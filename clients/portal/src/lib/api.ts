@@ -565,6 +565,64 @@ export const api = {
       return { success: true, filename };
     });
   },
+
+  // SSO Providers
+  listSSOProviders: (orgId: string) =>
+    fetchApi<Array<{
+      id: string;
+      org_id: string;
+      provider_type: string;
+      name: string;
+      enabled: boolean;
+      default_for_domain: string | null;
+      enforce_sso: boolean;
+      scim_enabled: boolean;
+      created_at: string;
+    }>>(`/sso/providers?org_id=${orgId}`),
+
+  createSSOProvider: (orgId: string, data: {
+    provider_type: string;
+    name: string;
+    entity_id?: string;
+    sso_url?: string;
+    client_id?: string;
+    client_secret?: string;
+  }) =>
+    fetchApi<{ id: string; message: string }>(`/sso/providers?org_id=${orgId}`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+
+  updateSSOProvider: (orgId: string, providerId: string, data: Record<string, unknown>) =>
+    fetchApi<{ message: string }>(`/sso/providers/${providerId}?org_id=${orgId}`, {
+      method: "PATCH",
+      body: JSON.stringify(data),
+    }),
+
+  enableSSOProvider: (orgId: string, providerId: string) =>
+    fetchApi<{ message: string }>(`/sso/providers/${providerId}/enable?org_id=${orgId}`, {
+      method: "POST",
+    }),
+
+  disableSSOProvider: (orgId: string, providerId: string) =>
+    fetchApi<{ message: string }>(`/sso/providers/${providerId}/disable?org_id=${orgId}`, {
+      method: "POST",
+    }),
+
+  enforceSSO: (orgId: string, providerId: string, enforce: boolean) =>
+    fetchApi<{ message: string }>(`/sso/providers/${providerId}/enforce?org_id=${orgId}&enforce=${enforce}`, {
+      method: "POST",
+    }),
+
+  generateSCIMToken: (orgId: string, providerId: string) =>
+    fetchApi<{ token: string; message: string }>(`/sso/providers/${providerId}/scim/token?org_id=${orgId}`, {
+      method: "POST",
+    }),
+
+  revokeSCIMToken: (orgId: string, providerId: string) =>
+    fetchApi<{ message: string }>(`/sso/providers/${providerId}/scim/token?org_id=${orgId}`, {
+      method: "DELETE",
+    }),
 };
 
 export function getJobStreamUrl(jobId: string): string {

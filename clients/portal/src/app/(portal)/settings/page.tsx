@@ -5,7 +5,7 @@ import { useOrg } from "@/hooks/use-org";
 import { useAuth } from "@/hooks/use-auth";
 import { usePermissions } from "@/hooks/use-permissions";
 import { api } from "@/lib/api";
-import { Loader2, Plus, Trash2, Building2, Users, Code, ChevronRight, Copy, Check, Archive, RefreshCw, Key, FileText, Shield, CreditCard, KeyRound } from "lucide-react";
+import { Loader2, Plus, Trash2, Building2, Users, Code, ChevronRight, Copy, Check, Archive, RefreshCw, Key, FileText, Shield, CreditCard, KeyRound, Lock } from "lucide-react";
 import { cn } from "@/lib/utils";
 import Link from "next/link";
 import { DeleteOrgDialog } from "./_components/delete-org-dialog";
@@ -16,10 +16,11 @@ import { AnalyticsTab } from "./_components/analytics-tab";
 import { DataExportPanel } from "./_components/data-export-panel";
 import { SecurityTab } from "./_components/security-tab";
 import { ScimTab } from "./_components/scim-tab";
+import { SSOTab } from "./_components/sso-tab";
 import { BillingTab } from "./_components/billing-tab";
 import { BarChart } from "lucide-react";
 
-type Tab = "org" | "members" | "references" | "api-keys" | "security" | "scim" | "audit-log" | "analytics" | "billing";
+type Tab = "org" | "members" | "references" | "api-keys" | "security" | "scim" | "sso" | "audit-log" | "analytics" | "billing";
 
 export default function SettingsPage() {
   const { user } = useAuth();
@@ -76,6 +77,7 @@ export default function SettingsPage() {
           { id: "api-keys", label: "API Keys", icon: Key },
           { id: "security", label: "Security", icon: Shield },
           { id: "scim", label: "SCIM", icon: KeyRound },
+          { id: "sso", label: "SSO", icon: Lock },
           { id: "audit-log", label: "Audit Log", icon: FileText },
           { id: "analytics", label: "Analytics", icon: BarChart },
           { id: "billing", label: "Billing", icon: CreditCard },
@@ -103,6 +105,7 @@ export default function SettingsPage() {
       {activeTab === "api-keys" && <ApiKeysSettings org={currentOrg} />}
       {activeTab === "security" && <SecurityTab />}
       {activeTab === "scim" && <ScimTab org={currentOrg} />}
+      {activeTab === "sso" && <SSOTab orgId={currentOrg?.id || ""} />}
       {activeTab === "audit-log" && <AuditLogTab org={currentOrg} />}
       {activeTab === "analytics" && <AnalyticsTab />}
       {activeTab === "billing" && <BillingTab />}
