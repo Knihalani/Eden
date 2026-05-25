@@ -12,7 +12,7 @@ from eden.config import get_settings
 from eden.kb import initialize_kb, health_check as kb_health_check
 from eden.pipeline.graph import compile_eden_graph
 from eden.storage.checkpointer import create_postgres_checkpointer
-from eden.api.routes import jobs, kb
+from eden.api.routes import jobs, kb, auth, orgs, references, api_keys, audit, analytics, export, scim, billing
 from eden.api.routes.jobs import set_eden_graph
 
 logger = logging.getLogger(__name__)
@@ -160,6 +160,15 @@ app.add_middleware(
 # Include route modules
 app.include_router(jobs.router)
 app.include_router(kb.router)
+app.include_router(auth.router)
+app.include_router(audit.router)  # /orgs/{org_id}/audit-log
+app.include_router(orgs.router)
+app.include_router(references.router)
+app.include_router(api_keys.router)
+app.include_router(billing.router)  # /orgs/{org_id}/billing
+app.include_router(analytics.router)  # /orgs/{org_id}/analytics
+app.include_router(export.router)  # /orgs/{org_id}/export
+app.include_router(scim.router)  # /orgs/{org_id}/scim/v2
 
 
 # ============================================================================
