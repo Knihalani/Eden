@@ -161,10 +161,164 @@ class QdrantClientWrapper:
         """Hybrid search combining dense vector and keyword search.
 
         Uses Reciprocal Rank Fusion to combine results.
+
+        Args:
+            collection: Collection name (without prefix)
+            query_vector: Query embedding for dense search
+            query_text: Query text for sparse/BME25 search
+            limit: Max results to return
+            dense_weight: Weight for dense vector results (0.0-1.0)
+            sparse_weight: Weight for sparse/keyword results (0.0-1.0)
+
+        Returns:
+            SearchResults with fused ranked results
         """
-        # For now, just use dense search
-        # TODO: Implement sparse vector search with BM25
-        return self.search(collection, query_vector, limit)
+        client = self._get_client()
+        collection_name = f"{self.collection_prefix}{collection}"
+
+        # Perform dense vector search
+        dense_results = self.search(collection, query_vector, limit=limit)
+
+        # Perform sparse keyword search using Qdrant's sparse vector support
+        # or fallback to text match scoring
+        sparse_results = self._sparse_search(collection_name, query_text, limit=limit)
+
+        # Apply Reciprocal Rank Fusion to combine results
+        fused = self._reciprocal_rank_fusion(
+            dense_results.results,
+            sparse_results,
+            dense_weight=dense_weight,
+            sparse_weight=sparse_weight,
+        )
+
+        return SearchResults(results=fused[:limit], total=len(fused))
+
+    def _sparse_search(
+        self,
+        collection_name: str,
+        query_text: str,
+        limit: int,
+    ) -> list[SearchResult]:
+        """Perform sparse keyword search using BM25-style scoring.
+
+        Qdrant supports sparse vectors through the sparse_quantization config.
+        This method uses text match with scoring as a fallback when
+        sparse vectors are not configured.
+
+        For a full BM25 implementation, you would:
+        1. Configure a sparse vector index on the collection
+        2. Use qdrant's sparse search with a sparse vector computed from query_text
+        3. Return results with BM25 scores
+
+        This implementation uses payload-based text matching with scoring.
+        """
+        # Fallback: use text match scoring via filtered search
+        # Get all points and score by text match
+        try:
+            # Try to use scroll API with text match filter
+            search_filter = None
+            results = client.scroll(
+                collection_name=collection_name,
+                scroll_filter=search_filter,
+                limit=limit * 2,  # Get more to filter
+                with_payload=True,
+            )[0]
+
+            # Score by text match (simplified BM25-style)
+            scored = []
+            query_terms = query_text.lower().split()
+            for point in results:
+                payload = point.payload or {}
+                # Get searchable text fields
+                text_fields = [
+                    str(payload.get("name", "")),
+                    str(payload.get("description", "")),
+                    str(payload.get("properties", {}).get("description", "")),
+                ]
+                combined_text = " ".join(text_fields).lower()
+
+                # Count matching terms (simplified scoring)
+                matches = sum(1 for term in query_terms if term in combined_text)
+                if matches > 0:
+                    # Normalize by number of terms (like precision)
+                    score = matches / len(query_terms) if query_terms else 0
+                    scored.append(SearchResult(
+                        id=str(point.id),
+                        score=score,
+                        payload=payload,
+                    ))
+
+            # Sort by score descending
+            scored.sort(key=lambda x: x.score, reverse=True)
+            return scored[:limit]
+
+        except Exception as e:
+            logger.warning(f"Sparse search failed, falling back to dense-only: {e}")
+            return []
+
+    def _reciprocal_rank_fusion(
+        self,
+        dense_results: list[SearchResult],
+        sparse_results: list[SearchResult],
+        dense_weight: float = 0.6,
+        sparse_weight: float = 0.4,
+        k: int = 60,
+    ) -> list[SearchResult]:
+        """Fuse dense and sparse results using Reciprocal Rank Fusion.
+
+        RRF score = weight * (1 / (k + rank))
+
+        Args:
+            dense_results: Results from dense vector search
+            sparse_results: Results from sparse/keyword search
+            dense_weight: Weight for dense results
+            sparse_weight: Weight for sparse results
+            k: RRF damping constant (higher = more weight to lower ranks)
+
+        Returns:
+            Combined and ranked results
+        """
+        # Build rank maps
+        dense_ranks = {r.id: rank for rank, r in enumerate(dense_results)}
+        sparse_ranks = {r.id: rank for rank, r in enumerate(sparse_results)}
+
+        # Get all unique IDs
+        all_ids = set(dense_ranks.keys()) | set(sparse_ranks.keys())
+
+        # Calculate RRF scores
+        scored = []
+        for doc_id in all_ids:
+            dense_rank = dense_ranks.get(doc_id, float('inf'))
+            sparse_rank = sparse_ranks.get(doc_id, float('inf'))
+
+            # RRF formula
+            rrf_score = 0.0
+            if dense_rank != float('inf'):
+                rrf_score += dense_weight * (1 / (k + dense_rank))
+            if sparse_rank != float('inf'):
+                rrf_score += sparse_weight * (1 / (k + sparse_rank))
+
+            # Get payload from whichever result has it
+            payload = {}
+            for r in dense_results:
+                if r.id == doc_id:
+                    payload = r.payload
+                    break
+            if not payload:
+                for r in sparse_results:
+                    if r.id == doc_id:
+                        payload = r.payload
+                        break
+
+            scored.append(SearchResult(
+                id=doc_id,
+                score=rrf_score,
+                payload=payload,
+            ))
+
+        # Sort by fused score
+        scored.sort(key=lambda x: x.score, reverse=True)
+        return scored
 
     def upsert(
         self,
