@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { api } from "@/lib/api";
+import { JobRequest } from "@/lib/types";
 import { ChatInput } from "./chat-input";
 import { Loader2, Sparkles, ArrowRight, Check, Circle, X } from "lucide-react";
 
@@ -239,36 +240,23 @@ export function ChatCreationView() {
       const newConfig = { ...prev };
 
       if (currentQuestion === "framework") {
-        // Try to match user's response to a framework
-        const matchedFramework = FRAMEWORKS.find((f) =>
-          content.toLowerCase().includes(f)
-        );
+        const matchedFramework = matchFramework(content);
         if (matchedFramework) {
           newConfig.framework = matchedFramework;
-          setProgress((p) => ({ ...p, framework: true }));
-        } else if (content.toLowerCase().includes("python")) {
-          newConfig.framework = "python";
-          setProgress((p) => ({ ...p, framework: true }));
-        } else if (content.toLowerCase().includes("react") || content.toLowerCase().includes("next")) {
-          newConfig.framework = content.toLowerCase().includes("next") ? "nextjs" : "react";
           setProgress((p) => ({ ...p, framework: true }));
         }
         newConfig.description = prev.description || content;
         setProgress((p) => ({ ...p, description: true }));
         setCurrentQuestion("difficulty");
       } else if (currentQuestion === "difficulty") {
-        const matchedDifficulty = DIFFICULTY_LEVELS.find((d) =>
-          content.toLowerCase().includes(d)
-        );
+        const matchedDifficulty = matchDifficulty(content);
         if (matchedDifficulty) {
           newConfig.difficulty_parameters = { level: matchedDifficulty };
           setProgress((p) => ({ ...p, difficulty: true }));
         }
         setCurrentQuestion("output_mode");
       } else if (currentQuestion === "output_mode") {
-        const matchedOutputMode = OUTPUT_MODES.find((m) =>
-          content.toLowerCase().includes(m.replace("-", " "))
-        );
+        const matchedOutputMode = matchOutputMode(content);
         if (matchedOutputMode) {
           newConfig.output_mode = matchedOutputMode;
           setProgress((p) => ({ ...p, output_mode: true }));
