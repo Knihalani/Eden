@@ -304,7 +304,7 @@ function MembersSettings({ org }: { org: any }) {
   const handleInvite = async () => {
     if (!org || !inviteEmail.trim()) return;
     try {
-      await api.sendInvite(org.id, inviteEmail, inviteRole);
+      await api.inviteOrgMember(org.id, inviteEmail, inviteRole);
       setInviteEmail("");
       await loadMembers();
     } catch (e: any) {

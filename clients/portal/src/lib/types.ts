@@ -2,10 +2,10 @@ export interface Invitation {
   id: string;
   email: string;
   role: string;
-  invited_by: string;
   inviter_name: string;
   expires_at: string;
   created_at: string;
+  invited_by?: string;
 }
 
 export interface VerifyInviteTokenResponse {

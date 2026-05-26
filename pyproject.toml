@@ -36,6 +36,12 @@ dependencies = [
     "fastapi>=0.115.0,<1.0.0",
     "uvicorn[standard]>=0.30.0,<1.0.0",
     "pydantic>=2.9.0,<3.0.0",
+    "pydantic-settings>=2.5.0,<3.0.0",
+    "sse-starlette>=2.0.0,<3.0.0",
+
+    # Auth
+    "python-jose[cryptography]>=3.3.0,<4.0.0",
+    "passlib[bcrypt]>=1.7.0,<2.0.0",
 
     # Code quality
     "pylint>=3.0.0,<4.0.0",

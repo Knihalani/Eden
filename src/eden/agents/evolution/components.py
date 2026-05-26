@@ -606,13 +606,14 @@ class PromptEvolvers(EvolutionComponent):
 
         degradation_detected = False
         improvement_detected = False
+        variants_created = 0
 
         if previous_quality:
             # Check for degradation
             if self._is_degraded(current_quality, previous_quality):
                 degradation_detected = True
                 logger.info(f"Agent {agent}: degradation detected, generating prompt variants")
-                await self._handle_degradation(agent, current_version, recent_jobs, current_quality, previous_quality)
+                variants_created = await self._handle_degradation(agent, current_version, recent_jobs, current_quality, previous_quality)
 
             # Check for improvement
             elif self._is_improved(current_quality, previous_quality):
@@ -626,8 +627,8 @@ class PromptEvolvers(EvolutionComponent):
         return {
             "degradation_detected": degradation_detected,
             "improvement_detected": improvement_detected,
-            "prompts_updated": 0,  # Updates happen in handle_degradation/improvement
-            "ab_test_initiated": False,
+            "prompts_updated": variants_created,
+            "ab_test_initiated": variants_created > 0,
         }
 
     async def _get_recent_jobs_for_agent(self, agent: str, limit: int) -> list[dict]:
@@ -749,20 +750,23 @@ class PromptEvolvers(EvolutionComponent):
         failure_jobs: list[dict],
         current_quality: dict,
         previous_quality: dict,
-    ) -> None:
+    ) -> int:
         """Handle detected degradation by generating prompt variants.
 
         Process:
         1. Get failure cases (jobs that failed or had issues)
         2. Generate 3 candidate improved prompts via LLM
         3. Insert candidates as new versions with ab_test_active flag
+
+        Returns:
+            Number of variants created for A/B testing
         """
         # Get failure cases (Bronze, Partial, Failed outcomes)
         failures = [j for j in failure_jobs if j.get("outcome_tier") in ["Bronze", "Partial", "Failed"]]
 
         if not failures:
             logger.debug(f"Agent {agent}: no failure jobs found for analysis")
-            return
+            return 0
 
         # Select 10 failure cases for analysis
         failure_cases = failures[:10]
@@ -772,12 +776,13 @@ class PromptEvolvers(EvolutionComponent):
 
         if not variants:
             logger.warning(f"Agent {agent}: failed to generate prompt variants")
-            return
+            return 0
 
         # Insert new versions with A/B test flag
+        variants_created = 0
         for i, variant in enumerate(variants):
             new_version = current_version + i + 1
-            await self.prompt_versions.insert_version(
+            success = await self.prompt_versions.insert_version(
                 agent=agent,
                 system_prompt=variant["prompt"],
                 version=new_version,
@@ -785,7 +790,11 @@ class PromptEvolvers(EvolutionComponent):
                 quality_metrics={"ab_test_active": True, "ab_test_round": i + 1},
                 active=False,
             )
-            logger.info(f"Agent {agent}: created prompt variant v{new_version} for A/B testing")
+            if success:
+                variants_created += 1
+                logger.info(f"Agent {agent}: created prompt variant v{new_version} for A/B testing")
+
+        return variants_created
 
     async def _handle_improvement(
         self,
@@ -1271,12 +1280,20 @@ class RetrievalTuner(EvolutionComponent):
         return adjustments
 
     async def _reinforce_strategy(self, collection: str, strategy: dict) -> None:
-        """Mark strategy as reinforced (no parameter changes needed)."""
+        """Mark strategy as reinforced and increment confidence counter."""
         logger.info(
             f"RetrievalTuner: reinforcing {collection} strategy (relevance >80%)"
         )
-        # Strategy is already working - just log the reinforcement
-        # In the future, could also increment a confidence counter
+        # Increment the relevant count to reinforce the strategy
+        await self.strategy_store.record_relevance(collection, is_relevant=True)
+        # Update last reinforced timestamp
+        await self.strategy_store.update_strategy(
+            collection,
+            {
+                "last_reinforced_at": datetime.utcnow(),
+                "reinforcement_count": strategy.get("reinforcement_count", 0) + 1,
+            },
+        )
 
 
 class PatternMiner(EvolutionComponent):
@@ -1613,7 +1630,7 @@ class PatternMiner(EvolutionComponent):
                     max_tokens=2048,
                 )
                 # Parse LLM synthesis if available
-                synthesis = llm_response.get("content", "") if llm_response else ""
+                synthesis = llm_response.content if llm_response else ""
             except Exception as e:
                 logger.warning(f"LLM synthesis failed: {e}")
                 synthesis = ""

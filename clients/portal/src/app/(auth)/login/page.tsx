@@ -4,7 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/hooks/use-auth";
-import { Loader2, Mail, Lock, ArrowRight, Eye, EyeOff, AlertCircle } from "lucide-react";
+import { Loader2, Mail, Lock, AlertCircle, CheckCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export default function LoginPage() {
@@ -15,10 +15,22 @@ export default function LoginPage() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [touched, setTouched] = useState({ email: false, password: false });
 
-  async function handleSubmit(e: React.FormEvent) {
+  const validateEmail = (email: string) => {
+    if (!email) return null;
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ? "valid" : "invalid";
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
+
+    if (!email || !password) {
+      setError("Please fill in all fields");
+      return;
+    }
+
     setLoading(true);
     try {
       await login(email, password);
@@ -28,111 +40,140 @@ export default function LoginPage() {
     } finally {
       setLoading(false);
     }
-  }
+  };
+
+  const emailValidation = validateEmail(email);
 
   return (
-    <div className="min-h-screen flex items-center justify-center px-4 py-12 bg-gradient-to-br from-gray-50 to-gray-100 dark:bg-gradient-to-br dark:from-gray-900 dark:to-gray-800 relative">
-      <div className="w-full max-w-md">
-        {/* Logo */}
-        <div className="text-center mb-10">
-          <div className="inline-flex items-center justify-center w-16 h-16 bg-teal-600 rounded-2xl mb-4 logo-animate">
-            <svg className="w-10 h-10 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <div className="min-h-screen flex items-center justify-center px-4 bg-[#F8F8F7]">
+      <div className="w-full max-w-sm">
+        {/* Header */}
+        <div className="text-center mb-8">
+          <div className="inline-flex items-center justify-center w-12 h-12 bg-[var(--accent)] rounded-xl mb-4">
+            <svg className="w-7 h-7 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M12 2L2 7l10 5 10-5-10-5z" />
               <path d="M2 17l10 5 10-5" />
               <path d="M2 12l10 5 10-5" />
             </svg>
           </div>
-          <h1 className="text-4xl font-bold text-gray-900 tracking-tight">Eden</h1>
-          <p className="text-gray-500 mt-2">AI Environment Generation</p>
+          <h1 className="text-2xl font-semibold text-[var(--foreground)] tracking-tight">Eden</h1>
         </div>
 
-        {/* Form Card */}
-        <div className="bg-white shadow-[0_8px_30px_rgb(0,0,0,0.08)] rounded-xl p-8 border border-gray-100">
-          <h2 className="text-xl font-semibold text-gray-900 mb-2">Welcome back</h2>
-          <p className="text-sm text-gray-500 mb-6">Sign in to your account to continue</p>
+        {/* Card */}
+        <div className="bg-[var(--surface)] rounded-xl p-6 border border-[var(--border)] shadow-[var(--shadow-sm)]">
+          <div className="mb-6">
+            <h2 className="text-lg font-semibold text-[var(--foreground)]">Log in</h2>
+            <p className="text-sm text-[var(--text-secondary)] mt-1">Enter your credentials to continue</p>
+          </div>
 
-          <form onSubmit={handleSubmit} className="space-y-5">
+          <form onSubmit={handleSubmit} className="space-y-4">
             {error && (
-              <div className="bg-red-50 text-red-600 text-sm px-4 py-3 rounded-lg flex items-center gap-2 shake">
+              <div className="bg-[var(--error-bg)] text-[var(--error)] text-sm px-4 py-3 rounded-lg flex items-center gap-2">
                 <AlertCircle className="w-4 h-4 flex-shrink-0" />
                 {error}
               </div>
             )}
 
-            <div className="floating-input">
-              <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 z-10" />
-              <input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-                id="email"
-                className={cn(
-                  "w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-lg",
-                  "focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-2 focus:border-transparent",
-                  "text-sm placeholder:text-gray-400",
-                  "shadow-[0_0_0_3px_rgba(20,184,166,0.1)]"
+            {/* Email */}
+            <div className="space-y-1.5">
+              <label htmlFor="email" className="text-sm font-medium text-[var(--text-primary)]">Email</label>
+              <div className="relative">
+                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-muted)]" />
+                <input
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  onBlur={() => setTouched(t => ({ ...t, email: true }))}
+                  required
+                  id="email"
+                  className={cn(
+                    "w-full pl-10 pr-10 py-2.5 rounded-lg border text-sm",
+                    "bg-[var(--surface)] text-[var(--foreground)]",
+                    "placeholder:text-[var(--text-muted)]",
+                    "focus:outline-none focus:ring-2 focus:ring-[var(--accent)] focus:ring-offset-1",
+                    "transition-shadow duration-150",
+                    touched.email && emailValidation === "invalid"
+                      ? "border-[var(--error)] focus:ring-[var(--error)]"
+                      : "border-[var(--border)] hover:border-[var(--text-muted)]"
+                  )}
+                  placeholder="you@example.com"
+                />
+                {touched.email && emailValidation === "valid" && (
+                  <CheckCircle className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--success)]" />
                 )}
-                placeholder=" "
-              />
-              <label htmlFor="email">Email</label>
+              </div>
+              {touched.email && emailValidation === "invalid" && (
+                <p className="text-xs text-[var(--error)]">Enter a valid email address</p>
+              )}
             </div>
 
-            <div className="floating-input">
-              <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 z-10" />
-              <input
-                type={showPassword ? "text" : "password"}
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-                id="password"
-                className={cn(
-                  "w-full pl-10 pr-10 py-2.5 border border-gray-200 rounded-lg",
-                  "focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-2 focus:border-transparent",
-                  "text-sm placeholder:text-gray-400",
-                  "shadow-[0_0_0_3px_rgba(20,184,166,0.1)]"
-                )}
-                placeholder=" "
-              />
-              <label htmlFor="password">Password</label>
-              <button
-                type="button"
-                onClick={() => setShowPassword(!showPassword)}
-                className="password-toggle"
-                tabIndex={-1}
-              >
-                {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-              </button>
+            {/* Password */}
+            <div className="space-y-1.5">
+              <label htmlFor="password" className="text-sm font-medium text-[var(--text-primary)]">Password</label>
+              <div className="relative">
+                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-muted)]" />
+                <input
+                  type={showPassword ? "text" : "password"}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  onBlur={() => setTouched(t => ({ ...t, password: true }))}
+                  required
+                  id="password"
+                  className={cn(
+                    "w-full pl-10 pr-10 py-2.5 rounded-lg border text-sm",
+                    "bg-[var(--surface)] text-[var(--foreground)]",
+                    "placeholder:text-[var(--text-muted)]",
+                    "focus:outline-none focus:ring-2 focus:ring-[var(--accent)] focus:ring-offset-1",
+                    "border-[var(--border)] hover:border-[var(--text-muted)] transition-shadow duration-150"
+                  )}
+                  placeholder="Enter your password"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)] hover:text-[var(--text-secondary)] p-0.5"
+                >
+                  {showPassword ? (
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M3.98 8.223A10.477 10.477 0 001.934 12C3.226 16.338 7.244 19.5 12 19.5c.993 0 1.953-.138 2.863-.395M6.228 6.228A10.45 10.45 0 0112 4.5c4.756 0 8.773 3.162 10.065 7.498a10.523 10.523 0 01-4.293 5.774M6.228 6.228L3 3m3.228 3.228l3.65 3.65m7.894 7.894L21 21m-3.228-3.228l-3.65-3.65m0 0a3 3 0 10-4.243-4.243m4.242 4.242L9.88 9.88" />
+                    </svg>
+                  ) : (
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                    </svg>
+                  )}
+                </button>
+              </div>
             </div>
 
             <button
               type="submit"
-              disabled={loading}
+              disabled={loading || (touched.email && emailValidation === "invalid")}
               className={cn(
-                "w-full flex items-center justify-center gap-2 bg-teal-600 text-white py-2.5 px-4 rounded-lg",
-                "hover:bg-teal-700 hover:shadow-lg transition-all duration-200 font-medium text-sm",
-                "active:scale-[0.97] disabled:opacity-50 disabled:cursor-not-allowed",
-                "shadow-sm hover:shadow-teal-200"
+                "w-full py-2.5 rounded-lg font-medium text-sm",
+                "bg-[var(--accent)] text-white",
+                "hover:bg-[var(--accent-hover)]",
+                "disabled:opacity-50 disabled:cursor-not-allowed",
+                "transition-colors duration-150"
               )}
             >
               {loading ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
+                <Loader2 className="w-4 h-4 animate-spin mx-auto" />
               ) : (
-                <>
-                  Sign in
-                  <ArrowRight className="w-4 h-4" />
-                </>
+                "Continue"
               )}
             </button>
           </form>
-
-          <p className="text-center text-sm text-gray-500 mt-6">
-            Don&apos;t have an account?{" "}
-            <Link href="/signup" className="text-teal-600 hover:underline font-medium">
-              Sign up
-            </Link>
-          </p>
         </div>
+
+        {/* Footer */}
+        <p className="text-center text-sm text-[var(--text-secondary)] mt-6">
+          Don&apos;t have an account?{" "}
+          <Link href="/signup" className="text-[var(--accent)] hover:underline font-medium">
+            Sign up
+          </Link>
+        </p>
       </div>
     </div>
   );

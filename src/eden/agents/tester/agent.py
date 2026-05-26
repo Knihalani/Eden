@@ -701,8 +701,8 @@ print("MUTATION_SCORE:", abs(mutant_mean - mean_reward) / max(1, std_reward) if 
             try:
                 score_str = output[mutation_score_match:].split("\n")[0].split(":")[1].strip()
                 mutation_score = float(score_str)
-            except:
-                pass
+            except (ValueError, IndexError, AttributeError) as e:
+                logger.warning(f"Failed to parse mutation score: {e}")
 
         return TestCategoryResult(
             name="mutation_testing",
@@ -807,8 +807,8 @@ print("TOTAL_STEPS:", 10000)
         if step_time_match != -1:
             try:
                 step_time = float(output[step_time_match:].split("\n")[0].split(":")[1].strip())
-            except:
-                pass
+            except (ValueError, IndexError, AttributeError) as e:
+                logger.warning(f"Failed to parse step time: {e}")
 
         return TestCategoryResult(
             name="performance_validation",

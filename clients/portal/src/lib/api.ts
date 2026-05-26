@@ -361,10 +361,12 @@ export const api = {
     fetchApi<string[]>(`/orgs/${orgId}/references/purposes`),
 
   // Jobs
-  listJobs: (params?: { status?: string; outcome_tier?: string; limit?: number; offset?: number }) => {
+  listJobs: (params?: { status?: string; outcome_tier?: string; q?: string; sort?: string; limit?: number; offset?: number }) => {
     const searchParams = new URLSearchParams();
     if (params?.status) searchParams.set("status", params.status);
     if (params?.outcome_tier) searchParams.set("outcome_tier", params.outcome_tier);
+    if (params?.q) searchParams.set("q", params.q);
+    if (params?.sort) searchParams.set("sort", params.sort);
     if (params?.limit) searchParams.set("limit", String(params.limit));
     if (params?.offset) searchParams.set("offset", String(params.offset));
     const qs = searchParams.toString();

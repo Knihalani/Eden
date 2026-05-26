@@ -26,6 +26,7 @@ export function AnalyticsTab() {
     }
 
     async function fetchAnalytics() {
+      if (!currentOrg) return;
       setLoading(true);
       setError(null);
       try {

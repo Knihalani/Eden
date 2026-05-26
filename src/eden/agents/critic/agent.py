@@ -138,10 +138,16 @@ Output as structured JSON with clear routing decision."""
 
         # Update routing based on critique
         routing = critique.get("routing", "approve")
+        dimension_scores = critique.get("dimensions", {})
 
         # Track iteration counts
         updates = {
-            "critic_decisions": [critique],
+            "critic_decisions": [{
+                **critique,
+                "novelty_assessment": novelty,
+                "design_confidence": confidence,
+                "needs_devil_advocate": needs_devil_advocate,
+            }],
             "routing_history": [{
                 "from": "critic",
                 "to": routing,
@@ -161,6 +167,8 @@ Output as structured JSON with clear routing decision."""
             updates["current_stage"] = "human_review"
 
         logger.info(f"Critic decision for job {job_id}: {routing} (replan={updates.get('critic_replan_count', 0)}, reresearch={updates.get('critic_reresearch_count', 0)})")
+        logger.info(f"Critic dimension scores for job {job_id}: {dimension_scores}")
+        logger.info(f"Critic DevilAdvocate trigger: novelty={novelty}, confidence={confidence}, triggered={needs_devil_advocate}")
 
         return updates
 

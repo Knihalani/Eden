@@ -269,17 +269,17 @@ export function ScimTab({ org }: { org: any }) {
               </div>
               <div className="flex items-center gap-2">
                 <code className="bg-blue-100 px-2 py-0.5 rounded text-xs">GET</code>
-                <code className="text-blue-700">/orgs/{currentOrg?.id}/scim/v2/Users/{{id}}</code>
+                <code className="text-blue-700">/orgs/{currentOrg?.id}/scim/v2/Users/{"{{id}}"}</code>
                 <span className="text-blue-600">- Get user</span>
               </div>
               <div className="flex items-center gap-2">
                 <code className="bg-blue-100 px-2 py-0.5 rounded text-xs">PUT</code>
-                <code className="text-blue-700">/orgs/{currentOrg?.id}/scim/v2/Users/{{id}}</code>
+                <code className="text-blue-700">/orgs/{currentOrg?.id}/scim/v2/Users/{"{{id}}"}</code>
                 <span className="text-blue-600">- Update user</span>
               </div>
               <div className="flex items-center gap-2">
                 <code className="bg-blue-100 px-2 py-0.5 rounded text-xs">DELETE</code>
-                <code className="text-blue-700">/orgs/{currentOrg?.id}/scim/v2/Users/{{id}}</code>
+                <code className="text-blue-700">/orgs/{currentOrg?.id}/scim/v2/Users/{"{{id}}"}</code>
                 <span className="text-blue-600">- De-provision user</span>
               </div>
             </div>

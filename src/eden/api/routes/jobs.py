@@ -1,12 +1,17 @@
 """Job management routes for Eden API."""
 
+import asyncio
+import json
 import logging
 from datetime import datetime
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException, BackgroundTasks, Query
+from fastapi import APIRouter, HTTPException, BackgroundTasks, Query, Depends
 from pydantic import BaseModel, Field
+from sse_starlette.sse import EventSourceResponse
 
+from eden.api.deps import get_current_user, get_current_org_api_key
+from eden.api.routes.billing import check_limit
 from eden.config import get_settings
 from eden.pipeline.state import create_initial_state
 from eden.pipeline.graph import compile_eden_graph
@@ -70,12 +75,41 @@ class JobResultResponse(BaseModel):
     archivist_summary: Optional[dict] = None
 
 
+class JobListResponse(BaseModel):
+    """Response schema for job listing."""
+
+    jobs: list[dict]
+    total: int
+    limit: int
+    offset: int
+
+
+# Track last-seen checkpoint blobs per job for SSE streaming
+_job_stream_blobs: dict[str, set[tuple[str, str]]] = {}
+
+
+TERMINAL_STATUSES = {"completed", "failed", "cancelled", "human_review"}
+
+
 @router.post("", response_model=JobResponse)
-async def submit_job(request: JobRequest, background_tasks: BackgroundTasks):
+async def submit_job(
+    request: JobRequest,
+    background_tasks: BackgroundTasks,
+    user: dict = get_current_user,
+):
     """Submit a new environment generation job."""
     import uuid
+
+    # Get org_id from user context (if available via header)
+    from fastapi import Header
+    x_org_id = None  # Would need to get from header in actual implementation
+
+    # Note: Job limits are checked per-org when org context is available
+    # For user-level jobs, we use user_id directly
+
     job_id = str(uuid.uuid4())
     created_at = datetime.utcnow().isoformat()
+    user_id = user["user_id"]
 
     client = await get_postgres_client()
     await client.upsert_job(
@@ -84,6 +118,7 @@ async def submit_job(request: JobRequest, background_tasks: BackgroundTasks):
         status="pending",
         current_stage="planning",
         created_at=created_at,
+        user_id=user_id,
     )
 
     background_tasks.add_task(_run_pipeline, job_id, request)
@@ -147,11 +182,61 @@ async def _run_pipeline(job_id: str, request: JobRequest) -> None:
         await client.update_job_status(job_id, "failed", "planning")
 
 
+@router.get("", response_model=JobListResponse)
+async def list_jobs(
+    status: Optional[str] = Query(None),
+    outcome_tier: Optional[str] = Query(None),
+    q: Optional[str] = Query(None, description="Search jobs by ID or description"),
+    sort: Optional[str] = Query("created_at:desc", description="Sort field:direction, e.g. created_at:desc"),
+    limit: int = Query(20, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+    user: dict = get_current_user,
+):
+    """List jobs for the authenticated user."""
+    client = await get_postgres_client()
+    user_id = user["user_id"]
+
+    jobs = await client.list_jobs(
+        user_id=user_id,
+        status=status,
+        outcome_tier=outcome_tier,
+        q=q,
+        sort=sort,
+        limit=limit,
+        offset=offset,
+    )
+
+    total = await client.count_jobs(
+        user_id=user_id,
+        status=status,
+        outcome_tier=outcome_tier,
+    )
+
+    return JobListResponse(
+        jobs=[
+            {
+                "job_id": j["job_id"],
+                "status": j["status"],
+                "current_stage": j["current_stage"],
+                "outcome_tier": j.get("outcome_tier"),
+                "created_at": j.get("created_at"),
+                "updated_at": j.get("updated_at"),
+            }
+            for j in jobs
+        ],
+        total=total,
+        limit=limit,
+        offset=offset,
+    )
+
+
 @router.get("/{job_id}", response_model=JobStatusResponse)
-async def get_job_status(job_id: str):
+async def get_job_status(job_id: str, user: dict = get_current_user):
     """Get job status."""
     client = await get_postgres_client()
-    job = await client.get_job(job_id)
+    user_id = user["user_id"]
+
+    job = await client.get_job(job_id, user_id=user_id)
 
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
@@ -168,10 +253,12 @@ async def get_job_status(job_id: str):
 
 
 @router.get("/{job_id}/result", response_model=JobResultResponse)
-async def get_job_result(job_id: str):
+async def get_job_result(job_id: str, user: dict = get_current_user):
     """Get job result."""
     client = await get_postgres_client()
-    job = await client.get_job(job_id)
+    user_id = user["user_id"]
+
+    job = await client.get_job(job_id, user_id=user_id)
 
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
@@ -198,10 +285,12 @@ async def get_job_result(job_id: str):
 
 
 @router.get("/{job_id}/trace")
-async def get_job_trace(job_id: str):
+async def get_job_trace(job_id: str, user: dict = get_current_user):
     """Get full job trace from checkpoint history."""
     client = await get_postgres_client()
-    job = await client.get_job(job_id)
+    user_id = user["user_id"]
+
+    job = await client.get_job(job_id, user_id=user_id)
 
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
@@ -225,11 +314,66 @@ async def get_job_trace(job_id: str):
     }
 
 
+class JobVersionResponse(BaseModel):
+    """Response schema for a single code version."""
+
+    iteration: int
+    code: str
+    timestamp: str
+    trigger: Optional[str] = None
+
+
+@router.get("/{job_id}/versions", response_model=list[JobVersionResponse])
+async def get_job_versions(job_id: str, user: dict = get_current_user):
+    """Get version history for a job from code_history and code: checkpoints.
+
+    Returns code snapshots with metadata from job record and checkpoint blobs.
+    """
+    client = await get_postgres_client()
+    user_id = user["user_id"]
+
+    job = await client.get_job(job_id, user_id=user_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    blobs = await client.get_checkpoint_blobs(job_id)
+
+    # Collect code:* checkpoints as versions
+    code_blobs = [b for b in blobs if b["field"].startswith("code:")]
+    job_created = job.get("created_at", "")
+    code_history = job.get("code_history", [])
+
+    # If code_history exists in job record, use it as fallback
+    versions: list[JobVersionResponse] = []
+
+    for i, blob in enumerate(code_blobs):
+        versions.append(JobVersionResponse(
+            iteration=i + 1,
+            code=blob["value"] if isinstance(blob["value"], str) else json.dumps(blob["value"]),
+            timestamp=blob.get("created_at", job_created),
+            trigger="executor",
+        ))
+
+    # Fall back to job.code_history if no code: blobs found
+    if not versions and code_history:
+        for i, code in enumerate(code_history):
+            versions.append(JobVersionResponse(
+                iteration=i + 1,
+                code=code,
+                timestamp=job_created,
+                trigger="executor",
+            ))
+
+    return versions
+
+
 @router.post("/{job_id}/cancel")
-async def cancel_job(job_id: str):
+async def cancel_job(job_id: str, user: dict = get_current_user):
     """Cancel an in-progress job."""
     client = await get_postgres_client()
-    job = await client.get_job(job_id)
+    user_id = user["user_id"]
+
+    job = await client.get_job(job_id, user_id=user_id)
 
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
@@ -249,3 +393,124 @@ async def cancel_job(job_id: str):
     await client.update_job_status(job_id, "cancelled", job["current_stage"])
 
     return {"job_id": job_id, "status": "cancelled", "message": "Cancel requested"}
+
+
+@router.get("/{job_id}/stream")
+async def stream_job_status(job_id: str, user: dict = get_current_user):
+    """Server-Sent Events stream of job status updates.
+
+    Streams job status changes until the job reaches a terminal state
+    or the client disconnects.
+
+    Emits events: status, stage_change, complete, error, code_fragment, message.
+    """
+    user_id = user["user_id"]
+
+    async def event_generator():
+        client = await get_postgres_client()
+        last_stage = None
+        last_status = None
+        last_blob_keys: set[tuple[str, str]] = set()
+
+        while True:
+            job = await client.get_job(job_id, user_id=user_id)
+
+            if not job:
+                yield {
+                    "event": "error",
+                    "data": "Job not found",
+                }
+                break
+
+            current_stage = job["current_stage"]
+            current_status = job["status"]
+
+            # Send status update if changed
+            if current_stage != last_stage or current_status != last_status:
+                yield {
+                    "event": "status",
+                    "data": {
+                        "job_id": job_id,
+                        "status": current_status,
+                        "current_stage": current_stage,
+                        "outcome_tier": job.get("outcome_tier"),
+                        "stage_history": job.get("stage_history", []),
+                    },
+                }
+                last_stage = current_stage
+                last_status = current_status
+
+            # Send stage change events
+            if current_stage != last_stage and last_stage is not None:
+                yield {
+                    "event": "stage_change",
+                    "data": {
+                        "from": last_stage,
+                        "to": current_stage,
+                        "at": job.get("updated_at", datetime.utcnow().isoformat()),
+                    },
+                }
+
+            # Detect new checkpoint blobs and emit code_fragment events
+            try:
+                blobs = await client.get_checkpoint_blobs(job_id)
+                current_blob_keys = {(b["field"], b.get("created_at", "")) for b in blobs}
+                new_blob_keys = current_blob_keys - last_blob_keys
+
+                for field, ts in new_blob_keys:
+                    blob_map = {b["field"]: b["value"] for b in blobs}
+                    value = blob_map.get(field)
+
+                    if field.startswith("code:"):
+                        # Emit code fragment for code checkpoints
+                        yield {
+                            "event": "code_fragment",
+                            "data": {
+                                "field": field,
+                                "code": value if isinstance(value, str) else "",
+                                "timestamp": ts,
+                            },
+                        }
+                    elif field in ("edp", "edp_history", "res", "final_res", "quality_report", "tester_results"):
+                        # Emit message for significant state changes
+                        yield {
+                            "event": "message",
+                            "data": {
+                                "text": f"New data available: {field}",
+                                "field": field,
+                                "timestamp": ts,
+                            },
+                        }
+                    elif field == "executor_pass":
+                        # Multi-section generation progress
+                        pass_data = value if isinstance(value, dict) else {}
+                        yield {
+                            "event": "code_gen",
+                            "data": {
+                                "text": pass_data.get("description", "Generating code..."),
+                                "pass_number": pass_data.get("pass_number"),
+                                "pass_name": pass_data.get("pass_name"),
+                            },
+                        }
+
+                last_blob_keys = current_blob_keys
+            except Exception:
+                pass  # Non-fatal during streaming
+
+            # Check for terminal state
+            if current_status in TERMINAL_STATUSES:
+                yield {
+                    "event": "complete",
+                    "data": {
+                        "status": current_status,
+                        "outcome_tier": job.get("outcome_tier"),
+                    },
+                }
+                break
+
+            # Wait before next poll
+            await asyncio.sleep(2)
+
+        return
+
+    return EventSourceResponse(event_generator())

@@ -192,6 +192,7 @@ Output the complete code as a string in a code block."""
 
         Actually queries Skill Library and uses OUTPUT_MODES template as guidance.
         """
+        logger.info(f"Executor single-pass: querying Skill Library")
         # Query Skill Library for relevant patterns
         skill_context = await self._query_skill_library(res)
 
@@ -202,6 +203,7 @@ Output the complete code as a string in a code block."""
         # Build prompt with skill context and template
         prompt = self._build_single_pass_prompt(res, skill_context, template)
 
+        logger.info(f"Executor single-pass: generating code")
         # Make LLM call
         response = self.llm.call(
             agent="executor",
@@ -213,6 +215,7 @@ Output the complete code as a string in a code block."""
 
         # Parse code from response
         code = self._extract_code(response.content)
+        logger.info(f"Executor single-pass: code generated ({len(code)} chars)")
 
         return {
             "code_history": [code],
@@ -227,33 +230,42 @@ Output the complete code as a string in a code block."""
         sections = {}
         skill_context = await self._query_skill_library(res)
 
-        logger.info(f"Multi-section generation: 7 passes starting")
+        logger.info(f"Job multi-section generation: starting 7-pass pipeline")
 
         # Pass 1: Skeleton — class structure, required methods, type annotations
+        logger.info(f"Multi-section pass 1/7: skeleton")
         sections["skeleton"] = await self._generate_skeleton(res, skill_context)
 
         # Pass 2: State management — observation/action/reward space definitions
+        logger.info(f"Multi-section pass 2/7: state")
         sections["state"] = await self._generate_state(res, sections["skeleton"], skill_context)
 
         # Pass 3: Core implementation — step(), reset(), utility methods
+        logger.info(f"Multi-section pass 3/7: core")
         sections["core"] = await self._generate_core(res, sections["skeleton"], sections["state"], skill_context)
 
         # Pass 4: Reward computation — all reward components
+        logger.info(f"Multi-section pass 4/7: reward")
         sections["reward"] = await self._generate_reward(res, sections["skeleton"], sections["state"], skill_context)
 
         # Pass 5: Termination — all conditions handled
+        logger.info(f"Multi-section pass 5/7: termination")
         sections["termination"] = await self._generate_termination(res, sections["skeleton"], sections["state"], skill_context)
 
         # Pass 6: Helpers — utility functions
+        logger.info(f"Multi-section pass 6/7: helpers")
         sections["helpers"] = await self._generate_helpers(res, sections["skeleton"], sections["state"], skill_context)
 
         # Pass 7: Integration synthesis — final wiring, tests
+        logger.info(f"Multi-section pass 7/7: integration")
         sections["integration"] = await self._generate_integration(
             res, sections, skill_context
         )
 
         # Synthesize final code from all sections
         code = await self._synthesize(sections, res, skill_context)
+
+        logger.info(f"Multi-section generation: completed all 7 passes")
 
         return {
             "code_history": [code],
@@ -415,7 +427,8 @@ Generate ONLY the core methods (no reward computation):
 2. step() — action processing and state update (no reward calculation)
 3. Any utility methods needed by step/reset
 
-Use placeholders for reward calculation (e.g., `reward = 0.0 # TODO: reward`).
+Implement the complete reward calculation in this pass - do NOT use placeholders.
+The reward must be fully implemented according to the reward_structure spec.
 Include docstrings on all methods."""
 
         response = self.llm.call(

@@ -91,6 +91,18 @@ class Settings(BaseSettings):
     interrupt_before_archivist: bool = True
     interrupt_before_human_review: bool = True
 
+    # JWT Authentication
+    jwt_secret: str = "change-me-in-production"
+    jwt_exp_days: int = 7
+
+    # Stripe
+    stripe_secret_key: str = ""
+    stripe_webhook_secret: str = ""
+
+    # Chain configuration
+chain_enabled_experts: list[str] = []  # Environment: EDEN_CHAIN_ENABLED_EXPERTS
+chain_disabled_optional: list[str] = []  # Environment: EDEN_CHAIN_DISABLED_OPTIONAL
+
     # Paths
     project_root: Path = Path(__file__).parent.parent.parent
     seed_data_dir: Path = Path("./seed")

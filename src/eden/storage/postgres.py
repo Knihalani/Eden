@@ -133,6 +133,7 @@ class PostgresClient:
         status: str = "pending",
         current_stage: str = "planning",
         created_at: Optional[str] = None,
+        user_id: Optional[str] = None,
     ) -> bool:
         """Insert or update a job record."""
         if created_at is None:
@@ -140,26 +141,32 @@ class PostgresClient:
             created_at = datetime.utcnow().isoformat()
 
         query = """
-            INSERT INTO jobs (job_id, request, status, current_stage, created_at, updated_at)
-            VALUES ($1, $2, $3, $4, $5, $5)
+            INSERT INTO jobs (job_id, request, status, current_stage, created_at, updated_at, user_id)
+            VALUES ($1, $2, $3, $4, $5, $5, $6)
             ON CONFLICT (job_id) DO UPDATE SET
                 status = EXCLUDED.status,
                 current_stage = EXCLUDED.current_stage,
                 updated_at = EXCLUDED.updated_at
             RETURNING job_id
         """
-        result = await self.fetchval(query, job_id, json.dumps(request), status, current_stage, created_at)
+        result = await self.fetchval(query, job_id, json.dumps(request), status, current_stage, created_at, user_id)
         return result is not None
 
-    async def get_job(self, job_id: str) -> Optional[dict]:
-        """Fetch a job by ID."""
+    async def get_job(self, job_id: str, user_id: Optional[str] = None) -> Optional[dict]:
+        """Fetch a job by ID, optionally verifying ownership."""
         query = """
             SELECT job_id, request, status, current_stage, outcome_tier,
-                   created_at, updated_at, edp_history, code_history
+                   created_at, updated_at, edp_history, code_history, user_id
             FROM jobs
             WHERE job_id = $1
         """
-        return await self.fetchrow(query, job_id)
+        params = [job_id]
+
+        if user_id:
+            query += " AND user_id = $2"
+            params.append(user_id)
+
+        return await self.fetchrow(query, *params)
 
     async def update_job_status(
         self,
@@ -183,15 +190,99 @@ class PostgresClient:
         result = await self.fetchval(query, job_id, status, current_stage, outcome_tier, updated_at)
         return result is not None
 
-    async def list_jobs(self, limit: int = 50, offset: int = 0) -> list[dict]:
-        """List jobs with pagination."""
-        query = """
-            SELECT job_id, status, current_stage, outcome_tier, created_at, updated_at
+    async def list_jobs(
+        self,
+        user_id: Optional[str] = None,
+        status: Optional[str] = None,
+        outcome_tier: Optional[str] = None,
+        q: Optional[str] = None,
+        sort: str = "created_at:desc",
+        limit: int = 50,
+        offset: int = 0,
+    ) -> list[dict]:
+        """List jobs with pagination and optional filters."""
+        conditions = []
+        params = []
+        param_idx = 1
+
+        if user_id:
+            conditions.append(f"user_id = ${param_idx}")
+            params.append(user_id)
+            param_idx += 1
+
+        if status:
+            conditions.append(f"status = ${param_idx}")
+            params.append(status)
+            param_idx += 1
+
+        if outcome_tier:
+            conditions.append(f"outcome_tier = ${param_idx}")
+            params.append(outcome_tier)
+            param_idx += 1
+
+        if q:
+            conditions.append(f"(job_id ILIKE ${param_idx} OR request::text ILIKE ${param_idx})")
+            params.append(f"%{q}%")
+            param_idx += 1
+
+        # Parse sort parameter (field:direction)
+        sort_field, sort_dir = "created_at", "DESC"
+        if sort and ":" in sort:
+            sort_field, sort_dir = sort.split(":", 1)
+            sort_dir = sort_dir.upper()
+            if sort_dir not in ("ASC", "DESC"):
+                sort_dir = "DESC"
+            # Whitelist allowed sort fields to prevent SQL injection
+            allowed_fields = ("created_at", "updated_at", "status", "outcome_tier")
+            if sort_field not in allowed_fields:
+                sort_field = "created_at"
+        elif sort:
+            allowed_fields = ("created_at", "updated_at", "status", "outcome_tier")
+            if sort in allowed_fields:
+                sort_field = sort
+
+        where_clause = f"WHERE {' AND '.join(conditions)}" if conditions else ""
+
+        query = f"""
+            SELECT job_id, request, status, current_stage, outcome_tier, created_at, updated_at
             FROM jobs
-            ORDER BY created_at DESC
-            LIMIT $1 OFFSET $2
+            {where_clause}
+            ORDER BY {sort_field} {sort_dir}
+            LIMIT ${param_idx} OFFSET ${param_idx + 1}
         """
-        return await self.fetch(query, limit, offset)
+        params.extend([limit, offset])
+        return await self.fetch(query, *params)
+
+    async def count_jobs(
+        self,
+        user_id: Optional[str] = None,
+        status: Optional[str] = None,
+        outcome_tier: Optional[str] = None,
+    ) -> int:
+        """Count jobs with optional filters."""
+        conditions = []
+        params = []
+        param_idx = 1
+
+        if user_id:
+            conditions.append(f"user_id = ${param_idx}")
+            params.append(user_id)
+            param_idx += 1
+
+        if status:
+            conditions.append(f"status = ${param_idx}")
+            params.append(status)
+            param_idx += 1
+
+        if outcome_tier:
+            conditions.append(f"outcome_tier = ${param_idx}")
+            params.append(outcome_tier)
+            param_idx += 1
+
+        where_clause = f"WHERE {' AND '.join(conditions)}" if conditions else ""
+
+        query = f"SELECT COUNT(*) FROM jobs {where_clause}"
+        return await self.fetchval(query, *params) or 0
 
     async def update_job_stage_history(self, job_id: str, stage_history: list[dict]) -> bool:
         """Update job stage history."""

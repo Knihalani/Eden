@@ -1,7 +1,7 @@
 """Eden LangGraph pipeline definition."""
 
 import logging
-from typing import Literal
+from typing import Literal, Optional
 
 from langgraph.graph import StateGraph, END, Command
 
@@ -16,6 +16,15 @@ from eden.pipeline.nodes import (
     verifier_node,
     tester_node,
     archivist_node,
+)
+from eden.pipeline.chain_builder import (
+    register_node,
+    register_router,
+    build_chain,
+    build_graph_from_chain,
+    NODE_REGISTRY,
+    ROUTER_REGISTRY,
+    ChainConfig,
 )
 
 logger = logging.getLogger(__name__)
@@ -35,6 +44,27 @@ STAGES = Literal[
     "failed",
     "human_review",
 ]
+
+
+def _register_core_nodes():
+    """Register all core pipeline nodes with the chain builder."""
+    register_node("planner", planner_node)
+    register_node("critic", critic_node)
+    register_node("refiner", refiner_node)
+    register_node("fact_checker", fact_checker_node)
+    register_node("executor", executor_node)
+    register_node("code_quality", code_quality_node)
+    register_node("verifier", verifier_node)
+    register_node("tester", tester_node)
+    register_node("archivist", archivist_node)
+
+
+def _register_routers():
+    """Register all routers with the chain builder."""
+    register_router("critic_router", critic_router)
+    register_router("code_quality_router", code_quality_router)
+    register_router("verifier_router", verifier_router)
+    register_router("tester_router", tester_router)
 
 
 def critic_router(state: EdenJobState) -> str:
@@ -118,42 +148,73 @@ def tester_router(state: EdenJobState) -> str:
         return "archiving"
 
 
-def build_eden_graph():
-    """Build the Eden pipeline graph."""
-    graph = StateGraph(EdenJobState)
+def build_eden_graph(config: Optional[ChainConfig] = None):
+    """Build the Eden pipeline graph using chain builder pattern.
 
-    # Add all nodes using actual node functions
-    graph.add_node("planner", planner_node)
-    graph.add_node("critic", critic_node)
-    graph.add_node("refiner", refiner_node)
-    graph.add_node("fact_checker", fact_checker_node)
-    graph.add_node("executor", executor_node)
-    graph.add_node("code_quality", code_quality_node)
-    graph.add_node("verifier", verifier_node)
-    graph.add_node("tester", tester_node)
-    graph.add_node("archivist", archivist_node)
+    Args:
+        config: Optional ChainConfig to customize the graph construction.
+                If None, uses default edges.
 
-    # Define edges
-    graph.add_edge("planner", "critic")
-    graph.add_conditional_edges("critic", critic_router)
-    graph.add_edge("refiner", "fact_checker")
-    graph.add_edge("fact_checker", "executor")
-    graph.add_edge("executor", "code_quality")
-    graph.add_conditional_edges("code_quality", code_quality_router)
-    graph.add_conditional_edges("verifier", verifier_router)
-    graph.add_conditional_edges("tester", tester_router)
-    graph.add_edge("archivist", END)
+    Returns:
+        StateGraph instance (uncompiled).
+    """
+    # Register core nodes and routers
+    _register_core_nodes()
+    _register_routers()
 
-    # Set entry point
-    graph.set_entry_point("planner")
+    # Build chain from config or use default
+    chain = build_chain(config)
+
+    # Build graph from chain
+    graph = build_graph_from_chain(chain)
 
     return graph
 
 
-def compile_eden_graph(checkpointer=None, interrupt_before_archivist=True):
-    """Compile the Eden graph with checkpointer and interrupts."""
-    graph = build_eden_graph()
+def compile_eden_graph(
+    checkpointer=None,
+    interrupt_before_nodes: Optional[list[str]] = None,
+    config: Optional[ChainConfig] = None,
+):
+    """Compile the Eden graph with checkpointer and interrupts.
 
+    Args:
+        checkpointer: Optional checkpointer for state persistence.
+        interrupt_before_nodes: Optional list of node names to interrupt before.
+        config: Optional ChainConfig to customize the graph construction.
+                If None, uses default edges.
+
+    Returns:
+        Compiled graph ready for execution.
+    """
+    # Register core nodes and routers
+    _register_core_nodes()
+    _register_routers()
+
+    # Build chain from config or use default
+    chain = build_chain(config)
+
+    # Build graph from chain
+    graph = build_graph_from_chain(chain, checkpointer, interrupt_before_nodes)
+
+    # Compile with checkpointer
     compiled = graph.compile(checkpointer=checkpointer)
 
     return compiled
+
+
+# Default chain configuration for backward compatibility
+DEFAULT_CHAIN_CONFIG = ChainConfig(
+    edges=[
+        ("planner", "critic"),
+        ("critic", "critic_router"),
+        ("refiner", "fact_checker"),
+        ("fact_checker", "executor"),
+        ("executor", "code_quality"),
+        ("code_quality", "code_quality_router"),
+        ("verifier", "verifier_router"),
+        ("tester", "tester_router"),
+        ("archivist", END),
+    ],
+    entry_point="planner",
+)
