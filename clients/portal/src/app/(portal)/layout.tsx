@@ -1,8 +1,9 @@
 "use client";
 
 import { useAuth } from "@/hooks/use-auth";
+import { useOrg } from "@/hooks/use-org";
 import { useRouter } from "next/navigation";
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 import {
   Loader2,
   LayoutDashboard,
@@ -17,12 +18,17 @@ import {
   ChevronLeft,
   Settings,
   CreditCard,
+  Building2,
+  Search,
+  Bell,
+  ChevronRight,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { CommandPalette } from "@/components/ui/command-palette";
 
-const SIDEBAR_EXPANDED_WIDTH = 240;
+const SIDEBAR_EXPANDED_WIDTH = 260;
 const SIDEBAR_COLLAPSED_WIDTH = 64;
 
 async function handleLogout(router: ReturnType<typeof useRouter>, closeDropdown: () => void) {
@@ -31,20 +37,42 @@ async function handleLogout(router: ReturnType<typeof useRouter>, closeDropdown:
   router.push("/login");
 }
 
+function buildBreadcrumbs(pathname: string): { label: string; href: string }[] {
+  const segments = pathname.split("/").filter(Boolean);
+  const crumbs: { label: string; href: string }[] = [];
+
+  const labelMap: Record<string, string> = {
+    dashboard: "Dashboard",
+    jobs: "Jobs",
+    settings: "Settings",
+    billing: "Billing",
+    docs: "Documentation",
+    profile: "Profile",
+    new: "New",
+  };
+
+  let path = "";
+  for (const segment of segments) {
+    path += `/${segment}`;
+    const label = labelMap[segment] ?? segment.charAt(0).toUpperCase() + segment.slice(1);
+    crumbs.push({ label, href: path });
+  }
+
+  return crumbs;
+}
+
 export default function PortalLayout({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
+  const { currentOrg, organizations, setCurrentOrg } = useOrg();
   const router = useRouter();
   const pathname = usePathname();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
   const [userDropdownOpen, setUserDropdownOpen] = useState(false);
+  const [orgSwitcherOpen, setOrgSwitcherOpen] = useState(false);
+  const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const userDropdownRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!loading && !user) {
-      router.replace("/login");
-    }
-  }, [user, loading, router]);
+  const orgDropdownRef = useRef<HTMLDivElement>(null);
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -52,17 +80,42 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
       if (userDropdownRef.current && !userDropdownRef.current.contains(event.target as Node)) {
         setUserDropdownOpen(false);
       }
+      if (orgDropdownRef.current && !orgDropdownRef.current.contains(event.target as Node)) {
+        setOrgSwitcherOpen(false);
+      }
     }
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
+  // Keyboard shortcut for command palette
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key === "k" && (e.metaKey || e.ctrlKey)) {
+        e.preventDefault();
+        setCommandPaletteOpen((prev) => !prev);
+      }
+    }
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, []);
+
+  const handleCollapse = useCallback(() => {
+    setCollapsed((prev) => !prev);
+  }, []);
+
+  useEffect(() => {
+    if (!loading && !user) {
+      router.replace("/login");
+    }
+  }, [user, loading, router]);
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <div className="flex flex-col items-center gap-3">
-          <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
-          <p className="text-sm text-gray-500">Loading...</p>
+          <Loader2 className="w-8 h-8 animate-spin text-[var(--accent)]" />
+          <p className="text-sm text-[var(--text-muted)]">Loading...</p>
         </div>
       </div>
     );
@@ -71,6 +124,8 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
   if (!user) {
     return null;
   }
+
+  const breadcrumbs = buildBreadcrumbs(pathname);
 
   return (
     <div className="flex min-h-screen bg-[var(--background)]">
@@ -86,13 +141,11 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
       <aside
         className={cn(
           "sidebar flex flex-col bg-[var(--surface)] border-r border-[var(--border)] relative z-50",
-          // Desktop collapse
           "hidden lg:flex",
           collapsed ? "collapsed" : "",
-          // Mobile slide-in
           sidebarOpen ? "translate-x-0" : "-translate-x-full",
           "lg:translate-x-0",
-          "transition-[transform,width] duration-300 lg:transition-[width]"
+          "transition-[transform,width] duration-300 ease-out lg:transition-[width]"
         )}
         style={{
           width: collapsed ? SIDEBAR_COLLAPSED_WIDTH : SIDEBAR_EXPANDED_WIDTH,
@@ -101,15 +154,20 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
         {/* Gradient overlay */}
         <div className="absolute inset-0 sidebar-gradient pointer-events-none" />
 
-        {/* Logo */}
+        {/* Logo & Org */}
         <div className="relative p-4 border-b border-[var(--border)]">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="w-9 h-9 bg-[#0ea5e9] rounded-xl flex items-center justify-center flex-shrink-0">
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="w-9 h-9 bg-[var(--accent)] rounded-xl flex items-center justify-center flex-shrink-0">
                 <Layers className="w-5 h-5 text-white" />
               </div>
               {!collapsed && (
-                <span className="text-xl font-bold text-[var(--text-primary)]">Eden</span>
+                <div className="min-w-0">
+                  <span className="text-xl font-bold text-[var(--text-primary)] block truncate">Eden</span>
+                  {currentOrg && (
+                    <span className="text-xs text-[var(--text-muted)] block truncate">{currentOrg.name}</span>
+                  )}
+                </div>
               )}
             </div>
             <button
@@ -121,21 +179,82 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
           </div>
         </div>
 
-        {/* Collapse button (desktop + tablet) */}
+        {/* Collapse button */}
         <button
-          onClick={() => setCollapsed(!collapsed)}
-          className="hidden md:flex absolute -right-3 top-20 w-6 h-6 bg-[var(--surface)] border border-[var(--border)] rounded-full items-center justify-center shadow-sm hover:shadow-md transition-all sidebar-collapse-btn"
+          onClick={handleCollapse}
+          className="hidden md:flex absolute -right-3 top-24 w-6 h-6 bg-[var(--surface)] border border-[var(--border)] rounded-full items-center justify-center shadow-sm hover:shadow-md transition-all sidebar-collapse-btn z-10"
           title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
         >
-          <ChevronLeft className="w-3.5 h-3.5 text-[var(--text-secondary)]" />
+          <ChevronLeft className={cn("w-3.5 h-3.5 text-[var(--text-secondary)] transition-transform duration-300", collapsed && "rotate-180")} />
         </button>
 
+        {/* Organization Switcher */}
+        {organizations.length > 0 && (
+          <div className="relative px-3 py-3">
+            {!collapsed ? (
+              <div ref={orgDropdownRef} className="relative">
+                <button
+                  onClick={() => setOrgSwitcherOpen(!orgSwitcherOpen)}
+                  className="w-full flex items-center gap-2 p-2 rounded-lg hover:bg-stone-100 transition-colors"
+                >
+                  <Building2 className="w-4 h-4 text-[var(--text-muted)] flex-shrink-0" />
+                  <span className="flex-1 text-sm font-medium text-left truncate">
+                    {currentOrg?.name || "Select org"}
+                  </span>
+                  <ChevronLeft className={cn("w-3 h-3 transition-transform duration-200", orgSwitcherOpen ? "rotate-90" : "")} />
+                </button>
+
+                {orgSwitcherOpen && (
+                  <div className="absolute left-0 right-0 mt-1 py-1 bg-[var(--surface)] border border-[var(--border)] rounded-lg shadow-lg z-50">
+                    {organizations.map((org) => (
+                      <button
+                        key={org.id}
+                        onClick={() => {
+                          setCurrentOrg(org);
+                          setOrgSwitcherOpen(false);
+                        }}
+                        className={cn(
+                          "w-full px-3 py-2 text-left text-sm hover:bg-stone-100 flex items-center justify-between",
+                          org.id === currentOrg?.id && "bg-[var(--accent-bg)] text-[var(--accent)]"
+                        )}
+                      >
+                        <span className="truncate">{org.name}</span>
+                        <span className="text-xs text-[var(--text-muted)]">{org.role}</span>
+                      </button>
+                    ))}
+                    <div className="border-t border-[var(--border)] mt-1 pt-1">
+                      <Link
+                        href="/settings"
+                        className="w-full px-3 py-2 text-left text-sm text-[var(--accent)] hover:bg-[var(--accent-bg)] flex items-center gap-2"
+                        onClick={() => setOrgSwitcherOpen(false)}
+                      >
+                        <Settings className="w-3.5 h-3.5" />
+                        Manage Organizations
+                      </Link>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <Link
+                href="/settings"
+                className="flex items-center justify-center p-2 rounded-lg hover:bg-stone-100 transition-colors"
+                title="Switch Organization"
+              >
+                <Building2 className="w-5 h-5 text-[var(--text-muted)]" />
+              </Link>
+            )}
+          </div>
+        )}
+
         {/* Navigation */}
-        <nav className="relative flex-1 p-3 space-y-1">
-          <NavItem href="/dashboard" icon={LayoutDashboard} label="Dashboard" collapsed={collapsed} onClick={() => setSidebarOpen(false)} iconSize="large" />
-          <NavItem href="/jobs" icon={Layers} label="Jobs" collapsed={collapsed} onClick={() => setSidebarOpen(false)} iconSize="small" />
-          <NavItem href="/jobs/new" icon={PlusCircle} label="New Job" collapsed={collapsed} onClick={() => setSidebarOpen(false)} iconSize="large" />
-          <NavItem href="/docs" icon={FileText} label="Documentation" collapsed={collapsed} onClick={() => setSidebarOpen(false)} iconSize="small" />
+        <nav className="relative flex-1 p-3 space-y-0.5">
+          <NavItem href="/dashboard" icon={LayoutDashboard} label="Dashboard" collapsed={collapsed} onClick={() => setSidebarOpen(false)} />
+          <NavItem href="/jobs" icon={Layers} label="Jobs" collapsed={collapsed} onClick={() => setSidebarOpen(false)} />
+          <NavItem href="/settings" icon={Settings} label="Settings" collapsed={collapsed} onClick={() => setSidebarOpen(false)} />
+          <NavItem href="/billing" icon={CreditCard} label="Billing" collapsed={collapsed} onClick={() => setSidebarOpen(false)} />
+          <NavItem href="/docs" icon={FileText} label="Docs" collapsed={collapsed} onClick={() => setSidebarOpen(false)} />
+          <NavItem href="/profile" icon={User} label="Profile" collapsed={collapsed} onClick={() => setSidebarOpen(false)} />
         </nav>
 
         {/* User section */}
@@ -207,37 +326,94 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
 
       {/* Main content */}
       <main className="flex-1 overflow-auto pb-20 lg:pb-0">
-        {/* Mobile header with hamburger */}
-        <header className="lg:hidden sticky top-0 z-30 bg-[var(--surface)] border-b border-[var(--border)] px-4 py-3 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 bg-[#0ea5e9] rounded-lg flex items-center justify-center">
-              <Layers className="w-4 h-4 text-white" />
+        {/* Top bar */}
+        <header className="sticky top-0 z-30 bg-[var(--surface)] border-b border-[var(--border)]">
+          <div className="flex items-center justify-between px-4 lg:px-6 py-3">
+            {/* Left: Mobile logo + hamburger */}
+            <div className="flex items-center gap-3 lg:hidden">
+              <button
+                onClick={() => setSidebarOpen(true)}
+                className="p-2.5 text-[var(--text-secondary)] hover:bg-stone-100 rounded-lg active:bg-stone-200"
+                aria-label="Open menu"
+              >
+                <Menu className="w-5 h-5" />
+              </button>
+              <div className="w-8 h-8 bg-[var(--accent)] rounded-lg flex items-center justify-center">
+                <Layers className="w-4 h-4 text-white" />
+              </div>
             </div>
-            <span className="text-lg font-bold text-[var(--text-primary)]">Eden</span>
+
+            {/* Breadcrumb */}
+            <nav className="flex items-center gap-1.5 text-sm">
+              <Link href="/dashboard" className="text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors">
+                <Home className="w-4 h-4" />
+              </Link>
+              {breadcrumbs.map((crumb, index) => (
+                <span key={crumb.href} className="flex items-center gap-1.5">
+                  <ChevronRight className="w-3 h-3 text-[var(--text-muted)]" />
+                  {index === breadcrumbs.length - 1 ? (
+                    <span className="font-medium text-[var(--text-primary)]">{crumb.label}</span>
+                  ) : (
+                    <Link href={crumb.href} className="text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors">
+                      {crumb.label}
+                    </Link>
+                  )}
+                </span>
+              ))}
+            </nav>
+
+            {/* Right: Search + Notifications */}
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setCommandPaletteOpen(true)}
+                className="hidden lg:flex items-center gap-2 px-3 py-1.5 text-sm text-[var(--text-muted)] bg-stone-100 hover:bg-stone-200 rounded-lg transition-colors"
+                title="Search (⌘K)"
+              >
+                <Search className="w-4 h-4" />
+                <span className="text-xs">Search...</span>
+                <kbd className="ml-2 px-1.5 py-0.5 bg-white rounded text-[var(--text-muted)] font-mono text-xs">⌘K</kbd>
+              </button>
+              <button
+                onClick={() => setCommandPaletteOpen(true)}
+                className="lg:hidden p-2 text-[var(--text-secondary)] hover:bg-stone-100 rounded-lg active:bg-stone-200"
+                aria-label="Search"
+              >
+                <Search className="w-5 h-5" />
+              </button>
+              <button
+                className="p-2 text-[var(--text-secondary)] hover:bg-stone-100 rounded-lg active:bg-stone-200 relative"
+                aria-label="Notifications"
+              >
+                <Bell className="w-5 h-5" />
+                <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-[var(--accent)] rounded-full" />
+              </button>
+            </div>
           </div>
-          <button
-            onClick={() => setSidebarOpen(true)}
-            className="p-2.5 text-[var(--text-secondary)] hover:bg-stone-100 rounded-lg active:bg-stone-200"
-            aria-label="Open menu"
-          >
-            <Menu className="w-5 h-5" />
-          </button>
         </header>
 
-        {children}
+        {/* Page content */}
+        <div className="page-enter">
+          {children}
+        </div>
 
         {/* Mobile bottom navigation */}
         <nav className="lg:hidden fixed bottom-0 left-0 right-0 bg-[var(--surface)] border-t border-[var(--border)] z-40">
           <div className="flex items-center justify-around h-16">
-            <BottomNavItem href="/dashboard" icon={Home} label="Home" />
+            <BottomNavItem href="/dashboard" icon={Home} label="Dashboard" />
             <BottomNavItem href="/jobs" icon={Layers} label="Jobs" />
-            <BottomNavItem href="/jobs/new" icon={PlusCircle} label="New" isCenter />
-            <BottomNavItem href="/profile" icon={User} label="Profile" />
+            <BottomNavItem href="/jobs/new" icon={PlusCircle} label="New Job" isCenter />
           </div>
         </nav>
+
+        {/* Command Palette (Cmd+K) */}
+        <CommandPalette open={commandPaletteOpen} onOpenChange={setCommandPaletteOpen} />
       </main>
     </div>
   );
+}
+
+function isActivePath(pathname: string, href: string): boolean {
+  return pathname === href || (href !== "/dashboard" && pathname.startsWith(href));
 }
 
 function NavItem({
@@ -246,23 +422,15 @@ function NavItem({
   label,
   collapsed,
   onClick,
-  iconSize = "default",
 }: {
   href: string;
   icon: typeof LayoutDashboard;
   label: string;
   collapsed: boolean;
   onClick?: () => void;
-  iconSize?: "default" | "large" | "small";
 }) {
   const pathname = usePathname();
-  const isActive = pathname === href || pathname.startsWith(href + "/");
-
-  const sizeClasses = {
-    default: isActive ? "w-4 h-4" : "w-4 h-4",
-    large: isActive ? "w-5 h-5" : "w-4 h-4",
-    small: isActive ? "w-4 h-4" : "w-3.5 h-3.5",
-  };
+  const active = isActivePath(pathname, href);
 
   return (
     <Link
@@ -270,17 +438,16 @@ function NavItem({
       onClick={onClick}
       aria-label={label}
       className={cn(
-        "nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors",
-        isActive ? "active" : "text-[var(--text-secondary)]"
+        "nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors relative",
+        active
+          ? "active"
+          : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
       )}
     >
       <Icon
         className={cn(
           "flex-shrink-0 nav-icon transition-all duration-200",
-          sizeClasses[iconSize],
-          isActive
-            ? "text-[var(--accent)]"
-            : "text-[var(--text-muted)]"
+          active ? "w-5 h-5 text-[var(--accent)]" : "w-4 h-4 text-[var(--text-muted)]"
         )}
       />
       {!collapsed && <span className="truncate">{label}</span>}
@@ -301,7 +468,7 @@ function BottomNavItem({
   isCenter?: boolean;
 }) {
   const pathname = usePathname();
-  const isActive = pathname === href || pathname.startsWith(href + "/");
+  const active = isActivePath(pathname, href);
 
   return (
     <Link
@@ -309,9 +476,9 @@ function BottomNavItem({
       className={cn(
         "flex flex-col items-center justify-center min-w-[44px] min-h-[44px] gap-1 transition-colors",
         isCenter
-          ? "text-blue-600 hover:text-blue-700"
-          : isActive
-            ? "text-blue-600"
+          ? "text-[var(--accent)] hover:text-[var(--accent-hover)]"
+          : active
+            ? "text-[var(--accent)]"
             : "text-[var(--text-muted)] hover:text-[var(--text-secondary)]"
       )}
     >
