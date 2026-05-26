@@ -5,7 +5,7 @@ import { useOrg } from "@/hooks/use-org";
 import { useAuth } from "@/hooks/use-auth";
 import { usePermissions } from "@/hooks/use-permissions";
 import { api } from "@/lib/api";
-import { Loader2, Plus, Trash2, Building2, Users, Code, ChevronRight, Copy, Check, Archive, RefreshCw, Key, FileText, Shield, CreditCard, KeyRound, Lock } from "lucide-react";
+import { Loader2, Plus, Trash2, Building2, Users, Code, Copy, Check, Archive, RefreshCw, Key, FileText, Shield, CreditCard, KeyRound, Lock, BarChart2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import Link from "next/link";
 import { DeleteOrgDialog } from "./_components/delete-org-dialog";
@@ -18,97 +18,106 @@ import { SecurityTab } from "./_components/security-tab";
 import { ScimTab } from "./_components/scim-tab";
 import { SSOTab } from "./_components/sso-tab";
 import { BillingTab } from "./_components/billing-tab";
-import { BarChart } from "lucide-react";
 
 type Tab = "org" | "members" | "references" | "api-keys" | "security" | "scim" | "sso" | "audit-log" | "analytics" | "billing";
+
+const TABS = [
+  { id: "org", label: "Organization", icon: Building2 },
+  { id: "members", label: "Members", icon: Users },
+  { id: "references", label: "Code References", icon: Code },
+  { id: "api-keys", label: "API Keys", icon: Key },
+  { id: "security", label: "Security", icon: Shield },
+  { id: "scim", label: "SCIM", icon: KeyRound },
+  { id: "sso", label: "SSO", icon: Lock },
+  { id: "audit-log", label: "Audit Log", icon: FileText },
+  { id: "analytics", label: "Analytics", icon: BarChart2 },
+  { id: "billing", label: "Billing", icon: CreditCard },
+] as const;
 
 export default function SettingsPage() {
   const { user } = useAuth();
   const { currentOrg, organizations, setCurrentOrg, refreshOrgs } = useOrg();
   const [activeTab, setActiveTab] = useState<Tab>("org");
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
   if (!user) return null;
 
   return (
-    <div className="p-6 max-w-5xl mx-auto">
-      <h1 className="text-2xl font-bold text-[var(--text-primary)] mb-6">Settings</h1>
-
-      {/* Org Switcher */}
-      {organizations.length > 0 && (
-        <div className="mb-6 p-4 bg-[var(--surface)] rounded-xl border border-[var(--border)]">
-          <div className="flex items-center gap-3 mb-3">
-            <Building2 className="w-5 h-5 text-[var(--text-muted)]" />
-            <span className="text-sm font-medium text-[var(--text-primary)]">Current Organization</span>
-          </div>
-          <div className="flex items-center gap-3">
-            <select
-              value={currentOrg?.id || ""}
-              onChange={(e) => {
-                const org = organizations.find((o) => o.id === e.target.value);
-                setCurrentOrg(org || null);
-              }}
-              className="flex-1 px-3 py-2 rounded-lg border border-[var(--border)] bg-[var(--background)] text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              {organizations.map((org) => (
-                <option key={org.id} value={org.id}>
-                  {org.name} ({org.role})
-                </option>
-              ))}
-            </select>
-            <Link
-              href="/settings/new-org"
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors flex items-center gap-2"
-            >
-              <Plus className="w-4 h-4" />
-              New
-            </Link>
-          </div>
+    <div className="flex h-[calc(100vh-64px)]">
+      {/* Vertical Tab Navigation - Left Sidebar */}
+      <div className="w-[200px] flex-shrink-0 bg-[var(--surface)] border-r border-[var(--border)]">
+        <div className="p-4">
+          <h2 className="text-sm font-semibold text-[var(--text-primary)] mb-4 px-2">Settings</h2>
+          <nav className="space-y-1">
+            {TABS.map((tab) => (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id as Tab)}
+                className={cn(
+                  "w-full px-3 py-2 rounded-lg text-sm font-medium flex items-center gap-3 transition-colors",
+                  activeTab === tab.id
+                    ? "bg-[var(--accent)] text-white"
+                    : "text-[var(--text-secondary)] hover:bg-[var(--bg-muted)]"
+                )}
+              >
+                <tab.icon className="w-4 h-4 flex-shrink-0" />
+                <span>{tab.label}</span>
+              </button>
+            ))}
+          </nav>
         </div>
-      )}
-
-      {/* Tabs */}
-      <div className="flex gap-1 p-1 bg-[var(--surface)] rounded-lg border border-[var(--border)] mb-6 w-fit">
-        {[
-          { id: "org", label: "Organization", icon: Building2 },
-          { id: "members", label: "Members", icon: Users },
-          { id: "references", label: "Code References", icon: Code },
-          { id: "api-keys", label: "API Keys", icon: Key },
-          { id: "security", label: "Security", icon: Shield },
-          { id: "scim", label: "SCIM", icon: KeyRound },
-          { id: "sso", label: "SSO", icon: Lock },
-          { id: "audit-log", label: "Audit Log", icon: FileText },
-          { id: "analytics", label: "Analytics", icon: BarChart },
-          { id: "billing", label: "Billing", icon: CreditCard },
-        ].map((tab) => (
-          <button
-            key={tab.id}
-            onClick={() => setActiveTab(tab.id as Tab)}
-            className={cn(
-              "px-4 py-2 rounded-md text-sm font-medium flex items-center gap-2 transition-colors",
-              activeTab === tab.id
-                ? "bg-blue-600 text-white"
-                : "text-[var(--text-secondary)] hover:bg-stone-100"
-            )}
-          >
-            <tab.icon className="w-4 h-4" />
-            {tab.label}
-          </button>
-        ))}
       </div>
 
-      {/* Tab Content */}
-      {activeTab === "org" && <OrgSettings org={currentOrg} />}
-      {activeTab === "members" && <MembersSettings org={currentOrg} />}
-      {activeTab === "references" && <ReferencesSettings org={currentOrg} />}
-      {activeTab === "api-keys" && <ApiKeysSettings org={currentOrg} />}
-      {activeTab === "security" && <SecurityTab />}
-      {activeTab === "scim" && <ScimTab org={currentOrg} />}
-      {activeTab === "sso" && <SSOTab orgId={currentOrg?.id || ""} />}
-      {activeTab === "audit-log" && <AuditLogTab org={currentOrg} />}
-      {activeTab === "analytics" && <AnalyticsTab />}
-      {activeTab === "billing" && <BillingTab />}
+      {/* Main Content */}
+      <div className="flex-1 overflow-auto">
+        <div className="p-6 max-w-4xl mx-auto">
+          {/* Org Switcher */}
+          {organizations.length > 0 && (
+            <div className="mb-6 p-4 bg-[var(--surface)] rounded-xl border border-[var(--border)]">
+              <div className="flex items-center gap-3 mb-3">
+                <Building2 className="w-5 h-5 text-[var(--text-muted)]" />
+                <span className="text-sm font-medium text-[var(--text-primary)]">Current Organization</span>
+              </div>
+              <div className="flex items-center gap-3">
+                <select
+                  value={currentOrg?.id || ""}
+                  onChange={(e) => {
+                    const org = organizations.find((o) => o.id === e.target.value);
+                    setCurrentOrg(org || null);
+                  }}
+                  className="flex-1 px-3 py-2 rounded-lg border border-[var(--border)] bg-[var(--background)] text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--accent)]"
+                >
+                  {organizations.map((org) => (
+                    <option key={org.id} value={org.id}>
+                      {org.name} ({org.role})
+                    </option>
+                  ))}
+                </select>
+                <Link
+                  href="/settings/new-org"
+                  className="px-4 py-2 bg-[var(--accent)] text-white rounded-lg text-sm font-medium hover:opacity-90 transition-opacity flex items-center gap-2"
+                >
+                  <Plus className="w-4 h-4" />
+                  New
+                </Link>
+              </div>
+            </div>
+          )}
+
+          {/* Tab Content */}
+          <div className="page-enter">
+            {activeTab === "org" && <OrgSettings org={currentOrg} />}
+            {activeTab === "members" && <MembersSettings org={currentOrg} />}
+            {activeTab === "references" && <ReferencesSettings org={currentOrg} />}
+            {activeTab === "api-keys" && <ApiKeysSettings org={currentOrg} />}
+            {activeTab === "security" && <SecurityTab />}
+            {activeTab === "scim" && <ScimTab org={currentOrg} />}
+            {activeTab === "sso" && <SSOTab orgId={currentOrg?.id || ""} />}
+            {activeTab === "audit-log" && <AuditLogTab org={currentOrg} />}
+            {activeTab === "analytics" && <AnalyticsTab />}
+            {activeTab === "billing" && <BillingTab />}
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
@@ -142,7 +151,7 @@ function OrgSettings({ org }: { org: any }) {
         <p className="text-[var(--text-secondary)] mb-4">No organization yet</p>
         <button
           onClick={() => setShowCreate(true)}
-          className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors flex items-center gap-2 mx-auto"
+          className="px-4 py-2 bg-[var(--accent)] text-white rounded-lg text-sm font-medium hover:opacity-90 transition-opacity flex items-center gap-2 mx-auto"
         >
           <Plus className="w-4 h-4" />
           Create Organization
@@ -169,7 +178,7 @@ function OrgSettings({ org }: { org: any }) {
           <button
             onClick={handleCreateOrg}
             disabled={loading}
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium disabled:opacity-50"
+            className="px-4 py-2 bg-[var(--accent)] text-white rounded-lg text-sm font-medium disabled:opacity-50"
           >
             {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : "Create Organization"}
           </button>
@@ -356,7 +365,7 @@ function MembersSettings({ org }: { org: any }) {
             </select>
             <button
               onClick={handleInvite}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700"
+              className="px-4 py-2 bg-[var(--accent)] text-white rounded-lg text-sm font-medium hover:opacity-90"
             >
               Invite
             </button>
@@ -517,7 +526,7 @@ function ReferencesSettings({ org }: { org: any }) {
               <button
                 type="submit"
                 disabled={uploading}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2"
+                className="px-4 py-2 bg-[var(--accent)] text-white rounded-lg text-sm font-medium hover:opacity-90 disabled:opacity-50 flex items-center gap-2"
               >
                 {uploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
                 Upload
@@ -535,7 +544,6 @@ function ReferencesSettings({ org }: { org: any }) {
           className="px-3 py-2 rounded-lg border border-[var(--border)] text-sm"
         >
           <option value="">All purposes</option>
-          {/* Would populate from api.listReferencePurposes(org.id) */}
         </select>
         <select
           value={filter.language || ""}
@@ -777,7 +785,7 @@ function ApiKeysSettings({ org }: { org: any }) {
           {!showCreate && !createdKey && (
             <button
               onClick={() => setShowCreate(true)}
-              className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700"
+              className="flex items-center gap-2 px-4 py-2 bg-[var(--accent)] text-white rounded-lg text-sm font-medium hover:opacity-90"
             >
               <Plus className="w-4 h-4" />
               Create API Key
@@ -826,7 +834,7 @@ function ApiKeysSettings({ org }: { org: any }) {
                 <button
                   onClick={handleCreate}
                   disabled={creating || !newKeyName.trim() || selectedScopes.length === 0}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium disabled:opacity-50 flex items-center gap-2"
+                  className="px-4 py-2 bg-[var(--accent)] text-white rounded-lg text-sm font-medium disabled:opacity-50 flex items-center gap-2"
                 >
                   {creating ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
                   Create Key
