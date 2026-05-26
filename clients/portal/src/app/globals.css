@@ -333,6 +333,16 @@ html {
   animation: stage-pulse 2s ease-in-out infinite;
 }
 
+/* Border pulse for running/pending job cards */
+@keyframes border-pulse {
+  0%, 100% { border-left-color: var(--accent); }
+  50% { border-left-color: rgba(16, 185, 129, 0.3); }
+}
+
+.animate-border-pulse {
+  animation: border-pulse 2s ease-in-out infinite;
+}
+
 /* Cursor blink */
 @keyframes cursor-blink {
   0%, 100% {

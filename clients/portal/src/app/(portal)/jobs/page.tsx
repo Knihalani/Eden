@@ -33,13 +33,6 @@ const OUTCOME_OPTIONS = [
   { value: "failed", label: "Failed" },
 ];
 
-const SORT_OPTIONS = [
-  { value: "created_at:desc", label: "Newest first" },
-  { value: "created_at:asc", label: "Oldest first" },
-  { value: "outcome_tier:asc", label: "Outcome: Gold first" },
-  { value: "outcome_tier:desc", label: "Outcome: Failed first" },
-];
-
 function StatCard({ icon: Icon, label, value, sublabel }: {
   icon: typeof Activity;
   label: string;
@@ -102,7 +95,6 @@ export default function JobsPage() {
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState("");
   const [outcomeTier, setOutcomeTier] = useState("__all__");
-  const [sortBy, setSortBy] = useState("created_at:desc");
   const [searchQuery, setSearchQuery] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [dateRange, setDateRange] = useState("all");
@@ -129,7 +121,7 @@ export default function JobsPage() {
       const outcomeParam = outcomeTier && outcomeTier !== "__all__" ? `&outcome_tier=${outcomeTier}` : "";
       const qParam = debouncedSearch ? `&q=${encodeURIComponent(debouncedSearch)}` : "";
       const res = await fetch(
-        `/api/jobs?status=${status}${outcomeParam}${qParam}&sort=${sortBy}&limit=${limit}&offset=${offset}`,
+        `/api/jobs?status=${status}${outcomeParam}${qParam}&sort=created_at:desc&limit=${limit}&offset=${offset}`,
         { signal: fetchControllerRef.current.signal }
       );
       const data = await res.json();
@@ -142,7 +134,7 @@ export default function JobsPage() {
     } finally {
       setLoading(false);
     }
-  }, [status, outcomeTier, sortBy, limit, offset, debouncedSearch]);
+  }, [status, outcomeTier, limit, offset, debouncedSearch]);
 
   useEffect(() => {
     queueMicrotask(() => fetchJobs());
