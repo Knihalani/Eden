@@ -37,10 +37,7 @@ class JobRequest(BaseModel):
 
     description: str = Field(..., description="Natural language description of the environment")
     tags: list[str] = Field(default_factory=list, description="Optional tags to guide the Planner")
-    framework: str = Field(default="gymnasium", description="Target framework")
-    framework_version: str = Field(default="0.29", description="Framework version")
     difficulty_parameters: dict = Field(default_factory=dict)
-    output_mode: str = Field(default="gymnasium_mode")
 
 
 class JobResponse(BaseModel):
@@ -188,6 +185,7 @@ async def list_jobs(
     outcome_tier: Optional[str] = Query(None),
     q: Optional[str] = Query(None, description="Search jobs by ID or description"),
     sort: Optional[str] = Query("created_at:desc", description="Sort field:direction, e.g. created_at:desc"),
+    created_after: Optional[str] = Query(None, description="ISO datetime — only jobs created on or after this time"),
     limit: int = Query(20, ge=1, le=100),
     offset: int = Query(0, ge=0),
     user: dict = get_current_user,
@@ -195,6 +193,13 @@ async def list_jobs(
     """List jobs for the authenticated user."""
     client = await get_postgres_client()
     user_id = user["user_id"]
+
+    created_after_dt = None
+    if created_after:
+        try:
+            created_after_dt = datetime.fromisoformat(created_after.replace("Z", "+00:00"))
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid created_after datetime format")
 
     jobs = await client.list_jobs(
         user_id=user_id,
@@ -204,12 +209,15 @@ async def list_jobs(
         sort=sort,
         limit=limit,
         offset=offset,
+        created_after=created_after_dt,
     )
 
     total = await client.count_jobs(
         user_id=user_id,
         status=status,
         outcome_tier=outcome_tier,
+        q=q,
+        created_after=created_after_dt,
     )
 
     return JobListResponse(
