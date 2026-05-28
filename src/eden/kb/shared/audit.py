@@ -103,13 +103,18 @@ def evaluate_audn(
 
 
 def _contradicts(a: dict, b: dict) -> bool:
-    """Check if two entries contradict each other."""
-    # Check key fields that shouldn't contradict
+    """Check if two entries contradict each other.
+
+    Two entries contradict when they have the same subject but mutually
+    exclusive properties (e.g., same entity_id but different entity_type,
+    or same entity_id/user but different edge_type).
+    """
+    # Key fields that should be consistent for a given subject
     contradictory_keys = ["entity_type", "edge_type", "category"]
     for key in contradictory_keys:
         if key in a and key in b and a[key] != b[key]:
-            # Same subject but different type - potential contradiction
-            pass  # For now, don't treat this as contradiction
+            # Same subject but different type - contradiction
+            return True
 
     return False
 
