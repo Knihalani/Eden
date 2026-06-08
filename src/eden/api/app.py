@@ -13,6 +13,8 @@ from eden.kb import initialize_kb, health_check as kb_health_check
 from eden.pipeline.graph import compile_eden_graph
 from eden.storage.checkpointer import create_postgres_checkpointer
 from eden.api.routes import jobs, kb, auth, orgs, references, api_keys, audit, analytics, export, scim, billing, sso, benchmark, chain
+# Batch A1 — OpenAI-compatible HTTP gateway (/gateway/v1/...)
+from eden.api.routes import gateway as _gateway_routes  # noqa: E402
 from eden.api.routes.jobs import set_eden_graph
 
 logger = logging.getLogger(__name__)
@@ -172,6 +174,8 @@ app.include_router(scim.router)  # /orgs/{org_id}/scim/v2
 app.include_router(sso.router)  # /sso
 app.include_router(benchmark.router)  # /benchmark
 app.include_router(chain.router)  # /chain
+# Batch A1 — register the OpenAI-compatible HTTP gateway
+app.include_router(_gateway_routes.router)  # /gateway/v1/...
 
 
 # ============================================================================

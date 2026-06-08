@@ -113,8 +113,32 @@ class Settings(BaseSettings):
     app_url: str = "https://portal.example.com"
 
     # Chain configuration
-chain_enabled_experts: list[str] = []  # Environment: EDEN_CHAIN_ENABLED_EXPERTS
-chain_disabled_optional: list[str] = []  # Environment: EDEN_CHAIN_DISABLED_OPTIONAL
+    chain_enabled_experts: list[str] = []  # Environment: EDEN_CHAIN_ENABLED_EXPERTS
+    chain_disabled_optional: list[str] = []  # Environment: EDEN_CHAIN_DISABLED_OPTIONAL
+
+    # CORS — comma-separated list of allowed origins; "*" is special-cased
+    # in app.py to mean "any origin".
+    cors_origins: str = ""
+
+    # Phase 7.0 / Batch A1 — secondary LLM provider (used by the OpenAI-
+    # compatible gateway when ``use_minimax`` is set; the default is to
+    # use OpenRouter).
+    use_minimax: bool = False
+    minimax_api_key: str = ""
+    minimax_base_url: str = "https://api.openai.com/v1"
+
+    # ── Phase 7.0 feature flags (referenced from eden.api.app lifespan) ──
+    # These were moved out of individual modules into Settings; defaults
+    # are conservative (off) so behaviour matches the pre-flags era.
+    ingestion_layer_enabled: bool = True
+    judges_enabled: bool = False
+    judges_async_tailer_enabled: bool = False
+    quota_enforcement_enabled: bool = False
+    rate_limit_default_rpm: int = 600
+    rate_limit_default_window: int = 60
+
+    # alembic.ini path used by the lifespan to run migrations at startup
+    alembic_ini: str = "alembic.ini"
 
     # Paths
     project_root: Path = Path(__file__).parent.parent.parent
