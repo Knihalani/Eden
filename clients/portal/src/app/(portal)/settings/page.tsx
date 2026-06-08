@@ -5,7 +5,7 @@ import { useOrg } from "@/hooks/use-org";
 import { useAuth } from "@/hooks/use-auth";
 import { usePermissions } from "@/hooks/use-permissions";
 import { api } from "@/lib/api";
-import { Loader2, Plus, Trash2, Building2, Users, Code, Copy, Check, Archive, RefreshCw, Key, FileText, Shield, CreditCard, KeyRound, Lock, BarChart2, FileArchive } from "lucide-react";
+import { Loader2, Plus, Trash2, Building2, Users, Code, Copy, Check, Archive, RefreshCw, Key, FileText, Shield, CreditCard, KeyRound, Lock, BarChart2, Server } from "lucide-react";
 import { cn } from "@/lib/utils";
 import Link from "next/link";
 import { DeleteOrgDialog } from "./_components/delete-org-dialog";
@@ -19,11 +19,13 @@ import { SecurityTab } from "./_components/security-tab";
 import { ScimTab } from "./_components/scim-tab";
 import { SSOTab } from "./_components/sso-tab";
 import { BillingTab } from "./_components/billing-tab";
+import { GatewayTab } from "./_components/gateway-tab";
 import { useToast } from "@/components/ui/toast";
 import { useConfirm } from "@/hooks/use-confirm";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useSearchParams } from "next/navigation";
 
-type Tab = "org" | "members" | "references" | "api-keys" | "security" | "scim" | "sso" | "audit-log" | "analytics" | "billing" | "exports";
+type Tab = "org" | "members" | "references" | "api-keys" | "security" | "scim" | "sso" | "audit-log" | "analytics" | "billing" | "gateway";
 
 const TABS = [
   { id: "org", label: "Organization", icon: Building2 },
@@ -33,7 +35,7 @@ const TABS = [
   { id: "security", label: "Security", icon: Shield },
   { id: "scim", label: "SCIM", icon: KeyRound },
   { id: "sso", label: "SSO", icon: Lock },
-  { id: "exports", label: "Exports", icon: FileArchive },
+  { id: "gateway", label: "AI Gateway", icon: Server },
   { id: "audit-log", label: "Audit Log", icon: FileText },
   { id: "analytics", label: "Analytics", icon: BarChart2 },
   { id: "billing", label: "Billing", icon: CreditCard },
@@ -42,7 +44,11 @@ const TABS = [
 export default function SettingsPage() {
   const { user } = useAuth();
   const { currentOrg, organizations, setCurrentOrg, refreshOrgs } = useOrg();
-  const [activeTab, setActiveTab] = useState<Tab>("org");
+  const searchParams = useSearchParams();
+  const initialTab = (searchParams.get("tab") as Tab) || "org";
+  const [activeTab, setActiveTab] = useState<Tab>(
+    TABS.some((t) => t.id === initialTab) ? initialTab : "org"
+  );
   const [indicatorStyle, setIndicatorStyle] = useState<React.CSSProperties>({});
   const navRef = useRef<HTMLDivElement>(null);
 
@@ -155,6 +161,7 @@ export default function SettingsPage() {
             {activeTab === "security" && <SecurityTab />}
             {activeTab === "scim" && <ScimTab org={currentOrg} />}
             {activeTab === "sso" && <SSOTab orgId={currentOrg?.id || ""} />}
+            {activeTab === "gateway" && <GatewayTab org={currentOrg} />}
             {activeTab === "audit-log" && <AuditLogTab org={currentOrg} />}
             {activeTab === "analytics" && <AnalyticsTab />}
             {activeTab === "billing" && <BillingTab />}

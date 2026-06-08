@@ -1,6 +1,7 @@
 """Shared FastAPI dependencies."""
 
 import hashlib
+from dataclasses import dataclass
 from typing import Optional
 
 from fastapi import Depends, HTTPException, Cookie, Header, status
@@ -60,6 +61,81 @@ def get_role_permissions(role: str) -> set[str]:
 def has_permission(role: str, permission: str) -> bool:
     """Check if a role has a specific permission."""
     return permission in get_role_permissions(role)
+
+
+@dataclass
+class OrgMember:
+    """Authenticated organization member context.
+
+    Returned by ``get_current_org_member`` and used as the auth
+    surface for human-facing CRUD endpoints. Wraps the user_id,
+    org_id, and role in a typed object so route signatures read
+    cleanly.
+    """
+
+    user_id: str
+    org_id: str
+    role: str
+    email: str = ""
+    name: str = ""
+
+
+async def get_current_org_member(
+    x_org_id: Optional[str] = Header(None, alias="X-Org-Id"),
+    authorization: Optional[str] = Cookie(None),
+) -> OrgMember:
+    """Authenticate a portal user and resolve their org membership.
+
+    Mirrors ``require_org_member`` but returns a typed ``OrgMember``
+    instead of a raw dict. Raises 401 on no/invalid auth, 403 on
+    no membership in the requested org.
+    """
+    if not authorization:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Not authenticated",
+        )
+    payload = decode_access_token(authorization)
+    if not payload:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired token",
+        )
+    user_id = payload.get("sub")
+    if not user_id:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid token payload",
+        )
+    org_id = x_org_id or payload.get("current_org_id")
+    if not org_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="No active organization",
+        )
+    client = await get_postgres_client()
+    row = await client.fetchrow(
+        """
+        SELECT om.role, u.name AS user_name, u.email
+        FROM org_members om
+        JOIN users u ON u.id = om.user_id
+        WHERE om.user_id = $1 AND om.org_id = $2
+        """,
+        user_id,
+        org_id,
+    )
+    if not row:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not a member of this organization",
+        )
+    return OrgMember(
+        user_id=user_id,
+        org_id=org_id,
+        role=row["role"],
+        email=row.get("email") or "",
+        name=row.get("user_name") or "",
+    )
 
 
 async def get_current_user(
