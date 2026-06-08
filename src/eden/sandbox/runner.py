@@ -9,11 +9,11 @@ import json
 import asyncio
 import hashlib
 import base64
+from collections import defaultdict
 from pathlib import Path
 from typing import Optional, AsyncIterator
 from dataclasses import dataclass, field
 from enum import Enum
-from concurrent import defaultdict
 
 logger = logging.getLogger(__name__)
 

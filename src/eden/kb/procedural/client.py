@@ -105,7 +105,7 @@ class ProceduralClient:
         query = "SELECT * FROM skills WHERE name = $1"
         return await client.fetchrow(query, name)
 
-    async def list(
+    async def list_skills(
         self,
         env_class: Optional[str] = None,
         framework: Optional[str] = None,
@@ -113,7 +113,12 @@ class ProceduralClient:
         limit: int = 100,
         offset: int = 0,
     ) -> list[dict]:
-        """List skills with optional filters."""
+        """List skills with optional filters.
+
+        Note: was renamed from ``list`` to avoid shadowing the ``list``
+        builtin in the class namespace (which broke ``-> list[dict]``
+        annotations downstream in the class body).
+        """
         client = await get_postgres_client()
 
         conditions = []

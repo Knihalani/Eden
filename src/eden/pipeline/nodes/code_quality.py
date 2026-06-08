@@ -3,6 +3,8 @@
 Runs 5 sequential passes: static analysis, security, complexity, performance, documentation.
 """
 
+from __future__ import annotations
+
 import asyncio
 import logging
 import re

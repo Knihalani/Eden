@@ -261,11 +261,6 @@ async def require_2fa(
         )
 
     return org
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Admin or owner role required",
-        )
-    return org
 
 
 async def require_org_owner(
@@ -426,6 +421,73 @@ async def get_optional_org(
 
     # Fall back to cookie auth
     return await get_current_org(x_org_id, authorization)
+
+
+# ============================================================================
+# Ingestion / Gateway Authentication
+# ============================================================================
+#
+# ``get_ingestion_auth`` is the shared auth dep for the telemetry ingestion
+# routes (POST /v1/ingest, /v1/events, /v1/spans, ...) and the OpenAI-
+# compatible gateway (/gateway/v1/...). It accepts EITHER:
+#
+#   * X-Org-Api-Key + X-Org-Id headers  — programmatic callers (curl, SDKs)
+#   * ``authorization`` session cookie  — portal users browsing the
+#     observability dashboard
+#
+# Whichever is valid wins. On 401 we raise with a clear error.
+# This mirrors the convention OpenAI / Anthropic / Helicone use: a single
+# "API key" credential for SDK callers, a cookie for the portal.
+
+async def get_ingestion_auth(
+    x_org_id: Optional[str] = Header(None, alias="X-Org-Id"),
+    x_org_api_key: Optional[str] = Header(None, alias="X-Org-Api-Key"),
+    authorization: Optional[str] = Cookie(None),
+) -> dict:
+    """Authenticate ingest / gateway traffic.
+
+    Returns ``{"org_id", "user_id", "api_key_id", "auth_method"}``.
+    ``user_id`` is None for API-key callers; ``api_key_id`` is None for
+    session-cookie callers. The gateway only requires ``org_id``, but
+    downstream telemetry is enriched with whichever IDs are present.
+    """
+    if x_org_api_key and x_org_id:
+        try:
+            ctx = await get_current_org_api_key(x_org_id, x_org_api_key)
+            return {
+                "org_id": ctx["org_id"],
+                "user_id": None,
+                "api_key_id": ctx.get("key_id"),
+                "auth_method": "api_key",
+                "scopes": ctx.get("scopes", []),
+            }
+        except HTTPException as exc:
+            # Invalid API key — fall through to cookie check; if that
+            # also fails, raise the API-key error (more specific).
+            api_key_error = exc
+
+    if authorization:
+        payload = decode_access_token(authorization)
+        if payload:
+            user_id = payload.get("sub")
+            org_id = x_org_id or payload.get("current_org_id")
+            if org_id:
+                return {
+                    "org_id": org_id,
+                    "user_id": user_id,
+                    "api_key_id": None,
+                    "auth_method": "session_cookie",
+                }
+
+    if x_org_api_key and x_org_id:
+        # Re-raise the API key error now that the cookie path failed
+        raise api_key_error  # type: ignore[misc]
+
+    raise HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Authentication required: provide X-Org-Api-Key or session cookie",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
 
 
 # ============================================================================

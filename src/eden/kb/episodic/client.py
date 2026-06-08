@@ -124,7 +124,7 @@ class EpisodicClient:
             logger.error(f"Failed to update job record: {e}")
             return False
 
-    async def list(
+    async def list_jobs(
         self,
         status: Optional[str] = None,
         outcome_tier: Optional[str] = None,
@@ -132,7 +132,12 @@ class EpisodicClient:
         limit: int = 100,
         offset: int = 0,
     ) -> list[dict]:
-        """List job records with optional filters."""
+        """List job records with optional filters.
+
+        Note: this used to be called ``list`` but the name shadowed
+        the ``list`` builtin in the class namespace, breaking the
+        ``-> list[dict]`` annotation. Renamed in 7.0/A1.
+        """
         client = await get_postgres_client()
 
         conditions = []
