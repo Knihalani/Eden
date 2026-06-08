@@ -510,6 +510,98 @@ export const api = {
       }>;
     }>(`/orgs/${orgId}/analytics${days ? `?days=${days}` : ""}`),
 
+  // Optimization — server may not have these endpoints yet; callers should
+  // fall back to synthetic data on 404. Wrapped in try/catch at the call site.
+  getOptimizationCosts: (orgId: string, days?: number) =>
+    fetchApi<{
+      by_day: Array<{ date: string; cost_usd: number }>;
+      by_model: Array<{ model: string; cost_usd: number; tokens: number; requests: number }>;
+    }>(
+      `/orgs/${orgId}/optimization/costs${days ? `?days=${days}` : ""}`
+    ),
+
+  getOptimizationCache: (orgId: string, days?: number) =>
+    fetchApi<{
+      by_day: Array<{
+        date: string;
+        cache_hits: number;
+        cache_misses: number;
+        tokens_saved: number;
+        cost_saved_usd: number;
+      }>;
+    }>(
+      `/orgs/${orgId}/optimization/cache${days ? `?days=${days}` : ""}`
+    ),
+
+  getOptimizationSavings: (orgId: string, days?: number) =>
+    fetchApi<{
+      by_day: Array<{ date: string; baseline_cost_usd: number; actual_cost_usd: number }>;
+      total_savings_usd: number;
+    }>(
+      `/orgs/${orgId}/optimization/savings${days ? `?days=${days}` : ""}`
+    ),
+
+  getOptimizationBudget: (orgId: string) =>
+    fetchApi<{
+      budget_usd: number;
+      spent_usd: number;
+      burn_pct: number;
+      days_into_period: number;
+      days_remaining: number;
+      projected_eom_cost_usd: number;
+      on_track: boolean;
+    }>(`/orgs/${orgId}/optimization/budget`),
+
+  getOptimizationCostPerTrace: (orgId: string, days?: number) =>
+    fetchApi<{
+      points: Array<{
+        trace_id: string;
+        cost_usd: number;
+        tokens: number;
+        latency_ms: number;
+        model: string;
+      }>;
+    }>(
+      `/orgs/${orgId}/optimization/cost-per-trace${days ? `?days=${days}` : ""}`
+    ),
+
+  // Per-model token usage (analytics tab)
+  getTokenUsage: (orgId: string, days?: number) =>
+    fetchApi<{
+      by_day: Array<{
+        date: string;
+        input_tokens: number;
+        output_tokens: number;
+      }>;
+    }>(`/orgs/${orgId}/analytics/token-usage${days ? `?days=${days}` : ""}`),
+
+  // Latency percentiles over time
+  getLatencyPercentiles: (orgId: string, days?: number) =>
+    fetchApi<{
+      by_day: Array<{ date: string; p50_ms: number; p95_ms: number; p99_ms: number }>;
+    }>(
+      `/orgs/${orgId}/analytics/latency${days ? `?days=${days}` : ""}`
+    ),
+
+  // Throughput by hour-of-day
+  getThroughputByHour: (orgId: string, days?: number) =>
+    fetchApi<{
+      by_hour: Array<{ hour: number; weekday: number; requests: number }>;
+    }>(
+      `/orgs/${orgId}/analytics/throughput${days ? `?days=${days}` : ""}`
+    ),
+
+  // Top agents by cost
+  getTopAgentsByCost: (orgId: string, days?: number) =>
+    fetchApi<{
+      agents: Array<{
+        agent: string;
+        cost_usd: number;
+        requests: number;
+        avg_latency_ms: number;
+      }>;
+    }>(`/orgs/${orgId}/analytics/top-agents${days ? `?days=${days}` : ""}`),
+
   // SCIM
   getScimConfig: (orgId: string) =>
     fetchApi<{
