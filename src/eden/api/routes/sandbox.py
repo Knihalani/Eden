@@ -21,10 +21,14 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 
-from eden.api.deps import get_current_user
+from eden.api.deps import get_current_user, require_feature_flag
 
 logger = logging.getLogger(__name__)
-router = APIRouter(prefix="/sandbox", tags=["sandbox"])
+router = APIRouter(
+    prefix="/sandbox",
+    tags=["sandbox"],
+    dependencies=[Depends(require_feature_flag("enable_eval_pipeline"))],
+)
 
 
 # ──────────────────────────────────────────────────────────────────────────

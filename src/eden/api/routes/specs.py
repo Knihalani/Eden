@@ -19,7 +19,7 @@ from typing import Optional
 from fastapi import APIRouter, HTTPException, BackgroundTasks, Depends, Header, Cookie
 from pydantic import BaseModel, Field
 
-from eden.api.deps import get_current_user
+from eden.api.deps import get_current_user, require_feature_flag
 from eden.agents.interviewer.agent import InterviewerAgent, InterviewSession, TurnResult
 from eden.storage.postgres import get_postgres_client
 from eden.pipeline.state import create_initial_state
@@ -30,7 +30,11 @@ from eden.config import get_settings
 logger = logging.getLogger(__name__)
 settings = get_settings()
 
-router = APIRouter(prefix="/specs", tags=["specs"])
+router = APIRouter(
+    prefix="/specs",
+    tags=["specs"],
+    dependencies=[Depends(require_feature_flag("enable_eval_pipeline"))],
+)
 
 # In-memory session store (production: use Redis)
 _interview_sessions: dict[str, InterviewSession] = {}

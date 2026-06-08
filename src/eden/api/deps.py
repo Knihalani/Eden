@@ -7,6 +7,7 @@ from fastapi import Depends, HTTPException, Cookie, Header, status
 from fastapi.security import HTTPBearer
 
 from eden.api.utils.auth import decode_access_token
+from eden.config import get_settings
 from eden.storage.postgres import get_postgres_client
 
 security = HTTPBearer(auto_error=False)
@@ -521,3 +522,35 @@ async def log_audit_event(
         ip_address,
         user_agent,
     )
+
+
+# ============================================================================
+# Feature Flags
+# ============================================================================
+
+
+def require_feature_flag(flag_name: str):
+    """Build a FastAPI dependency that gates a route on a boolean setting.
+
+    When the flag is OFF, the dependency raises HTTP 404 (pretending the route
+    does not exist) rather than 403. 404 is preferred because it leaks no
+    information about the existence of the feature to un-flagged callers.
+
+    Settings are read at request time (not at decorator/build time) so that
+    tests can monkeypatch ENABLE_EVAL_PIPELINE between requests.
+
+    Usage:
+        @router.get("/jobs", dependencies=[Depends(require_feature_flag("enable_eval_pipeline"))])
+        async def list_jobs(...): ...
+    """
+
+    async def _dependency() -> None:
+        settings = get_settings()
+        enabled = bool(getattr(settings, flag_name, False))
+        if not enabled:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Not Found",
+            )
+
+    return _dependency

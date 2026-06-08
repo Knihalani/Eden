@@ -3,15 +3,20 @@
 import logging
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
+from eden.api.deps import require_feature_flag
 from eden.config import get_settings
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
 
-router = APIRouter(prefix="/chain", tags=["chain"])
+router = APIRouter(
+    prefix="/chain",
+    tags=["chain"],
+    dependencies=[Depends(require_feature_flag("enable_eval_pipeline"))],
+)
 
 # Core agents (always enabled, immutable)
 CORE_AGENTS = ["planner", "critic", "refiner", "executor", "verifier", "tester", "archivist"]
