@@ -232,7 +232,9 @@ def patch_email_service():
     mock_service = MagicMock()
     mock_service.send_email = AsyncMock(return_value=True)
     with patch("eden.services.email_service.get_email_service", return_value=mock_service):
-        with patch("eden.api.routes.auth.get_email_service", return_value=mock_service):
+        # invitation_service is the canonical caller; auth.py doesn't import
+        # get_email_service directly, so patching there used to AttributeError.
+        with patch("eden.services.invitation_service.get_email_service", return_value=mock_service):
             yield mock_service
 
 
