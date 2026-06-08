@@ -5,7 +5,7 @@ import secrets
 import hashlib
 from uuid import uuid4
 
-from fastapi import APIRouter, HTTPException, status, Header
+from fastapi import Depends, APIRouter, HTTPException, status, Header
 from typing import Optional
 
 from eden.api.deps import get_current_user, require_org_admin
@@ -44,7 +44,7 @@ async def create_api_key(
     org_id: str,
     name: str,
     scopes: list[str],
-    user: dict = get_current_user,
+    user: dict = Depends(get_current_user),
 ):
     """Create a new API key for an organization.
 
@@ -110,7 +110,7 @@ async def create_api_key(
 @router.get("", response_model=list[dict])
 async def list_api_keys(
     org_id: str,
-    user: dict = get_current_user,
+    user: dict = Depends(get_current_user),
 ):
     """List all API keys for an organization (without raw keys)."""
     # Require org membership (any role can view keys)
@@ -150,7 +150,7 @@ async def list_api_keys(
 async def revoke_api_key(
     org_id: str,
     key_id: str,
-    user: dict = get_current_user,
+    user: dict = Depends(get_current_user),
 ):
     """Revoke (delete) an API key."""
     await require_org_admin(org_id)
