@@ -3,7 +3,8 @@
 import logging
 from typing import Literal, Optional
 
-from langgraph.graph import StateGraph, END, Command
+from langgraph.graph import StateGraph, END
+from langgraph.types import Command
 
 from eden.pipeline.state import EdenJobState, create_initial_state
 from eden.pipeline.nodes import (
