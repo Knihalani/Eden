@@ -8,6 +8,8 @@ asks ``for_event(event)`` for the judges that apply to one event.
 
 from __future__ import annotations
 
+from __future__ import annotations
+
 import logging
 from typing import TYPE_CHECKING, Iterable, Optional
 

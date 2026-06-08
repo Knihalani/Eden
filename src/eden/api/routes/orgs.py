@@ -7,7 +7,7 @@ import secrets
 from typing import Optional
 from uuid import uuid4
 
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import Depends, APIRouter, HTTPException, Query, status
 from pydantic import BaseModel
 
 from eden.api.deps import get_current_user, require_org_admin, require_org_member, require_org_owner, require_org_permission, log_audit_event
@@ -96,7 +96,7 @@ class CreateOrgResponse:
 async def create_org(
     name: str,
     make_default: bool = True,
-    user: dict = get_current_user,
+    user: dict = Depends(get_current_user),
 ):
     """Create a new organization. Creator becomes owner."""
     client = await get_postgres_client()
@@ -161,7 +161,7 @@ async def create_org(
 
 @router.get("", response_model=list[dict])
 async def list_user_orgs(
-    user: dict = get_current_user,
+    user: dict = Depends(get_current_user),
     include_archived: bool = Query(default=False),
 ):
     """List all organizations the user is a member of (excludes archived by default)."""
@@ -210,7 +210,7 @@ async def list_user_orgs(
 
 
 @router.get("/{org_id}", response_model=dict)
-async def get_org(org_id: str, user: dict = get_current_user):
+async def get_org(org_id: str, user: dict = Depends(get_current_user)):
     """Get organization details (must be member)."""
     client = await get_postgres_client()
     user_id = user["user_id"]
@@ -260,7 +260,7 @@ async def send_invite(
     org_id: str,
     email: str,
     role: str = "member",
-    user: dict = get_current_user,
+    user: dict = Depends(get_current_user),
 ):
     """Send an email invitation to a user to join the organization."""
     await require_org_permission("members:invite", org_id)
@@ -339,7 +339,7 @@ async def send_invite(
 @router.get("/{org_id}/invites", response_model=list[dict])
 async def list_invitations(
     org_id: str,
-    user: dict = get_current_user,
+    user: dict = Depends(get_current_user),
 ):
     """List all pending invitations for an organization."""
     await require_org_permission("members:invite", org_id)
@@ -352,7 +352,7 @@ async def list_invitations(
 async def accept_org_invitation(
     org_id: str,
     invitation_id: str,
-    user: dict = get_current_user,
+    user: dict = Depends(get_current_user),
 ):
     """Accept an organization invitation."""
     await require_org_member(org_id)
@@ -388,7 +388,7 @@ async def accept_org_invitation(
 async def decline_org_invitation(
     org_id: str,
     invitation_id: str,
-    user: dict = get_current_user,
+    user: dict = Depends(get_current_user),
 ):
     """Decline an organization invitation."""
     await require_org_member(org_id)
@@ -420,7 +420,7 @@ async def decline_org_invitation(
 async def remove_member(
     org_id: str,
     user_id: str,
-    user: dict = get_current_user,
+    user: dict = Depends(get_current_user),
 ):
     """Remove a member from the organization."""
     org = await require_org_permission("members:remove", org_id)
@@ -463,7 +463,7 @@ async def remove_member(
 
 
 @router.get("/{org_id}/members", response_model=list[dict])
-async def list_org_members(org_id: str, user: dict = get_current_user):
+async def list_org_members(org_id: str, user: dict = Depends(get_current_user)):
     """List all members of an organization."""
     await require_org_member(org_id, authorization=None)
 
@@ -496,7 +496,7 @@ async def list_org_members(org_id: str, user: dict = get_current_user):
 async def update_org_settings(
     org_id: str,
     settings: dict,
-    user: dict = get_current_user,
+    user: dict = Depends(get_current_user),
 ):
     """Update organization settings (admin only)."""
     await require_org_permission("settings:edit", org_id, authorization=None)
@@ -530,7 +530,7 @@ async def update_org_settings(
 
 
 @router.post("/{org_id}/archive", response_model=dict)
-async def archive_org(org_id: str, user: dict = get_current_user):
+async def archive_org(org_id: str, user: dict = Depends(get_current_user)):
     """Archive an organization (soft-delete). Admin or owner only."""
     await require_org_permission("settings:edit", org_id)
 
@@ -572,7 +572,7 @@ async def archive_org(org_id: str, user: dict = get_current_user):
 
 
 @router.delete("/{org_id}", response_model=dict)
-async def delete_org(org_id: str, user: dict = get_current_user):
+async def delete_org(org_id: str, user: dict = Depends(get_current_user)):
     """Permanently delete an organization. Owner only. Warning: cascades to all org data."""
     await require_org_owner(org_id)
 
@@ -623,7 +623,7 @@ async def delete_org(org_id: str, user: dict = get_current_user):
 async def transfer_ownership(
     org_id: str,
     target_user_id: str,
-    user: dict = get_current_user,
+    user: dict = Depends(get_current_user),
 ):
     """Transfer organization ownership to another member.
 
@@ -695,7 +695,7 @@ async def transfer_ownership(
 @router.get("/{org_id}/scim/config", response_model=dict)
 async def get_scim_config(
     org_id: str,
-    user: dict = get_current_user,
+    user: dict = Depends(get_current_user),
 ):
     """Get SCIM configuration for the organization (admin only).
 
@@ -731,7 +731,7 @@ async def get_scim_config(
 async def configure_scim(
     org_id: str,
     enabled: bool,
-    user: dict = get_current_user,
+    user: dict = Depends(get_current_user),
 ):
     """Enable or disable SCIM for the organization (admin only).
 
@@ -828,7 +828,7 @@ async def configure_scim(
 @router.post("/{org_id}/scim/rotate-token", response_model=dict)
 async def rotate_scim_token(
     org_id: str,
-    user: dict = get_current_user,
+    user: dict = Depends(get_current_user),
 ):
     """Rotate the SCIM bearer token (admin only).
 
@@ -906,7 +906,7 @@ class AddAllowedDomainRequest(BaseModel):
 @router.get("/{org_id}/allowed-domains", response_model=list[dict])
 async def list_allowed_domains(
     org_id: str,
-    user: dict = get_current_user,
+    user: dict = Depends(get_current_user),
 ):
     """List all allowed email domains for an organization."""
     await require_org_admin(org_id)
@@ -937,7 +937,7 @@ async def list_allowed_domains(
 async def add_allowed_domain(
     org_id: str,
     request: AddAllowedDomainRequest,
-    user: dict = get_current_user,
+    user: dict = Depends(get_current_user),
 ):
     """Add an allowed email domain to an organization."""
     await require_org_admin(org_id)
@@ -1004,7 +1004,7 @@ async def add_allowed_domain(
 async def remove_allowed_domain(
     org_id: str,
     domain_id: str,
-    user: dict = get_current_user,
+    user: dict = Depends(get_current_user),
 ):
     """Remove an allowed email domain from an organization."""
     await require_org_admin(org_id)
@@ -1039,7 +1039,7 @@ async def remove_allowed_domain(
 @router.get("/{org_id}/domain-restriction", response_model=dict)
 async def get_domain_restriction_settings(
     org_id: str,
-    user: dict = get_current_user,
+    user: dict = Depends(get_current_user),
 ):
     """Get domain restriction settings for an organization."""
     await require_org_member(org_id, authorization=None)
@@ -1064,7 +1064,7 @@ async def get_domain_restriction_settings(
 async def update_domain_restriction_settings(
     org_id: str,
     request: DomainRestrictionSettings,
-    user: dict = get_current_user,
+    user: dict = Depends(get_current_user),
 ):
     """Update domain restriction enforcement for an organization."""
     await require_org_admin(org_id)
@@ -1106,7 +1106,7 @@ class EnforceTwoFARequest(BaseModel):
 async def enforce_org_2fa(
     org_id: str,
     request: EnforceTwoFARequest,
-    user: dict = get_current_user,
+    user: dict = Depends(get_current_user),
 ):
     """Enable or disable 2FA enforcement for the organization.
 
@@ -1145,7 +1145,7 @@ async def enforce_org_2fa(
 @router.get("/{org_id}/2fa/enforcement-status", response_model=dict)
 async def get_2fa_enforcement_status(
     org_id: str,
-    user: dict = get_current_user,
+    user: dict = Depends(get_current_user),
 ):
     """Get 2FA enforcement status for an organization."""
     await require_org_admin(org_id)
@@ -1170,7 +1170,7 @@ async def get_2fa_enforcement_status(
 @router.get("/{org_id}/members-2fa-status", response_model=list[dict])
 async def get_org_members_2fa_status(
     org_id: str,
-    user: dict = get_current_user,
+    user: dict = Depends(get_current_user),
 ):
     """Get 2FA status for all members in an organization.
 
