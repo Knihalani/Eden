@@ -15,7 +15,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 
-from eden.api.deps import get_current_user
+from eden.api.deps import get_current_user, require_feature_flag
 from eden.multi_agent import (
     Message,
     MessageBus,
@@ -43,7 +43,11 @@ from eden.multi_agent import (
     MultiAgentTestSuite,
 )
 
-router = APIRouter(prefix="/orgs/{org_id}/multi-agent", tags=["multi-agent"])
+router = APIRouter(
+    prefix="/orgs/{org_id}/multi-agent",
+    tags=["multi-agent"],
+    dependencies=[Depends(require_feature_flag("enable_eval_pipeline"))],
+)
 
 
 # ──────────────────────────────────────────────────────────────────────────

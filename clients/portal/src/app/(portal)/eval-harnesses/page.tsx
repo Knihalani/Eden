@@ -6,6 +6,7 @@ import { JobGridSkeleton } from "@/components/jobs/job-filters";
 import { Plus, Search, X, ChevronLeft, ChevronRight, SlidersHorizontal, Activity, CheckCircle2, Clock, AlertCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import Link from "next/link";
+import { useFeatureFlags } from "@/hooks/use-feature-flags";
 
 interface JobListItem {
   job_id: string;
@@ -90,6 +91,7 @@ function DateRangePicker({ onChange }: { onChange: (range: string) => void }) {
 }
 
 export default function JobsPage() {
+  const { flags, loading: flagsLoading } = useFeatureFlags();
   const [jobs, setJobs] = useState<JobListItem[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(false);
@@ -200,6 +202,32 @@ export default function JobsPage() {
 
   const hasActiveFilters = searchQuery || status || outcomeTier !== "__all__" || dateRange !== "all";
 
+  // When the eval-pipeline feature flag is off, render a friendly disabled
+  // state. The sidebar should already hide the "Eval Harnesses" entry, but
+  // this guards against direct URL navigation.
+  if (!flagsLoading && !flags.enable_eval_pipeline) {
+    return (
+      <div className="p-4 sm:p-6 max-w-2xl mx-auto">
+        <div className="bg-[var(--surface)] shadow-sm rounded-xl p-8 border border-[var(--border)] text-center">
+          <h1 className="text-xl font-semibold text-[var(--text-primary)] mb-2">
+            Eval Harnesses is disabled
+          </h1>
+          <p className="text-sm text-[var(--text-muted)] mb-6">
+            The multi-stage environment generation pipeline is currently turned off
+            on this Eden deployment. Set <code className="font-mono text-xs">ENABLE_EVAL_PIPELINE=true</code> in the
+            backend environment to re-enable it.
+          </p>
+          <Link
+            href="/dashboard"
+            className="inline-block px-4 py-2 rounded-lg bg-[var(--accent)] text-white text-sm font-medium hover:bg-[var(--accent-hover)]"
+          >
+            Back to Dashboard
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="p-4 sm:p-6 max-w-7xl mx-auto">
       {/* Header */}
@@ -211,7 +239,7 @@ export default function JobsPage() {
           </p>
         </div>
         <Link
-          href="/jobs/new"
+          href="/eval-harnesses/new"
           className={cn(
             "flex items-center gap-2 bg-[var(--accent)] text-white px-5 py-2.5 rounded-xl",
             "hover:bg-[var(--accent-hover)] transition-all font-semibold text-sm shadow-sm",
@@ -354,7 +382,7 @@ export default function JobsPage() {
                 Get started by creating your first job and watch the magic happen.
               </p>
               <Link
-                href="/jobs/new"
+                href="/eval-harnesses/new"
                 className={cn(
                   "inline-flex items-center gap-2 bg-[var(--accent)] text-white px-6 py-3 rounded-xl",
                   "hover:bg-[var(--accent-hover)] transition-all font-semibold text-sm",

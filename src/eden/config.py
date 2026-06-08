@@ -158,6 +158,12 @@ class Settings(BaseSettings):
     insights_loop_batch_size: int = 200
     insights_loop_max_runtime_seconds: float = 50.0
 
+    # Feature flags
+    # Default OFF: the legacy multi-stage environment-generation pipeline
+    # (Planner→Critic→Refiner→Fact-checker→Executor→Code-quality→Verifier→Tester→Archivist)
+    # is being hard-cut. Set ENABLE_EVAL_PIPELINE=true to re-enable.
+    enable_eval_pipeline: bool = False  # Environment: ENABLE_EVAL_PIPELINE
+
     # Paths
     project_root: Path = Path(__file__).parent.parent.parent
     seed_data_dir: Path = Path("./seed")
