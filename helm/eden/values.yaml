@@ -1,0 +1,94 @@
+# Default values for the Eden chart.
+# These are dev / demo defaults; production should override
+# every secret-bearing field via --set or a values file.
+
+# -- Image registry / repository
+image:
+  repository: eden/api
+  tag: latest
+  pullPolicy: IfNotPresent
+
+# -- Replica counts
+api:
+  replicaCount: 2
+  resources:
+    requests: { cpu: 200m, memory: 512Mi }
+    limits: { cpu: 1000m, memory: 1Gi }
+  service:
+    type: ClusterIP
+    port: 8000
+
+worker:
+  replicaCount: 2
+  resources:
+    requests: { cpu: 200m, memory: 512Mi }
+    limits: { cpu: 2000m, memory: 2Gi }
+
+# -- Pluggable backends. Set any of these to a non-empty string
+# to use an external service instead of the in-chart one.
+externalPostgres: ""
+externalRedis: ""
+externalClickhouse: ""
+externalQdrant: ""
+
+# -- In-chart services. Disable the ones you've externalised.
+postgres:
+  enabled: true
+  image:
+    repository: postgres
+    tag: "16"
+  persistence:
+    enabled: true
+    size: 50Gi
+redis:
+  enabled: true
+  image:
+    repository: redis
+    tag: "7"
+clickhouse:
+  enabled: false  # off by default — heavy memory footprint
+qdrant:
+  enabled: true
+  image:
+    repository: qdrant/qdrant
+    tag: "v1.7.0"
+
+# -- SSO-ready: OIDC issuer + SAML metadata URL.
+# The backend reads EDEN_SSO_OIDC_ISSUER and EDEN_SSO_SAML_METADATA_URL
+# at startup and wires them into the SSO flow.
+sso:
+  oidcIssuer: ""
+  samlMetadataUrl: ""
+
+# -- Observability (§10.3). When enabled, the chart deploys
+# Prometheus + Grafana sidecars and points the API at Grafana
+# Cloud's remote_write endpoint.
+monitoring:
+  enabled: true
+  prometheus:
+    remoteWriteUrl: ""
+  grafana:
+    dashboards: true
+  alerts:
+    pagerdutyKey: ""
+
+# -- Discord webhook (closes §7.5). When set, fired alerts
+# are forwarded to the channel via the customer's webhook URL.
+discord:
+  webhookUrlSecret: ""  # name of a k8s Secret holding the webhook
+
+# -- Support webhook (closes §11.6). When set, the portal
+# "Submit ticket" button POSTs to this URL.
+support:
+  webhookUrl: ""
+
+ingress:
+  enabled: false
+  className: nginx
+  annotations: {}
+  hosts:
+    - host: eden.local
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []

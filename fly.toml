@@ -1,0 +1,46 @@
+app = "eden-staging"
+primary_region = "iad"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  HOST = "0.0.0.0"
+  PORT = "8000"
+  DEBUG = "false"
+  CORS_ORIGINS = "https://eden-staging.fly.dev"
+  RATE_LIMIT_DEFAULT_RPM = "60"
+  RATE_LIMIT_DEFAULT_WINDOW = "60"
+  PIPELINE_TIMEOUT_SECONDS = "300"
+  PIPELINE_TIMEOUT_ENABLED = "true"
+  BRONZE_BATCH_SIZE = "100"
+  BRONZE_FLUSH_INTERVAL_SECONDS = "5.0"
+
+[http_service]
+  internal_port = 8000
+  force_https = true
+  auto_stop_machines = true
+  auto_start_machines = true
+  min_machines_running = 1
+  max_machines_running = 3
+
+  [[http_service.checks]]
+    interval = "30s"
+    timeout = "10s"
+    grace_period = "15s"
+    method = "GET"
+    path = "/health"
+    protocol = "http"
+
+[metrics]
+  port = 8000
+  path = "/metrics"
+
+[[vm]]
+  cpu_kind = "shared"
+  cpus = 2
+  memory_mb = 2048
+
+[[mounts]]
+  source = "eden_data"
+  destination = "/data"

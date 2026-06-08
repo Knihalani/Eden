@@ -1,0 +1,47 @@
+name: pen-test-cadence (weekly checklist)
+
+on:
+  schedule:
+    # Every Monday 9am UTC. Posts a checklist issue to eden/security.
+    - cron: "0 9 * * 1"
+  workflow_dispatch: {}
+
+jobs:
+  post-checklist:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Post pen-test checklist issue
+        env:
+          GH_TOKEN: ${{ secrets.EDEN_BOT_TOKEN }}
+        run: |
+          gh issue create \
+            --repo "$GITHUB_REPOSITORY" \
+            --label "security,pen-test" \
+            --assignee "@eden/security" \
+            --title "Pen-test checklist — week of $(date -u +%Y-%m-%d)" \
+            --body "$(cat <<'EOF'
+          ## Weekly pen-test checklist
+
+          Reference: `docs/soc2-control-mapping.md` (CC4.x — Monitoring activities)
+
+          - [ ] Recon: scan the staging environment with the current Nmap profile
+          - [ ] Auth: confirm login rate-limit thresholds are still > brute-force infeasible
+          - [ ] Auth: confirm 2FA enforcement for the org-owner role
+          - [ ] Tenant isolation: run the cross-org access probe (`scripts/tenant_isolation_smoke.py`)
+          - [ ] Sandbox: probe Firecracker with a known-bad syscall
+          - [ ] KB: confirm the AI gateway PII filter is masking emails/phones/SSNs
+          - [ ] Webhooks: confirm HMAC-SHA256 signature verification is enforced
+          - [ ] Audit log: confirm `verify_audit_chain` returns `ok=true` on a sample org
+          - [ ] SCIM: confirm auto-deprovisioning still works
+          - [ ] API keys: confirm key-scoping restrictions are enforced (migration 017)
+
+          ## Findings
+          <record anything notable here>
+
+          ## Artifacts
+          <link the issue to any reports / screenshots>
+          EOF
+          )"
+          echo "Posted pen-test checklist issue"

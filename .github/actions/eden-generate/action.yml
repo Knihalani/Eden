@@ -1,0 +1,146 @@
+name: eden-generate
+description: >
+  Run `eden generate` from CI/CD. Wraps the Eden CLI to create a
+  spec + job from a description, wait for the result, and post a
+  PR comment summarising the quality report.
+author: Eden
+
+inputs:
+  description:
+    description: Plain-language description of the environment to generate.
+    required: true
+  eden-api-key:
+    description: Eden API key (recommend passing via secret).
+    required: true
+  eden-org:
+    description: Target organization ID (recommend passing via secret).
+    required: true
+  eden-base-url:
+    description: Eden API base URL.
+    required: false
+    default: https://api.eden.com
+  spec-file:
+    description: Optional path to a pre-built spec YAML/JSON.
+    required: false
+    default: ""
+  timeout:
+    description: Maximum seconds to wait for the job to terminate.
+    required: false
+    default: "1800"
+  python-version:
+    description: Python version to use for the CLI install.
+    required: false
+    default: "3.12"
+  post-pr-comment:
+    description: Set to "false" to skip the PR comment.
+    required: false
+    default: "true"
+  fail-on-quality-regression:
+    description: >
+      Set to "true" to fail the workflow when the generated job
+      fails or the outcome tier is "low". Default: "false" (the
+      PR comment is informational, the workflow still passes).
+    required: false
+    default: "false"
+
+outputs:
+  job-id:
+    description: The ID of the generated job.
+    value: ${{ steps.run.outputs.job_id }}
+  status:
+    description: Terminal status of the job (completed, failed, etc.).
+    value: ${{ steps.run.outputs.status }}
+  outcome-tier:
+    description: Outcome tier ("high", "medium", "low") when the job completes.
+    value: ${{ steps.run.outputs.outcome_tier }}
+  quality-score:
+    description: Aggregate quality score when the job completes.
+    value: ${{ steps.run.outputs.quality_score }}
+
+runs:
+  using: composite
+  steps:
+    - name: Set up Python ${{ inputs.python-version }}
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ inputs.python-version }}
+
+    - name: Install eden CLI
+      shell: bash
+      run: pip install --quiet eden-sdk
+
+    - name: Run eden generate
+      id: run
+      shell: bash
+      env:
+        EDEN_API_KEY: ${{ inputs.eden-api-key }}
+        EDEN_DEFAULT_ORG: ${{ inputs.eden-org }}
+        EDEN_BASE_URL: ${{ inputs.eden-base-url }}
+      run: |
+        set -euo pipefail
+        args=(
+          generate
+          --description "${{ inputs.description }}"
+          --timeout "${{ inputs.timeout }}"
+          --format json
+        )
+        if [ -n "${{ inputs.spec-file }}" ]; then
+          args+=(--spec-file "${{ inputs.spec-file }}")
+        fi
+        # The CLI writes JSON to stdout because --format json.
+        # We also write a copy to a GITHUB_OUTPUT-friendly file
+        # because multi-line JSON doesn't survive `>> $GITHUB_OUTPUT`.
+        out="$(eden "${args[@]}")"
+        echo "$out" > /tmp/eden-generate.json
+        {
+          echo "job_id<<EOF"
+          echo "$out" | python -c "import sys,json; print(json.load(sys.stdin).get('job_id',''))"
+          echo "EOF"
+          echo "status<<EOF"
+          echo "$out" | python -c "import sys,json; print(json.load(sys.stdin).get('status',''))"
+          echo "EOF"
+          echo "outcome_tier<<EOF"
+          echo "$out" | python -c "import sys,json; print(json.load(sys.stdin).get('outcome_tier',''))"
+          echo "EOF"
+          echo "quality_score<<EOF"
+          echo "$out" | python -c "import sys,json; print(json.load(sys.stdin).get('quality_score',''))"
+          echo "EOF"
+        } >> "$GITHUB_OUTPUT"
+
+    - name: Render PR comment
+      if: inputs.post-pr-comment == 'true' && github.event_name == 'pull_request'
+      shell: bash
+      run: |
+        python - <<'PY' > /tmp/eden-pr-comment.md
+        import json, os
+        with open("/tmp/eden-generate.json") as f:
+            data = json.load(f)
+        job_id = data.get("job_id", "?")
+        status = data.get("status", "?")
+        tier = data.get("outcome_tier") or "—"
+        score = data.get("quality_score") or "—"
+        report = data.get("report_url") or ""
+        emoji = {"completed": "✅", "failed": "❌", "cancelled": "⚠️"}.get(status, "⏳")
+        print(f"## {emoji} Eden environment generation")
+        print("")
+        print(f"- **Job:** `{job_id}`")
+        print(f"- **Status:** {status}")
+        print(f"- **Outcome tier:** {tier}")
+        print(f"- **Quality score:** {score}")
+        if report:
+            print(f"- **Full report:** {report}")
+        PY
+
+    - name: Post PR comment
+      if: inputs.post-pr-comment == 'true' && github.event_name == 'pull_request'
+      uses: marocchino/sticky-pull-request-comment@v2
+      with:
+        header: eden-generate
+        path: /tmp/eden-pr-comment.md
+
+    - name: Fail on quality regression
+      if: inputs.fail-on-quality-regression == 'true' && steps.run.outputs.status == 'failed'
+      shell: bash
+      run: |
+        echo "::error::Eden job ${{ steps.run.outputs.job_id }} failed."
+        exit 1

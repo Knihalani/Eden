@@ -1,0 +1,784 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>API Documentation — Eden</title>
+  <link rel="stylesheet" href="tokens.css" />
+  <style>
+    body { background: var(--bg-base); }
+
+    /* Docs layout */
+    .docs-layout { display: flex; min-height: 100vh; }
+    .docs-sidebar {
+      width: 220px; flex-shrink: 0;
+      background: var(--bg-surface);
+      border-right: 1px solid var(--border-subtle);
+      position: fixed; top: 0; left: 0;
+      height: 100vh; overflow-y: auto; z-index: 100;
+      display: flex; flex-direction: column;
+    }
+    .docs-sidebar-header {
+      padding: 0 var(--space-4); height: var(--header-h);
+      border-bottom: 1px solid var(--border-subtle);
+      display: flex; align-items: center; gap: var(--space-2);
+    }
+    .docs-logo-mark {
+      width: 28px; height: 28px; background: var(--accent);
+      border-radius: var(--radius-md);
+      display: grid; place-items: center;
+      color: oklch(10% 0.02 250);
+      font: 12px/1 var(--font-mono); font-weight: 700;
+    }
+    .docs-logo-name { font: 14px/1 var(--font-sans); font-weight: 700; letter-spacing: var(--tracking-tight); color: var(--fg-primary); }
+    .docs-nav { flex: 1; padding: var(--space-3) var(--space-2); display: flex; flex-direction: column; position: relative; }
+
+    /* Reading progress line */
+    .docs-progress-track {
+      position: absolute;
+      right: 6px;
+      top: 0;
+      bottom: 0;
+      width: 2px;
+      background: var(--border-subtle);
+      border-radius: 1px;
+    }
+    .docs-progress-fill {
+      width: 100%;
+      background: var(--accent);
+      border-radius: 1px;
+      transition: height 0.15s linear;
+      box-shadow: 0 0 6px oklch(70% 0.16 200 / 0.4);
+      height: 0%;
+    }
+
+    .docs-section-label { font: var(--text-xs) / 1 var(--font-mono); font-weight: 600; letter-spacing: var(--tracking-wider); text-transform: uppercase; color: var(--fg-faint); padding: var(--space-4) var(--space-3) var(--space-1); }
+    .docs-nav-item {
+      display: flex; align-items: center; gap: var(--space-2);
+      padding: var(--space-2) var(--space-3);
+      border-radius: var(--radius-md);
+      font: var(--text-sm) / 1 var(--font-sans); font-weight: 500;
+      color: var(--fg-muted); cursor: pointer; text-decoration: none;
+      transition: background var(--t-fast), color var(--t-fast);
+    }
+    .docs-nav-item:hover { background: var(--bg-hover); color: var(--fg-primary); }
+    .docs-nav-item.active { background: var(--accent-dim); color: var(--accent); font-weight: 600; }
+    .docs-nav-item .method-badge { font: 9px/1 var(--font-mono); font-weight: 700; letter-spacing: 0.06em; padding: 2px 5px; border-radius: 3px; text-transform: uppercase; flex-shrink: 0; }
+    .method-post { background: var(--success); color: oklch(10% 0.02 250); }
+    .method-get { background: var(--info); color: oklch(10% 0.02 250); }
+    .method-delete { background: var(--error); color: #fff; }
+
+    .docs-main { flex: 1; margin-left: 220px; display: flex; flex-direction: column; min-height: 100vh; }
+    .docs-topbar {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0 var(--space-8); height: var(--header-h);
+      border-bottom: 1px solid var(--border-subtle);
+      background: var(--bg-surface);
+      position: sticky; top: 0; z-index: 50;
+    }
+    .docs-topbar-title { font: var(--text-md) / 1 var(--font-sans); font-weight: 600; color: var(--fg-primary); }
+    .docs-body { padding: var(--space-8); flex: 1; display: flex; flex-direction: column; gap: var(--space-8); max-width: 860px; }
+
+    /* Sections */
+    .docs-section { display: flex; flex-direction: column; gap: var(--space-5); }
+    .docs-section-title { font: var(--text-2xl) / 1.2 var(--font-sans); font-weight: 700; letter-spacing: var(--tracking-tight); color: var(--fg-primary); padding-bottom: var(--space-4); border-bottom: 1px solid var(--border-subtle); }
+
+    /* Endpoint card */
+    .endpoint {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-lg);
+      overflow: hidden;
+      margin-bottom: var(--space-3);
+    }
+    .endpoint-header {
+      display: flex; align-items: center; gap: var(--space-3);
+      padding: var(--space-4) var(--space-5);
+      cursor: pointer;
+      transition: background var(--t-fast);
+    }
+    .endpoint-header:hover { background: var(--bg-elevated); }
+    .endpoint.open .endpoint-header { background: var(--bg-elevated); border-bottom: 1px solid var(--border-subtle); }
+    .method-badge-lg { font: var(--text-xs) / 1 var(--font-mono); font-weight: 800; letter-spacing: var(--tracking-wide); padding: 3px 8px; border-radius: var(--radius-sm); flex-shrink: 0; }
+    .endpoint-path { font: var(--text-sm) / 1 var(--font-mono); font-weight: 600; color: var(--fg-primary); flex: 1; }
+    .endpoint-summary { font: var(--text-sm) / 1 var(--font-sans); color: var(--fg-muted); }
+    .endpoint-chevron { width: 14px; height: 14px; color: var(--fg-faint); transition: transform var(--t-base); }
+    .endpoint.open .endpoint-chevron { transform: rotate(180deg); }
+    .endpoint-body { display: none; padding: var(--space-5); }
+    .endpoint.open .endpoint-body { display: block; }
+
+    /* Schema table */
+    .schema-table { width: 100%; border-collapse: collapse; font-size: var(--text-xs); overflow-x: auto; display: block; }
+    .schema-table th { text-align: left; font: var(--text-xs) / 1 var(--font-mono); font-weight: 500; letter-spacing: var(--tracking-wider); text-transform: uppercase; color: var(--fg-faint); padding: var(--space-2) var(--space-4); border-bottom: 1px solid var(--border-default); background: var(--bg-elevated); white-space: nowrap; }
+    .schema-table td { padding: var(--space-3) var(--space-4); border-bottom: 1px solid var(--border-subtle); vertical-align: top; }
+    .schema-table tr:last-child td { border-bottom: none; }
+    .schema-name { font: var(--text-xs) / 1 var(--font-mono); font-weight: 600; color: var(--fg-primary); }
+    .schema-type { font: var(--text-xs) / 1 var(--font-mono); color: oklch(68% 0.14 280); }
+    .schema-required { color: var(--error); font: 9px/1 var(--font-mono); letter-spacing: 0.07em; text-transform: uppercase; vertical-align: middle; }
+    .schema-desc { font: var(--text-sm) / 1.5 var(--font-sans); color: var(--fg-muted); }
+
+    /* Code tabs with horizontal wipe */
+    .code-tabs-wrap { position: relative; overflow: hidden; }
+    .code-tabs { display: flex; gap: 0; border-bottom: 1px solid var(--border-subtle); margin-bottom: var(--space-4); position: relative; }
+    .code-tabs::after {
+      content: '';
+      position: absolute;
+      bottom: -1px;
+      height: 2px;
+      background: var(--accent);
+      transition: left 0.25s var(--ease-out), width 0.25s var(--ease-out);
+      border-radius: 2px;
+      width: 0;
+      left: 0;
+    }
+    .code-tabs.animate::after {
+      width: var(--tab-indicator-width, 60px);
+      left: var(--tab-indicator-left, 0px);
+    }
+    .code-tab {
+      padding: var(--space-2) var(--space-4);
+      font: var(--text-xs) / 1 var(--font-mono); font-weight: 600;
+      color: var(--fg-muted);
+      border: none; background: transparent; cursor: pointer;
+      border-bottom: 2px solid transparent;
+      margin-bottom: -1px;
+      transition: color var(--t-fast);
+      position: relative; z-index: 1;
+    }
+    .code-tab:hover { color: var(--fg-primary); }
+    .code-tab.active { color: var(--accent); }
+    .code-panel { display: none; animation: tabWipeIn 0.25s var(--ease-out) both; }
+    .code-panel.active { display: block; }
+    @keyframes tabWipeIn {
+      from { opacity: 0; transform: translateX(-8px); }
+      to   { opacity: 1; transform: translateX(0); }
+    }
+    .code-block {
+      background: var(--bg-base);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-md);
+      padding: var(--space-4);
+      font: var(--text-xs) / 1.8 var(--font-mono);
+      color: var(--fg-secondary);
+      overflow-x: auto;
+    }
+    .code-comment { color: var(--fg-faint); }
+    .code-kw { color: var(--accent); }
+    .code-str { color: var(--success); }
+    .code-num { color: oklch(72% 0.14 195); }
+
+    /* Copy button — morphs to check on click */
+    .copy-btn {
+      display: inline-flex; align-items: center; gap: 5px;
+      padding: 4px 10px;
+      background: var(--bg-elevated);
+      border: 1px solid var(--border-default);
+      border-radius: var(--radius-md);
+      font: 11px / 1 var(--font-mono); color: var(--fg-muted);
+      cursor: pointer; transition: all var(--t-fast);
+      position: relative;
+      overflow: hidden;
+    }
+    .copy-btn:hover { border-color: var(--fg-muted); color: var(--fg-primary); background: var(--bg-hover); }
+    .copy-btn svg { width: 12px; height: 12px; transition: transform 0.2s var(--ease-out); }
+    .copy-btn .copy-icon { display: block; }
+    .copy-btn .check-icon { display: none; transform: scale(0); }
+    .copy-btn.copied {
+      background: var(--success);
+      border-color: var(--success);
+      color: var(--bg-base);
+      box-shadow: 0 0 12px oklch(72% 0.18 148 / 0.5);
+    }
+    .copy-btn.copied .copy-icon { display: none; }
+    .copy-btn.copied .check-icon { display: block; transform: scale(1); }
+    .copy-btn.copied svg { stroke: var(--bg-base); }
+    @keyframes copyPop {
+      0%   { transform: scale(1); }
+      30%  { transform: scale(1.25); }
+      60%  { transform: scale(0.92); }
+      100% { transform: scale(1); }
+    }
+    .copy-btn.animate-pop { animation: copyPop 0.35s var(--ease-out); }
+
+    /* Callout */
+    .callout {
+      display: flex; gap: var(--space-3);
+      padding: var(--space-4);
+      background: var(--accent-dim);
+      border: 1px solid oklch(72% 0.16 195 / 0.2);
+      border-radius: var(--radius-md);
+      font: var(--text-sm) / 1.5 var(--font-sans); color: var(--fg-secondary);
+    }
+    .callout-icon { font: var(--text-md) / 1 var(--font-mono); flex-shrink: 0; }
+
+    /* Auth card */
+    .auth-grid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-4); margin-bottom: var(--space-5); }
+    .auth-card {
+      padding: var(--space-4);
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-lg);
+    }
+    .auth-badge { font: var(--text-xs) / 1 var(--font-mono); font-weight: 700; padding: 2px 8px; border-radius: var(--radius-sm); }
+    .auth-card-title { font: var(--text-sm) / 1 var(--font-sans); font-weight: 600; color: var(--fg-primary); margin-top: var(--space-2); margin-bottom: var(--space-1); }
+    .auth-card-desc { font: var(--text-xs) / 1.5 var(--font-sans); color: var(--fg-muted); }
+
+    /* Error table */
+    .error-table { width: 100%; border-collapse: collapse; font: var(--text-sm); }
+    .error-table th { text-align: left; font: var(--text-xs) / 1 var(--font-mono); font-weight: 600; letter-spacing: var(--tracking-wider); text-transform: uppercase; color: var(--fg-faint); padding: var(--space-2) var(--space-4); border-bottom: 1px solid var(--border-default); background: var(--bg-elevated); white-space: nowrap; }
+    .error-table td { padding: var(--space-3) var(--space-4); border-bottom: 1px solid var(--border-subtle); color: var(--fg-secondary); vertical-align: middle; }
+    .error-table td:first-child { font: var(--text-xs) / 1 var(--font-mono); font-weight: 700; color: var(--error); }
+    .status-chip { display: inline-flex; align-items: center; gap: 4px; padding: 1px 6px; border-radius: var(--radius-sm); font: var(--text-xs) / 1 var(--font-mono); font-weight: 700; }
+
+    /* Stat cards row */
+    .stat-cards-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--space-4); }
+
+    @media (max-width: 900px) {
+      .docs-sidebar { transform: translateX(-100%); }
+      .docs-sidebar.open { transform: translateX(0); box-shadow: 4px 0 24px rgba(0,0,0,0.4); }
+      .docs-main { margin-left: 0; }
+      .hamburger-btn { display: grid !important; }
+      .stat-cards-row { grid-template-columns: repeat(2, 1fr); }
+      .docs-body { padding: var(--space-6); }
+    }
+    @media (max-width: 480px) {
+      .stat-cards-row { grid-template-columns: 1fr 1fr; gap: var(--space-3); }
+      .docs-body { padding: var(--space-4); }
+      .docs-topbar { padding: 0 var(--space-4); }
+    }
+  </style>
+</head>
+<body>
+<div class="docs-layout">
+  <div class="sidebar-overlay" onclick="toggleSidebar()"></div>
+
+  <nav class="docs-sidebar">
+    <a href="landing.html" class="docs-sidebar-header">
+      <div class="docs-logo-mark">E</div>
+      <span class="docs-logo-name">eden</span>
+    </a>
+    <div class="docs-nav">
+      <!-- Reading progress line -->
+      <div class="docs-progress-track">
+        <div class="docs-progress-fill" id="docs-progress"></div>
+      </div>
+
+      <div class="docs-section-label">Reference</div>
+      <a href="#overview" class="docs-nav-item active" aria-current="page">Overview</a>
+      <a href="#authentication" class="docs-nav-item">Authentication</a>
+      <div class="docs-section-label">Endpoints</div>
+      <a href="#post-jobs" class="docs-nav-item" onclick="toggleEndpoint('post-jobs'); return false;"><span class="method-badge method-post">POST</span><span style="margin-left:4px;font-size:var(--text-xs);color:var(--fg-muted);">/jobs</span></a>
+      <a href="#get-jobs" class="docs-nav-item" onclick="toggleEndpoint('get-jobs'); return false;"><span class="method-badge method-get">GET</span><span style="margin-left:4px;font-size:var(--text-xs);color:var(--fg-muted);">/jobs</span></a>
+      <a href="#get-job" class="docs-nav-item" onclick="toggleEndpoint('get-job'); return false;"><span class="method-badge method-get">GET</span><span style="margin-left:4px;font-size:var(--text-xs);color:var(--fg-muted);">/jobs/{id}</span></a>
+      <a href="#get-result" class="docs-nav-item" onclick="toggleEndpoint('get-result'); return false;"><span class="method-badge method-get">GET</span><span style="margin-left:4px;font-size:var(--text-xs);color:var(--fg-muted);">/jobs/{id}/result</span></a>
+      <a href="#get-stream" class="docs-nav-item" onclick="toggleEndpoint('get-stream'); return false;"><span class="method-badge method-get">GET</span><span style="margin-left:4px;font-size:var(--text-xs);color:var(--fg-muted);">/jobs/{id}/stream</span></a>
+      <a href="#cancel" class="docs-nav-item" onclick="toggleEndpoint('cancel'); return false;"><span class="method-badge method-delete">POST</span><span style="margin-left:4px;font-size:var(--text-xs);color:var(--fg-muted);">/jobs/{id}/cancel</span></a>
+      <div class="docs-section-label">Errors</div>
+      <a href="#errors" class="docs-nav-item">Error codes</a>
+    </div>
+  </nav>
+
+  <main class="docs-main">
+    <div class="docs-topbar">
+      <button class="hamburger-btn" onclick="toggleSidebar()" aria-label="Open navigation">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 4h12M2 8h12M2 12h12"/></svg>
+      </button>
+      <span class="docs-topbar-title">API Docs</span>
+      <a href="settings.html" class="btn btn-secondary btn-sm">Get API key</a>
+    </div>
+
+    <div class="docs-body">
+
+      <!-- Overview -->
+      <section class="docs-section" id="overview">
+        <h2 class="docs-section-title">Overview</h2>
+        <p style="font:var(--text-sm)/1.7 var(--font-sans);color:var(--fg-secondary);max-width:66ch;">
+          Eden is a REST API for generating complete, runnable AI agent environments from natural language descriptions. Submit a job, stream real-time pipeline events via SSE, and fetch the generated code when the pipeline completes.
+        </p>
+        <div class="callout">
+          <span class="callout-icon">›</span>
+          <div>All endpoints return JSON. Authenticate with a session cookie (web app) or an <code>Authorization: Bearer &lt;token&gt;</code> header using an API key from your account settings.</div>
+        </div>
+        <div class="stat-cards-row" style="margin-top:var(--space-4);">
+          <div class="stat-card" style="padding:var(--space-4);">
+            <div class="stat-label">Base URL</div>
+            <div style="font:var(--text-xs)/1 var(--font-mono);color:var(--fg-primary);margin-top:4px;">api.edenai.dev/v1</div>
+          </div>
+          <div class="stat-card" style="padding:var(--space-4);">
+            <div class="stat-label">Auth</div>
+            <div style="font:var(--text-xs)/1 var(--font-sans);color:var(--fg-secondary);margin-top:4px;">Session or Bearer</div>
+          </div>
+          <div class="stat-card" style="padding:var(--space-4);">
+            <div class="stat-label">Format</div>
+            <div style="font:var(--text-xs)/1 var(--font-sans);color:var(--fg-secondary);margin-top:4px;">JSON</div>
+          </div>
+          <div class="stat-card" style="padding:var(--space-4);">
+            <div class="stat-label">Versioning</div>
+            <div style="font:var(--text-xs)/1 var(--font-sans);color:var(--fg-secondary);margin-top:4px;">URL path prefix</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Authentication -->
+      <section class="docs-section" id="authentication">
+        <h2 class="docs-section-title">Authentication</h2>
+        <p style="font:var(--text-sm)/1.6 var(--font-sans);color:var(--fg-secondary);max-width:55ch;margin-bottom:var(--space-5);">
+          The Eden API supports two authentication methods. Session cookies are used by the web application. Programmatic access requires an API key.
+        </p>
+        <div class="auth-grid">
+          <div class="auth-card">
+            <span class="auth-badge" style="background:var(--accent-dim);color:var(--accent);">COOKIE</span>
+            <div class="auth-card-title">Session cookie</div>
+            <div class="auth-card-desc">Web app — automatic after login. Sent automatically by the browser.</div>
+          </div>
+          <div class="auth-card">
+            <span class="auth-badge" style="background:var(--info-dim);color:var(--info);">HEADER</span>
+            <div class="auth-card-title">API key — Authorization header</div>
+            <div class="auth-card-desc">Programmatic access. Generate keys in Settings → API Keys.</div>
+          </div>
+        </div>
+        <div style="display:flex;align-items:center;gap:var(--space-3);">
+          <div style="flex:1;font:var(--text-xs)/1.6 var(--font-mono);background:var(--bg-base);border:1px solid var(--border-subtle);border-radius:var(--radius-md);padding:var(--space-4);color:var(--fg-secondary);">
+            Authorization: Bearer eden_production_kQ9xZ2mP3rL8...
+          </div>
+          <button class="copy-btn" data-copy="Authorization: Bearer eden_production_kQ9xZ2mP3rL8...">
+            <svg class="copy-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="5" y="5" width="9" height="9" rx="1.5"/><path d="M11 5V3.5A1.5 1.5 0 0 0 9.5 2H3.5A1.5 1.5 0 0 0 2 3.5v6A1.5 1.5 0 0 0 3.5 11H5"/></svg>
+            <svg class="check-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="3 8 6 11 13 4"/></svg>
+            <span class="copy-label">Copy</span>
+          </button>
+        </div>
+      </section>
+
+      <!-- POST /jobs -->
+      <section class="docs-section" id="post-jobs">
+        <h2 class="docs-section-title">Submit Job — POST /jobs</h2>
+        <div class="endpoint open">
+          <div class="endpoint-header" role="button" tabindex="0" aria-expanded="true" aria-controls="body-post-jobs" onclick="toggleEndpoint('post-jobs')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();toggleEndpoint('post-jobs')}">
+            <span class="method-badge-lg method-post">POST</span>
+            <span class="endpoint-path">/v1/jobs</span>
+            <span class="endpoint-summary">Submit a new environment generation job</span>
+            <svg class="endpoint-chevron" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 6l4 4 4-4"/></svg>
+          </div>
+          <div class="endpoint-body" id="body-post-jobs">
+            <div style="margin-bottom:var(--space-5);">
+              <div style="font:var(--text-sm)/1 var(--font-sans);font-weight:600;color:var(--fg-primary);margin-bottom:var(--space-3);">Request body</div>
+              <table class="schema-table">
+                <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
+                <tbody>
+                  <tr><td class="schema-name">description</td><td class="schema-type">string <span class="schema-required">required</span></td><td class="schema-desc">Natural language description of the agent environment to generate.</td></tr>
+                  <tr><td class="schema-name">tags</td><td class="schema-type">string[]</td><td class="schema-desc">Optional tags to label and filter this job.</td></tr>
+                  <tr><td class="schema-name">difficulty</td><td class="schema-type">enum</td><td class="schema-desc">One of <code>easy</code>, <code>medium</code>, <code>hard</code>. Default: <code>medium</code>.</td></tr>
+                  <tr><td class="schema-name">metadata</td><td class="schema-type">object</td><td class="schema-desc">Arbitrary key-value pairs attached to the job and returned in trace events.</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div style="margin-bottom:var(--space-5);">
+              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:var(--space-3);">
+                <div style="font:var(--text-sm)/1 var(--font-sans);font-weight:600;color:var(--fg-primary);">Example request</div>
+                <button class="copy-btn" data-copy="curl -X POST https://api.edenai.dev/v1/jobs -H &quot;Authorization: Bearer eden_production_kQ9xZ2...&quot; -H &quot;Content-Type: application/json&quot; -d '{\"description\":\"Customer support bot with multi-turn dialog, Slack integration\",\"tags\":[\"slack\",\"websockets\"],\"difficulty\":\"medium\"}'" >
+                  <svg class="copy-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="5" y="5" width="9" height="9" rx="1.5"/><path d="M11 5V3.5A1.5 1.5 0 0 0 9.5 2H3.5A1.5 1.5 0 0 0 2 3.5v6A1.5 1.5 0 0 0 3.5 11H5"/></svg>
+                  <svg class="check-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="3 8 6 11 13 4"/></svg>
+                  <span class="copy-label">Copy</span>
+                </button>
+              </div>
+              <div class="code-tabs-wrap">
+                <div class="code-tabs" id="tabs-post">
+                  <button class="code-tab active" onclick="openCodeTab(this, 'post-curl')">cURL</button>
+                  <button class="code-tab" onclick="openCodeTab(this, 'post-python')">Python</button>
+                  <button class="code-tab" onclick="openCodeTab(this, 'post-js')">JavaScript</button>
+                </div>
+                <div id="post-curl" class="code-panel active">
+                  <div class="code-block">curl -X POST https://api.edenai.dev/v1/jobs \
+  -H <span class="code-str">"Authorization: Bearer eden_production_kQ9xZ2..."</span> \
+  -H <span class="code-str">"Content-Type: application/json"</span> \
+  -d '{
+    <span class="code-kw">"description"</span>: <span class="code-str">"Customer support bot with multi-turn dialog, Slack integration"</span>,
+    <span class="code-kw">"tags"</span>: [<span class="code-str">"slack"</span>, <span class="code-str">"websockets"</span>],
+    <span class="code-kw">"difficulty"</span>: <span class="code-str">"medium"</span>
+  }'</div>
+                </div>
+                <div id="post-python" class="code-panel">
+                  <div class="code-block"><span class="code-kw">import</span> httpx
+
+client = httpx.Client(
+    base_url=<span class="code-str">"https://api.edenai.dev/v1"</span>,
+    headers={<span class="code-str">"Authorization"</span>: <span class="code-str">"Bearer eden_production_kQ9xZ2..."</span>}
+)
+
+resp = client.post(<span class="code-str">"/jobs"</span>, json={
+    <span class="code-kw">"description"</span>: <span class="code-str">"Customer support bot with multi-turn dialog"</span>,
+    <span class="code-kw">"tags"</span>: [<span class="code-str">"slack"</span>, <span class="code-str">"websockets"</span>],
+    <span class="code-kw">"difficulty"</span>: <span class="code-str">"medium"</span>
+})
+job = resp.json()
+<span class="code-comment"># → {"job_id": "j_bd3f81", "status": "pending", ...}</span></div>
+                </div>
+                <div id="post-js" class="code-panel">
+                  <div class="code-block">const resp = await fetch(<span class="code-str">'https://api.edenai.dev/v1/jobs'</span>, {
+  method: <span class="code-str">'POST'</span>,
+  headers: {
+    <span class="code-str">'Authorization'</span>: <span class="code-str">'Bearer eden_production_kQ9xZ2...'</span>,
+    <span class="code-str">'Content-Type'</span>: <span class="code-str">'application/json'</span>
+  },
+  body: JSON.stringify({
+    description: <span class="code-str">'Customer support bot with multi-turn dialog'</span>,
+    tags: [<span class="code-str">'slack'</span>, <span class="code-str">'websockets'</span>],
+    difficulty: <span class="code-str">'medium'</span>
+  })
+});
+const job = await resp.json();
+<span class="code-comment">// → { job_id: 'j_bd3f81', status: 'pending', ... }</span></div>
+                </div>
+              </div>
+            </div>
+            <div>
+              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:var(--space-3);">
+                <div style="font:var(--text-sm)/1 var(--font-sans);font-weight:600;color:var(--fg-primary);">Response — 201 Created</div>
+                <button class="copy-btn" data-copy="{&quot;job_id&quot;:&quot;j_bd3f81&quot;,&quot;status&quot;:&quot;pending&quot;,&quot;created_at&quot;:&quot;2026-05-28T10:04:12Z&quot;}" >
+                  <svg class="copy-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="5" y="5" width="9" height="9" rx="1.5"/><path d="M11 5V3.5A1.5 1.5 0 0 0 9.5 2H3.5A1.5 1.5 0 0 0 2 3.5v6A1.5 1.5 0 0 0 3.5 11H5"/></svg>
+                  <svg class="check-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="3 8 6 11 13 4"/></svg>
+                  <span class="copy-label">Copy</span>
+                </button>
+              </div>
+              <div class="code-block">{<span class="code-kw">"job_id"</span>: <span class="code-str">"j_bd3f81"</span>, <span class="code-kw">"status"</span>: <span class="code-str">"pending"</span>, <span class="code-kw">"created_at"</span>: <span class="code-str">"2026-05-28T10:04:12Z"</span>}</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- GET /jobs -->
+      <section class="docs-section" id="get-jobs">
+        <h2 class="docs-section-title">List Jobs — GET /jobs</h2>
+        <div class="endpoint">
+          <div class="endpoint-header" role="button" tabindex="0" aria-expanded="false" aria-controls="body-get-jobs" onclick="toggleEndpoint('get-jobs')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();toggleEndpoint('get-jobs')}">
+            <span class="method-badge-lg method-get">GET</span>
+            <span class="endpoint-path">/v1/jobs</span>
+            <span class="endpoint-summary">List all jobs with optional filters, search, and pagination</span>
+            <svg class="endpoint-chevron" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 6l4 4 4-4"/></svg>
+          </div>
+          <div class="endpoint-body" id="body-get-jobs">
+            <div style="margin-bottom:var(--space-5);">
+              <div style="font:var(--text-sm)/1 var(--font-sans);font-weight:600;color:var(--fg-primary);margin-bottom:var(--space-3);">Query parameters</div>
+              <table class="schema-table">
+                <thead><tr><th>Param</th><th>Type</th><th>Description</th></tr></thead>
+                <tbody>
+                  <tr><td class="schema-name">status</td><td class="schema-type">enum</td><td class="schema-desc">Filter by: <code>pending</code>, <code>running</code>, <code>completed</code>, <code>failed</code></td></tr>
+                  <tr><td class="schema-name">q</td><td class="schema-type">string</td><td class="schema-desc">Search by job_id or description text</td></tr>
+                  <tr><td class="schema-name">sort</td><td class="schema-type">enum</td><td class="schema-desc"><code>newest</code> (default) or <code>oldest</code></td></tr>
+                  <tr><td class="schema-name">limit</td><td class="schema-type">integer</td><td class="schema-desc">Results per page. Default: 20. Max: 100.</td></tr>
+                  <tr><td class="schema-name">offset</td><td class="schema-type">integer</td><td class="schema-desc">Pagination offset. Default: 0.</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="code-tabs-wrap">
+              <div class="code-tabs" id="tabs-getjobs">
+                <button class="code-tab active" onclick="openCodeTab(this, 'getjobs-curl')">cURL</button>
+                <button class="code-tab" onclick="openCodeTab(this, 'getjobs-python')">Python</button>
+                <button class="code-tab" onclick="openCodeTab(this, 'getjobs-js')">JavaScript</button>
+              </div>
+              <div id="getjobs-curl" class="code-panel active">
+                <div class="code-block">curl <span class="code-str">"https://api.edenai.dev/v1/jobs?status=running&limit=10"</span> \
+  -H <span class="code-str">"Authorization: Bearer eden_production_kQ9xZ2..."</span></div>
+              </div>
+              <div id="getjobs-python" class="code-panel">
+                <div class="code-block">resp = client.get(<span class="code-str">"/jobs"</span>, params={<span class="code-str">"status"</span>: <span class="code-str">"running"</span>, <span class="code-str">"limit"</span>: <span class="code-num">10</span>})
+jobs = resp.json()[<span class="code-str">"items"</span>]</div>
+              </div>
+              <div id="getjobs-js" class="code-panel">
+                <div class="code-block">const params = new URLSearchParams({ status: <span class="code-str">'running'</span>, limit: <span class="code-num">10</span> });
+const resp = await fetch(<span class="code-str">`https://api.edenai.dev/v1/jobs?$<span class="code-num">{</span>params<span class="code-num">}</span>`</span>, {
+  headers: { <span class="code-str">'Authorization'</span>: <span class="code-str">'Bearer eden_production_kQ9xZ2...'</span> }
+});
+const { items: jobs } = await resp.json();</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- GET /jobs/{id} -->
+      <section class="docs-section" id="get-job">
+        <h2 class="docs-section-title">Get Job — GET /jobs/{job_id}</h2>
+        <div class="endpoint">
+          <div class="endpoint-header" role="button" tabindex="0" aria-expanded="false" aria-controls="body-get-job" onclick="toggleEndpoint('get-job')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();toggleEndpoint('get-job')}">
+            <span class="method-badge-lg method-get">GET</span>
+            <span class="endpoint-path">/v1/jobs/{job_id}</span>
+            <span class="endpoint-summary">Get current status and metadata for a single job</span>
+            <svg class="endpoint-chevron" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 6l4 4 4-4"/></svg>
+          </div>
+          <div class="endpoint-body" id="body-get-job">
+            <div style="margin-bottom:var(--space-5);">
+              <div style="font:var(--text-sm)/1 var(--font-sans);font-weight:600;color:var(--fg-primary);margin-bottom:var(--space-3);">Path parameters</div>
+              <table class="schema-table">
+                <thead><tr><th>Param</th><th>Type</th><th>Description</th></tr></thead>
+                <tbody>
+                  <tr><td class="schema-name">job_id</td><td class="schema-type">string <span class="schema-required">required</span></td><td class="schema-desc">The job identifier returned when the job was created.</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="code-tabs-wrap">
+              <div class="code-tabs" id="tabs-getjob">
+                <button class="code-tab active" onclick="openCodeTab(this, 'getjob-curl')">cURL</button>
+                <button class="code-tab" onclick="openCodeTab(this, 'getjob-python')">Python</button>
+                <button class="code-tab" onclick="openCodeTab(this, 'getjob-js')">JavaScript</button>
+              </div>
+              <div id="getjob-curl" class="code-panel active">
+                <div class="code-block">curl https://api.edenai.dev/v1/jobs/j_bd3f81 \
+  -H <span class="code-str">"Authorization: Bearer eden_production_kQ9xZ2..."</span></div>
+              </div>
+              <div id="getjob-python" class="code-panel">
+                <div class="code-block">resp = client.get(<span class="code-str">"/jobs/j_bd3f81"</span>)
+job = resp.json()</div>
+              </div>
+              <div id="getjob-js" class="code-panel">
+                <div class="code-block">const resp = await fetch(<span class="code-str">'https://api.edenai.dev/v1/jobs/j_bd3f81'</span>, {
+  headers: { <span class="code-str">'Authorization'</span>: <span class="code-str">'Bearer eden_production_kQ9xZ2...'</span> }
+});
+const job = await resp.json();</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- GET /jobs/{id}/stream -->
+      <section class="docs-section" id="get-stream">
+        <h2 class="docs-section-title">Stream — GET /jobs/{job_id}/stream</h2>
+        <div class="endpoint">
+          <div class="endpoint-header" role="button" tabindex="0" aria-expanded="false" aria-controls="body-get-stream" onclick="toggleEndpoint('get-stream')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();toggleEndpoint('get-stream')}">
+            <span class="method-badge-lg method-get">GET</span>
+            <span class="endpoint-path">/v1/jobs/{job_id}/stream</span>
+            <span class="endpoint-summary">SSE stream — real-time pipeline events, stage changes, and output fragments</span>
+            <svg class="endpoint-chevron" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 6l4 4 4-4"/></svg>
+          </div>
+          <div class="endpoint-body" id="body-get-stream">
+            <div class="callout" style="margin-bottom:var(--space-4);">
+              <span class="callout-icon">›</span>
+              <div>This endpoint returns a <strong>Server-Sent Events</strong> stream. Each event carries a <code>type</code> field (<code>status</code>, <code>stage</code>, <code>message</code>, <code>done</code>) and a data payload.</div>
+            </div>
+            <div class="code-tabs-wrap">
+              <div class="code-tabs" id="tabs-stream">
+                <button class="code-tab active" onclick="openCodeTab(this, 'stream-py')">Python</button>
+                <button class="code-tab" onclick="openCodeTab(this, 'stream-js')">JavaScript</button>
+              </div>
+              <div id="stream-py" class="code-panel active">
+                <div class="code-block"><span class="code-kw">import</span> httpx
+<span class="code-kw">from</span> sseclient <span class="code-kw">import</span> SSEClient
+
+with httpx.stream(<span class="code-str">"GET"</span>, <span class="code-str">"https://api.edenai.dev/v1/jobs/j_bd3f81/stream"</span>,
+                  headers={<span class="code-str">"Authorization"</span>: <span class="code-str">"Bearer eden_production_kQ9xZ2..."</span>}) <span class="code-kw">as</span> r:
+    <span class="code-kw">for</span> event <span class="code-kw">in</span> SSEClient(r):
+        print(event.data)  <span class="code-comment"># {"type":"stage","data":"fact_check"}</span></div>
+              </div>
+              <div id="stream-js" class="code-panel">
+                <div class="code-block">const es = new EventSource(
+  <span class="code-str">'https://api.edenai.dev/v1/jobs/j_bd3f81/stream'</span>,
+  { headers: { <span class="code-str">'Authorization'</span>: <span class="code-str">'Bearer eden_production_kQ9xZ2...'</span> } }
+);
+es.addEventListener(<span class="code-str">'stage'</span>, (e) => {
+  console.log(<span class="code-str">'Stage:'</span>, e.data);
+});
+es.addEventListener(<span class="code-str">'done'</span>, (e) => {
+  console.log(<span class="code-str">'Completed:'</span>, JSON.parse(e.data));
+});</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- POST cancel -->
+      <section class="docs-section" id="cancel">
+        <h2 class="docs-section-title">Cancel Job — POST /jobs/{job_id}/cancel</h2>
+        <div class="endpoint">
+          <div class="endpoint-header" role="button" tabindex="0" aria-expanded="false" aria-controls="body-cancel" onclick="toggleEndpoint('cancel')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();toggleEndpoint('cancel')}">
+            <span class="method-badge-lg method-delete">POST</span>
+            <span class="endpoint-path">/v1/jobs/{job_id}/cancel</span>
+            <span class="endpoint-summary">Cancel an in-progress job</span>
+            <svg class="endpoint-chevron" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 6l4 4 4-4"/></svg>
+          </div>
+          <div class="endpoint-body" id="body-cancel">
+            <div style="margin-bottom:var(--space-5);">
+              <div style="font:var(--text-sm)/1 var(--font-sans);font-weight:600;color:var(--fg-primary);margin-bottom:var(--space-3);">Path parameters</div>
+              <table class="schema-table">
+                <thead><tr><th>Param</th><th>Type</th><th>Description</th></tr></thead>
+                <tbody>
+                  <tr><td class="schema-name">job_id</td><td class="schema-type">string <span class="schema-required">required</span></td><td class="schema-desc">The job identifier of a running job to cancel.</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="code-tabs-wrap">
+              <div class="code-tabs" id="tabs-cancel">
+                <button class="code-tab active" onclick="openCodeTab(this, 'cancel-curl')">cURL</button>
+                <button class="code-tab" onclick="openCodeTab(this, 'cancel-python')">Python</button>
+                <button class="code-tab" onclick="openCodeTab(this, 'cancel-js')">JavaScript</button>
+              </div>
+              <div id="cancel-curl" class="code-panel active">
+                <div class="code-block">curl -X POST https://api.edenai.dev/v1/jobs/j_bd3f81/cancel \
+  -H <span class="code-str">"Authorization: Bearer eden_production_kQ9xZ2..."</span></div>
+              </div>
+              <div id="cancel-python" class="code-panel">
+                <div class="code-block">resp = client.post(<span class="code-str">"/jobs/j_bd3f81/cancel"</span>)
+<span class="code-comment"># → {"job_id": "j_bd3f81", "status": "cancelled"}</span></div>
+              </div>
+              <div id="cancel-js" class="code-panel">
+                <div class="code-block">const resp = await fetch(<span class="code-str">'https://api.edenai.dev/v1/jobs/j_bd3f81/cancel'</span>, { method: <span class="code-str">'POST'</span> });
+const result = await resp.json(); <span class="code-comment">// { job_id: 'j_bd3f81', status: 'cancelled' }</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Errors -->
+      <section class="docs-section" id="errors">
+        <h2 class="docs-section-title">Error Codes</h2>
+        <table class="error-table">
+          <thead><tr><th>Status</th><th>Meaning</th><th>Usual resolution</th></tr></thead>
+          <tbody>
+            <tr><td><span class="status-chip" style="background:var(--error-dim);color:var(--error);">400</span></td><td>Bad request — invalid fields or missing required parameters.</td><td>Check request body against schema.</td></tr>
+            <tr><td><span class="status-chip" style="background:var(--error-dim);color:var(--error);">401</span></td><td>Unauthorized — missing or invalid authentication token.</td><td>Provide a valid session cookie or API key Bearer token.</td></tr>
+            <tr><td><span class="status-chip" style="background:var(--error-dim);color:var(--error);">403</span></td><td>Forbidden — valid auth but insufficient permissions.</td><td>Request elevated access from an org owner.</td></tr>
+            <tr><td><span class="status-chip" style="background:var(--error-dim);color:var(--error);">404</span></td><td>Not found — job_id or resource does not exist.</td><td>Verify the job_id is correct and belongs to your account.</td></tr>
+            <tr><td><span class="status-chip" style="background:var(--error-dim);color:var(--error);">409</span></td><td>Conflict — job is not in a cancellable state.</td><td>Only <code>pending</code> or <code>running</code> jobs can be cancelled.</td></tr>
+            <tr><td><span class="status-chip" style="background:var(--error-dim);color:var(--error);">429</span></td><td>Too many requests — rate limit exceeded for this plan.</td><td>Back off and retry. Check <code>Retry-After</code> header.</td></tr>
+            <tr><td><span class="status-chip" style="background:var(--error-dim);color:var(--error);">500</span></td><td>Internal server error — something went wrong on Eden's side.</td><td>Check status.edenai.dev and retry with exponential backoff.</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+    </div>
+  </main>
+</div>
+
+<script>
+function toggleSidebar() {
+  document.querySelector('.docs-sidebar').classList.toggle('open');
+  document.querySelector('.sidebar-overlay').classList.toggle('open');
+}
+
+function toggleEndpoint(id) {
+  var el = document.getElementById(id);
+  if (!el) return;
+  var isOpen = el.classList.contains('open');
+  el.classList.toggle('open');
+  var header = el.querySelector('.endpoint-header');
+  if (header) {
+    header.setAttribute('aria-expanded', String(!isOpen));
+  }
+  // Re-calculate reading progress after content expands/collapses
+  if (window.updateDocsProgress) window.updateDocsProgress();
+}
+
+// ============================================================
+// CODE TABS with horizontal wipe indicator
+// ============================================================
+function openCodeTab(btn, panelId) {
+  var tabs = btn.closest('.code-tabs');
+  var panels = tabs.parentElement.querySelectorAll('.code-panel');
+  var activeTab = tabs.querySelector('.code-tab.active');
+  var newTab = btn;
+
+  // Ensure ARIA roles are set
+  tabs.setAttribute('role', 'tablist');
+  tabs.querySelectorAll('.code-tab').forEach(function(t) {
+    t.setAttribute('role', 'tab');
+  });
+
+  // Animate indicator: move from active tab to new tab
+  tabs.classList.remove('animate');
+  void tabs.offsetWidth; // reflow
+
+  var oldRect = activeTab.getBoundingClientRect();
+  var newRect = newTab.getBoundingClientRect();
+  var tabsRect = tabs.getBoundingClientRect();
+
+  var oldLeft = oldRect.left - tabsRect.left;
+  var newLeft = newRect.left - tabsRect.left;
+  var width = newRect.width;
+
+  tabs.style.setProperty('--tab-indicator-left', newLeft + 'px');
+  tabs.style.setProperty('--tab-indicator-width', width + 'px');
+  tabs.classList.add('animate');
+
+  tabs.querySelectorAll('.code-tab').forEach(function (t) {
+    t.classList.remove('active');
+    t.setAttribute('aria-selected', 'false');
+  });
+  newTab.classList.add('active');
+  newTab.setAttribute('aria-selected', 'true');
+
+  panels.forEach(function (p) { p.classList.remove('active'); });
+  document.getElementById(panelId).classList.add('active');
+
+  // Remove animate class after transition
+  setTimeout(function () { tabs.classList.remove('animate'); }, 300);
+}
+
+// ============================================================
+// COPY BUTTON — event delegation, works for all .copy-btn
+// ============================================================
+document.addEventListener('click', function (e) {
+  var btn = e.target.closest('.copy-btn');
+  if (!btn) return;
+  e.preventDefault();
+
+  var text = btn.getAttribute('data-copy');
+  if (!text) return;
+
+  function succeed() {
+    btn.classList.add('copied', 'animate-pop');
+    var label = btn.querySelector('.copy-label');
+    var orig = label ? label.textContent : 'Copy';
+    if (label) label.textContent = 'Copied!';
+    setTimeout(function () {
+      btn.classList.remove('copied', 'animate-pop');
+      if (label) label.textContent = orig;
+    }, 2200);
+  }
+
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(succeed).catch(function () {
+      var ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.cssText = 'position:fixed;top:0;left:0;opacity:0;height:1px;width:1px;';
+      document.body.appendChild(ta);
+      ta.focus(); ta.select();
+      try { document.execCommand('copy'); succeed(); } catch (err) { alert('Copy failed — try selecting manually.'); }
+      document.body.removeChild(ta);
+    });
+  } else {
+    var ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.cssText = 'position:fixed;top:0;left:0;opacity:0;height:1px;width:1px;';
+    document.body.appendChild(ta);
+    ta.focus(); ta.select();
+    try { document.execCommand('copy'); succeed(); } catch (err) { alert('Copy failed — try selecting manually.'); }
+    document.body.removeChild(ta);
+  }
+});
+
+// ============================================================
+// READING PROGRESS LINE
+// ============================================================
+(function () {
+  var progress = document.getElementById('docs-progress');
+  var body = document.querySelector('.docs-body');
+  var nav = document.querySelector('.docs-nav');
+  var sections = document.querySelectorAll('.docs-section');
+
+  function updateProgress() {
+    var scrollTop = window.scrollY;
+    var docHeight = document.documentElement.scrollHeight;
+    var pct = Math.min(100, Math.max(0, (scrollTop / (docHeight - window.innerHeight)) * 100));
+    progress.style.height = pct + '%';
+  }
+
+  window.updateDocsProgress = updateProgress;
+  window.addEventListener('scroll', updateProgress, { passive: true });
+  updateProgress();
+})();
+</script>
+
+</body>
+</html>
