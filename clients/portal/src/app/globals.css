@@ -3,57 +3,62 @@
 /* ==================== Design Tokens ==================== */
 
 :root {
-  /* Backgrounds */
+  /* Backgrounds — cooler neutral palette, not warm cream */
   --bg-primary: #FFFFFF;
-  --bg-secondary: #F8F8F7;
-  --bg-tertiary: #F4F4F2;
+  --bg-secondary: #F9FAFB;
+  --bg-tertiary: #F3F4F6;
+  --bg-inset: #FAFAFA;
 
-  /* Borders */
-  --border-subtle: #E8E8E4;
-  --border-default: #D4D4CE;
-  --border-strong: #A8A8A0;
+  /* Borders — refined, not harsh */
+  --border-subtle: #E9EAEB;
+  --border-default: #D9DADB;
+  --border-strong: #ACAFB2;
 
-  /* Text */
-  --text-primary: #18181B;
-  --text-secondary: #52525B;
-  --text-muted: #71717A;
+  /* Text — sharper contrast */
+  --text-primary: #111112;
+  --text-secondary: #5C5D60;
+  --text-muted: #989A9D;
 
-  /* Primary (Indigo) */
+  /* Accent (Emerald) — primary brand */
+  --accent: #10B981;
+  --accent-hover: #059669;
+  --accent-light: #D1FAE5;
+  --accent-foreground: #FFFFFF;
+
+  /* Primary (Indigo) — used sparingly */
   --primary: #6366F1;
   --primary-hover: #4F46E5;
   --primary-light: #EEF2FF;
   --primary-foreground: #FFFFFF;
 
-  /* Accent (Emerald) */
-  --accent: #10B981;
-  --accent-hover: #059669;
-  --accent-light: #D1FAE5;
-
   /* Semantic */
   --success: #16A34A;
   --success-bg: #DCFCE7;
-  --warning: #F59E0B;
+  --success-strong: #15803D;
+  --warning: #D97706;
   --warning-bg: #FEF3C7;
-  --error: #EF4444;
+  --warning-strong: #B45309;
+  --error: #DC2626;
   --error-bg: #FEF2F2;
+  --error-strong: #B91C1C;
 
   /* Pipeline Stage Colors */
   --stage-planning: #6366F1;
-  --stage-criticizing: #F59E0B;
-  --stage-refining: #06B6D4;
-  --stage-fact-checking: #14B8A6;
-  --stage-executing: #3B82F6;
-  --stage-code-quality: #8B5CF6;
+  --stage-criticizing: #D97706;
+  --stage-refining: #0891B2;
+  --stage-fact-checking: #0D9488;
+  --stage-executing: #2563EB;
+  --stage-code-quality: #7C3AED;
   --stage-verifying: #10B981;
-  --stage-testing: #84CC16;
-  --stage-archiving: #A855F7;
+  --stage-testing: #65A30D;
+  --stage-archiving: #9333EA;
 
   /* Status Colors */
-  --status-pending: #71717A;
-  --status-running: #3B82F6;
+  --status-pending: #6B7280;
+  --status-running: #2563EB;
   --status-completed: #16A34A;
-  --status-failed: #EF4444;
-  --status-human-review: #F59E0B;
+  --status-failed: #DC2626;
+  --status-human-review: #D97706;
 
   /* Typography Scale */
   --font-size-xs: 0.75rem;
@@ -99,10 +104,12 @@
   --radius-xl: 16px;
   --radius-full: 9999px;
 
-  /* Shadows */
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
-  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.06);
-  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.08);
+  /* Shadows — Linear-inspired: subtle, precise, not diffused everywhere */
+  --shadow-xs: 0 0 0 1px rgba(0, 0, 0, 0.03);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.04), 0 1px 3px rgba(0, 0, 0, 0.03);
+  --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.04), 0 2px 4px rgba(0, 0, 0, 0.03);
+  --shadow-lg: 0 10px 15px rgba(0, 0, 0, 0.05), 0 4px 6px rgba(0, 0, 0, 0.03);
+  --shadow-xl: 0 20px 25px rgba(0, 0, 0, 0.06), 0 8px 10px rgba(0, 0, 0, 0.03);
 
   /* Motion */
   --duration-fast: 150ms;
@@ -111,6 +118,19 @@
   --ease-out: cubic-bezier(0.33, 1, 0.68, 1);
   --ease-in: cubic-bezier(0.32, 0, 0.67, 0);
   --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+
+  /* shadcn / legacy compatibility aliases (map to canonical tokens) */
+  --surface: var(--bg-primary);
+  --background: var(--bg-secondary);
+  --foreground: var(--text-primary);
+  --border: var(--border-default);
+  --accent-bg: var(--accent-light);
+  --bg-muted: var(--bg-tertiary);
+
+  /* Frosted glass indicator for settings nav */
+  --indicator-bg: rgba(16, 185, 129, 0.08);
+  --indicator-border: rgba(16, 185, 129, 0.15);
+  --indicator-blur: 8px;
 }
 
 /* ==================== Tailwind v4 Theme Integration ==================== */
@@ -156,9 +176,11 @@
   --radius-md: var(--radius-md);
   --radius-lg: var(--radius-lg);
   --radius-xl: var(--radius-xl);
+  --shadow-xs: var(--shadow-xs);
   --shadow-sm: var(--shadow-sm);
   --shadow-md: var(--shadow-md);
   --shadow-lg: var(--shadow-lg);
+  --shadow-xl: var(--shadow-xl);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
@@ -185,10 +207,11 @@ body {
   color: var(--primary);
 }
 
-/* Focus Visible */
+/* Focus — distinctive ring, not the default browser outline */
 :focus-visible {
   outline: none;
-  box-shadow: 0 0 0 2px var(--bg-primary), 0 0 0 4px var(--primary);
+  box-shadow: 0 0 0 2px var(--bg-primary), 0 0 0 4px var(--accent);
+  border-radius: 4px;
 }
 
 /* Smooth Scrolling */
@@ -357,6 +380,22 @@ html {
   animation: cursor-blink 1s step-end infinite;
 }
 
+/* Scale in for command palette */
+@keyframes scale-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -48%) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+}
+
+.animate-scale-in {
+  animation: scale-in var(--duration-normal) var(--ease-out) forwards;
+}
+
 /* Shake */
 @keyframes shake {
   0%, 100% {
@@ -459,7 +498,8 @@ button:active, [role="button"]:active {
 }
 
 .nav-item:hover:not(.active) {
-  background: rgba(16, 185, 129, 0.04);
+  background: var(--accent-light);
+  opacity: 0.8;
 }
 
 .nav-item.active {
@@ -767,4 +807,35 @@ input::placeholder, textarea::placeholder {
 
 .password-toggle:hover {
   color: var(--text-secondary);
+}
+
+/* Respect reduced motion preferences */
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+
+  .stagger-children > * {
+    animation: none !important;
+  }
+
+  .page-enter {
+    animation: none !important;
+  }
+
+  button:active {
+    transform: none !important;
+  }
+
+  .stage-active {
+    animation: none !important;
+  }
 }

@@ -63,9 +63,11 @@ class Settings(BaseSettings):
     max_tokens_refiner: int = 25000
     max_tokens_fact_checker: int = 25000
     max_tokens_executor: int = 15000
+    max_tokens_optimizer: int = 15000
     max_tokens_code_quality: int = 10000
     max_tokens_verifier: int = 10000
     max_tokens_tester: int = 10000
+    max_tokens_adversarial_tester: int = 15000
     max_tokens_archivist: int = 60000
 
     # Max turns per agent
@@ -74,9 +76,11 @@ class Settings(BaseSettings):
     max_turns_refiner: int = 5
     max_turns_fact_checker: int = 4
     max_turns_executor: int = 6
+    max_turns_optimizer: int = 4
     max_turns_code_quality: int = 4
     max_turns_verifier: int = 3
     max_turns_tester: int = 5
+    max_turns_adversarial_tester: int = 5
     max_turns_archivist: int = 20
 
     # Retry configuration
@@ -98,6 +102,15 @@ class Settings(BaseSettings):
     # Stripe
     stripe_secret_key: str = ""
     stripe_webhook_secret: str = ""
+
+    # Email (SendGrid)
+    sendgrid_api_key: str = ""
+    sendgrid_from_email: str = "noreply@eden.ai"
+    sendgrid_from_name: str = "Eden"
+
+    # Portal
+    portal_base_url: str = "https://portal.example.com"
+    app_url: str = "https://portal.example.com"
 
     # Chain configuration
 chain_enabled_experts: list[str] = []  # Environment: EDEN_CHAIN_ENABLED_EXPERTS

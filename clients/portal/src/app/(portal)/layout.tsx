@@ -2,6 +2,7 @@
 
 import { useAuth } from "@/hooks/use-auth";
 import { useOrg } from "@/hooks/use-org";
+import { useNotifications } from "@/hooks/use-notifications";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, useRef, useCallback } from "react";
 import {
@@ -22,6 +23,7 @@ import {
   Search,
   Bell,
   ChevronRight,
+  Check,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import Link from "next/link";
@@ -128,23 +130,24 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
   const breadcrumbs = buildBreadcrumbs(pathname);
 
   return (
-    <div className="flex min-h-screen bg-[var(--background)]">
+    <div className="flex min-h-screen bg-[var(--bg-secondary)]">
       {/* Mobile sidebar overlay */}
       {sidebarOpen && (
-        <div
-          className="fixed inset-0 bg-black/50 z-40 lg:hidden"
+        <button
+          type="button"
+          className="fixed inset-0 bg-black/50 z-40 lg:hidden cursor-default border-0 p-0"
+          aria-label="Close menu"
           onClick={() => setSidebarOpen(false)}
         />
       )}
 
-      {/* Sidebar */}
+      {/* Sidebar: fixed drawer on mobile, in-flow on lg */}
       <aside
         className={cn(
-          "sidebar flex flex-col bg-[var(--surface)] border-r border-[var(--border)] relative z-50",
-          "hidden lg:flex",
+          "sidebar flex flex-col relative bg-[var(--bg-primary)] border-r border-[var(--border-default)] z-50",
+          "fixed inset-y-0 left-0 lg:static lg:inset-auto lg:flex-shrink-0",
           collapsed ? "collapsed" : "",
-          sidebarOpen ? "translate-x-0" : "-translate-x-full",
-          "lg:translate-x-0",
+          sidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0",
           "transition-[transform,width] duration-300 ease-out lg:transition-[width]"
         )}
         style={{
@@ -155,7 +158,7 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
         <div className="absolute inset-0 sidebar-gradient pointer-events-none" />
 
         {/* Logo & Org */}
-        <div className="relative p-4 border-b border-[var(--border)]">
+        <div className="relative p-4 border-b border-[var(--border-default)]">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3 min-w-0">
               <div className="w-9 h-9 bg-[var(--accent)] rounded-xl flex items-center justify-center flex-shrink-0">
@@ -172,7 +175,7 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
             </div>
             <button
               onClick={() => setSidebarOpen(false)}
-              className="lg:hidden p-2 text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-stone-100 rounded-lg transition-colors"
+              className="lg:hidden p-2 text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)] rounded-lg transition-colors"
             >
               <X className="w-5 h-5" />
             </button>
@@ -182,8 +185,8 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
         {/* Collapse button */}
         <button
           onClick={handleCollapse}
-          className="hidden md:flex absolute -right-3 top-24 w-6 h-6 bg-[var(--surface)] border border-[var(--border)] rounded-full items-center justify-center shadow-sm hover:shadow-md transition-all sidebar-collapse-btn z-10"
-          title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+          className="hidden md:flex absolute -right-3 top-24 w-6 h-6 bg-[var(--bg-primary)] border border-[var(--border-default)] rounded-full items-center justify-center shadow-sm hover:shadow-md transition-all sidebar-collapse-btn z-10"
+          aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
         >
           <ChevronLeft className={cn("w-3.5 h-3.5 text-[var(--text-secondary)] transition-transform duration-300", collapsed && "rotate-180")} />
         </button>
@@ -195,7 +198,9 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
               <div ref={orgDropdownRef} className="relative">
                 <button
                   onClick={() => setOrgSwitcherOpen(!orgSwitcherOpen)}
-                  className="w-full flex items-center gap-2 p-2 rounded-lg hover:bg-stone-100 transition-colors"
+                  className="w-full flex items-center gap-2 p-2 rounded-lg hover:bg-[var(--bg-tertiary)] transition-colors"
+                  aria-expanded={orgSwitcherOpen}
+                  aria-haspopup="listbox"
                 >
                   <Building2 className="w-4 h-4 text-[var(--text-muted)] flex-shrink-0" />
                   <span className="flex-1 text-sm font-medium text-left truncate">
@@ -205,7 +210,7 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
                 </button>
 
                 {orgSwitcherOpen && (
-                  <div className="absolute left-0 right-0 mt-1 py-1 bg-[var(--surface)] border border-[var(--border)] rounded-lg shadow-lg z-50">
+                  <div className="absolute left-0 right-0 mt-1 py-1 bg-[var(--bg-primary)] border border-[var(--border-default)] rounded-lg shadow-lg z-50" role="listbox" aria-label="Select organization">
                     {organizations.map((org) => (
                       <button
                         key={org.id}
@@ -213,19 +218,21 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
                           setCurrentOrg(org);
                           setOrgSwitcherOpen(false);
                         }}
+                        role="option"
+                        aria-selected={org.id === currentOrg?.id}
                         className={cn(
-                          "w-full px-3 py-2 text-left text-sm hover:bg-stone-100 flex items-center justify-between",
-                          org.id === currentOrg?.id && "bg-[var(--accent-bg)] text-[var(--accent)]"
+                          "w-full px-3 py-2 text-left text-sm hover:bg-[var(--bg-tertiary)] flex items-center justify-between",
+                          org.id === currentOrg?.id && "bg-[var(--accent-light)] text-[var(--accent)]"
                         )}
                       >
                         <span className="truncate">{org.name}</span>
                         <span className="text-xs text-[var(--text-muted)]">{org.role}</span>
                       </button>
                     ))}
-                    <div className="border-t border-[var(--border)] mt-1 pt-1">
+                    <div className="border-t border-[var(--border-default)] mt-1 pt-1">
                       <Link
                         href="/settings"
-                        className="w-full px-3 py-2 text-left text-sm text-[var(--accent)] hover:bg-[var(--accent-bg)] flex items-center gap-2"
+                        className="w-full px-3 py-2 text-left text-sm text-[var(--accent)] hover:bg-[var(--accent-light)] flex items-center gap-2"
                         onClick={() => setOrgSwitcherOpen(false)}
                       >
                         <Settings className="w-3.5 h-3.5" />
@@ -238,7 +245,7 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
             ) : (
               <Link
                 href="/settings"
-                className="flex items-center justify-center p-2 rounded-lg hover:bg-stone-100 transition-colors"
+                className="flex items-center justify-center p-2 rounded-lg hover:bg-[var(--bg-tertiary)] transition-colors"
                 title="Switch Organization"
               >
                 <Building2 className="w-5 h-5 text-[var(--text-muted)]" />
@@ -248,7 +255,7 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
         )}
 
         {/* Navigation */}
-        <nav className="relative flex-1 p-3 space-y-0.5">
+        <nav className="relative flex-1 p-3 space-y-0.5" aria-label="Main navigation">
           <NavItem href="/dashboard" icon={LayoutDashboard} label="Dashboard" collapsed={collapsed} onClick={() => setSidebarOpen(false)} />
           <NavItem href="/jobs" icon={Layers} label="Jobs" collapsed={collapsed} onClick={() => setSidebarOpen(false)} />
           <NavItem href="/settings" icon={Settings} label="Settings" collapsed={collapsed} onClick={() => setSidebarOpen(false)} />
@@ -258,7 +265,7 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
         </nav>
 
         {/* User section */}
-        <div className="relative p-3 border-t border-[var(--border)]">
+        <div className="relative p-3 border-t border-[var(--border-default)]">
           <div ref={userDropdownRef} className="relative">
             {/* User button */}
             <button
@@ -266,9 +273,12 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
               className={cn(
                 "w-full flex items-center gap-3 p-2 rounded-lg transition-colors",
                 userDropdownOpen
-                  ? "bg-[var(--accent-bg)]"
-                  : "hover:bg-stone-100"
+                  ? "bg-[var(--accent-light)]"
+                  : "hover:bg-[var(--bg-tertiary)]"
               )}
+              aria-expanded={userDropdownOpen}
+              aria-haspopup="true"
+              aria-label="User menu"
             >
               <div className="user-avatar user-avatar-online w-9 h-9 rounded-full flex items-center justify-center text-sm flex-shrink-0">
                 {user.name.charAt(0).toUpperCase()}
@@ -284,7 +294,7 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
             </button>
 
             {/* Dropdown */}
-            <div className={cn("user-dropdown", userDropdownOpen ? "open" : "")}>
+            <div className={cn("user-dropdown", userDropdownOpen ? "open" : "")} role="menu" aria-label="User menu">
               <Link
                 href="/settings"
                 className="user-dropdown-item"
@@ -304,6 +314,7 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
               <button
                 onClick={() => handleLogout(router, () => setUserDropdownOpen(false))}
                 className="user-dropdown-item danger w-full"
+                role="menuitem"
               >
                 <LogOut className="w-4 h-4" />
                 Log out
@@ -316,7 +327,7 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
             <button
               onClick={() => handleLogout(router, () => {})}
               className="w-full mt-2 p-2 text-[var(--text-muted)] hover:text-[var(--error)] hover:bg-[var(--error-bg)] rounded-lg transition-colors flex items-center justify-center"
-              title="Log out"
+              aria-label="Log out"
             >
               <LogOut className="w-4 h-4" />
             </button>
@@ -327,13 +338,13 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
       {/* Main content */}
       <main className="flex-1 overflow-auto pb-20 lg:pb-0">
         {/* Top bar */}
-        <header className="sticky top-0 z-30 bg-[var(--surface)] border-b border-[var(--border)]">
+        <header className="sticky top-0 z-30 bg-[var(--bg-primary)] border-b border-[var(--border-default)]">
           <div className="flex items-center justify-between px-4 lg:px-6 py-3">
             {/* Left: Mobile logo + hamburger */}
             <div className="flex items-center gap-3 lg:hidden">
               <button
                 onClick={() => setSidebarOpen(true)}
-                className="p-2.5 text-[var(--text-secondary)] hover:bg-stone-100 rounded-lg active:bg-stone-200"
+                className="p-2.5 text-[var(--text-secondary)] hover:bg-[var(--bg-tertiary)] rounded-lg active:bg-[var(--border-default)]"
                 aria-label="Open menu"
               >
                 <Menu className="w-5 h-5" />
@@ -344,8 +355,12 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
             </div>
 
             {/* Breadcrumb */}
-            <nav className="flex items-center gap-1.5 text-sm">
-              <Link href="/dashboard" className="text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors">
+            <nav className="flex items-center gap-1.5 text-sm min-w-0 flex-1 lg:flex-initial" aria-label="Breadcrumb">
+              <Link
+                href="/dashboard"
+                className="text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors shrink-0"
+                aria-label="Dashboard"
+              >
                 <Home className="w-4 h-4" />
               </Link>
               {breadcrumbs.map((crumb, index) => (
@@ -366,27 +381,21 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
             <div className="flex items-center gap-2">
               <button
                 onClick={() => setCommandPaletteOpen(true)}
-                className="hidden lg:flex items-center gap-2 px-3 py-1.5 text-sm text-[var(--text-muted)] bg-stone-100 hover:bg-stone-200 rounded-lg transition-colors"
+                className="hidden lg:flex items-center gap-2 px-3 py-1.5 text-sm text-[var(--text-muted)] bg-[var(--bg-tertiary)] hover:bg-[var(--border-default)] rounded-lg transition-colors"
                 title="Search (⌘K)"
               >
                 <Search className="w-4 h-4" />
                 <span className="text-xs">Search...</span>
-                <kbd className="ml-2 px-1.5 py-0.5 bg-white rounded text-[var(--text-muted)] font-mono text-xs">⌘K</kbd>
+                <kbd className="ml-2 px-1.5 py-0.5 bg-[var(--bg-primary)] border border-[var(--border-default)] rounded text-[var(--text-muted)] font-mono text-xs">⌘K</kbd>
               </button>
               <button
                 onClick={() => setCommandPaletteOpen(true)}
-                className="lg:hidden p-2 text-[var(--text-secondary)] hover:bg-stone-100 rounded-lg active:bg-stone-200"
+                className="lg:hidden p-2 text-[var(--text-secondary)] hover:bg-[var(--bg-tertiary)] rounded-lg active:bg-[var(--border-default)]"
                 aria-label="Search"
               >
                 <Search className="w-5 h-5" />
               </button>
-              <button
-                className="p-2 text-[var(--text-secondary)] hover:bg-stone-100 rounded-lg active:bg-stone-200 relative"
-                aria-label="Notifications"
-              >
-                <Bell className="w-5 h-5" />
-                <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-[var(--accent)] rounded-full" />
-              </button>
+              <NotificationsDropdown />
             </div>
           </div>
         </header>
@@ -397,17 +406,171 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
         </div>
 
         {/* Mobile bottom navigation */}
-        <nav className="lg:hidden fixed bottom-0 left-0 right-0 bg-[var(--surface)] border-t border-[var(--border)] z-40">
-          <div className="flex items-center justify-around h-16">
-            <BottomNavItem href="/dashboard" icon={Home} label="Dashboard" />
+        <nav className="lg:hidden fixed bottom-0 left-0 right-0 bg-[var(--bg-primary)] border-t border-[var(--border-default)] z-40" aria-label="Mobile navigation">
+          <div className="flex items-center justify-around h-16 px-1">
+            <BottomNavItem href="/dashboard" icon={Home} label="Home" />
             <BottomNavItem href="/jobs" icon={Layers} label="Jobs" />
-            <BottomNavItem href="/jobs/new" icon={PlusCircle} label="New Job" isCenter />
+            <BottomNavItem href="/jobs/new" icon={PlusCircle} label="New" isCenter />
+            <BottomNavItem href="/settings" icon={Settings} label="Settings" />
+            <BottomNavItem href="/profile" icon={User} label="Profile" />
           </div>
         </nav>
 
         {/* Command Palette (Cmd+K) */}
         <CommandPalette open={commandPaletteOpen} onOpenChange={setCommandPaletteOpen} />
       </main>
+    </div>
+  );
+}
+
+function NotificationsDropdown() {
+  const [open, setOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+  const { notifications, unreadCount, loading, markAsRead, markAllAsRead, deleteNotification } = useNotifications();
+
+  // Close on click outside
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setOpen(false);
+      }
+    }
+    if (open) {
+      document.addEventListener("mousedown", handleClickOutside);
+      return () => document.removeEventListener("mousedown", handleClickOutside);
+    }
+  }, [open]);
+
+  const formatRelativeTime = (dateString: string) => {
+    const date = new Date(dateString);
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMs / 3600000);
+    const diffDays = Math.floor(diffMs / 86400000);
+
+    if (diffMins < 1) return "Just now";
+    if (diffMins < 60) return `${diffMins}m ago`;
+    if (diffHours < 24) return `${diffHours}h ago`;
+    if (diffDays < 7) return `${diffDays}d ago`;
+    return date.toLocaleDateString();
+  };
+
+  const getNotificationIcon = (type: string) => {
+    switch (type) {
+      case "job_completed":
+        return <Check className="w-4 h-4 text-green-600" />;
+      case "job_failed":
+        return <X className="w-4 h-4 text-red-600" />;
+      default:
+        return <Bell className="w-4 h-4 text-[var(--text-muted)]" />;
+    }
+  };
+
+  return (
+    <div ref={dropdownRef} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        className={cn(
+          "p-2 rounded-lg transition-colors relative",
+          open
+            ? "bg-[var(--accent-light)] text-[var(--accent)]"
+            : "text-[var(--text-secondary)] hover:bg-[var(--bg-tertiary)]"
+        )}
+        aria-label="Notifications"
+        aria-expanded={open}
+      >
+        <Bell className="w-5 h-5" />
+        {unreadCount > 0 && (
+          <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] flex items-center justify-center bg-[var(--error)] text-white text-[10px] font-bold rounded-full px-1">
+            {unreadCount > 99 ? "99+" : unreadCount}
+          </span>
+        )}
+      </button>
+
+      {open && (
+        <div className="absolute right-0 mt-2 w-80 bg-[var(--bg-primary)] border border-[var(--border-default)] rounded-lg shadow-lg z-50 overflow-hidden">
+          {/* Header */}
+          <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--border-default)]">
+            <h3 className="font-semibold text-sm text-[var(--text-primary)]">Notifications</h3>
+            {unreadCount > 0 && (
+              <button
+                onClick={() => markAllAsRead()}
+                className="text-xs text-[var(--accent)] hover:text-[var(--accent-hover)] font-medium"
+              >
+                Mark all as read
+              </button>
+            )}
+          </div>
+
+          {/* Notification list */}
+          <div className="max-h-[320px] overflow-y-auto">
+            {loading && notifications.length === 0 ? (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="w-5 h-5 animate-spin text-[var(--text-muted)]" />
+              </div>
+            ) : notifications.length === 0 ? (
+              <div className="text-center py-8">
+                <Bell className="w-8 h-8 mx-auto mb-2 text-[var(--text-muted)] stroke-1 opacity-50" />
+                <p className="text-sm text-[var(--text-muted)]">No notifications</p>
+              </div>
+            ) : (
+              <div className="divide-y divide-[var(--border-subtle)]">
+                {notifications.map((notification) => (
+                  <div
+                    key={notification.id}
+                    className={cn(
+                      "px-4 py-3 hover:bg-[var(--bg-tertiary)] transition-colors cursor-pointer",
+                      !notification.is_read && "bg-[var(--accent-light)]/30"
+                    )}
+                    onClick={() => {
+                      if (!notification.is_read) {
+                        markAsRead(notification.id);
+                      }
+                    }}
+                  >
+                    <div className="flex items-start gap-3">
+                      <div className="mt-0.5 p-1.5 rounded bg-[var(--bg-tertiary)] shrink-0">
+                        {getNotificationIcon(notification.type)}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between gap-2">
+                          <p className={cn(
+                            "text-sm font-medium truncate",
+                            notification.is_read ? "text-[var(--text-secondary)]" : "text-[var(--text-primary)]"
+                          )}>
+                            {notification.title}
+                          </p>
+                          {notification.is_read && (
+                            <Check className="w-3.5 h-3.5 text-[var(--accent)] shrink-0" />
+                          )}
+                        </div>
+                        <p className="text-xs text-[var(--text-muted)] mt-0.5 line-clamp-2">
+                          {notification.message}
+                        </p>
+                        <p className="text-xs text-[var(--text-muted)] mt-1">
+                          {formatRelativeTime(notification.created_at)}
+                        </p>
+                      </div>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          deleteNotification(notification.id);
+                        }}
+                        className="p-1 text-[var(--text-muted)] hover:text-[var(--error)] transition-colors shrink-0"
+                        aria-label="Delete notification"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -473,6 +636,8 @@ function BottomNavItem({
   return (
     <Link
       href={href}
+      aria-label={label}
+      aria-current={active ? "page" : undefined}
       className={cn(
         "flex flex-col items-center justify-center min-w-[44px] min-h-[44px] gap-1 transition-colors",
         isCenter
