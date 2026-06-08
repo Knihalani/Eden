@@ -337,9 +337,13 @@ export default function DocsPage() {
                     Overview
                   </h1>
                   <p className="text-[var(--text-secondary)] leading-relaxed">
-                    The Eden API allows you to submit environment generation jobs,
-                    monitor their progress, and retrieve results. All endpoints
-                    require authentication via JWT cookie.
+                    Eden is the observability + improvement platform for AI agents and LLM
+                    apps. These docs cover the core API surface: the OpenAI-compatible
+                    gateway, the SDKs, the workspace endpoints, and the{" "}
+                    <code className="font-mono text-[var(--text-primary)] bg-[var(--bg-tertiary)] px-1.5 py-0.5 rounded text-xs">
+                      /eden-improve
+                    </code>{" "}
+                    CLI agent. All endpoints require authentication via JWT cookie.
                   </p>
                 </div>
 
@@ -355,10 +359,16 @@ export default function DocsPage() {
                     Introduction
                   </h2>
                   <p className="text-[var(--text-secondary)] leading-relaxed">
-                    Eden provides a unified API for generating agent environments for development,
-                    testing, training, and benchmarking. Each job goes through multiple stages
-                    including planning, critic analysis, refinement, and verification to ensure
-                    high-quality outputs.
+                    Eden is delivered as three pillars: <strong>Observability</strong>{" "}
+                    (OpenAI-compatible gateway + Python/TypeScript SDKs that capture every
+                    LLM call), the <strong>Web platform</strong> (org management,
+                    visualisations, data export, and a persistent AI assistant sidebar), and
+                    the <strong>CLI coding agent</strong> with the flagship{" "}
+                    <code className="font-mono text-[var(--text-primary)] bg-[var(--bg-tertiary)] px-1.5 py-0.5 rounded text-xs">
+                      /eden-improve
+                    </code>{" "}
+                    command that turns failing traces into shipped PRs. The three pillars
+                    close the loop: capture, analyse, improve.
                   </p>
                 </div>
 
@@ -368,9 +378,9 @@ export default function DocsPage() {
                   </h2>
                   <ol className="list-decimal list-inside space-y-2 text-[var(--text-secondary)]">
                     <li>Create an account or sign in</li>
-                    <li>Submit your first environment generation job</li>
-                    <li>Monitor progress via SSE stream or polling</li>
-                    <li>Retrieve results and quality reports</li>
+                    <li>Point your existing OpenAI SDK at Eden's gateway (one-line change)</li>
+                    <li>Browse captured traces, costs, and eval scores in the portal</li>
+                    <li>Install <code className="font-mono">eden</code> CLI and run <code className="font-mono">/eden-improve</code> to ship a fix</li>
                   </ol>
                 </div>
               </section>
