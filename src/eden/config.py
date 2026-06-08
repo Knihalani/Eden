@@ -121,6 +121,25 @@ class Settings(BaseSettings):
     chain_enabled_experts: list[str] = []  # Environment: EDEN_CHAIN_ENABLED_EXPERTS
     chain_disabled_optional: list[str] = []  # Environment: EDEN_CHAIN_DISABLED_OPTIONAL
 
+    # ── Phase 7.0 multi-format ingestion layer ─────────────────────────
+    # Master switch for the /orgs/{org_id}/ingest/{format} POST endpoints
+    # plus per-tenant rate limit, body cap, and the PII pre-mask gate.
+    ingestion_layer_enabled: bool = True
+    ingestion_pii_pre_mask: bool = True
+    ingestion_max_body_bytes: int = 5 * 1024 * 1024  # 5 MiB
+    ingestion_per_tenant_rpm: int = 600
+    ingestion_per_api_key_rpm: int = 300
+    ingestion_allowed_formats: list[str] = [
+        "otel", "helicone", "langfuse", "openai", "anthropic",
+        "bedrock", "gemini", "framework", "webhook",
+    ]
+    ingestion_chunks_max_per_request: int = 1000
+    # OTLP gRPC sidecar (off by default — HTTP-JSON via the POST routes
+    # is the canonical path).
+    ingestion_otlp_enabled: bool = False
+    ingestion_otlp_grpc_host: str = "0.0.0.0"
+    ingestion_otlp_grpc_port: int = 4317
+
     # Evolution Engine
     # When the prompt evolver generates a variant, automatically
     # promote it to a canary at this traffic percentage.
