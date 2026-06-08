@@ -1,0 +1,26 @@
+name: Load test (weekly)
+
+# Closes §9.3.5 of the roadmap. Runs the k6 jobs-load script
+# against a staging environment every Monday at 6am UTC. The
+# script (tests/load/jobs.js) is also runnable locally with
+# `k6 run`.
+
+on:
+  schedule:
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+
+jobs:
+  load:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      BASE_URL: ${{ secrets.STAGING_BASE_URL }}
+      TOKEN: ${{ secrets.STAGING_TOKEN }}
+      ORG_ID: ${{ secrets.STAGING_ORG_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run k6
+        uses: grafana/k6-action@v0.3.1
+        with:
+          filename: tests/load/jobs.js

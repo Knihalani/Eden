@@ -1,0 +1,571 @@
+"""OpenAI wire-format adapter for the Eden AI Gateway.
+
+Phase 7.0 / Batch A1 — the "users point their app at gateway.eden.ai/v1"
+killer feature. Translates OpenAI-compatible HTTP requests into a
+provider call (OpenRouter or MiniMax, picked from ``Settings``) and
+converts the response back into the OpenAI JSON shape so existing
+OpenAI / Vercel AI / LangChain clients Just Work.
+
+Wire shapes handled (matching the OpenAI Python SDK's
+``chat.completions.create`` deserializer):
+
+  Request:
+    - model: str  (e.g. "openai/gpt-4o-mini")
+    - messages: list[dict] — system / user / assistant / tool / function
+    - tools / functions: list[dict]
+    - tool_choice: str | dict
+    - temperature, top_p, max_tokens / max_completion_tokens
+    - stream: bool
+    - n: int
+    - logprobs: bool
+    - response_format: dict  (json_object / json_schema)
+    - seed, stop, user, store, service_tier
+    - reasoning_effort  (OpenAI o-series; ignored on older models)
+    - presence_penalty, frequency_penalty
+    - image_url  / type: "image_url" content parts
+    - modalities  (audio, text)
+
+  Response (non-streaming):
+    - id, object="chat.completion", created, model
+    - choices: [{index, message:{role,content,tool_calls,...}, finish_reason, logprobs}]
+    - usage: {prompt_tokens, completion_tokens, total_tokens}
+    - system_fingerprint
+
+  Response (streaming):  ``data: <ChatCompletionChunk>`` SSE chunks with
+    ``object="chat.completion.chunk"``; each carries a delta with
+    role/content/tool_calls and a finish_reason on the terminal chunk.
+
+Embeddings / legacy /completions live in separate helpers — the chat
+endpoint is the one most customers hit.
+"""
+
+from __future__ import annotations
+
+import json
+import logging
+import time
+import uuid
+from typing import Any, AsyncIterator, Iterable, Optional
+
+from pydantic import BaseModel, Field
+
+logger = logging.getLogger(__name__)
+
+
+# ─────────────────────────────────────────────────────────────────────
+# Pydantic request/response models (subset of OpenAI's contract)
+# ─────────────────────────────────────────────────────────────────────
+
+
+class ToolFunctionDef(BaseModel):
+    name: str
+    description: Optional[str] = None
+    parameters: Optional[dict[str, Any]] = None
+    strict: Optional[bool] = None
+
+
+class ToolDef(BaseModel):
+    type: str = "function"
+    function: ToolFunctionDef
+
+
+class ResponseFormat(BaseModel):
+    type: str  # "text" | "json_object" | "json_schema"
+    json_schema: Optional[dict[str, Any]] = None
+
+
+class ChatCompletionRequest(BaseModel):
+    """Pydantic mirror of OpenAI's create-chat-completion request body.
+
+    Every field is optional unless otherwise noted; the OpenAI client
+    sends many defaults we don't actually need to validate.
+    """
+
+    model: str = Field(..., description="Model identifier, e.g. openai/gpt-4o-mini")
+    messages: list[dict[str, Any]] = Field(..., description="Chat messages")
+    # Sampling
+    temperature: Optional[float] = None
+    top_p: Optional[float] = None
+    max_tokens: Optional[int] = None
+    max_completion_tokens: Optional[int] = None
+    n: Optional[int] = 1
+    # Stop
+    stop: Optional[Any] = None  # str | list[str]
+    # Tool calling (modern)
+    tools: Optional[list[ToolDef]] = None
+    tool_choice: Optional[Any] = None  # "none"|"auto"|"required"|{"type":"function","function":{...}}
+    # Tool calling (legacy, pre-1.0)
+    functions: Optional[list[ToolFunctionDef]] = None
+    function_call: Optional[Any] = None
+    # Output shape
+    response_format: Optional[ResponseFormat] = None
+    # Determinism / metadata
+    seed: Optional[int] = None
+    user: Optional[str] = None
+    store: Optional[bool] = None
+    # Penalties
+    presence_penalty: Optional[float] = None
+    frequency_penalty: Optional[float] = None
+    logit_bias: Optional[dict[str, float]] = None
+    logprobs: Optional[bool] = None
+    top_logprobs: Optional[int] = None
+    # Streaming
+    stream: Optional[bool] = False
+    stream_options: Optional[dict[str, Any]] = None
+    # o-series reasoning
+    reasoning_effort: Optional[str] = None
+    # Misc
+    modalities: Optional[list[str]] = None
+    audio: Optional[dict[str, Any]] = None
+    service_tier: Optional[str] = None
+    metadata: Optional[dict[str, Any]] = None
+    # Allow forward-compat: any extra fields land in ``extras``
+    extras: dict[str, Any] = Field(default_factory=dict)
+
+
+class CompletionRequest(BaseModel):
+    """Legacy ``/v1/completions`` body."""
+
+    model: str
+    prompt: Any  # str | list[str] | list[int] | list[list[int]]
+    max_tokens: Optional[int] = None
+    temperature: Optional[float] = None
+    top_p: Optional[float] = None
+    n: Optional[int] = 1
+    stream: Optional[bool] = False
+    logprobs: Optional[int] = None
+    stop: Optional[Any] = None
+    seed: Optional[int] = None
+    user: Optional[str] = None
+    suffix: Optional[str] = None
+    echo: Optional[bool] = None
+    presence_penalty: Optional[float] = None
+    frequency_penalty: Optional[float] = None
+    best_of: Optional[int] = None
+    logit_bias: Optional[dict[str, float]] = None
+    extras: dict[str, Any] = Field(default_factory=dict)
+
+
+class EmbeddingRequest(BaseModel):
+    model: str
+    input: Any  # str | list[str] | list[int] | list[list[int]]
+    encoding_format: Optional[str] = None  # "float" | "base64"
+    dimensions: Optional[int] = None
+    user: Optional[str] = None
+    extras: dict[str, Any] = Field(default_factory=dict)
+
+
+# ─────────────────────────────────────────────────────────────────────
+# Internal helper: messages → flat prompt (for AIGateway PII path)
+# ─────────────────────────────────────────────────────────────────────
+
+
+def messages_to_prompt(messages: list[dict[str, Any]]) -> str:
+    """Flatten an OpenAI messages list to a single prompt string.
+
+    Used for the PII filter (which operates on a single string) and
+    for the AIGateway ``ModelRequest.prompt`` field when the
+    ``prompt``-based path is taken. Tool calls and tool results are
+    serialised as JSON so they still flow through PII detection.
+    """
+    parts: list[str] = []
+    for msg in messages:
+        role = msg.get("role", "user")
+        content = msg.get("content")
+        if content is None:
+            # Assistant tool_calls-only message — render the tool call JSON
+            if msg.get("tool_calls"):
+                content = "[tool_calls] " + json.dumps(msg["tool_calls"], default=str)
+            else:
+                content = ""
+        elif isinstance(content, list):
+            # Multi-part content (text / image_url / input_audio)
+            rendered: list[str] = []
+            for part in content:
+                ptype = part.get("type", "text")
+                if ptype == "text":
+                    rendered.append(part.get("text", ""))
+                elif ptype == "image_url":
+                    rendered.append(
+                        f"[image_url: {part.get('image_url', {}).get('url', '')[:80]}]"
+                    )
+                elif ptype == "input_audio":
+                    rendered.append("[input_audio]")
+                elif ptype == "refusal":
+                    rendered.append(f"[refusal: {part.get('refusal', '')}]")
+                else:
+                    rendered.append(f"[{ptype}: {json.dumps(part, default=str)[:120]}]")
+            content = "\n".join(rendered)
+        if msg.get("name"):
+            parts.append(f"{role}({msg['name']}): {content}")
+        elif msg.get("tool_call_id"):
+            parts.append(f"tool({msg['tool_call_id']}): {content}")
+        else:
+            parts.append(f"{role}: {content}")
+    return "\n\n".join(parts)
+
+
+# ─────────────────────────────────────────────────────────────────────
+# Upstream-call parameter shaping
+# ─────────────────────────────────────────────────────────────────────
+
+
+def chat_to_provider_kwargs(body: ChatCompletionRequest) -> dict[str, Any]:
+    """Translate an OpenAI ``ChatCompletionRequest`` into kwargs the
+    ``openai`` Python SDK can pass to ``chat.completions.create``.
+
+    We strip ``stream`` and ``stream_options`` from the kwargs — those
+    are handled by the caller — but pass through every other OpenAI
+    field unchanged.
+    """
+    data = body.model_dump(exclude_none=True, exclude={"stream", "stream_options", "extras"})
+    return data
+
+
+def embeddings_to_provider_kwargs(body: EmbeddingRequest) -> dict[str, Any]:
+    data = body.model_dump(exclude_none=True, exclude={"extras"})
+    return data
+
+
+# ─────────────────────────────────────────────────────────────────────
+# Response shaping
+# ─────────────────────────────────────────────────────────────────────
+
+
+def _to_message_dict(message: Any) -> dict[str, Any]:
+    """Normalise an OpenAI SDK message object to a plain dict.
+
+    The OpenAI SDK returns Pydantic models; we want a JSON-friendly
+    representation. ``tool_calls`` are converted to the
+    ``ChatCompletionMessageToolCall`` shape that OpenAI's REST API
+    returns to clients (id, type, function.{name,arguments}).
+    """
+    out: dict[str, Any] = {}
+    if getattr(message, "role", None):
+        out["role"] = message.role
+    if getattr(message, "content", None) is not None:
+        out["content"] = message.content
+    if getattr(message, "refusal", None):
+        out["refusal"] = message.refusal
+    if getattr(message, "tool_calls", None):
+        out["tool_calls"] = [
+            {
+                "id": tc.id,
+                "type": getattr(tc, "type", "function") or "function",
+                "function": {
+                    "name": tc.function.name,
+                    "arguments": tc.function.arguments,
+                },
+            }
+            for tc in message.tool_calls
+        ]
+    if getattr(message, "function_call", None):
+        fc = message.function_call
+        out["function_call"] = {"name": fc.name, "arguments": fc.arguments}
+    if getattr(message, "audio", None):
+        out["audio"] = (
+            message.audio.model_dump() if hasattr(message.audio, "model_dump") else message.audio
+        )
+    return out
+
+
+def _to_choice_dict(choice: Any, *, stream: bool = False) -> dict[str, Any]:
+    """Normalise one OpenAI SDK choice to a dict matching the wire shape.
+
+    For non-streaming responses, ``choice.message`` is the assistant
+    message; for streaming, ``choice.delta`` is the incremental chunk.
+    """
+    out: dict[str, Any] = {"index": getattr(choice, "index", 0)}
+    if not stream:
+        out["message"] = _to_message_dict(choice.message)
+    else:
+        # Delta: same fields as message but partial.
+        delta: dict[str, Any] = {}
+        d = getattr(choice, "delta", None)
+        if d is not None:
+            if getattr(d, "role", None):
+                delta["role"] = d.role
+            if getattr(d, "content", None) is not None:
+                delta["content"] = d.content
+            if getattr(d, "refusal", None):
+                delta["refusal"] = d.refusal
+            if getattr(d, "tool_calls", None):
+                delta["tool_calls"] = [
+                    {
+                        "index": getattr(tc, "index", 0),
+                        "id": getattr(tc, "id", None),
+                        "type": getattr(tc, "type", "function") or "function",
+                        "function": {
+                            "name": tc.function.name if tc.function else None,
+                            "arguments": tc.function.arguments if tc.function else None,
+                        },
+                    }
+                    for tc in d.tool_calls
+                ]
+            if getattr(d, "function_call", None):
+                fc = d.function_call
+                delta["function_call"] = {"name": fc.name, "arguments": fc.arguments}
+        out["delta"] = delta
+    if getattr(choice, "finish_reason", None) is not None:
+        out["finish_reason"] = choice.finish_reason
+    if getattr(choice, "logprobs", None):
+        out["logprobs"] = (
+            choice.logprobs.model_dump() if hasattr(choice.logprobs, "model_dump") else choice.logprobs
+        )
+    return out
+
+
+def _to_usage_dict(usage: Any) -> dict[str, Any]:
+    if usage is None:
+        return {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
+    out: dict[str, Any] = {
+        "prompt_tokens": getattr(usage, "prompt_tokens", 0) or 0,
+        "completion_tokens": getattr(usage, "completion_tokens", 0) or 0,
+        "total_tokens": getattr(usage, "total_tokens", 0) or 0,
+    }
+    for opt in (
+        "prompt_tokens_details",
+        "completion_tokens_details",
+        "cost",
+        "cache_read_input_token_cost",
+    ):
+        val = getattr(usage, opt, None)
+        if val is not None:
+            out[opt] = val.model_dump() if hasattr(val, "model_dump") else val
+    return out
+
+
+def shape_chat_completion_response(response: Any) -> dict[str, Any]:
+    """Convert an OpenAI SDK ``ChatCompletion`` into the wire-format dict."""
+    created = getattr(response, "created", None) or int(time.time())
+    out: dict[str, Any] = {
+        "id": getattr(response, "id", None) or f"chatcmpl-{uuid.uuid4().hex[:24]}",
+        "object": "chat.completion",
+        "created": created,
+        "model": getattr(response, "model", None) or "",
+        "choices": [_to_choice_dict(c) for c in (response.choices or [])],
+        "usage": _to_usage_dict(getattr(response, "usage", None)),
+    }
+    sf = getattr(response, "system_fingerprint", None)
+    if sf:
+        out["system_fingerprint"] = sf
+    return out
+
+
+def shape_chat_completion_chunk(chunk: Any) -> dict[str, Any]:
+    """Convert an OpenAI SDK ``ChatCompletionChunk`` into a wire dict."""
+    created = getattr(chunk, "created", None) or int(time.time())
+    out: dict[str, Any] = {
+        "id": getattr(chunk, "id", None) or f"chatcmpl-{uuid.uuid4().hex[:24]}",
+        "object": "chat.completion.chunk",
+        "created": created,
+        "model": getattr(chunk, "model", None) or "",
+        "choices": [_to_choice_dict(c, stream=True) for c in (chunk.choices or [])],
+    }
+    if getattr(chunk, "system_fingerprint", None):
+        out["system_fingerprint"] = chunk.system_fingerprint
+    if getattr(chunk, "usage", None) is not None:
+        out["usage"] = _to_usage_dict(chunk.usage)
+    return out
+
+
+def shape_completion_response(response: Any) -> dict[str, Any]:
+    """Convert an OpenAI SDK ``Completion`` into the wire-format dict."""
+    out: dict[str, Any] = {
+        "id": getattr(response, "id", None) or f"cmpl-{uuid.uuid4().hex[:24]}",
+        "object": "text_completion",
+        "created": getattr(response, "created", None) or int(time.time()),
+        "model": getattr(response, "model", None) or "",
+        "choices": [
+            {
+                "text": getattr(c, "text", "") or "",
+                "index": getattr(c, "index", i),
+                "logprobs": (
+                    c.logprobs.model_dump()
+                    if getattr(c, "logprobs", None) and hasattr(c.logprobs, "model_dump")
+                    else getattr(c, "logprobs", None)
+                ),
+                "finish_reason": getattr(c, "finish_reason", None),
+            }
+            for i, c in enumerate(response.choices or [])
+        ],
+        "usage": _to_usage_dict(getattr(response, "usage", None)),
+    }
+    return out
+
+
+def shape_embedding_response(response: Any) -> dict[str, Any]:
+    """Convert an OpenAI SDK ``CreateEmbeddingResponse`` to a wire dict."""
+    out: dict[str, Any] = {
+        "object": "list",
+        "data": [
+            {
+                "object": "embedding",
+                "index": getattr(item, "index", i),
+                "embedding": list(getattr(item, "embedding", []) or []),
+            }
+            for i, item in enumerate(response.data or [])
+        ],
+        "model": getattr(response, "model", None) or "",
+        "usage": _to_usage_dict(getattr(response, "usage", None)),
+    }
+    return out
+
+
+# ─────────────────────────────────────────────────────────────────────
+# Models listing
+# ─────────────────────────────────────────────────────────────────────
+
+
+# Static catalogue used when the upstream's /models call is unavailable
+# or the operator hasn't registered an org_gateway_models row yet.
+STATIC_MODEL_CATALOGUE: list[dict[str, Any]] = [
+    {
+        "id": "openai/gpt-4o",
+        "object": "model",
+        "created": 1700000000,
+        "owned_by": "openai",
+        "permission": [],
+    },
+    {
+        "id": "openai/gpt-4o-mini",
+        "object": "model",
+        "created": 1700000000,
+        "owned_by": "openai",
+        "permission": [],
+    },
+    {
+        "id": "openai/gpt-4-turbo",
+        "object": "model",
+        "created": 1700000000,
+        "owned_by": "openai",
+        "permission": [],
+    },
+    {
+        "id": "openai/o1",
+        "object": "model",
+        "created": 1700000000,
+        "owned_by": "openai",
+        "permission": [],
+    },
+    {
+        "id": "openai/o1-mini",
+        "object": "model",
+        "created": 1700000000,
+        "owned_by": "openai",
+        "permission": [],
+    },
+    {
+        "id": "openai/o3-mini",
+        "object": "model",
+        "created": 1700000000,
+        "owned_by": "openai",
+        "permission": [],
+    },
+    {
+        "id": "anthropic/claude-3-5-sonnet",
+        "object": "model",
+        "created": 1700000000,
+        "owned_by": "anthropic",
+        "permission": [],
+    },
+    {
+        "id": "anthropic/claude-3-5-haiku",
+        "object": "model",
+        "created": 1700000000,
+        "owned_by": "anthropic",
+        "permission": [],
+    },
+    {
+        "id": "anthropic/claude-3-opus",
+        "object": "model",
+        "created": 1700000000,
+        "owned_by": "anthropic",
+        "permission": [],
+    },
+    {
+        "id": "google/gemini-pro-1.5",
+        "object": "model",
+        "created": 1700000000,
+        "owned_by": "google",
+        "permission": [],
+    },
+    {
+        "id": "meta-llama/llama-3.1-70b-instruct",
+        "object": "model",
+        "created": 1700000000,
+        "owned_by": "meta",
+        "permission": [],
+    },
+    {
+        "id": "mistralai/mistral-large",
+        "object": "model",
+        "created": 1700000000,
+        "owned_by": "mistralai",
+        "permission": [],
+    },
+]
+
+
+def shape_models_response(
+    *, upstream_models: Optional[Iterable[dict[str, Any]]] = None
+) -> dict[str, Any]:
+    """Shape a /v1/models response in the OpenAI format."""
+    rows = list(upstream_models) if upstream_models is not None else STATIC_MODEL_CATALOGUE
+    return {
+        "object": "list",
+        "data": [
+            {
+                "id": m.get("id"),
+                "object": m.get("object", "model"),
+                "created": m.get("created", 0),
+                "owned_by": m.get("owned_by", ""),
+                "permission": m.get("permission", []),
+            }
+            for m in rows
+        ],
+    }
+
+
+# ─────────────────────────────────────────────────────────────────────
+# SSE encoding
+# ─────────────────────────────────────────────────────────────────────
+
+
+def sse_format(data: dict[str, Any], *, event: Optional[str] = None) -> bytes:
+    """Encode one SSE message in the OpenAI streaming style.
+
+    OpenAI uses ``data: <json>\\n\\n`` and signals end-of-stream with
+    ``data: [DONE]\\n\\n``. We follow that exactly so existing client
+    SDKs (which parse the bytes verbatim) work without modification.
+    """
+    if event is not None:
+        return f"event: {event}\ndata: {json.dumps(data, default=str)}\n\n".encode()
+    return f"data: {json.dumps(data, default=str)}\n\n".encode()
+
+
+def sse_done() -> bytes:
+    return b"data: [DONE]\n\n"
+
+
+# ─────────────────────────────────────────────────────────────────────
+# Async-iterator utilities
+# ─────────────────────────────────────────────────────────────────────
+
+
+async def aiter_to_bytes_stream(
+    upstream: AsyncIterator[Any],
+) -> AsyncIterator[bytes]:
+    """Convert an async stream of OpenAI SDK chunks into SSE bytes.
+
+    Yields ``data: {...}\\n\\n`` for each chunk then the
+    ``data: [DONE]`` sentinel.
+    """
+    async for chunk in upstream:
+        try:
+            payload = shape_chat_completion_chunk(chunk)
+        except Exception as exc:  # noqa: BLE001
+            logger.debug(f"chunk shape failed: {exc}")
+            continue
+        yield sse_format(payload)
+    yield sse_done()

@@ -1,0 +1,38 @@
+rules:
+  - id: python-sql-injection-raw-string
+    languages: [python]
+    message: |
+      Detected potential SQL injection: string formatting or f-strings used with SQL queries.
+      Use parameterized queries instead.
+    severity: ERROR
+    pattern-either:
+      - pattern: |
+          $CONN.execute(f"..." + $X, ...)
+      - pattern: |
+          $CONN.execute("..." % $X, ...)
+      - pattern: |
+          $CONN.execute("...".format(...), ...)
+      - pattern: |
+          $CONN.fetch(f"..." + $X, ...)
+      - pattern: |
+          $CONN.fetch("..." % $X, ...)
+      - pattern: |
+          $CONN.fetch("...".format(...), ...)
+    paths:
+      include:
+        - src/eden/**/*.py
+
+  - id: python-sql-injection-fstring-sql
+    languages: [python]
+    message: |
+      Detected f-string interpolation inside SQL query string.
+      Use parameterized queries with $1, $2 placeholders.
+    severity: ERROR
+    pattern-either:
+      - pattern: |
+          $CONN.execute(f"...", ...)
+      - pattern: |
+          $CONN.fetch(f"...", ...)
+    paths:
+      include:
+        - src/eden/**/*.py

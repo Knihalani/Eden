@@ -1,0 +1,66 @@
+{
+  "_comment": "Synthetic canonical golden dataset for Eden. Closes §9.3.2 of the roadmap. These 50 environments are SYNTHETIC (sourced from a generator), not from real customer workloads. Use as a regression suite for the pipeline; never as a basis for real environment generation. Schema matches eden.evaluation.golden_dataset.load_canonical_datasets (cases: list).",
+  "version": "v1",
+  "generated_at": "2026-06-01",
+  "cases": [
+    {"id": "gym-cartpole-v1", "env_class": "rl_classic", "agent": "planner-v1", "expected_pass": true, "difficulty": "easy"},
+    {"id": "gym-mountaincar-v0", "env_class": "rl_classic", "agent": "planner-v1", "expected_pass": true, "difficulty": "easy"},
+    {"id": "gym-pendulum-v1", "env_class": "rl_classic", "agent": "planner-v1", "expected_pass": true, "difficulty": "easy"},
+    {"id": "gym-acrobot-v1", "env_class": "rl_classic", "agent": "planner-v1", "expected_pass": true, "difficulty": "medium"},
+    {"id": "gym-lunarlander-v2", "env_class": "rl_classic", "agent": "planner-v1", "expected_pass": true, "difficulty": "medium"},
+
+    {"id": "webshop-search-v1", "env_class": "web_agent", "agent": "planner-v1", "expected_pass": true, "difficulty": "medium"},
+    {"id": "webshop-checkout-v1", "env_class": "web_agent", "agent": "planner-v1", "expected_pass": true, "difficulty": "medium"},
+    {"id": "webshop-bundle-v1", "env_class": "web_agent", "agent": "planner-v1", "expected_pass": false, "difficulty": "hard"},
+    {"id": "minigrid-fourrooms-v0", "env_class": "gridworld", "agent": "planner-v1", "expected_pass": true, "difficulty": "easy"},
+    {"id": "minigrid-doorkey-v0", "env_class": "gridworld", "agent": "planner-v1", "expected_pass": true, "difficulty": "medium"},
+
+    {"id": "minigrid-multiroom-v0", "env_class": "gridworld", "agent": "planner-v1", "expected_pass": true, "difficulty": "medium"},
+    {"id": "minigrid-fetch-v0", "env_class": "gridworld", "agent": "planner-v1", "expected_pass": true, "difficulty": "medium"},
+    {"id": "minigrid-goToDoor-v0", "env_class": "gridworld", "agent": "planner-v1", "expected_pass": true, "difficulty": "easy"},
+    {"id": "minigrid-putNear-v0", "env_class": "gridworld", "agent": "planner-v1", "expected_pass": true, "difficulty": "easy"},
+    {"id": "minigrid-moveBlock-v0", "env_class": "gridworld", "agent": "planner-v1", "expected_pass": true, "difficulty": "medium"},
+
+    {"id": "tool-fs-read-v1", "env_class": "tool_use", "agent": "executor-v1", "expected_pass": true, "difficulty": "easy"},
+    {"id": "tool-fs-write-v1", "env_class": "tool_use", "agent": "executor-v1", "expected_pass": true, "difficulty": "easy"},
+    {"id": "tool-bash-run-v1", "env_class": "tool_use", "agent": "executor-v1", "expected_pass": true, "difficulty": "easy"},
+    {"id": "tool-bash-pipe-v1", "env_class": "tool_use", "agent": "executor-v1", "expected_pass": true, "difficulty": "medium"},
+    {"id": "tool-git-clone-v1", "env_class": "tool_use", "agent": "executor-v1", "expected_pass": true, "difficulty": "easy"},
+
+    {"id": "code-py-fizzbuzz", "env_class": "code_generation", "agent": "planner-v1", "expected_pass": true, "difficulty": "easy"},
+    {"id": "code-py-fibonacci", "env_class": "code_generation", "agent": "planner-v1", "expected_pass": true, "difficulty": "easy"},
+    {"id": "code-py-prime", "env_class": "code_generation", "agent": "planner-v1", "expected_pass": true, "difficulty": "easy"},
+    {"id": "code-py-palindrome", "env_class": "code_generation", "agent": "planner-v1", "expected_pass": true, "difficulty": "easy"},
+    {"id": "code-py-anagram", "env_class": "code_generation", "agent": "planner-v1", "expected_pass": true, "difficulty": "medium"},
+
+    {"id": "code-js-debounce", "env_class": "code_generation", "agent": "planner-v1", "expected_pass": true, "difficulty": "medium"},
+    {"id": "code-js-throttle", "env_class": "code_generation", "agent": "planner-v1", "expected_pass": true, "difficulty": "medium"},
+    {"id": "code-js-promise-all", "env_class": "code_generation", "agent": "planner-v1", "expected_pass": true, "difficulty": "medium"},
+    {"id": "code-rs-fizzbuzz", "env_class": "code_generation", "agent": "planner-v1", "expected_pass": true, "difficulty": "medium"},
+    {"id": "code-rs-fibonacci", "env_class": "code_generation", "agent": "planner-v1", "expected_pass": true, "difficulty": "medium"},
+
+    {"id": "adversarial-prompt-injection-v1", "env_class": "adversarial", "agent": "executor-v1", "expected_pass": false, "difficulty": "hard"},
+    {"id": "adversarial-pii-extraction-v1", "env_class": "adversarial", "agent": "executor-v1", "expected_pass": false, "difficulty": "hard"},
+    {"id": "adversarial-tool-confusion-v1", "env_class": "adversarial", "agent": "executor-v1", "expected_pass": false, "difficulty": "hard"},
+    {"id": "adversarial-context-overflow-v1", "env_class": "adversarial", "agent": "executor-v1", "expected_pass": false, "difficulty": "hard"},
+    {"id": "adversarial-cost-bomb-v1", "env_class": "adversarial", "agent": "executor-v1", "expected_pass": false, "difficulty": "hard"},
+
+    {"id": "multi-agent-2p-negotiation-v1", "env_class": "multi_agent", "agent": "planner-v1", "expected_pass": true, "difficulty": "hard"},
+    {"id": "multi-agent-3p-coalition-v1", "env_class": "multi_agent", "agent": "planner-v1", "expected_pass": false, "difficulty": "hard"},
+    {"id": "multi-agent-hierarchical-v1", "env_class": "multi_agent", "agent": "planner-v1", "expected_pass": true, "difficulty": "hard"},
+    {"id": "multi-agent-competitive-v1", "env_class": "multi_agent", "agent": "planner-v1", "expected_pass": true, "difficulty": "medium"},
+    {"id": "multi-agent-collaborative-v1", "env_class": "multi_agent", "agent": "planner-v1", "expected_pass": true, "difficulty": "medium"},
+
+    {"id": "sim-tick-economy-v1", "env_class": "simulation", "agent": "planner-v1", "expected_pass": true, "difficulty": "hard"},
+    {"id": "sim-traffic-v1", "env_class": "simulation", "agent": "planner-v1", "expected_pass": true, "difficulty": "hard"},
+    {"id": "sim-forest-fire-v1", "env_class": "simulation", "agent": "planner-v1", "expected_pass": true, "difficulty": "hard"},
+    {"id": "sim-predator-prey-v1", "env_class": "simulation", "agent": "planner-v1", "expected_pass": true, "difficulty": "medium"},
+    {"id": "sim-spread-disease-v1", "env_class": "simulation", "agent": "planner-v1", "expected_pass": true, "difficulty": "medium"},
+
+    {"id": "browser-form-fill-v1", "env_class": "browser", "agent": "executor-v1", "expected_pass": true, "difficulty": "medium"},
+    {"id": "browser-login-flow-v1", "env_class": "browser", "agent": "executor-v1", "expected_pass": true, "difficulty": "hard"},
+    {"id": "browser-pagination-v1", "env_class": "browser", "agent": "executor-v1", "expected_pass": true, "difficulty": "medium"},
+    {"id": "browser-file-download-v1", "env_class": "browser", "agent": "executor-v1", "expected_pass": true, "difficulty": "hard"},
+    {"id": "browser-cookie-banner-v1", "env_class": "browser", "agent": "executor-v1", "expected_pass": true, "difficulty": "medium"}
+  ]
+}

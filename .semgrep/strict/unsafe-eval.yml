@@ -1,0 +1,15 @@
+rules:
+  - id: unsafe-eval-usage
+    languages: [python]
+    message: |
+      Detected use of eval() or exec(). These are dangerous and should be avoided.
+      Use ast.literal_eval for safe parsing of literals, or a proper parser.
+    severity: ERROR
+    pattern-either:
+      - pattern: eval(...)
+      - pattern: exec(...)
+    paths:
+      include:
+        - src/eden/**/*.py
+      exclude:
+        - tests/**/*.py

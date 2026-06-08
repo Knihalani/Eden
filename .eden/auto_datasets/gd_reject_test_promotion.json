@@ -1,0 +1,23 @@
+{
+  "processed": 1,
+  "promoted": 0,
+  "rejected": 1,
+  "new_cases": 0,
+  "scores": [
+    {
+      "trace_id": "t1",
+      "overall_score": 0.35,
+      "correctness_score": 0.0,
+      "robustness_score": 0.0,
+      "efficiency_score": 1.0,
+      "diversity_score": 1.0,
+      "coverage_delta": 0.0,
+      "metadata": {
+        "environment_type": "agent_sandbox",
+        "tokens_used": 0,
+        "test_passed": 0,
+        "test_total": 1
+      }
+    }
+  ]
+}
