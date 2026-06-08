@@ -1,0 +1,51 @@
+name: perf-bench (weekly)
+
+on:
+  schedule:
+    # Weekly Sunday 4am UTC. Manual run via the Actions tab.
+    - cron: "0 4 * * 0"
+  workflow_dispatch: {}
+
+jobs:
+  bench:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('pyproject.toml') }}
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .
+
+      - name: Run performance benchmarks
+        env:
+          PYTHONPATH: "src:."
+        run: |
+          python -m bench.run_all
+
+      - name: Upload benchmark results
+        uses: actions/upload-artifact@v4
+        with:
+          name: bench-results
+          path: bench/results/*.json
+          if-no-files-found: error
+          retention-days: 90
+
+      - name: Post summary
+        if: always()
+        env:
+          PYTHONPATH: "src:."
+        run: |
+          python scripts/post_bench_summary.py

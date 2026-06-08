@@ -1,0 +1,1058 @@
+"""Eden Telemetry Collector (ETC) — ingestion pipeline for observability v2.
+
+Phase 6.5: Validates, enriches, deduplicates, and routes telemetry events
+from the SDK and internal services to multiple sinks (Redis hot path,
+PostgreSQL cold path, ClickHouse analytics, and real-time WebSocket fanout).
+
+Usage:
+    from eden.observability.telemetry_collector import get_telemetry_collector
+    collector = await get_telemetry_collector()
+    await collector.ingest(event)
+"""
+
+from __future__ import annotations
+
+import hashlib
+import json
+import logging
+import time
+import uuid
+from collections import defaultdict
+from dataclasses import dataclass, field
+from datetime import datetime, timezone
+from typing import Any, Optional
+
+from eden.config import get_settings
+
+logger = logging.getLogger(__name__)
+settings = get_settings()
+
+
+@dataclass
+class TelemetryEvent:
+    """A single telemetry event from an agent or environment."""
+
+    event_id: str
+    tenant_id: str
+    project_id: str
+    trace_id: str
+    realm: str  # "environment" | "production"
+    event_type: str  # "span.start", "span.end", "tool.call", "llm.completion", "env.step", etc.
+    timestamp: str  # ISO 8601
+    agent_id: Optional[str] = None
+    agent_version: Optional[str] = None
+    environment_id: Optional[str] = None
+    parent_span_id: Optional[str] = None
+    span_id: Optional[str] = None
+    name: Optional[str] = None
+    duration_ms: Optional[float] = None
+    payload: dict[str, Any] = field(default_factory=dict)
+    metrics: dict[str, float] = field(default_factory=dict)
+    attributes: dict[str, str] = field(default_factory=dict)
+    tags: list[str] = field(default_factory=list)
+    outcome: Optional[str] = None  # "success", "failure", "partial", "timeout", "crash"
+    # Phase 7.0 — which ingestion format produced this row. Defaults to
+    # the existing in-process emit path. The multi-format ingestion layer
+    # stamps one of: "otel", "helicone", "langfuse", "openai", "anthropic",
+    # "bedrock", "gemini", "framework", "webhook". The collector also
+    # backfills this for events created in-process by the SDK decorators
+    # and auto-instrumentation.
+    source_format: Optional[str] = "eden_native"
+    # Phase 7.2 — full LLM call capture. The decoders populate these
+    # fields with the COMPLETE request/response bodies and any provider
+    # extensions (reasoning, tool calls, images, logprobs, citations).
+    # The transcript view in the portal renders straight from these.
+    request_body: Optional[dict[str, Any]] = None
+    response_body: Optional[dict[str, Any]] = None
+    reasoning: Optional[dict[str, Any]] = None
+    tool_calls_full: list[dict[str, Any]] = field(default_factory=list)
+    tool_results: list[dict[str, Any]] = field(default_factory=list)
+    images: list[dict[str, Any]] = field(default_factory=list)
+    audio: list[dict[str, Any]] = field(default_factory=list)
+    logprobs: Optional[dict[str, Any]] = None
+    citations: list[dict[str, Any]] = field(default_factory=list)
+    finish_reason: Optional[str] = None
+    stop_sequence: Optional[str] = None
+    system_fingerprint: Optional[str] = None
+    cache_hit: bool = False
+    prompt_cache_savings_usd: Optional[float] = None
+    model_version: Optional[str] = None
+    service_tier: Optional[str] = None
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "event_id": self.event_id,
+            "tenant_id": self.tenant_id,
+            "project_id": self.project_id,
+            "trace_id": self.trace_id,
+            "realm": self.realm,
+            "event_type": self.event_type,
+            "timestamp": self.timestamp,
+            "agent_id": self.agent_id,
+            "agent_version": self.agent_version,
+            "environment_id": self.environment_id,
+            "parent_span_id": self.parent_span_id,
+            "span_id": self.span_id,
+            "name": self.name,
+            "duration_ms": self.duration_ms,
+            "payload": self.payload,
+            "metrics": self.metrics,
+            "attributes": self.attributes,
+            "tags": self.tags,
+            "outcome": self.outcome,
+            "source_format": self.source_format,
+            "request_body": self.request_body,
+            "response_body": self.response_body,
+            "reasoning": self.reasoning,
+            "tool_calls_full": self.tool_calls_full,
+            "tool_results": self.tool_results,
+            "images": self.images,
+            "audio": self.audio,
+            "logprobs": self.logprobs,
+            "citations": self.citations,
+            "finish_reason": self.finish_reason,
+            "stop_sequence": self.stop_sequence,
+            "system_fingerprint": self.system_fingerprint,
+            "cache_hit": self.cache_hit,
+            "prompt_cache_savings_usd": self.prompt_cache_savings_usd,
+            "model_version": self.model_version,
+            "service_tier": self.service_tier,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "TelemetryEvent":
+        return cls(
+            event_id=data["event_id"],
+            tenant_id=data["tenant_id"],
+            project_id=data["project_id"],
+            trace_id=data["trace_id"],
+            realm=data["realm"],
+            event_type=data["event_type"],
+            timestamp=data["timestamp"],
+            agent_id=data.get("agent_id"),
+            agent_version=data.get("agent_version"),
+            environment_id=data.get("environment_id"),
+            parent_span_id=data.get("parent_span_id"),
+            span_id=data.get("span_id"),
+            name=data.get("name"),
+            duration_ms=data.get("duration_ms"),
+            payload=data.get("payload", {}),
+            metrics=data.get("metrics", {}),
+            attributes=data.get("attributes", {}),
+            tags=data.get("tags", []),
+            outcome=data.get("outcome"),
+            source_format=data.get("source_format") or "eden_native",
+            request_body=data.get("request_body"),
+            response_body=data.get("response_body"),
+            reasoning=data.get("reasoning"),
+            tool_calls_full=data.get("tool_calls_full") or [],
+            tool_results=data.get("tool_results") or [],
+            images=data.get("images") or [],
+            audio=data.get("audio") or [],
+            logprobs=data.get("logprobs"),
+            citations=data.get("citations") or [],
+            finish_reason=data.get("finish_reason"),
+            stop_sequence=data.get("stop_sequence"),
+            system_fingerprint=data.get("system_fingerprint"),
+            cache_hit=bool(data.get("cache_hit", False)),
+            prompt_cache_savings_usd=data.get("prompt_cache_savings_usd"),
+            model_version=data.get("model_version"),
+            service_tier=data.get("service_tier"),
+        )
+
+
+@dataclass
+class TraceTree:
+    """Hierarchical trace tree for visualization."""
+
+    trace_id: str
+    tenant_id: str
+    realm: str
+    root_spans: list[dict[str, Any]]
+    span_map: dict[str, dict[str, Any]]
+    total_duration_ms: float
+    span_count: int
+    outcome: Optional[str] = None
+
+
+@dataclass
+class HeatmapData:
+    """Performance heatmap for a set of traces."""
+
+    metric_name: str
+    buckets: list[dict[str, Any]]  # [{"x": "tool_name", "y": "latency_ms", "value": 42}, ...]
+    x_labels: list[str]
+    y_labels: list[str]
+    min_value: float
+    max_value: float
+
+
+@dataclass
+class TimelineData:
+    """Step timeline for a single trace."""
+
+    trace_id: str
+    steps: list[dict[str, Any]]  # [{"name": "tool.search", "start_ms": 0, "end_ms": 120, "outcome": "success"}, ...]
+    total_duration_ms: float
+    markers: list[dict[str, Any]]  # [{"at_ms": 500, "label": "failure", "severity": "high"}, ...]
+
+
+class TelemetryCollector:
+    """Central telemetry ingestion and routing engine.
+
+    Responsibilities:
+      1. Validate incoming telemetry events (schema, required fields).
+      2. Enrich with derived fields (hashes, fingerprinting, geohash if geo).
+      3. Deduplicate via content hash (idempotent re-ingestion).
+      4. Route to sinks: Redis (hot), PostgreSQL (cold), ClickHouse (analytics),
+         and WebSocket fanout (real-time).
+    """
+
+    # Hot-path Redis stream maxlen per trace
+    STREAM_MAXLEN = 10000
+    # Deduplication window in seconds
+    DEDUP_WINDOW_SECONDS = 3600
+    # Max events to keep in memory per tenant
+    MAX_EVENTS_PER_TENANT = 50000
+
+    def __init__(self) -> None:
+        self._redis: Any = None
+        self._postgres: Any = None
+        self._clickhouse: Any = None
+        self._dedup_cache: dict[str, float] = {}  # event_hash -> timestamp
+        self._tenant_event_counts: dict[str, int] = defaultdict(int)
+
+    # ── Sink accessors ────────────────────────────────────────────────────
+
+    async def _get_redis(self) -> Any:
+        if self._redis is not None:
+            return self._redis
+        try:
+            from eden.storage.redis import get_redis_client
+            self._redis = await get_redis_client()
+        except Exception as exc:
+            logger.warning(f"Redis unavailable for telemetry: {exc}")
+        return self._redis
+
+    async def _get_postgres(self) -> Any:
+        if self._postgres is not None:
+            return self._postgres
+        try:
+            from eden.storage.postgres import get_postgres_client
+            self._postgres = await get_postgres_client()
+        except Exception as exc:
+            logger.warning(f"Postgres unavailable for telemetry: {exc}")
+        return self._postgres
+
+    async def _get_clickhouse(self) -> Any:
+        if self._clickhouse is not None:
+            return self._clickhouse
+        try:
+            from eden.data_platform.clickhouse_sink import get_clickhouse_sink
+            self._clickhouse = await get_clickhouse_sink()
+        except Exception as exc:
+            logger.debug(f"ClickHouse unavailable for telemetry: {exc}")
+        return self._clickhouse
+
+    # ── Public API ────────────────────────────────────────────────────────
+
+    async def ingest(self, event: TelemetryEvent) -> bool:
+        """Ingest a single telemetry event.
+
+        Returns True if the event was accepted and routed, False if
+        deduplicated or rejected.
+        """
+        # 1. Validate
+        if not self._validate(event):
+            return False
+
+        # 2. Enrich
+        self._enrich(event)
+
+        # 3. Deduplicate
+        if self._is_duplicate(event):
+            logger.debug(f"Telemetry event {event.event_id} deduplicated")
+            return False
+
+        # 4. Per-tenant limit
+        if self._tenant_event_counts[event.tenant_id] >= self.MAX_EVENTS_PER_TENANT:
+            logger.warning(f"Telemetry quota exceeded for tenant {event.tenant_id}")
+            return False
+        self._tenant_event_counts[event.tenant_id] += 1
+
+        # 5. Route to sinks
+        await self._route(event)
+        return True
+
+    async def ingest_batch(self, events: list[TelemetryEvent]) -> dict[str, Any]:
+        """Ingest a batch of telemetry events.
+
+        Returns a summary dict with counts of accepted, deduplicated, rejected.
+        """
+        accepted = 0
+        deduplicated = 0
+        rejected = 0
+
+        for event in events:
+            if not self._validate(event):
+                rejected += 1
+                continue
+            self._enrich(event)
+            if self._is_duplicate(event):
+                deduplicated += 1
+                continue
+            if self._tenant_event_counts[event.tenant_id] >= self.MAX_EVENTS_PER_TENANT:
+                rejected += 1
+                continue
+            self._tenant_event_counts[event.tenant_id] += 1
+            await self._route(event)
+            accepted += 1
+
+        return {
+            "accepted": accepted,
+            "deduplicated": deduplicated,
+            "rejected": rejected,
+            "total": len(events),
+        }
+
+    # ── Validation ────────────────────────────────────────────────────────
+
+    def _validate(self, event: TelemetryEvent) -> bool:
+        """Validate a telemetry event."""
+        required = [event.event_id, event.tenant_id, event.project_id, event.trace_id, event.realm, event.event_type, event.timestamp]
+        if not all(required):
+            logger.warning(f"Telemetry event missing required fields: {event.to_dict()}")
+            return False
+        if event.realm not in ("environment", "production"):
+            logger.warning(f"Invalid realm '{event.realm}' in telemetry event {event.event_id}")
+            return False
+        try:
+            datetime.fromisoformat(event.timestamp.replace("Z", "+00:00"))
+        except ValueError:
+            logger.warning(f"Invalid timestamp in telemetry event {event.event_id}")
+            return False
+        return True
+
+    # ── Enrichment ────────────────────────────────────────────────────────
+
+    def _enrich(self, event: TelemetryEvent) -> None:
+        """Add derived fields to a telemetry event."""
+        # Content hash for deduplication
+        content = json.dumps({
+            "trace_id": event.trace_id,
+            "event_type": event.event_type,
+            "span_id": event.span_id,
+            "timestamp": event.timestamp,
+            "payload": event.payload,
+        }, sort_keys=True, default=str)
+        event.attributes["_content_hash"] = hashlib.sha256(content.encode()).hexdigest()[:16]
+
+        # Ingestion latency
+        try:
+            event_ts = datetime.fromisoformat(event.timestamp.replace("Z", "+00:00"))
+            ingest_latency_ms = (datetime.now(timezone.utc) - event_ts).total_seconds() * 1000
+            event.metrics["_ingest_latency_ms"] = max(0.0, round(ingest_latency_ms, 2))
+        except Exception:
+            pass
+
+    # ── Deduplication ─────────────────────────────────────────────────────
+
+    def _is_duplicate(self, event: TelemetryEvent) -> bool:
+        """Check if an event is a duplicate within the dedup window."""
+        content_hash = event.attributes.get("_content_hash")
+        if not content_hash:
+            return False
+        now = time.time()
+        # Clean old entries
+        cutoff = now - self.DEDUP_WINDOW_SECONDS
+        self._dedup_cache = {k: v for k, v in self._dedup_cache.items() if v > cutoff}
+        if content_hash in self._dedup_cache:
+            return True
+        self._dedup_cache[content_hash] = now
+        return False
+
+    # ── Routing ───────────────────────────────────────────────────────────
+
+    async def _route(self, event: TelemetryEvent) -> None:
+        """Route an event to all configured sinks."""
+        # Redis hot path
+        await self._route_redis(event)
+        # PostgreSQL cold path
+        await self._route_postgres(event)
+        # ClickHouse analytics
+        await self._route_clickhouse(event)
+        # Real-time WebSocket fanout
+        await self._route_websocket(event)
+        # OTel dual-emit (Phase 7.2c) — fire-and-forget mirror to OTLP
+        await self._route_otel_dual_emit(event)
+
+    async def _route_redis(self, event: TelemetryEvent) -> None:
+        redis = await self._get_redis()
+        if not redis:
+            return
+        stream_key = f"telemetry:{event.tenant_id}:{event.trace_id}:events"
+        try:
+            await redis.xadd(
+                stream_key,
+                fields={"data": json.dumps(event.to_dict(), default=str)},
+                maxlen=self.STREAM_MAXLEN,
+            )
+        except Exception as exc:
+            logger.warning(f"Redis telemetry xadd failed: {exc}")
+
+    async def _route_postgres(self, event: TelemetryEvent) -> None:
+        client = await self._get_postgres()
+        if not client:
+            return
+        try:
+            await client.execute(
+                """
+                INSERT INTO telemetry_events (
+                    event_id, tenant_id, project_id, trace_id, realm,
+                    event_type, timestamp, agent_id, agent_version, environment_id,
+                    parent_span_id, span_id, name, duration_ms, payload,
+                    metrics, attributes, tags, outcome, source_format,
+                    request_body, response_body, reasoning,
+                    tool_calls_full, tool_results, images, audio,
+                    logprobs, citations, finish_reason, stop_sequence,
+                    system_fingerprint, cache_hit, prompt_cache_savings_usd,
+                    model_version, service_tier,
+                    created_at
+                )
+                VALUES (
+                    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
+                    $11, $12, $13, $14, $15, $16, $17, $18, $19, $20,
+                    $21, $22, $23, $24, $25, $26, $27, $28, $29, $30,
+                    $31, $32, $33, $34, $35, $36, NOW()
+                )
+                ON CONFLICT (event_id) DO NOTHING
+                """,
+                event.event_id,
+                event.tenant_id,
+                event.project_id,
+                event.trace_id,
+                event.realm,
+                event.event_type,
+                event.timestamp,
+                event.agent_id,
+                event.agent_version,
+                event.environment_id,
+                event.parent_span_id,
+                event.span_id,
+                event.name,
+                event.duration_ms,
+                json.dumps(event.payload, default=str),
+                json.dumps(event.metrics, default=str),
+                json.dumps(event.attributes, default=str),
+                event.tags,
+                event.outcome,
+                event.source_format or "eden_native",
+                json.dumps(event.request_body, default=str) if event.request_body is not None else None,
+                json.dumps(event.response_body, default=str) if event.response_body is not None else None,
+                json.dumps(event.reasoning, default=str) if event.reasoning is not None else None,
+                json.dumps(event.tool_calls_full, default=str) if event.tool_calls_full else None,
+                json.dumps(event.tool_results, default=str) if event.tool_results else None,
+                json.dumps(event.images, default=str) if event.images else None,
+                json.dumps(event.audio, default=str) if event.audio else None,
+                json.dumps(event.logprobs, default=str) if event.logprobs is not None else None,
+                json.dumps(event.citations, default=str) if event.citations else None,
+                event.finish_reason,
+                event.stop_sequence,
+                event.system_fingerprint,
+                event.cache_hit,
+                event.prompt_cache_savings_usd,
+                event.model_version,
+                event.service_tier,
+            )
+        except Exception as exc:
+            logger.warning(f"Postgres telemetry insert failed: {exc}")
+
+    async def _route_clickhouse(self, event: TelemetryEvent) -> None:
+        sink = await self._get_clickhouse()
+        if not sink:
+            return
+        try:
+            await sink.insert("telemetry_events_ch", [{
+                "event_id": event.event_id,
+                "tenant_id": event.tenant_id,
+                "project_id": event.project_id,
+                "trace_id": event.trace_id,
+                "realm": event.realm,
+                "event_type": event.event_type,
+                "timestamp": event.timestamp,
+                "agent_id": event.agent_id or "",
+                "agent_version": event.agent_version or "",
+                "environment_id": event.environment_id or "",
+                "span_id": event.span_id or "",
+                "name": event.name or "",
+                "duration_ms": event.duration_ms or 0.0,
+                "metrics": json.dumps(event.metrics, default=str),
+                "tags": json.dumps(event.tags, default=str),
+                "outcome": event.outcome or "",
+                "request_body": json.dumps(event.request_body, default=str) if event.request_body is not None else "",
+                "response_body": json.dumps(event.response_body, default=str) if event.response_body is not None else "",
+                "reasoning": json.dumps(event.reasoning, default=str) if event.reasoning is not None else "",
+                "tool_calls_full": json.dumps(event.tool_calls_full, default=str) if event.tool_calls_full else "",
+                "tool_results": json.dumps(event.tool_results, default=str) if event.tool_results else "",
+                "images": json.dumps(event.images, default=str) if event.images else "",
+                "audio": json.dumps(event.audio, default=str) if event.audio else "",
+                "logprobs": json.dumps(event.logprobs, default=str) if event.logprobs is not None else "",
+                "citations": json.dumps(event.citations, default=str) if event.citations else "",
+                "finish_reason": event.finish_reason or "",
+                "model": event.attributes.get("model", "") or "",
+                "model_version": event.model_version or "",
+                "cache_hit": 1 if event.cache_hit else 0,
+                "prompt_cache_savings_usd": float(event.prompt_cache_savings_usd or 0.0),
+                "ingested_at": datetime.now(timezone.utc).isoformat(),
+            }])
+        except Exception as exc:
+            logger.debug(f"ClickHouse telemetry insert failed: {exc}")
+
+    async def _route_websocket(self, event: TelemetryEvent) -> None:
+        """Fan out telemetry event to real-time WebSocket subscribers."""
+        try:
+            from eden.api.routes.websocket import _job_connections
+            # Use trace_id as the entity key for fanout
+            if event.trace_id in _job_connections:
+                message = {
+                    "type": "telemetry_event",
+                    "event": event.to_dict(),
+                }
+                for ws in list(_job_connections[event.trace_id]):
+                    try:
+                        await ws.send_json(message)
+                    except Exception:
+                        _job_connections[event.trace_id].discard(ws)
+                        if not _job_connections[event.trace_id]:
+                            del _job_connections[event.trace_id]
+                            break
+        except Exception as exc:
+            logger.debug(f"WebSocket telemetry fanout failed: {exc}")
+
+    async def _route_otel_dual_emit(self, event: TelemetryEvent) -> None:
+        """Phase 7.2c — forward to OTLP if enabled. Best-effort, no-op
+        when disabled."""
+        try:
+            from eden.observability.otel_exporter import get_otel_dual_exporter
+            await get_otel_dual_exporter().export_event(event)
+        except Exception as exc:
+            logger.debug(f"OTel dual-emit route failed: {exc}")
+
+    # ── Query API ─────────────────────────────────────────────────────────
+
+    async def get_trace_tree(self, tenant_id: str, trace_id: str) -> Optional[TraceTree]:
+        """Build a hierarchical trace tree from stored telemetry events."""
+        client = await self._get_postgres()
+        if not client:
+            return None
+
+        try:
+            rows = await client.fetch(
+                """
+                SELECT * FROM telemetry_events
+                WHERE tenant_id = $1 AND trace_id = $2
+                ORDER BY timestamp ASC
+                """,
+                tenant_id, trace_id,
+            )
+        except Exception as exc:
+            logger.warning(f"Failed to fetch trace tree: {exc}")
+            return None
+
+        if not rows:
+            return None
+
+        span_map: dict[str, dict[str, Any]] = {}
+        root_spans: list[dict[str, Any]] = []
+        total_duration = 0.0
+        outcome: Optional[str] = None
+        realm = "environment"
+
+        for row in rows:
+            span_id = row.get("span_id") or str(uuid.uuid4())
+            parent = row.get("parent_span_id")
+            name = row.get("name") or row.get("event_type")
+            duration = row.get("duration_ms") or 0.0
+            realm = row.get("realm", "environment")
+            if row.get("outcome"):
+                outcome = row.get("outcome")
+
+            node = {
+                "span_id": span_id,
+                "parent_span_id": parent,
+                "name": name,
+                "event_type": row.get("event_type"),
+                "timestamp": row.get("timestamp"),
+                "duration_ms": duration,
+                "metrics": row.get("metrics") or {},
+                "attributes": row.get("attributes") or {},
+                "payload": row.get("payload") or {},
+                "outcome": row.get("outcome"),
+                "request_body": row.get("request_body"),
+                "response_body": row.get("response_body"),
+                "reasoning": row.get("reasoning"),
+                "tool_calls_full": row.get("tool_calls_full") or [],
+                "tool_results": row.get("tool_results") or [],
+                "images": row.get("images") or [],
+                "audio": row.get("audio") or [],
+                "logprobs": row.get("logprobs"),
+                "citations": row.get("citations") or [],
+                "finish_reason": row.get("finish_reason"),
+                "stop_sequence": row.get("stop_sequence"),
+                "system_fingerprint": row.get("system_fingerprint"),
+                "cache_hit": row.get("cache_hit") or False,
+                "prompt_cache_savings_usd": row.get("prompt_cache_savings_usd"),
+                "model_version": row.get("model_version"),
+                "service_tier": row.get("service_tier"),
+                "children": [],
+            }
+            span_map[span_id] = node
+            total_duration = max(total_duration, duration)
+
+        # Link children to parents
+        for span_id, node in span_map.items():
+            parent_id = node.get("parent_span_id")
+            if parent_id and parent_id in span_map:
+                span_map[parent_id]["children"].append(node)
+            else:
+                root_spans.append(node)
+
+        return TraceTree(
+            trace_id=trace_id,
+            tenant_id=tenant_id,
+            realm=realm,
+            root_spans=root_spans,
+            span_map=span_map,
+            total_duration_ms=total_duration,
+            span_count=len(span_map),
+            outcome=outcome,
+        )
+
+    async def get_heatmap(
+        self,
+        tenant_id: str,
+        metric_name: str = "duration_ms",
+        x_axis: str = "name",
+        days: int = 7,
+    ) -> Optional[HeatmapData]:
+        """Build a performance heatmap from telemetry events."""
+        client = await self._get_postgres()
+        if not client:
+            return None
+
+        try:
+            rows = await client.fetch(
+                """
+                SELECT name, event_type, metrics->>$3 as metric_value, timestamp
+                FROM telemetry_events
+                WHERE tenant_id = $1
+                  AND timestamp > NOW() - INTERVAL '%s days'
+                  AND name IS NOT NULL
+                ORDER BY timestamp DESC
+                LIMIT 5000
+                """ % days,
+                tenant_id, metric_name,
+            )
+        except Exception as exc:
+            logger.warning(f"Failed to fetch heatmap data: {exc}")
+            return None
+
+        if not rows:
+            return None
+
+        # Bucket by name (x) and hour-of-day (y)
+        bucket_values: dict[tuple[str, int], list[float]] = defaultdict(list)
+        x_labels_set: set[str] = set()
+
+        for row in rows:
+            name = row.get("name") or row.get("event_type") or "unknown"
+            try:
+                ts = datetime.fromisoformat(str(row.get("timestamp")).replace("Z", "+00:00"))
+                hour = ts.hour
+            except Exception:
+                hour = 0
+            try:
+                value = float(row.get("metric_value") or 0)
+            except (TypeError, ValueError):
+                value = 0.0
+            bucket_values[(name, hour)].append(value)
+            x_labels_set.add(name)
+
+        x_labels = sorted(x_labels_set)[:20]
+        y_labels = [f"{h:02d}:00" for h in range(24)]
+
+        buckets = []
+        min_val = float("inf")
+        max_val = float("-inf")
+
+        for x in x_labels:
+            for hour in range(24):
+                values = bucket_values.get((x, hour), [0.0])
+                avg_val = sum(values) / len(values)
+                buckets.append({
+                    "x": x,
+                    "y": f"{hour:02d}:00",
+                    "value": round(avg_val, 2),
+                    "count": len(values),
+                })
+                min_val = min(min_val, avg_val)
+                max_val = max(max_val, avg_val)
+
+        return HeatmapData(
+            metric_name=metric_name,
+            buckets=buckets,
+            x_labels=x_labels,
+            y_labels=y_labels,
+            min_value=min_val if min_val != float("inf") else 0.0,
+            max_value=max_val if max_val != float("-inf") else 0.0,
+        )
+
+    async def get_timeline(self, tenant_id: str, trace_id: str) -> Optional[TimelineData]:
+        """Build a step timeline for a single trace."""
+        client = await self._get_postgres()
+        if not client:
+            return None
+
+        try:
+            rows = await client.fetch(
+                """
+                SELECT * FROM telemetry_events
+                WHERE tenant_id = $1 AND trace_id = $2
+                ORDER BY timestamp ASC
+                """,
+                tenant_id, trace_id,
+            )
+        except Exception as exc:
+            logger.warning(f"Failed to fetch timeline data: {exc}")
+            return None
+
+        if not rows:
+            return None
+
+        steps: list[dict[str, Any]] = []
+        markers: list[dict[str, Any]] = []
+        base_time: Optional[datetime] = None
+
+        for row in rows:
+            try:
+                ts = datetime.fromisoformat(str(row.get("timestamp")).replace("Z", "+00:00"))
+                if base_time is None:
+                    base_time = ts
+                start_ms = (ts - base_time).total_seconds() * 1000
+            except Exception:
+                start_ms = 0.0
+
+            duration = row.get("duration_ms") or 0.0
+            name = row.get("name") or row.get("event_type") or "unknown"
+            outcome = row.get("outcome")
+
+            steps.append({
+                "name": name,
+                "start_ms": round(start_ms, 2),
+                "end_ms": round(start_ms + duration, 2),
+                "duration_ms": round(duration, 2),
+                "event_type": row.get("event_type"),
+                "outcome": outcome,
+            })
+
+            if outcome and outcome != "success":
+                markers.append({
+                    "at_ms": round(start_ms + duration, 2),
+                    "label": f"{name}: {outcome}",
+                    "severity": "high" if outcome in ("failure", "crash") else "warning",
+                })
+
+        total_duration = steps[-1]["end_ms"] if steps else 0.0
+
+        return TimelineData(
+            trace_id=trace_id,
+            steps=steps,
+            total_duration_ms=total_duration,
+            markers=markers,
+        )
+
+    async def get_comparative_summary(
+        self,
+        tenant_id: str,
+        env_trace_id: str,
+        prod_trace_id: str,
+    ) -> Optional[dict[str, Any]]:
+        """Build a comparative summary between environment and production traces."""
+        env_tree = await self.get_trace_tree(tenant_id, env_trace_id)
+        prod_tree = await self.get_trace_tree(tenant_id, prod_trace_id)
+
+        if not env_tree or not prod_tree:
+            return None
+
+        # Compare span counts
+        env_spans = env_tree.span_count
+        prod_spans = prod_tree.span_count
+        span_gap = abs(env_spans - prod_spans) / max(env_spans, prod_spans, 1)
+
+        # Compare durations
+        env_duration = env_tree.total_duration_ms
+        prod_duration = prod_tree.total_duration_ms
+        duration_ratio = env_duration / max(prod_duration, 1)
+
+        # Compare outcomes
+        outcome_match = env_tree.outcome == prod_tree.outcome
+
+        # Tool usage comparison
+        env_tools = set()
+        prod_tools = set()
+        for span in env_tree.span_map.values():
+            if span.get("event_type") == "tool.call":
+                env_tools.add(span.get("name", ""))
+        for span in prod_tree.span_map.values():
+            if span.get("event_type") == "tool.call":
+                prod_tools.add(span.get("name", ""))
+
+        tool_overlap = len(env_tools & prod_tools) / max(len(env_tools | prod_tools), 1)
+        env_only_tools = sorted(env_tools - prod_tools)
+        prod_only_tools = sorted(prod_tools - env_tools)
+
+        return {
+            "env_trace_id": env_trace_id,
+            "prod_trace_id": prod_trace_id,
+            "overall_score": round(1.0 - (span_gap + abs(1 - duration_ratio)) / 2, 3),
+            "dimensions": [
+                {
+                    "name": "span_count",
+                    "env_value": env_spans,
+                    "prod_value": prod_spans,
+                    "gap": round(span_gap, 3),
+                    "severity": "high" if span_gap > 0.5 else "medium" if span_gap > 0.2 else "low",
+                    "explanation": f"Environment trace has {env_spans} spans, production has {prod_spans}",
+                },
+                {
+                    "name": "duration",
+                    "env_value": round(env_duration, 2),
+                    "prod_value": round(prod_duration, 2),
+                    "gap": round(abs(1 - duration_ratio), 3),
+                    "severity": "high" if duration_ratio > 2 or duration_ratio < 0.5 else "medium" if duration_ratio > 1.5 or duration_ratio < 0.67 else "low",
+                    "explanation": f"Environment duration is {env_duration:.0f}ms vs production {prod_duration:.0f}ms (ratio {duration_ratio:.2f})",
+                },
+                {
+                    "name": "outcome",
+                    "env_value": env_tree.outcome or "unknown",
+                    "prod_value": prod_tree.outcome or "unknown",
+                    "gap": 0.0 if outcome_match else 1.0,
+                    "severity": "high" if not outcome_match else "low",
+                    "explanation": "Outcomes match" if outcome_match else f"Outcomes differ: env={env_tree.outcome} vs prod={prod_tree.outcome}",
+                },
+                {
+                    "name": "tool_usage",
+                    "env_value": len(env_tools),
+                    "prod_value": len(prod_tools),
+                    "gap": round(1.0 - tool_overlap, 3),
+                    "severity": "high" if tool_overlap < 0.5 else "medium" if tool_overlap < 0.8 else "low",
+                    "explanation": f"Tool overlap: {tool_overlap:.0%}. Env-only: {env_only_tools}. Prod-only: {prod_only_tools}",
+                },
+            ],
+            "recommendations": [],
+            "metadata": {
+                "env_only_tools": env_only_tools,
+                "prod_only_tools": prod_only_tools,
+                "outcome_match": outcome_match,
+            },
+        }
+
+    # ── §11.2 KB cache tier labels ──────────────────────────────────────────
+    # The optimization layer has three cache tiers (L1 exact, L2 semantic,
+    # DB fallback). This helper emits a TelemetryEvent tagged with
+    # ``tier`` so the latency dashboard can break down p50/p95/p99 by
+    # tier — closing the §11.2 partial.
+
+    async def record_cache_lookup(
+        self,
+        *,
+        tenant_id: str,
+        trace_id: str,
+        tier: str,            # 'L1' | 'L2' | 'DB'
+        hit: bool,
+        latency_ms: float,
+        cache_key: Optional[str] = None,
+    ) -> bool:
+        """Emit a TelemetryEvent for a KB cache lookup. The event
+        carries ``tier`` and ``hit`` as tags so the dashboard can
+        break down p95 by tier (L1 hit vs L2 hit vs DB miss)."""
+        if tier not in ("L1", "L2", "DB"):
+            return False
+        event = TelemetryEvent(
+            event_id=f"cache-{trace_id}-{tier}-{int(time.time() * 1000)}",
+            tenant_id=tenant_id,
+            trace_id=trace_id,
+            realm="production",
+            event_type="kb_cache_lookup",
+            payload={
+                "tier": tier,
+                "hit": hit,
+                "latency_ms": latency_ms,
+                "cache_key": cache_key or "",
+            },
+            attributes={
+                "tier": tier,
+                "hit": "true" if hit else "false",
+            },
+            tags={"tier": tier, "hit": "true" if hit else "false"},
+        )
+        return await self.ingest(event)
+
+    # ── §Phase 7.2a — Per-chunk streaming capture ──────────────────
+    # SDKs buffer streaming chunks (50 chunks OR 250ms) and POST them
+    # to /orgs/{org_id}/ingest/chunks. The collector validates each
+    # chunk against its parent event_id, deduplicates by chunk_id, and
+    # writes to telemetry_stream_chunks. A separate background job
+    # rolls up ttft/itl/tpot per (tenant, model, hour) into
+    # telemetry_streaming_metrics.
+
+    async def record_stream_chunks(
+        self,
+        tenant_id: str,
+        chunks: list[dict[str, Any]],
+        *,
+        settings: Any = None,
+    ) -> dict[str, int]:
+        """Persist a batch of streaming chunks.
+
+        Returns a dict with ``accepted`` / ``rejected`` / ``deduplicated``
+        / ``total``. Caller (the chunks ingest route) maps that to
+        HTTP 200 with body.
+
+        Chunks must be dicts with at least ``event_id``, ``trace_id``,
+        ``chunk_index``. Missing required fields count as rejected;
+        duplicate ``chunk_id`` (set by SDK as
+        ``f"{event_id}:{chunk_index}"``) are deduped.
+        """
+        accepted = 0
+        rejected = 0
+        deduplicated = 0
+        if not chunks:
+            return {
+                "accepted": 0, "rejected": 0,
+                "deduplicated": 0, "total": 0,
+            }
+
+        client = await self._get_postgres()
+        if not client:
+            # No DB available — count all as accepted (the chunks are
+            # buffered client-side and will retry). We log the drop.
+            logger.warning(
+                f"record_stream_chunks: no Postgres client, "
+                f"dropping {len(chunks)} chunks for tenant {tenant_id}"
+            )
+            return {
+                "accepted": len(chunks), "rejected": 0,
+                "deduplicated": 0, "total": len(chunks),
+            }
+
+        # PII pre-mask on text fields
+        pii_on = bool(settings and settings.ingestion_pii_pre_mask)
+        if pii_on:
+            try:
+                from eden.observability.ingestion.pii import mask_payload
+                for chunk in chunks:
+                    for field in ("delta_text", "reasoning_delta"):
+                        if isinstance(chunk.get(field), str):
+                            masked = await mask_payload({"text": chunk[field]})
+                            if isinstance(masked, dict) and "text" in masked:
+                                chunk[field] = masked["text"]
+            except Exception as exc:
+                logger.debug(f"chunk PII mask failed: {exc}")
+
+        # Dedupe in-memory by chunk_id (set by SDK as event_id:index).
+        # The DB unique constraint on chunk_id is the durable guard.
+        seen: set[str] = set()
+        rows: list[tuple] = []
+        for chunk in chunks:
+            try:
+                event_id = str(chunk["event_id"])
+                trace_id = str(chunk["trace_id"])
+                chunk_index = int(chunk["chunk_index"])
+            except (KeyError, TypeError, ValueError):
+                rejected += 1
+                continue
+            parent_span_id = chunk.get("parent_span_id")
+            span_id = chunk.get("span_id")
+            delta_text = chunk.get("delta_text")
+            reasoning_delta = chunk.get("reasoning_delta")
+            tool_call_delta = chunk.get("tool_call_delta")
+            ttft_ms = chunk.get("ttft_ms")
+            itl_ms = chunk.get("itl_ms")
+            tpot_ms = chunk.get("tpot_ms")
+            chunk_id = f"{event_id}:{chunk_index}"
+            if chunk_id in seen:
+                deduplicated += 1
+                continue
+            seen.add(chunk_id)
+            rows.append((
+                chunk_id,
+                event_id,
+                tenant_id,
+                trace_id,
+                parent_span_id,
+                span_id,
+                chunk_index,
+                delta_text,
+                reasoning_delta,
+                json.dumps(tool_call_delta, default=str) if tool_call_delta is not None else None,
+                ttft_ms,
+                itl_ms,
+                tpot_ms,
+            ))
+
+        if not rows:
+            return {
+                "accepted": accepted,
+                "rejected": rejected,
+                "deduplicated": deduplicated,
+                "total": len(chunks),
+            }
+
+        # Use execute_many for batched insert. ON CONFLICT on chunk_id
+        # (which we generate deterministically) gives us idempotency.
+        try:
+            await client.executemany(
+                """
+                INSERT INTO telemetry_stream_chunks (
+                    chunk_id, event_id, tenant_id, trace_id,
+                    parent_span_id, span_id, chunk_index,
+                    delta_text, reasoning_delta, tool_call_delta,
+                    ttft_ms, itl_ms, tpot_ms, received_at
+                )
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, NOW())
+                ON CONFLICT (chunk_id) DO NOTHING
+                """,
+                rows,
+            )
+            accepted = len(rows)
+        except Exception as exc:
+            logger.warning(f"record_stream_chunks insert failed: {exc}")
+            rejected = len(rows)
+            accepted = 0
+
+        return {
+            "accepted": accepted,
+            "rejected": rejected,
+            "deduplicated": deduplicated,
+            "total": len(chunks),
+        }
+
+
+# ── Singleton accessor ──────────────────────────────────────────────────
+
+_telemetry_collector: Optional[TelemetryCollector] = None
+
+
+async def get_telemetry_collector() -> TelemetryCollector:
+    """Get the singleton telemetry collector."""
+    global _telemetry_collector
+    if _telemetry_collector is None:
+        _telemetry_collector = TelemetryCollector()
+    return _telemetry_collector
+
+
+async def close_telemetry_collector() -> None:
+    """Close the telemetry collector."""
+    global _telemetry_collector
+    _telemetry_collector = None

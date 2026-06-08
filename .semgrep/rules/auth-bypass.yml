@@ -1,0 +1,24 @@
+rules:
+  - id: fastapi-auth-bypass-get-current-user
+    languages: [python]
+    message: |
+      Detected `get_current_user` used as a default parameter value without `Depends()`.
+      This bypasses FastAPI dependency injection and leaves the endpoint unprotected.
+      Fix: `user: dict = Depends(get_current_user)`
+    severity: ERROR
+    pattern: user: dict = get_current_user
+    paths:
+      include:
+        - src/eden/api/routes/*.py
+
+  - id: fastapi-auth-bypass-require-org-admin
+    languages: [python]
+    message: |
+      Detected `require_org_admin` used as a default parameter value without `Depends()`.
+      This bypasses FastAPI dependency injection.
+      Fix: `user: dict = Depends(require_org_admin)`
+    severity: ERROR
+    pattern: user: dict = require_org_admin
+    paths:
+      include:
+        - src/eden/api/routes/*.py

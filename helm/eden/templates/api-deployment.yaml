@@ -1,0 +1,61 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "eden.fullname" . }}-api
+  labels:
+    {{- include "eden.labels" . | nindent 4 }}
+    app.kubernetes.io/component: api
+spec:
+  replicas: {{ .Values.api.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "eden.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: api
+  template:
+    metadata:
+      labels:
+        {{- include "eden.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: api
+    spec:
+      containers:
+        - name: api
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 8000
+              protocol: TCP
+          env:
+            - name: EDEN_DB_URL
+              value: {{ include "eden.postgresUrl" . }}
+            - name: EDEN_REDIS_URL
+              value: {{ include "eden.redisUrl" . }}
+            - name: EDEN_QDRANT_URL
+              value: {{ include "eden.qdrantUrl" . }}
+            - name: EDEN_SSO_OIDC_ISSUER
+              value: {{ .Values.sso.oidcIssuer | quote }}
+            - name: EDEN_SSO_SAML_METADATA_URL
+              value: {{ .Values.sso.samlMetadataUrl | quote }}
+            - name: EDEN_DISCORD_WEBHOOK_SECRET
+              {{- if .Values.discord.webhookUrlSecret }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.discord.webhookUrlSecret }}
+                  key: url
+              {{- else }}
+              value: ""
+              {{- end }}
+            - name: EDEN_SUPPORT_WEBHOOK_URL
+              value: {{ .Values.support.webhookUrl | quote }}
+            - name: EDEN_PROMETHEUS_REMOTE_WRITE_URL
+              value: {{ .Values.monitoring.prometheus.remoteWriteUrl | quote }}
+          livenessProbe:
+            httpGet: { path: /health, port: http }
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          readinessProbe:
+            httpGet: { path: /health, port: http }
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          resources:
+            {{- toYaml .Values.api.resources | nindent 12 }}

@@ -1,0 +1,56 @@
+# Prometheus configuration for self-hosted Eden observability.
+#
+# Used by:
+#   - docker/prometheus/docker-compose.yml (local dev)
+#   - the Grafana Cloud / Prometheus Agent remote-write target in
+#     production (see helm/eden/values.yaml for the remote_write
+#     configuration).
+#
+# Scrape targets:
+#   - The Eden FastAPI service exposes /metrics (Prometheus text
+#     format) on the main port. The path is registered by
+#     src/eden/observability/metrics_endpoint.py.
+#   - Postgres exporter (if the postgres_exporter sidecar is enabled
+#     in values.yaml).
+#   - Redis exporter.
+#   - ClickHouse exporter (if ClickHouse is enabled).
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    cluster: eden
+
+scrape_configs:
+  - job_name: eden-api
+    metrics_path: /metrics
+    static_configs:
+      - targets:
+          - eden-api:8000
+        labels:
+          service: eden-api
+
+  - job_name: eden-worker
+    metrics_path: /metrics
+    static_configs:
+      - targets:
+          - eden-worker:8001
+        labels:
+          service: eden-worker
+
+  - job_name: postgres
+    static_configs:
+      - targets:
+          - postgres-exporter:9187
+
+  - job_name: redis
+    static_configs:
+      - targets:
+          - redis-exporter:9121
+
+  - job_name: clickhouse
+    static_configs:
+      - targets:
+          - clickhouse-exporter:9363
+    # ClickHouse exporter is only present when the clickhouse
+    # subchart is enabled (helm/eden/values.yaml → clickhouse.enabled).

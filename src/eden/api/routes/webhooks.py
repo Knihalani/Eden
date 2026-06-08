@@ -1,0 +1,396 @@
+"""Webhook management routes for Eden Public API.
+
+Provides CRUD for organization webhooks and a test endpoint.
+Webhook delivery and retry scheduling is handled by the
+WebhookDeliveryService.
+"""
+
+import logging
+import secrets
+from datetime import datetime, timezone
+from typing import Optional
+from uuid import uuid4
+
+from fastapi import APIRouter, HTTPException, status, Header
+from pydantic import BaseModel, Field, HttpUrl
+
+from fastapi import Depends
+
+from eden.api.deps import get_current_user, require_org_admin, get_current_org
+from eden.api.schemas.envelope import APIEnvelope, PaginatedAPIEnvelope
+from eden.api.middleware.api_version import CURRENT_VERSION
+from eden.api.middleware.correlation_id import get_correlation_id
+from eden.storage.postgres import get_postgres_client
+
+logger = logging.getLogger(__name__)
+router = APIRouter(prefix="/orgs/{org_id}/webhooks", tags=["webhooks"])
+
+# Valid webhook event types
+VALID_EVENTS = [
+    "job.created",
+    "job.completed",
+    "job.failed",
+    "job.cancelled",
+    "benchmark.completed",
+    "environment.published",
+    "spec.generated",
+]
+
+
+# ---------------------------------------------------------------------------
+# Schemas
+# ---------------------------------------------------------------------------
+
+class WebhookCreateRequest(BaseModel):
+    """Request schema for creating a webhook."""
+
+    url: str = Field(..., description="HTTPS URL to deliver events to")
+    description: Optional[str] = Field(None, description="Human-readable description")
+    events: list[str] = Field(..., description="Event types to subscribe to")
+    active: bool = Field(True, description="Whether the webhook is active")
+
+
+class WebhookUpdateRequest(BaseModel):
+    """Request schema for updating a webhook."""
+
+    url: Optional[str] = Field(None, description="HTTPS URL to deliver events to")
+    description: Optional[str] = Field(None, description="Human-readable description")
+    events: Optional[list[str]] = Field(None, description="Event types to subscribe to")
+    active: Optional[bool] = Field(None, description="Whether the webhook is active")
+
+
+class WebhookResponse(BaseModel):
+    """Response schema for a webhook."""
+
+    id: str
+    org_id: str
+    url: str
+    description: Optional[str]
+    events: list[str]
+    active: bool
+    created_at: str
+    updated_at: str
+
+
+class WebhookTestResponse(BaseModel):
+    """Response schema for webhook test."""
+
+    success: bool
+    http_status: Optional[int]
+    response_body: Optional[str]
+    error: Optional[str]
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+async def _get_webhook(org_id: str, webhook_id: str) -> dict:
+    """Fetch a webhook by ID, verifying it belongs to the org."""
+    client = await get_postgres_client()
+    row = await client.fetchrow(
+        "SELECT * FROM webhooks WHERE id = $1 AND org_id = $2",
+        webhook_id, org_id,
+    )
+    if not row:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Webhook not found",
+        )
+    return dict(row)
+
+
+# ---------------------------------------------------------------------------
+# Routes
+# ---------------------------------------------------------------------------
+
+@router.post("", response_model=APIEnvelope)
+async def create_webhook(
+    org_id: str,
+    request: WebhookCreateRequest,
+    user: dict = Depends(get_current_user),
+    _admin: dict = Depends(require_org_admin),
+):
+    """Create a new webhook for an organization.
+
+    Returns the webhook configuration. The secret used for HMAC signature
+    verification is NOT returned — it is shown only once in this response
+    under `secret` inside the data payload (legacy compat) but should be
+    copied immediately because it cannot be retrieved later.
+    """
+
+    # Validate events
+    invalid = [e for e in request.events if e not in VALID_EVENTS]
+    if invalid:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid events: {invalid}. Valid: {VALID_EVENTS}",
+        )
+
+    # Validate URL is HTTPS
+    if not request.url.startswith("https://"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Webhook URL must use HTTPS",
+        )
+
+    client = await get_postgres_client()
+    webhook_id = str(uuid4())
+    secret = secrets.token_hex(32)
+    now = datetime.now(timezone.utc).isoformat()
+
+    await client.execute(
+        """
+        INSERT INTO webhooks (id, org_id, url, description, events, secret, active, created_by, created_at, updated_at)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $9)
+        """,
+        webhook_id, org_id, request.url, request.description,
+        request.events, secret, request.active, user["user_id"], now,
+    )
+
+    data = WebhookResponse(
+        id=webhook_id,
+        org_id=org_id,
+        url=request.url,
+        description=request.description,
+        events=request.events,
+        active=request.active,
+        created_at=now,
+        updated_at=now,
+    )
+
+    # Include secret in the raw data dict for one-time display
+    resp_dict = data.model_dump()
+    resp_dict["secret"] = secret  # One-time only
+
+    return APIEnvelope.wrap(
+        data=resp_dict,
+        api_version=CURRENT_VERSION,
+        request_id=get_correlation_id(),
+    )
+
+
+@router.get("", response_model=PaginatedAPIEnvelope)
+async def list_webhooks(
+    org_id: str,
+    active_only: bool = False,
+    limit: int = 20,
+    offset: int = 0,
+    user: dict = Depends(get_current_user),
+    org: dict = Depends(get_current_org),
+):
+    """List webhooks for an organization."""
+    if not org or str(org.get("org_id", "")) != org_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not a member of this organization",
+        )
+
+    client = await get_postgres_client()
+
+    conditions = ["org_id = $1"]
+    params = [org_id]
+    param_idx = 2
+
+    if active_only:
+        conditions.append(f"active = ${param_idx}")
+        params.append(True)
+        param_idx += 1
+
+    where_clause = " AND ".join(conditions)
+
+    rows = await client.fetch(
+        f"""
+        SELECT id, org_id, url, description, events, active, created_at, updated_at
+        FROM webhooks
+        WHERE {where_clause}
+        ORDER BY created_at DESC
+        LIMIT ${param_idx} OFFSET ${param_idx + 1}
+        """,
+        *params, limit, offset,
+    )
+
+    total = await client.fetchval(
+        f"SELECT COUNT(*) FROM webhooks WHERE {where_clause}",
+        *params,
+    ) or 0
+
+    data = [
+        WebhookResponse(
+            id=str(r["id"]),
+            org_id=str(r["org_id"]),
+            url=r["url"],
+            description=r.get("description"),
+            events=r["events"],
+            active=r["active"],
+            created_at=r["created_at"].isoformat() if r.get("created_at") else "",
+            updated_at=r["updated_at"].isoformat() if r.get("updated_at") else "",
+        )
+        for r in rows
+    ]
+
+    return PaginatedAPIEnvelope.wrap(
+        data=[d.model_dump() for d in data],
+        api_version=CURRENT_VERSION,
+        request_id=get_correlation_id(),
+        total=total,
+        page=(offset // limit) + 1,
+        per_page=limit,
+    )
+
+
+@router.get("/{webhook_id}", response_model=APIEnvelope)
+async def get_webhook(
+    org_id: str,
+    webhook_id: str,
+    user: dict = Depends(get_current_user),
+    _admin: dict = Depends(require_org_admin),
+):
+    """Get a single webhook by ID."""
+    row = await _get_webhook(org_id, webhook_id)
+
+    data = WebhookResponse(
+        id=str(row["id"]),
+        org_id=str(row["org_id"]),
+        url=row["url"],
+        description=row.get("description"),
+        events=row["events"],
+        active=row["active"],
+        created_at=row["created_at"].isoformat() if row.get("created_at") else "",
+        updated_at=row["updated_at"].isoformat() if row.get("updated_at") else "",
+    )
+
+    return APIEnvelope.wrap(
+        data=data.model_dump(),
+        api_version=CURRENT_VERSION,
+        request_id=get_correlation_id(),
+    )
+
+
+@router.patch("/{webhook_id}", response_model=APIEnvelope)
+async def update_webhook(
+    org_id: str,
+    webhook_id: str,
+    request: WebhookUpdateRequest,
+    user: dict = Depends(get_current_user),
+    _admin: dict = Depends(require_org_admin),
+):
+    """Update a webhook."""
+    await _get_webhook(org_id, webhook_id)
+
+    updates = []
+    params = [webhook_id]
+    param_idx = 2
+
+    if request.url is not None:
+        if not request.url.startswith("https://"):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Webhook URL must use HTTPS",
+            )
+        updates.append(f"url = ${param_idx}")
+        params.append(request.url)
+        param_idx += 1
+
+    if request.description is not None:
+        updates.append(f"description = ${param_idx}")
+        params.append(request.description)
+        param_idx += 1
+
+    if request.events is not None:
+        invalid = [e for e in request.events if e not in VALID_EVENTS]
+        if invalid:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Invalid events: {invalid}. Valid: {VALID_EVENTS}",
+            )
+        updates.append(f"events = ${param_idx}")
+        params.append(request.events)
+        param_idx += 1
+
+    if request.active is not None:
+        updates.append(f"active = ${param_idx}")
+        params.append(request.active)
+        param_idx += 1
+
+    if not updates:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No fields to update",
+        )
+
+    updates.append(f"updated_at = ${param_idx}")
+    params.append(datetime.now(timezone.utc).isoformat())
+
+    client = await get_postgres_client()
+    await client.execute(
+        f"UPDATE webhooks SET {', '.join(updates)} WHERE id = $1",
+        *params,
+    )
+
+    # Re-fetch the updated webhook and return it
+    row = await _get_webhook(org_id, webhook_id)
+    data = WebhookResponse(
+        id=str(row["id"]),
+        org_id=str(row["org_id"]),
+        url=row["url"],
+        description=row.get("description"),
+        events=row["events"],
+        active=row["active"],
+        created_at=row["created_at"].isoformat() if row.get("created_at") else "",
+        updated_at=row["updated_at"].isoformat() if row.get("updated_at") else "",
+    )
+
+    return APIEnvelope.wrap(
+        data=data.model_dump(),
+        api_version=CURRENT_VERSION,
+        request_id=get_correlation_id(),
+    )
+
+
+@router.delete("/{webhook_id}", response_model=APIEnvelope)
+async def delete_webhook(
+    org_id: str,
+    webhook_id: str,
+    user: dict = Depends(get_current_user),
+    _admin: dict = Depends(require_org_admin),
+):
+    """Delete (revoke) a webhook."""
+    await _get_webhook(org_id, webhook_id)
+
+    client = await get_postgres_client()
+    await client.execute("DELETE FROM webhooks WHERE id = $1", webhook_id)
+    return APIEnvelope.wrap(
+        data={"message": "Webhook deleted"},
+        api_version=CURRENT_VERSION,
+        request_id=get_correlation_id(),
+    )
+
+
+@router.post("/{webhook_id}/test", response_model=APIEnvelope)
+async def test_webhook(
+    org_id: str,
+    webhook_id: str,
+    user: dict = Depends(get_current_user),
+    _admin: dict = Depends(require_org_admin),
+):
+    """Send a test event to a webhook endpoint.
+
+    Useful for verifying connectivity and signature validation.
+    """
+    row = await _get_webhook(org_id, webhook_id)
+
+    from eden.services.webhook_delivery import WebhookDeliveryService
+
+    service = WebhookDeliveryService()
+    result = await service.deliver_test(
+        webhook_id=webhook_id,
+        url=row["url"],
+        secret=row["secret"],
+    )
+
+    return APIEnvelope.wrap(
+        data=result.model_dump(),
+        api_version=CURRENT_VERSION,
+        request_id=get_correlation_id(),
+    )
