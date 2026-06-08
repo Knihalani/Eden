@@ -5,101 +5,146 @@ import Link from "next/link";
 import { cn } from "@/lib/utils";
 import {
   Layers,
-  MessageSquare,
-  Code2,
-  Monitor,
-  FileText,
-  Globe,
-  Shield,
+  Activity,
+  Terminal,
+  LayoutDashboard,
+  GitPullRequest,
   ChevronRight,
   Menu,
   X,
+  Bot,
+  MessageSquare,
 } from "lucide-react";
 
 const NAV_LINKS = [
-  { label: "Features", href: "#features" },
+  { label: "Pillars", href: "#pillars" },
+  { label: "Improve", href: "#improve" },
   { label: "Docs", href: "/docs" },
-  { label: "Pricing", href: "#pricing" },
 ];
 
-const FEATURES = [
+const PILLARS = [
   {
-    icon: MessageSquare,
-    title: "Plain language input",
+    id: "observability",
+    icon: Activity,
+    title: "Observability",
+    badge: "Pillar 1",
+    headline: "See every LLM call. With your models.",
     description:
-      "Describe the environment you need in your own words. Eden figures out the technical requirements.",
+      "Drop-in SDKs (Python, TypeScript) and an OpenAI-compatible HTTP gateway that proxies every request to whichever upstream model you configure — OpenAI, Anthropic, Bedrock, self-hosted. Eden is a proxy, not a model vendor.",
+    bullets: [
+      "OpenAI-compatible gateway — change one line, capture everything",
+      "7+ source decoders (OpenAI, Anthropic, Gemini, Bedrock, LangChain, …)",
+      "PII pre-masked at ingest; structured evals (LLM-as-judge, code-based, third-party)",
+    ],
   },
   {
-    icon: Code2,
-    title: "Multi-stage pipeline",
+    id: "platform",
+    icon: LayoutDashboard,
+    title: "Web platform",
+    badge: "Pillar 2",
+    headline: "Workspace, visualisations, and a persistent AI assistant.",
     description:
-      "Intelligent planning, factual verification, code generation, and quality review — each stage builds on the last.",
+      "Org-aware workspace for teams of any size. Rich visualisations of traces, cost, latency, and eval scores. Data export, webhooks, and a persistent AI assistant sidebar in every view that answers questions against your real data — cited to trace IDs and eval records.",
+    bullets: [
+      "Multi-tenant orgs, RBAC, SSO/SAML, SCIM, audit log",
+      "Time-series + drill-down: traces, tokens, cost, eval regressions",
+      "AI assistant sidebar — every answer is cited to a trace or eval",
+    ],
   },
   {
-    icon: Monitor,
-    title: "Real-time monitoring",
+    id: "cli",
+    icon: Terminal,
+    title: "CLI agent",
+    badge: "Pillar 3",
+    headline: "Turn failing traces into shipped PRs.",
     description:
-      "Watch your environment generate live. Stage-by-stage progress, streaming output, instant feedback.",
-  },
-  {
-    icon: FileText,
-    title: "Full version history",
-    description:
-      "Every iteration is saved. Compare versions, review changes, roll back when needed.",
-  },
-  {
-    icon: Globe,
-    title: "Exportable code",
-    description:
-      "Download a complete, self-contained codebase. Works with your existing tools and CI/CD pipeline.",
-  },
-  {
-    icon: Shield,
-    title: "Quality verified",
-    description:
-      "Every environment passes automated validation before delivery. Code that runs, not skeleton templates.",
+      "`eden` is a CLI coding agent (Aider fork) with a flagship `/eden-improve` command. It reads failing traces and eval results, hypothesises a root cause, proposes a patch, runs your eval suite, and opens a PR. Closed loop, end-to-end.",
+    bullets: [
+      "/eden-improve — read → hypothesise → patch → eval → PR",
+      "/eden-trace, /eden-eval, /eden-compare for targeted workflows",
+      "Faster cycle every iteration — KB-grounded, never re-debugs a known regression",
+    ],
   },
 ];
 
-const PIPELINE_STAGES = [
-  { id: "planning", label: "Planning", done: true },
-  { id: "factcheck", label: "Fact Check", active: true },
-  { id: "executing", label: "Executing", pending: true },
-  { id: "archivist", label: "Archivist", pending: true },
+const QUOTES = [
+  {
+    quote:
+      "We swapped our base URL to Eden's gateway on a Friday. By Monday we had full per-trace cost and eval data we had been hand-rolling for two quarters.",
+    author: "Head of ML Platform",
+    company: "Series B LLM SaaS",
+  },
+  {
+    quote:
+      "/eden-improve caught a prompt regression on a tool-use branch we didn't even have alerting on. The PR merged the same day.",
+    author: "Founding Engineer",
+    company: "Agent infra startup",
+  },
 ];
 
-const LOG_LINES = [
-  { time: "00:00", msg: "Validating environment spec...", type: "proc" },
+const INSTALL_BLOCKS = [
+  {
+    id: "gateway",
+    label: "Gateway (Python)",
+    code: `from openai import OpenAI
+
+client = OpenAI(
+    base_url="https://gateway.eden.example/v1",  # Eden
+    api_key=os.environ["EDEN_API_KEY"],
+)
+
+resp = client.chat.completions.create(
+    model="gpt-4o",  # any upstream: OpenAI, Anthropic, Bedrock…
+    messages=[{"role": "user", "content": "Hello"}],
+)`,
+  },
+  {
+    id: "sdk",
+    label: "SDK (Python)",
+    code: `import eden
+
+with eden.span("agent.reasoning") as span:
+    resp = client.chat.completions.create(...)
+    span.set_output(resp.choices[0].message.content)
+    span.set_eval("quality", score=0.92, evaluator="llm-judge")`,
+  },
+  {
+    id: "cli",
+    label: "CLI (/eden-improve)",
+    code: `# In your project repo
+$ eden
+> /eden-improve
+
+# Reads failing traces → proposes fix → runs evals → opens PR`,
+  },
 ];
 
-const RESULT_LINES = [
-  "Fetching tool registry from package index...",
-  "Resolving memory store (Redis + vector KB)",
-  "Building tool discovery schema (17 tools found)",
-  "Compiling Docker environment with Python 3.12",
-  "Writing agent prompt and system instructions",
-  "Assembling self-contained codebase (12 files)",
-  "Running validation suite — all checks passed",
-  "Exporting deployment bundle to artifact storage",
+const IMPROVE_LOG = [
+  { time: "00:00", msg: "Loading recent failing traces from Eden workspace…", type: "proc" },
+  { time: "00:02", msg: "Hypothesising root causes (3 candidates ranked)…", type: "proc" },
+  { time: "00:04", msg: "Candidate: prompt brittleness on tool_call.2 (conf 0.78)", type: "" },
+  { time: "00:06", msg: "Editing prompts/system.md — adding fallback for empty tool result", type: "proc" },
+  { time: "00:09", msg: "Running eden evals — smoke: pass · quality: pass", type: "ok" },
+  { time: "00:12", msg: "Opening PR #482 — 'fix: tool_call.2 prompt brittleness'", type: "ok" },
 ];
 
 export default function LandingPage() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [terminalVisible, setTerminalVisible] = useState(false);
-  const [pipelineStarted, setPipelineStarted] = useState(false);
-  // completedCount tracks how many stages are done; activeStage tracks current stage
-  // Initial: Planning (idx 0) is done, Fact Check (idx 1) is active
-  const [completedCount, setCompletedCount] = useState(1);
-  const [activeStage, setActiveStage] = useState(1);
-  const [logLines, setLogLines] = useState(LOG_LINES);
-  const [resultRevealed, setResultRevealed] = useState(0);
-  const [typingDone, setTypingDone] = useState(false);
-  const [cmdText, setCmdText] = useState("");
-  const terminalRef = useRef<HTMLDivElement>(null);
+  const [heroVisible, setHeroVisible] = useState(false);
+  const [activeTab, setActiveTab] = useState("gateway");
+  const [logRevealed, setLogRevealed] = useState(0);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [typed, setTyped] = useState("");
 
-  const CMD = 'describe: "multi-tool support agent with memory and dynamic tool discovery"';
+  const FULL_PROMPT = "/eden-improve";
 
-  // Animate grid background
+  // Hero fade-in
+  useEffect(() => {
+    const t = setTimeout(() => setHeroVisible(true), 200);
+    return () => clearTimeout(t);
+  }, []);
+
+  // Grid canvas background
   useEffect(() => {
     const canvas = document.getElementById("grid-canvas") as HTMLCanvasElement;
     if (!canvas) return;
@@ -117,7 +162,7 @@ export default function LandingPage() {
     resize();
     window.addEventListener("resize", resize);
 
-    const drawGrid = () => {
+    const draw = () => {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       ctx.strokeStyle = "rgba(130, 140, 160, 0.045)";
       ctx.lineWidth = 1;
@@ -135,136 +180,64 @@ export default function LandingPage() {
         ctx.stroke();
       }
     };
-
-    const drawParticles = () => {
-      const count = Math.floor((canvas.width * canvas.height) / 14000);
-      for (let i = 0; i < count; i++) {
-        const x = (Math.sin(time * 0.001 + i * 0.5) * 0.5 + 0.5) * canvas.width;
-        const y = (Math.cos(time * 0.001 + i * 0.3) * 0.5 + 0.5) * canvas.height;
-        const pulse = Math.sin(time * 0.002 + i) * 0.5 + 0.5;
-        ctx.beginPath();
-        ctx.arc(x, y, 1, 0, Math.PI * 2);
-        ctx.fillStyle = `rgba(100, 200, 255, ${0.2 + pulse * 0.3})`;
-        ctx.fill();
-      }
-    };
-
     const loop = () => {
       time++;
-      drawGrid();
-      drawParticles();
+      draw();
       animationId = requestAnimationFrame(loop);
     };
     loop();
-
     return () => {
       window.removeEventListener("resize", resize);
       cancelAnimationFrame(animationId);
     };
   }, []);
 
-  // Terminal typing animation
+  // Typing animation for /eden-improve prompt
   useEffect(() => {
-    const timer = setTimeout(() => setTerminalVisible(true), 300);
-    return () => clearTimeout(timer);
-  }, []);
-
-  useEffect(() => {
-    if (!terminalVisible) return;
+    if (!heroVisible) return;
+    const logTimers: ReturnType<typeof setTimeout>[] = [];
     let i = 0;
-    const typeInterval = setInterval(() => {
-      setCmdText(CMD.slice(0, i++));
-      if (i > CMD.length) {
-        clearInterval(typeInterval);
-        setTypingDone(true);
-        // Reveal result lines one by one
-        RESULT_LINES.forEach((_, idx) => {
-          setTimeout(() => setResultRevealed(idx + 1), 300 + idx * 350);
+    const iv = setInterval(() => {
+      setTyped(FULL_PROMPT.slice(0, i++));
+      if (i > FULL_PROMPT.length) {
+        clearInterval(iv);
+        // Reveal improve log lines after typing
+        IMPROVE_LOG.forEach((_, idx) => {
+          const t = setTimeout(() => setLogRevealed(idx + 1), 400 + idx * 400);
+          logTimers.push(t);
         });
       }
-    }, 38);
-    return () => clearInterval(typeInterval);
-  }, [terminalVisible]);
-
-  // Pipeline animation
-  useEffect(() => {
-    if (!terminalVisible) return;
-    const timer = setTimeout(() => setPipelineStarted(true), 800);
-    return () => clearTimeout(timer);
-  }, [terminalVisible]);
-
-  useEffect(() => {
-    if (!pipelineStarted) return;
-    const stages = [
-      [
-        { t: "00:01", m: "Parsing environment description" },
-        { t: "00:02", m: "Identifying required tools and APIs", type: "proc" },
-        { t: "00:03", m: "Designing agent decision graph" },
-        { t: "00:05", m: "EDP complete — 12 tasks scoped", type: "ok" },
-      ],
-      [
-        { t: "00:06", m: "Verifying EDP claims against knowledge base", type: "proc" },
-        { t: "00:07", m: "Cross-referencing 34 service dependencies" },
-        { t: "00:09", m: "All facts validated — 0 conflicts found", type: "ok" },
-      ],
-      [
-        { t: "00:10", m: "Scaffolding agent skeleton with state machine", type: "proc" },
-        { t: "00:12", m: "Generating tool registry from environment spec" },
-        { t: "00:14", m: "Building Docker config and environment files" },
-        { t: "00:16", m: "Writing agent prompt and system instructions" },
-        { t: "00:19", m: "Code generation complete — 847 lines in 12 files", type: "ok" },
-      ],
-      [
-        { t: "00:20", m: "Running code quality and lint checks", type: "proc" },
-        { t: "00:22", m: "Adding knowledge base entries for searchability" },
-        { t: "00:24", m: "Indexing environment for future reuse" },
-        { t: "00:27", m: "Environment ready — deployment bundle prepared", type: "ok" },
-      ],
-    ];
-
-    let stageIdx = 0;
-    let lineIdx = 0;
-    let timeoutId: ReturnType<typeof setTimeout>;
-
-    const runLine = () => {
-      if (stageIdx >= stages.length) return;
-      const stage = stages[stageIdx];
-      if (lineIdx >= stage.length) {
-        // Mark current stage as done and advance active stage
-        setCompletedCount(stageIdx + 1);
-        setActiveStage(stageIdx + 1);
-        stageIdx++;
-        lineIdx = 0;
-        if (stageIdx < stages.length) {
-          timeoutId = setTimeout(runLine, 400);
-        }
-        return;
-      }
-      const line = stage[lineIdx];
-      setLogLines((prev) => [...prev, { time: line.t, msg: line.m, type: line.type || "" }]);
-      lineIdx++;
-      timeoutId = setTimeout(runLine, 220);
+    }, 70);
+    return () => {
+      clearInterval(iv);
+      logTimers.forEach((t) => clearTimeout(t));
     };
+  }, [heroVisible]);
 
-    timeoutId = setTimeout(runLine, 2800);
-    return () => clearTimeout(timeoutId);
-  }, [pipelineStarted]);
+  const activeBlock = INSTALL_BLOCKS.find((b) => b.id === activeTab) ?? INSTALL_BLOCKS[0];
+
+  async function copyCode(id: string, text: string) {
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch {
+      // noop
+    }
+    setCopiedId(id);
+    setTimeout(() => setCopiedId(null), 1500);
+  }
 
   return (
     <>
-      {/* Grid canvas background */}
       <canvas
         id="grid-canvas"
         className="fixed inset-0 w-full h-full z-0 pointer-events-none"
       />
 
-      {/* Sticky Nav */}
       <nav
         className="sticky top-0 z-50 h-16 bg-[var(--bg-primary)]/90 backdrop-blur-xl border-b border-[var(--border-subtle)]"
         style={{ backdropFilter: "blur(16px)" }}
       >
         <div className="max-w-6xl mx-auto px-6 h-full flex items-center justify-between">
-          {/* Logo */}
           <Link href="/" className="flex items-center gap-2 text-xl font-bold text-[var(--text-primary)]">
             <div className="w-9 h-9 bg-[var(--accent)] rounded-xl flex items-center justify-center">
               <Layers className="w-5 h-5 text-white" />
@@ -272,7 +245,6 @@ export default function LandingPage() {
             <span>Eden</span>
           </Link>
 
-          {/* Desktop nav links */}
           <div className="hidden md:flex items-center gap-1">
             {NAV_LINKS.map((link) => (
               <Link
@@ -285,7 +257,6 @@ export default function LandingPage() {
             ))}
           </div>
 
-          {/* Desktop CTA */}
           <div className="hidden md:flex items-center gap-2">
             <Link
               href="/login"
@@ -301,7 +272,6 @@ export default function LandingPage() {
             </Link>
           </div>
 
-          {/* Mobile menu button */}
           <button
             className="md:hidden p-2 text-[var(--text-secondary)] hover:bg-[var(--bg-tertiary)] rounded-lg"
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
@@ -311,7 +281,6 @@ export default function LandingPage() {
           </button>
         </div>
 
-        {/* Mobile menu */}
         {mobileMenuOpen && (
           <div className="md:hidden absolute top-16 left-0 right-0 bg-[var(--bg-primary)] border-b border-[var(--border-subtle)] px-6 py-4 flex flex-col gap-2">
             {NAV_LINKS.map((link) => (
@@ -345,42 +314,47 @@ export default function LandingPage() {
       </nav>
 
       <main className="relative z-10">
-        {/* Hero Section */}
+        {/* Hero */}
         <section className="pt-16 pb-12 px-6">
           <div className="max-w-6xl mx-auto">
             <div className="flex flex-col lg:flex-row items-center gap-10">
-              {/* Hero content */}
-              <div className="flex-1 max-w-xl">
-                <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[var(--accent-light)] text-[var(--accent)] text-xs font-medium mb-6 animate-fade-slide-up">
+              <div
+                className="flex-1 max-w-xl"
+                style={{
+                  opacity: heroVisible ? 1 : 0,
+                  transform: heroVisible ? "translateY(0)" : "translateY(16px)",
+                  transition: "opacity 600ms ease, transform 600ms ease",
+                }}
+              >
+                <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[var(--accent-light)] text-[var(--accent)] text-xs font-medium mb-6">
                   <span className="w-1.5 h-1.5 rounded-full bg-[var(--accent)] animate-pulse" />
-                  Now in public beta
+                  Observability + improvement, v3.0
                 </div>
 
                 <h1
-                  className="text-4xl md:text-5xl font-bold text-[var(--text-primary)] tracking-tight mb-6 animate-fade-slide-up"
+                  className="text-4xl md:text-5xl font-bold text-[var(--text-primary)] tracking-tight mb-6"
                   style={{ letterSpacing: "-0.03em", lineHeight: 1.05 }}
                 >
-                  Build AI Agent Environments{" "}
-                  <span className="text-[var(--accent)]">in Minutes</span>
+                  Observability + improvement{" "}
+                  <span className="text-[var(--accent)]">for AI agents</span>
                 </h1>
 
-                <p
-                  className="text-base text-[var(--text-secondary)] leading-relaxed mb-8 max-w-md animate-fade-slide-up"
-                  style={{ animationDelay: "80ms" }}
-                >
-                  Describe what you need in plain language. Eden builds a complete,
-                  validated, runnable environment — ready to use on day one.
+                <p className="text-base text-[var(--text-secondary)] leading-relaxed mb-8 max-w-md">
+                  Eden is the observability + improvement platform for AI agents and LLM apps.
+                  Capture every LLM call through an OpenAI-compatible gateway, analyse traces
+                  in a workspace with a persistent AI assistant, and let{" "}
+                  <code className="font-mono text-[var(--text-primary)] bg-[var(--bg-tertiary)] px-1.5 py-0.5 rounded text-sm">
+                    /eden-improve
+                  </code>{" "}
+                  turn regressions into shipped PRs.
                 </p>
 
-                <div
-                  className="flex flex-wrap gap-3 animate-fade-slide-up"
-                  style={{ animationDelay: "160ms" }}
-                >
+                <div className="flex flex-wrap gap-3">
                   <Link
                     href="/signup"
                     className="inline-flex items-center gap-2 px-6 py-3 text-sm font-medium bg-[var(--accent)] text-white rounded-xl hover:bg-[var(--accent-hover)] transition-colors"
                   >
-                    Start building free
+                    Start free
                     <ChevronRight className="w-4 h-4" />
                   </Link>
                   <Link
@@ -390,156 +364,69 @@ export default function LandingPage() {
                     Read the docs
                   </Link>
                 </div>
+
+                <p className="mt-5 text-xs text-[var(--text-muted)]">
+                  Free up to 100K trace events / month. No credit card.
+                </p>
               </div>
 
-              {/* Right column: Pipeline + Terminal */}
-              <div className="w-full lg:w-[640px] flex-shrink-0 flex flex-col gap-4">
-                {/* Pipeline Flow */}
+              {/* Hero right: /eden-improve terminal */}
+              <div className="w-full lg:w-[640px] flex-shrink-0">
                 <div
-                  ref={terminalRef}
-                  className={cn(
-                    "bg-[var(--bg-primary)] border border-[var(--border-subtle)] rounded-2xl p-6 shadow-lg transition-all duration-500",
-                    pipelineStarted && "shadow-xl",
-                    activeStage === 4 && "shadow-2xl"
-                  )}
+                  className="bg-[var(--bg-primary)] border border-[var(--border-subtle)] rounded-2xl overflow-hidden shadow-xl"
                   style={{
-                    opacity: terminalVisible ? 1 : 0,
-                    transform: terminalVisible ? "translateY(0)" : "translateY(16px)",
+                    opacity: heroVisible ? 1 : 0,
+                    transform: heroVisible ? "translateY(0)" : "translateY(16px)",
+                    transition: "opacity 600ms ease 100ms, transform 600ms ease 100ms",
                   }}
                 >
-                  <div className="text-[10px] font-mono font-bold uppercase tracking-widest text-[var(--text-muted)] mb-5">
-                    Pipeline — live preview
+                  <div className="flex items-center gap-1.5 px-4 py-3 bg-[var(--bg-tertiary)] border-b border-[var(--border-subtle)]">
+                    <span className="w-2.5 h-2.5 rounded-full bg-[#ff5f57]" />
+                    <span className="w-2.5 h-2.5 rounded-full bg-[#febc2e]" />
+                    <span className="w-2.5 h-2.5 rounded-full bg-[#28c840]" />
+                    <span className="ml-2 text-[11px] font-mono text-[var(--text-muted)] tracking-wider">
+                      eden — /eden-improve
+                    </span>
                   </div>
-                  <div className="flex items-center gap-0 mb-5">
-                    {PIPELINE_STAGES.map((stage, idx) => (
-                      <div key={stage.id} className="flex flex-col items-center flex-1 relative">
-                        {idx > 0 && (
-                          <div
-                            className={cn(
-                              "absolute top-3.5 -left-1/2 w-full h-0.5",
-                              idx < completedCount ? "bg-[var(--success)]" : "bg-[var(--border-subtle)]"
-                            )}
-                          />
+                  <div className="p-5 flex flex-col gap-1 min-h-[280px]">
+                    <div className="flex items-center gap-3 h-6">
+                      <span className="text-[var(--accent)] font-mono text-sm">$</span>
+                      <span className="text-[var(--text-primary)] font-mono text-sm">
+                        {typed}
+                        {typed.length <= FULL_PROMPT.length && (
+                          <span className="inline-block w-2 h-4 bg-[var(--accent)] ml-0.5 animate-cursor-blink rounded-sm" />
                         )}
-                        <div
-                          className={cn(
-                            "w-7 h-7 rounded-full border-2 flex items-center justify-center z-10 transition-all",
-                            idx < completedCount
-                              ? "bg-[var(--success)] border-[var(--success)]"
-                              : idx === activeStage
-                                ? "bg-[var(--accent)] border-[var(--accent)] ring-4 ring-[var(--accent)]/20"
-                                : "bg-[var(--bg-primary)] border-[var(--border-default)]"
-                          )}
-                        >
-                          {idx < completedCount ? (
-                            <svg
-                              className="w-3 h-3 text-white"
-                              fill="none"
-                              viewBox="0 0 24 24"
-                              stroke="currentColor"
-                              strokeWidth={3}
-                            >
-                              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                            </svg>
-                          ) : idx === activeStage ? (
-                            <svg
-                              className="w-3 h-3 text-white"
-                              fill="none"
-                              viewBox="0 0 24 24"
-                              stroke="currentColor"
-                              strokeWidth={3}
-                            >
-                              <path strokeLinecap="round" strokeLinejoin="round" d="M16 18l6-6-6-6M8 6l-6 6 6 6" />
-                            </svg>
-                          ) : null}
-                        </div>
-                        <span
-                          className={cn(
-                            "text-[10px] font-mono font-semibold uppercase mt-2 text-center transition-colors",
-                            idx < completedCount
-                              ? "text-[var(--success)]"
-                              : idx === activeStage
-                                ? "text-[var(--accent)]"
-                                : "text-[var(--text-muted)]"
-                          )}
-                        >
-                          {stage.label}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                  {/* Pipeline log */}
-                  <div className="bg-[var(--bg-secondary)] border border-[var(--border-subtle)] rounded-xl p-5 font-mono text-[11px] flex flex-col gap-0.5 max-h-40 overflow-y-auto">
-                    {logLines.map((line, idx) => (
+                      </span>
+                    </div>
+                    {IMPROVE_LOG.slice(0, logRevealed).map((line, idx) => (
                       <div
                         key={idx}
                         className={cn(
-                          "flex items-center gap-3 h-6 px-1.5 rounded transition-all duration-300",
-                          line.type === "proc" && "bg-[var(--accent)]/5 text-[var(--accent)]",
-                          line.type === "ok" && "bg-[var(--success)]/5 text-[var(--success)] font-semibold"
+                          "flex items-center gap-3 h-6 px-1.5 rounded transition-all",
+                          line.type === "proc" &&
+                            "bg-[var(--accent)]/5 text-[var(--accent)]",
+                          line.type === "ok" &&
+                            "bg-[var(--success)]/5 text-[var(--success)] font-semibold"
                         )}
                       >
-                        <span className="text-[var(--text-muted)]">{line.time}</span>
+                        <span className="text-[var(--text-muted)] font-mono text-[11px]">
+                          {line.time}
+                        </span>
                         <span
                           className={cn(
-                            line.type === "proc" && "italic",
-                            line.type === "ok" && "font-semibold"
+                            "font-mono text-[11px]",
+                            line.type === "proc" && "italic"
                           )}
                         >
                           {line.msg}
                         </span>
                       </div>
                     ))}
-                  </div>
-                </div>
-
-                {/* Terminal */}
-                <div
-                  className={cn(
-                    "bg-[var(--bg-primary)] border border-[var(--border-subtle)] rounded-2xl overflow-hidden shadow-lg transition-all duration-500",
-                    typingDone && "shadow-xl"
-                  )}
-                  style={{
-                    opacity: terminalVisible ? 1 : 0,
-                    transform: terminalVisible ? "translateY(0)" : "translateY(16px)",
-                    transitionDelay: "80ms",
-                  }}
-                >
-                  {/* Terminal bar */}
-                  <div className="flex items-center gap-1.5 px-4 py-3 bg-[var(--bg-tertiary)] border-b border-[var(--border-subtle)]">
-                    <span className="w-2.5 h-2.5 rounded-full bg-[#ff5f57]" />
-                    <span className="w-2.5 h-2.5 rounded-full bg-[#febc2e]" />
-                    <span className="w-2.5 h-2.5 rounded-full bg-[#28c840]" />
-                    <span className="ml-2 text-[11px] font-mono text-[var(--text-muted)] tracking-wider">
-                      eden — generate
-                    </span>
-                  </div>
-                  {/* Terminal body */}
-                  <div className="p-5 flex flex-col gap-0.5">
-                    <div className="flex items-center gap-3 h-6">
-                      <span className="text-[var(--accent)] font-mono text-sm">$</span>
-                      <span className="text-[var(--text-primary)] font-mono text-sm">
-                        {cmdText}
-                        <span className="inline-block w-2 h-4 bg-[var(--accent)] ml-0.5 animate-cursor-blink rounded-sm" />
-                      </span>
-                    </div>
-                    {RESULT_LINES.slice(0, resultRevealed).map((line, idx) => (
-                      <div
-                        key={idx}
-                        className="pl-6 h-6 flex items-center text-[var(--text-secondary)] font-mono text-xs border-l-2 border-[var(--accent)]/30 bg-[var(--accent)]/5 rounded-r"
-                      >
-                        {line}
-                      </div>
-                    ))}
-                    {resultRevealed === RESULT_LINES.length && (
-                      <div className="mt-2 ml-7 px-3 py-2 bg-[var(--success)]/10 border-l-2 border-[var(--success)] rounded-r text-[var(--success)] font-mono text-sm font-semibold">
-                        Environment ready — 4m 12s elapsed
+                    {logRevealed === IMPROVE_LOG.length && (
+                      <div className="mt-2 px-3 py-2 bg-[var(--success)]/10 border-l-2 border-[var(--success)] rounded-r text-[var(--success)] font-mono text-[11px] font-semibold">
+                        PR #482 opened · awaiting review
                       </div>
                     )}
-                    <div className="flex items-center gap-3 h-6 mt-1">
-                      <span className="text-[var(--accent)] font-mono text-sm">$</span>
-                      <span className="inline-block w-2 h-4 bg-[var(--accent)] animate-cursor-blink rounded-sm" />
-                    </div>
                   </div>
                 </div>
               </div>
@@ -551,7 +438,7 @@ export default function LandingPage() {
         <section className="py-8 border-y border-[var(--border-subtle)] bg-[var(--bg-primary)]/50">
           <div className="max-w-6xl mx-auto px-6 flex flex-col items-center gap-4">
             <p className="text-[11px] font-mono text-[var(--text-muted)] uppercase tracking-widest">
-              Trusted by engineering teams at
+              Trusted by engineering teams shipping AI agents
             </p>
             <div className="flex flex-wrap items-center justify-center gap-8">
               {["Vercel", "Linear", "Notion", "Figma", "Stripe", "Supabase"].map((brand) => (
@@ -566,56 +453,313 @@ export default function LandingPage() {
           </div>
         </section>
 
-        {/* Features Section */}
-        <section id="features" className="py-16 px-6">
+        {/* Three pillars */}
+        <section id="pillars" className="py-20 px-6">
           <div className="max-w-6xl mx-auto">
             <p className="text-[11px] font-mono font-semibold uppercase tracking-widest text-[var(--accent)] mb-3">
-              Platform
+              The three pillars
             </p>
             <h2
               className="text-3xl md:text-4xl font-bold text-[var(--text-primary)] tracking-tight mb-3"
               style={{ letterSpacing: "-0.025em" }}
             >
-              From idea to running environment
+              Capture. Analyse. Improve.
             </h2>
-            <p className="text-[var(--text-secondary)] mb-10 max-w-lg leading-relaxed">
-              Eden handles the full lifecycle — design, generation, validation, and export — so
-              your team ships faster.
+            <p className="text-[var(--text-secondary)] mb-12 max-w-2xl leading-relaxed">
+              Comparable to Helicone or Langfuse for the observability layer, with a
+              closed-loop improvement layer they don't have. Adopt any pillar independently;
+              the loop closes when you use all three.
             </p>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 stagger-children">
-              {FEATURES.map((feature) => (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+              {PILLARS.map((pillar) => (
                 <div
-                  key={feature.title}
-                  className="bg-[var(--bg-primary)] border border-[var(--border-subtle)] rounded-2xl p-5 flex flex-col gap-4 card-hover-lift"
+                  key={pillar.id}
+                  className="bg-[var(--bg-primary)] border border-[var(--border-subtle)] rounded-2xl p-6 flex flex-col gap-4 card-hover-lift"
                 >
-                  <div className="w-10 h-10 bg-[var(--accent)]/10 border border-[var(--accent)]/20 rounded-lg flex items-center justify-center text-[var(--accent)]">
-                    <feature.icon className="w-5 h-5" />
+                  <div className="flex items-center justify-between">
+                    <div className="w-10 h-10 bg-[var(--accent)]/10 border border-[var(--accent)]/20 rounded-lg flex items-center justify-center text-[var(--accent)]">
+                      <pillar.icon className="w-5 h-5" />
+                    </div>
+                    <span className="text-[10px] font-mono font-semibold uppercase tracking-widest text-[var(--text-muted)]">
+                      {pillar.badge}
+                    </span>
                   </div>
                   <div>
-                    <h3 className="text-sm font-semibold text-[var(--text-primary)] mb-1.5">
-                      {feature.title}
+                    <h3 className="text-lg font-semibold text-[var(--text-primary)] mb-1">
+                      {pillar.title}
                     </h3>
-                    <p className="text-xs text-[var(--text-muted)] leading-relaxed">
-                      {feature.description}
+                    <p className="text-sm text-[var(--text-secondary)] leading-snug mb-3">
+                      {pillar.headline}
+                    </p>
+                    <p className="text-xs text-[var(--text-muted)] leading-relaxed mb-3">
+                      {pillar.description}
                     </p>
                   </div>
+                  <ul className="flex flex-col gap-1.5 mt-auto">
+                    {pillar.bullets.map((b) => (
+                      <li
+                        key={b}
+                        className="text-xs text-[var(--text-secondary)] flex items-start gap-2"
+                      >
+                        <span className="w-1 h-1 rounded-full bg-[var(--accent)] mt-2 shrink-0" />
+                        <span>{b}</span>
+                      </li>
+                    ))}
+                  </ul>
                 </div>
               ))}
             </div>
           </div>
         </section>
 
-        {/* CTA Section */}
+        {/* 5-minute integration */}
+        <section className="py-16 px-6 border-t border-[var(--border-subtle)]">
+          <div className="max-w-6xl mx-auto">
+            <p className="text-[11px] font-mono font-semibold uppercase tracking-widest text-[var(--accent)] mb-3">
+              5-minute integration
+            </p>
+            <h2
+              className="text-3xl md:text-4xl font-bold text-[var(--text-primary)] tracking-tight mb-3"
+              style={{ letterSpacing: "-0.025em" }}
+            >
+              One line. Your models. Full observability.
+            </h2>
+            <p className="text-[var(--text-secondary)] mb-8 max-w-2xl leading-relaxed">
+              Point your existing OpenAI SDK at Eden's gateway. Every call is captured and
+              queryable in the portal — no other code changes.
+            </p>
+
+            <div className="bg-[var(--bg-primary)] border border-[var(--border-subtle)] rounded-2xl overflow-hidden">
+              <div className="flex items-center gap-1 px-2 pt-2 border-b border-[var(--border-subtle)] bg-[var(--bg-secondary)]">
+                {INSTALL_BLOCKS.map((b) => (
+                  <button
+                    key={b.id}
+                    type="button"
+                    onClick={() => setActiveTab(b.id)}
+                    className={cn(
+                      "px-3 py-2 text-xs font-medium rounded-t-md transition-colors",
+                      activeTab === b.id
+                        ? "bg-[var(--bg-primary)] text-[var(--text-primary)] border border-[var(--border-subtle)] border-b-[var(--bg-primary)] -mb-px"
+                        : "text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+                    )}
+                  >
+                    {b.label}
+                  </button>
+                ))}
+              </div>
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => copyCode(activeBlock.id, activeBlock.code)}
+                  className="absolute top-3 right-3 px-2 py-1 text-xs text-[var(--text-muted)] hover:text-[var(--text-primary)] bg-[var(--bg-secondary)] border border-[var(--border-default)] rounded-md transition-colors"
+                >
+                  {copiedId === activeBlock.id ? "Copied" : "Copy"}
+                </button>
+                <pre className="bg-[var(--text-primary)] text-[var(--bg-primary)] p-5 text-xs font-mono overflow-auto leading-relaxed">
+                  {activeBlock.code}
+                </pre>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* /eden-improve spotlight */}
+        <section id="improve" className="py-16 px-6 border-t border-[var(--border-subtle)]">
+          <div className="max-w-6xl mx-auto">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-10 items-center">
+              <div>
+                <p className="text-[11px] font-mono font-semibold uppercase tracking-widest text-[var(--accent)] mb-3">
+                  The differentiator
+                </p>
+                <h2
+                  className="text-3xl md:text-4xl font-bold text-[var(--text-primary)] tracking-tight mb-4"
+                  style={{ letterSpacing: "-0.025em" }}
+                >
+                  From "this regression" to "this PR"
+                </h2>
+                <p className="text-[var(--text-secondary)] mb-4 leading-relaxed">
+                  Helicone and Langfuse show you traces. Eden ships the fix. The
+                  <code className="font-mono text-[var(--text-primary)] bg-[var(--bg-tertiary)] px-1.5 py-0.5 rounded text-sm mx-1">
+                    /eden-improve
+                  </code>
+                  command reads failing traces and eval results from your workspace, proposes
+                  a patch to your prompt or code, runs your eval suite, and opens a PR.
+                </p>
+                <ul className="flex flex-col gap-2.5 mb-6">
+                  {[
+                    "Hypothesises root causes — cited to trace IDs and eval records",
+                    "Patches prompt or code, then runs your evals locally",
+                    "Opens a PR only if evals pass; iterates with the failure log otherwise",
+                    "Gets faster every cycle — KB-grounded, never re-debugs a known regression",
+                  ].map((b) => (
+                    <li
+                      key={b}
+                      className="text-sm text-[var(--text-secondary)] flex items-start gap-2"
+                    >
+                      <span className="w-1.5 h-1.5 rounded-full bg-[var(--accent)] mt-2 shrink-0" />
+                      <span>{b}</span>
+                    </li>
+                  ))}
+                </ul>
+                <Link
+                  href="/docs"
+                  className="inline-flex items-center gap-2 text-sm font-medium text-[var(--accent)] hover:text-[var(--accent-hover)]"
+                >
+                  Read the /eden-improve docs
+                  <ChevronRight className="w-4 h-4" />
+                </Link>
+              </div>
+
+              <div className="bg-[var(--bg-primary)] border border-[var(--border-subtle)] rounded-2xl p-5">
+                <div className="flex items-center gap-1.5 mb-4 pb-3 border-b border-[var(--border-subtle)]">
+                  <span className="w-2.5 h-2.5 rounded-full bg-[#ff5f57]" />
+                  <span className="w-2.5 h-2.5 rounded-full bg-[#febc2e]" />
+                  <span className="w-2.5 h-2.5 rounded-full bg-[#28c840]" />
+                  <span className="ml-2 text-[11px] font-mono text-[var(--text-muted)]">
+                    eden — PR opened
+                  </span>
+                </div>
+                <div className="flex flex-col gap-1.5 font-mono text-[11px]">
+                  <div className="flex items-center gap-3 h-6">
+                    <GitPullRequest className="w-3.5 h-3.5 text-[var(--success)]" />
+                    <span className="text-[var(--text-primary)] font-semibold">
+                      fix: tool_call.2 prompt brittleness
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-3 h-6 text-[var(--text-muted)]">
+                    <span>→</span>
+                    <span>edits prompts/system.md</span>
+                  </div>
+                  <div className="flex items-center gap-3 h-6 text-[var(--text-muted)]">
+                    <span>→</span>
+                    <span>evals: smoke ✓ · quality ✓</span>
+                  </div>
+                  <div className="flex items-center gap-3 h-6 text-[var(--success)]">
+                    <span>→</span>
+                    <span>PR #482 ready for review</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* AI assistant sidebar preview */}
+        <section className="py-16 px-6 border-t border-[var(--border-subtle)]">
+          <div className="max-w-6xl mx-auto">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-10 items-center">
+              <div className="bg-[var(--bg-primary)] border border-[var(--border-subtle)] rounded-2xl overflow-hidden">
+                <div className="flex items-center gap-2 px-4 py-3 bg-[var(--bg-secondary)] border-b border-[var(--border-subtle)]">
+                  <Bot className="w-4 h-4 text-[var(--accent)]" />
+                  <span className="text-xs font-semibold text-[var(--text-primary)]">
+                    Eden assistant
+                  </span>
+                </div>
+                <div className="p-4 flex flex-col gap-3">
+                  <div className="flex items-start gap-2">
+                    <MessageSquare className="w-4 h-4 text-[var(--text-muted)] mt-0.5 shrink-0" />
+                    <p className="text-xs text-[var(--text-secondary)]">
+                      Why did latency spike on Tuesday for project{" "}
+                      <code className="font-mono text-[var(--text-primary)]">copilot-prod</code>?
+                    </p>
+                  </div>
+                  <div className="bg-[var(--accent)]/5 border border-[var(--accent)]/20 rounded-lg p-3">
+                    <p className="text-xs text-[var(--text-primary)] leading-relaxed mb-2">
+                      Latency p95 went from 1.2s → 2.4s on Tuesday 14:00 UTC, driven by a
+                      regression in <code className="font-mono">planner.v3</code> triggered
+                      2,400 traces with multi-step tool loops.
+                    </p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {["trace_8a3f…", "trace_8b12…", "trace_8c44…"].map((t) => (
+                        <span
+                          key={t}
+                          className="text-[10px] font-mono text-[var(--accent)] bg-[var(--accent)]/10 px-1.5 py-0.5 rounded"
+                        >
+                          {t}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    className="self-start text-xs text-[var(--accent)] hover:text-[var(--accent-hover)]"
+                  >
+                    Open a /eden-improve run →
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <p className="text-[11px] font-mono font-semibold uppercase tracking-widest text-[var(--accent)] mb-3">
+                  Web platform
+                </p>
+                <h2
+                  className="text-3xl md:text-4xl font-bold text-[var(--text-primary)] tracking-tight mb-4"
+                  style={{ letterSpacing: "-0.025em" }}
+                >
+                  Ask your data. Cited answers.
+                </h2>
+                <p className="text-[var(--text-secondary)] leading-relaxed mb-4">
+                  A persistent AI assistant sidebar lives in every view of the Eden portal.
+                  It queries your real traces and eval records — not generic web results — and
+                  cites the trace ID or eval record behind every claim.
+                </p>
+                <ul className="flex flex-col gap-2.5">
+                  {[
+                    "Org management with RBAC, SSO/SAML, SCIM, audit log",
+                    "Trace + eval visualisations: time-series, drill-down, regression alerts",
+                    "Export to JSONL/CSV, scheduled S3/GCS, webhook delivery",
+                  ].map((b) => (
+                    <li
+                      key={b}
+                      className="text-sm text-[var(--text-secondary)] flex items-start gap-2"
+                    >
+                      <span className="w-1.5 h-1.5 rounded-full bg-[var(--accent)] mt-2 shrink-0" />
+                      <span>{b}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* Quotes */}
+        <section className="py-16 px-6 border-t border-[var(--border-subtle)]">
+          <div className="max-w-6xl mx-auto">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+              {QUOTES.map((q, idx) => (
+                <figure
+                  key={idx}
+                  className="bg-[var(--bg-primary)] border border-[var(--border-subtle)] rounded-2xl p-6"
+                >
+                  <blockquote className="text-sm text-[var(--text-primary)] leading-relaxed mb-4">
+                    "{q.quote}"
+                  </blockquote>
+                  <figcaption className="text-xs text-[var(--text-muted)]">
+                    <span className="font-semibold text-[var(--text-secondary)]">
+                      {q.author}
+                    </span>
+                    {" · "}
+                    {q.company}
+                  </figcaption>
+                </figure>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        {/* CTA */}
         <section className="py-16 px-6 border-t border-[var(--border-subtle)]">
           <div className="max-w-6xl mx-auto">
             <div className="bg-[var(--bg-primary)] border border-[var(--accent)]/20 rounded-2xl p-8 md:p-10 flex flex-col md:flex-row items-center justify-between gap-6">
               <div>
                 <h2 className="text-2xl md:text-3xl font-bold text-[var(--text-primary)] mb-2">
-                  Ready to ship faster?
+                  Ship better agents, faster.
                 </h2>
                 <p className="text-sm text-[var(--text-muted)]">
-                  Join teams using Eden to generate environments in minutes, not weeks.
+                  Capture, analyse, improve — start free in under five minutes.
                 </p>
               </div>
               <div className="flex flex-wrap gap-3 shrink-0">
@@ -623,7 +767,7 @@ export default function LandingPage() {
                   href="/signup"
                   className="inline-flex items-center gap-2 px-6 py-3 text-sm font-medium bg-[var(--accent)] text-white rounded-xl hover:bg-[var(--accent-hover)] transition-colors"
                 >
-                  Start building free
+                  Start free
                   <ChevronRight className="w-4 h-4" />
                 </Link>
                 <Link
@@ -648,7 +792,7 @@ export default function LandingPage() {
                 Eden
               </Link>
               <p className="text-sm text-[var(--text-muted)]">
-                AI-native environment generation.
+                Observability + improvement for AI agents and LLM apps.
               </p>
             </div>
 
@@ -678,7 +822,7 @@ export default function LandingPage() {
             </div>
 
             <p className="text-xs text-[var(--text-muted)]">
-              © 2026 Eden
+              © 2026 Eden · v3.0
             </p>
           </div>
         </footer>
