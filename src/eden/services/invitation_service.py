@@ -6,6 +6,7 @@ from typing import Optional
 from uuid import uuid4
 
 from eden.config import get_settings
+from eden.services.email_service import get_email_service
 from eden.storage.postgres import get_postgres_client
 
 settings = get_settings()
@@ -277,31 +278,58 @@ async def get_pending_invitations(org_id: str) -> list[dict]:
 async def send_invite_email(to_email: str, org_name: str, inviter_name: str, role: str, token: str, expires_at: str) -> None:
     """Send invitation email to the invitee.
 
-    Currently a stub - logs the invitation details.
-    In production, this would integrate with an email service (SendGrid, SES, etc.)
+    Sends via SendGrid if configured, otherwise logs a warning.
     """
-    invite_url = f"https://portal.example.com/invite/{token}"
-    print(f"""
-    ========================================
-    INVITATION EMAIL (STUB)
-    To: {to_email}
-    Organization: {org_name}
-    Invited by: {inviter_name}
-    Role: {role}
-    Expires: {expires_at}
-    Invite URL: {invite_url}
-    ========================================
-    """)
-    # TODO: Integrate with email service
-    # await email_service.send(
-    #     to=to_email,
-    #     subject=f"You've been invited to {org_name}",
-    #     template="invitation",
-    #     context={
-    #         "org_name": org_name,
-    #         "inviter_name": inviter_name,
-    #         "role": role,
-    #         "invite_url": invite_url,
-    #         "expires_at": expires_at,
-    #     }
-    # )
+    settings = get_settings()
+    invite_url = f"{settings.portal_base_url}/invite/{token}"
+
+    subject = f"You've been invited to {org_name}"
+    html_content = f"""
+    <html>
+    <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
+        <div style="max-width: 600px; margin: 0 auto; padding: 20px;">
+            <h2 style="color: #2c3e50;">You've been invited to join {org_name}</h2>
+            <p>
+                <strong>{inviter_name}</strong> has invited you to join <strong>{org_name}</strong>
+                as a <strong>{role}</strong>.
+            </p>
+            <p>
+                Click the link below to accept your invitation:
+            </p>
+            <p style="margin: 30px 0;">
+                <a href="{invite_url}"
+                   style="background-color: #3498db; color: white; padding: 12px 24px;
+                          text-decoration: none; border-radius: 4px; display: inline-block;">
+                    Accept Invitation
+                </a>
+            </p>
+            <p style="color: #7f8c8d; font-size: 14px;">
+                This invitation expires on {expires_at}.
+            </p>
+            <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;">
+            <p style="color: #95a5a6; font-size: 12px;">
+                If you didn't expect this invitation, you can safely ignore this email.
+            </p>
+        </div>
+    </body>
+    </html>
+    """
+    text_content = f"""
+    You've been invited to join {org_name}
+
+    {inviter_name} has invited you to join {org_name} as a {role}.
+
+    Accept your invitation by visiting: {invite_url}
+
+    This invitation expires on {expires_at}.
+
+    If you didn't expect this invitation, you can safely ignore this email.
+    """
+
+    email_service = get_email_service()
+    await email_service.send_email(
+        to_email=to_email,
+        subject=subject,
+        html_content=html_content,
+        text_content=text_content,
+    )
