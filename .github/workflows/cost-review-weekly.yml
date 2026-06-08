@@ -1,0 +1,57 @@
+name: cost-review (weekly Slack post)
+
+on:
+  schedule:
+    # Every Monday 9am UTC.
+    - cron: "0 9 * * 1"
+  workflow_dispatch: {}
+
+jobs:
+  post:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .
+      - name: Generate report
+        run: |
+          python scripts/generate_cost_report.py --month $(date -u +%Y-%m) --out reports/cost-weekly
+      - name: Post to Slack
+        if: env.SLACK_WEBHOOK_URL != ''
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        run: |
+          python - <<'PY'
+          import json, os, urllib.request
+          from pathlib import Path
+          # Best-effort: read the CSV, format a Slack message, POST.
+          csv_path = next(Path("reports/cost-weekly").glob("cost-*.csv"), None)
+          if not csv_path:
+              print("no report; skipping")
+              raise SystemExit(0)
+          rows = list(csv_path.read_text().splitlines())
+          msg = f"*Weekly cost report*\n```{csv_path.name}```\n" + "\n".join(rows[:30])
+          payload = json.dumps({"text": msg[:3000]}).encode()
+          url = os.environ["SLACK_WEBHOOK_URL"]
+          req = urllib.request.Request(url, data=payload, headers={"Content-Type": "application/json"})
+          try:
+              with urllib.request.urlopen(req, timeout=10) as r:
+                  print(f"posted: {r.status}")
+          except Exception as exc:
+              # Don't fail the workflow — cost review is a Slack nicety.
+              print(f"slack post skipped: {exc}")
+          PY
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: cost-report
+          path: reports/cost-weekly/*.csv
+          if-no-files-found: warn
+          retention-days: 90

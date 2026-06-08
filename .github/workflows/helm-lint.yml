@@ -1,0 +1,31 @@
+name: Helm lint
+
+# Closes part of §6.6. Runs `helm lint` + `ct lint` against
+# the chart in helm/eden on every PR. Deploys the chart to a
+# kind cluster in `helm-install` matrix entries.
+
+on:
+  pull_request:
+    paths:
+      - "helm/**"
+      - ".github/workflows/helm-lint.yml"
+  push:
+    branches: [main]
+    paths:
+      - "helm/**"
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/setup-helm@v4
+        with:
+          version: v3.15.0
+      - name: helm lint
+        run: helm lint helm/eden
+      - name: ct lint
+        uses: helm/chart-testing-action@v2.0.0
+        with:
+          config: helm/eden/ct.yaml
+          command: lint

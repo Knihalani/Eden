@@ -1,0 +1,31 @@
+name: dast (OWASP ZAP baseline)
+
+on:
+  schedule:
+    # Weekly Wednesday 3am UTC. The OWASP ZAP baseline scan is
+    # slow (~10 min) and noise-tolerant; running it on PRs would
+    # create churn. Run on a weekly cron + manual dispatch.
+    - cron: "0 3 * * 3"
+  workflow_dispatch: {}
+
+jobs:
+  zap-baseline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: ZAP baseline scan against staging
+        uses: zaproxy/action-baseline@v0.13.0
+        with:
+          target: ${{ secrets.STAGING_URL || 'https://staging.eden.example.com' }}
+          rules_file_name: '.zap/rules.tsv'
+          cmd_options: '-a -m 5 -T 60'
+          issue_title: 'DAST finding (ZAP baseline)'
+        continue-on-error: true   # findings surface in GH issues, not as a red ❌
+      - name: Post summary
+        if: always()
+        run: |
+          echo "## DAST findings" >> $GITHUB_STEP_SUMMARY
+          if [ -f report_md.md ]; then
+            cat report_md.md >> $GITHUB_STEP_SUMMARY
+          fi

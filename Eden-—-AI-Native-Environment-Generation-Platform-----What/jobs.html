@@ -1,0 +1,404 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Environments — Eden</title>
+  <link rel="stylesheet" href="tokens.css" />
+  <style>
+    body { background: var(--bg-base); }
+
+    /* Stats bar */
+    .stats-bar {
+      display: flex; gap: var(--space-6);
+      padding: var(--space-4) var(--space-5);
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-lg);
+      margin-bottom: var(--space-5);
+      flex-wrap: wrap;
+    }
+    .stat-item { display: flex; align-items: center; gap: var(--space-2); }
+    .stat-item-label { font: var(--text-sm) / 1 var(--font-sans); color: var(--fg-muted); }
+    .stat-item-value { font: var(--text-sm) / 1 var(--font-mono); font-weight: 600; font-variant-numeric: tabular-nums; }
+    .stat-item-value.total   { color: var(--fg-primary); }
+    .stat-item-value.running { color: var(--accent); }
+    .stat-item-value.completed { color: var(--success); }
+    .stat-item-value.failed   { color: var(--error); }
+
+    /* Controls bar */
+    .controls-bar { display: flex; align-items: center; gap: var(--space-3); flex-wrap: wrap; }
+    .filter-pills { display: flex; gap: var(--space-2); flex-wrap: wrap; }
+    .filter-pill {
+      padding: 5px 12px; border-radius: 999px;
+      font: 10px / 1 var(--font-mono); font-weight: 600;
+      border: 1px solid var(--border-default);
+      background: var(--bg-surface);
+      color: var(--fg-muted);
+      cursor: pointer;
+      transition: all var(--t-fast);
+      letter-spacing: var(--tracking-wide);
+      user-select: none;
+    }
+    .filter-pill:hover { border-color: var(--accent); color: var(--accent); }
+    .filter-pill.active { background: var(--accent-dim); border-color: var(--accent); color: var(--accent); }
+    .filter-pill:active { transform: scale(0.97); }
+
+    /* Controls scroll on mobile */
+    .controls-bar-scroll {
+      display: flex;
+      align-items: center;
+      gap: var(--space-3);
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+      flex: 1;
+      min-width: 0;
+      padding-bottom: 2px; /* prevent scrollbar clipping */
+    }
+    .controls-bar-scroll::-webkit-scrollbar { height: 3px; }
+    .controls-bar-scroll::-webkit-scrollbar-thumb { background: var(--border-default); border-radius: 2px; }
+    @media (max-width: 640px) {
+      .controls-bar-scroll { width: 100%; }
+      .filter-pills { flex-shrink: 0; }
+      .controls-bar .input { width: 100%; max-width: 100%; }
+    }
+
+    /* Desktop — 1440px+ search input breathes */
+    @media (min-width: 1440px) {
+      .controls-bar .input { max-width: 380px; }
+    }
+
+    /* Jobs grid */
+    .jobs-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--space-4); }
+
+    /* Job card — magnetic hover + animated left border */
+    .job-card {
+      position: relative;
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-lg);
+      padding: var(--space-4) var(--space-5);
+      display: flex; flex-direction: column; gap: var(--space-3);
+      cursor: pointer;
+      transition:
+        border-color var(--t-base),
+        background var(--t-base),
+        transform var(--t-slow) var(--ease-out),
+        box-shadow var(--t-slow) var(--ease-out);
+      overflow: hidden;
+
+      /* Start: no left border visible */
+      border-left: 3px solid transparent;
+      padding-left: calc(var(--space-5) - 3px);
+    }
+
+    /* Emerald left-border draws top-to-bottom on hover */
+    .job-card::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: -3px;
+      width: 3px;
+      height: 0;
+      background: var(--accent-2);
+      transition: height 0.35s var(--ease-out);
+      border-radius: 0 0 2px 2px;
+      box-shadow: 0 0 8px oklch(72% 0.16 162 / 0.5);
+    }
+
+    .job-card:hover::before {
+      height: 100%;
+      border-radius: 0 2px 2px 0;
+    }
+
+    .job-card:hover {
+      border-color: oklch(72% 0.16 162 / 0.4);
+      background: var(--bg-elevated);
+      box-shadow: 0 4px 20px oklch(0% 0 0 / 0.2), 0 0 0 1px oklch(72% 0.16 162 / 0.15);
+      transform: translateY(-2px) scale(1.01);
+    }
+
+    .job-card-title { font: var(--text-sm) / 1.4 var(--font-sans); font-weight: 600; color: var(--fg-primary); }
+    .job-id { font: 10px / 1 var(--font-mono); color: var(--fg-faint); margin-top: 3px; }
+    .job-card-stage { font: var(--text-xs) / 1 var(--font-sans); color: var(--fg-muted); }
+    .job-card-footer { display: flex; align-items: center; justify-content: space-between; margin-top: auto; padding-top: var(--space-2); }
+    .job-time { font: 10px / 1 var(--font-mono); color: var(--fg-faint); }
+
+    /* Magnetic inner elements — subtly follow cursor */
+    .magnetic-wrap { transition: transform 0.12s linear; }
+
+    @media (min-width: 1440px) {
+      .magnetic-wrap { transition: transform 0.15s linear; }
+    }
+
+    @media (max-width: 1100px) { .jobs-grid { grid-template-columns: repeat(2, 1fr); } }
+    @media (max-width: 640px)  { .jobs-grid { grid-template-columns: 1fr; } }
+    @media (max-width: 480px) {
+      .job-card-title { font-size: var(--text-xs); }
+      .stats-bar { gap: var(--space-3); }
+    }
+
+    /* Desktop — 1440px+ more generous space */
+    @media (min-width: 1440px) {
+      .jobs-grid { grid-template-columns: repeat(3, 1fr); gap: var(--space-6); }
+      .job-card { padding: var(--space-5) var(--space-6); }
+      .stats-bar { gap: var(--space-8); padding: var(--space-5) var(--space-6); }
+      .controls-bar { gap: var(--space-4); }
+      .controls-bar-scroll { margin-top: var(--space-1); }
+    }
+
+    /* Desktop — 1920px ultrawide */
+    @media (min-width: 1920px) {
+      .jobs-grid { grid-template-columns: repeat(4, 1fr); gap: var(--space-8); }
+      .page-body { padding: var(--space-8) var(--space-10); }
+      .stats-bar { gap: var(--space-10); }
+    }
+  </style>
+</head>
+<body>
+<div class="app-layout">
+  <div class="sidebar-overlay" onclick="toggleSidebar()"></div>
+
+  <nav class="sidebar">
+    <a href="landing.html" class="sidebar-logo">
+      <div class="sidebar-logo-mark">E</div>
+      <span class="sidebar-logo-name">eden</span>
+    </a>
+    <div class="sidebar-nav">
+      <div class="sidebar-section-label">Overview</div>
+      <a href="dashboard.html" class="nav-item">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 8.5h12M8.5 2v12"/></svg>
+        Dashboard
+      </a>
+      <a href="jobs.html" class="nav-item active">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1.5" y="1.5" width="13" height="13" rx="2"/><path d="M5 5h6M5 8h6M5 11h3"/></svg>
+        Environments
+      </a>
+      <div class="sidebar-section-label">Resources</div>
+      <a href="docs.html" class="nav-item">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2.5" y="1.5" width="11" height="13" rx="1.5"/><path d="M5.5 5h5M5.5 8h5M5.5 11h2.5"/></svg>
+        Docs
+      </a>
+      <div class="sidebar-section-label">Account</div>
+      <a href="settings.html" class="nav-item">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 10a3 3 0 1 0 0-6 3 3 0 0 0 0 6z"/><path d="M6.5 13.5l-2-2M13 2l1 2M2 5l2-1M13 13l2-2"/></svg>
+        Settings
+      </a>
+    </div>
+    <div class="nav-item-user">
+      <div style="width:28px;height:28px;border-radius:50%;background:var(--accent);display:grid;place-items:center;color:oklch(11% 0.015 250);font:10px/1 var(--font-mono);font-weight:700;flex-shrink:0;">AL</div>
+      <div>
+        <div style="font:var(--text-sm)/1 var(--font-sans);font-weight:600;color:var(--fg-primary);">Ada Lovelace</div>
+        <div style="font:var(--text-xs)/1 var(--font-mono);color:var(--fg-faint);">Owner</div>
+      </div>
+    </div>
+  </nav>
+
+  <main class="main-content">
+    <header class="page-header">
+      <button class="hamburger-btn" onclick="toggleSidebar()" aria-label="Open navigation">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 4h12M2 8h12M2 12h12"/></svg>
+      </button>
+      <span class="page-title">Environments</span>
+      <a href="job-detail.html" class="btn btn-primary btn-sm" style="margin-left:auto;">+ New environment</a>
+    </header>
+
+    <div class="page-body">
+
+      <!-- Stats bar -->
+      <div class="stats-bar">
+        <div class="stat-item">
+          <span class="stat-item-label">Total</span>
+          <span class="stat-item-value total">247</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-item-label">Running</span>
+          <span class="stat-item-value running">3</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-item-label">Completed</span>
+          <span class="stat-item-value completed">231</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-item-label">Failed</span>
+          <span class="stat-item-value failed">16</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-item-label">Pending</span>
+          <span class="stat-item-value" style="color:var(--fg-faint);">0</span>
+        </div>
+      </div>
+
+      <!-- Controls bar -->
+      <div class="controls-bar" style="margin-bottom:var(--space-5);">
+        <input class="input" type="text" placeholder="Search by job ID or description…" style="max-width:320px;flex-shrink:0;" />
+        <div class="controls-bar-scroll">
+          <div class="filter-pills" role="tablist" aria-label="Filter environments">
+            <button class="filter-pill active" role="tab" aria-selected="true" aria-label="Show all environments" onclick="filterJobs(this)">All</button>
+            <button class="filter-pill" role="tab" aria-selected="false" aria-label="Show running environments" onclick="filterJobs(this)">Running</button>
+            <button class="filter-pill" role="tab" aria-selected="false" aria-label="Show completed environments" onclick="filterJobs(this)">Completed</button>
+            <button class="filter-pill" role="tab" aria-selected="false" aria-label="Show failed environments" onclick="filterJobs(this)">Failed</button>
+            <button class="filter-pill" role="tab" aria-selected="false" aria-label="Show pending environments" onclick="filterJobs(this)">Pending</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Jobs grid with magnetic hover -->
+      <div class="jobs-grid stagger">
+
+        <div class="job-card" data-status="running" onclick="window.location.href='job-detail.html'">
+          <div class="magnetic-wrap">
+            <div class="job-card-title">Customer support bot — multi-turn dialog</div>
+            <div class="job-id">#j_bd3f81</div>
+          </div>
+          <div class="job-card-stage">Stage: <strong style="color:var(--fg-secondary);">Verifying facts</strong></div>
+          <div class="job-card-footer">
+            <span class="badge badge-cyan"><span class="spinner"></span>Running</span>
+            <span class="job-time">2m ago</span>
+          </div>
+        </div>
+
+        <div class="job-card" data-status="completed" onclick="window.location.href='job-detail.html'">
+          <div class="magnetic-wrap">
+            <div class="job-card-title">Data ingestion pipeline — WebSocket feed</div>
+            <div class="job-id">#j_9c20ea</div>
+          </div>
+          <div class="job-card-stage">Stage: <strong style="color:var(--success);">completed</strong></div>
+          <div class="job-card-footer">
+            <span class="badge badge-green">Completed</span>
+            <span class="job-time">14m ago</span>
+          </div>
+        </div>
+
+        <div class="job-card" data-status="completed" onclick="window.location.href='job-detail.html'">
+          <div class="magnetic-wrap">
+            <div class="job-card-title">E-commerce checkout agent — cart abandonment</div>
+            <div class="job-id">#j_3a11cf</div>
+          </div>
+          <div class="job-card-stage">Stage: <strong style="color:var(--success);">completed</strong></div>
+          <div class="job-card-footer">
+            <span class="badge badge-green">Completed</span>
+            <span class="job-time">1h ago</span>
+          </div>
+        </div>
+
+        <div class="job-card" data-status="failed" onclick="window.location.href='job-detail.html'">
+          <div class="magnetic-wrap">
+            <div class="job-card-title">Code review bot — AST analysis pipeline</div>
+            <div class="job-id">#j_7f44da</div>
+          </div>
+          <div class="job-card-stage">Verification — blocked</div>
+          <div class="job-card-footer">
+            <span class="badge badge-red">Failed</span>
+            <span class="job-time">3h ago</span>
+          </div>
+        </div>
+
+        <div class="job-card" data-status="pending" onclick="window.location.href='job-detail.html'">
+          <div class="magnetic-wrap">
+            <div class="job-card-title">Onboarding flow — adaptive hint system</div>
+            <div class="job-id">#j_0e98bc</div>
+          </div>
+          <div class="job-card-stage">Stage: <strong style="color:var(--fg-faint);">pending</strong></div>
+          <div class="job-card-footer">
+            <span class="badge badge-neutral">Pending</span>
+            <span class="job-time">5h ago</span>
+          </div>
+        </div>
+
+        <div class="job-card" data-status="completed" onclick="window.location.href='job-detail.html'">
+          <div class="magnetic-wrap">
+            <div class="job-card-title">Travel booking assistant — internationalization</div>
+            <div class="job-id">#j_2b90cf</div>
+          </div>
+          <div class="job-card-stage">Stage: <strong style="color:var(--success);">completed</strong></div>
+          <div class="job-card-footer">
+            <span class="badge badge-green">Completed</span>
+            <span class="job-time">8h ago</span>
+          </div>
+        </div>
+
+        <div class="job-card" data-status="completed" onclick="window.location.href='job-detail.html'">
+          <div class="magnetic-wrap">
+            <div class="job-card-title">Log analysis agent — pattern detection</div>
+            <div class="job-id">#j_5dd331</div>
+          </div>
+          <div class="job-card-stage">Stage: <strong style="color:var(--success);">completed</strong></div>
+          <div class="job-card-footer">
+            <span class="badge badge-green">Completed</span>
+            <span class="job-time">1d ago</span>
+          </div>
+        </div>
+
+        <div class="job-card" data-status="completed" onclick="window.location.href='job-detail.html'">
+          <div class="magnetic-wrap">
+            <div class="job-card-title">Financial report summarizer — PDF export</div>
+            <div class="job-id">#j_8ae440</div>
+          </div>
+          <div class="job-card-stage">Stage: <strong style="color:var(--success);">completed</strong></div>
+          <div class="job-card-footer">
+            <span class="badge badge-green">Completed</span>
+            <span class="job-time">1d ago</span>
+          </div>
+        </div>
+
+        <div class="job-card" data-status="completed" onclick="window.location.href='job-detail.html'">
+          <div class="magnetic-wrap">
+            <div class="job-card-title">HR recruiting bot — screening interview</div>
+            <div class="job-id">#j_cc7221</div>
+          </div>
+          <div class="job-card-stage">Stage: <strong style="color:var(--success);">completed</strong></div>
+          <div class="job-card-footer">
+            <span class="badge badge-green">Completed</span>
+            <span class="job-time">2d ago</span>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </main>
+</div>
+
+<script>
+function toggleSidebar() {
+  document.querySelector('.sidebar').classList.toggle('open');
+  document.querySelector('.sidebar-overlay').classList.toggle('open');
+}
+
+function filterJobs(btn) {
+  document.querySelectorAll('.filter-pill').forEach(function(p) {
+    p.classList.remove('active');
+    p.setAttribute('aria-selected', 'false');
+  });
+  btn.classList.add('active');
+  btn.setAttribute('aria-selected', 'true');
+  var filter = btn.textContent.trim().toLowerCase();
+  document.querySelectorAll('.job-card').forEach(function(card) {
+    var status = card.getAttribute('data-status') || '';
+    card.style.display = (filter === 'all' || status === filter) ? '' : 'none';
+  });
+}
+
+// Magnetic hover — inner content subtly follows cursor
+(function () {
+  var cards = document.querySelectorAll('.job-card');
+  cards.forEach(function (card) {
+    var inner = card.querySelector('.magnetic-wrap');
+    card.addEventListener('mousemove', function (e) {
+      var rect = card.getBoundingClientRect();
+      var cx = rect.left + rect.width / 2;
+      var cy = rect.top + rect.height / 2;
+      var dx = (e.clientX - cx) / rect.width;
+      var dy = (e.clientY - cy) / rect.height;
+      var shift = 3;
+      inner.style.transform = 'translate(' + (dx * shift) + 'px, ' + (dy * shift) + 'px)';
+    });
+    card.addEventListener('mouseleave', function () {
+      inner.style.transform = '';
+    });
+  });
+})();
+</script>
+
+</body>
+</html>

@@ -1,0 +1,98 @@
+{
+  "title": "Eden SLO Dashboard",
+  "uid": "eden-slo",
+  "schemaVersion": 38,
+  "timezone": "browser",
+  "refresh": "1m",
+  "tags": ["eden", "slo"],
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "API availability (30d)",
+      "targets": [
+        {
+          "expr": "sum(rate(eden_http_requests_total{status!~\"4..\"}[30d])) / sum(rate(eden_http_requests_total[30d]))",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "yellow", "value": 0.99 },
+              { "color": "green", "value": 0.999 }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "API p95 latency",
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(eden_http_request_duration_seconds_bucket[5m])) by (le, route))",
+          "refId": "A",
+          "legendFormat": "{{route}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 0.2 },
+              { "color": "red", "value": 0.5 }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "LLM provider errors / 5m",
+      "targets": [
+        {
+          "expr": "sum by (provider) (rate(eden_llm_provider_errors_total[5m]))",
+          "refId": "A",
+          "legendFormat": "{{provider}}"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "KB cache hit rate",
+      "targets": [
+        {
+          "expr": "sum(rate(eden_kb_cache_hits_total[5m])) / sum(rate(eden_kb_cache_lookups_total[5m]))",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "percentunit" }
+      }
+    },
+    {
+      "id": 5,
+      "type": "table",
+      "title": "Published SLO targets",
+      "targets": [
+        {
+          "expr": "eden_slo_target",
+          "format": "table",
+          "instant": true,
+          "refId": "A"
+        }
+      ]
+    }
+  ]
+}
