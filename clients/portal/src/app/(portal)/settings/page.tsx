@@ -5,7 +5,7 @@ import { useOrg } from "@/hooks/use-org";
 import { useAuth } from "@/hooks/use-auth";
 import { usePermissions } from "@/hooks/use-permissions";
 import { api } from "@/lib/api";
-import { Loader2, Plus, Trash2, Building2, Users, Code, Copy, Check, Archive, RefreshCw, Key, FileText, Shield, CreditCard, KeyRound, Lock, BarChart2 } from "lucide-react";
+import { Loader2, Plus, Trash2, Building2, Users, Code, Copy, Check, Archive, RefreshCw, Key, FileText, Shield, CreditCard, KeyRound, Lock, BarChart2, FileArchive } from "lucide-react";
 import { cn } from "@/lib/utils";
 import Link from "next/link";
 import { DeleteOrgDialog } from "./_components/delete-org-dialog";
@@ -14,6 +14,7 @@ import { InvitePanel } from "./_components/invite-panel";
 import { AuditLogTab } from "./_components/audit-log-tab";
 import { AnalyticsTab } from "./_components/analytics-tab";
 import { DataExportPanel } from "./_components/data-export-panel";
+import { ExportsTab } from "./_components/exports-tab";
 import { SecurityTab } from "./_components/security-tab";
 import { ScimTab } from "./_components/scim-tab";
 import { SSOTab } from "./_components/sso-tab";
@@ -22,7 +23,7 @@ import { useToast } from "@/components/ui/toast";
 import { useConfirm } from "@/hooks/use-confirm";
 import { Skeleton } from "@/components/ui/skeleton";
 
-type Tab = "org" | "members" | "references" | "api-keys" | "security" | "scim" | "sso" | "audit-log" | "analytics" | "billing";
+type Tab = "org" | "members" | "references" | "api-keys" | "security" | "scim" | "sso" | "audit-log" | "analytics" | "billing" | "exports";
 
 const TABS = [
   { id: "org", label: "Organization", icon: Building2 },
@@ -32,6 +33,7 @@ const TABS = [
   { id: "security", label: "Security", icon: Shield },
   { id: "scim", label: "SCIM", icon: KeyRound },
   { id: "sso", label: "SSO", icon: Lock },
+  { id: "exports", label: "Exports", icon: FileArchive },
   { id: "audit-log", label: "Audit Log", icon: FileText },
   { id: "analytics", label: "Analytics", icon: BarChart2 },
   { id: "billing", label: "Billing", icon: CreditCard },
@@ -156,6 +158,12 @@ export default function SettingsPage() {
             {activeTab === "audit-log" && <AuditLogTab org={currentOrg} />}
             {activeTab === "analytics" && <AnalyticsTab />}
             {activeTab === "billing" && <BillingTab />}
+            {activeTab === "exports" && (
+              <ExportsTab
+                orgId={currentOrg?.id || ""}
+                canManage={currentOrg?.role === "owner" || currentOrg?.role === "admin"}
+              />
+            )}
           </div>
         </div>
       </div>
