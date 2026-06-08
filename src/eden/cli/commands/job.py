@@ -7,6 +7,7 @@ from typing import Any
 
 import click
 
+from eden.cli._legacy_gate import require_eval_pipeline, warn_legacy_pipeline
 from eden.cli.main import cli, echo_json, echo_table, get_client
 
 
@@ -24,6 +25,7 @@ def job() -> None:
 @click.pass_context
 def job_list(ctx: click.Context, status: str, outcome_tier: str, query: str, limit: int, offset: int) -> None:
     """List jobs."""
+    warn_legacy_pipeline("job list")
     async def _run() -> None:
         client = get_client(ctx)
         async with client:
@@ -63,6 +65,7 @@ def job_list(ctx: click.Context, status: str, outcome_tier: str, query: str, lim
 @click.pass_context
 def job_get(ctx: click.Context, job_id: str) -> None:
     """Get job status."""
+    require_eval_pipeline("job get")
     async def _run() -> None:
         client = get_client(ctx)
         async with client:
@@ -90,6 +93,7 @@ def job_get(ctx: click.Context, job_id: str) -> None:
 @click.pass_context
 def job_result(ctx: click.Context, job_id: str) -> None:
     """Get job result."""
+    require_eval_pipeline("job result")
     async def _run() -> None:
         client = get_client(ctx)
         async with client:
@@ -120,6 +124,7 @@ def job_result(ctx: click.Context, job_id: str) -> None:
 @click.pass_context
 def job_watch(ctx: click.Context, job_id: str) -> None:
     """Watch job progress in real time with a stage progress bar."""
+    require_eval_pipeline("job watch")
     from eden.cli.progress import StageProgress
 
     async def _run() -> None:
@@ -167,6 +172,7 @@ def job_watch(ctx: click.Context, job_id: str) -> None:
 @click.pass_context
 def job_cancel(ctx: click.Context, job_id: str) -> None:
     """Cancel an in-progress job."""
+    require_eval_pipeline("job cancel")
     async def _run() -> None:
         client = get_client(ctx)
         async with client:
