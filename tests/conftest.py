@@ -262,15 +262,15 @@ def patch_email_service():
     mock_service = MagicMock()
     mock_service.send_email = AsyncMock(return_value=True)
     with patch("eden.services.email_service.get_email_service", return_value=mock_service):
-        # ``eden.api.routes.auth`` no longer exposes ``get_email_service``
-        # in 7.0; the auth router imports the service from
-        # ``eden.services.email_service`` directly. Guard the legacy
-        # patch so it doesn't crash the autouse fixture.
+        # invitation_service is the canonical caller. The legacy auth
+        # router may also reference get_email_service in 7.0 — guarded with
+        # ``create=True`` and try/except so the autouse fixture doesn't
+        # crash on either shape.
         try:
-            with patch("eden.api.routes.auth.get_email_service", return_value=mock_service, create=True):
+            with patch("eden.services.invitation_service.get_email_service", return_value=mock_service):
                 yield mock_service
         except (AttributeError, ModuleNotFoundError):
-            yield mock_service
+            pass
 
 
 @pytest.fixture(autouse=True)
