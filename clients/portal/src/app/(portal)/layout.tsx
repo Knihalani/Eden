@@ -24,6 +24,8 @@ import {
   Bell,
   ChevronRight,
   Check,
+  BarChart3,
+  Sparkles,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import Link from "next/link";
@@ -46,6 +48,8 @@ function buildBreadcrumbs(pathname: string): { label: string; href: string }[] {
   const labelMap: Record<string, string> = {
     dashboard: "Dashboard",
     jobs: "Jobs",
+    analytics: "Analytics",
+    optimization: "Optimization",
     settings: "Settings",
     billing: "Billing",
     docs: "Documentation",
@@ -258,6 +262,8 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
         <nav className="relative flex-1 p-3 space-y-0.5" aria-label="Main navigation">
           <NavItem href="/dashboard" icon={LayoutDashboard} label="Dashboard" collapsed={collapsed} onClick={() => setSidebarOpen(false)} />
           <NavItem href="/jobs" icon={Layers} label="Jobs" collapsed={collapsed} onClick={() => setSidebarOpen(false)} />
+          <NavItem href="/analytics" icon={BarChart3} label="Analytics" collapsed={collapsed} onClick={() => setSidebarOpen(false)} />
+          <NavItem href="/optimization" icon={Sparkles} label="Optimization" collapsed={collapsed} onClick={() => setSidebarOpen(false)} />
           <NavItem href="/settings" icon={Settings} label="Settings" collapsed={collapsed} onClick={() => setSidebarOpen(false)} />
           <NavItem href="/billing" icon={CreditCard} label="Billing" collapsed={collapsed} onClick={() => setSidebarOpen(false)} />
           <NavItem href="/docs" icon={FileText} label="Docs" collapsed={collapsed} onClick={() => setSidebarOpen(false)} />

@@ -1,1064 +1,647 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useEffect, useMemo, useState } from "react";
+import {
+  AlertTriangle,
+  ArrowDownRight,
+  ArrowUpRight,
+  BarChart3,
+  Clock,
+  Coins,
+  Loader2,
+  Sparkles,
+  Zap,
+} from "lucide-react";
+import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Cell,
+  Legend,
+  Line,
+  LineChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
+
+import { ChartCard } from "@/components/ui/chart-card";
 import { useOrg } from "@/hooks/use-org";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import {
-  BarChart3,
-  TrendingUp,
-  TrendingDown,
-  Minus,
-  AlertCircle,
-  Loader2,
-  CheckCircle2,
-  XCircle,
-  Clock,
-  DollarSign,
-  Zap,
-  Users,
-  Database,
-  Sparkles,
-  ChevronRight,
-  BarChart,
-  Layers,
-  Activity,
-  ArrowUpRight,
-  ArrowDownRight,
-  Target,
-  ShieldAlert,
-  FileText,
-  Plus,
-} from "lucide-react";
-import {
-  AreaChart,
-  Area,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-  BarChart as ReBarChart,
-  Bar,
-  Cell,
-  PieChart,
-  Pie,
-  Legend,
-  RadarChart,
-  Radar,
-  PolarGrid,
-  PolarAngleAxis,
-  PolarRadiusAxis,
-} from "recharts";
-import { motion, AnimatePresence } from "framer-motion";
+  AXIS_TICK_PROPS,
+  CHART_COLORS,
+  TOOLTIP_STYLE,
+  fetchWithFallback,
+  formatChartDate,
+  formatCompact,
+  formatHour,
+  formatLatency,
+  formatPercent,
+  formatTokens,
+  makeSyntheticLatencyByDay,
+  makeSyntheticThroughputByHour,
+  makeSyntheticTokenUsageByDay,
+  makeSyntheticTopAgents,
+} from "../_lib/chart-utils";
 
-// ── Types ────────────────────────────────────────────────────────────────
+/* ------------------------- Synthetic badge ----------------------------- */
 
-interface KPIs {
-  total_jobs: number;
-  successful_jobs: number;
-  failed_jobs: number;
-  success_rate: number;
-  avg_duration_ms: number;
-  p95_duration_ms: number;
-  median_duration_ms: number;
-  gold_outcome_rate: number;
-  test_pass_rate: number;
-  avg_quality_score: number;
-  adversarial_issues_found: number;
-  total_cost_usd: number;
-  avg_cost_per_job: number;
-  total_tokens: number;
-  avg_tokens_per_job: number;
-  jobs_by_environment_class: Record<string, number>;
-  jobs_by_framework: Record<string, number>;
-  jobs_by_outcome_tier: Record<string, number>;
-  cost_by_model: Record<string, number>;
-  tokens_by_model: Record<string, number>;
-  data_quality_score: number;
-  pii_incidents: number;
-  quarantine_rate: number;
-}
-
-interface TrendPoint {
-  timestamp: string;
-  value: number;
-  count?: number;
-}
-
-interface TrendAnalysis {
-  metric_name: string;
-  period_days: number;
-  current_value: number;
-  previous_value: number;
-  change_abs: number;
-  change_pct: number;
-  direction: string;
-  moving_average_7d: number;
-  moving_average_30d: number;
-  forecast_next_7d: number | null;
-  anomaly_dates: string[];
-  data_points: TrendPoint[];
-}
-
-interface Cohort {
-  cohort_label: string;
-  total_members: number;
-  active_members: number;
-  activation_rate: number;
-  retention_day_7: number;
-  retention_day_30: number;
-  avg_jobs_per_member: number;
-  avg_quality_score: number;
-  total_cost_usd: number;
-}
-
-interface BenchmarkComparison {
-  metric_name: string;
-  org_value: number;
-  global_avg: number;
-  global_p50: number;
-  global_p90: number;
-  percentile: number;
-  gap_pct: number;
-}
-
-interface DatasetItem {
-  dataset_id: string;
-  name: string;
-  dataset_type: string;
-  version: string;
-  entry_count: number;
-  tags: string[];
-  created_at: string;
-  updated_at: string;
-}
-
-interface AggregateMetrics {
-  period_days: number;
-  jobs: {
-    total: number;
-    successful: number;
-    success_rate: number;
-    avg_quality: number;
-    avg_duration_ms: number;
-    p95_duration_ms: number;
-  };
-  costs: {
-    total_cost_usd: number;
-    total_tokens: number;
-  };
-  members: {
-    total: number;
-    active: number;
-    activity_rate: number;
-  };
-  references: { total: number };
-  daily_jobs: Array<{ date: string; count: number }>;
-}
-
-// ── Tab definitions ──────────────────────────────────────────────────────
-
-type TabKey = "overview" | "trends" | "cohorts" | "benchmarks" | "datasets" | "synthetic";
-
-const TABS: { key: TabKey; label: string; icon: typeof BarChart3 }[] = [
-  { key: "overview", label: "Overview", icon: BarChart3 },
-  { key: "trends", label: "Trends", icon: TrendingUp },
-  { key: "cohorts", label: "Cohorts", icon: Users },
-  { key: "benchmarks", label: "Benchmarks", icon: Target },
-  { key: "datasets", label: "Datasets", icon: Database },
-  { key: "synthetic", label: "Synthetic", icon: Sparkles },
-];
-
-// ── Component ────────────────────────────────────────────────────────────
-
-export default function AnalyticsPage() {
-  const { currentOrg } = useOrg();
-  const orgId = currentOrg?.id ?? "";
-
-  const [activeTab, setActiveTab] = useState<TabKey>("overview");
-  const [periodDays, setPeriodDays] = useState(30);
-  const [kpis, setKpis] = useState<KPIs | null>(null);
-  const [trends, setTrends] = useState<{
-    jobs: TrendAnalysis | null;
-    quality: TrendAnalysis | null;
-    costs: TrendAnalysis | null;
-  }>({ jobs: null, quality: null, costs: null });
-  const [cohorts, setCohorts] = useState<Cohort[]>([]);
-  const [benchmarks, setBenchmarks] = useState<BenchmarkComparison[]>([]);
-  const [aggregate, setAggregate] = useState<AggregateMetrics | null>(null);
-  const [datasets, setDatasets] = useState<DatasetItem[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
-
-  const fetchAll = useCallback(async () => {
-    if (!orgId) return;
-    setLoading(true);
-    setError("");
-    try {
-      const [kpiData, aggData, jobTrend, qualTrend, costTrend, cohortData, benchData, dsData] =
-        await Promise.all([
-          api.getLatestKPIs(orgId, periodDays).catch(() => null),
-          api.getAggregateMetrics(orgId, periodDays).catch(() => null),
-          api.getJobTrends(orgId, periodDays).catch(() => null),
-          api.getQualityTrends(orgId, periodDays).catch(() => null),
-          api.getCostTrends(orgId, periodDays).catch(() => null),
-          api.getCohortAnalysis(orgId, periodDays).catch(() => null),
-          api.getBenchmarkComparison(orgId, periodDays).catch(() => null),
-          api.listTrainingDatasets(orgId).catch(() => null),
-        ]);
-
-      setKpis(kpiData);
-      setAggregate(aggData);
-      setTrends({ jobs: jobTrend, quality: qualTrend, costs: costTrend });
-      setCohorts(cohortData?.cohorts || []);
-      setBenchmarks(benchData?.comparisons || []);
-      setDatasets(dsData?.datasets || []);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to load analytics");
-    } finally {
-      setLoading(false);
-    }
-  }, [orgId, periodDays]);
-
-  useEffect(() => {
-    fetchAll();
-  }, [fetchAll]);
-
-  if (!orgId) {
-    return (
-      <div className="flex items-center justify-center min-h-[60vh]">
-        <div className="text-center">
-          <BarChart3 className="w-12 h-12 mx-auto text-[var(--text-muted)] mb-3" />
-          <p className="text-[var(--text-secondary)]">Select an organization to view analytics</p>
-        </div>
-      </div>
-    );
-  }
-
+function SyntheticBadge() {
   return (
-    <div className="max-w-7xl mx-auto px-4 lg:px-6 py-6 space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-[var(--text-primary)]">Analytics</h1>
-          <p className="text-sm text-[var(--text-muted)] mt-1">
-            Gold-layer KPIs, trends, cohorts, and data intelligence
-          </p>
+    <span
+      title="Backend /analytics/* sub-routes not yet implemented"
+      className="inline-flex items-center gap-1 rounded-full border border-[var(--border-subtle)] bg-[var(--bg-tertiary)] px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-[var(--text-muted)]"
+    >
+      <Sparkles className="h-3 w-3" /> Synthetic
+    </span>
+  );
+}
+
+/* ------------------------- KPI strip ---------------------------------- */
+
+interface KpiProps {
+  label: string;
+  value: string;
+  sublabel?: string;
+  icon: typeof Coins;
+  iconColor: string;
+  trend?: string;
+  trendDir?: "up" | "down" | "neutral";
+}
+
+function Kpi({ label, value, sublabel, icon: Icon, iconColor, trend, trendDir }: KpiProps) {
+  return (
+    <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-sm transition-all duration-200 hover:shadow-md">
+      <div className="mb-2 flex items-start justify-between">
+        <div className={cn("rounded-lg p-2", iconColor)}>
+          <Icon className="h-4 w-4" />
         </div>
-        <div className="flex items-center gap-2">
-          <PeriodSelector value={periodDays} onChange={setPeriodDays} />
-          <button
-            onClick={fetchAll}
-            disabled={loading}
-            className="p-2 text-[var(--text-secondary)] hover:bg-[var(--bg-tertiary)] rounded-lg transition-colors"
-            title="Refresh"
+        {trend && (
+          <span
+            className={cn(
+              "flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[10px] font-medium",
+              trendDir === "up" && "text-[var(--success)] bg-[var(--success-bg)]",
+              trendDir === "down" && "text-[var(--error)] bg-[var(--error-bg)]",
+              trendDir === "neutral" && "text-[var(--text-muted)] bg-[var(--bg-tertiary)]"
+            )}
           >
-            <Loader2 className={cn("w-4 h-4", loading && "animate-spin")} />
-          </button>
-        </div>
-      </div>
-
-      {error && (
-        <div className="bg-[var(--error-bg)] text-[var(--error)] text-sm px-4 py-3 rounded-xl flex items-center gap-2.5 border border-[var(--error)]/20">
-          <AlertCircle className="w-4 h-4 flex-shrink-0" />
-          {error}
-        </div>
-      )}
-
-      {/* Tab navigation */}
-      <div className="border-b border-[var(--border-default)]">
-        <div className="flex gap-1 overflow-x-auto scrollbar-hide">
-          {TABS.map((tab) => {
-            const Icon = tab.icon;
-            return (
-              <button
-                key={tab.key}
-                onClick={() => setActiveTab(tab.key)}
-                className={cn(
-                  "flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors whitespace-nowrap",
-                  activeTab === tab.key
-                    ? "border-[var(--accent)] text-[var(--accent)]"
-                    : "border-transparent text-[var(--text-muted)] hover:text-[var(--text-primary)]"
-                )}
-              >
-                <Icon className="w-4 h-4" />
-                {tab.label}
-              </button>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* Tab content */}
-      <AnimatePresence mode="wait">
-        <motion.div
-          key={activeTab}
-          initial={{ opacity: 0, y: 4 }}
-          animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0, y: -4 }}
-          transition={{ duration: 0.2 }}
-        >
-          {activeTab === "overview" && <OverviewTab kpis={kpis} aggregate={aggregate} />}
-          {activeTab === "trends" && <TrendsTab trends={trends} />}
-          {activeTab === "cohorts" && <CohortsTab cohorts={cohorts} />}
-          {activeTab === "benchmarks" && <BenchmarksTab benchmarks={benchmarks} />}
-          {activeTab === "datasets" && <DatasetsTab datasets={datasets} orgId={orgId} onRefresh={fetchAll} />}
-          {activeTab === "synthetic" && <SyntheticTab datasets={datasets} orgId={orgId} onRefresh={fetchAll} />}
-        </motion.div>
-      </AnimatePresence>
-    </div>
-  );
-}
-
-// ── Period Selector ──────────────────────────────────────────────────────
-
-function PeriodSelector({ value, onChange }: { value: number; onChange: (v: number) => void }) {
-  const options = [
-    { label: "7D", value: 7 },
-    { label: "30D", value: 30 },
-    { label: "90D", value: 90 },
-  ];
-  return (
-    <div className="flex bg-[var(--bg-tertiary)] rounded-lg p-1">
-      {options.map((opt) => (
-        <button
-          key={opt.value}
-          onClick={() => onChange(opt.value)}
-          className={cn(
-            "px-3 py-1 text-xs font-medium rounded-md transition-colors",
-            value === opt.value
-              ? "bg-[var(--accent)] text-[var(--bg-base)]"
-              : "text-[var(--text-muted)] hover:text-[var(--text-primary)]"
-          )}
-        >
-          {opt.label}
-        </button>
-      ))}
-    </div>
-  );
-}
-
-// ── Overview Tab ─────────────────────────────────────────────────────────
-
-function OverviewTab({ kpis, aggregate }: { kpis: KPIs | null; aggregate: AggregateMetrics | null }) {
-  if (!kpis && !aggregate) {
-    return <EmptyState message="No overview data yet — generate an environment to see totals here." />;
-  }
-
-  const k = kpis;
-  const a = aggregate;
-
-  const cards = [
-    {
-      label: "Total Jobs",
-      value: k?.total_jobs ?? a?.jobs.total ?? 0,
-      icon: Layers,
-      color: "text-[var(--accent)]",
-      sub: `${k?.successful_jobs ?? 0} successful · ${k?.failed_jobs ?? 0} failed`,
-    },
-    {
-      label: "Success Rate",
-      value: `${k?.success_rate ?? a?.jobs.success_rate ?? 0}%`,
-      icon: CheckCircle2,
-      color: "text-[var(--success)]",
-      sub: `Gold: ${k?.gold_outcome_rate ?? 0}%`,
-    },
-    {
-      label: "Avg Quality",
-      value: (k?.avg_quality_score ?? a?.jobs.avg_quality ?? 0).toFixed(2),
-      icon: Target,
-      color: "text-[var(--accent)]",
-      sub: `Test pass: ${k?.test_pass_rate ?? 0}%`,
-    },
-    {
-      label: "Total Cost",
-      value: `$${(k?.total_cost_usd ?? a?.costs.total_cost_usd ?? 0).toFixed(2)}`,
-      icon: DollarSign,
-      color: "text-[var(--error)]",
-      sub: `${(k?.total_tokens ?? a?.costs.total_tokens ?? 0).toLocaleString()} tokens`,
-    },
-    {
-      label: "Data Quality",
-      value: `${((k?.data_quality_score ?? 1) * 100).toFixed(0)}%`,
-      icon: ShieldAlert,
-      color: "text-[var(--warning)]",
-      sub: `${k?.pii_incidents ?? 0} PII incidents`,
-    },
-    {
-      label: "Active Members",
-      value: a?.members.active ?? 0,
-      icon: Users,
-      color: "text-[var(--info)]",
-      sub: `${a?.members.total ?? 0} total`,
-    },
-  ];
-
-  // Pie chart data
-  const outcomeData = k
-    ? Object.entries(k.jobs_by_outcome_tier).map(([name, value]) => ({ name, value }))
-    : [];
-
-  const frameworkData = k
-    ? Object.entries(k.jobs_by_framework).map(([name, value]) => ({ name, value }))
-    : [];
-
-  const COLORS = ["var(--accent)", "var(--terminal)", "var(--error)", "var(--warning)", "var(--accent)", "var(--cat-purple-fg)", "var(--cat-purple-fg)"];
-
-  return (
-    <div className="space-y-6">
-      {/* KPI Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
-        {cards.map((card, i) => {
-          const Icon = card.icon;
-          return (
-            <motion.div
-              key={card.label}
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: i * 0.05 }}
-              className="bg-[var(--bg-primary)] border border-[var(--border-default)] rounded-xl p-4 hover:shadow-md transition-shadow"
-            >
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-xs font-medium text-[var(--text-muted)]">{card.label}</span>
-                <Icon className={cn("w-4 h-4", card.color)} />
-              </div>
-              <div className="text-xl font-bold text-[var(--text-primary)]">{card.value}</div>
-              <div className="text-xs text-[var(--text-muted)] mt-1">{card.sub}</div>
-            </motion.div>
-          );
-        })}
-      </div>
-
-      {/* Charts row */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Daily jobs sparkline */}
-        <div className="bg-[var(--bg-primary)] border border-[var(--border-default)] rounded-xl p-5">
-          <h3 className="text-sm font-semibold text-[var(--text-primary)] mb-4">Daily Jobs</h3>
-          {a && a.daily_jobs.length > 0 ? (
-            <ResponsiveContainer width="100%" height={220}>
-              <AreaChart data={a.daily_jobs}>
-                <defs>
-                  <linearGradient id="colorJobs" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="var(--accent)" stopOpacity={0.3} />
-                    <stop offset="95%" stopColor="var(--accent)" stopOpacity={0} />
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="var(--border-subtle)" />
-                <XAxis dataKey="date" tick={{ fontSize: 11, fill: "var(--text-muted)" }} tickFormatter={(v: string) => v.slice(5)} />
-                <YAxis tick={{ fontSize: 11, fill: "var(--text-muted)" }} />
-                <Tooltip
-                  contentStyle={{ background: "var(--bg-primary)", border: "1px solid var(--border-default)", borderRadius: 8 }}
-                  labelStyle={{ color: "var(--text-secondary)" }}
-                />
-                <Area type="monotone" dataKey="count" stroke="var(--accent)" fillOpacity={1} fill="url(#colorJobs)" strokeWidth={2} />
-              </AreaChart>
-            </ResponsiveContainer>
-          ) : (
-            <EmptyState message="No daily job data yet — wait for jobs to complete and they'll roll up here by day." />
-          )}
-        </div>
-
-        {/* Outcome distribution */}
-        <div className="bg-[var(--bg-primary)] border border-[var(--border-default)] rounded-xl p-5">
-          <h3 className="text-sm font-semibold text-[var(--text-primary)] mb-4">Outcomes</h3>
-          {outcomeData.length > 0 ? (
-            <ResponsiveContainer width="100%" height={220}>
-              <PieChart>
-                <Pie data={outcomeData} cx="50%" cy="50%" innerRadius={60} outerRadius={90} paddingAngle={3} dataKey="value">
-                  {outcomeData.map((_, i) => (
-                    <Cell key={`cell-${i}`} fill={COLORS[i % COLORS.length]} />
-                  ))}
-                </Pie>
-                <Legend />
-                <Tooltip
-                  contentStyle={{ background: "var(--bg-primary)", border: "1px solid var(--border-default)", borderRadius: 8 }}
-                />
-              </PieChart>
-            </ResponsiveContainer>
-          ) : (
-            <EmptyState message="No outcome tier data yet — completed jobs will populate this distribution." />
-          )}
-        </div>
-      </div>
-
-      {/* Framework breakdown */}
-      <div className="bg-[var(--bg-primary)] border border-[var(--border-default)] rounded-xl p-5">
-        <h3 className="text-sm font-semibold text-[var(--text-primary)] mb-4">Framework Usage</h3>
-        {frameworkData.length > 0 ? (
-          <ResponsiveContainer width="100%" height={200}>
-            <ReBarChart data={frameworkData} layout="vertical">
-              <CartesianGrid strokeDasharray="3 3" stroke="var(--border-subtle)" />
-              <XAxis type="number" tick={{ fontSize: 11, fill: "var(--text-muted)" }} />
-              <YAxis dataKey="name" type="category" tick={{ fontSize: 11, fill: "var(--text-muted)" }} width={100} />
-              <Tooltip
-                contentStyle={{ background: "var(--bg-primary)", border: "1px solid var(--border-default)", borderRadius: 8 }}
-              />
-              <Bar dataKey="value" fill="var(--accent)" radius={[0, 4, 4, 0]} />
-            </ReBarChart>
-          </ResponsiveContainer>
-        ) : (
-          <EmptyState message="No framework data yet — generate environments across multiple frameworks to compare." />
+            {trendDir === "up" ? (
+              <ArrowUpRight className="h-3 w-3" />
+            ) : trendDir === "down" ? (
+              <ArrowDownRight className="h-3 w-3" />
+            ) : null}
+            {trend}
+          </span>
         )}
       </div>
+      <p className="text-2xl font-bold tracking-tight text-[var(--text-primary)]">{value}</p>
+      <p className="text-xs font-medium text-[var(--text-secondary)]">{label}</p>
+      {sublabel && <p className="mt-0.5 text-[10px] text-[var(--text-muted)]">{sublabel}</p>}
     </div>
   );
 }
 
-// ── Trends Tab ───────────────────────────────────────────────────────────
+/* --------------------- Input vs output tokens ------------------------- */
 
-function TrendsTab({ trends }: { trends: { jobs: TrendAnalysis | null; quality: TrendAnalysis | null; costs: TrendAnalysis | null } }) {
-  if (!trends.jobs && !trends.quality && !trends.costs) {
-    return <EmptyState message="No trend data yet — at least 7 days of job activity is needed to compute trends." />;
-  }
-
+function TokenUsageChart({
+  data,
+}: {
+  data: Array<{ date: string; input_tokens: number; output_tokens: number }>;
+}) {
   return (
-    <div className="space-y-6">
-      {trends.jobs && <TrendCard title="Job Volume" trend={trends.jobs} color="var(--accent)" />}
-      {trends.quality && <TrendCard title="Quality Score" trend={trends.quality} color="var(--terminal)" />}
-      {trends.costs && <TrendCard title="Daily Cost" trend={trends.costs} color="var(--error)" unit="$" />}
-    </div>
+    <ChartCard
+      title="Token usage trends"
+      description="Input vs output tokens by day, last 30 days"
+      height={300}
+      isEmpty={data.length === 0}
+    >
+      <MultiLineChart
+        data={data}
+        series={[
+          { key: "input_tokens", label: "Input", color: CHART_COLORS.primary },
+          { key: "output_tokens", label: "Output", color: CHART_COLORS.accent },
+        ]}
+        valueFormatter={(v) => formatTokens(v)}
+        labelFormatter={formatChartDate}
+      />
+    </ChartCard>
   );
 }
 
-function TrendCard({ title, trend, color, unit = "" }: { title: string; trend: TrendAnalysis; color: string; unit?: string }) {
-  const TrendIcon = trend.direction === "up" ? ArrowUpRight : trend.direction === "down" ? ArrowDownRight : Minus;
-  const trendColor =
-    trend.direction === "up"
-      ? title.toLowerCase().includes("cost")
-        ? "text-[var(--error)]"
-        : "text-[var(--success)]"
-      : trend.direction === "down"
-        ? title.toLowerCase().includes("cost")
-          ? "text-[var(--success)]"
-          : "text-[var(--error)]"
-        : "text-[var(--text-muted)]";
+/* Reusable multi-line chart so token usage + others share styling. */
 
+interface SeriesSpec {
+  key: string;
+  label: string;
+  color: string;
+  fillOpacity?: number;
+  dashed?: boolean;
+}
+
+function MultiLineChart({
+  data,
+  series,
+  valueFormatter,
+  labelFormatter,
+}: {
+  data: Array<Record<string, number | string>>;
+  series: SeriesSpec[];
+  valueFormatter: (v: number) => string;
+  labelFormatter: (v: string) => string;
+}) {
   return (
-    <div className="bg-[var(--bg-primary)] border border-[var(--border-default)] rounded-xl p-5">
-      <div className="flex items-center justify-between mb-4">
-        <div>
-          <h3 className="text-sm font-semibold text-[var(--text-primary)]">{title}</h3>
-          <p className="text-xs text-[var(--text-muted)] mt-0.5">
-            {trend.period_days} days · MA7: {unit}{trend.moving_average_7d.toFixed(2)} · MA30: {unit}{trend.moving_average_30d.toFixed(2)}
-          </p>
-        </div>
-        <div className={cn("flex items-center gap-1 text-sm font-medium", trendColor)}>
-          <TrendIcon className="w-4 h-4" />
-          {trend.change_pct > 0 ? "+" : ""}
-          {trend.change_pct.toFixed(1)}%
-        </div>
-      </div>
-
-      <ResponsiveContainer width="100%" height={240}>
-        <AreaChart data={trend.data_points}>
-          <defs>
-            <linearGradient id={`grad-${trend.metric_name}`} x1="0" y1="0" x2="0" y2="1">
-              <stop offset="5%" stopColor={color} stopOpacity={0.3} />
-              <stop offset="95%" stopColor={color} stopOpacity={0} />
-            </linearGradient>
-          </defs>
-          <CartesianGrid strokeDasharray="3 3" stroke="var(--border-subtle)" />
-          <XAxis dataKey="timestamp" tick={{ fontSize: 11, fill: "var(--text-muted)" }} tickFormatter={(v: string) => v.slice(5, 10)} />
-          <YAxis tick={{ fontSize: 11, fill: "var(--text-muted)" }} tickFormatter={(v: number) => `${unit}${v}`} />
-          <Tooltip
-            contentStyle={{ background: "var(--bg-primary)", border: "1px solid var(--border-default)", borderRadius: 8 }}
-            formatter={(value: number) => [`${unit}${value.toFixed(2)}`, title]}
+    <ResponsiveContainer width="100%" height="100%">
+      <LineChart data={data}>
+        <CartesianGrid strokeDasharray="3 3" stroke="var(--border-subtle)" vertical={false} />
+        <XAxis
+          dataKey="date"
+          tickFormatter={labelFormatter}
+          tick={AXIS_TICK_PROPS}
+          tickLine={false}
+          axisLine={{ stroke: "var(--border-subtle)" }}
+          interval="preserveStartEnd"
+        />
+        <YAxis
+          tickFormatter={valueFormatter}
+          tick={AXIS_TICK_PROPS}
+          tickLine={false}
+          axisLine={false}
+        />
+        <Tooltip
+          contentStyle={TOOLTIP_STYLE}
+          labelFormatter={(label) => labelFormatter(String(label))}
+          formatter={(value: number) => [valueFormatter(value), undefined]}
+        />
+        {series.length > 1 && (
+          <Legend
+            iconType="circle"
+            wrapperStyle={{ fontSize: 11, color: "var(--text-muted)", paddingTop: 8 }}
           />
-          <Area type="monotone" dataKey="value" stroke={color} fill={`url(#grad-${trend.metric_name})`} strokeWidth={2} />
-        </AreaChart>
-      </ResponsiveContainer>
-
-      {trend.anomaly_dates.length > 0 && (
-        <div className="mt-3 flex items-center gap-2 text-xs text-[var(--warning)]">
-          <AlertCircle className="w-3.5 h-3.5" />
-          {trend.anomaly_dates.length} anomaly{trend.anomaly_dates.length > 1 ? "ies" : "y"} detected
-        </div>
-      )}
-
-      {trend.forecast_next_7d !== null && (
-        <div className="mt-2 text-xs text-[var(--text-muted)]">
-          Forecast (next 7d): {unit}{trend.forecast_next_7d.toFixed(2)}
-        </div>
-      )}
-    </div>
+        )}
+        {series.map((s) => (
+          <Line
+            key={s.key}
+            type="monotone"
+            dataKey={s.key}
+            name={s.label}
+            stroke={s.color}
+            strokeWidth={2}
+            dot={false}
+            activeDot={{ r: 4, fill: s.color }}
+            strokeDasharray={s.dashed ? "4 4" : undefined}
+          />
+        ))}
+      </LineChart>
+    </ResponsiveContainer>
   );
 }
 
-// ── Cohorts Tab ────────────────────────────────────────────────────────
+/* -------------------- Latency p50/p95/p99 over time ------------------- */
 
-function CohortsTab({ cohorts }: { cohorts: Cohort[] }) {
-  if (cohorts.length === 0) {
-    return <EmptyState message="No cohort data yet — this is computed from teams that have used Eden for at least 14 days." />;
-  }
+function LatencyChart({
+  data,
+}: {
+  data: Array<{ date: string; p50_ms: number; p95_ms: number; p99_ms: number }>;
+}) {
+  return (
+    <ChartCard
+      title="Latency percentiles"
+      description="p50, p95, p99 over time"
+      height={300}
+      isEmpty={data.length === 0}
+    >
+      <LineChart data={data}>
+        <CartesianGrid strokeDasharray="3 3" stroke="var(--border-subtle)" vertical={false} />
+        <XAxis
+          dataKey="date"
+          tickFormatter={formatChartDate}
+          tick={AXIS_TICK_PROPS}
+          tickLine={false}
+          axisLine={{ stroke: "var(--border-subtle)" }}
+          interval="preserveStartEnd"
+        />
+        <YAxis
+          tickFormatter={(v) => formatLatency(v)}
+          tick={AXIS_TICK_PROPS}
+          tickLine={false}
+          axisLine={false}
+        />
+        <Tooltip
+          contentStyle={TOOLTIP_STYLE}
+          labelFormatter={(label) => formatChartDate(String(label))}
+          formatter={(value: number) => [formatLatency(value), undefined]}
+        />
+        <Legend
+          iconType="circle"
+          wrapperStyle={{ fontSize: 11, color: "var(--text-muted)", paddingTop: 8 }}
+        />
+        <Line
+          type="monotone"
+          dataKey="p50_ms"
+          name="p50"
+          stroke="var(--accent)"
+          strokeWidth={2}
+          dot={false}
+        />
+        <Line
+          type="monotone"
+          dataKey="p95_ms"
+          name="p95"
+          stroke="var(--warning)"
+          strokeWidth={2}
+          dot={false}
+        />
+        <Line
+          type="monotone"
+          dataKey="p99_ms"
+          name="p99"
+          stroke="var(--error)"
+          strokeWidth={2}
+          dot={false}
+        />
+      </LineChart>
+    </ChartCard>
+  );
+}
 
-  const data = cohorts.map((c) => ({
-    label: c.cohort_label,
-    activation: c.activation_rate,
-    retention7: c.retention_day_7,
-    retention30: c.retention_day_30,
-    members: c.total_members,
-    jobs: c.avg_jobs_per_member,
-  }));
+/* ------------------- Throughput heatmap (bar variant) ----------------- */
+
+const WEEKDAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+function ThroughputHeatmap({
+  data,
+}: {
+  data: Array<{ hour: number; weekday: number; requests: number }>;
+}) {
+  // Pivot to one row per weekday with 24 hour columns. Build a Map once so
+  // cell lookup is O(1) per slot instead of an O(N) Array.find inside the
+  // 7×24 grid render (previous version did 28k comparisons on a 168-row
+  // dataset).
+  const rows = useMemo(() => {
+    const index = new Map<string, number>();
+    for (const d of data) index.set(`${d.weekday}:${d.hour}`, d.requests);
+    const out: Array<Record<string, number | string>> = [];
+    for (let weekday = 0; weekday < 7; weekday++) {
+      const row: Record<string, number | string> = { weekday: WEEKDAY_LABELS[weekday] };
+      for (let hour = 0; hour < 24; hour++) {
+        row[`h${hour}`] = index.get(`${weekday}:${hour}`) ?? 0;
+      }
+      out.push(row);
+    }
+    return out;
+  }, [data]);
+
+  const max = useMemo(
+    () => Math.max(1, ...data.map((d) => d.requests)),
+    [data]
+  );
 
   return (
-    <div className="space-y-6">
-      {/* Cohort table */}
-      <div className="bg-[var(--bg-primary)] border border-[var(--border-default)] rounded-xl overflow-hidden">
-        <div className="px-5 py-4 border-b border-[var(--border-default)]">
-          <h3 className="text-sm font-semibold text-[var(--text-primary)]">Cohort Analysis</h3>
-          <p className="text-xs text-[var(--text-muted)] mt-0.5">Member activation and retention by join month</p>
-        </div>
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
+    <ChartCard
+      title="Throughput by hour of day"
+      description="Request volume · darker accent = more traffic"
+      height={300}
+      isEmpty={data.length === 0}
+    >
+      <div className="flex h-full flex-col">
+        <div className="flex-1 overflow-x-auto">
+          <table className="w-full min-w-[640px] border-separate border-spacing-[2px] text-[10px]">
             <thead>
-              <tr className="bg-[var(--bg-tertiary)] text-[var(--text-muted)] text-xs">
-                <th className="text-left px-4 py-2.5 font-medium">Cohort</th>
-                <th className="text-right px-4 py-2.5 font-medium">Members</th>
-                <th className="text-right px-4 py-2.5 font-medium">Activation</th>
-                <th className="text-right px-4 py-2.5 font-medium">7D Retention</th>
-                <th className="text-right px-4 py-2.5 font-medium">30D Retention</th>
-                <th className="text-right px-4 py-2.5 font-medium">Avg Jobs</th>
-                <th className="text-right px-4 py-2.5 font-medium">Quality</th>
-                <th className="text-right px-4 py-2.5 font-medium">Cost</th>
+              <tr>
+                <th className="w-10 text-left font-normal text-[var(--text-muted)]">Day</th>
+                {Array.from({ length: 24 }).map((_, h) => (
+                  <th
+                    key={h}
+                    className="text-center font-normal text-[var(--text-muted)]"
+                    title={formatHour(h)}
+                  >
+                    {h % 3 === 0 ? formatHour(h).replace(/(am|pm)/, "") : ""}
+                  </th>
+                ))}
               </tr>
             </thead>
-            <tbody className="divide-y divide-[var(--border-subtle)]">
-              {cohorts.map((c) => (
-                <tr key={c.cohort_label} className="hover:bg-[var(--bg-tertiary)]/50 transition-colors">
-                  <td className="px-4 py-3 font-medium text-[var(--text-primary)]">{c.cohort_label}</td>
-                  <td className="px-4 py-3 text-right text-[var(--text-secondary)]">{c.total_members}</td>
-                  <td className="px-4 py-3 text-right">
-                    <span className={cn("font-medium", c.activation_rate >= 50 ? "text-[var(--success)]" : "text-[var(--warning)]")}>
-                      {c.activation_rate}%
-                    </span>
+            <tbody>
+              {rows.map((row, dayIdx) => (
+                <tr key={dayIdx}>
+                  <td className="pr-2 text-left font-medium text-[var(--text-muted)]">
+                    {WEEKDAY_LABELS[dayIdx]}
                   </td>
-                  <td className="px-4 py-3 text-right text-[var(--text-secondary)]">{c.retention_day_7}%</td>
-                  <td className="px-4 py-3 text-right text-[var(--text-secondary)]">{c.retention_day_30}%</td>
-                  <td className="px-4 py-3 text-right text-[var(--text-secondary)]">{c.avg_jobs_per_member}</td>
-                  <td className="px-4 py-3 text-right text-[var(--text-secondary)]">{c.avg_quality_score.toFixed(2)}</td>
-                  <td className="px-4 py-3 text-right text-[var(--text-secondary)]">${c.total_cost_usd.toFixed(2)}</td>
+                  {Array.from({ length: 24 }).map((_, h) => {
+                    const v = (row[`h${h}`] as number) ?? 0;
+                    // Theme-aligned: cells use the accent color with varying
+                    // alpha. We build a per-intensity color so the lowest
+                    // values are still visible against the dark surface.
+                    const intensity = 0.08 + (v / max) * 0.85;
+                    return (
+                      <td
+                        key={h}
+                        className="h-5 min-w-[18px] rounded-sm transition-all hover:ring-1 hover:ring-[var(--accent)]"
+                        style={{ backgroundColor: `var(--accent)`, opacity: intensity }}
+                        title={`${WEEKDAY_LABELS[dayIdx]} ${formatHour(h)} · ${v} req`}
+                      />
+                    );
+                  })}
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
+        <div className="mt-2 flex items-center justify-end gap-1 text-[10px] text-[var(--text-muted)]">
+          <span>Low</span>
+          <div className="flex h-2 w-32 overflow-hidden rounded">
+            {Array.from({ length: 16 }).map((_, i) => (
+              <div
+                key={i}
+                className="flex-1 bg-[var(--accent)]"
+                style={{ opacity: 0.08 + (i / 15) * 0.85 }}
+              />
+            ))}
+          </div>
+          <span>High</span>
+        </div>
       </div>
-
-      {/* Retention chart */}
-      <div className="bg-[var(--bg-primary)] border border-[var(--border-default)] rounded-xl p-5">
-        <h3 className="text-sm font-semibold text-[var(--text-primary)] mb-4">Retention Curves</h3>
-        <ResponsiveContainer width="100%" height={260}>
-          <ReBarChart data={data}>
-            <CartesianGrid strokeDasharray="3 3" stroke="var(--border-subtle)" />
-            <XAxis dataKey="label" tick={{ fontSize: 11, fill: "var(--text-muted)" }} />
-            <YAxis tick={{ fontSize: 11, fill: "var(--text-muted)" }} domain={[0, 100]} />
-            <Tooltip
-              contentStyle={{ background: "var(--bg-primary)", border: "1px solid var(--border-default)", borderRadius: 8 }}
-              formatter={(value: number, name: string) => [`${value.toFixed(1)}%`, name]}
-            />
-            <Legend />
-            <Bar dataKey="activation" name="Activation" fill="var(--accent)" radius={[4, 4, 0, 0]} />
-            <Bar dataKey="retention7" name="7D Retention" fill="var(--accent)" radius={[4, 4, 0, 0]} />
-            <Bar dataKey="retention30" name="30D Retention" fill="var(--terminal)" radius={[4, 4, 0, 0]} />
-          </ReBarChart>
-        </ResponsiveContainer>
-      </div>
-    </div>
+    </ChartCard>
   );
 }
 
-// ── Benchmarks Tab ───────────────────────────────────────────────────────
+/* ------------------------- Top agents by cost ------------------------- */
 
-function BenchmarksTab({ benchmarks }: { benchmarks: BenchmarkComparison[] }) {
-  if (benchmarks.length === 0) {
-    return <EmptyState message="No benchmark data yet — benchmarks populate as more teams use Eden." />;
+function TopAgentsChart({
+  data,
+}: {
+  data: Array<{
+    agent: string;
+    cost_usd: number;
+    requests: number;
+    avg_latency_ms: number;
+  }>;
+}) {
+  return (
+    <ChartCard
+      title="Top agents by cost"
+      description="All-time cumulative across tracked agents"
+      height={300}
+      isEmpty={data.length === 0}
+    >
+      <BarChart data={data} layout="vertical" margin={{ top: 8, right: 24, bottom: 0, left: 8 }}>
+        <CartesianGrid strokeDasharray="3 3" stroke="var(--border-subtle)" horizontal={false} />
+        <XAxis
+          type="number"
+          tickFormatter={(v) => formatCompact(v)}
+          tick={AXIS_TICK_PROPS}
+          tickLine={false}
+          axisLine={false}
+        />
+        <YAxis
+          type="category"
+          dataKey="agent"
+          tick={AXIS_TICK_PROPS}
+          tickLine={false}
+          axisLine={false}
+          width={90}
+        />
+        <Tooltip
+          contentStyle={TOOLTIP_STYLE}
+          // Recharts passes the full item as 3rd arg; payload may be undefined.
+          formatter={(value, _name, item) => {
+            const payload = (item as { payload?: { requests?: number; avg_latency_ms?: number } })
+              ?.payload;
+            return [
+              <span key="cost">
+                <strong>${Number(value).toFixed(2)}</strong>
+                <span className="ml-2 text-[var(--text-muted)]">
+                  {formatCompact(payload?.requests ?? 0)} req ·{" "}
+                  {formatLatency(payload?.avg_latency_ms ?? 0)}
+                </span>
+              </span>,
+              "Cost",
+            ];
+          }}
+        />
+        <Bar dataKey="cost_usd" radius={[0, 4, 4, 0]}>
+          {data.map((_, i) => (
+            <Cell key={i} fill={CHART_COLORS.series[i % CHART_COLORS.series.length]} />
+          ))}
+        </Bar>
+      </BarChart>
+    </ChartCard>
+  );
+}
+
+/* ----------------------------- Page ---------------------------------- */
+
+const DAY_OPTIONS = [
+  { label: "7d", value: 7 },
+  { label: "30d", value: 30 },
+  { label: "90d", value: 90 },
+] as const;
+
+export default function AnalyticsPage() {
+  const { currentOrg } = useOrg();
+  const [days, setDays] = useState<number>(30);
+  const [loading, setLoading] = useState(true);
+  const [isSynthetic, setIsSynthetic] = useState(false);
+
+  const [tokenByDay, setTokenByDay] = useState<
+    Array<{ date: string; input_tokens: number; output_tokens: number }>
+  >([]);
+  const [latencyByDay, setLatencyByDay] = useState<
+    Array<{ date: string; p50_ms: number; p95_ms: number; p99_ms: number }>
+  >([]);
+  const [throughput, setThroughput] = useState<
+    Array<{ hour: number; weekday: number; requests: number }>
+  >([]);
+  const [topAgents, setTopAgents] = useState<
+    Array<{ agent: string; cost_usd: number; requests: number; avg_latency_ms: number }>
+  >([]);
+
+  useEffect(() => {
+    if (!currentOrg) return;
+    let cancelled = false;
+    const orgId = currentOrg.id;
+    const seedOpts = { orgId, days };
+
+    // Defer the loading-state update so it isn't called synchronously
+    // within the effect body (avoids cascading-render lint warning).
+    queueMicrotask(() => {
+      if (cancelled) return;
+      setLoading(true);
+    });
+    Promise.all([
+      fetchWithFallback({
+        fetcher: () => api.getTokenUsage(orgId, days),
+        fallback: () => ({ by_day: makeSyntheticTokenUsageByDay(seedOpts) }),
+      }),
+      fetchWithFallback({
+        fetcher: () => api.getLatencyPercentiles(orgId, days),
+        fallback: () => ({ by_day: makeSyntheticLatencyByDay(seedOpts) }),
+      }),
+      fetchWithFallback({
+        fetcher: () => api.getThroughputByHour(orgId, days),
+        fallback: () => ({ by_hour: makeSyntheticThroughputByHour(seedOpts) }),
+      }),
+      fetchWithFallback({
+        fetcher: () => api.getTopAgentsByCost(orgId, days),
+        fallback: () => ({ agents: makeSyntheticTopAgents(seedOpts) }),
+      }),
+    ]).then(([tokens, lat, tp, ag]) => {
+      if (cancelled) return;
+      const tokData = tokens.data as { by_day: typeof tokenByDay } | null;
+      const latData = lat.data as { by_day: typeof latencyByDay } | null;
+      const tpData = tp.data as { by_hour: typeof throughput } | null;
+      const agData = ag.data as { agents: typeof topAgents } | null;
+
+      setTokenByDay(tokData?.by_day ?? []);
+      setLatencyByDay(latData?.by_day ?? []);
+      setThroughput(tpData?.by_hour ?? []);
+      setTopAgents(agData?.agents ?? []);
+      setIsSynthetic(
+        tokens.isSynthetic || lat.isSynthetic || tp.isSynthetic || ag.isSynthetic
+      );
+      setLoading(false);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [currentOrg, days]);
+
+  const totals = useMemo(() => {
+    const totalIn = tokenByDay.reduce((s, d) => s + d.input_tokens, 0);
+    const totalOut = tokenByDay.reduce((s, d) => s + d.output_tokens, 0);
+    const req = tokenByDay.reduce((s, d) => s + d.input_tokens + d.output_tokens, 0);
+    const latP95 =
+      latencyByDay.length > 0
+        ? latencyByDay.reduce((s, d) => s + d.p95_ms, 0) / latencyByDay.length
+        : 0;
+    const latP99 =
+      latencyByDay.length > 0
+        ? latencyByDay.reduce((s, d) => s + d.p99_ms, 0) / latencyByDay.length
+        : 0;
+    const tpTotal = throughput.reduce((s, d) => s + d.requests, 0);
+    return {
+      totalIn,
+      totalOut,
+      req,
+      latP95,
+      latP99,
+      tpTotal,
+    };
+  }, [tokenByDay, latencyByDay, throughput]);
+
+  if (!currentOrg) {
+    return (
+      <div className="p-8 text-center text-sm text-[var(--text-muted)]">
+        Select an organization to view analytics.
+      </div>
+    );
   }
 
-  const radarData = benchmarks.map((b) => ({
-    metric: b.metric_name.replace(/_/g, " "),
-    org: Math.min(b.org_value, 100),
-    global: Math.min(b.global_avg, 100),
-    p90: Math.min(b.global_p90, 100),
-  }));
-
   return (
-    <div className="space-y-6">
-      <div className="bg-[var(--bg-primary)] border border-[var(--border-default)] rounded-xl p-5">
-        <h3 className="text-sm font-semibold text-[var(--text-primary)] mb-4">Global Benchmark Comparison</h3>
-        <ResponsiveContainer width="100%" height={300}>
-          <RadarChart data={radarData}>
-            <PolarGrid stroke="var(--border-subtle)" />
-            <PolarAngleAxis dataKey="metric" tick={{ fontSize: 11, fill: "var(--text-muted)" }} />
-            <PolarRadiusAxis tick={{ fontSize: 10, fill: "var(--text-muted)" }} />
-            <Radar name="Your Org" dataKey="org" stroke="var(--accent)" fill="var(--accent)" fillOpacity={0.2} strokeWidth={2} />
-            <Radar name="Global Avg" dataKey="global" stroke="var(--text-muted)" fill="var(--text-muted)" fillOpacity={0.1} strokeWidth={1.5} />
-            <Radar name="Global P90" dataKey="p90" stroke="var(--terminal)" fill="var(--terminal)" fillOpacity={0.1} strokeWidth={1.5} />
-            <Legend />
-            <Tooltip
-              contentStyle={{ background: "var(--bg-primary)", border: "1px solid var(--border-default)", borderRadius: 8 }}
-            />
-          </RadarChart>
-        </ResponsiveContainer>
+    <div className="page-enter mx-auto max-w-7xl space-y-6 p-4 sm:p-6 lg:p-8">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight text-[var(--text-primary)] sm:text-3xl">
+            Analytics
+          </h1>
+          <p className="mt-1 text-sm text-[var(--text-muted)]">
+            Token throughput, latency, traffic patterns, and per-agent cost.
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          {isSynthetic && <SyntheticBadge />}
+          <div className="inline-flex rounded-lg border border-[var(--border)] bg-[var(--surface)] p-0.5 shadow-sm">
+            {DAY_OPTIONS.map((opt) => (
+              <button
+                key={opt.value}
+                onClick={() => setDays(opt.value)}
+                className={cn(
+                  "rounded-md px-3 py-1.5 text-xs font-medium transition-all",
+                  days === opt.value
+                    ? "bg-[var(--accent)] text-white shadow-sm"
+                    : "text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+                )}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+        </div>
       </div>
 
-      {/* Benchmark cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {benchmarks.map((b) => {
-          const isPositive = b.gap_pct > 0;
-          const isGood = b.metric_name.includes("cost") || b.metric_name.includes("duration")
-            ? !isPositive
-            : isPositive;
-          return (
-            <div key={b.metric_name} className="bg-[var(--bg-primary)] border border-[var(--border-default)] rounded-xl p-4">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-sm font-medium text-[var(--text-primary)] capitalize">{b.metric_name.replace(/_/g, " ")}</span>
-                <span className={cn("text-xs font-semibold px-2 py-0.5 rounded-full", isGood ? "bg-[var(--success-bg)] text-[var(--success)]" : "bg-[var(--error-bg)] text-[var(--error)]")}>
-                  {b.percentile.toFixed(0)}th percentile
-                </span>
-              </div>
-              <div className="flex items-end gap-3">
-                <div>
-                  <div className="text-2xl font-bold text-[var(--text-primary)]">{b.org_value.toFixed(2)}</div>
-                  <div className="text-xs text-[var(--text-muted)]">Your org</div>
-                </div>
-                <div className="flex-1 space-y-1.5">
-                  <div className="flex items-center gap-2 text-xs">
-                    <span className="text-[var(--text-muted)] w-16">Global avg</span>
-                    <div className="flex-1 h-1.5 bg-[var(--bg-tertiary)] rounded-full overflow-hidden">
-                      <div className="h-full bg-[var(--text-muted)] rounded-full" style={{ width: `${Math.min((b.global_avg / Math.max(b.org_value, b.global_avg)) * 100, 100)}%` }} />
-                    </div>
-                    <span className="text-[var(--text-secondary)] w-12 text-right">{b.global_avg.toFixed(2)}</span>
-                  </div>
-                  <div className="flex items-center gap-2 text-xs">
-                    <span className="text-[var(--text-muted)] w-16">Global P90</span>
-                    <div className="flex-1 h-1.5 bg-[var(--bg-tertiary)] rounded-full overflow-hidden">
-                      <div className="h-full bg-[var(--success)] rounded-full" style={{ width: `${Math.min((b.global_p90 / Math.max(b.org_value, b.global_p90)) * 100, 100)}%` }} />
-                    </div>
-                    <span className="text-[var(--text-secondary)] w-12 text-right">{b.global_p90.toFixed(2)}</span>
-                  </div>
-                </div>
-              </div>
-              <div className={cn("mt-2 text-xs font-medium", isGood ? "text-[var(--success)]" : "text-[var(--error)]")}>
-                {isGood ? "↑" : "↓"} {Math.abs(b.gap_pct).toFixed(1)}% vs global average
-              </div>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-// ── Datasets Tab ─────────────────────────────────────────────────────────
-
-function DatasetsTab({ datasets, orgId, onRefresh }: { datasets: DatasetItem[]; orgId: string; onRefresh: () => void }) {
-  const [generating, setGenerating] = useState(false);
-  const [genError, setGenError] = useState("");
-  const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState({ name: "", min_quality_score: "0.7", limit: "1000", tags: "" });
-
-  const handleGenerate = async () => {
-    setGenerating(true);
-    setGenError("");
-    try {
-      await api.generateTrainingDataset(orgId, {
-        name: form.name || `Training Dataset ${new Date().toLocaleDateString()}`,
-        min_quality_score: parseFloat(form.min_quality_score),
-        limit: parseInt(form.limit),
-        tags: form.tags.split(",").map((t) => t.trim()).filter(Boolean),
-      });
-      setShowForm(false);
-      setForm({ name: "", min_quality_score: "0.7", limit: "1000", tags: "" });
-      onRefresh();
-    } catch (e) {
-      setGenError(e instanceof Error ? e.message : "Generation failed");
-    } finally {
-      setGenerating(false);
-    }
-  };
-
-  return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h3 className="text-sm font-semibold text-[var(--text-primary)]">Gold Training Datasets</h3>
-        <button
-          onClick={() => setShowForm(!showForm)}
-          className="flex items-center gap-1.5 px-3 py-1.5 bg-[var(--accent)] text-[var(--bg-base)] text-xs font-medium rounded-lg hover:bg-[var(--accent-hover)] transition-colors"
-        >
-          <Plus className="w-3.5 h-3.5" />
-          Generate Dataset
-        </button>
+      {/* KPI strip */}
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <Kpi
+          label="Total tokens"
+          value={formatTokens(totals.totalIn + totals.totalOut)}
+          sublabel={`${formatPercent(
+            totals.totalIn / Math.max(1, totals.totalIn + totals.totalOut),
+            0
+          )} input`}
+          icon={Coins}
+          iconColor="bg-[var(--primary-light)] text-[var(--primary)]"
+        />
+        <Kpi
+          label="p95 latency"
+          value={formatLatency(totals.latP95)}
+          sublabel="Average over period"
+          icon={Clock}
+          iconColor="bg-[var(--warning-bg)] text-[var(--warning)]"
+        />
+        <Kpi
+          label="p99 latency"
+          value={formatLatency(totals.latP99)}
+          sublabel="Tail latency"
+          icon={Zap}
+          iconColor="bg-[var(--error-bg)] text-[var(--error)]"
+        />
+        <Kpi
+          label="Total requests"
+          value={formatCompact(totals.req)}
+          sublabel="Tokens in + out"
+          icon={BarChart3}
+          iconColor="bg-[var(--accent-light)] text-[var(--accent)]"
+        />
       </div>
 
-      {showForm && (
-        <motion.div
-          initial={{ opacity: 0, height: 0 }}
-          animate={{ opacity: 1, height: "auto" }}
-          className="bg-[var(--bg-primary)] border border-[var(--border-default)] rounded-xl p-4 space-y-3"
-        >
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-            <div>
-              <label className="text-xs font-medium text-[var(--text-muted)] mb-1 block">Name</label>
-              <input
-                type="text"
-                value={form.name}
-                onChange={(e) => setForm({ ...form, name: e.target.value })}
-                placeholder="My Training Dataset"
-                className="w-full px-3 py-2 bg-[var(--bg-tertiary)] border border-[var(--border-default)] rounded-lg text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--accent)]/50"
-              />
-            </div>
-            <div>
-              <label className="text-xs font-medium text-[var(--text-muted)] mb-1 block">Min Quality</label>
-              <input
-                type="number"
-                min="0"
-                max="1"
-                step="0.05"
-                value={form.min_quality_score}
-                onChange={(e) => setForm({ ...form, min_quality_score: e.target.value })}
-                className="w-full px-3 py-2 bg-[var(--bg-tertiary)] border border-[var(--border-default)] rounded-lg text-sm text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--accent)]/50"
-              />
-            </div>
-            <div>
-              <label className="text-xs font-medium text-[var(--text-muted)] mb-1 block">Limit</label>
-              <input
-                type="number"
-                min="1"
-                max="50000"
-                value={form.limit}
-                onChange={(e) => setForm({ ...form, limit: e.target.value })}
-                className="w-full px-3 py-2 bg-[var(--bg-tertiary)] border border-[var(--border-default)] rounded-lg text-sm text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--accent)]/50"
-              />
-            </div>
-          </div>
-          <div>
-            <label className="text-xs font-medium text-[var(--text-muted)] mb-1 block">Tags (comma-separated)</label>
-            <input
-              type="text"
-              value={form.tags}
-              onChange={(e) => setForm({ ...form, tags: e.target.value })}
-              placeholder="python, multi-agent, ..."
-              className="w-full px-3 py-2 bg-[var(--bg-tertiary)] border border-[var(--border-default)] rounded-lg text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--accent)]/50"
-            />
-          </div>
-          {genError && <p className="text-xs text-[var(--error)]">{genError}</p>}
-          <div className="flex gap-2">
-            <button
-              onClick={handleGenerate}
-              disabled={generating}
-              className="px-4 py-2 bg-[var(--accent)] text-[var(--bg-base)] text-sm font-medium rounded-lg hover:bg-[var(--accent-hover)] transition-colors disabled:opacity-50"
-            >
-              {generating ? <Loader2 className="w-4 h-4 animate-spin" /> : "Generate"}
-            </button>
-            <button
-              onClick={() => setShowForm(false)}
-              className="px-4 py-2 text-sm text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors"
-            >
-              Cancel
-            </button>
-          </div>
-        </motion.div>
-      )}
+      {/* Row 1: token usage + latency */}
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        {loading ? <ChartSkeleton /> : <TokenUsageChart data={tokenByDay} />}
+        {loading ? <ChartSkeleton /> : <LatencyChart data={latencyByDay} />}
+      </div>
 
-      {datasets.length === 0 ? (
-        <EmptyState message="No training datasets yet. Generate an environment to start collecting signal for model fine-tuning." />
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {datasets.map((ds) => (
-            <div key={ds.dataset_id} className="bg-[var(--bg-primary)] border border-[var(--border-default)] rounded-xl p-4 hover:shadow-md transition-shadow">
-              <div className="flex items-start justify-between mb-2">
-                <div className="flex items-center gap-2">
-                  <Database className="w-4 h-4 text-[var(--accent)]" />
-                  <span className="text-sm font-medium text-[var(--text-primary)] truncate">{ds.name}</span>
-                </div>
-                <span className="text-[10px] font-medium px-1.5 py-0.5 bg-[var(--accent-faint)] text-[var(--accent)] rounded-full">
-                  {ds.dataset_type}
-                </span>
-              </div>
-              <div className="text-xs text-[var(--text-muted)] mb-3">{ds.entry_count.toLocaleString()} entries · v{ds.version}</div>
-              <div className="flex flex-wrap gap-1 mb-3">
-                {ds.tags.map((tag) => (
-                  <span key={tag} className="text-[10px] px-1.5 py-0.5 bg-[var(--bg-tertiary)] text-[var(--text-muted)] rounded">
-                    {tag}
-                  </span>
-                ))}
-              </div>
-              <div className="text-xs text-[var(--text-muted)]">{new Date(ds.created_at).toLocaleDateString()}</div>
-            </div>
-          ))}
+      {/* Row 2: throughput heatmap + top agents */}
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        {loading ? <ChartSkeleton /> : <ThroughputHeatmap data={throughput} />}
+        {loading ? <ChartSkeleton /> : <TopAgentsChart data={topAgents} />}
+      </div>
+
+      {isSynthetic && (
+        <div className="flex items-start gap-2 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-tertiary)] p-3 text-xs text-[var(--text-muted)]">
+          <AlertTriangle className="h-4 w-4 shrink-0 text-[var(--warning)]" />
+          <p>
+            Showing synthetic data because the server does not yet implement{" "}
+            <code className="font-mono text-[var(--text-secondary)]">
+              /orgs/&#123;id&#125;/analytics/* sub-routes
+            </code>
+            . Replace{" "}
+            <code className="font-mono text-[var(--text-secondary)]">
+              fetchWithFallback(&#123; fetcher, fallback &#125;)
+            </code>{" "}
+            with the real API call once the backend ships.
+          </p>
         </div>
       )}
     </div>
   );
 }
 
-// ── Synthetic Tab ──────────────────────────────────────────────────────
-
-function SyntheticTab({ datasets, orgId, onRefresh }: { datasets: DatasetItem[]; orgId: string; onRefresh: () => void }) {
-  const [selectedDataset, setSelectedDataset] = useState("");
-  const [strategies, setStrategies] = useState<string[]>(["paraphrase", "adversarial", "curriculum"]);
-  const [augmenting, setAugmenting] = useState(false);
-  const [augResult, setAugResult] = useState<{ total: number; byStrategy: Record<string, number> } | null>(null);
-  const [augError, setAugError] = useState("");
-
-  const handleAugment = async () => {
-    if (!selectedDataset) return;
-    setAugmenting(true);
-    setAugError("");
-    setAugResult(null);
-    try {
-      const result = await api.augmentSyntheticData(orgId, {
-        dataset_id: selectedDataset,
-        strategies,
-        counts: { paraphrase: 3, adversarial: 2, curriculum: 5 },
-      });
-      const byStrategy: Record<string, number> = {};
-      Object.entries(result.by_strategy).forEach(([k, v]) => {
-        byStrategy[k] = Array.isArray(v) ? v.length : 0;
-      });
-      setAugResult({ total: result.total_variants_generated, byStrategy });
-      onRefresh();
-    } catch (e) {
-      setAugError(e instanceof Error ? e.message : "Augmentation failed");
-    } finally {
-      setAugmenting(false);
-    }
-  };
-
-  const toggleStrategy = (s: string) => {
-    setStrategies((prev) => (prev.includes(s) ? prev.filter((x) => x !== s) : [...prev, s]));
-  };
-
+function ChartSkeleton() {
   return (
-    <div className="space-y-6">
-      <div className="bg-[var(--bg-primary)] border border-[var(--border-default)] rounded-xl p-5">
-        <h3 className="text-sm font-semibold text-[var(--text-primary)] mb-1">Synthetic Data Augmentation</h3>
-        <p className="text-xs text-[var(--text-muted)] mb-4">
-          Generate paraphrased, adversarial, and curriculum variants from an existing dataset.
-        </p>
-
-        <div className="space-y-4">
-          <div>
-            <label className="text-xs font-medium text-[var(--text-muted)] mb-1.5 block">Source Dataset</label>
-            <select
-              value={selectedDataset}
-              onChange={(e) => setSelectedDataset(e.target.value)}
-              className="w-full px-3 py-2 bg-[var(--bg-tertiary)] border border-[var(--border-default)] rounded-lg text-sm text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--accent)]/50"
-            >
-              <option value="">Select a dataset...</option>
-              {datasets.map((ds) => (
-                <option key={ds.dataset_id} value={ds.dataset_id}>
-                  {ds.name} ({ds.entry_count} entries)
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div>
-            <label className="text-xs font-medium text-[var(--text-muted)] mb-1.5 block">Strategies</label>
-            <div className="flex flex-wrap gap-2">
-              {["paraphrase", "composition", "adversarial", "curriculum"].map((s) => (
-                <button
-                  key={s}
-                  onClick={() => toggleStrategy(s)}
-                  className={cn(
-                    "px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors capitalize",
-                    strategies.includes(s)
-                      ? "bg-[var(--accent-faint)] border-[var(--accent)] text-[var(--accent)]"
-                      : "bg-[var(--bg-tertiary)] border-[var(--border-default)] text-[var(--text-muted)] hover:text-[var(--text-primary)]"
-                  )}
-                >
-                  {s}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {augError && <p className="text-xs text-[var(--error)]">{augError}</p>}
-
-          {augResult && (
-            <motion.div
-              initial={{ opacity: 0, y: 4 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="bg-[var(--success-bg)] border border-[var(--success)]/20 rounded-lg p-3"
-            >
-              <div className="flex items-center gap-2 text-sm text-[var(--success)] font-medium">
-                <Sparkles className="w-4 h-4" />
-                Generated {augResult.total} synthetic variants
-              </div>
-              <div className="mt-2 flex flex-wrap gap-2">
-                {Object.entries(augResult.byStrategy).map(([k, v]) => (
-                  <span key={k} className="text-xs px-2 py-1 bg-[var(--bg-primary)] rounded-full text-[var(--text-secondary)]">
-                    {k}: {v}
-                  </span>
-                ))}
-              </div>
-            </motion.div>
-          )}
-
-          <button
-            onClick={handleAugment}
-            disabled={!selectedDataset || strategies.length === 0 || augmenting}
-            className="flex items-center gap-2 px-4 py-2 bg-[var(--accent)] text-[var(--bg-base)] text-sm font-medium rounded-lg hover:bg-[var(--accent-hover)] transition-colors disabled:opacity-50"
-          >
-            {augmenting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
-            Augment Dataset
-          </button>
-        </div>
-      </div>
-
-      {/* Strategy descriptions */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {[
-          {
-            name: "Paraphrase",
-            desc: "Rephrase prompts while preserving intent using template-based and LLM-driven variation.",
-            icon: FileText,
-            color: "text-[var(--accent)]",
-          },
-          {
-            name: "Composition",
-            desc: "Combine multiple scenarios into hybrid tasks that test composition of skills.",
-            icon: Layers,
-            color: "text-[var(--info)]",
-          },
-          {
-            name: "Adversarial",
-            desc: "Inject edge cases, ambiguities, resource constraints, and exploit surfaces.",
-            icon: ShieldAlert,
-            color: "text-[var(--error)]",
-          },
-          {
-            name: "Curriculum",
-            desc: "Progressively remove scaffolding and increase difficulty across 5 stages.",
-            icon: TrendingUp,
-            color: "text-[var(--success)]",
-          },
-        ].map((strategy) => {
-          const Icon = strategy.icon;
-          return (
-            <div key={strategy.name} className="bg-[var(--bg-primary)] border border-[var(--border-default)] rounded-xl p-4">
-              <div className="flex items-center gap-2 mb-2">
-                <Icon className={cn("w-4 h-4", strategy.color)} />
-                <span className="text-sm font-medium text-[var(--text-primary)]">{strategy.name}</span>
-              </div>
-              <p className="text-xs text-[var(--text-muted)] leading-relaxed">{strategy.desc}</p>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-// ── Empty State ────────────────────────────────────────────────────────
-
-function EmptyState({ message, icon: Icon = BarChart3 }: { message: string; icon?: React.ComponentType<{ className?: string }> }) {
-  return (
-    <div className="flex flex-col items-center justify-center py-16 bg-[var(--bg-primary)] border border-[var(--border-default)] rounded-xl">
-      <Icon className="w-10 h-10 text-[var(--text-muted)] mb-3 opacity-50" />
-      <p className="text-sm text-[var(--text-muted)]">{message}</p>
+    <div className="flex h-[300px] items-center justify-center rounded-xl border border-[var(--border)] bg-[var(--surface)]">
+      <Loader2 className="h-5 w-5 animate-spin text-[var(--text-muted)]" />
     </div>
   );
 }
