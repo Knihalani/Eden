@@ -1,0 +1,132 @@
+{
+  "run_id": "ci-abcdef12-1780244462",
+  "commit_sha": "abcdef1234567890",
+  "branch": "feature/test",
+  "stages": [
+    {
+      "stage": "static_analysis",
+      "status": "failed",
+      "duration_ms": 21.91,
+      "details": {
+        "ruff_lint": {
+          "passed": false,
+          "error": "[Errno 2] No such file or directory: 'ruff'"
+        },
+        "ruff_format": {
+          "passed": false,
+          "error": "[Errno 2] No such file or directory: 'ruff'"
+        },
+        "mypy": {
+          "passed": false,
+          "error": "[Errno 2] No such file or directory: 'mypy'"
+        }
+      },
+      "error": null,
+      "blocks_merge": true
+    },
+    {
+      "stage": "security_scan",
+      "status": "failed",
+      "duration_ms": 15.57,
+      "details": {
+        "bandit": {
+          "passed": false,
+          "error": "[Errno 2] No such file or directory: 'bandit'"
+        },
+        "safety": {
+          "passed": false,
+          "error": "[Errno 2] No such file or directory: 'safety'"
+        }
+      },
+      "error": null,
+      "blocks_merge": true
+    },
+    {
+      "stage": "unit_tests",
+      "status": "failed",
+      "duration_ms": 5.11,
+      "details": {},
+      "error": "[Errno 2] No such file or directory: 'pytest'",
+      "blocks_merge": true
+    },
+    {
+      "stage": "integration_tests",
+      "status": "failed",
+      "duration_ms": 5.71,
+      "details": {},
+      "error": "[Errno 2] No such file or directory: 'pytest'",
+      "blocks_merge": true
+    },
+    {
+      "stage": "benchmark_regression",
+      "status": "failed",
+      "duration_ms": 0.8,
+      "details": {
+        "dataset_id": "gd_eden_canonical_v1",
+        "dataset_version": "1.0.0",
+        "baseline_commit": null,
+        "regression_detected": true,
+        "overall_success_rate": 0.84,
+        "category_results": {
+          "adversarial": {
+            "total": 8,
+            "passed": 6,
+            "failed": 2,
+            "success_rate": 0.75,
+            "category_passed": true
+          },
+          "llm_agent_eval": {
+            "total": 10,
+            "passed": 10,
+            "failed": 0,
+            "success_rate": 1.0,
+            "category_passed": true
+          },
+          "multi_agent": {
+            "total": 8,
+            "passed": 7,
+            "failed": 1,
+            "success_rate": 0.875,
+            "category_passed": true
+          },
+          "simulation": {
+            "total": 6,
+            "passed": 3,
+            "failed": 3,
+            "success_rate": 0.5,
+            "category_passed": false
+          },
+          "tool_use": {
+            "total": 8,
+            "passed": 7,
+            "failed": 1,
+            "success_rate": 0.875,
+            "category_passed": true
+          },
+          "agent_sandbox": {
+            "total": 10,
+            "passed": 9,
+            "failed": 1,
+            "success_rate": 0.9,
+            "category_passed": true
+          }
+        }
+      },
+      "error": null,
+      "blocks_merge": true
+    },
+    {
+      "stage": "performance_tests",
+      "status": "warned",
+      "duration_ms": 4.5,
+      "details": {},
+      "error": "[Errno 2] No such file or directory: 'python'",
+      "blocks_merge": false
+    }
+  ],
+  "overall_status": "failed",
+  "summary": "CI Evaluation complete in 34ms\n  Passed: 0 | Failed: 5 | Warned: 1 | Skipped: 0\n  Merge blocked by: static_analysis, security_scan, unit_tests, integration_tests, benchmark_regression\n  Warnings in: performance_tests",
+  "duration_ms": 33.9,
+  "timestamp": "2026-05-31T16:21:02.095370+00:00",
+  "merge_allowed": false
+}

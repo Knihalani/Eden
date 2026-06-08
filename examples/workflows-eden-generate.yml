@@ -1,0 +1,36 @@
+# Example workflow showing how to use the eden-generate action.
+# Copy into .github/workflows/eden-generate.yml and adjust the
+# description and trigger to match your project.
+name: Eden generate
+
+on:
+  pull_request:
+    paths:
+      - "docs/**"
+      - "specs/**"
+  workflow_dispatch:
+    inputs:
+      description:
+        description: Plain-language description of the environment to generate.
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Generate environment
+        uses: ./.github/actions/eden-generate
+        with:
+          description: ${{ github.event.pull_request.title || github.event.inputs.description }}
+          eden-api-key: ${{ secrets.EDEN_API_KEY }}
+          eden-org: ${{ secrets.EDEN_ORG_ID }}
+          eden-base-url: ${{ secrets.EDEN_BASE_URL }}
+          fail-on-quality-regression: "false"

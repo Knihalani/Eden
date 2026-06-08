@@ -1,0 +1,68 @@
+name: e2e-cron (daily)
+
+on:
+  schedule:
+    # Daily 6am UTC. Same suite as the PR e2e job but with a
+    # shorter timeout and the `-m "not slow"` filter so we catch
+    # regressions overnight without blocking a worker.
+    - cron: "0 6 * * *"
+  workflow_dispatch: {}
+
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: eden_test
+          POSTGRES_PASSWORD: eden_test
+          POSTGRES_DB: eden_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      POSTGRES_HOST: localhost
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: eden_test
+      POSTGRES_USER: eden_test
+      POSTGRES_PASSWORD: eden_test
+      JWT_SECRET: test-jwt-secret-do-not-use-in-production-ever
+      ENCRYPTION_KEY: $(python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())")
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install backend
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .
+
+      - name: Apply migrations
+        run: |
+          PGPASSWORD=eden_test psql -h localhost -U eden_test -d eden_test -f migrations/001_kb_schema.sql
+          # Apply subsequent migrations idempotently
+          for m in migrations/00*.sql; do
+            PGPASSWORD=eden_test psql -h localhost -U eden_test -d eden_test -f "$m" || true
+          done
+
+      - name: Install Playwright browsers (cached)
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ hashFiles('clients/portal/package-lock.json') }}
+
+      - name: Run e2e suite
+        run: |
+          python -m pytest tests/e2e/ -m e2e -x --timeout=300
+        env:
+          BASE_URL: http://localhost:3000
+          API_BASE_URL: http://localhost:8000

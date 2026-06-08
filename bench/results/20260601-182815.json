@@ -1,0 +1,160 @@
+{
+  "started_at": "2026-06-01T18:28:15Z",
+  "suites": {
+    "api_latency": [
+      {
+        "name": "api:GET /health",
+        "n": 200,
+        "p50_ms": 6.326,
+        "p95_ms": 6.47,
+        "p99_ms": 6.622,
+        "mean_ms": 6.319,
+        "max_ms": 6.638,
+        "extras": {
+          "concurrency": 10
+        }
+      },
+      {
+        "name": "api:GET /v1/jobs",
+        "n": 200,
+        "p50_ms": 6.327,
+        "p95_ms": 6.408,
+        "p99_ms": 6.421,
+        "mean_ms": 6.287,
+        "max_ms": 6.422,
+        "extras": {
+          "concurrency": 10
+        }
+      },
+      {
+        "name": "api:GET /v1/environments",
+        "n": 200,
+        "p50_ms": 6.332,
+        "p95_ms": 6.4,
+        "p99_ms": 6.404,
+        "mean_ms": 6.208,
+        "max_ms": 6.405,
+        "extras": {
+          "concurrency": 10
+        }
+      },
+      {
+        "name": "api:GET /v1/benchmarks",
+        "n": 200,
+        "p50_ms": 6.33,
+        "p95_ms": 6.394,
+        "p99_ms": 6.41,
+        "mean_ms": 6.228,
+        "max_ms": 6.411,
+        "extras": {
+          "concurrency": 10
+        }
+      }
+    ],
+    "sandbox_boot": {
+      "name": "sandbox_boot:cold",
+      "n": 20,
+      "p50_ms": 150.314,
+      "p95_ms": 150.329,
+      "p99_ms": 150.334,
+      "mean_ms": 150.314,
+      "max_ms": 150.335,
+      "extras": {
+        "concurrency": 1
+      }
+    },
+    "llm_provider": [
+      {
+        "name": "llm:openai",
+        "n": 30,
+        "p50_ms": 257.683,
+        "p95_ms": 293.848,
+        "p99_ms": 299.902,
+        "mean_ms": 250.532,
+        "max_ms": 301.919,
+        "extras": {
+          "concurrency": 4
+        },
+        "errors": 0,
+        "total": 30,
+        "error_rate": 0.0
+      },
+      {
+        "name": "llm:anthropic",
+        "n": 30,
+        "p50_ms": 334.723,
+        "p95_ms": 373.865,
+        "p99_ms": 380.245,
+        "mean_ms": 319.153,
+        "max_ms": 381.786,
+        "extras": {
+          "concurrency": 4
+        },
+        "errors": 0,
+        "total": 30,
+        "error_rate": 0.0
+      },
+      {
+        "name": "llm:openrouter",
+        "n": 30,
+        "p50_ms": 397.561,
+        "p95_ms": 474.959,
+        "p99_ms": 477.905,
+        "mean_ms": 399.731,
+        "max_ms": 478.657,
+        "extras": {
+          "concurrency": 4
+        },
+        "errors": 0,
+        "total": 30,
+        "error_rate": 0.0
+      }
+    ],
+    "kb_retrieval": [
+      {
+        "name": "kb_retrieval:L1",
+        "n": 97,
+        "p50_ms": 1.274,
+        "p95_ms": 1.306,
+        "p99_ms": 1.324,
+        "mean_ms": 1.233,
+        "max_ms": 1.361,
+        "extras": {
+          "tier": "L1",
+          "concurrency": 8
+        },
+        "hit_rate": 0.485
+      },
+      {
+        "name": "kb_retrieval:L2",
+        "n": 75,
+        "p50_ms": 30.889,
+        "p95_ms": 32.063,
+        "p99_ms": 32.078,
+        "mean_ms": 31.053,
+        "max_ms": 32.081,
+        "extras": {
+          "tier": "L2",
+          "concurrency": 8
+        },
+        "hit_rate": 0.375
+      },
+      {
+        "name": "kb_retrieval:DB",
+        "n": 28,
+        "p50_ms": 80.778,
+        "p95_ms": 82.062,
+        "p99_ms": 82.082,
+        "mean_ms": 80.945,
+        "max_ms": 82.088,
+        "extras": {
+          "tier": "DB",
+          "concurrency": 8
+        },
+        "hit_rate": 0.14
+      }
+    ]
+  },
+  "duration_s": 8.89,
+  "finished_at": "2026-06-01T18:28:24Z"
+}

@@ -1,0 +1,43 @@
+# CODEOWNERS — required reviewers for each path
+# GitHub enforces this for any user with write access; auto-assigns
+# the listed owners on every PR touching that path.
+
+# Default: platform team owns everything
+*                                       @eden/platform
+
+# AI/agents — AI research team
+/src/eden/agents/                      @eden/ai-research
+/src/eden/llm/                         @eden/ai-research
+/src/eden/llmops/                      @eden/ai-research
+/src/eden/kb/                          @eden/ai-research
+/src/eden/insights/                    @eden/ai-research
+/src/eden/observability/               @eden/ai-research
+
+# Data platform — data engineering
+/src/eden/data_platform/               @eden/data-eng
+/migrations/                           @eden/data-eng
+
+# API + billing — platform team
+/src/eden/api/                         @eden/platform
+/src/eden/services/                    @eden/platform
+
+# Infra/security — security
+/src/eden/sandbox/                     @eden/security
+/src/eden/multi_agent/                 @eden/ai-research
+
+# Frontend — frontend
+/clients/portal/                       @eden/frontend
+
+# SDKs — DevRel
+/src/eden/sdk/                         @eden/devrel
+/sdk/ts/                               @eden/devrel
+
+# CI/security tooling
+/.github/workflows/                    @eden/devops
+/scripts/                              @eden/devops
+/.semgrep/                             @eden/security
+
+# Docs — DevRel
+/docs/                                 @eden/devrel
+/examples/                             @eden/devrel
+/README.md                             @eden/devrel
