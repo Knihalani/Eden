@@ -96,7 +96,7 @@ TERMINAL_STATUSES = {"completed", "failed", "cancelled", "human_review"}
 async def submit_job(
     request: JobRequest,
     background_tasks: BackgroundTasks,
-    user: dict = get_current_user,
+    user: dict = Depends(get_current_user),
 ):
     """Submit a new environment generation job."""
     import uuid
@@ -192,7 +192,7 @@ async def list_jobs(
     created_after: Optional[str] = Query(None, description="ISO datetime — only jobs created on or after this time"),
     limit: int = Query(20, ge=1, le=100),
     offset: int = Query(0, ge=0),
-    user: dict = get_current_user,
+    user: dict = Depends(get_current_user),
 ):
     """List jobs for the authenticated user."""
     client = await get_postgres_client()
@@ -243,7 +243,7 @@ async def list_jobs(
 
 
 @router.get("/{job_id}", response_model=JobStatusResponse)
-async def get_job_status(job_id: str, user: dict = get_current_user):
+async def get_job_status(job_id: str, user: dict = Depends(get_current_user)):
     """Get job status."""
     client = await get_postgres_client()
     user_id = user["user_id"]
@@ -265,7 +265,7 @@ async def get_job_status(job_id: str, user: dict = get_current_user):
 
 
 @router.get("/{job_id}/result", response_model=JobResultResponse)
-async def get_job_result(job_id: str, user: dict = get_current_user):
+async def get_job_result(job_id: str, user: dict = Depends(get_current_user)):
     """Get job result."""
     client = await get_postgres_client()
     user_id = user["user_id"]
@@ -297,7 +297,7 @@ async def get_job_result(job_id: str, user: dict = get_current_user):
 
 
 @router.get("/{job_id}/trace")
-async def get_job_trace(job_id: str, user: dict = get_current_user):
+async def get_job_trace(job_id: str, user: dict = Depends(get_current_user)):
     """Get full job trace from checkpoint history."""
     client = await get_postgres_client()
     user_id = user["user_id"]
@@ -336,7 +336,7 @@ class JobVersionResponse(BaseModel):
 
 
 @router.get("/{job_id}/versions", response_model=list[JobVersionResponse])
-async def get_job_versions(job_id: str, user: dict = get_current_user):
+async def get_job_versions(job_id: str, user: dict = Depends(get_current_user)):
     """Get version history for a job from code_history and code: checkpoints.
 
     Returns code snapshots with metadata from job record and checkpoint blobs.
@@ -380,7 +380,7 @@ async def get_job_versions(job_id: str, user: dict = get_current_user):
 
 
 @router.post("/{job_id}/cancel")
-async def cancel_job(job_id: str, user: dict = get_current_user):
+async def cancel_job(job_id: str, user: dict = Depends(get_current_user)):
     """Cancel an in-progress job."""
     client = await get_postgres_client()
     user_id = user["user_id"]
@@ -408,7 +408,7 @@ async def cancel_job(job_id: str, user: dict = get_current_user):
 
 
 @router.get("/{job_id}/stream")
-async def stream_job_status(job_id: str, user: dict = get_current_user):
+async def stream_job_status(job_id: str, user: dict = Depends(get_current_user)):
     """Server-Sent Events stream of job status updates.
 
     Streams job status changes until the job reaches a terminal state

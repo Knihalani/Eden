@@ -13,6 +13,7 @@ class Settings(BaseSettings):
         env_file=".env",
         env_file_encoding="utf-8",
         case_sensitive=False,
+        extra="ignore",  # don't blow up on unrelated env vars from other tools
     )
 
     # Application

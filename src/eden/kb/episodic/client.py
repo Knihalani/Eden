@@ -3,6 +3,8 @@
 Handles job records, pipeline history, and outcome tracking.
 """
 
+from __future__ import annotations
+
 import json
 import logging
 from datetime import datetime
