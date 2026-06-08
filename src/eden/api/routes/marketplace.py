@@ -25,7 +25,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
 
-from eden.api.deps import get_current_user
+from eden.api.deps import get_current_user, require_feature_flag
 from eden.marketplace import (
     EnvCardSummary,
     ForkRequest,
@@ -51,7 +51,11 @@ from eden.marketplace import (
 from eden.marketplace.models import EnvCard
 
 logger = logging.getLogger(__name__)
-router = APIRouter(prefix="/marketplace", tags=["marketplace"])
+router = APIRouter(
+    prefix="/marketplace",
+    tags=["marketplace"],
+    dependencies=[Depends(require_feature_flag("enable_eval_pipeline"))],
+)
 
 
 class _PatchRequest(BaseModel):

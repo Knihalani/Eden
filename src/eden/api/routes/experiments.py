@@ -7,6 +7,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
+from eden.api.deps import require_feature_flag
 from eden.experiments import (
     Variant,
     analyse,
@@ -16,7 +17,11 @@ from eden.experiments import (
 )
 
 logger = logging.getLogger(__name__)
-router = APIRouter(prefix="/experiments", tags=["experiments"])
+router = APIRouter(
+    prefix="/experiments",
+    tags=["experiments"],
+    dependencies=[Depends(require_feature_flag("enable_eval_pipeline"))],
+)
 
 
 class AssignRequest(BaseModel):
