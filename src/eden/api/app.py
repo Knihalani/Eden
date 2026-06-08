@@ -127,9 +127,32 @@ async def lifespan(app: FastAPI):
         eden_graph = None
         set_eden_graph(None)
 
+    # Phase 7.1b follow-up — start the Insights detector loop.
+    # Best-effort: a failure to start the loop must never block
+    # app startup.  The loop reads the ``judge_scores`` table on a
+    # 60s cadence (configurable via ``insights_loop_interval_seconds``)
+    # and writes ``Insight`` objects to Postgres + the KB.
+    insights_loop = None
+    if getattr(settings, "insights_loop_enabled", True):
+        try:
+            from eden.insights.detector_loop import start_insights_detector_loop
+
+            await start_insights_detector_loop()
+            insights_loop = True
+        except Exception as e:
+            logger.warning(f"Insights detector loop startup skipped: {e}")
+
     yield
 
     # Cleanup
+    if insights_loop:
+        try:
+            from eden.insights.detector_loop import stop_insights_detector_loop
+
+            await stop_insights_detector_loop()
+        except Exception as e:
+            logger.warning(f"Insights detector loop stop failed: {e}")
+
     from eden.storage.postgres import close_postgres_client
     from eden.sandbox.runner import close_sandbox_runner
 
