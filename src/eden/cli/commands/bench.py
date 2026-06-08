@@ -8,6 +8,7 @@ from typing import Any
 
 import click
 
+from eden.cli._legacy_gate import require_eval_pipeline
 from eden.cli.main import cli, echo_json, echo_table, get_client
 
 
@@ -23,6 +24,7 @@ def benchmark() -> None:
 @click.pass_context
 def bench_create(ctx: click.Context, name: str, agent: tuple[str, ...], criteria: str) -> None:
     """Create a new benchmark definition."""
+    require_eval_pipeline("benchmark create")
     async def _run() -> None:
         client = get_client(ctx)
         async with client:
@@ -49,6 +51,7 @@ def bench_create(ctx: click.Context, name: str, agent: tuple[str, ...], criteria
 @click.pass_context
 def bench_run(ctx: click.Context, benchmark_id: str, target_code: str, output: str) -> None:
     """Run a benchmark against target code."""
+    require_eval_pipeline("benchmark run")
     async def _run() -> None:
         client = get_client(ctx)
         code = Path(target_code).read_text()
@@ -77,6 +80,7 @@ def bench_run(ctx: click.Context, benchmark_id: str, target_code: str, output: s
 @click.pass_context
 def bench_results(ctx: click.Context, benchmark_id: str) -> None:
     """Get benchmark results."""
+    require_eval_pipeline("benchmark results")
     async def _run() -> None:
         client = get_client(ctx)
         async with client:
@@ -100,6 +104,7 @@ def bench_results(ctx: click.Context, benchmark_id: str) -> None:
 @click.pass_context
 def bench_history(ctx: click.Context) -> None:
     """List past benchmark runs."""
+    require_eval_pipeline("benchmark history")
     async def _run() -> None:
         client = get_client(ctx)
         async with client:
@@ -130,5 +135,6 @@ def bench_history(ctx: click.Context) -> None:
 @click.pass_context
 def bench_compare(ctx: click.Context, baseline_id: str, current_id: str) -> None:
     """Compare two benchmark runs (placeholder for Phase 3)."""
+    require_eval_pipeline("benchmark compare")
     click.echo(f"Comparing {baseline_id} vs {current_id}")
     click.echo("Detailed comparison available via the portal.")

@@ -20,6 +20,7 @@ from typing import Any
 import click
 import yaml
 
+from eden.cli._legacy_gate import require_eval_pipeline
 from eden.cli.main import cli
 
 
@@ -104,6 +105,7 @@ def generate(
       eden generate --description "Adversarial coding eval" --no-wait
       eden generate --spec-file ./spec.yaml --out ./result.json
     """
+    require_eval_pipeline("generate")
     from eden.sdk import EdenClient
     from eden.sdk.config import EdenConfig
 
