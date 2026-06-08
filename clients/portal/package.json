@@ -6,7 +6,9 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "typecheck": "tsc --noEmit",
+    "test": "echo 'No unit tests yet — add a test runner (e.g. vitest) before relying on this.' && exit 0"
   },
   "dependencies": {
     "@radix-ui/react-label": "^2.1.8",
