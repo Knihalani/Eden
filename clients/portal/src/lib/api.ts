@@ -510,6 +510,164 @@ export const api = {
       }>;
     }>(`/orgs/${orgId}/analytics${days ? `?days=${days}` : ""}`),
 
+  // Observability / Telemetry
+  listObservabilityTraces: (orgId: string, params?: {
+    realm?: "environment" | "production";
+    outcome?: string;
+    agent_id?: string;
+    limit?: number;
+    offset?: number;
+    days?: number;
+  }) => {
+    const searchParams = new URLSearchParams();
+    if (params?.realm) searchParams.set("realm", params.realm);
+    if (params?.outcome) searchParams.set("outcome", params.outcome);
+    if (params?.agent_id) searchParams.set("agent_id", params.agent_id);
+    if (params?.limit) searchParams.set("limit", String(params.limit));
+    if (params?.offset) searchParams.set("offset", String(params.offset));
+    if (params?.days) searchParams.set("days", String(params.days));
+    const qs = searchParams.toString();
+    return fetchApi<{
+      traces: Array<{
+        trace_id: string;
+        agent_id: string | null;
+        outcome: string | null;
+        started_at: string;
+        ended_at: string | null;
+        duration_ms: number | null;
+        span_count: number;
+        realm: string;
+      }>;
+      total: number;
+      limit: number;
+      offset: number;
+    }>(`/orgs/${orgId}/observability/traces${qs ? `?${qs}` : ""}`).catch(() => ({
+      traces: [] as Array<{
+        trace_id: string;
+        agent_id: string | null;
+        outcome: string | null;
+        started_at: string;
+        ended_at: string | null;
+        duration_ms: number | null;
+        span_count: number;
+        realm: string;
+      }>,
+      total: 0,
+      limit: params?.limit ?? 10,
+      offset: params?.offset ?? 0,
+    }));
+  },
+
+  getOptimizationOverview: (orgId: string, days: number = 30) =>
+    fetchApi<{
+      routing: {
+        total_requests: number;
+        models_used: number;
+        fallback_count: number;
+        avg_latency_ms: number;
+      };
+      cache: {
+        hits: number;
+        misses: number;
+        hit_rate: number;
+        tokens_saved: number;
+      };
+      costs: {
+        period_days: number;
+        period_start: string;
+        period_end: string;
+        total_cost_cents: number;
+        total_cost_usd: number;
+        total_tokens: number;
+        events_count: number;
+        avg_cost_per_call_cents: number;
+        by_tier: Record<string, number>;
+        by_node: Record<string, number>;
+        by_model: Record<string, number>;
+      };
+      budget: {
+        period_cents: number;
+        spend_cents: number;
+        remaining_cents: number;
+        percent_used: number;
+        status: "ok" | "warning" | "exceeded";
+      };
+      savings: {
+        tokens_saved: number;
+        estimated_cost_saved_cents: number;
+        compression_ratio: number;
+        coalesced_requests: number;
+      };
+    }>(`/orgs/${orgId}/optimization/overview?days=${days}`).catch(() => null),
+
+  listJudgeScores: (orgId: string, params?: {
+    trace_id?: string;
+    judge_name?: string;
+    limit?: number;
+    offset?: number;
+  }) => {
+    const searchParams = new URLSearchParams();
+    if (params?.trace_id) searchParams.set("trace_id", params.trace_id);
+    if (params?.judge_name) searchParams.set("judge_name", params.judge_name);
+    if (params?.limit) searchParams.set("limit", String(params.limit));
+    if (params?.offset) searchParams.set("offset", String(params.offset));
+    const qs = searchParams.toString();
+    return fetchApi<{
+      scores: Array<{
+        judge_run_id: string;
+        judge_name: string;
+        judge_version: string;
+        trace_id: string;
+        span_id: string | null;
+        score: number;
+        rationale: string | null;
+        model: string | null;
+        scored_at: string;
+        latency_ms: number;
+      }>;
+      total: number;
+      limit: number;
+      offset: number;
+    }>(`/orgs/${orgId}/observability/judges/scores${qs ? `?${qs}` : ""}`).catch(() => ({
+      scores: [] as Array<{
+        judge_run_id: string;
+        judge_name: string;
+        judge_version: string;
+        trace_id: string;
+        span_id: string | null;
+        score: number;
+        rationale: string | null;
+        model: string | null;
+        scored_at: string;
+        latency_ms: number;
+      }>,
+      total: 0,
+      limit: params?.limit ?? 100,
+      offset: params?.offset ?? 0,
+    }));
+  },
+
+  listAlerts: () =>
+    fetchApi<Array<{
+      rule_id: string;
+      severity: string;
+      title: string;
+      message: string;
+      value: number;
+      threshold: number;
+      fired_at: string;
+      labels: Record<string, string>;
+    }>>(`/alerts`).catch(() => [] as Array<{
+      rule_id: string;
+      severity: string;
+      title: string;
+      message: string;
+      value: number;
+      threshold: number;
+      fired_at: string;
+      labels: Record<string, string>;
+    }>),
+
   // SCIM
   getScimConfig: (orgId: string) =>
     fetchApi<{
