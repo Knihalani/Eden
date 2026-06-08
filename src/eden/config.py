@@ -122,6 +122,18 @@ class Settings(BaseSettings):
     # 0 disables auto-canary creation (variants stay inactive).
     evolver_auto_canary_pct: int = 5
 
+    # ── Insights detector loop (Phase 7.1b follow-up) ──────────────
+    # The detector registry ships six real detectors, but nothing
+    # periodically read new ``judge_scores`` rows and fanned them
+    # through ``InsightsService`` to write ``insights`` /
+    # ``kb_insight_writes`` rows.  The loop in
+    # ``src/eden/insights/detector_loop.py`` does that, started
+    # from the FastAPI lifespan.
+    insights_loop_enabled: bool = True
+    insights_loop_interval_seconds: float = 60.0
+    insights_loop_batch_size: int = 200
+    insights_loop_max_runtime_seconds: float = 50.0
+
     # Paths
     project_root: Path = Path(__file__).parent.parent.parent
     seed_data_dir: Path = Path("./seed")
