@@ -12,7 +12,7 @@ from eden.config import get_settings
 from eden.kb import initialize_kb, health_check as kb_health_check
 from eden.pipeline.graph import compile_eden_graph
 from eden.storage.checkpointer import create_postgres_checkpointer
-from eden.api.routes import jobs, kb, auth, orgs, references, api_keys, audit, analytics, export, export_destinations, scim, billing, sso, benchmark, chain, ai_insights
+from eden.api.routes import jobs, kb, auth, orgs, references, api_keys, audit, analytics, export, export_destinations, scim, billing, sso, benchmark, chain, ai_insights, pii_policy, retention_policy, region
 # Batch A1 — OpenAI-compatible HTTP gateway (/gateway/v1/...)
 from eden.api.routes import gateway as _gateway_routes  # noqa: E402
 from eden.api.routes.jobs import set_eden_graph
@@ -201,6 +201,9 @@ app.include_router(chain.router)  # /chain
 # Batch A1 — register the OpenAI-compatible HTTP gateway
 app.include_router(_gateway_routes.router)  # /gateway/v1/...
 app.include_router(ai_insights.router)  # /orgs/{org_id}/ai-insights
+app.include_router(pii_policy.router)  # /orgs/{org_id}/pii-policy
+app.include_router(retention_policy.router)  # /orgs/{org_id}/retention-policy
+app.include_router(region.router)  # /orgs/{org_id}/region
 
 
 # ============================================================================
