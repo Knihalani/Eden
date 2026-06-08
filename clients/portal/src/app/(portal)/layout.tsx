@@ -3,6 +3,7 @@
 import { useAuth } from "@/hooks/use-auth";
 import { useOrg } from "@/hooks/use-org";
 import { useNotifications } from "@/hooks/use-notifications";
+import { useFeatureFlags } from "@/hooks/use-feature-flags";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, useRef, useCallback } from "react";
 import {
@@ -48,7 +49,8 @@ function buildBreadcrumbs(pathname: string): { label: string; href: string }[] {
 
   const labelMap: Record<string, string> = {
     dashboard: "Dashboard",
-    jobs: "Jobs",
+    jobs: "Eval Harnesses",
+    "eval-harnesses": "Eval Harnesses",
     analytics: "Analytics",
     optimization: "Optimization",
     settings: "Settings",
@@ -71,6 +73,7 @@ function buildBreadcrumbs(pathname: string): { label: string; href: string }[] {
 export default function PortalLayout({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
   const { currentOrg, organizations, setCurrentOrg } = useOrg();
+  const { flags } = useFeatureFlags();
   const router = useRouter();
   const pathname = usePathname();
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -262,7 +265,9 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
         {/* Navigation */}
         <nav className="relative flex-1 p-3 space-y-0.5" aria-label="Main navigation">
           <NavItem href="/dashboard" icon={LayoutDashboard} label="Dashboard" collapsed={collapsed} onClick={() => setSidebarOpen(false)} />
-          <NavItem href="/jobs" icon={Layers} label="Jobs" collapsed={collapsed} onClick={() => setSidebarOpen(false)} />
+          {flags.enable_eval_pipeline && (
+            <NavItem href="/eval-harnesses" icon={Layers} label="Eval Harnesses" collapsed={collapsed} onClick={() => setSidebarOpen(false)} />
+          )}
           <NavItem href="/analytics" icon={BarChart3} label="Analytics" collapsed={collapsed} onClick={() => setSidebarOpen(false)} />
           <NavItem href="/optimization" icon={Sparkles} label="Optimization" collapsed={collapsed} onClick={() => setSidebarOpen(false)} />
           <NavItem href="/settings" icon={Settings} label="Settings" collapsed={collapsed} onClick={() => setSidebarOpen(false)} />
@@ -416,8 +421,12 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
         <nav className="lg:hidden fixed bottom-0 left-0 right-0 bg-[var(--bg-primary)] border-t border-[var(--border-default)] z-40" aria-label="Mobile navigation">
           <div className="flex items-center justify-around h-16 px-1">
             <BottomNavItem href="/dashboard" icon={Home} label="Home" />
-            <BottomNavItem href="/jobs" icon={Layers} label="Jobs" />
-            <BottomNavItem href="/jobs/new" icon={PlusCircle} label="New" isCenter />
+            {flags.enable_eval_pipeline && (
+              <>
+                <BottomNavItem href="/eval-harnesses" icon={Layers} label="Harnesses" />
+                <BottomNavItem href="/eval-harnesses/new" icon={PlusCircle} label="New" isCenter />
+              </>
+            )}
             <BottomNavItem href="/settings" icon={Settings} label="Settings" />
             <BottomNavItem href="/profile" icon={User} label="Profile" />
           </div>

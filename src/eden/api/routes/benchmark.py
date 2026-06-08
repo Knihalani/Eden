@@ -4,16 +4,20 @@ import logging
 from datetime import datetime
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from pydantic import BaseModel
 
-from eden.api.deps import get_current_user
+from eden.api.deps import get_current_user, require_feature_flag
 from eden.benchmark_engine import BenchmarkEngine
 from eden.agents.benchmark.benchmark_runner import BenchmarkResult
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/benchmark", tags=["benchmark"])
+router = APIRouter(
+    prefix="/benchmark",
+    tags=["benchmark"],
+    dependencies=[Depends(require_feature_flag("enable_eval_pipeline"))],
+)
 
 # Global benchmark engine instance
 _benchmark_engine: Optional[BenchmarkEngine] = None
