@@ -841,6 +841,103 @@ export const api = {
       finished_at: string;
     }>(`/orgs/${orgId}/export/run-now/${scheduleId}`, {
       method: "POST",
+  // Compliance: PII Policy
+  getPiiPolicy: (orgId: string) =>
+    fetchApi<{
+      org_id: string;
+      categories: Record<string, boolean>;
+      fail_closed_on_credentials: boolean;
+      extra_redact_keys: string[];
+      created_at: string | null;
+      updated_at: string | null;
+    }>(`/orgs/${orgId}/pii-policy`),
+
+  updatePiiPolicy: (
+    orgId: string,
+    data: {
+      categories?: Record<string, boolean>;
+      fail_closed_on_credentials?: boolean;
+      extra_redact_keys?: string[];
+    }
+  ) =>
+    fetchApi<{
+      org_id: string;
+      categories: Record<string, boolean>;
+      fail_closed_on_credentials: boolean;
+      extra_redact_keys: string[];
+      created_at: string | null;
+      updated_at: string | null;
+    }>(`/orgs/${orgId}/pii-policy`, {
+      method: "PUT",
+      body: JSON.stringify(data),
+    }),
+
+  // Compliance: Retention Policy
+  getRetentionPolicy: (orgId: string) =>
+    fetchApi<{
+      org_id: string;
+      table_overrides: Record<string, {
+        hot_days: number;
+        warm_days: number;
+        cold_days: number;
+        delete_days: number;
+      }>;
+      pii_scrub_after_days: number;
+      created_at: string | null;
+      updated_at: string | null;
+    }>(`/orgs/${orgId}/retention-policy`),
+
+  updateRetentionPolicy: (
+    orgId: string,
+    data: {
+      table_overrides?: Record<string, {
+        hot_days: number;
+        warm_days: number;
+        cold_days: number;
+        delete_days: number;
+      }>;
+      pii_scrub_after_days?: number;
+    }
+  ) =>
+    fetchApi<{
+      org_id: string;
+      table_overrides: Record<string, {
+        hot_days: number;
+        warm_days: number;
+        cold_days: number;
+        delete_days: number;
+      }>;
+      pii_scrub_after_days: number;
+      created_at: string | null;
+      updated_at: string | null;
+    }>(`/orgs/${orgId}/retention-policy`, {
+      method: "PUT",
+      body: JSON.stringify(data),
+    }),
+
+  // Compliance: Region / Data Residency
+  getRegion: (orgId: string) =>
+    fetchApi<{
+      org_id: string;
+      region: "us" | "eu" | "ap";
+      pinned: boolean;
+      created_at: string | null;
+      updated_at: string | null;
+    }>(`/orgs/${orgId}/region`),
+
+  updateRegion: (
+    orgId: string,
+    data: { region: "us" | "eu" | "ap"; pinned?: boolean }
+  ) =>
+    fetchApi<{
+      org_id: string;
+      region: "us" | "eu" | "ap";
+      pinned: boolean;
+      created_at: string | null;
+      updated_at: string | null;
+    }>(`/orgs/${orgId}/region`, {
+      method: "PUT",
+      body: JSON.stringify(data),
     }),
 };
 
