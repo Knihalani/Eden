@@ -113,8 +113,14 @@ class Settings(BaseSettings):
     app_url: str = "https://portal.example.com"
 
     # Chain configuration
-chain_enabled_experts: list[str] = []  # Environment: EDEN_CHAIN_ENABLED_EXPERTS
-chain_disabled_optional: list[str] = []  # Environment: EDEN_CHAIN_DISABLED_OPTIONAL
+    chain_enabled_experts: list[str] = []  # Environment: EDEN_CHAIN_ENABLED_EXPERTS
+    chain_disabled_optional: list[str] = []  # Environment: EDEN_CHAIN_DISABLED_OPTIONAL
+
+    # Evolution Engine
+    # When the prompt evolver generates a variant, automatically
+    # promote it to a canary at this traffic percentage.
+    # 0 disables auto-canary creation (variants stay inactive).
+    evolver_auto_canary_pct: int = 5
 
     # Paths
     project_root: Path = Path(__file__).parent.parent.parent
