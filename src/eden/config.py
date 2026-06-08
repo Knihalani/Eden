@@ -139,6 +139,14 @@ class Settings(BaseSettings):
     seed_data_dir: Path = Path("./seed")
     migrations_dir: Path = Path("./migrations")
 
+    # ── AI Insights chat sidebar (Phase 8 / Batch B4) ─────────────────
+    # Direct Anthropic SDK call (not OpenRouter). The chat endpoint
+    # requires ANTHROPIC_API_KEY / ANTHROPIC_AUTH_TOKEN in the env to
+    # actually invoke the model — ``ai_insights_enabled`` only gates
+    # the route's master switch.
+    ai_insights_enabled: bool = True
+    ai_insights_model: str = "claude-sonnet-4-6"
+
 
 @lru_cache
 def get_settings() -> Settings:
