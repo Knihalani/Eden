@@ -1,0 +1,81 @@
+{
+  "name": "@eden-ai/sdk",
+  "version": "0.1.0",
+  "description": "Eden TypeScript runtime SDK — auto-instrumentation for OpenAI, Anthropic, Vercel AI, and LangChain with fire-and-forget telemetry to the Eden gateway.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs",
+      "default": "./dist/index.js"
+    },
+    "./instrumentations/openai": {
+      "types": "./dist/instrumentations/openai.d.ts",
+      "import": "./dist/instrumentations/openai.js"
+    },
+    "./instrumentations/anthropic": {
+      "types": "./dist/instrumentations/anthropic.d.ts",
+      "import": "./dist/instrumentations/anthropic.js"
+    },
+    "./instrumentations/vercel-ai": {
+      "types": "./dist/instrumentations/vercel-ai.d.ts",
+      "import": "./dist/instrumentations/vercel-ai.js"
+    },
+    "./instrumentations/langchain": {
+      "types": "./dist/instrumentations/langchain.d.ts",
+      "import": "./dist/instrumentations/langchain.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsup src/index.ts --format esm,cjs --dts",
+    "typecheck": "tsc --noEmit",
+    "test": "bun test",
+    "lint": "tsc --noEmit"
+  },
+  "dependencies": {
+    "undici": "*"
+  },
+  "peerDependencies": {
+    "openai": "*",
+    "@anthropic-ai/sdk": "*",
+    "ai": "*",
+    "@langchain/core": "*"
+  },
+  "peerDependenciesMeta": {
+    "openai": { "optional": true },
+    "@anthropic-ai/sdk": { "optional": true },
+    "ai": { "optional": true },
+    "@langchain/core": { "optional": true }
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "typescript": "^5.5.0",
+    "tsup": "^8.2.0"
+  },
+  "engines": {
+    "node": ">=18",
+    "bun": ">=1.1.0"
+  },
+  "license": "MIT",
+  "keywords": [
+    "eden",
+    "ai",
+    "observability",
+    "openai",
+    "anthropic",
+    "vercel-ai",
+    "langchain",
+    "tracing",
+    "telemetry",
+    "llm",
+    "agents"
+  ]
+}
