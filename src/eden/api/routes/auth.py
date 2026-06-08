@@ -7,7 +7,7 @@ from datetime import datetime
 from typing import Optional
 
 import pyotp
-from fastapi import APIRouter, HTTPException, Response, Cookie, status
+from fastapi import Depends, APIRouter, HTTPException, Response, Cookie, status
 from pydantic import BaseModel, EmailStr, Field
 from qrcode import QRCode
 
@@ -343,7 +343,7 @@ async def logout(response: Response):
 
 
 @router.get("/me", response_model=UserResponse)
-async def get_me(user: dict = get_current_user):
+async def get_me(user: dict = Depends(get_current_user)):
     """Return the currently authenticated user."""
     db_user = await get_user_by_id(user["user_id"])
     if not db_user:
@@ -385,7 +385,7 @@ async def get_me(user: dict = get_current_user):
 
 
 @router.post("/2fa/setup", response_model=TwoFASetupResponse)
-async def setup_2fa(user: dict = get_current_user):
+async def setup_2fa(user: dict = Depends(get_current_user)):
     """Initiate 2FA setup for the current user.
 
     Generates a TOTP secret and QR code for authenticator apps.
@@ -434,7 +434,7 @@ async def setup_2fa(user: dict = get_current_user):
 
 
 @router.post("/2fa/verify", response_model=TwoFAEnableResponse)
-async def verify_2fa(request: TwoFAVerifyRequest, user: dict = get_current_user):
+async def verify_2fa(request: TwoFAVerifyRequest, user: dict = Depends(get_current_user)):
     """Verify 2FA setup with a TOTP code and enable 2FA.
 
     The user must have initiated setup first via POST /auth/2fa/setup.
@@ -480,7 +480,7 @@ async def verify_2fa(request: TwoFAVerifyRequest, user: dict = get_current_user)
 
 
 @router.post("/2fa/disable", response_model=TwoFAEnableResponse)
-async def disable_2fa(request: TwoFAVerifyRequest, user: dict = get_current_user):
+async def disable_2fa(request: TwoFAVerifyRequest, user: dict = Depends(get_current_user)):
     """Disable 2FA for the current user.
 
     Requires the current TOTP code to disable.
@@ -532,7 +532,7 @@ async def disable_2fa(request: TwoFAVerifyRequest, user: dict = get_current_user
 
 
 @router.get("/2fa/status", response_model=dict)
-async def get_2fa_status(user: dict = get_current_user):
+async def get_2fa_status(user: dict = Depends(get_current_user)):
     """Get the current user's 2FA status."""
     client = await get_postgres_client()
 
@@ -560,7 +560,7 @@ async def get_2fa_status(user: dict = get_current_user):
 @router.post("/2fa/enforce", response_model=EnforceTwoFAResponse)
 async def enforce_org_2fa(
     request: EnforceTwoFARequest,
-    org: dict = get_current_org(require_org_admin),
+    org: dict = Depends(require_org_admin),
 ):
     """Enable or disable 2FA enforcement for the organization.
 
@@ -596,7 +596,7 @@ async def enforce_org_2fa(
 
 
 @router.get("/2fa/enforcement-status", response_model=dict)
-async def get_2fa_enforcement_status(org: dict = get_current_org):
+async def get_2fa_enforcement_status(org: dict = Depends(get_current_org)):
     """Get 2FA enforcement status for the current org."""
     client = await get_postgres_client()
 
@@ -617,7 +617,7 @@ async def get_2fa_enforcement_status(org: dict = get_current_org):
 
 
 @router.get("/org-members-2fa-status", response_model=list)
-async def get_org_members_2fa_status(org: dict = get_current_org(require_org_admin)):
+async def get_org_members_2fa_status(org: dict = Depends(require_org_admin)):
     """Get 2FA status for all members in the organization.
 
     Only org admins/owners can view this.

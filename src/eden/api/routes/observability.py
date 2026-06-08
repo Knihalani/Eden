@@ -15,7 +15,7 @@ import json
 import logging
 from typing import Any, Optional
 
-from fastapi import APIRouter, HTTPException, Query, Body, Path
+from fastapi import Depends, APIRouter, HTTPException, Query, Body, Path
 from pydantic import BaseModel, Field
 
 from eden.api.deps import get_current_user
@@ -176,7 +176,7 @@ async def _get_collector() -> TelemetryCollector:
 async def ingest_telemetry_event(
     org_id: str = Path(..., description="Organization ID"),
     body: TelemetryEventIngest = Body(...),
-    user: dict = get_current_user,
+    user: dict = Depends(get_current_user),
 ) -> TelemetryIngestResponse:
     """Ingest a single telemetry event."""
     try:
@@ -200,7 +200,7 @@ async def ingest_telemetry_event(
 async def ingest_telemetry_batch(
     org_id: str = Path(..., description="Organization ID"),
     body: TelemetryBatchIngest = Body(...),
-    user: dict = get_current_user,
+    user: dict = Depends(get_current_user),
 ) -> TelemetryIngestResponse:
     """Ingest a batch of telemetry events."""
     try:
@@ -224,7 +224,7 @@ async def list_traces(
     limit: int = Query(50, ge=1, le=500),
     offset: int = Query(0, ge=0),
     days: int = Query(7, ge=1, le=90),
-    user: dict = get_current_user,
+    user: dict = Depends(get_current_user),
 ) -> TraceListResponse:
     """List traces for an organization with optional filters."""
     # For MVP, return an empty list with simulated metadata
@@ -241,7 +241,7 @@ async def list_traces(
 async def get_trace_tree_route(
     org_id: str = Path(..., description="Organization ID"),
     trace_id: str = Path(..., description="Trace ID"),
-    user: dict = get_current_user,
+    user: dict = Depends(get_current_user),
 ) -> TraceTreeResponse:
     """Retrieve a hierarchical trace tree for visualization."""
     collector = await _get_collector()
@@ -263,7 +263,7 @@ async def get_trace_tree_route(
 async def get_trace_timeline_route(
     org_id: str = Path(..., description="Organization ID"),
     trace_id: str = Path(..., description="Trace ID"),
-    user: dict = get_current_user,
+    user: dict = Depends(get_current_user),
 ) -> TimelineResponse:
     """Retrieve a step timeline for a single trace."""
     collector = await _get_collector()
@@ -284,7 +284,7 @@ async def get_heatmap_route(
     metric_name: str = Path(..., description="Metric name to visualize"),
     x_axis: str = Query("name", description="Field to use for X-axis"),
     days: int = Query(7, ge=1, le=30),
-    user: dict = get_current_user,
+    user: dict = Depends(get_current_user),
 ) -> HeatmapResponse:
     """Retrieve a performance heatmap for a set of traces."""
     collector = await _get_collector()
@@ -305,7 +305,7 @@ async def get_heatmap_route(
 async def compare_traces_route(
     org_id: str = Path(..., description="Organization ID"),
     body: ComparativeRequest = Body(...),
-    user: dict = get_current_user,
+    user: dict = Depends(get_current_user),
 ) -> ComparativeResponse:
     """Compare an environment trace with a production trace."""
     collector = await _get_collector()
@@ -342,7 +342,7 @@ async def export_trace_route(
     org_id: str = Path(..., description="Organization ID"),
     trace_id: str = Path(..., description="Trace ID"),
     body: ExportFormatRequest = Body(...),
-    user: dict = get_current_user,
+    user: dict = Depends(get_current_user),
 ) -> TraceExportResponse:
     """Export a trace tree in JSONL, JSON, or CSV format."""
     collector = await _get_collector()

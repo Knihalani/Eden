@@ -74,7 +74,7 @@ class BenchmarkHistoryResponse(BaseModel):
 async def create_benchmark(
     request: BenchmarkCreateRequest,
     background_tasks: BackgroundTasks,
-    user: dict = get_current_user,
+    user: dict = Depends(get_current_user),
 ):
     """Create a new benchmark definition."""
     engine = get_benchmark_engine()
@@ -98,7 +98,7 @@ async def run_benchmark(
     benchmark_id: str,
     request: BenchmarkRunRequest,
     background_tasks: BackgroundTasks,
-    user: dict = get_current_user,
+    user: dict = Depends(get_current_user),
 ):
     """Run a created benchmark."""
     engine = get_benchmark_engine()
@@ -129,7 +129,7 @@ async def run_benchmark(
 @router.get("/results/{benchmark_id}")
 async def get_benchmark_results(
     benchmark_id: str,
-    user: dict = get_current_user,
+    user: dict = Depends(get_current_user),
 ):
     """Get benchmark results for a specific benchmark."""
     engine = get_benchmark_engine()
@@ -159,7 +159,7 @@ async def get_benchmark_results(
 
 @router.get("/history", response_model=BenchmarkHistoryResponse)
 async def get_benchmark_history(
-    user: dict = get_current_user,
+    user: dict = Depends(get_current_user),
 ):
     """List past benchmark runs."""
     engine = get_benchmark_engine()
