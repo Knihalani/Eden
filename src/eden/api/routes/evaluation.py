@@ -14,7 +14,7 @@ from typing import Any, Optional
 from fastapi import APIRouter, HTTPException, BackgroundTasks, Depends
 from pydantic import BaseModel, Field
 
-from eden.api.deps import get_current_user, require_org_admin
+from eden.api.deps import get_current_user, require_org_admin, require_feature_flag
 from eden.evaluation.golden_dataset import (
     DatasetRegistry,
     GoldenDataset,
@@ -41,7 +41,11 @@ from eden.evaluation.security_scanner import SecurityScanner, SecurityGatePolicy
 from eden.evaluation.auto_dataset import AutoDatasetPromoter, TraceQualityScorer
 
 logger = logging.getLogger(__name__)
-router = APIRouter(prefix="/evaluation", tags=["evaluation"])
+router = APIRouter(
+    prefix="/evaluation",
+    tags=["evaluation"],
+    dependencies=[Depends(require_feature_flag("enable_eval_pipeline"))],
+)
 
 # ── Shared state ───────────────────────────────────────────────────────────
 

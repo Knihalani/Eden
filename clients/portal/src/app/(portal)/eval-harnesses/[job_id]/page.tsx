@@ -37,6 +37,7 @@ import {
   FlaskConical,
   Archive,
 } from "lucide-react";
+import { useFeatureFlags } from "@/hooks/use-feature-flags";
 
 interface ActivityLogEntry {
   id: string;
@@ -126,6 +127,7 @@ export default function JobDetailPage() {
   const params = useParams();
   const router = useRouter();
   const jobId = params.job_id as string;
+  const { flags, loading: flagsLoading } = useFeatureFlags();
 
   const [job, setJob] = useState<JobStatus | null>(null);
   const [messages, setMessages] = useState<ChatMessageData[]>([]);
@@ -435,10 +437,32 @@ export default function JobDetailPage() {
         <div className="text-center">
           <p className="text-[var(--text-secondary)] mb-4">Job not found</p>
           <button
-            onClick={() => router.push("/jobs")}
+            onClick={() => router.push("/eval-harnesses")}
             className="text-sm text-[var(--accent)] hover:underline"
           >
             Back to Jobs
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (!flagsLoading && !flags.enable_eval_pipeline) {
+    return (
+      <div className="flex items-center justify-center h-full bg-[var(--background)] p-4">
+        <div className="bg-[var(--surface)] shadow-sm rounded-xl p-8 border border-[var(--border)] text-center max-w-md">
+          <h1 className="text-xl font-semibold text-[var(--text-primary)] mb-2">
+            Eval Harnesses is disabled
+          </h1>
+          <p className="text-sm text-[var(--text-muted)] mb-6">
+            The multi-stage environment generation pipeline is currently turned off
+            on this Eden deployment.
+          </p>
+          <button
+            onClick={() => router.push("/dashboard")}
+            className="inline-block px-4 py-2 rounded-lg bg-[var(--accent)] text-white text-sm font-medium hover:bg-[var(--accent-hover)]"
+          >
+            Back to Dashboard
           </button>
         </div>
       </div>
@@ -454,7 +478,7 @@ export default function JobDetailPage() {
       {/* Top Bar */}
       <div className="h-14 bg-[var(--surface)] border-b border-[var(--border)] flex items-center justify-between px-4">
         <div className="flex items-center gap-3">
-          <Link href="/jobs" className="text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors">
+          <Link href="/eval-harnesses" className="text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors">
             <ChevronRight className="w-5 h-5 rotate-180" />
           </Link>
           <span className="text-sm font-mono text-[var(--text-secondary)]">#</span>
