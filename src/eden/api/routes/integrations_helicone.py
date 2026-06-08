@@ -17,14 +17,19 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from fastapi import APIRouter, Header, HTTPException, Request, status
+from fastapi import APIRouter, Header, HTTPException, Request, status, Depends
 from pydantic import BaseModel
 
+from eden.api.deps import require_feature_flag
 from eden.integrations import INTEGRATION_API_VERSION
 from eden.integrations.helicone.sync import parse_helicone_event
 
 logger = logging.getLogger(__name__)
-router = APIRouter(prefix="/integrations/helicone", tags=["integrations"])
+router = APIRouter(
+    prefix="/integrations/helicone",
+    tags=["integrations"],
+    dependencies=[Depends(require_feature_flag("enable_eval_pipeline"))],
+)
 
 
 class StatusResponse(BaseModel):

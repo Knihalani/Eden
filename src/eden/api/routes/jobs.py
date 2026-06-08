@@ -10,7 +10,7 @@ from fastapi import APIRouter, HTTPException, BackgroundTasks, Query, Depends
 from pydantic import BaseModel, Field
 from sse_starlette.sse import EventSourceResponse
 
-from eden.api.deps import get_current_user, get_current_org_api_key
+from eden.api.deps import get_current_user, get_current_org_api_key, require_feature_flag
 from eden.api.routes.billing import check_limit
 from eden.config import get_settings
 from eden.pipeline.state import create_initial_state
@@ -20,7 +20,11 @@ from eden.storage.postgres import get_postgres_client
 logger = logging.getLogger(__name__)
 settings = get_settings()
 
-router = APIRouter(prefix="/jobs", tags=["jobs"])
+router = APIRouter(
+    prefix="/jobs",
+    tags=["jobs"],
+    dependencies=[Depends(require_feature_flag("enable_eval_pipeline"))],
+)
 
 # Global graph reference (set on startup)
 eden_graph = None

@@ -12,7 +12,7 @@ import {
   ChevronDown,
 } from "lucide-react";
 
-interface FileNode {
+export interface FileNode {
   id: string;
   name: string;
   path: string;
