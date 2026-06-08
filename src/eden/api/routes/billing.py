@@ -9,7 +9,7 @@ from datetime import datetime
 from typing import Optional
 from uuid import uuid4
 
-from fastapi import APIRouter, HTTPException, Request, status
+from fastapi import Depends, APIRouter, HTTPException, Request, status
 from pydantic import BaseModel
 
 from eden.api.deps import require_org_permission, get_current_user, get_postgres_client
@@ -211,7 +211,7 @@ async def check_limit(
 # ============================================================================
 
 @router.get("/plans", response_model=PlanLimits)
-async def get_plans(org_id: str, user: dict = get_current_user):
+async def get_plans(org_id: str, user: dict = Depends(get_current_user)):
     """Get current plan and usage for the organization."""
     await require_org_permission("billing:view", org_id)
 
@@ -252,7 +252,7 @@ async def get_plans(org_id: str, user: dict = get_current_user):
 async def subscribe(
     org_id: str,
     request: SubscribeRequest,
-    user: dict = get_current_user,
+    user: dict = Depends(get_current_user),
 ):
     """Create a Stripe checkout session for subscription."""
     await require_org_permission("billing:edit", org_id)
@@ -350,7 +350,7 @@ async def subscribe(
 
 
 @router.get("/invoices", response_model=list[InvoiceResponse])
-async def get_invoices(org_id: str, user: dict = get_current_user):
+async def get_invoices(org_id: str, user: dict = Depends(get_current_user)):
     """Get billing invoices for the organization."""
     await require_org_permission("billing:view", org_id)
 
@@ -403,7 +403,7 @@ async def get_invoices(org_id: str, user: dict = get_current_user):
 
 
 @router.post("/cancel", response_model=dict)
-async def cancel_subscription(org_id: str, user: dict = get_current_user):
+async def cancel_subscription(org_id: str, user: dict = Depends(get_current_user)):
     """Cancel the current subscription."""
     await require_org_permission("billing:edit", org_id)
 

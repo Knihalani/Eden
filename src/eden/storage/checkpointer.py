@@ -3,7 +3,10 @@
 import logging
 from typing import Optional
 
-from langgraph.checkpoint.postgres import PostgresSaver  # was: PostgresCheckpointSaver
+try:
+    from langgraph.checkpoint.postgres import PostgresSaver
+except ImportError:  # older langgraph versions
+    from langgraph.checkpoint.postgres import PostgresCheckpointSaver as PostgresSaver  # type: ignore
 
 from eden.storage.postgres import get_postgres_client
 

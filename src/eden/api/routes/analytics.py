@@ -4,7 +4,7 @@ import logging
 from datetime import datetime, timedelta
 from typing import Optional
 
-from fastapi import APIRouter, Query
+from fastapi import Depends, APIRouter, Query
 
 from eden.api.deps import get_current_user, require_org_permission
 from eden.storage.postgres import get_postgres_client
@@ -18,7 +18,7 @@ router = APIRouter(prefix="/orgs/{org_id}/analytics", tags=["analytics"])
 async def get_org_analytics(
     org_id: str,
     days: int = Query(default=30, ge=1, le=365),
-    user: dict = get_current_user,
+    user: dict = Depends(get_current_user),
 ):
     """Get analytics for an organization.
 

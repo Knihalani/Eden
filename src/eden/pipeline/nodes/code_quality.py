@@ -13,6 +13,8 @@ from pathlib import Path
 from typing import TypedDict, Literal, Optional
 from dataclasses import dataclass
 
+from eden.pipeline.state import EdenJobState
+
 from eden.config import get_settings
 
 logger = logging.getLogger(__name__)
