@@ -140,6 +140,12 @@ class Settings(BaseSettings):
     # alembic.ini path used by the lifespan to run migrations at startup
     alembic_ini: str = "alembic.ini"
 
+    # Evolution Engine
+    # When the prompt evolver generates a variant, automatically
+    # promote it to a canary at this traffic percentage.
+    # 0 disables auto-canary creation (variants stay inactive).
+    evolver_auto_canary_pct: int = 5
+
     # Paths
     project_root: Path = Path(__file__).parent.parent.parent
     seed_data_dir: Path = Path("./seed")
