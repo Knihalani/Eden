@@ -537,6 +537,37 @@ export const api = {
       method: "POST",
     }),
 
+  // AI Insights
+  // (added in B4 — see ai-insights/ChatSidebar)
+  listAiInsightsSessions: (orgId: string) =>
+    fetchApi<{
+      sessions: Array<{
+        session_id: string;
+        title: string;
+        created_at: string | null;
+        updated_at: string | null;
+        archived: boolean;
+      }>;
+    }>(`/orgs/${orgId}/ai-insights/sessions`),
+
+  getAiInsightsSessionMessages: (orgId: string, sessionId: string) =>
+    fetchApi<{
+      session_id: string;
+      title: string;
+      messages: Array<{
+        message_id: string;
+        role: string;
+        content: unknown;
+        created_at: string | null;
+      }>;
+    }>(`/orgs/${orgId}/ai-insights/sessions/${sessionId}/messages`),
+
+  archiveAiInsightsSession: (orgId: string, sessionId: string) =>
+    fetchApi<{ session_id: string; archived: boolean }>(
+      `/orgs/${orgId}/ai-insights/sessions/${sessionId}/archive`,
+      { method: "POST" },
+    ),
+
   // Data Export
   exportOrgData: (orgId: string) => {
     const url = `${API_BASE}/orgs/${orgId}/export`;
@@ -723,4 +754,23 @@ export const api = {
 
 export function getJobStreamUrl(jobId: string): string {
   return `${API_BASE}/jobs/${jobId}/stream`;
+}
+
+/**
+ * Start a streaming AI Insights chat turn. Returns the raw ``fetch``
+ * Response so the caller can iterate the SSE body — the result is
+ * text/event-stream, not JSON.
+ */
+export async function aiInsightsChat(
+  orgId: string,
+  body: { message: string; session_id?: string | null },
+): Promise<Response> {
+  // Bypass fetchApi() — this endpoint streams SSE, and we need the
+  // raw Response so the caller can attach a reader.
+  return fetch(`${API_BASE}/orgs/${orgId}/ai-insights/chat`, {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json", Accept: "text/event-stream" },
+    body: JSON.stringify(body),
+  });
 }

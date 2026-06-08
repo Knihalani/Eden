@@ -261,11 +261,6 @@ async def require_2fa(
         )
 
     return org
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Admin or owner role required",
-        )
-    return org
 
 
 async def require_org_owner(

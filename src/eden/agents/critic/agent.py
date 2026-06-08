@@ -88,6 +88,10 @@ Output as structured JSON with clear routing decision."""
         self.llm = llm_client or OpenRouterClient()
         self.max_tokens = settings.max_tokens_critic
         self.max_turns = settings.max_turns_critic
+        # ``SYSTEM_PROMPT`` is the class-level prompt; ``system_prompt``
+        # is the per-instance attribute the rest of the file uses.
+        # Alias so both spellings resolve to the same string.
+        self.system_prompt = type(self).SYSTEM_PROMPT
         self._load_prompt()
 
     async def run(self, state: dict) -> dict:
@@ -256,6 +260,8 @@ Be specific, not generic. Find REAL issues, not nitpicks."""
     def __init__(self, llm_client: Optional[OpenRouterClient] = None):
         self.llm = llm_client or OpenRouterClient()
         self.max_tokens = settings.max_tokens_critic
+        # Alias for SYSTEM_PROMPT (see CriticAgent for the rationale).
+        self.system_prompt = type(self).SYSTEM_PROMPT
 
     async def run(self, edp: dict) -> dict:
         """Run Devil's Advocate on the EDP."""

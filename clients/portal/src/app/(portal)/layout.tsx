@@ -29,6 +29,7 @@ import { cn } from "@/lib/utils";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { CommandPalette } from "@/components/ui/command-palette";
+import { ChatSidebar } from "@/components/ai-insights/ChatSidebar";
 
 const SIDEBAR_EXPANDED_WIDTH = 260;
 const SIDEBAR_COLLAPSED_WIDTH = 64;
@@ -419,6 +420,11 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
         {/* Command Palette (Cmd+K) */}
         <CommandPalette open={commandPaletteOpen} onOpenChange={setCommandPaletteOpen} />
       </main>
+
+      {/* AI Insights chat sidebar — persistent across the portal.
+          Renders its own floating toggle button so it can be opened
+          from any page. */}
+      <ChatSidebar />
     </div>
   );
 }
