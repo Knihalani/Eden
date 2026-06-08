@@ -1,0 +1,18 @@
+# gitleaks config (closes part of §10.4).
+# Runs in CI via the security_scanner module + this config.
+
+title = "Eden secret detection"
+
+[extend]
+useDefault = true
+
+[allowlist]
+  description = "Allow test fixtures with known fake credentials"
+  paths = [
+    '''tests/fixtures/.*\.json$''',
+    '''clients/portal/.*\.test\.tsx$''',
+  ]
+  regexes = [
+    '''test[-_]?api[-_]?key''',
+    '''example[-_]?token''',
+  ]

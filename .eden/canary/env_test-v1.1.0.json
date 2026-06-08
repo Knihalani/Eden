@@ -1,0 +1,39 @@
+{
+  "environment_id": "env_test",
+  "current_version": "v1.0.0",
+  "candidate_version": "v1.1.0",
+  "strategy": "ab_test",
+  "result": {
+    "status": "failed",
+    "failed_checks": [
+      "error_rate"
+    ],
+    "action": "rollback",
+    "confidence": 0.8,
+    "metrics": {
+      "error_rate": {
+        "baseline": 0.0041,
+        "candidate": 0.0172,
+        "regression_pct": 318.55,
+        "threshold_pct": 5.0,
+        "failed": true
+      },
+      "latency_p99": {
+        "baseline": 440.5871,
+        "candidate": 273.5636,
+        "regression_pct": -37.91,
+        "threshold_pct": 50.0,
+        "failed": false
+      },
+      "success_rate": {
+        "baseline": 0.9521,
+        "candidate": 0.9626,
+        "regression_pct": -1.11,
+        "threshold_pct": 5.0,
+        "failed": false
+      }
+    },
+    "duration_ms": 3002.17,
+    "timestamp": "2026-05-31T16:43:10.584077+00:00"
+  }
+}

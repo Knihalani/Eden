@@ -1,0 +1,18 @@
+apiVersion: v2
+name: eden
+description: Eden — AI-native environment generation platform
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+home: https://eden.com
+sources:
+  - https://github.com/eden/eden
+maintainers:
+  - name: Eden Engineering
+    email: engineering@eden.com
+keywords:
+  - ai
+  - evaluation
+  - environments
+  - llm
+  - agents

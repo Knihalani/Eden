@@ -1,0 +1,15 @@
+# chart-testing config (closes §6.6).
+# CI: .github/workflows/helm-lint.yml runs `ct lint` against this.
+chart-dirs:
+  - helm
+charts:
+  - eden
+helm-versions:
+  - v3.14.0
+  - v3.15.0
+  - v4.0.0
+excluded-charts: []
+check-version-increment: false
+remote: origin
+target-branch: main
+debug: false
