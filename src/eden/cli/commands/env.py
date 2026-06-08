@@ -9,6 +9,7 @@ from typing import Any
 
 import click
 
+from eden.cli._legacy_gate import require_eval_pipeline
 from eden.cli.main import cli, echo_json, echo_table, get_client
 
 
@@ -26,6 +27,7 @@ def environment() -> None:
 @click.pass_context
 def env_create(ctx: click.Context, description: str, tags: tuple[str, ...], difficulty: str, wait: bool, output: str) -> None:
     """Create a new environment generation job."""
+    require_eval_pipeline("environment create")
     async def _run() -> None:
         client = get_client(ctx)
         async with client:
@@ -81,6 +83,7 @@ def env_create(ctx: click.Context, description: str, tags: tuple[str, ...], diff
 @click.pass_context
 def env_list(ctx: click.Context, status: str, outcome_tier: str, limit: int, offset: int) -> None:
     """List environments."""
+    require_eval_pipeline("environment list")
     async def _run() -> None:
         client = get_client(ctx)
         async with client:
@@ -119,6 +122,7 @@ def env_list(ctx: click.Context, status: str, outcome_tier: str, limit: int, off
 @click.pass_context
 def env_get(ctx: click.Context, job_id: str) -> None:
     """Get environment details by job ID."""
+    require_eval_pipeline("environment get")
     async def _run() -> None:
         client = get_client(ctx)
         async with client:
@@ -144,6 +148,7 @@ def env_get(ctx: click.Context, job_id: str) -> None:
 @click.pass_context
 def env_download(ctx: click.Context, job_id: str, output: str) -> None:
     """Download environment code as a ZIP archive."""
+    require_eval_pipeline("environment download")
     async def _run() -> None:
         client = get_client(ctx)
         async with client:
@@ -159,6 +164,7 @@ def env_download(ctx: click.Context, job_id: str, output: str) -> None:
 @click.pass_context
 def env_tests(ctx: click.Context, job_id: str) -> None:
     """Get test results for an environment."""
+    require_eval_pipeline("environment tests")
     async def _run() -> None:
         client = get_client(ctx)
         async with client:
