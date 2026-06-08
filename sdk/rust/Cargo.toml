@@ -1,0 +1,32 @@
+[package]
+name = "eden-sdk"
+version = "0.1.0"
+edition = "2021"
+description = "Eden Rust SDK — minimum-viable observability client for tracing LLM and agent calls"
+license = "MIT"
+keywords = ["eden", "observability", "llm", "tracing", "ai-agents"]
+categories = ["api-bindings", "development-tools", "asynchronous"]
+readme = "README.md"
+
+[dependencies]
+tokio = { version = "1.40", features = ["macros", "rt-multi-thread", "time"] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+thiserror = "1.0"
+async-trait = "0.1"
+uuid = { version = "1.10", features = ["v4"] }
+tracing = "0.1"
+
+[dev-dependencies]
+tokio = { version = "1.40", features = ["macros", "rt-multi-thread", "test-util"] }
+httpmock = "0.7"
+serde_json = "1.0"
+
+[[example]]
+name = "basic"
+path = "examples/basic.rs"
+
+[lib]
+name = "eden"
+path = "src/lib.rs"
