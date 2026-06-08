@@ -226,6 +226,14 @@ app.include_router(marketplace.router)  # /marketplace (gated)
 app.include_router(integrations_helicone.router)  # /integrations/helicone (gated)
 app.include_router(feature_flags.router)  # /feature-flags (public)
 
+# A2 — Per-org AI Gateway model registry. CRUD over the
+# org_gateway_models table; the gateway in A1 calls /resolve to
+# look up the upstream provider, model id, and (decrypted) API
+# key for a given logical model name. The router is always
+# mounted; the routes themselves enforce org membership + admin.
+from eden.api.routes import gateway_models
+app.include_router(gateway_models.router)
+
 
 # ============================================================================
 # Health Check
