@@ -1,71 +1,98 @@
 "use client";
 
-import { useCallback, useState } from "react";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { useCallback, useState, useRef } from "react";
+import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
-interface ConfirmOptions {
+export interface ConfirmOptions {
   title: string;
-  description: string;
+  description?: string;
   confirmLabel?: string;
-  cancelLabel?: string | null;
+  cancelLabel?: string;
   variant?: "default" | "destructive";
-  hideCancel?: boolean;
 }
 
-export function useConfirm() {
-  const [open, setOpen] = useState(false);
-  const [options, setOptions] = useState<ConfirmOptions | null>(null);
-  const [resolver, setResolver] = useState<((value: boolean) => void) | null>(null);
+interface DialogState extends ConfirmOptions {
+  open: boolean;
+  resolve: ((value: boolean) => void) | null;
+}
 
-  const confirm = useCallback((opts: ConfirmOptions) => {
-    return new Promise<boolean>((resolve) => {
-      setOptions(opts);
-      setResolver(() => resolve);
-      setOpen(true);
+const initialState: DialogState = {
+  open: false,
+  title: "",
+  resolve: null,
+};
+
+/**
+ * Promise-based confirm dialog hook.
+ *
+ * Usage:
+ *   const { confirm, ConfirmDialog } = useConfirm();
+ *   if (await confirm({ title: "...", variant: "destructive" })) {
+ *     // user clicked Confirm
+ *   }
+ *   return <div>{ConfirmDialog}</div>;
+ */
+export function useConfirm() {
+  const [state, setState] = useState<DialogState>(initialState);
+  const resolveRef = useRef<((value: boolean) => void) | null>(null);
+
+  const confirm = useCallback((opts: ConfirmOptions): Promise<boolean> => {
+    return new Promise((resolve) => {
+      resolveRef.current = resolve;
+      setState({ ...opts, open: true, resolve });
     });
   }, []);
 
-  const handleClose = (value: boolean) => {
-    setOpen(false);
-    resolver?.(value);
-    setResolver(null);
-    setOptions(null);
+  const close = (value: boolean) => {
+    if (resolveRef.current) {
+      resolveRef.current(value);
+      resolveRef.current = null;
+    }
+    setState((s) => ({ ...s, open: false, resolve: null }));
   };
 
-  const showCancel = !(options?.hideCancel || options?.cancelLabel === null);
-
-  const ConfirmDialog = (
-    <Dialog open={open} onOpenChange={(next) => !next && handleClose(false)}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>{options?.title}</DialogTitle>
-          <DialogDescription>{options?.description}</DialogDescription>
-        </DialogHeader>
-        <DialogFooter className={showCancel ? "gap-2 sm:gap-0" : ""}>
-          {showCancel && (
-            <Button type="button" variant="outline" onClick={() => handleClose(false)}>
-              {options?.cancelLabel ?? "Cancel"}
-            </Button>
-          )}
+  const ConfirmDialog = state.open ? (
+    <div
+      role="dialog"
+      aria-modal="true"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
+      onClick={() => close(false)}
+    >
+      <div
+        className="w-full max-w-md rounded-lg border border-[var(--border)] bg-[var(--surface)] p-6 shadow-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <h2 className="text-lg font-semibold text-[var(--text)]">
+          {state.title}
+        </h2>
+        {state.description && (
+          <p className="mt-2 text-sm text-[var(--text-muted)]">
+            {state.description}
+          </p>
+        )}
+        <div className="mt-6 flex justify-end gap-2">
           <Button
             type="button"
-            variant={options?.variant === "destructive" ? "destructive" : "default"}
-            onClick={() => handleClose(true)}
+            variant="ghost"
+            onClick={() => close(false)}
           >
-            {options?.confirmLabel ?? "Confirm"}
+            {state.cancelLabel || "Cancel"}
           </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
+          <Button
+            type="button"
+            variant={state.variant === "destructive" ? "destructive" : "default"}
+            onClick={() => close(true)}
+          >
+            {state.confirmLabel || "Confirm"}
+          </Button>
+        </div>
+      </div>
+    </div>
+  ) : null;
 
   return { confirm, ConfirmDialog };
 }
+
+// Silence unused-import warning when Loader2 isn't used directly.
+void Loader2;

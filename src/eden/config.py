@@ -99,6 +99,10 @@ class Settings(BaseSettings):
     jwt_secret: str = "change-me-in-production"
     jwt_exp_days: int = 7
 
+    # Encryption (Fernet key for sensitive at-rest fields).
+    # If empty, falls back to deriving a key from JWT_SECRET.
+    encryption_key: str = ""
+
     # Stripe
     stripe_secret_key: str = ""
     stripe_webhook_secret: str = ""
