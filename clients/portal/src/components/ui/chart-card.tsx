@@ -2,34 +2,10 @@
 
 import * as React from "react";
 import {
-  Area,
-  AreaChart,
-  Bar,
-  BarChart,
-  CartesianGrid,
-  Cell,
-  Legend,
-  Line,
-  LineChart,
-  Pie,
-  PieChart,
   ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
 } from "recharts";
-import { Section } from "@/components/layout/section";
-
-const TOOLTIP_STYLE = {
-  background: "var(--bg-primary)",
-  border: "1px solid var(--border-default)",
-  borderRadius: "8px",
-  fontSize: "12px",
-  color: "var(--text-primary)",
-  padding: "8px 12px",
-};
-
-const AXIS_TICK = { fill: "var(--text-muted)", fontSize: 11 };
+import { Section } from "@/components/ui/section";
+import { cn } from "@/lib/utils";
 
 export interface ChartCardProps {
   title?: string;
@@ -37,15 +13,35 @@ export interface ChartCardProps {
   actions?: React.ReactNode;
   height?: number;
   className?: string;
-  children: React.ReactNode;
+  contentClassName?: string;
+  /** When true, render the chart even if data is empty (shows fallback message inside). */
+  showFallback?: boolean;
+  fallback?: React.ReactNode;
+  isEmpty?: boolean;
+  children: React.ReactElement;
 }
 
+const DEFAULT_FALLBACK = (
+  <div className="flex h-full items-center justify-center text-sm text-[var(--text-muted)]">
+    No data available for this period
+  </div>
+);
+
+/**
+ * ChartCard — pairs a Section header with a ResponsiveContainer so chart
+ * panels share layout/typography without re-implementing the shell. Children
+ * must be a single Recharts element (e.g. <LineChart />, <BarChart />).
+ */
 export function ChartCard({
   title,
   description,
   actions,
-  height = 220,
+  height = 260,
   className,
+  contentClassName,
+  showFallback = true,
+  fallback = DEFAULT_FALLBACK,
+  isEmpty = false,
   children,
 }: ChartCardProps) {
   return (
@@ -54,32 +50,17 @@ export function ChartCard({
       description={description}
       actions={actions}
       className={className}
-      contentClassName="overflow-hidden"
+      contentClassName={cn("overflow-hidden", contentClassName)}
     >
-      <div style={{ width: "100%", height }}>
-        <ResponsiveContainer width="100%" height="100%">
-          {children as React.ReactElement}
-        </ResponsiveContainer>
+      <div style={{ width: "100%", height }} className="relative">
+        {isEmpty && showFallback ? (
+          fallback
+        ) : (
+          <ResponsiveContainer width="100%" height="100%">
+            {children}
+          </ResponsiveContainer>
+        )}
       </div>
     </Section>
   );
 }
-
-export const ChartGrid = CartesianGrid;
-export const ChartTooltip = Tooltip;
-export const ChartXAxis = XAxis;
-export const ChartYAxis = YAxis;
-export const ChartLegend = Legend;
-export const ChartLine = Line;
-export const ChartArea = Area;
-export const ChartBar = Bar;
-export const ChartPie = Pie;
-export const ChartCell = Cell;
-export const chartTooltipStyle = TOOLTIP_STYLE;
-export const chartAxisTick = AXIS_TICK;
-export {
-  LineChart,
-  AreaChart,
-  BarChart,
-  PieChart,
-};
