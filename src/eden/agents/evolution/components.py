@@ -4,6 +4,7 @@ These run continuously, processing Archivist output and improving every system c
 They do not block job execution.
 """
 
+import json
 import logging
 from abc import ABC, abstractmethod
 from typing import Optional
@@ -793,8 +794,163 @@ class PromptEvolvers(EvolutionComponent):
             if success:
                 variants_created += 1
                 logger.info(f"Agent {agent}: created prompt variant v{new_version} for A/B testing")
+                # Auto-create canary experiment for this variant when
+                # enabled via settings. Defaults to 5% traffic; 0 disables.
+                await self._auto_create_canary(agent, new_version, i + 1)
 
         return variants_created
+
+    async def _auto_create_canary(
+        self,
+        agent: str,
+        version: int,
+        ab_test_round: int,
+    ) -> bool:
+        """Auto-create a canary experiment for a newly generated variant.
+
+        When ``settings.evolver_auto_canary_pct`` is greater than 0, each
+        newly inserted prompt variant is automatically enrolled in a
+        canary at the configured traffic percentage.  The variant's
+        ``quality_metrics`` are updated to mark it as an active canary
+        (``canary_status="active"``, ``canary_traffic_pct``,
+        ``canary_created_at``).  An ``evolver.auto_canary_created``
+        audit event is written to ``org_audit_log``.
+
+        Args:
+            agent: Agent name the variant belongs to.
+            version: Newly inserted prompt version.
+            ab_test_round: A/B test round (1-based) within the batch.
+
+        Returns:
+            True if a canary was created, False if disabled / failed.
+        """
+        traffic_pct = settings.evolver_auto_canary_pct
+        if not isinstance(traffic_pct, int) or traffic_pct <= 0:
+            logger.debug(
+                f"Auto-canary disabled (evolver_auto_canary_pct={traffic_pct}) "
+                f"for {agent} v{version}; variant stays inactive."
+            )
+            return False
+
+        if traffic_pct > 100:
+            traffic_pct = 100
+
+        canary_metrics = {
+            "ab_test_active": True,
+            "ab_test_round": ab_test_round,
+            "canary_status": "active",
+            "canary_traffic_pct": traffic_pct,
+            "canary_created_at": datetime.utcnow().isoformat(),
+        }
+
+        # Persist the canary state on the prompt version row.  The
+        # ``prompt_versions`` table is the source of truth for variant
+        # status in this codebase; a separate ``prompt_canary_experiments``
+        # table can be wired up later without breaking callers.
+        try:
+            updated = await self.prompt_versions.update_quality_metrics(
+                agent, version, canary_metrics
+            )
+        except Exception as e:
+            logger.error(
+                f"Failed to mark canary active on {agent} v{version}: {e}"
+            )
+            return False
+
+        if not updated:
+            logger.warning(
+                f"Could not persist canary metrics for {agent} v{version}"
+            )
+            return False
+
+        # Best-effort audit log.  Evolution runs are org-agnostic in
+        # this codebase (no ``org_id`` is plumbed through the prompt
+        # evolver), so the row is attributed to the first organization
+        # and user we can resolve; see ``_log_canary_audit_event`` for
+        # the resolution strategy.
+        try:
+            await self._log_canary_audit_event(agent, version, traffic_pct)
+        except Exception as e:
+            # Audit failures must never break evolution; the canary is
+            # already live in the database.
+            logger.error(
+                f"Failed to write evolver.auto_canary_created audit log "
+                f"for {agent} v{version}: {e}"
+            )
+
+        logger.info(
+            f"Agent {agent}: auto-canary created for v{version} "
+            f"at {traffic_pct}% traffic"
+        )
+        return True
+
+    async def _log_canary_audit_event(
+        self,
+        agent: str,
+        version: int,
+        traffic_pct: int,
+    ) -> None:
+        """Write an ``evolver.auto_canary_created`` event to org_audit_log.
+
+        Evolution runs in the background with no logged-in user and the
+        ``prompt_versions`` table is not org-scoped, so the audit row is
+        attributed to a synthetic ``system`` user and the first
+        organization in the database.  When the schema evolves to
+        org-scope ``prompt_versions``, this method should resolve
+        ``org_id`` from the variant row instead.
+        """
+        from eden.storage.postgres import get_postgres_client
+
+        client = await get_postgres_client()
+
+        # Resolve an org_id: prefer the first real org so we satisfy
+        # the org_audit_log FK to organizations(id).  Falls back to a
+        # sentinel all-zeros UUID if the orgs table is empty (e.g. in
+        # unit tests that don't seed the org table).
+        org_id: Optional[str] = None
+        try:
+            org_id = await client.fetchval(
+                "SELECT id FROM organizations ORDER BY created_at LIMIT 1"
+            )
+        except Exception:
+            org_id = None
+        if not org_id:
+            org_id = "00000000-0000-0000-0000-000000000000"
+
+        # Resolve a system user (best-effort).  Most prod databases
+        # have at least one user; in fresh test DBs we fall back to
+        # the sentinel so the INSERT doesn't violate the FK.
+        user_id: Optional[str] = None
+        try:
+            user_id = await client.fetchval(
+                "SELECT id FROM users ORDER BY created_at LIMIT 1"
+            )
+        except Exception:
+            user_id = None
+        if not user_id:
+            user_id = "00000000-0000-0000-0000-000000000000"
+
+        metadata = {
+            "agent": agent,
+            "version": version,
+            "traffic_pct": traffic_pct,
+            "source": "PromptEvolvers",
+        }
+
+        await client.execute(
+            """
+            INSERT INTO org_audit_log (
+                org_id, user_id, action, target_type, target_id,
+                metadata, ip_address, user_agent
+            ) VALUES ($1, $2, $3, $4, $5, $6, NULL, NULL)
+            """,
+            org_id,
+            user_id,
+            "evolver.auto_canary_created",
+            "prompt_version",
+            f"{agent}:{version}",
+            json.dumps(metadata),
+        )
 
     async def _handle_improvement(
         self,
