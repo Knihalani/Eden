@@ -76,12 +76,23 @@ class CircuitBreaker:
         self.half_open_lockout_seconds = half_open_lockout_seconds
 
     def is_open(self, agent: str) -> bool:
-        if self.state[agent] == CircuitState.OPEN:
-            lock_until = self.half_open_lock_until.get(agent, 0)
-            if time.time() < lock_until:
-                return True
-            self.state[agent] = CircuitState.HALF_OPEN
+        """True when the circuit is OPEN and still within the
+        recovery_timeout window. Transitions to HALF_OPEN once the
+        timeout has elapsed (allowing a single probe call).
+        """
+        if self.state[agent] != CircuitState.OPEN:
             return False
+        # If no lock has been set, the circuit was just opened and we
+        # haven't yet hit recovery_timeout (the lock is set on
+        # half-open max_failures escalation).  Treat that as still-open.
+        if self.last_failure_time.get(agent) is None:
+            return True
+        elapsed = time.time() - self.last_failure_time[agent]
+        if elapsed < self.recovery_timeout:
+            return True
+        # Recovery window elapsed — transition to HALF_OPEN to allow a
+        # single probe call.
+        self.state[agent] = CircuitState.HALF_OPEN
         return False
 
     def record_success(self, agent: str) -> None:
@@ -133,6 +144,10 @@ class OpenRouterClient:
         )
         self.max_retries = max_retries
         self._usage_log: list[UsageStats] = []
+        # §11.4 — per-provider error counters split by openai vs anthropic
+        # so the observability dashboard can break them out by provider.
+        self._provider_errors: dict[str, int] = {}
+        self._provider_calls: dict[str, int] = {}
         self.MODEL_SLOTS: dict[str, ModelSlot] = {
             "reasoning": ModelSlot(
                 primary=self.settings.model_reasoning,
@@ -160,6 +175,29 @@ class OpenRouterClient:
         """Get the primary model for a slot from config."""
         config = self.MODEL_SLOTS.get(slot, self.MODEL_SLOTS["reasoning"])
         return config.primary
+
+    @staticmethod
+    def _is_anthropic_model(model: str) -> bool:
+        """Classify a model as Anthropic (Claude family) for provider-routing.
+
+        OpenRouter prefixes Anthropic models with ``anthropic/``; native
+        Anthropic SDK model IDs start with ``claude-``.  We treat both as
+        the Anthropic provider.
+        """
+        m = (model or "").lower()
+        return m.startswith("anthropic/") or m.startswith("claude-")
+
+    def _record_provider_error(self, provider: str, error: bool) -> None:
+        """Bump the per-provider error/ok counter.
+
+        Args:
+            provider: ``"openai"`` or ``"anthropic"`` (or any provider
+                label the caller wants to track).
+            error: True for a failed call, False for a successful one.
+        """
+        key = f"{provider}.{'error' if error else 'ok'}"
+        self._provider_errors[key] = self._provider_errors.get(key, 0) + 1
+        self._provider_calls[provider] = self._provider_calls.get(provider, 0) + 1
 
     async def acall(
         self,
@@ -204,16 +242,35 @@ class OpenRouterClient:
                     )
                     self.circuit_breaker.record_success(agent)
                     self._log_usage(response)
+                    self._record_provider_error(
+                        "anthropic" if self._is_anthropic_model(model) else "openai",
+                        error=False,
+                    )
                     return response
                 except (RateLimitError, APITimeoutError) as e:
                     last_error = e
+                    self._record_provider_error(
+                        "anthropic" if self._is_anthropic_model(model) else "openai",
+                        error=True,
+                    )
                     if attempt < self.max_retries - 1:
                         time.sleep(2**attempt)
                     continue
                 except APIError as e:
                     last_error = e
                     if e.status_code in (401, 400):
+                        # 4xx errors propagate immediately and still
+                        # bump the per-provider counter so the §11.4
+                        # dashboard can see client-side bad-request rate.
+                        self._record_provider_error(
+                            "anthropic" if self._is_anthropic_model(model) else "openai",
+                            error=True,
+                        )
                         raise
+                    self._record_provider_error(
+                        "anthropic" if self._is_anthropic_model(model) else "openai",
+                        error=True,
+                    )
                     if attempt < self.max_retries - 1:
                         time.sleep(2**attempt)
                     continue
@@ -314,3 +371,32 @@ def get_llm_client() -> OpenRouterClient:
         circuit_breaker_threshold=settings.circuit_breaker_threshold,
         circuit_breaker_timeout=settings.circuit_breaker_timeout,
     )
+
+
+# Backward-compat alias: some tests + downstream callers still reference
+# the underscore-prefixed name that pre-dated the public rename.
+_get_llm_client = get_llm_client
+
+
+def get_provider_error_counts() -> dict[str, dict[str, float]]:
+    """§11.4 — per-provider error rate snapshot from the singleton client.
+
+    Returns ``{provider: {"calls": int, "errors": int, "error_rate": float}}``
+    for every provider that has had at least one call. Returns an empty
+    dict if no calls have been made (so the §11.4 dashboard can render
+    a zero-state without a KeyError).
+    """
+    # Use the underscore-prefixed name so tests that patch
+    # ``eden.llm.client._get_llm_client`` correctly intercept the call
+    # (the public name is a separate attribute slot).
+    client = _get_llm_client()
+    out: dict[str, dict[str, float]] = {}
+    for provider, calls in client._provider_calls.items():
+        errors = client._provider_errors.get(f"{provider}.error", 0)
+        rate = (errors / calls) if calls else 0.0
+        out[provider] = {
+            "calls": calls,
+            "errors": errors,
+            "error_rate": rate,
+        }
+    return out
