@@ -147,6 +147,11 @@ def test_call_records_success_on_first_try():
     c = client_module.OpenRouterClient(
         api_key="test", base_url="https://example.com", max_retries=1
     )
+    # Default reasoning slot is anthropic — force openai so we can assert
+    # the openai counter.
+    c.MODEL_SLOTS["reasoning"] = client_module.ModelSlot(
+        primary="openai/gpt-4o", fallback=[], max_tokens=100
+    )
 
     # Make _make_request return a fake LLMResponse
     fake_response = client_module.LLMResponse(
@@ -170,6 +175,9 @@ def test_call_skips_4xx_with_status_code_400():
     instruments."""
     c = client_module.OpenRouterClient(
         api_key="test", base_url="https://example.com", max_retries=3
+    )
+    c.MODEL_SLOTS["reasoning"] = client_module.ModelSlot(
+        primary="openai/gpt-4o", fallback=[], max_tokens=100
     )
 
     def _raise_400(*a, **kw):
