@@ -14,6 +14,11 @@ from eden.storage.postgres import get_postgres_client
 security = HTTPBearer(auto_error=False)
 
 # Permission map: role -> set of permissions
+# Phase 7.3d: extended with the new SOC-2 + GDPR + observability
+# permissions — ``pii:edit``, ``judges:run``, ``gdpr:execute``,
+# ``retention:override``. The split is owner-heavy on destructive
+# actions (gdpr:execute, retention:override) and admin-spread on
+# policy edits.
 PERMISSION_MAP: dict[str, set[str]] = {
     "owner": {
         "references:read",
@@ -28,6 +33,11 @@ PERMISSION_MAP: dict[str, set[str]] = {
         "jobs:read",
         "jobs:write",
         "org:transfer",
+        # Phase 7.3d additions
+        "pii:edit",
+        "judges:run",
+        "gdpr:execute",
+        "retention:override",
     },
     "admin": {
         "references:read",
@@ -40,11 +50,19 @@ PERMISSION_MAP: dict[str, set[str]] = {
         "audit:view",
         "jobs:read",
         "jobs:write",
+        # Phase 7.3d additions — admins can edit PII policy and run
+        # judges, but cannot override retention or execute GDPR
+        # deletions (those require owner).
+        "pii:edit",
+        "judges:run",
     },
     "member": {
         "references:read",
         "jobs:read",
         "jobs:write",
+        # Phase 7.3d — members can run judges (read-only ops on
+        # observability data) but cannot edit PII policy.
+        "judges:run",
     },
     "viewer": {
         "references:read",
@@ -381,6 +399,123 @@ async def require_org_permission(
             detail=f"Permission denied: {permission}",
         )
     return org
+
+
+# Phase 7.3d — thin permission guards. Route signatures read
+# cleaner with these than with a stringly-typed
+# ``require_org_permission("pii:edit")`` call site, and they give us
+# a single place to add telemetry / audit-log hooks later.
+async def _require_pii_policy_edit(
+    x_org_id: Optional[str] = Header(None, alias="X-Org-Id"),
+    authorization: Optional[str] = Cookie(None),
+) -> dict:
+    return await require_org_permission("pii:edit", x_org_id, authorization)
+
+
+async def _require_judges_run(
+    x_org_id: Optional[str] = Header(None, alias="X-Org-Id"),
+    authorization: Optional[str] = Cookie(None),
+) -> dict:
+    return await require_org_permission("judges:run", x_org_id, authorization)
+
+
+async def _require_gdpr_execute(
+    x_org_id: Optional[str] = Header(None, alias="X-Org-Id"),
+    authorization: Optional[str] = Cookie(None),
+) -> dict:
+    return await require_org_permission("gdpr:execute", x_org_id, authorization)
+
+
+async def _require_retention_override(
+    x_org_id: Optional[str] = Header(None, alias="X-Org-Id"),
+    authorization: Optional[str] = Cookie(None),
+) -> dict:
+    return await require_org_permission("retention:override", x_org_id, authorization)
+
+
+# Public aliases (used by route signatures).
+require_pii_policy_edit = _require_pii_policy_edit
+require_judges_run = _require_judges_run
+require_gdpr_execute = _require_gdpr_execute
+require_retention_override = _require_retention_override
+
+
+async def check_resource_permission(
+    *,
+    user_id: str,
+    org_id: str,
+    permission: str,
+    resource_type: Optional[str] = None,
+    resource_id: Optional[str] = None,
+) -> bool:
+    """Resource-scoped permission check for the custom-RBAC system.
+
+    Two layers:
+
+    1. Built-in role permissions (``PERMISSION_MAP``). If the user's
+       role in the org grants the requested permission, allow.
+    2. Custom-role assignments. A user may be assigned a custom role
+       for a specific resource; the assignment grants its permissions
+       for that resource.
+
+    The function is async because layer 2 hits Postgres. Layer 1 is
+    a pure dict lookup.
+
+    Returns ``False`` on any DB error — fail-closed is the wrong
+    default for an "is this allowed?" check, but the route layer
+    translates ``False`` into a 403, so we'd rather return False
+    than 500.
+    """
+    try:
+        client = await get_postgres_client()
+    except Exception:
+        return False
+    if not client:
+        return False
+
+    try:
+        row = await client.fetchrow(
+            """
+            SELECT role
+            FROM org_members
+            WHERE user_id = $1 AND org_id = $2
+            """,
+            user_id,
+            org_id,
+        )
+    except Exception:
+        return False
+
+    role = (row or {}).get("role") or ""
+    if has_permission(role, permission):
+        return True
+
+    # No built-in grant. If a resource_id is given, check the
+    # custom-role assignment table for a match.
+    if not (resource_type and resource_id):
+        return False
+
+    try:
+        present = await client.fetchval(
+            """
+            SELECT 1
+            FROM role_assignments
+            WHERE user_id = $1
+              AND org_id = $2
+              AND resource_type = $3
+              AND resource_id = $4
+              AND $5 = ANY(permissions)
+            LIMIT 1
+            """,
+            user_id,
+            org_id,
+            resource_type,
+            resource_id,
+            permission,
+        )
+    except Exception:
+        return False
+    return bool(present)
 
 
 def require_org_permission_or_api_key(permission: str):
