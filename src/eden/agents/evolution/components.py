@@ -1936,3 +1936,315 @@ Format as plain text, no JSON needed."""
             logger.info(f"Invalidated {invalidated} stale intelligence reports")
 
         return invalidated
+
+
+class JudgeScorePromptEvolver(EvolutionComponent):
+    """Phase 7.2b — judge-driven prompt evolution.
+
+    This is the **first link** in the closed-loop flywire. The evolver:
+
+    1. Reads recent ``judge_scores`` joined to ``telemetry_events``
+       (so each score has an ``agent_id``).
+    2. Aggregates per ``(agent_id, judge_name)``: mean score, sample
+       count, and a sample of the rationales.
+    3. For pairs with mean below
+       ``settings.judge_score_degradation_threshold`` AND sample count
+       ≥ ``settings.evolver_min_samples_per_judge`` → "degradation".
+    4. For each degradation, reads the active ``prompt_versions`` row
+       for that agent and asks the LLM for a revised system prompt
+       that addresses the judge feedback.
+    5. Inserts the new prompt version with ``active=False``,
+       ``ab_test_active=True``, and an ``ab_test_round`` bumped from
+       the previous version. The variant is dormant until
+       ``ModelRouter`` (Phase 2c) starts sending traffic to it.
+
+    The cap at ``settings.evolver_max_variants_per_run`` keeps one bad
+    day from producing dozens of variants; we sort the degradations
+    by mean score ascending so the worst-offending (agent, judge)
+    pairs are the first ones to get a rewrite.
+    """
+
+    def __init__(self, llm_client: Optional[OpenRouterClient] = None):
+        super().__init__(llm_client)
+        self._pv_client = None
+        self._pg = None
+
+    async def _get_pv(self):
+        if self._pv_client is None:
+            from eden.kb.prompt_versions.client import get_prompt_versions_client
+            # ``get_prompt_versions_client`` is a coroutine function —
+            # await it so ``self._pv_client`` is the actual client
+            # object, not a coroutine.
+            self._pv_client = await get_prompt_versions_client()
+        return self._pv_client
+
+    @property
+    def prompt_versions(self):
+        """Synchronous accessor for the cached client.
+
+        Returns the cached client object or ``None`` if it hasn't
+        been resolved yet. Async callers should use ``await
+        self._get_pv()`` instead.
+        """
+        return self._pv_client
+
+    async def _get_pg(self):
+        if self._pg is None:
+            from eden.storage.postgres import get_postgres_client
+            # ``get_postgres_client`` is a coroutine function — await
+            # it so ``self._pg`` is the client object, not a coroutine.
+            self._pg = await get_postgres_client()
+        return self._pg
+
+    async def _fetch_recent_judge_rows(self) -> list[dict]:
+        """Pull recent judge_scores joined to telemetry_events for
+        agent attribution.
+
+        Implemented as two queries for portability: the judge scores
+        table is read first, then we look up the agent_id for any
+        trace that has one. The evolver's contract is: each row has
+        ``agent_id`` populated if-and-only-if the score can be
+        attributed to an agent.
+
+        Errors are swallowed — the evolver never raises to its caller.
+        """
+        try:
+            pg = await self._get_pg()
+        except Exception as e:
+            logger.warning(f"JudgeScorePromptEvolver: postgres unavailable: {e}")
+            return []
+
+        from eden import config as _config
+        lookback = _config.get_settings().evolver_judge_lookback_minutes
+        try:
+            scores = await pg.fetch(
+                """
+                SELECT
+                    judge_name,
+                    score,
+                    rationale,
+                    trace_id,
+                    span_id,
+                    model,
+                    scored_at
+                FROM judge_scores
+                WHERE scored_at > NOW() - (%s || ' minutes')::interval
+                ORDER BY scored_at DESC
+                LIMIT 5000
+                """,
+                str(lookback),
+            )
+        except Exception as e:
+            logger.warning(f"JudgeScorePromptEvolver: judge_scores query failed: {e}")
+            return []
+
+        if not scores:
+            return []
+
+        # Build a trace_id → agent_id map from telemetry_events.
+        trace_ids = list({r.get("trace_id") for r in scores if r.get("trace_id")})
+        agent_by_trace: dict[str, str | None] = {}
+        if trace_ids:
+            try:
+                rows = await pg.fetch(
+                    """
+                    SELECT DISTINCT ON (trace_id)
+                        trace_id, agent_id
+                    FROM telemetry_events
+                    WHERE trace_id = ANY(%s)
+                      AND agent_id IS NOT NULL
+                    ORDER BY trace_id, ts DESC
+                    """,
+                    trace_ids,
+                )
+                agent_by_trace = {r["trace_id"]: r.get("agent_id") for r in rows}
+            except Exception as e:
+                logger.debug(f"JudgeScorePromptEvolver: telemetry join failed: {e}")
+
+        out: list[dict] = []
+        for r in scores:
+            tid = r.get("trace_id")
+            agent_id = agent_by_trace.get(tid) if tid else None
+            out.append({**r, "agent_id": agent_id})
+        return out
+
+    @staticmethod
+    def _aggregate(rows: list[dict]) -> dict[tuple[str, str], dict]:
+        """Group by (agent_id, judge_name); produce mean, count, sample rationales."""
+        buckets: dict[tuple[str, str], list[dict]] = defaultdict(list)
+        for r in rows:
+            agent_id = r.get("agent_id")
+            judge = r.get("judge_name")
+            if not agent_id or not judge:
+                continue
+            buckets[(agent_id, judge)].append(r)
+
+        aggregates: dict[tuple[str, str], dict] = {}
+        for key, items in buckets.items():
+            scores = [float(it.get("score") or 0.0) for it in items]
+            mean = sum(scores) / len(scores) if scores else 0.0
+            rationales = [
+                str(it.get("rationale") or "")
+                for it in items[:5]
+                if it.get("rationale")
+            ]
+            aggregates[key] = {
+                "agent_id": key[0],
+                "judge_name": key[1],
+                "mean_score": mean,
+                "sample_count": len(items),
+                "rationales": rationales,
+            }
+        return aggregates
+
+    async def _generate_variant(
+        self,
+        *,
+        agent: str,
+        current_prompt: str,
+        judge: str,
+        mean_score: float,
+        rationales: list[str],
+    ) -> str | None:
+        """Ask the LLM for a revised system prompt. Returns None on
+        failure (timeout, empty content, exception). The caller is
+        responsible for never propagating errors from here."""
+        rationale_block = "\n".join(f"- {r}" for r in rationales[:5]) or "(no rationales provided)"
+        prompt = (
+            f"The {agent} agent is failing the `{judge}` judge "
+            f"(mean score {mean_score:.2f}).\n\n"
+            f"Recent judge rationales:\n{rationale_block}\n\n"
+            f"Current system prompt for {agent}:\n```\n{current_prompt}\n```\n\n"
+            f"Rewrite the system prompt to address the recurring issues. "
+            f"Output the full revised system prompt — no commentary, no "
+            f"markdown fences, no JSON, just the prompt text."
+        )
+        try:
+            response = self.llm.call(
+                agent=f"prompt_evolver_{agent}",
+                prompt=prompt,
+                slot="reasoning",
+                system_prompt=(
+                    "You are a prompt engineer. Output only the revised system "
+                    "prompt — no preamble, no explanation, no markdown."
+                ),
+            )
+        except Exception as e:
+            logger.warning(f"JudgeScorePromptEvolver: LLM call failed for {agent}: {e}")
+            return None
+
+        content = (getattr(response, "content", "") or "").strip()
+        if not content:
+            return None
+        return content
+
+    async def run(self) -> dict:
+        """One pass of the evolver. Returns a small report dict with
+        ``degradations_detected`` and ``variants_generated``.
+
+        Never raises; DB / LLM errors are logged and swallowed so the
+        caller's loop (RedisTailer tick) keeps running.
+        """
+        # Re-resolve settings on every run so the test fixture's
+        # ``patch_settings`` (which swaps the singleton at runtime)
+        # is honored, and so live config changes take effect on the
+        # next tick. Go through the module so monkeypatch on
+        # ``eden.config.get_settings`` is picked up.
+        from eden import config as _config
+        s = _config.get_settings()
+        threshold = s.judge_score_degradation_threshold
+        min_samples = s.evolver_min_samples_per_judge
+        max_variants = s.evolver_max_variants_per_run
+
+        try:
+            rows = await self._fetch_recent_judge_rows()
+        except Exception as e:
+            logger.warning(f"JudgeScorePromptEvolver.run: fetch failed: {e}")
+            return {"degradations_detected": 0, "variants_generated": 0}
+
+        aggregates = self._aggregate(rows)
+        degradations = [
+            v for v in aggregates.values()
+            if v["mean_score"] < threshold and v["sample_count"] >= min_samples
+        ]
+        # Worst first (lowest mean).
+        degradations.sort(key=lambda v: v["mean_score"])
+
+        result = {
+            "degradations_detected": len(degradations),
+            "variants_generated": 0,
+        }
+        if not degradations:
+            return result
+
+        # Cap how many we act on this tick.
+        to_act_on = degradations[:max_variants]
+
+        for agg in to_act_on:
+            agent = agg["agent_id"]
+            try:
+                pv = await self._get_pv()
+                active = await pv.get_active_prompt(agent)
+            except Exception as e:
+                logger.warning(
+                    f"JudgeScorePromptEvolver: prompt_versions unavailable for {agent}: {e}"
+                )
+                continue
+
+            if not active:
+                # No active prompt → can't generate a variant. Bootstrap
+                # case; the agent is still using its class-level default.
+                continue
+
+            current_prompt = active.get("system_prompt") or ""
+            new_prompt = await self._generate_variant(
+                agent=agent,
+                current_prompt=current_prompt,
+                judge=agg["judge_name"],
+                mean_score=agg["mean_score"],
+                rationales=agg["rationales"],
+            )
+            if not new_prompt:
+                continue
+
+            prev_metrics = active.get("quality_metrics") or {}
+            prev_round = int(prev_metrics.get("ab_test_round") or 0)
+            new_version = (active.get("version") or 0) + 1
+
+            quality_metrics = {
+                "ab_test_active": True,
+                "ab_test_round": prev_round + 1,
+                "source_judges": [
+                    {
+                        "judge_name": agg["judge_name"],
+                        "mean_score": agg["mean_score"],
+                        "sample_count": agg["sample_count"],
+                    }
+                ],
+                "generated_by": "JudgeScorePromptEvolver",
+            }
+
+            try:
+                inserted = await pv.insert_version(
+                    agent=agent,
+                    system_prompt=new_prompt,
+                    version=new_version,
+                    few_shot_examples=prev_metrics.get("few_shot_examples"),
+                    quality_metrics=quality_metrics,
+                    active=False,
+                )
+            except Exception as e:
+                logger.warning(
+                    f"JudgeScorePromptEvolver: insert_version failed for {agent}: {e}"
+                )
+                continue
+
+            if inserted:
+                result["variants_generated"] += 1
+                logger.info(
+                    f"JudgeScorePromptEvolver: queued variant v{new_version} "
+                    f"for {agent} (judge={agg['judge_name']}, mean={agg['mean_score']:.2f})"
+                )
+
+        self.last_run = datetime.utcnow()
+        return result
