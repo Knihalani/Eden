@@ -31,7 +31,8 @@ from eden.insights.correlation import (
 # ────────────────────────────────────────────────────────────────────────
 
 
-def test_write_all_pending_does_not_crash_on_list():
+@pytest.mark.asyncio
+async def test_write_all_pending_does_not_crash_on_list():
     """Pre-fix: ``self._insights.values()`` raised AttributeError because
     ``_insights`` is a list. Post-fix: iteration works."""
     svc = InsightsService()
@@ -48,13 +49,14 @@ def test_write_all_pending_does_not_crash_on_list():
         return f"ent_{insight.insight_id}"
 
     with patch.object(svc, "write_insight_to_kb", side_effect=fake_write):
-        result = asyncio.run(svc.write_all_pending_insights_to_kb())
+        result = await svc.write_all_pending_insights_to_kb()
     assert result["total"] == 3
     assert len(result["written"]) == 3
     assert result["failed"] == []
 
 
-def test_write_insight_to_kb_no_longer_uses_nonexistent_fields():
+@pytest.mark.asyncio
+async def test_write_insight_to_kb_no_longer_uses_nonexistent_fields():
     """Pre-fix: payload referenced ``insight.title`` and
     ``insight.description`` which don't exist on the Insight dataclass.
     Post-fix: uses ``summary`` and ``recommended_action``."""
@@ -84,7 +86,7 @@ def test_write_insight_to_kb_no_longer_uses_nonexistent_fields():
         "eden.kb.semantic.vector_client.get_vector_client",
         return_value=FakeSemantic(),
     ):
-        result = asyncio.run(svc.write_insight_to_kb(insight))
+        result = await svc.write_insight_to_kb(insight)
 
     assert result == captured["entity_id"]
     # payload uses the real field names now
@@ -220,7 +222,8 @@ async def test_correlation_report_passes_org_id_as_parameter():
 # ────────────────────────────────────────────────────────────────────────
 
 
-def test_insights_service_uses_injected_embedder():
+@pytest.mark.asyncio
+async def test_insights_service_uses_injected_embedder():
     """When an embedder is passed to __init__, write_insight_to_kb
     calls it instead of building a default."""
     from eden.insights.insights_service import InsightsService
@@ -255,7 +258,7 @@ def test_insights_service_uses_injected_embedder():
     )
 
     with patch("eden.kb.semantic.vector_client.get_vector_client", return_value=fake_s):
-        result = asyncio.run(svc.write_insight_to_kb(insight))
+        result = await svc.write_insight_to_kb(insight)
 
     assert result is not None
     assert len(fake.calls) == 1
@@ -285,7 +288,8 @@ def test_hash_fallback_embedder_distinguishes_inputs():
     assert a != b
 
 
-def test_write_insight_falls_back_when_embedder_fails():
+@pytest.mark.asyncio
+async def test_write_insight_falls_back_when_embedder_fails():
     """If the embedder raises, the KB write still completes via the
     deterministic fallback vector (so the advisory path never blocks
     the pipeline)."""
@@ -316,7 +320,7 @@ def test_write_insight_falls_back_when_embedder_fails():
     )
 
     with patch("eden.kb.semantic.vector_client.get_vector_client", return_value=fake):
-        result = asyncio.run(svc.write_insight_to_kb(insight))
+        result = await svc.write_insight_to_kb(insight)
 
     assert result is not None
     # The fallback produced a 1536-dim vector and it was used.
