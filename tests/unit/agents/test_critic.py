@@ -170,7 +170,14 @@ class TestCriticRouting:
 
     @pytest.fixture
     def mock_llm(self):
-        """Mock LLM client."""
+        """Mock LLM client.
+
+        The Critic agent calls ``self.llm.call`` *synchronously* and
+        reads ``.content`` off the returned object, so the mock's
+        ``call`` attribute must be a regular ``MagicMock`` (not
+        ``AsyncMock``); the surrounding ``run`` is async but the LLM
+        call is not.
+        """
         return MagicMock()
 
     @pytest.fixture
@@ -189,7 +196,7 @@ class TestCriticRouting:
     @pytest.mark.asyncio
     async def test_routing_approve_leads_to_refining(self, mock_llm, base_state):
         """Test approve routing sends to refining stage."""
-        mock_llm.call = AsyncMock(return_value=MagicMock(
+        mock_llm.call = MagicMock(return_value=MagicMock(
             content='{"routing": "approve", "routing_reason": "Looks good", "dimensions": {}}'
         ))
         agent = CriticAgent(mock_llm)
@@ -200,7 +207,7 @@ class TestCriticRouting:
     @pytest.mark.asyncio
     async def test_routing_targeted_replan_increments_count(self, mock_llm, base_state):
         """Test targeted_replan increments critic_replan_count."""
-        mock_llm.call = AsyncMock(return_value=MagicMock(
+        mock_llm.call = MagicMock(return_value=MagicMock(
             content='{"routing": "targeted_replan", "routing_reason": "Fix reward spec", "dimensions": {}}'
         ))
         agent = CriticAgent(mock_llm)
@@ -212,7 +219,7 @@ class TestCriticRouting:
     @pytest.mark.asyncio
     async def test_routing_full_reresearch_increments_count(self, mock_llm, base_state):
         """Test full_reresearch increments critic_reresearch_count."""
-        mock_llm.call = AsyncMock(return_value=MagicMock(
+        mock_llm.call = MagicMock(return_value=MagicMock(
             content='{"routing": "full_reresearch", "routing_reason": "Need more research", "dimensions": {}}'
         ))
         agent = CriticAgent(mock_llm)
@@ -224,7 +231,7 @@ class TestCriticRouting:
     @pytest.mark.asyncio
     async def test_routing_reject_goes_to_human_review(self, mock_llm, base_state):
         """Test reject/escalate routing sends to human_review."""
-        mock_llm.call = AsyncMock(return_value=MagicMock(
+        mock_llm.call = MagicMock(return_value=MagicMock(
             content='{"routing": "reject", "routing_reason": "Fundamental flaw", "dimensions": {}}'
         ))
         agent = CriticAgent(mock_llm)
