@@ -840,23 +840,33 @@ except Exception as e:
         input_data: dict,
         timeout: int = 60,
     ) -> dict:
-        """Execute code directly (DEV ONLY)."""
+        """Execute code directly (DEV ONLY).
+
+        Captures both ``output = ...`` assignments and anything the
+        code prints via ``print()``.
+        """
+        import io
+        import contextlib
+
         logger.warning("Using NullSandboxRunner - NOT for production!")
 
         try:
             exec_globals = {"input": input_data.copy(), "__name__": "__main__"}
-            exec(code, exec_globals)
-
-            return {
-                "success": True,
-                "output": exec_globals.get("output"),
-            }
+            stdout_buf = io.StringIO()
+            with contextlib.redirect_stdout(stdout_buf):
+                exec(code, exec_globals)
+            printed = stdout_buf.getvalue()
+            # Prefer an explicit ``output`` variable, fall back to
+            # captured stdout so tests using plain ``print()`` work.
+            captured = exec_globals.get("output")
+            if captured is None:
+                captured = printed
+            return {"success": True, "output": captured}
         except Exception as e:
             return {
                 "success": False,
-                "error": str(e),
+                "error": f"{type(e).__name__}: {e}",
             }
-
     async def destroy(self) -> None:
         """Clean up (no-op for null runner)."""
         self._pool_initialized = False
