@@ -169,6 +169,17 @@ class Settings(BaseSettings):
     # 0 disables auto-canary creation (variants stay inactive).
     evolver_auto_canary_pct: int = 5
 
+    # ── Promotion loop (Phase 7.1b follow-up) ───────────────────────
+    # Used by ``eden.llmops.promotion.PromotionLoop`` to decide
+    # whether the canary's stats are significant enough to
+    # promote, keep, or roll back.
+    promotion_min_calls: int = 30
+    promotion_min_success_rate_lift: float = 0.05
+    promotion_max_latency_ratio: float = 1.10
+    promotion_max_judge_regression: float = 0.05
+    promotion_confidence_band: float = 0.02
+    promotion_lookback_minutes: int = 60
+
     # ── Insights detector loop (Phase 7.1b follow-up) ──────────────
     # The detector registry ships six real detectors, but nothing
     # periodically read new ``judge_scores`` rows and fanned them
