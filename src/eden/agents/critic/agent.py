@@ -261,8 +261,14 @@ Be specific, not generic. Find REAL issues, not nitpicks."""
     def __init__(self, llm_client: Optional[OpenRouterClient] = None):
         self.llm = llm_client or OpenRouterClient()
         self.max_tokens = settings.max_tokens_critic
-        # Alias for SYSTEM_PROMPT (see CriticAgent for the rationale).
+        # Use the class-level SYSTEM_PROMPT. We don't extend PromptLoader
+        # because Devil's Advocate has no corresponding prompt_versions
+        # row — its prompt is hard-coded.
         self._system_prompt = type(self).SYSTEM_PROMPT
+
+    @property
+    def system_prompt(self) -> str:
+        return self._system_prompt or ""
 
     async def run(self, edp: dict) -> dict:
         """Run Devil's Advocate on the EDP."""
