@@ -19,6 +19,7 @@ class AUDNAction(Enum):
     UPDATE = "UPDATE"
     DELETE = "DELETE"
     NONE = "NONE"
+    CONFLICT = "CONFLICT"
 
 
 @dataclass
@@ -66,9 +67,9 @@ def evaluate_audn(
     for existing_entry in matching:
         if _contradicts(proposed, existing_entry):
             return AUDNResult(
-                action=AUDNAction.UPDATE,
+                action=AUDNAction.CONFLICT,
                 reason=f"Contradiction detected with existing entry",
-                conflicting_entry=existing_entry
+                conflicting_entry=existing_entry,
             )
 
     # Check temporal ordering
@@ -120,13 +121,20 @@ def _contradicts(a: dict, b: dict) -> bool:
 
 
 def _has_new_information(proposed: dict, existing: dict) -> bool:
-    """Check if proposed entry has meaningfully new information."""
-    # Compare relevant fields
+    """Check if proposed entry has meaningfully new information.
+
+    A proposed key counts as "new information" if:
+      - it's not present in existing, OR
+      - it is present but the value differs.
+    """
     relevant_keys = ["properties", "description", "embedding"]
     for key in relevant_keys:
-        if key in proposed and key in existing:
-            if proposed[key] != existing[key]:
-                return True
+        if key not in proposed:
+            continue
+        if key not in existing:
+            return True  # brand-new key in proposed
+        if proposed[key] != existing[key]:
+            return True
     return False
 
 
