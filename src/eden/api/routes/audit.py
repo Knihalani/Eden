@@ -14,6 +14,24 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/orgs", tags=["audit"])
 
 
+class ChainVerifyEntry(BaseModel):
+    """One row in the chain-verify report."""
+    seq: int
+    id: str
+    created_at: object = None  # accept str or datetime, stringify in row mapper
+    ok: bool
+    expected_hash: str
+    actual_hash: str
+
+
+class ChainVerifyResponse(BaseModel):
+    """§6.4 — audit log chain verify report."""
+    total_rows: int = 0
+    ok_rows: int = 0
+    broken_rows: int = 0
+    entries: list[ChainVerifyEntry] = []
+
+
 class AuditLogEntry(BaseModel):
     """Single audit log entry."""
     id: str
@@ -128,4 +146,94 @@ async def get_audit_log(
         total=total,
         limit=limit,
         offset=offset,
+    )
+
+@router.get("/{org_id}/audit-log/verify-chain", response_model=ChainVerifyResponse)
+async def verify_audit_chain(
+    org_id: str,
+    x_org_id: Optional[str] = Header(None, alias="X-Org-Id"),
+    authorization: Optional[str] = Cookie(None),
+):
+    """§6.4 — verify the audit-log hash chain for tamper-evidence.
+
+    Returns a report with the total / ok / broken counts. If the
+    migration creating the ``verify_audit_chain`` SQL function has
+    not been applied, ``client.fetch`` will raise and we surface a
+    zero-state so the portal can render a "needs migration" banner.
+    """
+    await require_org_permission("audit:view", org_id, authorization)
+    client = await get_postgres_client()
+    try:
+        rows = await client.fetch(
+            "SELECT seq, id, created_at, ok, expected_hash, actual_hash "
+            "FROM verify_audit_chain(%s) ORDER BY seq",
+            org_id,
+        )
+    except Exception:
+        # Migration not applied (or other DB error) — surface zero
+        # state so the portal can render a "needs migration" banner.
+        return ChainVerifyResponse()
+    entries = [ChainVerifyEntry(**r) for r in rows]
+    ok = sum(1 for e in entries if e.ok)
+    return ChainVerifyResponse(
+        total_rows=len(entries),
+        ok_rows=ok,
+        broken_rows=len(entries) - ok,
+        entries=entries,
+    )
+
+
+@router.get("/{org_id}/audit-log/export")
+async def export_audit_log(
+    org_id: str,
+    format: str = Query("jsonl", pattern="^(jsonl|csv)$"),
+    from_date: Optional[str] = Query(None),
+    to_date: Optional[str] = Query(None),
+    x_org_id: Optional[str] = Header(None, alias="X-Org-Id"),
+    authorization: Optional[str] = Cookie(None),
+):
+    """§6.4 — streaming export of the audit log as JSONL or CSV.
+
+    Returns a StreamingResponse whose ``body_iterator`` yields one
+    record per chunk. JSONL writes one record per line; CSV writes
+    a header row followed by one record per line.
+    """
+    from fastapi.responses import StreamingResponse
+    import csv as _csv
+    import io as _io
+    import json as _json
+
+    await require_org_permission("audit:view", org_id, authorization)
+    client = await get_postgres_client()
+    rows = await client.fetch(
+        "SELECT id, user_id, user_email, action, target_type, target_id, "
+        "metadata, ip_address, user_agent, created_at, prev_hash, entry_hash "
+        "FROM audit_log WHERE org_id = %s "
+        "ORDER BY created_at",
+        org_id,
+    )
+
+    csv_fields = [
+        "id", "user_id", "user_email", "action", "target_type", "target_id",
+        "metadata", "ip_address", "user_agent", "created_at", "prev_hash", "entry_hash",
+    ]
+
+    def _serialize(r: dict) -> str:
+        if format == "jsonl":
+            return _json.dumps(r, default=str) + "\n"
+        # csv
+        buf = _io.StringIO()
+        writer = _csv.DictWriter(buf, fieldnames=csv_fields, extrasaction="ignore")
+        writer.writerow(r)
+        return buf.getvalue()
+
+    async def _iter():
+        if format == "csv":
+            yield (",".join(csv_fields) + "\n").encode("utf-8")
+        for r in rows:
+            yield _serialize(r).encode("utf-8")
+
+    return StreamingResponse(
+        _iter(),
+        media_type="application/jsonl" if format == "jsonl" else "text/csv",
     )
