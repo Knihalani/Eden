@@ -941,6 +941,103 @@ export const api = {
       method: "PUT",
       body: JSON.stringify(data),
     }),
+
+  // ── Observability: judges (Phase 7.2b) ────────────────────────
+  // These power the live "Scores" tab in /observability.
+
+  /**
+   * Run the registered judges on a specific trace. The request is
+   * fire-and-forget — the async tailer picks up the job and writes
+   * scores to ``judge_scores``; the caller refreshes the list to see
+   * the new rows.
+   */
+  runJudges: (
+    orgId: string,
+    body: { trace_id: string; judge_names?: string[] | null },
+  ): Promise<{ enqueued: number }> =>
+    fetchApi(`/orgs/${orgId}/observability/judges/run`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+
+  /**
+   * List judge scores for a tenant, optionally filtered by trace or
+   * judge name. Returns a page of rows plus a ``next_cursor`` token
+   * for pagination.
+   */
+  listJudgeScores: (
+    orgId: string,
+    params: {
+      trace_id?: string;
+      judge_name?: string;
+      limit?: number;
+      cursor?: string | null;
+    },
+  ): Promise<{
+    scores: Array<{
+      judge_run_id: string;
+      trace_id: string;
+      span_id?: string | null;
+      judge_name: string;
+      judge_version: string;
+      score: number;
+      rationale?: string | null;
+      model: string;
+      scored_at: string;
+      latency_ms?: number | null;
+    }>;
+    next_cursor: string | null;
+  }> => {
+    const q = new URLSearchParams();
+    if (params.trace_id) q.set("trace_id", params.trace_id);
+    if (params.judge_name) q.set("judge_name", params.judge_name);
+    if (params.limit) q.set("limit", String(params.limit));
+    if (params.cursor) q.set("cursor", params.cursor);
+    const qs = q.toString();
+    return fetchApi(
+      `/orgs/${orgId}/observability/judges${qs ? `?${qs}` : ""}`,
+    );
+  },
+
+  /**
+   * Fetch a single judge run by id. Used for the per-score detail
+   * drawer in the portal.
+   */
+  getJudgeScore: (
+    orgId: string,
+    judgeRunId: string,
+  ): Promise<{
+    judge_run_id: string;
+    trace_id: string;
+    span_id?: string | null;
+    judge_name: string;
+    judge_version: string;
+    score: number;
+    rationale?: string | null;
+    model: string;
+    scored_at: string;
+    latency_ms?: number | null;
+  }> => fetchApi(`/orgs/${orgId}/observability/judges/${judgeRunId}`),
+
+  // ── Observability: PII policy (Phase 7.3a) ───────────────────
+
+  // ── Observability: retention policy (Phase 7.3b) ─────────────
+  // The existing `getRetentionPolicy` / `updateRetentionPolicy`
+  // cover the singular config. ``listRetentionOverrides`` returns
+  // the per-table overrides the route returns for tenants that
+  // have set them; useful for the Settings rail's Retention tab.
+
+  listRetentionOverrides: (
+    orgId: string,
+  ): Promise<Array<{
+    policy_id: string;
+    table_name: string;
+    hot_days: number;
+    warm_days: number;
+    cold_days: number;
+    delete_days: number;
+    pii_scrub_after_days: number | null;
+  }>> => fetchApi(`/orgs/${orgId}/retention-policy?list=overrides`),
 };
 
 export function getJobStreamUrl(jobId: string): string {
