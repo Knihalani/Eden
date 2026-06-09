@@ -15,6 +15,17 @@ Decision flow when ``PromptLoader`` resolves a prompt:
        broken by the highest version.
     4. Fall back to the global ``prompt_versions.active = TRUE`` row.
     5. Fall back to the class constant ``SYSTEM_PROMPT``.
+
+Public surface (used by ``PromptLoader`` and tests):
+
+    * ``_stable_roll``  — the deterministic per-(tenant, agent, minute)
+      hash → [0, 1) value.
+    * ``pick_canary_version`` — the pure-function dice roller.
+    * ``fetch_active_assignments`` — async DB helper that returns
+      the active rows for a (tenant, agent) tuple.
+    * ``resolve_prompt_version`` — async end-to-end: queries the DB,
+      rolls the dice, and returns the chosen version (or ``None`` to
+      fall back to the global active).
 """
 
 from __future__ import annotations
@@ -22,8 +33,6 @@ from __future__ import annotations
 import hashlib
 import logging
 from typing import Any, Optional
-
-from eden.config import get_settings
 
 logger = logging.getLogger(__name__)
 
@@ -67,3 +76,72 @@ def pick_canary_version(
         if roll < cumulative:
             return row
     return sorted_rows[-1]  # floating point edge case
+
+
+async def fetch_active_assignments(
+    tenant_id: str,
+    agent: str,
+) -> list[dict[str, Any]]:
+    """Return the active canary assignments for (tenant, agent).
+
+    Reads from ``prompt_version_assignments``. Returns ``[]`` on any
+    DB error — the caller falls back to the global active version.
+
+    Each row has at least:
+        ``version``        — int
+        ``traffic_pct``    — int 0-100
+        ``experiment_id``  — UUID str
+    """
+    try:
+        from eden.storage.postgres import get_postgres_client
+        client = await get_postgres_client()
+    except Exception as exc:  # pragma: no cover - best-effort
+        logger.debug(f"fetch_active_assignments: postgres unavailable: {exc}")
+        return []
+    if not client:
+        return []
+    try:
+        rows = await client.fetch(
+            """
+            SELECT version, traffic_pct, experiment_id
+            FROM prompt_version_assignments
+            WHERE tenant_id = $1
+              AND agent = $2
+              AND status = 'active'
+              AND (expires_at IS NULL OR expires_at > NOW())
+            """,
+            tenant_id,
+            agent,
+        )
+    except Exception as exc:
+        logger.debug(f"fetch_active_assignments: query failed: {exc}")
+        return []
+    out: list[dict[str, Any]] = []
+    for r in rows:
+        out.append({
+            "version": int(r.get("version") or 0),
+            "traffic_pct": int(r.get("traffic_pct") or 0),
+            "experiment_id": str(r.get("experiment_id") or ""),
+        })
+    return out
+
+
+async def resolve_prompt_version(
+    tenant_id: str,
+    agent: str,
+) -> Optional[int]:
+    """End-to-end canary resolution: fetch assignments, roll the
+    dice, return the chosen version, or ``None`` if the global
+    active version should be used.
+
+    This is the helper ``PromptLoader`` should call from its async
+    variant. It is intentionally side-effect-free: the actual prompt
+    text comes from ``prompt_versions`` based on the returned
+    version, and the caller is responsible for falling back to the
+    class-level ``SYSTEM_PROMPT`` if the version is not in the KB.
+    """
+    assignments = await fetch_active_assignments(tenant_id, agent)
+    choice = pick_canary_version(assignments, tenant_id, agent)
+    if not choice:
+        return None
+    return int(choice["version"])
