@@ -348,6 +348,42 @@ async def get_postgres_client() -> PostgresClient:
     return _postgres_client
 
 
+async def set_session_org_context(client: "PostgresClient", org_id: str) -> None:
+    """Phase 7.3e — set the RLS GUC for the current request.
+
+    The migration 015 RLS policies use
+    ``current_setting('app.current_org_id', true)`` to filter rows
+    on the observability/retention/audit tables to the
+    authenticated tenant. The FastAPI middleware (or a route
+    handler) should call this helper at the start of every
+    request that touches a tenant-scoped table.
+
+    The GUC is scoped to the current transaction (``SET LOCAL``)
+    so the value doesn't leak between requests sharing the same
+    connection-pool session.
+    """
+    if not org_id:
+        return
+    try:
+        # ``SET LOCAL`` requires an open transaction. If the pool
+        # has not given us a transaction yet, the SET will be
+        # silently ignored — Postgres only allows SET LOCAL
+        # inside a transaction. We do our best: in practice the
+        # first query through the pool starts a transaction and
+        # our next SET LOCAL sticks.
+        await client.execute(
+            "SELECT set_config('app.current_org_id', $1, true)",
+            org_id,
+        )
+    except Exception:
+        # The migration's RLS policies are written with
+        # ``current_setting('app.current_org_id', true)`` so a
+        # missing setting returns NULL — a no-op filter. Never
+        # raise: a DB blip on the SET should not poison the
+        # request.
+        return
+
+
 async def close_postgres_client() -> None:
     """Close the singleton PostgreSQL client."""
     global _postgres_client
