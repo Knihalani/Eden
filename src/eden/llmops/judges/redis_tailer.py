@@ -39,6 +39,11 @@ class RedisTailer:
     subscription instead), reads the most recent entries, and runs
     the registry's judges on each new event. Scoring is best-effort.
 
+    On every Nth tick (default: every tick) the tailer also invokes
+    ``PromotionLoop.run_once()`` so the closed-loop flywire keeps
+    advancing. Same async / best-effort posture: a failure logs and
+    the loop continues.
+
     Concurrency: ``max_concurrent_per_tenant`` is enforced via a
     per-tenant ``asyncio.Semaphore`` so a noisy tenant can't
     starve quieter ones.
@@ -51,14 +56,19 @@ class RedisTailer:
         max_concurrent_per_tenant: int = 4,
         poll_interval_seconds: float = 1.0,
         max_events_per_poll: int = 100,
+        promotion_loop_every_n_polls: int = 1,
     ) -> None:
         self.llm_client = llm_client
         self.max_concurrent_per_tenant = max_concurrent_per_tenant
         self.poll_interval_seconds = poll_interval_seconds
         self.max_events_per_poll = max_events_per_poll
+        # Run ``PromotionLoop.run_once()`` every N polls (default: every
+        # poll). Set to 0 to disable the promotion loop entirely.
+        self.promotion_loop_every_n_polls = promotion_loop_every_n_polls
         self._semaphores: dict[str, asyncio.Semaphore] = {}
         self._stop = asyncio.Event()
         self._task: Optional[asyncio.Task] = None
+        self._poll_count: int = 0
 
     async def start(self) -> None:
         """Start the background polling task. Idempotent."""
@@ -109,6 +119,8 @@ class RedisTailer:
         consumer group + last-delivered-id cursor is the right
         primitive; that's the Phase 3 upgrade.
         """
+        self._poll_count += 1
+
         from eden.storage.redis import get_redis_client
 
         client = await get_redis_client()
@@ -134,6 +146,19 @@ class RedisTailer:
                 )
         except Exception as exc:
             logger.debug(f"scan_iter failed: {exc}")
+
+        # Promotion loop — runs the closed-loop flywire on the same
+        # tick. Same best-effort posture: a failure is logged, the
+        # outer loop continues.
+        if self.promotion_loop_every_n_polls > 0 and (
+            self._poll_count % self.promotion_loop_every_n_polls == 0
+        ):
+            try:
+                from eden.llmops.promotion import get_promotion_loop
+                loop = get_promotion_loop()
+                await loop.run_once()
+            except Exception as exc:
+                logger.debug(f"promotion loop tick failed: {exc}")
 
     async def _process_key(
         self,
