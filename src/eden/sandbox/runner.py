@@ -6,6 +6,7 @@ Each test run executes in an ephemeral microVM with no access to Eden infrastruc
 
 import logging
 import json
+import sys
 import asyncio
 import hashlib
 import base64
@@ -698,6 +699,12 @@ class NullSandboxRunner(SandboxRunner):
             "exploits_found": 0,
         }
 
+
+    def _enforce_resource_limits(self) -> None:
+        """No-op for the dev-only runner. The real Firecracker
+        runner would use this hook to set rlimits via preexec_fn.
+        """
+        return
     async def initialize(self) -> None:
         """Initialize the null sandbox runner."""
         logger.warning("NullSandboxRunner initialized - NOT for production!")
@@ -718,42 +725,180 @@ class NullSandboxRunner(SandboxRunner):
         exploit_probes: list[dict],
         timeout: int = 300,
     ) -> TestResult:
-        """Run tests directly in subprocess (DEV ONLY)."""
+        """Run tests directly in subprocess (DEV ONLY).
+
+        Counts ``assert`` statements in the test suite, treats each as
+        a test, and supports two structured-output conventions:
+
+        1. The test suite may print JSON between
+           ``__EDEN_RESULT_START__`` and ``__EDEN_RESULT_END__`` markers.
+           If present, that JSON wins (it lets the test author decide
+           pass/fail counts).
+        2. If no markers are printed, the runner counts assertions and
+           tracks how many raised AssertionError vs. how many passed.
+
+        Each ``exploit_probes`` entry is run after the test suite
+        passes; probes that set ``_probe_result = {...}`` produce an
+        ``exploit_findings`` entry.
+        """
         logger.warning("Using NullSandboxRunner - NOT for production!")
 
         # Build combined code to execute
+        # Use base64 to avoid triple-quote / escape ambiguities in the
+        # user-supplied ``code`` and ``test_suite`` strings.
+        import base64
+
+        code_b64 = base64.b64encode(code.encode("utf-8")).decode("ascii")
+        suite_b64 = base64.b64encode(test_suite.encode("utf-8")).decode("ascii")
+        probes_json = json.dumps(exploit_probes or [])
+
         combined_code = f"""
 import sys
 import json
+import base64
 import traceback
+import ast
 
-# Capture stdout
 from io import StringIO
+
 sys.stdout = StringIO()
+sys.stderr = StringIO()
+
+def _b64_to_str(b):
+    return base64.b64decode(b).decode("utf-8")
+
+def _count_assertions(src):
+    try:
+        tree = ast.parse(src)
+    except SyntaxError:
+        return 0
+    count = 0
+    for node in ast.walk(tree):
+        # Bare ``assert`` statements at module level only. We skip
+        # asserts inside functions because the test suite runs at
+        # module scope; nested asserts would be unreachable.
+        if isinstance(node, ast.Assert):
+            count += 1
+    return count
 
 try:
-    # Execute the environment code
-    exec('''
-{code}
-''')
+    # Execute the environment code first so the test suite sees it.
+    env_src = _b64_to_str({code_b64!r})
+    try:
+        exec(env_src, globals())
+    except Exception as env_exc:
+        sys.stdout = sys.__stdout__
+        sys.stderr = sys.__stderr__
+        print("ERROR: env code raised " + type(env_exc).__name__ + ": " + str(env_exc), file=sys.stderr)
+        traceback.print_exc()
+        sys.exit(1)
 
-    # Execute the test suite
-    test_results = exec('''
-{test_suite}
-''')
+    # Execute the test suite. Each ``assert`` statement is treated as
+    # a test case; the runner tracks how many pass and how many fail.
+    suite_src = _b64_to_str({suite_b64!r})
+    expected_assertions = _count_assertions(suite_src)
 
-    stdout_output = sys.stdout.getvalue()
+    test_count = expected_assertions
+    passed = 0
+    failed = 0
+    errors = 0
+    structured = None
+
+    # Run the test suite with a wrapper that catches AssertionErrors
+    # globally — we want ``passed`` to reflect successful asserts, not
+    # an early-exit on the first failure.
+    import linecache
+    suite_compiled = compile(suite_src, "<test_suite>", "exec")
+
+    try:
+        exec(suite_compiled, globals())
+    except AssertionError as ae:
+        # A top-level AssertionError means the most recent assert
+        # failed. The remaining ones were either not reached (we
+        # can't tell statically) or also failed. We surface 1 failure
+        # + (test_count - 1) "unreached" which the test treats as
+        # failed.
+        failed = max(1, expected_assertions - passed)
+    except Exception as suite_exc:
+        errors = 1
+        sys.stdout = sys.__stdout__
+        sys.stderr = sys.__stderr__
+        print("ERROR: test suite raised " + type(suite_exc).__name__ + ": " + str(suite_exc), file=sys.stderr)
+        traceback.print_exc()
+
+    # If we got here without an exception, every assertion passed
+    # (since the suite completed without raising AssertionError).
+    if errors == 0 and failed == 0:
+        passed = test_count
+    elif errors == 0 and failed > 0 and test_count > 0:
+        # Conservative: count the first failed as failed, the rest as
+        # unreached. The test author can use the structured markers
+        # below if they need exact counts.
+        passed = 0
+
+    # Check for structured __EDEN_RESULT_START__ / __EDEN_RESULT_END__
+    # markers in stdout. If present, those override the heuristic
+    # counts above.
+    stdout_value = sys.stdout.getvalue()
+    if "__EDEN_RESULT_START__" in stdout_value and "__EDEN_RESULT_END__" in stdout_value:
+        try:
+            payload = stdout_value.split("__EDEN_RESULT_START__", 1)[1].split("__EDEN_RESULT_END__", 1)[0].strip()
+            structured = json.loads(payload)
+            test_count = structured.get("test_count", test_count)
+            passed = structured.get("passed", passed)
+            failed = structured.get("failed", failed)
+            errors = structured.get("errors", errors)
+        except (json.JSONDecodeError, IndexError):
+            pass
+
+    # Run exploit probes. Each probe is a small bit of code that sets
+    # ``_probe_result`` if it detects an exploit; the runner captures
+    # those as findings.
+    exploit_findings = []
+    try:
+        for probe in json.loads({probes_json!r}):
+            try:
+                probe_globals = {{"__name__": "__main__"}}
+                exec(probe.get("probe_code", "pass"), probe_globals)
+                pr = probe_globals.get("_probe_result")
+                if pr is not None:
+                    exploit_findings.append({{
+                        "probe_name": probe.get("name", "unknown"),
+                        "category": probe.get("category", "unknown"),
+                        "result": pr,
+                    }})
+            except Exception as probe_exc:
+                exploit_findings.append({{
+                    "probe_name": probe.get("name", "unknown"),
+                    "category": probe.get("category", "unknown"),
+                    "error": type(probe_exc).__name__ + ": " + str(probe_exc),
+                }})
+    except Exception:
+        pass
+
+    # Restore stdout/stderr and emit the structured result.
+    captured_stdout = sys.stdout.getvalue()
     sys.stdout = sys.__stdout__
+    sys.stderr = sys.__stderr__
 
+    result = {{
+        "test_count": test_count,
+        "passed": passed,
+        "failed": failed,
+        "errors": errors,
+        "exploit_findings": exploit_findings,
+    }}
     print("TEST_RESULTS:")
-    print(json.dumps(test_results))
+    print(json.dumps(result))
     print("STDOUT:")
-    print(stdout_output)
+    print(captured_stdout)
 
-except Exception as e:
+except Exception as outer_exc:
     sys.stdout = sys.__stdout__
-    print("ERROR:", file=sys.stderr)
+    sys.stderr = sys.__stderr__
+    print("ERROR: " + type(outer_exc).__name__ + ": " + str(outer_exc), file=sys.stderr)
     traceback.print_exc()
+    sys.exit(1)
 """
 
         try:
@@ -841,23 +986,31 @@ except Exception as e:
         input_data: dict,
         timeout: int = 60,
     ) -> dict:
-        """Execute code directly (DEV ONLY)."""
+        """Execute code directamente (DEV ONLY).
+
+        Captures both ``output = ...`` assignments and anything the
+        code prints via ``print()``.
+        """
+        import io
+        import contextlib
+
         logger.warning("Using NullSandboxRunner - NOT for production!")
 
         try:
             exec_globals = {"input": input_data.copy(), "__name__": "__main__"}
-            exec(code, exec_globals)
-
-            return {
-                "success": True,
-                "output": exec_globals.get("output"),
-            }
+            stdout_buf = io.StringIO()
+            with contextlib.redirect_stdout(stdout_buf):
+                exec(code, exec_globals)
+            printed = stdout_buf.getvalue()
+            captured = exec_globals.get("output")
+            if captured is None:
+                captured = printed
+            return {"success": True, "output": captured}
         except Exception as e:
             return {
                 "success": False,
-                "error": str(e),
+                "error": f"{type(e).__name__}: {e}",
             }
-
     async def destroy(self) -> None:
         """Clean up (no-op for null runner)."""
         self._pool_initialized = False

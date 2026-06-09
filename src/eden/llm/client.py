@@ -79,6 +79,14 @@ class CircuitBreaker:
         if self.state[agent] == CircuitState.OPEN:
             lock_until = self.half_open_lock_until.get(agent, 0)
             if time.time() < lock_until:
+                # Hard lockout from repeated half-open failures.
+                return True
+            # Promote to HALF_OPEN only once the recovery_timeout has
+            # elapsed since the last failure — otherwise we'd flip
+            # to HALF_OPEN instantly and effectively never block
+            # traffic, which defeats the purpose of a circuit breaker.
+            last = self.last_failure_time.get(agent, 0)
+            if time.time() - last < self.recovery_timeout:
                 return True
             self.state[agent] = CircuitState.HALF_OPEN
             return False
@@ -133,6 +141,10 @@ class OpenRouterClient:
         )
         self.max_retries = max_retries
         self._usage_log: list[UsageStats] = []
+        # §11.4 — per-provider error counters split by openai vs anthropic
+        # so the observability dashboard can break them out by provider.
+        self._provider_errors: dict[str, int] = {}
+        self._provider_calls: dict[str, int] = {}
         self.MODEL_SLOTS: dict[str, ModelSlot] = {
             "reasoning": ModelSlot(
                 primary=self.settings.model_reasoning,
@@ -155,6 +167,18 @@ class OpenRouterClient:
                 max_tokens=self.settings.max_tokens_fact_checker,
             ),
         }
+
+    @staticmethod
+    def _is_anthropic_model(model: str) -> bool:
+        """Classify a model as Anthropic (Claude family) for provider-routing."""
+        m = (model or "").lower()
+        return m.startswith("anthropic/") or m.startswith("claude-")
+
+    def _record_provider_error(self, provider: str, error: bool) -> None:
+        """Bump the per-provider error/ok counter."""
+        key = f"{provider}.{'error' if error else 'ok'}"
+        self._provider_errors[key] = self._provider_errors.get(key, 0) + 1
+        self._provider_calls[provider] = self._provider_calls.get(provider, 0) + 1
 
     def get_model_for_slot(self, slot: str) -> str:
         """Get the primary model for a slot from config."""
@@ -204,16 +228,32 @@ class OpenRouterClient:
                     )
                     self.circuit_breaker.record_success(agent)
                     self._log_usage(response)
+                    self._record_provider_error(
+                        "anthropic" if self._is_anthropic_model(model) else "openai",
+                        error=False,
+                    )
                     return response
                 except (RateLimitError, APITimeoutError) as e:
                     last_error = e
+                    self._record_provider_error(
+                        "anthropic" if self._is_anthropic_model(model) else "openai",
+                        error=True,
+                    )
                     if attempt < self.max_retries - 1:
                         time.sleep(2**attempt)
                     continue
                 except APIError as e:
                     last_error = e
                     if e.status_code in (401, 400):
+                        self._record_provider_error(
+                            "anthropic" if self._is_anthropic_model(model) else "openai",
+                            error=True,
+                        )
                         raise
+                    self._record_provider_error(
+                        "anthropic" if self._is_anthropic_model(model) else "openai",
+                        error=True,
+                    )
                     if attempt < self.max_retries - 1:
                         time.sleep(2**attempt)
                     continue
@@ -314,3 +354,24 @@ def get_llm_client() -> OpenRouterClient:
         circuit_breaker_threshold=settings.circuit_breaker_threshold,
         circuit_breaker_timeout=settings.circuit_breaker_timeout,
     )
+
+
+# Backward-compat alias: tests + downstream callers that pre-dated
+# the public rename use the underscore-prefixed name.
+_get_llm_client = get_llm_client
+
+
+def get_provider_error_counts() -> dict:
+    """§11.4 — per-provider error rate snapshot from the singleton client.
+
+    Returns ``{provider: {"calls": int, "errors": int, "error_rate": float}}``.
+    """
+    # Use the underscore-prefixed name so tests that patch
+    # ``eden.llm.client._get_llm_client`` correctly intercept.
+    client = _get_llm_client()
+    out: dict = {}
+    for provider, calls in client._provider_calls.items():
+        errors = client._provider_errors.get(f"{provider}.error", 0)
+        rate = (errors / calls) if calls else 0.0
+        out[provider] = {"calls": calls, "errors": errors, "error_rate": rate}
+    return out

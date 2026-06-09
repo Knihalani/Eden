@@ -41,10 +41,13 @@ def helicone_headers(
         headers["Helicone-Cache-Bucket"] = str(cache_bucket)
     if properties:
         for key, value in properties.items():
-            # Helicone reserves "Helicone-" prefix; namespaces props under
-            # ``Helicone-Property-`` so user-defined keys don't collide.
-            if not key.startswith("Helicone-"):
-                headers[f"Helicone-Property-{key}"] = str(value)
+            # Helicone reserves the "Helicone-" prefix for internal
+            # routing. User-supplied keys that already start with that
+            # prefix would collide if passed through, so we always
+            # namespace them under ``Helicone-Property-``. The result
+            # is that "Helicone-Foo" becomes "Helicone-Property-Helicone-Foo"
+            # — slightly redundant but unambiguous.
+            headers[f"Helicone-Property-{key}"] = str(value)
     return headers
 
 
