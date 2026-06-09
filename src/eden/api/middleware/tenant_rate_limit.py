@@ -84,6 +84,9 @@ class TenantRateLimitMiddleware(BaseHTTPMiddleware):
         self._bucket_lock = asyncio.Lock()
         self._tier_cache: dict[str, tuple[int, int, str, float]] = {}  # org_id -> (limit, window, tier, expires_at)
         self._tier_cache_ttl = 5.0  # seconds
+        # Phase 7.3c — per-tenant region cache. Cheap; lives in-process.
+        self._region_cache: dict[str, tuple[Optional[str], float]] = {}
+        self._region_cache_ttl = 30.0  # seconds
         self._redis = None  # Lazy-load Redis if available
         self._cleanup_task: Optional[asyncio.Task] = None
         self._running = True
@@ -251,6 +254,48 @@ class TenantRateLimitMiddleware(BaseHTTPMiddleware):
             logger.debug(f"Could not resolve API key id for rate limit: {exc}")
             return None
 
+    async def _resolve_region(self, org_id: Optional[str]) -> Optional[str]:
+        """Phase 7.3c — return the org's region code (``"us"``,
+        ``"eu"``, ``"ap"``) for the ``X-Region-Hint`` response header.
+
+        Returns ``None`` when:
+
+        * ``org_id`` is missing (anonymous traffic).
+        * The org hasn't set a region yet.
+        * The DB is unavailable (caller treats as best-effort).
+
+        Results are cached in-process for ``_region_cache_ttl`` seconds
+        to avoid a per-request DB hit on the hot path.
+        """
+        if not org_id:
+            return None
+        import time as _time
+        now = _time.monotonic()
+        cached = self._region_cache.get(org_id)
+        if cached is not None:
+            value, expires_at = cached
+            if expires_at > now:
+                return value
+        try:
+            from eden.storage.postgres import get_postgres_client
+            client = await get_postgres_client()
+        except Exception:
+            return None
+        if not client:
+            return None
+        try:
+            row = await client.fetchrow(
+                "SELECT region FROM organizations WHERE org_id = $1",
+                org_id,
+            )
+        except Exception:
+            return None
+        region = None
+        if row:
+            region = row.get("region") or None
+        self._region_cache[org_id] = (region, now + self._region_cache_ttl)
+        return region
+
     async def dispatch(self, request: Request, call_next) -> Response:
         # ── Skip rate limiting for health checks and CORS preflight ──
         if request.url.path == "/health" or request.method == "OPTIONS":
@@ -318,4 +363,35 @@ class TenantRateLimitMiddleware(BaseHTTPMiddleware):
         response.headers["X-RateLimit-Remaining"] = str(int(remaining))
         response.headers["X-RateLimit-Reset"] = str(reset_ts)
         response.headers["X-RateLimit-Policy"] = tier
+
+        # ── RLS GUC (Phase 7.3e) ──
+        # Set the per-connection ``app.current_org_id`` GUC so the
+        # RLS policies added in migration 015 filter the
+        # observability / retention / audit tables to the
+        # authenticated tenant. Best-effort: a DB blip on the SET
+        # must not poison the response, and the GUC is only
+        # applied when the request is authed.
+        if org_id:
+            try:
+                from eden.storage.postgres import (
+                    get_postgres_client,
+                    set_session_org_context,
+                )
+                _pg = await get_postgres_client()
+                await set_session_org_context(_pg, org_id)
+            except Exception:
+                pass
+
+        # ── Region hint (Phase 7.3c) ──
+        # If the resolved tenant has a region set, surface it on
+        # the response so the client (and our own dashboards) can
+        # confirm residency routing. Best-effort: a DB blip must
+        # not poison the response.
+        try:
+            region = await self._resolve_region(org_id)
+            if region:
+                response.headers["X-Region-Hint"] = region
+        except Exception:
+            pass
+
         return response

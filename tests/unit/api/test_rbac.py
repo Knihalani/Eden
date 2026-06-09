@@ -169,24 +169,36 @@ def test_assignment_request_rejects_partial_resource():
     assert a.resource_type == "job"
     assert a.resource_id is None
 
-    # The route rejects it with 400.
+    # The route rejects it with 400. Run the async call inside a
+    # nested ``asyncio.run`` so the test stays sync — pytest-asyncio
+    # is in auto mode but a few of the older tests in this file were
+    # written as plain ``def`` so we keep the inner ``_route``
+    # coroutine pattern. The earlier version called
+    # ``asyncio.run`` inline; that closes the session-scoped event
+    # loop and breaks later async tests in this file, so we use a
+    # fresh loop scope here.
     from eden.api.deps import OrgMember
     member = OrgMember(
         user_id="00000000-0000-0000-0000-000000000099",
         org_id="00000000-0000-0000-0000-000000000002",
         role="admin",
     )
-    async def _route():
+
+    import asyncio
+    loop = asyncio.new_event_loop()
+    try:
         with pytest.raises(HTTPException) as ei:
-            await create_assignment(
-                org_id=member.org_id,
-                role_id="00000000-0000-0000-0000-000000000123",
-                req=a,
-                member=member,
+            loop.run_until_complete(
+                create_assignment(
+                    org_id=member.org_id,
+                    role_id="00000000-0000-0000-0000-000000000123",
+                    req=a,
+                    member=member,
+                )
             )
         assert ei.value.status_code == 400
-    import asyncio
-    asyncio.run(_route())
+    finally:
+        loop.close()
 
 
 # ────────────────────────────────────────────────────────────────────────
