@@ -169,6 +169,20 @@ class Settings(BaseSettings):
     # 0 disables auto-canary creation (variants stay inactive).
     evolver_auto_canary_pct: int = 5
 
+    # ── JudgeScorePromptEvolver (Phase 7.2b) ────────────────────────
+    # The judge-driven prompt evolver reads judge_scores joined to
+    # telemetry_events and, when a (agent, judge) pair is degraded,
+    # generates a new prompt variant. These knobs control how
+    # aggressive the evolver is.
+    judge_score_degradation_threshold: float = 0.7
+    # Below this many samples per (agent, judge) pair we don't act.
+    evolver_min_samples_per_judge: int = 20
+    # Cap on variants generated per run, so a single bad day doesn't
+    # produce 20 prompt rewrites that all need to be canaried.
+    evolver_max_variants_per_run: int = 3
+    # Lookback window (in minutes) for the judge aggregation.
+    evolver_judge_lookback_minutes: int = 60 * 24
+
     # ── Promotion loop (Phase 7.1b follow-up) ───────────────────────
     # Used by ``eden.llmops.promotion.PromotionLoop`` to decide
     # whether the canary's stats are significant enough to
@@ -210,6 +224,12 @@ class Settings(BaseSettings):
     # the route's master switch.
     ai_insights_enabled: bool = True
     ai_insights_model: str = "claude-sonnet-4-6"
+
+    # ── Production monitor judge bridge ───────────────────────────────
+    # When True, the hallucination judge uses an LLM for the final call;
+    # when False, falls back to the heuristic-only path. Lets ops
+    # turn the expensive path off without redeploying.
+    production_monitor_use_llm_judge: bool = True
 
 
 @lru_cache
