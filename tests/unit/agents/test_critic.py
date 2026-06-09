@@ -13,7 +13,8 @@ class TestDevilAdvocateAgent:
     def mock_llm(self):
         """Mock LLM client."""
         client = MagicMock()
-        client.call = AsyncMock(return_value=MagicMock(
+        # OpenRouterClient.call is sync; use MagicMock, not AsyncMock.
+        client.call = MagicMock(return_value=MagicMock(
             content='{"issues": [{"type": "reward_hacking", "description": "Agent could exploit terminal reward"}], "risks": ["Difficulty miscalibrated"]}'
         ))
         return client
@@ -62,7 +63,10 @@ class TestCriticAgentDevilAdvocateIntegration:
     def mock_llm(self):
         """Mock LLM client."""
         client = MagicMock()
-        client.call = AsyncMock(return_value=MagicMock(
+        # OpenRouterClient.call is sync (returns LLMResponse); the test
+        # fixture is in async context but the call method isn't async,
+        # so use MagicMock (not AsyncMock) for the return value.
+        client.call = MagicMock(return_value=MagicMock(
             content='{"routing": "approve", "routing_reason": "Design is sound", "dimensions": {}}'
         ))
         return client
