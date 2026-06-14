@@ -1,8 +1,8 @@
 """Eden configuration."""
 
-from pathlib import Path
 from functools import lru_cache
-from pydantic import Field
+from pathlib import Path
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -187,6 +187,42 @@ class Settings(BaseSettings):
     # the route's master switch.
     ai_insights_enabled: bool = True
     ai_insights_model: str = "claude-sonnet-4-6"
+
+    # ── Rate limiting ─────────────────────────────────────────────────
+    # Per-tenant sliding-window rate limiter. Defaults to 60 requests
+    # per 60s window. Backed by Redis (REDIS_URL) when available; falls
+    # back to in-memory TokenBucket for single-node dev. The middleware
+    # also sets standard X-RateLimit-* headers on every response.
+    rate_limit_enabled: bool = True
+    rate_limit_default_per_window: int = 60
+    rate_limit_window_seconds: int = 60
+
+    # ClickHouse — used by data_platform.clickhouse_sink + the columnar
+    # engine (Cat 18). HTTP interface only; see
+    # docs/architecture/clickhouse-transport.md for why.
+    clickhouse_url: str = "http://localhost:8123"
+    clickhouse_database: str = "eden"
+    clickhouse_user: str = "default"
+    clickhouse_password: str = ""
+    clickhouse_timeout: int = 30
+
+    # Redis — used by TenantRateLimitMiddleware, IdempotencyMiddleware,
+    # OptimizationCache, and the RedisTailer judge pipeline. Empty
+    # string disables Redis (in-memory fallback for all middlewares).
+    redis_url: str = "redis://localhost:6379/0"
+
+    # ── GitHub App (onboarding wizard) ────────────────────────────────
+    # The onboarding wizard uses a GitHub App (not an OAuth App) so we
+    # get fine-grained, per-repo permissions and short-lived
+    # installation tokens. All four fields are optional — when any are
+    # missing, the wizard's "Connect GitHub" step gracefully degrades
+    # to a "Skip — integrate manually" path.
+    github_app_id: str = ""
+    github_app_client_id: str = ""
+    github_app_client_secret: str = ""
+    github_app_private_key: str = ""  # PEM-encoded; multi-line OK in .env
+    github_app_webhook_secret: str = ""
+    github_app_callback_url: str = ""  # e.g. https://portal.example.com/onboarding/connect
 
 
 @lru_cache

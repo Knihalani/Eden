@@ -2,24 +2,44 @@
 
 import logging
 from contextlib import asynccontextmanager
-from typing import Optional
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
-from eden.config import get_settings
-from eden.kb import initialize_kb, health_check as kb_health_check
-from eden.api.routes import kb, auth, orgs, references, api_keys, audit, analytics, export, export_destinations, scim, billing, sso, chain, ai_insights, pii_policy, retention_policy, region
+from eden.api.middleware.tenant_rate_limit import TenantRateLimitMiddleware
 from eden.api.routes import (
-    feature_flags,
-    sandbox,
-    experiments,
+    ai_insights,
+    analytics,
+    api_keys,
+    audit,
+    auth,
+    billing,
+    chain,
     evaluation,
-    multi_agent,
-    marketplace,
+    experiments,
+    export,
+    export_destinations,
+    feature_flags,
     integrations_helicone,
+    kb,
+    marketplace,
+    multi_agent,
+    orgs,
+    pii_policy,
+    references,
+    region,
+    retention_policy,
+    sandbox,
+    scim,
+    sso,
 )
+from eden.api.routes import (
+    github as github_routes,
+)
+from eden.config import get_settings
+from eden.kb import health_check as kb_health_check
+from eden.kb import initialize_kb
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -62,7 +82,7 @@ class JobStatusResponse(BaseModel):
     job_id: str
     status: str
     current_stage: str
-    outcome_tier: Optional[str] = None
+    outcome_tier: str | None = None
     created_at: str
     updated_at: str
     stage_history: list[dict] = Field(default_factory=list)
@@ -73,11 +93,11 @@ class JobResultResponse(BaseModel):
 
     job_id: str
     status: str
-    outcome_tier: Optional[str] = None
-    environment_code: Optional[str] = None
-    test_results: Optional[dict] = None
-    quality_report: Optional[dict] = None
-    archivist_summary: Optional[dict] = None
+    outcome_tier: str | None = None
+    environment_code: str | None = None
+    test_results: dict | None = None
+    quality_report: dict | None = None
+    archivist_summary: dict | None = None
 
 
 class HealthResponse(BaseModel):
@@ -141,8 +161,8 @@ async def lifespan(app: FastAPI):
         except Exception as e:
             logger.warning(f"Insights detector loop stop failed: {e}")
 
-    from eden.storage.postgres import close_postgres_client
     from eden.sandbox.runner import close_sandbox_runner
+    from eden.storage.postgres import close_postgres_client
 
     await close_sandbox_runner()
     await close_postgres_client()
@@ -167,6 +187,17 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Per-tenant sliding-window rate limiter. Registered AFTER CORS so
+# preflight OPTIONS requests are never rate-limited. Falls back to
+# in-memory TokenBucket when REDIS_URL is unset. Disable in dev with
+# RATE_LIMIT_ENABLED=false. Defaults: 60 req / 60s window.
+if getattr(settings, "rate_limit_enabled", True):
+    app.add_middleware(
+        TenantRateLimitMiddleware,
+        default_limit=getattr(settings, "rate_limit_default_per_window", 60),
+        default_window=getattr(settings, "rate_limit_window_seconds", 60),
+    )
 
 # Include route modules
 app.include_router(kb.router)
@@ -194,12 +225,22 @@ app.include_router(marketplace.router)  # /marketplace (gated)
 app.include_router(integrations_helicone.router)  # /integrations/helicone (gated)
 app.include_router(feature_flags.router)  # /feature-flags (public)
 
+# Onboarding wizard (June 2026) — GitHub App OAuth + per-org
+# wizard state + integration PR runs. Two routers:
+#   public: /integrations/github/{configured,authorize,callback,webhook}
+#   org:    /orgs/{org_id}/{github,onboarding}/...
+# Both gracefully degrade when GITHUB_APP_* env vars are unset
+# (the wizard's "Connect GitHub" step renders a "Skip" fallback).
+app.include_router(github_routes.public_router)
+app.include_router(github_routes.org_router)
+
 # A2 — Per-org AI Gateway model registry. CRUD over the
 # org_gateway_models table; the gateway in A1 calls /resolve to
 # look up the upstream provider, model id, and (decrypted) API
 # key for a given logical model name. The router is always
 # mounted; the routes themselves enforce org membership + admin.
 from eden.api.routes import gateway_models
+
 app.include_router(gateway_models.router)
 
 
@@ -231,7 +272,7 @@ async def health_check():
 def _get_sandbox_health() -> str:
     """Get sandbox health status."""
     try:
-        from eden.sandbox.runner import _sandbox_runner, NullSandboxRunner
+        from eden.sandbox.runner import NullSandboxRunner, _sandbox_runner
         if _sandbox_runner is None:
             return "uninitialized"
         if isinstance(_sandbox_runner, NullSandboxRunner):
