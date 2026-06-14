@@ -6,7 +6,7 @@ import pytest
 
 sys.path.insert(0, "src")
 
-from eden.data_platform.pii import PIIMasker, PIIPolicy, PIIMaskingError
+from eden.data_platform.pii import PIIMasker, PIIMaskingError, PIIPolicy
 
 
 def test_default_masker_masks_email():

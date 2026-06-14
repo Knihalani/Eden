@@ -27,7 +27,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import Any, Optional
+from typing import Any
 
 from eden.data_platform.pii import PIIMasker, PIIMaskingError, PIIPolicy
 from eden.observability.ingestion.pii_policy import resolve_policy
@@ -38,7 +38,7 @@ logger = logging.getLogger(__name__)
 async def mask_payload(
     payload: Any,
     *,
-    tenant_id: Optional[str] = None,
+    tenant_id: str | None = None,
 ) -> Any:
     """Run PIIMasker on a payload dict/list/scalar in a worker thread.
 
@@ -81,7 +81,7 @@ async def mask_payload(
 async def mask_attributes(
     attributes: dict[str, str],
     *,
-    tenant_id: Optional[str] = None,
+    tenant_id: str | None = None,
 ) -> dict[str, str]:
     """Mask string values inside an ``attributes`` dict. Each value is
     masked independently. Keys are not masked (they're schema names).

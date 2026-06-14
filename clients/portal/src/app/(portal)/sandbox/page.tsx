@@ -44,14 +44,19 @@ interface SandboxSession {
 }
 
 interface RequestLogEntry {
+  request_id?: string;
   timestamp: string;
   method: string;
   endpoint: string;
+  status: number;
   status_code: number;
   duration_ms: number;
+  requested_at?: string;
 }
 
 interface SandboxDoc {
+  title: string;
+  version: string;
   description: string;
   ttl_seconds: number;
   max_requests_per_session: number;
@@ -60,9 +65,19 @@ interface SandboxDoc {
     method: string;
     path: string;
     description: string;
+    request_schema?: Record<string, unknown>;
+    response_schema?: Record<string, unknown>;
     example?: Record<string, unknown>;
   }>;
   mock_behaviors: Record<string, string>;
+}
+
+interface SandboxResponse {
+  status: number;
+  status_code: number;
+  body: string | Record<string, unknown>;
+  duration_ms: number;
+  warnings: string[] | null;
 }
 
 // ─── Component ──────────────────────────────────────────────────────────────
@@ -113,7 +128,25 @@ export default function SandboxPage() {
   const loadDocs = useCallback(async () => {
     try {
       const res = await api.getSandboxDocs();
-      setDocs(res);
+      // The API returns the docs page with title/version/endpoints;
+      // the local SandboxDoc type carries extra fields the BE doesn't
+      // surface. Map at the boundary with sensible defaults.
+      setDocs({
+        title: res.title,
+        version: res.version,
+        description: "",
+        ttl_seconds: 0,
+        max_requests_per_session: 0,
+        max_active_sessions: 0,
+        endpoints: res.endpoints.map((e) => ({
+          method: e.method,
+          path: e.path,
+          description: e.description,
+          request_schema: e.request_schema,
+          response_schema: e.response_schema,
+        })),
+        mock_behaviors: {},
+      });
     } catch {
       // docs are optional
     }
@@ -129,7 +162,21 @@ export default function SandboxPage() {
   const loadRequestLog = useCallback(async (sessionId: string) => {
     try {
       const res = await api.getSandboxRequestLog(sessionId);
-      setRequestLog(res.entries);
+      // The API returns ``request_id/status/requested_at``; the
+      // local RequestLogEntry uses ``timestamp/status_code``. Map
+      // at the boundary so consumers stay on the legacy names.
+      setRequestLog(
+        res.entries.map((e) => ({
+          request_id: e.request_id,
+          timestamp: e.requested_at,
+          method: e.method,
+          endpoint: e.endpoint,
+          status: e.status,
+          status_code: e.status,
+          duration_ms: e.duration_ms,
+          requested_at: e.requested_at,
+        })),
+      );
     } catch {
       setRequestLog([]);
     }
@@ -226,7 +273,12 @@ export default function SandboxPage() {
         body: parsedBody,
       });
 
-      setLastResponse(res);
+      setLastResponse({
+        status_code: res.status,
+        body: res.body,
+        duration_ms: res.duration_ms,
+        warnings: null,
+      });
       setActiveSession((prev) =>
         prev ? { ...prev, request_count: prev.request_count + 1 } : null
       );
@@ -345,28 +397,28 @@ export default function SandboxPage() {
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
         <StatCard
           icon={Shield}
-          label="Active Sessions"
+          title="Active Sessions"
           value={String(sessions.length)}
           subtitle={`Max ${docs?.max_active_sessions ?? 3}`}
           accent="accent"
         />
         <StatCard
           icon={Zap}
-          label="Total Requests"
+          title="Total Requests"
           value={String(sessions.reduce((a, s) => a + s.request_count, 0))}
           subtitle={`Limit ${docs?.max_requests_per_session ?? 100}/session`}
           accent="terminal"
         />
         <StatCard
           icon={Clock}
-          label="Session TTL"
+          title="Session TTL"
           value={`${Math.floor((docs?.ttl_seconds ?? 3600) / 60)}m`}
           subtitle="Auto-expires"
           accent="warning"
         />
         <StatCard
           icon={BookOpen}
-          label="Mocked Endpoints"
+          title="Mocked Endpoints"
           value={String(presetEndpoints.length)}
           subtitle="Available to test"
           accent="neutral"
@@ -565,7 +617,7 @@ export default function SandboxPage() {
                             className={cn(
                               "text-xs font-medium px-2 py-0.5 rounded",
                               lastResponse.status_code < 300
-                                ? "bg-[var(--cat-success-dim)] text-[var(--cat-success-fg)]  "
+                                ? "bg-[var(--terminal-faint)] text-[var(--terminal)]  "
                                 : lastResponse.status_code < 400
                                   ? "bg-[var(--warning-bg)] text-[var(--warning)]  "
                                   : "bg-[var(--error-dim)] text-[var(--error)]  "
@@ -580,9 +632,10 @@ export default function SandboxPage() {
                             onClick={handleCopyResponse}
                             className="p-1.5 text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)] rounded-md transition-colors"
                             title="Copy response"
+                            aria-label={copied ? "Response copied" : "Copy response"}
                           >
                             {copied ? (
-                              <CheckCircle2 className="w-3.5 h-3.5 text-[var(--cat-success-fg)]" />
+                              <CheckCircle2 className="w-3.5 h-3.5 text-[var(--terminal)]" />
                             ) : (
                               <Copy className="w-3.5 h-3.5" />
                             )}
@@ -674,10 +727,10 @@ export default function SandboxPage() {
                                 <span
                                   className={cn(
                                     "text-xs font-medium px-1.5 py-0.5 rounded",
-                                    entry.method === "GET" && "bg-blue-100 text-blue-700  ",
-                                    entry.method === "POST" && "bg-[var(--cat-success-dim)] text-[var(--cat-success-fg)]  ",
+                                    entry.method === "GET" && "bg-[var(--accent-faint)] text-[var(--accent)]  ",
+                                    entry.method === "POST" && "bg-[var(--terminal-faint)] text-[var(--terminal)]  ",
                                     entry.method === "PUT" && "bg-[var(--warning-bg)] text-[var(--warning)]  ",
-                                    entry.method === "PATCH" && "bg-[var(--cat-purple-dim)] text-[var(--cat-purple-fg)]  ",
+                                    entry.method === "PATCH" && "bg-[var(--accent-faint)] text-[var(--accent)]  ",
                                     entry.method === "DELETE" && "bg-[var(--error-dim)] text-[var(--error)]  "
                                   )}
                                 >
@@ -692,7 +745,7 @@ export default function SandboxPage() {
                                   className={cn(
                                     "text-xs font-medium",
                                     entry.status_code < 300
-                                      ? "text-[var(--cat-success-fg)] "
+                                      ? "text-[var(--terminal)] "
                                       : entry.status_code < 400
                                         ? "text-[var(--warning)] "
                                         : "text-[var(--error)] "
@@ -751,8 +804,8 @@ export default function SandboxPage() {
                             <span
                               className={cn(
                                 "text-xs font-bold px-2 py-0.5 rounded min-w-[52px] text-center",
-                                ep.method === "GET" && "bg-blue-100 text-blue-700  ",
-                                ep.method === "POST" && "bg-[var(--cat-success-dim)] text-[var(--cat-success-fg)]  ",
+                                ep.method === "GET" && "bg-[var(--accent-faint)] text-[var(--accent)]  ",
+                                ep.method === "POST" && "bg-[var(--terminal-faint)] text-[var(--terminal)]  ",
                                 ep.method === "PUT" && "bg-[var(--warning-bg)] text-[var(--warning)]  ",
                                 ep.method === "DELETE" && "bg-[var(--error-dim)] text-[var(--error)]  "
                               )}
@@ -830,7 +883,7 @@ function SessionCard({
             <div
               className={cn(
                 "w-2.5 h-2.5 rounded-full",
-                expired ? "bg-[var(--error)]" : "bg-[var(--cat-success-dim)]0"
+                expired ? "bg-[var(--error)]" : "bg-[var(--terminal-faint)]0"
               )}
             />
             <span className="text-sm font-medium text-[var(--text-primary)] truncate">
@@ -842,7 +895,7 @@ function SessionCard({
               "text-[10px] font-medium px-1.5 py-0.5 rounded",
               expired
                 ? "bg-[var(--error-dim)] text-[var(--error)]  "
-                : "bg-[var(--cat-success-dim)] text-[var(--cat-success-fg)]  "
+                : "bg-[var(--terminal-faint)] text-[var(--terminal)]  "
             )}
           >
             {expired ? "Expired" : "Active"}

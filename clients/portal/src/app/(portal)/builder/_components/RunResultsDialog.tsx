@@ -35,11 +35,11 @@ export interface RunResultsDialogProps {
 }
 
 const STATUS_COLOR: Record<string, string> = {
-  passed: "text-emerald-400 border-emerald-500/30 bg-emerald-500/10",
-  failed: "text-amber-400 border-amber-500/30 bg-amber-500/10",
-  error: "text-red-400 border-red-500/30 bg-red-500/10",
-  pending: "text-zinc-400 border-zinc-500/30 bg-zinc-500/10",
-  running: "text-sky-400 border-sky-500/30 bg-sky-500/10",
+  passed: "text-[var(--terminal)] border-emerald-500/30 bg-[var(--terminal)]/10",
+  failed: "text-[var(--warning)] border-[var(--warning)]/30 bg-[var(--warning)]/10",
+  error: "text-[var(--error)] border-[var(--error)]/30 bg-[var(--error)]/10",
+  pending: "text-[var(--text-muted)] border-zinc-500/30 bg-zinc-500/10",
+  running: "text-[var(--accent)] border-sky-500/30 bg-[var(--accent)]/10",
 };
 
 export function RunResultsDialog({ state, onClose, orgId, onRerun }: RunResultsDialogProps) {
@@ -57,14 +57,14 @@ export function RunResultsDialog({ state, onClose, orgId, onRerun }: RunResultsD
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50"
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[var(--bg-base)]/50"
       role="dialog"
       aria-modal="true"
       aria-label="Sim run results"
     >
-      <div className="w-full max-w-2xl max-h-[80vh] flex flex-col rounded-xl border border-zinc-800 bg-zinc-950 shadow-2xl">
-        <header className="flex items-center justify-between px-4 py-3 border-b border-zinc-800">
-          <h2 className="text-sm font-semibold text-zinc-100">
+      <div className="w-full max-w-2xl max-h-[80vh] flex flex-col rounded-xl border border-[var(--border-default)] bg-[var(--bg-base)] shadow-2xl">
+        <header className="flex items-center justify-between px-4 py-3 border-b border-[var(--border-default)]">
+          <h2 className="text-sm font-semibold text-[var(--text-primary)]">
             {state.kind === "pushing" && "Pushing to Eden…"}
             {state.kind === "polling" && `Running… (${state.run.status})`}
             {state.kind === "done" && `Run ${state.run.status}`}
@@ -73,7 +73,7 @@ export function RunResultsDialog({ state, onClose, orgId, onRerun }: RunResultsD
           <button
             type="button"
             onClick={onClose}
-            className="p-1 text-zinc-400 hover:text-zinc-100 rounded"
+            className="p-1 text-[var(--text-muted)] hover:text-[var(--text-primary)] rounded"
             aria-label="Close"
           >
             <X className="w-4 h-4" />
@@ -81,14 +81,14 @@ export function RunResultsDialog({ state, onClose, orgId, onRerun }: RunResultsD
         </header>
         <div className="flex-1 overflow-auto p-4 space-y-3">
           {state.kind === "pushing" && (
-            <div className="flex items-center gap-2 text-sm text-zinc-300">
+            <div className="flex items-center gap-2 text-sm text-[var(--text-muted)]">
               <Loader2 className="w-4 h-4 animate-spin" />
               Packaging the tarball and uploading…
             </div>
           )}
           {state.kind === "polling" && (
             <div className="space-y-3">
-              <div className="flex items-center gap-2 text-sm text-zinc-300">
+              <div className="flex items-center gap-2 text-sm text-[var(--text-muted)]">
                 <Loader2 className="w-4 h-4 animate-spin" />
                 Polling <span className="font-mono">{state.run.id}</span> every
                 2 s…
@@ -104,13 +104,13 @@ export function RunResultsDialog({ state, onClose, orgId, onRerun }: RunResultsD
             />
           )}
           {state.kind === "error" && (
-            <div className="flex items-start gap-2 text-sm text-red-300">
+            <div className="flex items-start gap-2 text-sm text-[var(--error)]">
               <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
               <p className="whitespace-pre-wrap">{state.message}</p>
             </div>
           )}
         </div>
-        <footer className="px-4 py-3 border-t border-zinc-800 flex items-center justify-end gap-2">
+        <footer className="px-4 py-3 border-t border-[var(--border-default)] flex items-center justify-end gap-2">
           {state.kind === "done" && onRerun && (
             <Button
               type="button"
@@ -167,21 +167,21 @@ function DoneView({
     <div className="space-y-4">
       <div className="flex items-center gap-3">
         {r.status === "passed" ? (
-          <CheckCircle2 className="w-6 h-6 text-emerald-400" />
+          <CheckCircle2 className="w-6 h-6 text-[var(--terminal)]" />
         ) : r.status === "failed" ? (
-          <XCircle className="w-6 h-6 text-amber-400" />
+          <XCircle className="w-6 h-6 text-[var(--warning)]" />
         ) : (
-          <AlertCircle className="w-6 h-6 text-red-400" />
+          <AlertCircle className="w-6 h-6 text-[var(--error)]" />
         )}
         <div>
-          <div className="text-sm font-semibold text-zinc-100">
+          <div className="text-sm font-semibold text-[var(--text-primary)]">
             {r.status === "passed" ? "All scenarios passed" : r.status}
           </div>
           {summary && (
-            <div className="text-xs text-zinc-400">{summary}</div>
+            <div className="text-xs text-[var(--text-muted)]">{summary}</div>
           )}
           {r.duration_ms != null && (
-            <div className="text-[11px] text-zinc-500">
+            <div className="text-[11px] text-[var(--text-muted)]">
               Duration: {r.duration_ms} ms
             </div>
           )}
@@ -190,9 +190,9 @@ function DoneView({
       </div>
 
       {scenarios.length > 0 && (
-        <div className="rounded-md border border-zinc-800 overflow-hidden">
+        <div className="rounded-md border border-[var(--border-default)] overflow-hidden">
           <table className="w-full text-xs">
-            <thead className="bg-zinc-900 text-zinc-400">
+            <thead className="bg-[var(--bg-base)] text-[var(--text-muted)]">
               <tr>
                 <th className="text-left px-3 py-2 font-medium">Scenario</th>
                 <th className="text-left px-3 py-2 font-medium">Status</th>
@@ -205,17 +205,17 @@ function DoneView({
               {scenarios.map((s, i) => (
                 <tr
                   key={`${s.scenario_id}-${i}`}
-                  className="border-t border-zinc-800 text-zinc-300"
+                  className="border-t border-[var(--border-default)] text-[var(--text-muted)]"
                 >
                   <td className="px-3 py-1.5 font-mono">{s.scenario_id}</td>
                   <td className="px-3 py-1.5">
                     <StatusBadge status={s.status} />
                   </td>
                   <td className="px-3 py-1.5 text-right">{s.episodes}</td>
-                  <td className="px-3 py-1.5 text-right text-emerald-400">
+                  <td className="px-3 py-1.5 text-right text-[var(--terminal)]">
                     {s.passed_steps}
                   </td>
-                  <td className="px-3 py-1.5 text-right text-amber-400">
+                  <td className="px-3 py-1.5 text-right text-[var(--warning)]">
                     {s.failed_steps}
                   </td>
                 </tr>
@@ -226,7 +226,7 @@ function DoneView({
       )}
 
       {r.error && (
-        <pre className="rounded-md border border-red-500/30 bg-red-500/10 p-3 text-[11px] text-red-200 font-mono whitespace-pre-wrap">
+        <pre className="rounded-md border border-[var(--error)]/30 bg-[var(--error)]/10 p-3 text-[11px] text-[var(--error)] font-mono whitespace-pre-wrap">
           {r.error}
         </pre>
       )}
@@ -234,7 +234,7 @@ function DoneView({
       {orgId && (
         <a
           href={`/agents/${state.agentId}?org=${orgId}`}
-          className="text-[11px] text-emerald-400 hover:text-emerald-300 underline"
+          className="text-[11px] text-[var(--terminal)] hover:text-[var(--terminal)] underline"
         >
           View in agent detail page →
         </a>

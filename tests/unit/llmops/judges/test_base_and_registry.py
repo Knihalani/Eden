@@ -1,5 +1,7 @@
 """Tests for the Judge abstraction and JudgeRegistry."""
 
+from datetime import UTC
+
 import pytest
 
 from eden.llmops.judges.base import Judge, JudgeContext, JudgeScore
@@ -132,7 +134,7 @@ def test_judge_score_to_dict_round_trip():
         score=0.85,
         rationale="looks good",
         model="claude-haiku",
-        scored_at=datetime(2026, 6, 3, 12, 0, 0, tzinfo=timezone.utc),
+        scored_at=datetime(2026, 6, 3, 12, 0, 0, tzinfo=UTC),
         latency_ms=120.5,
         metadata={"event_id": "e1"},
     )

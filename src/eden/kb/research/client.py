@@ -36,7 +36,7 @@ class ResearchProposalsClient:
         Returns:
             The UUID of the inserted proposal
         """
-        db = get_postgres_client()
+        db = await get_postgres_client()
         proposal_id = str(uuid4())
 
         await db.execute(
@@ -79,7 +79,7 @@ class ResearchProposalsClient:
         Returns:
             List of proposal dicts with status='pending'
         """
-        db = get_postgres_client()
+        db = await get_postgres_client()
 
         rows = await db.fetch(
             """
@@ -110,7 +110,7 @@ class ResearchProposalsClient:
             proposal_id: UUID of the proposal
             audn_action: AUDN action taken (ADD, UPDATE, DELETE, NONE, CONFLICT)
         """
-        db = get_postgres_client()
+        db = await get_postgres_client()
 
         await db.execute(
             """
@@ -129,7 +129,7 @@ class ResearchProposalsClient:
         Returns:
             Dict of framework_name -> current version
         """
-        db = get_postgres_client()
+        db = await get_postgres_client()
 
         rows = await db.fetch(
             """
@@ -160,7 +160,7 @@ class ResearchProposalsClient:
             is_major: Whether this is a major version bump
             changelog_url: URL to the changelog/release notes
         """
-        db = get_postgres_client()
+        db = await get_postgres_client()
 
         await db.execute(
             """
@@ -181,7 +181,7 @@ class ResearchProposalsClient:
             proposal_id: UUID of the proposal
             change: FrameworkChange dict with framework_name, previous_version, new_version
         """
-        db = get_postgres_client()
+        db = await get_postgres_client()
 
         await db.execute(
             """

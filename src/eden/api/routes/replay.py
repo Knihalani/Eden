@@ -11,15 +11,15 @@ All endpoints require authentication via cookie.
 from __future__ import annotations
 
 import logging
-from typing import Any, Optional
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 
 from eden.api.deps import get_current_user
-from eden.realtime.trace_store import TraceEventStore, get_trace_store, TraceEvent
-from eden.realtime.human_in_the_loop import HILTController, get_hilt_controller
-from eden.realtime.alert_stream import AlertStreamProcessor, get_alert_processor, GeneratedAlert
+from eden.realtime.alert_stream import get_alert_processor
+from eden.realtime.human_in_the_loop import get_hilt_controller
+from eden.realtime.trace_store import get_trace_store
 from eden.storage.postgres import get_postgres_client
 
 logger = logging.getLogger(__name__)
@@ -34,7 +34,7 @@ class TraceReplayResponse(BaseModel):
     events: list[dict[str, Any]]
     total_events: int
     from_sequence: int = 0
-    summary: Optional[dict[str, Any]] = None
+    summary: dict[str, Any] | None = None
 
 
 class HILTCommandRequest(BaseModel):
@@ -45,7 +45,7 @@ class HILTCommandRequest(BaseModel):
 class HILTCommandResponse(BaseModel):
     status: str
     message: str
-    state: Optional[dict[str, Any]] = None
+    state: dict[str, Any] | None = None
 
 
 class AlertListResponse(BaseModel):
@@ -64,7 +64,7 @@ class AlertAcknowledgeRequest(BaseModel):
 async def get_trace_replay(
     job_id: str,
     from_sequence: int = Query(0, ge=0),
-    to_sequence: Optional[int] = Query(None),
+    to_sequence: int | None = Query(None),
     limit: int = Query(1000, ge=1, le=5000),
     include_summary: bool = Query(False),
     user: dict[str, Any] = Depends(get_current_user),
@@ -208,8 +208,8 @@ async def hilt_cleanup(
 @router.get("/orgs/{org_id}/alerts")
 async def list_alerts(
     org_id: str,
-    severity: Optional[str] = Query(None),
-    acknowledged: Optional[bool] = Query(None),
+    severity: str | None = Query(None),
+    acknowledged: bool | None = Query(None),
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
     user: dict[str, Any] = Depends(get_current_user),

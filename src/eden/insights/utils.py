@@ -4,9 +4,9 @@
 from __future__ import annotations
 
 from collections import OrderedDict
-from typing import TypeVar
+from typing import Generic, TypeVar
 
-T = TypeVar("T")
+_T = TypeVar("_T")
 
 
 def sequence_similarity(seq_a: list[str], seq_b: list[str]) -> float:
@@ -31,14 +31,18 @@ def sequence_similarity(seq_a: list[str], seq_b: list[str]) -> float:
     return lcs_len / max(m, n)
 
 
-class BoundedSet:
-    """A set with a maximum capacity that evicts oldest entries (FIFO)."""
+class BoundedSet(Generic[_T]):
+    """A set with a maximum capacity that evicts oldest entries (FIFO).
+
+    Generic over the item type so call sites can store tuples,
+    dataclasses, or plain strings without ``cast``/``Any`` wrangling.
+    """
 
     def __init__(self, max_size: int = 10000):
         self._max_size = max_size
-        self._data: OrderedDict[str, None] = OrderedDict()
+        self._data: OrderedDict[_T, None] = OrderedDict()
 
-    def add(self, item: str) -> None:
+    def add(self, item: _T) -> None:
         if item in self._data:
             self._data.move_to_end(item)
             return

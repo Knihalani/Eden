@@ -11,17 +11,16 @@ Six detectors that automatically analyze traces and generate actionable insights
 
 from __future__ import annotations
 
-import json
 import logging
 import statistics
 from abc import ABC, abstractmethod
 from collections import Counter, defaultdict
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta, timezone
-from typing import Any, Optional
+from datetime import UTC, datetime, timedelta
+from typing import Any
 
-from eden.insights.unified_trace_model import UnifiedTrace, Outcome, SpanType
-from eden.insights.utils import BoundedSet, sequence_similarity
+from eden.insights.unified_trace_model import Outcome, SpanType, UnifiedTrace
+from eden.insights.utils import BoundedSet
 
 logger = logging.getLogger(__name__)
 
@@ -36,7 +35,7 @@ class Insight:
     affected_trace_ids: list[str] = field(default_factory=list)
     pattern: dict[str, Any] = field(default_factory=dict)
     recommended_action: str = ""
-    auto_created_dataset: Optional[str] = None
+    auto_created_dataset: str | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
@@ -57,7 +56,7 @@ class Insight:
 class BaseDetector(ABC):
     """Abstract base for all insight detectors."""
 
-    def __init__(self, name: str, min_confidence: float = 0.7):
+    def __init__(self, name: str, min_confidence: float = 0.7) -> None:
         self.name = name
         self.min_confidence = min_confidence
 
@@ -79,7 +78,7 @@ class FailurePatternDetector(BaseDetector):
     and flags them as systematic issues.
     """
 
-    def __init__(self, min_occurrences: int = 3, min_confidence: float = 0.75):
+    def __init__(self, min_occurrences: int = 3, min_confidence: float = 0.75) -> None:
         super().__init__("failure_pattern", min_confidence)
         self.min_occurrences = min_occurrences
 
@@ -122,10 +121,12 @@ class FailurePatternDetector(BaseDetector):
         tool_failures: dict[str, list[str]] = defaultdict(list)
         for trace in failure_traces:
             for span in trace.spans:
-                if span.span_type == SpanType.TOOL_INVOCATION:
-                    if not span.payload.get("success", True):
-                        tool_name = span.payload.get("tool_name", "unknown")
-                        tool_failures[tool_name].append(trace.trace_id)
+                if (
+                    span.span_type == SpanType.TOOL_INVOCATION
+                    and not span.payload.get("success", True)
+                ):
+                    tool_name = span.payload.get("tool_name", "unknown")
+                    tool_failures[tool_name].append(trace.trace_id)
 
         for tool_name, trace_ids in tool_failures.items():
             if len(trace_ids) >= self.min_occurrences:
@@ -170,7 +171,7 @@ class PerformanceAnomalyDetector(BaseDetector):
     Uses rolling statistics to flag traces that deviate significantly from baseline.
     """
 
-    def __init__(self, z_threshold: float = 2.5, min_confidence: float = 0.8):
+    def __init__(self, z_threshold: float = 2.5, min_confidence: float = 0.8) -> None:
         super().__init__("performance_anomaly", min_confidence)
         self.z_threshold = z_threshold
 
@@ -244,7 +245,7 @@ class RegressionDetector(BaseDetector):
     Compares latest version against baseline using Welch's t-test approximation.
     """
 
-    def __init__(self, degradation_threshold: float = 0.05, min_samples: int = 5, min_confidence: float = 0.8):
+    def __init__(self, degradation_threshold: float = 0.05, min_samples: int = 5, min_confidence: float = 0.8) -> None:
         super().__init__("regression", min_confidence)
         self.degradation_threshold = degradation_threshold
         self.min_samples = min_samples
@@ -349,7 +350,7 @@ class DisparityDetector(BaseDetector):
     but missing or divergent in environment testing.
     """
 
-    def __init__(self, divergence_threshold: float = 0.3, min_confidence: float = 0.75):
+    def __init__(self, divergence_threshold: float = 0.3, min_confidence: float = 0.75) -> None:
         super().__init__("disparity", min_confidence)
         self.divergence_threshold = divergence_threshold
 
@@ -442,7 +443,7 @@ class RewardHackingDetector(BaseDetector):
     - Observation manipulation signals
     """
 
-    def __init__(self, min_confidence: float = 0.75):
+    def __init__(self, min_confidence: float = 0.75) -> None:
         super().__init__("reward_hacking", min_confidence)
 
     def analyze(self, traces: list[UnifiedTrace]) -> list[Insight]:
@@ -541,9 +542,14 @@ class NovelBehaviorDetector(BaseDetector):
     this would be backed by a persistent store (PostgreSQL / Redis).
     """
 
-    def __init__(self, min_confidence: float = 0.7, max_behaviors: int = 10000):
+    def __init__(self, min_confidence: float = 0.7, max_behaviors: int = 10000) -> None:
         super().__init__("novel_behavior", min_confidence)
-        self._seen_behaviors = BoundedSet(max_size=max_behaviors)
+        self._seen_behaviors: BoundedSet[tuple[str, ...]] = BoundedSet(
+            max_size=max_behaviors
+        )
+        self._seen_transitions: BoundedSet[str] = BoundedSet(
+            max_size=max_behaviors
+        )
 
     def analyze(self, traces: list[UnifiedTrace]) -> list[Insight]:
         insights = []
@@ -577,10 +583,10 @@ class NovelBehaviorDetector(BaseDetector):
                     prev_state = state
 
             unique_transitions = set(state_transitions)
-            seen_set = self._seen_behaviors.keys()
+            seen_set = self._seen_transitions.keys()
             new_transitions = unique_transitions - seen_set
             for trans in new_transitions:
-                self._seen_behaviors.add(trans)
+                self._seen_transitions.add(trans)
                 novel_behaviors.append({
                     "type": "novel_state_transition",
                     "transition": trans,
@@ -625,7 +631,7 @@ class NovelBehaviorDetector(BaseDetector):
 class DetectorRegistry:
     """Registry for managing and running all detectors."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self._detectors: dict[str, BaseDetector] = {
             "failure_pattern": FailurePatternDetector(),
             "performance_anomaly": PerformanceAnomalyDetector(),
@@ -643,7 +649,7 @@ class DetectorRegistry:
     def register(self, name: str, detector: BaseDetector) -> None:
         self._detectors[name] = detector
 
-    def get(self, name: str) -> Optional[BaseDetector]:
+    def get(self, name: str) -> BaseDetector | None:
         return self._detectors.get(name)
 
     def run_all(self, traces: list[UnifiedTrace]) -> list[Insight]:
@@ -749,7 +755,7 @@ class DetectorRegistry:
 class JudgeDetector(BaseDetector):
     """Bridges ``judge_scores`` rows to the InsightsService surface."""
 
-    def __init__(self, min_confidence: float = 0.0, lookback_seconds: int = 3600):
+    def __init__(self, min_confidence: float = 0.0, lookback_seconds: int = 3600) -> None:
         super().__init__("judge_scores_bridge", min_confidence)
         self.lookback_seconds = lookback_seconds
 
@@ -808,13 +814,12 @@ class JudgeDetector(BaseDetector):
         """Async variant: read ``judge_scores`` rows in the lookback
         window. Use this from async callers (the InsightsService is
         called from an async FastAPI handler)."""
-        from datetime import datetime, timezone, timedelta
         from eden.storage.postgres import get_postgres_client
 
         client = await get_postgres_client()
         if client is None:
             return []
-        cutoff = datetime.now(timezone.utc) - timedelta(seconds=self.lookback_seconds)
+        cutoff = datetime.now(UTC) - timedelta(seconds=self.lookback_seconds)
         rows = await client.fetch(
             """
             SELECT judge_run_id, judge_name, judge_version, trace_id, span_id,

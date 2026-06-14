@@ -8,6 +8,7 @@ These tests lock in the contract for the refactored gateway:
 """
 
 import asyncio
+
 import pytest
 
 from eden.llmops.ai_gateway import AIGateway, ModelRequest, Provider, ProviderUnavailable

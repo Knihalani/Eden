@@ -254,10 +254,10 @@ function ModelsTab({ orgId }: { orgId: string }) {
               </div>
 
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                <StatCard label="Family" value={selectedArtifact.artifact.model_family} icon={Box} accent="neutral" />
-                <StatCard label="Provider" value={selectedArtifact.artifact.provider} icon={Server} accent="accent" />
-                <StatCard label="Created" value={formatDate(selectedArtifact.artifact.created_at)} icon={Clock} accent="neutral" />
-                <StatCard label="Status" value={selectedArtifact.artifact.is_deployed ? "Deployed" : "Staging"} icon={CheckCircle2} accent={selectedArtifact.artifact.is_deployed ? "terminal" : "warning"} />
+                <StatCard title="Family" value={selectedArtifact.artifact.model_family} icon={Box} accent="neutral" />
+                <StatCard title="Provider" value={selectedArtifact.artifact.provider} icon={Server} accent="accent" />
+                <StatCard title="Created" value={formatDate(selectedArtifact.artifact.created_at)} icon={Clock} accent="neutral" />
+                <StatCard title="Status" value={selectedArtifact.artifact.is_deployed ? "Deployed" : "Staging"} icon={CheckCircle2} accent={selectedArtifact.artifact.is_deployed ? "terminal" : "warning"} />
               </div>
 
               <div>
@@ -521,10 +521,10 @@ function ExperimentsTab({ orgId }: { orgId: string }) {
             </div>
 
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-              <StatCard label="Type" value={selectedExp.experiment.experiment_type} icon={FlaskConical} accent="accent" />
-              <StatCard label="Pipeline" value={selectedExp.experiment.pipeline_version} icon={GitCommit} accent="neutral" />
-              <StatCard label="Runs" value={String(selectedExp.runs.length)} icon={Hash} accent="terminal" />
-              <StatCard label="Git Commit" value={selectedExp.experiment.git_commit.slice(0, 7)} icon={GitCommit} accent="neutral" />
+              <StatCard title="Type" value={selectedExp.experiment.experiment_type} icon={FlaskConical} accent="accent" />
+              <StatCard title="Pipeline" value={selectedExp.experiment.pipeline_version} icon={GitCommit} accent="neutral" />
+              <StatCard title="Runs" value={String(selectedExp.runs.length)} icon={Hash} accent="terminal" />
+              <StatCard title="Git Commit" value={selectedExp.experiment.git_commit.slice(0, 7)} icon={GitCommit} accent="neutral" />
             </div>
 
             {selectedExp.comparison && (
@@ -928,10 +928,10 @@ function CacheTab({ orgId }: { orgId: string }) {
     <div className="space-y-6">
       {/* Stats */}
       <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
-        <StatCard label="Total Queries" value={stats?.total_queries ?? 0} icon={Hash} />
-        <StatCard label="Hits" value={stats?.hits ?? 0} icon={CheckCircle2} />
-        <StatCard label="Misses" value={stats?.misses ?? 0} icon={XCircle} />
-        <StatCard label="Hit Rate" value={`${((stats?.hit_rate ?? 0) * 100).toFixed(1)}%`} icon={BarChart3} />
+        <StatCard title="Total Queries" value={stats?.total_queries ?? 0} icon={Hash} />
+        <StatCard title="Hits" value={stats?.hits ?? 0} icon={CheckCircle2} />
+        <StatCard title="Misses" value={stats?.misses ?? 0} icon={XCircle} />
+        <StatCard title="Hit Rate" value={`${((stats?.hit_rate ?? 0) * 100).toFixed(1)}%`} icon={BarChart3} />
       </div>
 
       {/* Cache Lookup */}
@@ -1030,7 +1030,7 @@ function HealthScoreCard({ label, value, icon: Icon, invert }: { label: string; 
 
 function StatusBadge({ status }: { status: string }) {
   const colorMap: Record<string, string> = {
-    running: "bg-blue-100 text-blue-600",
+    running: "bg-[var(--accent-faint)] text-[var(--accent)]",
     completed: "bg-[var(--terminal-dim)] text-[var(--terminal)]",
     failed: "bg-[var(--error-dim)] text-[var(--error)]",
     paused: "bg-[var(--warning-bg)] text-[var(--warning)]",
@@ -1049,7 +1049,7 @@ function StatusBadge({ status }: { status: string }) {
 function AlertSeverityIcon({ severity }: { severity: string }) {
   if (severity === "critical") return <XCircle className="w-5 h-5 text-[var(--error)]" />;
   if (severity === "warning") return <AlertTriangle className="w-5 h-5 text-[var(--warning)]" />;
-  return <AlertCircle className="w-5 h-5 text-blue-500" />;
+  return <AlertCircle className="w-5 h-5 text-[var(--accent)]" />;
 }
 
 function formatDate(dateString: string | undefined) {

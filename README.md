@@ -1,12 +1,11 @@
 # Eden
 
-**Eden is the observability + improvement platform for AI agents and LLM apps.** Comparable to Helicone or Langfuse for the observability layer, with a closed-loop improvement layer they don't have. Delivered as three pillars:
+**Eden is the observability + improvement platform for AI agents and LLM apps.** Comparable to Helicone or Langfuse for the observability layer, with a closed-loop improvement layer they don't have. Delivered as two pillars:
 
 1. **Observability** — drop-in SDKs (Python, TypeScript) and an **OpenAI-compatible HTTP gateway** that proxies every request to whichever upstream model you configure (OpenAI, Anthropic, Bedrock, self-hosted).
 2. **Web platform** — org management, trace/eval visualisations, data export, and a persistent AI assistant sidebar in every view.
-3. **CLI coding agent** — `eden`, an Aider fork with the flagship **`/eden-improve`** command that turns failing traces into shipped PRs.
 
-The three pillars close the loop: capture, analyse, improve. The platform is also available with an **advanced, opt-in environment generation pipeline** for teams that need auto-generated eval harnesses — see [the advanced section](#advanced-opt-in-environment-generation) at the bottom of this README.
+The two pillars close the loop: capture, analyse, improve.
 
 ## Quickstart — Gateway (5-minute integration)
 
@@ -55,29 +54,6 @@ with eden.span("agent.reasoning") as span:
     span.set_eval("quality", score=0.92, evaluator="llm-judge")
 ```
 
-## Quickstart — `/eden-improve` (CLI agent)
-
-```bash
-# Install
-curl -fsSL https://eden.example/install.sh | sh
-
-# Authenticate
-eden login
-
-# In your project repo
-cat > eden.evals.yaml <<EOF
-evals:
-  - name: smoke
-    command: pytest -q tests/smoke
-EOF
-
-# Run
-eden
-> /eden-improve
-```
-
-The agent reads failing traces from your Eden workspace, proposes a fix, runs your eval suite, and opens a PR.
-
 ## Quickstart — Self-host / Local dev
 
 ```bash
@@ -119,12 +95,9 @@ python -m eden.api.app
                   │               |
                   │               ▼
                   │     +-------------------+
-                  │     |  CLI Agent        |  /eden-improve
-                  │     |  (Aider fork)     |  /eden-trace /eden-eval …
-                  │     +---------+---------+
-                  │               |
-                  │               ▼
-                  │             PR ──► your repo
+                  │     |  Web Platform     |  trace viz, eval, export
+                  │     |  (Next.js)        |  AI assistant sidebar
+                  │     +-------------------+
                   │
 ```
 
@@ -151,14 +124,6 @@ eden/
 │   │   ├── evals/
 │   │   ├── export/
 │   │   └── assistant/           # Persistent AI assistant
-│   ├── cli/                     # `eden` CLI + Aider fork (Pillar 3)
-│   │   ├── agent.py
-│   │   ├── commands/
-│   │   │   ├── improve.py       # /eden-improve
-│   │   │   ├── trace.py         # /eden-trace
-│   │   │   ├── eval.py          # /eden-eval
-│   │   │   └── compare.py       # /eden-compare
-│   │   └── eval_runner.py
 │   ├── kb/                      # Knowledge Base (shared across pillars)
 │   │   ├── episodic/            # PostgreSQL trace/eval/attempt records
 │   │   ├── semantic/            # Temporal knowledge graph
@@ -223,9 +188,3 @@ cd clients/portal && bun install && bun run dev
 ## Documentation
 
 See [PRD.md](./PRD.md) for the full product requirements document and roadmap.
-
----
-
-## Advanced (opt-in): Environment Generation
-
-> Most teams adopt Eden for the three pillars above. The original Eden product — a multi-agent pipeline that takes a natural-language description and produces a runnable, verified, production-quality environment (RL training, agent eval, simulation) — is still available as an **advanced, opt-in feature**. Enable it per project in your workspace settings. See [PRD.md § Part VIII](./PRD.md#part-viii--advanced-opt-in-environment-generation-pipeline) for the high-level overview, and `PRD-Legacy-Environments.md` for the full pipeline specification (Planner, Critic, Refiner, Fact Checker, Executor, Code Quality Pipeline, Verifier, Tester, Archivist).

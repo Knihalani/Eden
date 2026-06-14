@@ -23,10 +23,8 @@ forwarder that enqueues to the Redis tailer and returns a job id.
 from __future__ import annotations
 
 import logging
-from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Query
-from pydantic import BaseModel, Field
 
 from eden.api.deps import get_current_user
 from eden.llmops.judges.base import JudgeScore
@@ -186,8 +184,8 @@ async def run_judges(
 @router.get("", response_model=JudgeListResponse)
 async def list_judge_scores(
     org_id: str = Path(..., description="Organization ID"),
-    trace_id: Optional[str] = Query(None),
-    judge_name: Optional[str] = Query(None),
+    trace_id: str | None = Query(None),
+    judge_name: str | None = Query(None),
     limit: int = Query(100, ge=1, le=1000),
     offset: int = Query(0, ge=0),
     user: dict = Depends(get_current_user),

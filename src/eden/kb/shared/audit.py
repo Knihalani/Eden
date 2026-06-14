@@ -1,14 +1,13 @@
+from typing import Any, cast
 """AUDN protocol for Knowledge Base writes.
 
 AUDN = Add / Update / Delete / None
 Determines how to handle proposed KB writes based on existing entries.
 """
 
-from dataclasses import dataclass
-from datetime import datetime
-from enum import Enum
-from typing import Optional, Any
 import logging
+from dataclasses import dataclass
+from enum import Enum
 
 logger = logging.getLogger(__name__)
 
@@ -27,7 +26,7 @@ class AUDNResult:
     """Result of AUDN evaluation."""
     action: AUDNAction
     reason: str
-    conflicting_entry: Optional[dict] = None
+    conflicting_entry: dict | None = None
 
 
 def evaluate_audn(
@@ -68,7 +67,7 @@ def evaluate_audn(
         if _contradicts(proposed, existing_entry):
             return AUDNResult(
                 action=AUDNAction.CONFLICT,
-                reason=f"Contradiction detected with existing entry",
+                reason="Contradiction detected with existing entry",
                 conflicting_entry=existing_entry,
             )
 
@@ -76,19 +75,18 @@ def evaluate_audn(
     proposed_time = proposed.get(timestamp_key)
     existing_time = max(e.get(timestamp_key, "") for e in matching)
 
-    if proposed_time and existing_time:
-        if proposed_time > existing_time:
-            # Check if there's actual new information
-            if _has_new_information(proposed, matching[0]):
-                return AUDNResult(
-                    action=AUDNAction.UPDATE,
-                    reason=f"Newer timestamp and new information for '{subject}'"
-                )
-            else:
-                return AUDNResult(
-                    action=AUDNAction.NONE,
-                    reason=f"No new information in update for '{subject}'"
-                )
+    if proposed_time and existing_time and proposed_time > existing_time:
+        # Check if there's actual new information
+        if _has_new_information(proposed, matching[0]):
+            return AUDNResult(
+                action=AUDNAction.UPDATE,
+                reason=f"Newer timestamp and new information for '{subject}'"
+            )
+        else:
+            return AUDNResult(
+                action=AUDNAction.NONE,
+                reason=f"No new information in update for '{subject}'"
+            )
 
     # Check if proposed is duplicate
     if _is_duplicate(proposed, matching[0]):
@@ -112,12 +110,7 @@ def _contradicts(a: dict, b: dict) -> bool:
     """
     # Key fields that should be consistent for a given subject
     contradictory_keys = ["entity_type", "edge_type", "category"]
-    for key in contradictory_keys:
-        if key in a and key in b and a[key] != b[key]:
-            # Same subject but different type - contradiction
-            return True
-
-    return False
+    return any(key in a and key in b and a[key] != b[key] for key in contradictory_keys)
 
 
 def _has_new_information(proposed: dict, existing: dict) -> bool:
@@ -147,7 +140,7 @@ def _is_duplicate(a: dict, b: dict) -> bool:
 
 
 def apply_audn(
-    client,
+    client: Any,
     collection: str,
     proposed: dict,
     audn_result: AUDNResult,
@@ -164,10 +157,10 @@ def apply_audn(
         True if write was applied
     """
     if audn_result.action == AUDNAction.ADD:
-        return client.insert(collection, proposed)
+        return cast(bool, client.insert(collection, proposed))
     elif audn_result.action == AUDNAction.UPDATE:
-        return client.update(collection, proposed)
+        return cast(bool, client.update(collection, proposed))
     elif audn_result.action == AUDNAction.DELETE:
-        return client.delete(collection, proposed.get("id"))
+        return cast(bool, client.delete(collection, proposed.get("id")))
     else:  # NONE
         return False

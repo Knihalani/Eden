@@ -32,12 +32,18 @@ import {
 interface AlertItem {
   alert_id: string;
   title: string;
+  description?: string;
+  source?: string;
   message: string;
   severity: string;
   entity_id: string;
   acknowledged: boolean;
+  triggered_at?: string;
   created_at: string;
+  acknowledged_at?: string | null;
+  acknowledged_by?: string | null;
   channels: string[];
+  metadata?: Record<string, unknown>;
 }
 
 interface AlertListResponse {
@@ -51,8 +57,8 @@ type SeverityFilter = "all" | "critical" | "high" | "warning" | "info" | "debug"
 const SEVERITY_CONFIG: Record<string, { icon: typeof AlertCircle; color: string; bg: string; label: string }> = {
   critical: { icon: ShieldAlert, color: "text-[var(--error)]", bg: "bg-[var(--error)]/10", label: "Critical" },
   high: { icon: AlertTriangle, color: "text-[var(--warning)]", bg: "bg-[var(--warning)]/10", label: "High" },
-  warning: { icon: AlertCircle, color: "text-[var(--cat-warning-fg)]", bg: "bg-[var(--cat-warning-dim)]", label: "Warning" },
-  info: { icon: Info, color: "text-[var(--cat-info-fg)]", bg: "bg-[var(--cat-info-dim)]", label: "Info" },
+  warning: { icon: AlertCircle, color: "text-[var(--warning)]", bg: "bg-[var(--warning-bg)]", label: "Warning" },
+  info: { icon: Info, color: "text-[var(--accent)]", bg: "bg-[var(--accent-faint)]", label: "Info" },
   debug: { icon: Zap, color: "text-[var(--text-muted)]", bg: "bg-[var(--bg-tertiary)]", label: "Debug" },
 };
 
@@ -88,7 +94,27 @@ export default function AlertsPage() {
       if (acknowledgedFilter !== null) params.acknowledged = acknowledgedFilter;
 
       const data = await api.listAlerts(currentOrg.id, params);
-      setAlerts(data.alerts);
+      // The API returns rows without the legacy ``message``,
+      // ``entity_id``, ``channels`` fields. Map at the boundary
+      // so the rest of the page can keep the existing local shape.
+      setAlerts(
+        data.alerts.map((a) => ({
+          alert_id: a.alert_id,
+          title: a.title,
+          description: a.description,
+          source: a.source,
+          message: a.description,
+          severity: a.severity,
+          entity_id: "",
+          acknowledged: a.acknowledged,
+          triggered_at: a.triggered_at,
+          created_at: a.triggered_at,
+          acknowledged_at: a.acknowledged_at,
+          acknowledged_by: a.acknowledged_by,
+          channels: [],
+          metadata: a.metadata,
+        })),
+      );
       setTotal(data.total);
       setUnreadCount(data.unread_count);
     } catch (e) {

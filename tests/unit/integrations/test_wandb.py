@@ -12,7 +12,6 @@ from __future__ import annotations
 from eden.integrations import INTEGRATION_API_VERSION
 from eden.integrations.wandb import WeaveClient, fan_out_bronze_event, from_bronze_event
 
-
 # ────────────────────────────────────────────────────────────────────────
 # from_bronze_event
 # ────────────────────────────────────────────────────────────────────────

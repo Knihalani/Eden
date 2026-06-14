@@ -15,7 +15,7 @@ from __future__ import annotations
 import json
 import logging
 from dataclasses import dataclass, field
-from typing import Any, Optional
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -27,10 +27,10 @@ class FieldContract:
     name: str
     required: bool = True
     field_type: type = str
-    max_length: Optional[int] = None
-    max_size_bytes: Optional[int] = None
-    pattern: Optional[str] = None  # regex pattern for string validation
-    allowed_values: Optional[list[Any]] = None
+    max_length: int | None = None
+    max_size_bytes: int | None = None
+    pattern: str | None = None  # regex pattern for string validation
+    allowed_values: list[Any] | None = None
     default: Any = None
 
 
@@ -232,7 +232,7 @@ class ValidationResult:
 class ContractValidator:
     """Validates events against registered data contracts."""
 
-    def __init__(self, contracts: Optional[dict[str, EventContract]] = None) -> None:
+    def __init__(self, contracts: dict[str, EventContract] | None = None) -> None:
         self.contracts = contracts or CONTRACT_REGISTRY
 
     def validate(self, event: dict[str, Any], contract: EventContract | str) -> ValidationResult:
@@ -246,14 +246,16 @@ class ContractValidator:
             ValidationResult with violations, warnings, and quarantine flag.
         """
         if isinstance(contract, str):
-            contract = self.contracts.get(contract)
-            if not contract:
+            resolved = self.contracts.get(contract)
+            if not resolved:
                 return ValidationResult(
                     valid=False,
-                    event_type=contract if isinstance(contract, str) else "unknown",
+                    event_type=contract,
                     violations=[f"No contract registered for event type: {contract}"],
                     quarantine=True,
                 )
+            contract = resolved
+        assert contract is not None  # narrowed above; keep mypy honest
 
         violations: list[str] = []
         warnings: list[str] = []
@@ -305,11 +307,14 @@ class ContractValidator:
                     violations.append(
                         f"Field '{fc.name}' exceeds max length {fc.max_length}"
                     )
-                if fc.max_size_bytes and isinstance(value, str):
-                    if len(value.encode("utf-8")) > fc.max_size_bytes:
-                        violations.append(
-                            f"Field '{fc.name}' exceeds max size {fc.max_size_bytes} bytes"
-                        )
+                if (
+                    fc.max_size_bytes
+                    and isinstance(value, str)
+                    and len(value.encode("utf-8")) > fc.max_size_bytes
+                ):
+                    violations.append(
+                        f"Field '{fc.name}' exceeds max size {fc.max_size_bytes} bytes"
+                    )
                 if fc.pattern and isinstance(value, str):
                     import re
                     if not re.match(fc.pattern, value):

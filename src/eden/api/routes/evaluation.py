@@ -6,39 +6,33 @@ security scanning, and review gates via REST API.
 
 from __future__ import annotations
 
-import json
 import logging
 import os
-from typing import Any, Optional
+from pathlib import Path
+from typing import Any
 
-from fastapi import APIRouter, HTTPException, BackgroundTasks, Depends
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from pydantic import BaseModel, Field
 
-from eden.api.deps import get_current_user, require_org_admin, require_feature_flag
-from eden.evaluation.golden_dataset import (
-    DatasetRegistry,
-    GoldenDataset,
-    load_canonical_datasets,
-    EnvironmentCategory,
-    DifficultyLevel,
-)
-from eden.evaluation.ci_pipeline import CIPipeline, StageName, StageStatus, PipelineReport
+from eden.api.deps import get_current_user, require_feature_flag, require_org_admin
+from eden.evaluation.auto_dataset import AutoDatasetPromoter
 from eden.evaluation.canary import (
     CanaryDeployment,
-    CanaryResult,
     DeploymentConfig,
     DeploymentStrategy,
     RollbackController,
 )
-from eden.evaluation.review_gate import (
-    ReviewGate,
-    RiskClassifier,
-    RiskLevel,
-    EnvironmentDiff,
-    ReviewDecision,
+from eden.evaluation.ci_pipeline import CIPipeline, StageName
+from eden.evaluation.golden_dataset import (
+    DatasetRegistry,
+    EnvironmentCategory,
+    load_canonical_datasets,
 )
-from eden.evaluation.security_scanner import SecurityScanner, SecurityGatePolicy
-from eden.evaluation.auto_dataset import AutoDatasetPromoter, TraceQualityScorer
+from eden.evaluation.review_gate import (
+    EnvironmentDiff,
+    ReviewGate,
+)
+from eden.evaluation.security_scanner import SecurityScanner
 
 logger = logging.getLogger(__name__)
 router = APIRouter(
@@ -121,14 +115,14 @@ class GoldenDatasetDetail(BaseModel):
     description: str
     cases: list[dict[str, Any]]
     overall_pass_criteria: dict[str, Any]
-    baseline_version: Optional[str] = None
+    baseline_version: str | None = None
 
 
 class CIPipelineRequest(BaseModel):
     commit_sha: str = Field(..., description="Git commit SHA to evaluate")
     branch: str = Field(..., description="Git branch name")
     changed_files: list[str] = Field(default_factory=list, description="Files changed in PR")
-    baseline_commit: Optional[str] = Field(None, description="Baseline commit for regression")
+    baseline_commit: str | None = Field(None, description="Baseline commit for regression")
     skip_stages: list[str] = Field(default_factory=list, description="Stage names to skip")
 
 
@@ -150,7 +144,7 @@ class CanaryDeployRequest(BaseModel):
     current_version: str = Field(..., description="Currently serving version")
     candidate_version: str = Field(..., description="New version to deploy")
     strategy: str = Field(default="canary", description="Deployment strategy: shadow, canary, ab_test, blue_green")
-    stages: Optional[list[dict[str, Any]]] = Field(None, description="Custom rollout stages")
+    stages: list[dict[str, Any]] | None = Field(None, description="Custom rollout stages")
     rollback: bool = Field(default=True, description="Enable automatic rollback")
 
 
@@ -233,7 +227,7 @@ class SecurityScanResponse(BaseModel):
 class AutoDatasetRequest(BaseModel):
     traces: list[dict[str, Any]] = Field(..., description="Production traces to evaluate")
     target_dataset_id: str = Field(default="gd_auto_production", description="Target dataset ID")
-    category: Optional[str] = Field(None, description="Default category for promoted cases")
+    category: str | None = Field(None, description="Default category for promoted cases")
 
 
 class AutoDatasetResponse(BaseModel):
@@ -250,7 +244,7 @@ class AutoDatasetResponse(BaseModel):
 
 @router.get("/datasets", response_model=list[GoldenDatasetListItem])
 async def list_golden_datasets(
-    category: Optional[str] = None,
+    category: str | None = None,
     user: dict = Depends(get_current_user),
 ):
     """List all golden datasets."""
@@ -275,7 +269,7 @@ async def list_golden_datasets(
 @router.get("/datasets/{dataset_id}", response_model=GoldenDatasetDetail)
 async def get_golden_dataset(
     dataset_id: str,
-    version: Optional[str] = None,
+    version: str | None = None,
     user: dict = Depends(get_current_user),
 ):
     """Get a specific golden dataset."""
@@ -312,7 +306,7 @@ async def run_ci_pipeline(
         try:
             skip_stages.add(StageName(name))
         except ValueError:
-            raise HTTPException(status_code=400, detail=f"Unknown stage: {name}")
+            raise HTTPException(status_code=400, detail=f"Unknown stage: {name}") from None
 
     report = await pipeline.run(
         commit_sha=request.commit_sha,
@@ -374,7 +368,7 @@ async def canary_deploy(
     try:
         strategy = DeploymentStrategy(request.strategy)
     except ValueError:
-        raise HTTPException(status_code=400, detail=f"Unknown strategy: {request.strategy}")
+        raise HTTPException(status_code=400, detail=f"Unknown strategy: {request.strategy}") from None
 
     config = DeploymentConfig(
         strategy=strategy,
@@ -512,7 +506,7 @@ async def approve_review(
             auto_approved=decision.auto_approved,
         )
     except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        raise HTTPException(status_code=404, detail=str(e)) from e
 
 
 @router.post("/review/reject")
@@ -540,7 +534,7 @@ async def reject_review(
             auto_approved=decision.auto_approved,
         )
     except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        raise HTTPException(status_code=404, detail=str(e)) from e
 
 
 @router.get("/review/pending")
@@ -595,7 +589,7 @@ async def run_security_scan(
 @router.post("/security/scan-file")
 async def scan_file(
     file_path: str,
-    requirements: Optional[list[str]] = None,
+    requirements: list[str] | None = None,
     user: dict = Depends(require_org_admin),
 ):
     """Scan a file on disk."""
@@ -612,7 +606,7 @@ async def scan_file(
         project_root = Path(".").resolve()
         path.relative_to(project_root)
     except ValueError:
-        raise HTTPException(status_code=400, detail="Invalid file path: must be within project directory")
+        raise HTTPException(status_code=400, detail="Invalid file path: must be within project directory") from None
 
     if not path.exists():
         raise HTTPException(status_code=404, detail=f"File not found: {file_path}")

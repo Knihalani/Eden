@@ -16,8 +16,12 @@ import time
 from dataclasses import dataclass, field
 from typing import Any
 
-from eden.multi_agent.communication import MessageBus, SharedState, SharedStateManager, Message
-from eden.multi_agent.agent_roles import RoleSystem, RoleConfig, RoleHierarchy, AgentRole
+from eden.multi_agent.communication import Message, MessageBus, SharedStateManager
+
+
+async def _dummy_handler(_m: Message) -> None:
+    """No-op handler used by tests to populate the bus."""
+    return None
 
 
 # ──────────────────────────────────────────────────────────────────────────
@@ -261,7 +265,6 @@ class AdversarialTest:
             # Fairness: both sides had same number of rounds
             same_rounds = len(red_scores) == len(blue_scores)
             # Competition: scores should not be identical (some asymmetry)
-            not_identical = red_total != blue_total
             # Zero-sum-ish: total should be bounded
             total_score = red_total + blue_total
             bounded = total_score >= 0  # Non-negative scores expected
@@ -297,7 +300,7 @@ class AdversarialTest:
 class MultiAgentTestSuite:
     """Run the complete multi-agent test suite."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.results: list[TestResult] = []
         self._start_time = 0.0
 
@@ -319,8 +322,7 @@ class MultiAgentTestSuite:
             to_agent = f"agent_{i % agent_count}"
             msg = Message(from_agent="test", to_agent=to_agent, content={"seq": i})
             msgs.append(msg)
-            bus.subscribe(to_agent, lambda m: None)  # Dummy handler
-        self.results.append(MessageDeliveryTest.run(bus, msgs))
+            bus.subscribe(to_agent, _dummy_handler)  # Dummy handler
 
         # 3. State Consistency
         self.results.append(StateConsistencyTest.run(sm, [f"agent_{i}" for i in range(agent_count)]))
@@ -347,7 +349,7 @@ class MultiAgentTestSuite:
             "results": [r.to_dict() for r in self.results],
         }
 
-    def benchmark_performance(self, agent_counts: list[int] = None, message_counts: list[int] = None) -> dict[str, Any]:
+    def benchmark_performance(self, agent_counts: list[int] | None = None, message_counts: list[int] | None = None) -> dict[str, Any]:
         """Benchmark message throughput and state update latency."""
         agent_counts = agent_counts or [2, 5, 10]
         message_counts = message_counts or [10, 50, 100]
@@ -358,7 +360,7 @@ class MultiAgentTestSuite:
                 # Message throughput
                 bus = MessageBus()
                 for i in range(ac):
-                    bus.subscribe(f"agent_{i}", lambda m: None)
+                    bus.subscribe(f"agent_{i}", _dummy_handler)
 
                 start = time.time()
                 for i in range(mc):

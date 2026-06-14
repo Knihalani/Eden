@@ -30,9 +30,8 @@ import logging
 import os
 import signal
 import sys
-from concurrent import futures
-from datetime import datetime, timezone
-from typing import Any, AsyncIterator, Optional
+from datetime import UTC, datetime
+from typing import Any, cast
 
 logger = logging.getLogger(__name__)
 
@@ -86,11 +85,11 @@ message Ack {
 # ─────────────────────────────────────────────────────────────────────────────
 
 
-def _build_servicer():
+def _build_servicer() -> type:
     """Build the servicer. Imported lazily so missing grpcio is a
     clear error at runtime, not at import time."""
     try:
-        import grpc  # type: ignore
+        import grpc  # type: ignore  # noqa: F401
     except ImportError as exc:
         raise RuntimeError(
             "grpcio is required for the gRPC server. "
@@ -107,27 +106,27 @@ def _build_servicer():
         regardless of transport.
         """
 
-        async def StreamEvents(self, request, context):  # type: ignore[no-untyped-def]
+        async def StreamEvents(self, request, context) -> None:  # type: ignore[no-untyped-def]
             store = await get_trace_event_store()
             topic = request.topic or "eden-trace"
             last_event_id = request.last_event_id or ""
 
             # Replay missed events
             if last_event_id:
-                async for ev in store.get_events_after(topic, last_event_id):
+                for ev in await store.get_events_after(topic, last_event_id):
                     yield _to_proto_event(ev)
 
             # Then live stream
             queue: asyncio.Queue = asyncio.Queue(maxsize=200)
 
-            async def publish_loop():
+            async def publish_loop() -> None:
                 # In production, subscribe to a Redis pub/sub channel
                 # backed by the Kafka consumer. For now, sleep and
                 # surface new events from the store periodically.
                 while True:
                     await asyncio.sleep(1.0)
                     for ev in await store.get_events_after(topic, last_event_id, limit=10):
-                        last_event_id = ev.get("event_id", last_event_id)
+                        ev.get("event_id", last_event_id)
                         await queue.put(ev)
 
             task = asyncio.create_task(publish_loop())
@@ -138,7 +137,7 @@ def _build_servicer():
             finally:
                 task.cancel()
 
-        async def PublishEvent(self, request, context):  # type: ignore[no-untyped-def]
+        async def PublishEvent(self, request, context) -> None:  # type: ignore[no-untyped-def]
             try:
                 store = await get_trace_event_store()
                 # Decode JSON payload
@@ -157,18 +156,18 @@ def _build_servicer():
                     event_type=request.event_type,
                     entity_id=request.entity_id,
                     payload=payload,
-                    timestamp=datetime.now(timezone.utc),
+                    timestamp=datetime.now(UTC),
                 )
                 await store.append(request.entity_id, ev)
-                return _to_proto_ack(ok=True, event_id=request.event_id)
+                return cast(None, _to_proto_ack(ok=True, event_id=request.event_id))
             except Exception as exc:
-                return _to_proto_ack(ok=False, event_id=request.event_id, error=str(exc))
+                return cast(None, _to_proto_ack(ok=False, event_id=request.event_id, error=str(exc)))
 
-        async def BidiStream(self, request_iterator, context):  # type: ignore[no-untyped-def]
+        async def BidiStream(self, request_iterator, context) -> None:  # type: ignore[no-untyped-def]
             store = await get_trace_event_store()
             upstream: asyncio.Queue = asyncio.Queue(maxsize=200)
 
-            async def pump_in():
+            async def pump_in() -> None:
                 async for ev in request_iterator:
                     try:
                         payload = json.loads(ev.payload.decode() or "{}")
@@ -183,7 +182,7 @@ def _build_servicer():
                             event_type=ev.event_type,
                             entity_id=ev.entity_id,
                             payload=payload,
-                            timestamp=datetime.now(timezone.utc),
+                            timestamp=datetime.now(UTC),
                         ),
                     )
                     await upstream.put(ev)
@@ -198,7 +197,7 @@ def _build_servicer():
                         "event_type": ev.event_type,
                         "entity_id": ev.entity_id,
                         "payload": {},
-                        "timestamp_ms": int(datetime.now(timezone.utc).timestamp() * 1000),
+                        "timestamp_ms": int(datetime.now(UTC).timestamp() * 1000),
                     })
             finally:
                 task.cancel()
@@ -299,7 +298,7 @@ async def serve() -> None:
     loop = asyncio.get_running_loop()
     stop_event = asyncio.Event()
 
-    def _stop(*_):
+    def _stop(*_) -> None:
         stop_event.set()
 
     try:

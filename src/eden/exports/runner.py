@@ -30,7 +30,6 @@ import io
 import json
 import logging
 import os
-from typing import Any, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -70,7 +69,7 @@ def _serialise(rows: list[dict], format: str) -> bytes:
         writer = csv.DictWriter(buf, fieldnames=list(rows[0].keys()))
         writer.writeheader()
         for r in rows:
-            writer.writerow({k: r.get(k) for k in rows[0].keys()})
+            writer.writerow({k: r.get(k) for k in rows[0]})
         return buf.getvalue().encode("utf-8")
 
     if format == "parquet":
@@ -92,9 +91,9 @@ def _serialise(rows: list[dict], format: str) -> bytes:
 
 
 def _push_to_destination(
-    destination_type: Optional[str],
+    destination_type: str | None,
     destination_name: str,
-    config: Optional[dict],
+    config: dict | None,
     payload: bytes,
 ) -> int:
     """Write ``payload`` to the destination. Returns bytes written."""
@@ -159,9 +158,9 @@ async def run_export(
     org_id: str,
     data_type: str,
     format: str,
-    destination_type: Optional[str],
+    destination_type: str | None,
     destination_name: str,
-    destination_config: Optional[dict],
+    destination_config: dict | None,
 ) -> int:
     """Run a single export and return the bytes written.
 

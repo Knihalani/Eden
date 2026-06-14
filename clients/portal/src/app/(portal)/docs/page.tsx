@@ -265,7 +265,7 @@ export default function DocsPage() {
       {/* Mobile nav overlay */}
       {showMobileNav && (
         <div
-          className="md:hidden fixed inset-0 z-50 bg-black/50"
+          className="md:hidden fixed inset-0 z-50 bg-[var(--bg-base)]/50"
           onClick={() => setShowMobileNav(false)}
           role="presentation"
         >
@@ -559,7 +559,7 @@ export default function DocsPage() {
       {/* Search modal */}
       {searchOpen && (
         <div className="fixed inset-0 z-50 flex items-start justify-center pt-[15vh] px-4">
-          <div className="absolute inset-0 bg-black/50" onClick={() => setSearchOpen(false)} role="presentation" />
+          <div className="absolute inset-0 bg-[var(--bg-base)]/50" onClick={() => setSearchOpen(false)} role="presentation" />
           <div className="relative w-full max-w-lg bg-[var(--bg-primary)] rounded-xl shadow-2xl border border-[var(--border-default)] overflow-hidden">
             <div className="flex items-center gap-3 px-4 py-3 border-b border-[var(--border-subtle)]">
               <Search className="w-4 h-4 text-[var(--text-muted)]" />

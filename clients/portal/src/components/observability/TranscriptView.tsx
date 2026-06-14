@@ -156,7 +156,7 @@ function SummaryCard({
   const borderColor =
     outcome === "success" ? "var(--terminal)" :
     outcome === "failure" || outcome === "crash" ? "var(--error)" :
-    outcome === "partial" || outcome === "timeout" ? "var(--cat-warning-fg)" :
+    outcome === "partial" || outcome === "timeout" ? "var(--warning)" :
     "var(--border-default)";
   return (
     <div
@@ -240,7 +240,7 @@ function TranscriptRowItem({
   const iconColor =
     row.outcome === "failure" ? "var(--error)" :
     isLlm ? "var(--accent)" :
-    isTool ? "var(--cat-warning-fg)" :
+    isTool ? "var(--warning)" :
     "var(--text-muted)";
 
   return (
@@ -303,7 +303,7 @@ function TranscriptRowItem({
           )}
 
           {/* System prompt (if separate from messages) */}
-          {row.request_body?.system && (
+          {row.request_body?.system != null && row.request_body.system !== "" ? (
             <div>
               <SectionHeader>System</SectionHeader>
               <div className="rounded border border-[var(--border-default)] bg-[var(--bg-primary)] px-2 py-1.5 text-xs">
@@ -312,9 +312,19 @@ function TranscriptRowItem({
                   : <pre className="overflow-x-auto whitespace-pre-wrap font-mono text-[11px]">{JSON.stringify(row.request_body.system, null, 2)}</pre>}
               </div>
             </div>
-          )}
+          ) : null}
 
-          {renderToolCalls(row.tool_calls)}
+          {/* Render the tool-calls list. Now that the parent's
+              ``response_body`` narrowing uses a ternary with
+              ``typeof`` (not ``&&``), the ``unknown`` leak is
+              gone and this ``&&`` short-circuit type-checks
+              cleanly: the result is
+              ``TranscriptToolCall[] | null | undefined | boolean
+              | JSX.Element``, all of which are valid
+              ``ReactNode``s. */}
+          {row.tool_calls && row.tool_calls.length > 0 && (
+            <ToolCallsList toolCalls={row.tool_calls} />
+          )}
 
           {/* Tool results */}
           {row.tool_results && row.tool_results.length > 0 && (
@@ -326,10 +336,16 @@ function TranscriptRowItem({
             <ImagesPanel images={row.images} orgId={orgId} />
           )}
 
-          {/* Response content (when no structured messages) */}
-          {row.response_body && !row.request_body?.messages && (
-            <ResponsePanel response={row.response_body} />
-          )}
+          {/* Response content (when no structured messages).
+              NOTE: ``row.response_body`` is typed as ``unknown``,
+              so a ``&&`` short-circuit here would leak ``unknown``
+              into the JSX children union and trigger TS2322 on
+              every sibling. The ternary + ``typeof`` narrowing
+              keeps the result type a clean
+              ``JSX.Element | null``. */}
+          {typeof row.response_body !== "undefined" && !row.request_body?.messages ? (
+            <ResponsePanel response={row.response_body as never} />
+          ) : null}
 
           {/* Citations */}
           {row.citations && row.citations.length > 0 && (
@@ -375,10 +391,10 @@ function SectionHeader({ children }: { children: React.ReactNode }) {
 function ReasoningPanel({ blocks }: { blocks: NonNullable<TR["reasoning"]> }) {
   const [open, setOpen] = React.useState(false);
   return (
-    <div className="rounded border border-[var(--cat-warning-fg)]/30 bg-[var(--cat-warning-fg)]/5">
+    <div className="rounded border border-[var(--warning)]/30 bg-[var(--warning)]/5">
       <button
         onClick={() => setOpen((v) => !v)}
-        className="flex w-full items-center gap-1.5 px-2 py-1.5 text-left text-[var(--cat-warning-fg)]"
+        className="flex w-full items-center gap-1.5 px-2 py-1.5 text-left text-[var(--warning)]"
       >
         <Brain className="h-3 w-3" />
         <span className="text-[10px] font-mono uppercase tracking-wider">
@@ -387,10 +403,10 @@ function ReasoningPanel({ blocks }: { blocks: NonNullable<TR["reasoning"]> }) {
         {open ? <ChevronDown className="h-3 w-3 ml-auto" /> : <ChevronRight className="h-3 w-3 ml-auto" />}
       </button>
       {open && (
-        <div className="border-t border-[var(--cat-warning-fg)]/30 p-2 space-y-2 text-xs">
+        <div className="border-t border-[var(--warning)]/30 p-2 space-y-2 text-xs">
           {blocks.map((b, i) => (
             <div key={i} className="font-mono text-[11px] text-[var(--text-primary)] whitespace-pre-wrap">
-              {b.thought && <span className="text-[var(--cat-warning-fg)]">[thought] </span>}
+              {b.thought && <span className="text-[var(--warning)]">[thought] </span>}
               {b.text}
               {b.signature && (
                 <div className="mt-1 text-[9px] text-[var(--text-muted)]">
@@ -439,7 +455,7 @@ function roleColor(role: string): React.CSSProperties {
     case "assistant":
       return { background: "var(--bg-secondary)", borderColor: "var(--accent)" };
     case "tool":
-      return { background: "var(--cat-warning-dim)", borderColor: "var(--cat-warning-fg)" };
+      return { background: "var(--warning-bg)", borderColor: "var(--warning)" };
     default:
       return {};
   }
@@ -450,21 +466,16 @@ function ToolCallsSection({ calls }: { calls: TranscriptToolCall[] | null | unde
   return <ToolCallsList toolCalls={calls} />;
 }
 
-function renderToolCalls(calls: unknown): React.ReactNode {
-  if (!Array.isArray(calls) || calls.length === 0) return null;
-  return <ToolCallsList toolCalls={calls as never} />;
-}
-
-function ToolCallsList({ toolCalls }: { toolCalls: TranscriptToolCall[] | null | undefined }) {
+function ToolCallsList({ toolCalls }: { toolCalls: TranscriptToolCall[] | null | undefined }): React.ReactElement | null {
   if (!toolCalls || toolCalls.length === 0) return null;
   return (
     <div>
       <SectionHeader>{`Tool calls (${toolCalls.length})`}</SectionHeader>
       <div className="space-y-1">
         {toolCalls.map((tc, i) => (
-          <div key={i} className="rounded border border-[var(--cat-warning-fg)]/30 bg-[var(--bg-secondary)] px-2 py-1.5 text-xs">
+          <div key={i} className="rounded border border-[var(--warning)]/30 bg-[var(--bg-secondary)] px-2 py-1.5 text-xs">
             <div className="mb-0.5 flex items-center gap-1.5">
-              <Wrench className="h-3 w-3 text-[var(--cat-warning-fg)]" />
+              <Wrench className="h-3 w-3 text-[var(--warning)]" />
               <span className="font-mono">{tc.name}</span>
               {tc.id && <span className="text-[10px] text-[var(--text-muted)]">{tc.id.slice(0, 12)}…</span>}
             </div>

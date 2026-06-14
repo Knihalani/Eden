@@ -5,19 +5,17 @@ Ref: eden-multi-agent-orchestration-architecture.md §3, §3.2
 
 from __future__ import annotations
 
-import asyncio
 import time
 from collections import defaultdict
 from dataclasses import dataclass, field
-from enum import Enum
-from typing import Any, Optional
-
+from enum import StrEnum
+from typing import Any
 
 # ──────────────────────────────────────────────────────────────────────────
 # Enums
 # ──────────────────────────────────────────────────────────────────────────
 
-class ActionType(str, Enum):
+class ActionType(StrEnum):
     CODE_EXECUTION = "code_execution"
     FILE_WRITE = "file_write"
     NETWORK_ACCESS = "network_access"
@@ -28,14 +26,14 @@ class ActionType(str, Enum):
     TOOL_CALL = "tool_call"
 
 
-class ActionResult(str, Enum):
+class ActionResult(StrEnum):
     APPROVED = "approved"
     BLOCKED = "blocked"
     PENDING = "pending"
     TIMEOUT = "timeout"
 
 
-class RoleHierarchy(str, Enum):
+class RoleHierarchy(StrEnum):
     FLAT = "flat"               # Peer-to-peer
     MANAGER_WORKER = "manager_worker"
     SPECIALIST_POOL = "specialist_pool"
@@ -155,7 +153,7 @@ class AgentRole:
 class RoleSystem:
     """Manages all agent roles within a multi-agent environment."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self._roles: dict[str, AgentRole] = {}
         self._role_configs: dict[str, RoleConfig] = {}
         self._teams: dict[str, list[str]] = defaultdict(list)
@@ -234,7 +232,7 @@ class RoleSystem:
     def to_dict(self) -> dict[str, Any]:
         return {
             "roles": [r.to_dict() for r in self._roles.values()],
-            "teams": {tid: aids for tid, aids in self._teams.items()},
+            "teams": dict(self._teams.items()),
             "role_configs": {name: cfg.to_dict() for name, cfg in self._role_configs.items()},
         }
 
@@ -257,7 +255,7 @@ class HITLManager:
         ActionType.TOOL_CALL: "always_approve",
     }
 
-    def __init__(self, rules: dict[ActionType, str] | None = None):
+    def __init__(self, rules: dict[ActionType, str] | None = None) -> None:
         self.rules = rules or dict(self.DEFAULT_RULES)
         self._pending_approvals: dict[str, dict[str, Any]] = {}
         self._approval_resolutions: dict[str, str] = {}  # approval_id -> "approved" | "blocked"

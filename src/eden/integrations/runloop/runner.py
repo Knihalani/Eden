@@ -89,7 +89,7 @@ class RunloopClient:
             return None
         # Most SDKs take an API key in their constructor.
         try:
-            self._sdk = sdk.Client(api_key=self.api_key)  # type: ignore[attr-defined]
+            self._sdk = sdk.Client(api_key=self.api_key)
         except Exception:
             self._sdk = sdk
         return self._sdk
@@ -100,7 +100,7 @@ class RunloopClient:
             return RunloopDevbox(id=f"null-{os.urandom(4).hex()}", spec=spec, state="stub")
         # Real call: defer to SDK in a thread so the async loop isn't blocked.
         def _create() -> Any:
-            return sdk.create_devbox(  # type: ignore[attr-defined]
+            return sdk.create_devbox(
                 blueprint_id=spec.blueprint_id,
                 name=spec.name,
                 env_vars=spec.env_vars,
@@ -120,7 +120,7 @@ class RunloopClient:
         if sdk is None:
             return {"exit_code": 0, "stdout": "", "stderr": "runloop not configured", "stub": True}
         def _exec() -> Any:
-            return sdk.exec(devbox.id, command)  # type: ignore[attr-defined]
+            return sdk.exec(devbox.id, command)
         result = await asyncio.to_thread(_exec)
         return {
             "exit_code": int(getattr(result, "exit_code", 0)),
@@ -133,7 +133,7 @@ class RunloopClient:
         if sdk is None:
             return
         def _destroy() -> Any:
-            return sdk.destroy_devbox(devbox.id)  # type: ignore[attr-defined]
+            return sdk.destroy_devbox(devbox.id)
         await asyncio.to_thread(_destroy)
 
 

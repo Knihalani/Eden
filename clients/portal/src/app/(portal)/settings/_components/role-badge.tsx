@@ -12,7 +12,7 @@ export function RoleBadge({ role, showPermissions = false }: RoleBadgeProps) {
 
   if (!role) return null;
 
-  const colorClass = ROLE_COLORS[role] || "bg-gray-100 text-gray-700 border-gray-300";
+  const colorClass = ROLE_COLORS[role] || "bg-[var(--bg-tertiary)] text-[var(--text-secondary)] border-[var(--border-default)]";
   const label = ROLE_LABELS[role] || role;
 
   return (

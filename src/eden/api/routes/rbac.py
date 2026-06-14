@@ -10,10 +10,10 @@ from __future__ import annotations
 
 import logging
 import re
-from typing import Any, Optional
+from typing import Any
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field, field_validator
 
 from eden.api.deps import OrgMember, get_current_org_member, require_org_permission
@@ -46,7 +46,7 @@ def _validate_permission_key(key: str) -> str:
 class RoleCreateRequest(BaseModel):
     name: str = Field(..., min_length=1, max_length=64)
     base_role: str = Field(..., pattern=r"^(owner|admin|member|viewer)$")
-    description: Optional[str] = Field(None, max_length=500)
+    description: str | None = Field(None, max_length=500)
     permissions: list[str] = Field(default_factory=list)
 
     @field_validator("permissions")
@@ -58,8 +58,8 @@ class RoleCreateRequest(BaseModel):
 
 
 class RoleUpdateRequest(BaseModel):
-    description: Optional[str] = Field(None, max_length=500)
-    permissions: Optional[list[str]] = None
+    description: str | None = Field(None, max_length=500)
+    permissions: list[str] | None = None
 
     @field_validator("permissions")
     @classmethod
@@ -76,15 +76,15 @@ class RoleResponse(BaseModel):
     org_id: str
     name: str
     base_role: str
-    description: Optional[str] = None
+    description: str | None = None
     permissions: list[str] = []
     created_at: str
 
 
 class AssignmentCreateRequest(BaseModel):
     user_id: str
-    resource_type: Optional[str] = Field(None, max_length=32)
-    resource_id: Optional[str] = Field(None, max_length=128)
+    resource_type: str | None = Field(None, max_length=32)
+    resource_id: str | None = Field(None, max_length=128)
 
     @field_validator("user_id")
     @classmethod
@@ -100,9 +100,9 @@ class AssignmentResponse(BaseModel):
     id: str
     role_id: str
     user_id: str
-    resource_type: Optional[str] = None
-    resource_id: Optional[str] = None
-    granted_by: Optional[str] = None
+    resource_type: str | None = None
+    resource_id: str | None = None
+    granted_by: str | None = None
     created_at: str
 
 
@@ -193,9 +193,8 @@ async def create_role(
     except Exception as exc:
         # Unique violation on (org_id, name)
         if "unique" in str(exc).lower() or "duplicate" in str(exc).lower():
-            raise HTTPException(status_code=409, detail=f"Role {req.name!r} already exists")
+            raise HTTPException(status_code=409, detail=f"Role {req.name!r} already exists") from exc
         raise
-
     role_id = str(row["id"])
     if req.permissions:
         await client.executemany(
@@ -382,3 +381,239 @@ async def delete_assignment(
         assignment_id,
         role_id,
     )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Convenience wrappers — "give user this permission" in one call
+# ─────────────────────────────────────────────────────────────────────────────
+
+# The auto-role naming scheme is: f"perm:{permission_key}". These roles
+# are hidden from the list-roles UI (filter on name LIKE 'perm:%' and
+# skip them) — they're managed entirely by the /assign + /unassign
+# convenience routes. The base_role is "viewer" (minimal perms) so the
+# only thing the user gets is the explicit permission_key we add.
+
+_AUTO_ROLE_PREFIX = "perm:"
+
+
+async def _get_or_create_auto_role(org_id: str, permission_key: str) -> str:
+    """Find or create the auto-managed role for a single permission.
+
+    Returns the role_id. The role has ``base_role=viewer`` (so the user
+    gets no other permissions) plus an explicit entry in
+    ``role_permissions`` for ``permission_key``.
+    """
+    client = await get_postgres_client()
+    role_name = f"{_AUTO_ROLE_PREFIX}{permission_key}"
+    row = await client.fetchrow(
+        "SELECT id FROM role_definitions WHERE org_id = $1 AND name = $2",
+        org_id,
+        role_name,
+    )
+    if row:
+        return str(row["id"])
+    row = await client.fetchrow(
+        """
+        INSERT INTO role_definitions (org_id, name, base_role, description)
+        VALUES ($1, $2, 'viewer', $3)
+        RETURNING id
+        """,
+        org_id,
+        role_name,
+        f"Auto-managed role for permission {permission_key}",
+    )
+    role_id = str(row["id"])
+    await client.execute(
+        """
+        INSERT INTO role_permissions (role_id, permission_key, granted)
+        VALUES ($1, $2, TRUE)
+        ON CONFLICT (role_id, permission_key) DO UPDATE SET granted = TRUE
+        """,
+        role_id,
+        permission_key,
+    )
+    return role_id
+
+
+class PermissionAssignRequest(BaseModel):
+    user_id: str
+    permission_key: str
+    resource_type: str | None = Field(None, max_length=32)
+    resource_id: str | None = Field(None, max_length=128)
+
+    @field_validator("user_id")
+    @classmethod
+    def _check_user_id(cls, v: str) -> str:
+        try:
+            UUID(v)
+        except (ValueError, TypeError) as exc:
+            raise ValueError(f"user_id must be a UUID: {v!r}") from exc
+        return v
+
+    @field_validator("permission_key")
+    @classmethod
+    def _check_perm(cls, v: str) -> str:
+        return _validate_permission_key(v)
+
+
+class PermissionUnassignRequest(BaseModel):
+    user_id: str
+    permission_key: str
+
+    @field_validator("user_id")
+    @classmethod
+    def _check_user_id(cls, v: str) -> str:
+        try:
+            UUID(v)
+        except (ValueError, TypeError) as exc:
+            raise ValueError(f"user_id must be a UUID: {v!r}") from exc
+        return v
+
+    @field_validator("permission_key")
+    @classmethod
+    def _check_perm(cls, v: str) -> str:
+        return _validate_permission_key(v)
+
+
+@router.post("/assign", response_model=AssignmentResponse, status_code=201)
+async def assign_permission(
+    org_id: str,
+    req: PermissionAssignRequest,
+    member: OrgMember = Depends(get_current_org_member),
+) -> AssignmentResponse:
+    """One-call ``give this user this permission``.
+
+    Wraps the role/assignment infrastructure: finds-or-creates an
+    auto-managed role containing exactly ``permission_key``, then
+    creates an assignment for ``user_id`` to that role. Idempotent —
+    calling twice with the same args returns the existing assignment.
+    """
+    if member.role not in ("owner", "admin"):
+        raise HTTPException(status_code=403, detail="Owner or admin required")
+    if (req.resource_type is None) != (req.resource_id is None):
+        raise HTTPException(
+            status_code=400,
+            detail="resource_type and resource_id must both be set or both be null",
+        )
+    role_id = await _get_or_create_auto_role(org_id, req.permission_key)
+    client = await get_postgres_client()
+    # Idempotent: ON CONFLICT (role_id, user_id, resource_type, resource_id)
+    # DO NOTHING; then fetch the existing row.
+    row = await client.fetchrow(
+        """
+        INSERT INTO role_assignments (role_id, user_id, resource_type, resource_id, granted_by)
+        VALUES ($1, $2, $3, $4, $5)
+        ON CONFLICT (role_id, user_id, COALESCE(resource_type, ''), COALESCE(resource_id, ''))
+        DO NOTHING
+        RETURNING id, role_id, user_id, resource_type, resource_id, granted_by, created_at
+        """,
+        role_id,
+        req.user_id,
+        req.resource_type,
+        req.resource_id,
+        member.user_id,
+    )
+    if row is None:
+        # Already exists — fetch the existing row to return.
+        existing = await client.fetchrow(
+            """
+            SELECT id, role_id, user_id, resource_type, resource_id, granted_by, created_at
+            FROM role_assignments
+            WHERE role_id = $1 AND user_id = $2
+              AND COALESCE(resource_type, '') = COALESCE($3, '')
+              AND COALESCE(resource_id, '') = COALESCE($4, '')
+            """,
+            role_id,
+            req.user_id,
+            req.resource_type,
+            req.resource_id,
+        )
+        row = existing
+    return AssignmentResponse(
+        id=str(row["id"]),
+        role_id=str(row["role_id"]),
+        user_id=str(row["user_id"]),
+        resource_type=row.get("resource_type"),
+        resource_id=row.get("resource_id"),
+        granted_by=str(row["granted_by"]) if row.get("granted_by") else None,
+        created_at=row["created_at"].isoformat(),
+    )
+
+
+@router.post("/unassign", status_code=204)
+async def unassign_permission(
+    org_id: str,
+    req: PermissionUnassignRequest,
+    member: OrgMember = Depends(get_current_org_member),
+):
+    """One-call ``revoke this user's permission``.
+
+    Reverses ``assign_permission`` by deleting the user's assignment
+    to the auto-managed role for ``permission_key``. 204 even if no
+    assignment existed (idempotent unassign).
+    """
+    if member.role not in ("owner", "admin"):
+        raise HTTPException(status_code=403, detail="Owner or admin required")
+    client = await get_postgres_client()
+    role_name = f"{_AUTO_ROLE_PREFIX}{req.permission_key}"
+    await client.execute(
+        """
+        DELETE FROM role_assignments
+        WHERE user_id = $1
+          AND role_id IN (
+            SELECT id FROM role_definitions WHERE org_id = $2 AND name = $3
+          )
+        """,
+        req.user_id,
+        org_id,
+        role_name,
+    )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Permission catalogue (static, derived from PERMISSION_MAP)
+# ─────────────────────────────────────────────────────────────────────────────
+
+# This endpoint lives on the /orgs/{org_id}/permissions prefix, not the
+# /roles one. We mount it as a separate router on app include so the URL
+# shape matches what the portal calls.
+permissions_router = APIRouter(prefix="/orgs/{org_id}", tags=["rbac"])
+
+
+@permissions_router.get("/permissions")
+async def list_permissions(
+    org_id: str,
+    member: OrgMember = Depends(get_current_org_member),
+) -> dict[str, Any]:
+    """Return the full permission catalogue grouped by built-in role.
+
+    The catalogue is derived from ``PERMISSION_MAP`` in
+    ``eden.api.deps`` — the same source of truth used by
+    ``require_org_permission`` to gate access. Each entry has the
+    permission key, the description (derived from the key's
+    ``<resource>:<action>`` shape), and the set of built-in roles
+    that include it.
+    """
+    from eden.api.deps import PERMISSION_MAP  # local import to avoid cycles
+
+    # Invert the map: permission -> {role, ...}
+    perm_to_roles: dict[str, set[str]] = {}
+    for role, perms in PERMISSION_MAP.items():
+        for p in perms:
+            perm_to_roles.setdefault(p, set()).add(role)
+
+    items: list[dict[str, Any]] = []
+    for p in sorted(perm_to_roles):
+        resource, _, action = p.partition(":")
+        items.append({
+            "key": p,
+            "resource": resource,
+            "action": action,
+            "granted_by_default": sorted(perm_to_roles[p]),
+        })
+
+    return {
+        "org_id": org_id,
+        "count": len(items),
+        "permissions": items,
+    }

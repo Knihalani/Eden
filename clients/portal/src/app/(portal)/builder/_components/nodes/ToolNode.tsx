@@ -18,7 +18,7 @@ export function ToolNode({ data, selected }: NodeProps) {
       outputs={[{ id: "out:tool", position: Position.Right }]}
     >
       <div className="font-mono text-[11px]">{d.name}</div>
-      <div className="text-[10px] text-zinc-500">
+      <div className="text-[10px] text-[var(--text-muted)]">
         {d.toolKind}
         {configCount > 0 ? ` · ${configCount} cfg` : ""}
       </div>

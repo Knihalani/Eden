@@ -1,11 +1,12 @@
 """Tests for the tiered storage lifecycle manager."""
 
 import pytest
+
 from eden.data_platform.storage_lifecycle import (
+    DEFAULT_TRANSITIONS,
+    LifecycleReport,
     StorageLifecycleManager,
     TierTransition,
-    LifecycleReport,
-    DEFAULT_TRANSITIONS,
 )
 
 

@@ -8,7 +8,6 @@ import asyncio
 import logging
 import time
 from collections import defaultdict
-from typing import Optional
 
 from eden.config import get_settings
 
@@ -16,7 +15,7 @@ settings = get_settings()
 logger = logging.getLogger(__name__)
 
 
-class RateLimitExceeded(Exception):
+class RateLimitExceeded(Exception):  # noqa: N818
     """Raised when a rate limit is exceeded."""
     def __init__(self, retry_after: float = 60.0):
         self.retry_after = retry_after

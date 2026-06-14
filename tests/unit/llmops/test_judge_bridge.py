@@ -1,12 +1,12 @@
 """Tests for the JudgeDetector + the LLM-judge toggle in
 ``ProductionMonitor.evaluate_hallucination``."""
 
+from datetime import UTC
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from eden.insights.detectors import JudgeDetector
-
 
 # ── JudgeDetector ──────────────────────────────────────────────────
 
@@ -22,7 +22,7 @@ def _fake_row(**kwargs) -> dict:
         "score": 0.3,
         "rationale": "test rationale",
         "model": "claude-haiku",
-        "scored_at": datetime(2026, 6, 3, 12, 0, 0, tzinfo=timezone.utc),
+        "scored_at": datetime(2026, 6, 3, 12, 0, 0, tzinfo=UTC),
         "latency_ms": 150.0,
     }
     base.update(kwargs)
@@ -65,10 +65,9 @@ def test_judge_detector_analyze_empty_when_no_rows(monkeypatch):
 async def test_evaluate_hallucination_heuristic_only_when_toggle_off(monkeypatch):
     """Default (``production_monitor_use_llm_judge = False``) uses the
     heuristic and does not call the LLM."""
-    from eden.llmops.production_monitor import ProductionMonitor
-
     # Ensure the toggle is off.
     from eden.config import get_settings
+    from eden.llmops.production_monitor import ProductionMonitor
     settings = get_settings()
     monkeypatch.setattr(
         settings, "production_monitor_use_llm_judge", False
@@ -89,9 +88,8 @@ async def test_evaluate_hallucination_heuristic_only_when_toggle_off(monkeypatch
 async def test_evaluate_hallucination_llm_judge_when_toggle_on(monkeypatch):
     """When the toggle is on, the LLM judge is called and its score
     is the primary confidence."""
-    from eden.llmops.production_monitor import ProductionMonitor
-
     from eden.config import get_settings
+    from eden.llmops.production_monitor import ProductionMonitor
     settings = get_settings()
     monkeypatch.setattr(
         settings, "production_monitor_use_llm_judge", True
@@ -125,9 +123,8 @@ async def test_evaluate_hallucination_llm_judge_when_toggle_on(monkeypatch):
 async def test_evaluate_hallucination_llm_failure_falls_back(monkeypatch):
     """If the LLM judge throws, the heuristic result is returned with
     a ``judge_error`` field — the pipeline never blocks."""
-    from eden.llmops.production_monitor import ProductionMonitor
-
     from eden.config import get_settings
+    from eden.llmops.production_monitor import ProductionMonitor
     settings = get_settings()
     monkeypatch.setattr(
         settings, "production_monitor_use_llm_judge", True

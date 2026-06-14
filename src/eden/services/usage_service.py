@@ -11,11 +11,11 @@ Database stores cost_usd as NUMERIC(18,6) cents-compatible.
 """
 
 import logging
-from datetime import datetime, timezone, timedelta
-from typing import Optional
+from datetime import UTC, datetime, timedelta
+from typing import Literal
 
-from eden.storage.postgres import get_postgres_client
 from eden.services.plan_tiers import get_plan_tier
+from eden.storage.postgres import get_postgres_client
 
 logger = logging.getLogger(__name__)
 
@@ -34,12 +34,12 @@ class UsageService:
         resource: str,
         quantity: float,
         unit: str,
-        user_id: Optional[str] = None,
-        model: Optional[str] = None,
-        cost_usd: Optional[float] = None,
-        metadata: Optional[dict] = None,
-        correlation_id: Optional[str] = None,
-    ) -> Optional[str]:
+        user_id: str | None = None,
+        model: str | None = None,
+        cost_usd: float | None = None,
+        metadata: dict | None = None,
+        correlation_id: str | None = None,
+    ) -> str | None:
         """Record a single usage event. Returns the event UUID."""
         client = await get_postgres_client()
         try:
@@ -105,21 +105,27 @@ class UsageService:
         org_id: str,
         start: datetime,
         end: datetime,
-        group_by: str = "user",  # "user" | "job" | "model" | "resource" | "endpoint" | "time"
+        group_by: Literal["user", "job", "model", "resource", "endpoint", "time"] = "user",
     ) -> list[dict]:
         """Break down costs by user, job, model, resource, endpoint, or time bucket.
 
-        group_by options:
-            user     -> aggregates by user_id
-            job      -> aggregates by metadata->>'job_id'
-            model    -> aggregates by model name
-            resource -> aggregates by resource type
-            endpoint -> aggregates by metadata->>'endpoint' (e.g. /v1/jobs, /v1/environments)
-            time     -> aggregates by day bucket (date_trunc('day', created_at))
+        ``group_by`` is typed as a ``Literal`` so mypy rejects any
+        caller passing an untrusted string at compile time. The
+        runtime ``GROUP_COLUMNS`` dict is the second line of defence:
+        only entries in this dict are ever interpolated into the
+        SQL, so the f-string below cannot be reached with attacker-
+        controlled input. The ``assert`` is a third guard so a
+        future refactor that adds a new ``group_by`` without also
+        adding the column expression fails loudly instead of
+        silently ``KeyError``-ing.
         """
         client = await get_postgres_client()
 
-        group_columns = {
+        # Static mapping. VALUES ARE NEVER USER INPUT — only the
+        # ``Literal``-typed ``group_by`` parameter is used to index
+        # this dict, so an attacker cannot reach the f-string with
+        # arbitrary SQL.
+        GROUP_COLUMNS: dict[str, str] = {
             "user": "user_id",
             "job": "metadata->>'job_id'",
             "model": "COALESCE(model, 'unknown')",
@@ -127,11 +133,12 @@ class UsageService:
             "endpoint": "COALESCE(metadata->>'endpoint', 'unknown')",
             "time": "date_trunc('day', created_at)",
         }
+        assert group_by in GROUP_COLUMNS, (
+            f"group_by={group_by!r} missing from GROUP_COLUMNS — "
+            f"add a Literal member and a column expression in tandem"
+        )
 
-        if group_by not in group_columns:
-            raise ValueError(f"Invalid group_by: {group_by}. Choose from {list(group_columns.keys())}")
-
-        col = group_columns[group_by]
+        col = GROUP_COLUMNS[group_by]
         query = f"""
             SELECT
                 {col} as group_key,
@@ -163,7 +170,7 @@ class UsageService:
         period: str = "month",  # "day" | "week" | "month" | "year"
     ) -> dict:
         """Return total spend for the current billing period."""
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         start = self._period_start(now, period)
 
         client = await get_postgres_client()
@@ -206,10 +213,11 @@ class UsageService:
             await client.set_org_resource_limits(org_id, plan_name="free")
             limits = await client.get_org_resource_limits(org_id)
 
-        plan_name = limits.get("plan_name", "free") if limits else "free"
+        plan_name_raw = limits.get("plan_name", "free") if limits else "free"
+        plan_name = str(plan_name_raw) if plan_name_raw is not None else "free"
         tier = get_plan_tier(plan_name)
 
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         month_start = self._period_start(now, "month")
 
         # Aggregate actual usage from usage_events for the current month
@@ -233,7 +241,7 @@ class UsageService:
         total_cost_usd = float(usage_row["total_cost_usd"]) if usage_row else 0.0
 
         # Use tier limits as the effective limits if the DB row has zeros or is missing values
-        def _limit(val, fallback):
+        def _limit(val: Any, fallback: int) -> int:
             return int(val) if val and int(val) > 0 else fallback
 
         jobs_soft = _limit(limits.get("jobs_soft_limit"), tier.jobs_soft_limit)
@@ -245,10 +253,10 @@ class UsageService:
         sandbox_soft = _limit(limits.get("sandbox_seconds_soft_limit"), tier.sandbox_seconds_soft_limit)
         sandbox_hard = _limit(limits.get("sandbox_seconds_hard_limit"), tier.sandbox_seconds_hard_limit)
 
-        def _pct(used, limit):
+        def _pct(used: Any, limit: int) -> float:
             return round((used / limit) * 100, 1) if limit > 0 else 0.0
 
-        def _status(used, soft, hard):
+        def _status(used: Any, soft: int, hard: int) -> str:
             if hard > 0 and used >= hard:
                 return "hard_exceeded"
             if soft > 0 and used >= soft:
@@ -319,7 +327,7 @@ class UsageService:
         days: int = 30,
     ) -> list[dict]:
         """Return a daily time-series of usage for dashboard charts."""
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         start = now - timedelta(days=days)
 
         client = await get_postgres_client()
@@ -369,7 +377,7 @@ class UsageService:
 
 
 # Singleton convenience instance
-_usage_service: Optional[UsageService] = None
+_usage_service: UsageService | None = None
 
 
 async def get_usage_service() -> UsageService:

@@ -1,3 +1,4 @@
+from typing import Any, cast
 """Per-tenant token-bucket rate limiting middleware.
 
 Enforces tiered rate limits based on org_resource_limits. Uses Redis as the
@@ -14,16 +15,15 @@ Rejects with HTTP 429 when the limit is exceeded.
 """
 
 import asyncio
+import contextlib
 import hashlib
 import logging
 import time
-from typing import Optional
 
 from fastapi import Request
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse, Response
 
-from eden.api.middleware.correlation_id import get_correlation_id
 from eden.api.utils.auth import decode_access_token
 from eden.config import get_settings
 from eden.storage.postgres import get_postgres_client
@@ -38,7 +38,7 @@ class TokenBucket:
     Not distributed — use Redis in production for multi-node deployments.
     """
 
-    def __init__(self, capacity: int, refill_rate: float):
+    def __init__(self, capacity: int, refill_rate: float) -> None:
         self.capacity = capacity
         self.refill_rate = refill_rate
         self.tokens = float(capacity)
@@ -76,7 +76,7 @@ class TenantRateLimitMiddleware(BaseHTTPMiddleware):
     middleware. Falls back to per-IP limiting for unauthenticated requests.
     """
 
-    def __init__(self, app, default_limit: int = 60, default_window: int = 60):
+    def __init__(self, app: Any, default_limit: int = 60, default_window: int = 60) -> None:
         super().__init__(app)
         self.default_limit = default_limit
         self.default_window = default_window
@@ -85,15 +85,15 @@ class TenantRateLimitMiddleware(BaseHTTPMiddleware):
         self._tier_cache: dict[str, tuple[int, int, str, float]] = {}  # org_id -> (limit, window, tier, expires_at)
         self._tier_cache_ttl = 5.0  # seconds
         # Phase 7.3c — per-tenant region cache. Cheap; lives in-process.
-        self._region_cache: dict[str, tuple[Optional[str], float]] = {}
+        self._region_cache: dict[str, tuple[str | None, float]] = {}
         self._region_cache_ttl = 30.0  # seconds
         self._redis = None  # Lazy-load Redis if available
-        self._cleanup_task: Optional[asyncio.Task] = None
+        self._cleanup_task: asyncio.Task | None = None
         self._running = True
         # Start periodic bucket cleanup background task
         self._cleanup_task = asyncio.create_task(self._periodic_bucket_cleanup())
 
-    async def _get_redis(self):
+    async def _get_redis(self) -> None:
         """Lazy-load Redis client if REDIS_URL is configured."""
         if self._redis is not None:
             return self._redis
@@ -138,7 +138,7 @@ class TenantRateLimitMiddleware(BaseHTTPMiddleware):
                 self._buckets[key] = TokenBucket(capacity, refill_rate)
             return self._buckets[key]
 
-    async def _resolve_org_from_request(self, request: Request) -> Optional[str]:
+    async def _resolve_org_from_request(self, request: Request) -> str | None:
         """Parse JWT cookie or API key header to extract org_id.
 
         Mirrors the logic in eden.api.deps but without depending on
@@ -223,12 +223,10 @@ class TenantRateLimitMiddleware(BaseHTTPMiddleware):
         self._running = False
         if self._cleanup_task:
             self._cleanup_task.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError):
                 await self._cleanup_task
-            except asyncio.CancelledError:
-                pass
 
-    async def _resolve_api_key_id(self, request: Request) -> Optional[str]:
+    async def _resolve_api_key_id(self, request: Request) -> str | None:
         """Resolve the API key id from the X-Org-Api-Key header.
 
         Returns the key's UUID (suitable for ``key:{id}`` rate limit
@@ -241,7 +239,6 @@ class TenantRateLimitMiddleware(BaseHTTPMiddleware):
         if not api_key or not org_id:
             return None
         try:
-            import hashlib
             key_hash = hashlib.sha256(api_key.encode()).hexdigest()
             client = await get_postgres_client()
             row = await client.fetchrow(
@@ -254,7 +251,7 @@ class TenantRateLimitMiddleware(BaseHTTPMiddleware):
             logger.debug(f"Could not resolve API key id for rate limit: {exc}")
             return None
 
-    async def _resolve_region(self, org_id: Optional[str]) -> Optional[str]:
+    async def _resolve_region(self, org_id: str | None) -> str | None:
         """Phase 7.3c — return the org's region code (``"us"``,
         ``"eu"``, ``"ap"``) for the ``X-Region-Hint`` response header.
 
@@ -296,10 +293,10 @@ class TenantRateLimitMiddleware(BaseHTTPMiddleware):
         self._region_cache[org_id] = (region, now + self._region_cache_ttl)
         return region
 
-    async def dispatch(self, request: Request, call_next) -> Response:
+    async def dispatch(self, request: Request, call_next: Any) -> Response:
         # ── Skip rate limiting for health checks and CORS preflight ──
         if request.url.path == "/health" or request.method == "OPTIONS":
-            return await call_next(request)
+            return cast(Response, await call_next(request))
 
         # ── Identify the limit key ──
         # Phase 5.1.4: per-API-key limits are tighter than per-org so a
@@ -310,10 +307,7 @@ class TenantRateLimitMiddleware(BaseHTTPMiddleware):
         api_key_id: str | None = None
         if org_id:
             api_key_id = await self._resolve_api_key_id(request)
-            if api_key_id:
-                limit_key = f"key:{api_key_id}"
-            else:
-                limit_key = f"org:{org_id}"
+            limit_key = f"key:{api_key_id}" if api_key_id else f"org:{org_id}"
         else:
             forwarded = request.headers.get("x-forwarded-for", "")
             client_ip = forwarded.split(",")[0].strip() if forwarded else (request.client.host if request.client else "unknown")
@@ -394,4 +388,4 @@ class TenantRateLimitMiddleware(BaseHTTPMiddleware):
         except Exception:
             pass
 
-        return response
+        return cast(Response, response)

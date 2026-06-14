@@ -17,16 +17,16 @@ import json
 import logging
 import uuid
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, cast
 
 from eden.evaluation.golden_dataset import (
+    DatasetRegistry,
+    DifficultyLevel,
+    EnvironmentCategory,
     GoldenCase,
     GoldenDataset,
-    DatasetRegistry,
-    EnvironmentCategory,
-    DifficultyLevel,
 )
 
 logger = logging.getLogger(__name__)
@@ -224,9 +224,9 @@ class AutoDatasetPromoter:
 
     def __init__(
         self,
-        scorer: Optional[TraceQualityScorer] = None,
-        registry: Optional[DatasetRegistry] = None,
-        state_dir: Optional[Path] = None,
+        scorer: TraceQualityScorer | None = None,
+        registry: DatasetRegistry | None = None,
+        state_dir: Path | None = None,
         promotion_threshold: float = 0.80,
     ):
         """Initialize auto-dataset promoter.
@@ -247,7 +247,7 @@ class AutoDatasetPromoter:
         self,
         traces: list[dict[str, Any]],
         target_dataset_id: str = "gd_auto_production",
-        category: Optional[EnvironmentCategory] = None,
+        category: EnvironmentCategory | None = None,
     ) -> dict[str, Any]:
         """Process a batch of production traces and promote high-quality ones.
 
@@ -304,7 +304,7 @@ class AutoDatasetPromoter:
             updated = GoldenDataset(
                 dataset_id=existing_dataset.dataset_id,
                 version=self._bump_version(existing_dataset.version),
-                frozen_at=datetime.now(timezone.utc).isoformat(),
+                frozen_at=datetime.now(UTC).isoformat(),
                 description=existing_dataset.description,
                 cases=all_cases,
                 overall_pass_criteria=existing_dataset.overall_pass_criteria,
@@ -312,7 +312,7 @@ class AutoDatasetPromoter:
                 generation_config={
                     **existing_dataset.generation_config,
                     "auto_promoted_count": len(new_cases),
-                    "last_promotion": datetime.now(timezone.utc).isoformat(),
+                    "last_promotion": datetime.now(UTC).isoformat(),
                 },
             )
             self._registry.register(updated, is_draft=True)
@@ -321,7 +321,7 @@ class AutoDatasetPromoter:
             new_dataset = GoldenDataset(
                 dataset_id=target_dataset_id,
                 version="1.0.0",
-                frozen_at=datetime.now(timezone.utc).isoformat(),
+                frozen_at=datetime.now(UTC).isoformat(),
                 description="Auto-promoted golden dataset from production traces",
                 cases=new_cases,
                 overall_pass_criteria={
@@ -331,7 +331,7 @@ class AutoDatasetPromoter:
                 generation_config={
                     "source": "auto_promotion",
                     "auto_promoted_count": len(new_cases),
-                    "created_at": datetime.now(timezone.utc).isoformat(),
+                    "created_at": datetime.now(UTC).isoformat(),
                 },
             )
             self._registry.register(new_dataset, is_draft=True)
@@ -359,8 +359,8 @@ class AutoDatasetPromoter:
         self,
         trace: dict[str, Any],
         score: TraceQualityScore,
-        default_category: Optional[EnvironmentCategory] = None,
-    ) -> Optional[GoldenCase]:
+        default_category: EnvironmentCategory | None = None,
+    ) -> GoldenCase | None:
         """Convert a production trace to a golden case."""
         trace_id = trace.get("trace_id") or str(uuid.uuid4())
         description = trace.get("description", "Auto-promoted production trace")
@@ -439,18 +439,18 @@ class AutoDatasetPromoter:
         path = self._state_dir / f"{dataset_id}_promotion.json"
         path.write_text(json.dumps(state, indent=2, default=str), encoding="utf-8")
 
-    def load_state(self, dataset_id: str) -> Optional[dict[str, Any]]:
+    def load_state(self, dataset_id: str) -> dict[str, Any] | None:
         """Load promotion state from disk."""
         path = self._state_dir / f"{dataset_id}_promotion.json"
         if not path.exists():
             return None
-        return json.loads(path.read_text(encoding="utf-8"))
+        return cast(dict[str, Any] | None, json.loads(path.read_text(encoding="utf-8")))
 
     async def review_and_freeze(
         self,
         dataset_id: str,
         approved: bool = True,
-    ) -> Optional[GoldenDataset]:
+    ) -> GoldenDataset | None:
         """Review an auto-generated dataset and freeze it.
 
         Args:

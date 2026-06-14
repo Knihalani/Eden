@@ -4,23 +4,29 @@ import hashlib
 import logging
 import re
 import secrets
-from typing import Optional
 from uuid import uuid4
 
-from fastapi import Depends, APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
 
-from eden.api.deps import get_current_user, require_org_admin, require_org_member, require_org_owner, require_org_permission, log_audit_event
+from eden.api.deps import (
+    get_current_user,
+    log_audit_event,
+    require_org_admin,
+    require_org_member,
+    require_org_owner,
+    require_org_permission,
+)
 from eden.api.routes.billing import check_limit
+from eden.config import get_settings
 from eden.services.invitation_service import (
-    create_invitation,
-    get_pending_invitations,
     accept_invitation,
+    create_invitation,
     decline_invitation,
+    get_pending_invitations,
     send_invite_email,
 )
 from eden.storage.postgres import get_postgres_client
-from eden.config import get_settings
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -306,7 +312,7 @@ async def send_invite(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e),
-        )
+        ) from e
 
     # Send invitation email (stub)
     await send_invite_email(
@@ -363,7 +369,7 @@ async def accept_org_invitation(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e),
-        )
+        ) from e
 
     # Audit log
     client = await get_postgres_client()
@@ -399,7 +405,7 @@ async def decline_org_invitation(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e),
-        )
+        ) from e
 
     # Audit log
     client = await get_postgres_client()
@@ -888,8 +894,6 @@ async def rotate_scim_token(
 # ============================================================================
 # Import hashlib for token hashing
 # ============================================================================
-import hashlib
-import secrets
 # DOMAIN RESTRICTION MANAGEMENT
 # ============================================================================
 
@@ -975,11 +979,11 @@ async def add_allowed_domain(
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail="Domain is already in the allowed list",
-            )
+            ) from e
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to add domain",
-        )
+        ) from e
 
     # Audit log
     await log_audit_event(

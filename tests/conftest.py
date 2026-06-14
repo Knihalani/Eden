@@ -2,7 +2,7 @@
 
 import asyncio
 import json
-from typing import AsyncIterator
+from collections.abc import AsyncIterator
 from unittest.mock import AsyncMock, MagicMock, patch
 
 # Pre-existing passlib 1.7.4 + bcrypt 5.x incompatibility: passlib's
@@ -40,7 +40,6 @@ from eden.config import Settings, get_settings
 from eden.llm.client import CircuitBreaker, LLMResponse, OpenRouterClient, UsageStats
 from eden.storage.postgres import PostgresClient
 
-
 # Pre-compute a valid bcrypt hash for the test user so that verify_password
 # works correctly in integration tests.
 _TEST_USER_PASSWORD = "correct-password"
@@ -48,15 +47,16 @@ _TEST_USER_HASH = hash_password(_TEST_USER_PASSWORD)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Event-loop policy (required for pytest-asyncio with FastAPI)
+# Event-loop policy
 # ─────────────────────────────────────────────────────────────────────────────
-
-@pytest.fixture(scope="session")
-def event_loop():
-    """Create an instance of the default event loop for the test session."""
-    loop = asyncio.get_event_loop_policy().new_event_loop()
-    yield loop
-    loop.close()
+# pytest-asyncio 0.26+ manages the event loop itself and warns when
+# a user-provided ``event_loop`` fixture overrides its policy. The
+# previous session-scoped override (here) caused cross-test loop
+# pollution: a test that called ``asyncio.run`` or hung up a
+# pending task would leave the loop in an inconsistent state, and
+# later tests would observe coroutines as "never awaited". Letting
+# pytest-asyncio own the loop (function-scoped, default) eliminates
+# that class of failure.
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -77,6 +77,11 @@ def test_settings() -> Settings:
         qdrant_host="localhost",
         qdrant_port=6333,
         cors_origins="*",
+        # The 413 test sends a 1.1 MiB body and expects the
+        # ingestion route to reject it. The production cap is
+        # 5 MiB; tighten it to 1 MiB for the integration suite
+        # so the test exercises the actual guard logic.
+        ingestion_max_body_bytes=1_000_000,
     )
 
 
@@ -193,6 +198,27 @@ def mock_postgres_client() -> MagicMock:
     _test_user_2fa_secret = None
 
     async def _fetchrow(query, *args):
+        # Test extensions: tests can append ``(query_substr, row)``
+        # tuples to ``client._fetchrow_overrides`` to override the
+        # default behaviour for specific queries. We pop the first
+        # match so a single test can chain several overrides and
+        # the rest fall back to the conftest defaults.
+        overrides = getattr(client, "_fetchrow_overrides", None)
+        if overrides:
+            for i, (needle, row) in enumerate(list(overrides)):
+                if needle in query:
+                    overrides.pop(i)
+                    return row
+        # INSERTs with RETURNING: the conftest's consumer modules
+        # expect a row back. The route does ``row["id"]`` so we
+        # always return a deterministic synthetic id derived from
+        # the query + first arg (so multiple INSERTs in one test
+        # each get their own id).
+        if "INSERT INTO" in query and "RETURNING" in query:
+            seed = f"{query}::{args[0] if args else ''}"
+            return {
+                "id": f"row-{abs(hash(seed)) % 10**10:010d}",
+            }
         # Simple pattern-matching for auth queries
         if "users WHERE email" in query:
             email = args[0] if args else ""
@@ -227,6 +253,12 @@ def mock_postgres_client() -> MagicMock:
         return None
 
     client.fetchrow = AsyncMock(side_effect=_fetchrow)
+    # ``_fetchrow_overrides`` is a per-test queue of (needle, row)
+    # pairs that takes precedence over the default side_effect
+    # handlers in ``_fetchrow``. Tests extend this list to inject
+    # custom rows for specific queries without losing the
+    # conftest's default auth + org-membership lookups.
+    client._fetchrow_overrides = []
 
     async def _fetch(query, *args):
         if "organizations" in query and "org_members" in query:
@@ -247,9 +279,97 @@ def mock_postgres_client() -> MagicMock:
 
 @pytest.fixture(autouse=True)
 def patch_postgres(mock_postgres_client: MagicMock):
-    """Patch get_postgres_client to return the mock."""
-    with patch("eden.storage.postgres.get_postgres_client", return_value=mock_postgres_client):
+    """Patch get_postgres_client to return the mock.
+
+    The auth and other routes do ``from eden.storage.postgres import
+    get_postgres_client`` which captures the function reference at
+    import time. A naive ``patch("eden.storage.postgres.get_postgres_client")``
+    only swaps the attribute on the source module — the route's
+    local binding still points at the real (DB-connecting) function,
+    so the integration tests would talk to a real asyncpg connection.
+
+    To fix this, we additionally patch ``get_postgres_client`` in
+    every module that imports it at module level. We discover the
+    consumer modules by AST-walking the eden source tree at fixture-
+    setup time. Only top-level imports count (function-local imports
+    are not module attributes and would cause ``AttributeError`` on
+    patch). The discovery is cached so this stays O(1) on subsequent
+    tests.
+    """
+    import ast
+    import os
+    from contextlib import ExitStack
+
+    consumer_attr = "_patch_postgres_consumers"
+    if not hasattr(patch_postgres, consumer_attr):
+        src_root = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+            "src",
+            "eden",
+        )
+        consumers: set[str] = set()
+        for dirpath, _dirs, files in os.walk(src_root):
+            for f in files:
+                if not f.endswith(".py"):
+                    continue
+                full = os.path.join(dirpath, f)
+                with open(full, encoding="utf-8", errors="ignore") as fh:
+                    try:
+                        src = fh.read()
+                    except Exception:
+                        continue
+                try:
+                    tree = ast.parse(src, filename=full)
+                except SyntaxError:
+                    continue
+                found = False
+                for node in tree.body:
+                    if not isinstance(node, ast.ImportFrom):
+                        continue
+                    if node.module != "eden.storage.postgres":
+                        continue
+                    for alias in node.names:
+                        if alias.name == "get_postgres_client":
+                            found = True
+                            break
+                    if found:
+                        break
+                if not found:
+                    continue
+                rel = os.path.relpath(full, os.path.dirname(src_root))
+                mod = rel[:-3].replace(os.sep, ".")
+                if mod.endswith(".__init__"):
+                    mod = mod[: -len(".__init__")]
+                consumers.add(mod)
+        # Source module itself (so any future `eden.storage.postgres.get_postgres_client()`
+        # call site also sees the patch).
+        consumers.add("eden.storage.postgres")
+        setattr(patch_postgres, consumer_attr, consumers)
+
+    consumers = getattr(patch_postgres, consumer_attr)
+    stack = ExitStack()
+    # Patch each consumer module's `get_postgres_client` attribute.
+    # We ``import_module`` first so the parent package has the
+    # submodule as an attribute (``patch`` walks the dotted path and
+    # raises AttributeError if any segment isn't already an attribute
+    # of the parent module). Empty ``__init__.py`` files in this
+    # project mean submodules are not auto-registered.
+    import importlib
+    for mod_name in consumers:
+        try:
+            importlib.import_module(mod_name)
+        except Exception:
+            # If the module can't be imported (transitive dep missing
+            # in the test env, etc.), skip it — the test will surface
+            # the real failure mode.
+            continue
+        stack.enter_context(
+            patch(f"{mod_name}.get_postgres_client", return_value=mock_postgres_client)
+        )
+    try:
         yield mock_postgres_client
+    finally:
+        stack.close()
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -321,6 +441,18 @@ def auth_headers(auth_token: str) -> dict[str, str]:
 def authenticated_client(api_client: TestClient, auth_token: str) -> TestClient:
     """Return a TestClient with auth cookie pre-set."""
     api_client.cookies.set("authorization", auth_token)
+    return api_client
+
+
+@pytest.fixture
+def unauthenticated_client(api_client: TestClient) -> TestClient:
+    """Return a TestClient with no auth cookie set.
+
+    Tests that exercise auth gates (e.g. ``GET /export/destinations``
+    without a cookie) can use this fixture to assert 401 responses
+    without manually clearing the cookie on the shared ``api_client``.
+    """
+    api_client.cookies.clear()
     return api_client
 
 

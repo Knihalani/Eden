@@ -9,11 +9,11 @@ from pathlib import Path
 import pytest
 
 from eden.evaluation.golden_dataset import (
+    DatasetRegistry,
+    DifficultyLevel,
+    EnvironmentCategory,
     GoldenCase,
     GoldenDataset,
-    DatasetRegistry,
-    EnvironmentCategory,
-    DifficultyLevel,
     load_canonical_datasets,
 )
 

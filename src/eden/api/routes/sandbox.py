@@ -9,13 +9,12 @@ References: eden-api-developer-platform-architecture.md §9, §10
 
 from __future__ import annotations
 
-import asyncio
 import logging
 import random
 import secrets
 import time
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -592,7 +591,6 @@ def _mock_endpoint(
     endpoint: str, method: str, body: dict[str, Any]
 ) -> tuple[dict[str, Any] | str, int, list[str] | None]:
     """Return a mocked response for a sandboxed API call."""
-    warnings: list[str] | None = None
     normalized = endpoint.lower().rstrip("/")
 
     def _extract_id_from_path(prefix: str) -> str:
@@ -791,4 +789,4 @@ def _mock_endpoint(
 
 def _fmt_ts(ts: float) -> str:
     """Format a Unix timestamp to ISO 8601 UTC string."""
-    return datetime.fromtimestamp(ts, tz=timezone.utc).isoformat().replace("+00:00", "Z")
+    return datetime.fromtimestamp(ts, tz=UTC).isoformat().replace("+00:00", "Z")

@@ -17,30 +17,22 @@ Usage:
 
 from __future__ import annotations
 
-import asyncio
+import contextlib
 import json
 import logging
 import uuid
-from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
-from typing import Any, Optional
+from datetime import UTC, datetime
+from typing import Any, cast
 
 from eden.config import get_settings
-from eden.data_platform.contracts import (
-    AgentTraceContract,
-    BenchmarkEventContract,
-    ContractValidator,
-    PipelineEventContract,
-    UsageEventContract,
-    ValidationResult,
-)
 from eden.data_platform.clickhouse_sink import get_clickhouse_sink
+from eden.data_platform.contracts import (
+    ContractValidator,
+)
 from eden.data_platform.pii import PIIMasker
 from eden.data_platform.quality import (
     DataQualityValidator,
-    SILVER_EVENT_EXPECTATIONS,
-    ValidationReport,
 )
 
 logger = logging.getLogger(__name__)
@@ -88,7 +80,7 @@ class SilverETLPipeline:
         self._masker = PIIMasker()
         self._contract_validator = ContractValidator()
         self._quality_validator = DataQualityValidator()
-        self._postgres_client: Optional[Any] = None
+        self._postgres_client: Any | None = None
 
     async def _get_postgres(self) -> Any:
         if self._postgres_client is None:
@@ -109,7 +101,7 @@ class SilverETLPipeline:
         Returns:
             ETLReport with processing statistics.
         """
-        start = datetime.now(timezone.utc)
+        start = datetime.now(UTC)
         report = ETLReport()
         report.processed = len(events)
 
@@ -160,7 +152,7 @@ class SilverETLPipeline:
                 logger.warning(f"ClickHouse push failed (non-critical): {exc}")
 
         report.duration_ms = (
-            datetime.now(timezone.utc) - start
+            datetime.now(UTC) - start
         ).total_seconds() * 1000
 
         logger.info(
@@ -172,7 +164,7 @@ class SilverETLPipeline:
 
     async def run_from_bronze(
         self,
-        since: Optional[datetime] = None,
+        since: datetime | None = None,
         limit: int = 10_000,
         push_to_clickhouse: bool = True,
     ) -> ETLReport:
@@ -254,7 +246,7 @@ class SilverETLPipeline:
 
         return valid, quarantined
 
-    def _infer_contract(self, event_type: str) -> Optional[str]:
+    def _infer_contract(self, event_type: str) -> str | None:
         """Map event_type string to a registered contract name."""
         mapping: dict[str, str] = {
             "llm_call": "usage_event",
@@ -340,7 +332,7 @@ class SilverETLPipeline:
                 event["model_family"] = model.split("/")[0] if "/" in model else model.split("-")[0]
 
             # Add processing timestamp
-            event["silver_processed_at"] = datetime.now(timezone.utc).isoformat()
+            event["silver_processed_at"] = datetime.now(UTC).isoformat()
             event["silver_event_id"] = str(uuid.uuid4())
 
             enriched.append(event)
@@ -380,8 +372,8 @@ class SilverETLPipeline:
             "quarantined": False,
             "metadata": metadata,
             "correlation_id": event.get("correlation_id"),
-            "timestamp": event.get("created_at") or event.get("timestamp") or datetime.now(timezone.utc).isoformat(),
-            "silver_processed_at": event.get("silver_processed_at") or datetime.now(timezone.utc).isoformat(),
+            "timestamp": event.get("created_at") or event.get("timestamp") or datetime.now(UTC).isoformat(),
+            "silver_processed_at": event.get("silver_processed_at") or datetime.now(UTC).isoformat(),
         }
 
     async def _validate_quality(
@@ -407,10 +399,8 @@ class SilverETLPipeline:
             logger.warning(f"Quality validation failed: {exc}")
             return events, 0
         finally:
-            try:
+            with contextlib.suppress(Exception):
                 await client.execute(f"DROP TABLE IF EXISTS {temp_table}")
-            except Exception:
-                pass
 
     async def _create_temp_table(
         self, client: Any, table_name: str, events: list[dict[str, Any]]
@@ -464,8 +454,8 @@ class SilverETLPipeline:
                 "pii_detected": bool(e.get("pii_detected", False)),
                 "quarantined": bool(e.get("quarantined", False)),
                 "correlation_id": e.get("correlation_id") or "",
-                "timestamp": e.get("timestamp") or datetime.now(timezone.utc).isoformat(),
-                "silver_processed_at": e.get("silver_processed_at") or datetime.now(timezone.utc).isoformat(),
+                "timestamp": e.get("timestamp") or datetime.now(UTC).isoformat(),
+                "silver_processed_at": e.get("silver_processed_at") or datetime.now(UTC).isoformat(),
             })
         await sink.insert_silver_events(rows)
 
@@ -550,7 +540,7 @@ class SilverETLPipeline:
                 e.get("event_type"),
                 json.dumps(reason),
                 json.dumps(e, default=str),
-                datetime.now(timezone.utc).isoformat(),
+                datetime.now(UTC).isoformat(),
             ))
         if rows:
             async with client.acquire() as conn:
@@ -574,7 +564,7 @@ class SilverETLPipeline:
             await client.execute(query, True, *chunk)
 
     async def get_quarantine_summary(
-        self, org_id: Optional[str] = None, limit: int = 100
+        self, org_id: str | None = None, limit: int = 100
     ) -> list[dict[str, Any]]:
         """Get a summary of quarantined events for review."""
         client = await self._get_postgres()
@@ -586,14 +576,14 @@ class SilverETLPipeline:
                 ORDER BY quarantined_at DESC
                 LIMIT $2
             """
-            return await client.fetch(query, org_id, limit)
+            return cast(list[dict[str, Any]], await client.fetch(query, org_id, limit))
         query = """
             SELECT quarantine_id, org_id, event_type, quarantine_reason, quarantined_at
             FROM quarantine_events
             ORDER BY quarantined_at DESC
             LIMIT $1
         """
-        return await client.fetch(query, limit)
+        return cast(list[dict[str, Any]], await client.fetch(query, limit))
 
     async def reprocess_quarantine(
         self, quarantine_ids: list[str]

@@ -61,7 +61,7 @@ const STATUS_COLORS: Record<GanttJob["status"], string> = {
   success: "var(--terminal)",
   failure: "var(--error)",
   pending: "var(--text-muted)",
-  timeout: "var(--cat-warning-fg)",
+  timeout: "var(--warning)",
 };
 
 export function JobGantt({ jobs, className = "" }: JobGanttProps) {
@@ -135,7 +135,7 @@ function Header({
             onClick={() => onRangeChange(r.key)}
             className={`rounded px-1.5 py-0.5 font-mono transition-colors ${
               range === r.key
-                ? "bg-[var(--accent)] text-white"
+                ? "bg-[var(--accent)] text-[var(--bg-primary)]"
                 : "text-[var(--text-muted)] hover:text-[var(--text-primary)]"
             }`}
           >

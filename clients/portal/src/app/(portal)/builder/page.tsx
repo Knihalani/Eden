@@ -75,7 +75,7 @@ import type { SimRun } from "@/lib/api";
 // dynamic-import the canvas with ssr:false.
 const Canvas = dynamic(
   () => import("./_components/Canvas").then((m) => m.Canvas),
-  { ssr: false, loading: () => <div className="flex-1 bg-zinc-950" /> },
+  { ssr: false, loading: () => <div className="flex-1 bg-[var(--bg-base)]" /> },
 );
 
 export default function BuilderPage() {
@@ -527,7 +527,7 @@ function BuilderPageInner() {
                           )}
                           <button
                             type="button"
-                            className="ml-auto text-zinc-400 hover:text-[var(--error)]"
+                            className="ml-auto text-[var(--text-muted)] hover:text-[var(--error)]"
                             onClick={() => {
                               deleteSaved(m.graphName);
                               setRecent(listRecent());

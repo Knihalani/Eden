@@ -1,12 +1,13 @@
 """Audit log routes for Eden API."""
 
 import logging
-from typing import Optional
+from datetime import datetime
 
-from fastapi import APIRouter, Query, Cookie, Header
-from pydantic import BaseModel
+import asyncpg
+from fastapi import APIRouter, Cookie, Header, Query
+from pydantic import BaseModel, field_validator
 
-from eden.api.deps import get_current_user, require_org_permission
+from eden.api.deps import require_org_permission
 from eden.storage.postgres import get_postgres_client
 
 logger = logging.getLogger(__name__)
@@ -18,10 +19,21 @@ class ChainVerifyEntry(BaseModel):
     """One row in the chain-verify report."""
     seq: int
     id: str
-    created_at: object = None  # accept str or datetime, stringify in row mapper
+    # asyncpg returns ``datetime`` for timestamp columns; the SQL
+    # function may also return ISO text in some configurations. Accept
+    # both and normalise to an ISO string so the response model is
+    # always serialisable.
+    created_at: str | None = None
     ok: bool
     expected_hash: str
     actual_hash: str
+
+    @field_validator("created_at", mode="before")
+    @classmethod
+    def _coerce_created_at(cls, v):
+        if isinstance(v, datetime):
+            return v.isoformat()
+        return v
 
 
 class ChainVerifyResponse(BaseModel):
@@ -38,11 +50,11 @@ class AuditLogEntry(BaseModel):
     org_id: str
     user_id: str
     action: str
-    target_type: Optional[str]
-    target_id: Optional[str]
+    target_type: str | None
+    target_id: str | None
     metadata: dict
-    ip_address: Optional[str]
-    user_agent: Optional[str]
+    ip_address: str | None
+    user_agent: str | None
     created_at: str
 
 
@@ -57,14 +69,14 @@ class AuditLogResponse(BaseModel):
 @router.get("/{org_id}/audit-log", response_model=AuditLogResponse)
 async def get_audit_log(
     org_id: str,
-    action: Optional[str] = Query(None, description="Filter by action type (e.g., 'member.invited')"),
-    user_id: Optional[str] = Query(None, description="Filter by user ID"),
-    from_date: Optional[str] = Query(None, description="Filter from date (ISO format)"),
-    to_date: Optional[str] = Query(None, description="Filter to date (ISO format)"),
+    action: str | None = Query(None, description="Filter by action type (e.g., 'member.invited')"),
+    user_id: str | None = Query(None, description="Filter by user ID"),
+    from_date: str | None = Query(None, description="Filter from date (ISO format)"),
+    to_date: str | None = Query(None, description="Filter to date (ISO format)"),
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
-    x_org_id: Optional[str] = Header(None, alias="X-Org-Id"),
-    authorization: Optional[str] = Cookie(None),
+    x_org_id: str | None = Header(None, alias="X-Org-Id"),
+    authorization: str | None = Cookie(None),
 ):
     """Get audit log for an organization.
 
@@ -151,8 +163,8 @@ async def get_audit_log(
 @router.get("/{org_id}/audit-log/verify-chain", response_model=ChainVerifyResponse)
 async def verify_audit_chain(
     org_id: str,
-    x_org_id: Optional[str] = Header(None, alias="X-Org-Id"),
-    authorization: Optional[str] = Cookie(None),
+    x_org_id: str | None = Header(None, alias="X-Org-Id"),
+    authorization: str | None = Cookie(None),
 ):
     """§6.4 — verify the audit-log hash chain for tamper-evidence.
 
@@ -166,13 +178,19 @@ async def verify_audit_chain(
     try:
         rows = await client.fetch(
             "SELECT seq, id, created_at, ok, expected_hash, actual_hash "
-            "FROM verify_audit_chain(%s) ORDER BY seq",
+            "FROM verify_audit_chain($1) ORDER BY seq",
             org_id,
         )
-    except Exception:
-        # Migration not applied (or other DB error) — surface zero
-        # state so the portal can render a "needs migration" banner.
+    except asyncpg.exceptions.UndefinedFunctionError:
+        # Migration not applied — surface zero state so the portal
+        # can render a "needs migration" banner.
         return ChainVerifyResponse()
+    except Exception:
+        # Real DB failure (connection drop, permission, etc.) — log
+        # and re-raise so it surfaces as a 500 rather than being
+        # silently misreported as a missing migration.
+        logger.exception("verify_audit_chain DB call failed for org=%s", org_id)
+        raise
     entries = [ChainVerifyEntry(**r) for r in rows]
     ok = sum(1 for e in entries if e.ok)
     return ChainVerifyResponse(
@@ -187,10 +205,10 @@ async def verify_audit_chain(
 async def export_audit_log(
     org_id: str,
     format: str = Query("jsonl", pattern="^(jsonl|csv)$"),
-    from_date: Optional[str] = Query(None),
-    to_date: Optional[str] = Query(None),
-    x_org_id: Optional[str] = Header(None, alias="X-Org-Id"),
-    authorization: Optional[str] = Cookie(None),
+    from_date: str | None = Query(None),
+    to_date: str | None = Query(None),
+    x_org_id: str | None = Header(None, alias="X-Org-Id"),
+    authorization: str | None = Cookie(None),
 ):
     """§6.4 — streaming export of the audit log as JSONL or CSV.
 
@@ -198,19 +216,35 @@ async def export_audit_log(
     record per chunk. JSONL writes one record per line; CSV writes
     a header row followed by one record per line.
     """
-    from fastapi.responses import StreamingResponse
     import csv as _csv
     import io as _io
     import json as _json
 
+    from fastapi.responses import StreamingResponse
+
     await require_org_permission("audit:view", org_id, authorization)
     client = await get_postgres_client()
-    rows = await client.fetch(
-        "SELECT id, user_id, user_email, action, target_type, target_id, "
-        "metadata, ip_address, user_agent, created_at, prev_hash, entry_hash "
-        "FROM audit_log WHERE org_id = %s "
-        "ORDER BY created_at",
-        org_id,
+    # NOTE: the canonical table is `org_audit_log` (aliased `oal`); a
+    # previous revision of this query targeted a non-existent
+    # `audit_log` and selected `user_email` as a base column instead
+    # of joining `users`, so the export silently returned garbage.
+    #
+    # Use the server-side-cursor streamer so an org with millions of
+    # audit rows doesn't OOM the API process — the previous
+    # ``client.fetch(...)`` loaded the entire result set into memory
+    # before yielding the first byte. ``fetchiter`` holds the
+    # connection for the duration of the generator; FastAPI cancels
+    # the generator when the client disconnects, which releases the
+    # connection back to the pool.
+    query = (
+        "SELECT oal.id, oal.user_id, u.email AS user_email, oal.action, "
+        "       oal.target_type, oal.target_id, oal.metadata, "
+        "       oal.ip_address, oal.user_agent, oal.created_at, "
+        "       oal.prev_hash, oal.entry_hash "
+        "FROM org_audit_log oal "
+        "JOIN users u ON u.id = oal.user_id "
+        "WHERE oal.org_id = $1 "
+        "ORDER BY oal.created_at"
     )
 
     csv_fields = [
@@ -230,7 +264,7 @@ async def export_audit_log(
     async def _iter():
         if format == "csv":
             yield (",".join(csv_fields) + "\n").encode("utf-8")
-        for r in rows:
+        async for r in client.fetchiter(query, org_id):
             yield _serialize(r).encode("utf-8")
 
     return StreamingResponse(

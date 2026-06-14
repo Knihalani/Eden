@@ -9,12 +9,11 @@ from __future__ import annotations
 
 import json
 import logging
-import uuid
-from dataclasses import dataclass, field, asdict
-from datetime import datetime, timezone
-from enum import Enum
+from dataclasses import dataclass, field
+from datetime import UTC, datetime
+from enum import StrEnum
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -28,7 +27,7 @@ __all__ = [
 ]
 
 
-class EnvironmentCategory(str, Enum):
+class EnvironmentCategory(StrEnum):
     """Canonical environment categories for golden dataset organization."""
 
     AGENT_SANDBOX = "agent_sandbox"
@@ -40,7 +39,7 @@ class EnvironmentCategory(str, Enum):
     CUSTOM = "custom"
 
 
-class DifficultyLevel(str, Enum):
+class DifficultyLevel(StrEnum):
     """Difficulty levels for golden cases."""
 
     BEGINNER = "beginner"
@@ -126,7 +125,7 @@ class GoldenDataset:
     description: str
     cases: list[GoldenCase]
     overall_pass_criteria: dict[str, Any] = field(default_factory=dict)
-    baseline_version: Optional[str] = None
+    baseline_version: str | None = None
     generation_config: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
@@ -199,7 +198,7 @@ class DatasetRegistry:
     lookup by ID, version, or category.
     """
 
-    def __init__(self, storage_path: Optional[Path] = None):
+    def __init__(self, storage_path: Path | None = None):
         """Initialize registry.
 
         Args:
@@ -233,7 +232,7 @@ class DatasetRegistry:
         frozen = GoldenDataset(
             dataset_id=draft.dataset_id,
             version=draft.version,
-            frozen_at=datetime.now(timezone.utc).isoformat(),
+            frozen_at=datetime.now(UTC).isoformat(),
             description=draft.description,
             cases=draft.cases,
             overall_pass_criteria=draft.overall_pass_criteria,
@@ -243,7 +242,7 @@ class DatasetRegistry:
         self.register(frozen, is_draft=False)
         return frozen
 
-    def get(self, dataset_id: str, version: Optional[str] = None) -> Optional[GoldenDataset]:
+    def get(self, dataset_id: str, version: str | None = None) -> GoldenDataset | None:
         """Get a dataset by ID and optional version.
 
         If version is not specified, returns the latest version (frozen or draft).
@@ -262,7 +261,7 @@ class DatasetRegistry:
         latest_key = sorted(all_matching, key=lambda k: k.split("@")[1])[-1]
         return self._datasets.get(latest_key) or self._drafts.get(latest_key)
 
-    def list_datasets(self, category: Optional[EnvironmentCategory] = None) -> list[GoldenDataset]:
+    def list_datasets(self, category: EnvironmentCategory | None = None) -> list[GoldenDataset]:
         """List all frozen datasets, optionally filtered by category."""
         datasets = list(self._datasets.values())
         if category:
@@ -1270,7 +1269,7 @@ def load_canonical_datasets() -> DatasetRegistry:
     dataset = GoldenDataset(
         dataset_id="gd_eden_canonical_v1",
         version="1.0.0",
-        frozen_at=datetime.now(timezone.utc).isoformat(),
+        frozen_at=datetime.now(UTC).isoformat(),
         description="Eden canonical golden dataset — 50 cases across 6 environment categories",
         cases=_CANONICAL_CASES,
         overall_pass_criteria={

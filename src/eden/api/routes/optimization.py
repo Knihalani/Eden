@@ -9,22 +9,19 @@ Provides real-time visibility into:
 """
 
 import logging
-from datetime import datetime, timedelta, timezone
-from typing import Optional
+from datetime import UTC, datetime, timedelta
 
-from fastapi import APIRouter, HTTPException, Query, Depends
+from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel
 
 from eden.api.deps import get_current_user, require_org_permission
 from eden.optimization import (
-    ModelRouter,
-    TaskClassifier,
-    QualityValidator,
-    ExactMatchCache,
-    SemanticCache,
-    CostTracker,
-    BudgetStatus,
     BudgetExceededError,
+    BudgetStatus,
+    CostTracker,
+    ExactMatchCache,
+    ModelRouter,
+    SemanticCache,
 )
 from eden.optimization.cost_tracker import CostEvent
 
@@ -137,10 +134,10 @@ class CacheInvalidateResponse(BaseModel):
 # Module-level singletons (stateful across requests for real-time stats)
 # ============================================================================
 
-_model_router: Optional[ModelRouter] = None
-_exact_cache: Optional[ExactMatchCache] = None
-_semantic_cache: Optional[SemanticCache] = None
-_cost_tracker: Optional[CostTracker] = None
+_model_router: ModelRouter | None = None
+_exact_cache: ExactMatchCache | None = None
+_semantic_cache: SemanticCache | None = None
+_cost_tracker: CostTracker | None = None
 
 
 def _get_model_router() -> ModelRouter:
@@ -223,7 +220,7 @@ async def get_optimization_overview(
     )
 
     # Cost breakdown (from in-memory tracker, filtered by tenant)
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     start = now - timedelta(days=days)
     events = tracker.get_events(tenant_id=org_id)
     filtered = [e for e in events if datetime.fromisoformat(e.timestamp) >= start]
@@ -411,7 +408,7 @@ async def get_cost_breakdown(
     await require_org_permission("billing:view", org_id)
 
     tracker = _get_cost_tracker()
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     start = now - timedelta(days=days)
     events = tracker.get_events(tenant_id=org_id)
     filtered = [e for e in events if datetime.fromisoformat(e.timestamp) >= start]
@@ -504,7 +501,7 @@ async def get_budget_status(
     redis = await get_redis_client()
     current_spend = 0.0
     if redis:
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         month_key = now.strftime("%Y-%m")
         raw = await redis.hget(f"eden:cost:{org_id}:month:{month_key}", "total_cents")
         current_spend = float(raw or 0.0)
@@ -577,3 +574,62 @@ async def get_token_savings(
         compression_ratio=1.0,
         coalesced_requests=0,
     )
+
+
+# ============================================================================
+# Routes — Per-trace cost (analytics tab)
+# ============================================================================
+
+@router.get("/cost-per-trace", response_model=dict)
+async def get_cost_per_trace(
+    org_id: str,
+    days: int = Query(default=30, ge=1, le=365),
+    user: dict = Depends(get_current_user),
+):
+    """Per-trace cost + tokens + latency from ``usage_events`` + ``telemetry_events``.
+
+    Joins the two event streams on ``correlation_id`` (the request-tracing
+    link written by the LLM client) so we can show cost alongside the
+    latency that produced it. The response shape matches the portal's
+    ``getOptimizationCostPerTrace`` method:
+    ``{points: [{trace_id, cost_usd, tokens, latency_ms, model}]}``.
+
+    Limited to the top 100 most expensive traces to keep the response small.
+    """
+    from eden.storage.postgres import get_postgres_client as _pg
+
+    await require_org_permission("billing:view", org_id)
+
+    client = await _pg()
+    now = datetime.now(UTC)
+    start = now - timedelta(days=days)
+
+    query = """
+        SELECT ue.correlation_id AS trace_id,
+               ue.model AS model,
+               COALESCE(ue.cost_usd, 0) AS cost_usd,
+               COALESCE(ue.quantity, 0) AS tokens,
+               COALESCE(te.duration_ms, 0) AS latency_ms
+        FROM usage_events ue
+        LEFT JOIN telemetry_events te
+          ON te.tenant_id = $1::varchar
+         AND te.correlation_id = ue.correlation_id
+        WHERE ue.org_id = $1
+          AND ue.event_type = 'llm_call'
+          AND ue.created_at >= $2
+          AND ue.correlation_id IS NOT NULL
+        ORDER BY cost_usd DESC
+        LIMIT 100
+    """
+    rows = await client.fetch(query, org_id, start)
+    points = [
+        {
+            "trace_id": row["trace_id"],
+            "model": row["model"] or "unknown",
+            "cost_usd": float(row["cost_usd"] or 0.0),
+            "tokens": int(row["tokens"] or 0),
+            "latency_ms": float(row["latency_ms"] or 0.0),
+        }
+        for row in rows
+    ]
+    return {"points": points}

@@ -17,8 +17,8 @@ export function LoopNode({ data, selected }: NodeProps) {
       outputs={[{ id: "out:loop", position: Position.Right }]}
     >
       <div className="text-[11px]">{d.loopType}</div>
-      <div className="text-[10px] text-zinc-500">
-        max: <span className="text-zinc-300">{d.maxIterations}</span>
+      <div className="text-[10px] text-[var(--text-muted)]">
+        max: <span className="text-[var(--text-muted)]">{d.maxIterations}</span>
       </div>
     </NodeShell>
   );

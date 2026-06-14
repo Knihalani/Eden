@@ -17,7 +17,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from fastapi import APIRouter, Header, HTTPException, Request, status, Depends
+from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
 from pydantic import BaseModel
 
 from eden.api.deps import require_feature_flag
@@ -67,7 +67,7 @@ async def helicone_webhook(
     try:
         payload = await request.json()
     except Exception:
-        raise HTTPException(status_code=400, detail="Invalid JSON")
+        raise HTTPException(status_code=400, detail="Invalid JSON") from None
     if not isinstance(payload, dict):
         raise HTTPException(status_code=400, detail="Expected JSON object")
     event = parse_helicone_event(payload)
@@ -94,8 +94,9 @@ async def helicone_webhook(
 @router.get("/test")
 async def helicone_test() -> dict[str, Any]:
     """Health check that exercises the upstream proxy."""
-    from eden.config import get_settings
     import httpx
+
+    from eden.config import get_settings
 
     settings = get_settings()
     if not settings.helicone_api_key:
@@ -112,4 +113,4 @@ async def helicone_test() -> dict[str, Any]:
             "integration_version": INTEGRATION_API_VERSION,
         }
     except httpx.RequestError as exc:
-        raise HTTPException(status_code=502, detail=f"Helicone upstream unreachable: {exc}")
+        raise HTTPException(status_code=502, detail=f"Helicone upstream unreachable: {exc}") from exc

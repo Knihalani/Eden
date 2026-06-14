@@ -17,8 +17,8 @@ export function MemoryNode({ data, selected }: NodeProps) {
       outputs={[{ id: "out:memory", position: Position.Right }]}
     >
       <div className="text-[11px]">{d.memoryType}</div>
-      <div className="text-[10px] text-zinc-500">
-        capacity: <span className="text-zinc-300">{d.capacity}</span>
+      <div className="text-[10px] text-[var(--text-muted)]">
+        capacity: <span className="text-[var(--text-muted)]">{d.capacity}</span>
       </div>
     </NodeShell>
   );

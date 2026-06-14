@@ -24,7 +24,7 @@ import json
 import logging
 import re
 from dataclasses import dataclass, field
-from typing import Any, Optional, Set
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -34,10 +34,10 @@ class PIIPolicy:
     """Per-tenant PII policy. The default policy matches the
     hard-coded category list; tenants override via org_pii_policies."""
 
-    enabled_categories: Set[str] = field(default_factory=lambda: set(_DEFAULT_CATEGORIES))
-    disabled_categories: Set[str] = field(default_factory=set)
+    enabled_categories: set[str] = field(default_factory=lambda: set(_DEFAULT_CATEGORIES))
+    disabled_categories: set[str] = field(default_factory=set)
     fail_closed_on_credentials: bool = False
-    redact_keys_extra: Set[str] = field(default_factory=set)
+    redact_keys_extra: set[str] = field(default_factory=set)
     mask_token: str = "REDACTED"
 
     @classmethod
@@ -50,11 +50,11 @@ class PIIPolicy:
         )
 
     @property
-    def active_categories(self) -> Set[str]:
+    def active_categories(self) -> set[str]:
         return self.enabled_categories - self.disabled_categories
 
     @property
-    def credential_categories(self) -> Set[str]:
+    def credential_categories(self) -> set[str]:
         return self.active_categories & _CREDENTIAL_CATEGORIES
 
 
@@ -139,7 +139,7 @@ class PIIMasker:
         self,
         mask_token: str = "REDACTED",
         *,
-        policy: Optional[PIIPolicy] = None,
+        policy: PIIPolicy | None = None,
     ) -> None:
         self.mask_token = mask_token
         self.policy = policy or PIIPolicy(mask_token=mask_token)
@@ -237,10 +237,7 @@ class PIIMasker:
         """Quick check: does this payload contain any detectable PII?"""
         if isinstance(text, dict):
             text = json.dumps(text)
-        for pattern in self.PATTERNS.values():
-            if pattern.search(text):
-                return True
-        return False
+        return any(pattern.search(text) for pattern in self.PATTERNS.values())
 
 
 def _sanitize_for_sql(value: Any) -> Any:

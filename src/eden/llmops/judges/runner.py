@@ -9,9 +9,9 @@ best-effort and never raise.
 
 from __future__ import annotations
 
-import asyncio
 import logging
-from typing import TYPE_CHECKING, Iterable, Optional
+from collections.abc import Iterable
+from typing import TYPE_CHECKING
 
 from .base import Judge, JudgeContext, JudgeScore
 
@@ -33,7 +33,7 @@ class JudgeRunner:
     def __init__(
         self,
         *,
-        llm_client: Optional[object] = None,
+        llm_client: object | None = None,
         max_concurrent_per_tenant: int = 4,
     ) -> None:
         self.llm_client = llm_client
@@ -41,10 +41,10 @@ class JudgeRunner:
 
     async def run_for_event(
         self,
-        event: "TelemetryEvent",
+        event: TelemetryEvent,
         judges: Iterable[Judge],
         *,
-        trace_id: Optional[str] = None,
+        trace_id: str | None = None,
     ) -> list[JudgeScore]:
         """Score one event with each judge. Returns the list of
         scores (also persisted as a side-effect)."""
@@ -123,10 +123,10 @@ class JudgeRunner:
 
 
 async def run_judges_for_event(
-    event: "TelemetryEvent",
+    event: TelemetryEvent,
     judges: Iterable[Judge],
     *,
-    llm_client: Optional[object] = None,
+    llm_client: object | None = None,
 ) -> list[JudgeScore]:
     """Convenience wrapper for one-off judge runs.
 

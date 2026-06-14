@@ -19,10 +19,9 @@ import hashlib
 import json
 import logging
 import random
-import re
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
-from typing import Any, Optional
+from datetime import UTC, datetime
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -40,7 +39,7 @@ class SyntheticVariant:
     difficulty_delta: int  # -3 to +3 relative to source
     tags: list[str] = field(default_factory=list)
     metadata: dict[str, Any] = field(default_factory=dict)
-    created_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+    created_at: str = field(default_factory=lambda: datetime.now(UTC).isoformat())
 
 
 class SyntheticDataEngine:
@@ -162,7 +161,7 @@ class SyntheticDataEngine:
     ]
 
     def __init__(self) -> None:
-        self._llm_client: Optional[Any] = None
+        self._llm_client: Any | None = None
 
     async def _get_llm(self) -> Any:
         if self._llm_client is None:
@@ -384,7 +383,7 @@ class SyntheticDataEngine:
     async def generate_curriculum_variants(
         self,
         datapoints: list[dict[str, Any]],
-        stages: Optional[list[int]] = None,
+        stages: list[int] | None = None,
     ) -> list[SyntheticVariant]:
         """Generate curriculum-scaffolded variants.
 
@@ -475,8 +474,8 @@ class SyntheticDataEngine:
     async def augment_dataset(
         self,
         datapoints: list[dict[str, Any]],
-        strategies: list[str] = None,
-        counts: dict[str, int] = None,
+        strategies: list[str] | None = None,
+        counts: dict[str, int] | None = None,
     ) -> dict[str, list[SyntheticVariant]]:
         """Run full augmentation pipeline on a dataset.
 

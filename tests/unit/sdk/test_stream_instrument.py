@@ -11,7 +11,8 @@ from __future__ import annotations
 
 import asyncio
 import time
-from typing import Any, AsyncIterator
+from collections.abc import AsyncIterator
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -101,15 +102,14 @@ class _FakeAnthropicEvent:
 # Import the wrapper functions under test. We import from the
 # internal helpers (no SDK installation required).
 from eden.sdk.trace import (
-    _extract_text_from_openai_chunk,
     _extract_text_from_anthropic_event,
-    _tpot_ms,
+    _extract_text_from_openai_chunk,
     _itl_avg_ms,
     _streaming_summary,
-    _wrap_openai_stream,
+    _tpot_ms,
     _wrap_anthropic_stream,
+    _wrap_openai_stream,
 )
-
 
 # ── _extract_text_from_openai_chunk ──────────────────────────────────
 

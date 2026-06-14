@@ -20,12 +20,12 @@ def gateway() -> AIGateway:
 def make_request():
     """Factory for ``ModelRequest`` instances with sensible defaults."""
     def _make(prompt: str = "hello", **overrides) -> ModelRequest:
-        defaults = dict(
-            model_family="claude",
-            model_version="claude-sonnet-4",
-            prompt=prompt,
-            tenant_id="tenant-test",
-        )
+        defaults = {
+            "model_family": "claude",
+            "model_version": "claude-sonnet-4",
+            "prompt": prompt,
+            "tenant_id": "tenant-test",
+        }
         defaults.update(overrides)
         return ModelRequest(**defaults)
     return _make

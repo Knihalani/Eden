@@ -38,7 +38,7 @@ export function PlanLimitsDisplay({
               key={item.label}
               className={cn(
                 "font-medium",
-                isAtLimit ? "text-red-600" : "text-[var(--text-secondary)]"
+                isAtLimit ? "text-[var(--error)]" : "text-[var(--text-secondary)]"
               )}
             >
               {item.used}/{item.limit} {item.label.toLowerCase()}
@@ -61,24 +61,24 @@ export function PlanLimitsDisplay({
             key={item.label}
             className={cn(
               "p-4 rounded-lg border",
-              isAtLimit ? "border-red-200 bg-red-50" : isNearLimit ? "border-yellow-200 bg-yellow-50" : "border-[var(--border)] bg-[var(--surface)]"
+              isAtLimit ? "border-[var(--error)] bg-[var(--error-dim)]" : isNearLimit ? "border-[var(--warning)] bg-[var(--warning-bg)]" : "border-[var(--border)] bg-[var(--bg-primary)]"
             )}
           >
             <div className="text-sm text-[var(--text-secondary)] mb-1">{item.label}</div>
             <div className="flex items-baseline gap-1">
               <span className={cn(
                 "text-2xl font-bold",
-                isAtLimit ? "text-red-600" : "text-[var(--text-primary)]"
+                isAtLimit ? "text-[var(--error)]" : "text-[var(--text-primary)]"
               )}>
                 {item.used}
               </span>
               <span className="text-sm text-[var(--text-muted)]">/ {item.limit}</span>
             </div>
-            <div className="mt-2 h-1.5 bg-white rounded-full overflow-hidden">
+            <div className="mt-2 h-1.5 bg-[var(--bg-primary)] rounded-full overflow-hidden">
               <div
                 className={cn(
                   "h-full rounded-full",
-                  isAtLimit ? "bg-red-500" : isNearLimit ? "bg-yellow-500" : "bg-blue-500"
+                  isAtLimit ? "bg-[var(--error)]" : isNearLimit ? "bg-[var(--warning)]" : "bg-[var(--accent)]"
                 )}
                 style={{ width: `${percentage}%` }}
               />

@@ -23,8 +23,8 @@ from __future__ import annotations
 
 import time
 import uuid
-from datetime import datetime, timezone
-from typing import Any, Optional
+from datetime import UTC, datetime
+from typing import Any, cast
 
 
 class EdenEnvironmentWrapper:
@@ -41,10 +41,10 @@ class EdenEnvironmentWrapper:
         *,
         tenant_id: str,
         project_id: str,
-        agent_id: Optional[str] = None,
-        agent_version: Optional[str] = None,
-        environment_id: Optional[str] = None,
-        tags: Optional[list[str]] = None,
+        agent_id: str | None = None,
+        agent_version: str | None = None,
+        environment_id: str | None = None,
+        tags: list[str] | None = None,
     ) -> None:
         self._env = env
         self._tenant_id = tenant_id
@@ -53,10 +53,10 @@ class EdenEnvironmentWrapper:
         self._agent_version = agent_version
         self._environment_id = environment_id or getattr(env, "spec", None) and getattr(env.spec, "id", None)
         self._tags = tags or []
-        self._trace_id: Optional[str] = None
+        self._trace_id: str | None = None
         self._step_count = 0
         self._episode_reward = 0.0
-        self._start_time: Optional[float] = None
+        self._start_time: float | None = None
 
     # ── Core delegation ───────────────────────────────────────────────────
 
@@ -186,11 +186,11 @@ class EdenEnvironmentWrapper:
         *,
         event_type: str,
         name: str,
-        parent_span_id: Optional[str] = None,
-        duration_ms: Optional[float] = None,
-        payload: Optional[dict[str, Any]] = None,
-        metrics: Optional[dict[str, float]] = None,
-        outcome: Optional[str] = None,
+        parent_span_id: str | None = None,
+        duration_ms: float | None = None,
+        payload: dict[str, Any] | None = None,
+        metrics: dict[str, float] | None = None,
+        outcome: str | None = None,
     ) -> None:
         """Build and emit a telemetry event."""
         if not self._trace_id:
@@ -203,7 +203,7 @@ class EdenEnvironmentWrapper:
             "trace_id": self._trace_id,
             "realm": "environment",
             "event_type": event_type,
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
             "agent_id": self._agent_id,
             "agent_version": self._agent_version,
             "environment_id": self._environment_id,
@@ -221,8 +221,12 @@ class EdenEnvironmentWrapper:
         # Attempt async ingestion via the telemetry collector
         try:
             import asyncio
-            from eden.observability.telemetry_collector import TelemetryEvent, get_telemetry_collector
-            collector = get_telemetry_collector()
+
+            from eden.observability.telemetry_collector import (
+                TelemetryEvent,
+                get_telemetry_collector,
+            )
+            collector = cast(TelemetryCollector, get_telemetry_collector())
             # If we're in an async context, await; otherwise fire-and-forget
             try:
                 loop = asyncio.get_running_loop()
@@ -231,7 +235,7 @@ class EdenEnvironmentWrapper:
             except RuntimeError:
                 # No event loop — synchronous context; log for now
                 pass
-        except Exception as exc:
+        except Exception:
             # Telemetry should never break the environment
             pass
 
@@ -241,10 +245,10 @@ def wrap_environment(
     *,
     tenant_id: str,
     project_id: str,
-    agent_id: Optional[str] = None,
-    agent_version: Optional[str] = None,
-    environment_id: Optional[str] = None,
-    tags: Optional[list[str]] = None,
+    agent_id: str | None = None,
+    agent_version: str | None = None,
+    environment_id: str | None = None,
+    tags: list[str] | None = None,
 ) -> EdenEnvironmentWrapper:
     """Wrap a Gymnasium-style environment with Eden telemetry capture.
 

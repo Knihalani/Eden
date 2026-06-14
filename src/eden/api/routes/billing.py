@@ -1,3 +1,4 @@
+from typing import cast
 """Billing and subscription management routes for Eden.
 
 Handles Stripe webhook events, subscription management, and plan limits.
@@ -5,14 +6,11 @@ Handles Stripe webhook events, subscription management, and plan limits.
 
 import json
 import logging
-from datetime import datetime
-from typing import Optional
-from uuid import uuid4
 
-from fastapi import Depends, APIRouter, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel
 
-from eden.api.deps import require_org_permission, get_current_user, get_postgres_client
+from eden.api.deps import get_current_user, get_postgres_client, require_org_permission
 from eden.config import get_settings
 
 logger = logging.getLogger(__name__)
@@ -35,9 +33,9 @@ class PlanLimits(BaseModel):
     jobs_limit: int
     jobs_used: int
     active: bool
-    stripe_subscription_id: Optional[str] = None
-    subscription_status: Optional[str] = None
-    current_period_end: Optional[str] = None
+    stripe_subscription_id: str | None = None
+    subscription_status: str | None = None
+    current_period_end: str | None = None
 
 
 class SubscribeRequest(BaseModel):
@@ -54,7 +52,7 @@ class InvoiceResponse(BaseModel):
     currency: str
     status: str
     created: int  # Unix timestamp
-    invoice_url: Optional[str] = None
+    invoice_url: str | None = None
 
 
 # ============================================================================
@@ -100,7 +98,7 @@ def _get_settings_data(settings: any) -> dict:
     return {}
 
 
-async def get_org_plan(org_id: str) -> Optional[dict]:
+async def get_org_plan(org_id: str) -> dict | None:
     """Get the active plan for an organization."""
     client = await get_postgres_client()
     query = """
@@ -197,11 +195,11 @@ async def check_limit(
 
     # Check directly without syncing first (sync is done lazily on plan view)
     if limit_type == "seats":
-        return plan["seats_used"] >= plan["seats_limit"]
+        return cast(bool, plan["seats_used"] >= plan["seats_limit"])
     elif limit_type == "references":
-        return plan["references_used"] >= plan["references_limit"]
+        return cast(bool, plan["references_used"] >= plan["references_limit"])
     elif limit_type == "jobs":
-        return plan["jobs_used"] >= plan["jobs_limit"]
+        return cast(bool, plan["jobs_used"] >= plan["jobs_limit"])
 
     return False
 
@@ -340,13 +338,13 @@ async def subscribe(
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Stripe SDK not installed. Run: pip install stripe",
-        )
+        ) from None
     except Exception as e:
         logger.error(f"Stripe checkout error: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to create checkout session: {str(e)}",
-        )
+        ) from e
 
 
 @router.get("/invoices", response_model=list[InvoiceResponse])
@@ -447,13 +445,91 @@ async def cancel_subscription(org_id: str, user: dict = Depends(get_current_user
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Stripe SDK not installed.",
-        )
+        ) from None
     except Exception as e:
         logger.error(f"Stripe cancel error: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to cancel subscription: {str(e)}",
+        ) from e
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Payment method — read the org's saved card from Stripe
+# ─────────────────────────────────────────────────────────────────────────────
+
+class PaymentMethodResponse(BaseModel):
+    """The org's default payment method. ``None`` if no card on file."""
+    brand: str
+    last4: str
+    exp_month: int
+    exp_year: int
+
+
+@router.get("/payment-method", response_model=PaymentMethodResponse | None)
+async def get_payment_method(
+    org_id: str,
+    user: dict = Depends(get_current_user),
+) -> PaymentMethodResponse | None:
+    """Return the org's default payment method, or ``None`` if no card.
+
+    Reads from Stripe if configured (same pattern as ``/invoices``).
+    Returns ``None`` (not 404) when:
+      - Stripe is not configured
+      - the org has no ``stripe_customer_id`` set
+      - the customer has no default payment method on file
+      - any Stripe call fails (graceful degradation)
+
+    The portal uses ``None`` to render an "Add payment method" CTA.
+    """
+    await require_org_permission("billing:view", org_id)
+
+    stripe_api_key = getattr(settings, "stripe_secret_key", None) or ""
+    if not stripe_api_key:
+        return None
+
+    try:
+        import stripe
+        stripe.api_key = stripe_api_key
+
+        client = await get_postgres_client()
+        org = await client.fetchrow(
+            "SELECT settings FROM organizations WHERE id = $1",
+            org_id,
         )
+        if not org or not org.get("settings"):
+            return None
+        settings_data = _get_settings_data(org["settings"])
+        customer_id = settings_data.get("stripe_customer_id")
+        if not customer_id:
+            return None
+
+        customer = stripe.Customer.retrieve(customer_id)
+        default_pm_id = getattr(customer, "invoice_settings", None)
+        default_pm_id = getattr(
+            getattr(default_pm_id, "default_payment_method", None),
+            "id",
+            None,
+        ) if default_pm_id else None
+        if not default_pm_id:
+            return None
+
+        pm = stripe.PaymentMethod.retrieve(default_pm_id)
+        card = getattr(pm, "card", None)
+        if not card:
+            return None
+
+        return PaymentMethodResponse(
+            brand=card.brand or "unknown",
+            last4=card.last4 or "0000",
+            exp_month=int(card.exp_month or 0),
+            exp_year=int(card.exp_year or 0),
+        )
+    except ImportError:
+        return None
+    except Exception as e:
+        logger.warning(f"Stripe payment-method lookup failed for org {org_id}: {e}")
+        return None
 
 
 # ============================================================================
@@ -497,7 +573,7 @@ async def stripe_webhook(
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Invalid webhook payload",
-            )
+            ) from None
         except Exception as e:
             # If no webhook secret configured, just parse
             logger.warning(f"Stripe webhook verification failed: {e}")
@@ -529,7 +605,7 @@ async def stripe_webhook(
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Stripe SDK not installed.",
-        )
+        ) from None
     except HTTPException:
         raise
     except Exception as e:
@@ -537,7 +613,7 @@ async def stripe_webhook(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Webhook processing failed: {str(e)}",
-        )
+        ) from e
 
 
 async def handle_subscription_event(event: dict) -> None:
@@ -617,7 +693,7 @@ async def handle_subscription_event(event: dict) -> None:
         )
 
         # Update org_plans with subscription reference
-        plan_def = PLAN_DEFINITIONS.get("pro")  # Default to pro on active subscription
+        PLAN_DEFINITIONS.get("pro")  # Default to pro on active subscription
         await client.execute(
             """
             UPDATE org_plans

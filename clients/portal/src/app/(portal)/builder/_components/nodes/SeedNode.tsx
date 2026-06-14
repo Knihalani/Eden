@@ -16,7 +16,7 @@ export function SeedNode({ data, selected }: NodeProps) {
       icon={<Dice5 className="w-3.5 h-3.5" />}
     >
       <div className="font-mono text-[11px]">seed = {d.value}</div>
-      <div className="text-[10px] text-zinc-500">determinism on</div>
+      <div className="text-[10px] text-[var(--text-muted)]">determinism on</div>
     </NodeShell>
   );
 }

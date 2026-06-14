@@ -14,11 +14,12 @@ the loop continues. The tailer must never crash the app process.
 from __future__ import annotations
 
 import asyncio
+import collections
+import contextlib
 import json
 import logging
-from typing import Any, Optional
+from typing import Any
 
-from .base import Judge
 from .registry import get_judge_registry
 from .runner import JudgeRunner
 
@@ -29,6 +30,24 @@ logger = logging.getLogger(__name__)
 # ``TelemetryCollector._route_redis`` writes.
 def _stream_key(tenant_id: str, trace_id: str) -> str:
     return f"telemetry:{tenant_id}:{trace_id}:events"
+
+
+class _LightEvent:
+    """Minimal stand-in for ``TelemetryEvent`` used by the tailer.
+
+    Defined at module level so the hot loop in ``_process_key``
+    doesn't rebuild the class object on every event. The slots
+    mirror the fields the judges actually read.
+    """
+
+    __slots__ = (
+        "event_id", "event_type", "trace_id", "span_id",
+        "payload", "attributes", "tags", "source_format",
+        "tenant_id", "agent_id", "environment_id",
+        "metrics", "duration_ms", "outcome", "name",
+        "timestamp", "realm", "project_id",
+        "agent_version", "parent_span_id",
+    )
 
 
 class RedisTailer:
@@ -67,8 +86,22 @@ class RedisTailer:
         self.promotion_loop_every_n_polls = promotion_loop_every_n_polls
         self._semaphores: dict[str, asyncio.Semaphore] = {}
         self._stop = asyncio.Event()
-        self._task: Optional[asyncio.Task] = None
+        self._task: asyncio.Task | None = None
         self._poll_count: int = 0
+        # Cached runner — JudgeRunner construction is cheap but not
+        # free, and ``_poll_once`` runs on every tick (default 1 Hz).
+        # Reusing it avoids per-tick allocation.
+        self._runner: JudgeRunner | None = None
+        # Cross-poll dedup set. The previous implementation
+        # allocated a fresh ``set`` inside ``_poll_once``, which
+        # meant events straddling a poll boundary could be
+        # re-scored (duplicate judge runs + duplicate promotion
+        # actions). Hold it as instance state so dedup is
+        # continuous across ticks.
+        # Bounded so the tailer can't OOM if it loses its
+        # backing store; ``maxlen`` evicts oldest-first.
+        self._seen: collections.deque[str] = collections.deque(maxlen=50_000)
+        self._seen_set: set[str] = set()
 
     async def start(self) -> None:
         """Start the background polling task. Idempotent."""
@@ -83,7 +116,7 @@ class RedisTailer:
         if self._task is not None:
             try:
                 await asyncio.wait_for(self._task, timeout=5.0)
-            except (asyncio.TimeoutError, asyncio.CancelledError):
+            except (TimeoutError, asyncio.CancelledError):
                 self._task.cancel()
 
     async def _run(self) -> None:
@@ -102,12 +135,10 @@ class RedisTailer:
                 break
             except Exception as exc:
                 logger.warning(f"judge tailer poll failed: {exc}")
-            try:
+            with contextlib.suppress(TimeoutError):
                 await asyncio.wait_for(
                     self._stop.wait(), timeout=self.poll_interval_seconds
                 )
-            except asyncio.TimeoutError:
-                pass
         logger.info("judge redis tailer stopped")
 
     async def _poll_once(self) -> None:
@@ -128,8 +159,16 @@ class RedisTailer:
             return
 
         registry = get_judge_registry()
-        runner = JudgeRunner(llm_client=self.llm_client)
-        seen: set[str] = set()
+        if self._runner is None:
+            self._runner = JudgeRunner(llm_client=self.llm_client)
+        runner = self._runner
+        # Use the instance-level dedup set so an event that
+        # straddles two poll cycles is only scored once. The
+        # matching ``_seen`` deque enforces the maxlen cap so
+        # the in-memory dedup state can't grow without bound
+        # (e.g. if the backing store were reset and the tailer
+        # restarted without the queue being cleared).
+        seen = self._seen_set
 
         # Enumerate keys. SCAN avoids blocking the server.
         try:
@@ -187,7 +226,18 @@ class RedisTailer:
             entry_id = entry_id_bytes.decode() if isinstance(entry_id_bytes, bytes) else str(entry_id_bytes)
             if entry_id in seen:
                 continue
+            # Add to the dedup set; mirror into the bounded
+            # deque so we can evict the oldest entry from the
+            # set when the deque is full. The deque's
+            # ``maxlen`` automatically pops the oldest on the
+            # next append, so we synchronise by dropping the
+            # matching entry from the set whenever the deque
+            # reaches its cap.
             seen.add(entry_id)
+            self._seen.append(entry_id)
+            if len(self._seen) >= self._seen.maxlen:
+                oldest = self._seen.popleft()
+                self._seen_set.discard(oldest)
             data = fields.get(b"data") if isinstance(fields, dict) else None
             if data is None:
                 continue
@@ -199,20 +249,14 @@ class RedisTailer:
 
             # Build a minimal TelemetryEvent from the dict for the
             # judge. We don't reconstruct the full dataclass — the
-            # judges only need payload + event_type + trace_id.
-            class _LightEvent:
-                __slots__ = ("event_id", "event_type", "trace_id", "span_id",
-                             "payload", "attributes", "tags", "source_format",
-                             "tenant_id", "agent_id", "environment_id",
-                             "metrics", "duration_ms", "outcome", "name",
-                             "timestamp", "realm", "project_id",
-                             "agent_version", "parent_span_id")
-
+            # judges only need payload + event_type + trace_id. The
+            # class is defined at module level to avoid recreating it
+            # on every event in the hot path.
             event = _LightEvent()
             for f in _LightEvent.__slots__:
                 setattr(event, f, event_dict.get(f))
 
-            judges = registry.for_event(event)  # type: ignore[arg-type]
+            judges = registry.for_event(event)
             if not judges:
                 continue
 

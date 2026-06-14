@@ -1,3 +1,4 @@
+from typing import cast
 """API versioning middleware for Eden Public API.
 
 Supports date-based versioning via the ``X-API-Version`` header.
@@ -16,7 +17,6 @@ Version history:
 """
 
 import logging
-from typing import Optional
 
 from fastapi import Request
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -45,7 +45,7 @@ class APIVersionMiddleware(BaseHTTPMiddleware):
 
         # Only enforce versioning on v1 API routes
         if not path.startswith("/v1"):
-            return await call_next(request)
+            return cast(Response, await call_next(request))
 
         raw_version = request.headers.get(_VERSION_HEADER)
         version = self._resolve_version(raw_version)
@@ -71,10 +71,10 @@ class APIVersionMiddleware(BaseHTTPMiddleware):
 
         # Echo the resolved version in response headers
         response.headers[_VERSION_HEADER] = version
-        return response
+        return cast(Response, response)
 
     @staticmethod
-    def _resolve_version(raw: Optional[str]) -> Optional[str]:
+    def _resolve_version(raw: str | None) -> str | None:
         """Resolve a version string to a supported version.
 
         Returns the version if supported, None otherwise.
@@ -89,7 +89,7 @@ class APIVersionMiddleware(BaseHTTPMiddleware):
         return None
 
 
-def get_api_version(request: Optional[Request] = None) -> str:
+def get_api_version(request: Request | None = None) -> str:
     """Get the resolved API version for the current request.
 
     Defaults to CURRENT_VERSION if the middleware has not run or request is None.

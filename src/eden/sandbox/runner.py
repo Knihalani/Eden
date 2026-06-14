@@ -4,17 +4,17 @@ This module provides hardware-isolated code execution for the Tester agent.
 Each test run executes in an ephemeral microVM with no access to Eden infrastructure.
 """
 
-import logging
-import json
-import sys
 import asyncio
-import hashlib
 import base64
 from collections import defaultdict
 from pathlib import Path
 from typing import Optional, AsyncIterator
+import json
+import logging
+import sys
 from dataclasses import dataclass, field
 from enum import Enum
+from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
@@ -39,7 +39,7 @@ class TestResult:
     errors: int
     output: str
     exploit_findings: list[dict] = field(default_factory=list)
-    mutation_score: Optional[float] = None
+    mutation_score: float | None = None
 
 
 @dataclass
@@ -56,10 +56,10 @@ class VMInstance:
     """Represents a single Firecracker microVM instance."""
     id: str
     state: VMState = VMState.INIT
-    snapshot_id: Optional[str] = None
-    socket_path: Optional[Path] = None
-    created_at: Optional[float] = None
-    last_used: Optional[float] = None
+    snapshot_id: str | None = None
+    socket_path: Path | None = None
+    created_at: float | None = None
+    last_used: float | None = None
 
 
 class BandSoxProtocol:
@@ -114,10 +114,10 @@ class SandboxRunner:
         cpu_count: int = 2,
         snapshot_pool_size: int = 10,
         max_concurrent: int = 100,
-        bandsox_host: Optional[str] = None,
-        bandsox_port: Optional[int] = None,
-        firecracker_kernel: Optional[str] = None,
-        firecracker_rootfs: Optional[str] = None,
+        bandsox_host: str | None = None,
+        bandsox_port: int | None = None,
+        firecracker_kernel: str | None = None,
+        firecracker_rootfs: str | None = None,
     ):
         self.memory_mb = memory_mb
         self.cpu_count = cpu_count
@@ -133,9 +133,9 @@ class SandboxRunner:
         # VM management
         self._vm_pool: dict[str, VMInstance] = {}
         self._active_vms: dict[str, VMInstance] = {}
-        self._semaphore: Optional[asyncio.Semaphore] = None
-        self._reader: Optional[asyncio.StreamReader] = None
-        self._writer: Optional[asyncio.StreamWriter] = None
+        self._semaphore: asyncio.Semaphore | None = None
+        self._reader: asyncio.StreamReader | None = None
+        self._writer: asyncio.StreamWriter | None = None
         self._connected: bool = False
         self._pool_initialized: bool = False
 
@@ -183,15 +183,15 @@ class SandboxRunner:
 
             # Verify connection with ping
             await self._send_ping()
-        except asyncio.TimeoutError:
+        except TimeoutError:
             logger.error("BandSox connection timeout")
-            raise RuntimeError("Failed to connect to BandSox: connection timeout")
+            raise RuntimeError("Failed to connect to BandSox: connection timeout") from None
         except ConnectionRefusedError:
             logger.error("BandSox connection refused")
-            raise RuntimeError("Failed to connect to BandSox: connection refused")
+            raise RuntimeError("Failed to connect to BandSox: connection refused") from None
         except Exception as e:
             logger.error(f"BandSox connection failed: {e}")
-            raise RuntimeError(f"Failed to connect to BandSox: {e}")
+            raise RuntimeError(f"Failed to connect to BandSox: {e}") from e
 
     async def _send_ping(self) -> bool:
         """Send ping to BandSox and wait for pong."""
@@ -333,7 +333,7 @@ class SandboxRunner:
 
         except Exception as e:
             vm.state = VMState.FAILED
-            raise RuntimeError(f"Failed to initialize VM {vm.id}: {e}")
+            raise RuntimeError(f"Failed to initialize VM {vm.id}: {e}") from e
 
     async def _release_vm(self, vm: VMInstance, reuse: bool = True) -> None:
         """Release a VM back to the pool or destroy it."""
@@ -358,7 +358,14 @@ class SandboxRunner:
                     self._writer.write(msg)
                     await self._writer.drain()
             except Exception:
-                pass  # Best effort cleanup
+                # Best effort cleanup — but a silent pass here would
+                # let a BandSox outage quietly leak VM instances. Log
+                # at warning so it's visible in the sandbox metrics.
+                logger.warning(
+                    "Failed to send terminate for vm_id=%s; VM may be leaked",
+                    vm_id,
+                    exc_info=True,
+                )
 
             if vm_id in self._vm_pool:
                 del self._vm_pool[vm_id]
@@ -457,7 +464,7 @@ class SandboxRunner:
                     exploit_findings=[],
                 )
 
-        except asyncio.TimeoutError:
+        except TimeoutError:
             logger.error(f"Test execution timed out after {timeout}s")
             return TestResult(
                 success=False,
@@ -541,7 +548,7 @@ class SandboxRunner:
                     "output": response.get("output"),
                 }
 
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 return {"success": False, "error": f"Timeout after {timeout}s"}
             except Exception as e:
                 return {"success": False, "error": str(e)}
@@ -746,7 +753,6 @@ class NullSandboxRunner(SandboxRunner):
         # Build combined code to execute
         # Use base64 to avoid triple-quote / escape ambiguities in the
         # user-supplied ``code`` and ``test_suite`` strings.
-        import base64
 
         code_b64 = base64.b64encode(code.encode("utf-8")).decode("ascii")
         suite_b64 = base64.b64encode(test_suite.encode("utf-8")).decode("ascii")
@@ -914,7 +920,7 @@ except Exception as outer_exc:
                     process.communicate(),
                     timeout=timeout,
                 )
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 process.kill()
                 return TestResult(
                     success=False,
@@ -991,8 +997,8 @@ except Exception as outer_exc:
         Captures both ``output = ...`` assignments and anything the
         code prints via ``print()``.
         """
-        import io
         import contextlib
+        import io
 
         logger.warning("Using NullSandboxRunner - NOT for production!")
 
@@ -1017,14 +1023,14 @@ except Exception as outer_exc:
 
 
 # Singleton instance
-_sandbox_runner: Optional[SandboxRunner] = None
+_sandbox_runner: SandboxRunner | None = None
 
 
 async def get_sandbox_runner(
-    memory_mb: Optional[int] = None,
-    cpu_count: Optional[int] = None,
-    snapshot_pool_size: Optional[int] = None,
-    max_concurrent: Optional[int] = None,
+    memory_mb: int | None = None,
+    cpu_count: int | None = None,
+    snapshot_pool_size: int | None = None,
+    max_concurrent: int | None = None,
 ) -> SandboxRunner:
     """Get the appropriate sandbox runner for the environment.
 

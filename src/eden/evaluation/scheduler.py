@@ -21,16 +21,16 @@ Usage:
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import logging
 import random
 from dataclasses import dataclass, field
-from datetime import datetime, timezone, timedelta
-from typing import Any, Optional
+from datetime import UTC, datetime, timedelta
+from typing import Any
 
 from eden.config import get_settings
 from eden.evaluation.auto_dataset import AutoDatasetPromoter, TraceQualityScorer
-from eden.evaluation.golden_dataset import load_canonical_datasets, DatasetRegistry
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -42,7 +42,7 @@ class PromotionCycleReport:
 
     cycle_id: str
     started_at: str
-    completed_at: Optional[str] = None
+    completed_at: str | None = None
     traces_collected: int = 0
     traces_scored: int = 0
     traces_promoted: int = 0
@@ -90,7 +90,7 @@ class AutoDatasetScheduler:
         interval_hours: int = 24,
         trace_lookback_hours: int = 48,
         target_dataset_id: str = "gd_auto_production",
-        promoter: Optional[AutoDatasetPromoter] = None,
+        promoter: AutoDatasetPromoter | None = None,
         dry_run: bool = False,
     ) -> None:
         self.interval_hours = interval_hours
@@ -99,8 +99,8 @@ class AutoDatasetScheduler:
         self.promoter = promoter or AutoDatasetPromoter()
         self.dry_run = dry_run
         self._running = False
-        self._task: Optional[asyncio.Task] = None
-        self._postgres_client: Optional[Any] = None
+        self._task: asyncio.Task | None = None
+        self._postgres_client: Any | None = None
 
     async def _get_postgres(self) -> Any:
         if self._postgres_client is None:
@@ -119,7 +119,7 @@ class AutoDatasetScheduler:
         3. Score and promote
         4. Persist report
         """
-        start = datetime.now(timezone.utc)
+        start = datetime.now(UTC)
         cycle_id = f"apc-{start.strftime('%Y%m%d%H%M%S')}"
         report = PromotionCycleReport(
             cycle_id=cycle_id,
@@ -136,8 +136,8 @@ class AutoDatasetScheduler:
 
             if not traces:
                 logger.info("No traces collected for promotion")
-                report.completed_at = datetime.now(timezone.utc).isoformat()
-                report.duration_ms = (datetime.now(timezone.utc) - start).total_seconds() * 1000
+                report.completed_at = datetime.now(UTC).isoformat()
+                report.duration_ms = (datetime.now(UTC) - start).total_seconds() * 1000
                 await self._persist_report(report)
                 return report
 
@@ -147,8 +147,8 @@ class AutoDatasetScheduler:
 
             if not filtered_traces:
                 logger.info("All traces already promoted")
-                report.completed_at = datetime.now(timezone.utc).isoformat()
-                report.duration_ms = (datetime.now(timezone.utc) - start).total_seconds() * 1000
+                report.completed_at = datetime.now(UTC).isoformat()
+                report.duration_ms = (datetime.now(UTC) - start).total_seconds() * 1000
                 await self._persist_report(report)
                 return report
 
@@ -185,14 +185,14 @@ class AutoDatasetScheduler:
                 # Mark traces as promoted
                 await self._mark_traces_promoted(filtered_traces, cycle_id)
 
-            report.completed_at = datetime.now(timezone.utc).isoformat()
+            report.completed_at = datetime.now(UTC).isoformat()
 
         except Exception as exc:
             logger.error(f"Promotion cycle failed: {exc}")
             report.errors.append(str(exc))
-            report.completed_at = datetime.now(timezone.utc).isoformat()
+            report.completed_at = datetime.now(UTC).isoformat()
 
-        report.duration_ms = (datetime.now(timezone.utc) - start).total_seconds() * 1000
+        report.duration_ms = (datetime.now(UTC) - start).total_seconds() * 1000
         await self._persist_report(report)
 
         logger.info(
@@ -211,7 +211,7 @@ class AutoDatasetScheduler:
         - Usage events with rich metadata
         """
         client = await self._get_postgres()
-        since = datetime.now(timezone.utc) - timedelta(hours=self.trace_lookback_hours)
+        since = datetime.now(UTC) - timedelta(hours=self.trace_lookback_hours)
 
         # Collect from completed jobs
         rows = await client.fetch(
@@ -298,7 +298,7 @@ class AutoDatasetScheduler:
             VALUES ($1, $2, $3)
             ON CONFLICT (trace_id) DO NOTHING
         """
-        now = datetime.now(timezone.utc).isoformat()
+        now = datetime.now(UTC).isoformat()
         rows = [(t["trace_id"], cycle_id, now) for t in traces]
 
         async with client.acquire() as conn:
@@ -350,24 +350,22 @@ class AutoDatasetScheduler:
         self._running = False
         if self._task:
             self._task.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError):
                 await self._task
-            except asyncio.CancelledError:
-                pass
             self._task = None
         logger.info("AutoDatasetScheduler stopped")
 
     async def _schedule_loop(self) -> None:
         """Background loop that runs promotion cycles on schedule."""
         while self._running:
-            cycle_start = datetime.now(timezone.utc)
+            cycle_start = datetime.now(UTC)
             try:
                 await self.run_promotion_cycle()
             except Exception as exc:
                 logger.error(f"Scheduled promotion cycle failed: {exc}")
 
             # Maintain consistent interval regardless of processing time
-            elapsed = (datetime.now(timezone.utc) - cycle_start).total_seconds()
+            elapsed = (datetime.now(UTC) - cycle_start).total_seconds()
             sleep_seconds = max(0, self.interval_hours * 3600 - elapsed)
             jitter = random.uniform(0, 60)  # Up to 60s jitter to avoid thundering herd
             total_sleep = sleep_seconds + jitter
@@ -400,13 +398,13 @@ class AutoDatasetScheduler:
 
     async def get_dataset_growth(
         self,
-        dataset_id: Optional[str] = None,
+        dataset_id: str | None = None,
         days: int = 30,
     ) -> list[dict[str, Any]]:
         """Get dataset growth metrics over time."""
         client = await self._get_postgres()
         target = dataset_id or self.target_dataset_id
-        since = datetime.now(timezone.utc) - timedelta(days=days)
+        since = datetime.now(UTC) - timedelta(days=days)
 
         rows = await client.fetch(
             """

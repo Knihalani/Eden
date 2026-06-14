@@ -23,14 +23,10 @@ import json
 import logging
 import os
 import shutil
-import sys
-import tarfile
-import tempfile
 import time
-import zipfile
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Optional, Protocol
+from typing import Any, Protocol, cast
 
 logger = logging.getLogger("eden.sim_runner")
 
@@ -94,7 +90,7 @@ class SimRunResult:
 # ── Adapter Protocol ─────────────────────────────────────────────
 
 
-def _seed_env(eval_yaml: Optional[dict]) -> Optional[dict]:
+def _seed_env(eval_yaml: dict | None) -> dict | None:
     """Return a child-process env dict carrying ``EDEN_SEED`` if
     the spec carries a non-negative integer ``seed:`` field.
 
@@ -195,7 +191,7 @@ class SubprocessSimAdapter:
                 stdout, stderr = await asyncio.wait_for(
                     proc.communicate(), timeout=self.pip_timeout_s
                 )
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 proc.kill()
                 return f"pip install timed out after {self.pip_timeout_s}s"
             if proc.returncode != 0:
@@ -209,10 +205,11 @@ class SubprocessSimAdapter:
 
     async def _run_pytest(
         self, upload_path: Path, venv_python: str,
-        subprocess_env: Optional[dict] = None,
-    ) -> tuple[int, str, str]:
+        subprocess_env: dict | None = None,
+    ) -> tuple[int, bytes, bytes]:
         """Run ``pytest`` in the upload directory. Returns
-        ``(returncode, stdout, stderr)``.
+        ``(returncode, stdout, stderr)`` as ``bytes`` so callers can
+        decode with the encoding they want.
 
         ``subprocess_env`` is forwarded to the child process so
         the visual builder's ``seed:`` field (delivered as the
@@ -231,11 +228,9 @@ class SubprocessSimAdapter:
                 stdout, stderr = await asyncio.wait_for(
                     proc.communicate(), timeout=self.episode_timeout_s * 6
                 )
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 proc.kill()
-                return (-1, b"", b"pytest timed out").__class__((  # noqa
-                    -1, b"", b"pytest timed out"
-                ))
+                return -1, b"", b"pytest timed out"
             return proc.returncode, stdout, stderr
         except Exception as exc:  # noqa: BLE001
             return -1, b"", str(exc).encode()
@@ -245,7 +240,7 @@ class SubprocessSimAdapter:
         upload_path: Path,
         venv_python: str,
         scenario: dict,
-        subprocess_env: Optional[dict] = None,
+        subprocess_env: dict | None = None,
     ) -> ScenarioRunResult:
         """Run a single scenario: import the env class, run episodes.
 
@@ -256,7 +251,7 @@ class SubprocessSimAdapter:
         before any user-level randomness runs.
         """
         sid = scenario.get("id", "unknown")
-        env_class = scenario.get("env_class_name", "SimEnv")
+        scenario.get("env_class_name", "SimEnv")
         result = ScenarioRunResult(scenario_id=sid, status="error")
         try:
             # Write a small driver script that imports + runs the
@@ -283,7 +278,7 @@ class SubprocessSimAdapter:
                 stdout, stderr = await asyncio.wait_for(
                     proc.communicate(), timeout=self.episode_timeout_s
                 )
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 proc.kill()
                 result.status = "error"
                 result.error = f"timed out after {self.episode_timeout_s}s"
@@ -507,7 +502,7 @@ class FirecrackerSimAdapter:
 
 
 def select_adapter(
-    preferred: Optional[str] = None,
+    preferred: str | None = None,
 ) -> SimExecutionAdapter:
     """Return the best available adapter.
 
@@ -613,5 +608,5 @@ class LocalProviderSimAdapter:
             duration_ms=result.duration_ms,
             provider=result.provider,
             stderr=result.stderr,
-            error=None if result.success else "probe returned non-zero",
+            error=(None if result.success else "probe returned non-zero"),
         )

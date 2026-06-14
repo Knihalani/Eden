@@ -13,9 +13,9 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Any, Optional
+from typing import Any
 
-from fastapi import Depends, APIRouter, HTTPException, Query, Body, Path
+from fastapi import APIRouter, Body, Depends, HTTPException, Path, Query
 from pydantic import BaseModel, Field
 
 from eden.api.deps import get_current_user
@@ -38,18 +38,18 @@ class TelemetryEventIngest(BaseModel):
     realm: str = Field(..., pattern="^(environment|production)$")
     event_type: str
     timestamp: str
-    agent_id: Optional[str] = None
-    agent_version: Optional[str] = None
-    environment_id: Optional[str] = None
-    parent_span_id: Optional[str] = None
-    span_id: Optional[str] = None
-    name: Optional[str] = None
-    duration_ms: Optional[float] = None
+    agent_id: str | None = None
+    agent_version: str | None = None
+    environment_id: str | None = None
+    parent_span_id: str | None = None
+    span_id: str | None = None
+    name: str | None = None
+    duration_ms: float | None = None
     payload: dict[str, Any] = Field(default_factory=dict)
     metrics: dict[str, float] = Field(default_factory=dict)
     attributes: dict[str, str] = Field(default_factory=dict)
     tags: list[str] = Field(default_factory=list)
-    outcome: Optional[str] = None
+    outcome: str | None = None
 
 
 class TelemetryBatchIngest(BaseModel):
@@ -70,7 +70,7 @@ class TraceTreeResponse(BaseModel):
     root_spans: list[dict[str, Any]]
     total_duration_ms: float
     span_count: int
-    outcome: Optional[str] = None
+    outcome: str | None = None
 
 
 class HeatmapResponse(BaseModel):
@@ -115,9 +115,9 @@ class ComparativeResponse(BaseModel):
 class TraceListItem(BaseModel):
     trace_id: str
     realm: str
-    agent_id: Optional[str] = None
-    started_at: Optional[str] = None
-    outcome: Optional[str] = None
+    agent_id: str | None = None
+    started_at: str | None = None
+    outcome: str | None = None
     span_count: int = 0
     duration_ms: float = 0.0
 
@@ -127,6 +127,34 @@ class TraceListResponse(BaseModel):
     total: int
     limit: int
     offset: int
+
+
+# ── Observability summary (Phase 2: deeper fingerprint) ─────────
+
+
+class ObservabilitySummary(BaseModel):
+    """Aggregated observability surface for the AgentProfile's behavioral
+    fingerprint. Consumed by the Eden Agent CLI's AgentProfileProvider
+    and rendered into every EdenCoder system prompt.
+
+    Phase 2: extends the legacy summary shape with ``top_tools``
+    (per-tool call counts) and ``hot_paths`` (per-span-kind counts)
+    so the CLI's behavioral fingerprint is more than a failure-mode
+    list — it tells the LLM *what the agent actually does most* and
+    *where it spends its time*, not just where it fails.
+    """
+
+    window_hours: int = 24
+    total_traces: int = 0
+    error_rate: float = 0.0
+    p50_latency_ms: float = 0.0
+    p95_latency_ms: float = 0.0
+    p99_latency_ms: float = 0.0
+    total_cost_usd: float = 0.0
+    top_failure_modes: list[dict] = Field(default_factory=list)
+    top_tools: list[dict] = Field(default_factory=list)
+    hot_paths: list[dict] = Field(default_factory=list)
+    model_breakdown: list[dict] = Field(default_factory=list)
 
 
 class ExportFormatRequest(BaseModel):
@@ -193,7 +221,7 @@ async def ingest_telemetry_event(
         raise
     except Exception as exc:
         logger.warning(f"Telemetry ingest failed for org {org_id}: {exc}")
-        raise HTTPException(status_code=500, detail="Telemetry ingestion failed")
+        raise HTTPException(status_code=500, detail="Telemetry ingestion failed") from exc
 
 
 @router.post("/telemetry/ingest/batch", response_model=TelemetryIngestResponse)
@@ -212,15 +240,15 @@ async def ingest_telemetry_batch(
         raise
     except Exception as exc:
         logger.warning(f"Telemetry batch ingest failed for org {org_id}: {exc}")
-        raise HTTPException(status_code=500, detail="Batch telemetry ingestion failed")
+        raise HTTPException(status_code=500, detail="Batch telemetry ingestion failed") from exc
 
 
 @router.get("/traces", response_model=TraceListResponse)
 async def list_traces(
     org_id: str = Path(..., description="Organization ID"),
-    realm: Optional[str] = Query(None, pattern="^(environment|production)$"),
-    outcome: Optional[str] = Query(None),
-    agent_id: Optional[str] = Query(None),
+    realm: str | None = Query(None, pattern="^(environment|production)$"),
+    outcome: str | None = Query(None),
+    agent_id: str | None = Query(None),
     limit: int = Query(50, ge=1, le=500),
     offset: int = Query(0, ge=0),
     days: int = Query(7, ge=1, le=90),
@@ -234,6 +262,164 @@ async def list_traces(
         total=0,
         limit=limit,
         offset=offset,
+    )
+
+
+@router.get("/summary", response_model=ObservabilitySummary)
+async def observability_summary(
+    org_id: str = Path(..., description="Organization ID"),
+    window_hours: int = Query(24, ge=1, le=720),
+    agent_id: str | None = Query(None, description="Scope to one agent"),
+    user: dict = Depends(get_current_user),
+) -> ObservabilitySummary:
+    """Aggregated observability surface for the AgentProfile's
+    behavioral fingerprint.
+
+    Phase 2: the deeper fields (``top_tools``, ``hot_paths``) let
+    the Eden Agent CLI's AgentProfileProvider describe the agent's
+    actual behavior, not just its failure modes. The CLI consumes
+    this via the existing ``GET /v1/orgs/{org}/observability/summary``
+    endpoint.
+
+    When the telemetry store is unreachable, returns an empty summary
+    so the CLI degrades cleanly. When the store is reachable but
+    empty (no events yet), returns a summary with zero counts.
+    """
+    from eden.storage.postgres import get_postgres_client
+
+    client = await get_postgres_client()
+    if client is None:
+        return ObservabilitySummary(window_hours=window_hours)
+
+    # Build the WHERE clause once, reused across aggregation queries.
+    where = "tenant_id = $1 AND timestamp >= NOW() - ($2 || ' hours')::interval"
+    params: list = [org_id, str(window_hours)]
+    if agent_id:
+        where += f" AND agent_id = ${len(params) + 1}"
+        params.append(agent_id)
+
+    # Total + error count + per-latency percentiles (via Postgres's
+    # percentile_cont aggregate). For now we use a coarse
+    # approximation: count + error_count + a few percentile buckets
+    # drawn from the latency_ms field on telemetry_events.
+    total_row = await client.fetchrow(
+        f"""
+        SELECT count(*)::int AS total,
+               count(*) FILTER (WHERE error IS NOT NULL)::int AS errors
+        FROM telemetry_events
+        WHERE {where}
+        """,
+        *params,
+    )
+    total = int(total_row["total"] or 0) if total_row else 0
+    errors = int(total_row["errors"] or 0) if total_row else 0
+    error_rate = (errors / total) if total else 0.0
+
+    # Latency percentiles — Postgres percentile_cont on duration_ms.
+    # If the column is missing on some events, NULL is filtered.
+    lat_row = await client.fetchrow(
+        f"""
+        SELECT percentile_cont(0.5) WITHIN GROUP (ORDER BY duration_ms)
+                   FILTER (WHERE duration_ms IS NOT NULL) AS p50,
+               percentile_cont(0.95) WITHIN GROUP (ORDER BY duration_ms)
+                   FILTER (WHERE duration_ms IS NOT NULL) AS p95,
+               percentile_cont(0.99) WITHIN GROUP (ORDER BY duration_ms)
+                   FILTER (WHERE duration_ms IS NOT NULL) AS p99,
+               coalesce(sum(cost_usd), 0)::float AS cost
+        FROM telemetry_events
+        WHERE {where}
+        """,
+        *params,
+    )
+
+    # Top failure modes: group by error.type or event_type (when
+    # error is present), count, and pull a sample of trace_ids.
+    top_failure_modes = await client.fetch(
+        f"""
+        SELECT
+            coalesce(error->>'type', error->>'category', event_type) AS name,
+            count(*)::int AS count,
+            array_agg(DISTINCT trace_id) FILTER (WHERE trace_id IS NOT NULL)
+                AS sample_trace_ids
+        FROM telemetry_events
+        WHERE {where} AND error IS NOT NULL
+        GROUP BY 1
+        ORDER BY count DESC
+        LIMIT 10
+        """,
+        *params,
+    )
+
+    # Top tools: group by tool_name (extracted from payload), count.
+    # The schema varies per source_format; we read ``payload->>'tool_name'``
+    # which is the common case (Anthropic + OpenAI tool calls).
+    top_tools = await client.fetch(
+        f"""
+        SELECT
+            coalesce(
+                payload->>'tool_name',
+                attributes->>'tool.name',
+                event_type
+            ) AS name,
+            count(*)::int AS count
+        FROM telemetry_events
+        WHERE {where} AND event_type IN ('tool_call', 'tool_result')
+        GROUP BY 1
+        ORDER BY count DESC
+        LIMIT 10
+        """,
+        *params,
+    )
+
+    # Hot paths: per-span-kind / event_type counts. This is the
+    # behavioral-fingerprint version of "what does the agent actually
+    # do most in a 24h window". Read directly from telemetry_events
+    # event_type.
+    hot_paths = await client.fetch(
+        f"""
+        SELECT event_type AS name,
+               count(*)::int AS count,
+               round(avg(duration_ms) FILTER (WHERE duration_ms IS NOT NULL)::numeric, 2)::float
+                   AS avg_duration_ms
+        FROM telemetry_events
+        WHERE {where}
+        GROUP BY 1
+        ORDER BY count DESC
+        LIMIT 10
+        """,
+        *params,
+    )
+
+    # Model breakdown: per-model call counts + cost (when cost_usd
+    # is recorded). Useful for cost-allocation + per-model sim
+    # generation.
+    model_breakdown = await client.fetch(
+        f"""
+        SELECT
+            coalesce(attributes->>'model', payload->>'model') AS model,
+            count(*)::int AS calls,
+            coalesce(sum(cost_usd), 0)::float AS cost_usd
+        FROM telemetry_events
+        WHERE {where} AND event_type = 'llm_call'
+        GROUP BY 1
+        ORDER BY cost_usd DESC NULLS LAST
+        LIMIT 10
+        """,
+        *params,
+    )
+
+    return ObservabilitySummary(
+        window_hours=window_hours,
+        total_traces=total,
+        error_rate=error_rate,
+        p50_latency_ms=float(lat_row["p50"] or 0.0) if lat_row else 0.0,
+        p95_latency_ms=float(lat_row["p95"] or 0.0) if lat_row else 0.0,
+        p99_latency_ms=float(lat_row["p99"] or 0.0) if lat_row else 0.0,
+        total_cost_usd=float(lat_row["cost"] or 0.0) if lat_row else 0.0,
+        top_failure_modes=[dict(r) for r in top_failure_modes],
+        top_tools=[dict(r) for r in top_tools],
+        hot_paths=[dict(r) for r in hot_paths],
+        model_breakdown=[dict(r) for r in model_breakdown],
     )
 
 
@@ -353,7 +539,7 @@ async def export_trace_route(
     fmt = body.format_type
     if fmt == "jsonl":
         lines = []
-        for span_id, span in tree.span_map.items():
+        for _span_id, span in tree.span_map.items():
             lines.append(json.dumps(span, default=str))
         data = "\n".join(lines)
     elif fmt == "csv":
@@ -362,7 +548,7 @@ async def export_trace_route(
         buf = io.StringIO()
         writer = csv.writer(buf)
         writer.writerow(["span_id", "parent_span_id", "name", "event_type", "duration_ms", "outcome"])
-        for span_id, span in tree.span_map.items():
+        for _span_id, span in tree.span_map.items():
             writer.writerow([
                 span.get("span_id", ""),
                 span.get("parent_span_id", ""),

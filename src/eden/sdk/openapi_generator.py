@@ -10,10 +10,9 @@ from __future__ import annotations
 
 import json
 import logging
-import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 logger = logging.getLogger(__name__)
 
@@ -64,7 +63,7 @@ class OpenAPIGenerator:
 
     def load_spec_from_file(self, path: str | Path) -> dict[str, Any]:
         """Load an OpenAPI spec from a local JSON file."""
-        with open(path, "r", encoding="utf-8") as f:
+        with open(path, encoding="utf-8") as f:
             self._spec = json.load(f)
         return self._spec
 
@@ -226,7 +225,7 @@ class OpenAPIGenerator:
         """Convert a JSON schema fragment to a TypeScript type string."""
         if "$ref" in schema:
             ref_name = schema["$ref"].split("/")[-1]
-            return ref_name
+            return cast(str, ref_name)
 
         schema_type = schema.get("type")
         if schema_type == "object":

@@ -80,8 +80,8 @@ export function ChatView({
         <div className="flex-1 overflow-y-auto px-6 py-6 space-y-6">
           {messages.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-full text-center">
-              <h2 className="text-lg font-medium text-gray-900 mb-2">What would you like to build?</h2>
-              <p className="text-sm text-gray-500 max-w-sm">
+              <h2 className="text-lg font-medium text-[var(--text-primary)] mb-2">What would you like to build?</h2>
+              <p className="text-sm text-[var(--text-muted)] max-w-sm">
                 Describe the environment you want to build and watch as Eden generates the code in real-time.
               </p>
             </div>
@@ -107,12 +107,12 @@ export function ChatView({
 
       {/* File panel */}
       {filePanelOpen && (
-        <div className="w-80 bg-[var(--surface)] border-l border-[var(--border)] flex flex-col">
-          <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
-            <h2 className="text-sm font-semibold text-gray-900">Files</h2>
+        <div className="w-80 bg-[var(--bg-primary)] border-l border-[var(--border)] flex flex-col">
+          <div className="px-4 py-3 border-b border-[var(--border-subtle)] flex items-center justify-between">
+            <h2 className="text-sm font-semibold text-[var(--text-primary)]">Files</h2>
             <button
               onClick={() => setFilePanelOpen(false)}
-              className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+              className="p-1.5 text-[var(--text-muted)] hover:text-[var(--text-secondary)] hover:bg-[var(--bg-tertiary)] rounded-lg transition-colors"
             >
               <ChevronRight className="w-4 h-4" />
             </button>
@@ -122,12 +122,12 @@ export function ChatView({
               <FileTree files={files} onFileSelect={handleFileSelect} />
             ) : (
               <div className="flex flex-col items-center justify-center h-full px-4 text-center">
-                <div className="w-12 h-12 bg-gray-50 rounded-xl flex items-center justify-center mb-3">
-                  <svg className="w-6 h-6 text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                <div className="w-12 h-12 bg-[var(--bg-secondary)] rounded-xl flex items-center justify-center mb-3">
+                  <svg className="w-6 h-6 text-[var(--text-muted)]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
                     <path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
                   </svg>
                 </div>
-                <p className="text-xs text-gray-500">
+                <p className="text-xs text-[var(--text-muted)]">
                   Files will appear here once created
                 </p>
               </div>
@@ -140,9 +140,9 @@ export function ChatView({
       {!filePanelOpen && (
         <button
           onClick={() => setFilePanelOpen(true)}
-          className="absolute right-4 top-1/2 -translate-y-1/2 w-8 h-16 bg-white border border-gray-200 rounded-l-lg flex items-center justify-center shadow-md hover:bg-gray-50 transition-colors"
+          className="absolute right-4 top-1/2 -translate-y-1/2 w-8 h-16 bg-[var(--bg-primary)] border border-[var(--border-default)] rounded-l-lg flex items-center justify-center shadow-md hover:bg-[var(--bg-secondary)] transition-colors"
         >
-          <ChevronLeft className="w-4 h-4 text-gray-500" />
+          <ChevronLeft className="w-4 h-4 text-[var(--text-muted)]" />
         </button>
       )}
     </div>

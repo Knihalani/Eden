@@ -34,7 +34,7 @@ export function DeleteOrgDialog({ orgId, orgName, onDeleted }: DeleteOrgDialogPr
     return (
       <button
         onClick={() => setOpen(true)}
-        className="px-3 py-1.5 text-sm border border-red-200 text-red-600 rounded-lg hover:bg-red-50 flex items-center gap-1.5"
+        className="px-3 py-1.5 text-sm border border-[var(--error)] text-[var(--error)] rounded-lg hover:bg-[var(--error-dim)] flex items-center gap-1.5"
       >
         <Trash2 className="w-4 h-4" />
         Delete
@@ -43,13 +43,13 @@ export function DeleteOrgDialog({ orgId, orgName, onDeleted }: DeleteOrgDialogPr
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-      <div className="bg-white rounded-xl shadow-xl max-w-md w-full mx-4 p-6">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-[var(--bg-base)]/50">
+      <div className="bg-[var(--bg-primary)] rounded-xl shadow-xl max-w-md w-full mx-4 p-6">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-semibold">Permanently Delete Organization</h2>
           <button
             onClick={() => setOpen(false)}
-            className="p-1 hover:bg-stone-100 rounded-lg"
+            className="p-1 hover:bg-[var(--bg-tertiary)] rounded-lg"
           >
             <X className="w-5 h-5" />
           </button>
@@ -59,14 +59,14 @@ export function DeleteOrgDialog({ orgId, orgName, onDeleted }: DeleteOrgDialogPr
           This action cannot be undone.
         </p>
         {error && (
-          <div className="text-red-500 text-sm p-2 bg-red-50 rounded mb-4">
+          <div className="text-[var(--error)] text-sm p-2 bg-[var(--error-dim)] rounded mb-4">
             {error}
           </div>
         )}
         <div className="flex gap-3 justify-end">
           <button
             onClick={() => setOpen(false)}
-            className="px-4 py-2 text-sm border border-[var(--border)] rounded-lg hover:bg-stone-100"
+            className="px-4 py-2 text-sm border border-[var(--border)] rounded-lg hover:bg-[var(--bg-tertiary)]"
           >
             Cancel
           </button>
@@ -74,7 +74,7 @@ export function DeleteOrgDialog({ orgId, orgName, onDeleted }: DeleteOrgDialogPr
             onClick={handleDelete}
             disabled={loading}
             className={cn(
-              "px-4 py-2 text-sm text-white bg-red-600 rounded-lg hover:bg-red-700 flex items-center gap-2",
+              "px-4 py-2 text-sm text-[var(--bg-primary)] bg-[var(--error)] rounded-lg hover:bg-[var(--error)] flex items-center gap-2",
               loading && "opacity-50"
             )}
           >

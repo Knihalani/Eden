@@ -10,13 +10,13 @@ from __future__ import annotations
 
 import logging
 import uuid
-from datetime import datetime, timezone
-from typing import Any, Optional
+from datetime import UTC, datetime
+from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Path
+from fastapi import APIRouter, Body, Cookie, Header, HTTPException, Path
 from pydantic import BaseModel, Field
 
-from eden.api.deps import get_current_user
+from eden.api.deps import require_org_permission
 from eden.storage.postgres import get_postgres_client
 
 logger = logging.getLogger(__name__)
@@ -27,8 +27,8 @@ router = APIRouter(prefix="/orgs/{org_id}/prompts", tags=["prompts"])
 class CanaryCreateRequest(BaseModel):
     candidate_version: int
     traffic_pct: int = Field(..., ge=0, le=100)
-    expires_at: Optional[str] = None  # ISO 8601
-    notes: Optional[str] = None
+    expires_at: str | None = None  # ISO 8601
+    notes: str | None = None
 
 
 class CanaryPromoteRequest(BaseModel):
@@ -39,8 +39,9 @@ class CanaryPromoteRequest(BaseModel):
 async def create_canary(
     org_id: str,
     agent: str = Path(..., description="Agent name, e.g. 'planner'"),
-    body: CanaryCreateRequest = ...,
-    user: dict = Depends(get_current_user),
+    body: CanaryCreateRequest = Body(...),
+    x_org_id: str | None = Header(None, alias="X-Org-Id"),
+    authorization: str | None = Cookie(None),
 ) -> dict[str, Any]:
     """Start a canary experiment for ``agent`` at the given traffic %.
 
@@ -49,6 +50,15 @@ async def create_canary(
     of the agent (the "control") continues to handle the remaining
     ``100 - traffic_pct`` percent of calls.
     """
+    # Tenant + role guard: only members of ``org_id`` with
+    # ``prompts:write`` (owner/admin) may create canaries. The previous
+    # implementation used ``get_current_user`` which checked only that
+    # the caller had *any* valid JWT, so a user in org A could create
+    # canaries in org B by editing the URL.
+    await require_org_permission(
+        "prompts:write", org_id,
+        x_org_id=x_org_id, authorization=authorization,
+    )
     client = await get_postgres_client()
     if not client:
         raise HTTPException(status_code=503, detail="Database unavailable")
@@ -91,7 +101,7 @@ async def create_canary(
         )
     except Exception as exc:
         logger.warning(f"canary create failed: {exc}")
-        raise HTTPException(status_code=500, detail=str(exc))
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
 
     return {
         "experiment_id": experiment_id,
@@ -107,9 +117,18 @@ async def create_canary(
 async def list_canaries(
     org_id: str,
     agent: str = Path(...),
-    user: dict = Depends(get_current_user),
+    x_org_id: str | None = Header(None, alias="X-Org-Id"),
+    authorization: str | None = Cookie(None),
 ) -> list[dict[str, Any]]:
     """List active canary experiments for the agent."""
+    # Read operation — ``prompts:read`` (owner/admin/member) so
+    # ``member`` role can monitor traffic splits without being
+    # able to mutate them. The create / promote / rollback
+    # routes still require ``prompts:write`` (owner/admin only).
+    await require_org_permission(
+        "prompts:read", org_id,
+        x_org_id=x_org_id, authorization=authorization,
+    )
     client = await get_postgres_client()
     if not client:
         raise HTTPException(status_code=503, detail="Database unavailable")
@@ -133,13 +152,19 @@ async def promote_canary(
     org_id: str,
     agent: str = Path(...),
     experiment_id: str = Path(...),
-    user: dict = Depends(get_current_user),
+    x_org_id: str | None = Header(None, alias="X-Org-Id"),
+    authorization: str | None = Cookie(None),
 ) -> dict[str, Any]:
     """Promote the canary candidate to 100% traffic.
 
     Sets the candidate's assignment traffic_pct to 100, ends the
     experiment, and audit-logs the action.
     """
+    # Same tenant-isolation fix as create_canary above.
+    user = await require_org_permission(
+        "prompts:write", org_id,
+        x_org_id=x_org_id, authorization=authorization,
+    )
     client = await get_postgres_client()
     if not client:
         raise HTTPException(status_code=503, detail="Database unavailable")
@@ -155,7 +180,7 @@ async def promote_canary(
         if not row:
             raise HTTPException(status_code=404, detail="Experiment not found")
         candidate_version = row["candidate_version"]
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         # Set the candidate to 100
         await client.execute(
             """
@@ -195,7 +220,7 @@ async def promote_canary(
         raise
     except Exception as exc:
         logger.warning(f"canary promote failed: {exc}")
-        raise HTTPException(status_code=500, detail=str(exc))
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
 
     # Audit log
     try:
@@ -225,14 +250,20 @@ async def rollback_canary(
     org_id: str,
     agent: str = Path(...),
     experiment_id: str = Path(...),
-    user: dict = Depends(get_current_user),
+    x_org_id: str | None = Header(None, alias="X-Org-Id"),
+    authorization: str | None = Cookie(None),
 ) -> dict[str, Any]:
     """Roll back the canary. The tenant's calls fall back to the
     global active version for this agent."""
+    # Same tenant-isolation fix as create_canary above.
+    user = await require_org_permission(
+        "prompts:write", org_id,
+        x_org_id=x_org_id, authorization=authorization,
+    )
     client = await get_postgres_client()
     if not client:
         raise HTTPException(status_code=503, detail="Database unavailable")
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     try:
         await client.execute(
             """
@@ -252,7 +283,7 @@ async def rollback_canary(
         )
     except Exception as exc:
         logger.warning(f"canary rollback failed: {exc}")
-        raise HTTPException(status_code=500, detail=str(exc))
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
 
     try:
         from eden.api.deps import log_audit_event

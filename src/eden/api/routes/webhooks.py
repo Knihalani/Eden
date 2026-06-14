@@ -7,19 +7,16 @@ WebhookDeliveryService.
 
 import logging
 import secrets
-from datetime import datetime, timezone
-from typing import Optional
+from datetime import UTC, datetime
 from uuid import uuid4
 
-from fastapi import APIRouter, HTTPException, status, Header
-from pydantic import BaseModel, Field, HttpUrl
+from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel, Field
 
-from fastapi import Depends
-
-from eden.api.deps import get_current_user, require_org_admin, get_current_org
-from eden.api.schemas.envelope import APIEnvelope, PaginatedAPIEnvelope
+from eden.api.deps import get_current_org, get_current_user, require_org_admin
 from eden.api.middleware.api_version import CURRENT_VERSION
 from eden.api.middleware.correlation_id import get_correlation_id
+from eden.api.schemas.envelope import APIEnvelope, PaginatedAPIEnvelope
 from eden.storage.postgres import get_postgres_client
 
 logger = logging.getLogger(__name__)
@@ -45,7 +42,7 @@ class WebhookCreateRequest(BaseModel):
     """Request schema for creating a webhook."""
 
     url: str = Field(..., description="HTTPS URL to deliver events to")
-    description: Optional[str] = Field(None, description="Human-readable description")
+    description: str | None = Field(None, description="Human-readable description")
     events: list[str] = Field(..., description="Event types to subscribe to")
     active: bool = Field(True, description="Whether the webhook is active")
 
@@ -53,10 +50,10 @@ class WebhookCreateRequest(BaseModel):
 class WebhookUpdateRequest(BaseModel):
     """Request schema for updating a webhook."""
 
-    url: Optional[str] = Field(None, description="HTTPS URL to deliver events to")
-    description: Optional[str] = Field(None, description="Human-readable description")
-    events: Optional[list[str]] = Field(None, description="Event types to subscribe to")
-    active: Optional[bool] = Field(None, description="Whether the webhook is active")
+    url: str | None = Field(None, description="HTTPS URL to deliver events to")
+    description: str | None = Field(None, description="Human-readable description")
+    events: list[str] | None = Field(None, description="Event types to subscribe to")
+    active: bool | None = Field(None, description="Whether the webhook is active")
 
 
 class WebhookResponse(BaseModel):
@@ -65,7 +62,7 @@ class WebhookResponse(BaseModel):
     id: str
     org_id: str
     url: str
-    description: Optional[str]
+    description: str | None
     events: list[str]
     active: bool
     created_at: str
@@ -76,9 +73,9 @@ class WebhookTestResponse(BaseModel):
     """Response schema for webhook test."""
 
     success: bool
-    http_status: Optional[int]
-    response_body: Optional[str]
-    error: Optional[str]
+    http_status: int | None
+    response_body: str | None
+    error: str | None
 
 
 # ---------------------------------------------------------------------------
@@ -137,7 +134,7 @@ async def create_webhook(
     client = await get_postgres_client()
     webhook_id = str(uuid4())
     secret = secrets.token_hex(32)
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(UTC).isoformat()
 
     await client.execute(
         """
@@ -320,7 +317,7 @@ async def update_webhook(
         )
 
     updates.append(f"updated_at = ${param_idx}")
-    params.append(datetime.now(timezone.utc).isoformat())
+    params.append(datetime.now(UTC).isoformat())
 
     client = await get_postgres_client()
     await client.execute(

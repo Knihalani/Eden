@@ -7,14 +7,15 @@ from __future__ import annotations
 
 import json
 import logging
-from dataclasses import dataclass, field
 from collections import Counter, defaultdict
-from datetime import datetime, timezone
+from collections.abc import Callable
+from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from enum import Enum
-from typing import Any, Callable, Optional
+from typing import Any
 from uuid import uuid4
 
-from eden.insights.unified_trace_model import UnifiedTrace, Outcome, Realm
+from eden.insights.unified_trace_model import Outcome, Realm, UnifiedTrace
 
 logger = logging.getLogger(__name__)
 
@@ -41,12 +42,12 @@ class DatasetRule:
     name: str
     description: str = ""
     # Filters
-    realm: Optional[Realm] = None
-    outcome: Optional[Outcome] = None
+    realm: Realm | None = None
+    outcome: Outcome | None = None
     min_confidence: float = 0.0
     tags_include: list[str] = field(default_factory=list)
     tags_exclude: list[str] = field(default_factory=list)
-    custom_filter: Optional[Callable[[UnifiedTrace], bool]] = None
+    custom_filter: Callable[[UnifiedTrace], bool] | None = None
     # Extraction
     extract_input: str = ""
     extract_expected: str = ""
@@ -68,9 +69,7 @@ class DatasetRule:
             return False
         if self.tags_exclude and any(t in trace_tags for t in self.tags_exclude):
             return False
-        if self.custom_filter and not self.custom_filter(trace):
-            return False
-        return True
+        return not (self.custom_filter and not self.custom_filter(trace))
 
 
 @dataclass
@@ -113,8 +112,8 @@ class Dataset:
     version: str
     tenant_id: str
     project_id: str = "default"
-    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
-    updated_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
+    updated_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     entry_count: int = 0
     tags: list[str] = field(default_factory=list)
     metadata: dict[str, Any] = field(default_factory=dict)
@@ -202,7 +201,7 @@ class DatasetGenerationEngine:
         ),
     ]
 
-    def __init__(self, rules: Optional[list[DatasetRule]] = None):
+    def __init__(self, rules: list[DatasetRule] | None = None):
         self.rules = rules or list(self.DEFAULT_RULES)
         # In-memory stores — production would use PostgreSQL + S3
         self._datasets: dict[str, Dataset] = {}
@@ -263,7 +262,7 @@ class DatasetGenerationEngine:
                 results[entry.dataset_id].append(entry)
         return dict(results)
 
-    def _create_entry(self, trace: UnifiedTrace, rule: DatasetRule) -> Optional[DatasetEntry]:
+    def _create_entry(self, trace: UnifiedTrace, rule: DatasetRule) -> DatasetEntry | None:
         """Extract data from trace according to rule."""
         try:
             dataset_id = f"ds_{rule.dataset_name}_{trace.tenant_id}"[:64]
@@ -285,7 +284,7 @@ class DatasetGenerationEngine:
                 entry_id=f"entry_{str(uuid4())[:16]}",
                 source_trace_id=trace.trace_id,
                 source_realm=trace.realm.value,
-                extracted_at=datetime.now(timezone.utc),
+                extracted_at=datetime.now(UTC),
                 extract_rule=rule.name,
                 dataset_id=dataset_id,
                 input_data=input_data,
@@ -379,14 +378,14 @@ class DatasetGenerationEngine:
 
         self._entries[dataset_id].append(entry)
         self._datasets[dataset_id].entry_count = len(self._entries[dataset_id])
-        self._datasets[dataset_id].updated_at = datetime.now(timezone.utc)
+        self._datasets[dataset_id].updated_at = datetime.now(UTC)
 
     def _generate_version(self) -> str:
         """Generate a version string."""
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         return f"{now.strftime('%Y.%m.%d-%H%M%S')}"
 
-    def get_dataset(self, dataset_id: str) -> Optional[Dataset]:
+    def get_dataset(self, dataset_id: str) -> Dataset | None:
         return self._datasets.get(dataset_id)
 
     def list_datasets(self, tenant_id: str) -> list[Dataset]:
@@ -400,7 +399,7 @@ class DatasetGenerationEngine:
         self,
         dataset_id: str,
         format_type: str = "jsonl",
-        split_ratio: Optional[tuple[float, float]] = None,
+        split_ratio: tuple[float, float] | None = None,
     ) -> dict[str, Any]:
         """Export a dataset to a portable format."""
         dataset = self._datasets.get(dataset_id)
@@ -408,7 +407,7 @@ class DatasetGenerationEngine:
             raise ValueError(f"Dataset not found: {dataset_id}")
 
         entries = self._entries.get(dataset_id, [])
-        data = [e.to_dict() for e in entries]
+        data: list[dict[str, Any]] = [e.to_dict() for e in entries]
 
         result = {
             "dataset_id": dataset_id,

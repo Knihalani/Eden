@@ -32,11 +32,11 @@ export interface RunHistoryProps {
 }
 
 const STATUS_COLOR: Record<string, string> = {
-  passed: "text-emerald-400",
-  failed: "text-amber-400",
-  error: "text-red-400",
-  pending: "text-zinc-400",
-  running: "text-sky-400",
+  passed: "text-[var(--terminal)]",
+  failed: "text-[var(--warning)]",
+  error: "text-[var(--error)]",
+  pending: "text-[var(--text-muted)]",
+  running: "text-[var(--accent)]",
 };
 
 export function RunHistory({

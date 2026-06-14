@@ -15,14 +15,14 @@ Usage:
 from eden.sdk.client import EdenClient
 from eden.sdk.config import EdenConfig
 from eden.sdk.errors import (
-    EdenError,
     AuthenticationError,
-    RateLimitError,
-    ValidationError,
+    EdenError,
     NotFoundError,
     PipelineError,
+    RateLimitError,
     SandboxTimeoutError,
     ServerError,
+    ValidationError,
 )
 from eden.sdk.trace import trace_agent
 

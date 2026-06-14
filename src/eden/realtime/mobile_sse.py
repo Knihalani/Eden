@@ -14,14 +14,15 @@ Usage:
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import logging
-from datetime import datetime, timezone
-from typing import Any, Optional
+from datetime import UTC, datetime
+from typing import Any
 
-from fastapi import APIRouter, Request, Query
-from fastapi.responses import StreamingResponse
+from fastapi import APIRouter, Query, Request
 from fastapi.exceptions import HTTPException
+from fastapi.responses import StreamingResponse
 
 from eden.api.deps import get_current_user
 from eden.storage.postgres import get_postgres_client
@@ -44,9 +45,9 @@ class MobileSSEStream:
         self,
         job_id: str,
         user: dict[str, Any],
-        fields: Optional[list[str]] = None,
+        fields: list[str] | None = None,
         battery_aware: bool = True,
-        resume_after: Optional[str] = None,
+        resume_after: str | None = None,
     ) -> None:
         self.job_id = job_id
         self.user = user
@@ -54,10 +55,10 @@ class MobileSSEStream:
         self.battery_aware = battery_aware
         self._queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue(maxsize=100)
         self._connected = True
-        self._last_event_id: Optional[str] = None
+        self._last_event_id: str | None = None
         # Phase 5.1.6: when set, replay events with id > resume_after
         # from the trace store before yielding live events.
-        self._resume_after: Optional[str] = resume_after
+        self._resume_after: str | None = resume_after
 
     async def emit(self, event: dict[str, Any]) -> None:
         """Emit an event to the stream, filtering fields for mobile."""
@@ -89,7 +90,7 @@ class MobileSSEStream:
 
     def format_sse(self, event: dict[str, Any]) -> str:
         """Format an event as SSE text."""
-        event_id = event.get("event_id", str(int(datetime.now(timezone.utc).timestamp() * 1000)))
+        event_id = event.get("event_id", str(int(datetime.now(UTC).timestamp() * 1000)))
         event_type = event.get("event_type", "message")
         data = json.dumps(event)
 
@@ -113,7 +114,7 @@ class MobileSSEStream:
                 "job_id": self.job_id,
                 "fields": self.fields,
                 "battery_aware": self.battery_aware,
-                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "timestamp": datetime.now(UTC).isoformat(),
             },
         })
 
@@ -140,7 +141,7 @@ class MobileSSEStream:
                 # Wait for next event with timeout for keepalive
                 event = await asyncio.wait_for(self._queue.get(), timeout=15.0)
                 yield self.format_sse(event)
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 # Send keepalive comment to prevent proxy timeout
                 yield ":heartbeat\n\n"
             except Exception as exc:
@@ -160,11 +161,11 @@ _mobile_streams: dict[str, set[MobileSSEStream]] = {}
 async def mobile_sse_stream(
     request: Request,
     job_id: str = Query(..., description="Job ID to stream"),
-    fields: Optional[str] = Query(None, description="Comma-separated field list for payload filtering"),
-    battery_level: Optional[int] = Query(None, ge=0, le=100, description="Client battery level (0-100)"),
-    is_charging: Optional[bool] = Query(None, description="Whether device is charging"),
-    last_event_id: Optional[str] = Query(None, description="Last received event ID for resume"),
-):
+    fields: str | None = Query(None, description="Comma-separated field list for payload filtering"),
+    battery_level: int | None = Query(None, ge=0, le=100, description="Client battery level (0-100)"),
+    is_charging: bool | None = Query(None, description="Whether device is charging"),
+    last_event_id: str | None = Query(None, description="Last received event ID for resume"),
+) -> StreamingResponse:
     """Mobile-optimized SSE stream for job progress.
 
     Query Parameters:
@@ -230,10 +231,8 @@ async def mobile_sse_stream(
         if not _mobile_streams[job_id]:
             del _mobile_streams[job_id]
         poll_task.cancel()
-        try:
+        with contextlib.suppress(asyncio.CancelledError):
             await poll_task
-        except asyncio.CancelledError:
-            pass
 
     # Build response headers with reconnect advice
     headers = {
@@ -252,8 +251,8 @@ async def mobile_sse_stream(
 
 
 def _calculate_reconnect_backoff(
-    battery_level: Optional[int],
-    is_charging: Optional[bool],
+    battery_level: int | None,
+    is_charging: bool | None,
 ) -> int:
     """Calculate recommended reconnect backoff in seconds based on battery state.
 
@@ -281,8 +280,8 @@ async def _poll_job_updates(
 ) -> None:
     """Poll job state and emit events to the mobile SSE stream."""
     client = await get_postgres_client()
-    last_stage: Optional[str] = None
-    last_status: Optional[str] = None
+    last_stage: str | None = None
+    last_status: str | None = None
 
     try:
         while stream._connected:
@@ -305,7 +304,7 @@ async def _poll_job_updates(
                             "from": last_stage,
                             "to": current_stage,
                             "job_id": job_id,
-                            "timestamp": datetime.now(timezone.utc).isoformat(),
+                            "timestamp": datetime.now(UTC).isoformat(),
                         },
                     })
                     last_stage = current_stage
@@ -320,7 +319,7 @@ async def _poll_job_updates(
                             "stage": current_stage,
                             "outcome_tier": job.get("outcome_tier"),
                             "job_id": job_id,
-                            "timestamp": datetime.now(timezone.utc).isoformat(),
+                            "timestamp": datetime.now(UTC).isoformat(),
                         },
                     })
                     last_status = current_status
@@ -334,7 +333,7 @@ async def _poll_job_updates(
                             "status": current_status,
                             "outcome_tier": job.get("outcome_tier"),
                             "job_id": job_id,
-                            "timestamp": datetime.now(timezone.utc).isoformat(),
+                            "timestamp": datetime.now(UTC).isoformat(),
                         },
                     })
                     break
@@ -359,7 +358,5 @@ async def broadcast_to_mobile(job_id: str, event: dict[str, Any]) -> None:
         return
 
     for stream in list(_mobile_streams[job_id]):
-        try:
+        with contextlib.suppress(Exception):
             await stream.emit(event)
-        except Exception:
-            pass

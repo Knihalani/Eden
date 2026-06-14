@@ -31,8 +31,9 @@ from __future__ import annotations
 
 import hashlib
 import logging
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from typing import Any, Mapping, Sequence
+from typing import Any
 
 from eden.integrations import INTEGRATION_API_VERSION
 

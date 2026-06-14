@@ -14,8 +14,7 @@ from __future__ import annotations
 import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import Any, Optional
-
+from typing import Any, cast
 
 # ──────────────────────────────────────────────────────────────────────────
 # Core data structures
@@ -152,6 +151,45 @@ class PlanningFramework(ABC):
     def to_dict(self) -> dict[str, Any]:
         return {"framework": self._framework_name, "max_steps": self.max_steps}
 
+    # ── Default no-op hooks (subclasses override) ─────────────────
+    # These exist so subclasses can call them without an ``hasattr``
+    # check; the default is a safe placeholder that the runtime
+    # introspection (``_observe`` / ``_step`` / ``_evaluate_success``)
+    # can use to surface that this particular framework doesn't
+    # implement that lifecycle phase.
+
+    def _observe(self, env_state: Any, agent_id: str) -> dict[str, Any]:
+        """Project ``env_state`` into the observation the agent sees.
+
+        Subclasses override when the observation shape is framework-
+        specific (e.g. ReAct prepends a Thought: prefix to encourage
+        explicit reasoning). The default returns the raw state.
+        """
+        return env_state if isinstance(env_state, dict) else {"state": env_state}
+
+    def _step(
+        self,
+        env_state: Any,
+        action: dict[str, Any],
+        agent_id: str,
+    ) -> tuple[Any, float, bool, dict[str, Any]]:
+        """Apply ``action`` to ``env_state``.
+
+        Returns ``(new_state, reward, done, info)``. The default is a
+        no-op that returns the state unchanged — useful for read-only
+        frameworks like pure CoT that don't transition environment
+        state in the loop.
+        """
+        return env_state, 0.0, False, {}
+
+    def _evaluate_success(self, trajectory: list[dict[str, Any]]) -> bool:
+        """Decide whether the trajectory counts as a success.
+
+        Default is ``False`` (no signal); subclasses override with a
+        framework-specific success criterion.
+        """
+        return False
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Phase 6.8.4: Chain-of-Thought (CoT)
@@ -181,7 +219,7 @@ class ChainOfThoughtEnvironment(PlanningFramework):
         self._framework_name = "chain_of_thought"
         self.thought_chain: list[str] = []
         self.last_thought: str = ""
-        self.completion_action: Optional[dict[str, Any]] = None
+        self.completion_action: dict[str, Any] | None = None
 
     def _format_thought(self, raw: str) -> str:
         """Strip optional ``Action:`` trailer and surface a clean thought.
@@ -191,7 +229,7 @@ class ChainOfThoughtEnvironment(PlanningFramework):
         present we capture it for execution.
         """
         thought = raw
-        action: Optional[dict[str, Any]] = None
+        action: dict[str, Any] | None = None
         if "Action:" in raw:
             thought, _, action_str = raw.partition("Action:")
             action_str = action_str.strip()
@@ -266,7 +304,7 @@ class ChainOfThoughtEnvironment(PlanningFramework):
     def _agent_think(self, agent: Any, observation: dict[str, Any]) -> str:
         """Ask the agent for a single thought. Falls back to a stub."""
         if hasattr(agent, "think"):
-            return agent.think(observation, self.thought_chain)
+            return cast(str, agent.think(observation, self.thought_chain))
         # Stub: produce a no-op thought so the loop terminates gracefully
         return f"Thought #{len(self.thought_chain) + 1}: (no-op)"
 
@@ -329,18 +367,18 @@ class ReActEnvironment(PlanningFramework):
     def _get_observation(self, env_state: Any, agent_id: str) -> dict[str, Any]:
         # Stub: return env state as-is
         if hasattr(env_state, "to_observable"):
-            return env_state.to_observable(agent_id)
+            return cast(dict[str, Any], env_state.to_observable(agent_id))
         return {"state": str(env_state)}
 
     def _react_step(self, agent: Any, observation: dict[str, Any], trajectory: list[dict[str, Any]]) -> tuple[str, dict[str, Any]]:
         if hasattr(agent, "react_step"):
-            return agent.react_step(observation, trajectory)
+            return cast(tuple[str, dict[str, Any]], agent.react_step(observation, trajectory))
         # Stub: agent just echoes observation
         return f"Observed: {observation}", {"type": "noop"}
 
     def _step(self, state: Any, action: dict[str, Any], agent_id: str) -> tuple[Any, float, bool, dict[str, Any]]:
         if hasattr(state, "apply_action"):
-            return state.apply_action(agent_id, action)
+            return cast(tuple[Any, float, bool, dict[str, Any]], state.apply_action(agent_id, action))
         return state, 0.0, False, {}
 
     def _evaluate_success(self, trajectory: list[dict[str, Any]]) -> bool:
@@ -394,7 +432,7 @@ class TreeOfThoughtsEnvironment(PlanningFramework):
 
     def _generate_thoughts(self, agent: Any, node: ThoughtNode, k: int) -> list[str]:
         if hasattr(agent, "generate_thoughts"):
-            return agent.generate_thoughts(node, k=k)
+            return cast(list[str], agent.generate_thoughts(node, k=k))
         # Stub: return k generic thoughts
         return [f"Thought {i+1} at depth {node.depth}" for i in range(k)]
 
@@ -477,7 +515,7 @@ class PlanAndExecuteEnvironment(PlanningFramework):
 
     def _generate_plan(self, planner: Any, env_state: Any) -> list[dict[str, Any]]:
         if hasattr(planner, "generate_plan"):
-            return planner.generate_plan(env_state)
+            return cast(list[dict[str, Any]], planner.generate_plan(env_state))
         # Stub: 5-step generic plan
         return [
             {"step_id": f"s{i}", "description": f"Step {i+1}", "agent_id": "agent_1"}
@@ -486,17 +524,17 @@ class PlanAndExecuteEnvironment(PlanningFramework):
 
     def _execute_step(self, executor: Any, step: dict[str, Any], observation: dict[str, Any]) -> dict[str, Any]:
         if hasattr(executor, "execute_step"):
-            return executor.execute_step(step, observation)
+            return cast(dict[str, Any], executor.execute_step(step, observation))
         return {"type": "execute", "step": step}
 
     def _get_observation(self, env_state: Any, agent_id: str) -> dict[str, Any]:
         if hasattr(env_state, "to_observable"):
-            return env_state.to_observable(agent_id)
+            return cast(dict[str, Any], env_state.to_observable(agent_id))
         return {"state": str(env_state)}
 
     def _step(self, state: Any, action: dict[str, Any], agent_id: str) -> tuple[Any, float, bool, dict[str, Any]]:
         if hasattr(state, "apply_action"):
-            return state.apply_action(agent_id, action)
+            return cast(tuple[Any, float, bool, dict[str, Any]], state.apply_action(agent_id, action))
         return state, 0.0, False, {}
 
     def _evaluate_success(self, trajectory: list[dict[str, Any]]) -> bool:
@@ -522,7 +560,7 @@ class ReflexionEnvironment(PlanningFramework):
         best_result: EpisodeResult | None = None
         all_trajectories = []
 
-        for iteration in range(self.max_iterations):
+        for _iteration in range(self.max_iterations):
             # Run episode
             result = self._run_single_episode(agent, env_state)
             all_trajectories.append(result.trajectory)
@@ -572,22 +610,22 @@ class ReflexionEnvironment(PlanningFramework):
 
     def _get_observation(self, env_state: Any, agent_id: str) -> dict[str, Any]:
         if hasattr(env_state, "to_observable"):
-            return env_state.to_observable(agent_id)
+            return cast(dict[str, Any], env_state.to_observable(agent_id))
         return {"state": str(env_state)}
 
     def _agent_act(self, agent: Any, observation: dict[str, Any]) -> dict[str, Any]:
         if hasattr(agent, "act"):
-            return agent.act(observation)
+            return cast(dict[str, Any], agent.act(observation))
         return {"type": "noop"}
 
     def _step(self, state: Any, action: dict[str, Any], agent_id: str) -> tuple[Any, float, bool, dict[str, Any]]:
         if hasattr(state, "apply_action"):
-            return state.apply_action(agent_id, action)
+            return cast(tuple[Any, float, bool, dict[str, Any]], state.apply_action(agent_id, action))
         return state, 0.0, False, {}
 
     def _critic_review(self, critic: Any, result: EpisodeResult) -> Critique:
         if hasattr(critic, "review"):
-            return critic.review(result)
+            return cast(Critique, critic.review(result))
         # Stub: score based on total reward
         score = min(max(result.total_reward / 10.0, 0.0), 1.0)
         return Critique(

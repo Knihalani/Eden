@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-from typing import Any, Optional
+from typing import Any
 
 from eden.sdk.models import (
-    BenchmarkItem,
-    BenchmarkRunResult,
-    BenchmarkResultDetail,
     BenchmarkHistoryItem,
+    BenchmarkItem,
+    BenchmarkResultDetail,
+    BenchmarkRunResult,
 )
 
 
@@ -24,7 +24,7 @@ class BenchmarksResource:
         benchmark_name: str,
         target_agents: list[str],
         criteria: dict[str, Any],
-        idempotency_key: Optional[str] = None,
+        idempotency_key: str | None = None,
     ) -> BenchmarkItem:
         """Create a new benchmark definition.
 
@@ -53,7 +53,7 @@ class BenchmarksResource:
         benchmark_id: str,
         *,
         target_code: str,
-        idempotency_key: Optional[str] = None,
+        idempotency_key: str | None = None,
     ) -> BenchmarkRunResult:
         """Execute a benchmark.
 

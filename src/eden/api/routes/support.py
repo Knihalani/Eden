@@ -40,7 +40,7 @@ async def submit_ticket(
     try:
         payload = validate_ticket(req.model_dump())
     except SupportTicketError as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     # Enrich with org + user context.
     payload["org_id"] = user.get("active_org_id") or user.get("org_id")
     payload["user_id"] = user.get("user_id")

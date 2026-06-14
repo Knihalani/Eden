@@ -21,8 +21,8 @@ from __future__ import annotations
 import json
 import logging
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
-from typing import Any, Optional
+from datetime import UTC, datetime
+from typing import Any
 
 from eden.config import get_settings
 
@@ -38,7 +38,7 @@ class SchemaVersion:
     schema_type: str  # "json", "avro", "protobuf"
     version: str
     definition: dict[str, Any]
-    created_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+    created_at: str = field(default_factory=lambda: datetime.now(UTC).isoformat())
     is_active: bool = True
     compatibility: str = "BACKWARD"  # BACKWARD, FORWARD, FULL, NONE
 
@@ -65,7 +65,7 @@ class SchemaRegistry:
     """
 
     def __init__(self) -> None:
-        self._postgres_client: Optional[Any] = None
+        self._postgres_client: Any | None = None
 
     async def _get_postgres(self) -> Any:
         if self._postgres_client is None:
@@ -144,8 +144,8 @@ class SchemaRegistry:
     async def get_schema(
         self,
         schema_id: str,
-        version: Optional[str] = None,
-    ) -> Optional[SchemaVersion]:
+        version: str | None = None,
+    ) -> SchemaVersion | None:
         """Get a schema definition by ID and optional version.
 
         If version is omitted, returns the latest active version.
@@ -185,7 +185,7 @@ class SchemaRegistry:
         self,
         schema_id: str,
         event: dict[str, Any],
-        version: Optional[str] = None,
+        version: str | None = None,
     ) -> SchemaValidationResult:
         """Validate an event against a registered schema.
 
@@ -312,7 +312,7 @@ class SchemaRegistry:
         old_props = latest.definition.get("properties", {})
         old_required = set(latest.definition.get("required", []))
         new_props = new_definition.get("properties", {})
-        new_required = set(new_definition.get("required", []))
+        set(new_definition.get("required", []))
 
         # Backward compatibility: old readers must read new data
         # - Cannot remove required fields

@@ -6,14 +6,14 @@ import pytest
 
 from eden.evaluation.auto_dataset import (
     AutoDatasetPromoter,
-    TraceQualityScorer,
     TraceQualityScore,
+    TraceQualityScorer,
 )
 from eden.evaluation.golden_dataset import (
-    GoldenCase,
     DatasetRegistry,
-    EnvironmentCategory,
     DifficultyLevel,
+    EnvironmentCategory,
+    GoldenCase,
 )
 
 

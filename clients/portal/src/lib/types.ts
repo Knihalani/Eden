@@ -156,21 +156,81 @@ export const STAGE_LABELS: Record<string, string> = {
   cancelled: "Cancelled",
 };
 
+// ----- Status & Outcome visual descriptors -----
+// Each entry bundles a label, an icon (lucide-react), and a Tailwind class
+// string for the badge. Color is NEVER the only signal — the icon and the
+// human-readable label are both rendered, so users with color-vision
+// deficiencies can still distinguish states. See <StatusBadge /> and
+// <OutcomeBadge /> in components/ui/status-badge.tsx for the renderer.
+
+import type { LucideIcon } from "lucide-react";
+import {
+  CheckCircle2,
+  XCircle,
+  AlertTriangle,
+  Ban,
+  Clock,
+  Loader2,
+  Trophy,
+  Medal,
+  Award,
+  CircleDashed,
+  CircleSlash,
+  GitPullRequest,
+} from "lucide-react";
+
+export interface StatusDescriptor {
+  label: string;
+  className: string;
+  icon: LucideIcon;
+}
+
+export interface OutcomeDescriptor {
+  label: string;
+  className: string;
+  icon: LucideIcon;
+}
+
 export const STATUS_COLORS: Record<string, string> = {
-  pending: "bg-yellow-100 text-yellow-800",
-  running: "bg-blue-100 text-blue-800",
-  completed: "bg-green-100 text-green-800",
-  failed: "bg-red-100 text-red-800",
-  human_review: "bg-orange-100 text-orange-800",
-  cancelled: "bg-gray-100 text-gray-800",
+  pending: "bg-[var(--bg-tertiary)] text-[var(--text-secondary)]",
+  running: "bg-[var(--accent-faint)] text-[var(--accent)]",
+  completed: "bg-[var(--terminal-faint)] text-[var(--terminal)]",
+  failed: "bg-[var(--error-dim)] text-[var(--error)]",
+  human_review: "bg-[var(--warning-bg)] text-[var(--warning)]",
+  cancelled: "bg-[var(--bg-tertiary)] text-[var(--text-muted)]",
+};
+
+export const STATUS: Record<string, StatusDescriptor> = {
+  pending: { label: "Pending",        className: STATUS_COLORS.pending,      icon: Clock },
+  running: { label: "Running",        className: STATUS_COLORS.running,      icon: Loader2 },
+  completed: { label: "Completed",    className: STATUS_COLORS.completed,   icon: CheckCircle2 },
+  failed: { label: "Failed",          className: STATUS_COLORS.failed,      icon: XCircle },
+  human_review: { label: "Needs review", className: STATUS_COLORS.human_review, icon: AlertTriangle },
+  cancelled: { label: "Cancelled",     className: STATUS_COLORS.cancelled,   icon: Ban },
 };
 
 export const OUTCOME_COLORS: Record<string, string> = {
-  gold: "bg-yellow-100 text-yellow-800 border-yellow-300",
-  silver: "bg-gray-100 text-gray-700 border-gray-300",
-  bronze: "bg-orange-100 text-orange-700 border-orange-300",
-  partial: "bg-blue-100 text-blue-700 border-blue-300",
-  failed: "bg-red-100 text-red-700 border-red-300",
+  gold: "bg-[var(--warning-bg)] text-[var(--warning)] border-[var(--warning)]/30",
+  silver: "bg-[var(--bg-tertiary)] text-[var(--text-secondary)] border-[var(--border-default)]",
+  bronze: "bg-[var(--warning-bg)] text-[var(--warning)] border-[var(--warning)]/30",
+  partial: "bg-[var(--accent-faint)] text-[var(--accent)] border-[var(--accent)]/30",
+  failed: "bg-[var(--error-dim)] text-[var(--error)] border-[var(--error)]/30",
+};
+
+export const OUTCOMES: Record<string, OutcomeDescriptor> = {
+  gold:    { label: "Gold",    className: OUTCOME_COLORS.gold,    icon: Trophy },
+  silver:  { label: "Silver",  className: OUTCOME_COLORS.silver,  icon: Medal },
+  bronze:  { label: "Bronze",  className: OUTCOME_COLORS.bronze,  icon: Award },
+  partial: { label: "Partial", className: OUTCOME_COLORS.partial, icon: CircleDashed },
+  failed:  { label: "Failed",  className: OUTCOME_COLORS.failed,  icon: CircleSlash },
+};
+
+// PR Suggestion lifecycle — distinct from the generic STATUS map (no "running")
+export const PR_STATUSES: Record<string, StatusDescriptor> = {
+  pending:  { label: "Pending review", className: "bg-[var(--warning-bg)] text-[var(--warning)] border-[var(--warning)]/20",            icon: Clock },
+  opened:   { label: "PR opened",      className: "bg-[var(--accent-faint)] text-[var(--accent)] border-[var(--accent)]/20",            icon: GitPullRequest },
+  merged:   { label: "Merged",         className: "bg-[var(--terminal-faint)] text-[var(--terminal)] border-[var(--terminal)]/20",     icon: CheckCircle2 },
+  rejected: { label: "Rejected",       className: "bg-[var(--bg-tertiary)] text-[var(--text-muted)] border-[var(--border-default)]",   icon: XCircle },
 };
 
 export interface OrgAnalytics {
