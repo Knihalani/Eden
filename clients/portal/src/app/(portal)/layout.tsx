@@ -104,6 +104,9 @@ function buildBreadcrumbs(pathname: string): { label: string; href: string }[] {
     cohorts: "Cohorts",
     governance: "Governance",
     eval: "Eval",
+    traces: "Trace Explorer",
+    onboarding: "Onboarding",
+    connect: "Connect Agent",
   };
 
   let path = "";
@@ -324,6 +327,7 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
           </NavGroup>
 
           <NavGroup label="Observe" collapsed={collapsed}>
+            <NavItem href="/traces" icon={Layers} label="Trace Explorer" collapsed={collapsed} onClick={() => setSidebarOpen(false)} />
             <NavItem href="/observability" icon={Activity} label="Observability" collapsed={collapsed} onClick={() => setSidebarOpen(false)} />
             <NavItem href="/incidents" icon={AlertOctagon} label="Incidents" collapsed={collapsed} onClick={() => setSidebarOpen(false)} />
             <NavItem href="/insights" icon={Brain} label="Insights" collapsed={collapsed} onClick={() => setSidebarOpen(false)} />
