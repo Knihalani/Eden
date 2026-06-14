@@ -64,6 +64,17 @@ dependencies = [
     "pytest-cov>=5.0.0,<6.0.0",
     "httpx>=0.27.0,<1.0.0",
 
+    # ClickHouse HTTP interface — used by data_platform.clickhouse_sink
+    # and the columnar engine (Cat 18). Was an undeclared dep that
+    # would crash any code path hitting `ClickHouseSink._get_session`.
+    # See docs/architecture/clickhouse-transport.md for why we keep
+    # raw aiohttp over `clickhouse-connect`.
+    "aiohttp>=3.9.0,<4.0.0",
+
+    # GitHub App auth + REST — used by the onboarding wizard
+    # (GitHubRepoProvider, GitHubPRProvider) and the integration PR flow.
+    "PyGithub>=2.3.0,<3.0.0",
+
     # Utilities
     "tenacity>=8.3.0,<9.0.0",
     "structlog>=24.0.0,<25.0.0",
@@ -84,8 +95,10 @@ dev = [
 # Phase 2: the env-gen pipeline (and its `eden` console script entry
 # point, which used to launch the legacy thin CLI) has been retired.
 # The server is launched via ``uvicorn eden.api.app:app`` (see
-# the Dockerfiles). The Eden Agent CLI lives at ``cli/eden/`` and
-# has its own pyproject.toml.
+# the Dockerfiles). The Eden Agent CLI was deleted entirely in the
+# June 2026 backlog cleanup — onboarding now happens through the
+# portal wizard + SDK; FrameworkDetector + SDKIntegrator moved to
+# src/eden/integrations/.
 
 [build-system]
 requires = ["hatchling"]
