@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
+import { useSearchParams } from "next/navigation";
 import { useOrg } from "@/hooks/use-org";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
@@ -111,8 +112,14 @@ function formatTimestamp(ts: string): string {
 
 export default function ReplayPage() {
   const { currentOrg } = useOrg();
+  const searchParams = useSearchParams();
+  // June 2026: deep-link support — ?job_id= or ?trace_id= (alias).
+  // The /observability Traces tab links here with ?trace_id= so the
+  // user lands directly on the right trace + can jump into HILT
+  // control without re-selecting from the dropdown.
+  const deepLinkJobId = searchParams.get("job_id") ?? searchParams.get("trace_id") ?? "";
   const [jobs, setJobs] = useState<JobItem[]>([]);
-  const [selectedJobId, setSelectedJobId] = useState<string>("");
+  const [selectedJobId, setSelectedJobId] = useState<string>(deepLinkJobId);
   const [loadingJobs, setLoadingJobs] = useState(true);
   const [error, setError] = useState<string | null>(null);
 

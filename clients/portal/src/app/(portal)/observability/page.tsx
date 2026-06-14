@@ -33,6 +33,7 @@ import {
   Flame,
   Eye,
   EyeOff,
+  PlayCircle,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { NoOrgState } from "@/components/ui/no-org-state";
@@ -577,6 +578,16 @@ function TracesTab({
                         >
                           <Clock className="w-4 h-4" />
                         </button>
+                        {/* June 2026: deep-link into the full /replay UI
+                            for HILT control + per-step rewind. The replay
+                            page reads ?trace_id= on mount. */}
+                        <a
+                          href={`/replay?trace_id=${trace.trace_id}`}
+                          className="p-1.5 text-[var(--text-muted)] hover:text-[var(--accent)] hover:bg-[var(--accent-faint)] rounded-lg transition-colors"
+                          title="Open in Replay"
+                        >
+                          <PlayCircle className="w-4 h-4" />
+                        </a>
                         <button
                           onClick={() => onExport(trace.trace_id)}
                           className="p-1.5 text-[var(--text-muted)] hover:text-[var(--accent)] hover:bg-[var(--accent-faint)] rounded-lg transition-colors"

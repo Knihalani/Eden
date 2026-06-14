@@ -26,6 +26,11 @@ function ForecastChart({
 }: {
   data: Array<{ date: string; projected_cost: number; ci_low: number; ci_high: number }>;
 }) {
+  // June 2026 polish: legend, hover tooltip with full date + median +
+  // CI band, evenly-spaced x-axis tick labels (was: first/last only),
+  // grid lines so the eye can read absolute values without hovering.
+  const [hoverIdx, setHoverIdx] = useState<number | null>(null);
+
   if (data.length === 0) {
     return (
       <EmptyState
@@ -37,9 +42,9 @@ function ForecastChart({
     );
   }
   const width = 720;
-  const height = 240;
-  const padX = 40;
-  const padY = 24;
+  const height = 260;
+  const padX = 48;
+  const padY = 28;
   const xs = data.map((d) => new Date(d.date).getTime());
   const ys = data.flatMap((d) => [d.ci_low, d.ci_high, d.projected_cost]);
   const xMin = Math.min(...xs);
@@ -76,84 +81,230 @@ function ForecastChart({
     return [...top, ...bottom, "Z"].join(" ");
   })();
 
+  // Horizontal grid lines at 0%, 25%, 50%, 75%, 100% of the y range.
+  const gridLines = [0, 0.25, 0.5, 0.75, 1.0].map((frac) => ({
+    y: padY + frac * (height - padY * 2),
+    value: yMax - frac * yRange,
+  }));
+
+  // X-axis tick stride: aim for ~5 ticks; data points may be irregular.
+  const xTickCount = Math.min(5, data.length);
+  const xTickStride = Math.max(1, Math.floor((data.length - 1) / Math.max(1, xTickCount - 1)));
+  const xTicks: number[] = [];
+  for (let i = 0; i < data.length; i += xTickStride) xTicks.push(i);
+  if (xTicks[xTicks.length - 1] !== data.length - 1) xTicks.push(data.length - 1);
+
+  // Hover handling — translate cursor x into a data index.
+  const onSvgMouseMove = (evt: React.MouseEvent<SVGSVGElement>) => {
+    const svg = evt.currentTarget;
+    const rect = svg.getBoundingClientRect();
+    const cursorX = ((evt.clientX - rect.left) / rect.width) * width;
+    if (cursorX < padX || cursorX > width - padX) {
+      setHoverIdx(null);
+      return;
+    }
+    // Pick the closest point to the cursor.
+    let bestIdx = 0;
+    let bestDist = Infinity;
+    data.forEach((d, i) => {
+      const dx = Math.abs(xScale(new Date(d.date).getTime()) - cursorX);
+      if (dx < bestDist) {
+        bestDist = dx;
+        bestIdx = i;
+      }
+    });
+    setHoverIdx(bestIdx);
+  };
+
+  const hoverPoint = hoverIdx !== null ? data[hoverIdx] : null;
+  const hoverX = hoverPoint ? xScale(new Date(hoverPoint.date).getTime()) : 0;
+  const hoverY = hoverPoint ? yScale(hoverPoint.projected_cost) : 0;
+
+  // Tooltip flips to the left if it would overflow the right edge.
+  const tooltipW = 168;
+  const tooltipH = 64;
+  const tooltipFlipLeft = hoverX + tooltipW + 12 > width;
+  const tooltipX = tooltipFlipLeft ? hoverX - tooltipW - 12 : hoverX + 12;
+  const tooltipY = Math.max(padY, Math.min(height - padY - tooltipH, hoverY - tooltipH / 2));
+
   return (
-    <svg
-      viewBox={`0 0 ${width} ${height}`}
-      className="h-64 w-full"
-      role="img"
-      aria-label="Projected cost forecast"
-    >
-      <defs>
-        <linearGradient id="fcBand" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="var(--accent)" stopOpacity={0.25} />
-          <stop offset="100%" stopColor="var(--accent)" stopOpacity={0.02} />
-        </linearGradient>
-      </defs>
-      {/* axes */}
-      <line
-        x1={padX}
-        y1={height - padY}
-        x2={width - padX}
-        y2={height - padY}
-        stroke="var(--border-subtle)"
-      />
-      <line
-        x1={padX}
-        y1={padY}
-        x2={padX}
-        y2={height - padY}
-        stroke="var(--border-subtle)"
-      />
-      {/* CI band */}
-      <path d={bandPath} fill="url(#fcBand)" stroke="none" />
-      {/* projected line */}
-      <path d={linePath} fill="none" stroke="var(--accent)" strokeWidth={2} />
-      {/* dots */}
-      {data.map((d) => {
-        const x = xScale(new Date(d.date).getTime());
-        const y = yScale(d.projected_cost);
-        return <circle key={d.date} cx={x} cy={y} r={2.5} fill="var(--accent)" />;
-      })}
-      {/* y axis labels */}
-      <text
-        x={padX - 6}
-        y={padY + 4}
-        textAnchor="end"
-        fontSize={10}
-        fill="var(--text-muted)"
+    <div>
+      {/* Legend */}
+      <div className="flex items-center gap-4 mb-2 text-xs text-[var(--text-muted)]">
+        <span className="inline-flex items-center gap-1.5">
+          <span className="inline-block w-3 h-0.5 bg-[var(--accent)]" />
+          <span>Projected median</span>
+        </span>
+        <span className="inline-flex items-center gap-1.5">
+          <span
+            className="inline-block w-3 h-2.5 rounded-sm"
+            style={{ background: "var(--accent)", opacity: 0.18 }}
+          />
+          <span>95% confidence band</span>
+        </span>
+      </div>
+      <svg
+        viewBox={`0 0 ${width} ${height}`}
+        className="h-64 w-full cursor-crosshair"
+        role="img"
+        aria-label="Projected cost forecast"
+        onMouseMove={onSvgMouseMove}
+        onMouseLeave={() => setHoverIdx(null)}
       >
-        {`$${yMax.toFixed(0)}`}
-      </text>
-      <text
-        x={padX - 6}
-        y={height - padY}
-        textAnchor="end"
-        fontSize={10}
-        fill="var(--text-muted)"
-      >
-        {`$${yMin.toFixed(0)}`}
-      </text>
-      {/* x axis labels (first + last) */}
-      <text
-        x={padX}
-        y={height - 6}
-        textAnchor="start"
-        fontSize={10}
-        fill="var(--text-muted)"
-      >
-        {data[0].date.slice(5)}
-      </text>
-      <text
-        x={width - padX}
-        y={height - 6}
-        textAnchor="end"
-        fontSize={10}
-        fill="var(--text-muted)"
-      >
-        {data[data.length - 1].date.slice(5)}
-      </text>
-    </svg>
+        <defs>
+          <linearGradient id="fcBand" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="var(--accent)" stopOpacity={0.25} />
+            <stop offset="100%" stopColor="var(--accent)" stopOpacity={0.02} />
+          </linearGradient>
+        </defs>
+        {/* Horizontal grid lines + y-axis labels */}
+        {gridLines.map((g, i) => (
+          <g key={i}>
+            <line
+              x1={padX}
+              y1={g.y}
+              x2={width - padX}
+              y2={g.y}
+              stroke="var(--border-subtle)"
+              strokeDasharray="2 3"
+              opacity={0.5}
+            />
+            <text
+              x={padX - 6}
+              y={g.y + 3}
+              textAnchor="end"
+              fontSize={10}
+              fill="var(--text-muted)"
+            >
+              {`$${g.value.toFixed(g.value >= 100 ? 0 : 2)}`}
+            </text>
+          </g>
+        ))}
+        {/* axes */}
+        <line
+          x1={padX}
+          y1={height - padY}
+          x2={width - padX}
+          y2={height - padY}
+          stroke="var(--border-default)"
+        />
+        <line
+          x1={padX}
+          y1={padY}
+          x2={padX}
+          y2={height - padY}
+          stroke="var(--border-default)"
+        />
+        {/* CI band */}
+        <path d={bandPath} fill="url(#fcBand)" stroke="none" />
+        {/* projected line */}
+        <path d={linePath} fill="none" stroke="var(--accent)" strokeWidth={2} />
+        {/* dots */}
+        {data.map((d, i) => {
+          const x = xScale(new Date(d.date).getTime());
+          const y = yScale(d.projected_cost);
+          return (
+            <circle
+              key={d.date}
+              cx={x}
+              cy={y}
+              r={hoverIdx === i ? 4 : 2.5}
+              fill="var(--accent)"
+            />
+          );
+        })}
+        {/* x-axis date ticks */}
+        {xTicks.map((i) => {
+          const d = data[i];
+          const x = xScale(new Date(d.date).getTime());
+          return (
+            <text
+              key={`xt-${i}`}
+              x={x}
+              y={height - 8}
+              textAnchor={i === 0 ? "start" : i === data.length - 1 ? "end" : "middle"}
+              fontSize={10}
+              fill="var(--text-muted)"
+            >
+              {formatTickDate(d.date)}
+            </text>
+          );
+        })}
+        {/* Hover crosshair + tooltip */}
+        {hoverPoint && (
+          <g>
+            <line
+              x1={hoverX}
+              y1={padY}
+              x2={hoverX}
+              y2={height - padY}
+              stroke="var(--text-muted)"
+              strokeDasharray="2 3"
+              opacity={0.4}
+            />
+            <rect
+              x={tooltipX}
+              y={tooltipY}
+              width={tooltipW}
+              height={tooltipH}
+              fill="var(--bg-primary)"
+              stroke="var(--border-default)"
+              rx={6}
+            />
+            <text
+              x={tooltipX + 8}
+              y={tooltipY + 16}
+              fontSize={11}
+              fontWeight="600"
+              fill="var(--text-primary)"
+            >
+              {formatTooltipDate(hoverPoint.date)}
+            </text>
+            <text
+              x={tooltipX + 8}
+              y={tooltipY + 32}
+              fontSize={11}
+              fill="var(--text-secondary)"
+            >
+              {`Median: $${hoverPoint.projected_cost.toFixed(2)}`}
+            </text>
+            <text
+              x={tooltipX + 8}
+              y={tooltipY + 48}
+              fontSize={10}
+              fill="var(--text-muted)"
+            >
+              {`95% CI: $${hoverPoint.ci_low.toFixed(2)}–$${hoverPoint.ci_high.toFixed(2)}`}
+            </text>
+          </g>
+        )}
+      </svg>
+    </div>
   );
+}
+
+function formatTickDate(iso: string): string {
+  // Trim leading year ("2026-06-14" → "Jun 14")
+  try {
+    const d = new Date(iso);
+    return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  } catch {
+    return iso.slice(5);
+  }
+}
+
+function formatTooltipDate(iso: string): string {
+  try {
+    const d = new Date(iso);
+    return d.toLocaleDateString(undefined, {
+      weekday: "short",
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+    });
+  } catch {
+    return iso;
+  }
 }
 
 /* ----------------------- Helpers -------------------------------------- */
