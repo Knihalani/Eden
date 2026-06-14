@@ -154,9 +154,9 @@ export function RegionTab() {
       </div>
 
       {error && (
-        <div className="p-4 bg-red-500/10 border border-red-500/30 rounded-lg flex items-start gap-2">
-          <AlertTriangle className="w-5 h-5 text-red-500 mt-0.5" />
-          <p className="text-sm text-red-500">{error}</p>
+        <div className="p-4 bg-[var(--error)]/10 border border-[var(--error)]/30 rounded-lg flex items-start gap-2">
+          <AlertTriangle className="w-5 h-5 text-[var(--error)] mt-0.5" />
+          <p className="text-sm text-[var(--error)]">{error}</p>
         </div>
       )}
 
@@ -248,7 +248,7 @@ export function RegionTab() {
           >
             <span
               className={cn(
-                "absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full transition-transform",
+                "absolute top-0.5 left-0.5 w-5 h-5 bg-[var(--bg-primary)] rounded-full transition-transform",
                 draft.pinned && "translate-x-6"
               )}
             />
@@ -270,7 +270,7 @@ export function RegionTab() {
             type="button"
             onClick={handleSave}
             disabled={!dirty || saving}
-            className="px-4 py-2 bg-[var(--accent)] text-white rounded-lg text-sm font-medium hover:opacity-90 disabled:opacity-50 flex items-center gap-2"
+            className="px-4 py-2 bg-[var(--accent)] text-[var(--bg-primary)] rounded-lg text-sm font-medium hover:opacity-90 disabled:opacity-50 flex items-center gap-2"
           >
             {saving && <Loader2 className="w-4 h-4 animate-spin" />}
             Save changes

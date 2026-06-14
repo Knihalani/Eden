@@ -1,6 +1,7 @@
 """Tests for the PII detection and masking module."""
 
 import pytest
+
 from eden.data_platform.pii import PIIMasker
 
 

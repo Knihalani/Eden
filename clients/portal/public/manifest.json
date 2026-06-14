@@ -1,7 +1,7 @@
 {
-  "name": "Eden — AI Environment Generation",
+  "name": "Eden — Agent Evaluation & Observability",
   "short_name": "Eden",
-  "description": "AI-native environment generation system for agent development, testing, training, and benchmarking",
+  "description": "Eden — AI-native agent evaluation and observability platform",
   "start_url": "/dashboard",
   "display": "standalone",
   "background_color": "#0a0a0f",
@@ -49,17 +49,10 @@
   ],
   "shortcuts": [
     {
-      "name": "New Job",
-      "short_name": "New",
-      "description": "Create a new environment generation job",
-      "url": "/jobs/new",
-      "icons": [{ "src": "/icon-192x192.svg", "sizes": "192x192" }]
-    },
-    {
-      "name": "Jobs",
-      "short_name": "Jobs",
-      "description": "View all jobs",
-      "url": "/jobs",
+      "name": "Observability",
+      "short_name": "Obs",
+      "description": "View live agent observability (traces, judges, failure modes)",
+      "url": "/observability",
       "icons": [{ "src": "/icon-192x192.svg", "sizes": "192x192" }]
     },
     {

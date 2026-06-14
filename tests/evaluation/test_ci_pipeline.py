@@ -6,10 +6,10 @@ import pytest
 
 from eden.evaluation.ci_pipeline import (
     CIPipeline,
-    StageName,
-    StageStatus,
-    StageResult,
     PipelineReport,
+    StageName,
+    StageResult,
+    StageStatus,
 )
 from eden.evaluation.golden_dataset import load_canonical_datasets
 
@@ -101,7 +101,7 @@ class TestCIPipeline:
 
     def test_simulate_case_evaluation(self):
         pipeline = CIPipeline(dataset_registry=load_canonical_datasets())
-        from eden.evaluation.golden_dataset import GoldenCase, EnvironmentCategory, DifficultyLevel
+        from eden.evaluation.golden_dataset import DifficultyLevel, EnvironmentCategory, GoldenCase
         case = GoldenCase(
             case_id="test",
             category=EnvironmentCategory.AGENT_SANDBOX,

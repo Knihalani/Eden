@@ -8,11 +8,11 @@ from pathlib import Path
 import pytest
 
 from eden.evaluation.review_gate import (
+    EnvironmentDiff,
+    ReviewDecision,
+    ReviewGate,
     RiskClassifier,
     RiskLevel,
-    ReviewGate,
-    ReviewDecision,
-    EnvironmentDiff,
 )
 
 

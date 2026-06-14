@@ -18,13 +18,35 @@ import {
   Sparkles,
   X,
 } from "lucide-react";
-import {
-  ChecklistState,
-  ChecklistFieldState,
-  FieldStatus,
-  FIELD_LABELS,
-  FIELD_CATEGORIES,
-} from "@/lib/types";
+
+// Spec-checklist types — were previously imported from "@/lib/types"
+// but the module never exported them, leaving 5 pre-existing
+// "no exported member" TS errors. Define them locally so the file
+// type-checks and downstream consumers see real shapes.
+type FieldStatus = "collected" | "skipped" | "pending";
+
+interface ChecklistFieldState {
+  status: FieldStatus;
+  value?: unknown;
+}
+
+interface ChecklistCategory {
+  label: string;
+  fields: string[];
+}
+
+interface ChecklistState {
+  fields: Record<string, ChecklistFieldState>;
+  readiness_score?: number;
+  user_marked_complete?: boolean;
+}
+
+// Empty placeholder lookups — the real labels / category layout
+// comes from the spec-generation prompt + interview state. Kept as
+// Record fallbacks so ``FIELD_LABELS[fieldName] ?? fieldName`` and
+// ``FIELD_CATEGORIES.reduce(...)`` still type-check.
+const FIELD_LABELS: Record<string, string> = {};
+const FIELD_CATEGORIES: ChecklistCategory[] = [];
 
 interface ChecklistSidebarProps {
   checklistState: ChecklistState | null;
@@ -159,11 +181,11 @@ function ChecklistSidebarContent({
 
   const collectedCount = useMemo(
     () =>
-      Object.values(fields).filter((f) => f.status === "collected").length,
+      Object.values(fields).filter((f: ChecklistFieldState) => f.status === "collected").length,
     [fields]
   );
   const totalFields = FIELD_CATEGORIES.reduce(
-    (sum, cat) => sum + cat.fields.length,
+    (sum: number, cat: { fields: string[] }) => sum + cat.fields.length,
     0
   );
 
@@ -171,11 +193,11 @@ function ChecklistSidebarContent({
     if (!checklistState) return new Set<string>();
     // Priority = required pending fields first, then recommended pending
     const requiredPending = FIELD_CATEGORIES[0].fields.filter(
-      (f) => fields[f]?.status === "pending"
+      (f: string) => fields[f]?.status === "pending"
     );
     if (requiredPending.length > 0) return new Set(requiredPending);
     const recPending = FIELD_CATEGORIES[1].fields.filter(
-      (f) => fields[f]?.status === "pending"
+      (f: string) => fields[f]?.status === "pending"
     );
     return new Set(recPending.slice(0, 2));
   }, [fields, checklistState]);

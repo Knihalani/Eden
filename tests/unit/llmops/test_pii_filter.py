@@ -9,8 +9,8 @@ Locks in:
 
 import pytest
 
-from eden.llmops.filters import PIIFilter, PIIFilterConfig
 from eden.llmops.ai_gateway import ModelRequest
+from eden.llmops.filters import PIIFilter, PIIFilterConfig
 
 
 def _req(prompt: str, **kw) -> ModelRequest:

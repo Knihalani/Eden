@@ -22,7 +22,6 @@ from fastapi.testclient import TestClient
 
 from eden.api.deps import OrgMember
 
-
 # ── In-memory store + Postgres fake ─────────────────────────────
 
 
@@ -70,7 +69,7 @@ class GatewayModelStore:
             "endpoint", "enabled", "routing_priority", "metadata",
             "created_by", "created_at", "updated_at",
         ]
-        row = dict(zip(cols, args))
+        row = dict(zip(cols, args, strict=False))
         # UNIQUE(org_id, name)
         for r in self.rows:
             if r["org_id"] == row["org_id"] and r["name"] == row["name"]:
@@ -198,8 +197,8 @@ def api_client_with_gateway(gateway_store: GatewayModelStore) -> TestClient:
     """A TestClient with the gateway router's auth deps overridden."""
     from eden.api.app import app
     from eden.api.deps import get_current_org_member
-    from eden.storage.postgres import get_postgres_client
     from eden.llmops import registry_store as rs
+    from eden.storage.postgres import get_postgres_client
 
     pg = _make_pg(gateway_store)
 
@@ -216,9 +215,9 @@ def api_client_with_gateway(gateway_store: GatewayModelStore) -> TestClient:
     async def _pg():
         return pg
     app.dependency_overrides[get_postgres_client] = _pg
-    import eden.llmops.registry_store as rs_module
-    import eden.api.routes.gateway_models as gm_module
     import eden.api.deps as deps_module
+    import eden.api.routes.gateway_models as gm_module
+    import eden.llmops.registry_store as rs_module
     rs_original = rs_module.get_postgres_client
     gm_original = gm_module.get_postgres_client
     deps_original = deps_module.get_postgres_client

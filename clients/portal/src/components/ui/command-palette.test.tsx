@@ -25,8 +25,14 @@ vi.mock("@/lib/api", () => ({
 describe("CommandPalette", () => {
   it("renders nothing when closed", () => {
     render(<CommandPalette open={false} onOpenChange={() => {}} />);
-    // The palette is hidden via the `hidden` class when closed.
-    expect(screen.queryByPlaceholderText(/search/i)).not.toBeVisible();
+    // The palette remains in the DOM but is hidden via the `hidden`
+    // Tailwind class. jsdom doesn't compute CSS `display: none` so
+    // we walk up to the closest container and assert it has the
+    // `hidden` class instead of relying on `toBeVisible()`.
+    const input = screen.queryByPlaceholderText(/search/i);
+    expect(input).toBeInTheDocument();
+    const wrapper = input?.closest('[class*="hidden"]') ?? input?.parentElement;
+    expect(wrapper?.className ?? "").toMatch(/hidden/);
   });
 
   it("renders a search input when open", () => {

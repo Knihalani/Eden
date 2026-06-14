@@ -15,8 +15,8 @@ import pytest
 sys.path.insert(0, "src")
 
 from eden.observability.media_store import (
-    MediaStore,
     MediaBlob,
+    MediaStore,
     _safe_tenant,
 )
 

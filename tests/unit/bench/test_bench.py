@@ -13,7 +13,6 @@ import pytest
 from bench import kb_retrieval, latency, llm_provider, sandbox_boot
 from bench.common import BenchResult, bench_async
 
-
 # ────────────────────────────────────────────────────────────────────────
 # bench.common
 # ────────────────────────────────────────────────────────────────────────

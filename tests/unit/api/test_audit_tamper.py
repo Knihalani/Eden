@@ -15,9 +15,9 @@ from datetime import datetime
 from io import BytesIO
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import asyncpg
 import pytest
 from fastapi import HTTPException
-
 
 # ────────────────────────────────────────────────────────────────────────
 # Hash-chain verify endpoint
@@ -31,7 +31,7 @@ async def test_verify_chain_empty_state_when_migration_missing():
     from eden.api.routes.audit import verify_audit_chain
 
     fake_client = MagicMock()
-    fake_client.fetch = AsyncMock(side_effect=Exception("relation verify_audit_chain does not exist"))
+    fake_client.fetch = AsyncMock(side_effect=asyncpg.exceptions.UndefinedFunctionError("relation verify_audit_chain does not exist"))
     async def _client():
         return fake_client
 
@@ -137,7 +137,12 @@ async def test_export_jsonl_yields_one_record_per_line():
          "entry_hash": "abc123"},
     ]
     fake_client = MagicMock()
-    fake_client.fetch = AsyncMock(return_value=rows)
+
+    async def _aiter(items):
+        for r in items:
+            yield r
+
+    fake_client.fetchiter = MagicMock(side_effect=lambda *a, **kw: _aiter(rows))
     async def _client():
         return fake_client
 
@@ -185,7 +190,12 @@ async def test_export_csv_has_header_and_one_row_per_record():
          "entry_hash": "abc123"},
     ]
     fake_client = MagicMock()
-    fake_client.fetch = AsyncMock(return_value=rows)
+
+    async def _aiter(items):
+        for r in items:
+            yield r
+
+    fake_client.fetchiter = MagicMock(side_effect=lambda *a, **kw: _aiter(rows))
     async def _client():
         return fake_client
 
@@ -220,9 +230,10 @@ def test_migration_021_defines_required_objects():
     canonical_json helper, the trigger itself, and the
     verify_audit_chain function. Locking these in here is a guard
     against accidental removal when refactoring the audit log."""
-    migration = open(
+    with open(
         "/Users/kaiavnihalani/Downloads/Eden/migrations/021_audit_tamper_evidence.sql"
-    ).read()
+    ) as _f:
+        migration = _f.read()
     assert "prev_hash" in migration
     assert "entry_hash" in migration
     assert "audit_canonical_json" in migration

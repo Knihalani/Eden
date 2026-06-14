@@ -147,8 +147,9 @@ def test_call_records_success_on_first_try():
     c = client_module.OpenRouterClient(
         api_key="test", base_url="https://example.com", max_retries=1
     )
-    # Default reasoning slot is anthropic — force openai so we can assert
-    # the openai counter.
+    # Override the reasoning slot to use an openai-prefixed model so
+    # the provider classifier routes the counter to "openai", matching
+    # the test's assertion.
     c.MODEL_SLOTS["reasoning"] = client_module.ModelSlot(
         primary="openai/gpt-4o", fallback=[], max_tokens=100
     )
@@ -176,6 +177,7 @@ def test_call_skips_4xx_with_status_code_400():
     c = client_module.OpenRouterClient(
         api_key="test", base_url="https://example.com", max_retries=3
     )
+    # Same as above — pin the model so the assertion targets the right counter.
     c.MODEL_SLOTS["reasoning"] = client_module.ModelSlot(
         primary="openai/gpt-4o", fallback=[], max_tokens=100
     )

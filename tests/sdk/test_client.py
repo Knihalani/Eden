@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import pytest
+
 from eden.sdk import EdenClient, EdenConfig
-from eden.sdk.errors import EdenError, AuthenticationError, NotFoundError, ValidationError
+from eden.sdk.errors import AuthenticationError, EdenError, NotFoundError, ValidationError
 
 
 class TestEdenConfig:

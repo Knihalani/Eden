@@ -1,0 +1,831 @@
+{
+  "run_id": "ci-abcdef12-1781273935",
+  "commit_sha": "abcdef1234567890",
+  "branch": "feature/test",
+  "stages": [
+    {
+      "stage": "static_analysis",
+      "status": "failed",
+      "duration_ms": 427.99,
+      "details": {
+        "ruff_lint": {
+          "passed": false,
+          "issues_count": 3140,
+          "issues": [
+            {
+              "cell": null,
+              "code": "UP035",
+              "end_location": {
+                "column": 43,
+                "row": 51
+              },
+              "filename": "/Users/kaiavnihalani/Downloads/Eden/src/eden/agents/agent_intel/_common.py",
+              "fix": {
+                "applicability": "safe",
+                "edits": [
+                  {
+                    "content": "from typing import Any, Optional\nfrom collections.abc import Iterable",
+                    "end_location": {
+                      "column": 43,
+                      "row": 51
+                    },
+                    "location": {
+                      "column": 1,
+                      "row": 51
+                    }
+                  }
+                ],
+                "message": "Import from `collections.abc`"
+              },
+              "location": {
+                "column": 1,
+                "row": 51
+              },
+              "message": "Import from `collections.abc` instead: `Iterable`",
+              "noqa_row": 51,
+              "severity": "error",
+              "url": "https://docs.astral.sh/ruff/rules/deprecated-import"
+            },
+            {
+              "cell": null,
+              "code": "UP045",
+              "end_location": {
+                "column": 55,
+                "row": 132
+              },
+              "filename": "/Users/kaiavnihalani/Downloads/Eden/src/eden/agents/agent_intel/_common.py",
+              "fix": {
+                "applicability": "safe",
+                "edits": [
+                  {
+                    "content": "str | None",
+                    "end_location": {
+                      "column": 55,
+                      "row": 132
+                    },
+                    "location": {
+                      "column": 42,
+                      "row": 132
+                    }
+                  }
+                ],
+                "message": "Convert to `X | None`"
+              },
+              "location": {
+                "column": 42,
+                "row": 132
+              },
+              "message": "Use `X | None` for type annotations",
+              "noqa_row": 132,
+              "severity": "error",
+              "url": "https://docs.astral.sh/ruff/rules/non-pep604-annotation-optional"
+            },
+            {
+              "cell": null,
+              "code": "UP017",
+              "end_location": {
+                "column": 37,
+                "row": 212
+              },
+              "filename": "/Users/kaiavnihalani/Downloads/Eden/src/eden/agents/agent_intel/_common.py",
+              "fix": {
+                "applicability": "safe",
+                "edits": [
+                  {
+                    "content": "from datetime import datetime, timezone, UTC",
+                    "end_location": {
+                      "column": 40,
+                      "row": 50
+                    },
+                    "location": {
+                      "column": 1,
+                      "row": 50
+                    }
+                  },
+                  {
+                    "content": "UTC",
+                    "end_location": {
+                      "column": 37,
+                      "row": 212
+                    },
+                    "location": {
+                      "column": 25,
+                      "row": 212
+                    }
+                  }
+                ],
+                "message": "Convert to `datetime.UTC` alias"
+              },
+              "location": {
+                "column": 25,
+                "row": 212
+              },
+              "message": "Use `datetime.UTC` alias",
+              "noqa_row": 212,
+              "severity": "error",
+              "url": "https://docs.astral.sh/ruff/rules/datetime-timezone-utc"
+            },
+            {
+              "cell": null,
+              "code": "UP045",
+              "end_location": {
+                "column": 30,
+                "row": 458
+              },
+              "filename": "/Users/kaiavnihalani/Downloads/Eden/src/eden/agents/agent_intel/_common.py",
+              "fix": {
+                "applicability": "safe",
+                "edits": [
+                  {
+                    "content": "dict[str, Any] | None",
+                    "end_location": {
+                      "column": 30,
+                      "row": 458
+                    },
+                    "location": {
+                      "column": 6,
+                      "row": 458
+                    }
+                  }
+                ],
+                "message": "Convert to `X | None`"
+              },
+              "location": {
+                "column": 6,
+                "row": 458
+              },
+              "message": "Use `X | None` for type annotations",
+              "noqa_row": 458,
+              "severity": "error",
+              "url": "https://docs.astral.sh/ruff/rules/non-pep604-annotation-optional"
+            },
+            {
+              "cell": null,
+              "code": "UP045",
+              "end_location": {
+                "column": 34,
+                "row": 495
+              },
+              "filename": "/Users/kaiavnihalani/Downloads/Eden/src/eden/agents/agent_intel/_common.py",
+              "fix": {
+                "applicability": "safe",
+                "edits": [
+                  {
+                    "content": "float | None",
+                    "end_location": {
+                      "column": 34,
+                      "row": 495
+                    },
+                    "location": {
+                      "column": 19,
+                      "row": 495
+                    }
+                  }
+                ],
+                "message": "Convert to `X | None`"
+              },
+              "location": {
+                "column": 19,
+                "row": 495
+              },
+              "message": "Use `X | None` for type annotations",
+              "noqa_row": 495,
+              "severity": "error",
+              "url": "https://docs.astral.sh/ruff/rules/non-pep604-annotation-optional"
+            },
+            {
+              "cell": null,
+              "code": "UP045",
+              "end_location": {
+                "column": 30,
+                "row": 496
+              },
+              "filename": "/Users/kaiavnihalani/Downloads/Eden/src/eden/agents/agent_intel/_common.py",
+              "fix": {
+                "applicability": "safe",
+                "edits": [
+                  {
+                    "content": "float | None",
+                    "end_location": {
+                      "column": 30,
+                      "row": 496
+                    },
+                    "location": {
+                      "column": 15,
+                      "row": 496
+                    }
+                  }
+                ],
+                "message": "Convert to `X | None`"
+              },
+              "location": {
+                "column": 15,
+                "row": 496
+              },
+              "message": "Use `X | None` for type annotations",
+              "noqa_row": 496,
+              "severity": "error",
+              "url": "https://docs.astral.sh/ruff/rules/non-pep604-annotation-optional"
+            },
+            {
+              "cell": null,
+              "code": "UP045",
+              "end_location": {
+                "column": 36,
+                "row": 497
+              },
+              "filename": "/Users/kaiavnihalani/Downloads/Eden/src/eden/agents/agent_intel/_common.py",
+              "fix": {
+                "applicability": "safe",
+                "edits": [
+                  {
+                    "content": "float | None",
+                    "end_location": {
+                      "column": 36,
+                      "row": 497
+                    },
+                    "location": {
+                      "column": 21,
+                      "row": 497
+                    }
+                  }
+                ],
+                "message": "Convert to `X | None`"
+              },
+              "location": {
+                "column": 21,
+                "row": 497
+              },
+              "message": "Use `X | None` for type annotations",
+              "noqa_row": 497,
+              "severity": "error",
+              "url": "https://docs.astral.sh/ruff/rules/non-pep604-annotation-optional"
+            },
+            {
+              "cell": null,
+              "code": "UP045",
+              "end_location": {
+                "column": 36,
+                "row": 498
+              },
+              "filename": "/Users/kaiavnihalani/Downloads/Eden/src/eden/agents/agent_intel/_common.py",
+              "fix": {
+                "applicability": "safe",
+                "edits": [
+                  {
+                    "content": "float | None",
+                    "end_location": {
+                      "column": 36,
+                      "row": 498
+                    },
+                    "location": {
+                      "column": 21,
+                      "row": 498
+                    }
+                  }
+                ],
+                "message": "Convert to `X | None`"
+              },
+              "location": {
+                "column": 21,
+                "row": 498
+              },
+              "message": "Use `X | None` for type annotations",
+              "noqa_row": 498,
+              "severity": "error",
+              "url": "https://docs.astral.sh/ruff/rules/non-pep604-annotation-optional"
+            },
+            {
+              "cell": null,
+              "code": "UP045",
+              "end_location": {
+                "column": 31,
+                "row": 499
+              },
+              "filename": "/Users/kaiavnihalani/Downloads/Eden/src/eden/agents/agent_intel/_common.py",
+              "fix": {
+                "applicability": "safe",
+                "edits": [
+                  {
+                    "content": "float | None",
+                    "end_location": {
+                      "column": 31,
+                      "row": 499
+                    },
+                    "location": {
+                      "column": 16,
+                      "row": 499
+                    }
+                  }
+                ],
+                "message": "Convert to `X | None`"
+              },
+              "location": {
+                "column": 16,
+                "row": 499
+              },
+              "message": "Use `X | None` for type annotations",
+              "noqa_row": 499,
+              "severity": "error",
+              "url": "https://docs.astral.sh/ruff/rules/non-pep604-annotation-optional"
+            },
+            {
+              "cell": null,
+              "code": "SIM117",
+              "end_location": {
+                "column": 43,
+                "row": 520
+              },
+              "filename": "/Users/kaiavnihalani/Downloads/Eden/src/eden/agents/agent_intel/_common.py",
+              "fix": {
+                "applicability": "safe",
+                "edits": [
+                  {
+                    "content": "        async with client.acquire() as conn, conn.transaction():\n            await conn.execute(\n                \"\"\"\n                    DELETE FROM agent_performance_snapshots\n                     WHERE org_id = $1\n                       AND agent_id = $2\n                       AND window = $3\n                    \"\"\",\n                org_id,\n                agent_id,\n                window,\n            )\n            await conn.execute(\n                \"\"\"\n                    INSERT INTO agent_performance_snapshots\n                        (id, org_id, agent_id, window, success_rate,\n                         cost_usd, latency_p50_ms, latency_p95_ms,\n                         judge_avg)\n                    VALUES (gen_random_uuid(), $1, $2, $3, $4, $5,\n                            $6, $7, $8)\n                    \"\"\",\n                org_id,\n                agent_id,\n                window,\n                success_rate,\n                cost_usd,\n                latency_p50_ms,\n                latency_p95_ms,\n                judge_avg,\n            )",
+                    "end_location": {
+                      "column": 18,
+                      "row": 549
+                    },
+                    "location": {
+                      "column": 1,
+                      "row": 519
+                    }
+                  }
+                ],
+                "message": "Combine `with` statements"
+              },
+              "location": {
+                "column": 9,
+                "row": 519
+              },
+              "message": "Use a single `with` statement with multiple contexts instead of nested `with` statements",
+              "noqa_row": 519,
+              "severity": "error",
+              "url": "https://docs.astral.sh/ruff/rules/multiple-with-statements"
+            },
+            {
+              "cell": null,
+              "code": "SIM117",
+              "end_location": {
+                "column": 43,
+                "row": 574
+              },
+              "filename": "/Users/kaiavnihalani/Downloads/Eden/src/eden/agents/agent_intel/_common.py",
+              "fix": {
+                "applicability": "safe",
+                "edits": [
+                  {
+                    "content": "        async with client.acquire() as conn, conn.transaction():\n            await conn.execute(\n                \"DELETE FROM agent_relationships WHERE org_id = $1\",\n                org_id,\n            )\n            for r in rows:\n                parent = str(r.get(\"parent_agent_id\", \"\"))[:128]\n                child = str(r.get(\"child_agent_id\", \"\"))[:128]\n                if not parent or not child:\n                    continue\n                count = int(r.get(\"handoff_count\", 0) or 0)\n                sr = r.get(\"success_rate\")\n                await conn.execute(\n                    \"\"\"\n                        INSERT INTO agent_relationships\n                            (id, org_id, parent_agent_id, child_agent_id,\n                             handoff_count, success_rate)\n                        VALUES (gen_random_uuid(), $1, $2, $3, $4, $5)\n                        \"\"\",\n                    org_id, parent, child, count, sr,\n                )",
+                    "end_location": {
+                      "column": 22,
+                      "row": 594
+                    },
+                    "location": {
+                      "column": 1,
+                      "row": 573
+                    }
+                  }
+                ],
+                "message": "Combine `with` statements"
+              },
+              "location": {
+                "column": 9,
+                "row": 573
+              },
+              "message": "Use a single `with` statement with multiple contexts instead of nested `with` statements",
+              "noqa_row": 573,
+              "severity": "error",
+              "url": "https://docs.astral.sh/ruff/rules/multiple-with-statements"
+            },
+            {
+              "cell": null,
+              "code": "SIM117",
+              "end_location": {
+                "column": 43,
+                "row": 622
+              },
+              "filename": "/Users/kaiavnihalani/Downloads/Eden/src/eden/agents/agent_intel/_common.py",
+              "fix": {
+                "applicability": "safe",
+                "edits": [
+                  {
+                    "content": "        async with client.acquire() as conn, conn.transaction():\n            await conn.execute(\n                \"\"\"\n                    DELETE FROM agent_benchmark_runs\n                     WHERE org_id = $1\n                       AND agent_id = $2\n                       AND dataset_id = $3\n                    \"\"\",\n                org_id,\n                agent_id,\n                dataset_id,\n            )\n            await conn.execute(\n                \"\"\"\n                    INSERT INTO agent_benchmark_runs\n                        (id, org_id, agent_id, dataset_id, status,\n                         metrics_json)\n                    VALUES (gen_random_uuid(), $1, $2, $3, $4, $5)\n                    \"\"\",\n                org_id, agent_id, dataset_id, status, metrics_json,\n            )",
+                    "end_location": {
+                      "column": 18,
+                      "row": 642
+                    },
+                    "location": {
+                      "column": 1,
+                      "row": 621
+                    }
+                  }
+                ],
+                "message": "Combine `with` statements"
+              },
+              "location": {
+                "column": 9,
+                "row": 621
+              },
+              "message": "Use a single `with` statement with multiple contexts instead of nested `with` statements",
+              "noqa_row": 621,
+              "severity": "error",
+              "url": "https://docs.astral.sh/ruff/rules/multiple-with-statements"
+            },
+            {
+              "cell": null,
+              "code": "UP045",
+              "end_location": {
+                "column": 34,
+                "row": 651
+              },
+              "filename": "/Users/kaiavnihalani/Downloads/Eden/src/eden/agents/agent_intel/_common.py",
+              "fix": {
+                "applicability": "safe",
+                "edits": [
+                  {
+                    "content": "str | None",
+                    "end_location": {
+                      "column": 34,
+                      "row": 651
+                    },
+                    "location": {
+                      "column": 21,
+                      "row": 651
+                    }
+                  }
+                ],
+                "message": "Convert to `X | None`"
+              },
+              "location": {
+                "column": 21,
+                "row": 651
+              },
+              "message": "Use `X | None` for type annotations",
+              "noqa_row": 651,
+              "severity": "error",
+              "url": "https://docs.astral.sh/ruff/rules/non-pep604-annotation-optional"
+            },
+            {
+              "cell": null,
+              "code": "SIM117",
+              "end_location": {
+                "column": 43,
+                "row": 669
+              },
+              "filename": "/Users/kaiavnihalani/Downloads/Eden/src/eden/agents/agent_intel/_common.py",
+              "fix": {
+                "applicability": "safe",
+                "edits": [
+                  {
+                    "content": "        async with client.acquire() as conn, conn.transaction():\n            existing = await conn.fetchval(\n                \"\"\"\n                    SELECT id FROM agent_fleet_identities\n                     WHERE org_id = $1 AND agent_id = $2\n                     LIMIT 1\n                    \"\"\",\n                org_id, agent_id,\n            )\n            if existing is not None:\n                await conn.execute(\n                    \"\"\"\n                        UPDATE agent_fleet_identities\n                           SET display_name = $3,\n                               slack_identity = $4\n                         WHERE org_id = $1 AND agent_id = $2\n                        \"\"\",\n                    org_id, agent_id, display_name, slack_identity,\n                )\n            else:\n                await conn.execute(\n                    \"\"\"\n                        INSERT INTO agent_fleet_identities\n                            (id, org_id, agent_id, display_name,\n                             slack_identity)\n                        VALUES (gen_random_uuid(), $1, $2, $3, $4)\n                        \"\"\",\n                    org_id, agent_id, display_name, slack_identity,\n                )",
+                    "end_location": {
+                      "column": 22,
+                      "row": 697
+                    },
+                    "location": {
+                      "column": 1,
+                      "row": 668
+                    }
+                  }
+                ],
+                "message": "Combine `with` statements"
+              },
+              "location": {
+                "column": 9,
+                "row": 668
+              },
+              "message": "Use a single `with` statement with multiple contexts instead of nested `with` statements",
+              "noqa_row": 668,
+              "severity": "error",
+              "url": "https://docs.astral.sh/ruff/rules/multiple-with-statements"
+            },
+            {
+              "cell": null,
+              "code": "UP045",
+              "end_location": {
+                "column": 55,
+                "row": 781
+              },
+              "filename": "/Users/kaiavnihalani/Downloads/Eden/src/eden/agents/agent_intel/_common.py",
+              "fix": {
+                "applicability": "safe",
+                "edits": [
+                  {
+                    "content": "float | None",
+                    "end_location": {
+                      "column": 55,
+                      "row": 781
+                    },
+                    "location": {
+                      "column": 40,
+                      "row": 781
+                    }
+                  }
+                ],
+                "message": "Convert to `X | None`"
+              },
+              "location": {
+                "column": 40,
+                "row": 781
+              },
+              "message": "Use `X | None` for type annotations",
+              "noqa_row": 781,
+              "severity": "error",
+              "url": "https://docs.astral.sh/ruff/rules/non-pep604-annotation-optional"
+            },
+            {
+              "cell": null,
+              "code": "UP045",
+              "end_location": {
+                "column": 35,
+                "row": 829
+              },
+              "filename": "/Users/kaiavnihalani/Downloads/Eden/src/eden/agents/agent_intel/_common.py",
+              "fix": {
+                "applicability": "safe",
+                "edits": [
+                  {
+                    "content": "float | None",
+                    "end_location": {
+                      "column": 35,
+                      "row": 829
+                    },
+                    "location": {
+                      "column": 20,
+                      "row": 829
+                    }
+                  }
+                ],
+                "message": "Convert to `X | None`"
+              },
+              "location": {
+                "column": 20,
+                "row": 829
+              },
+              "message": "Use `X | None` for type annotations",
+              "noqa_row": 829,
+              "severity": "error",
+              "url": "https://docs.astral.sh/ruff/rules/non-pep604-annotation-optional"
+            },
+            {
+              "cell": null,
+              "code": "UP045",
+              "end_location": {
+                "column": 55,
+                "row": 829
+              },
+              "filename": "/Users/kaiavnihalani/Downloads/Eden/src/eden/agents/agent_intel/_common.py",
+              "fix": {
+                "applicability": "safe",
+                "edits": [
+                  {
+                    "content": "float | None",
+                    "end_location": {
+                      "column": 55,
+                      "row": 829
+                    },
+                    "location": {
+                      "column": 40,
+                      "row": 829
+                    }
+                  }
+                ],
+                "message": "Convert to `X | None`"
+              },
+              "location": {
+                "column": 40,
+                "row": 829
+              },
+              "message": "Use `X | None` for type annotations",
+              "noqa_row": 829,
+              "severity": "error",
+              "url": "https://docs.astral.sh/ruff/rules/non-pep604-annotation-optional"
+            },
+            {
+              "cell": null,
+              "code": "I001",
+              "end_location": {
+                "column": 2,
+                "row": 96
+              },
+              "filename": "/Users/kaiavnihalani/Downloads/Eden/src/eden/agents/agent_intel/performance.py",
+              "fix": {
+                "applicability": "safe",
+                "edits": [
+                  {
+                    "content": "from __future__ import annotations\n\nimport json\nimport logging\nfrom typing import Any, Optional\n\nfrom ._common import (\n    BENCHMARK_TASK_COUNT,\n    BOTTLENECK_MIN_CALLS,\n    DISPLAY_NAME_MAX_LEN,\n    DRIFT_DELTA_PCT,\n    DRIFT_MIN_BASELINE_CALLS,\n    HOTSPOT_ERROR_RATE,\n    LEGAL_PERMISSION_KEYS,\n    MAX_PERMISSIONS_PER_AGENT,\n    SLACK_IDENTITY_MAX_LEN,\n    VALID_BENCHMARKS,\n    _bad_request_envelope,\n    _delete_then_insert_benchmark_run,\n    _delete_then_insert_perf_snapshot,\n    _delete_then_insert_relationships,\n    _fetch_existing_fleet_identity,\n    _fetch_handoff_counts_in_window,\n    _fetch_relationships_for_org,\n    _fetch_telemetry_rollup_for_agent,\n    _fire_fleet_drift_hook,\n    _insert_fleet_permissions,\n    _not_found_envelope,\n    _now_iso,\n    _ok_envelope,\n    _parse_window,\n    _round2,\n    _safe_float,\n    _safe_float_or_none,\n    _safe_int,\n    _upsert_fleet_identity,\n)\n\n",
+                    "end_location": {
+                      "column": 1,
+                      "row": 98
+                    },
+                    "location": {
+                      "column": 1,
+                      "row": 60
+                    }
+                  }
+                ],
+                "message": "Organize imports"
+              },
+              "location": {
+                "column": 1,
+                "row": 60
+              },
+              "message": "Import block is un-sorted or un-formatted",
+              "noqa_row": 60,
+              "severity": "error",
+              "url": "https://docs.astral.sh/ruff/rules/unsorted-imports"
+            },
+            {
+              "cell": null,
+              "code": "F401",
+              "end_location": {
+                "column": 26,
+                "row": 73
+              },
+              "filename": "/Users/kaiavnihalani/Downloads/Eden/src/eden/agents/agent_intel/performance.py",
+              "fix": {
+                "applicability": "safe",
+                "edits": [
+                  {
+                    "content": "from ._common import (\n    BENCHMARK_TASK_COUNT,\n    BOTTLENECK_MIN_CALLS,\n    DRIFT_DELTA_PCT,\n    DRIFT_MIN_BASELINE_CALLS,\n    DISPLAY_NAME_MAX_LEN,\n    HOTSPOT_ERROR_RATE,\n    MAX_PERMISSIONS_PER_AGENT,\n    SLACK_IDENTITY_MAX_LEN,\n    VALID_BENCHMARKS,\n    _bad_request_envelope,\n    _delete_then_insert_benchmark_run,\n    _delete_then_insert_perf_snapshot,\n    _delete_then_insert_relationships,\n    _fetch_existing_fleet_identity,\n    _fetch_handoff_counts_in_window,\n    _fetch_relationships_for_org,\n    _fetch_telemetry_rollup_for_agent,\n    _fire_fleet_drift_hook,\n    _insert_fleet_permissions,\n    _not_found_envelope,\n    _now_iso,\n    _ok_envelope,\n    _parse_window,\n    _round2,\n    _safe_float,\n    _safe_float_or_none,\n    _safe_int,\n    _upsert_fleet_identity,\n)",
+                    "end_location": {
+                      "column": 2,
+                      "row": 96
+                    },
+                    "location": {
+                      "column": 1,
+                      "row": 66
+                    }
+                  }
+                ],
+                "message": "Remove unused import: `._common.LEGAL_PERMISSION_KEYS`"
+              },
+              "location": {
+                "column": 5,
+                "row": 73
+              },
+              "message": "`._common.LEGAL_PERMISSION_KEYS` imported but unused",
+              "noqa_row": 73,
+              "severity": "error",
+              "url": "https://docs.astral.sh/ruff/rules/unused-import"
+            },
+            {
+              "cell": null,
+              "code": "UP045",
+              "end_location": {
+                "column": 38,
+                "row": 629
+              },
+              "filename": "/Users/kaiavnihalani/Downloads/Eden/src/eden/agents/agent_intel/performance.py",
+              "fix": {
+                "applicability": "safe",
+                "edits": [
+                  {
+                    "content": "str | None",
+                    "end_location": {
+                      "column": 38,
+                      "row": 629
+                    },
+                    "location": {
+                      "column": 25,
+                      "row": 629
+                    }
+                  }
+                ],
+                "message": "Convert to `X | None`"
+              },
+              "location": {
+                "column": 25,
+                "row": 629
+              },
+              "message": "Use `X | None` for type annotations",
+              "noqa_row": 629,
+              "severity": "error",
+              "url": "https://docs.astral.sh/ruff/rules/non-pep604-annotation-optional"
+            }
+          ]
+        },
+        "ruff_format": {
+          "passed": false
+        },
+        "mypy": {
+          "passed": false,
+          "output": "llipsisType\", parameter has type \"ApproveMetricRequest\")  [assignment]\ntests/intelligence/test_metric_studio.py:354: error: \"Judge\" has no attribute \"org_id\"  [attr-defined]\ntests/intelligence/test_metric_studio.py:355: error: \"Judge\" has no attribute \"metric_id\"  [attr-defined]\ntests/intelligence/test_metric_studio.py:356: error: \"Judge\" has no attribute \"rubric_prompt\"  [attr-defined]\ntests/intelligence/test_metric_studio.py:412: error: Unsupported right operand type for in (\"str | None\")  [operator]\ntests/intelligence/test_metric_studio.py:640: error: \"Callable[[str, dict[str, Any]], Coroutine[Any, Any, None]]\" has no attribute \"saved\"  [attr-defined]\ntests/intelligence/test_metric_studio.py:655: error: \"Callable[[str, dict[str, Any]], Coroutine[Any, Any, None]]\" has no attribute \"saved\"  [attr-defined]\nsrc/eden/api/app.py:84: error: Function is missing a return type annotation  [no-untyped-def]\nsrc/eden/api/app.py:237: error: Function is missing a return type annotation  [no-untyped-def]\ntests/conftest.py:109: error: Incompatible default for parameter \"content\" (default has type \"None\", parameter has type \"str\")  [assignment]\ntests/conftest.py:109: note: PEP 484 prohibits implicit Optional. Accordingly, mypy has changed its default to no_implicit_optional=True\ntests/conftest.py:109: note: Use https://github.com/hauntsaninja/no_implicit_optional to automatically upgrade your codebase\ntests/conftest.py:109: error: Incompatible default for parameter \"usage\" (default has type \"None\", parameter has type \"UsageStats\")  [assignment]\ntests/conftest.py:109: error: Incompatible default for parameter \"model\" (default has type \"None\", parameter has type \"str\")  [assignment]\ntests/integration/test_ingestion.py:50: error: Module \"eden.api.deps\" has no attribute \"get_ingestion_auth\"  [attr-defined]\ntests/integration/test_gateway.py:160: error: Module \"eden.api.deps\" has no attribute \"get_ingestion_auth\"  [attr-defined]\nFound 1075 errors in 220 files (checked 544 source files)\n"
+        }
+      },
+      "error": null,
+      "blocks_merge": true
+    },
+    {
+      "stage": "security_scan",
+      "status": "failed",
+      "duration_ms": 11.9,
+      "details": {
+        "bandit": {
+          "passed": false,
+          "error": "[Errno 2] No such file or directory: 'bandit'"
+        },
+        "safety": {
+          "passed": false,
+          "error": "[Errno 2] No such file or directory: 'safety'"
+        }
+      },
+      "error": null,
+      "blocks_merge": true
+    },
+    {
+      "stage": "unit_tests",
+      "status": "failed",
+      "duration_ms": 315.03,
+      "details": {
+        "returncode": 4,
+        "coverage_pct": 0.0,
+        "output_summary": ""
+      },
+      "error": null,
+      "blocks_merge": true
+    },
+    {
+      "stage": "integration_tests",
+      "status": "failed",
+      "duration_ms": 314.72,
+      "details": {
+        "returncode": 4,
+        "output_summary": ""
+      },
+      "error": null,
+      "blocks_merge": true
+    },
+    {
+      "stage": "benchmark_regression",
+      "status": "failed",
+      "duration_ms": 0.71,
+      "details": {
+        "dataset_id": "gd_eden_canonical_v1",
+        "dataset_version": "1.0.0",
+        "baseline_commit": null,
+        "regression_detected": true,
+        "overall_success_rate": 0.84,
+        "category_results": {
+          "simulation": {
+            "total": 6,
+            "passed": 3,
+            "failed": 3,
+            "success_rate": 0.5,
+            "category_passed": false
+          },
+          "adversarial": {
+            "total": 8,
+            "passed": 6,
+            "failed": 2,
+            "success_rate": 0.75,
+            "category_passed": true
+          },
+          "agent_sandbox": {
+            "total": 10,
+            "passed": 9,
+            "failed": 1,
+            "success_rate": 0.9,
+            "category_passed": true
+          },
+          "multi_agent": {
+            "total": 8,
+            "passed": 7,
+            "failed": 1,
+            "success_rate": 0.875,
+            "category_passed": true
+          },
+          "tool_use": {
+            "total": 8,
+            "passed": 7,
+            "failed": 1,
+            "success_rate": 0.875,
+            "category_passed": true
+          },
+          "llm_agent_eval": {
+            "total": 10,
+            "passed": 10,
+            "failed": 0,
+            "success_rate": 1.0,
+            "category_passed": true
+          }
+        }
+      },
+      "error": null,
+      "blocks_merge": true
+    },
+    {
+      "stage": "performance_tests",
+      "status": "warned",
+      "duration_ms": 5.23,
+      "details": {},
+      "error": "[Errno 2] No such file or directory: 'python'",
+      "blocks_merge": false
+    }
+  ],
+  "overall_status": "failed",
+  "summary": "CI Evaluation complete in 750ms\n  Passed: 0 | Failed: 5 | Warned: 1 | Skipped: 0\n  Merge blocked by: static_analysis, security_scan, unit_tests, integration_tests, benchmark_regression\n  Warnings in: performance_tests",
+  "duration_ms": 749.76,
+  "timestamp": "2026-06-12T14:18:56.217592+00:00",
+  "merge_allowed": false
+}

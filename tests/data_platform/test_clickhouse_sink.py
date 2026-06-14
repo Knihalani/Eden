@@ -1,11 +1,12 @@
 """Tests for the ClickHouse analytics sink."""
 
 import pytest
+
 from eden.data_platform.clickhouse_sink import (
-    ClickHouseSink,
     ClickHouseConfig,
-    IngestionReport,
     ClickHouseError,
+    ClickHouseSink,
+    IngestionReport,
 )
 
 
