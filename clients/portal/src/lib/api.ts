@@ -2886,3 +2886,124 @@ export const governanceApi = {
 (api as unknown as Record<string, unknown>).metricStudioApi = metricStudioApi;
 (api as unknown as Record<string, unknown>).intelligenceAgentsApi = intelligenceAgentsApi;
 (api as unknown as Record<string, unknown>).governanceApi = governanceApi;
+
+// ─── Onboarding wizard (June 2026) ────────────────────────────────
+
+export interface GitHubInstallation {
+  installation_id: number;
+  account_login: string;
+  account_type: string;
+  installed_at: string;
+  suspended: boolean;
+}
+
+export interface GitHubRepo {
+  full_name: string;
+  name: string;
+  owner: string;
+  default_branch: string;
+  private: boolean;
+  description: string;
+  html_url: string;
+  installation_id: number;
+}
+
+export interface OnboardingPRRun {
+  id: string;
+  org_id: string;
+  agent_id: string | null;
+  repo_full_name: string;
+  framework: string | null;
+  language: string | null;
+  branch: string | null;
+  pr_number: number | null;
+  pr_url: string | null;
+  status: "pending" | "opened" | "merged" | "closed" | "skipped" | "failed";
+  detail: Record<string, unknown>;
+  created_at: string;
+  opened_at: string | null;
+  merged_at: string | null;
+  closed_at: string | null;
+}
+
+export interface OnboardingState {
+  org_id: string;
+  step: "welcome" | "org_setup" | "install_sdk" | "connect_github" | "wait_for_pr" | "done";
+  org_setup_choice: "created" | "joined" | null;
+  agents_onboarded: Array<{ agent_id?: string; agent_name?: string }>;
+  completed_by_users: string[];
+  updated_at: string;
+}
+
+export interface PendingInvite {
+  invitation_id: string;
+  org_id: string;
+  org_name: string;
+  org_slug: string;
+  role: string;
+  expires_at: string | null;
+  created_at: string | null;
+  invited_by_name: string;
+  invited_by_email: string;
+}
+
+export const githubApi = {
+  configured: () =>
+    fetchApi<{ configured: boolean; app_slug: string | null }>(
+      `/integrations/github/configured`,
+    ),
+  authorize: (orgId: string) =>
+    fetchApi<{ install_url: string; state: string }>(
+      `/integrations/github/authorize`,
+      { method: "GET", headers: { "X-Org-Id": orgId } },
+    ),
+  listInstallations: (orgId: string) =>
+    fetchApi<GitHubInstallation[]>(
+      `/orgs/${orgId}/github/installations`,
+      { headers: { "X-Org-Id": orgId } },
+    ),
+  listRepos: (orgId: string) =>
+    fetchApi<GitHubRepo[]>(
+      `/orgs/${orgId}/github/repos`,
+      { headers: { "X-Org-Id": orgId } },
+    ),
+  integrate: (
+    orgId: string,
+    body: { installation_id: number; repo_full_name: string; agent_id?: string; agent_name?: string },
+  ) =>
+    fetchApi<OnboardingPRRun>(`/orgs/${orgId}/github/integrate`, {
+      method: "POST",
+      headers: { "X-Org-Id": orgId },
+      body: JSON.stringify(body),
+    }),
+};
+
+export const onboardingApi = {
+  getState: (orgId: string) =>
+    fetchApi<OnboardingState>(`/orgs/${orgId}/onboarding/state`, {
+      headers: { "X-Org-Id": orgId },
+    }),
+  patchState: (
+    orgId: string,
+    body: {
+      step?: OnboardingState["step"];
+      org_setup_choice?: "created" | "joined";
+      mark_agent_onboarded?: { agent_id?: string; agent_name?: string };
+    },
+  ) =>
+    fetchApi<OnboardingState>(`/orgs/${orgId}/onboarding/state`, {
+      method: "POST",
+      headers: { "X-Org-Id": orgId },
+      body: JSON.stringify(body),
+    }),
+  listPrRuns: (orgId: string, limit = 50) =>
+    fetchApi<OnboardingPRRun[]>(
+      `/orgs/${orgId}/onboarding/pr-runs?limit=${limit}`,
+      { headers: { "X-Org-Id": orgId } },
+    ),
+  pendingInvites: () =>
+    fetchApi<PendingInvite[]>(`/auth/me/pending-invites`),
+};
+
+(api as unknown as Record<string, unknown>).githubApi = githubApi;
+(api as unknown as Record<string, unknown>).onboardingApi = onboardingApi;
