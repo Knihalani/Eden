@@ -89,7 +89,7 @@ export function AuditLogTab({ org }: { org: any }) {
   return (
     <div className="space-y-4">
       {/* Filters */}
-      <div className="p-4 bg-[var(--surface)] rounded-xl border border-[var(--border)]">
+      <div className="p-4 bg-[var(--bg-primary)] rounded-xl border border-[var(--border)]">
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-2">
             <FileText className="w-4 h-4 text-[var(--text-muted)]" />
@@ -100,7 +100,7 @@ export function AuditLogTab({ org }: { org: any }) {
             onClick={() => setShowFilters(!showFilters)}
             className={cn(
               "px-3 py-1.5 text-sm border border-[var(--border)] rounded-lg flex items-center gap-1.5",
-              showFilters && "bg-blue-50 border-blue-200"
+              showFilters && "bg-[var(--accent-faint)] border-[var(--accent)]"
             )}
           >
             <Filter className="w-4 h-4" />
@@ -173,7 +173,7 @@ export function AuditLogTab({ org }: { org: any }) {
           <p className="text-sm">Events will appear here as actions are taken</p>
         </div>
       ) : (
-        <div className="bg-[var(--surface)] rounded-xl border border-[var(--border)] overflow-hidden">
+        <div className="bg-[var(--bg-primary)] rounded-xl border border-[var(--border)] overflow-hidden">
           <table className="w-full">
             <thead className="bg-[var(--bg-muted)]">
               <tr>
@@ -198,14 +198,14 @@ export function AuditLogTab({ org }: { org: any }) {
                     <span className={cn(
                       "px-2 py-1 rounded-md text-xs font-medium",
                       event.action.startsWith("member.")
-                        ? "bg-blue-50 text-blue-700"
+                        ? "bg-[var(--accent-faint)] text-[var(--accent)]"
                         : event.action.startsWith("org.")
-                        ? "bg-red-50 text-red-700"
+                        ? "bg-[var(--error-dim)] text-[var(--error)]"
                         : event.action.startsWith("reference.")
-                        ? "bg-green-50 text-green-700"
+                        ? "bg-[var(--terminal-faint)] text-[var(--terminal)]"
                         : event.action.startsWith("settings.")
-                        ? "bg-yellow-50 text-yellow-700"
-                        : "bg-gray-50 text-gray-700"
+                        ? "bg-[var(--warning-bg)] text-[var(--warning)]"
+                        : "bg-[var(--bg-secondary)] text-[var(--text-secondary)]"
                     )}>
                       {formatAction(event.action)}
                     </span>
@@ -241,7 +241,7 @@ export function AuditLogTab({ org }: { org: any }) {
               <button
                 onClick={() => loadEvents(true)}
                 disabled={loading}
-                className="px-4 py-2 text-sm text-blue-600 hover:underline disabled:opacity-50"
+                className="px-4 py-2 text-sm text-[var(--accent)] hover:underline disabled:opacity-50"
               >
                 {loading ? (
                   <span className="flex items-center gap-2 justify-center">

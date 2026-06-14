@@ -6,11 +6,10 @@ Handles graph entities and entity links with bitemporal model.
 import json
 import logging
 from datetime import datetime
-from typing import Optional, Any
-from uuid import UUID, uuid4
+from uuid import uuid4
 
-from eden.storage.postgres import get_postgres_client
 from eden.kb.retrieval_logger import get_retrieval_logger
+from eden.storage.postgres import get_postgres_client
 
 logger = logging.getLogger(__name__)
 
@@ -101,7 +100,7 @@ class SemanticGraphClient:
             logger.error(f"Failed to insert link: {e}")
             return False
 
-    async def get_entity(self, entity_id: str) -> Optional[dict]:
+    async def get_entity(self, entity_id: str) -> dict | None:
         """Get a graph entity by ID."""
         client = await get_postgres_client()
 
@@ -111,8 +110,8 @@ class SemanticGraphClient:
     async def get_entity_by_name(
         self,
         name: str,
-        entity_type: Optional[str] = None,
-    ) -> Optional[dict]:
+        entity_type: str | None = None,
+    ) -> dict | None:
         """Get a graph entity by name and optional type."""
         client = await get_postgres_client()
 
@@ -211,7 +210,7 @@ class SemanticGraphClient:
     async def query_by_type(
         self,
         entity_type: str,
-        valid_at: Optional[datetime] = None,
+        valid_at: datetime | None = None,
         limit: int = 100,
     ) -> list[dict]:
         """Query entities by type with optional temporal filter."""
@@ -268,7 +267,7 @@ class SemanticGraphClient:
 
 
 # Singleton
-_graph_client: Optional[SemanticGraphClient] = None
+_graph_client: SemanticGraphClient | None = None
 
 
 def get_graph_client() -> SemanticGraphClient:

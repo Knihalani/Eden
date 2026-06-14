@@ -4,7 +4,6 @@ Provides hybrid dense+sparse vector search for semantic memory retrieval.
 """
 
 import logging
-from typing import Optional
 from dataclasses import dataclass
 
 from qdrant_client import QdrantClient
@@ -45,14 +44,14 @@ class QdrantClientWrapper:
 
     def __init__(
         self,
-        host: Optional[str] = None,
-        port: Optional[int] = None,
+        host: str | None = None,
+        port: int | None = None,
         collection_prefix: str = "eden_",
     ):
         self.host = host or settings.qdrant_host
         self.port = port or settings.qdrant_port
         self.collection_prefix = collection_prefix
-        self._client: Optional[QdrantClient] = None
+        self._client: QdrantClient | None = None
 
     def _get_client(self) -> QdrantClient:
         """Get or create the Qdrant client."""
@@ -85,11 +84,14 @@ class QdrantClientWrapper:
         existing = {c.name for c in client.get_collections().collections}
         for name, config in collections_to_create.items():
             if name not in existing:
+                # ``config`` is built from a literal above, so the values
+                # are concrete (not Any). Cast through the static types so
+                # mypy is happy.
                 client.create_collection(
                     collection_name=name,
                     vectors_config=models.VectorParams(
-                        size=config["vector_size"],
-                        distance=config["distance"],
+                        size=int(config["vector_size"]),
+                        distance=models.Distance(config["distance"]),
                     ),
                 )
                 logger.info(f"Created Qdrant collection: {name}")
@@ -99,8 +101,8 @@ class QdrantClientWrapper:
         collection: str,
         query_vector: list[float],
         limit: int = 20,
-        query_filter: Optional[dict] = None,
-        score_threshold: Optional[float] = None,
+        query_filter: dict | None = None,
+        score_threshold: float | None = None,
     ) -> SearchResults:
         """Search for similar vectors.
 
@@ -173,7 +175,7 @@ class QdrantClientWrapper:
         Returns:
             SearchResults with fused ranked results
         """
-        client = self._get_client()
+        self._get_client()
         collection_name = f"{self.collection_prefix}{collection}"
 
         # Perform dense vector search
@@ -217,6 +219,7 @@ class QdrantClientWrapper:
         try:
             # Try to use scroll API with text match filter
             search_filter = None
+            client = self._get_client()
             results = client.scroll(
                 collection_name=collection_name,
                 scroll_filter=search_filter,
@@ -361,7 +364,7 @@ class QdrantClientWrapper:
         )
         return True
 
-    def count(self, collection: str, filter_cond: Optional[dict] = None) -> int:
+    def count(self, collection: str, filter_cond: dict | None = None) -> int:
         """Count points in a collection."""
         client = self._get_client()
         collection_name = f"{self.collection_prefix}{collection}"
@@ -407,7 +410,7 @@ class QdrantClientWrapper:
 
 
 # Singleton instance
-_qdrant_client: Optional[QdrantClientWrapper] = None
+_qdrant_client: QdrantClientWrapper | None = None
 
 
 def get_qdrant_client() -> QdrantClientWrapper:

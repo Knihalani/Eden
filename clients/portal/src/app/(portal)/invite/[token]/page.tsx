@@ -71,7 +71,7 @@ export default function InvitePage() {
     return (
       <div className="min-h-screen flex items-center justify-center bg-[var(--background)]">
         <div className="text-center">
-          <Loader2 className="w-8 h-8 animate-spin mx-auto mb-4 text-blue-600" />
+          <Loader2 className="w-8 h-8 animate-spin mx-auto mb-4 text-[var(--accent)]" />
           <p className="text-[var(--text-secondary)]">Verifying invitation...</p>
         </div>
       </div>
@@ -81,9 +81,9 @@ export default function InvitePage() {
   if (error || !inviteData?.valid) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-[var(--background)]">
-        <div className="max-w-md w-full mx-4 p-8 bg-[var(--surface)] rounded-2xl border border-[var(--border)] text-center">
-          <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
-            <AlertCircle className="w-6 h-6 text-red-600" />
+        <div className="max-w-md w-full mx-4 p-8 bg-[var(--bg-primary)] rounded-2xl border border-[var(--border)] text-center">
+          <div className="w-12 h-12 bg-[var(--error-dim)] rounded-full flex items-center justify-center mx-auto mb-4">
+            <AlertCircle className="w-6 h-6 text-[var(--error)]" />
           </div>
           <h1 className="text-xl font-bold mb-2">Invalid Invitation</h1>
           <p className="text-[var(--text-secondary)] mb-6">
@@ -91,7 +91,7 @@ export default function InvitePage() {
           </p>
           <a
             href="/login"
-            className="inline-block px-6 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700"
+            className="inline-block px-6 py-2 bg-[var(--accent)] text-[var(--bg-primary)] rounded-lg font-medium hover:bg-[var(--accent-hover)]"
           >
             Go to Login
           </a>
@@ -104,10 +104,10 @@ export default function InvitePage() {
     <div className="min-h-screen flex items-center justify-center bg-[var(--background)] p-4">
       <div className="max-w-md w-full">
         {/* Invitation Info Card */}
-        <div className="p-6 bg-[var(--surface)] rounded-2xl border border-[var(--border)] mb-6">
+        <div className="p-6 bg-[var(--bg-primary)] rounded-2xl border border-[var(--border)] mb-6">
           <div className="flex items-center gap-3 mb-4">
-            <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
-              <Building2 className="w-5 h-5 text-blue-600" />
+            <div className="w-10 h-10 bg-[var(--accent-faint)] rounded-lg flex items-center justify-center">
+              <Building2 className="w-5 h-5 text-[var(--accent)]" />
             </div>
             <div>
               <h2 className="font-semibold text-lg">{inviteData.org_name}</h2>
@@ -133,9 +133,9 @@ export default function InvitePage() {
           <div className="mt-4 pt-4 border-t border-[var(--border)]">
             <span className={cn(
               "px-3 py-1 rounded-lg text-sm font-medium",
-              inviteData.role === "admin" ? "bg-blue-100 text-blue-700" :
-              inviteData.role === "member" ? "bg-gray-100 text-gray-700" :
-              "bg-gray-100 text-gray-600"
+              inviteData.role === "admin" ? "bg-[var(--accent-faint)] text-[var(--accent)]" :
+              inviteData.role === "member" ? "bg-[var(--bg-tertiary)] text-[var(--text-secondary)]" :
+              "bg-[var(--bg-tertiary)] text-[var(--text-secondary)]"
             )}>
               {inviteData.role}
             </span>
@@ -143,7 +143,7 @@ export default function InvitePage() {
         </div>
 
         {/* Signup Form */}
-        <div className="p-6 bg-[var(--surface)] rounded-2xl border border-[var(--border)]">
+        <div className="p-6 bg-[var(--bg-primary)] rounded-2xl border border-[var(--border)]">
           <h1 className="text-xl font-bold mb-1">Create Your Account</h1>
           <p className="text-sm text-[var(--text-secondary)] mb-6">
             Join {inviteData.org_name} by creating your account
@@ -178,7 +178,7 @@ export default function InvitePage() {
             </div>
 
             {signupError && (
-              <div className="p-3 bg-red-50 text-red-600 rounded-lg text-sm">
+              <div className="p-3 bg-[var(--error-dim)] text-[var(--error)] rounded-lg text-sm">
                 {signupError}
               </div>
             )}
@@ -186,7 +186,7 @@ export default function InvitePage() {
             <button
               type="submit"
               disabled={signupLoading || !name.trim() || !password.trim()}
-              className="w-full py-2.5 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              className="w-full py-2.5 bg-[var(--accent)] text-[var(--bg-primary)] rounded-lg font-medium hover:bg-[var(--accent-hover)] disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
             >
               {signupLoading && <Loader2 className="w-4 h-4 animate-spin" />}
               {signupLoading ? "Creating Account..." : "Join Organization"}
@@ -195,7 +195,7 @@ export default function InvitePage() {
 
           <p className="text-xs text-center text-[var(--text-muted)] mt-4">
             Already have an account?{" "}
-            <a href="/login" className="text-blue-600 hover:underline">
+            <a href="/login" className="text-[var(--accent)] hover:underline">
               Sign in
             </a>
           </p>

@@ -53,11 +53,11 @@ export function CodeHighlightBlock({
   const detectedLang = language || detectLanguage(filePath);
 
   return (
-    <div className={cn("rounded-xl border overflow-hidden", isStreaming ? "border-blue-500" : "border-[var(--border)]")}>
+    <div className={cn("rounded-xl border overflow-hidden", isStreaming ? "border-[var(--accent)]" : "border-[var(--border)]")}>
       {filePath && (
-        <div className="px-4 py-2 bg-[var(--surface)] border-b border-[var(--border)] flex items-center justify-between">
+        <div className="px-4 py-2 bg-[var(--bg-primary)] border-b border-[var(--border)] flex items-center justify-between">
           <span className="text-xs font-mono text-[var(--text-muted)]">{filePath}</span>
-          <span className="text-xs px-1.5 py-0.5 bg-gray-100 text-gray-600 rounded font-medium">
+          <span className="text-xs px-1.5 py-0.5 bg-[var(--bg-tertiary)] text-[var(--text-secondary)] rounded font-medium">
             {detectedLang}
           </span>
         </div>
@@ -85,13 +85,13 @@ export function CodeHighlightBlock({
         </SyntaxHighlighter>
         <button
           onClick={handleCopy}
-          className="absolute top-2 right-2 p-1.5 text-gray-400 hover:text-gray-100 hover:bg-gray-700 rounded transition-colors"
+          className="absolute top-2 right-2 p-1.5 text-[var(--text-muted)] hover:text-[var(--text-primary)]/100 hover:bg-[var(--text-primary)] rounded transition-colors"
           title="Copy code"
         >
           {copied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
         </button>
         {isStreaming && (
-          <div className="absolute bottom-2 right-10 w-2 h-4 bg-gray-400 animate-pulse" />
+          <div className="absolute bottom-2 right-10 w-2 h-4 bg-[var(--border-strong)] animate-pulse" />
         )}
       </div>
     </div>

@@ -3,62 +3,100 @@
 /* ==================== Design Tokens ==================== */
 
 :root {
-  /* Backgrounds — cooler neutral palette, not warm cream */
-  --bg-primary: #FFFFFF;
-  --bg-secondary: #F9FAFB;
-  --bg-tertiary: #F3F4F6;
-  --bg-inset: #FAFAFA;
+  /* Dark Terminal — deep blacks, cool blue panels, phosphor accents */
 
-  /* Borders — refined, not harsh */
-  --border-subtle: #E9EAEB;
-  --border-default: #D9DADB;
-  --border-strong: #ACAFB2;
+  /* Backgrounds — terminal depth ladder */
+  --bg-base: #03060A;          /* deepest — code blocks, terminal panels */
+  --bg-primary: #0A0E14;       /* default body / page background */
+  --bg-secondary: #0F1419;     /* cards, popovers */
+  --bg-tertiary: #151B23;      /* elevated surfaces, table headers */
+  --bg-inset: #060A10;         /* inset wells, code blocks */
 
-  /* Text — sharper contrast */
-  --text-primary: #111112;
-  --text-secondary: #5C5D60;
-  --text-muted: #989A9D;
+  /* Borders — refined blue-tinted edges */
+  --border-subtle: #1A2332;
+  --border-default: #243044;
+  --border-strong: #3A4A66;
+  --border-glow: #5B9EFF;      /* focus / active glow */
 
-  /* Accent (Emerald) — primary brand */
-  --accent: #10B981;
-  --accent-hover: #059669;
-  --accent-light: #D1FAE5;
-  --accent-foreground: #FFFFFF;
+  /* Text — sharp contrast on dark */
+  --text-primary: #E4ECF7;
+  --text-secondary: #94A3B8;
+  --text-muted: #64748B;
+  --text-faint: #475569;
 
-  /* Primary (Indigo) — used sparingly */
-  --primary: #6366F1;
-  --primary-hover: #4F46E5;
-  --primary-light: #EEF2FF;
-  --primary-foreground: #FFFFFF;
+  /* Accent (Terminal Blue) — primary action color */
+  --accent: #5B9EFF;
+  --accent-hover: #7AB1FF;
+  --accent-dim: #1E3A5F;
+  --accent-faint: #0F1F33;
+  --accent-2: #5FE5A8;         /* legacy alias — maps to terminal green */
+  --accent-light: #0F1F33;     /* legacy alias — maps to accent-faint */
+  --accent-foreground: #03060A;
 
-  /* Semantic */
-  --success: #16A34A;
-  --success-bg: #DCFCE7;
-  --success-strong: #15803D;
-  --warning: #D97706;
-  --warning-bg: #FEF3C7;
+  /* Terminal (Phosphor Green) — reserved for active/running only */
+  --terminal: #5FE5A8;
+  --terminal-dim: #2D6B4F;
+  --terminal-faint: #0F1F18;
+  --terminal-glow: rgba(95, 229, 168, 0.4);
+
+  /* Primary (Indigo) — kept for any legacy references, but rarely used */
+  --primary: #5B9EFF;
+  --primary-hover: #7AB1FF;
+  --primary-light: #0F1F33;
+  --primary-foreground: #03060A;
+
+  /* Semantic — terminal-themed */
+  --success: #5FE5A8;
+  --success-bg: #0F1F18;
+  --success-strong: #2D6B4F;
+  --warning: #FFB547;
+  --warning-bg: rgba(255, 181, 71, 0.1);
   --warning-strong: #B45309;
-  --error: #DC2626;
-  --error-bg: #FEF2F2;
+  --error: #FF6B7A;
+  --error-bg: rgba(255, 107, 122, 0.1);
+  --error-dim: #3A1A1F;
   --error-strong: #B91C1C;
 
-  /* Pipeline Stage Colors */
-  --stage-planning: #6366F1;
-  --stage-criticizing: #D97706;
-  --stage-refining: #0891B2;
-  --stage-fact-checking: #0D9488;
-  --stage-executing: #2563EB;
-  --stage-code-quality: #7C3AED;
-  --stage-verifying: #10B981;
-  --stage-testing: #65A30D;
-  --stage-archiving: #9333EA;
+  /* Pipeline Stage Colors — 9 distinct hues, dark-base friendly */
+  --stage-planning: #818CF8;
+  --stage-criticizing: #FFB547;
+  --stage-refining: #22D3EE;
+  --stage-fact-checking: #2DD4BF;
+  --stage-executing: #5B9EFF;
+  --stage-code-quality: #C084FC;
+  --stage-verifying: #5FE5A8;
+  --stage-testing: #A3E635;
+  --stage-archiving: #E879F9;
 
-  /* Status Colors */
-  --status-pending: #6B7280;
-  --status-running: #2563EB;
-  --status-completed: #16A34A;
-  --status-failed: #DC2626;
-  --status-human-review: #D97706;
+  /* Status Colors — remapped to terminal palette */
+  --status-pending: #64748B;
+  --status-running: #5B9EFF;
+  --status-completed: #5FE5A8;
+  --status-failed: #FF6B7A;
+  --status-human-review: #FFB547;
+
+  /* Chart palette — dark theme */
+  --chart-accent: #5B9EFF;
+  --chart-primary: #5B9EFF;
+  --chart-success: #5FE5A8;
+  --chart-warning: #FFB547;
+  --chart-error: #FF6B7A;
+  --chart-grid: #1A2332;
+  --chart-axis: #475569;
+  --chart-pie-1: #5B9EFF;
+  --chart-pie-2: #5FE5A8;
+  --chart-pie-3: #FFB547;
+  --chart-pie-4: #C084FC;
+  --chart-pie-5: #E879F9;
+  --chart-pie-6: #22D3EE;
+  --chart-outcome-gold: #FFB547;
+  --chart-outcome-silver: #94A3B8;
+  --chart-outcome-bronze: #C084FC;
+  --chart-outcome-partial: #5B9EFF;
+  --chart-outcome-failed: #FF6B7A;
+
+  /* Overlay — modal scrim */
+  --overlay: rgba(0, 0, 0, 0.72);
 
   /* Typography Scale */
   --font-size-xs: 0.75rem;
@@ -124,40 +162,60 @@
   --background: var(--bg-secondary);
   --foreground: var(--text-primary);
   --border: var(--border-default);
-  --accent-bg: var(--accent-light);
+  --accent-bg: var(--accent-faint);
   --bg-muted: var(--bg-tertiary);
+  --bg-elevated: var(--bg-tertiary);
+  --fg-muted: var(--text-muted);
+  --fg-secondary: var(--text-secondary);
+  --fg-faint: var(--text-faint);
+  --bg-surface: var(--bg-primary);
+  --error-bg-dim: var(--error-dim);
 
   /* Frosted glass indicator for settings nav */
-  --indicator-bg: rgba(16, 185, 129, 0.08);
-  --indicator-border: rgba(16, 185, 129, 0.15);
+  --indicator-bg: rgba(91, 158, 255, 0.08);
+  --indicator-border: rgba(91, 158, 255, 0.15);
   --indicator-blur: 8px;
 }
 
 /* ==================== Tailwind v4 Theme Integration ==================== */
 
 @theme inline {
+  --color-bg-base: var(--bg-base);
   --color-bg-primary: var(--bg-primary);
   --color-bg-secondary: var(--bg-secondary);
   --color-bg-tertiary: var(--bg-tertiary);
+  --color-bg-inset: var(--bg-inset);
   --color-border-subtle: var(--border-subtle);
   --color-border-default: var(--border-default);
   --color-border-strong: var(--border-strong);
+  --color-border-glow: var(--border-glow);
   --color-text-primary: var(--text-primary);
   --color-text-secondary: var(--text-secondary);
   --color-text-muted: var(--text-muted);
+  --color-text-faint: var(--text-faint);
   --color-primary: var(--primary);
   --color-primary-hover: var(--primary-hover);
   --color-primary-light: var(--primary-light);
   --color-primary-foreground: var(--primary-foreground);
   --color-accent: var(--accent);
   --color-accent-hover: var(--accent-hover);
+  --color-accent-dim: var(--accent-dim);
+  --color-accent-faint: var(--accent-faint);
   --color-accent-light: var(--accent-light);
+  --color-accent-2: var(--accent-2);
+  --color-terminal: var(--terminal);
+  --color-terminal-dim: var(--terminal-dim);
+  --color-terminal-faint: var(--terminal-faint);
   --color-success: var(--success);
   --color-success-bg: var(--success-bg);
+  --color-success-strong: var(--success-strong);
   --color-warning: var(--warning);
   --color-warning-bg: var(--warning-bg);
+  --color-warning-strong: var(--warning-strong);
   --color-error: var(--error);
   --color-error-bg: var(--error-bg);
+  --color-error-dim: var(--error-dim);
+  --color-error-strong: var(--error-strong);
   --color-stage-planning: var(--stage-planning);
   --color-stage-criticizing: var(--stage-criticizing);
   --color-stage-refining: var(--stage-refining);
@@ -172,6 +230,12 @@
   --color-status-completed: var(--status-completed);
   --color-status-failed: var(--status-failed);
   --color-status-human-review: var(--status-human-review);
+  --color-chart-accent: var(--chart-accent);
+  --color-chart-primary: var(--chart-primary);
+  --color-chart-success: var(--chart-success);
+  --color-chart-warning: var(--chart-warning);
+  --color-chart-error: var(--chart-error);
+  --color-chart-grid: var(--chart-grid);
   --radius-sm: var(--radius-sm);
   --radius-md: var(--radius-md);
   --radius-lg: var(--radius-lg);
@@ -192,7 +256,7 @@
 }
 
 body {
-  background: var(--bg-secondary);
+  background: var(--bg-base);
   color: var(--text-primary);
   font-family: var(--font-sans);
   line-height: var(--line-height-normal);
@@ -203,8 +267,8 @@ body {
 
 /* Selection */
 ::selection {
-  background: var(--primary-light);
-  color: var(--primary);
+  background: var(--accent-faint);
+  color: var(--accent);
 }
 
 /* Focus — distinctive ring, not the default browser outline */
@@ -358,12 +422,38 @@ html {
 
 /* Border pulse for running/pending job cards */
 @keyframes border-pulse {
-  0%, 100% { border-left-color: var(--accent); }
-  50% { border-left-color: rgba(16, 185, 129, 0.3); }
+  0%, 100% { border-left-color: var(--terminal); box-shadow: 0 0 8px var(--terminal-glow); }
+  50% { border-left-color: var(--accent); box-shadow: none; }
 }
 
 .animate-border-pulse {
   animation: border-pulse 2s ease-in-out infinite;
+}
+
+/* Fade up — used by auth screens and inline error reveals */
+@keyframes fadeUp {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.fade-up {
+  animation: fadeUp var(--duration-normal) var(--ease-out) forwards;
+}
+
+/* Glow pulse — terminal active states */
+@keyframes glow-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 var(--terminal-glow); }
+  50% { box-shadow: 0 0 12px 2px var(--terminal-glow); }
+}
+
+.animate-glow-pulse {
+  animation: glow-pulse 2s ease-in-out infinite;
 }
 
 /* Cursor blink */
@@ -468,10 +558,10 @@ button:active, [role="button"]:active {
 .sidebar-gradient {
   background: linear-gradient(
     to bottom,
-    rgba(99, 102, 241, 0.03) 0%,
+    rgba(91, 158, 255, 0.04) 0%,
     transparent 20%,
     transparent 80%,
-    rgba(99, 102, 241, 0.02) 100%
+    rgba(95, 229, 168, 0.02) 100%
   );
 }
 
@@ -498,17 +588,19 @@ button:active, [role="button"]:active {
 }
 
 .nav-item:hover:not(.active) {
-  background: var(--accent-light);
-  opacity: 0.8;
+  background: var(--accent-faint);
+  opacity: 0.85;
 }
 
 .nav-item.active {
-  background: var(--accent-light);
+  background: var(--accent-faint);
   color: var(--accent);
+  box-shadow: inset 2px 0 0 var(--accent);
 }
 
 .nav-item.active .nav-icon {
   color: var(--accent);
+  filter: drop-shadow(0 0 4px var(--terminal-glow));
 }
 
 .nav-tooltip {
@@ -561,8 +653,8 @@ button:active, [role="button"]:active {
 }
 
 .user-avatar {
-  background: linear-gradient(135deg, var(--accent) 0%, var(--primary) 100%);
-  color: white;
+  background: linear-gradient(135deg, var(--accent) 0%, var(--terminal) 100%);
+  color: var(--bg-base);
   font-weight: 600;
 }
 
@@ -577,9 +669,10 @@ button:active, [role="button"]:active {
   right: 0;
   width: 10px;
   height: 10px;
-  background: var(--success);
-  border: 2px solid white;
+  background: var(--terminal);
+  border: 2px solid var(--bg-primary);
   border-radius: 50%;
+  box-shadow: 0 0 6px var(--terminal-glow);
 }
 
 .user-dropdown {
@@ -618,7 +711,7 @@ button:active, [role="button"]:active {
 }
 
 .user-dropdown-item:hover {
-  background: rgba(16, 185, 129, 0.06);
+  background: var(--accent-faint);
 }
 
 .user-dropdown-item.danger {
@@ -626,7 +719,7 @@ button:active, [role="button"]:active {
 }
 
 .user-dropdown-item.danger:hover {
-  background: var(--error-bg);
+  background: var(--error-dim);
 }
 
 /* ==================== Typography ==================== */
@@ -672,35 +765,42 @@ p {
   line-height: var(--line-height-relaxed);
 }
 
-a {
-  color: var(--primary);
+/* Anchor links — terminal blue, but only for unstyled anchors (don't override Tailwind text utilities) */
+a:where(:not([class*="text-"])) {
+  color: var(--accent);
   text-decoration: none;
   transition: color var(--duration-fast) ease;
 }
 
-a:hover {
-  color: var(--primary-hover);
+a:where(:not([class*="text-"])):hover {
+  color: var(--accent-hover);
 }
 
 code {
   font-family: var(--font-mono);
   font-size: 0.875em;
   background: var(--bg-tertiary);
+  color: var(--terminal);
   padding: 0.125em 0.375em;
   border-radius: var(--radius-sm);
+  border: 1px solid var(--border-subtle);
 }
 
 pre {
   font-family: var(--font-mono);
-  background: var(--bg-tertiary);
+  background: var(--bg-inset);
+  border: 1px solid var(--border-subtle);
   padding: var(--space-4);
   border-radius: var(--radius-md);
   overflow-x: auto;
+  color: var(--text-primary);
 }
 
 pre code {
   background: none;
   padding: 0;
+  border: none;
+  color: inherit;
 }
 
 /* ==================== Form Elements ==================== */
@@ -709,7 +809,7 @@ input, textarea, select {
   font-family: inherit;
   font-size: var(--font-size-base);
   color: var(--text-primary);
-  background: var(--bg-primary);
+  background: var(--bg-base);
   border: 1px solid var(--border-default);
   border-radius: var(--radius-md);
   padding: var(--space-2) var(--space-3);
@@ -718,8 +818,8 @@ input, textarea, select {
 
 input:focus, textarea:focus, select:focus {
   outline: none;
-  border-color: var(--primary);
-  box-shadow: 0 0 0 3px var(--primary-light);
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-faint);
 }
 
 input::placeholder, textarea::placeholder {
@@ -754,9 +854,47 @@ input::placeholder, textarea::placeholder {
   position: fixed;
   inset: 0;
   pointer-events: none;
-  opacity: 0.02;
+  opacity: 0.04;
   background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
   z-index: 9999;
+}
+
+/* Glass panel — used for command palette, modals, popovers */
+.glass-panel {
+  -webkit-backdrop-filter: blur(12px) saturate(140%);
+  backdrop-filter: blur(12px) saturate(140%);
+  background: rgba(15, 20, 25, 0.72);
+  border: 1px solid var(--border-default);
+}
+
+/* Terminal cursor — blinking block, used as visual punctuation in code/empty states */
+.terminal-cursor::after {
+  content: "▊";
+  display: inline-block;
+  color: var(--terminal);
+  animation: cursor-blink 1s step-end infinite;
+  margin-left: 2px;
+}
+
+/* Skip-to-content link — visually hidden until focused */
+.skip-to-content {
+  position: absolute;
+  top: -100px;
+  left: var(--space-4);
+  z-index: 10000;
+  padding: var(--space-2) var(--space-4);
+  background: var(--accent);
+  color: var(--bg-base);
+  border-radius: var(--radius-md);
+  font-weight: 600;
+  text-decoration: none;
+  transition: top var(--duration-fast) var(--ease-out);
+}
+
+.skip-to-content:focus {
+  top: var(--space-4);
+  outline: none;
+  box-shadow: 0 0 0 2px var(--bg-base), 0 0 0 4px var(--accent);
 }
 
 /* Floating label input */
@@ -785,11 +923,11 @@ input::placeholder, textarea::placeholder {
 .floating-input input:not(:placeholder-shown) ~ label {
   top: 0.6rem;
   transform: translateY(0) scale(0.75);
-  color: var(--primary);
+  color: var(--accent);
 }
 
 .floating-input input:focus ~ label {
-  color: var(--primary);
+  color: var(--accent);
 }
 
 /* Password visibility toggle */

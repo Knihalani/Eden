@@ -139,7 +139,7 @@ export function VersionDiff({ oldVersion, newVersion }: VersionDiffProps) {
   return (
     <div className="border border-[var(--border)] rounded-lg overflow-hidden">
       {/* Header */}
-      <div className="px-4 py-3 bg-[var(--surface)] border-b border-[var(--border)] flex items-center justify-between">
+      <div className="px-4 py-3 bg-[var(--bg-primary)] border-b border-[var(--border)] flex items-center justify-between">
         <div className="flex items-center gap-2">
           <ArrowLeftRight className="w-4 h-4 text-[var(--text-muted)]" />
           <span className="text-sm font-medium text-[var(--text-primary)]">
@@ -147,10 +147,10 @@ export function VersionDiff({ oldVersion, newVersion }: VersionDiffProps) {
           </span>
         </div>
         <div className="flex items-center gap-3 text-xs">
-          <span className="flex items-center gap-1 text-green-600">
+          <span className="flex items-center gap-1 text-[var(--terminal)]">
             <Plus className="w-3 h-3" /> {addedCount}
           </span>
-          <span className="flex items-center gap-1 text-red-500">
+          <span className="flex items-center gap-1 text-[var(--error)]">
             <Minus className="w-3 h-3" /> {removedCount}
           </span>
         </div>
@@ -165,32 +165,32 @@ export function VersionDiff({ oldVersion, newVersion }: VersionDiffProps) {
                 key={idx}
                 className={
                   line.type === "added"
-                    ? "bg-green-900/20"
+                    ? "bg-[var(--terminal)]/20"
                     : line.type === "removed"
-                    ? "bg-red-900/20"
+                    ? "bg-[var(--error)]/20"
                     : ""
                 }
               >
                 {/* Old line number */}
-                <td className="px-3 py-0.5 text-gray-600 text-right select-none w-10 text-xs">
+                <td className="px-3 py-0.5 text-[var(--text-secondary)] text-right select-none w-10 text-xs">
                   {line.oldLineNum || ""}
                 </td>
                 {/* New line number */}
-                <td className="px-3 py-0.5 text-gray-600 text-right select-none w-10 text-xs">
+                <td className="px-3 py-0.5 text-[var(--text-secondary)] text-right select-none w-10 text-xs">
                   {line.newLineNum || ""}
                 </td>
                 {/* Diff indicator */}
                 <td className="px-2 py-0.5 text-center select-none w-4">
                   {line.type === "added" ? (
-                    <span className="text-green-400">+</span>
+                    <span className="text-[var(--terminal)]">+</span>
                   ) : line.type === "removed" ? (
-                    <span className="text-red-400">−</span>
+                    <span className="text-[var(--error)]">−</span>
                   ) : (
-                    <span className="text-gray-600"> </span>
+                    <span className="text-[var(--text-secondary)]"> </span>
                   )}
                 </td>
                 {/* Line content */}
-                <td className="px-3 py-0.5 text-gray-100 whitespace-pre">{line.content}</td>
+                <td className="px-3 py-0.5 text-[var(--text-primary)] whitespace-pre">{line.content}</td>
               </tr>
             ))}
           </tbody>

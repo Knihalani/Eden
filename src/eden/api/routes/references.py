@@ -6,12 +6,14 @@ References are org-scoped and include purpose labels.
 
 import hashlib
 import logging
-from typing import Optional
 from uuid import uuid4
 
-from fastapi import APIRouter, HTTPException, UploadFile, File, Form, status
+from fastapi import APIRouter, File, Form, HTTPException, UploadFile, status
 
-from eden.api.deps import require_org_member, require_org_permission, get_current_org_api_key, get_optional_org
+from eden.api.deps import (
+    require_org_member,
+    require_org_permission,
+)
 from eden.api.routes.billing import check_limit
 from eden.storage.postgres import get_postgres_client
 
@@ -35,10 +37,7 @@ async def generate_embedding(text: str) -> list[float]:
 
     # Normalize
     magnitude = sum(v * v for v in vector) ** 0.5
-    if magnitude > 0:
-        vector = [v / magnitude for v in vector]
-    else:
-        vector = [0.0] * 1536
+    vector = [v / magnitude for v in vector] if magnitude > 0 else [0.0] * 1536
 
     return vector
 
@@ -99,7 +98,7 @@ def detect_language(filename: str, content: str) -> str:
 
 class CodeReferenceResponse:
     """Response schema for code reference."""
-    def __init__(self, id: str, name: str, description: Optional[str], purpose: str,
+    def __init__(self, id: str, name: str, description: str | None, purpose: str,
                  filename: str, language: str, uploaded_by: str, created_at: str):
         self.id = id
         self.name = name
@@ -116,9 +115,9 @@ async def upload_reference(
     org_id: str,
     name: str = Form(...),
     purpose: str = Form(...),
-    description: Optional[str] = Form(None),
+    description: str | None = Form(None),
     file: UploadFile = File(...),
-    user: dict = None,
+    user: dict | None = None,
 ):
     """Upload a code reference to the organization's library.
 
@@ -147,8 +146,7 @@ async def upload_reference(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="File must be UTF-8 encoded text",
-        )
-
+        ) from None
     # Validate size (max 500KB)
     if len(content) > 500 * 1024:
         raise HTTPException(
@@ -203,9 +201,9 @@ async def upload_reference(
 @router.get("", response_model=list[dict])
 async def list_references(
     org_id: str,
-    purpose: Optional[str] = None,
-    language: Optional[str] = None,
-    user: dict = None,
+    purpose: str | None = None,
+    language: str | None = None,
+    user: dict | None = None,
 ):
     """List code references in the organization.
 
@@ -258,7 +256,7 @@ async def list_references(
 
 
 @router.get("/{ref_id}", response_model=dict)
-async def get_reference(org_id: str, ref_id: str, user: dict = None):
+async def get_reference(org_id: str, ref_id: str, user: dict | None = None):
     """Get a single code reference with content."""
     await require_org_member(org_id)
 
@@ -291,7 +289,7 @@ async def get_reference(org_id: str, ref_id: str, user: dict = None):
 
 
 @router.delete("/{ref_id}", response_model=dict)
-async def delete_reference(org_id: str, ref_id: str, user: dict = None):
+async def delete_reference(org_id: str, ref_id: str, user: dict | None = None):
     """Delete a code reference (requires references:delete permission or be the uploader)."""
     # First check if user has delete permission (owner/admin)
     try:
@@ -328,7 +326,7 @@ async def delete_reference(org_id: str, ref_id: str, user: dict = None):
 async def search_references(
     org_id: str,
     q: str,
-    user: dict = None,
+    user: dict | None = None,
 ):
     """Search code references by text similarity.
 
@@ -367,7 +365,7 @@ async def search_references(
 
 
 @router.get("/purposes", response_model=list[str])
-async def list_purposes(org_id: str, user: dict = None):
+async def list_purposes(org_id: str, user: dict | None = None):
     """List all unique purpose labels in the organization."""
     await require_org_member(org_id)
 

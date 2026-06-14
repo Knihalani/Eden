@@ -7,13 +7,11 @@ from __future__ import annotations
 
 import json
 import logging
-from datetime import datetime
-from typing import Optional, Any
 from uuid import uuid4
 
-from eden.storage.postgres import get_postgres_client
-from eden.kb.semantic.vector_client import get_vector_client
 from eden.kb.retrieval_logger import get_retrieval_logger
+from eden.kb.semantic.vector_client import get_vector_client
+from eden.storage.postgres import get_postgres_client
 
 logger = logging.getLogger(__name__)
 
@@ -93,29 +91,34 @@ class ProceduralClient:
             logger.error(f"Failed to insert skill: {e}")
             return False
 
-    async def get(self, skill_id: str) -> Optional[dict]:
+    async def get(self, skill_id: str) -> dict | None:
         """Get a skill by ID."""
         client = await get_postgres_client()
 
         query = "SELECT * FROM skills WHERE id = $1"
         return await client.fetchrow(query, skill_id)
 
-    async def get_by_name(self, name: str) -> Optional[dict]:
+    async def get_by_name(self, name: str) -> dict | None:
         """Get a skill by name."""
         client = await get_postgres_client()
 
         query = "SELECT * FROM skills WHERE name = $1"
         return await client.fetchrow(query, name)
 
-    async def list(
+    async def list_skills(
         self,
-        env_class: Optional[str] = None,
-        framework: Optional[str] = None,
-        archivist_reviewed: Optional[bool] = None,
+        env_class: str | None = None,
+        framework: str | None = None,
+        archivist_reviewed: bool | None = None,
         limit: int = 100,
         offset: int = 0,
     ) -> list[dict]:
-        """List skills with optional filters."""
+        """List skills with optional filters.
+
+        Note: was renamed from ``list`` to avoid shadowing the ``list``
+        builtin in the class namespace (which broke ``-> list[dict]``
+        annotations downstream in the class body).
+        """
         client = await get_postgres_client()
 
         conditions = []
@@ -152,8 +155,8 @@ class ProceduralClient:
     async def search_by_embedding(
         self,
         query_vector: list[float],
-        env_class: Optional[str] = None,
-        framework: Optional[str] = None,
+        env_class: str | None = None,
+        framework: str | None = None,
         limit: int = 5,
     ) -> list[dict]:
         """Find similar skills by embedding.
@@ -233,7 +236,7 @@ class ProceduralClient:
         if not set_clauses:
             return True
 
-        set_clauses.append(f"updated_at = NOW()")
+        set_clauses.append("updated_at = NOW()")
         params.append(skill_id)
 
         query = f"""
@@ -258,7 +261,7 @@ class ProceduralClient:
 
 
 # Singleton
-_procedural_client: Optional[ProceduralClient] = None
+_procedural_client: ProceduralClient | None = None
 
 
 def get_procedural_client() -> ProceduralClient:

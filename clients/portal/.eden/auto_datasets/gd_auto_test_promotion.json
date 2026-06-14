@@ -1,0 +1,38 @@
+{
+  "processed": 2,
+  "promoted": 1,
+  "rejected": 1,
+  "new_cases": 1,
+  "scores": [
+    {
+      "trace_id": "t1",
+      "overall_score": 0.9925,
+      "correctness_score": 1.0,
+      "robustness_score": 1.0,
+      "efficiency_score": 0.95,
+      "diversity_score": 1.0,
+      "coverage_delta": 1.0,
+      "metadata": {
+        "environment_type": "agent_sandbox",
+        "tokens_used": 500,
+        "test_passed": 10,
+        "test_total": 10
+      }
+    },
+    {
+      "trace_id": "t2",
+      "overall_score": 0.2875,
+      "correctness_score": 0.2,
+      "robustness_score": 0.0,
+      "efficiency_score": 0.05,
+      "diversity_score": 1.0,
+      "coverage_delta": 1.0,
+      "metadata": {
+        "environment_type": "agent_sandbox",
+        "tokens_used": 9500,
+        "test_passed": 2,
+        "test_total": 10
+      }
+    }
+  ]
+}

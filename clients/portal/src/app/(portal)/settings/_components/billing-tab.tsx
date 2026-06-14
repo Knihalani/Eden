@@ -130,18 +130,18 @@ export function BillingTab() {
   return (
     <div className="space-y-6">
       {error && (
-        <div className="p-4 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2 text-red-700">
+        <div className="p-4 bg-[var(--error-dim)] border border-[var(--error)] rounded-lg flex items-center gap-2 text-[var(--error)]">
           <AlertCircle className="w-5 h-5 flex-shrink-0" />
           <span className="text-sm">{error}</span>
         </div>
       )}
 
       {/* Current Plan */}
-      <div className="p-6 bg-[var(--surface)] rounded-xl border border-[var(--border)]">
+      <div className="p-6 bg-[var(--bg-primary)] rounded-xl border border-[var(--border)]">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-3">
-            <div className="p-2 bg-blue-100 rounded-lg">
-              <CreditCard className="w-5 h-5 text-blue-600" />
+            <div className="p-2 bg-[var(--accent-faint)] rounded-lg">
+              <CreditCard className="w-5 h-5 text-[var(--accent)]" />
             </div>
             <div>
               <h2 className="text-lg font-semibold capitalize">{plan?.plan_name || "Free"} Plan</h2>
@@ -154,7 +154,7 @@ export function BillingTab() {
             </div>
           </div>
           {!plan?.stripe_subscription_id && (
-            <span className="px-3 py-1 bg-green-100 text-green-700 rounded-full text-sm font-medium">
+            <span className="px-3 py-1 bg-[var(--terminal-faint)] text-[var(--terminal)] rounded-full text-sm font-medium">
               Active
             </span>
           )}
@@ -185,13 +185,13 @@ export function BillingTab() {
 
       {/* Upgrade Options */}
       {!plan?.stripe_subscription_id && (
-        <div className="p-6 bg-[var(--surface)] rounded-xl border border-[var(--border)]">
+        <div className="p-6 bg-[var(--bg-primary)] rounded-xl border border-[var(--border)]">
           <h3 className="text-lg font-semibold mb-4">Upgrade Your Plan</h3>
           <div className="grid grid-cols-3 gap-4">
             {["starter", "pro", "enterprise"].map((planName) => (
               <div
                 key={planName}
-                className="p-4 border border-[var(--border)] rounded-lg hover:border-blue-500 transition-colors"
+                className="p-4 border border-[var(--border)] rounded-lg hover:border-[var(--accent)] transition-colors"
               >
                 <h4 className="font-semibold capitalize mb-2">{planName}</h4>
                 <p className="text-2xl font-bold mb-1">
@@ -206,7 +206,7 @@ export function BillingTab() {
                 <button
                   onClick={() => handleSubscribe(planName)}
                   disabled={subscribing}
-                  className="w-full py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center gap-2"
+                  className="w-full py-2 bg-[var(--accent)] text-[var(--bg-primary)] rounded-lg text-sm font-medium hover:bg-[var(--accent-hover)] disabled:opacity-50 flex items-center justify-center gap-2"
                 >
                   {subscribing ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
                   {subscribing ? "Redirecting..." : "Upgrade"}
@@ -219,7 +219,7 @@ export function BillingTab() {
 
       {/* Cancel Subscription */}
       {plan?.stripe_subscription_id && (
-        <div className="p-6 bg-[var(--surface)] rounded-xl border border-[var(--border)]">
+        <div className="p-6 bg-[var(--bg-primary)] rounded-xl border border-[var(--border)]">
           <h3 className="text-lg font-semibold mb-2">Subscription Management</h3>
           <p className="text-sm text-[var(--text-secondary)] mb-4">
             Your subscription will{" "}
@@ -231,7 +231,7 @@ export function BillingTab() {
           <button
             onClick={handleCancelSubscription}
             disabled={cancelling}
-            className="px-4 py-2 border border-red-300 text-red-600 rounded-lg text-sm font-medium hover:bg-red-50 disabled:opacity-50 flex items-center gap-2"
+            className="px-4 py-2 border border-red-300 text-[var(--error)] rounded-lg text-sm font-medium hover:bg-[var(--error-dim)] disabled:opacity-50 flex items-center gap-2"
           >
             {cancelling ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
             Cancel Subscription
@@ -241,7 +241,7 @@ export function BillingTab() {
 
       {/* Invoice History */}
       {invoices.length > 0 && (
-        <div className="p-6 bg-[var(--surface)] rounded-xl border border-[var(--border)]">
+        <div className="p-6 bg-[var(--bg-primary)] rounded-xl border border-[var(--border)]">
           <h3 className="text-lg font-semibold mb-4">Billing History</h3>
           <div className="space-y-3">
             {invoices.map((invoice) => (
@@ -256,7 +256,7 @@ export function BillingTab() {
                 <div className="flex items-center gap-3">
                   <span className={cn(
                     "px-2 py-1 rounded text-xs font-medium",
-                    invoice.status === "paid" ? "bg-green-100 text-green-700" : "bg-yellow-100 text-yellow-700"
+                    invoice.status === "paid" ? "bg-[var(--terminal-faint)] text-[var(--terminal)]" : "bg-[var(--warning-bg)] text-[var(--warning)]"
                   )}>
                     {invoice.status}
                   </span>
@@ -265,7 +265,7 @@ export function BillingTab() {
                       href={invoice.invoice_url}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="text-blue-600 hover:underline text-sm"
+                      className="text-[var(--accent)] hover:underline text-sm"
                     >
                       View Invoice
                     </a>
@@ -279,7 +279,7 @@ export function BillingTab() {
 
       {/* Empty State for no invoices */}
       {plan?.stripe_subscription_id && invoices.length === 0 && !loading && (
-        <div className="p-6 bg-[var(--surface)] rounded-xl border border-[var(--border)]">
+        <div className="p-6 bg-[var(--bg-primary)] rounded-xl border border-[var(--border)]">
           <h3 className="text-lg font-semibold mb-2">Billing History</h3>
           <p className="text-sm text-[var(--text-secondary)]">No invoices yet.</p>
         </div>
@@ -307,7 +307,7 @@ function UsageMeter({
     <div className="flex items-center gap-4">
       <Icon className={cn(
         "w-5 h-5",
-        isAtLimit ? "text-red-500" : isNearLimit ? "text-yellow-500" : "text-[var(--text-muted)]"
+        isAtLimit ? "text-[var(--error)]" : isNearLimit ? "text-[var(--warning)]" : "text-[var(--text-muted)]"
       )} />
       <div className="flex-1">
         <div className="flex items-center justify-between mb-1">
@@ -320,7 +320,7 @@ function UsageMeter({
           <div
             className={cn(
               "h-full rounded-full transition-all",
-              isAtLimit ? "bg-red-500" : isNearLimit ? "bg-yellow-500" : "bg-blue-500"
+              isAtLimit ? "bg-[var(--error)]" : isNearLimit ? "bg-[var(--warning)]" : "bg-[var(--accent)]"
             )}
             style={{ width: `${percentage}%` }}
           />

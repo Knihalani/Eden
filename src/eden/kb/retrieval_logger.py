@@ -6,7 +6,7 @@ so the RetrievalTuner can analyze relevance patterns and adjust strategy.
 
 import hashlib
 import logging
-from typing import Optional
+from typing import Any
 from uuid import uuid4
 
 from eden.storage.postgres import get_postgres_client
@@ -21,7 +21,7 @@ class RetrievalLogger:
     is performing a retrieval operation.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         self._context: dict = {}
 
     def set_context(self, job_id: str, agent_id: str) -> None:
@@ -32,7 +32,24 @@ class RetrievalLogger:
         """Clear retrieval context."""
         self._context = {}
 
-    def _hash_query(self, query) -> str:
+    def warning(self, msg: str, *args: Any, **kwargs: Any) -> None:
+        """Log a warning through the module logger.
+
+        Convenience shim so callers that shadow ``logger`` with
+        ``get_retrieval_logger()`` can still emit warnings without
+        re-importing logging.
+        """
+        logger.warning(msg, *args, **kwargs)
+
+    def error(self, msg: str, *args: Any, **kwargs: Any) -> None:
+        """Log an error through the module logger (shim)."""
+        logger.error(msg, *args, **kwargs)
+
+    def info(self, msg: str, *args: Any, **kwargs: Any) -> None:
+        """Log an info through the module logger (shim)."""
+        logger.info(msg, *args, **kwargs)
+
+    def _hash_query(self, query: Any) -> str:
         """Create deduplication hash for query."""
         content = str(query).encode() if not isinstance(query, str) else query.encode()
         return hashlib.sha256(content).hexdigest()
@@ -41,13 +58,13 @@ class RetrievalLogger:
         self,
         collection: str,
         retrieved_items: list[dict],
-        query_vector: list[float] = None,
-        query_text: str = None,
+        query_vector: list[float] | None = None,
+        query_text: str | None = None,
         retrieval_method: str = "vector",
-        filter_conditions: dict = None,
-        score_threshold: float = None,
-        latency_ms: float = None,
-    ) -> Optional[str]:
+        filter_conditions: dict | None = None,
+        score_threshold: float | None = None,
+        latency_ms: float | None = None,
+    ) -> str | None:
         """Log a retrieval event.
 
         Returns:
@@ -130,7 +147,7 @@ class RetrievalLogger:
 
 
 # Singleton
-_retrieval_logger: Optional[RetrievalLogger] = None
+_retrieval_logger: RetrievalLogger | None = None
 
 
 def get_retrieval_logger() -> RetrievalLogger:
