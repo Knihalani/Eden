@@ -117,14 +117,14 @@ export function SSOTab({ orgId }: SSOTabProps) {
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-lg font-semibold">SSO / SAML</h2>
-          <p className="text-sm text-gray-500 dark:text-gray-400">
+          <p className="text-sm text-[var(--text-muted)] dark:text-[var(--text-muted)]">
             Configure Single Sign-On for your organization using SAML or OIDC.
           </p>
         </div>
         {canManage && (
           <button
             onClick={() => setShowForm(!showForm)}
-            className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 text-sm"
+            className="px-4 py-2 bg-primary text-[var(--bg-primary)] rounded-lg hover:bg-primary/90 text-sm"
           >
             {showForm ? "Cancel" : "Add Provider"}
           </button>
@@ -132,13 +132,13 @@ export function SSOTab({ orgId }: SSOTabProps) {
       </div>
 
       {error && (
-        <div className="p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg text-red-600 dark:text-red-400 text-sm">
+        <div className="p-4 bg-[var(--error-dim)] bg-red-/20 border border-[var(--error)] dark:border-[var(--error)] rounded-lg text-[var(--error)] dark:text-[var(--error)] text-sm">
           {error}
         </div>
       )}
 
       {showForm && (
-        <form onSubmit={handleCreate} className="p-4 bg-gray-50 dark:bg-gray-800 rounded-lg space-y-4">
+        <form onSubmit={handleCreate} className="p-4 bg-[var(--bg-secondary)] dark:bg-[var(--bg-tertiary)] rounded-lg space-y-4">
           <h3 className="font-medium">New SSO Provider</h3>
           <div className="grid grid-cols-2 gap-4">
             <div>
@@ -146,7 +146,7 @@ export function SSOTab({ orgId }: SSOTabProps) {
               <select
                 value={formData.provider_type}
                 onChange={(e) => setFormData({ ...formData, provider_type: e.target.value })}
-                className="w-full px-3 py-2 border rounded-lg dark:bg-gray-700 dark:border-gray-600"
+                className="w-full px-3 py-2 border rounded-lg dark:bg-[var(--text-primary)] dark:border-[var(--border-strong)]"
               >
                 <option value="oidc">OIDC</option>
                 <option value="okta">Okta</option>
@@ -162,7 +162,7 @@ export function SSOTab({ orgId }: SSOTabProps) {
                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                 placeholder="My SSO"
                 required
-                className="w-full px-3 py-2 border rounded-lg dark:bg-gray-700 dark:border-gray-600"
+                className="w-full px-3 py-2 border rounded-lg dark:bg-[var(--text-primary)] dark:border-[var(--border-strong)]"
               />
             </div>
             <div>
@@ -175,7 +175,7 @@ export function SSOTab({ orgId }: SSOTabProps) {
                   client_id: formData.provider_type === "oidc" ? e.target.value : formData.client_id,
                   entity_id: formData.provider_type !== "oidc" ? e.target.value : formData.entity_id,
                 })}
-                className="w-full px-3 py-2 border rounded-lg dark:bg-gray-700 dark:border-gray-600"
+                className="w-full px-3 py-2 border rounded-lg dark:bg-[var(--text-primary)] dark:border-[var(--border-strong)]"
               />
             </div>
             <div>
@@ -185,7 +185,7 @@ export function SSOTab({ orgId }: SSOTabProps) {
                 value={formData.sso_url}
                 onChange={(e) => setFormData({ ...formData, sso_url: e.target.value })}
                 placeholder="https://..."
-                className="w-full px-3 py-2 border rounded-lg dark:bg-gray-700 dark:border-gray-600"
+                className="w-full px-3 py-2 border rounded-lg dark:bg-[var(--text-primary)] dark:border-[var(--border-strong)]"
               />
             </div>
             <div>
@@ -194,13 +194,13 @@ export function SSOTab({ orgId }: SSOTabProps) {
                 type="password"
                 value={formData.client_secret}
                 onChange={(e) => setFormData({ ...formData, client_secret: e.target.value })}
-                className="w-full px-3 py-2 border rounded-lg dark:bg-gray-700 dark:border-gray-600"
+                className="w-full px-3 py-2 border rounded-lg dark:bg-[var(--text-primary)] dark:border-[var(--border-strong)]"
               />
             </div>
           </div>
           <button
             type="submit"
-            className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 text-sm"
+            className="px-4 py-2 bg-primary text-[var(--bg-primary)] rounded-lg hover:bg-primary/90 text-sm"
           >
             Create Provider
           </button>
@@ -208,36 +208,36 @@ export function SSOTab({ orgId }: SSOTabProps) {
       )}
 
       {loading ? (
-        <div className="text-center py-8 text-gray-500">Loading...</div>
+        <div className="text-center py-8 text-[var(--text-muted)]">Loading...</div>
       ) : providers.length === 0 ? (
-        <div className="text-center py-8 text-gray-500 dark:text-gray-400">
+        <div className="text-center py-8 text-[var(--text-muted)] dark:text-[var(--text-muted)]">
           <p>No SSO providers configured.</p>
           <p className="text-sm mt-1">Add a provider to enable SSO for your organization.</p>
         </div>
       ) : (
         <div className="space-y-4">
           {providers.map((provider) => (
-            <div key={provider.id} className="p-4 border dark:border-gray-700 rounded-lg">
+            <div key={provider.id} className="p-4 border dark:border-[var(--text-secondary)] rounded-lg">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 bg-blue-100 dark:bg-blue-900/30 rounded-lg flex items-center justify-center">
-                    <span className="text-blue-600 dark:text-blue-400 font-bold text-sm">
+                  <div className="w-10 h-10 bg-[var(--accent-faint)] bg-blue-/30 rounded-lg flex items-center justify-center">
+                    <span className="text-[var(--accent)] dark:text-[var(--accent)] font-bold text-sm">
                       {provider.provider_type.slice(0, 2).toUpperCase()}
                     </span>
                   </div>
                   <div>
                     <h3 className="font-medium">{provider.name}</h3>
-                    <p className="text-sm text-gray-500 dark:text-gray-400">
+                    <p className="text-sm text-[var(--text-muted)] dark:text-[var(--text-muted)]">
                       {providerTypeLabels[provider.provider_type] || provider.provider_type}
                     </p>
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
-                  <span className={`text-xs px-2 py-1 rounded-full ${provider.enabled ? "bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400" : "bg-gray-100 dark:bg-gray-700 text-gray-500"}`}>
+                  <span className={`text-xs px-2 py-1 rounded-full ${provider.enabled ? "bg-[var(--terminal-faint)] bg-green-/30 text-[var(--terminal)] dark:text-[var(--terminal)]" : "bg-[var(--bg-tertiary)] dark:bg-[var(--text-primary)] text-[var(--text-muted)]"}`}>
                     {provider.enabled ? "Enabled" : "Disabled"}
                   </span>
                   {provider.enforce_sso && (
-                    <span className="text-xs px-2 py-1 rounded-full bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400">
+                    <span className="text-xs px-2 py-1 rounded-full bg-[var(--warning)] 100 bg-[var(--warning)]/30 text-[var(--warning)] 600 text-orange-">
                       Enforced
                     </span>
                   )}
@@ -245,28 +245,28 @@ export function SSOTab({ orgId }: SSOTabProps) {
               </div>
 
               {provider.default_for_domain && (
-                <p className="text-sm text-gray-500 dark:text-gray-400 mt-2">
+                <p className="text-sm text-[var(--text-muted)] dark:text-[var(--text-muted)] mt-2">
                   Auto-enroll for domain: <strong>{provider.default_for_domain}</strong>
                 </p>
               )}
 
               {canManage && (
-                <div className="flex items-center gap-2 mt-4 pt-4 border-t dark:border-gray-700">
+                <div className="flex items-center gap-2 mt-4 pt-4 border-t dark:border-[var(--text-secondary)]">
                   <button
                     onClick={() => handleEnable(provider.id, !provider.enabled)}
-                    className="px-3 py-1 text-sm border rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700"
+                    className="px-3 py-1 text-sm border rounded-lg hover:bg-[var(--bg-secondary)] dark:hover:bg-[var(--text-primary)]"
                   >
                     {provider.enabled ? "Disable" : "Enable"}
                   </button>
                   <button
                     onClick={() => handleEnforce(provider.id, !provider.enforce_sso)}
-                    className="px-3 py-1 text-sm border rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700"
+                    className="px-3 py-1 text-sm border rounded-lg hover:bg-[var(--bg-secondary)] dark:hover:bg-[var(--text-primary)]"
                   >
                     {provider.enforce_sso ? "Unenforce SSO" : "Enforce SSO"}
                   </button>
                   <button
                     onClick={() => handleDelete(provider.id)}
-                    className="px-3 py-1 text-sm border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20"
+                    className="px-3 py-1 text-sm border border-[var(--error)] dark:border-[var(--error)] text-[var(--error)] dark:text-[var(--error)] rounded-lg hover:bg-[var(--error-dim)] dark:hover:bg-[var(--error-dim)]/20"
                   >
                     Delete
                   </button>
@@ -277,9 +277,9 @@ export function SSOTab({ orgId }: SSOTabProps) {
         </div>
       )}
 
-      <div className="p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
-        <h3 className="font-medium text-blue-900 dark:text-blue-100 mb-2">How SSO Works</h3>
-        <ul className="text-sm text-blue-700 dark:text-blue-300 space-y-1">
+      <div className="p-4 bg-[var(--accent-faint)] bg-blue-/20 border border-[var(--accent)] border-blue- rounded-lg">
+        <h3 className="font-medium text-[var(--accent)] dark:text-[var(--accent)] mb-2">How SSO Works</h3>
+        <ul className="text-sm text-[var(--accent)] text-blue- space-y-1">
           <li>• Users with emails at <strong>{'{domain}'}</strong> will be automatically redirected to SSO</li>
           <li>• When SSO is enforced, password login is disabled for all org members</li>
           <li>• SCIM tokens are used for automated user provisioning (see SCIM tab)</li>

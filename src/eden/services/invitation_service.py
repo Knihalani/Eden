@@ -2,7 +2,6 @@
 
 import secrets
 from datetime import datetime, timedelta
-from typing import Optional
 from uuid import uuid4
 
 from eden.config import get_settings
@@ -53,10 +52,15 @@ async def create_invitation(
         email,
         org_id,
     )
-    if existing:
-        # Check if expired - only reject if NOT expired (still pending)
-        if existing["expires_at"] > datetime.utcnow():
-            raise ValueError("An invitation is already pending for this email in this organization")
+    if existing:  # noqa: SIM102
+        # Check if expired - only reject if NOT expired (still pending).
+        # The nested `if` keeps the error message co-located with the
+        # condition; collapsing would push a multi-line raise into a
+        # ternary.
+        if existing["expires_at"] > datetime.utcnow():  # noqa: SIM102
+            raise ValueError(
+                "An invitation is already pending for this email in this organization"
+            )
 
     # Generate token
     plain_token = generate_invite_token()
@@ -108,7 +112,7 @@ async def create_invitation(
     return plain_token, invitation_record
 
 
-async def verify_invite_token(token: str) -> Optional[dict]:
+async def verify_invite_token(token: str) -> dict | None:
     """Verify an invitation token and return invitation details if valid.
 
     Returns None if token is invalid, expired, or already used/declined.

@@ -1,3 +1,4 @@
+from typing import cast, Any
 """Verifier agent — fidelity check between code and RES.
 
 Checks if the generated code matches the Refined Environment Spec before testing.
@@ -6,11 +7,10 @@ Checks if the generated code matches the Refined Environment Spec before testing
 import json
 import logging
 import re
-from typing import Optional
 
-from eden.llm.client import OpenRouterClient, get_llm_client
-from eden.config import get_settings
 from eden.agents.base import PromptLoader
+from eden.config import get_settings
+from eden.llm.client import OpenRouterClient, get_llm_client
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -62,7 +62,7 @@ Output a verification report as JSON:
 
 If design_level=true and same pattern recurs, the spec needs revision, not the code."""
 
-    def __init__(self, llm_client: Optional[OpenRouterClient] = None):
+    def __init__(self, llm_client: OpenRouterClient | None = None):
         super().__init__()
         self.llm = llm_client or get_llm_client()
         self.max_tokens = settings.max_tokens_verifier
@@ -190,7 +190,7 @@ Be thorough and specific. Location should indicate file/line/method."""
         json_match = re.search(r"```(?:json)?\s*(\{[\s\S]*?\})\s*```", content)
         if json_match:
             try:
-                return json.loads(json_match.group(1))
+                return cast(dict[Any, Any], json.loads(json_match.group(1)))
             except json.JSONDecodeError:
                 pass
 
@@ -198,7 +198,7 @@ Be thorough and specific. Location should indicate file/line/method."""
         json_match = re.search(r"\{[\s\S]*\}", content)
         if json_match:
             try:
-                return json.loads(json_match.group(0))
+                return cast(dict[Any, Any], json.loads(json_match.group(0)))
             except json.JSONDecodeError:
                 pass
 

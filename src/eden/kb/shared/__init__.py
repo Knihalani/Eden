@@ -3,8 +3,8 @@
 from eden.kb.shared.audit import (
     AUDNAction,
     AUDNResult,
-    evaluate_audn,
     apply_audn,
+    evaluate_audn,
 )
 
 __all__ = [

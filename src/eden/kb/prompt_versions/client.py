@@ -5,8 +5,6 @@ Manages prompt versioning, A/B testing, and promotion for the Evolution Engine.
 
 import json
 import logging
-from datetime import datetime
-from typing import Optional, Any
 
 from eden.storage.postgres import get_postgres_client
 
@@ -24,8 +22,8 @@ class PromptVersionsClient:
         agent: str,
         system_prompt: str,
         version: int,
-        few_shot_examples: list[dict] = None,
-        quality_metrics: dict = None,
+        few_shot_examples: list[dict] | None = None,
+        quality_metrics: dict | None = None,
         active: bool = False,
     ) -> bool:
         """Insert a new prompt version.
@@ -69,7 +67,7 @@ class PromptVersionsClient:
             logger.error(f"Failed to insert prompt version: {e}")
             return False
 
-    async def get_active_prompt(self, agent: str) -> Optional[dict]:
+    async def get_active_prompt(self, agent: str) -> dict | None:
         """Get the currently active prompt version for an agent.
 
         Args:
@@ -336,8 +334,8 @@ class PromptVersionsClient:
     async def get_prompts_for_agent(
         self,
         agent: str,
-        version: Optional[int] = None,
-    ) -> Optional[dict]:
+        version: int | None = None,
+    ) -> dict | None:
         """Get a specific prompt version or active if version not specified.
 
         Args:
@@ -376,7 +374,7 @@ class PromptVersionsClient:
 
 
 # Singleton
-_prompt_versions_client: Optional[PromptVersionsClient] = None
+_prompt_versions_client: PromptVersionsClient | None = None
 
 
 def get_prompt_versions_client() -> PromptVersionsClient:

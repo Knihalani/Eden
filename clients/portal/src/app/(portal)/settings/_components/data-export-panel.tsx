@@ -35,7 +35,7 @@ export function DataExportPanel({ orgId, canExport }: DataExportPanelProps) {
   if (!canExport) return null;
 
   return (
-    <div className="p-4 bg-[var(--surface)] rounded-xl border border-[var(--border)]">
+    <div className="p-4 bg-[var(--bg-primary)] rounded-xl border border-[var(--border)]">
       <div className="flex items-center gap-2 mb-4">
         <FileArchive className="w-4 h-4 text-[var(--text-muted)]" />
         <h3 className="text-sm font-semibold">Export Data</h3>
@@ -47,13 +47,13 @@ export function DataExportPanel({ orgId, canExport }: DataExportPanelProps) {
       </p>
 
       {error && (
-        <div className="text-sm text-red-500 p-2 bg-red-50 rounded mb-4">
+        <div className="text-sm text-[var(--error)] p-2 bg-[var(--error-dim)] rounded mb-4">
           {error}
         </div>
       )}
 
       {success && (
-        <div className="flex items-center gap-2 text-sm text-green-600 p-2 bg-green-50 rounded mb-4">
+        <div className="flex items-center gap-2 text-sm text-[var(--terminal)] p-2 bg-[var(--terminal-faint)] rounded mb-4">
           <CheckCircle className="w-4 h-4" />
           Export downloaded successfully
         </div>
@@ -64,7 +64,7 @@ export function DataExportPanel({ orgId, canExport }: DataExportPanelProps) {
         disabled={loading}
         className={cn(
           "px-4 py-2 text-sm rounded-lg flex items-center gap-2 transition-colors",
-          "bg-[var(--accent)] text-white hover:opacity-90",
+          "bg-[var(--accent)] text-[var(--bg-primary)] hover:opacity-90",
           loading && "opacity-50 cursor-not-allowed"
         )}
       >

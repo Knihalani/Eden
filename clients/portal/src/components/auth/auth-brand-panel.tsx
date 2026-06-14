@@ -32,7 +32,7 @@ export function AuthBrandPanel() {
         {/* Logo */}
         <div className="flex items-center gap-3 mb-12">
           <div className="auth-logo-mark">
-            <Layers className="w-6 h-6 text-white" />
+            <Layers className="w-6 h-6 text-[var(--bg-primary)]" />
           </div>
           <span className="text-3xl font-bold tracking-tight text-[var(--text-primary)]">
             eden

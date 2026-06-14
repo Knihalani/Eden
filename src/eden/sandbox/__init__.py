@@ -1,11 +1,11 @@
 """Sandbox module exports."""
 
 from eden.sandbox.runner import (
-    SandboxRunner,
     NullSandboxRunner,
+    SandboxRunner,
     TestResult,
-    get_sandbox_runner,
     close_sandbox_runner,
+    get_sandbox_runner,
 )
 
 __all__ = [

@@ -43,13 +43,13 @@ export function TransferOwnershipDialog({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       {/* Backdrop */}
-      <div className="absolute inset-0 bg-black/50" onClick={onClose} />
+      <div className="absolute inset-0 bg-[var(--bg-base)]/50" onClick={onClose} />
 
       {/* Dialog */}
-      <div className="relative bg-[var(--surface)] rounded-xl shadow-xl w-full max-w-md mx-4 p-6">
+      <div className="relative bg-[var(--bg-primary)] rounded-xl shadow-xl w-full max-w-md mx-4 p-6">
         <div className="flex items-start gap-4 mb-4">
-          <div className="p-3 bg-yellow-100 rounded-lg">
-            <AlertTriangle className="w-6 h-6 text-yellow-600" />
+          <div className="p-3 bg-[var(--warning-bg)] rounded-lg">
+            <AlertTriangle className="w-6 h-6 text-[var(--warning)]" />
           </div>
           <div>
             <h2 className="text-lg font-semibold text-[var(--text-primary)]">
@@ -66,8 +66,8 @@ export function TransferOwnershipDialog({
             You are about to transfer ownership of <strong>{org.name}</strong> to:
           </p>
           <div className="mt-3 flex items-center gap-3">
-            <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
-              <span className="text-blue-600 font-medium">
+            <div className="w-10 h-10 bg-[var(--accent-faint)] rounded-full flex items-center justify-center">
+              <span className="text-[var(--accent)] font-medium">
                 {member.name.charAt(0).toUpperCase()}
               </span>
             </div>
@@ -78,11 +78,11 @@ export function TransferOwnershipDialog({
           </div>
         </div>
 
-        <div className="mb-6 p-3 bg-blue-50 rounded-lg border border-blue-100">
-          <p className="text-sm text-blue-800">
+        <div className="mb-6 p-3 bg-[var(--accent-faint)] rounded-lg border border-blue-100">
+          <p className="text-sm text-[var(--accent)]">
             <strong>What happens next:</strong>
           </p>
-          <ul className="mt-2 text-sm text-blue-700 space-y-1">
+          <ul className="mt-2 text-sm text-[var(--accent)] space-y-1">
             <li>• {member.name} will become the new owner</li>
             <li>• You will become an admin of {org.name}</li>
             <li>• You will lose owner privileges but keep admin access</li>
@@ -90,15 +90,15 @@ export function TransferOwnershipDialog({
         </div>
 
         {error && (
-          <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg">
-            <p className="text-sm text-red-600">{error}</p>
+          <div className="mb-4 p-3 bg-[var(--error-dim)] border border-[var(--error)] rounded-lg">
+            <p className="text-sm text-[var(--error)]">{error}</p>
           </div>
         )}
 
         <div className="flex gap-3 justify-end">
           <button
             onClick={onClose}
-            className="px-4 py-2 text-sm font-medium text-[var(--text-secondary)] hover:bg-stone-100 rounded-lg"
+            className="px-4 py-2 text-sm font-medium text-[var(--text-secondary)] hover:bg-[var(--bg-tertiary)] rounded-lg"
             disabled={loading}
           >
             Cancel
@@ -108,7 +108,7 @@ export function TransferOwnershipDialog({
             disabled={loading}
             className={cn(
               "px-4 py-2 text-sm font-medium rounded-lg flex items-center gap-2",
-              "bg-yellow-600 text-white hover:bg-yellow-700",
+              "bg-[var(--warning)] text-[var(--bg-primary)] hover:bg-[var(--warning)]",
               loading && "opacity-50 cursor-not-allowed"
             )}
           >

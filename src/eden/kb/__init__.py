@@ -56,7 +56,7 @@ async def _initialize_postgres_schema() -> None:
         logger.warning(f"Migration file not found: {schema_file}")
         return
 
-    with open(schema_file, "r") as f:
+    with open(schema_file) as f:
         schema_sql = f.read()
 
     # Execute schema

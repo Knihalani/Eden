@@ -48,7 +48,7 @@ export function InvitePanel({ orgId, canManage }: InvitePanelProps) {
   if (!canManage) return null;
 
   return (
-    <div className="p-4 bg-[var(--surface)] rounded-xl border border-[var(--border)]">
+    <div className="p-4 bg-[var(--bg-primary)] rounded-xl border border-[var(--border)]">
       <div className="flex items-center gap-2 mb-4">
         <Mail className="w-4 h-4 text-[var(--text-muted)]" />
         <h3 className="text-sm font-semibold">Pending Invitations</h3>
@@ -61,7 +61,7 @@ export function InvitePanel({ orgId, canManage }: InvitePanelProps) {
       )}
 
       {error && (
-        <div className="text-sm text-red-500 py-2">{error}</div>
+        <div className="text-sm text-[var(--error)] py-2">{error}</div>
       )}
 
       {!loading && invitations.length === 0 && (
@@ -82,9 +82,9 @@ export function InvitePanel({ orgId, canManage }: InvitePanelProps) {
                 <div className="flex items-center gap-3 text-xs text-[var(--text-muted)]">
                   <span className={cn(
                     "px-1.5 py-0.5 rounded font-medium",
-                    invite.role === "admin" ? "bg-blue-100 text-blue-700" :
-                    invite.role === "member" ? "bg-gray-100 text-gray-700" :
-                    "bg-gray-100 text-gray-600"
+                    invite.role === "admin" ? "bg-[var(--accent-faint)] text-[var(--accent)]" :
+                    invite.role === "member" ? "bg-[var(--bg-tertiary)] text-[var(--text-secondary)]" :
+                    "bg-[var(--bg-tertiary)] text-[var(--text-secondary)]"
                   )}>
                     {invite.role}
                   </span>
@@ -97,7 +97,7 @@ export function InvitePanel({ orgId, canManage }: InvitePanelProps) {
               </div>
               <button
                 onClick={() => handleDecline(invite.id)}
-                className="p-2 text-red-500 hover:bg-red-50 rounded-lg"
+                className="p-2 text-[var(--error)] hover:bg-[var(--error-dim)] rounded-lg"
                 title="Cancel invitation"
               >
                 <X className="w-4 h-4" />

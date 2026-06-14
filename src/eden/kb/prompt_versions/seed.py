@@ -5,7 +5,6 @@ for all agents when initializing a fresh Knowledge Base.
 """
 
 import logging
-from typing import Optional
 
 from eden.kb.prompt_versions.client import get_prompt_versions_client
 
@@ -378,9 +377,9 @@ async def seed_initial_prompts() -> dict:
             # Insert the initial prompt as version 1, active
             success = await client.insert_version(
                 agent=agent_name,
-                system_prompt=prompt_data["system_prompt"],
-                version=prompt_data["version"],
-                few_shot_examples=prompt_data.get("few_shot_examples", []),
+                system_prompt=str(prompt_data["system_prompt"]),
+                version=int(prompt_data["version"]),
+                few_shot_examples=list(prompt_data.get("few_shot_examples") or []),
                 quality_metrics={},
                 active=True,
             )

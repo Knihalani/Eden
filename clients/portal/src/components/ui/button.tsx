@@ -12,14 +12,14 @@ const buttonVariants = cva(
     variants: {
       variant: {
         default:
-          "bg-[var(--accent)] text-white hover:bg-[var(--accent-hover)] focus:ring-[var(--accent)]",
+          "bg-[var(--accent)] text-[var(--bg-primary)] hover:bg-[var(--accent-hover)] focus:ring-[var(--accent)]",
         destructive:
-          "bg-[var(--error)] text-white hover:bg-[var(--error)]/90 focus:ring-[var(--error)]",
+          "bg-[var(--error)] text-[var(--bg-primary)] hover:bg-[var(--error)]/90 focus:ring-[var(--error)]",
         outline:
           "border border-[var(--border)] bg-transparent hover:bg-[var(--accent-bg)] hover:text-[var(--accent)]",
         ghost: "hover:bg-[var(--accent-bg)] hover:text-[var(--accent)]",
         secondary:
-          "bg-[var(--primary)] text-white hover:bg-[var(--primary-hover)] focus:ring-[var(--primary)]",
+          "bg-[var(--primary)] text-[var(--bg-primary)] hover:bg-[var(--primary-hover)] focus:ring-[var(--primary)]",
         emerald:
           "bg-[var(--accent-2)] text-[var(--bg-base)] hover:bg-[var(--accent-2)]/90 focus:ring-[var(--accent-2)]",
         danger:

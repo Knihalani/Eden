@@ -65,9 +65,7 @@ export default function ProfilePage() {
     setSaving(true);
     setSaveSuccess(false);
     try {
-      // Note: API endpoint for updating profile would be needed here
-      // For now, we simulate success
-      await new Promise((resolve) => setTimeout(resolve, 500));
+      await api.updateProfile({ name: name.trim() });
       setSaveSuccess(true);
       await refreshUser();
       setTimeout(() => setSaveSuccess(false), 2000);
@@ -95,8 +93,7 @@ export default function ProfilePage() {
 
     setChangingPassword(true);
     try {
-      // Note: API endpoint for password change would be needed here
-      await new Promise((resolve) => setTimeout(resolve, 500));
+      await api.changePassword(currentPassword, newPassword);
       setPasswordSuccess("Password changed successfully");
       setCurrentPassword("");
       setNewPassword("");
@@ -125,8 +122,7 @@ export default function ProfilePage() {
 
     setUploadingAvatar(true);
     try {
-      // Note: API endpoint for avatar upload would be needed here
-      await new Promise((resolve) => setTimeout(resolve, 500));
+      await api.uploadAvatar(file);
       await refreshUser();
     } catch (e: any) {
       alert(e.message || "Failed to upload avatar");
@@ -146,8 +142,7 @@ export default function ProfilePage() {
 
     setDeleting(true);
     try {
-      // Note: API endpoint for account deletion would be needed here
-      await new Promise((resolve) => setTimeout(resolve, 500));
+      await api.deleteAccount("DELETE");
       window.location.href = "/";
     } catch (e: any) {
       alert(e.message || "Failed to delete account");
@@ -165,7 +160,7 @@ export default function ProfilePage() {
       </div>
 
       {/* User Info Section */}
-      <div className="bg-[var(--surface)] rounded-lg border border-[var(--border)] p-6 mb-6">
+      <div className="bg-[var(--bg-primary)] rounded-lg border border-[var(--border)] p-6 mb-6">
         <h2 className="text-lg font-semibold text-[var(--text-primary)] mb-4">User Information</h2>
 
         {/* Avatar Upload */}
@@ -177,7 +172,7 @@ export default function ProfilePage() {
             <button
               onClick={() => fileInputRef.current?.click()}
               disabled={uploadingAvatar}
-              className="absolute bottom-0 right-0 w-8 h-8 bg-[var(--surface)] border border-[var(--border)] rounded-full flex items-center justify-center hover:bg-[var(--bg-muted)] transition-colors"
+              className="absolute bottom-0 right-0 w-8 h-8 bg-[var(--bg-primary)] border border-[var(--border)] rounded-full flex items-center justify-center hover:bg-[var(--bg-muted)] transition-colors"
             >
               {uploadingAvatar ? (
                 <Loader2 className="w-4 h-4 animate-spin" />
@@ -255,10 +250,10 @@ export default function ProfilePage() {
       </div>
 
       {/* Password Change Section */}
-      <div className="bg-[var(--surface)] rounded-lg border border-[var(--border)] p-6 mb-6">
+      <div className="bg-[var(--bg-primary)] rounded-lg border border-[var(--border)] p-6 mb-6">
         <div className="flex items-center gap-3 mb-4">
-          <div className="p-2 bg-blue-100 rounded-lg">
-            <Lock className="w-5 h-5 text-blue-600" />
+          <div className="p-2 bg-[var(--accent-faint)] rounded-lg">
+            <Lock className="w-5 h-5 text-[var(--accent)]" />
           </div>
           <div>
             <h2 className="text-lg font-semibold text-[var(--text-primary)]">Change Password</h2>
@@ -301,11 +296,11 @@ export default function ProfilePage() {
           </div>
 
           {passwordError && (
-            <p className="text-sm text-red-500">{passwordError}</p>
+            <p className="text-sm text-[var(--error)]">{passwordError}</p>
           )}
 
           {passwordSuccess && (
-            <p className="text-sm text-green-600 flex items-center gap-1">
+            <p className="text-sm text-[var(--terminal)] flex items-center gap-1">
               <Check className="w-4 h-4" />
               {passwordSuccess}
             </p>
@@ -322,10 +317,10 @@ export default function ProfilePage() {
       </div>
 
       {/* 2FA Section */}
-      <div className="bg-[var(--surface)] rounded-lg border border-[var(--border)] p-6 mb-6">
+      <div className="bg-[var(--bg-primary)] rounded-lg border border-[var(--border)] p-6 mb-6">
         <div className="flex items-center gap-3 mb-4">
-          <div className={cn("p-2 rounded-lg", twoFactorEnabled ? "bg-green-100" : "bg-yellow-100")}>
-            <Shield className={cn("w-5 h-5", twoFactorEnabled ? "text-green-600" : "text-yellow-600")} />
+          <div className={cn("p-2 rounded-lg", twoFactorEnabled ? "bg-[var(--terminal-faint)]" : "bg-[var(--warning-bg)]")}>
+            <Shield className={cn("w-5 h-5", twoFactorEnabled ? "text-[var(--terminal)]" : "text-[var(--warning)]")} />
           </div>
           <div>
             <h2 className="text-lg font-semibold text-[var(--text-primary)]">Two-Factor Authentication</h2>
@@ -343,7 +338,7 @@ export default function ProfilePage() {
             <div className="flex items-center gap-3">
               {twoFactorEnabled ? (
                 <>
-                  <span className="px-3 py-1 bg-green-100 text-green-700 text-sm font-medium rounded-full flex items-center gap-1">
+                  <span className="px-3 py-1 bg-[var(--terminal-faint)] text-[var(--terminal)] text-sm font-medium rounded-full flex items-center gap-1">
                     <ShieldCheck className="w-4 h-4" />
                     Enabled
                   </span>
@@ -351,7 +346,7 @@ export default function ProfilePage() {
                 </>
               ) : (
                 <>
-                  <span className="px-3 py-1 bg-yellow-100 text-yellow-700 text-sm font-medium rounded-full flex items-center gap-1">
+                  <span className="px-3 py-1 bg-[var(--warning-bg)] text-[var(--warning)] text-sm font-medium rounded-full flex items-center gap-1">
                     <ShieldAlert className="w-4 h-4" />
                     Not Enabled
                   </span>
@@ -374,18 +369,18 @@ export default function ProfilePage() {
       </div>
 
       {/* Danger Zone */}
-      <div className="bg-[var(--surface)] rounded-lg border border-red-200 p-6">
+      <div className="bg-[var(--bg-primary)] rounded-lg border border-[var(--error)] p-6">
         <div className="flex items-center gap-3 mb-4">
-          <div className="p-2 bg-red-100 rounded-lg">
-            <Trash2 className="w-5 h-5 text-red-600" />
+          <div className="p-2 bg-[var(--error-dim)] rounded-lg">
+            <Trash2 className="w-5 h-5 text-[var(--error)]" />
           </div>
           <div>
-            <h2 className="text-lg font-semibold text-red-600">Danger Zone</h2>
+            <h2 className="text-lg font-semibold text-[var(--error)]">Danger Zone</h2>
             <p className="text-sm text-[var(--text-muted)]">Irreversible actions</p>
           </div>
         </div>
 
-        <div className="flex items-center justify-between p-4 border border-red-200 rounded-lg bg-red-50">
+        <div className="flex items-center justify-between p-4 border border-[var(--error)] rounded-lg bg-[var(--error-dim)]">
           <div>
             <p className="text-sm font-medium text-[var(--text-primary)]">Delete Account</p>
             <p className="text-xs text-[var(--text-secondary)]">Permanently delete your account and all data</p>
@@ -403,11 +398,11 @@ export default function ProfilePage() {
 
       {/* Delete Confirmation Modal */}
       {showDeleteConfirm && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-[var(--surface)] rounded-xl p-6 w-full max-w-md mx-4">
+        <div className="fixed inset-0 bg-[var(--bg-base)]/50 flex items-center justify-center z-50">
+          <div className="bg-[var(--bg-primary)] rounded-xl p-6 w-full max-w-md mx-4">
             <div className="flex items-center gap-3 mb-4">
-              <div className="p-2 bg-red-100 rounded-lg">
-                <Trash2 className="w-5 h-5 text-red-600" />
+              <div className="p-2 bg-[var(--error-dim)] rounded-lg">
+                <Trash2 className="w-5 h-5 text-[var(--error)]" />
               </div>
               <h2 className="text-lg font-semibold text-[var(--text-primary)]">Delete Account</h2>
             </div>
@@ -486,8 +481,8 @@ function Disable2FADialog({
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-      <div className="bg-[var(--surface)] rounded-xl p-6 w-full max-w-md mx-4">
+    <div className="fixed inset-0 bg-[var(--bg-base)]/50 flex items-center justify-center z-50">
+      <div className="bg-[var(--bg-primary)] rounded-xl p-6 w-full max-w-md mx-4">
         <h2 className="text-lg font-semibold mb-4">Disable 2FA</h2>
         <p className="text-sm text-[var(--text-secondary)] mb-4">
           Enter the 6-digit code from your authenticator app to disable 2FA.
@@ -507,7 +502,7 @@ function Disable2FADialog({
           </div>
 
           {error && (
-            <p className="text-sm text-red-500">{error}</p>
+            <p className="text-sm text-[var(--error)]">{error}</p>
           )}
 
           <div className="flex gap-3 justify-end">

@@ -10,14 +10,11 @@ SCIM endpoint base: /orgs/{org_id}/scim/v2
 
 import hashlib
 import logging
-import secrets
-from datetime import datetime
-from typing import Optional
 from uuid import uuid4
 
-from fastapi import APIRouter, HTTPException, Header, status
-from fastapi.responses import JSONResponse
+from fastapi import APIRouter, Header, HTTPException, status
 from pydantic import BaseModel, Field
+
 from eden.config import get_settings
 from eden.storage.postgres import get_postgres_client
 
@@ -33,15 +30,15 @@ router = APIRouter(prefix="/orgs/{org_id}/scim/v2", tags=["scim"])
 
 class SCIMName(BaseModel):
     """SCIM name object per RFC 7643."""
-    givenName: Optional[str] = Field(None, alias="givenName")
-    familyName: Optional[str] = Field(None, alias="familyName")
+    givenName: str | None = Field(None, alias="givenName")
+    familyName: str | None = Field(None, alias="familyName")
 
 
 class SCIMEmail(BaseModel):
     """SCIM email object per RFC 7643."""
     value: str
-    type: Optional[str] = "work"
-    primary: Optional[bool] = True
+    type: str | None = "work"
+    primary: bool | None = True
 
 
 class SCIMUser(BaseModel):
@@ -56,14 +53,14 @@ class SCIMUser(BaseModel):
     We do NOT support password via SCIM.
     """
     schemas: list[str] = ["urn:ietf:params:scim:schemas:core:2.0:User"]
-    id: Optional[str] = None
-    externalId: Optional[str] = Field(None, alias="externalId")
-    userName: Optional[str] = None  # Required
-    name: Optional[SCIMName] = None
-    displayName: Optional[str] = None
-    emails: Optional[list[SCIMEmail]] = None
-    active: Optional[bool] = True
-    meta: Optional[dict] = None
+    id: str | None = None
+    externalId: str | None = Field(None, alias="externalId")
+    userName: str | None = None  # Required
+    name: SCIMName | None = None
+    displayName: str | None = None
+    emails: list[SCIMEmail] | None = None
+    active: bool | None = True
+    meta: dict | None = None
 
 
 class SCIMListResponse(BaseModel):
@@ -78,7 +75,7 @@ class SCIMListResponse(BaseModel):
 class SCIMError(BaseModel):
     """SCIM error response per RFC 7644."""
     schemas: list[str] = ["urn:ietf:params:scim:api:messages:2.0:Error"]
-    detail: Optional[str] = None
+    detail: str | None = None
     status: int
 
 
@@ -88,7 +85,7 @@ class SCIMError(BaseModel):
 
 async def get_current_org_scim(
     org_id: str,
-    authorization: Optional[str] = Header(None, alias="Authorization"),
+    authorization: str | None = Header(None, alias="Authorization"),
 ) -> dict:
     """Validate SCIM bearer token and return org context.
 
@@ -232,7 +229,7 @@ def _parse_scim_user(scim_resource: dict) -> dict:
     }
 
 
-async def _get_or_create_user(client, email: str, given_name: Optional[str], family_name: Optional[str]) -> str:
+async def _get_or_create_user(client, email: str, given_name: str | None, family_name: str | None) -> str:
     """Get existing user by email or create a new user account.
 
     Returns user_id.
@@ -268,7 +265,7 @@ async def _sync_user_to_org(
     org_id: str,
     user_id: str,
     scim_external_id: str,
-    display_name: Optional[str],
+    display_name: str | None,
     active: bool,
 ) -> str:
     """Sync user to org membership.
@@ -363,10 +360,10 @@ async def _sync_user_to_org(
 @router.get("/Users", response_model=SCIMListResponse)
 async def list_scim_users(
     org_id: str,
-    filter: Optional[str] = None,
+    filter: str | None = None,
     startIndex: int = 1,
     count: int = 100,
-    authorization: Optional[str] = Header(None, alias="Authorization"),
+    authorization: str | None = Header(None, alias="Authorization"),
 ):
     """List all SCIM-provisioned users for the org (RFC 7644 Section 3.4.2).
 
@@ -431,7 +428,7 @@ async def list_scim_users(
 async def create_scim_user(
     org_id: str,
     scim_user: SCIMUser,
-    authorization: Optional[str] = Header(None, alias="Authorization"),
+    authorization: str | None = Header(None, alias="Authorization"),
 ):
     """Provision a new user via SCIM (RFC 7644 Section 3.4.3).
 
@@ -446,7 +443,7 @@ async def create_scim_user(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e),
-        )
+        ) from e
 
     client = await get_postgres_client()
 
@@ -518,7 +515,7 @@ async def create_scim_user(
 async def get_scim_user(
     org_id: str,
     scim_user_id: str,
-    authorization: Optional[str] = Header(None, alias="Authorization"),
+    authorization: str | None = Header(None, alias="Authorization"),
 ):
     """Get a SCIM user by ID (RFC 7644 Section 3.4.1)."""
     await get_current_org_scim(org_id, authorization)
@@ -550,7 +547,7 @@ async def update_scim_user(
     org_id: str,
     scim_user_id: str,
     scim_user: SCIMUser,
-    authorization: Optional[str] = Header(None, alias="Authorization"),
+    authorization: str | None = Header(None, alias="Authorization"),
 ):
     """Update (replace) a SCIM user via PUT (RFC 7644 Section 3.4.4.1).
 
@@ -579,7 +576,7 @@ async def update_scim_user(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e),
-        )
+        ) from e
 
     # Update user account if email changed
     user_id = existing["user_id"]
@@ -650,7 +647,7 @@ async def update_scim_user(
 async def delete_scim_user(
     org_id: str,
     scim_user_id: str,
-    authorization: Optional[str] = Header(None, alias="Authorization"),
+    authorization: str | None = Header(None, alias="Authorization"),
 ):
     """De-provision a user (RFC 7644 Section 3.4.4.5).
 
@@ -711,7 +708,7 @@ async def delete_scim_user(
 @router.get("/ServiceProviderConfig")
 async def get_service_provider_config(
     org_id: str,
-    authorization: Optional[str] = Header(None, alias="Authorization"),
+    authorization: str | None = Header(None, alias="Authorization"),
 ):
     """Return SCIM service provider configuration."""
     await get_current_org_scim(org_id, authorization)
@@ -739,7 +736,7 @@ async def get_service_provider_config(
 @router.get("/ResourceTypes", response_model=dict)
 async def get_resource_types(
     org_id: str,
-    authorization: Optional[str] = Header(None, alias="Authorization"),
+    authorization: str | None = Header(None, alias="Authorization"),
 ):
     """Return supported SCIM resource types."""
     await get_current_org_scim(org_id, authorization)
@@ -764,7 +761,7 @@ async def get_resource_types(
 @router.get("/Schemas", response_model=dict)
 async def get_schemas(
     org_id: str,
-    authorization: Optional[str] = Header(None, alias="Authorization"),
+    authorization: str | None = Header(None, alias="Authorization"),
 ):
     """Return SCIM schemas."""
     await get_current_org_scim(org_id, authorization)

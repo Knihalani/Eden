@@ -1,7 +1,6 @@
 """Chain configuration routes for Eden API."""
 
 import logging
-from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
@@ -40,8 +39,8 @@ class ChainConfigResponse(BaseModel):
 class ChainConfigUpdate(BaseModel):
     """Request schema for updating chain configuration."""
 
-    enabled_expert_agents: Optional[list[str]] = None
-    disabled_optional_agents: Optional[list[str]] = None
+    enabled_expert_agents: list[str] | None = None
+    disabled_optional_agents: list[str] | None = None
 
 
 class AgentInfo(BaseModel):

@@ -29,27 +29,27 @@ const STAGE_ICONS: Record<string, typeof Lightbulb> = {
 };
 
 const STAGE_COLORS: Record<string, string> = {
-  planning: "text-indigo-500",
-  criticizing: "text-amber-500",
-  refining: "text-cyan-500",
-  fact_checking: "text-teal-500",
-  executing: "text-blue-500",
-  code_quality: "text-violet-500",
-  verifying: "text-emerald-500",
-  testing: "text-lime-500",
-  archiving: "text-purple-500",
+  planning: "text-[var(--accent)]",
+  criticizing: "text-[var(--warning)]",
+  refining: "text-[var(--accent)]",
+  fact_checking: "text-[var(--terminal)]",
+  executing: "text-[var(--accent)]",
+  code_quality: "text-[var(--accent)]",
+  verifying: "text-[var(--terminal)]",
+  testing: "text-[var(--terminal)]",
+  archiving: "text-[var(--accent)]",
 };
 
 const STAGE_BG_COLORS: Record<string, string> = {
-  planning: "bg-indigo-50",
-  criticizing: "bg-amber-50",
-  refining: "bg-cyan-50",
-  fact_checking: "bg-teal-50",
-  executing: "bg-blue-50",
-  code_quality: "bg-violet-50",
-  verifying: "bg-emerald-50",
-  testing: "bg-lime-50",
-  archiving: "bg-purple-50",
+  planning: "bg-[var(--accent-faint)]",
+  criticizing: "bg-[var(--warning-bg)]",
+  refining: "bg-[var(--accent-faint)]",
+  fact_checking: "bg-[var(--terminal-faint)]",
+  executing: "bg-[var(--accent-faint)]",
+  code_quality: "bg-[var(--accent-faint)]",
+  verifying: "bg-[var(--terminal-faint)]",
+  testing: "bg-[var(--terminal-faint)]",
+  archiving: "bg-[var(--accent-faint)]",
 };
 
 const STAGE_DESCRIPTIONS: Record<string, string> = {
@@ -83,7 +83,7 @@ export function PipelineStageBar({
   const isStageActive = (stage: string) => stage === currentStage && !isStageComplete(stage) && !isStageFailed(stage);
 
   return (
-    <div className="relative flex items-center gap-1 p-4 bg-white border-b border-gray-100 overflow-x-auto">
+    <div className="relative flex items-center gap-1 p-4 bg-[var(--bg-primary)] border-b border-[var(--border-subtle)] overflow-x-auto">
       {PIPELINE_STAGES.map((stage, index) => {
         const Icon = STAGE_ICONS[stage];
         const isComplete = isStageComplete(stage);
@@ -108,10 +108,10 @@ export function PipelineStageBar({
               <div
                 className={cn(
                   "w-10 h-10 rounded-xl flex items-center justify-center transition-all duration-250",
-                  isComplete && "bg-green-100 text-green-600",
-                  isFailed && "bg-red-100 text-red-500",
+                  isComplete && "bg-[var(--terminal-faint)] text-[var(--terminal)]",
+                  isFailed && "bg-[var(--error-dim)] text-[var(--error)]",
                   isActive && cn(STAGE_BG_COLORS[stage], STAGE_COLORS[stage], "stage-active"),
-                  !isComplete && !isFailed && !isActive && "bg-gray-100 text-gray-400"
+                  !isComplete && !isFailed && !isActive && "bg-[var(--bg-tertiary)] text-[var(--text-muted)]"
                 )}
               >
                 {isComplete ? (
@@ -127,29 +127,29 @@ export function PipelineStageBar({
               <span
                 className={cn(
                   "mt-1.5 text-xs font-medium",
-                  isActive && "text-gray-900",
-                  isComplete && "text-green-600",
-                  isFailed && "text-red-500",
-                  !isActive && !isComplete && !isFailed && "text-gray-400"
+                  isActive && "text-[var(--text-primary)]",
+                  isComplete && "text-[var(--terminal)]",
+                  isFailed && "text-[var(--error)]",
+                  !isActive && !isComplete && !isFailed && "text-[var(--text-muted)]"
                 )}
               >
                 {STAGE_LABELS[stage]}
               </span>
             </div>
             {showTooltip && isHovered && (
-              <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 w-48 p-2 bg-gray-900 text-white text-xs rounded-lg shadow-lg z-50">
+              <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 w-48 p-2 bg-[var(--bg-primary)] text-[var(--bg-primary)] text-xs rounded-lg shadow-lg z-50">
                 <div className="flex items-start gap-2">
-                  <Info className="w-3 h-3 mt-0.5 flex-shrink-0 text-gray-400" />
+                  <Info className="w-3 h-3 mt-0.5 flex-shrink-0 text-[var(--text-muted)]" />
                   <span>{STAGE_DESCRIPTIONS[stage]}</span>
                 </div>
-                <div className="absolute left-1/2 -translate-x-1/2 top-full w-2 h-2 bg-gray-900 rotate-45" />
+                <div className="absolute left-1/2 -translate-x-1/2 top-full w-2 h-2 bg-[var(--bg-primary)] rotate-45" />
               </div>
             )}
             {index < PIPELINE_STAGES.length - 1 && (
               <div
                 className={cn(
                   "w-8 h-0.5 mx-1 mt-[-20px]",
-                  isComplete ? "bg-green-300" : "bg-gray-200"
+                  isComplete ? "bg-green-300" : "bg-[var(--bg-tertiary)]"
                 )}
               />
             )}
