@@ -1,4 +1,54 @@
-__pycache__/
-*.pyc
+# AI coding tools
+.aider*
 .env
-.env.local
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+*.egg
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.venv/
+venv/
+ENV/
+env/
+*.pyo
+
+# Node / TypeScript / Next.js
+node_modules/
+.next/
+out/
+dist/
+build/
+.turbo/
+.parcel-cache/
+.npm/
+.eslintcache
+*.tsbuildinfo
+bun.lockb
+
+# Editor / OS
+.DS_Store
+*.swp
+*.swo
+*~
+.idea/
+.vscode/
+*.sublime-*
+
+# Runtime caches (not source of truth)
+.eden/ci/
+.eden/cache/
+.eden/auto_datasets/
+.eden/canary/
+.eden/*.log
+.codegraph/
+
+# Local config / secrets
+*.local
+secrets/

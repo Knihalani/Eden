@@ -20,8 +20,17 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, Optional
 
-from eden.benchmark_engine import BenchmarkEngine
 from eden.evaluation.golden_dataset import DatasetRegistry, GoldenDataset, load_canonical_datasets
+
+# BenchmarkEngine was part of the original env-gen benchmarking
+# stack and is no longer present on this branch.  The CIPipeline
+# tolerates a missing engine (the benchmark stage is skipped) — the
+# import is made lazy so this module imports cleanly even when the
+# engine is absent.
+try:
+    from eden.benchmark_engine import BenchmarkEngine  # type: ignore
+except ImportError:  # noqa: BLE001
+    BenchmarkEngine = None  # type: ignore[assignment,misc]
 
 logger = logging.getLogger(__name__)
 

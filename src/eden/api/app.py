@@ -10,10 +10,9 @@ from pydantic import BaseModel, Field
 
 from eden.config import get_settings
 from eden.kb import initialize_kb, health_check as kb_health_check
-from eden.api.routes import jobs, kb, auth, orgs, references, api_keys, audit, analytics, export, export_destinations, scim, billing, sso, benchmark, chain, ai_insights, pii_policy, retention_policy, region
+from eden.api.routes import kb, auth, orgs, references, api_keys, audit, analytics, export, export_destinations, scim, billing, sso, chain, ai_insights, pii_policy, retention_policy, region
 from eden.api.routes import (
     feature_flags,
-    specs,
     sandbox,
     experiments,
     evaluation,
@@ -170,7 +169,6 @@ app.add_middleware(
 )
 
 # Include route modules
-app.include_router(jobs.router)
 app.include_router(kb.router)
 app.include_router(auth.router)
 app.include_router(audit.router)  # /orgs/{org_id}/audit-log
@@ -183,13 +181,11 @@ app.include_router(export.router)  # /orgs/{org_id}/export
 app.include_router(export_destinations.router)  # /orgs/{org_id}/export/{destinations,schedules,run-now}
 app.include_router(scim.router)  # /orgs/{org_id}/scim/v2
 app.include_router(sso.router)  # /sso
-app.include_router(benchmark.router)  # /benchmark
 app.include_router(chain.router)  # /chain
 app.include_router(ai_insights.router)  # /orgs/{org_id}/ai-insights
 app.include_router(pii_policy.router)  # /orgs/{org_id}/pii-policy
 app.include_router(retention_policy.router)  # /orgs/{org_id}/retention-policy
 app.include_router(region.router)  # /orgs/{org_id}/region
-app.include_router(specs.router)  # /specs (gated)
 app.include_router(sandbox.router)  # /sandbox (gated)
 app.include_router(experiments.router)  # /experiments (gated)
 app.include_router(evaluation.router)  # /evaluation (gated)

@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from typing import cast
 """Agent Intelligence services (Cat 6) — lazy re-exports.
 
@@ -21,8 +23,6 @@ Mirrors the layout of :mod:`eden.kb.retrieval_intel`,
 re-exported at package import time; the import of the
 ``performance`` module triggers the real implementations.
 """
-
-from __future__ import annotations
 
 # Lazy re-exports — keep the package cold-path cheap.
 # Mirror the Cat 4 / Cat 5 / Cat 8 / Cat 16 pattern.

@@ -563,3 +563,42 @@ def require_feature_flag(flag_name: str):
             )
 
     return _dependency
+
+
+# ============================================================================
+# Ingestion Auth (Phase 7.0)
+# ============================================================================
+
+async def get_ingestion_auth(
+    x_org_id: Optional[str] = Header(None, alias="X-Org-Id"),
+    x_org_api_key: Optional[str] = Header(None, alias="X-Org-Api-Key"),
+    authorization: Optional[str] = Cookie(None),
+) -> dict:
+    """Authenticate an ingestion / gateway request.
+
+    Accepts either an API key (X-Org-Api-Key) or a session cookie
+    (``authorization``). Returns the org context dict; raises 401
+    if neither is provided or both are invalid.
+
+    The gateway/ingestion routes use this instead of
+    ``get_current_user`` so the OpenAI-compatible HTTP gateway can be
+    hit with just an API key (no browser cookie).
+    """
+    if x_org_api_key:
+        return await get_current_org_api_key(x_org_id, x_org_api_key)
+
+    if not authorization:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="X-Org-Api-Key header or session cookie required",
+        )
+
+    org = await get_current_org(x_org_id, authorization)
+    if not org:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not a member of this organization",
+        )
+    return org
+
+    return _dependency
