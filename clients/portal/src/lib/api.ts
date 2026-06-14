@@ -39,6 +39,29 @@ async function fetchApi<T>(
 }
 
 export const api = {
+  // Generic HTTP verbs — escape hatch for new routes whose typed
+  // helpers haven't been added yet. Prefer the typed per-resource
+  // methods (api.listRoles, api.listGatewayModels, …) where they
+  // exist; the generic methods are intentionally loosely typed.
+  get: <T = unknown>(endpoint: string) => fetchApi<T>(endpoint, { method: "GET" }),
+  post: <T = unknown>(endpoint: string, body?: unknown) =>
+    fetchApi<T>(endpoint, {
+      method: "POST",
+      body: body !== undefined ? JSON.stringify(body) : undefined,
+    }),
+  patch: <T = unknown>(endpoint: string, body?: unknown) =>
+    fetchApi<T>(endpoint, {
+      method: "PATCH",
+      body: body !== undefined ? JSON.stringify(body) : undefined,
+    }),
+  put: <T = unknown>(endpoint: string, body?: unknown) =>
+    fetchApi<T>(endpoint, {
+      method: "PUT",
+      body: body !== undefined ? JSON.stringify(body) : undefined,
+    }),
+  delete: <T = unknown>(endpoint: string) =>
+    fetchApi<T>(endpoint, { method: "DELETE" }),
+
   // Auth
   signup: (data: { email: string; password: string; name: string }) =>
     fetchApi<{ user_id: string; email: string; message: string }>("/auth/signup", {
@@ -55,6 +78,24 @@ export const api = {
   logout: () =>
     fetchApi<{ message: string }>("/auth/logout", { method: "POST" }),
 
+  // Password reset flow — the BE route
+  // (``POST /auth/forgot-password`` and
+  // ``POST /auth/reset-password``) is currently shipped in tests
+  // but the live route handler is tracked as Phase 7.5 work.
+  // The FE keeps the call sites typed so consumers don't
+  // throw a 404 at the wrong layer.
+  forgotPassword: (data: { email: string }) =>
+    fetchApi<{ message: string }>("/auth/forgot-password", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+
+  resetPassword: (data: { token: string; password: string }) =>
+    fetchApi<{ message: string }>("/auth/reset-password", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+
   getMe: () =>
     fetchApi<{
       user_id: string;
@@ -68,6 +109,36 @@ export const api = {
       }>;
       current_org_id: string | null;
     }>("/auth/me"),
+
+  // Notifications (user-scoped, polled by NotificationsProvider)
+  listNotifications: (params?: { limit?: number }) =>
+    fetchApi<{
+      notifications: Array<{
+        id: string;
+        user_id: string;
+        org_id: string | null;
+        type: string;
+        title: string;
+        message: string;
+        metadata: Record<string, unknown>;
+        is_read: boolean;
+        created_at: string;
+      }>;
+      unread_count: number;
+    }>("/notifications" + (params?.limit ? `?limit=${params.limit}` : "")),
+  markNotificationRead: (notificationId: string) =>
+    fetchApi<{ id: string; is_read: boolean }>(
+      `/notifications/${notificationId}/read`,
+      { method: "POST" },
+    ),
+  markAllNotificationsRead: () =>
+    fetchApi<{ updated: number }>("/notifications/read-all", {
+      method: "POST",
+    }),
+  deleteNotification: (notificationId: string) =>
+    fetchApi<{ id: string }>(`/notifications/${notificationId}`, {
+      method: "DELETE",
+    }),
 
   // Organizations
   listOrgs: (includeArchived?: boolean) =>
@@ -199,6 +270,40 @@ export const api = {
 
   get2FAStatus: () =>
     fetchApi<{ two_factor_enabled: boolean }>("/auth/2fa/status"),
+
+  // Profile mutations (Phase A.4)
+  updateProfile: (data: { name?: string; avatar_url?: string }) =>
+    fetchApi<{ user_id: string; email: string; name: string; avatar_url?: string }>(
+      "/auth/users/me",
+      { method: "PATCH", body: JSON.stringify(data) },
+    ),
+
+  changePassword: (oldPassword: string, newPassword: string) =>
+    fetchApi<void>("/auth/users/me/password", {
+      method: "POST",
+      body: JSON.stringify({ old_password: oldPassword, new_password: newPassword }),
+    }),
+
+  uploadAvatar: async (file: File): Promise<{ avatar_url: string }> => {
+    const formData = new FormData();
+    formData.append("file", file);
+    const res = await fetch("/api/proxy/auth/users/me/avatar", {
+      method: "POST",
+      body: formData,
+      credentials: "include",
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || `Upload failed: ${res.status}`);
+    }
+    return res.json();
+  },
+
+  deleteAccount: (confirm: string) =>
+    fetchApi<void>("/auth/users/me", {
+      method: "DELETE",
+      body: JSON.stringify({ confirm }),
+    }),
 
   enforceOrg2FA: (orgId: string, enforce: boolean) =>
     fetchApi<{ two_factor_enforced: boolean; message: string }>(
@@ -360,71 +465,11 @@ export const api = {
   listReferencePurposes: (orgId: string) =>
     fetchApi<string[]>(`/orgs/${orgId}/references/purposes`),
 
-  // Jobs
-  listJobs: (params?: { status?: string; outcome_tier?: string; q?: string; sort?: string; limit?: number; offset?: number }) => {
-    const searchParams = new URLSearchParams();
-    if (params?.status) searchParams.set("status", params.status);
-    if (params?.outcome_tier) searchParams.set("outcome_tier", params.outcome_tier);
-    if (params?.q) searchParams.set("q", params.q);
-    if (params?.sort) searchParams.set("sort", params.sort);
-    if (params?.limit) searchParams.set("limit", String(params.limit));
-    if (params?.offset) searchParams.set("offset", String(params.offset));
-    const qs = searchParams.toString();
-    return fetchApi<{
-      jobs: Array<{
-        job_id: string;
-        status: string;
-        current_stage: string;
-        outcome_tier: string | null;
-        created_at: string;
-        updated_at: string;
-      }>;
-      total: number;
-      limit: number;
-      offset: number;
-    }>(`/jobs${qs ? `?${qs}` : ""}`);
-  },
-
-  getJob: (jobId: string) =>
-    fetchApi<{
-      job_id: string;
-      status: string;
-      current_stage: string;
-      outcome_tier: string | null;
-      created_at: string;
-      updated_at: string;
-      stage_history: Array<{ from?: string; to: string; at: string }>;
-    }>(`/jobs/${jobId}`),
-
-  getJobResult: (jobId: string) =>
-    fetchApi<{
-      job_id: string;
-      status: string;
-      outcome_tier: string | null;
-      environment_code: string | null;
-      test_results: Record<string, unknown> | null;
-      quality_report: Record<string, unknown> | null;
-      archivist_summary: Record<string, unknown> | null;
-    }>(`/jobs/${jobId}/result`),
-
-  submitJob: (data: {
-    description: string;
-    tags: string[];
-    framework: string;
-    framework_version: string;
-    difficulty_parameters: Record<string, unknown>;
-    output_mode: string;
-  }) =>
-    fetchApi<{ job_id: string; status: string; message: string }>("/jobs", {
-      method: "POST",
-      body: JSON.stringify(data),
-    }),
-
-  cancelJob: (jobId: string) =>
-    fetchApi<{ job_id: string; status: string; message: string }>(
-      `/jobs/${jobId}/cancel`,
-      { method: "POST" }
-    ),
+  // Jobs — Phase 2: the env-gen pipeline was retired. The stand-alone
+  // exports at the bottom of this file (listJobs, getJob, getJobResult,
+  // submitJob, getJobStreamUrl) all reject with a clear deprecation
+  // message. The /jobs route on the server has been removed; the
+  // /v1/environments route is stubbed to 410.
 
   // API Keys
   createApiKey: (orgId: string, name: string, scopes: string[]) =>
@@ -1021,6 +1066,25 @@ export const api = {
 
   // ── Observability: PII policy (Phase 7.3a) ───────────────────
 
+  // ── Observability: trace tree (Inspector page) ──────────────
+  // Hierarchical tree of spans rooted at the trace's entry span,
+  // used by the Inspector page to render the call-graph view.
+  // The BE returns ``root_spans`` as a list of nested dicts; we
+  // keep the type loose (list of unknown dicts) because the
+  // exact span shape varies by ``realm``.
+  getTraceTree: (
+    orgId: string,
+    traceId: string,
+  ): Promise<{
+    trace_id: string;
+    tenant_id: string;
+    realm: string;
+    root_spans: Array<Record<string, unknown>>;
+    total_duration_ms: number;
+    span_count: number;
+    outcome: string | null;
+  }> => fetchApi(`/orgs/${orgId}/observability/traces/${traceId}/tree`),
+
   // ── Observability: retention policy (Phase 7.3b) ─────────────
   // The existing `getRetentionPolicy` / `updateRetentionPolicy`
   // cover the singular config. ``listRetentionOverrides`` returns
@@ -1038,10 +1102,1092 @@ export const api = {
     delete_days: number;
     pii_scrub_after_days: number | null;
   }>> => fetchApi(`/orgs/${orgId}/retention-policy?list=overrides`),
+
+  // ── AI Gateway model registry (Phase 7 A2) ───────────────────
+  // CRUD over the per-org ``org_gateway_models`` table. The
+  // gateway A1 layer calls ``/resolve`` to look up the upstream
+  // provider / model id / decrypted key; this is the admin surface
+  // for adding and updating those rows. See
+  // ``src/eden/api/routes/gateway_models.py`` for the BE handler.
+  // Field names mirror the BE Pydantic models
+  // ``GatewayModelOut`` / ``GatewayModelCreate`` /
+  // ``GatewayModelUpdate``.
+  listGatewayModels: (
+    orgId: string,
+  ): Promise<Array<{
+    model_id: string;
+    org_id: string;
+    name: string;
+    provider: string;
+    upstream_model: string;
+    upstream_key_prefix: string;
+    endpoint: string | null;
+    enabled: boolean;
+    routing_priority: number;
+    metadata: Record<string, unknown>;
+    created_by: string | null;
+    created_at: string;
+    updated_at: string;
+  }>> => fetchApi(`/orgs/${orgId}/gateway/models`),
+
+  getGatewayModel: (
+    orgId: string,
+    modelId: string,
+  ): Promise<{
+    model_id: string;
+    org_id: string;
+    name: string;
+    provider: string;
+    upstream_model: string;
+    upstream_key_prefix: string;
+    endpoint: string | null;
+    enabled: boolean;
+    routing_priority: number;
+    metadata: Record<string, unknown>;
+    created_by: string | null;
+    created_at: string;
+    updated_at: string;
+  }> => fetchApi(`/orgs/${orgId}/gateway/models/${modelId}`),
+
+  createGatewayModel: (
+    orgId: string,
+    body: {
+      name: string;
+      provider: string;
+      upstream_model: string;
+      upstream_api_key?: string;
+      endpoint?: string | null;
+      enabled?: boolean;
+      routing_priority?: number;
+      metadata?: Record<string, unknown>;
+    },
+  ): Promise<{
+    model_id: string;
+    org_id: string;
+    name: string;
+    provider: string;
+    upstream_model: string;
+    upstream_key_prefix: string;
+    endpoint: string | null;
+    enabled: boolean;
+    routing_priority: number;
+    metadata: Record<string, unknown>;
+    created_by: string | null;
+    created_at: string;
+    updated_at: string;
+  }> => fetchApi(`/orgs/${orgId}/gateway/models`, {
+    method: "POST",
+    body: JSON.stringify(body),
+  }),
+
+  updateGatewayModel: (
+    orgId: string,
+    modelId: string,
+    body: Partial<{
+      upstream_model: string;
+      upstream_api_key: string;
+      endpoint: string | null;
+      enabled: boolean;
+      routing_priority: number;
+      metadata: Record<string, unknown>;
+    }>,
+  ): Promise<{
+    model_id: string;
+    org_id: string;
+    name: string;
+    provider: string;
+    upstream_model: string;
+    upstream_key_prefix: string;
+    endpoint: string | null;
+    enabled: boolean;
+    routing_priority: number;
+    metadata: Record<string, unknown>;
+    created_by: string | null;
+    created_at: string;
+    updated_at: string;
+  }> => fetchApi(`/orgs/${orgId}/gateway/models/${modelId}`, {
+    method: "PATCH",
+    body: JSON.stringify(body),
+  }),
+
+  deleteGatewayModel: (
+    orgId: string,
+    modelId: string,
+  ): Promise<{ deleted: boolean; model_id: string }> =>
+    fetchApi(`/orgs/${orgId}/gateway/models/${modelId}`, {
+      method: "DELETE",
+    }),
+
+  // ── RBAC: roles (Phase 7.3d) ────────────────────────────────
+  // Roles + permissions for the org. The FE ``/settings/roles``
+  // page lists roles, reads the per-role permission set, and
+  // creates / updates / deletes custom roles. The ``post`` and
+  // ``delete`` shims below are kept loose-typed because the
+  // request body shape varies per-route.
+  listRoles: (
+    orgId: string,
+  ): Promise<Array<{
+    role_id: string;
+    name: string;
+    description: string;
+    is_system: boolean;
+    permissions: string[];
+    created_at: string;
+  }>> => fetchApi(`/orgs/${orgId}/roles`),
+
+  getRole: (
+    orgId: string,
+    roleId: string,
+  ): Promise<{
+    role_id: string;
+    name: string;
+    description: string;
+    is_system: boolean;
+    permissions: string[];
+    created_at: string;
+  }> => fetchApi(`/orgs/${orgId}/roles/${roleId}`),
+
+  createRole: (
+    orgId: string,
+    body: { name: string; description?: string; permissions: string[] },
+  ): Promise<{
+    role_id: string;
+    name: string;
+    description: string;
+    is_system: boolean;
+    permissions: string[];
+    created_at: string;
+  }> => fetchApi(`/orgs/${orgId}/roles`, {
+    method: "POST",
+    body: JSON.stringify(body),
+  }),
+
+  updateRole: (
+    orgId: string,
+    roleId: string,
+    body: Partial<{ name: string; description: string; permissions: string[] }>,
+  ): Promise<{
+    role_id: string;
+    name: string;
+    description: string;
+    is_system: boolean;
+    permissions: string[];
+    created_at: string;
+  }> => fetchApi(`/orgs/${orgId}/roles/${roleId}`, {
+    method: "PATCH",
+    body: JSON.stringify(body),
+  }),
+
+  deleteRole: (
+    orgId: string,
+    roleId: string,
+  ): Promise<{ deleted: boolean; role_id: string }> =>
+    fetchApi(`/orgs/${orgId}/roles/${roleId}`, { method: "DELETE" }),
+
+  assignRole: (
+    orgId: string,
+    body: { user_id: string; role_id: string },
+  ): Promise<{ user_id: string; role_id: string }> =>
+    fetchApi(`/orgs/${orgId}/roles/assign`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+
+  unassignRole: (
+    orgId: string,
+    body: { user_id: string; role_id: string },
+  ): Promise<{ user_id: string; role_id: string }> =>
+    fetchApi(`/orgs/${orgId}/roles/unassign`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+
+  // ── RBAC: permissions catalogue ─────────────────────────────
+  listPermissions: (
+    orgId: string,
+  ): Promise<Array<{
+    permission: string;
+    category: string;
+    description: string;
+  }>> => fetchApi(`/orgs/${orgId}/permissions`),
+
+  // ── Billing: payment method (Phase 7.0) ──────────────────────
+  getPaymentMethod: (
+    orgId: string,
+  ): Promise<{
+    brand: string;
+    last4: string;
+    exp_month: number;
+    exp_year: number;
+  } | null> => fetchApi(`/orgs/${orgId}/billing/payment-method`),
+
+  // ── Observability: list / timeline / heatmap / compare / export ──
+  // The list endpoint backs the Trace Table on /observability; the
+  // timeline is the per-step view; heatmap is the day×model latency
+  // grid; compare is env↔prod diffing; export ships a downloadable
+  // blob (json / jsonl / csv).
+
+  listObservabilityTraces: (
+    orgId: string,
+    params?: { realm?: string; outcome?: string; agent_id?: string; days?: number; limit?: number },
+  ): Promise<{ traces: ObservabilityTrace[]; total: number }> => {
+    const q = new URLSearchParams();
+    if (params?.realm) q.set("realm", params.realm);
+    if (params?.outcome) q.set("outcome", params.outcome);
+    if (params?.agent_id) q.set("agent_id", params.agent_id);
+    if (params?.days !== undefined) q.set("days", String(params.days));
+    if (params?.limit) q.set("limit", String(params.limit));
+    const qs = q.toString();
+    return fetchApi(`/orgs/${orgId}/observability/traces${qs ? `?${qs}` : ""}`);
+  },
+
+  getTraceTimeline: (
+    orgId: string,
+    traceId: string,
+  ): Promise<{
+    trace_id: string;
+    steps: Array<{
+      name: string;
+      start_ms: number;
+      end_ms: number;
+      duration_ms: number;
+      event_type: string;
+      outcome: string | null;
+    }>;
+    total_duration_ms: number;
+    markers: Array<{ at_ms: number; label: string; severity: string }>;
+  }> => fetchApi(`/orgs/${orgId}/observability/traces/${traceId}/timeline`),
+
+  getObservabilityHeatmap: (
+    orgId: string,
+    metric: string,
+    params?: { days?: number },
+  ): Promise<{
+    metric_name: string;
+    buckets: Array<{ x: string; y: string; value: number; count: number }>;
+    x_labels: string[];
+    y_labels: string[];
+    min_value: number;
+    max_value: number;
+  }> => {
+    const q = new URLSearchParams();
+    q.set("metric", metric);
+    if (params?.days) q.set("days", String(params.days));
+    return fetchApi(`/orgs/${orgId}/observability/heatmap?${q.toString()}`);
+  },
+
+  compareObservabilityTraces: (
+    orgId: string,
+    envTraceId: string,
+    prodTraceId: string,
+  ): Promise<{
+    env_trace_id: string;
+    prod_trace_id: string;
+    overall_score: number;
+    dimensions: Array<{
+      name: string;
+      env_value: unknown;
+      prod_value: unknown;
+      gap: number;
+      severity: string;
+      explanation: string;
+    }>;
+    recommendations: string[];
+    metadata: Record<string, unknown>;
+  }> =>
+    fetchApi(
+      `/orgs/${orgId}/observability/traces/compare?env=${encodeURIComponent(envTraceId)}&prod=${encodeURIComponent(prodTraceId)}`,
+    ),
+
+  exportTrace: (
+    orgId: string,
+    traceId: string,
+    format: "json" | "jsonl" | "csv" = "jsonl",
+  ): Promise<{ data: string; format: string; trace_id: string }> => {
+    const q = new URLSearchParams();
+    q.set("format", format);
+    return fetchApi(
+      `/orgs/${orgId}/observability/traces/${traceId}/export?${q.toString()}`,
+    );
+  },
+
+  // ── Alerts: feed + ack + rules ─────────────────────────────────
+  // The org-scoped listAlerts(orgId, params) is used by /alerts and
+  // by Dashboard; the parameterless overload returns the global feed
+  // for the current user (across all orgs). Both shapes return the
+  // same {alerts, total, unread_count} envelope so the consumer
+  // can use either.
+
+  listAlerts: ((orgId?: string, params?: { severity?: string; acknowledged?: boolean; limit?: number; offset?: number }): Promise<{
+    alerts: Array<{
+      alert_id: string;
+      severity: string;
+      title: string;
+      description: string;
+      source: string;
+      triggered_at: string;
+      acknowledged: boolean;
+      acknowledged_at: string | null;
+      acknowledged_by: string | null;
+      metadata: Record<string, unknown>;
+    }>;
+    total: number;
+    unread_count: number;
+  }> => {
+    if (orgId === undefined) {
+      return fetchApi("/alerts");
+    }
+    const q = new URLSearchParams();
+    if (params?.severity) q.set("severity", params.severity);
+    if (params?.acknowledged !== undefined) q.set("acknowledged", String(params.acknowledged));
+    if (params?.limit) q.set("limit", String(params.limit));
+    if (params?.offset !== undefined) q.set("offset", String(params.offset));
+    const qs = q.toString();
+    return fetchApi(`/orgs/${orgId}/alerts${qs ? `?${qs}` : ""}`);
+  }) as {
+    (orgId: string, params?: { severity?: string; acknowledged?: boolean; limit?: number; offset?: number }): Promise<{
+      alerts: Array<{
+        alert_id: string;
+        severity: string;
+        title: string;
+        description: string;
+        source: string;
+        triggered_at: string;
+        acknowledged: boolean;
+        acknowledged_at: string | null;
+        acknowledged_by: string | null;
+        metadata: Record<string, unknown>;
+      }>;
+      total: number;
+      unread_count: number;
+    }>;
+    (): Promise<{
+      alerts: Array<{
+        alert_id: string;
+        severity: string;
+        title: string;
+        description: string;
+        source: string;
+        triggered_at: string;
+        acknowledged: boolean;
+        acknowledged_at: string | null;
+        acknowledged_by: string | null;
+        metadata: Record<string, unknown>;
+      }>;
+      total: number;
+      unread_count: number;
+    }>;
+  },
+
+  acknowledgeAlert: (alertId: string) =>
+    fetchApi<{ alert_id: string; acknowledged: boolean }>(`/alerts/${alertId}/ack`, {
+      method: "POST",
+    }),
+
+  acknowledgeAlertsBatch: (alertIds: string[]) =>
+    fetchApi<{ acknowledged: number }>(`/alerts/ack-batch`, {
+      method: "POST",
+      body: JSON.stringify({ alert_ids: alertIds }),
+    }),
+
+  getAlertRules: (orgId: string) =>
+    fetchApi<{
+      rules: Array<{
+        rule_id: string;
+        name: string;
+        description: string;
+        event_types: string[];
+        severity_threshold: string;
+        channels: string[];
+        enabled: boolean;
+      }>;
+    }>(`/orgs/${orgId}/alerts/rules`),
+
+  // ── Insights overview (Cat 9 high-level rollup) ────────────────
+  getInsightsOverview: (orgId: string) =>
+    fetchApi<{
+      satisfaction_corrected: number;
+      nps: number;
+      friction_signals: number;
+      top_friction_areas: Array<{ area: string; severity: string; count: number }>;
+      active_users_24h: number;
+      active_users_7d: number;
+    }>(`/orgs/${orgId}/insights/overview`),
+
+  runDetectors: (orgId: string) =>
+    fetchApi<{ detectors_run: number; signals: number }>(
+      `/orgs/${orgId}/insights/detectors/run`,
+      { method: "POST" },
+    ),
+
+  // ── Optimization overview (cost dashboard tile) ────────────────
+  getOptimizationOverview: (orgId: string, days: number) =>
+    fetchApi<{
+      costs: {
+        total_cost_cents: number;
+        prompt_cost_cents: number;
+        completion_cost_cents: number;
+        cache_savings_cents: number;
+        token_total: number;
+      };
+      efficiency: {
+        cache_hit_rate: number;
+        avg_cost_per_request_cents: number;
+        p50_latency_ms: number;
+        p95_latency_ms: number;
+      };
+      forecast: {
+        next_7d_cost_cents: number;
+        next_30d_cost_cents: number;
+      };
+    }>(`/orgs/${orgId}/optimization/overview?days=${days}`),
+
+  // ── LLM Ops: model artifacts (Phase 7.1c) ──────────────────────
+  listModelArtifacts: (
+    orgId: string,
+    params?: { model_family?: string; limit?: number },
+  ) => {
+    const q = new URLSearchParams();
+    if (params?.model_family) q.set("model_family", params.model_family);
+    if (params?.limit) q.set("limit", String(params.limit));
+    const qs = q.toString();
+    return fetchApi<{
+      artifacts: Array<{
+        artifact_id: string;
+        model_family: string;
+        model_version: string;
+        provider: string;
+        artifact_type: string;
+        created_at: string;
+      }>;
+    }>(`/orgs/${orgId}/llmops/artifacts${qs ? `?${qs}` : ""}`);
+  },
+
+  getModelArtifact: (orgId: string, artifactId: string) =>
+    fetchApi<{
+      artifact: {
+        artifact_id: string;
+        model_family: string;
+        model_version: string;
+        provider: string;
+        artifact_type: string;
+        created_at: string;
+        config: Record<string, unknown>;
+        metadata: Record<string, unknown>;
+      };
+    }>(`/orgs/${orgId}/llmops/artifacts/${artifactId}`),
+
+  // ── LLM Ops: prompts registry + canary render ─────────────────
+  listPrompts: (orgId: string) =>
+    fetchApi<{
+      prompts: Array<{
+        prompt_id: string;
+        prompt_name: string;
+        version: string;
+        agent_scope: string;
+        template_text: string;
+        is_default: boolean;
+        variables: string[];
+        created_at: string;
+      }>;
+    }>(`/orgs/${orgId}/llmops/prompts`),
+
+  renderPrompt: (orgId: string, promptId: string, variables: Record<string, unknown>) =>
+    fetchApi<{
+      rendered: string;
+      prompt_id: string;
+      version: string;
+      used_variables: string[];
+    }>(`/orgs/${orgId}/llmops/prompts/${promptId}/render`, {
+      method: "POST",
+      body: JSON.stringify({ variables }),
+    }),
+
+  // ── LLM Ops: experiments (Cat 12) ─────────────────────────────
+  listExperiments: (orgId: string) =>
+    fetchApi<{
+      experiments: Array<{
+        experiment_id: string;
+        experiment_name: string;
+        experiment_type: string;
+        status: string;
+        pipeline_version: string;
+        git_commit: string;
+        created_at: string;
+        winning_variant_id: string | null;
+      }>;
+    }>(`/orgs/${orgId}/intelligence/experiments`),
+
+  getExperiment: (orgId: string, experimentId: string) =>
+    fetchApi<{
+      experiment: {
+        experiment_id: string;
+        experiment_name: string;
+        experiment_type: string;
+        status: string;
+        pipeline_version: string;
+        git_commit: string;
+        created_at: string;
+      };
+      runs: Array<{
+        run_id: string;
+        created_at: string;
+        metrics: Record<string, unknown>;
+        artifacts: Record<string, unknown>;
+      }>;
+      comparison: Record<string, unknown> | null;
+    }>(`/orgs/${orgId}/intelligence/experiments/${experimentId}`),
+
+  // ── LLM Ops: A/B tests (Cat 12 traffic splitter) ──────────────
+  listABTests: (orgId: string) =>
+    fetchApi<{
+      tests: Array<{
+        test_id: string;
+        prompt_name: string;
+        variant_a_id: string;
+        variant_b_id: string;
+        traffic_split: number;
+        success_metric: string;
+        winner_prompt_id: string | null;
+        start_date: string | null;
+        status: string;
+      }>;
+    }>(`/orgs/${orgId}/intelligence/experiments/ab-tests`),
+
+  // ── LLM Ops: AI Gateway health + metrics ──────────────────────
+  gatewayHealth: (orgId: string) =>
+    fetchApi<{
+      overall: string;
+      providers: Array<{
+        provider: string;
+        healthy: boolean;
+        avg_latency_ms: number;
+        p95_latency_ms: number;
+        error_rate: number;
+      }>;
+      last_check: string;
+    }>(`/orgs/${orgId}/gateway/health`),
+
+  gatewayMetrics: (orgId: string, limit: number) =>
+    fetchApi<{
+      metrics: Array<{
+        provider: string;
+        model: string;
+        latency_ms: number;
+        input_tokens: number;
+        output_tokens: number;
+        cost_usd: number;
+        cached: boolean;
+        ts: string;
+      }>;
+    }>(`/orgs/${orgId}/gateway/metrics?limit=${limit}`),
+
+  // ── LLM Ops: monitoring (Cat 13/22 surfaces) ──────────────────
+  getOverallHealth: (orgId: string) =>
+    fetchApi<{
+      overall_score: number;
+      active_alert_count: number;
+      model_count: number;
+      trend: "improving" | "degrading" | "stable";
+      last_check: string;
+    }>(`/orgs/${orgId}/monitoring/health`),
+
+  listMonitoringAlerts: (
+    orgId: string,
+    params?: { severity?: string; model_family?: string; limit?: number },
+  ) => {
+    const q = new URLSearchParams();
+    if (params?.severity) q.set("severity", params.severity);
+    if (params?.model_family) q.set("model_family", params.model_family);
+    if (params?.limit) q.set("limit", String(params.limit));
+    const qs = q.toString();
+    return fetchApi<{
+      alerts: Array<{
+        alert_id: string;
+        alert_type: string;
+        severity: string;
+        model_family: string;
+        triggered_at: string;
+        acknowledged: boolean;
+        message: string;
+      }>;
+    }>(`/orgs/${orgId}/monitoring/alerts${qs ? `?${qs}` : ""}`);
+  },
+
+  acknowledgeMonitoringAlert: (orgId: string, alertId: string) =>
+    fetchApi<{ alert_id: string; acknowledged: boolean }>(
+      `/orgs/${orgId}/monitoring/alerts/${alertId}/ack`,
+      { method: "POST" },
+    ),
+
+  // ── LLM Ops: semantic cache ───────────────────────────────────
+  cacheStats: (orgId: string) =>
+    fetchApi<{
+      total_queries: number;
+      hits: number;
+      misses: number;
+      hit_rate: number;
+      avg_lookup_ms: number;
+      size_bytes: number;
+    }>(`/orgs/${orgId}/cache/stats`),
+
+  cacheGet: (orgId: string, query: string, modelVersion: string) =>
+    fetchApi<{
+      hit: boolean;
+      response: string | null;
+      similarity: number | null;
+      cached_at: string | null;
+    }>(`/orgs/${orgId}/cache/get?query=${encodeURIComponent(query)}&model=${encodeURIComponent(modelVersion)}`),
+
+  cacheInvalidate: (orgId: string, pattern: string) =>
+    fetchApi<{ invalidated: number }>(`/orgs/${orgId}/cache/invalidate`, {
+      method: "POST",
+      body: JSON.stringify({ pattern }),
+    }),
+
+  // ── Multi-agent: environments / comms / roles / memory / planning / tests / HITL ──
+  // These are the per-org routes for the multi-agent orchestrator
+  // surface in /multi-agent. They were added in 2026-06 as part of
+  // the multi-agent test-runner expansion; the page uses one helper
+  // per route so that consumers stay typed at the call site.
+
+  listMultiAgentEnvs: (orgId: string) =>
+    fetchApi<{
+      environments: Array<{
+        env_id: string;
+        name: string;
+        pattern: string;
+        agent_count: number;
+        max_steps: number;
+        created_at: string;
+      }>;
+    }>(`/orgs/${orgId}/multi-agent/environments`),
+
+  createMultiAgentEnv: (
+    orgId: string,
+    data: {
+      name: string;
+      communication_pattern: string;
+      agent_count: number;
+      max_steps: number;
+    },
+  ) =>
+    fetchApi<{
+      env_id: string;
+      name: string;
+      pattern: string;
+      agent_count: number;
+      max_steps: number;
+      created_at: string;
+    }>(`/orgs/${orgId}/multi-agent/environments`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+
+  deleteMultiAgentEnv: (orgId: string, envId: string) =>
+    fetchApi<{ deleted: boolean }>(`/orgs/${orgId}/multi-agent/environments/${envId}`, {
+      method: "DELETE",
+    }),
+
+  getMultiAgentMessages: (orgId: string, envId: string, toAgent: string) =>
+    fetchApi<{
+      messages: Array<{
+        message_id: string;
+        from_agent: string;
+        to_agent: string;
+        content: Record<string, unknown>;
+        sent_at: string;
+        read_at: string | null;
+      }>;
+    }>(
+      `/orgs/${orgId}/multi-agent/environments/${envId}/messages?to=${encodeURIComponent(toAgent)}`,
+    ),
+
+  getMultiAgentCommStats: (orgId: string, envId: string) =>
+    fetchApi<{
+      stats: {
+        total_messages: number;
+        messages_per_minute: number;
+        unique_pairs: number;
+        broadcast_count: number;
+        avg_latency_ms: number;
+      };
+    }>(`/orgs/${orgId}/multi-agent/environments/${envId}/stats`),
+
+  sendMultiAgentMessage: (
+    orgId: string,
+    envId: string,
+    data: { from_agent: string; to_agent: string; content: Record<string, unknown> },
+  ) =>
+    fetchApi<{ message_id: string; sent_at: string }>(
+      `/orgs/${orgId}/multi-agent/environments/${envId}/messages`,
+      { method: "POST", body: JSON.stringify(data) },
+    ),
+
+  broadcastMultiAgentMessage: (
+    orgId: string,
+    envId: string,
+    data: { from_agent: string; content: Record<string, unknown> },
+  ) =>
+    fetchApi<{ delivered: number; sent_at: string }>(
+      `/orgs/${orgId}/multi-agent/environments/${envId}/broadcast`,
+      { method: "POST", body: JSON.stringify(data) },
+    ),
+
+  // Roles + role configs
+
+  listAgentRoles: (orgId: string, envId: string) =>
+    fetchApi<{
+      roles: Array<{
+        role_id: string;
+        role_name: string;
+        hierarchy: string;
+        agent_id: string | null;
+        objectives: string[];
+        tools: string[];
+      }>;
+    }>(`/orgs/${orgId}/multi-agent/environments/${envId}/roles`),
+
+  listRoleConfigs: (orgId: string, envId: string) =>
+    fetchApi<{
+      configs: Array<{
+        config_id: string;
+        role_name: string;
+        hierarchy: string;
+        objectives: string[];
+        tools: string[];
+        created_at: string;
+      }>;
+    }>(`/orgs/${orgId}/multi-agent/environments/${envId}/role-configs`),
+
+  createRoleConfig: (
+    orgId: string,
+    envId: string,
+    data: { role_name: string; hierarchy: string; objectives: string[]; tools: string[] },
+  ) =>
+    fetchApi<{
+      config_id: string;
+      role_name: string;
+      hierarchy: string;
+      objectives: string[];
+      tools: string[];
+      created_at: string;
+    }>(`/orgs/${orgId}/multi-agent/environments/${envId}/role-configs`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+
+  assignAgentRole: (
+    orgId: string,
+    envId: string,
+    data: { agent_id: string; role_name: string },
+  ) =>
+    fetchApi<{ role_id: string; agent_id: string; role_name: string; assigned_at: string }>(
+      `/orgs/${orgId}/multi-agent/environments/${envId}/roles`,
+      { method: "POST", body: JSON.stringify(data) },
+    ),
+
+  // Memory
+
+  queryMemory: (orgId: string, envId: string, agentId: string) =>
+    fetchApi<{
+      working_memory_summary: string;
+      episodes: Array<{
+        episode_id: string;
+        content: string;
+        recorded_at: string;
+        importance: number;
+      }>;
+      semantic_facts: Array<{ fact: string; confidence: number }>;
+    }>(
+      `/orgs/${orgId}/multi-agent/environments/${envId}/memory/${encodeURIComponent(agentId)}/query`,
+    ),
+
+  getMemoryStats: (orgId: string, envId: string) =>
+    fetchApi<{
+      working_memory_count: number;
+      episodic: { total_recorded: number; recent_24h: number };
+      semantic: { total_facts: number; avg_confidence: number };
+    }>(`/orgs/${orgId}/multi-agent/environments/${envId}/memory/stats`),
+
+  addObservation: (
+    orgId: string,
+    envId: string,
+    data: { agent_id: string; content: string },
+  ) =>
+    fetchApi<{ observation_id: string; recorded_at: string }>(
+      `/orgs/${orgId}/multi-agent/environments/${envId}/memory/observe`,
+      { method: "POST", body: JSON.stringify(data) },
+    ),
+
+  consolidateMemory: (orgId: string, envId: string, agentId: string) =>
+    fetchApi<{ merged: number; archived: number; demoted: number }>(
+      `/orgs/${orgId}/multi-agent/environments/${envId}/memory/${encodeURIComponent(agentId)}/consolidate`,
+      { method: "POST" },
+    ),
+
+  // Planning
+
+  listPlanningFrameworks: (orgId: string) =>
+    fetchApi<{
+      frameworks: Array<{
+        id: string;
+        name: string;
+        description: string;
+        complexity: "low" | "medium" | "high";
+        supports: string[];
+      }>;
+    }>(`/orgs/${orgId}/multi-agent/frameworks`),
+
+  runEpisode: (
+    orgId: string,
+    envId: string,
+    data: { framework: string; agent_ids: string[]; max_steps: number },
+  ) =>
+    fetchApi<{
+      result: {
+        episode_id: string;
+        steps_taken: number;
+        outcome: string;
+        agent_contributions: Record<string, number>;
+        artifacts: Record<string, unknown>;
+      };
+    }>(`/orgs/${orgId}/multi-agent/environments/${envId}/episodes/run`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+
+  // Tests + benchmark
+
+  runMultiAgentTests: (orgId: string, envId: string) =>
+    fetchApi<{
+      total_tests: number;
+      passed: number;
+      failed: number;
+      duration_ms: number;
+      all_passed: boolean;
+      results: Array<{
+        test_name: string;
+        passed: boolean;
+        duration_ms: number;
+        error: string | null;
+      }>;
+    }>(`/orgs/${orgId}/multi-agent/environments/${envId}/tests/run`, {
+      method: "POST",
+    }),
+
+  runMultiAgentBenchmark: (orgId: string, envId: string) =>
+    fetchApi<{
+      suite: string;
+      scores: Record<string, number>;
+      duration_ms: number;
+      per_test: Array<{ test_name: string; score: number; duration_ms: number }>;
+    }>(`/orgs/${orgId}/multi-agent/environments/${envId}/benchmark/run`, {
+      method: "POST",
+    }),
+
+  getMultiAgentTestResults: (orgId: string, envId: string) =>
+    fetchApi<{
+      total_tests: number;
+      passed: number;
+      failed: number;
+      duration_ms: number;
+      all_passed: boolean;
+      results: Array<{
+        test_name: string;
+        passed: boolean;
+        duration_ms: number;
+        error: string | null;
+      }>;
+    }>(`/orgs/${orgId}/multi-agent/environments/${envId}/tests/results`),
+
+  // HITL (human-in-the-loop)
+
+  getHitlRules: (orgId: string, envId: string) =>
+    fetchApi<{ rules: Record<string, string> }>(
+      `/orgs/${orgId}/multi-agent/environments/${envId}/hitl/rules`,
+    ),
+
+  getPendingApprovals: (orgId: string, envId: string) =>
+    fetchApi<{
+      pending: Array<{
+        approval_id: string;
+        action_type: string;
+        payload: Record<string, unknown>;
+        requested_at: string;
+        requested_by: string;
+      }>;
+    }>(`/orgs/${orgId}/multi-agent/environments/${envId}/hitl/pending`),
+
+  setHitlRule: (
+    orgId: string,
+    envId: string,
+    data: { action_type: string; rule: string },
+  ) =>
+    fetchApi<{ action_type: string; rule: string; set_at: string }>(
+      `/orgs/${orgId}/multi-agent/environments/${envId}/hitl/rules`,
+      { method: "POST", body: JSON.stringify(data) },
+    ),
+
+  resolveApproval: (orgId: string, envId: string, approvalId: string, approve: boolean) =>
+    fetchApi<{ approval_id: string; resolved: boolean; decision: "approved" | "rejected" }>(
+      `/orgs/${orgId}/multi-agent/environments/${envId}/hitl/resolve`,
+      {
+        method: "POST",
+        body: JSON.stringify({ approval_id: approvalId, approve }),
+      },
+    ),
+
+  // ── Marketplace (Cat 15) ──────────────────────────────────────
+
+  listMarketplace: (params?: { q?: string; category?: string; quality?: string }) => {
+    const q = new URLSearchParams();
+    if (params?.q) q.set("q", params.q);
+    if (params?.category) q.set("category", params.category);
+    if (params?.quality) q.set("quality", params.quality);
+    const qs = q.toString();
+    return fetchApi<
+      Array<{
+        id: string;
+        name: string;
+        description: string;
+        category: string;
+        quality: "high" | "medium" | "low";
+        author: string;
+        stars: number;
+        forks: number;
+        updated_at: string;
+      }>
+    >(`/marketplace${qs ? `?${qs}` : ""}`);
+  },
+
+  listMarketplaceFeatured: () =>
+    fetchApi<
+      Array<{
+        id: string;
+        name: string;
+        description: string;
+        category: string;
+        quality: "high" | "medium" | "low";
+        author: string;
+        stars: number;
+        forks: number;
+        updated_at: string;
+      }>
+    >(`/marketplace/featured`),
+
+  // ── Sandbox (developer playground) ────────────────────────────
+  // Sessions are 24h, capped at 50 requests; the FE tracks request
+  // count from the create-session payload + after every execute.
+
+  listSandboxSessions: () =>
+    fetchApi<{
+      sessions: Array<{
+        session_id: string;
+        status: "active" | "expired" | "deleted";
+        created_at: string;
+        last_used_at: string;
+        expires_at: string;
+        request_count: number;
+        max_requests: number;
+        endpoints_available: string[];
+      }>;
+    }>(`/sandbox/sessions`),
+
+  createSandboxSession: (data: { name?: string }) =>
+    fetchApi<{
+      session_id: string;
+      status: "active";
+      created_at: string;
+      expires_at: string;
+      request_count: number;
+      max_requests: number;
+    }>(`/sandbox/sessions`, { method: "POST", body: JSON.stringify(data) }),
+
+  deleteSandboxSession: (sessionId: string) =>
+    fetchApi<{ deleted: boolean }>(`/sandbox/sessions/${sessionId}`, {
+      method: "DELETE",
+    }),
+
+  resetSandboxSession: (sessionId: string, hardReset: boolean) =>
+    fetchApi<{
+      session_id: string;
+      request_count: number;
+      reset_at: string;
+      hard: boolean;
+    }>(`/sandbox/sessions/${sessionId}/reset`, {
+      method: "POST",
+      body: JSON.stringify({ hard: hardReset }),
+    }),
+
+  getSandboxDocs: () =>
+    fetchApi<{
+      title: string;
+      version: string;
+      endpoints: Array<{
+        path: string;
+        method: string;
+        description: string;
+        request_schema: Record<string, unknown>;
+        response_schema: Record<string, unknown>;
+      }>;
+    }>(`/sandbox/docs`),
+
+  getSandboxRequestLog: (sessionId: string) =>
+    fetchApi<{
+      entries: Array<{
+        request_id: string;
+        endpoint: string;
+        method: string;
+        status: number;
+        duration_ms: number;
+        requested_at: string;
+      }>;
+    }>(`/sandbox/sessions/${sessionId}/log`),
+
+  executeSandboxRequest: (
+    sessionId: string,
+    data: { endpoint: string; method: string; body: Record<string, unknown> },
+  ) =>
+    fetchApi<{
+      status: number;
+      body: Record<string, unknown>;
+      duration_ms: number;
+    }>(`/sandbox/sessions/${sessionId}/execute`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
 };
 
-export function getJobStreamUrl(jobId: string): string {
-  return `${API_BASE}/jobs/${jobId}/stream`;
+// Phase 2: the environment-generation pipeline (Planner→Critic→…→Archivist)
+// was retired. All job management surfaces (listJobs, getJob, submitJob,
+// getJobResult, getJobStreamUrl) are no longer wired to a live API. The
+// Eden Agent CLI's `/eden-sim` is the replacement for sim/test generation.
+// We keep the exports but make them throw a clear error so any remaining
+// reference (e.g. leftover code, browser console, test mocks) fails
+// loudly rather than silently.
+const ENV_GEN_RETIRED_MSG =
+  "The Eden environment-generation pipeline was retired in Phase 2. " +
+  "Use the Eden Agent CLI's `/eden-sim` command to generate " +
+  "simulations + test cases for your agent, grounded in observability.";
+
+export function listJobs(_params?: unknown): Promise<never> {
+  return Promise.reject(new Error(ENV_GEN_RETIRED_MSG));
+}
+export function getJob(_jobId: string): Promise<never> {
+  return Promise.reject(new Error(ENV_GEN_RETIRED_MSG));
+}
+export function getJobResult(_jobId: string): Promise<never> {
+  return Promise.reject(new Error(ENV_GEN_RETIRED_MSG));
+}
+export function submitJob(_data: unknown): Promise<never> {
+  return Promise.reject(new Error(ENV_GEN_RETIRED_MSG));
+}
+export function getJobStreamUrl(_jobId: string): string {
+  // Returning a syntactically valid URL keeps callers that just inspect
+  // the value (instead of fetching it) from crashing; the fetch itself
+  // will 404 since the route is removed.
+  return `${API_BASE}/jobs/_retired/stream`;
 }
 
 /**
@@ -1062,3 +2208,681 @@ export async function aiInsightsChat(
     body: JSON.stringify(body),
   });
 }
+
+// ── Shared observability types ────────────────────────────────────
+// These types back the Trace list/tree/timeline/heatmap views in
+// /observability. The BE Pydantic models in
+// ``src/eden/observability/trace_models.py`` are the source of truth;
+// the FE shapes mirror what the BE actually returns (loose for
+// nested span objects, strict for scalar fields the UI binds to).
+
+export type ObservabilityStreamingMetrics = {
+  ttft_ms?: number | null;
+  itl_ms_avg?: number | null;
+  tpot_ms?: number | null;
+  stream_completed?: boolean | null;
+  total_chunks?: number | null;
+};
+
+export type ObservabilityTrace = {
+  trace_id: string;
+  tenant_id: string;
+  realm: string;
+  outcome: string | null;
+  span_count: number;
+  duration_ms: number;
+  agent_id?: string | null;
+  started_at?: string | null;
+  model?: string | null;
+  provider?: string | null;
+  input_tokens?: number | null;
+  output_tokens?: number | null;
+  cost_cents?: number | null;
+  error?: string | null;
+  streaming_metrics?: ObservabilityStreamingMetrics | null;
+  /** Free-form tag dict the BE attaches (e.g. ``realm:env``). */
+  tags?: Record<string, string> | null;
+};
+
+// ── Phase 3: agents + uploads + sim/test runs ────────────────────
+
+export type AgentSummary = {
+  agent_id: string;
+  name: string;
+  framework: string | null;
+  repo_url: string | null;
+  last_seen_at: string;
+  created_at: string;
+  updated_at: string;
+};
+
+export type AgentUpload = {
+  upload_id: string;
+  upload_version: number;
+  code_path: string;
+  entry_point: string | null;
+  framework: string | null;
+  language: string | null;
+  file_count: number;
+  total_bytes: number;
+  eval_yaml: Record<string, unknown> | null;
+  uploaded_at: string;
+};
+
+export type SimRun = {
+  id: string;
+  org_id: string;
+  agent_id: string;
+  upload_id: string;
+  kind: "sim" | "test";
+  status: "pending" | "running" | "passed" | "failed" | "error";
+  started_at: string;
+  finished_at: string | null;
+  duration_ms: number | null;
+  results: Record<string, unknown> | null;
+  error: string | null;
+  runner_kind: string | null;
+};
+
+export const agentsApi = {
+  list: (orgId: string, params?: { framework?: string; name?: string; limit?: number }) => {
+    const search = new URLSearchParams();
+    if (params?.framework) search.set("framework", params.framework);
+    if (params?.name) search.set("name", params.name);
+    if (params?.limit) search.set("limit", String(params.limit));
+    const qs = search.toString();
+    return fetchApi<{ agents: AgentSummary[]; total: number }>(
+      `/orgs/${orgId}/agents${qs ? `?${qs}` : ""}`
+    );
+  },
+  register: (
+    orgId: string,
+    body: { name: string; framework?: string; repo_url?: string; agent_id?: string }
+  ) =>
+    fetchApi<{ agent: AgentSummary; created: boolean }>(
+      `/orgs/${orgId}/agents/register`,
+      { method: "POST", body: JSON.stringify(body) }
+    ),
+  listUploads: (orgId: string, agentId: string, params?: { active_only?: boolean; limit?: number }) => {
+    const search = new URLSearchParams();
+    if (params?.active_only) search.set("active_only", "true");
+    if (params?.limit) search.set("limit", String(params.limit));
+    const qs = search.toString();
+    return fetchApi<AgentUpload[]>(
+      `/orgs/${orgId}/agents/${agentId}/uploads${qs ? `?${qs}` : ""}`
+    );
+  },
+  upload: (orgId: string, agentId: string, file: File, filename: string) => {
+    const form = new FormData();
+    form.append("file", file, filename);
+    return fetchApi<AgentUpload>(
+      `/orgs/${orgId}/agents/${agentId}/upload`,
+      { method: "POST", body: form }
+    );
+  },
+  triggerSimRun: (
+    orgId: string,
+    agentId: string,
+    body: { upload_id?: string; scenario_ids?: string[]; max_episodes?: number; runner_kind?: "firecracker" | "subprocess" }
+  ) =>
+    fetchApi<SimRun>(
+      `/orgs/${orgId}/agents/${agentId}/sim/runs`,
+      { method: "POST", body: JSON.stringify(body) }
+    ),
+  listSimRuns: (orgId: string, agentId: string, params?: { status?: string; limit?: number }) => {
+    const search = new URLSearchParams();
+    if (params?.status) search.set("status", params.status);
+    if (params?.limit) search.set("limit", String(params.limit));
+    const qs = search.toString();
+    return fetchApi<{ runs: SimRun[]; total: number }>(
+      `/orgs/${orgId}/agents/${agentId}/sim/runs${qs ? `?${qs}` : ""}`
+    );
+  },
+  getSimRun: (orgId: string, agentId: string, runId: string) =>
+    fetchApi<SimRun>(`/orgs/${orgId}/agents/${agentId}/sim/runs/${runId}`),
+  triggerTestRun: (
+    orgId: string,
+    agentId: string,
+    body: { upload_id?: string; runner_kind?: "firecracker" | "subprocess" }
+  ) =>
+    fetchApi<SimRun>(
+      `/orgs/${orgId}/agents/${agentId}/test/runs`,
+      { method: "POST", body: JSON.stringify(body) }
+    ),
+  listTestRuns: (orgId: string, agentId: string, params?: { status?: string; limit?: number }) => {
+    const search = new URLSearchParams();
+    if (params?.status) search.set("status", params.status);
+    if (params?.limit) search.set("limit", String(params.limit));
+    const qs = search.toString();
+    return fetchApi<{ runs: SimRun[]; total: number }>(
+      `/orgs/${orgId}/agents/${agentId}/test/runs${qs ? `?${qs}` : ""}`
+    );
+  },
+  getTestRun: (orgId: string, agentId: string, runId: string) =>
+    fetchApi<SimRun>(`/orgs/${orgId}/agents/${agentId}/test/runs/${runId}`),
+};
+// ── Agent PR-suggestion API (v1.7) ───────────────────────────────
+
+import type {
+  PRSuggestionCreateResponse,
+  PRSuggestionDetailResponse,
+  PRSuggestionListResponse,
+  PRSuggestionOpenPRResponse,
+} from "@/lib/types";
+
+export const prSuggestionApi = {
+  list: (orgId: string, query: string) =>
+    fetchApi<PRSuggestionListResponse>(
+      `/orgs/${orgId}/pr-suggestions?${query}`
+    ),
+  get: (orgId: string, suggestionId: string) =>
+    fetchApi<PRSuggestionDetailResponse>(
+      `/orgs/${orgId}/pr-suggestions/${suggestionId}`
+    ),
+  create: (
+    orgId: string,
+    payload: {
+      trigger: string;
+      trigger_id: string;
+      trigger_payload: Record<string, unknown>;
+    }
+  ) =>
+    fetchApi<PRSuggestionCreateResponse>(
+      `/orgs/${orgId}/pr-suggestions`,
+      { method: "POST", body: JSON.stringify(payload) }
+    ),
+  openPR: (
+    orgId: string,
+    suggestionId: string,
+    payload: {
+      pr_title?: string;
+      pr_body?: string;
+      branch?: string;
+      base?: string;
+      labels?: string[];
+      reviewers?: string[];
+      draft?: boolean;
+    }
+  ) =>
+    fetchApi<PRSuggestionOpenPRResponse>(
+      `/orgs/${orgId}/pr-suggestions/${suggestionId}/open-pr`,
+      { method: "POST", body: JSON.stringify(payload) }
+    ),
+  getFile: (orgId: string, suggestionId: string, filePath: string) =>
+    fetchApi<{
+      status: string;
+      data: { path: string; content: string; size: number };
+    }>(
+      `/orgs/${orgId}/pr-suggestions/${encodeURIComponent(
+        suggestionId
+      )}/files/${encodeURIComponent(filePath)}`
+    ),
+  updateStatus: (
+    orgId: string,
+    suggestionId: string,
+    status: "merged" | "rejected" | "opened"
+  ) =>
+    fetchApi<PRSuggestionDetailResponse>(
+      `/orgs/${orgId}/pr-suggestions/${suggestionId}/status`,
+      { method: "POST", body: JSON.stringify({ status }) }
+    ),
+  regenerate: (orgId: string, suggestionId: string) =>
+    fetchApi<PRSuggestionDetailResponse>(
+      `/orgs/${orgId}/pr-suggestions/${suggestionId}/regenerate`,
+      { method: "POST" }
+    ),
+  bulkRegenerate: (orgId: string, suggestionIds: string[]) =>
+    fetchApi<{
+      status: string;
+      data: {
+        regenerated: string[];
+        skipped: string[];
+        requested: number;
+      };
+    }>(`/orgs/${orgId}/pr-suggestions/bulk/regenerate`, {
+      method: "POST",
+      body: JSON.stringify({ suggestion_ids: suggestionIds }),
+    }),
+};
+
+// ── Intelligence: RCA & Incidents (Cat 2) ───────────────────────────
+export const rcaApi = {
+  analyze: (orgId: string, traceId: string) =>
+    fetchApi<{ trace_id: string; rca_id: string; root_cause: string; confidence: number; factors: Array<Record<string, unknown>>; }>(`/orgs/${orgId}/intelligence/rca/${traceId}/analyze`, { method: "POST" }),
+  explain: (orgId: string, traceId: string) =>
+    fetchApi<{ trace_id: string; narrative: string; related_traces: string[]; similar_past: Array<Record<string, unknown>>; }>(`/orgs/${orgId}/intelligence/rca/${traceId}/explain`),
+  clusterIncidents: (orgId: string) =>
+    fetchApi<{ clusters: Array<Record<string, unknown>>; cluster_count: number; }>(`/orgs/${orgId}/intelligence/rca/incidents/cluster`, { method: "POST" }),
+  listIncidents: (orgId: string) =>
+    fetchApi<{ incidents: Array<Record<string, unknown>>; }>(`/orgs/${orgId}/intelligence/rca/incidents`),
+  summarizeIncident: (orgId: string, clusterId: string) =>
+    fetchApi<{ cluster_id: string; summary: string; member_count: number; severity: string; first_seen: string; last_seen: string; }>(`/orgs/${orgId}/intelligence/rca/incidents/${clusterId}/summarize`),
+};
+
+// ── Visual Builder: graph save/load (§8.1, Phase 1.7) ────────────
+export const builderApi = {
+  list: (orgId: string, params?: { limit?: number; offset?: number }) => {
+    const search = new URLSearchParams();
+    if (params?.limit) search.set("limit", String(params.limit));
+    if (params?.offset) search.set("offset", String(params.offset));
+    const qs = search.toString();
+    return fetchApi<{
+      graphs: Array<{
+        id: string;
+        org_id: string;
+        name: string;
+        graph: { nodes: unknown[]; edges: unknown[] };
+        yaml: string;
+        agent_id: string | null;
+        created_at: string;
+        updated_at: string;
+      }>;
+      total: number;
+    }>(`/orgs/${orgId}/builder/graphs${qs ? `?${qs}` : ""}`);
+  },
+  get: (orgId: string, name: string) =>
+    fetchApi<{
+      id: string;
+      org_id: string;
+      name: string;
+      graph: { nodes: unknown[]; edges: unknown[] };
+      yaml: string;
+      agent_id: string | null;
+      created_at: string;
+      updated_at: string;
+    }>(`/orgs/${orgId}/builder/graphs/${encodeURIComponent(name)}`),
+  upsert: (
+    orgId: string,
+    body: {
+      name: string;
+      graph: { nodes: unknown[]; edges: unknown[] };
+      yaml?: string;
+      agent_id?: string | null;
+    },
+  ) =>
+    fetchApi<{
+      graph: {
+        id: string;
+        org_id: string;
+        name: string;
+        graph: { nodes: unknown[]; edges: unknown[] };
+        yaml: string;
+        agent_id: string | null;
+        created_at: string;
+        updated_at: string;
+      };
+      created: boolean;
+    }>(`/orgs/${orgId}/builder/graphs`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  delete: (orgId: string, name: string) =>
+    fetchApi<{ deleted: boolean; name: string }>(
+      `/orgs/${orgId}/builder/graphs/${encodeURIComponent(name)}`,
+      { method: "DELETE" },
+    ),
+};
+
+// ── Intelligence: Retrieval (Cat 4) ─────────────────────────────────
+export const retrievalApi = {
+  utilization: (orgId: string, traceId: string) =>
+    fetchApi<{ trace_id: string; utilization: number; used_chunks: string[]; unused_chunks: string[]; }>(`/orgs/${orgId}/intelligence/retrieval/${traceId}/utilization`, { method: "POST" }),
+  gaps: (orgId: string) =>
+    fetchApi<{ gaps: Array<{ query: string; gap_score: number; example_trace_id: string }>; }>(`/orgs/${orgId}/intelligence/retrieval/gaps`, { method: "POST" }),
+  attribution: (orgId: string, traceId: string) =>
+    fetchApi<{ trace_id: string; chunks: Array<{ chunk_id: string; influence: number; snippet: string }>; }>(`/orgs/${orgId}/intelligence/retrieval/${traceId}/attribution`, { method: "POST" }),
+  reorder: (orgId: string) =>
+    fetchApi<{ reordering: Array<{ chunk_id: string; new_position: number; reason: string }>; }>(`/orgs/${orgId}/intelligence/retrieval/reorder`, { method: "POST" }),
+};
+
+// ── Intelligence: Memory (Cat 5) ────────────────────────────────────
+export const memoryApi = {
+  attribute: (orgId: string, traceId: string) =>
+    fetchApi<{ trace_id: string; memories: Array<{ memory_id: string; influence: number }>; }>(`/orgs/${orgId}/intelligence/memory/${traceId}/attribute`, { method: "POST" }),
+  timeline: (orgId: string, memoryId: string) =>
+    fetchApi<{ memory_id: string; events: Array<{ ts: string; event: string }>; }>(`/orgs/${orgId}/intelligence/memory/timeline/${memoryId}`),
+  impact: (orgId: string, traceId: string) =>
+    fetchApi<{ trace_id: string; impact_score: number; components: Record<string, number>; }>(`/orgs/${orgId}/intelligence/memory/${traceId}/impact`, { method: "POST" }),
+  reweaverSuggest: (orgId: string) =>
+    fetchApi<{ suggestions: Array<{ memory_id: string; action: "merge" | "archive" | "demote"; reason: string }>; }>(`/orgs/${orgId}/intelligence/memory/reaver/suggest`, { method: "POST" }),
+};
+
+// ── Intelligence: Tools (Cat 7) ─────────────────────────────────────
+export const toolsApi = {
+  attribution: (orgId: string, data: { days?: number }) =>
+    fetchApi<{ tools: Array<{ tool_name: string; success_rate: number; call_count: number }>; }>(`/orgs/${orgId}/intelligence/tools/attribution`, { method: "POST", body: JSON.stringify(data) }),
+  compare: (orgId: string, data: { tool_names: string[] }) =>
+    fetchApi<{ comparison: Array<{ tool_name: string; metrics: Record<string, number> }>; }>(`/orgs/${orgId}/intelligence/tools/compare`, { method: "POST", body: JSON.stringify(data) }),
+  recommend: (orgId: string, data: { task: string }) =>
+    fetchApi<{ recommendations: Array<{ tool_name: string; score: number; rationale: string }>; }>(`/orgs/${orgId}/intelligence/tools/recommend`, { method: "POST", body: JSON.stringify(data) }),
+  taxonomy: (orgId: string) =>
+    fetchApi<{ categories: Array<{ category: string; tools: string[] }>; }>(`/orgs/${orgId}/intelligence/tools/taxonomy`),
+};
+
+// ── Intelligence: User (Cat 9) ──────────────────────────────────────
+export const userApi = {
+  aggregateSessions: (orgId: string, data: { days?: number }) =>
+    fetchApi<{ sessions: Array<{ session_id: string; user_id: string; trace_count: number; first_seen: string; last_seen: string }>; }>(`/orgs/${orgId}/intelligence/user/sessions/aggregate`, { method: "POST", body: JSON.stringify(data) }),
+  listGoals: (orgId: string) =>
+    fetchApi<{ goals: Array<{ goal_id: string; name: string; description: string; target: number; current: number }>; }>(`/orgs/${orgId}/intelligence/user/goals`),
+  createGoal: (orgId: string, data: { name: string; description?: string; target: number }) =>
+    fetchApi<{ goal_id: string; name: string; target: number; current: number; }>(`/orgs/${orgId}/intelligence/user/goals`, { method: "POST", body: JSON.stringify(data) }),
+  updateGoal: (orgId: string, goalId: string, data: { current?: number; target?: number }) =>
+    fetchApi<{ goal_id: string; current: number; target: number; }>(`/orgs/${orgId}/intelligence/user/goals/${goalId}`, { method: "PATCH", body: JSON.stringify(data) }),
+  getConversation: (orgId: string, sessionId: string) =>
+    fetchApi<{ session_id: string; messages: Array<{ role: string; content: string; ts: string }>; }>(`/orgs/${orgId}/intelligence/user/conversation/${sessionId}`),
+  postMessage: (orgId: string, data: { session_id: string; role: string; content: string }) =>
+    fetchApi<{ message_id: string; session_id: string; }>(`/orgs/${orgId}/intelligence/user/conversation/message`, { method: "POST", body: JSON.stringify(data) }),
+  postFeedback: (orgId: string, data: { trace_id: string; rating: number; comment?: string }) =>
+    fetchApi<{ feedback_id: string; trace_id: string; rating: number; }>(`/orgs/${orgId}/intelligence/user/feedback`, { method: "POST", body: JSON.stringify(data) }),
+  getFeedback: (orgId: string, traceId: string) =>
+    fetchApi<{ trace_id: string; ratings: Array<{ rating: number; comment?: string; ts: string }>; }>(`/orgs/${orgId}/intelligence/user/feedback/${traceId}`),
+  getSatisfaction: (orgId: string, traceId: string) =>
+    fetchApi<{ trace_id: string; satisfaction: number; confidence: number; correction: number; }>(`/orgs/${orgId}/intelligence/user/satisfaction/${traceId}`),
+  getSegments: (orgId: string) =>
+    fetchApi<{ segments: Array<{ segment_id: string; name: string; user_count: number; criteria: Record<string, unknown> }>; }>(`/orgs/${orgId}/intelligence/user/segment`),
+  getCohortDashboard: (orgId: string) =>
+    fetchApi<{ cohorts: Array<{ name: string; user_count: number; satisfaction: number; regen_rate: number }>; }>(`/orgs/${orgId}/intelligence/user/dashboard/cohort`),
+  getCorrection: (orgId: string, traceId: string) =>
+    fetchApi<{ trace_id: string; raw: number; corrected: number; alpha: number; beta: number; n: number; }>(`/orgs/${orgId}/intelligence/user/correction/${traceId}`),
+  postRegenerationSignal: (orgId: string, data: { trace_id: string; count: number }) =>
+    fetchApi<{ trace_id: string; regen_count: number; }>(`/orgs/${orgId}/intelligence/user/signals/regeneration`, { method: "POST", body: JSON.stringify(data) }),
+  postEditDistanceSignal: (orgId: string, data: { trace_id: string; distance: number }) =>
+    fetchApi<{ trace_id: string; edit_distance: number; }>(`/orgs/${orgId}/intelligence/user/signals/edit-distance`, { method: "POST", body: JSON.stringify(data) }),
+  postReturnSignal: (orgId: string, data: { trace_id: string; returned: boolean }) =>
+    fetchApi<{ trace_id: string; returned: boolean; }>(`/orgs/${orgId}/intelligence/user/signals/return`, { method: "POST", body: JSON.stringify(data) }),
+  postAbandonmentSignal: (orgId: string, data: { trace_id: string; abandoned: boolean }) =>
+    fetchApi<{ trace_id: string; abandoned: boolean; }>(`/orgs/${orgId}/intelligence/user/signals/abandonment`, { method: "POST", body: JSON.stringify(data) }),
+  postCopyPasteSignal: (orgId: string, data: { trace_id: string; copied: boolean }) =>
+    fetchApi<{ trace_id: string; copied: boolean; }>(`/orgs/${orgId}/intelligence/user/signals/copy-paste`, { method: "POST", body: JSON.stringify(data) }),
+  postRetrySignal: (orgId: string, data: { trace_id: string; retried: boolean }) =>
+    fetchApi<{ trace_id: string; retried: boolean; }>(`/orgs/${orgId}/intelligence/user/signals/retry`, { method: "POST", body: JSON.stringify(data) }),
+};
+
+// ── Intelligence: Outcomes / ROI (Cat 11) ───────────────────────────
+export const outcomesApi = {
+  track: (orgId: string, data: { trace_id: string; outcome: string; department?: string; revenue?: number }) =>
+    fetchApi<{ trace_id: string; outcome: string; department: string; revenue: number; roi: number; }>(`/orgs/${orgId}/intelligence/outcomes`, { method: "POST", body: JSON.stringify(data) }),
+  listDepartments: (orgId: string) =>
+    fetchApi<{ departments: Array<{ department: string; total_cost: number; total_revenue: number; roi: number; trace_count: number; anomaly: string | null }>; }>(`/orgs/${orgId}/intelligence/outcomes/departments`),
+  getAnalytics: (orgId: string) =>
+    fetchApi<{ total_revenue: number; total_cost: number; roi: number; per_department: Array<Record<string, unknown>>; anomalies: Array<Record<string, unknown>>; }>(`/orgs/${orgId}/intelligence/outcomes/analytics`),
+};
+
+// ── Intelligence: Predictive / Drift (Cat 13) ───────────────────────
+export const predictiveApi = {
+  quality: (orgId: string, data: { horizon_days?: number }) =>
+    fetchApi<{ predictions: Array<{ date: string; median: number; ci_95_low: number; ci_95_high: number }>; }>(`/orgs/${orgId}/intelligence/predict/quality`, { method: "POST", body: JSON.stringify(data) }),
+  cost: (orgId: string, data: { horizon_days?: number }) =>
+    fetchApi<{ predictions: Array<{ date: string; median: number; ci_95_low: number; ci_95_high: number }>; }>(`/orgs/${orgId}/intelligence/predict/cost`, { method: "POST", body: JSON.stringify(data) }),
+  capacity: (orgId: string, data: { horizon_days?: number }) =>
+    fetchApi<{ predictions: Array<{ date: string; gpu_hours: number }>; scenarios: Record<string, { gpu_hours: number; cost: number }>; }>(`/orgs/${orgId}/intelligence/predict/capacity`, { method: "POST", body: JSON.stringify(data) }),
+  risk: (orgId: string) =>
+    fetchApi<{ risk_score: number; components: Record<string, { score: number; weight: number; alerts: string[] }>; breakdown: Array<{ component: string; score: number; alerts: string[] }>; }>(`/orgs/${orgId}/intelligence/predict/risk`, { method: "POST" }),
+  drift: (orgId: string) =>
+    fetchApi<{ drift_detected: boolean; drift_score: number; baseline_period: string; current_period: string; severity: string; top_shifts: Array<Record<string, unknown>>; }>(`/orgs/${orgId}/intelligence/predict/drift`, { method: "POST" }),
+  embeddingDrift: (orgId: string) =>
+    fetchApi<{ drift_detected: boolean; psi: number; histogram_buckets: number; severity: string; }>(`/orgs/${orgId}/intelligence/predict/drift/embedding`, { method: "POST" }),
+};
+
+// ── Intelligence: Autonomous (Cat 14) ───────────────────────────────
+export const autonomousApi = {
+  investigate: (orgId: string, data: { trace_id?: string; question: string }) =>
+    fetchApi<{ investigation_id: string; findings: string; recommended_actions: string[]; confidence: number; }>(`/orgs/${orgId}/intelligence/autonomous/investigate`, { method: "POST", body: JSON.stringify(data) }),
+  report: (orgId: string, data: { topic: string; period_days?: number }) =>
+    fetchApi<{ report_id: string; title: string; markdown: string; period_days: number; generated_at: string; }>(`/orgs/${orgId}/intelligence/autonomous/report`, { method: "POST", body: JSON.stringify(data) }),
+  recommendations: (orgId: string) =>
+    fetchApi<{ recommendations: Array<{ id: string; title: string; impact: string; effort: string; rationale: string }>; }>(`/orgs/${orgId}/intelligence/autonomous/recommendations`),
+  heal: (orgId: string, data: { component: string; description: string }) =>
+    fetchApi<{ heal_id: string; status: "pending_approval" | "applied" | "rejected"; before_state: Record<string, unknown>; proposed_change: string; }>(`/orgs/${orgId}/intelligence/autonomous/heal`, { method: "POST", body: JSON.stringify(data) }),
+  nlQuery: (orgId: string, data: { question: string }) =>
+    fetchApi<{ question: string; sql: string; rows: Array<Record<string, unknown>>; explanation: string; }>(`/orgs/${orgId}/intelligence/autonomous/nl/query`, { method: "POST", body: JSON.stringify(data) }),
+  nlDashboard: (orgId: string, data: { description: string }) =>
+    fetchApi<{ dashboard_id: string; title: string; widgets: Array<{ type: string; title: string; query: string }>; }>(`/orgs/${orgId}/intelligence/autonomous/nl/dashboard`, { method: "POST", body: JSON.stringify(data) }),
+  nlReport: (orgId: string, data: { audience: string; period_days?: number }) =>
+    fetchApi<{ report_id: string; title: string; markdown: string; audience: string; generated_at: string; }>(`/orgs/${orgId}/intelligence/autonomous/nl/report`, { method: "POST", body: JSON.stringify(data) }),
+};
+
+// ── Intelligence: Guardrails (Cat 15) ───────────────────────────────
+export const guardrailsApi = {
+  listPolicies: (orgId: string) =>
+    fetchApi<{ policies: Array<{ policy_id: string; name: string; kind: string; enabled: boolean; config: Record<string, unknown> }>; }>(`/orgs/${orgId}/intelligence/guardrails/policies`),
+  createPolicy: (orgId: string, data: { name: string; kind: string; enabled?: boolean; config: Record<string, unknown> }) =>
+    fetchApi<{ policy_id: string; name: string; kind: string; enabled: boolean; }>(`/orgs/${orgId}/intelligence/guardrails/policies`, { method: "POST", body: JSON.stringify(data) }),
+  evaluate: (orgId: string, data: { content: string; context?: Record<string, unknown> }) =>
+    fetchApi<{ passed: boolean; violations: Array<{ policy_id: string; severity: string; reason: string }>; }>(`/orgs/${orgId}/intelligence/guardrails/evaluate`, { method: "POST", body: JSON.stringify(data) }),
+  scanInjection: (orgId: string, data: { content: string }) =>
+    fetchApi<{ injection_score: number; is_injection: boolean; matched_patterns: string[]; }>(`/orgs/${orgId}/intelligence/guardrails/injection/scan`, { method: "POST", body: JSON.stringify(data) }),
+  redactPii: (orgId: string, data: { content: string; categories?: string[] }) =>
+    fetchApi<{ redacted_content: string; redactions: Array<{ category: string; count: number }>; }>(`/orgs/${orgId}/intelligence/guardrails/pii/redact`, { method: "POST", body: JSON.stringify(data) }),
+  // Phase A.9: persistent scan history (replaces the portal's
+  // hardcoded MOCK_INJECTIONS / MOCK_PII_REDACTIONS arrays).
+  scanHistory: (orgId: string, opts?: { limit?: number; action_prefix?: string }) =>
+    fetchApi<{ scans: Array<{ id: string; trace_id: string | null; verdict: string; reason: string | null; policy_id: string | null; edited_text: string | null; created_at: string }>; count: number }>(
+      `/orgs/${orgId}/intelligence/guardrails/scan-history${
+        opts
+          ? `?${new URLSearchParams(
+              Object.entries(opts).map(([k, v]) => [k, String(v)]) as [string, string][],
+            ).toString()}`
+          : ""
+      }`,
+    ),
+};
+
+// ── Intelligence: Cost (Cat 8) ──────────────────────────────────────
+export const costApi = {
+  efficiency: (orgId: string, data: { days?: number }) =>
+    fetchApi<{ efficiency_score: number; by_model: Array<{ model: string; cost_per_call: number; success_rate: number }>; period_days: number; }>(`/orgs/${orgId}/intelligence/cost/efficiency`, { method: "POST", body: JSON.stringify(data) }),
+  roi: (orgId: string, data: { days?: number }) =>
+    fetchApi<{ total_cost: number; total_revenue: number; roi: number; per_agent: Array<{ agent_id: string; cost: number; revenue: number; roi: number }>; }>(`/orgs/${orgId}/intelligence/cost/roi`, { method: "POST", body: JSON.stringify(data) }),
+  anomalies: (orgId: string, data: { days?: number }) =>
+    fetchApi<{ anomalies: Array<{ date: string; z_score: number; severity: string; agent_id: string; cost: number }>; }>(`/orgs/${orgId}/intelligence/cost/anomalies`, { method: "POST", body: JSON.stringify(data) }),
+  forecast: (orgId: string) =>
+    fetchApi<{ forecast: Array<{ date: string; projected_cost: number; ci_low: number; ci_high: number }>; model: string; period_days: number; }>(`/orgs/${orgId}/intelligence/cost/forecast`),
+};
+
+// ── Intelligence: Experiments (Cat 12) ──────────────────────────────
+export const experimentsApi = {
+  trafficSplit: (orgId: string, data: { name: string; variants: Array<{ name: string; weight: number }> }) =>
+    fetchApi<{ split_id: string; name: string; variants: Array<{ name: string; weight: number }>; }>(`/orgs/${orgId}/intelligence/experiments/traffic-split`, { method: "POST", body: JSON.stringify(data) }),
+  listTrafficSplits: (orgId: string) =>
+    fetchApi<{ splits: Array<{ split_id: string; name: string; variants: Array<{ name: string; weight: number }>; created_at: string }>; }>(`/orgs/${orgId}/intelligence/experiments/traffic-split`),
+  autoEvaluate: (orgId: string, data: { split_id: string }) =>
+    fetchApi<{ evaluation_id: string; per_variant: Array<{ variant: string; judge_score: number; n: number }>; recommended_action: string; }>(`/orgs/${orgId}/intelligence/experiments/auto-evaluate`, { method: "POST", body: JSON.stringify(data) }),
+  recommend: (orgId: string, data: { split_id: string }) =>
+    fetchApi<{ decision: "ship" | "dont_ship" | "need_more_data" | "tie" | "low_confidence"; confidence: number; rationale: string; details: Record<string, unknown>; }>(`/orgs/${orgId}/intelligence/experiments/recommend`, { method: "POST", body: JSON.stringify(data) }),
+  winner: (orgId: string, data: { split_id: string }) =>
+    fetchApi<{ winner: string; hard_judge_score: number; veto: string[]; }>(`/orgs/${orgId}/intelligence/experiments/winner`, { method: "POST", body: JSON.stringify(data) }),
+  simulate: (orgId: string, data: { scenario: string; params: Record<string, unknown> }) =>
+    fetchApi<{ simulation_id: string; results: Array<Record<string, unknown>>; summary: string; }>(`/orgs/${orgId}/intelligence/experiments/simulate`, { method: "POST", body: JSON.stringify(data) }),
+  simulateReplay: (orgId: string, data: { trace_ids: string[]; candidate_changes: Record<string, unknown> }) =>
+    fetchApi<{ replay_id: string; regressions: number; improvements: number; per_trace: Array<Record<string, unknown>>; }>(`/orgs/${orgId}/intelligence/experiments/simulate/replay`, { method: "POST", body: JSON.stringify(data) }),
+  whatif: (orgId: string, data: { question: string }) =>
+    fetchApi<{ ratios: Record<string, number>; answer: string; }>(`/orgs/${orgId}/intelligence/experiments/simulate/whatif`, { method: "POST", body: JSON.stringify(data) }),
+};
+
+// ── Intelligence: Closed Loop (Cat 17) ──────────────────────────────
+export const closedLoopApi = {
+  listActions: (orgId: string, params?: { status?: "pending" | "approved" | "denied" | "applied" }) => {
+    const q = new URLSearchParams();
+    if (params?.status) q.set("status", params.status);
+    const qs = q.toString();
+    return fetchApi<{ actions: Array<{ action_id: string; hook: string; status: string; created_at: string; payload: Record<string, unknown> }>; }>(`/orgs/${orgId}/intelligence/closed-loop/actions${qs ? `?${qs}` : ""}`);
+  },
+  approveAction: (orgId: string, actionId: string) =>
+    fetchApi<{ action_id: string; status: string; }>(`/orgs/${orgId}/intelligence/closed-loop/actions/${actionId}/approve`, { method: "POST" }),
+  denyAction: (orgId: string, actionId: string, data: { reason?: string }) =>
+    fetchApi<{ action_id: string; status: string; reason: string; }>(`/orgs/${orgId}/intelligence/closed-loop/actions/${actionId}/deny`, { method: "POST", body: JSON.stringify(data) }),
+  applyAction: (orgId: string, actionId: string) =>
+    fetchApi<{ action_id: string; status: string; applied_at: string; }>(`/orgs/${orgId}/intelligence/closed-loop/actions/${actionId}/apply`, { method: "POST" }),
+  dashboard: (orgId: string) =>
+    fetchApi<{ pending: number; approved: number; denied: number; applied_today: number; by_hook: Record<string, number>; }>(`/orgs/${orgId}/intelligence/closed-loop/dashboard`),
+};
+
+// ── Intelligence: Eval (Cat 3) ──────────────────────────────────────
+export const evalApi = {
+  tagVersion: (orgId: string, data: { judge_name: string; version: string; notes?: string }) =>
+    fetchApi<{ version_id: string; judge_name: string; version: string; tagged_at: string; }>(`/orgs/${orgId}/intelligence/eval/versions/tag`, { method: "POST", body: JSON.stringify(data) }),
+  listVersions: (orgId: string) =>
+    fetchApi<{ versions: Array<{ version_id: string; judge_name: string; version: string; tagged_at: string; notes: string | null }>; }>(`/orgs/${orgId}/intelligence/eval/versions`),
+  failureClusters: (orgId: string, data: { days?: number }) =>
+    fetchApi<{ clusters: Array<{ cluster_id: string; size: number; example_trace_ids: string[]; representative_failure: string }>; }>(`/orgs/${orgId}/intelligence/eval/failure-clusters`, { method: "POST", body: JSON.stringify(data) }),
+  clhfGenerate: (orgId: string, data: { seed_traces: string[]; n?: number }) =>
+    fetchApi<{ generation_id: string; samples: Array<{ prompt: string; chosen: string; rejected: string }>; }>(`/orgs/${orgId}/intelligence/eval/clhf/generate`, { method: "POST", body: JSON.stringify(data) }),
+  hilTask: (orgId: string, data: { trace_id: string; question: string }) =>
+    fetchApi<{ task_id: string; trace_id: string; question: string; }>(`/orgs/${orgId}/intelligence/eval/hil/tasks`, { method: "POST", body: JSON.stringify(data) }),
+  hilAnnotation: (orgId: string, data: { task_id: string; answer: string; confidence: number }) =>
+    fetchApi<{ annotation_id: string; task_id: string; }>(`/orgs/${orgId}/intelligence/eval/hil/annotations`, { method: "POST", body: JSON.stringify(data) }),
+  pairwiseQueue: (orgId: string, data: { n: number }) =>
+    fetchApi<{ queue_id: string; pairs: Array<{ a: string; b: string; trace_id: string }>; }>(`/orgs/${orgId}/intelligence/eval/pairwise/queues`, { method: "POST", body: JSON.stringify(data) }),
+  pairwisePreference: (orgId: string, data: { queue_id: string; pair_id: string; preferred: "a" | "b" }) =>
+    fetchApi<{ preference_id: string; queue_id: string; }>(`/orgs/${orgId}/intelligence/eval/pairwise/preferences`, { method: "POST", body: JSON.stringify(data) }),
+  multimodalEvaluate: (orgId: string, data: { trace_id: string; modality: string }) =>
+    fetchApi<{ score: number; rationale: string; modality: string; }>(`/orgs/${orgId}/intelligence/eval/multimodal/evaluate`, { method: "POST", body: JSON.stringify(data) }),
+  promoteToGuardrail: (orgId: string, data: { judge_name: string; version: string; threshold: number }) =>
+    fetchApi<{ policy_id: string; judge_name: string; threshold: number; }>(`/orgs/${orgId}/intelligence/eval/promote-to-guardrail`, { method: "POST", body: JSON.stringify(data) }),
+};
+
+// ── Intelligence: Replay / Decision (Cat 16) ────────────────────────
+export const replayApi = {
+  createSession: (orgId: string, data: { trace_id: string; name?: string }) =>
+    fetchApi<{ session_id: string; trace_id: string; }>(`/orgs/${orgId}/intelligence/replay/sessions`, { method: "POST", body: JSON.stringify(data) }),
+  listSessions: (orgId: string) =>
+    fetchApi<{ sessions: Array<{ session_id: string; trace_id: string; name: string | null; created_at: string }>; }>(`/orgs/${orgId}/intelligence/replay/sessions`),
+  getTree: (orgId: string, sessionId: string) =>
+    fetchApi<{ session_id: string; steps: Array<{ step_index: number; name: string; event_type: string }>; }>(`/orgs/${orgId}/intelligence/replay/sessions/${sessionId}/tree`),
+  getMessageView: (orgId: string, sessionId: string) =>
+    fetchApi<{ session_id: string; messages: Array<{ role: string; content: string; ts: string }>; }>(`/orgs/${orgId}/intelligence/replay/sessions/${sessionId}/messages`),
+  decisionPath: (orgId: string, data: { trace_id: string }) =>
+    fetchApi<{ trace_id: string; decisions: Array<{ step_index: number; decision: string; alternatives: string[]; chosen_reason: string }>; }>(`/orgs/${orgId}/intelligence/replay/decision/path`, { method: "POST", body: JSON.stringify(data) }),
+  reasoningExplain: (orgId: string, data: { trace_id: string; step_index: number }) =>
+    fetchApi<{ step_index: number; reasoning: string; supporting_evidence: string[]; }>(`/orgs/${orgId}/intelligence/replay/decision/explain`, { method: "POST", body: JSON.stringify(data) }),
+};
+
+// ── Intelligence: Time-Travel (Cat 20) ──────────────────────────────
+export const timeTravelApi = {
+  record: (orgId: string, data: { trace_id: string }) =>
+    fetchApi<{ recording_id: string; trace_id: string; steps: number; }>(`/orgs/${orgId}/intelligence/time-travel/record`, { method: "POST", body: JSON.stringify(data) }),
+  fork: (orgId: string, data: { recording_id: string; at_step: number; edited_state: Record<string, unknown> }) =>
+    fetchApi<{ fork_id: string; from_step: number; new_state: Record<string, unknown>; }>(`/orgs/${orgId}/intelligence/time-travel/fork`, { method: "POST", body: JSON.stringify(data) }),
+  replay: (orgId: string, data: { fork_id: string }) =>
+    fetchApi<{ replay_id: string; final_state: Record<string, unknown>; steps_replayed: number; outcome: string; }>(`/orgs/${orgId}/intelligence/time-travel/replay`, { method: "POST", body: JSON.stringify(data) }),
+};
+
+// ── Intelligence: APM Depth (Cat 22) ────────────────────────────────
+export const apmApi = {
+  enrich: (orgId: string, data: { trace_id: string; resource_attrs?: Record<string, string> }) =>
+    fetchApi<{ trace_id: string; enriched_attrs: Record<string, string>; }>(`/orgs/${orgId}/intelligence/apm-depth/enrich`, { method: "POST", body: JSON.stringify(data) }),
+  stampSteps: (orgId: string, data: { trace_id: string }) =>
+    fetchApi<{ trace_id: string; steps_stamped: number; }>(`/orgs/${orgId}/intelligence/apm-depth/steps/stamp`, { method: "POST", body: JSON.stringify(data) }),
+  getSteps: (orgId: string, traceId: string) =>
+    fetchApi<{ trace_id: string; steps: Array<{ step_index: number; evaluation_score: number | null; cost_cents: number; duration_ms: number }>; }>(`/orgs/${orgId}/intelligence/apm-depth/steps/${traceId}`),
+  samplingEvaluate: (orgId: string, data: { trace_id: string; rules?: Record<string, unknown> }) =>
+    fetchApi<{ keep: boolean; matched_rule: string; reason: string; }>(`/orgs/${orgId}/intelligence/apm-depth/sampling/evaluate`, { method: "POST", body: JSON.stringify(data) }),
+  samplingStats: (orgId: string) =>
+    fetchApi<{ total_evaluated: number; kept: number; dropped: number; by_rule: Record<string, number>; }>(`/orgs/${orgId}/intelligence/apm-depth/sampling/stats`),
+  agentMetrics: (orgId: string) =>
+    fetchApi<{ agents: Array<{ agent_id: string; task_completion_rate: number; tool_failure_rate: number; avg_iterations_to_success: number }>; }>(`/orgs/${orgId}/intelligence/apm-depth/metrics/agents`),
+};
+
+// ── Intelligence: Columnar (Cat 18) ─────────────────────────────────
+export const columnarApi = {
+  ensurePartitions: (orgId: string, data: { period?: string }) =>
+    fetchApi<{ period: string; partitions_ensured: number; }>(`/orgs/${orgId}/intelligence/columnar/partitions/ensure`, { method: "POST", body: JSON.stringify(data) }),
+  precomputeRollups: (orgId: string) =>
+    fetchApi<{ rollups_computed: number; period: string; }>(`/orgs/${orgId}/intelligence/columnar/rollups/precompute`, { method: "POST" }),
+  compact: (orgId: string) =>
+    fetchApi<{ compacted: number; compacted_size_bytes: number; duration_ms: number; }>(`/orgs/${orgId}/intelligence/columnar/compact`, { method: "POST" }),
+  query: (orgId: string, data: { sql: string; params?: Record<string, unknown> }) =>
+    fetchApi<{ columns: string[]; rows: Array<Array<unknown>>; row_count: number; data_source: string; }>(`/orgs/${orgId}/intelligence/columnar/query`, { method: "POST", body: JSON.stringify(data) }),
+};
+
+// ── Intelligence: DSL / EQL (Cat 19) ────────────────────────────────
+export const dslApi = {
+  parse: (orgId: string, data: { query: string }) =>
+    fetchApi<{ ast: Record<string, unknown>; valid: boolean; errors: string[]; }>(`/orgs/${orgId}/intelligence/dsl/parse`, { method: "POST", body: JSON.stringify(data) }),
+  resolve: (orgId: string, data: { query: string }) =>
+    fetchApi<{ sql: string; parameters: Record<string, unknown>; }>(`/orgs/${orgId}/intelligence/dsl/resolve`, { method: "POST", body: JSON.stringify(data) }),
+  lint: (orgId: string, data: { query: string }) =>
+    fetchApi<{ warnings: Array<{ line: number; column: number; severity: string; message: string }>; }>(`/orgs/${orgId}/intelligence/dsl/lint`, { method: "POST", body: JSON.stringify(data) }),
+  compileAlert: (orgId: string, data: { query: string; name: string; severity?: string }) =>
+    fetchApi<{ alert_id: string; name: string; sql: string; severity: string; }>(`/orgs/${orgId}/intelligence/dsl/alerts/compile`, { method: "POST", body: JSON.stringify(data) }),
+  listAlerts: (orgId: string) =>
+    fetchApi<{ alerts: Array<{ alert_id: string; name: string; severity: string; created_at: string; last_fired: string | null }>; }>(`/orgs/${orgId}/intelligence/dsl/alerts`),
+};
+
+// ── Intelligence: Metric Studio (Cat 21) ────────────────────────────
+export const metricStudioApi = {
+  listTemplates: (orgId: string) =>
+    fetchApi<{ templates: Array<{ template_id: string; name: string; category: string; rubric: string; example_count: number }>; }>(`/orgs/${orgId}/intelligence/metric-studio/templates`),
+  fromExamples: (orgId: string, data: { examples: Array<{ input: string; output: string; score: number; rationale: string }>; name: string }) =>
+    fetchApi<{ metric_id: string; name: string; rubric: string; confidence: number; }>(`/orgs/${orgId}/intelligence/metric-studio/from-examples`, { method: "POST", body: JSON.stringify(data) }),
+  createMetric: (orgId: string, data: { name: string; rubric: string; model?: string }) =>
+    fetchApi<{ metric_id: string; name: string; rubric: string; model: string; version: string; }>(`/orgs/${orgId}/intelligence/metric-studio/metrics`, { method: "POST", body: JSON.stringify(data) }),
+  listMetrics: (orgId: string) =>
+    fetchApi<{ metrics: Array<{ metric_id: string; name: string; version: string; created_at: string; approved: boolean }>; }>(`/orgs/${orgId}/intelligence/metric-studio/metrics`),
+  getMetric: (orgId: string, metricId: string) =>
+    fetchApi<{ metric_id: string; name: string; rubric: string; model: string; version: string; history: Array<{ version: string; tagged_at: string }>; }>(`/orgs/${orgId}/intelligence/metric-studio/metrics/${metricId}`),
+  approveMetric: (orgId: string, metricId: string) =>
+    fetchApi<{ metric_id: string; approved: boolean; approved_at: string; }>(`/orgs/${orgId}/intelligence/metric-studio/metrics/${metricId}/approve`, { method: "POST" }),
+};
+
+// ── Intelligence: Agents (Cat 6) ────────────────────────────────────
+export const intelligenceAgentsApi = {
+  performance: (orgId: string) =>
+    fetchApi<{ agents: Array<{ agent_id: string; name: string; success_rate: number; avg_latency_ms: number; trace_count: number }>; }>(`/orgs/${orgId}/intelligence/agents/performance`),
+  relationships: (orgId: string) =>
+    fetchApi<{ edges: Array<{ from_agent: string; to_agent: string; handoff_count: number; handoff_success_rate: number }>; }>(`/orgs/${orgId}/intelligence/agents/relationships`),
+  handoffsAnalyze: (orgId: string, data: { from_agent?: string; to_agent?: string; days?: number }) =>
+    fetchApi<{ handoffs: Array<{ from_agent: string; to_agent: string; count: number; success_rate: number; latency_ms: number }>; }>(`/orgs/${orgId}/intelligence/agents/handoffs/analyze`, { method: "POST", body: JSON.stringify(data) }),
+  benchmarkRun: (orgId: string, data: { agent_id: string; suite: string }) =>
+    fetchApi<{ benchmark_id: string; agent_id: string; suite: string; results: Array<{ task: string; passed: boolean; latency_ms: number }>; }>(`/orgs/${orgId}/intelligence/agents/benchmark/run`, { method: "POST", body: JSON.stringify(data) }),
+  fleetIdentity: (orgId: string, data: { agent_id: string; display_name: string; tags?: string[] }) =>
+    fetchApi<{ identity_id: string; agent_id: string; display_name: string; tags: string[]; }>(`/orgs/${orgId}/intelligence/agents/fleet/identity`, { method: "POST", body: JSON.stringify(data) }),
+  fleetPermissions: (orgId: string, data: { agent_id: string; permissions: string[] }) =>
+    fetchApi<{ agent_id: string; permissions: string[]; updated_at: string; }>(`/orgs/${orgId}/intelligence/agents/fleet/permissions`, { method: "POST", body: JSON.stringify(data) }),
+};
+
+// ── Intelligence: Governance (Cat 10) ───────────────────────────────
+export const governanceApi = {
+  listApprovals: (orgId: string) =>
+    fetchApi<{ approvals: Array<{ request_id: string; requester: string; resource: string; status: string; created_at: string }>; }>(`/orgs/${orgId}/intelligence/governance/approvals`),
+  requestApproval: (orgId: string, data: { resource: string; action: string; justification: string }) =>
+    fetchApi<{ request_id: string; status: string; }>(`/orgs/${orgId}/intelligence/governance/approvals/request`, { method: "POST", body: JSON.stringify(data) }),
+  resolveApproval: (orgId: string, requestId: string, data: { decision: "approve" | "deny"; reason?: string }) =>
+    fetchApi<{ request_id: string; status: string; }>(`/orgs/${orgId}/intelligence/governance/approvals/${requestId}/resolve`, { method: "POST", body: JSON.stringify(data) }),
+  compliancePacks: (orgId: string) =>
+    fetchApi<{ packs: Array<{ evidence_pack_id: string; framework: string; generated_at: string; control_count: number }>; }>(`/orgs/${orgId}/intelligence/governance/compliance/packs`),
+  securityScans: (orgId: string) =>
+    fetchApi<{ scans: Array<{ scan_id: string; started_at: string; findings_count: number; severity: string }>; }>(`/orgs/${orgId}/intelligence/governance/security/scans`),
+  rtbf: (orgId: string, data: { user_id: string; categories?: string[] }) =>
+    fetchApi<{ request_id: string; status: string; affected_records: number; }>(`/orgs/${orgId}/intelligence/governance/rtbf`, { method: "POST", body: JSON.stringify(data) }),
+  lineage: (orgId: string, data: { resource: string }) =>
+    fetchApi<{ resource: string; graph: { nodes: Array<Record<string, unknown>>; edges: Array<Record<string, unknown>> }; }>(`/orgs/${orgId}/intelligence/governance/lineage`, { method: "POST", body: JSON.stringify(data) }),
+  dashboard: (orgId: string) =>
+    fetchApi<{ approvals_pending: number; compliance_packs: number; security_findings: number; rtbf_pending: number; }>(`/orgs/${orgId}/intelligence/governance/dashboard`),
+};
+
+// ── Attach all intelligence api namespaces to the `api` object ───────
+// This lets consumers write `api.rcaApi.listIncidents(orgId)` etc.
+(api as unknown as Record<string, unknown>).rcaApi = rcaApi;
+(api as unknown as Record<string, unknown>).retrievalApi = retrievalApi;
+(api as unknown as Record<string, unknown>).memoryApi = memoryApi;
+(api as unknown as Record<string, unknown>).toolsApi = toolsApi;
+(api as unknown as Record<string, unknown>).userApi = userApi;
+(api as unknown as Record<string, unknown>).outcomesApi = outcomesApi;
+(api as unknown as Record<string, unknown>).predictiveApi = predictiveApi;
+(api as unknown as Record<string, unknown>).autonomousApi = autonomousApi;
+(api as unknown as Record<string, unknown>).guardrailsApi = guardrailsApi;
+(api as unknown as Record<string, unknown>).costApi = costApi;
+(api as unknown as Record<string, unknown>).experimentsApi = experimentsApi;
+(api as unknown as Record<string, unknown>).closedLoopApi = closedLoopApi;
+(api as unknown as Record<string, unknown>).evalApi = evalApi;
+(api as unknown as Record<string, unknown>).replayApi = replayApi;
+(api as unknown as Record<string, unknown>).timeTravelApi = timeTravelApi;
+(api as unknown as Record<string, unknown>).apmApi = apmApi;
+(api as unknown as Record<string, unknown>).columnarApi = columnarApi;
+(api as unknown as Record<string, unknown>).dslApi = dslApi;
+(api as unknown as Record<string, unknown>).metricStudioApi = metricStudioApi;
+(api as unknown as Record<string, unknown>).intelligenceAgentsApi = intelligenceAgentsApi;
+(api as unknown as Record<string, unknown>).governanceApi = governanceApi;

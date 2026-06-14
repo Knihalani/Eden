@@ -31,6 +31,7 @@ export interface RunResultsDialogProps {
   state: RunDialogState;
   onClose: () => void;
   orgId: string | null;
+  onRerun?: (run: SimRun, agentId: string) => void;
 }
 
 const STATUS_COLOR: Record<string, string> = {
@@ -41,7 +42,7 @@ const STATUS_COLOR: Record<string, string> = {
   running: "text-sky-400 border-sky-500/30 bg-sky-500/10",
 };
 
-export function RunResultsDialog({ state, onClose, orgId }: RunResultsDialogProps) {
+export function RunResultsDialog({ state, onClose, orgId, onRerun }: RunResultsDialogProps) {
   // Close on Escape
   useEffect(() => {
     if (state.kind === "idle") return;
@@ -95,7 +96,13 @@ export function RunResultsDialog({ state, onClose, orgId }: RunResultsDialogProp
               <StatusBadge status={state.run.status} />
             </div>
           )}
-          {state.kind === "done" && <DoneView state={state} orgId={orgId} />}
+          {state.kind === "done" && (
+            <DoneView
+              state={state}
+              orgId={orgId}
+              onRerun={onRerun ? () => onRerun(state.run, state.agentId) : undefined}
+            />
+          )}
           {state.kind === "error" && (
             <div className="flex items-start gap-2 text-sm text-red-300">
               <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
@@ -104,6 +111,16 @@ export function RunResultsDialog({ state, onClose, orgId }: RunResultsDialogProp
           )}
         </div>
         <footer className="px-4 py-3 border-t border-zinc-800 flex items-center justify-end gap-2">
+          {state.kind === "done" && onRerun && (
+            <Button
+              type="button"
+              variant="default"
+              onClick={() => onRerun(state.run, state.agentId)}
+              data-testid="rerun-button"
+            >
+              Rerun
+            </Button>
+          )}
           <Button type="button" variant="outline" onClick={onClose}>
             Close
           </Button>
@@ -126,9 +143,11 @@ function StatusBadge({ status }: { status: string }) {
 function DoneView({
   state,
   orgId,
+  onRerun,
 }: {
   state: Extract<RunDialogState, { kind: "done" }>;
   orgId: string | null;
+  onRerun?: () => void;
 }) {
   const r = state.run;
   const scenarios = (
