@@ -7,18 +7,22 @@ statistical process control for trend monitoring.
 
 from __future__ import annotations
 
+import logging
 import math
 import time
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta, timezone
-from enum import Enum
+from datetime import UTC, datetime, timedelta
+from enum import StrEnum
 from typing import Any
 
 
-class AlertSeverity(str, Enum):
+class AlertSeverity(StrEnum):
     INFO = "info"
     WARNING = "warning"
     CRITICAL = "critical"
+
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -31,7 +35,7 @@ class MonitoringAlert:
     baseline_value: float
     threshold: float
     model_family: str
-    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     acknowledged: bool = False
 
     def to_dict(self) -> dict[str, Any]:
@@ -93,7 +97,7 @@ class ProductionMonitor:
     COST_INFLATION = 0.15         # 15% MoM
     PASS_RATE_DEGRADATION = 0.05  # 5% drop
 
-    def __init__(self):
+    def __init__(self) -> None:
         self._snapshots: dict[str, list[ModelHealthSnapshot]] = {}  # model -> snapshots
         self._alerts: list[MonitoringAlert] = []
         self._baselines: dict[str, dict[str, float]] = {}  # model -> {metric: value}
@@ -251,7 +255,7 @@ class ProductionMonitor:
         hours: int = 24,
     ) -> list[ModelHealthSnapshot]:
         key = f"{model_family}:"
-        cutoff = datetime.now(timezone.utc) - timedelta(hours=hours)
+        cutoff = datetime.now(UTC) - timedelta(hours=hours)
         all_snapshots: list[ModelHealthSnapshot] = []
         for k, snaps in self._snapshots.items():
             if k.startswith(key):
@@ -295,7 +299,7 @@ class ProductionMonitor:
         """Aggregate health across all models."""
         all_latest: list[ModelHealthSnapshot] = []
         seen_families: set[str] = set()
-        for k, snaps in self._snapshots.items():
+        for k, _snaps in self._snapshots.items():
             family = k.split(":")[0]
             if family in seen_families:
                 continue
@@ -390,9 +394,9 @@ class ProductionMonitor:
         # LLM-judge path. Build a minimal TelemetryEvent-shaped
         # object that the HallucinationJudge can score.
         try:
-            from eden.llmops.judges.hallucination import HallucinationJudge
-            from eden.llmops.judges.base import JudgeContext
             from eden.llm.client import OpenRouterClient
+            from eden.llmops.judges.base import JudgeContext
+            from eden.llmops.judges.hallucination import HallucinationJudge
 
             class _E:
                 __slots__ = (

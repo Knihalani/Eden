@@ -3,21 +3,21 @@
 Phase 6.3: Insights Engine & Dataset Generation
 """
 
-from .unified_trace_model import UnifiedTrace, TraceNormalizer, Realm, Outcome
+from .comparative_analysis import ComparativeAnalysisEngine, DisparityReport
+from .dataset_engine import DatasetGenerationEngine, DatasetRule, DatasetType
 from .detectors import (
+    DetectorRegistry,
+    DisparityDetector,
     FailurePatternDetector,
+    Insight,
+    NovelBehaviorDetector,
     PerformanceAnomalyDetector,
     RegressionDetector,
-    DisparityDetector,
     RewardHackingDetector,
-    NovelBehaviorDetector,
-    DetectorRegistry,
-    Insight,
 )
-from .dataset_engine import DatasetGenerationEngine, DatasetRule, DatasetType
-from .comparative_analysis import ComparativeAnalysisEngine, DisparityReport
 from .insights_service import InsightsService
-from .utils import sequence_similarity, BoundedSet
+from .unified_trace_model import Outcome, Realm, TraceNormalizer, UnifiedTrace
+from .utils import BoundedSet, sequence_similarity
 
 __all__ = [
     "UnifiedTrace",

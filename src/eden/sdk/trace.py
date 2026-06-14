@@ -817,8 +817,8 @@ def _instrument_langchain(
                 error_type=error_type,
             )
 
-    BaseChatModel._agenerate = traced_agenerate  # type: ignore[method-assign]
-    BaseChatModel._eden_instrumented = True  # type: ignore[attr-defined]
+    BaseChatModel._agenerate = traced_agenerate
+    BaseChatModel._eden_instrumented = True
     logger.info("Auto-instrumented langchain.chat_models.base.BaseChatModel")
     return True
 

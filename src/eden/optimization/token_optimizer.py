@@ -4,7 +4,6 @@ import logging
 import re
 import time
 from dataclasses import dataclass
-from typing import Optional
 
 logger = logging.getLogger(__name__)
 
@@ -26,7 +25,7 @@ class PromptCompressor:
     3. Truncate with semantic preservation
     """
 
-    def __init__(self, summarizer_model: Optional[str] = None):
+    def __init__(self, summarizer_model: str | None = None):
         self.summarizer_model = summarizer_model
 
     def compress(self, prompt: str, max_tokens: int) -> str:
@@ -106,7 +105,7 @@ class Message:
 
     role: str  # system | user | assistant
     content: str
-    timestamp: Optional[float] = None
+    timestamp: float | None = None
 
 
 class ContextWindowManager:
@@ -154,7 +153,7 @@ class ContextWindowManager:
 
         # Always include the most recent exchanges (temporal locality)
         recent_cutoff = max(0, len(scored) - 3)
-        for msg, score in scored[:recent_cutoff]:
+        for msg, _score in scored[:recent_cutoff]:
             msg_tokens = estimate_tokens(msg.content)
             if current_tokens + msg_tokens <= available:
                 selected.append(msg)

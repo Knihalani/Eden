@@ -4,18 +4,17 @@ Provides a unified auth dependency that accepts either cookie-based
 session auth or API-key-based programmatic auth.
 """
 
-from typing import Optional
 
 from fastapi import Header, HTTPException, status
 from fastapi.params import Depends
 
-from eden.api.deps import get_optional_user, get_current_org_api_key
+from eden.api.deps import get_current_org_api_key, get_optional_user
 
 
 async def get_v1_caller(
-    user: Optional[dict] = Depends(get_optional_user),
-    x_org_id: Optional[str] = Header(None, alias="X-Org-Id"),
-    x_org_api_key: Optional[str] = Header(None, alias="X-Org-Api-Key"),
+    user: dict | None = Depends(get_optional_user),
+    x_org_id: str | None = Header(None, alias="X-Org-Id"),
+    x_org_api_key: str | None = Header(None, alias="X-Org-Api-Key"),
 ) -> dict:
     """Resolve caller identity from cookie or API key.
 

@@ -1,7 +1,7 @@
 [project]
 name = "eden"
 version = "0.1.0"
-description = "AI-native environment generation system"
+description = "Eden — AI-native agent evaluation and observability platform"
 readme = "README.md"
 requires-python = ">=3.12"
 license = { text = "MIT" }
@@ -15,10 +15,6 @@ classifiers = [
 ]
 
 dependencies = [
-    # Pipeline orchestration
-    "langgraph>=0.3.0,<1.0.0",
-    "langchain-core>=0.3.0,<1.0.0",
-
     # LLM API (OpenRouter)
     "openrouter>=0.3.0,<1.0.0",
     "openai>=1.0.0,<2.0.0",
@@ -31,6 +27,11 @@ dependencies = [
     "asyncpg>=0.29.0,<1.0.0",
     "sqlalchemy>=2.0.0,<3.0.0",
     "pgbouncer>=0.0.0",  # not a Python package, noted for infra
+    # Redis — used by IdempotencyMiddleware, TenantRateLimitMiddleware,
+    # OptimizationCache, and the RedisTailer judge pipeline. Was an
+    # undeclared dep that broke test collection through the
+    # `eden.api.middleware → eden.storage.redis` import chain.
+    "redis>=5.0.0,<6.0.0",
 
     # Vector search
     "qdrant-client>=1.9.0,<2.0.0",
@@ -45,6 +46,8 @@ dependencies = [
     # Auth
     "python-jose[cryptography]>=3.3.0,<4.0.0",
     "passlib[bcrypt]>=1.7.0,<2.0.0",
+    "pyotp>=2.9.0,<3.0.0",
+    "qrcode>=7.4.0,<8.0.0",
 
     # Code quality
     "pylint>=3.0.0,<4.0.0",
@@ -78,8 +81,11 @@ dev = [
     "ipdb>=0.13.0,<1.0.0",
 ]
 
-[project.scripts]
-eden = "eden.cli:main"
+# Phase 2: the env-gen pipeline (and its `eden` console script entry
+# point, which used to launch the legacy thin CLI) has been retired.
+# The server is launched via ``uvicorn eden.api.app:app`` (see
+# the Dockerfiles). The Eden Agent CLI lives at ``cli/eden/`` and
+# has its own pyproject.toml.
 
 [build-system]
 requires = ["hatchling"]
@@ -99,12 +105,5 @@ filterwarnings = [
 targets = ["src/"]
 skips = ["B413"]  # blacklist (e.g. crypto) - needed for some valid use cases
 
-[tool.langgraph]
-checkpoint = "postgres"
-
-[tool.langgraph.postgres]
-host = "localhost"
-port = 5432
-dbname = "eden"
-user = "eden"
-password = ""
+# Phase 2: the env-gen LangGraph pipeline is retired; the [tool.langgraph]
+# sections above (langchain-core deps, postgres checkpoint config) are gone.

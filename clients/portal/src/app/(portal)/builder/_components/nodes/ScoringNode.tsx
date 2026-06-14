@@ -20,7 +20,7 @@ export function ScoringNode({ data, selected }: NodeProps) {
         {d.criteria.length} criterion
         {d.criteria.length === 1 ? "" : "s"}
       </div>
-      <div className="text-[10px] text-zinc-500 truncate">
+      <div className="text-[10px] text-[var(--text-muted)] truncate">
         {d.criteria
           .slice(0, 2)
           .map((c) => c.name)

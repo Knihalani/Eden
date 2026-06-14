@@ -32,7 +32,7 @@ from __future__ import annotations
 import logging
 import time
 from collections import defaultdict, deque
-from typing import Any, Optional
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Request
 from pydantic import BaseModel, Field
@@ -108,8 +108,8 @@ async def _ingest_handler(
     path_format: str,
     auth_ctx: dict,
     project_id: str = "default",
-    content_type: Optional[str] = None,
-    headers: Optional[dict[str, str]] = None,
+    content_type: str | None = None,
+    headers: dict[str, str] | None = None,
 ) -> IngestResponse:
     """Shared body for all 9 endpoints. Decode → PII pre-mask → collector."""
     settings = get_settings()
@@ -160,10 +160,10 @@ async def _ingest_handler(
         detail: Any = str(exc)
         if problems:
             detail = {"error": detail, "problems": problems}
-        raise HTTPException(status_code=status_code, detail=detail)
+        raise HTTPException(status_code=status_code, detail=detail) from exc
     except Exception as exc:
         logger.exception(f"ingest decode failed: {exc}")
-        raise HTTPException(status_code=500, detail="Ingestion failed")
+        raise HTTPException(status_code=500, detail="Ingestion failed") from exc
 
     # Write
     collector: TelemetryCollector = await get_telemetry_collector()
@@ -292,7 +292,7 @@ async def ingest_chunks(
     try:
         payload = ChunksIngestRequest.model_validate_json(body)
     except Exception as exc:
-        raise HTTPException(status_code=422, detail=f"Invalid body: {exc}")
+        raise HTTPException(status_code=422, detail=f"Invalid body: {exc}") from exc
 
     if not payload.chunks:
         return ChunksIngestResponse(accepted=0, rejected=0, deduplicated=0, total=0)

@@ -24,8 +24,8 @@ from __future__ import annotations
 import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
-from typing import TYPE_CHECKING, Any, Optional
+from datetime import UTC, datetime
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from eden.observability.telemetry_collector import TelemetryEvent
@@ -43,7 +43,7 @@ class JudgeContext:
     for downstream correlation.
     """
 
-    event: "TelemetryEvent"
+    event: TelemetryEvent
     llm_client: Any = None  # OpenRouterClient; lazy so judges can run without one
     model_slot: str = "fast"
     trace_id: str = ""
@@ -56,11 +56,11 @@ class JudgeScore:
     judge_name: str
     judge_version: str
     trace_id: str
-    span_id: Optional[str]
+    span_id: str | None
     score: float
-    rationale: Optional[str]
+    rationale: str | None
     model: str
-    scored_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    scored_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     latency_ms: float = 0.0
     metadata: dict[str, Any] = field(default_factory=dict)
 
@@ -104,7 +104,7 @@ class Judge(ABC):
 
     @abstractmethod
     async def score(
-        self, event: "TelemetryEvent", ctx: JudgeContext
+        self, event: TelemetryEvent, ctx: JudgeContext
     ) -> JudgeScore:
         """Score one event. Must not raise — return a low-confidence
         JudgeScore instead. The runner logs and skips failures
@@ -112,7 +112,7 @@ class Judge(ABC):
         """
         ...
 
-    def matches(self, event: "TelemetryEvent") -> bool:
+    def matches(self, event: TelemetryEvent) -> bool:
         """Return True if this judge applies to ``event``.
 
         Default: applies to any event with an LLM-style event_type.
@@ -129,4 +129,30 @@ class Judge(ABC):
                 "langfuse.generation", "helicone.llm_call",
                 "llm_completion", "llm_completion_stream",
             )
+        )
+
+    def _low_confidence(
+        self,
+        event: TelemetryEvent,
+        ctx: JudgeContext,
+        *,
+        reason: str,
+    ) -> JudgeScore:
+        """Return a neutral score with a clear rationale when we
+        cannot produce a real judgment (no LLM, empty content, etc).
+        Score 0.5 is "unknown" so it doesn't skew downstream
+        aggregations. Subclasses may override for a different
+        fallback shape, but the default works for every built-in
+        judge.
+        """
+        return JudgeScore(
+            judge_name=self.name,
+            judge_version=self.version,
+            trace_id=ctx.trace_id or event.trace_id,
+            span_id=event.span_id,
+            score=0.5,
+            rationale=f"low_confidence:{reason}",
+            model="none",
+            latency_ms=0.0,
+            metadata={"fallback_reason": reason},
         )

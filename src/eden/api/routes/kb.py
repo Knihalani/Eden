@@ -1,13 +1,11 @@
 """Knowledge Base query routes for Eden API."""
 
 import logging
-from typing import Optional
 
 from fastapi import APIRouter, Query
 from pydantic import BaseModel
 
 from eden.kb.episodic.client import get_episodic_client
-from eden.kb.semantic.vector_client import get_vector_client
 
 logger = logging.getLogger(__name__)
 

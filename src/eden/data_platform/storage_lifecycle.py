@@ -16,8 +16,8 @@ import asyncio
 import json
 import logging
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta, timezone
-from typing import Any, Optional
+from datetime import UTC, datetime, timedelta
+from typing import Any
 
 from eden.config import get_settings
 
@@ -107,12 +107,12 @@ class StorageLifecycleManager:
 
     def __init__(
         self,
-        transitions: Optional[list[TierTransition]] = None,
+        transitions: list[TierTransition] | None = None,
         dry_run: bool = False,
     ) -> None:
         self.transitions = transitions or DEFAULT_TRANSITIONS
         self.dry_run = dry_run
-        self._postgres_client: Optional[Any] = None
+        self._postgres_client: Any | None = None
 
     async def _get_postgres(self) -> Any:
         if self._postgres_client is None:
@@ -206,7 +206,7 @@ class StorageLifecycleManager:
         Returns number of rows moved.
         """
         client = await self._get_postgres()
-        cutoff = datetime.now(timezone.utc) - timedelta(days=before_days)
+        cutoff = datetime.now(UTC) - timedelta(days=before_days)
 
         query = f"""
             SELECT * FROM {table}
@@ -264,7 +264,7 @@ class StorageLifecycleManager:
             import boto3
             s3 = boto3.client("s3")
             prefix = f"warm/{table}"
-            ts = datetime.now(timezone.utc)
+            ts = datetime.now(UTC)
             key = (
                 f"{prefix}/year={ts.year}/month={ts.month:02d}/"
                 f"day={ts.day:02d}/{ts.hour:02d}/{ts.isoformat()}.ndjson"
@@ -301,7 +301,7 @@ class StorageLifecycleManager:
         if not bucket:
             return 0
 
-        cutoff = datetime.now(timezone.utc) - timedelta(days=before_days)
+        cutoff = datetime.now(UTC) - timedelta(days=before_days)
 
         try:
             import boto3
@@ -314,7 +314,7 @@ class StorageLifecycleManager:
             for page in paginator.paginate(Bucket=bucket, Prefix=prefix):
                 for obj in page.get("Contents", []):
                     last_modified = obj["LastModified"]
-                    if last_modified.replace(tzinfo=timezone.utc) < cutoff:
+                    if last_modified.replace(tzinfo=UTC) < cutoff:
                         objects_to_transition.append(
                             {"Key": obj["Key"], "StorageClass": to_storage_class}
                         )
@@ -329,9 +329,10 @@ class StorageLifecycleManager:
             # Batch transition via copy_object
             transitioned = 0
             for obj in objects_to_transition:
+                # Capture obj by default-arg to avoid late-binding in lambda.
                 await loop.run_in_executor(
                     None,
-                    lambda: s3.copy_object(
+                    lambda obj=obj: s3.copy_object(
                         Bucket=bucket,
                         CopySource={"Bucket": bucket, "Key": obj["Key"]},
                         Key=obj["Key"],
@@ -369,19 +370,21 @@ class StorageLifecycleManager:
             for prefix in prefixes:
                 paginator = s3.get_paginator("list_objects_v2")
                 objects_to_delete = []
-                cutoff = datetime.now(timezone.utc) - timedelta(days=7)
+                cutoff = datetime.now(UTC) - timedelta(days=7)
 
                 for page in paginator.paginate(Bucket=bucket, Prefix=prefix):
                     for obj in page.get("Contents", []):
-                        if obj["LastModified"].replace(tzinfo=timezone.utc) < cutoff:
+                        if obj["LastModified"].replace(tzinfo=UTC) < cutoff:
                             objects_to_delete.append({"Key": obj["Key"]})
 
                 if objects_to_delete and not self.dry_run:
+                    # objects_to_delete is defined once outside this call,
+                    # so the lambda captures the (stable) outer binding.
                     await loop.run_in_executor(
                         None,
-                        lambda: s3.delete_objects(
+                        lambda: s3.delete_objects(  # noqa: B023
                             Bucket=bucket,
-                            Delete={"Objects": objects_to_delete},
+                            Delete={"Objects": objects_to_delete},  # noqa: B023
                         ),
                     )
                     total_deleted += len(objects_to_delete)
@@ -403,7 +406,7 @@ class StorageLifecycleManager:
     async def get_storage_summary(self) -> dict[str, Any]:
         """Get a summary of current storage usage across tiers."""
         summary: dict[str, Any] = {
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
             "hot": {},
             "warm": {},
             "cold": {},
@@ -429,9 +432,10 @@ class StorageLifecycleManager:
                 # Get bucket size via CloudWatch or ListObjectsV2 heuristic
                 # For simplicity, just list prefixes and count objects
                 for tier_prefix in ["bronze/events", "silver", "datasets", "cold"]:
+                    # Capture by default-arg to avoid late-binding in lambda.
                     response = await loop.run_in_executor(
                         None,
-                        lambda: s3.list_objects_v2(
+                        lambda tier_prefix=tier_prefix: s3.list_objects_v2(
                             Bucket=bucket, Prefix=tier_prefix, MaxKeys=1000
                         ),
                     )

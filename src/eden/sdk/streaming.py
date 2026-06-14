@@ -6,7 +6,8 @@ Converts an async text iterator into StreamEvent objects.
 from __future__ import annotations
 
 import json
-from typing import Any, AsyncIterator
+from collections.abc import AsyncIterator
+from typing import Any
 
 from eden.sdk.models import StreamEvent
 
@@ -18,7 +19,7 @@ class SSEStream:
         self._iterator = text_iterator
         self._buffer = ""
 
-    def __aiter__(self) -> "SSEStream":
+    def __aiter__(self) -> SSEStream:
         return self
 
     async def __anext__(self) -> StreamEvent:
@@ -42,7 +43,7 @@ class SSEStream:
                     self._buffer = ""
                     if event:
                         return event
-                raise StopAsyncIteration
+                raise StopAsyncIteration from None
 
     def _parse_event(self, raw: str) -> StreamEvent | None:
         """Parse a single SSE event block."""

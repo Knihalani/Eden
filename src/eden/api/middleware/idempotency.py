@@ -1,3 +1,4 @@
+from typing import cast, Any
 """Idempotency key middleware for Eden Public API v1.
 
 Ensures that mutating endpoints (POST, PUT, PATCH, DELETE) are safe to retry.
@@ -15,8 +16,7 @@ Non-mutating requests (GET, HEAD, OPTIONS) are ignored.
 import hashlib
 import json
 import logging
-from datetime import datetime, timezone, timedelta
-from typing import Optional
+from datetime import UTC, datetime, timedelta
 
 from fastapi import Request
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -69,7 +69,7 @@ class IdempotencyMiddleware(BaseHTTPMiddleware):
 
         # Only enforce idempotency on mutating methods under /v1/
         if method not in _MUTATING_METHODS or not request.url.path.startswith("/v1"):
-            return await call_next(request)
+            return cast(Response, await call_next(request))
 
         idempotency_key = request.headers.get(_IDEMPOTENCY_HEADER)
         if not idempotency_key:
@@ -111,10 +111,10 @@ class IdempotencyMiddleware(BaseHTTPMiddleware):
 
         # No cache hit — proceed with request
         # Re-inject body so downstream handlers can still read it
-        async def receive():
+        async def receive() -> dict:
             return {"type": "http.request", "body": body_bytes, "more_body": False}
 
-        request._receive = receive  # type: ignore[attr-defined]
+        request._receive = receive
         # Store body in state as a fallback for frameworks that don't honour _receive
         request.state.idempotency_body = body_bytes
 
@@ -123,21 +123,21 @@ class IdempotencyMiddleware(BaseHTTPMiddleware):
         # Cache the response for future replays
         await self._cache_response(cache_key, key_raw, method, request.url.path, body_hash, identity, response)
 
-        return response
+        return cast(Response, response)
 
-    async def _lookup_redis(self, cache_key: str) -> Optional[dict]:
+    async def _lookup_redis(self, cache_key: str) -> dict | None:
         try:
             redis = await get_redis_client()
             if redis is None:
                 return None
             raw = await redis.get(cache_key)
             if raw:
-                return json.loads(raw)
+                return cast(dict[Any, Any] | None, json.loads(raw))
         except Exception as exc:
             logger.warning(f"Redis idempotency lookup failed: {exc}")
         return None
 
-    async def _lookup_postgres(self, key: str, method: str, path: str, body_hash: str, identity: str) -> Optional[dict]:
+    async def _lookup_postgres(self, key: str, method: str, path: str, body_hash: str, identity: str) -> dict | None:
         try:
             from eden.storage.postgres import get_postgres_client
             client = await get_postgres_client()
@@ -187,7 +187,7 @@ class IdempotencyMiddleware(BaseHTTPMiddleware):
             return
 
         # Rebuild response so it can still be returned
-        async def _replay():
+        async def _replay() -> None:
             yield body
 
         response.body_iterator = _replay()
@@ -210,7 +210,7 @@ class IdempotencyMiddleware(BaseHTTPMiddleware):
         try:
             from eden.storage.postgres import get_postgres_client
             client = await get_postgres_client()
-            expires_at = datetime.now(timezone.utc) + timedelta(seconds=_TTL_SECONDS)
+            expires_at = datetime.now(UTC) + timedelta(seconds=_TTL_SECONDS)
             await client.execute(
                 """
                 INSERT INTO idempotency_keys (

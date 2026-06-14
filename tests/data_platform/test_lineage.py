@@ -1,11 +1,12 @@
 """Tests for the OpenLineage lineage tracker."""
 
 import pytest
+
 from eden.data_platform.lineage import (
-    LineageTracker,
-    Dataset,
     ColumnLineage,
+    Dataset,
     LineageRun,
+    LineageTracker,
 )
 
 

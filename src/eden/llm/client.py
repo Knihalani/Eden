@@ -1,15 +1,16 @@
 """OpenRouter LLM client with retry logic, circuit breaker, and cost tracking."""
 
-import time
+import asyncio
 import logging
-from enum import Enum
+import random
+import time
+from collections import defaultdict, deque
 from dataclasses import dataclass, field
-from typing import Optional, Any
-from collections import defaultdict
+from enum import Enum
 from functools import lru_cache
+from typing import Any
 
-from openai import OpenAI, RateLimitError, APITimeoutError, APIError
-import tenacity
+from openai import APIError, APITimeoutError, AsyncOpenAI, OpenAI, RateLimitError
 
 from eden.config import get_settings
 
@@ -39,7 +40,7 @@ class UsageStats:
     prompt_tokens: int = 0
     completion_tokens: int = 0
     total_tokens: int = 0
-    cost: Optional[float] = None
+    cost: float | None = None
     cache_reads: int = 0
     cache_writes: int = 0
 
@@ -64,7 +65,7 @@ class CircuitBreaker:
         recovery_timeout: int = 60,
         half_open_max_failures: int = 3,
         half_open_lockout_seconds: int = 300,
-    ):
+    ) -> None:
         self.failures: dict[str, int] = defaultdict(int)
         self.state: dict[str, CircuitState] = defaultdict(lambda: CircuitState.CLOSED)
         self.last_failure_time: dict[str, float] = {}
@@ -124,23 +125,41 @@ class OpenRouterClient:
 
     def __init__(
         self,
-        api_key: Optional[str] = None,
+        api_key: str | None = None,
         base_url: str = "https://openrouter.ai/api/v1",
         max_retries: int = 3,
         circuit_breaker_threshold: int = 5,
         circuit_breaker_timeout: int = 60,
-    ):
+        request_timeout: float = 60.0,
+        usage_log_maxlen: int = 10_000,
+    ) -> None:
         self.settings = get_settings()
+        # Sync client — kept for the sync ``call`` path (e.g. Celery
+        # workers, scripts) and for any downstream code that still
+        # imports ``OpenRouterClient.client`` directly.
         self.client = OpenAI(
             api_key=api_key or self.settings.openrouter_api_key,
             base_url=base_url,
+            timeout=request_timeout,
+        )
+        # Async client — the only path the FastAPI event loop uses
+        # now (see :meth:`acall`). Owns its own ``httpx.AsyncClient``
+        # connection pool; explicitly close it in lifespan shutdown
+        # via :meth:`close_async` to avoid leaking sockets.
+        self.async_client = AsyncOpenAI(
+            api_key=api_key or self.settings.openrouter_api_key,
+            base_url=base_url,
+            timeout=request_timeout,
         )
         self.circuit_breaker = CircuitBreaker(
             failure_threshold=circuit_breaker_threshold,
             recovery_timeout=circuit_breaker_timeout,
         )
         self.max_retries = max_retries
-        self._usage_log: list[UsageStats] = []
+        # Bounded usage log so a long-lived client can't OOM. 10k
+        # entries is ~1h of headroom at 3 RPS before the oldest
+        # entries start to age out.
+        self._usage_log: deque[UsageStats] = deque(maxlen=usage_log_maxlen)
         # §11.4 — per-provider error counters split by openai vs anthropic
         # so the observability dashboard can break them out by provider.
         self._provider_errors: dict[str, int] = {}
@@ -190,14 +209,86 @@ class OpenRouterClient:
         agent: str,
         prompt: str,
         slot: str = "reasoning",
-        system_prompt: Optional[str] = None,
+        system_prompt: str | None = None,
         **kwargs,
     ) -> LLMResponse:
-        """Async wrapper using thread pool executor."""
-        import asyncio
-        loop = asyncio.get_event_loop()
-        return await loop.run_in_executor(
-            None, self.call, agent, prompt, slot, system_prompt
+        """Fully async LLM call with retry and circuit breaker.
+
+        Unlike the previous implementation (which dispatched the
+        sync :meth:`call` into a thread pool executor), this path
+        never blocks the event loop. It uses ``AsyncOpenAI`` +
+        ``asyncio.sleep`` + ``asyncio.timeout`` so a hung downstream
+        request cannot exhaust the executor's threads.
+
+        Forwards ``**kwargs`` (e.g. ``stream``, ``temperature``,
+        ``tools``) to the underlying request — earlier revisions
+        dropped them silently, which meant streaming callers got
+        non-streaming behaviour with no warning.
+        """
+        if self.circuit_breaker.is_open(agent):
+            raise CircuitOpenError(f"Circuit breaker open for agent: {agent}")
+
+        model_config = self.MODEL_SLOTS.get(slot, self.MODEL_SLOTS["reasoning"])
+        all_models = [model_config.primary] + model_config.fallback
+
+        last_error = None
+        for model in all_models:
+            for attempt in range(self.max_retries):
+                try:
+                    # ``asyncio.timeout`` cancels the request if the
+                    # provider hangs past the deadline (the default
+                    # is also configured on the AsyncOpenAI client
+                    # itself, but this guard makes the deadline
+                    # explicit at the call site).
+                    async with asyncio.timeout(60.0):
+                        response = await self._make_request_async(
+                            model=model,
+                            prompt=prompt,
+                            system_prompt=system_prompt,
+                            max_tokens=kwargs.get("max_tokens", model_config.max_tokens),
+                            **kwargs,
+                        )
+                    self.circuit_breaker.record_success(agent)
+                    self._log_usage(response)
+                    self._record_provider_error(
+                        "anthropic" if self._is_anthropic_model(model) else "openai",
+                        error=False,
+                    )
+                    return response
+                except (TimeoutError, RateLimitError, APITimeoutError) as e:
+                    last_error = e
+                    self._record_provider_error(
+                        "anthropic" if self._is_anthropic_model(model) else "openai",
+                        error=True,
+                    )
+                    if attempt < self.max_retries - 1:
+                        await self._sleep_with_jitter_async(2 ** attempt)
+                    continue
+                except APIError as e:
+                    last_error = e
+                    # ``APIError`` subclasses include ``APIConnectionError``
+                    # and ``APITimeoutError`` which may not carry
+                    # ``status_code`` — guard with ``getattr`` so a
+                    # network blip doesn't ``AttributeError``-out
+                    # before we record the failure or retry.
+                    status_code = getattr(e, "status_code", None)
+                    if status_code in (401, 400):
+                        self._record_provider_error(
+                            "anthropic" if self._is_anthropic_model(model) else "openai",
+                            error=True,
+                        )
+                        raise
+                    self._record_provider_error(
+                        "anthropic" if self._is_anthropic_model(model) else "openai",
+                        error=True,
+                    )
+                    if attempt < self.max_retries - 1:
+                        await self._sleep_with_jitter_async(2 ** attempt)
+                    continue
+
+        self.circuit_breaker.record_failure(agent)
+        raise MaxRetriesExceededError(
+            f"All models failed for agent {agent} after {self.max_retries} attempts: {last_error}"
         )
 
     def call(
@@ -205,7 +296,7 @@ class OpenRouterClient:
         agent: str,
         prompt: str,
         slot: str = "reasoning",
-        system_prompt: Optional[str] = None,
+        system_prompt: str | None = None,
         **kwargs,
     ) -> LLMResponse:
         """Make an LLM call with retry and circuit breaker."""
@@ -240,11 +331,16 @@ class OpenRouterClient:
                         error=True,
                     )
                     if attempt < self.max_retries - 1:
-                        time.sleep(2**attempt)
+                        self._sleep_with_jitter(2 ** attempt)
                     continue
                 except APIError as e:
                     last_error = e
-                    if e.status_code in (401, 400):
+                    # ``APIError`` subclasses include ``APIConnectionError``
+                    # which has no ``status_code`` — guard with
+                    # ``getattr`` so we don't ``AttributeError`` before
+                    # recording the failure or deciding to retry.
+                    status_code = getattr(e, "status_code", None)
+                    if status_code in (401, 400):
                         self._record_provider_error(
                             "anthropic" if self._is_anthropic_model(model) else "openai",
                             error=True,
@@ -255,7 +351,7 @@ class OpenRouterClient:
                         error=True,
                     )
                     if attempt < self.max_retries - 1:
-                        time.sleep(2**attempt)
+                        self._sleep_with_jitter(2 ** attempt)
                     continue
 
         self.circuit_breaker.record_failure(agent)
@@ -267,20 +363,18 @@ class OpenRouterClient:
         self,
         model: str,
         prompt: str,
-        system_prompt: Optional[str] = None,
+        system_prompt: str | None = None,
         max_tokens: int = 4096,
         **kwargs,
     ) -> LLMResponse:
-        """Make a single request to OpenRouter."""
-        messages = []
-        if system_prompt:
-            messages.append({"role": "system", "content": system_prompt})
-        messages.append({"role": "user", "content": prompt})
+        """Make a single sync request to OpenRouter.
 
-        extra_headers = {}
-        if "structured-outputs" in kwargs:
-            extra_headers["x-open-router-beta"] = "structured-outputs-2025-11-13"
-
+        Kept for callers that still need a blocking LLM call (CLI
+        scripts, Celery workers, tests). The async event loop
+        should use :meth:`acall` + :meth:`_make_request_async`.
+        """
+        messages = self._build_messages(prompt, system_prompt)
+        extra_headers = self._build_extra_headers(kwargs)
         response = self.client.chat.completions.create(
             model=model,
             messages=messages,
@@ -288,7 +382,51 @@ class OpenRouterClient:
             extra_headers=extra_headers if extra_headers else None,
             **kwargs,
         )
+        return self._response_to_llm_response(response, model)
 
+    async def _make_request_async(
+        self,
+        model: str,
+        prompt: str,
+        system_prompt: str | None = None,
+        max_tokens: int = 4096,
+        **kwargs,
+    ) -> LLMResponse:
+        """Make a single async request to OpenRouter via AsyncOpenAI.
+
+        The async path never touches the event loop's thread pool
+        — a hung downstream request will be cancelled by the
+        enclosing :meth:`acall` ``asyncio.timeout`` guard rather
+        than blocking a worker thread.
+        """
+        messages = self._build_messages(prompt, system_prompt)
+        extra_headers = self._build_extra_headers(kwargs)
+        response = await self.async_client.chat.completions.create(
+            model=model,
+            messages=messages,
+            max_tokens=max_tokens,
+            extra_headers=extra_headers if extra_headers else None,
+            **kwargs,
+        )
+        return self._response_to_llm_response(response, model)
+
+    @staticmethod
+    def _build_messages(prompt: str, system_prompt: str | None) -> list[dict]:
+        messages: list[dict] = []
+        if system_prompt:
+            messages.append({"role": "system", "content": system_prompt})
+        messages.append({"role": "user", "content": prompt})
+        return messages
+
+    @staticmethod
+    def _build_extra_headers(kwargs: dict) -> dict:
+        extra_headers: dict = {}
+        if "structured-outputs" in kwargs:
+            extra_headers["x-open-router-beta"] = "structured-outputs-2025-11-13"
+        return extra_headers
+
+    @staticmethod
+    def _response_to_llm_response(response: Any, model: str) -> LLMResponse:
         usage = UsageStats(
             prompt_tokens=response.usage.prompt_tokens if response.usage else 0,
             completion_tokens=response.usage.completion_tokens if response.usage else 0,
@@ -297,7 +435,6 @@ class OpenRouterClient:
             cache_reads=getattr(response.usage, "cache_reads", 0) or 0,
             cache_writes=getattr(response.usage, "cache_writes", 0) or 0,
         )
-
         return LLMResponse(
             content=response.choices[0].message.content or "",
             usage=usage,
@@ -314,6 +451,32 @@ class OpenRouterClient:
             f"tokens={response.usage.total_tokens}, "
             f"cost={response.usage.cost}"
         )
+
+    @staticmethod
+    def _sleep_with_jitter(base_seconds: float) -> None:
+        """Exponential backoff with ±25% jitter to avoid thundering-herd
+        retries when many clients recover from a shared downstream
+        blip simultaneously."""
+        jitter = base_seconds * 0.25
+        time.sleep(base_seconds + random.uniform(-jitter, jitter))
+
+    @staticmethod
+    async def _sleep_with_jitter_async(base_seconds: float) -> None:
+        """Async sibling of :meth:`_sleep_with_jitter` — uses
+        ``asyncio.sleep`` so the event loop is free to schedule
+        other coroutines during the backoff."""
+        jitter = base_seconds * 0.25
+        await asyncio.sleep(base_seconds + random.uniform(-jitter, jitter))
+
+    async def close_async(self) -> None:
+        """Close the async client's underlying ``httpx.AsyncClient``.
+
+        Call from FastAPI ``lifespan`` shutdown to release sockets
+        cleanly. Sync callers can ignore this — the sync ``OpenAI``
+        client manages its own connection pool and the GC will
+        reclaim it on process exit.
+        """
+        await self.async_client.close()
 
     def get_total_usage(self) -> UsageStats:
         """Get aggregated usage statistics."""

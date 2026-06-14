@@ -12,7 +12,6 @@ from eden.observability.ingestion.providers import (
     OpenAIDecoder,
 )
 
-
 # ── OpenAI ──────────────────────────────────────────────────────────
 
 

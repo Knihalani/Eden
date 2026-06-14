@@ -1,13 +1,14 @@
 """Tests for the data contracts module."""
 
 import pytest
+
 from eden.data_platform.contracts import (
-    ContractValidator,
-    ValidationResult,
     AgentTraceContract,
-    UsageEventContract,
-    PipelineEventContract,
     BenchmarkEventContract,
+    ContractValidator,
+    PipelineEventContract,
+    UsageEventContract,
+    ValidationResult,
 )
 
 

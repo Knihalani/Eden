@@ -17,8 +17,8 @@ export function AgentNode({ data, selected }: NodeProps) {
       outputs={[{ id: "out:agent", position: Position.Right }]}
     >
       <div className="font-mono text-[11px]">{d.name}</div>
-      <div className="text-[10px] text-zinc-500">
-        framework: <span className="text-zinc-300">{d.framework}</span>
+      <div className="text-[10px] text-[var(--text-muted)]">
+        framework: <span className="text-[var(--text-muted)]">{d.framework}</span>
       </div>
     </NodeShell>
   );

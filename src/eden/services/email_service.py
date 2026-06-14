@@ -1,7 +1,6 @@
 """Email service for sending transactional emails via SendGrid."""
 
 import logging
-from typing import Optional
 
 import httpx
 
@@ -20,7 +19,7 @@ class EmailService:
     If SendGrid is not configured (no API key), emails are logged instead.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.settings = get_settings()
 
     async def send_email(
@@ -28,7 +27,7 @@ class EmailService:
         to_email: str,
         subject: str,
         html_content: str,
-        text_content: Optional[str] = None,
+        text_content: str | None = None,
     ) -> bool:
         """Send an email via SendGrid.
 

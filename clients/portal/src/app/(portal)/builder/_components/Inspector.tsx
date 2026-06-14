@@ -107,7 +107,7 @@ export function Inspector({
             <span className="text-[10px] text-[var(--text-muted)]">live</span>
           </summary>
           <pre
-            className="mt-2 max-h-48 overflow-auto rounded-md border border-[var(--border-subtle)] bg-zinc-950 p-3 text-[11px] text-zinc-200 font-mono whitespace-pre"
+            className="mt-2 max-h-48 overflow-auto rounded-md border border-[var(--border-subtle)] bg-[var(--bg-base)] p-3 text-[11px] text-[var(--text-primary)] font-mono whitespace-pre"
             data-testid="yaml-preview"
           >
             {yamlPreview}
@@ -398,15 +398,15 @@ function HttpToolConfig({
         <div className="space-y-1.5">
           {Object.entries(headers).map(([k, v]) => (
             <div key={k} className="flex items-center gap-1.5 text-xs">
-              <span className="flex-1 font-mono truncate text-zinc-700">
+              <span className="flex-1 font-mono truncate text-[var(--text-secondary)]">
                 {k}
               </span>
-              <span className="flex-1 font-mono truncate text-zinc-500">
+              <span className="flex-1 font-mono truncate text-[var(--text-muted)]">
                 = {v}
               </span>
               <button
                 type="button"
-                className="text-zinc-400 hover:text-[var(--error)]"
+                className="text-[var(--text-muted)] hover:text-[var(--error)]"
                 onClick={() => {
                   const next = { ...config };
                   delete next[`header.${k}`];
@@ -483,11 +483,11 @@ function ConfigTable({
             key={k}
             className="flex items-center gap-1.5 text-xs"
           >
-            <span className="flex-1 font-mono truncate text-zinc-700">{k}</span>
-            <span className="flex-1 font-mono truncate text-zinc-500">= {v}</span>
+            <span className="flex-1 font-mono truncate text-[var(--text-secondary)]">{k}</span>
+            <span className="flex-1 font-mono truncate text-[var(--text-muted)]">= {v}</span>
             <button
               type="button"
-              className="text-zinc-400 hover:text-[var(--error)]"
+              className="text-[var(--text-muted)] hover:text-[var(--error)]"
               onClick={() => {
                 const next = { ...config };
                 delete next[k];
@@ -635,7 +635,7 @@ function ScoringForm({
               <button
                 type="button"
                 onClick={() => remove(i)}
-                className="text-zinc-400 hover:text-[var(--error)]"
+                className="text-[var(--text-muted)] hover:text-[var(--error)]"
                 aria-label="Remove criterion"
               >
                 <Trash2 className="w-3.5 h-3.5" />

@@ -1,3 +1,4 @@
+from typing import Any, cast
 """Quota enforcement middleware — soft / hard limit checking.
 
 Adds `X-Quota-*` headers to every response showing current usage vs limits.
@@ -14,16 +15,13 @@ Depends on:
 """
 
 import logging
-from typing import Optional
 
 from fastapi import Request
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse, Response
 
-from eden.api.middleware.tenant_rate_limit import TenantRateLimitMiddleware
 from eden.api.utils.auth import decode_access_token
 from eden.services.usage_service import UsageService
-from eden.storage.postgres import get_postgres_client
 
 logger = logging.getLogger(__name__)
 
@@ -50,9 +48,9 @@ class QuotaEnforcementMiddleware(BaseHTTPMiddleware):
     quota/budget enforcement on top.
     """
 
-    def __init__(self, app):
+    def __init__(self, app: Any) -> None:
         super().__init__(app)
-        self._usage_service: Optional[UsageService] = None
+        self._usage_service: UsageService | None = None
 
     async def _get_usage_service(self) -> UsageService:
         if self._usage_service is None:
@@ -60,7 +58,7 @@ class QuotaEnforcementMiddleware(BaseHTTPMiddleware):
         return self._usage_service
 
     @staticmethod
-    async def _resolve_org_id(request: Request) -> Optional[str]:
+    async def _resolve_org_id(request: Request) -> str | None:
         """Extract org_id from headers, cookies, or API key."""
         # 1. Header (used by API keys and some cookie flows)
         org_id = request.headers.get("x-org-id")
@@ -90,15 +88,15 @@ class QuotaEnforcementMiddleware(BaseHTTPMiddleware):
                 return resources
         return []
 
-    async def dispatch(self, request: Request, call_next) -> Response:
+    async def dispatch(self, request: Request, call_next: Any) -> Response:
         # ── Skip for preflight, health, and docs ──
         if request.method == "OPTIONS" or request.url.path == "/health":
-            return await call_next(request)
+            return cast(Response, await call_next(request))
 
         org_id = await self._resolve_org_id(request)
         if not org_id:
             # Unauthenticated — let the route handler deal with auth
-            return await call_next(request)
+            return cast(Response, await call_next(request))
 
         # ── Build quota headers (always added when we can resolve org) ──
         try:
@@ -133,7 +131,7 @@ class QuotaEnforcementMiddleware(BaseHTTPMiddleware):
         for key, value in quota_headers.items():
             response.headers[key] = str(value)
 
-        return response
+        return cast(Response, response)
 
     async def _build_quota_headers(self, org_id: str) -> dict[str, str]:
         """Fetch budget status and return as HTTP headers."""

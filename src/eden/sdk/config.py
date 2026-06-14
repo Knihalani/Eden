@@ -12,16 +12,15 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional
 
 
 @dataclass
 class EdenConfig:
     """Eden SDK configuration."""
 
-    api_key: Optional[str] = None
+    api_key: str | None = None
     base_url: str = "http://localhost:8000"
-    default_org: Optional[str] = None
+    default_org: str | None = None
     timeout: float = 60.0
     max_retries: int = 3
     debug: bool = False
@@ -40,13 +39,13 @@ class EdenConfig:
     def load(
         cls,
         *,
-        api_key: Optional[str] = None,
-        base_url: Optional[str] = None,
-        default_org: Optional[str] = None,
-        timeout: Optional[float] = None,
-        max_retries: Optional[int] = None,
-        debug: Optional[bool] = None,
-    ) -> "EdenConfig":
+        api_key: str | None = None,
+        base_url: str | None = None,
+        default_org: str | None = None,
+        timeout: float | None = None,
+        max_retries: int | None = None,
+        debug: bool | None = None,
+    ) -> EdenConfig:
         """Load configuration from hierarchy.
 
         Priority (highest → lowest):
@@ -88,7 +87,7 @@ class EdenConfig:
         return cfg
 
     @classmethod
-    def _from_env(cls) -> Optional["EdenConfig"]:
+    def _from_env(cls) -> EdenConfig | None:
         """Load from environment variables."""
         api_key = os.getenv("EDEN_API_KEY")
         base_url = os.getenv("EDEN_BASE_URL")
@@ -110,7 +109,7 @@ class EdenConfig:
         )
 
     @classmethod
-    def _from_file(cls) -> Optional["EdenConfig"]:
+    def _from_file(cls) -> EdenConfig | None:
         """Load from config file (~/.eden/config.toml or ./eden.toml)."""
         paths = [
             Path.home() / ".eden" / "config.toml",
@@ -122,7 +121,7 @@ class EdenConfig:
         return None
 
     @classmethod
-    def _parse_toml(cls, path: Path) -> Optional["EdenConfig"]:
+    def _parse_toml(cls, path: Path) -> EdenConfig | None:
         """Parse a TOML config file."""
         try:
             import tomllib  # Python 3.11+
@@ -147,7 +146,7 @@ class EdenConfig:
             debug=data.get("debug", False),
         )
 
-    def _merge(self, other: "EdenConfig") -> "EdenConfig":
+    def _merge(self, other: EdenConfig) -> EdenConfig:
         """Merge another config, taking non-None / explicitly-set values from other."""
         return EdenConfig(
             api_key=other.api_key if other.api_key is not None else self.api_key,

@@ -9,7 +9,6 @@ while guarding against IP-spoofing attacks from untrusted sources.
 
 import ipaddress
 import logging
-from typing import Optional
 
 from fastapi import Request
 
@@ -43,7 +42,7 @@ def _is_trusted_proxy(ip: str, trusted: list[ipaddress.IPv4Network | ipaddress.I
     return False
 
 
-def get_client_ip(request: Request, trusted_proxy_cidrs: Optional[list[str]] = None) -> str:
+def get_client_ip(request: Request, trusted_proxy_cidrs: list[str] | None = None) -> str:
     """Extract the real client IP from a FastAPI request.
 
     Priority:

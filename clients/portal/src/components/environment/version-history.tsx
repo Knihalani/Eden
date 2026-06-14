@@ -35,7 +35,7 @@ export function VersionHistory({ versions, onSelectVersion, selectedIteration }:
     <div className="border border-[var(--border)] rounded-lg overflow-hidden">
       <button
         onClick={() => setIsExpanded(!isExpanded)}
-        className="w-full flex items-center justify-between px-4 py-3 bg-[var(--surface)] hover:bg-[var(--bg-muted)] transition-colors"
+        className="w-full flex items-center justify-between px-4 py-3 bg-[var(--bg-primary)] hover:bg-[var(--bg-muted)] transition-colors"
       >
         <div className="flex items-center gap-2">
           <GitBranch className="w-4 h-4 text-[var(--text-muted)]" />

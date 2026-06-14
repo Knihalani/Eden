@@ -11,15 +11,14 @@ Usage:
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import logging
-from datetime import datetime, timezone
-from typing import Optional, Any
+from datetime import UTC, datetime
+from typing import Any
 
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Query, Depends
-from fastapi.exceptions import HTTPException
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
-from eden.api.deps import get_current_user
 from eden.storage.postgres import get_postgres_client
 
 logger = logging.getLogger(__name__)
@@ -30,7 +29,7 @@ router = APIRouter(tags=["websocket"])
 _job_connections: dict[str, set[WebSocket]] = {}
 
 
-async def _authenticate_ws(websocket: WebSocket) -> Optional[dict]:
+async def _authenticate_ws(websocket: WebSocket) -> dict | None:
     """Authenticate WebSocket connection via query param or cookie.
 
     Accepts token from:
@@ -123,7 +122,7 @@ async def job_trace_websocket(
         # parallel with the polling loop so the client can issue HILT
         # commands (pause/resume/step/inject/approve) over the same WS
         # connection instead of opening a REST round-trip.
-        from eden.realtime.human_in_the_loop import HILTController, HILTCommandType
+        from eden.realtime.human_in_the_loop import HILTController
 
         hilt = HILTController(job_id=job_id)
         receive_task = asyncio.create_task(
@@ -139,7 +138,7 @@ async def job_trace_websocket(
             "current_stage": job["current_stage"],
             "outcome_tier": job.get("outcome_tier"),
             "stage_history": job.get("stage_history", []),
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
         })
         last_stage = job["current_stage"]
         last_status = job["status"]
@@ -151,10 +150,8 @@ async def job_trace_websocket(
                 break
 
             # Poll for updates every 2 seconds (or break early if HILT paused)
-            try:
+            with contextlib.suppress(TimeoutError):
                 await asyncio.wait_for(hilt.wait_for_resume(timeout=2.0), timeout=2.0)
-            except asyncio.TimeoutError:
-                pass
 
             # Fetch latest job state
             job = await client.get_job(job_id, user_id=user["user_id"])
@@ -175,7 +172,7 @@ async def job_trace_websocket(
                     "job_id": job_id,
                     "from": last_stage,
                     "to": current_stage,
-                    "at": job.get("updated_at", datetime.now(timezone.utc).isoformat()),
+                    "at": job.get("updated_at", datetime.now(UTC).isoformat()),
                 })
 
             # Emit status update if changed
@@ -187,7 +184,7 @@ async def job_trace_websocket(
                     "current_stage": current_stage,
                     "outcome_tier": job.get("outcome_tier"),
                     "stage_history": job.get("stage_history", []),
-                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                    "timestamp": datetime.now(UTC).isoformat(),
                 })
                 last_stage = current_stage
                 last_status = current_status
@@ -230,7 +227,7 @@ async def job_trace_websocket(
                     "job_id": job_id,
                     "status": current_status,
                     "outcome_tier": job.get("outcome_tier"),
-                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                    "timestamp": datetime.now(UTC).isoformat(),
                 })
                 break
 
@@ -238,26 +235,20 @@ async def job_trace_websocket(
         logger.info(f"WebSocket disconnected for job {job_id}")
     except Exception as exc:
         logger.error(f"WebSocket error for job {job_id}: {exc}")
-        try:
+        with contextlib.suppress(Exception):
             await websocket.send_json({"type": "error", "message": str(exc)})
-        except Exception:
-            pass
     finally:
         if not receive_task.done():
             receive_task.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError, Exception):
                 await receive_task
-            except (asyncio.CancelledError, Exception):
-                pass
         # Unregister connection
         if job_id in _job_connections:
             _job_connections[job_id].discard(websocket)
             if not _job_connections[job_id]:
                 del _job_connections[job_id]
-        try:
+        with contextlib.suppress(Exception):
             await websocket.close()
-        except Exception:
-            pass
 
 
 @router.websocket("/ws/jobs/{job_id}/logs")
@@ -310,7 +301,7 @@ async def job_logs_websocket(
                     "level": "info",
                     "job_id": job_id,
                     "message": f"Status changed: {last_status} → {current_status}",
-                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                    "timestamp": datetime.now(UTC).isoformat(),
                 })
                 last_status = current_status
 
@@ -321,7 +312,7 @@ async def job_logs_websocket(
                     "level": "info",
                     "job_id": job_id,
                     "message": f"Stage transition: {last_stage} → {current_stage}",
-                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                    "timestamp": datetime.now(UTC).isoformat(),
                 })
                 last_stage = current_stage
 
@@ -333,7 +324,7 @@ async def job_logs_websocket(
                     "level": level,
                     "job_id": job_id,
                     "message": f"Job {current_status}",
-                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                    "timestamp": datetime.now(UTC).isoformat(),
                 })
                 break
 
@@ -346,10 +337,8 @@ async def job_logs_websocket(
             _job_connections[job_id].discard(websocket)
             if not _job_connections[job_id]:
                 del _job_connections[job_id]
-        try:
+        with contextlib.suppress(Exception):
             await websocket.close()
-        except Exception:
-            pass
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -470,7 +459,5 @@ async def _ws_receive_commands(
 
 async def _safe_send(websocket: WebSocket, payload: dict[str, Any]) -> None:
     """Send JSON on the WebSocket, swallowing client-disconnect errors."""
-    try:
+    with contextlib.suppress(Exception):
         await websocket.send_json(payload)
-    except Exception:
-        pass

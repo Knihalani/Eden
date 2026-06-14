@@ -56,9 +56,10 @@ Settings
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
 import time
-from typing import Any, Optional
+from typing import Any
 from uuid import UUID
 
 from eden.config import Settings, get_settings
@@ -73,10 +74,10 @@ class InsightsDetectorLoop:
     def __init__(
         self,
         *,
-        interval_seconds: Optional[float] = None,
-        batch_size: Optional[int] = None,
-        max_runtime_seconds: Optional[float] = None,
-        settings: Optional[Settings] = None,
+        interval_seconds: float | None = None,
+        batch_size: int | None = None,
+        max_runtime_seconds: float | None = None,
+        settings: Settings | None = None,
     ) -> None:
         s = settings or get_settings()
         self.interval_seconds: float = (
@@ -95,7 +96,7 @@ class InsightsDetectorLoop:
             else float(getattr(s, "insights_loop_max_runtime_seconds", 50))
         )
         self._stop = asyncio.Event()
-        self._task: Optional[asyncio.Task] = None
+        self._task: asyncio.Task | None = None
 
     # ── Lifecycle ──────────────────────────────────────────────────────
 
@@ -119,7 +120,7 @@ class InsightsDetectorLoop:
         if self._task is not None:
             try:
                 await asyncio.wait_for(self._task, timeout=5.0)
-            except (asyncio.TimeoutError, asyncio.CancelledError):
+            except (TimeoutError, asyncio.CancelledError):
                 self._task.cancel()
             logger.info("insights detector loop stopped")
 
@@ -143,10 +144,8 @@ class InsightsDetectorLoop:
                 logger.warning(f"insights detector loop tick failed: {exc}")
             elapsed = time.monotonic() - tick_start
             sleep_for = max(0.0, self.interval_seconds - elapsed)
-            try:
+            with contextlib.suppress(TimeoutError):
                 await asyncio.wait_for(self._stop.wait(), timeout=sleep_for)
-            except asyncio.TimeoutError:
-                pass
 
     async def tick_once(self) -> dict[str, int]:
         """Run one iteration of the loop and return per-tenant counts.
@@ -320,7 +319,7 @@ class InsightsDetectorLoop:
     @staticmethod
     async def _read_watermark(
         client: Any, tenant_id: str
-    ) -> Optional[str]:
+    ) -> str | None:
         row = await client.fetchrow(
             """
             SELECT last_processed_judge_score_id
@@ -338,7 +337,7 @@ class InsightsDetectorLoop:
     async def _upsert_watermark(
         client: Any,
         tenant_id: str,
-        last_processed_judge_score_id: Optional[str],
+        last_processed_judge_score_id: str | None,
     ) -> None:
         """Set the watermark for ``tenant_id``.
 
@@ -390,8 +389,8 @@ class InsightsDetectorLoop:
 
 # ── Module-level singleton used by the lifespan ──────────────────────
 
-_loop: Optional[InsightsDetectorLoop] = None
-_started_for: Optional[InsightsDetectorLoop] = None
+_loop: InsightsDetectorLoop | None = None
+_started_for: InsightsDetectorLoop | None = None
 # Idempotency guard: we only call ``.start()`` once per singleton
 # instance.  The test fixture ``test_start_is_idempotent`` resets
 # ``_loop = None`` between runs; tracking the *instance* we

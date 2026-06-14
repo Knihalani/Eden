@@ -16,11 +16,10 @@ import pytest
 from fastapi import HTTPException
 
 from eden.api.deps import (
+    PERMISSION_MAP,
     check_resource_permission,
     has_permission,
-    PERMISSION_MAP,
 )
-
 
 # ────────────────────────────────────────────────────────────────────────
 # Built-in role permission map — sanity check
@@ -184,7 +183,6 @@ def test_assignment_request_rejects_partial_resource():
         role="admin",
     )
 
-    import asyncio
     loop = asyncio.new_event_loop()
     try:
         with pytest.raises(HTTPException) as ei:
@@ -209,8 +207,8 @@ def test_assignment_request_rejects_partial_resource():
 @pytest.mark.asyncio
 async def test_create_role_route_happy_path():
     """End-to-end: POST /orgs/{id}/roles inserts a role and its perms."""
-    from eden.api.routes.rbac import create_role, RoleCreateRequest
     from eden.api.deps import OrgMember
+    from eden.api.routes.rbac import RoleCreateRequest, create_role
 
     fake_role_row = {
         "id": "00000000-0000-0000-0000-000000000099",
@@ -252,8 +250,8 @@ async def test_create_role_route_happy_path():
 @pytest.mark.asyncio
 async def test_create_role_forbidden_for_member_role():
     """Members (not admin) cannot create roles."""
-    from eden.api.routes.rbac import create_role, RoleCreateRequest
     from eden.api.deps import OrgMember
+    from eden.api.routes.rbac import RoleCreateRequest, create_role
 
     member = OrgMember(
         user_id="00000000-0000-0000-0000-000000000001",

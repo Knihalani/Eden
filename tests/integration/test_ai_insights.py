@@ -28,8 +28,9 @@ import os
 import pathlib
 import sys
 import uuid
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from typing import Any, AsyncIterator
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -38,6 +39,8 @@ import pytest
 os.environ.setdefault("ANTHROPIC_API_KEY", "test-key-not-real")
 os.environ.setdefault("ANTHROPIC_AUTH_TOKEN", "test-key-not-real")
 os.environ.setdefault("EDEN_TESTING", "1")
+
+from datetime import UTC
 
 from eden.config import get_settings  # noqa: E402
 from eden.llmops import insights_tools  # noqa: E402
@@ -73,15 +76,6 @@ class TestToolRegistry:
         return {t.name for t in insights_tools.list_tools()}
 
     def test_required_tools_present(self, tool_names: set[str]) -> None:
-        required = {
-            "list_traces",  # alias of list_jobs
-            "get_latency_p95",
-            "get_cost_breakdown",
-            "get_judge_scores",
-            "get_anomalies",
-            "get_insights",
-            "get_traces_by_filter",
-        }
         # ``list_traces`` is the spec's name for what the project
         # implements as ``list_jobs``. We keep both; tests can call
         # either via the same dispatcher.
@@ -142,23 +136,23 @@ def await_dispatch_tool_call(name: str, input_json: dict[str, Any]) -> dict[str,
 
 class TestParseSince:
     def test_defaults_to_24h_when_empty(self) -> None:
-        from datetime import datetime, timezone, timedelta
+        from datetime import datetime, timedelta, timezone
         out = insights_tools._parse_since("")
-        delta = datetime.now(timezone.utc) - out
+        delta = datetime.now(UTC) - out
         # Allow a few seconds of slack.
         assert timedelta(hours=23, minutes=59) < delta < timedelta(hours=24, minutes=1)
 
     def test_relative_hours(self) -> None:
         out = insights_tools._parse_since("3h")
         # Should be roughly 3h ago.
-        from datetime import datetime, timezone, timedelta
-        delta = datetime.now(timezone.utc) - out
+        from datetime import datetime, timedelta, timezone
+        delta = datetime.now(UTC) - out
         assert timedelta(hours=2, minutes=59) < delta < timedelta(hours=3, minutes=1)
 
     def test_relative_days(self) -> None:
         out = insights_tools._parse_since("7d")
-        from datetime import datetime, timezone, timedelta
-        delta = datetime.now(timezone.utc) - out
+        from datetime import datetime, timedelta, timezone
+        delta = datetime.now(UTC) - out
         assert timedelta(days=6, hours=23) < delta < timedelta(days=7, hours=1)
 
     def test_iso8601(self) -> None:
@@ -169,8 +163,8 @@ class TestParseSince:
     def test_garbage_falls_back_to_24h(self) -> None:
         # Should not raise.
         out = insights_tools._parse_since("not a real timestamp")
-        from datetime import datetime, timezone, timedelta
-        delta = datetime.now(timezone.utc) - out
+        from datetime import datetime, timedelta, timezone
+        delta = datetime.now(UTC) - out
         assert delta < timedelta(hours=25)
 
 

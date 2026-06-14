@@ -19,7 +19,6 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from fastapi.testclient import TestClient
 
-
 # ── Module-level fixtures ──────────────────────────────────────────
 
 
@@ -48,8 +47,8 @@ def mock_auth(api_client: TestClient, mock_collector, monkeypatch):
     """
     from eden.api.app import app
     from eden.api.deps import get_ingestion_auth
-    from eden.observability import telemetry_collector as tc_module
     from eden.api.routes import ingestion as ingestion_module
+    from eden.observability import telemetry_collector as tc_module
 
     fake_auth = {
         "org_id": "org-123",

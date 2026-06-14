@@ -3,17 +3,14 @@
 import hashlib
 import logging
 import secrets
-from datetime import datetime, timedelta
-from typing import Optional
+from datetime import datetime
 from uuid import uuid4
 
-from fastapi import APIRouter, HTTPException, Depends, status, Header, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
-import jwt
 
-from eden.api.deps import get_current_user, require_org_admin, get_postgres_client
+from eden.api.deps import get_current_user, get_postgres_client, require_org_admin
 from eden.config import get_settings
-from eden.api.utils.auth import create_access_token, decode_access_token
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -24,12 +21,12 @@ class SSOProviderConfig(BaseModel):
     """SSO provider configuration."""
     provider_type: str  # okta, google, oidc, saml2
     name: str
-    entity_id: Optional[str] = None
-    sso_url: Optional[str] = None
-    certificate: Optional[str] = None
-    client_id: Optional[str] = None
-    client_secret: Optional[str] = None
-    scopes: Optional[list[str]] = None
+    entity_id: str | None = None
+    sso_url: str | None = None
+    certificate: str | None = None
+    client_id: str | None = None
+    client_secret: str | None = None
+    scopes: list[str] | None = None
 
 
 class SSOProviderResponse(BaseModel):
@@ -39,7 +36,7 @@ class SSOProviderResponse(BaseModel):
     provider_type: str
     name: str
     enabled: bool
-    default_for_domain: Optional[str]
+    default_for_domain: str | None
     enforce_sso: bool
     scim_enabled: bool
     created_at: datetime
@@ -345,9 +342,9 @@ async def initiate_sso_login(
 @router.post("/callback/{provider_id}", response_model=dict)
 async def sso_callback(
     provider_id: str,
-    code: Optional[str] = None,
-    saml_response: Optional[str] = None,
-    state: Optional[str] = None,
+    code: str | None = None,
+    saml_response: str | None = None,
+    state: str | None = None,
     org_id: str = Query(..., alias="org_id"),
 ):
     """Handle SSO callback from IdP. Exchanges code for tokens and creates/links user."""

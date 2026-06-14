@@ -4,9 +4,10 @@ Provides PromptLoader mixin that enables agents to load their system prompts
 from the prompt_versions table instead of using hardcoded constants.
 """
 
+import contextlib
 import inspect
 import logging
-from typing import Optional, ClassVar
+from typing import ClassVar
 
 from eden.kb.prompt_versions.client import get_prompt_versions_client
 
@@ -32,8 +33,8 @@ class PromptLoader:
 
     AGENT_NAME: ClassVar[str] = ""  # Must be set by subclass
 
-    _system_prompt: Optional[str] = None
-    _prompt_version: Optional[int] = None
+    _system_prompt: str | None = None
+    _prompt_version: int | None = None
     _prompt_loaded: bool = False
 
     def _load_prompt(self) -> None:
@@ -69,10 +70,8 @@ class PromptLoader:
                 # Close the unawaited coroutine so Python's runtime
                 # doesn't emit a "coroutine was never awaited" warning
                 # during garbage collection.
-                try:
+                with contextlib.suppress(Exception):  # pragma: no cover
                     prompt_data.close()
-                except Exception:  # pragma: no cover - best-effort
-                    pass
                 self._system_prompt = getattr(self, "SYSTEM_PROMPT", "")
                 self._prompt_version = None
                 self._prompt_loaded = False
@@ -135,7 +134,7 @@ class PromptLoader:
         return self._system_prompt or ""
 
     @property
-    def prompt_version(self) -> Optional[int]:
+    def prompt_version(self) -> int | None:
         """Get the prompt version loaded from KB.
 
         Returns:

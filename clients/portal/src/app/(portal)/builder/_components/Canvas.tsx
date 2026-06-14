@@ -121,7 +121,7 @@ export function Canvas({
       ref={wrapperRef}
       onDragOver={handleDragOver}
       onDrop={handleDrop}
-      className="relative flex-1 h-full bg-zinc-950"
+      className="relative flex-1 h-full bg-[var(--bg-base)]"
       data-testid="builder-canvas"
     >
       <ReactFlow
@@ -144,7 +144,7 @@ export function Canvas({
         <Controls
           position="bottom-left"
           showInteractive={false}
-          className="!bg-zinc-900 !border-zinc-800 !text-zinc-300"
+          className="!bg-[var(--bg-base)] !border-[var(--border-default)] !text-[var(--text-muted)]"
         />
         <MiniMap
           position="bottom-right"
@@ -171,7 +171,7 @@ export function Canvas({
                 return "#71717a";
             }
           }}
-          className="!bg-zinc-900 !border-zinc-800"
+          className="!bg-[var(--bg-base)] !border-[var(--border-default)]"
         />
       </ReactFlow>
     </div>

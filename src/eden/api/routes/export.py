@@ -5,9 +5,8 @@ import json
 import logging
 import zipfile
 from datetime import datetime
-from typing import Optional
 
-from fastapi import APIRouter, Cookie, Header
+from fastapi import APIRouter, Cookie
 from fastapi.responses import StreamingResponse
 
 from eden.api.deps import require_org_permission
@@ -21,7 +20,7 @@ router = APIRouter(prefix="/orgs", tags=["export"])
 @router.get("/{org_id}/export")
 async def export_org_data(
     org_id: str,
-    authorization: Optional[str] = Cookie(None),
+    authorization: str | None = Cookie(None),
 ):
     """Export all organization data as a ZIP archive for GDPR compliance.
 

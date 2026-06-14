@@ -1,5 +1,10 @@
-"""Eden Public API v1 routes."""
+"""Eden Public API v1 routes.
 
-from eden.api.routes.v1 import jobs, environments, benchmarks
+Phase 2: the v1 env-gen routes (``jobs``, ``benchmarks``) have been
+removed. The ``environments`` route is stubbed to 410 Gone (its
+helpers read env-gen blob data that no longer has writers).
+"""
 
-__all__ = ["jobs", "environments", "benchmarks"]
+from eden.api.routes.v1 import environments  # noqa: F401
+
+__all__ = ["environments"]

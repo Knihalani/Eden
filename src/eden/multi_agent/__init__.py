@@ -8,57 +8,53 @@ Architecture references:
     • eden-development-roadmap.md §6.8
 """
 
+from eden.multi_agent.agent_roles import (
+    ActionResult,
+    ActionType,
+    AgentObjective,
+    AgentRole,
+    HITLManager,
+    RoleConfig,
+    RoleHierarchy,
+    RoleSystem,
+)
 from eden.multi_agent.communication import (
+    Blackboard,
+    BlackboardEntry,
+    BlackboardEnvironment,
     Message,
-    MessageType,
     MessageBus,
+    MessagePassingEnvironment,
+    MessageType,
     SharedState,
     SharedStateManager,
-    BlackboardEntry,
-    Blackboard,
-    MessagePassingEnvironment,
-    BlackboardEnvironment,
 )
-
-from eden.multi_agent.agent_roles import (
-    AgentRole,
-    RoleConfig,
-    AgentObjective,
-    RoleSystem,
-    RoleHierarchy,
-    HITLManager,
-    ActionType,
-    ActionResult,
-)
-
 from eden.multi_agent.memory_tiers import (
-    WorkingMemory,
     EpisodicMemory,
-    SemanticMemory,
     MemoryService,
-    Observation,
     MemoryTier,
+    Observation,
+    SemanticMemory,
+    WorkingMemory,
 )
-
 from eden.multi_agent.planning import (
-    PlanningFramework,
-    ReActEnvironment,
-    TreeOfThoughtsEnvironment,
-    PlanAndExecuteEnvironment,
-    ReflexionEnvironment,
     ChainOfThoughtEnvironment,
-    ThoughtNode,
-    PlanStep,
     EpisodeResult,
+    PlanAndExecuteEnvironment,
+    PlanningFramework,
+    PlanStep,
+    ReActEnvironment,
+    ReflexionEnvironment,
+    ThoughtNode,
+    TreeOfThoughtsEnvironment,
 )
-
 from eden.multi_agent.test_suite import (
-    MultiAgentTestSuite,
+    AdversarialTest,
+    ConsensusTest,
     DeterminismTest,
     MessageDeliveryTest,
+    MultiAgentTestSuite,
     StateConsistencyTest,
-    ConsensusTest,
-    AdversarialTest,
     TestResult,
 )
 

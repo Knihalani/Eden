@@ -44,8 +44,8 @@ export function AnalyticsTab() {
 
   if (!canViewAnalytics) {
     return (
-      <div className="p-6 bg-red-50 rounded-lg border border-red-200">
-        <p className="text-sm text-red-700">
+      <div className="p-6 bg-[var(--error-dim)] rounded-lg border border-[var(--error)]">
+        <p className="text-sm text-[var(--error)]">
           You do not have permission to view organization analytics. Contact your organization admin.
         </p>
       </div>
@@ -55,24 +55,24 @@ export function AnalyticsTab() {
   if (loading) {
     return (
       <div className="flex items-center justify-center py-12">
-        <Loader2 className="w-6 h-6 animate-spin text-blue-600" />
-        <span className="ml-2 text-gray-500">Loading analytics...</span>
+        <Loader2 className="w-6 h-6 animate-spin text-[var(--accent)]" />
+        <span className="ml-2 text-[var(--text-muted)]">Loading analytics...</span>
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="p-4 bg-red-50 rounded-lg border border-red-200">
-        <p className="text-sm text-red-700">{error}</p>
+      <div className="p-4 bg-[var(--error-dim)] rounded-lg border border-[var(--error)]">
+        <p className="text-sm text-[var(--error)]">{error}</p>
       </div>
     );
   }
 
   if (!analytics) {
     return (
-      <div className="p-6 bg-gray-50 rounded-lg border border-gray-200">
-        <p className="text-sm text-gray-500">No analytics data available.</p>
+      <div className="p-6 bg-[var(--bg-secondary)] rounded-lg border border-[var(--border-default)]">
+        <p className="text-sm text-[var(--text-muted)]">No analytics data available.</p>
       </div>
     );
   }
@@ -94,37 +94,37 @@ export function AnalyticsTab() {
     <div className="space-y-6">
       {/* Summary Stats */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="bg-white p-4 rounded-lg border border-gray-200">
+        <div className="bg-[var(--bg-primary)] p-4 rounded-lg border border-[var(--border-default)]">
           <div className="flex items-center gap-3">
-            <div className="p-2 bg-blue-100 rounded-lg">
-              <TrendingUp className="w-5 h-5 text-blue-600" />
+            <div className="p-2 bg-[var(--accent-faint)] rounded-lg">
+              <TrendingUp className="w-5 h-5 text-[var(--accent)]" />
             </div>
             <div>
-              <p className="text-sm text-gray-500">Active Members</p>
+              <p className="text-sm text-[var(--text-muted)]">Active Members</p>
               <p className="text-2xl font-semibold">{analytics.active_members_count}</p>
             </div>
           </div>
         </div>
 
-        <div className="bg-white p-4 rounded-lg border border-gray-200">
+        <div className="bg-[var(--bg-primary)] p-4 rounded-lg border border-[var(--border-default)]">
           <div className="flex items-center gap-3">
-            <div className="p-2 bg-green-100 rounded-lg">
-              <Code className="w-5 h-5 text-green-600" />
+            <div className="p-2 bg-[var(--terminal-faint)] rounded-lg">
+              <Code className="w-5 h-5 text-[var(--terminal)]" />
             </div>
             <div>
-              <p className="text-sm text-gray-500">Total References</p>
+              <p className="text-sm text-[var(--text-muted)]">Total References</p>
               <p className="text-2xl font-semibold">{analytics.total_references}</p>
             </div>
           </div>
         </div>
 
-        <div className="bg-white p-4 rounded-lg border border-gray-200">
+        <div className="bg-[var(--bg-primary)] p-4 rounded-lg border border-[var(--border-default)]">
           <div className="flex items-center gap-3">
-            <div className="p-2 bg-purple-100 rounded-lg">
-              <Database className="w-5 h-5 text-purple-600" />
+            <div className="p-2 bg-[var(--accent-faint)] rounded-lg">
+              <Database className="w-5 h-5 text-[var(--accent)]" />
             </div>
             <div>
-              <p className="text-sm text-gray-500">Storage Used</p>
+              <p className="text-sm text-[var(--text-muted)]">Storage Used</p>
               <p className="text-2xl font-semibold">{formatBytes(analytics.storage_bytes_used)}</p>
             </div>
           </div>
@@ -132,7 +132,7 @@ export function AnalyticsTab() {
       </div>
 
       {/* Job Counts Chart */}
-      <div className="bg-white p-4 rounded-lg border border-gray-200">
+      <div className="bg-[var(--bg-primary)] p-4 rounded-lg border border-[var(--border-default)]">
         <h3 className="text-lg font-semibold mb-4">Job Activity</h3>
         {analytics.job_counts_by_day.length > 0 ? (
           <div className="h-64">
@@ -156,12 +156,12 @@ export function AnalyticsTab() {
             </ResponsiveContainer>
           </div>
         ) : (
-          <p className="text-sm text-gray-500 py-8 text-center">No job data available for this period.</p>
+          <p className="text-sm text-[var(--text-muted)] py-8 text-center">No job data available for this period.</p>
         )}
       </div>
 
       {/* Reference Uploads Chart */}
-      <div className="bg-white p-4 rounded-lg border border-gray-200">
+      <div className="bg-[var(--bg-primary)] p-4 rounded-lg border border-[var(--border-default)]">
         <h3 className="text-lg font-semibold mb-4">Reference Uploads</h3>
         {analytics.reference_uploads_by_day.length > 0 ? (
           <div className="h-64">
@@ -185,12 +185,12 @@ export function AnalyticsTab() {
             </ResponsiveContainer>
           </div>
         ) : (
-          <p className="text-sm text-gray-500 py-8 text-center">No reference upload data available.</p>
+          <p className="text-sm text-[var(--text-muted)] py-8 text-center">No reference upload data available.</p>
         )}
       </div>
 
       {/* Storage Pie Chart */}
-      <div className="bg-white p-4 rounded-lg border border-gray-200">
+      <div className="bg-[var(--bg-primary)] p-4 rounded-lg border border-[var(--border-default)]">
         <h3 className="text-lg font-semibold mb-4">Storage Distribution</h3>
         <div className="h-64">
           <ResponsiveContainer width="100%" height="100%">
@@ -214,14 +214,14 @@ export function AnalyticsTab() {
         </div>
         <div className="flex justify-center gap-4 mt-4">
           <div className="flex items-center gap-2">
-            <div className="w-3 h-3 rounded-full bg-blue-500" />
-            <span className="text-sm text-gray-600">Used ({formatBytes(analytics.storage_bytes_used)})</span>
+            <div className="w-3 h-3 rounded-full bg-[var(--accent)]" />
+            <span className="text-sm text-[var(--text-secondary)]">Used ({formatBytes(analytics.storage_bytes_used)})</span>
           </div>
         </div>
       </div>
 
       {/* Member Activity */}
-      <div className="bg-white p-4 rounded-lg border border-gray-200">
+      <div className="bg-[var(--bg-primary)] p-4 rounded-lg border border-[var(--border-default)]">
         <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
           <Users className="w-5 h-5" />
           Member Activity
@@ -230,24 +230,24 @@ export function AnalyticsTab() {
           {analytics.member_activity.map((member) => (
             <div
               key={member.user_id}
-              className="flex items-center justify-between py-2 border-b border-gray-100 last:border-0"
+              className="flex items-center justify-between py-2 border-b border-[var(--border-subtle)] last:border-0"
             >
               <div className="flex items-center gap-3">
-                <div className="w-8 h-8 bg-gray-200 rounded-full flex items-center justify-center text-sm font-medium">
+                <div className="w-8 h-8 bg-[var(--bg-tertiary)] rounded-full flex items-center justify-center text-sm font-medium">
                   {member.name?.charAt(0).toUpperCase() || member.email.charAt(0).toUpperCase()}
                 </div>
                 <div>
                   <p className="text-sm font-medium">{member.name || member.email}</p>
-                  <p className="text-xs text-gray-500">{member.role}</p>
+                  <p className="text-xs text-[var(--text-muted)]">{member.role}</p>
                 </div>
               </div>
               <div className="text-right">
-                <p className="text-xs text-gray-500">
+                <p className="text-xs text-[var(--text-muted)]">
                   Last active: {member.last_active_at
                     ? new Date(member.last_active_at).toLocaleDateString()
                     : "Never"}
                 </p>
-                <p className="text-xs text-gray-400">
+                <p className="text-xs text-[var(--text-muted)]">
                   Joined: {member.joined_at ? new Date(member.joined_at).toLocaleDateString() : "Unknown"}
                 </p>
               </div>

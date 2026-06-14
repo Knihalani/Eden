@@ -1,15 +1,18 @@
 """Shared FastAPI dependencies."""
 
 import hashlib
+import logging
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Optional
 
-from fastapi import Depends, HTTPException, Cookie, Header, status
+from fastapi import Cookie, Header, HTTPException, status
 from fastapi.security import HTTPBearer
 
 from eden.api.utils.auth import decode_access_token
 from eden.config import get_settings
 from eden.storage.postgres import get_postgres_client
+
+logger = logging.getLogger(__name__)
 
 security = HTTPBearer(auto_error=False)
 
@@ -33,6 +36,7 @@ PERMISSION_MAP: dict[str, set[str]] = {
         "jobs:read",
         "jobs:write",
         "org:transfer",
+        "prompts:write",
         # Phase 7.3d additions
         "pii:edit",
         "judges:run",
@@ -50,6 +54,7 @@ PERMISSION_MAP: dict[str, set[str]] = {
         "audit:view",
         "jobs:read",
         "jobs:write",
+        "prompts:write",
         # Phase 7.3d additions — admins can edit PII policy and run
         # judges, but cannot override retention or execute GDPR
         # deletions (those require owner).
@@ -60,6 +65,7 @@ PERMISSION_MAP: dict[str, set[str]] = {
         "references:read",
         "jobs:read",
         "jobs:write",
+        "prompts:read",
         # Phase 7.3d — members can run judges (read-only ops on
         # observability data) but cannot edit PII policy.
         "judges:run",
@@ -99,8 +105,8 @@ class OrgMember:
 
 
 async def get_current_org_member(
-    x_org_id: Optional[str] = Header(None, alias="X-Org-Id"),
-    authorization: Optional[str] = Cookie(None),
+    x_org_id: str | None = Header(None, alias="X-Org-Id"),
+    authorization: str | None = Cookie(None),
 ) -> OrgMember:
     """Authenticate a portal user and resolve their org membership.
 
@@ -157,7 +163,7 @@ async def get_current_org_member(
 
 
 async def get_current_user(
-    authorization: Optional[str] = Cookie(None),
+    authorization: str | None = Cookie(None),
 ) -> dict:
     """Validate JWT cookie and return user.
 
@@ -191,9 +197,15 @@ async def get_current_user(
 
 
 async def get_optional_user(
-    authorization: Optional[str] = Cookie(None),
-) -> Optional[dict]:
-    """Validate JWT cookie and return user, or None if not authenticated."""
+    authorization: str | None = Cookie(None),
+) -> dict | None:
+    """Validate JWT cookie and return user, or None if not authenticated.
+
+    Returns ``None`` when there is no cookie, the token is invalid, or
+    the token payload is missing the ``sub`` claim. Callers MUST treat
+    a falsy return as "unauthenticated" and not dereference a possibly
+    absent ``user_id``.
+    """
     if not authorization:
         return None
 
@@ -201,13 +213,17 @@ async def get_optional_user(
     if not payload:
         return None
 
+    user_id = payload.get("sub")
+    if not user_id:
+        return None
+
     return {
-        "user_id": payload.get("sub"),
+        "user_id": user_id,
         "email": payload.get("email"),
     }
 
 
-async def get_user_by_id(user_id: str) -> Optional[dict]:
+async def get_user_by_id(user_id: str) -> dict | None:
     """Fetch a user by their ID."""
     client = await get_postgres_client()
     query = "SELECT id, email, name, created_at, preferred_org_id FROM users WHERE id = $1"
@@ -215,10 +231,10 @@ async def get_user_by_id(user_id: str) -> Optional[dict]:
 
 
 async def get_current_org(
-    x_org_id: Optional[str] = Header(None, alias="X-Org-Id"),
-    authorization: Optional[str] = Cookie(None),
+    x_org_id: str | None = Header(None, alias="X-Org-Id"),
+    authorization: str | None = Cookie(None),
     include_archived: bool = False,
-) -> Optional[dict]:
+) -> dict | None:
     """Get current organization context from header or JWT.
 
     Returns org context if user is a member, None otherwise.
@@ -277,8 +293,8 @@ async def get_current_org(
 
 
 async def require_org_member(
-    x_org_id: Optional[str] = Header(None, alias="X-Org-Id"),
-    authorization: Optional[str] = Cookie(None),
+    x_org_id: str | None = Header(None, alias="X-Org-Id"),
+    authorization: str | None = Cookie(None),
 ) -> dict:
     """Require user to be an org member, otherwise raise 403."""
     org = await get_current_org(x_org_id, authorization)
@@ -291,8 +307,8 @@ async def require_org_member(
 
 
 async def require_org_admin(
-    x_org_id: Optional[str] = Header(None, alias="X-Org-Id"),
-    authorization: Optional[str] = Cookie(None),
+    x_org_id: str | None = Header(None, alias="X-Org-Id"),
+    authorization: str | None = Cookie(None),
 ) -> dict:
     """Require user to be an org admin/owner, otherwise raise 403."""
     org = await get_current_org(x_org_id, authorization)
@@ -310,8 +326,8 @@ async def require_org_admin(
 
 
 async def require_2fa(
-    x_org_id: Optional[str] = Header(None, alias="X-Org-Id"),
-    authorization: Optional[str] = Cookie(None),
+    x_org_id: str | None = Header(None, alias="X-Org-Id"),
+    authorization: str | None = Cookie(None),
 ) -> dict:
     """Require user to have 2FA enabled if org enforces it.
 
@@ -359,8 +375,8 @@ async def require_2fa(
 
 
 async def require_org_owner(
-    x_org_id: Optional[str] = Header(None, alias="X-Org-Id"),
-    authorization: Optional[str] = Cookie(None),
+    x_org_id: str | None = Header(None, alias="X-Org-Id"),
+    authorization: str | None = Cookie(None),
 ) -> dict:
     """Require user to be an org owner, otherwise raise 403."""
     org = await get_current_org(x_org_id, authorization)
@@ -379,8 +395,8 @@ async def require_org_owner(
 
 async def require_org_permission(
     permission: str,
-    x_org_id: Optional[str] = Header(None, alias="X-Org-Id"),
-    authorization: Optional[str] = Cookie(None),
+    x_org_id: str | None = Header(None, alias="X-Org-Id"),
+    authorization: str | None = Cookie(None),
 ) -> dict:
     """Require user to have a specific org permission, otherwise raise 403.
 
@@ -406,29 +422,29 @@ async def require_org_permission(
 # ``require_org_permission("pii:edit")`` call site, and they give us
 # a single place to add telemetry / audit-log hooks later.
 async def _require_pii_policy_edit(
-    x_org_id: Optional[str] = Header(None, alias="X-Org-Id"),
-    authorization: Optional[str] = Cookie(None),
+    x_org_id: str | None = Header(None, alias="X-Org-Id"),
+    authorization: str | None = Cookie(None),
 ) -> dict:
     return await require_org_permission("pii:edit", x_org_id, authorization)
 
 
 async def _require_judges_run(
-    x_org_id: Optional[str] = Header(None, alias="X-Org-Id"),
-    authorization: Optional[str] = Cookie(None),
+    x_org_id: str | None = Header(None, alias="X-Org-Id"),
+    authorization: str | None = Cookie(None),
 ) -> dict:
     return await require_org_permission("judges:run", x_org_id, authorization)
 
 
 async def _require_gdpr_execute(
-    x_org_id: Optional[str] = Header(None, alias="X-Org-Id"),
-    authorization: Optional[str] = Cookie(None),
+    x_org_id: str | None = Header(None, alias="X-Org-Id"),
+    authorization: str | None = Cookie(None),
 ) -> dict:
     return await require_org_permission("gdpr:execute", x_org_id, authorization)
 
 
 async def _require_retention_override(
-    x_org_id: Optional[str] = Header(None, alias="X-Org-Id"),
-    authorization: Optional[str] = Cookie(None),
+    x_org_id: str | None = Header(None, alias="X-Org-Id"),
+    authorization: str | None = Cookie(None),
 ) -> dict:
     return await require_org_permission("retention:override", x_org_id, authorization)
 
@@ -445,8 +461,8 @@ async def check_resource_permission(
     user_id: str,
     org_id: str,
     permission: str,
-    resource_type: Optional[str] = None,
-    resource_id: Optional[str] = None,
+    resource_type: str | None = None,
+    resource_id: str | None = None,
 ) -> bool:
     """Resource-scoped permission check for the custom-RBAC system.
 
@@ -469,6 +485,12 @@ async def check_resource_permission(
     try:
         client = await get_postgres_client()
     except Exception:
+        logger.warning(
+            "check_resource_permission: postgres unavailable for "
+            "user_id=%s org_id=%s permission=%s; returning False",
+            user_id, org_id, permission,
+            exc_info=True,
+        )
         return False
     if not client:
         return False
@@ -484,6 +506,12 @@ async def check_resource_permission(
             org_id,
         )
     except Exception:
+        logger.warning(
+            "check_resource_permission: org_members lookup failed for "
+            "user_id=%s org_id=%s permission=%s; returning False",
+            user_id, org_id, permission,
+            exc_info=True,
+        )
         return False
 
     role = (row or {}).get("role") or ""
@@ -514,20 +542,27 @@ async def check_resource_permission(
             permission,
         )
     except Exception:
+        logger.warning(
+            "check_resource_permission: role_assignments lookup failed for "
+            "user_id=%s org_id=%s resource_type=%s resource_id=%s; "
+            "returning False",
+            user_id, org_id, resource_type, resource_id,
+            exc_info=True,
+        )
         return False
     return bool(present)
 
 
-def require_org_permission_or_api_key(permission: str):
+def require_org_permission_or_api_key(permission: str) -> Callable:
     """Factory that returns a dependency supporting either cookie or API key auth.
 
     For user auth, checks role-based permissions.
     For API key auth, checks scopes directly.
     """
     async def dependency(
-        x_org_id: Optional[str] = Header(None, alias="X-Org-Id"),
-        x_org_api_key: Optional[str] = Header(None, alias="X-Org-Api-Key"),
-        authorization: Optional[str] = Cookie(None),
+        x_org_id: str | None = Header(None, alias="X-Org-Id"),
+        x_org_api_key: str | None = Header(None, alias="X-Org-Api-Key"),
+        authorization: str | None = Cookie(None),
     ) -> dict:
         # Try API key first
         if x_org_api_key:
@@ -569,7 +604,7 @@ def require_org_permission_or_api_key(permission: str):
 
 async def get_current_org_api_key(
     x_org_id: str = Header(..., alias="X-Org-Id"),
-    x_org_api_key: Optional[str] = Header(None, alias="X-Org-Api-Key"),
+    x_org_api_key: str | None = Header(None, alias="X-Org-Api-Key"),
 ) -> dict:
     """Validate X-Org-Api-Key header and return org context.
 
@@ -614,11 +649,86 @@ async def get_current_org_api_key(
     }
 
 
+async def get_ingestion_auth(
+    x_org_id: str | None = Header(None, alias="X-Org-Id"),
+    x_org_api_key: str | None = Header(None, alias="X-Org-Api-Key"),
+    authorization: str | None = Cookie(None),
+) -> dict:
+    """Auth dependency for the public ingestion + AI gateway surfaces.
+
+    Accepts EITHER:
+
+    1. ``X-Org-Id`` + ``X-Org-Api-Key`` headers (programmatic / SDK).
+    2. A valid ``authorization`` JWT cookie (browser session).
+
+    Returns a context dict with at minimum ``user_id``, ``org_id``, and
+    ``auth_method`` (``"api_key"`` or ``"cookie"``).  For API-key auth
+    the dict also includes ``scopes`` and ``key_id``.  For cookie auth
+    the org is resolved from the ``X-Org-Id`` header (preferred) or
+    the user's ``current_org_id`` JWT claim, then verified against
+    the ``org_members`` table.
+
+    Raises ``401 Unauthorized`` when neither auth method is valid.
+    """
+    # Path 1: API key (programmatic).
+    if x_org_api_key and x_org_id:
+        try:
+            org = await get_current_org_api_key(x_org_id, x_org_api_key)
+        except HTTPException:
+            raise
+        return {
+            "user_id": f"apikey:{org['key_id']}",
+            "org_id": org["org_id"],
+            "scopes": org.get("scopes", []),
+            "key_id": org["key_id"],
+            "auth_method": "api_key",
+        }
+
+    # Path 2: session cookie.
+    if authorization:
+        payload = decode_access_token(authorization)
+        if payload and payload.get("sub"):
+            user_id = payload["sub"]
+            org_id = x_org_id or payload.get("current_org_id")
+            if not org_id:
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail=(
+                        "No org context. Pass X-Org-Id header or set "
+                        "current_org_id on the session."
+                    ),
+                )
+            # Verify the cookie user is actually a member of ``org_id``.
+            client = await get_postgres_client()
+            row = await client.fetchrow(
+                """
+                SELECT 1 FROM org_members
+                WHERE user_id = $1 AND org_id = $2
+                """,
+                user_id, org_id,
+            )
+            if row:
+                return {
+                    "user_id": user_id,
+                    "email": payload.get("email"),
+                    "org_id": org_id,
+                    "auth_method": "cookie",
+                }
+
+    raise HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail=(
+            "Authentication required. Provide X-Org-Id + X-Org-Api-Key "
+            "headers OR a valid session cookie."
+        ),
+    )
+
+
 async def get_optional_org(
-    x_org_id: Optional[str] = Header(None, alias="X-Org-Id"),
-    x_org_api_key: Optional[str] = Header(None, alias="X-Org-Api-Key"),
-    authorization: Optional[str] = Cookie(None),
-) -> Optional[dict]:
+    x_org_id: str | None = Header(None, alias="X-Org-Id"),
+    x_org_api_key: str | None = Header(None, alias="X-Org-Api-Key"),
+    authorization: str | None = Cookie(None),
+) -> dict | None:
     """Get org context from either API key or JWT cookie.
 
     Tries API key first, then falls back to cookie auth.
@@ -711,11 +821,11 @@ async def log_audit_event(
     org_id: str,
     user_id: str,
     action: str,
-    target_type: Optional[str] = None,
-    target_id: Optional[str] = None,
-    metadata: Optional[dict] = None,
-    ip_address: Optional[str] = None,
-    user_agent: Optional[str] = None,
+    target_type: str | None = None,
+    target_id: str | None = None,
+    metadata: dict | None = None,
+    ip_address: str | None = None,
+    user_agent: str | None = None,
 ) -> None:
     """Insert an audit log entry for an org action."""
     query = """
@@ -740,7 +850,7 @@ async def log_audit_event(
 # ============================================================================
 
 
-def require_feature_flag(flag_name: str):
+def require_feature_flag(flag_name: str) -> Callable:
     """Build a FastAPI dependency that gates a route on a boolean setting.
 
     When the flag is OFF, the dependency raises HTTP 404 (pretending the route

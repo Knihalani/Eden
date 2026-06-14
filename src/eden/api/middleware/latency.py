@@ -17,7 +17,7 @@ import logging
 import time
 from collections import defaultdict
 from threading import Lock
-from typing import Protocol
+from typing import Any, Protocol, cast
 
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
@@ -105,7 +105,7 @@ def _route_template(request: Request) -> str:
     per job-id."""
     route = request.scope.get("route")
     if route is not None and getattr(route, "path", None):
-        return route.path
+        return cast(str, route.path)
     return request.url.path
 
 
@@ -115,7 +115,7 @@ class LatencyMiddleware(BaseHTTPMiddleware):
     correlation ID is in scope (and BEFORE the route, so we measure
     the full request lifecycle)."""
 
-    async def dispatch(self, request: Request, call_next):
+    async def dispatch(self, request: Request, call_next: Any) -> Response:
         t0 = time.perf_counter()
         try:
             response: Response = await call_next(request)

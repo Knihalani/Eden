@@ -217,7 +217,7 @@ export function GatewayTab({ org }: GatewayTabProps) {
           {canManage && !showCreate && (
             <button
               onClick={startCreate}
-              className="flex items-center gap-2 px-4 py-2 bg-[var(--accent)] text-white rounded-lg text-sm font-medium hover:opacity-90 flex-shrink-0"
+              className="flex items-center gap-2 px-4 py-2 bg-[var(--accent)] text-[var(--bg-primary)] rounded-lg text-sm font-medium hover:opacity-90 flex-shrink-0"
             >
               <Plus className="w-4 h-4" />
               Add model
@@ -396,7 +396,7 @@ export function GatewayTab({ org }: GatewayTabProps) {
                   !form.upstream_model.trim() ||
                   (!editing && !form.upstream_api_key)
                 }
-                className="px-4 py-2 bg-[var(--accent)] text-white rounded-lg text-sm font-medium disabled:opacity-50 inline-flex items-center gap-2"
+                className="px-4 py-2 bg-[var(--accent)] text-[var(--bg-primary)] rounded-lg text-sm font-medium disabled:opacity-50 inline-flex items-center gap-2"
               >
                 {saving ? (
                   <Loader2 className="w-4 h-4 animate-spin" />
@@ -501,7 +501,7 @@ export function GatewayTab({ org }: GatewayTabProps) {
                         className={cn(
                           "px-2 py-0.5 rounded text-xs font-medium",
                           m.enabled
-                            ? "bg-green-50 text-green-700"
+                            ? "bg-[var(--terminal-faint)] text-[var(--terminal)]"
                             : "bg-[var(--bg-tertiary)] text-[var(--text-muted)]"
                         )}
                       >
@@ -512,7 +512,7 @@ export function GatewayTab({ org }: GatewayTabProps) {
                         className={cn(
                           "px-2 py-0.5 rounded text-xs font-medium",
                           m.enabled
-                            ? "bg-green-50 text-green-700"
+                            ? "bg-[var(--terminal-faint)] text-[var(--terminal)]"
                             : "bg-[var(--bg-tertiary)] text-[var(--text-muted)]"
                         )}
                       >
@@ -531,7 +531,7 @@ export function GatewayTab({ org }: GatewayTabProps) {
                         </button>
                         <button
                           onClick={() => handleDelete(m)}
-                          className="p-1.5 text-red-500 hover:bg-red-50 rounded-lg"
+                          className="p-1.5 text-[var(--error)] hover:bg-[var(--error-dim)] rounded-lg"
                           title="Delete"
                         >
                           <Trash2 className="w-4 h-4" />

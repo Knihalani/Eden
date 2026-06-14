@@ -15,8 +15,8 @@ from __future__ import annotations
 
 import logging
 import uuid
-from datetime import datetime, timezone
-from typing import Any, Optional
+from datetime import UTC, datetime
+from typing import Any, cast
 
 from eden.config import get_settings
 from eden.observability.ingestion.attribution import Attribution
@@ -35,15 +35,15 @@ def _normalize_timestamp(value: Any) -> str:
     to ``+00:00``), epoch int/float (ms or s), or a ``datetime``.
     """
     if value is None:
-        return datetime.now(timezone.utc).isoformat()
+        return datetime.now(UTC).isoformat()
     if isinstance(value, datetime):
         if value.tzinfo is None:
-            value = value.replace(tzinfo=timezone.utc)
-        return value.isoformat()
+            value = value.replace(tzinfo=UTC)
+        return cast(str, value.isoformat())
     if isinstance(value, (int, float)):
         # Heuristic: > 10^12 → milliseconds, else seconds.
         ts = value / 1000.0 if value > 1e12 else float(value)
-        return datetime.fromtimestamp(ts, tz=timezone.utc).isoformat()
+        return datetime.fromtimestamp(ts, tz=UTC).isoformat()
     if isinstance(value, str):
         s = value.strip()
         if s.endswith("Z"):
@@ -54,11 +54,11 @@ def _normalize_timestamp(value: Any) -> str:
             return s
         except ValueError:
             logger.debug(f"timestamp not ISO 8601, using now(): {value!r}")
-            return datetime.now(timezone.utc).isoformat()
-    return datetime.now(timezone.utc).isoformat()
+            return datetime.now(UTC).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
-def _ensure_event_id(value: Optional[str]) -> str:
+def _ensure_event_id(value: str | None) -> str:
     """Generate a stable event_id when the source didn't provide one.
     Uses uuid4 — the collector dedupes on event_id so collisions are
     safe but should be rare."""
@@ -67,7 +67,7 @@ def _ensure_event_id(value: Optional[str]) -> str:
     return f"ing_{uuid.uuid4().hex}"
 
 
-def _ensure_trace_id(value: Optional[str]) -> str:
+def _ensure_trace_id(value: str | None) -> str:
     """A trace_id is required. If the source has no concept of a trace,
     we synthesize one from the event_id (so the row is its own
     one-event trace). The portal's trace tree will show a single-node
@@ -77,7 +77,7 @@ def _ensure_trace_id(value: Optional[str]) -> str:
     return f"trace_{uuid.uuid4().hex}"
 
 
-def _coerce_outcome(value: Optional[str]) -> Optional[str]:
+def _coerce_outcome(value: str | None) -> str | None:
     """Map free-form status / outcome strings to the canonical set the
     collector accepts. Unknown values pass through (the collector
     accepts any string and the UI renders the literal)."""

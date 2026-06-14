@@ -211,7 +211,6 @@ jobs:
     @classmethod
     def generate_issue_template(cls, output_dir: str) -> None:
         """Write GitHub issue templates for bug reports and feature requests."""
-        import json
         from pathlib import Path
 
         out = Path(output_dir)
@@ -247,7 +246,6 @@ jobs:
     @staticmethod
     def _to_yaml_form(template: dict[str, Any]) -> str:
         """Convert a dict to a minimal YAML-like string for GitHub forms."""
-        import json
         # Use a simple human-readable format; in production use PyYAML
         lines = [f"name: {template['name']}", f"description: {template['description']}"]
         if template.get("labels"):

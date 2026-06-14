@@ -14,7 +14,9 @@ Public surface:
   convenience wrapper.
 - ``RedisTailer`` — async background worker that tails the
   ``telemetry:{tenant_id}:{trace_id}:events`` Redis stream and
-  runs judges per event. Started from ``app.py`` lifespan.
+  runs judges per event. Started from ``app.py`` lifespan. The
+  module-level ``redis_tailer`` instance is the singleton that
+  the lifespan hooks.
 - ``schema`` — Pydantic models for the API surface.
 
 Defaults are registered lazily on first ``get_judge_registry()`` call
@@ -27,13 +29,21 @@ from __future__ import annotations
 import logging
 
 from .base import Judge, JudgeContext, JudgeScore
+from .redis_tailer import RedisTailer
 from .registry import (
     JudgeRegistry,
     get_judge_registry,
     reset_judge_registry,
 )
 from .runner import JudgeRunner, run_judges_for_event
-from .redis_tailer import RedisTailer
+
+# Module-level singleton so the FastAPI lifespan can do
+# ``await redis_tailer.start()`` / ``await redis_tailer.stop()``
+# without re-constructing the worker on every reload. The
+# constructor is cheap but the poll cadence / dedup set are
+# bound to the instance, so a process restart picks up fresh
+# state by virtue of the new process image.
+redis_tailer = RedisTailer()
 
 __all__ = [
     "Judge",
@@ -45,6 +55,7 @@ __all__ = [
     "JudgeRunner",
     "run_judges_for_event",
     "RedisTailer",
+    "redis_tailer",
     "register_default_judges",
 ]
 
@@ -59,8 +70,8 @@ def register_default_judges(registry: JudgeRegistry) -> None:
     that don't need the built-ins. Idempotent — re-registering
     overwrites existing entries.
     """
-    from .hallucination import HallucinationJudge
     from .correctness import CorrectnessJudge
+    from .hallucination import HallucinationJudge
     from .tone import ToneJudge
 
     registry.register(HallucinationJudge())

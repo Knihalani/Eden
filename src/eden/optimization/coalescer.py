@@ -1,3 +1,4 @@
+from typing import cast
 """Request coalescing and deduplication for LLM calls.
 
 When multiple identical or near-identical requests arrive within a short window,
@@ -8,7 +9,6 @@ import hashlib
 import logging
 import time
 from dataclasses import dataclass
-from typing import Optional
 
 from eden.llm.client import LLMResponse
 
@@ -31,7 +31,7 @@ class RequestCoalescer:
     underlying request all receive the result simultaneously.
     """
 
-    def __init__(self, window_ms: float = 100.0):
+    def __init__(self, window_ms: float = 100.0) -> None:
         self.window_ms = window_ms
         self._inflight: dict[str, _InflightRequest] = {}
         self._lock = asyncio.Lock()
@@ -44,7 +44,7 @@ class RequestCoalescer:
         model: str,
         temperature: float,
         max_tokens: int,
-        system_prompt: Optional[str] = None,
+        system_prompt: str | None = None,
     ) -> str:
         """Create a deterministic coalescing key."""
         normalized = " ".join(prompt.split()).strip().lower()
@@ -59,7 +59,7 @@ class RequestCoalescer:
         model: str,
         temperature: float = 0.7,
         max_tokens: int = 4096,
-        system_prompt: Optional[str] = None,
+        system_prompt: str | None = None,
         call_fn=None,
     ) -> LLMResponse:
         """Execute a deduplicated LLM call.
@@ -91,7 +91,7 @@ class RequestCoalescer:
                 future = self._inflight[key].future
                 # Release lock before waiting on the future
                 try:
-                    return await future
+                    return cast(LLMResponse, await future)
                 except asyncio.CancelledError:
                     raise
 
@@ -109,7 +109,7 @@ class RequestCoalescer:
                 raise ValueError("call_fn is required for the leader request")
             result = await call_fn()
             future.set_result(result)
-            return result
+            return cast(LLMResponse, result)
         except Exception as e:
             future.set_exception(e)
             raise

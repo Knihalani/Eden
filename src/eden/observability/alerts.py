@@ -24,8 +24,8 @@ from __future__ import annotations
 
 import logging
 from dataclasses import asdict, dataclass, field
-from datetime import datetime, timezone
-from typing import Any, Optional
+from datetime import UTC, datetime
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -57,7 +57,7 @@ class AlertRule:
     description: str
     threshold: float
 
-    def evaluate(self, current_value: float) -> Optional[Alert]:
+    def evaluate(self, current_value: float) -> Alert | None:
         """Return an Alert if the rule fires (value > threshold), else
         ``None``. Rules are simple upper-bound checks — no sustained
         windowing here (that's the §10.3 monitoring layer's job)."""
@@ -69,7 +69,7 @@ class AlertRule:
                 message=self.description,
                 value=current_value,
                 threshold=self.threshold,
-                fired_at=datetime.now(timezone.utc).isoformat(),
+                fired_at=datetime.now(UTC).isoformat(),
             )
         return None
 
@@ -97,17 +97,14 @@ DEFAULT_RULES: list[AlertRule] = [
         description="KB cache p95 is over 250ms. Tier-L2/DB hit rate may be high.",
         threshold=250.0,
     ),
-    AlertRule(
-        rule_id="pipeline_timeout_rate",
-        severity="critical",
-        title="Pipeline timeout rate > 5%",
-        description="Pipeline nodes are timing out at > 5%. Check tool timeouts and external-service latency.",
-        threshold=0.05,
-    ),
+    # Phase 2: the env-gen pipeline is gone, so the
+    # "pipeline_timeout_rate" rule (which read eden.pipeline.metrics) is
+    # removed. Per-agent failure-mode alerting replaces it (see the
+    # judge-scored-insights detector loop in eden.insights.detector_loop).
 ]
 
 
-def _percentile_from_histogram(rows: list[dict], pct: float) -> Optional[float]:
+def _percentile_from_histogram(rows: list[dict], pct: float) -> float | None:
     """Compute a percentile from the latency-histogram snapshot.
 
     The histogram is cumulative (Prometheus-style): ``buckets[b]``
@@ -177,20 +174,10 @@ def evaluate_alerts() -> list[Alert]:
     # in-memory version, we fall through silently if no events.
     # (Production: see §10.3 monitoring/alerting pipeline.)
 
-    # Rule 4: Pipeline timeout rate
-    try:
-        from eden.pipeline.metrics import get_pipeline_metrics_snapshot
-        snap = get_pipeline_metrics_snapshot()
-        for node, rate in snap.get("timeout_rates", {}).items():
-            for rule in DEFAULT_RULES:
-                if rule.rule_id == "pipeline_timeout_rate":
-                    a = rule.evaluate(rate)
-                    if a:
-                        a.labels["node"] = node
-                        fired.append(a)
-                    break
-    except Exception as exc:  # noqa: BLE001
-        logger.debug("evaluate_alerts: pipeline check failed: %s", exc)
+    # Phase 2: the env-gen pipeline is gone, so the
+    # "pipeline_timeout_rate" check (which read eden.pipeline.metrics)
+    # is removed. Per-agent failure-mode alerting replaces it — see
+    # eden.insights.detector_loop which uses JudgeScores.
 
     return fired
 

@@ -1,6 +1,6 @@
 """Tests for the shared normalizer."""
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime, timezone
 
 import pytest
 
@@ -36,7 +36,7 @@ def test_normalize_timestamp_epoch_ms():
 
 
 def test_normalize_timestamp_datetime():
-    dt = datetime(2024, 6, 1, 12, 0, 0, tzinfo=timezone.utc)
+    dt = datetime(2024, 6, 1, 12, 0, 0, tzinfo=UTC)
     assert _normalize_timestamp(dt) == "2024-06-01T12:00:00+00:00"
 
 

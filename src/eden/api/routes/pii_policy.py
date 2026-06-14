@@ -12,8 +12,7 @@ from __future__ import annotations
 
 import logging
 import uuid
-from datetime import datetime, timezone
-from typing import Any, Optional
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Path
 from pydantic import BaseModel, Field
@@ -32,7 +31,7 @@ class PIIPolicyIn(BaseModel):
     disabled_categories: list[str] = Field(default_factory=list)
     fail_closed_on_credentials: bool = False
     redact_keys_extra: list[str] = Field(default_factory=list)
-    notes: Optional[str] = None
+    notes: str | None = None
 
 
 class PIIPolicyOut(BaseModel):
@@ -43,9 +42,9 @@ class PIIPolicyOut(BaseModel):
     fail_closed_on_credentials: bool
     redact_keys_extra: list[str]
     effective_from: str
-    effective_until: Optional[str] = None
-    created_by: Optional[str] = None
-    notes: Optional[str] = None
+    effective_until: str | None = None
+    created_by: str | None = None
+    notes: str | None = None
 
 
 @router.get("", response_model=PIIPolicyOut)
@@ -83,7 +82,7 @@ async def get_pii_policy(
             disabled_categories=[],
             fail_closed_on_credentials=False,
             redact_keys_extra=[],
-            effective_from=datetime.now(timezone.utc).isoformat(),
+            effective_from=datetime.now(UTC).isoformat(),
             effective_until=None,
             created_by=None,
             notes="default policy",
@@ -120,7 +119,7 @@ async def put_pii_policy(
     if not client:
         raise HTTPException(status_code=503, detail="Database unavailable")
     new_id = str(uuid.uuid4())
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     try:
         await client.execute(
             """
@@ -151,7 +150,7 @@ async def put_pii_policy(
         )
     except Exception as exc:
         logger.warning(f"put_pii_policy failed: {exc}")
-        raise HTTPException(status_code=500, detail=str(exc))
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
 
     # Drop the in-process cache so the new policy takes effect
     # immediately on the next ingest event.

@@ -10,9 +10,9 @@ const badgeVariants = cva(
     variants: {
       variant: {
         // Status variants
-        default: "border-transparent bg-[var(--accent)] text-white",
+        default: "border-transparent bg-[var(--accent)] text-[var(--bg-primary)]",
         secondary: "border-transparent bg-[var(--accent-bg)] text-[var(--accent)]",
-        destructive: "border-transparent bg-[var(--error)] text-white",
+        destructive: "border-transparent bg-[var(--error)] text-[var(--bg-primary)]",
 
         // Status colors
         success: "border-transparent bg-[var(--success-bg)] text-[var(--success)]",
@@ -22,8 +22,8 @@ const badgeVariants = cva(
         // Outcome tier variants
         gold: "border-[var(--warning)]/30 bg-[var(--warning)]/10 text-[var(--warning)]",
         silver: "border-[var(--text-muted)]/30 bg-[var(--text-muted)]/10 text-[var(--text-secondary)]",
-        bronze: "border-orange-400/30 bg-orange-50 text-orange-600",
-        partial: "border-blue-400/30 bg-blue-50 text-blue-600",
+        bronze: "border-orange-400/30 bg-[var(--warning-bg)] text-[var(--warning)]",
+        partial: "border-blue-400/30 bg-[var(--accent-faint)] text-[var(--accent)]",
         failed: "border-[var(--error)]/30 bg-[var(--error)]/10 text-[var(--error)]",
 
         // Pipeline stage variants

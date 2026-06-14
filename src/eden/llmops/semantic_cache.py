@@ -8,11 +8,10 @@ string match. Uses a three-tier storage: L1 Redis (exact), L2 pgvector
 from __future__ import annotations
 
 import hashlib
-import json
 import time
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any, Callable, Optional, Protocol
+from typing import Any, Protocol, cast
 
 
 @dataclass
@@ -45,7 +44,7 @@ class SemanticCache:
     Redis + PostgreSQL/pgvector + S3.
     """
 
-    def __init__(self, *, embedder: Optional["Embedder"] = None) -> None:
+    def __init__(self, *, embedder: Embedder | None = None) -> None:
         """Construct a semantic cache.
 
         Args:
@@ -56,7 +55,7 @@ class SemanticCache:
                 ``SentenceTransformerEmbedder`` classes are
                 ready-to-use implementations.
         """
-        self._embedder: Optional[Embedder] = embedder
+        self._embedder: Embedder | None = embedder
         self._l1_exact: dict[str, tuple[str, float]] = {}  # hash -> (response, expires_at)
         self._l2_entries: list[CacheEntry] = []
         self._l3_archive: list[CacheEntry] = []
@@ -74,7 +73,7 @@ class SemanticCache:
     def _cosine_similarity(self, a: list[float], b: list[float]) -> float:
         if len(a) != len(b):
             return 0.0
-        dot = sum(x * y for x, y in zip(a, b))
+        dot = sum(x * y for x, y in zip(a, b, strict=False))
         norm_a = math.sqrt(sum(x * x for x in a))
         norm_b = math.sqrt(sum(x * x for x in b))
         if norm_a == 0 or norm_b == 0:
@@ -107,7 +106,7 @@ class SemanticCache:
         # available so dev environments without vector infra still work.
         best_match: CacheEntry | None = None
         best_score = 0.0
-        query_lower = query.lower().split()
+        query.lower().split()
 
         for entry in self._l2_entries:
             if entry.model_version != model_version:
@@ -120,7 +119,6 @@ class SemanticCache:
             # configured.
             if self._embedder is not None:
                 try:
-                    import asyncio
                     q_vec = self._embedder.embed(query)
                     e_vec = self._embedder.embed(entry.query_text)
                     score = _cosine_similarity(q_vec, e_vec)
@@ -257,7 +255,7 @@ class Embedder(Protocol):
 def _cosine_similarity(a: list[float], b: list[float]) -> float:
     if not a or not b or len(a) != len(b):
         return 0.0
-    dot = sum(x * y for x, y in zip(a, b))
+    dot = sum(x * y for x, y in zip(a, b, strict=False))
     norm_a = math.sqrt(sum(x * x for x in a))
     norm_b = math.sqrt(sum(x * x for x in b))
     if norm_a == 0 or norm_b == 0:
@@ -330,4 +328,4 @@ class SentenceTransformerEmbedder:
     def embed(self, text: str) -> list[float]:
         model = self._load()
         vec = model.encode(text, convert_to_numpy=True)
-        return vec.tolist()
+        return cast(list[float], vec.tolist())

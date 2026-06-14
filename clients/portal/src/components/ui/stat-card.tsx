@@ -1,140 +1,135 @@
 "use client";
 
-import * as React from "react";
-import Link from "next/link";
+import { ArrowUpRight, ArrowDownRight, type LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { Skeleton } from "./skeleton";
-import { ArrowUpRight, ArrowDownRight, Minus } from "lucide-react";
+import { Loader2 } from "lucide-react";
 
-export type StatCardAccent = "neutral" | "accent" | "warning" | "terminal" | "error" | "info";
+export type StatCardAccent = "neutral" | "accent" | "terminal" | "warning" | "error" | "info";
 
 export interface StatCardProps {
-  label: string;
+  /** KPI label (shown below the value as a smaller subtitle). */
+  title: string;
+  /** Headline value — string or number. */
   value: string | number;
+  /** Optional supporting line. */
   subtitle?: string;
-  icon: React.ComponentType<{ className?: string }>;
-  accent?: StatCardAccent;
-  trend?: "up" | "down" | "flat";
+  /** Optional trend indicator. */
+  trend?: "up" | "down" | "flat" | null;
+  /** Trend delta (e.g. "+12%"). */
   trendValue?: string;
-  isLoading?: boolean;
+  /** Which trend direction is "good" for this stat (controls color). */
+  trendIsGood?: "up" | "down";
+  /** Icon shown in the top-left chip. */
+  icon: LucideIcon;
+  /** Override the icon chip's color classes. */
+  iconClassName?: string;
+  /** Quick accent preset — alternative to `iconClassName`. */
+  accent?: StatCardAccent;
+  /** Render a loading spinner in place of the value. */
+  loading?: boolean;
+  /** Render an empty state placeholder. */
+  empty?: boolean;
+  /** Empty state copy. Defaults to "No data yet". */
+  emptyText?: string;
+  /** Wrap the card in a clickable link. */
   href?: string;
   className?: string;
 }
 
-const ACCENT_STYLES: Record<StatCardAccent, { chip: string; dot: string; trend: string }> = {
-  neutral: {
-    chip: "bg-[var(--bg-tertiary)] text-[var(--text-secondary)]",
-    dot: "bg-[var(--text-muted)]",
-    trend: "text-[var(--text-muted)]",
-  },
-  accent: {
-    chip: "bg-[var(--accent-faint)] text-[var(--accent)]",
-    dot: "bg-[var(--accent)]",
-    trend: "text-[var(--accent)]",
-  },
-  warning: {
-    chip: "bg-[var(--warning-bg)] text-[var(--warning)]",
-    dot: "bg-[var(--warning)]",
-    trend: "text-[var(--warning)]",
-  },
-  terminal: {
-    chip: "bg-[var(--terminal-faint)] text-[var(--terminal)]",
-    dot: "bg-[var(--terminal)]",
-    trend: "text-[var(--terminal)]",
-  },
-  error: {
-    chip: "bg-[var(--error-bg)] text-[var(--error)]",
-    dot: "bg-[var(--error)]",
-    trend: "text-[var(--error)]",
-  },
-  info: {
-    chip: "bg-[var(--accent-faint)] text-[var(--accent)]",
-    dot: "bg-[var(--accent)]",
-    trend: "text-[var(--accent)]",
-  },
+const ACCENT_CLASSES: Record<StatCardAccent, string> = {
+  neutral: "bg-[var(--bg-tertiary)] text-[var(--text-secondary)]",
+  accent:  "bg-[var(--accent-faint)] text-[var(--accent)]",
+  terminal:"bg-[var(--terminal-faint)] text-[var(--terminal)]",
+  warning: "bg-[var(--warning-bg)] text-[var(--warning)]",
+  error:   "bg-[var(--error-dim)] text-[var(--error)]",
+  info:    "bg-[var(--accent-faint)] text-[var(--accent)]",
 };
 
-const TREND_ICON = {
-  up: ArrowUpRight,
-  down: ArrowDownRight,
-  flat: Minus,
-};
+const DEFAULT_ICON_CLASS = "bg-[var(--accent-faint)] text-[var(--accent)]";
 
-function StatCardContent({
-  label,
+function resolveIconClass(iconClassName: string | undefined, accent: StatCardAccent | undefined): string {
+  if (iconClassName) return iconClassName;
+  if (accent && accent !== "neutral") return ACCENT_CLASSES[accent];
+  return DEFAULT_ICON_CLASS;
+}
+
+export function StatCard({
+  title,
   value,
   subtitle,
-  icon: Icon,
-  accent = "neutral",
   trend,
   trendValue,
-  isLoading,
-}: Omit<StatCardProps, "href" | "className">) {
-  const styles = ACCENT_STYLES[accent];
-  const TrendIcon = trend ? TREND_ICON[trend] : null;
-
-  return (
-    <div className="group relative">
-      <div
-        className={cn(
-          "absolute left-0 top-0 bottom-0 w-[3px] rounded-full transition-opacity",
-          styles.dot,
-          "opacity-0 group-hover:opacity-100",
-        )}
-        aria-hidden
-      />
-      <div className="pl-4">
-        <div className="flex items-center gap-2 mb-1.5">
-          <span className="text-xs font-medium text-[var(--text-muted)] uppercase tracking-wide">
-            {label}
-          </span>
-          <div className={cn("p-1 rounded", styles.chip)}>
-            <Icon className="w-3 h-3" />
+  trendIsGood = "up",
+  icon: Icon,
+  iconClassName,
+  accent = "neutral",
+  loading = false,
+  empty = false,
+  emptyText = "No data yet",
+  href,
+  className,
+}: StatCardProps) {
+  const inner = (
+    <div
+      className={cn(
+        "bg-[var(--bg-primary)] rounded-xl p-5 border border-[var(--border-default)] h-full",
+        "transition-all duration-200 ease-out hover:border-[var(--border-strong)] hover:shadow-md",
+        className,
+      )}
+    >
+      <div className="flex items-start justify-between mb-3">
+        <div className={cn("p-2.5 rounded-lg", resolveIconClass(iconClassName, accent))}>
+          <Icon className="w-5 h-5" aria-hidden />
+        </div>
+        {trend && trendValue && !loading && !empty && (
+          <div
+            className={cn(
+              "flex items-center gap-0.5 text-xs font-medium px-1.5 py-0.5 rounded font-mono",
+              trend === trendIsGood
+                ? "text-[var(--terminal)] bg-[var(--terminal-faint)]"
+                : "text-[var(--error)] bg-[var(--error-dim)]",
+            )}
+            aria-label={`${trend === "up" ? "Up" : "Down"} ${trendValue} ${trend === trendIsGood ? "(good)" : "(bad)"}`}
+          >
+            {trend === "up" ? (
+              <ArrowUpRight className="w-3 h-3" aria-hidden />
+            ) : (
+              <ArrowDownRight className="w-3 h-3" aria-hidden />
+            )}
+            {trendValue}
           </div>
-        </div>
-        <div className="flex items-baseline gap-2">
-          {isLoading ? (
-            <Skeleton className="h-8 w-16" />
+        )}
+      </div>
+      <div className="space-y-1">
+        <p className="text-3xl font-bold text-[var(--text-primary)] tracking-tight font-mono">
+          {loading ? (
+            <Loader2 className="w-6 h-6 animate-spin text-[var(--text-muted)]" aria-label="Loading" />
+          ) : empty ? (
+            <span className="text-[var(--text-muted)]">—</span>
           ) : (
-            <p className="text-3xl font-bold text-[var(--text-primary)] tracking-tight">
-              {value}
-            </p>
+            value
           )}
-          {trend && TrendIcon && !isLoading && (
-            <span className={cn("inline-flex items-center gap-0.5 text-xs font-medium", styles.trend)}>
-              <TrendIcon className="w-3 h-3" />
-              {trendValue}
-            </span>
-          )}
-        </div>
-        {subtitle && (
-          <p className="text-xs text-[var(--text-muted)] mt-0.5">{subtitle}</p>
+        </p>
+        <p className="text-sm font-medium text-[var(--text-secondary)]">{title}</p>
+        {subtitle && !empty && (
+          <p className="text-xs text-[var(--text-muted)] font-mono">{subtitle}</p>
+        )}
+        {empty && (
+          <p className="text-xs text-[var(--text-muted)]">{emptyText}</p>
         )}
       </div>
     </div>
   );
-}
-
-export function StatCard(props: StatCardProps) {
-  const { href, className, ...rest } = props;
 
   if (href) {
     return (
-      <Link
+      <a
         href={href}
-        className={cn(
-          "block rounded-xl p-2 -m-2 transition-colors hover:bg-[var(--bg-tertiary)]/40",
-          className,
-        )}
+        className="block transition-transform hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--border-glow)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-base)] rounded-xl"
       >
-        <StatCardContent {...rest} />
-      </Link>
+        {inner}
+      </a>
     );
   }
-
-  return (
-    <div className={className}>
-      <StatCardContent {...rest} />
-    </div>
-  );
+  return inner;
 }

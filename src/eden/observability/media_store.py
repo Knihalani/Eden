@@ -35,7 +35,7 @@ import logging
 import os
 import uuid
 from dataclasses import dataclass
-from typing import Any, Optional
+from typing import Any, cast
 
 from eden.config import get_settings
 
@@ -73,7 +73,7 @@ class MediaStore:
             self._s3_bucket = getattr(settings, "media_s3_bucket", "eden-media")
             try:
                 import boto3  # noqa: F401
-                self._s3_client = None  # lazy-init on first use
+                self._s3_client: Any = None  # lazy-init on first use
             except ImportError:
                 logger.warning(
                     "media_backend='s3' but boto3 not installed; "
@@ -104,7 +104,7 @@ class MediaStore:
         media_type: str,
         content_type: str,
         data: bytes,
-        metadata: Optional[dict[str, Any]] = None,
+        metadata: dict[str, Any] | None = None,
     ) -> MediaBlob:
         """Store bytes and return the blob metadata.
 
@@ -216,7 +216,7 @@ class MediaStore:
             None,
             lambda: self._s3_client.get_object(Bucket=bucket, Key=key),
         )
-        return response["Body"].read()
+        return cast(bytes, response["Body"].read())
 
 
 def _safe_tenant(tenant_id: str) -> str:
@@ -228,7 +228,7 @@ def _safe_tenant(tenant_id: str) -> str:
 
 # ── singleton ────────────────────────────────────────────────────────
 
-_store: Optional[MediaStore] = None
+_store: MediaStore | None = None
 
 
 def get_media_store() -> MediaStore:

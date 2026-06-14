@@ -2,13 +2,11 @@
 
 import ast
 import logging
-import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import Enum
-from typing import Optional
 
-from eden.llm.client import OpenRouterClient, LLMResponse, UsageStats
 from eden.config import get_settings
+from eden.llm.client import LLMResponse, OpenRouterClient
 
 logger = logging.getLogger(__name__)
 
@@ -55,12 +53,12 @@ class PipelineTask:
     output_type: str = "text"  # text | code | json
     requires_novelty: bool = False
     expected_min_length: int = 50
-    required_format: Optional[str] = None
+    required_format: str | None = None
     requires_quality_check: bool = True
-    system_prompt: Optional[str] = None
-    org_id: Optional[str] = None
-    job_id: Optional[str] = None
-    user_id: Optional[str] = None
+    system_prompt: str | None = None
+    org_id: str | None = None
+    job_id: str | None = None
+    user_id: str | None = None
 
 
 @dataclass
@@ -82,8 +80,8 @@ class ValidationResult:
 
     passed: bool
     reason: str = ""
-    quality_score: Optional[float] = None
-    tier_used: Optional[ModelTier] = None
+    quality_score: float | None = None
+    tier_used: ModelTier | None = None
 
 
 class TaskClassifier:
@@ -102,7 +100,7 @@ class TaskClassifier:
     # Code agents that may vary in complexity
     CODE_AGENTS: set[str] = {"executor", "refiner", "verifier", "tester", "code_quality"}
 
-    def __init__(self, llm_client: Optional[OpenRouterClient] = None):
+    def __init__(self, llm_client: OpenRouterClient | None = None) -> None:
         self.llm_client = llm_client
         self._heuristic_hits = 0
         self._llm_classifications = 0
@@ -126,7 +124,7 @@ class TaskClassifier:
         # ── LLM-based classification for ambiguous cases ──────────────────
         return await self._llm_classify(task)
 
-    def _heuristic_classify(self, task: PipelineTask) -> Optional[ModelTier]:
+    def _heuristic_classify(self, task: PipelineTask) -> ModelTier | None:
         """Fast heuristic classification without any LLM call."""
         agent = task.agent.lower()
         slot = task.slot.lower()
@@ -244,14 +242,14 @@ class QualityValidator:
     Checks: parseability (code), completeness, format compliance, semantic quality.
     """
 
-    def __init__(self, llm_client: Optional[OpenRouterClient] = None):
+    def __init__(self, llm_client: OpenRouterClient | None = None) -> None:
         self.llm_client = llm_client
 
     def validate_sync(
         self,
         response: LLMResponse,
         task: PipelineTask,
-        tier: Optional[ModelTier] = None,
+        tier: ModelTier | None = None,
     ) -> ValidationResult:
         """Synchronous validation (no LLM judge). Used by sync ``route()``."""
         content = response.content
@@ -288,7 +286,7 @@ class QualityValidator:
         self,
         response: LLMResponse,
         task: PipelineTask,
-        tier: Optional[ModelTier] = None,
+        tier: ModelTier | None = None,
     ) -> ValidationResult:
         """Async validation with full quality check (may call LLM judge)."""
         content = response.content
@@ -362,7 +360,7 @@ class QualityValidator:
             return "#" in content or "```" in content
         return True
 
-    async def _judge_quality(self, content: str, task: PipelineTask) -> Optional[float]:
+    async def _judge_quality(self, content: str, task: PipelineTask) -> float | None:
         """Use a lightweight LLM to score output quality."""
         if self.llm_client is None:
             return None
@@ -395,10 +393,10 @@ class ModelRouter:
 
     def __init__(
         self,
-        llm_client: Optional[OpenRouterClient] = None,
-        classifier: Optional[TaskClassifier] = None,
-        validator: Optional[QualityValidator] = None,
-    ):
+        llm_client: OpenRouterClient | None = None,
+        classifier: TaskClassifier | None = None,
+        validator: QualityValidator | None = None,
+    ) -> None:
         self.settings = get_settings()
         self.llm_client = llm_client or OpenRouterClient()
         self.classifier = classifier or TaskClassifier(llm_client=self.llm_client)
@@ -419,7 +417,7 @@ class ModelRouter:
         self,
         task: PipelineTask,
         prompt: str,
-        system_prompt: Optional[str] = None,
+        system_prompt: str | None = None,
         **kwargs,
     ) -> LLMResponse:
         """Route an LLM request through the tiered fallback chain (synchronous).
@@ -434,13 +432,11 @@ class ModelRouter:
         """
         # Use heuristic classification in sync path to avoid blocking
         classification = self.classifier._heuristic_classify(task)
-        if classification is None:
-            start_tier = ModelTier.T2  # Default for sync path
-        else:
-            start_tier = classification
+        # Default to T2 when the heuristic can't classify (sync path can't await).
+        start_tier = ModelTier.T2 if classification is None else classification
 
         tiers_to_try = self._get_fallback_chain(start_tier)
-        last_error: Optional[str] = None
+        last_error: str | None = None
 
         for tier in tiers_to_try:
             self._calls_by_tier[tier] += 1
@@ -494,9 +490,9 @@ class ModelRouter:
         self,
         task: PipelineTask,
         prompt: str,
-        system_prompt: Optional[str] = None,
-        org_id: Optional[str] = None,
-        user_id: Optional[str] = None,
+        system_prompt: str | None = None,
+        org_id: str | None = None,
+        user_id: str | None = None,
         **kwargs,
     ) -> LLMResponse:
         """Async route with full classification and validation.
@@ -509,7 +505,7 @@ class ModelRouter:
         classification = await self.classifier.classify(task)
         start_tier = classification.tier
         tiers_to_try = self._get_fallback_chain(start_tier)
-        last_error: Optional[str] = None
+        last_error: str | None = None
 
         for tier in tiers_to_try:
             self._calls_by_tier[tier] += 1
@@ -518,9 +514,10 @@ class ModelRouter:
             for model in models:
                 try:
                     loop = asyncio.get_event_loop()
+                    # Capture model by default-arg to avoid late-binding in lambda.
                     response = await loop.run_in_executor(
                         None,
-                        lambda: self.llm_client.call(
+                        lambda model=model: self.llm_client.call(
                             agent=task.agent,
                             prompt=prompt,
                             slot="reasoning",

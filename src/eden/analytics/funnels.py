@@ -34,7 +34,7 @@ async def _funnel_clickhouse(org_id: str, steps: list[str], *, window_days: int)
         engine = get_engine()
     except Exception:
         return None
-    step_placeholders = ", ".join(f"%(step_{i})s AS step_{i}" for i in range(len(steps)))
+    ", ".join(f"%(step_{i})s AS step_{i}" for i in range(len(steps)))
     sql = f"""
         WITH events AS (
             SELECT user_id, event_name

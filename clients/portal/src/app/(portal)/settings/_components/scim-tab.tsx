@@ -113,8 +113,8 @@ export function ScimTab({ org }: { org: any }) {
 
   if (!canManageScim) {
     return (
-      <div className="p-6 bg-red-50 rounded-lg border border-red-200">
-        <p className="text-sm text-red-700">
+      <div className="p-6 bg-[var(--error-dim)] rounded-lg border border-[var(--error)]">
+        <p className="text-sm text-[var(--error)]">
           You do not have permission to manage SCIM settings. Contact your organization admin.
         </p>
       </div>
@@ -124,8 +124,8 @@ export function ScimTab({ org }: { org: any }) {
   if (loading) {
     return (
       <div className="flex items-center justify-center py-12">
-        <Loader2 className="w-6 h-6 animate-spin text-blue-600" />
-        <span className="ml-2 text-gray-500">Loading SCIM configuration...</span>
+        <Loader2 className="w-6 h-6 animate-spin text-[var(--accent)]" />
+        <span className="ml-2 text-[var(--text-muted)]">Loading SCIM configuration...</span>
       </div>
     );
   }
@@ -134,12 +134,12 @@ export function ScimTab({ org }: { org: any }) {
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center gap-3">
-        <div className="p-2 bg-blue-100 rounded-lg">
-          <Key className="w-5 h-5 text-blue-600" />
+        <div className="p-2 bg-[var(--accent-faint)] rounded-lg">
+          <Key className="w-5 h-5 text-[var(--accent)]" />
         </div>
         <div>
           <h2 className="text-lg font-semibold">SCIM Provisioning</h2>
-          <p className="text-sm text-gray-500">
+          <p className="text-sm text-[var(--text-muted)]">
             Automated user provisioning via your Identity Provider
           </p>
         </div>
@@ -147,29 +147,29 @@ export function ScimTab({ org }: { org: any }) {
 
       {/* Error */}
       {error && (
-        <div className="p-4 bg-red-50 rounded-lg border border-red-200">
-          <p className="text-sm text-red-700">{error}</p>
+        <div className="p-4 bg-[var(--error-dim)] rounded-lg border border-[var(--error)]">
+          <p className="text-sm text-[var(--error)]">{error}</p>
         </div>
       )}
 
       {/* New Token Display */}
       {newToken && (
-        <div className="p-4 bg-green-50 border border-green-200 rounded-lg">
+        <div className="p-4 bg-[var(--terminal-faint)] border border-[var(--terminal)] rounded-lg">
           <div className="flex items-start gap-3">
-            <AlertTriangle className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
+            <AlertTriangle className="w-5 h-5 text-[var(--terminal)] flex-shrink-0 mt-0.5" />
             <div className="flex-1">
-              <p className="text-sm font-medium text-green-800">SCIM Token Created</p>
-              <p className="text-xs text-green-600 mt-1 mb-3">
+              <p className="text-sm font-medium text-[var(--terminal)]">SCIM Token Created</p>
+              <p className="text-xs text-[var(--terminal)] mt-1 mb-3">
                 Copy this token now. You will not be able to see it again.
               </p>
-              <div className="flex items-center gap-2 p-2 bg-white border border-green-200 rounded">
+              <div className="flex items-center gap-2 p-2 bg-[var(--bg-primary)] border border-[var(--terminal)] rounded">
                 <code className="flex-1 text-sm font-mono break-all">{newToken}</code>
                 <button
                   onClick={() => copyToClipboard(newToken)}
-                  className="p-1.5 hover:bg-green-100 rounded"
+                  className="p-1.5 hover:bg-[var(--terminal-faint)] rounded"
                   title="Copy to clipboard"
                 >
-                  {copied ? <Check className="w-4 h-4 text-green-600" /> : <Copy className="w-4 h-4" />}
+                  {copied ? <Check className="w-4 h-4 text-[var(--terminal)]" /> : <Copy className="w-4 h-4" />}
                 </button>
               </div>
             </div>
@@ -178,21 +178,21 @@ export function ScimTab({ org }: { org: any }) {
       )}
 
       {/* SCIM Status Card */}
-      <div className="p-4 bg-white rounded-lg border border-gray-200">
+      <div className="p-4 bg-[var(--bg-primary)] rounded-lg border border-[var(--border-default)]">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className={cn(
               "p-2 rounded-lg",
-              config?.scim_enabled ? "bg-green-100" : "bg-gray-100"
+              config?.scim_enabled ? "bg-[var(--terminal-faint)]" : "bg-[var(--bg-tertiary)]"
             )}>
               <Shield className={cn(
                 "w-5 h-5",
-                config?.scim_enabled ? "text-green-600" : "text-gray-500"
+                config?.scim_enabled ? "text-[var(--terminal)]" : "text-[var(--text-muted)]"
               )} />
             </div>
             <div>
               <p className="font-medium">SCIM Provisioning</p>
-              <p className="text-sm text-gray-500">
+              <p className="text-sm text-[var(--text-muted)]">
                 {config?.scim_enabled ? "Enabled - users can be provisioned via SCIM" : "Disabled"}
               </p>
             </div>
@@ -202,12 +202,12 @@ export function ScimTab({ org }: { org: any }) {
             disabled={saving}
             className={cn(
               "relative w-12 h-6 rounded-full transition-colors",
-              config?.scim_enabled ? "bg-blue-600" : "bg-gray-300"
+              config?.scim_enabled ? "bg-[var(--accent)]" : "bg-[var(--border-default)]"
             )}
           >
             <span
               className={cn(
-                "absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full transition-transform",
+                "absolute top-0.5 left-0.5 w-5 h-5 bg-[var(--bg-primary)] rounded-full transition-transform",
                 config?.scim_enabled && "translate-x-6"
               )}
             />
@@ -220,33 +220,33 @@ export function ScimTab({ org }: { org: any }) {
         <>
           {/* Sync Stats */}
           <div className="grid grid-cols-2 gap-4">
-            <div className="p-4 bg-white rounded-lg border border-gray-200">
+            <div className="p-4 bg-[var(--bg-primary)] rounded-lg border border-[var(--border-default)]">
               <div className="flex items-center gap-2 mb-2">
-                <Users className="w-4 h-4 text-gray-500" />
-                <span className="text-sm text-gray-500">Provisioned Users</span>
+                <Users className="w-4 h-4 text-[var(--text-muted)]" />
+                <span className="text-sm text-[var(--text-muted)]">Provisioned Users</span>
               </div>
               <p className="text-2xl font-semibold">{config.provisioned_user_count}</p>
             </div>
-            <div className="p-4 bg-white rounded-lg border border-gray-200">
+            <div className="p-4 bg-[var(--bg-primary)] rounded-lg border border-[var(--border-default)]">
               <div className="flex items-center gap-2 mb-2">
-                <RefreshCw className="w-4 h-4 text-gray-500" />
-                <span className="text-sm text-gray-500">Last Sync</span>
+                <RefreshCw className="w-4 h-4 text-[var(--text-muted)]" />
+                <span className="text-sm text-[var(--text-muted)]">Last Sync</span>
               </div>
               <p className="text-lg font-semibold">{formatLastSync(config.last_sync_at)}</p>
             </div>
           </div>
 
           {/* Token Actions */}
-          <div className="p-4 bg-white rounded-lg border border-gray-200">
+          <div className="p-4 bg-[var(--bg-primary)] rounded-lg border border-[var(--border-default)]">
             <h3 className="font-medium mb-3">Bearer Token</h3>
-            <p className="text-sm text-gray-500 mb-4">
+            <p className="text-sm text-[var(--text-muted)] mb-4">
               Use this token to authenticate SCIM requests from your Identity Provider.
-              The endpoint base is: <code className="bg-gray-100 px-1 rounded">/orgs/{currentOrg?.id}/scim/v2</code>
+              The endpoint base is: <code className="bg-[var(--bg-tertiary)] px-1 rounded">/orgs/{currentOrg?.id}/scim/v2</code>
             </p>
             <button
               onClick={handleRotateToken}
               disabled={saving}
-              className="px-4 py-2 bg-yellow-100 text-yellow-700 rounded-lg text-sm font-medium hover:bg-yellow-200 transition-colors disabled:opacity-50 flex items-center gap-2"
+              className="px-4 py-2 bg-[var(--warning-bg)] text-[var(--warning)] rounded-lg text-sm font-medium hover:bg-[var(--warning-bg)] transition-colors disabled:opacity-50 flex items-center gap-2"
             >
               <RefreshCw className="w-4 h-4" />
               Rotate Token
@@ -254,33 +254,33 @@ export function ScimTab({ org }: { org: any }) {
           </div>
 
           {/* SCIM Endpoint Info */}
-          <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
-            <h3 className="text-sm font-medium text-blue-800 mb-2">SCIM 2.0 Endpoints</h3>
+          <div className="p-4 bg-[var(--accent-faint)] rounded-lg border border-[var(--accent)]">
+            <h3 className="text-sm font-medium text-[var(--accent)] mb-2">SCIM 2.0 Endpoints</h3>
             <div className="space-y-2 text-sm">
               <div className="flex items-center gap-2">
-                <code className="bg-blue-100 px-2 py-0.5 rounded text-xs">GET</code>
-                <code className="text-blue-700">/orgs/{currentOrg?.id}/scim/v2/Users</code>
-                <span className="text-blue-600">- List users</span>
+                <code className="bg-[var(--accent-faint)] px-2 py-0.5 rounded text-xs">GET</code>
+                <code className="text-[var(--accent)]">/orgs/{currentOrg?.id}/scim/v2/Users</code>
+                <span className="text-[var(--accent)]">- List users</span>
               </div>
               <div className="flex items-center gap-2">
-                <code className="bg-blue-100 px-2 py-0.5 rounded text-xs">POST</code>
-                <code className="text-blue-700">/orgs/{currentOrg?.id}/scim/v2/Users</code>
-                <span className="text-blue-600">- Create user</span>
+                <code className="bg-[var(--accent-faint)] px-2 py-0.5 rounded text-xs">POST</code>
+                <code className="text-[var(--accent)]">/orgs/{currentOrg?.id}/scim/v2/Users</code>
+                <span className="text-[var(--accent)]">- Create user</span>
               </div>
               <div className="flex items-center gap-2">
-                <code className="bg-blue-100 px-2 py-0.5 rounded text-xs">GET</code>
-                <code className="text-blue-700">/orgs/{currentOrg?.id}/scim/v2/Users/{"{{id}}"}</code>
-                <span className="text-blue-600">- Get user</span>
+                <code className="bg-[var(--accent-faint)] px-2 py-0.5 rounded text-xs">GET</code>
+                <code className="text-[var(--accent)]">/orgs/{currentOrg?.id}/scim/v2/Users/{"{{id}}"}</code>
+                <span className="text-[var(--accent)]">- Get user</span>
               </div>
               <div className="flex items-center gap-2">
-                <code className="bg-blue-100 px-2 py-0.5 rounded text-xs">PUT</code>
-                <code className="text-blue-700">/orgs/{currentOrg?.id}/scim/v2/Users/{"{{id}}"}</code>
-                <span className="text-blue-600">- Update user</span>
+                <code className="bg-[var(--accent-faint)] px-2 py-0.5 rounded text-xs">PUT</code>
+                <code className="text-[var(--accent)]">/orgs/{currentOrg?.id}/scim/v2/Users/{"{{id}}"}</code>
+                <span className="text-[var(--accent)]">- Update user</span>
               </div>
               <div className="flex items-center gap-2">
-                <code className="bg-blue-100 px-2 py-0.5 rounded text-xs">DELETE</code>
-                <code className="text-blue-700">/orgs/{currentOrg?.id}/scim/v2/Users/{"{{id}}"}</code>
-                <span className="text-blue-600">- De-provision user</span>
+                <code className="bg-[var(--accent-faint)] px-2 py-0.5 rounded text-xs">DELETE</code>
+                <code className="text-[var(--accent)]">/orgs/{currentOrg?.id}/scim/v2/Users/{"{{id}}"}</code>
+                <span className="text-[var(--accent)]">- De-provision user</span>
               </div>
             </div>
           </div>
@@ -288,8 +288,8 @@ export function ScimTab({ org }: { org: any }) {
       )}
 
       {/* Info Box */}
-      <div className="p-4 bg-gray-50 rounded-lg border border-gray-200">
-        <p className="text-sm text-gray-700">
+      <div className="p-4 bg-[var(--bg-secondary)] rounded-lg border border-[var(--border-default)]">
+        <p className="text-sm text-[var(--text-secondary)]">
           <strong>How it works:</strong> SCIM 2.0 allows your Identity Provider (Okta, Azure AD, etc.)
           to automatically provision and de-provision user accounts. When a user is de-provisioned
           via SCIM, their organization membership is suspended (not deleted) to preserve data.

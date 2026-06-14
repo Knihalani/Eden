@@ -5,10 +5,10 @@ Covers: circuit breaker, retry logic, usage tracking, model fallback,
 """
 
 import time
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from openai import RateLimitError, APIError, APITimeoutError
+from openai import APIError, APITimeoutError, RateLimitError
 
 from eden.llm.client import (
     CircuitBreaker,
@@ -19,7 +19,6 @@ from eden.llm.client import (
     OpenRouterClient,
     UsageStats,
 )
-
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Circuit Breaker
@@ -106,16 +105,45 @@ class TestCircuitBreaker:
 class TestOpenRouterClientRetry:
     @pytest.fixture
     def client(self):
-        """Return a client instance with mocked OpenAI client."""
-        with patch("eden.llm.client.OpenAI") as mock_openai:
-            mock_openai_instance = MagicMock()
-            mock_openai.return_value = mock_openai_instance
+        """Return a client instance with mocked OpenAI + AsyncOpenAI clients.
+
+        ``_openai_mock`` and ``async_client`` are SEPARATE MagicMock
+        objects because the sync ``call`` path needs a regular
+        ``.create`` (returns the response) while the async
+        ``acall`` path needs an ``AsyncMock.create`` (awaitable).
+        Use :func:`set_response` in each test to set the same
+        behaviour on both mocks in one line.
+        """
+        with patch("eden.llm.client.OpenAI") as mock_openai, \
+             patch("eden.llm.client.AsyncOpenAI") as mock_async_openai:
+            mock_sync = MagicMock()
+            mock_async = MagicMock()
+            mock_async.chat.completions.create = AsyncMock()
+            mock_openai.return_value = mock_sync
+            mock_async_openai.return_value = mock_async
             client = OpenRouterClient(
                 api_key="test-key",
                 base_url="https://test.example.com",
                 max_retries=3,
             )
-            client._openai_mock = mock_openai_instance
+            client._openai_mock = mock_sync
+            client._openai_async_mock = mock_async
+
+            def set_response(*, return_value=None, side_effect=None):
+                """Set the same response on sync + async mock.
+
+                Both paths read from their respective ``.create``
+                attribute — this helper keeps them in lockstep so
+                tests don't have to repeat the assignment twice.
+                """
+                if return_value is not None:
+                    mock_sync.chat.completions.create.return_value = return_value
+                    mock_async.chat.completions.create.return_value = return_value
+                if side_effect is not None:
+                    mock_sync.chat.completions.create.side_effect = side_effect
+                    mock_async.chat.completions.create.side_effect = side_effect
+
+            client.set_response = set_response
             return client
 
     @pytest.mark.asyncio
@@ -126,7 +154,10 @@ class TestOpenRouterClientRetry:
         mock_response.usage = MagicMock(
             prompt_tokens=5, completion_tokens=3, total_tokens=8
         )
-        client._openai_mock.chat.completions.create.return_value = mock_response
+        # The async path reads from a separate ``AsyncOpenAI``
+        # instance — drive both mocks via the ``set_response``
+        # helper.
+        client.set_response(return_value=mock_response)
 
         resp = await client.acall(agent="test", prompt="Say hello", slot="reasoning")
         assert isinstance(resp, LLMResponse)
@@ -136,17 +167,19 @@ class TestOpenRouterClientRetry:
     @pytest.mark.asyncio
     async def test_acall_timeout_retry(self, client):
         """APITimeoutError triggers retry on async calls."""
-        client._openai_mock.chat.completions.create.side_effect = [
+        client.set_response(side_effect=[
             APITimeoutError("timeout"),
             MagicMock(
                 choices=[MagicMock(message=MagicMock(content="Recovered"))],
                 usage=MagicMock(prompt_tokens=1, completion_tokens=1, total_tokens=2),
             ),
-        ]
+        ])
 
         resp = await client.acall(agent="test", prompt="test", slot="reasoning")
         assert resp.content == "Recovered"
-        assert client._openai_mock.chat.completions.create.call_count == 2
+        # ``acall`` goes through ``async_client`` — the async mock
+        # is the one that saw the retry.
+        assert client._openai_async_mock.chat.completions.create.call_count == 2
 
     def test_successful_call(self, client):
         """A successful call returns an LLMResponse."""

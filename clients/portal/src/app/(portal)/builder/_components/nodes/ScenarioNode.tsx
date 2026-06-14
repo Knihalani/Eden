@@ -24,7 +24,7 @@ export function ScenarioNode({ data, selected }: NodeProps) {
       outputs={[{ id: "out:scenario", position: Position.Right }]}
     >
       <div className="font-mono text-[11px]">{d.id}</div>
-      <div className="text-[10px] text-zinc-500">
+      <div className="text-[10px] text-[var(--text-muted)]">
         {d.envClassName} · {d.maxEpisodes} ep
       </div>
     </NodeShell>

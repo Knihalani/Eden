@@ -4,14 +4,15 @@ Provides caching, session storage, and distributed rate-limiting backend.
 Uses redis-py with asyncio support.
 """
 
+import contextlib
 import functools
 import hashlib
 import json
 import logging
 import pickle
 import time
-from typing import Any, Callable, Optional, TypeVar, cast
-from datetime import timedelta
+from collections.abc import Callable
+from typing import Any, TypeVar, cast
 
 import redis.asyncio as redis
 from redis.asyncio import Redis
@@ -27,10 +28,10 @@ T = TypeVar("T")
 # Client
 # ============================================================================
 
-_redis_client: Optional[Redis] = None
+_redis_client: Redis | None = None
 
 
-async def get_redis_client() -> Optional[Redis]:
+async def get_redis_client() -> Redis | None:
     """Get the singleton Redis client.
 
     Returns None if REDIS_URL is not configured.
@@ -106,7 +107,7 @@ class Cache:
         self,
         key: str,
         value: Any,
-        ttl: Optional[int] = None,
+        ttl: int | None = None,
         nx: bool = False,
     ) -> bool:
         """Store a value (JSON-encoded) with optional TTL.
@@ -138,7 +139,7 @@ class Cache:
         if client is None:
             return False
         result = await client.delete(self._key(key))
-        return result > 0
+        return cast(bool, result > 0)
 
     async def exists(self, key: str) -> bool:
         """Check if a key exists."""
@@ -153,14 +154,14 @@ class Cache:
         client = await get_redis_client()
         if client is None:
             return 0
-        return await client.incrby(self._key(key), amount)
+        return cast(int, await client.incrby(self._key(key), amount))
 
     async def expire(self, key: str, ttl: int) -> bool:
         """Set TTL on an existing key."""
         client = await get_redis_client()
         if client is None:
             return False
-        return await client.expire(self._key(key), ttl)
+        return cast(bool, await client.expire(self._key(key), ttl))
 
 
 # Global cache instance
@@ -173,7 +174,7 @@ cache = Cache(prefix="eden:cache", default_ttl=300)
 
 def cached(
     ttl: int = 300,
-    key_func: Optional[Callable[..., str]] = None,
+    key_func: Callable[..., str] | None = None,
     prefix: str = "func",
 ) -> Callable[[Callable[..., T]], Callable[..., T]]:
     """Decorator to cache async function results in Redis.
@@ -213,14 +214,12 @@ def cached(
             result = await func(*args, **kwargs)
 
             if client is not None:
-                try:
+                with contextlib.suppress(Exception):  # cache write is best-effort
                     await client.set(
                         cache_key,
                         json.dumps(result) if not isinstance(result, (str, bytes)) else result,
                         ex=ttl,
                     )
-                except Exception:
-                    pass  # Cache write is best-effort
 
             return result
 
@@ -247,7 +246,7 @@ class SessionStore:
     def _key(self, session_id: str) -> str:
         return f"{self.prefix}:{session_id}"
 
-    async def create(self, session_id: str, data: dict, ttl: Optional[int] = None) -> bool:
+    async def create(self, session_id: str, data: dict, ttl: int | None = None) -> bool:
         """Create a new session."""
         client = await get_redis_client()
         if client is None:
@@ -259,7 +258,7 @@ class SessionStore:
             nx=True,
         ) is not None
 
-    async def get(self, session_id: str) -> Optional[dict]:
+    async def get(self, session_id: str) -> dict | None:
         """Retrieve session data."""
         client = await get_redis_client()
         if client is None:
@@ -268,11 +267,11 @@ class SessionStore:
         if raw is None:
             return None
         try:
-            return json.loads(raw)
+            return cast(dict[Any, Any] | None, json.loads(raw))
         except json.JSONDecodeError:
             return None
 
-    async def update(self, session_id: str, data: dict, ttl: Optional[int] = None) -> bool:
+    async def update(self, session_id: str, data: dict, ttl: int | None = None) -> bool:
         """Overwrite session data."""
         client = await get_redis_client()
         if client is None:
@@ -289,14 +288,14 @@ class SessionStore:
         if client is None:
             return False
         result = await client.delete(self._key(session_id))
-        return result > 0
+        return cast(bool, result > 0)
 
     async def extend(self, session_id: str, ttl: int) -> bool:
         """Extend session TTL."""
         client = await get_redis_client()
         if client is None:
             return False
-        return await client.expire(self._key(session_id), ttl)
+        return cast(bool, await client.expire(self._key(session_id), ttl))
 
 
 session_store = SessionStore(prefix="eden:session", default_ttl=3600)
@@ -375,10 +374,10 @@ class RedisRateLimiter:
             lua_script,
             1,
             redis_key,
-            now,
-            window_start,
-            self.max_requests,
-            self.window_seconds,
+            str(now),
+            str(window_start),
+            str(self.max_requests),
+            str(self.window_seconds),
         )
 
         # result is a list: [new_count, retry_after]
@@ -392,7 +391,7 @@ class RedisRateLimiter:
         if client is None:
             return False
         result = await client.delete(self._key(key))
-        return result > 0
+        return cast(bool, result > 0)
 
     async def get_remaining(self, key: str) -> int:
         """Get the number of remaining requests for a key."""
@@ -406,7 +405,7 @@ class RedisRateLimiter:
 
         await client.zremrangebyscore(redis_key, 0, window_start)
         count = await client.zcard(redis_key)
-        return max(0, self.max_requests - count)
+        return cast(int, max(0, self.max_requests - count))
 
 
 # ============================================================================
@@ -430,9 +429,9 @@ class Lock:
         self.ttl = ttl
         self.prefix = prefix
         self._key = f"{prefix}:{name}"
-        self._token: Optional[str] = None
+        self._token: str | None = None
 
-    async def acquire(self, token: Optional[str] = None) -> bool:
+    async def acquire(self, token: str | None = None) -> bool:
         """Try to acquire the lock.
 
         Args:

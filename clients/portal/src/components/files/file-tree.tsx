@@ -71,18 +71,18 @@ export function FileTree({ files, selectedFileId, onFileSelect, level = 0 }: Fil
                 onClick={() => toggleFolder(file.id)}
                 className={cn(
                   "w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-left transition-colors",
-                  "hover:bg-gray-50 text-gray-700"
+                  "hover:bg-[var(--bg-secondary)] text-[var(--text-secondary)]"
                 )}
               >
                 {expandedFolders.has(file.id) ? (
-                  <ChevronDown className="w-3.5 h-3.5 text-gray-400" />
+                  <ChevronDown className="w-3.5 h-3.5 text-[var(--text-muted)]" />
                 ) : (
-                  <ChevronRight className="w-3.5 h-3.5 text-gray-400" />
+                  <ChevronRight className="w-3.5 h-3.5 text-[var(--text-muted)]" />
                 )}
                 {expandedFolders.has(file.id) ? (
-                  <FolderOpen className="w-4 h-4 text-blue-500" />
+                  <FolderOpen className="w-4 h-4 text-[var(--accent)]" />
                 ) : (
-                  <Folder className="w-4 h-4 text-blue-500" />
+                  <Folder className="w-4 h-4 text-[var(--accent)]" />
                 )}
                 <span className="text-sm font-medium">{file.name}</span>
               </button>
@@ -101,13 +101,13 @@ export function FileTree({ files, selectedFileId, onFileSelect, level = 0 }: Fil
               className={cn(
                 "w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-left transition-colors",
                 selectedFileId === file.id
-                  ? "bg-blue-50 text-blue-700"
-                  : "hover:bg-gray-50 text-gray-600"
+                  ? "bg-[var(--accent-faint)] text-[var(--accent)]"
+                  : "hover:bg-[var(--bg-secondary)] text-[var(--text-secondary)]"
               )}
             >
               {(() => {
                 const Icon = getFileIcon(file.name);
-                return <Icon className="w-4 h-4 text-gray-400" />;
+                return <Icon className="w-4 h-4 text-[var(--text-muted)]" />;
               })()}
               <span className="text-sm">{file.name}</span>
             </button>

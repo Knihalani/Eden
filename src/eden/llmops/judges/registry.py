@@ -8,10 +8,8 @@ asks ``for_event(event)`` for the judges that apply to one event.
 
 from __future__ import annotations
 
-from __future__ import annotations
-
 import logging
-from typing import TYPE_CHECKING, Iterable, Optional
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from eden.observability.telemetry_collector import TelemetryEvent
@@ -25,9 +23,9 @@ class JudgeRegistry:
     """Process-wide registry of Judge instances."""
 
     def __init__(self) -> None:
-        self._judges: dict[str, "Judge"] = {}
+        self._judges: dict[str, Judge] = {}
 
-    def register(self, judge: "Judge") -> None:
+    def register(self, judge: Judge) -> None:
         """Register (or overwrite) a judge by its ``name``.
 
         Idempotent — re-registering the same name replaces the
@@ -41,16 +39,16 @@ class JudgeRegistry:
     def unregister(self, name: str) -> None:
         self._judges.pop(name, None)
 
-    def get(self, name: str) -> Optional["Judge"]:
+    def get(self, name: str) -> Judge | None:
         return self._judges.get(name)
 
     def list(self) -> list[str]:
         return sorted(self._judges.keys())
 
-    def all(self) -> list["Judge"]:
+    def all(self) -> list[Judge]:
         return list(self._judges.values())
 
-    def for_event(self, event: "TelemetryEvent") -> list["Judge"]:
+    def for_event(self, event: TelemetryEvent) -> list[Judge]:
         """Return every registered judge whose ``matches(event)`` is True.
 
         The runner calls this per event to decide which judges to

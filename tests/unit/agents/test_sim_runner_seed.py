@@ -113,7 +113,7 @@ class SeedEnvHelperTests(unittest.TestCase):
         self.assertEqual(env["EDEN_SEED"], "42")
 
     def test_int_seed_preserves_other_env_vars(self):
-        with tempfile.TemporaryDirectory() as tmp:
+        with tempfile.TemporaryDirectory():
             os.environ["FOO_BAR_BAZ"] = "present"
             try:
                 env = _seed_env({"seed": 7})

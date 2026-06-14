@@ -5,17 +5,15 @@ and comparative analysis (environment vs production disparity).
 """
 
 import logging
-from typing import Any, Optional
+from typing import Any
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 
-from eden.api.deps import get_current_org_member, OrgMember
+from eden.api.deps import OrgMember, get_current_org_member
 from eden.insights import (
-    InsightsService,
     DetectorRegistry,
-    DatasetGenerationEngine,
-    ComparativeAnalysisEngine,
+    InsightsService,
 )
 
 logger = logging.getLogger(__name__)
@@ -48,9 +46,9 @@ def _get_detector_registry() -> DetectorRegistry:
 class TraceIngestRequest(BaseModel):
     realm: str = Field(..., description="environment | production | comparative")
     raw_trace: dict[str, Any] = Field(..., description="Raw trace data from the source")
-    env_trace_id: Optional[str] = Field(None, description="For comparative realm: environment trace ID")
-    prod_trace_id: Optional[str] = Field(None, description="For comparative realm: production trace ID")
-    metrics: Optional[dict[str, Any]] = Field(None, description="For comparative realm: disparity metrics")
+    env_trace_id: str | None = Field(None, description="For comparative realm: environment trace ID")
+    prod_trace_id: str | None = Field(None, description="For comparative realm: production trace ID")
+    metrics: dict[str, Any] | None = Field(None, description="For comparative realm: disparity metrics")
 
 
 class InsightResponse(BaseModel):
@@ -62,7 +60,7 @@ class InsightResponse(BaseModel):
     affected_trace_ids: list[str]
     pattern: dict[str, Any]
     recommended_action: str
-    auto_created_dataset: Optional[str]
+    auto_created_dataset: str | None
     metadata: dict[str, Any]
 
 
@@ -134,8 +132,8 @@ class DetectorsResponse(BaseModel):
 
 
 class RunDetectorsRequest(BaseModel):
-    detector_names: Optional[list[str]] = Field(None, description="Specific detectors to run; null = all")
-    realm: Optional[str] = Field(None, description="Filter traces by realm")
+    detector_names: list[str] | None = Field(None, description="Specific detectors to run; null = all")
+    realm: str | None = Field(None, description="Filter traces by realm")
 
 
 class CompareRequest(BaseModel):
@@ -149,7 +147,7 @@ class BatchCompareRequest(BaseModel):
 
 class ExportDatasetRequest(BaseModel):
     format_type: str = Field("jsonl", description="jsonl | json | csv | openai-eval")
-    split_ratio: Optional[tuple[float, float]] = Field(None, description="Train/test split ratio")
+    split_ratio: tuple[float, float] | None = Field(None, description="Train/test split ratio")
 
 
 # ============================================================================
@@ -179,7 +177,7 @@ async def ingest_trace(
             raise HTTPException(status_code=400, detail=f"Unknown realm: {req.realm}")
     except (KeyError, TypeError, ValueError) as e:
         logger.warning(f"Trace ingestion failed for org {org_id}: {e}")
-        raise HTTPException(status_code=422, detail=f"Malformed trace data: {e}")
+        raise HTTPException(status_code=422, detail=f"Malformed trace data: {e}") from e
 
     # Auto-process for datasets
     service.generate_datasets(tenant_id, [trace.trace_id])
@@ -196,7 +194,7 @@ async def ingest_trace(
 @router.get("/insights/traces", response_model=list[dict[str, Any]])
 async def list_traces(
     org_id: str,
-    realm: Optional[str] = Query(None),
+    realm: str | None = Query(None),
     limit: int = Query(100, ge=1, le=1000),
     offset: int = Query(0, ge=0),
     member: OrgMember = Depends(get_current_org_member),
@@ -207,7 +205,7 @@ async def list_traces(
     try:
         realm_enum = Realm(realm) if realm else None
     except ValueError:
-        raise HTTPException(status_code=422, detail=f"Invalid realm: {realm}")
+        raise HTTPException(status_code=422, detail=f"Invalid realm: {realm}") from None
     traces = service.list_traces(member.org_id, realm=realm_enum, limit=limit, offset=offset)
     return [t.to_dict() for t in traces]
 
@@ -291,8 +289,8 @@ async def list_detectors(
 @router.get("/insights", response_model=list[InsightResponse])
 async def list_insights(
     org_id: str,
-    detector: Optional[str] = Query(None),
-    severity: Optional[str] = Query(None),
+    detector: str | None = Query(None),
+    severity: str | None = Query(None),
     limit: int = Query(100, ge=1, le=500),
     member: OrgMember = Depends(get_current_org_member),
 ) -> list[InsightResponse]:
@@ -328,7 +326,7 @@ async def get_insight(
 @router.post("/insights/datasets/generate", response_model=dict[str, Any])
 async def generate_datasets(
     org_id: str,
-    trace_ids: Optional[list[str]] = Body(None),
+    trace_ids: list[str] | None = Body(None),
     member: OrgMember = Depends(get_current_org_member),
 ) -> dict[str, Any]:
     """Generate datasets from traces using configured rules."""
@@ -425,7 +423,7 @@ async def compare_traces(
         report = service.compare_env_vs_prod(member.org_id, req.env_trace_id, req.prod_trace_id)
         return DisparityReportResponse(**report.to_dict())
     except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        raise HTTPException(status_code=404, detail=str(e)) from e
 
 
 @router.post("/insights/disparity/batch-compare", response_model=list[DisparityReportResponse])
@@ -443,7 +441,7 @@ async def batch_compare_traces(
 @router.get("/insights/disparity/reports", response_model=list[DisparityReportResponse])
 async def list_disparity_reports(
     org_id: str,
-    min_score: Optional[float] = Query(None, ge=0.0, le=1.0),
+    min_score: float | None = Query(None, ge=0.0, le=1.0),
     limit: int = Query(100, ge=1, le=500),
     member: OrgMember = Depends(get_current_org_member),
 ) -> list[DisparityReportResponse]:
@@ -477,16 +475,16 @@ class CorrelationWeekBucket(BaseModel):
     kb_writes: int
     jobs_in_post_window: int
     gold_tier_in_post_window: int
-    gold_tier_rate: Optional[float] = None
+    gold_tier_rate: float | None = None
 
 
 class CorrelationReportResponse(BaseModel):
-    organization_id: Optional[str] = None
+    organization_id: str | None = None
     lookback_days: int
     weeks: list[CorrelationWeekBucket] = []
     aggregate_post_jobs: int = 0
     aggregate_post_gold: int = 0
-    aggregate_post_rate: Optional[float] = None
+    aggregate_post_rate: float | None = None
     target_slo: float
     target_slo_met: bool
     generated_at: str

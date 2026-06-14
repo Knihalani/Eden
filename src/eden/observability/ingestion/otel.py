@@ -37,10 +37,11 @@ Span fields consumed:
 
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
-import time
-from typing import Any, Optional
+from datetime import UTC
+from typing import Any
 
 from eden.observability.ingestion.attribution import Attribution
 from eden.observability.ingestion.errors import SchemaInvalidError
@@ -139,7 +140,7 @@ def _ns_to_iso(ns: int | str) -> str:
     return _iso_from_seconds(seconds)
 
 
-def _seconds_to_ms(value: Any) -> Optional[float]:
+def _seconds_to_ms(value: Any) -> float | None:
     """Convert a seconds-valued OTel attribute to milliseconds.
 
     OTel standard ``gen_ai.*.duration`` and ``time_to_first_token``
@@ -155,16 +156,16 @@ def _seconds_to_ms(value: Any) -> Optional[float]:
 
 
 def _iso_from_seconds(seconds: float) -> str:
-    from datetime import datetime, timezone
-    return datetime.fromtimestamp(seconds, tz=timezone.utc).isoformat()
+    from datetime import datetime
+    return datetime.fromtimestamp(seconds, tz=UTC).isoformat()
 
 
 def _now_iso() -> str:
-    from datetime import datetime, timezone
-    return datetime.now(timezone.utc).isoformat()
+    from datetime import datetime
+    return datetime.now(UTC).isoformat()
 
 
-def _ns_diff_ms(start_ns: int | str, end_ns: int | str) -> Optional[float]:
+def _ns_diff_ms(start_ns: int | str, end_ns: int | str) -> float | None:
     try:
         s = int(start_ns)
         e = int(end_ns)
@@ -238,10 +239,8 @@ def _span_to_raw_dict(
         drop anything that isn't a number."""
         if value is None:
             return
-        try:
+        with contextlib.suppress(TypeError, ValueError):
             metrics[key] = float(value)
-        except (TypeError, ValueError):
-            pass
 
     # Token usage (canonical)
     _add_metric("input_tokens", attrs.get("gen_ai.usage.input_tokens"))
@@ -382,7 +381,7 @@ def _span_to_raw_dict(
         payload["events"] = events
 
     # ── Build request_body / response_body from span events ─────────
-    request_body: Optional[dict[str, Any]] = None
+    request_body: dict[str, Any] | None = None
     if request_messages or system_blocks:
         request_body = {
             "messages": request_messages,
@@ -396,7 +395,7 @@ def _span_to_raw_dict(
         }
         request_body = {k: v for k, v in request_body.items() if v is not None}
 
-    response_body: Optional[dict[str, Any]] = None
+    response_body: dict[str, Any] | None = None
     if response_choices:
         response_body = {
             "id": attrs.get("gen_ai.response.id"),
@@ -479,7 +478,7 @@ def _span_to_raw_dict(
     }
 
 
-def _extract_otel_reasoning(attrs: dict[str, Any]) -> Optional[dict[str, Any]]:
+def _extract_otel_reasoning(attrs: dict[str, Any]) -> dict[str, Any] | None:
     """OTel GenAI surfaces reasoning via gen_ai.usage.reasoning_tokens or
     via separate gen_ai.usage.* attributes depending on the SDK."""
     out: dict[str, Any] = {}
@@ -490,7 +489,7 @@ def _extract_otel_reasoning(attrs: dict[str, Any]) -> Optional[dict[str, Any]]:
     return out or None
 
 
-def _extract_otel_logprobs(attrs: dict[str, Any]) -> Optional[dict[str, Any]]:
+def _extract_otel_logprobs(attrs: dict[str, Any]) -> dict[str, Any] | None:
     """OTel's `gen_ai.choice.logprobs` attribute, if the SDK set it."""
     lp = attrs.get("gen_ai.choice.logprobs")
     return lp if isinstance(lp, dict) else None
@@ -507,7 +506,7 @@ def _extract_otel_citations(attrs: dict[str, Any]) -> list[dict[str, Any]]:
     return []
 
 
-def _first_finish_reason(value: Any) -> Optional[str]:
+def _first_finish_reason(value: Any) -> str | None:
     if value is None:
         return None
     if isinstance(value, list):
@@ -523,7 +522,7 @@ class OtelDecoder:
 
     source_format = "otel"
 
-    def detect(self, body: bytes, content_type: Optional[str]) -> bool:
+    def detect(self, body: bytes, content_type: str | None) -> bool:
         if content_type and "otel" in content_type.lower():
             return True
         try:
@@ -543,7 +542,7 @@ class OtelDecoder:
             raise SchemaInvalidError(
                 f"OTel body is not valid JSON: {exc}",
                 problems=[f"json_decode_error: {exc}"],
-            )
+            ) from exc
 
         if not isinstance(payload, dict):
             raise SchemaInvalidError(

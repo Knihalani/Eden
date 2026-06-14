@@ -24,10 +24,10 @@ import asyncio
 import json
 import logging
 import time
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
-from typing import Any, Optional
+from datetime import UTC, datetime
+from typing import Any
 
 from eden.api.middleware.correlation_id import get_correlation_id
 from eden.config import get_settings
@@ -46,12 +46,12 @@ class RawEvent:
     resource: str  # tokens, jobs, storage_mb, sandbox_seconds, requests
     quantity: float
     unit: str
-    user_id: Optional[str] = None
-    model: Optional[str] = None
-    cost_usd: Optional[float] = None
+    user_id: str | None = None
+    model: str | None = None
+    cost_usd: float | None = None
     metadata: dict = field(default_factory=dict)
-    correlation_id: Optional[str] = None
-    timestamp: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+    correlation_id: str | None = None
+    timestamp: str = field(default_factory=lambda: datetime.now(UTC).isoformat())
 
     def to_db_row(self) -> tuple:
         """Convert to asyncpg parameter tuple for bulk insert."""
@@ -100,19 +100,19 @@ class BronzeEventSink:
         batch_size: int = 100,
         flush_interval_seconds: float = 5.0,
         max_retries: int = 3,
-    ):
+    ) -> None:
         self.batch_size = batch_size
         self.flush_interval = flush_interval_seconds
         self.max_retries = max_retries
         self._buffer: list[RawEvent] = []
         self._lock = asyncio.Lock()
-        self._flush_task: Optional[asyncio.Task] = None
+        self._flush_task: asyncio.Task | None = None
         self._running = False
         self._s3_enabled = bool(getattr(settings, "bronze_s3_bucket", ""))
         self._total_ingested = 0
         self._total_flushed = 0
         self._flushing = False  # guard against concurrent flushes
-        self._s3_client = None  # lazy-init boto3 client
+        self._s3_client: Any = None  # lazy-init boto3 client
 
     async def start(self) -> None:
         """Start the background flush loop."""
@@ -130,10 +130,8 @@ class BronzeEventSink:
         self._running = False
         if self._flush_task:
             self._flush_task.cancel()
-            try:
+            with suppress(asyncio.CancelledError):
                 await self._flush_task
-            except asyncio.CancelledError:
-                pass
         await self._flush_buffer()
         logger.info(
             f"BronzeEventSink stopped (ingested={self._total_ingested}, "
@@ -226,7 +224,7 @@ class BronzeEventSink:
 
             bucket = settings.bronze_s3_bucket
             prefix = getattr(settings, "bronze_s3_prefix", "bronze/events")
-            ts = datetime.now(timezone.utc)
+            ts = datetime.now(UTC)
             key = f"{prefix}/year={ts.year}/month={ts.month:02d}/day={ts.day:02d}/hour={ts.hour:02d}/{int(time.time() * 1000)}.ndjson"
 
             body = "\n".join(json.dumps(e.to_dict(), default=str) for e in batch)
@@ -257,7 +255,7 @@ class BronzeEventSink:
 
 
 # Singleton instance
-_bronze_sink: Optional[BronzeEventSink] = None
+_bronze_sink: BronzeEventSink | None = None
 
 
 async def get_bronze_sink() -> BronzeEventSink:
@@ -281,7 +279,7 @@ async def close_bronze_sink() -> None:
 
 
 @asynccontextmanager
-async def bronze_sink_context():
+async def bronze_sink_context() -> None:
     """Async context manager for the BronzeEventSink."""
     sink = await get_bronze_sink()
     try:

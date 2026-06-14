@@ -18,13 +18,12 @@ sensitive operation.
 
 from __future__ import annotations
 
-import io
 import json
 import logging
 import re
 import uuid
-from datetime import datetime, timezone
-from typing import Any, Optional
+from datetime import UTC, datetime
+from typing import Any
 
 from fastapi import APIRouter, Cookie, Depends, HTTPException, Path
 from pydantic import BaseModel, Field, field_validator
@@ -40,7 +39,7 @@ from eden.storage.postgres import get_postgres_client
 
 async def _require_export_admin(
     org_id: str,
-    authorization: Optional[str] = Cookie(None),
+    authorization: str | None = Cookie(None),
 ) -> dict:
     """Verify the caller is an org admin (settings:edit).
 
@@ -108,18 +107,18 @@ class DestinationOut(BaseModel):
     # raw ``credentials`` blob is never echoed back.
     config: dict
     created_at: str
-    created_by: Optional[str] = None
+    created_by: str | None = None
 
 
 class ScheduleIn(BaseModel):
-    destination_id: Optional[str] = Field(
+    destination_id: str | None = Field(
         default=None,
         description="Omit / null for a one-shot download schedule",
     )
     data_type: str
     format: str
     # NULL cron → one-shot. 5-field cron string for recurring.
-    cron_expression: Optional[str] = Field(
+    cron_expression: str | None = Field(
         default=None,
         description="Standard 5-field cron (m h dom mon dow). Omit for one-shot.",
     )
@@ -140,7 +139,7 @@ class ScheduleIn(BaseModel):
 
     @field_validator("cron_expression")
     @classmethod
-    def _cron_must_be_valid(cls, v: Optional[str]) -> Optional[str]:
+    def _cron_must_be_valid(cls, v: str | None) -> str | None:
         if v is None or v.strip() == "":
             return None
         # Standard 5-field cron: minute hour day-of-month month day-of-week
@@ -156,13 +155,13 @@ class ScheduleIn(BaseModel):
 class ScheduleOut(BaseModel):
     schedule_id: str
     org_id: str
-    destination_id: Optional[str] = None
+    destination_id: str | None = None
     data_type: str
     format: str
-    cron_expression: Optional[str] = None
-    last_run_at: Optional[str] = None
+    cron_expression: str | None = None
+    last_run_at: str | None = None
     created_at: str
-    created_by: Optional[str] = None
+    created_by: str | None = None
 
 
 class RunNowResult(BaseModel):
@@ -215,7 +214,7 @@ def _row_to_schedule(row: Any) -> ScheduleOut:
 async def list_destinations(
     org_id: str = Path(...),
     member: dict = Depends(get_current_user),
-    authorization: Optional[str] = Cookie(None),
+    authorization: str | None = Cookie(None),
 ) -> list[DestinationOut]:
     """List all export destinations for an org (secrets stripped)."""
     await _require_export_admin(org_id, authorization)
@@ -240,7 +239,7 @@ async def create_destination(
     body: DestinationIn,
     org_id: str = Path(...),
     member: dict = Depends(get_current_user),
-    authorization: Optional[str] = Cookie(None),
+    authorization: str | None = Cookie(None),
 ) -> DestinationOut:
     """Create a new export destination.
 
@@ -296,7 +295,7 @@ async def delete_destination(
     destination_id: str,
     org_id: str = Path(...),
     member: dict = Depends(get_current_user),
-    authorization: Optional[str] = Cookie(None),
+    authorization: str | None = Cookie(None),
 ) -> dict:
     """Delete a destination.
 
@@ -351,7 +350,7 @@ async def delete_destination(
 async def list_schedules(
     org_id: str = Path(...),
     member: dict = Depends(get_current_user),
-    authorization: Optional[str] = Cookie(None),
+    authorization: str | None = Cookie(None),
 ) -> list[ScheduleOut]:
     """List all export schedules for an org."""
     await _require_export_admin(org_id, authorization)
@@ -376,7 +375,7 @@ async def create_schedule(
     body: ScheduleIn,
     org_id: str = Path(...),
     member: dict = Depends(get_current_user),
-    authorization: Optional[str] = Cookie(None),
+    authorization: str | None = Cookie(None),
 ) -> ScheduleOut:
     """Create an export schedule.
 
@@ -440,7 +439,7 @@ async def delete_schedule(
     schedule_id: str,
     org_id: str = Path(...),
     member: dict = Depends(get_current_user),
-    authorization: Optional[str] = Cookie(None),
+    authorization: str | None = Cookie(None),
 ) -> dict:
     """Delete an export schedule."""
     await _require_export_admin(org_id, authorization)
@@ -474,7 +473,7 @@ async def run_export_now(
     schedule_id: str,
     org_id: str = Path(...),
     member: dict = Depends(get_current_user),
-    authorization: Optional[str] = Cookie(None),
+    authorization: str | None = Cookie(None),
 ) -> RunNowResult:
     """Trigger a schedule immediately.
 
@@ -503,7 +502,7 @@ async def run_export_now(
     if not row:
         raise HTTPException(status_code=404, detail="Schedule not found")
 
-    started_at = datetime.now(timezone.utc)
+    started_at = datetime.now(UTC)
 
     # Defer to the runner. We import lazily so test environments
     # without boto3 / google-cloud-storage can still import the
@@ -511,7 +510,7 @@ async def run_export_now(
     from eden.exports.runner import run_export
 
     destination_name = row["destination_name"] or "download"
-    decrypted_config: Optional[dict] = None
+    decrypted_config: dict | None = None
     if row["config_encrypted"]:
         decrypted_config = json.loads(decrypt_value(row["config_encrypted"]))
 
@@ -524,7 +523,7 @@ async def run_export_now(
         destination_config=decrypted_config,
     )
 
-    finished_at = datetime.now(timezone.utc)
+    finished_at = datetime.now(UTC)
 
     await client.execute(
         "UPDATE export_schedules SET last_run_at = $1 WHERE schedule_id = $2",

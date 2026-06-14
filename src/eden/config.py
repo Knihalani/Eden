@@ -1,8 +1,8 @@
 """Eden configuration."""
 
-from pathlib import Path
 from functools import lru_cache
-from pydantic import Field
+from pathlib import Path
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -42,6 +42,14 @@ class Settings(BaseSettings):
     # OpenRouter
     openrouter_api_key: str = ""
     openrouter_base_url: str = "https://openrouter.ai/api/v1"
+
+    # MiniMax — alternative gateway upstream (off by default). When
+    # ``use_minimax`` is true the gateway routes through MiniMax's
+    # OpenAI-compatible endpoint instead of OpenRouter. Both providers
+    # speak the OpenAI wire format so the swap is a one-flag toggle.
+    use_minimax: bool = False
+    minimax_api_key: str = ""
+    minimax_base_url: str = "https://api.openai.com/v1"
 
     # Model configuration
     model_reasoning: str = "anthropic/claude-sonnet-4.6"
@@ -99,6 +107,12 @@ class Settings(BaseSettings):
     # JWT Authentication
     jwt_secret: str = "change-me-in-production"
     jwt_exp_days: int = 7
+    # Optional ``aud``/``iss`` claims enforced by ``decode_access_token``
+    # when set. Defaults preserve the previous "any signed token is
+    # accepted" behaviour for backward compat with existing sessions;
+    # flip these on in production to bind tokens to this service.
+    jwt_audience: str | None = None
+    jwt_issuer: str | None = None
 
     # Encryption (Fernet key for sensitive at-rest fields).
     # If empty, falls back to deriving a key from JWT_SECRET.
@@ -116,6 +130,14 @@ class Settings(BaseSettings):
     # Portal
     portal_base_url: str = "https://portal.example.com"
     app_url: str = "https://portal.example.com"
+    # CORS — comma-separated allowlist. The previous default of
+    # ``["*"]`` + ``allow_credentials=True`` is rejected by browsers
+    # and (when it does work) lets any origin make credentialed
+    # requests. Set ``EDEN_CORS_ALLOWED_ORIGINS="https://a.com,https://b.com"``
+    # in production. When unset, the API falls back to
+    # ``[portal_base_url, app_url]`` so the same-origin portal works
+    # out of the box.
+    cors_allowed_origins: str = ""
 
     # Chain configuration
     chain_enabled_experts: list[str] = []  # Environment: EDEN_CHAIN_ENABLED_EXPERTS
@@ -212,6 +234,17 @@ class Settings(BaseSettings):
     # is being hard-cut. Set ENABLE_EVAL_PIPELINE=true to re-enable.
     enable_eval_pipeline: bool = False  # Environment: ENABLE_EVAL_PIPELINE
 
+    # Phase 2: Multi-agent simulation route (separate product from the
+    # env-gen pipeline). Previously gated on ENABLE_EVAL_PIPELINE which
+    # is now OFF by default; needs its own flag so it stays reachable.
+    enable_multi_agent: bool = True  # Environment: ENABLE_MULTI_AGENT
+
+    # Phase 9: 16-category intelligence gap surface
+    # (see ``docs/eden-observability-gap-roadmap.md``). Default OFF
+    # so the new routes can ship and be tested in staging without
+    # exposing them to production traffic until reviewed.
+    intelligence_gap_v0: bool = False  # Environment: INTELLIGENCE_GAP_V0
+
     # Paths
     project_root: Path = Path(__file__).parent.parent.parent
     seed_data_dir: Path = Path("./seed")
@@ -230,6 +263,42 @@ class Settings(BaseSettings):
     # when False, falls back to the heuristic-only path. Lets ops
     # turn the expensive path off without redeploying.
     production_monitor_use_llm_judge: bool = True
+
+    # ── Redis (idempotency, rate limit, judge tailer, semantic cache) ──
+    # Falls back to localhost when unset; production should always
+    # point this at the managed Redis cluster.
+    redis_url: str = "redis://localhost:6379/0"
+
+    # ── S3 (media + bronze-tier data lake) ───────────────────────────
+    bronze_s3_bucket: str = "eden-bronze"
+    bronze_s3_region: str = "us-east-1"
+
+    # ── OTel exporter ──────────────────────────────────────────────────
+    # Per-export timeout for the OTel OTLP HTTP exporter. Bounded so a
+    # slow collector doesn't block the request that produced the span.
+    otel_exporter_otlp_timeout_seconds: int = 5
+    # OTLP endpoint URL (default = the standard OTel collector).
+    otel_exporter_otlp_endpoint: str = "http://localhost:4318"
+    # When True, the OTel exporter keeps emitting on the legacy
+    # OpenTelemetry Collector path in addition to any new sink.
+    otel_dual_emit_enabled: bool = False
+
+    # ── Promotion loop ─────────────────────────────────────────────────
+    # Master switch for the background promotion loop that watches
+    # canary stats and decides to promote / keep / rollback. Off by
+    # default so the loop is opt-in (avoids accidental prod writes).
+    promotion_loop_enabled: bool = False
+
+    # ── Helicone upstream proxy (optional integration) ─────────────────
+    # When set, the ``/integrations/helicone`` route forwards incoming
+    # Helicone-format payloads upstream. Empty disables the route.
+    helicone_api_key: str = ""
+    helicone_base_url: str = "https://api.helicone.ai"
+
+    # ── Feedback / rbac ───────────────────────────────────────────────
+    # Driver for the rbac escalation service. Empty disables
+    # escalation. Configurable per-environment.
+    rbac_escalation_driver: str = ""
 
 
 @lru_cache

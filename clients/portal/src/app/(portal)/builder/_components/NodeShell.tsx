@@ -25,44 +25,44 @@ const ACCENT: Record<string, KindAccent> = {
   agent: {
     border: "border-l-emerald-500",
     ring: "ring-emerald-500/30",
-    text: "text-emerald-300",
-    icon: "text-emerald-400",
+    text: "text-[var(--terminal)]",
+    icon: "text-[var(--terminal)]",
   },
   tool: {
     border: "border-l-sky-500",
     ring: "ring-sky-500/30",
-    text: "text-sky-300",
-    icon: "text-sky-400",
+    text: "text-[var(--accent)]",
+    icon: "text-[var(--accent)]",
   },
   scenario: {
     border: "border-l-amber-500",
     ring: "ring-amber-500/30",
-    text: "text-amber-300",
-    icon: "text-amber-400",
+    text: "text-[var(--warning)]",
+    icon: "text-[var(--warning)]",
   },
   scoring: {
     border: "border-l-purple-500",
     ring: "ring-purple-500/30",
-    text: "text-purple-300",
-    icon: "text-purple-400",
+    text: "text-[var(--accent)]",
+    icon: "text-[var(--accent)]",
   },
   memory: {
     border: "border-l-pink-500",
     ring: "ring-pink-500/30",
-    text: "text-pink-300",
-    icon: "text-pink-400",
+    text: "text-[var(--accent)]",
+    icon: "text-[var(--accent)]",
   },
   loop: {
     border: "border-l-cyan-500",
     ring: "ring-cyan-500/30",
-    text: "text-cyan-300",
-    icon: "text-cyan-400",
+    text: "text-[var(--accent)]",
+    icon: "text-[var(--accent)]",
   },
   seed: {
     border: "border-l-orange-500",
     ring: "ring-orange-500/30",
-    text: "text-orange-300",
-    icon: "text-orange-400",
+    text: "text-[var(--warning)]",
+    icon: "text-[var(--warning)]",
   },
 };
 
@@ -100,7 +100,7 @@ export function NodeShell({
   return (
     <div
       className={cn(
-        "min-w-[180px] max-w-[260px] rounded-md border border-zinc-800 border-l-4 bg-zinc-950 shadow-md",
+        "min-w-[180px] max-w-[260px] rounded-md border border-[var(--border-default)] border-l-4 bg-[var(--bg-base)] shadow-md",
         accent.border,
         selected && `ring-2 ${accent.ring}`,
         className,
@@ -114,7 +114,7 @@ export function NodeShell({
           position={h.position ?? Position.Left}
         />
       ))}
-      <div className="flex items-center gap-2 px-3 py-2 border-b border-zinc-800/60">
+      <div className="flex items-center gap-2 px-3 py-2 border-b border-[var(--border-default)]/60">
         <span className={cn("shrink-0", accent.icon)} aria-hidden="true">
           {icon}
         </span>
@@ -128,10 +128,10 @@ export function NodeShell({
         </span>
       </div>
       {(children || footer) && (
-        <div className="px-3 py-2 text-xs text-zinc-300 space-y-1">
+        <div className="px-3 py-2 text-xs text-[var(--text-muted)] space-y-1">
           {children}
           {footer && (
-            <div className="pt-1 mt-1 border-t border-zinc-800/60 text-zinc-500">
+            <div className="pt-1 mt-1 border-t border-[var(--border-default)]/60 text-[var(--text-muted)]">
               {footer}
             </div>
           )}

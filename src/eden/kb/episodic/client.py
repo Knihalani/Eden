@@ -7,13 +7,9 @@ from __future__ import annotations
 
 import json
 import logging
-from datetime import datetime
-from typing import Optional, Any
-from uuid import UUID
 
-from eden.storage.postgres import get_postgres_client
-from eden.kb.shared.audit import evaluate_audn, apply_audn, AUDNResult
 from eden.kb.retrieval_logger import get_retrieval_logger
+from eden.storage.postgres import get_postgres_client
 
 logger = logging.getLogger(__name__)
 
@@ -68,7 +64,7 @@ class EpisodicClient:
             logger.error(f"Failed to insert job record: {e}")
             return False
 
-    async def get(self, job_id: str) -> Optional[dict]:
+    async def get(self, job_id: str) -> dict | None:
         """Get a job record by job_id."""
         client = await get_postgres_client()
 
@@ -111,7 +107,7 @@ class EpisodicClient:
         if not set_clauses:
             return True
 
-        set_clauses.append(f"updated_at = NOW()")
+        set_clauses.append("updated_at = NOW()")
         params.append(job_id)
 
         query = f"""
@@ -128,9 +124,9 @@ class EpisodicClient:
 
     async def list_jobs(
         self,
-        status: Optional[str] = None,
-        outcome_tier: Optional[str] = None,
-        environment_class: Optional[str] = None,
+        status: str | None = None,
+        outcome_tier: str | None = None,
+        environment_class: str | None = None,
         limit: int = 100,
         offset: int = 0,
     ) -> list[dict]:
@@ -358,7 +354,7 @@ class EpisodicClient:
 
 
 # Singleton
-_episodic_client: Optional[EpisodicClient] = None
+_episodic_client: EpisodicClient | None = None
 
 
 def get_episodic_client() -> EpisodicClient:

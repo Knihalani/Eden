@@ -46,9 +46,10 @@ list are accepted.
 
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
-from typing import Any, Optional
+from typing import Any
 
 from eden.observability.ingestion.attribution import Attribution
 from eden.observability.ingestion.errors import SchemaInvalidError
@@ -76,7 +77,7 @@ class LangfuseDecoder:
 
     source_format = "langfuse"
 
-    def detect(self, body: bytes, content_type: Optional[str]) -> bool:
+    def detect(self, body: bytes, content_type: str | None) -> bool:
         try:
             parsed = json.loads(body)
         except (ValueError, UnicodeDecodeError):
@@ -103,7 +104,7 @@ class LangfuseDecoder:
             raise SchemaInvalidError(
                 f"Langfuse body is not valid JSON: {exc}",
                 problems=[f"json_decode_error: {exc}"],
-            )
+            ) from exc
 
         # Accept three wire shapes:
         #   1. {"batch": [trace, ...]}
@@ -135,7 +136,7 @@ class LangfuseDecoder:
         for trace in traces:
             if not isinstance(trace, dict):
                 continue
-            trace_id = str(trace.get("id") or trace.get("traceId") or "")
+            str(trace.get("id") or trace.get("traceId") or "")
             scores = trace.get("scores") or []
             trace_scores: list[dict[str, Any]] = []
             obs_scores: dict[str, list[dict[str, Any]]] = {}
@@ -257,10 +258,8 @@ def _observation_to_raw(
         ("totalTokens", "total_tokens"),
     ):
         if src_key in usage:
-            try:
+            with contextlib.suppress(TypeError, ValueError):
                 metrics[dst_key] = float(usage[src_key])
-            except (TypeError, ValueError):
-                pass
 
     # Outcome
     level = str(obs.get("level") or "").upper()
@@ -327,14 +326,14 @@ def _observation_to_raw(
         "finish_reason": _extract_langfuse_finish_reason(obs),
         "stop_sequence": None,
         "system_fingerprint": None,
-        "cache_hit": bool((usage.get("cacheReadInputTokens") if isinstance(usage, dict) else 0)),
+        "cache_hit": bool(usage.get("cacheReadInputTokens") if isinstance(usage, dict) else 0),
         "prompt_cache_savings_usd": None,
         "model_version": str(obs.get("model") or "") or None,
         "service_tier": None,
     }
 
 
-def _normalize_langfuse_messages(value: Any) -> Optional[dict[str, Any]]:
+def _normalize_langfuse_messages(value: Any) -> dict[str, Any] | None:
     """Coerce a Langfuse `input` field (string, list, or dict) into a
     request-body dict that the portal can render.
     """
@@ -349,7 +348,7 @@ def _normalize_langfuse_messages(value: Any) -> Optional[dict[str, Any]]:
     return None
 
 
-def _normalize_langfuse_output(value: Any, obs_type: str) -> Optional[dict[str, Any]]:
+def _normalize_langfuse_output(value: Any, obs_type: str) -> dict[str, Any] | None:
     """Coerce a Langfuse `output` field into a response-body dict."""
     if value is None:
         return None
@@ -362,7 +361,7 @@ def _normalize_langfuse_output(value: Any, obs_type: str) -> Optional[dict[str, 
     return None
 
 
-def _extract_langfuse_reasoning(output: Any) -> Optional[dict[str, Any]]:
+def _extract_langfuse_reasoning(output: Any) -> dict[str, Any] | None:
     """Langfuse stores reasoning as content blocks with `type=reasoning`."""
     if not isinstance(output, list):
         return None
@@ -464,7 +463,7 @@ def _extract_langfuse_citations(obs: dict[str, Any]) -> list[dict[str, Any]]:
     return out
 
 
-def _extract_langfuse_finish_reason(obs: dict[str, Any]) -> Optional[str]:
+def _extract_langfuse_finish_reason(obs: dict[str, Any]) -> str | None:
     """Langfuse puts finish reason in `output.finish_reason` or in
     `metadata.finish_reason`."""
     output = obs.get("output")

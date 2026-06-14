@@ -24,8 +24,9 @@ from __future__ import annotations
 import json
 import logging
 import time
-from datetime import datetime, timedelta, timezone
-from typing import Any, Awaitable, Callable, Optional
+from collections.abc import Awaitable, Callable
+from datetime import UTC, datetime, timedelta
+from typing import Any
 
 from eden.storage.postgres import get_postgres_client
 
@@ -90,7 +91,7 @@ def insights_tool(
     return deco
 
 
-def get_tool(name: str) -> Optional[InsightsTool]:
+def get_tool(name: str) -> InsightsTool | None:
     return _REGISTRY.get(name)
 
 
@@ -109,21 +110,21 @@ def _parse_since(since: str) -> datetime:
     itself (which is a known source of timezone / off-by-one bugs).
     """
     if not since:
-        return datetime.now(timezone.utc) - timedelta(hours=24)
+        return datetime.now(UTC) - timedelta(hours=24)
     s = since.strip().lower()
     if s.endswith("h") and s[:-1].isdigit():
-        return datetime.now(timezone.utc) - timedelta(hours=int(s[:-1]))
+        return datetime.now(UTC) - timedelta(hours=int(s[:-1]))
     if s.endswith("d") and s[:-1].isdigit():
-        return datetime.now(timezone.utc) - timedelta(days=int(s[:-1]))
+        return datetime.now(UTC) - timedelta(days=int(s[:-1]))
     if s.endswith("m") and s[:-1].isdigit():
-        return datetime.now(timezone.utc) - timedelta(minutes=int(s[:-1]))
+        return datetime.now(UTC) - timedelta(minutes=int(s[:-1]))
     # Fall back to ISO-8601; accept a trailing 'Z'.
     try:
         return datetime.fromisoformat(since.replace("Z", "+00:00"))
     except ValueError:
         # Default to last 24h if the input is unparseable — fail safe.
         logger.warning(f"insights_tools: unparseable since={since!r}; defaulting to 24h")
-        return datetime.now(timezone.utc) - timedelta(hours=24)
+        return datetime.now(UTC) - timedelta(hours=24)
 
 
 # ============================================================================
@@ -169,7 +170,7 @@ async def list_jobs(
     org_id: str,
     limit: int = 25,
     since: str = "24h",
-    status: Optional[str] = None,
+    status: str | None = None,
 ) -> dict[str, Any]:
     limit = max(1, min(int(limit), 200))
     cutoff = _parse_since(since)
@@ -346,7 +347,7 @@ async def get_job(
 async def list_recent_references(
     org_id: str,
     limit: int = 20,
-    language: Optional[str] = None,
+    language: str | None = None,
 ) -> dict[str, Any]:
     limit = max(1, min(int(limit), 100))
     client = await get_postgres_client()
@@ -517,9 +518,9 @@ async def search_jobs(
 async def get_traces_by_filter(
     org_id: str,
     since: str = "7d",
-    status: Optional[str] = None,
-    environment_class: Optional[str] = None,
-    outcome_tier: Optional[str] = None,
+    status: str | None = None,
+    environment_class: str | None = None,
+    outcome_tier: str | None = None,
     limit: int = 50,
 ) -> dict[str, Any]:
     cutoff = _parse_since(since)
@@ -965,7 +966,7 @@ async def get_insights(
         """,
         org_id, cutoff,
     )
-    duration_list = sorted(
+    duration_list: list[float] = sorted(
         float(r["d"]) for r in durations if r["d"] is not None
     )
     n = len(duration_list)
@@ -988,8 +989,8 @@ async def get_insights(
         },
         "latency_s": {
             "sample_size": n,
-            "p50": round(_pct(50), 3) if _pct(50) is not None else None,
-            "p95": round(_pct(95), 3) if _pct(95) is not None else None,
+            "p50": round(float(p50), 3) if (p50 := _pct(50)) is not None else None,
+            "p95": round(float(p95), 3) if (p95 := _pct(95)) is not None else None,
         },
     }
 

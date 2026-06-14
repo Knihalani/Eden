@@ -5,15 +5,15 @@ from __future__ import annotations
 import pytest
 
 from eden.evaluation.security_scanner import (
-    SecurityScanner,
-    SecurityIssue,
-    Severity,
-    IssueCategory,
-    ScanResult,
-    SecurityGatePolicy,
     DependencyVerifier,
+    IssueCategory,
     SASTScanner,
     SBOMGenerator,
+    ScanResult,
+    SecurityGatePolicy,
+    SecurityIssue,
+    SecurityScanner,
+    Severity,
 )
 
 
@@ -121,7 +121,7 @@ class TestDependencyVerifier:
         assert "requests" in similar
 
     def test_levenshtein_distance(self):
-        verifier = DependencyVerifier()
+        DependencyVerifier()
         assert DependencyVerifier._levenshtein("kitten", "sitting") == 3
         assert DependencyVerifier._levenshtein("", "abc") == 3
         assert DependencyVerifier._levenshtein("abc", "abc") == 0

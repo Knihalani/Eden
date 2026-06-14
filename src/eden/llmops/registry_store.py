@@ -21,9 +21,10 @@ from __future__ import annotations
 
 import logging
 import uuid
+from collections.abc import Iterable
 from dataclasses import dataclass
-from datetime import datetime, timezone
-from typing import Any, Iterable, Optional
+from datetime import UTC, datetime
+from typing import Any
 
 from eden.api.utils.encryption import decrypt_value, encrypt_value
 from eden.storage.postgres import get_postgres_client
@@ -55,11 +56,11 @@ class UpstreamModelConfig:
     upstream_model: str
     upstream_api_key: str
     upstream_key_prefix: str
-    endpoint: Optional[str]
+    endpoint: str | None
     enabled: bool
     routing_priority: int
     metadata: dict[str, Any]
-    created_by: Optional[str]
+    created_by: str | None
     created_at: datetime
     updated_at: datetime
 
@@ -111,9 +112,9 @@ def _row_to_config(row: dict[str, Any]) -> UpstreamModelConfig:
     created_at = row.get("created_at")
     updated_at = row.get("updated_at")
     if isinstance(created_at, datetime) and created_at.tzinfo is None:
-        created_at = created_at.replace(tzinfo=timezone.utc)
+        created_at = created_at.replace(tzinfo=UTC)
     if isinstance(updated_at, datetime) and updated_at.tzinfo is None:
-        updated_at = updated_at.replace(tzinfo=timezone.utc)
+        updated_at = updated_at.replace(tzinfo=UTC)
     return UpstreamModelConfig(
         model_id=str(row["model_id"]),
         org_id=str(row["org_id"]),
@@ -165,7 +166,7 @@ async def get_model(
     name: str,
     *,
     enabled_only: bool = True,
-) -> Optional[UpstreamModelConfig]:
+) -> UpstreamModelConfig | None:
     """Return the highest-priority enabled row for ``org_id`` + ``name``."""
     client = await get_postgres_client()
     if client is None:
@@ -189,7 +190,7 @@ async def get_model(
 
 async def get_model_by_id(
     org_id: str, model_id: str
-) -> Optional[UpstreamModelConfig]:
+) -> UpstreamModelConfig | None:
     """Return a single row by id, scoped to the org."""
     client = await get_postgres_client()
     if client is None:
@@ -222,11 +223,11 @@ async def create_model(
     provider: str,
     upstream_model: str,
     upstream_api_key: str,
-    endpoint: Optional[str] = None,
+    endpoint: str | None = None,
     enabled: bool = True,
     routing_priority: int = 100,
-    metadata: Optional[dict[str, Any]] = None,
-    created_by: Optional[str] = None,
+    metadata: dict[str, Any] | None = None,
+    created_by: str | None = None,
 ) -> UpstreamModelConfig:
     """Insert a new registry row. Encrypts the API key at rest."""
     provider = _validate_provider(provider)
@@ -238,7 +239,7 @@ async def create_model(
     ciphertext = encrypt_value(upstream_api_key or "")
     key_prefix = _mask_prefix(upstream_api_key or "")
     model_id = str(uuid.uuid4())
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
 
     client = await get_postgres_client()
     await client.execute(
@@ -287,13 +288,13 @@ async def update_model(
     org_id: str,
     model_id: str,
     *,
-    upstream_model: Optional[str] = None,
-    upstream_api_key: Optional[str] = None,
-    endpoint: Optional[str] = None,
-    enabled: Optional[bool] = None,
-    routing_priority: Optional[int] = None,
-    metadata: Optional[dict[str, Any]] = None,
-) -> Optional[UpstreamModelConfig]:
+    upstream_model: str | None = None,
+    upstream_api_key: str | None = None,
+    endpoint: str | None = None,
+    enabled: bool | None = None,
+    routing_priority: int | None = None,
+    metadata: dict[str, Any] | None = None,
+) -> UpstreamModelConfig | None:
     """Patch one row. ``None`` fields are left unchanged.
 
     Passing ``upstream_api_key=""`` clears the key (used by the

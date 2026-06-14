@@ -25,7 +25,7 @@ export function Section({
   return (
     <section
       className={cn(
-        "rounded-xl border border-[var(--border)] bg-[var(--surface)] shadow-sm",
+        "rounded-xl border border-[var(--border)] bg-[var(--bg-primary)] shadow-sm",
         className
       )}
       {...props}

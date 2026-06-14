@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
-from typing import Any, AsyncIterator, Optional
+from collections.abc import AsyncIterator
+from typing import Any, cast
 
 from eden.sdk.models import (
     JobCreateRequest,
     JobItem,
-    JobStatus,
     JobResult,
+    JobStatus,
     StreamEvent,
 )
 
@@ -23,9 +24,9 @@ class JobsResource:
         self,
         *,
         description: str,
-        tags: Optional[list[str]] = None,
-        difficulty_parameters: Optional[dict[str, Any]] = None,
-        idempotency_key: Optional[str] = None,
+        tags: list[str] | None = None,
+        difficulty_parameters: dict[str, Any] | None = None,
+        idempotency_key: str | None = None,
     ) -> JobItem:
         """Create a new environment generation job.
 
@@ -53,11 +54,11 @@ class JobsResource:
     async def list(
         self,
         *,
-        status: Optional[str] = None,
-        outcome_tier: Optional[str] = None,
-        q: Optional[str] = None,
+        status: str | None = None,
+        outcome_tier: str | None = None,
+        q: str | None = None,
         sort: str = "created_at:desc",
-        created_after: Optional[str] = None,
+        created_after: str | None = None,
         limit: int = 20,
         offset: int = 0,
     ) -> dict[str, Any]:
@@ -81,7 +82,7 @@ class JobsResource:
             params["created_after"] = created_after
 
         data = await self._client.get("/jobs", params=params)
-        return data
+        return cast(dict[str, Any], data)
 
     async def get(self, job_id: str) -> JobStatus:
         """Get job status by ID."""
@@ -95,7 +96,7 @@ class JobsResource:
 
     async def cancel(self, job_id: str) -> dict[str, Any]:
         """Cancel an in-progress job."""
-        return await self._client.post(f"/jobs/{job_id}/cancel")
+        return cast(dict[str, Any], await self._client.post(f"/jobs/{job_id}/cancel"))
 
     async def stream(self, job_id: str) -> AsyncIterator[StreamEvent]:
         """Stream job status updates via Server-Sent Events.

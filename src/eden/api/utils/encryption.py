@@ -9,7 +9,6 @@ JWT_SECRET as a fallback (not recommended for production).
 import base64
 import hashlib
 import logging
-from typing import Optional
 
 from cryptography.fernet import Fernet, InvalidToken
 
@@ -18,7 +17,7 @@ from eden.config import get_settings
 logger = logging.getLogger(__name__)
 
 # Lazy-loaded singleton
-_fernet: Optional[Fernet] = None
+_fernet: Fernet | None = None
 
 
 def _get_fernet() -> Fernet:

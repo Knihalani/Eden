@@ -3,13 +3,10 @@
 Handles embedding-based retrieval using Qdrant.
 """
 
-import json
 import logging
-from typing import Optional, Any
-from uuid import UUID
 
 from eden.kb.retrieval_logger import get_retrieval_logger
-from eden.storage.qdrant import get_qdrant_client, SearchResult
+from eden.storage.qdrant import SearchResult, get_qdrant_client
 
 logger = logging.getLogger(__name__)
 
@@ -24,9 +21,9 @@ class SemanticVectorClient:
         self,
         collection: str,
         query_vector: list[float],
-        filter_conditions: Optional[dict] = None,
+        filter_conditions: dict | None = None,
         limit: int = 20,
-        score_threshold: Optional[float] = None,
+        score_threshold: float | None = None,
     ) -> list[SearchResult]:
         """Search for similar vectors.
 
@@ -72,7 +69,7 @@ class SemanticVectorClient:
         collection: str,
         query_vector: list[float],
         query_text: str,
-        filter_conditions: Optional[dict] = None,
+        filter_conditions: dict | None = None,
         limit: int = 20,
     ) -> list[SearchResult]:
         """Hybrid search combining dense vector and keyword search.
@@ -150,7 +147,7 @@ class SemanticVectorClient:
     async def count(
         self,
         collection: str,
-        filter_conditions: Optional[dict] = None,
+        filter_conditions: dict | None = None,
     ) -> int:
         """Count vectors in a collection.
 
@@ -166,7 +163,7 @@ class SemanticVectorClient:
 
 
 # Singleton
-_vector_client: Optional[SemanticVectorClient] = None
+_vector_client: SemanticVectorClient | None = None
 
 
 def get_vector_client() -> SemanticVectorClient:

@@ -15,13 +15,12 @@ import logging
 import subprocess
 import time
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
-from enum import Enum
+from datetime import UTC, datetime
+from enum import StrEnum
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, cast
 
-from eden.benchmark_engine import BenchmarkEngine
-from eden.evaluation.golden_dataset import DatasetRegistry, GoldenDataset, load_canonical_datasets
+from eden.evaluation.golden_dataset import DatasetRegistry, load_canonical_datasets
 
 logger = logging.getLogger(__name__)
 
@@ -34,7 +33,7 @@ __all__ = [
 ]
 
 
-class StageStatus(str, Enum):
+class StageStatus(StrEnum):
     """Status of an evaluation stage."""
 
     PENDING = "pending"
@@ -45,13 +44,17 @@ class StageStatus(str, Enum):
     WARNED = "warned"
 
 
-class StageName(str, Enum):
+class StageName(StrEnum):
     """Named evaluation stages."""
 
     STATIC_ANALYSIS = "static_analysis"
     UNIT_TESTS = "unit_tests"
     INTEGRATION_TESTS = "integration_tests"
     BENCHMARK_REGRESSION = "benchmark_regression"
+    # Phase 2: the env-gen BenchmarkEngine is gone. The
+    # benchmark_regression stage now iterates golden datasets
+    # directly (no orchestrator engine needed) — see
+    # _run_benchmark_regression below.
     PERFORMANCE_TESTS = "performance_tests"
     SECURITY_SCAN = "security_scan"
 
@@ -72,7 +75,7 @@ class StageResult:
     status: StageStatus
     duration_ms: float = 0.0
     details: dict[str, Any] = field(default_factory=dict)
-    error: Optional[str] = None
+    error: str | None = None
 
     @property
     def blocks_merge(self) -> bool:
@@ -142,7 +145,7 @@ class PipelineReport:
         """Whether any benchmark regression was detected."""
         for stage in self.stages:
             if stage.stage == StageName.BENCHMARK_REGRESSION:
-                return stage.details.get("regression_detected", False)
+                return cast(bool, stage.details.get("regression_detected", False))
         return False
 
     @property
@@ -176,18 +179,18 @@ class CIPipeline:
 
     def __init__(
         self,
-        benchmark_engine: Optional[BenchmarkEngine] = None,
-        dataset_registry: Optional[DatasetRegistry] = None,
-        work_dir: Optional[Path] = None,
-    ):
+        dataset_registry: DatasetRegistry | None = None,
+        work_dir: Path | None = None,
+    ) -> None:
         """Initialize CI pipeline.
 
         Args:
-            benchmark_engine: BenchmarkEngine for running regression tests.
             dataset_registry: Registry of golden datasets.
             work_dir: Working directory for temporary files.
         """
-        self._benchmark_engine = benchmark_engine or BenchmarkEngine()
+        # Phase 2: the BenchmarkEngine is gone (env-gen pipeline retired).
+        # The benchmark_regression stage iterates golden datasets
+        # directly without an orchestrator.
         self._dataset_registry = dataset_registry or load_canonical_datasets()
         self._work_dir = work_dir or Path("./.eden/ci")
         self._work_dir.mkdir(parents=True, exist_ok=True)
@@ -197,8 +200,8 @@ class CIPipeline:
         commit_sha: str,
         branch: str,
         changed_files: list[str],
-        baseline_commit: Optional[str] = None,
-        skip_stages: Optional[set[StageName]] = None,
+        baseline_commit: str | None = None,
+        skip_stages: set[StageName] | None = None,
     ) -> PipelineReport:
         """Run the full CI evaluation pipeline.
 
@@ -289,7 +292,7 @@ class CIPipeline:
             overall_status=overall_status,
             summary=summary,
             duration_ms=duration_ms,
-            timestamp=datetime.now(timezone.utc).isoformat(),
+            timestamp=datetime.now(UTC).isoformat(),
         )
 
         # Persist report
@@ -349,7 +352,7 @@ class CIPipeline:
         stage: StageName,
         commit_sha: str,
         branch: str,
-        baseline_commit: Optional[str],
+        baseline_commit: str | None,
     ) -> StageResult:
         """Execute a single evaluation stage."""
         start = time.perf_counter()
@@ -396,7 +399,7 @@ class CIPipeline:
     ) -> list[StageResult]:
         """Collect results from asyncio.gather, handling exceptions."""
         collected = []
-        for stage, result in zip(stages, results):
+        for stage, result in zip(stages, results, strict=False):
             if isinstance(result, Exception):
                 collected.append(StageResult(
                     stage=stage,
@@ -555,7 +558,7 @@ class CIPipeline:
 
     async def _run_benchmark_regression(
         self,
-        baseline_commit: Optional[str],
+        baseline_commit: str | None,
     ) -> StageResult:
         """Run benchmark regression against golden datasets."""
         try:
@@ -633,7 +636,7 @@ class CIPipeline:
                 error=str(e),
             )
 
-    def _simulate_case_evaluation(self, case) -> bool:
+    def _simulate_case_evaluation(self, case: Any) -> bool:
         """Simulate case evaluation for CI pipeline.
 
         In production, this would execute the actual environment.
@@ -770,7 +773,7 @@ class CIPipeline:
         report_path.write_text(report.to_json(), encoding="utf-8")
         logger.info(f"Saved CI report to {report_path}")
 
-    def load_report(self, run_id: str) -> Optional[PipelineReport]:
+    def load_report(self, run_id: str) -> PipelineReport | None:
         """Load a previously saved pipeline report."""
         report_path = self._work_dir / f"{run_id}.json"
         if not report_path.exists():

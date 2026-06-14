@@ -121,7 +121,7 @@ export default function ObservabilityPage() {
   const [compareResult, setCompareResult] = useState<ComparativeData | null>(null);
 
   // Export
-  const [exportFormat, setExportFormat] = useState("jsonl");
+  const [exportFormat, setExportFormat] = useState<"json" | "jsonl" | "csv">("jsonl");
   const [exportData, setExportData] = useState<string>("");
   const [showExportModal, setShowExportModal] = useState(false);
 
@@ -381,7 +381,7 @@ export default function ObservabilityPage() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"
+            className="fixed inset-0 bg-[var(--bg-base)]/50 z-50 flex items-center justify-center p-4"
             onClick={() => setShowExportModal(false)}
           >
             <motion.div
@@ -405,7 +405,7 @@ export default function ObservabilityPage() {
               </div>
               <div className="p-4 space-y-4 overflow-auto flex-1">
                 <div className="flex items-center gap-2">
-                  {["jsonl", "json", "csv"].map((fmt) => (
+                  {(["jsonl", "json", "csv"] as const).map((fmt) => (
                     <button
                       key={fmt}
                       onClick={() => setExportFormat(fmt)}
@@ -535,8 +535,8 @@ function TracesTab({
                       <span className={cn(
                         "text-xs px-2 py-0.5 rounded-full font-medium",
                         trace.realm === "environment"
-                          ? "bg-blue-50 text-blue-600"
-                          : "bg-[var(--cat-purple-dim)] text-[var(--cat-purple-fg)]"
+                          ? "bg-[var(--accent-faint)] text-[var(--accent)]"
+                          : "bg-[var(--accent-faint)] text-[var(--accent)]"
                       )}>
                         {trace.realm}
                       </span>
@@ -1151,7 +1151,7 @@ function OutcomeBadge({ outcome }: { outcome: string | null }) {
     success: "bg-[var(--terminal-faint)] text-[var(--terminal)]",
     failure: "bg-[var(--error-bg)] text-[var(--error)]",
     partial: "bg-[var(--warning-bg)] text-[var(--warning)]",
-    timeout: "bg-[var(--cat-warning-dim)] text-[var(--cat-warning-fg)]",
+    timeout: "bg-[var(--warning-bg)] text-[var(--warning)]",
     crash: "bg-[var(--error-dim)] text-[var(--error)]",
   };
   return (
@@ -1164,9 +1164,9 @@ function OutcomeBadge({ outcome }: { outcome: string | null }) {
 function SeverityBadge({ severity }: { severity: string }) {
   const classes: Record<string, string> = {
     critical: "bg-[var(--error-bg)] text-[var(--error)]",
-    high: "bg-[var(--cat-warning-dim)] text-[var(--cat-warning-fg)]",
+    high: "bg-[var(--warning-bg)] text-[var(--warning)]",
     medium: "bg-[var(--warning-bg)] text-[var(--warning)]",
-    low: "bg-blue-50 text-blue-600",
+    low: "bg-[var(--accent-faint)] text-[var(--accent)]",
     info: "bg-[var(--bg-tertiary)] text-[var(--text-secondary)]",
   };
   return (

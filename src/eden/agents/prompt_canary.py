@@ -32,7 +32,8 @@ from __future__ import annotations
 
 import hashlib
 import logging
-from typing import Any, Optional
+from datetime import UTC
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -45,7 +46,7 @@ def _stable_roll(tenant_id: str, agent: str, minute: int) -> float:
     tenants and minutes (avoiding bias). MD5 is fine here — we
     don't need cryptographic strength, just uniformity.
     """
-    raw = f"{tenant_id}:{agent}:{minute}".encode("utf-8")
+    raw = f"{tenant_id}:{agent}:{minute}".encode()
     h = hashlib.md5(raw).hexdigest()
     return int(h[:8], 16) / 0xFFFFFFFF
 
@@ -54,7 +55,7 @@ def pick_canary_version(
     assignments: list[dict[str, Any]],
     tenant_id: str,
     agent: str,
-) -> Optional[dict[str, Any]]:
+) -> dict[str, Any] | None:
     """Given a list of active canary assignments for (tenant, agent),
     decide which one wins for this call.
 
@@ -64,8 +65,8 @@ def pick_canary_version(
     """
     if not assignments:
         return None
-    from datetime import datetime, timezone
-    minute = int(datetime.now(timezone.utc).timestamp()) // 60
+    from datetime import datetime
+    minute = int(datetime.now(UTC).timestamp()) // 60
     roll = _stable_roll(tenant_id, agent, minute)
 
     cumulative = 0.0
@@ -129,7 +130,7 @@ async def fetch_active_assignments(
 async def resolve_prompt_version(
     tenant_id: str,
     agent: str,
-) -> Optional[int]:
+) -> int | None:
     """End-to-end canary resolution: fetch assignments, roll the
     dice, return the chosen version, or ``None`` if the global
     active version should be used.

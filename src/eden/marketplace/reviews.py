@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, cast
 from uuid import UUID
 
 logger = logging.getLogger(__name__)
@@ -127,7 +127,7 @@ async def flag_review(*, review_id: UUID, reason: str) -> bool:
         reason,
         review_id,
     )
-    return result != "UPDATE 0"
+    return cast(bool, result != "UPDATE 0")
 
 
 async def moderate_review(*, review_id: UUID, moderator_id: UUID, approve: bool) -> bool:
@@ -144,7 +144,7 @@ async def moderate_review(*, review_id: UUID, moderator_id: UUID, approve: bool)
         moderator_id,
         review_id,
     )
-    return result != "UPDATE 0"
+    return cast(bool, result != "UPDATE 0")
 
 
 __all__ = [

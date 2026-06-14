@@ -18,18 +18,17 @@ import asyncio
 import json
 import logging
 import re
-import subprocess
 import time
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
-from enum import Enum
+from datetime import UTC, datetime
+from enum import StrEnum
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
 
-class Severity(str, Enum):
+class Severity(StrEnum):
     """Security issue severity levels."""
 
     CRITICAL = "critical"
@@ -39,7 +38,7 @@ class Severity(str, Enum):
     INFO = "info"
 
 
-class IssueCategory(str, Enum):
+class IssueCategory(StrEnum):
     """Security issue categories."""
 
     INJECTION = "injection"
@@ -112,7 +111,7 @@ class ScanResult:
     issues: list[SecurityIssue] = field(default_factory=list)
     passed: bool = True
     duration_ms: float = 0.0
-    timestamp: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+    timestamp: str = field(default_factory=lambda: datetime.now(UTC).isoformat())
     metadata: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
@@ -210,7 +209,7 @@ typosquatting detection (names that look similar to popular packages).
         "pydantic-settings", "alembic", "asyncpg", "psycopg2",
     ]
 
-    def __init__(self, popular_packages: Optional[list[str]] = None):
+    def __init__(self, popular_packages: list[str] | None = None):
         self._popular = set(popular_packages or self._POPULAR_PACKAGES)
 
     async def verify(self, requirements: list[str]) -> ScanResult:
@@ -223,7 +222,7 @@ typosquatting detection (names that look similar to popular packages).
             ScanResult with any hallucinated or typosquatted dependencies.
         """
         issues: list[SecurityIssue] = []
-        start_time = datetime.now(timezone.utc)
+        start_time = datetime.now(UTC)
 
         for req in requirements:
             # Parse package name (strip version specifiers)
@@ -256,7 +255,7 @@ typosquatting detection (names that look similar to popular packages).
                     confidence=0.85,
                 ))
 
-        duration_ms = (datetime.now(timezone.utc) - start_time).total_seconds() * 1000
+        duration_ms = (datetime.now(UTC) - start_time).total_seconds() * 1000
 
         return ScanResult(
             scanner="dependency_verifier",
@@ -308,11 +307,12 @@ typosquatting detection (names that look similar to popular packages).
         }
         if pkg_name in known_packages:
             return True
-        # Check for common patterns of real packages
-        if re.match(r"^[a-z][a-z0-9_-]+$", pkg_name) and len(pkg_name) >= 3:
-            # Simulate probabilistic check (in production: actual PyPI API call)
-            # For common-looking names, assume they exist to reduce false positives
-            return True
+        # Check for common patterns of real packages.
+        # For common-looking names, assume they exist to reduce false
+        # positives; in production: actual PyPI API call.
+        return bool(
+            re.match(r"^[a-z][a-z0-9_-]+$", pkg_name) and len(pkg_name) >= 3
+        )
         return False
 
     def _find_similar(self, pkg_name: str) -> list[str]:
@@ -402,7 +402,7 @@ class SASTScanner:
             ScanResult with found issues.
         """
         issues: list[SecurityIssue] = []
-        start_time = datetime.now(timezone.utc)
+        start_time = datetime.now(UTC)
 
         # 1. Hardcoded secrets via regex
         for secret_type, pattern in self._SECRET_PATTERNS:
@@ -466,7 +466,7 @@ class SASTScanner:
                 confidence=0.75,
             ))
 
-        duration_ms = (datetime.now(timezone.utc) - start_time).total_seconds() * 1000
+        duration_ms = (datetime.now(UTC) - start_time).total_seconds() * 1000
 
         return ScanResult(
             scanner="sast_scanner",
@@ -630,7 +630,7 @@ class SBOMGenerator:
             "serialNumber": f"urn:uuid:{__import__('uuid').uuid4()}",
             "version": 1,
             "metadata": {
-                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "timestamp": datetime.now(UTC).isoformat(),
                 "tools": [{"vendor": "Eden", "name": "eden-sbom-generator", "version": "1.0.0"}],
                 "component": {"type": "application", "name": project_name, "version": "1.0.0"},
             },
@@ -650,7 +650,7 @@ class SecurityScanner:
         result = scanner.scan_environment(code="...", requirements=["requests", "numpy"])
     """
 
-    def __init__(self, policy: Optional[SecurityGatePolicy] = None):
+    def __init__(self, policy: SecurityGatePolicy | None = None):
         self._sast = SASTScanner()
         self._dependency = DependencyVerifier()
         self._sbom = SBOMGenerator()
@@ -701,10 +701,10 @@ class SecurityScanner:
             },
             "all_issues": [i.to_dict() for i in all_issues],
             "duration_ms": round(duration_ms, 2),
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
         }
 
-    async def scan_file(self, path: Path, requirements: Optional[list[str]] = None) -> dict[str, Any]:
+    async def scan_file(self, path: Path, requirements: list[str] | None = None) -> dict[str, Any]:
         """Scan a file on disk."""
         code = path.read_text(encoding="utf-8")
         return await self.scan_environment(
@@ -756,7 +756,7 @@ async def run_bandit(
         stdout, stderr = await asyncio.wait_for(
             proc.communicate(), timeout=timeout_seconds
         )
-    except asyncio.TimeoutError:
+    except TimeoutError:
         proc.kill()
         return {"tool": "bandit", "tool_available": True, "error": "timeout"}
     try:
@@ -783,7 +783,7 @@ async def run_semgrep(
         stdout, stderr = await asyncio.wait_for(
             proc.communicate(), timeout=timeout_seconds
         )
-    except asyncio.TimeoutError:
+    except TimeoutError:
         proc.kill()
         return {"tool": "semgrep", "tool_available": True, "error": "timeout"}
     try:
@@ -809,7 +809,7 @@ async def run_safety(
         stdout, stderr = await asyncio.wait_for(
             proc.communicate(), timeout=timeout_seconds
         )
-    except asyncio.TimeoutError:
+    except TimeoutError:
         proc.kill()
         return {"tool": "safety", "tool_available": True, "error": "timeout"}
     try:
@@ -820,7 +820,7 @@ async def run_safety(
 
 async def run_all_scanners(
     target: str,
-    requirements_path: Optional[str] = None,
+    requirements_path: str | None = None,
 ) -> dict[str, Any]:
     """Run all three scanners in parallel; return their combined output.
 

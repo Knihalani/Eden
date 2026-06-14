@@ -2,13 +2,12 @@
 
 from __future__ import annotations
 
-from typing import Any, Optional
+from typing import Any, cast
 
 from eden.sdk.models import (
-    EnvironmentItem,
     EnvironmentDetail,
-    EnvironmentVersion,
     EnvironmentTestReport,
+    EnvironmentVersion,
 )
 
 
@@ -21,9 +20,9 @@ class EnvironmentsResource:
     async def list(
         self,
         *,
-        status: Optional[str] = None,
-        outcome_tier: Optional[str] = None,
-        q: Optional[str] = None,
+        status: str | None = None,
+        outcome_tier: str | None = None,
+        q: str | None = None,
         sort: str = "created_at:desc",
         limit: int = 20,
         offset: int = 0,
@@ -42,7 +41,7 @@ class EnvironmentsResource:
             params["q"] = q
 
         data = await self._client.get("/environments", params=params)
-        return data
+        return cast(dict[str, Any], data)
 
     async def get(self, job_id: str) -> EnvironmentDetail:
         """Get environment detail by job ID."""
@@ -57,7 +56,7 @@ class EnvironmentsResource:
         """
         result = await self._client.request("GET", f"/environments/{job_id}/download")
         if result.get("_binary"):
-            return result["content"]
+            return cast(bytes, result["content"])
         raise RuntimeError("Expected binary ZIP response, got JSON")
 
     async def tests(self, job_id: str) -> EnvironmentTestReport:

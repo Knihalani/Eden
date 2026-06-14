@@ -166,7 +166,7 @@ async def generate_env_for_pattern(
         )
     except Exception as exc:
         logger.warning(f"generate_env failed to create job: {exc}")
-        raise HTTPException(status_code=500, detail=str(exc))
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
     return {
         "job_id": str(job_id),
         "pattern_id": pattern_id,

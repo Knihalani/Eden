@@ -8,15 +8,14 @@ from __future__ import annotations
 import time
 from collections import deque
 from dataclasses import dataclass, field
-from enum import Enum
-from typing import Any, Optional
-
+from enum import StrEnum
+from typing import Any
 
 # ──────────────────────────────────────────────────────────────────────────
 # Enums and data structures
 # ──────────────────────────────────────────────────────────────────────────
 
-class MemoryTier(str, Enum):
+class MemoryTier(StrEnum):
     WORKING = "working"
     EPISODIC = "episodic"
     SEMANTIC = "semantic"
@@ -99,7 +98,7 @@ class Fact:
 class WorkingMemory:
     """Immediate context — what the agent is currently thinking about."""
 
-    def __init__(self, max_observations: int = 20):
+    def __init__(self, max_observations: int = 20) -> None:
         self.current_goal: str = ""
         self.current_plan: list[dict[str, Any]] = []
         self.recent_observations: deque[Observation] = deque(maxlen=max_observations)
@@ -160,7 +159,7 @@ class WorkingMemory:
 class EpisodicMemory:
     """Chronological log of past experiences — what happened when."""
 
-    def __init__(self, max_episodes: int = 1000):
+    def __init__(self, max_episodes: int = 1000) -> None:
         self._episodes: deque[Episode] = deque(maxlen=max_episodes)
         self._total_recorded = 0
         self._vector_store: Any | None = None
@@ -219,7 +218,7 @@ class EpisodicMemory:
 class SemanticMemory:
     """Long-term factual knowledge — concepts, relationships, best practices."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self._facts: list[Fact] = []
         self._total_facts = 0
         self._knowledge_graph: Any | None = None
@@ -285,7 +284,7 @@ class SemanticMemory:
 class MemoryService:
     """Provides all three memory tiers to agents."""
 
-    def __init__(self, vector_store: Any | None = None, knowledge_graph: Any | None = None):
+    def __init__(self, vector_store: Any | None = None, knowledge_graph: Any | None = None) -> None:
         self.working_memories: dict[str, WorkingMemory] = {}
         self.episodic_memory = EpisodicMemory()
         self.semantic_memory = SemanticMemory()

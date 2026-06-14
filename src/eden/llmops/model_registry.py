@@ -11,13 +11,13 @@ import json
 import logging
 from dataclasses import dataclass, field
 from datetime import datetime
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 logger = logging.getLogger(__name__)
 
 
-class ArtifactType(str, Enum):
+class ArtifactType(StrEnum):
     BASE_MODEL = "base_model"
     LORA_ADAPTER = "lora_adapter"
     EMBEDDING_MODEL = "embedding_model"
@@ -37,6 +37,7 @@ class ModelArtifact:
     training_config: dict[str, Any] = field(default_factory=dict)
     parent_artifact_id: str | None = None
     created_at: datetime = field(default_factory=datetime.utcnow)
+    created_by: str = "system"
     metadata: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
@@ -65,6 +66,13 @@ class ArtifactEvaluation:
     cost_per_1k_tokens: float
     hallucination_rate: float
     evaluated_at: datetime = field(default_factory=datetime.utcnow)
+    # Field aliases used by the SQL writer — some legacy call sites
+    # reference these shorter names; keep them in sync to avoid
+    # silent AttributeError at runtime.
+    eval_id: str = ""
+    eval_name: str = ""
+    dataset_id: str = ""
+    metadata: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -85,7 +93,7 @@ class ModelArtifactRegistry:
     Production would persist to PostgreSQL + S3.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         self._artifacts: dict[str, ModelArtifact] = {}
         self._evaluations: dict[str, list[ArtifactEvaluation]] = {}
         self._family_index: dict[str, list[str]] = {}

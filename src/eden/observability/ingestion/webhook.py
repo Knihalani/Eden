@@ -27,7 +27,6 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Any, Optional
 
 from eden.config import get_settings
 from eden.observability.ingestion.attribution import Attribution
@@ -55,7 +54,7 @@ class WebhookDecoder:
 
     source_format = "webhook"
 
-    def detect(self, body: bytes, content_type: Optional[str]) -> bool:
+    def detect(self, body: bytes, content_type: str | None) -> bool:
         # The webhook decoder is the fallback — it always returns True
         # for any JSON body. Callers should prefer the more specific
         # decoders first (otel / helicone / langfuse / etc.) and only
@@ -91,7 +90,7 @@ class WebhookDecoder:
             raise SchemaInvalidError(
                 f"webhook body is not valid JSON: {exc}",
                 problems=[f"json_decode_error: {exc}"],
-            )
+            ) from exc
 
         if isinstance(payload, list):
             items = [p for p in payload if isinstance(p, dict)]

@@ -1,13 +1,14 @@
 """Password hashing and JWT utilities."""
 
+import logging
 from datetime import datetime, timedelta
-from typing import Optional
 
 import bcrypt
 from jose import JWTError, jwt
 
 from eden.config import get_settings
 
+logger = logging.getLogger(__name__)
 settings = get_settings()
 
 ALGORITHM = "HS256"
@@ -39,7 +40,7 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
 
 def create_access_token(
     data: dict,
-    expires_delta: Optional[timedelta] = None,
+    expires_delta: timedelta | None = None,
 ) -> str:
     """Create a JWT access token."""
     to_encode = data.copy()
@@ -51,6 +52,13 @@ def create_access_token(
         "exp": expire,
         "iat": datetime.utcnow(),
     })
+    # Stamp ``aud``/``iss`` when configured. Tokens issued before
+    # these settings existed are still accepted by ``decode_access_token``
+    # because the validation is only enforced when the values are set.
+    if settings.jwt_audience:
+        to_encode["aud"] = settings.jwt_audience
+    if settings.jwt_issuer:
+        to_encode["iss"] = settings.jwt_issuer
 
     return jwt.encode(
         to_encode,
@@ -59,14 +67,31 @@ def create_access_token(
     )
 
 
-def decode_access_token(token: str) -> Optional[dict]:
-    """Decode and validate a JWT access token."""
+def decode_access_token(token: str) -> dict | None:
+    """Decode and validate a JWT access token.
+
+    When ``settings.jwt_audience`` or ``settings.jwt_issuer`` is set,
+    those claims are enforced; otherwise the token is accepted based
+    on signature + ``exp`` alone (legacy behaviour, preserved so
+    existing sessions are not invalidated).
+    """
+    decode_kwargs: dict = {
+        "algorithms": [ALGORITHM],
+    }
+    if settings.jwt_audience:
+        decode_kwargs["audience"] = settings.jwt_audience
+    if settings.jwt_issuer:
+        decode_kwargs["issuer"] = settings.jwt_issuer
     try:
         payload = jwt.decode(
             token,
             settings.jwt_secret,
-            algorithms=[ALGORITHM],
+            **decode_kwargs,
         )
         return payload
-    except JWTError:
+    except JWTError as exc:
+        # Log only at debug — invalid tokens are routine (expired
+        # sessions, manual API calls) and would flood the warning
+        # stream if logged higher.
+        logger.debug("decode_access_token failed: %s", exc)
         return None

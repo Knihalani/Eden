@@ -34,10 +34,9 @@ from __future__ import annotations
 import json
 import logging
 import uuid
-from datetime import datetime, timezone
-from typing import Any, Optional
+from datetime import UTC, datetime
 
-from fastapi import APIRouter, Depends, HTTPException, Path, Query
+from fastapi import APIRouter, Body, Depends, HTTPException, Path, Query
 from pydantic import BaseModel, Field
 
 from eden.api.deps import get_current_user
@@ -58,11 +57,11 @@ class BuilderGraph(BaseModel):
 
     id: str
     org_id: str
-    user_id: Optional[str] = None
+    user_id: str | None = None
     name: str
     graph: dict
     yaml: str = ""
-    agent_id: Optional[str] = None
+    agent_id: str | None = None
     created_at: str
     updated_at: str
 
@@ -80,7 +79,7 @@ class BuilderGraphUpsertRequest(BaseModel):
     name: str = Field(..., min_length=1, max_length=128)
     graph: dict
     yaml: str = ""
-    agent_id: Optional[str] = None
+    agent_id: str | None = None
 
 
 class BuilderGraphUpsertResponse(BaseModel):
@@ -110,7 +109,7 @@ def _row_to_response(row: dict) -> BuilderGraph:
         if ts is None:
             return ""
         if isinstance(ts, datetime):
-            return ts.astimezone(timezone.utc).isoformat()
+            return ts.astimezone(UTC).isoformat()
         return str(ts)
 
     graph = row.get("graph")
@@ -191,7 +190,7 @@ async def list_builder_graphs(
 @router.post("", response_model=BuilderGraphUpsertResponse)
 async def upsert_builder_graph(
     org_id: str = Path(...),
-    body: BuilderGraphUpsertRequest = ...,
+    body: BuilderGraphUpsertRequest = Body(...),
     user: dict = Depends(get_current_user),
 ) -> BuilderGraphUpsertResponse:
     """Create or overwrite a graph keyed by (org_id, name)."""

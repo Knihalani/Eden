@@ -30,6 +30,18 @@ import pytest
 from fastapi.testclient import TestClient
 
 
+def _override_fetchrow(patch_postgres, query_needle: str, row):
+    """Queue a one-shot row for ``fetchrow`` calls whose query
+    contains ``query_needle``.
+
+    The conftest's default ``_fetchrow`` side_effect handles
+    auth + org-membership lookups automatically; tests use this
+    helper to inject a specific row for a specific query
+    without breaking those defaults.
+    """
+    patch_postgres._fetchrow_overrides.append((query_needle, row))
+
+
 # ────────────────────────────────────────────────────────────────────
 # Fixtures
 # ────────────────────────────────────────────────────────────────────
@@ -134,7 +146,7 @@ class TestDestinations:
             '"secret_access_key": "shhh-its-a-secret"}}'
         )
         returned_row = _dest_row(config_encrypted=encrypted_blob)
-        patch_postgres.fetchrow = AsyncMock(return_value=returned_row)
+        _override_fetchrow(patch_postgres, "INSERT INTO export_destinations", returned_row)
         patch_postgres.execute = AsyncMock(return_value="OK")
 
         response = authenticated_client.post(
@@ -169,10 +181,15 @@ class TestDestinations:
     ):
         # asyncpg raises UniqueViolationError on the duplicate; we
         # simulate by raising an exception whose message contains
-        # "unique" so the route maps it to 409.
-        patch_postgres.fetchrow = AsyncMock(
-            side_effect=Exception("duplicate key value violates unique constraint")
-        )
+        # "unique" so the route maps it to 409. The conftest's
+        # default side_effect handles auth; we wrap it so the
+        # specific INSERT call raises.
+        original_side_effect = patch_postgres.fetchrow.side_effect
+        async def _raise_on_insert(query, *args):
+            if "INSERT INTO export_destinations" in query:
+                raise Exception("duplicate key value violates unique constraint")
+            return await original_side_effect(query, *args)
+        patch_postgres.fetchrow = AsyncMock(side_effect=_raise_on_insert)
         response = authenticated_client.post(
             "/orgs/00000000-0000-0000-0000-000000000123/export/destinations",
             json=destination_payload,
@@ -184,8 +201,10 @@ class TestDestinations:
         self, authenticated_client: TestClient, patch_postgres
     ):
         dest_id = str(uuid.uuid4())
-        patch_postgres.fetchrow = AsyncMock(
-            return_value=_dest_row(destination_id=dest_id, name="prod-archive")
+        _override_fetchrow(
+            patch_postgres,
+            "FROM export_destinations WHERE destination_id",
+            _dest_row(destination_id=dest_id, name="prod-archive"),
         )
         patch_postgres.fetchval = AsyncMock(return_value=3)  # 3 schedules
         response = authenticated_client.delete(
@@ -198,8 +217,10 @@ class TestDestinations:
         self, authenticated_client: TestClient, patch_postgres
     ):
         dest_id = str(uuid.uuid4())
-        patch_postgres.fetchrow = AsyncMock(
-            return_value=_dest_row(destination_id=dest_id, name="prod-archive")
+        _override_fetchrow(
+            patch_postgres,
+            "FROM export_destinations WHERE destination_id",
+            _dest_row(destination_id=dest_id, name="prod-archive"),
         )
         patch_postgres.fetchval = AsyncMock(return_value=0)
         patch_postgres.execute = AsyncMock(return_value="OK")
@@ -214,7 +235,11 @@ class TestDestinations:
     def test_delete_destination_404(
         self, authenticated_client: TestClient, patch_postgres
     ):
-        patch_postgres.fetchrow = AsyncMock(return_value=None)
+        _override_fetchrow(
+            patch_postgres,
+            "FROM export_destinations WHERE destination_id",
+            None,
+        )
         response = authenticated_client.delete(
             f"/orgs/00000000-0000-0000-0000-000000000123/export/destinations/{uuid.uuid4()}"
         )
@@ -239,8 +264,10 @@ class TestSchedules:
     def test_create_schedule_one_shot(
         self, authenticated_client: TestClient, patch_postgres
     ):
-        patch_postgres.fetchrow = AsyncMock(
-            return_value=_schedule_row(cron_expression=None, format="jsonl")
+        _override_fetchrow(
+            patch_postgres,
+            "INSERT INTO export_schedules",
+            _schedule_row(cron_expression=None, format="jsonl"),
         )
         response = authenticated_client.post(
             "/orgs/00000000-0000-0000-0000-000000000123/export/schedules",
@@ -346,12 +373,14 @@ class TestRunNow:
         schedule_id = str(uuid.uuid4())
         from eden.api.utils.encryption import encrypt_value
 
-        encrypted_config = encrypt_value(
+        encrypt_value(
             '{"bucket": "eden-prod-archive", '
             '"credentials": {"access_key_id": "AKIA", "secret_access_key": "S3CR3T"}}'
         )
-        patch_postgres.fetchrow = AsyncMock(
-            return_value=_FakeRow({
+        _override_fetchrow(
+            patch_postgres,
+            "FROM export_schedules",
+            _FakeRow({
                 "schedule_id": schedule_id,
                 "org_id": "00000000-0000-0000-0000-000000000123",
                 "destination_id": None,
@@ -384,7 +413,7 @@ class TestRunNow:
     def test_run_now_404(
         self, authenticated_client: TestClient, patch_postgres
     ):
-        patch_postgres.fetchrow = AsyncMock(return_value=None)
+        _override_fetchrow(patch_postgres, "FROM export_schedules", None)
         response = authenticated_client.post(
             f"/orgs/00000000-0000-0000-0000-000000000123/export/run-now/{uuid.uuid4()}"
         )

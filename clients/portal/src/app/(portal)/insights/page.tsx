@@ -145,7 +145,7 @@ export default function InsightsPage() {
     setError("");
     try {
       const data = await api.getInsightsOverview(currentOrg.id);
-      setOverview(data);
+      setOverview(data as unknown as OverviewData);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load insights");
     } finally {
@@ -319,8 +319,8 @@ function OverviewTab({ data }: { data: OverviewData }) {
       label: "Disparity Reports",
       value: summary.total_disparity_reports,
       icon: AlertTriangle,
-      color: "text-[var(--cat-warning-fg)]",
-      bg: "bg-[var(--cat-warning-dim)]",
+      color: "text-[var(--warning)]",
+      bg: "bg-[var(--warning-bg)]",
     },
     {
       label: "Datasets",
@@ -370,11 +370,11 @@ function OverviewTab({ data }: { data: OverviewData }) {
                 severity === "critical"
                   ? "bg-[var(--error)]"
                   : severity === "high"
-                  ? "bg-[var(--cat-warning-dim)]"
+                  ? "bg-[var(--warning-bg)]"
                   : severity === "medium"
                   ? "bg-[var(--warning)]"
                   : severity === "low"
-                  ? "bg-blue-400"
+                  ? "bg-[var(--accent)]"
                   : "bg-[var(--text-muted)]";
               return (
                 <div key={severity}>
@@ -486,7 +486,7 @@ function OverviewTab({ data }: { data: OverviewData }) {
               <p className="text-xs text-[var(--text-muted)]">Average Divergence</p>
             </div>
             <div>
-              <p className="text-3xl font-bold text-[var(--cat-warning-fg)]">{disparity.high_disparity_count}</p>
+              <p className="text-3xl font-bold text-[var(--warning)]">{disparity.high_disparity_count}</p>
               <p className="text-xs text-[var(--text-muted)]">High Disparity Reports</p>
             </div>
             <div>
@@ -620,7 +620,7 @@ function DisparityTab({
         </div>
         <div className="bg-[var(--bg-primary)] border border-[var(--border-default)] rounded-xl p-4">
           <p className="text-xs text-[var(--text-muted)] uppercase tracking-wide">High Disparity</p>
-          <p className="text-2xl font-bold text-[var(--cat-warning-fg)] mt-1">{data.high_disparity_count}</p>
+          <p className="text-2xl font-bold text-[var(--warning)] mt-1">{data.high_disparity_count}</p>
         </div>
         <div className="bg-[var(--bg-primary)] border border-[var(--border-default)] rounded-xl p-4">
           <p className="text-xs text-[var(--text-muted)] uppercase tracking-wide">Avg Score</p>
@@ -646,7 +646,7 @@ function DisparityTab({
                     report.overall_score > 0.6
                       ? "bg-[var(--error-bg)] text-[var(--error)]"
                       : report.overall_score > 0.3
-                      ? "bg-[var(--cat-warning-dim)] text-[var(--cat-warning-fg)]"
+                      ? "bg-[var(--warning-bg)] text-[var(--warning)]"
                       : "bg-[var(--terminal-faint)] text-[var(--terminal)]"
                   )}
                 >
@@ -670,7 +670,7 @@ function DisparityTab({
                     dim.gap > 0.5
                       ? "bg-[var(--error-bg)] text-[var(--error)]"
                       : dim.gap > 0.2
-                      ? "bg-[var(--cat-warning-dim)] text-[var(--cat-warning-fg)]"
+                      ? "bg-[var(--warning-bg)] text-[var(--warning)]"
                       : "bg-[var(--bg-tertiary)] text-[var(--text-muted)]"
                   )}
                 >
@@ -788,7 +788,7 @@ function InsightDetailModal({
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"
+      className="fixed inset-0 bg-[var(--bg-base)]/50 z-50 flex items-center justify-center p-4"
       onClick={onClose}
     >
       <motion.div
@@ -861,7 +861,7 @@ function ReportDetailModal({
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"
+      className="fixed inset-0 bg-[var(--bg-base)]/50 z-50 flex items-center justify-center p-4"
       onClick={onClose}
     >
       <motion.div
@@ -888,7 +888,7 @@ function ReportDetailModal({
                 report.overall_score > 0.6
                   ? "bg-[var(--error-bg)] text-[var(--error)]"
                   : report.overall_score > 0.3
-                  ? "bg-[var(--cat-warning-dim)] text-[var(--cat-warning-fg)]"
+                  ? "bg-[var(--warning-bg)] text-[var(--warning)]"
                   : "bg-[var(--terminal-faint)] text-[var(--terminal)]"
               )}
             >
@@ -916,7 +916,7 @@ function ReportDetailModal({
                       dim.gap > 0.5
                         ? "bg-[var(--error)]"
                         : dim.gap > 0.2
-                        ? "bg-[var(--cat-warning-dim)]"
+                        ? "bg-[var(--warning-bg)]"
                         : "bg-[var(--terminal)]"
                     )}
                     style={{ width: `${dim.gap * 100}%` }}
@@ -953,9 +953,9 @@ function ReportDetailModal({
 function SeverityIcon({ severity }: { severity: string }) {
   const map: Record<string, { icon: typeof AlertTriangle; color: string }> = {
     critical: { icon: XCircle, color: "text-[var(--error)]" },
-    high: { icon: AlertTriangle, color: "text-[var(--cat-warning-fg)]" },
+    high: { icon: AlertTriangle, color: "text-[var(--warning)]" },
     medium: { icon: AlertTriangle, color: "text-[var(--warning)]" },
-    low: { icon: Info, color: "text-blue-400" },
+    low: { icon: Info, color: "text-[var(--accent)]" },
     info: { icon: Info, color: "text-[var(--text-muted)]" },
   };
   const { icon: Icon, color } = map[severity] || map.info;
@@ -965,9 +965,9 @@ function SeverityIcon({ severity }: { severity: string }) {
 function SeverityBadge({ severity }: { severity: string }) {
   const classes: Record<string, string> = {
     critical: "bg-[var(--error-bg)] text-[var(--error)]",
-    high: "bg-[var(--cat-warning-dim)] text-[var(--cat-warning-fg)]",
+    high: "bg-[var(--warning-bg)] text-[var(--warning)]",
     medium: "bg-[var(--warning-bg)] text-[var(--warning)]",
-    low: "bg-blue-50 text-blue-600",
+    low: "bg-[var(--accent-faint)] text-[var(--accent)]",
     info: "bg-[var(--bg-tertiary)] text-[var(--text-secondary)]",
   };
   return (
@@ -1003,7 +1003,8 @@ function ClosedLoopTab() {
       } catch (e) {
         if (!cancelled) {
           setError(
-            "Could not load the closed-loop report. Run alembic migration 019 and ensure the audit log has data.",
+            "Could not load the correlation report. " +
+            "For pending closed-loop actions, visit /closed-loop.",
           );
           setReport(null);
         }
