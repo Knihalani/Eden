@@ -48,7 +48,11 @@ export default function SignupPage() {
     setLoading(true);
     try {
       await signup(email, password, name);
-      router.push("/dashboard");
+      // June 2026: fresh signups always go through the onboarding
+      // wizard (welcome → org setup → SDK install → optional GitHub
+      // connect → done). The wizard handles its own state, so we
+      // don't have to check anything here.
+      router.push("/onboarding");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Signup failed");
     } finally {

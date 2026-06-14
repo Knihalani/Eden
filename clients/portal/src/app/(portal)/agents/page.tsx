@@ -14,6 +14,7 @@ import { useToast } from "@/components/ui/toast";
 import {
   Bot,
   ExternalLink,
+  Plus,
   RefreshCw,
   Search,
   Filter,
@@ -122,6 +123,13 @@ export default function AgentsPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          <Link
+            href="/agents/connect"
+            className="inline-flex items-center gap-1.5 px-3 py-2 bg-[var(--accent)] text-[var(--bg-primary)] rounded-lg text-sm font-medium hover:opacity-90 transition-opacity"
+          >
+            <Plus className="w-4 h-4" />
+            Connect new agent
+          </Link>
           <button
             onClick={load}
             disabled={loading}
