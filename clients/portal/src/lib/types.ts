@@ -203,3 +203,210 @@ export interface AuditEvent {
   user_email?: string;
   user_name?: string;
 }
+// ── Agent PR-suggestion types (v1.7) ─────────────────────────────
+
+export type PRSuggestionTrigger =
+  | "rca_cluster"
+  | "drift_alert"
+  | "retrieval_gap"
+  | "judge_regression";
+
+export type PRSuggestionStatus =
+  | "pending"
+  | "opened"
+  | "merged"
+  | "rejected";
+
+export interface PRSuggestionFile {
+  path: string;
+  size: number;
+}
+
+export interface PRSuggestion {
+  id: string;
+  org_id: string;
+  trigger: PRSuggestionTrigger;
+  trigger_id: string;
+  trigger_summary: string;
+  files: PRSuggestionFile[];
+  patch_diff: string;
+  pr_title: string;
+  pr_body: string;
+  blast_radius: number;
+  confidence: number;
+  status: PRSuggestionStatus;
+  created_at: string;
+  opened_pr_number: number | null;
+}
+
+export interface PRSuggestionListResponse {
+  status: string;
+  data: {
+    suggestions: PRSuggestion[];
+    count: number;
+    filter: {
+      status: string | null;
+      trigger: string | null;
+      limit: number;
+    };
+  };
+}
+
+export interface PRSuggestionDetailResponse {
+  status: string;
+  data: {
+    suggestion: PRSuggestion;
+  };
+}
+
+export interface PRSuggestionCreateResponse {
+  status: string;
+  data: {
+    suggestion: PRSuggestion;
+    suggestion_id: string;
+  };
+}
+
+export interface PRSuggestionOpenPRResponse {
+  status: string;
+  data: {
+    suggestion_id: string;
+    pr: {
+      number: number;
+      title: string;
+      branch: string;
+      base: string;
+      url: string;
+      state: string;
+      created_at: string;
+    };
+  };
+}
+
+// ── Visual Builder (§8.1) ─────────────────────────────────────────
+// Block kinds, handle ids, and data shapes for the React Flow
+// DAG editor at /builder. Re-exported from
+// clients/portal/src/app/(portal)/builder/_lib/types.ts so both
+// the page and any cross-package consumer can use them.
+
+export type BlockKind =
+  | "agent"
+  | "tool"
+  | "scenario"
+  | "scoring"
+  | "memory"
+  | "loop"
+  | "seed";
+
+export type HandleId =
+  | "out:agent"
+  | "out:tool"
+  | "out:scenario"
+  | "out:scoring"
+  | "out:memory"
+  | "out:loop"
+  | "in:agent"
+  | "in:tool"
+  | "in:scenario"
+  | "in:scoring"
+  | "in:memory"
+  | "in:loop";
+
+export interface BaseBlockData {
+  kind: BlockKind;
+  label: string;
+}
+
+export interface AgentBlockData extends BaseBlockData {
+  kind: "agent";
+  name: string;
+  framework: "langchain" | "openai-agents" | "raw" | "none";
+}
+
+export interface ToolBlockData extends BaseBlockData {
+  kind: "tool";
+  name: string;
+  toolKind: "shell" | "file" | "http" | "custom";
+  config: Record<string, string>;
+}
+
+export interface ScenarioBlockData extends BaseBlockData {
+  kind: "scenario";
+  id: string;
+  envClassName: string;
+  maxEpisodes: number;
+  description: string;
+}
+
+export interface CriterionData {
+  name: string;
+  kind: "quality" | "adversarial" | "behavioural";
+  weight: number;
+}
+
+export interface ScoringBlockData extends BaseBlockData {
+  kind: "scoring";
+  criteria: CriterionData[];
+}
+
+export interface MemoryBlockData extends BaseBlockData {
+  kind: "memory";
+  memoryType: "none" | "short-term" | "long-term";
+  capacity: number;
+}
+
+export interface LoopBlockData extends BaseBlockData {
+  kind: "loop";
+  loopType: "none" | "retry" | "reflexion";
+  maxIterations: number;
+}
+
+export interface SeedBlockData extends BaseBlockData {
+  kind: "seed";
+  value: number;
+}
+
+export type BlockData =
+  | AgentBlockData
+  | ToolBlockData
+  | ScenarioBlockData
+  | ScoringBlockData
+  | MemoryBlockData
+  | LoopBlockData
+  | SeedBlockData;
+
+/** Edges carry a kind for data-flow vs control-flow styling. */
+export interface EdenEdgeData {
+  kind: "data" | "control";
+}
+
+export interface SpecBundle {
+  /** eden-sim-eval.yaml as a string. */
+  yaml: string;
+  /** Extra files to include in the tarball. */
+  files: { path: string; body: string }[];
+}
+
+export interface SpecValidationError {
+  code: string;
+  message: string;
+  nodeId?: string;
+}
+
+export interface SavedGraph {
+  graphName: string;
+  nodes: unknown[]; // EdenNode[] at runtime; looser here to avoid the React Flow type dependency in this file.
+  edges: unknown[]; // EdenEdge[] at runtime.
+  updatedAt: number;
+}
+
+export interface SavedGraphMeta {
+  graphName: string;
+  updatedAt: number;
+  summary: {
+    agents: number;
+    tools: number;
+    scenarios: number;
+    seed?: number;
+  };
+}
