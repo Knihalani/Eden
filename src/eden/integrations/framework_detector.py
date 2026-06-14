@@ -1,8 +1,9 @@
-"""Framework detection for `/integrate-eden`.
+"""Framework detection for the onboarding wizard.
 
 Walks a target repo and reports which agent framework is in use, plus
 the entry points and existing instrumentation. The output drives the
-SDK integrator and eval harness generator.
+SDK integrator and the PR that the onboarding flow opens against the
+user's repo.
 
 Detection strategy is import-pattern based: we look at
 ``requirements.txt`` / ``pyproject.toml`` / ``package.json`` for
@@ -10,20 +11,25 @@ declared deps and at the first 200 Python / TS files for canonical
 imports (``from langchain.*``, ``import openai``, ``from anthropic``,
 etc.). Heuristics are conservative — we never claim "custom" until
 we have looked at a meaningful sample of files.
+
+Originally lived under ``cli/eden/framework_detector.py`` while the
+agent CLI shipped. The CLI was retired in the June 2026 cleanup; this
+module is now imported by ``eden.api.routes.github`` (onboarding flow)
+and the eval harness generator.
 """
 
 from __future__ import annotations
 
 import json
 import re
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Optional, Tuple
-
+from typing import Any
 
 # Canonical markers per framework. We use a (module, import_pattern)
 # pair; either side matching counts.
-FRAMEWORK_MARKERS: Dict[str, Dict[str, Any]] = {
+FRAMEWORK_MARKERS: dict[str, dict[str, Any]] = {
     "langchain": {
         "pip": ["langchain", "langchain-core", "langchain-community"],
         "npm": ["langchain", "@langchain/core"],
@@ -92,12 +98,12 @@ class FrameworkDetection:
     framework: str  # e.g. "langchain", "openai", "custom"
     language: str  # "python" | "typescript" | "unknown"
     confidence: float  # 0.0 - 1.0
-    entry_points: List[str] = field(default_factory=list)
-    matched_markers: List[str] = field(default_factory=list)
-    existing_instrumentation: List[str] = field(default_factory=list)
-    project_files: List[str] = field(default_factory=list)
+    entry_points: list[str] = field(default_factory=list)
+    matched_markers: list[str] = field(default_factory=list)
+    existing_instrumentation: list[str] = field(default_factory=list)
+    project_files: list[str] = field(default_factory=list)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "framework": self.framework,
             "language": self.language,
@@ -130,7 +136,7 @@ def _detect_language(root: Path) -> str:
     return "unknown"
 
 
-def _iter_source_files(root: Path, language: str, limit: int = 200) -> List[Path]:
+def _iter_source_files(root: Path, language: str, limit: int = 200) -> list[Path]:
     if language == "python":
         exts = (".py",)
     elif language == "typescript":
@@ -142,7 +148,7 @@ def _iter_source_files(root: Path, language: str, limit: int = 200) -> List[Path
         "node_modules", ".git", "venv", ".venv", "__pycache__",
         "dist", "build", ".next", ".turbo", "target",
     }
-    found: List[Path] = []
+    found: list[Path] = []
     for path in root.rglob("*"):
         if path.is_dir():
             continue
@@ -155,7 +161,7 @@ def _iter_source_files(root: Path, language: str, limit: int = 200) -> List[Path
     return found
 
 
-def _parse_requirements_txt(text: str) -> List[str]:
+def _parse_requirements_txt(text: str) -> list[str]:
     """Return a list of normalised package names from requirements.txt."""
     pkgs = []
     for line in text.splitlines():
@@ -170,7 +176,7 @@ def _parse_requirements_txt(text: str) -> List[str]:
     return pkgs
 
 
-def _parse_package_json_deps(text: str) -> List[str]:
+def _parse_package_json_deps(text: str) -> list[str]:
     try:
         data = json.loads(text)
     except json.JSONDecodeError:
@@ -181,10 +187,10 @@ def _parse_package_json_deps(text: str) -> List[str]:
     return [d.lower() for d in deps]
 
 
-def _parse_pyproject_deps(text: str) -> List[str]:
+def _parse_pyproject_deps(text: str) -> list[str]:
     """Best-effort: pull out a flat list of strings from project.dependencies."""
     # Heuristic regex; avoids requiring tomli/tomllib for fast detection.
-    pkgs: List[str] = []
+    pkgs: list[str] = []
     # Look for `dependencies = [ ... ]` blocks
     for m in re.finditer(r"dependencies\s*=\s*\[([^\]]+)\]", text):
         block = m.group(1)
@@ -196,11 +202,11 @@ def _parse_pyproject_deps(text: str) -> List[str]:
     return pkgs
 
 
-def _find_entry_points(root: Path, source_files: Iterable[Path]) -> List[str]:
+def _find_entry_points(root: Path, source_files: Iterable[Path]) -> list[str]:
     """Heuristic entry points: files with `if __name__ == "__main__"` or
     main functions in TypeScript. Paths are returned relative to
     ``root`` so callers can present them as repo-relative entries."""
-    entries: List[str] = []
+    entries: list[str] = []
     for p in source_files:
         try:
             text = _safe_read_text(p, max_bytes=50_000)
@@ -222,9 +228,9 @@ def _find_entry_points(root: Path, source_files: Iterable[Path]) -> List[str]:
     return entries[:10]
 
 
-def _detect_existing_instrumentation(source_files: Iterable[Path]) -> List[str]:
+def _detect_existing_instrumentation(source_files: Iterable[Path]) -> list[str]:
     """Look for any pre-existing observability wiring the user has."""
-    found: List[str] = []
+    found: list[str] = []
     patterns = {
         "opentelemetry": r"opentelemetry",
         "otel-instrumentation": r"OTLPSpanExporter|Instrumentation",
@@ -239,7 +245,7 @@ def _detect_existing_instrumentation(source_files: Iterable[Path]) -> List[str]:
             if re.search(pat, text, re.IGNORECASE):
                 found.append(label)
     # Dedupe, preserve order
-    seen: Dict[str, None] = {}
+    seen: dict[str, None] = {}
     for f in found:
         seen.setdefault(f, None)
     return list(seen.keys())
@@ -247,17 +253,17 @@ def _detect_existing_instrumentation(source_files: Iterable[Path]) -> List[str]:
 
 def _score_framework(
     framework: str,
-    declared_deps: List[str],
+    declared_deps: list[str],
     source_text: str,
     language: str,
-) -> Tuple[float, List[str]]:
+) -> tuple[float, list[str]]:
     """Return (confidence 0..1, list of matched marker descriptions)."""
     meta = FRAMEWORK_MARKERS[framework]
     pip_markers = [d.lower() for d in meta["pip"]]
     npm_markers = [d.lower() for d in meta["npm"]]
     import_patterns = meta["imports"]
 
-    matched: List[str] = []
+    matched: list[str] = []
 
     dep_hits = [
         d for d in declared_deps
@@ -311,7 +317,7 @@ def detect_framework(target: str | Path) -> FrameworkDetection:
     source_files = _iter_source_files(root, language)
     project_files_rel = [str(p.relative_to(root)) for p in source_files[:20]]
 
-    declared_deps: List[str] = []
+    declared_deps: list[str] = []
     req_path = root / "requirements.txt"
     if req_path.exists():
         declared_deps.extend(_parse_requirements_txt(_safe_read_text(req_path)))
@@ -323,15 +329,15 @@ def detect_framework(target: str | Path) -> FrameworkDetection:
         declared_deps.extend(_parse_package_json_deps(_safe_read_text(pj_path)))
 
     # Concatenate source text (capped) for import scanning.
-    source_text_parts: List[str] = []
+    source_text_parts: list[str] = []
     for p in source_files[:50]:
         source_text_parts.append(_safe_read_text(p, max_bytes=20_000))
     source_text = "\n".join(source_text_parts)
 
     # Score each candidate framework
-    best_framework: Optional[str] = None
+    best_framework: str | None = None
     best_confidence = 0.0
-    best_markers: List[str] = []
+    best_markers: list[str] = []
 
     for fw in FRAMEWORK_MARKERS:
         conf, markers = _score_framework(fw, declared_deps, source_text, language)
@@ -375,3 +381,82 @@ def detect_framework(target: str | Path) -> FrameworkDetection:
         existing_instrumentation=_detect_existing_instrumentation(source_files),
         project_files=project_files_rel,
     )
+
+
+def detect_framework_from_files(files: dict[str, str]) -> FrameworkDetection:
+    """Same as :func:`detect_framework` but takes an in-memory file map
+    instead of walking a real directory.
+
+    The onboarding wizard calls this against files fetched via
+    ``RepoProvider.read_file`` — no clone needed.
+
+    Args:
+        files: Mapping of repo-relative path -> file content. Caller
+            should pre-filter to manifest files (requirements.txt,
+            pyproject.toml, package.json) + a handful of source files.
+
+    Returns:
+        A ``FrameworkDetection``; falls back to ``custom`` if nothing
+        meaningful is matched.
+    """
+    has_py = any(p in files for p in ("pyproject.toml", "requirements.txt", "setup.py"))
+    has_ts = any(p in files for p in ("package.json", "tsconfig.json"))
+    if has_py and not has_ts:
+        language = "python"
+    elif has_ts and not has_py:
+        language = "typescript"
+    elif has_py and has_ts:
+        language = "python"
+    else:
+        language = "unknown"
+
+    declared_deps: list[str] = []
+    if "requirements.txt" in files:
+        declared_deps.extend(_parse_requirements_txt(files["requirements.txt"]))
+    if "pyproject.toml" in files:
+        declared_deps.extend(_parse_pyproject_deps(files["pyproject.toml"]))
+    if "package.json" in files:
+        declared_deps.extend(_parse_package_json_deps(files["package.json"]))
+
+    source_text = "\n".join(
+        content for path, content in files.items()
+        if path.endswith((".py", ".ts", ".tsx", ".js", ".jsx"))
+    )
+
+    best_framework: str | None = None
+    best_confidence = 0.0
+    best_markers: list[str] = []
+    for fw in FRAMEWORK_MARKERS:
+        conf, markers = _score_framework(fw, declared_deps, source_text, language)
+        if conf > best_confidence:
+            best_confidence = conf
+            best_framework = fw
+            best_markers = markers
+
+    if best_framework is None or best_confidence < 0.5:
+        if any("openai" in d for d in declared_deps):
+            best_framework, best_confidence = "openai", 0.6
+            best_markers = ["fallback:openai"]
+        elif any("anthropic" in d for d in declared_deps):
+            best_framework, best_confidence = "anthropic", 0.6
+            best_markers = ["fallback:anthropic"]
+        else:
+            best_framework = "custom"
+
+    return FrameworkDetection(
+        framework=best_framework or "custom",
+        language=language,
+        confidence=best_confidence,
+        entry_points=[],
+        matched_markers=best_markers,
+        existing_instrumentation=[],
+        project_files=list(files.keys())[:20],
+    )
+
+
+__all__ = [
+    "FRAMEWORK_MARKERS",
+    "FrameworkDetection",
+    "detect_framework",
+    "detect_framework_from_files",
+]
