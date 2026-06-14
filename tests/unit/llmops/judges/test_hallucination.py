@@ -72,7 +72,7 @@ async def test_hallucination_judge_success():
     client.call.assert_called_once()
     prompt = client.call.call_args.kwargs["prompt"]
     assert "Hello world." in prompt
-    assert "judge_hallucination" == client.call.call_args.kwargs["agent"]
+    assert client.call.call_args.kwargs["agent"] == "judge_hallucination"
 
 
 @pytest.mark.asyncio

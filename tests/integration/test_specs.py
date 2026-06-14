@@ -2,10 +2,27 @@
 
 Covers: interview turn submission, spec generation, spec retrieval,
         spec listing, and spec-to-job conversion.
+
+NOTE: The env-generation pipeline that drove these routes
+(``/specs/interview``, ``/specs/{id}``, ``/specs/{id}/regenerate``,
+``/specs/{id}/convert-to-job``) was retired in Phase 2 (see the
+``ENV_GEN_RETIRED_MSG`` block in ``eden.api.utils.env_gen_status``
+and the corresponding app-router removal in ``eden/api/app.py``).
+The tests below are skipped — they remain in the tree as a
+historical record of the contract and to make the retirement
+visible in the test summary rather than silently disappearing.
 """
 
 import pytest
 from fastapi.testclient import TestClient
+
+pytestmark = pytest.mark.skip(
+    reason=(
+        "Env-generation pipeline (specs + interview + spec-to-job) "
+        "retired in Phase 2. The routes no longer exist on the app; "
+        "the equivalent flow is now the Eden Agent CLI's `/eden-sim`."
+    )
+)
 
 
 class TestSpecInterview:

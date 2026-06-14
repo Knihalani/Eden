@@ -16,15 +16,14 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from eden.insights.detectors import Insight
-from eden.insights.insights_service import InsightsService
 from eden.insights.correlation import (
-    CorrelationReport,
     GOLD_TIER_UPLIFT_TARGET,
+    CorrelationReport,
     WeekBucket,
     correlation_report,
 )
-
+from eden.insights.detectors import Insight
+from eden.insights.insights_service import InsightsService
 
 # ────────────────────────────────────────────────────────────────────────
 # Bug-fix regressions (June 2026 audit)

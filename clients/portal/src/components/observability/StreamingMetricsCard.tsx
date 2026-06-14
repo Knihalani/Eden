@@ -107,7 +107,7 @@ export function StreamingMetricsCard({
         unit="ms"
         sub="Time per output token"
         sparkline={tpotSeries}
-        color="var(--cat-warning-fg)"
+        color="var(--warning)"
       />
     </div>
   );

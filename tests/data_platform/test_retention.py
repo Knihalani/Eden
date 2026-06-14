@@ -1,12 +1,14 @@
 """Tests for the data retention and GDPR manager."""
 
+from datetime import UTC, datetime, timedelta, timezone
+
 import pytest
-from datetime import datetime, timezone, timedelta
+
 from eden.data_platform.retention import (
+    DEFAULT_POLICIES,
     DataRetentionManager,
     RetentionPolicy,
     RetentionReport,
-    DEFAULT_POLICIES,
 )
 
 
@@ -47,14 +49,14 @@ class TestDataRetentionManager:
     @pytest.mark.asyncio
     async def test_purge_pii_fields_dry_run(self):
         manager = DataRetentionManager(dry_run=True)
-        before = datetime.now(timezone.utc) - timedelta(days=30)
+        before = datetime.now(UTC) - timedelta(days=30)
         count = await manager.purge_pii_fields(before)
         assert count >= 0  # Dry run returns count without DB
 
     @pytest.mark.asyncio
     async def test_cleanup_debug_dumps(self):
         manager = DataRetentionManager(dry_run=True)
-        before = datetime.now(timezone.utc) - timedelta(days=8)
+        before = datetime.now(UTC) - timedelta(days=8)
         count = await manager.cleanup_debug_dumps(before)
         assert count == 0
 

@@ -20,7 +20,6 @@ from eden.integrations import (
 from eden.integrations.helicone.headers import helicone_headers
 from eden.integrations.helicone.sync import parse_helicone_event
 
-
 # ────────────────────────────────────────────────────────────────────────
 # Versioning policy
 # ────────────────────────────────────────────────────────────────────────

@@ -21,7 +21,7 @@ export default function SettingsLoading() {
       {/* Tab content */}
       <div className="space-y-6">
         {/* Section */}
-        <div className="bg-[var(--surface)] border border-[var(--border)] rounded-xl p-6 space-y-5">
+        <div className="bg-[var(--bg-primary)] border border-[var(--border)] rounded-xl p-6 space-y-5">
           <div className="space-y-2">
             <Skeleton className="h-6 w-40" />
             <Skeleton className="h-4 w-72" />
@@ -50,7 +50,7 @@ export default function SettingsLoading() {
         </div>
 
         {/* Another section */}
-        <div className="bg-[var(--surface)] border border-[var(--border)] rounded-xl p-6 space-y-5">
+        <div className="bg-[var(--bg-primary)] border border-[var(--border)] rounded-xl p-6 space-y-5">
           <div className="space-y-2">
             <Skeleton className="h-6 w-48" />
             <Skeleton className="h-4 w-80" />

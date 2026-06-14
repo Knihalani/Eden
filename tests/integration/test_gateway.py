@@ -31,7 +31,6 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from fastapi.testclient import TestClient
 
-
 # ─────────────────────────────────────────────────────────────────────
 # Fixtures
 # ─────────────────────────────────────────────────────────────────────
@@ -78,12 +77,16 @@ class _StubChoice:
 class _StubChatResponse:
     """Minimal stand-in for ``openai.types.chat.ChatCompletion``."""
 
-    def __init__(self, content="Hello!", model="openai/gpt-4o-mini"):
+    def __init__(self, content="Hello!", model="openai/gpt-4o-mini", message=None):
         self.id = "chatcmpl-stub-1"
         self.object = "chat.completion"
         self.created = int(time.time())
         self.model = model
-        self.choices = [_StubChoice(message=_StubMessage(content=content))]
+        # If the caller passes a pre-built ``message`` (e.g. one with
+        # ``tool_calls`` populated), honour it.  Otherwise fall back
+        # to building a content-only message for the simple cases.
+        msg = message if message is not None else _StubMessage(content=content)
+        self.choices = [_StubChoice(message=msg)]
         self.usage = _StubUsage()
         self.system_fingerprint = "fp_stub"
 
@@ -159,7 +162,16 @@ def mock_auth(api_client: TestClient, mock_collector, monkeypatch):
     from eden.api.app import app
     from eden.api.deps import get_ingestion_auth
     from eden.api.routes import gateway as gateway_module
+    from eden.config import Settings, get_settings
     from eden.observability import telemetry_collector as tc_module
+    from eden.config import get_settings
+
+    # Make sure /v1/models and the upstream probe don't reach out
+    # to the real OpenRouter: empty key → gateway falls back to the
+    # static catalogue baked into the adapter.
+    s = get_settings()
+    monkeypatch.setattr(s, "openrouter_api_key", "", raising=False)
+    monkeypatch.setattr(s, "minimax_api_key", "", raising=False)
 
     fake_auth = {
         "org_id": "org-123",
@@ -183,10 +195,27 @@ def mock_auth(api_client: TestClient, mock_collector, monkeypatch):
     monkeypatch.setattr(gateway_module, "_async_client", stub_client)
     monkeypatch.setattr(gateway_module, "_gateway", None)  # reset cached gateway
 
+    # Force ``list_models`` to skip the live upstream probe and
+    # return the static catalogue baked into the adapter.  We
+    # swap both the cached Settings instance and the gateway
+    # module's ``_settings()`` helper so the live call sees
+    # ``openrouter_api_key = ""`` (and won't even attempt httpx).
+    _cached = get_settings.cache_info()  # noqa: F841
+    get_settings.cache_clear()
+    blank_settings = Settings(
+        openrouter_api_key="",
+        openrouter_base_url="https://openrouter.ai/api/v1",
+        minimax_api_key="",
+        minimax_base_url="https://api.openai.com/v1",
+    )
+    monkeypatch.setattr(gateway_module, "_settings", lambda: blank_settings)
+    monkeypatch.setattr("eden.config.get_settings", lambda: blank_settings)
+
     try:
         yield {"auth": fake_auth, "client": stub_client}
     finally:
         app.dependency_overrides.pop(get_ingestion_auth, None)
+        get_settings.cache_clear()
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -236,7 +265,7 @@ class TestChatCompletionsUnary:
                 content=None,
                 tool_calls=[_StubToolCall()],
             )
-            return _StubChatResponse(content="ignored")
+            return _StubChatResponse(message=msg)
 
         mock_auth["client"].chat.completions.create = AsyncMock(side_effect=_create)
 
@@ -638,7 +667,7 @@ class TestAdapterUnit:
         assert out["choices"][0]["delta"]["role"] == "assistant"
 
     def test_sse_format(self):
-        from eden.llmops.openai_adapter import sse_format, sse_done
+        from eden.llmops.openai_adapter import sse_done, sse_format
 
         msg = sse_format({"x": 1})
         assert msg.startswith(b"data: ")

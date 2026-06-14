@@ -16,11 +16,10 @@ import pytest
 from fastapi import HTTPException
 
 from eden.api.deps import (
+    PERMISSION_MAP,
     check_resource_permission,
     has_permission,
-    PERMISSION_MAP,
 )
-
 
 # ────────────────────────────────────────────────────────────────────────
 # Built-in role permission map — sanity check
@@ -169,24 +168,35 @@ def test_assignment_request_rejects_partial_resource():
     assert a.resource_type == "job"
     assert a.resource_id is None
 
-    # The route rejects it with 400.
+    # The route rejects it with 400. Run the async call inside a
+    # nested ``asyncio.run`` so the test stays sync — pytest-asyncio
+    # is in auto mode but a few of the older tests in this file were
+    # written as plain ``def`` so we keep the inner ``_route``
+    # coroutine pattern. The earlier version called
+    # ``asyncio.run`` inline; that closes the session-scoped event
+    # loop and breaks later async tests in this file, so we use a
+    # fresh loop scope here.
     from eden.api.deps import OrgMember
     member = OrgMember(
         user_id="00000000-0000-0000-0000-000000000099",
         org_id="00000000-0000-0000-0000-000000000002",
         role="admin",
     )
-    async def _route():
+
+    loop = asyncio.new_event_loop()
+    try:
         with pytest.raises(HTTPException) as ei:
-            await create_assignment(
-                org_id=member.org_id,
-                role_id="00000000-0000-0000-0000-000000000123",
-                req=a,
-                member=member,
+            loop.run_until_complete(
+                create_assignment(
+                    org_id=member.org_id,
+                    role_id="00000000-0000-0000-0000-000000000123",
+                    req=a,
+                    member=member,
+                )
             )
         assert ei.value.status_code == 400
-    import asyncio
-    asyncio.run(_route())
+    finally:
+        loop.close()
 
 
 # ────────────────────────────────────────────────────────────────────────
@@ -197,8 +207,8 @@ def test_assignment_request_rejects_partial_resource():
 @pytest.mark.asyncio
 async def test_create_role_route_happy_path():
     """End-to-end: POST /orgs/{id}/roles inserts a role and its perms."""
-    from eden.api.routes.rbac import create_role, RoleCreateRequest
     from eden.api.deps import OrgMember
+    from eden.api.routes.rbac import RoleCreateRequest, create_role
 
     fake_role_row = {
         "id": "00000000-0000-0000-0000-000000000099",
@@ -240,8 +250,8 @@ async def test_create_role_route_happy_path():
 @pytest.mark.asyncio
 async def test_create_role_forbidden_for_member_role():
     """Members (not admin) cannot create roles."""
-    from eden.api.routes.rbac import create_role, RoleCreateRequest
     from eden.api.deps import OrgMember
+    from eden.api.routes.rbac import RoleCreateRequest, create_role
 
     member = OrgMember(
         user_id="00000000-0000-0000-0000-000000000001",

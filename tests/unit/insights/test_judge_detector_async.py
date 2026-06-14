@@ -9,14 +9,13 @@ in async contexts (e.g. the FastAPI handler that calls
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime, timezone
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
 from eden.insights.detectors import DetectorRegistry, JudgeDetector
-
 
 # ── aanalyze: async path ──────────────────────────────────────────
 
@@ -39,7 +38,7 @@ def _row(**kwargs) -> dict[str, Any]:
         "score": 0.3,
         "rationale": "test",
         "model": "claude-haiku",
-        "scored_at": datetime(2026, 6, 3, 12, 0, 0, tzinfo=timezone.utc),
+        "scored_at": datetime(2026, 6, 3, 12, 0, 0, tzinfo=UTC),
         "latency_ms": 100.0,
     }
     base.update(kwargs)

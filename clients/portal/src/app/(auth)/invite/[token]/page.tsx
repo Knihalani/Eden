@@ -82,7 +82,7 @@ export default function InvitePage() {
   if (error || !inviteData?.valid) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-[var(--bg-secondary)]">
-        <div className="max-w-md w-full mx-4 p-8 bg-[var(--surface)] rounded-2xl border border-[var(--border)] text-center">
+        <div className="max-w-md w-full mx-4 p-8 bg-[var(--bg-primary)] rounded-2xl border border-[var(--border)] text-center">
           <div className="w-12 h-12 bg-[var(--error-bg)] rounded-full flex items-center justify-center mx-auto mb-4">
             <AlertCircle className="w-6 h-6 text-[var(--error)]" />
           </div>
@@ -104,7 +104,7 @@ export default function InvitePage() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-[var(--bg-secondary)] p-4">
       <div className="max-w-md w-full">
-        <div className="p-6 bg-[var(--surface)] rounded-2xl border border-[var(--border)] mb-6">
+        <div className="p-6 bg-[var(--bg-primary)] rounded-2xl border border-[var(--border)] mb-6">
           <div className="flex items-center gap-3 mb-4">
             <div className="w-10 h-10 bg-[var(--accent-faint)] rounded-lg flex items-center justify-center">
               <Building2 className="w-5 h-5 text-[var(--accent)]" />
@@ -153,7 +153,7 @@ export default function InvitePage() {
           </div>
         </div>
 
-        <div className="p-6 bg-[var(--surface)] rounded-2xl border border-[var(--border)]">
+        <div className="p-6 bg-[var(--bg-primary)] rounded-2xl border border-[var(--border)]">
           <h1 className="text-xl font-bold mb-1 text-[var(--text-primary)]">Create your account</h1>
           <p className="text-sm text-[var(--text-secondary)] mb-6">
             Join {inviteData.org_name} by creating your account

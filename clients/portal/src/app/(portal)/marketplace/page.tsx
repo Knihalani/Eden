@@ -10,17 +10,24 @@ import { cn } from "@/lib/utils";
 
 interface EnvCardSummary {
   id: string;
-  slug: string;
+  slug?: string;
+  name?: string;
   title: string;
-  summary: string;
+  description?: string;
+  summary?: string;
   category: string;
-  tags: string[];
-  quality_score: number | null;
-  quality_band: "low" | "medium" | "high" | null;
-  fork_count: number;
-  install_count: number;
-  is_featured: boolean;
-  published_at: string | null;
+  tags?: string[];
+  author?: string;
+  stars?: number;
+  forks?: number;
+  quality: "low" | "medium" | "high";
+  quality_score?: number | null;
+  quality_band?: "low" | "medium" | "high" | null;
+  fork_count?: number;
+  install_count?: number;
+  is_featured?: boolean;
+  published_at?: string | null;
+  updated_at?: string;
 }
 
 const CATEGORIES = [
@@ -61,8 +68,44 @@ export default function MarketplacePage() {
           api.listMarketplaceFeatured().catch(() => []),
         ]);
         if (!cancelled) {
-          setCards(list || []);
-          setFeatured(feat || []);
+          // Map the API's marketplace row shape onto the page's
+          // EnvCardSummary. The API returns ``id/name/description/...``
+          // while the page uses ``id/title/summary/tags/...``; we
+          // bridge at the boundary so the rest of the page can keep
+          // the FE's vocabulary.
+          const toCard = (r: {
+            id: string;
+            name: string;
+            description: string;
+            category: string;
+            quality: "low" | "medium" | "high";
+            author: string;
+            stars: number;
+            forks: number;
+            updated_at: string;
+          }): EnvCardSummary => ({
+            id: r.id,
+            slug: r.id,
+            name: r.name,
+            title: r.name,
+            description: r.description,
+            summary: r.description,
+            category: r.category,
+            tags: [],
+            author: r.author,
+            stars: r.stars,
+            forks: r.forks,
+            quality: r.quality,
+            quality_score: null,
+            quality_band: r.quality,
+            fork_count: r.forks,
+            install_count: 0,
+            is_featured: false,
+            published_at: null,
+            updated_at: r.updated_at,
+          });
+          setCards((list || []).map(toCard));
+          setFeatured((feat || []).map(toCard));
         }
       } catch (e) {
         console.error("Failed to load marketplace", e);
@@ -82,7 +125,7 @@ export default function MarketplacePage() {
         icon={Sparkles}
         title="Marketplace"
         description="Create an organization to discover, fork, and contribute environments."
-        cta={
+        action={
           <Link
             href="/settings"
             className="inline-flex items-center gap-1.5 text-sm font-semibold bg-[var(--accent)] text-[var(--bg-base)] px-4 py-2 rounded-lg hover:opacity-90"
@@ -132,10 +175,10 @@ export default function MarketplacePage() {
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Search environments..."
               aria-label="Search marketplace"
-              className="w-full pl-9 pr-3 py-2 text-sm bg-[var(--surface)] border border-[var(--border-default)] rounded-lg text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--accent)]/30"
+              className="w-full pl-9 pr-3 py-2 text-sm bg-[var(--bg-primary)] border border-[var(--border-default)] rounded-lg text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--accent)]/30"
             />
           </div>
-          <div role="radiogroup" aria-label="Quality filter" className="flex items-center gap-1 p-1 bg-[var(--surface)] border border-[var(--border-default)] rounded-lg">
+          <div role="radiogroup" aria-label="Quality filter" className="flex items-center gap-1 p-1 bg-[var(--bg-primary)] border border-[var(--border-default)] rounded-lg">
             {(["all", "high", "medium", "low"] as const).map((q) => (
               <button
                 key={q}
@@ -165,7 +208,7 @@ export default function MarketplacePage() {
                 "px-3 py-1 text-xs font-medium rounded-full border transition-colors min-h-[32px]",
                 category === cat.value
                   ? "bg-[var(--accent-bg)] text-[var(--accent)] border-[var(--accent)]/40"
-                  : "bg-[var(--surface)] text-[var(--text-secondary)] border-[var(--border-default)] hover:bg-[var(--bg-tertiary)]"
+                  : "bg-[var(--bg-primary)] text-[var(--text-secondary)] border-[var(--border-default)] hover:bg-[var(--bg-tertiary)]"
               )}
             >
               {cat.label}
@@ -181,7 +224,7 @@ export default function MarketplacePage() {
             {[1, 2, 3, 4, 5, 6].map((i) => (
               <div
                 key={i}
-                className="h-40 rounded-xl bg-[var(--surface)] border border-[var(--border-default)] animate-pulse"
+                className="h-40 rounded-xl bg-[var(--bg-primary)] border border-[var(--border-default)] animate-pulse"
                 aria-hidden="true"
               />
             ))}
@@ -209,7 +252,7 @@ function CardTile({ card, featured = false }: { card: EnvCardSummary; featured?:
   return (
     <Link
       href={`/marketplace/${card.slug}`}
-      className="group block bg-[var(--surface)] border border-[var(--border-default)] rounded-xl p-4 hover:border-[var(--accent)] transition-colors"
+      className="group block bg-[var(--bg-primary)] border border-[var(--border-default)] rounded-xl p-4 hover:border-[var(--accent)] transition-colors"
       aria-label={`${card.title} — ${card.category}`}
     >
       <div className="flex items-start justify-between gap-2 mb-2">
@@ -235,9 +278,9 @@ function CardTile({ card, featured = false }: { card: EnvCardSummary; featured?:
       </div>
       <h3 className="text-sm font-semibold text-[var(--text-primary)] mb-1 line-clamp-2">{card.title}</h3>
       <p className="text-xs text-[var(--text-secondary)] line-clamp-2 mb-3">{card.summary}</p>
-      {card.tags.length > 0 && (
+      {(card.tags ?? []).length > 0 && (
         <div className="flex items-center gap-1 flex-wrap mb-3">
-          {card.tags.slice(0, 3).map((tag) => (
+          {(card.tags ?? []).slice(0, 3).map((tag) => (
             <span
               key={tag}
               className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] text-[var(--text-muted)] bg-[var(--bg-tertiary)] rounded"
@@ -246,8 +289,8 @@ function CardTile({ card, featured = false }: { card: EnvCardSummary; featured?:
               {tag}
             </span>
           ))}
-          {card.tags.length > 3 && (
-            <span className="text-[10px] text-[var(--text-faint)]">+{card.tags.length - 3}</span>
+          {(card.tags ?? []).length > 3 && (
+            <span className="text-[10px] text-[var(--text-faint)]">+{(card.tags ?? []).length - 3}</span>
           )}
         </div>
       )}
@@ -255,9 +298,9 @@ function CardTile({ card, featured = false }: { card: EnvCardSummary; featured?:
         <div className="flex items-center gap-3">
           <span className="inline-flex items-center gap-1">
             <GitFork className="w-3 h-3" aria-hidden="true" />
-            {card.fork_count}
+            {card.fork_count ?? 0}
           </span>
-          {card.quality_score !== null && (
+          {card.quality_score != null && (
             <span>{Math.round(card.quality_score * 100)}%</span>
           )}
         </div>

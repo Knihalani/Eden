@@ -64,7 +64,7 @@ export function RecentTracesCard({ loading, traces }: RecentTracesCardProps) {
           {top.map((t) => (
             <li key={t.trace_id}>
               <Link
-                href={`/observability/traces/${encodeURIComponent(t.trace_id)}`}
+                href={`/observability?trace=${encodeURIComponent(t.trace_id)}`}
                 className="flex items-center gap-3 px-5 py-2.5 hover:bg-[var(--bg-secondary)] transition-colors group"
               >
                 <OutcomeDot outcome={t.outcome} />

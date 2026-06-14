@@ -27,6 +27,23 @@ import {
   Check,
   BarChart3,
   Sparkles,
+  GitPullRequestArrow,
+  Activity,
+  Brain,
+  AlertOctagon,
+  Wand2,
+  Bot,
+  Wrench,
+  Cog,
+  Shield,
+  FlaskConical,
+  TrendingUp,
+  Compass,
+  Users,
+  Inbox,
+  Box,
+  Server,
+  Network,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import Link from "next/link";
@@ -58,6 +75,35 @@ function buildBreadcrumbs(pathname: string): { label: string; href: string }[] {
     docs: "Documentation",
     profile: "Profile",
     new: "New",
+    observability: "Observability",
+    incidents: "Incidents",
+    insights: "Insights",
+    inspector: "Inspector",
+    alerts: "Alerts",
+    llmops: "LLMOps",
+    agents: "Agents",
+    builder: "Builder",
+    marketplace: "Marketplace",
+    "multi-agent": "Multi-Agent",
+    sandbox: "Sandbox",
+    users: "Users",
+    guardrails: "Guardrails",
+    autonomous: "Autonomous",
+    studio: "Custom Metrics",
+    "pr-suggestions": "PR Suggestions",
+    retrieval: "Retrieval",
+    memory: "Memory",
+    time: "Time-Travel",
+    "time-travel": "Time-Travel",
+    apm: "APM",
+    decisions: "Decisions",
+    outcomes: "Outcomes",
+    predict: "Predictive",
+    tools: "Tools",
+    query: "Query",
+    cohorts: "Cohorts",
+    governance: "Governance",
+    eval: "Eval",
   };
 
   let path = "";
@@ -139,11 +185,15 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
 
   return (
     <div className="flex min-h-screen bg-[var(--bg-secondary)]">
+      {/* Skip-to-content link — visually hidden until focused, allows keyboard users to bypass the sidebar nav */}
+      <a href="#main-content" className="skip-to-content">
+        Skip to main content
+      </a>
       {/* Mobile sidebar overlay */}
       {sidebarOpen && (
         <button
           type="button"
-          className="fixed inset-0 bg-black/50 z-40 lg:hidden cursor-default border-0 p-0"
+          className="fixed inset-0 bg-[var(--bg-base)]/50 z-40 lg:hidden cursor-default border-0 p-0"
           aria-label="Close menu"
           onClick={() => setSidebarOpen(false)}
         />
@@ -170,7 +220,7 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3 min-w-0">
               <div className="w-9 h-9 bg-[var(--accent)] rounded-xl flex items-center justify-center flex-shrink-0">
-                <Layers className="w-5 h-5 text-white" />
+                <Layers className="w-5 h-5 text-[var(--bg-primary)]" />
               </div>
               {!collapsed && (
                 <div className="min-w-0">
@@ -263,17 +313,47 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
         )}
 
         {/* Navigation */}
-        <nav className="relative flex-1 p-3 space-y-0.5" aria-label="Main navigation">
-          <NavItem href="/dashboard" icon={LayoutDashboard} label="Dashboard" collapsed={collapsed} onClick={() => setSidebarOpen(false)} />
-          {flags.enable_eval_pipeline && (
-            <NavItem href="/eval-harnesses" icon={Layers} label="Eval Harnesses" collapsed={collapsed} onClick={() => setSidebarOpen(false)} />
-          )}
-          <NavItem href="/analytics" icon={BarChart3} label="Analytics" collapsed={collapsed} onClick={() => setSidebarOpen(false)} />
-          <NavItem href="/optimization" icon={Sparkles} label="Optimization" collapsed={collapsed} onClick={() => setSidebarOpen(false)} />
-          <NavItem href="/settings" icon={Settings} label="Settings" collapsed={collapsed} onClick={() => setSidebarOpen(false)} />
-          <NavItem href="/billing" icon={CreditCard} label="Billing" collapsed={collapsed} onClick={() => setSidebarOpen(false)} />
-          <NavItem href="/docs" icon={FileText} label="Docs" collapsed={collapsed} onClick={() => setSidebarOpen(false)} />
-          <NavItem href="/profile" icon={User} label="Profile" collapsed={collapsed} onClick={() => setSidebarOpen(false)} />
+        <nav className="relative flex-1 p-3 space-y-4 overflow-y-auto" aria-label="Main navigation">
+          <NavGroup label="Workspace" collapsed={collapsed}>
+            <NavItem href="/dashboard" icon={LayoutDashboard} label="Dashboard" collapsed={collapsed} onClick={() => setSidebarOpen(false)} />
+            <NavItem href="/agents" icon={Bot} label="Agents" collapsed={collapsed} onClick={() => setSidebarOpen(false)} />
+            <NavItem href="/builder" icon={Wand2} label="Builder" collapsed={collapsed} onClick={() => setSidebarOpen(false)} />
+            <NavItem href="/marketplace" icon={Box} label="Marketplace" collapsed={collapsed} onClick={() => setSidebarOpen(false)} />
+            <NavItem href="/multi-agent" icon={Network} label="Multi-Agent" collapsed={collapsed} onClick={() => setSidebarOpen(false)} />
+            <NavItem href="/sandbox" icon={Server} label="Sandbox" collapsed={collapsed} onClick={() => setSidebarOpen(false)} />
+          </NavGroup>
+
+          <NavGroup label="Observe" collapsed={collapsed}>
+            <NavItem href="/observability" icon={Activity} label="Observability" collapsed={collapsed} onClick={() => setSidebarOpen(false)} />
+            <NavItem href="/incidents" icon={AlertOctagon} label="Incidents" collapsed={collapsed} onClick={() => setSidebarOpen(false)} />
+            <NavItem href="/insights" icon={Brain} label="Insights" collapsed={collapsed} onClick={() => setSidebarOpen(false)} />
+            <NavItem href="/inspector" icon={Compass} label="Inspector" collapsed={collapsed} onClick={() => setSidebarOpen(false)} />
+            <NavItem href="/alerts" icon={Bell} label="Alerts" collapsed={collapsed} onClick={() => setSidebarOpen(false)} />
+            <NavItem href="/llmops" icon={Cog} label="LLMOps" collapsed={collapsed} onClick={() => setSidebarOpen(false)} />
+          </NavGroup>
+
+          <NavGroup label="Optimize" collapsed={collapsed}>
+            <NavItem href="/optimization" icon={Sparkles} label="Cost" collapsed={collapsed} onClick={() => setSidebarOpen(false)} />
+            <NavItem href="/studio" icon={FlaskConical} label="Custom Metrics" collapsed={collapsed} onClick={() => setSidebarOpen(false)} />
+          </NavGroup>
+
+          <NavGroup label="Protect" collapsed={collapsed}>
+            <NavItem href="/guardrails" icon={Shield} label="Guardrails" collapsed={collapsed} onClick={() => setSidebarOpen(false)} />
+          </NavGroup>
+
+          <NavGroup label="Automate" collapsed={collapsed}>
+            <NavItem href="/autonomous" icon={Wand2} label="Autonomous" collapsed={collapsed} onClick={() => setSidebarOpen(false)} />
+            <NavItem href="/closed-loop" icon={Inbox} label="Closed-Loop" collapsed={collapsed} onClick={() => setSidebarOpen(false)} />
+            <NavItem href="/pr-suggestions" icon={GitPullRequestArrow} label="PR Suggestions" collapsed={collapsed} onClick={() => setSidebarOpen(false)} />
+            <NavItem href="/analytics" icon={BarChart3} label="Analytics" collapsed={collapsed} onClick={() => setSidebarOpen(false)} />
+          </NavGroup>
+
+          <NavGroup label="Account" collapsed={collapsed}>
+            <NavItem href="/settings" icon={Settings} label="Settings" collapsed={collapsed} onClick={() => setSidebarOpen(false)} />
+            <NavItem href="/billing" icon={CreditCard} label="Billing" collapsed={collapsed} onClick={() => setSidebarOpen(false)} />
+            <NavItem href="/docs" icon={FileText} label="Docs" collapsed={collapsed} onClick={() => setSidebarOpen(false)} />
+            <NavItem href="/profile" icon={User} label="Profile" collapsed={collapsed} onClick={() => setSidebarOpen(false)} />
+          </NavGroup>
         </nav>
 
         {/* User section */}
@@ -348,7 +428,7 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
       </aside>
 
       {/* Main content */}
-      <main className="flex-1 overflow-auto pb-20 lg:pb-0">
+      <main id="main-content" className="flex-1 overflow-auto pb-20 lg:pb-0" tabIndex={-1}>
         {/* Top bar */}
         <header className="sticky top-0 z-30 bg-[var(--bg-primary)] border-b border-[var(--border-default)]">
           <div className="flex items-center justify-between px-4 lg:px-6 py-3">
@@ -362,7 +442,7 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
                 <Menu className="w-5 h-5" />
               </button>
               <div className="w-8 h-8 bg-[var(--accent)] rounded-lg flex items-center justify-center">
-                <Layers className="w-4 h-4 text-white" />
+                <Layers className="w-4 h-4 text-[var(--bg-primary)]" />
               </div>
             </div>
 
@@ -480,9 +560,9 @@ function NotificationsDropdown() {
   const getNotificationIcon = (type: string) => {
     switch (type) {
       case "job_completed":
-        return <Check className="w-4 h-4 text-green-600" />;
+        return <Check className="w-4 h-4 text-[var(--terminal)]" />;
       case "job_failed":
-        return <X className="w-4 h-4 text-red-600" />;
+        return <X className="w-4 h-4 text-[var(--error)]" />;
       default:
         return <Bell className="w-4 h-4 text-[var(--text-muted)]" />;
     }
@@ -504,7 +584,7 @@ function NotificationsDropdown() {
       >
         <Bell className="w-5 h-5" />
         {unreadCount > 0 && (
-          <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] flex items-center justify-center bg-[var(--error)] text-white text-[10px] font-bold rounded-full px-1">
+          <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] flex items-center justify-center bg-[var(--error)] text-[var(--bg-primary)] text-[10px] font-bold rounded-full px-1">
             {unreadCount > 99 ? "99+" : unreadCount}
           </span>
         )}
@@ -671,5 +751,28 @@ function BottomNavItem({
       <Icon className={cn("w-5 h-5", isCenter && "w-6 h-6")} />
       <span className="text-[10px] font-medium">{label}</span>
     </Link>
+  );
+}
+
+function NavGroup({
+  label,
+  collapsed,
+  children,
+}: {
+  label: string;
+  collapsed: boolean;
+  children: React.ReactNode;
+}) {
+  if (collapsed) {
+    // When collapsed, show items directly with a thin divider above
+    return <div className="space-y-0.5 border-t border-[var(--border-subtle)] pt-2 first:border-t-0 first:pt-0">{children}</div>;
+  }
+  return (
+    <div className="space-y-0.5">
+      <div className="px-3 py-1 text-[10px] font-semibold uppercase tracking-wider text-[var(--text-muted)] opacity-70">
+        {label}
+      </div>
+      {children}
+    </div>
   );
 }

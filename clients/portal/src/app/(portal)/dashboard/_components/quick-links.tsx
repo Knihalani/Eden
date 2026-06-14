@@ -1,7 +1,17 @@
 "use client";
 
 import Link from "next/link";
-import { Activity, Zap, BellRing, Sparkles, ArrowRight } from "lucide-react";
+import {
+  Activity,
+  Zap,
+  BellRing,
+  Sparkles,
+  ArrowRight,
+  Bot,
+  ShieldCheck,
+  Wrench,
+  Network,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface QuickLinkItem {
@@ -21,6 +31,13 @@ const QUICK_LINKS: QuickLinkItem[] = [
     accent: "blue",
   },
   {
+    label: "Agents",
+    description: "Manage your agent fleet",
+    href: "/agents",
+    icon: Bot,
+    accent: "emerald",
+  },
+  {
     label: "Optimization",
     description: "Routing, cache, cost & budget",
     href: "/optimization",
@@ -35,11 +52,32 @@ const QUICK_LINKS: QuickLinkItem[] = [
     accent: "amber",
   },
   {
+    label: "Tools",
+    description: "Attribution & comparisons",
+    href: "/tools",
+    icon: Wrench,
+    accent: "violet",
+  },
+  {
     label: "Insights",
     description: "Patterns, KB hits, regressions",
     href: "/insights",
     icon: Sparkles,
     accent: "violet",
+  },
+  {
+    label: "Guardrails",
+    description: "Policies & compliance",
+    href: "/guardrails",
+    icon: ShieldCheck,
+    accent: "blue",
+  },
+  {
+    label: "Incidents",
+    description: "RCA clusters",
+    href: "/incidents",
+    icon: Network,
+    accent: "amber",
   },
 ];
 
@@ -47,14 +85,26 @@ const ACCENT_MAP: Record<QuickLinkItem["accent"], string> = {
   blue: "bg-[var(--primary-light)] text-[var(--primary)]",
   emerald: "bg-[var(--accent-light)] text-[var(--accent)]",
   amber: "bg-[var(--warning-bg)] text-[var(--warning-strong)]",
-  violet: "bg-violet-50 text-violet-600",
+  violet: "bg-[var(--accent-faint)] text-[var(--accent)]",
 };
 
 export function QuickLinks() {
   return (
     <div className="bg-[var(--bg-primary)] rounded-xl p-5 border border-[var(--border-default)]">
-      <h2 className="text-base font-semibold text-[var(--text-primary)] mb-4">Quick Links</h2>
-      <div className="space-y-2">
+      <div className="flex items-center justify-between mb-4">
+        <div>
+          <h2 className="text-base font-semibold text-[var(--text-primary)]">Quick links</h2>
+          <p className="text-xs text-[var(--text-muted)] mt-0.5">Jump to the most-used surfaces</p>
+        </div>
+        <Link
+          href="/insights"
+          className="text-xs font-medium text-[var(--accent)] hover:text-[var(--accent-hover)] inline-flex items-center gap-1"
+        >
+          Insights
+          <ArrowRight className="w-3 h-3" />
+        </Link>
+      </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
         {QUICK_LINKS.map((q) => (
           <Link
             key={q.href}
@@ -65,7 +115,7 @@ export function QuickLinks() {
               <q.icon className="w-4 h-4" />
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-[var(--text-primary)]">{q.label}</p>
+              <p className="text-sm font-medium text-[var(--text-primary)] truncate">{q.label}</p>
               <p className="text-xs text-[var(--text-muted)] truncate">{q.description}</p>
             </div>
             <ArrowRight className="w-3.5 h-3.5 text-[var(--text-muted)] group-hover:text-[var(--accent)] group-hover:translate-x-0.5 transition-all shrink-0" />

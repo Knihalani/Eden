@@ -20,7 +20,7 @@ interface ScoresTabProps {
 
 const SEVERITY_COLORS = {
   high: "var(--error)",
-  warning: "var(--cat-warning-fg)",
+  warning: "var(--warning)",
   low: "var(--terminal)",
 };
 
@@ -34,11 +34,11 @@ export function ScoresTab({ orgId, traceId }: ScoresTabProps) {
   const [scores, setScores] = React.useState<Array<{
     judge_run_id: string;
     trace_id: string;
-    span_id?: string;
+    span_id?: string | null;
     judge_name: string;
     judge_version: string;
     score: number;
-    rationale?: string;
+    rationale?: string | null;
     model: string;
     scored_at: string;
     latency_ms?: number;
@@ -52,7 +52,16 @@ export function ScoresTab({ orgId, traceId }: ScoresTabProps) {
     setLoading(true);
     try {
       const result = await api.listJudgeScores(orgId, { trace_id: traceId, limit: 50 });
-      setScores(result.scores);
+      // The API returns ``latency_ms: number | null``; the local
+      // state uses ``number | undefined`` (we never surface ``null``).
+      // Coerce at the boundary so the rest of the component stays
+      // strictly-typed.
+      setScores(
+        result.scores.map((s) => ({
+          ...s,
+          latency_ms: s.latency_ms ?? undefined,
+        })),
+      );
     } catch (err) {
       console.warn("Failed to load judge scores", err);
     } finally {
@@ -124,7 +133,7 @@ export function ScoresTab({ orgId, traceId }: ScoresTabProps) {
           <button
             onClick={handleRun}
             disabled={running}
-            className="flex items-center gap-1 rounded bg-[var(--accent)] px-2 py-1 text-xs font-medium text-white hover:opacity-90 disabled:opacity-50"
+            className="flex items-center gap-1 rounded bg-[var(--accent)] px-2 py-1 text-xs font-medium text-[var(--bg-primary)] hover:opacity-90 disabled:opacity-50"
           >
             <Play className="h-3 w-3" />
             {running ? "Running…" : "Run judges"}

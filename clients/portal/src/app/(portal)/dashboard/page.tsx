@@ -11,7 +11,7 @@ import {
 } from "lucide-react";
 import { api } from "@/lib/api";
 import { useOrg } from "@/hooks/use-org";
-import { StatCard } from "./_components/stat-card";
+import { StatCard } from "@/components/ui/stat-card";
 import { ThroughputCard } from "./_components/throughput-card";
 import { LatencyCard } from "./_components/latency-card";
 import {
@@ -23,6 +23,7 @@ import {
   type TraceRow,
 } from "./_components/recent-traces-card";
 import { QuickLinks } from "./_components/quick-links";
+import { IntelligenceGrid } from "./_components/intelligence-grid";
 
 interface DashboardData {
   traces: TraceRow[];
@@ -82,11 +83,11 @@ export default function DashboardPage() {
         const lastMonth = Math.round(thisMonth * 0.85);
 
         setData({
-          traces: (tracesRes.traces ?? []) as TraceRow[],
+          traces: (tracesRes.traces ?? []) as unknown as TraceRow[],
           tracesTotal: tracesRes.total ?? tracesRes.traces?.length ?? 0,
           judgeScores: (scoresRes.scores ?? []) as JudgeScoreRow[],
-          optimization,
-          alerts: alerts ?? [],
+          optimization: optimization as unknown as DashboardData["optimization"],
+          alerts: (alerts ?? []) as unknown as DashboardData["alerts"],
           costThisMonthCents: thisMonth,
           costLastMonthCents: lastMonth,
         });
@@ -218,6 +219,11 @@ export default function DashboardPage() {
           <RecentTracesCard loading={loading} traces={lastDayTraces.slice(0, 10)} />
           <QuickLinks />
         </div>
+      </div>
+
+      {/* Row 3: top-of-funnel cards for every observability category */}
+      <div className="mt-6 sm:mt-8">
+        <IntelligenceGrid />
       </div>
 
       {/* Footer trace count summary */}

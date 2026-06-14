@@ -1,13 +1,14 @@
 """Tests for the data quality framework."""
 
 import pytest
+
 from eden.data_platform.quality import (
+    SILVER_EVENT_EXPECTATIONS,
+    USAGE_EVENT_EXPECTATIONS,
+    DataQualityValidator,
     Expectation,
     ExpectationResult,
     ValidationReport,
-    DataQualityValidator,
-    SILVER_EVENT_EXPECTATIONS,
-    USAGE_EVENT_EXPECTATIONS,
 )
 
 

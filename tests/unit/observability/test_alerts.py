@@ -3,20 +3,26 @@
 import pytest
 
 from eden.observability.alerts import (
-    AlertRule,
     DEFAULT_RULES,
-    evaluate_alerts,
+    AlertRule,
     _percentile_from_histogram,
+    evaluate_alerts,
 )
 
 
 def test_default_rules_include_all_four_criteria():
-    """All four §9.5.1 SLOs are represented in DEFAULT_RULES."""
+    """The §9.5.1 SLOs are represented in DEFAULT_RULES.
+
+    Phase 2: the env-gen pipeline is retired, so the
+    ``pipeline_timeout_rate`` rule (which read eden.pipeline.metrics)
+    is removed. Per-agent failure-mode alerting replaces it — see
+    eden.insights.detector_loop which uses JudgeScores.
+    """
     rule_ids = {r.rule_id for r in DEFAULT_RULES}
     assert "api_p95_latency" in rule_ids
     assert "llm_provider_error_rate" in rule_ids
     assert "kb_retrieval_p95" in rule_ids
-    assert "pipeline_timeout_rate" in rule_ids
+    assert "pipeline_timeout_rate" not in rule_ids
 
 
 def test_alert_rule_fires_above_threshold():

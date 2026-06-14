@@ -39,7 +39,7 @@ interface MultiAgentEnv {
   pattern: string;
   agent_count: number;
   max_steps: number;
-  created_at: number;
+  created_at: string;
 }
 
 interface TestResultItem {
@@ -393,7 +393,19 @@ function CommunicationTab({ env, orgId }: { env: MultiAgentEnv | null; orgId: st
     if (!orgId || !env) return;
     try {
       const res = await api.getMultiAgentMessages(orgId, env.env_id, toAgent);
-      setMessages(res.messages);
+      // The API returns message_id/sent_at; the local MessageItem
+      // uses id/type/timestamp. Map at the boundary so the rest of
+      // the page can stay loosely typed on local semantics.
+      setMessages(
+        res.messages.map((m) => ({
+          id: m.message_id,
+          from_agent: m.from_agent,
+          to_agent: m.to_agent,
+          type: "direct",
+          content: m.content,
+          timestamp: new Date(m.sent_at).getTime(),
+        })),
+      );
     } catch {
       // ignore
     }
@@ -569,7 +581,7 @@ function RolesTab({ env, orgId }: { env: MultiAgentEnv | null; orgId: string | u
     if (!orgId || !env) return;
     try {
       const [rRes, cRes] = await Promise.all([
-        api.listRoles(orgId, env.env_id),
+        api.listAgentRoles(orgId, env.env_id),
         api.listRoleConfigs(orgId, env.env_id),
       ]);
       setRoles(rRes.roles);
@@ -601,7 +613,7 @@ function RolesTab({ env, orgId }: { env: MultiAgentEnv | null; orgId: string | u
   const handleAssign = async () => {
     if (!orgId || !env || !agentId.trim() || !selectedRoleName) return;
     try {
-      await api.assignRole(orgId, env.env_id, { agent_id: agentId.trim(), role_name: selectedRoleName });
+      await api.assignAgentRole(orgId, env.env_id, { agent_id: agentId.trim(), role_name: selectedRoleName });
       setAgentId("");
       setAssigning(false);
       fetchData();
@@ -786,9 +798,9 @@ function MemoryTab({ env, orgId }: { env: MultiAgentEnv | null; orgId: string | 
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <StatCard label="Working Memories" value={String(stats?.working_memory_count ?? "—")} icon={MemoryStick} />
-        <StatCard label="Episodes Recorded" value={String((stats?.episodic as Record<string, unknown>)?.total_recorded ?? "—")} icon={GitCommit} />
-        <StatCard label="Semantic Facts" value={String((stats?.semantic as Record<string, unknown>)?.total_facts ?? "—")} icon={FileText} />
+        <StatCard title="Working Memories" value={String(stats?.working_memory_count ?? "—")} icon={MemoryStick} />
+        <StatCard title="Episodes Recorded" value={String((stats?.episodic as Record<string, unknown>)?.total_recorded ?? "—")} icon={GitCommit} />
+        <StatCard title="Semantic Facts" value={String((stats?.semantic as Record<string, unknown>)?.total_facts ?? "—")} icon={FileText} />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -919,9 +931,9 @@ function PlanningTab({ env, orgId }: { env: MultiAgentEnv | null; orgId: string 
               <span className="font-semibold text-[var(--text-primary)]">{fw.name}</span>
               <span className={cn(
                 "text-[10px] px-1.5 py-0.5 rounded-full font-medium",
-                fw.complexity === "high" ? "bg-[var(--cat-warning-dim)] text-[var(--cat-warning-fg)]  " :
-                fw.complexity === "medium" ? "bg-blue-100 text-blue-700  " :
-                "bg-[var(--cat-success-dim)] text-[var(--cat-success-fg)]  "
+                fw.complexity === "high" ? "bg-[var(--warning-bg)] text-[var(--warning)]  " :
+                fw.complexity === "medium" ? "bg-[var(--accent-faint)] text-[var(--accent)]  " :
+                "bg-[var(--terminal-faint)] text-[var(--terminal)]  "
               )}>
                 {fw.complexity}
               </span>
@@ -1038,10 +1050,10 @@ function TestsTab({ env, orgId }: { env: MultiAgentEnv | null; orgId: string | u
       {testResults && (
         <div className="p-4 bg-[var(--bg-primary)] border border-[var(--border-default)] rounded-xl space-y-4">
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            <StatCard label="Total" value={String(testResults.total_tests)} icon={FlaskConical} accent="neutral" />
-            <StatCard label="Passed" value={String(testResults.passed)} icon={CheckCircle} accent="terminal" />
-            <StatCard label="Failed" value={String(testResults.failed)} icon={XCircle} accent="error" />
-            <StatCard label="Duration" value={`${Math.round(testResults.duration_ms)}ms`} icon={Activity} accent="accent" />
+            <StatCard title="Total" value={String(testResults.total_tests)} icon={FlaskConical} accent="neutral" />
+            <StatCard title="Passed" value={String(testResults.passed)} icon={CheckCircle} accent="terminal" />
+            <StatCard title="Failed" value={String(testResults.failed)} icon={XCircle} accent="error" />
+            <StatCard title="Duration" value={`${Math.round(testResults.duration_ms)}ms`} icon={Activity} accent="accent" />
           </div>
 
           <div className="space-y-2">
@@ -1049,11 +1061,11 @@ function TestsTab({ env, orgId }: { env: MultiAgentEnv | null; orgId: string | u
               <div key={i} className={cn(
                 "flex items-center gap-3 p-3 rounded-lg text-sm border",
                 r.passed
-                  ? "bg-[var(--cat-success-dim)] border-[var(--cat-success-fg)]/20  "
+                  ? "bg-[var(--terminal-faint)] border-[var(--terminal)]/20  "
                   : "bg-[var(--error-bg)] border-[var(--error-dim)]  "
               )}>
                 {r.passed ? (
-                  <CheckCircle className="w-5 h-5 text-[var(--cat-success-fg)] shrink-0" />
+                  <CheckCircle className="w-5 h-5 text-[var(--terminal)] shrink-0" />
                 ) : (
                   <XCircle className="w-5 h-5 text-[var(--error)] shrink-0" />
                 )}
@@ -1179,7 +1191,7 @@ function HitlTab({ env, orgId }: { env: MultiAgentEnv | null; orgId: string | un
                   "text-xs px-2 py-0.5 rounded-full font-medium",
                   r === "block" ? "bg-[var(--error-dim)] text-[var(--error)]  " :
                   r === "require_human" ? "bg-[var(--warning-bg)] text-[var(--warning)]  " :
-                  "bg-[var(--cat-success-dim)] text-[var(--cat-success-fg)]  "
+                  "bg-[var(--terminal-faint)] text-[var(--terminal)]  "
                 )}>
                   {r}
                 </span>
@@ -1211,7 +1223,7 @@ function HitlTab({ env, orgId }: { env: MultiAgentEnv | null; orgId: string | un
                   </div>
                   <div className="text-xs text-[var(--text-muted)] mb-2">Agent: {String(p.agent_id || "—")}</div>
                   <div className="flex gap-2">
-                    <Button size="sm" variant="outline" className="text-[var(--cat-success-fg)] border-[var(--cat-success-fg)]/30 hover:bg-[var(--cat-success-dim)] " onClick={() => handleResolve(String(p.approval_id || p.id || ""), true)} disabled={busy}>
+                    <Button size="sm" variant="outline" className="text-[var(--terminal)] border-[var(--terminal)]/30 hover:bg-[var(--terminal-faint)] " onClick={() => handleResolve(String(p.approval_id || p.id || ""), true)} disabled={busy}>
                       <CheckCircle className="w-3.5 h-3.5 mr-1" />
                       Approve
                     </Button>

@@ -1,0 +1,846 @@
+{
+  "run_id": "ci-abcdef12-1781380790",
+  "commit_sha": "abcdef1234567890",
+  "branch": "feature/test",
+  "stages": [
+    {
+      "stage": "static_analysis",
+      "status": "failed",
+      "duration_ms": 3536.03,
+      "details": {
+        "ruff_lint": {
+          "passed": false,
+          "issues_count": 3435,
+          "issues": [
+            {
+              "cell": null,
+              "code": "I001",
+              "end_location": {
+                "column": 6,
+                "row": 30
+              },
+              "filename": "/Users/kaiavnihalani/Downloads/Eden/src/eden/agent/__init__.py",
+              "fix": {
+                "applicability": "safe",
+                "edits": [
+                  {
+                    "content": "    from .pr_suggester import (\n        VALID_TRIGGERS,\n        PRSuggester,\n        PRSuggestion,\n    )\n",
+                    "end_location": {
+                      "column": 1,
+                      "row": 31
+                    },
+                    "location": {
+                      "column": 1,
+                      "row": 26
+                    }
+                  }
+                ],
+                "message": "Organize imports"
+              },
+              "location": {
+                "column": 5,
+                "row": 26
+              },
+              "message": "Import block is un-sorted or un-formatted",
+              "noqa_row": 26,
+              "severity": "error",
+              "url": "https://docs.astral.sh/ruff/rules/unsorted-imports"
+            },
+            {
+              "cell": null,
+              "code": "F401",
+              "end_location": {
+                "column": 12,
+                "row": 42
+              },
+              "filename": "/Users/kaiavnihalani/Downloads/Eden/src/eden/agent/pr_suggester.py",
+              "fix": {
+                "applicability": "safe",
+                "edits": [
+                  {
+                    "content": "",
+                    "end_location": {
+                      "column": 1,
+                      "row": 43
+                    },
+                    "location": {
+                      "column": 1,
+                      "row": 42
+                    }
+                  }
+                ],
+                "message": "Remove unused import: `time`"
+              },
+              "location": {
+                "column": 8,
+                "row": 42
+              },
+              "message": "`time` imported but unused",
+              "noqa_row": 42,
+              "severity": "error",
+              "url": "https://docs.astral.sh/ruff/rules/unused-import"
+            },
+            {
+              "cell": null,
+              "code": "F401",
+              "end_location": {
+                "column": 31,
+                "row": 44
+              },
+              "filename": "/Users/kaiavnihalani/Downloads/Eden/src/eden/agent/pr_suggester.py",
+              "fix": {
+                "applicability": "safe",
+                "edits": [
+                  {
+                    "content": "from dataclasses import dataclass, field",
+                    "end_location": {
+                      "column": 49,
+                      "row": 44
+                    },
+                    "location": {
+                      "column": 1,
+                      "row": 44
+                    }
+                  }
+                ],
+                "message": "Remove unused import: `dataclasses.asdict`"
+              },
+              "location": {
+                "column": 25,
+                "row": 44
+              },
+              "message": "`dataclasses.asdict` imported but unused",
+              "noqa_row": 44,
+              "severity": "error",
+              "url": "https://docs.astral.sh/ruff/rules/unused-import"
+            },
+            {
+              "cell": null,
+              "code": "UP017",
+              "end_location": {
+                "column": 58,
+                "row": 124
+              },
+              "filename": "/Users/kaiavnihalani/Downloads/Eden/src/eden/agent/pr_suggester.py",
+              "fix": {
+                "applicability": "safe",
+                "edits": [
+                  {
+                    "content": "from datetime import datetime, timezone, UTC",
+                    "end_location": {
+                      "column": 40,
+                      "row": 45
+                    },
+                    "location": {
+                      "column": 1,
+                      "row": 45
+                    }
+                  },
+                  {
+                    "content": "UTC",
+                    "end_location": {
+                      "column": 58,
+                      "row": 124
+                    },
+                    "location": {
+                      "column": 46,
+                      "row": 124
+                    }
+                  }
+                ],
+                "message": "Convert to `datetime.UTC` alias"
+              },
+              "location": {
+                "column": 46,
+                "row": 124
+              },
+              "message": "Use `datetime.UTC` alias",
+              "noqa_row": 124,
+              "severity": "error",
+              "url": "https://docs.astral.sh/ruff/rules/datetime-timezone-utc"
+            },
+            {
+              "cell": null,
+              "code": "UP045",
+              "end_location": {
+                "column": 36,
+                "row": 126
+              },
+              "filename": "/Users/kaiavnihalani/Downloads/Eden/src/eden/agent/pr_suggester.py",
+              "fix": {
+                "applicability": "safe",
+                "edits": [
+                  {
+                    "content": "int | None",
+                    "end_location": {
+                      "column": 36,
+                      "row": 126
+                    },
+                    "location": {
+                      "column": 23,
+                      "row": 126
+                    }
+                  }
+                ],
+                "message": "Convert to `X | None`"
+              },
+              "location": {
+                "column": 23,
+                "row": 126
+              },
+              "message": "Use `X | None` for type annotations",
+              "noqa_row": 126,
+              "severity": "error",
+              "url": "https://docs.astral.sh/ruff/rules/non-pep604-annotation-optional"
+            },
+            {
+              "cell": null,
+              "code": "UP045",
+              "end_location": {
+                "column": 29,
+                "row": 146
+              },
+              "filename": "/Users/kaiavnihalani/Downloads/Eden/src/eden/agent/pr_suggester.py",
+              "fix": {
+                "applicability": "safe",
+                "edits": [
+                  {
+                    "content": "str | None",
+                    "end_location": {
+                      "column": 29,
+                      "row": 146
+                    },
+                    "location": {
+                      "column": 16,
+                      "row": 146
+                    }
+                  }
+                ],
+                "message": "Convert to `X | None`"
+              },
+              "location": {
+                "column": 16,
+                "row": 146
+              },
+              "message": "Use `X | None` for type annotations",
+              "noqa_row": 146,
+              "severity": "error",
+              "url": "https://docs.astral.sh/ruff/rules/non-pep604-annotation-optional"
+            },
+            {
+              "cell": null,
+              "code": "UP045",
+              "end_location": {
+                "column": 44,
+                "row": 205
+              },
+              "filename": "/Users/kaiavnihalani/Downloads/Eden/src/eden/agent/pr_suggester.py",
+              "fix": {
+                "applicability": "safe",
+                "edits": [
+                  {
+                    "content": "LLMClientLike | None",
+                    "end_location": {
+                      "column": 44,
+                      "row": 205
+                    },
+                    "location": {
+                      "column": 21,
+                      "row": 205
+                    }
+                  }
+                ],
+                "message": "Convert to `X | None`"
+              },
+              "location": {
+                "column": 21,
+                "row": 205
+              },
+              "message": "Use `X | None` for type annotations",
+              "noqa_row": 205,
+              "severity": "error",
+              "url": "https://docs.astral.sh/ruff/rules/non-pep604-annotation-optional"
+            },
+            {
+              "cell": null,
+              "code": "UP045",
+              "end_location": {
+                "column": 34,
+                "row": 206
+              },
+              "filename": "/Users/kaiavnihalani/Downloads/Eden/src/eden/agent/pr_suggester.py",
+              "fix": {
+                "applicability": "safe",
+                "edits": [
+                  {
+                    "content": "str | None",
+                    "end_location": {
+                      "column": 34,
+                      "row": 206
+                    },
+                    "location": {
+                      "column": 21,
+                      "row": 206
+                    }
+                  }
+                ],
+                "message": "Convert to `X | None`"
+              },
+              "location": {
+                "column": 21,
+                "row": 206
+              },
+              "message": "Use `X | None` for type annotations",
+              "noqa_row": 206,
+              "severity": "error",
+              "url": "https://docs.astral.sh/ruff/rules/non-pep604-annotation-optional"
+            },
+            {
+              "cell": null,
+              "code": "UP045",
+              "end_location": {
+                "column": 30,
+                "row": 328
+              },
+              "filename": "/Users/kaiavnihalani/Downloads/Eden/src/eden/agent/pr_suggester.py",
+              "fix": {
+                "applicability": "safe",
+                "edits": [
+                  {
+                    "content": "str | None",
+                    "end_location": {
+                      "column": 30,
+                      "row": 328
+                    },
+                    "location": {
+                      "column": 17,
+                      "row": 328
+                    }
+                  }
+                ],
+                "message": "Convert to `X | None`"
+              },
+              "location": {
+                "column": 17,
+                "row": 328
+              },
+              "message": "Use `X | None` for type annotations",
+              "noqa_row": 328,
+              "severity": "error",
+              "url": "https://docs.astral.sh/ruff/rules/non-pep604-annotation-optional"
+            },
+            {
+              "cell": null,
+              "code": "UP045",
+              "end_location": {
+                "column": 31,
+                "row": 329
+              },
+              "filename": "/Users/kaiavnihalani/Downloads/Eden/src/eden/agent/pr_suggester.py",
+              "fix": {
+                "applicability": "safe",
+                "edits": [
+                  {
+                    "content": "str | None",
+                    "end_location": {
+                      "column": 31,
+                      "row": 329
+                    },
+                    "location": {
+                      "column": 18,
+                      "row": 329
+                    }
+                  }
+                ],
+                "message": "Convert to `X | None`"
+              },
+              "location": {
+                "column": 18,
+                "row": 329
+              },
+              "message": "Use `X | None` for type annotations",
+              "noqa_row": 329,
+              "severity": "error",
+              "url": "https://docs.astral.sh/ruff/rules/non-pep604-annotation-optional"
+            },
+            {
+              "cell": null,
+              "code": "UP045",
+              "end_location": {
+                "column": 29,
+                "row": 330
+              },
+              "filename": "/Users/kaiavnihalani/Downloads/Eden/src/eden/agent/pr_suggester.py",
+              "fix": {
+                "applicability": "safe",
+                "edits": [
+                  {
+                    "content": "str | None",
+                    "end_location": {
+                      "column": 29,
+                      "row": 330
+                    },
+                    "location": {
+                      "column": 16,
+                      "row": 330
+                    }
+                  }
+                ],
+                "message": "Convert to `X | None`"
+              },
+              "location": {
+                "column": 16,
+                "row": 330
+              },
+              "message": "Use `X | None` for type annotations",
+              "noqa_row": 330,
+              "severity": "error",
+              "url": "https://docs.astral.sh/ruff/rules/non-pep604-annotation-optional"
+            },
+            {
+              "cell": null,
+              "code": "UP045",
+              "end_location": {
+                "column": 34,
+                "row": 345
+              },
+              "filename": "/Users/kaiavnihalani/Downloads/Eden/src/eden/agent/pr_suggester.py",
+              "fix": {
+                "applicability": "safe",
+                "edits": [
+                  {
+                    "content": "float | None",
+                    "end_location": {
+                      "column": 34,
+                      "row": 345
+                    },
+                    "location": {
+                      "column": 19,
+                      "row": 345
+                    }
+                  }
+                ],
+                "message": "Convert to `X | None`"
+              },
+              "location": {
+                "column": 19,
+                "row": 345
+              },
+              "message": "Use `X | None` for type annotations",
+              "noqa_row": 345,
+              "severity": "error",
+              "url": "https://docs.astral.sh/ruff/rules/non-pep604-annotation-optional"
+            },
+            {
+              "cell": null,
+              "code": "UP015",
+              "end_location": {
+                "column": 44,
+                "row": 354
+              },
+              "filename": "/Users/kaiavnihalani/Downloads/Eden/src/eden/agent/pr_suggester.py",
+              "fix": {
+                "applicability": "safe",
+                "edits": [
+                  {
+                    "content": "",
+                    "end_location": {
+                      "column": 44,
+                      "row": 354
+                    },
+                    "location": {
+                      "column": 39,
+                      "row": 354
+                    }
+                  }
+                ],
+                "message": "Remove mode argument"
+              },
+              "location": {
+                "column": 41,
+                "row": 354
+              },
+              "message": "Unnecessary mode argument",
+              "noqa_row": 354,
+              "severity": "error",
+              "url": "https://docs.astral.sh/ruff/rules/redundant-open-modes"
+            },
+            {
+              "cell": null,
+              "code": "UP045",
+              "end_location": {
+                "column": 32,
+                "row": 392
+              },
+              "filename": "/Users/kaiavnihalani/Downloads/Eden/src/eden/agent/pr_suggester.py",
+              "fix": {
+                "applicability": "safe",
+                "edits": [
+                  {
+                    "content": "PRSuggestion | None",
+                    "end_location": {
+                      "column": 32,
+                      "row": 392
+                    },
+                    "location": {
+                      "column": 10,
+                      "row": 392
+                    }
+                  }
+                ],
+                "message": "Convert to `X | None`"
+              },
+              "location": {
+                "column": 10,
+                "row": 392
+              },
+              "message": "Use `X | None` for type annotations",
+              "noqa_row": 392,
+              "severity": "error",
+              "url": "https://docs.astral.sh/ruff/rules/non-pep604-annotation-optional"
+            },
+            {
+              "cell": null,
+              "code": "UP015",
+              "end_location": {
+                "column": 44,
+                "row": 397
+              },
+              "filename": "/Users/kaiavnihalani/Downloads/Eden/src/eden/agent/pr_suggester.py",
+              "fix": {
+                "applicability": "safe",
+                "edits": [
+                  {
+                    "content": "",
+                    "end_location": {
+                      "column": 44,
+                      "row": 397
+                    },
+                    "location": {
+                      "column": 39,
+                      "row": 397
+                    }
+                  }
+                ],
+                "message": "Remove mode argument"
+              },
+              "location": {
+                "column": 41,
+                "row": 397
+              },
+              "message": "Unnecessary mode argument",
+              "noqa_row": 397,
+              "severity": "error",
+              "url": "https://docs.astral.sh/ruff/rules/redundant-open-modes"
+            },
+            {
+              "cell": null,
+              "code": "UP045",
+              "end_location": {
+                "column": 32,
+                "row": 417
+              },
+              "filename": "/Users/kaiavnihalani/Downloads/Eden/src/eden/agent/pr_suggester.py",
+              "fix": {
+                "applicability": "safe",
+                "edits": [
+                  {
+                    "content": "PRSuggestion | None",
+                    "end_location": {
+                      "column": 32,
+                      "row": 417
+                    },
+                    "location": {
+                      "column": 10,
+                      "row": 417
+                    }
+                  }
+                ],
+                "message": "Convert to `X | None`"
+              },
+              "location": {
+                "column": 10,
+                "row": 417
+              },
+              "message": "Use `X | None` for type annotations",
+              "noqa_row": 417,
+              "severity": "error",
+              "url": "https://docs.astral.sh/ruff/rules/non-pep604-annotation-optional"
+            },
+            {
+              "cell": null,
+              "code": "UP045",
+              "end_location": {
+                "column": 32,
+                "row": 434
+              },
+              "filename": "/Users/kaiavnihalani/Downloads/Eden/src/eden/agent/pr_suggester.py",
+              "fix": {
+                "applicability": "safe",
+                "edits": [
+                  {
+                    "content": "PRSuggestion | None",
+                    "end_location": {
+                      "column": 32,
+                      "row": 434
+                    },
+                    "location": {
+                      "column": 10,
+                      "row": 434
+                    }
+                  }
+                ],
+                "message": "Convert to `X | None`"
+              },
+              "location": {
+                "column": 10,
+                "row": 434
+              },
+              "message": "Use `X | None` for type annotations",
+              "noqa_row": 434,
+              "severity": "error",
+              "url": "https://docs.astral.sh/ruff/rules/non-pep604-annotation-optional"
+            },
+            {
+              "cell": null,
+              "code": "UP045",
+              "end_location": {
+                "column": 34,
+                "row": 449
+              },
+              "filename": "/Users/kaiavnihalani/Downloads/Eden/src/eden/agent/pr_suggester.py",
+              "fix": {
+                "applicability": "safe",
+                "edits": [
+                  {
+                    "content": "dict[str, Any] | None",
+                    "end_location": {
+                      "column": 34,
+                      "row": 449
+                    },
+                    "location": {
+                      "column": 10,
+                      "row": 449
+                    }
+                  }
+                ],
+                "message": "Convert to `X | None`"
+              },
+              "location": {
+                "column": 10,
+                "row": 449
+              },
+              "message": "Use `X | None` for type annotations",
+              "noqa_row": 449,
+              "severity": "error",
+              "url": "https://docs.astral.sh/ruff/rules/non-pep604-annotation-optional"
+            },
+            {
+              "cell": null,
+              "code": "UP045",
+              "end_location": {
+                "column": 32,
+                "row": 486
+              },
+              "filename": "/Users/kaiavnihalani/Downloads/Eden/src/eden/agent/pr_suggester.py",
+              "fix": {
+                "applicability": "safe",
+                "edits": [
+                  {
+                    "content": "PRSuggestion | None",
+                    "end_location": {
+                      "column": 32,
+                      "row": 486
+                    },
+                    "location": {
+                      "column": 10,
+                      "row": 486
+                    }
+                  }
+                ],
+                "message": "Convert to `X | None`"
+              },
+              "location": {
+                "column": 10,
+                "row": 486
+              },
+              "message": "Use `X | None` for type annotations",
+              "noqa_row": 486,
+              "severity": "error",
+              "url": "https://docs.astral.sh/ruff/rules/non-pep604-annotation-optional"
+            },
+            {
+              "cell": null,
+              "code": "UP017",
+              "end_location": {
+                "column": 49,
+                "row": 570
+              },
+              "filename": "/Users/kaiavnihalani/Downloads/Eden/src/eden/agent/pr_suggester.py",
+              "fix": {
+                "applicability": "safe",
+                "edits": [
+                  {
+                    "content": "from datetime import datetime, timezone, UTC",
+                    "end_location": {
+                      "column": 40,
+                      "row": 45
+                    },
+                    "location": {
+                      "column": 1,
+                      "row": 45
+                    }
+                  },
+                  {
+                    "content": "UTC",
+                    "end_location": {
+                      "column": 49,
+                      "row": 570
+                    },
+                    "location": {
+                      "column": 37,
+                      "row": 570
+                    }
+                  }
+                ],
+                "message": "Convert to `datetime.UTC` alias"
+              },
+              "location": {
+                "column": 37,
+                "row": 570
+              },
+              "message": "Use `datetime.UTC` alias",
+              "noqa_row": 570,
+              "severity": "error",
+              "url": "https://docs.astral.sh/ruff/rules/datetime-timezone-utc"
+            }
+          ]
+        },
+        "ruff_format": {
+          "passed": false
+        },
+        "mypy": {
+          "passed": false,
+          "output": "await?\ntests/intelligence/test_metric_studio.py:354: error: \"Judge\" has no attribute \"org_id\"  [attr-defined]\ntests/intelligence/test_metric_studio.py:355: error: \"Judge\" has no attribute \"metric_id\"  [attr-defined]\ntests/intelligence/test_metric_studio.py:356: error: \"Judge\" has no attribute \"rubric_prompt\"  [attr-defined]\ntests/intelligence/test_metric_studio.py:412: error: Unsupported right operand type for in (\"str | None\")  [operator]\ntests/intelligence/test_metric_studio.py:640: error: \"Callable[[str, dict[str, Any]], Coroutine[Any, Any, None]]\" has no attribute \"saved\"  [attr-defined]\ntests/intelligence/test_metric_studio.py:655: error: \"Callable[[str, dict[str, Any]], Coroutine[Any, Any, None]]\" has no attribute \"saved\"  [attr-defined]\nsrc/eden/api/app.py:88: error: Function is missing a return type annotation  [no-untyped-def]\nsrc/eden/api/app.py:278: error: Function is missing a return type annotation  [no-untyped-def]\ntests/integration/test_gateway_models.py:197: error: The return type of a generator function should be \"Generator\" or one of its supertypes  [misc]\ntests/conftest.py:43: error: Unexpected keyword argument \"cors_origins\" for \"Settings\"  [call-arg]\ntests/conftest.py:43: note: \"Settings\" defined in \"eden.config\"\ntests/conftest.py:110: error: Incompatible default for parameter \"content\" (default has type \"None\", parameter has type \"str\")  [assignment]\ntests/conftest.py:110: note: PEP 484 prohibits implicit Optional. Accordingly, mypy has changed its default to no_implicit_optional=True\ntests/conftest.py:110: note: Use https://github.com/hauntsaninja/no_implicit_optional to automatically upgrade your codebase\ntests/conftest.py:110: error: Incompatible default for parameter \"usage\" (default has type \"None\", parameter has type \"UsageStats\")  [assignment]\ntests/conftest.py:110: error: Incompatible default for parameter \"model\" (default has type \"None\", parameter has type \"str\")  [assignment]\nFound 1263 errors in 251 files (checked 619 source files)\n"
+        }
+      },
+      "error": null,
+      "blocks_merge": true
+    },
+    {
+      "stage": "security_scan",
+      "status": "failed",
+      "duration_ms": 9733.63,
+      "details": {
+        "bandit": {
+          "passed": false,
+          "error": "Expecting value: line 1 column 1 (char 0)"
+        },
+        "safety": {
+          "passed": false,
+          "returncode": 1
+        }
+      },
+      "error": null,
+      "blocks_merge": true
+    },
+    {
+      "stage": "unit_tests",
+      "status": "failed",
+      "duration_ms": 3176.94,
+      "details": {
+        "returncode": 4,
+        "coverage_pct": 0.0,
+        "output_summary": ""
+      },
+      "error": null,
+      "blocks_merge": true
+    },
+    {
+      "stage": "integration_tests",
+      "status": "failed",
+      "duration_ms": 1962.48,
+      "details": {
+        "returncode": 4,
+        "output_summary": ""
+      },
+      "error": null,
+      "blocks_merge": true
+    },
+    {
+      "stage": "benchmark_regression",
+      "status": "failed",
+      "duration_ms": 0.96,
+      "details": {
+        "dataset_id": "gd_eden_canonical_v1",
+        "dataset_version": "1.0.0",
+        "baseline_commit": null,
+        "regression_detected": true,
+        "overall_success_rate": 0.84,
+        "category_results": {
+          "agent_sandbox": {
+            "total": 10,
+            "passed": 9,
+            "failed": 1,
+            "success_rate": 0.9,
+            "category_passed": true
+          },
+          "simulation": {
+            "total": 6,
+            "passed": 3,
+            "failed": 3,
+            "success_rate": 0.5,
+            "category_passed": false
+          },
+          "tool_use": {
+            "total": 8,
+            "passed": 7,
+            "failed": 1,
+            "success_rate": 0.875,
+            "category_passed": true
+          },
+          "llm_agent_eval": {
+            "total": 10,
+            "passed": 10,
+            "failed": 0,
+            "success_rate": 1.0,
+            "category_passed": true
+          },
+          "adversarial": {
+            "total": 8,
+            "passed": 6,
+            "failed": 2,
+            "success_rate": 0.75,
+            "category_passed": true
+          },
+          "multi_agent": {
+            "total": 8,
+            "passed": 7,
+            "failed": 1,
+            "success_rate": 0.875,
+            "category_passed": true
+          }
+        }
+      },
+      "error": null,
+      "blocks_merge": true
+    },
+    {
+      "stage": "performance_tests",
+      "status": "passed",
+      "duration_ms": 32.94,
+      "details": {
+        "import_time_ms": 32.82,
+        "threshold_ms": 2000,
+        "import_success": true
+      },
+      "error": null,
+      "blocks_merge": false
+    }
+  ],
+  "overall_status": "failed",
+  "summary": "CI Evaluation complete in 12946ms\n  Passed: 1 | Failed: 5 | Warned: 0 | Skipped: 0\n  Merge blocked by: static_analysis, security_scan, unit_tests, integration_tests, benchmark_regression",
+  "duration_ms": 12946.26,
+  "timestamp": "2026-06-13T20:00:03.902409+00:00",
+  "merge_allowed": false
+}

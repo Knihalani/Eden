@@ -34,22 +34,23 @@ import {
   AXIS_TICK_PROPS,
   CHART_COLORS,
   TOOLTIP_STYLE,
-  fetchWithFallback,
   formatChartDate,
   formatCompact,
   formatHour,
   formatLatency,
   formatPercent,
   formatTokens,
-  makeSyntheticLatencyByDay,
-  makeSyntheticThroughputByHour,
-  makeSyntheticTokenUsageByDay,
-  makeSyntheticTopAgents,
 } from "../_lib/chart-utils";
 
 /* ------------------------- Synthetic badge ----------------------------- */
 
-function SyntheticBadge() {
+// (Removed in Phase B.1: backend /analytics/* sub-routes are now
+// implemented (Phase A.1). The portal calls the real API directly
+// and renders real data — no synthetic fallback needed. The badge
+// import below is kept for legacy callers but is no longer used.)
+
+/* eslint-disable-next-line @typescript-eslint/no-unused-vars */
+function RemovedSyntheticBadge() {
   return (
     <span
       title="Backend /analytics/* sub-routes not yet implemented"
@@ -74,7 +75,7 @@ interface KpiProps {
 
 function Kpi({ label, value, sublabel, icon: Icon, iconColor, trend, trendDir }: KpiProps) {
   return (
-    <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-sm transition-all duration-200 hover:shadow-md">
+    <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-primary)] p-4 shadow-sm transition-all duration-200 hover:shadow-md">
       <div className="mb-2 flex items-start justify-between">
         <div className={cn("rounded-lg p-2", iconColor)}>
           <Icon className="h-4 w-4" />
@@ -462,45 +463,37 @@ export default function AnalyticsPage() {
     if (!currentOrg) return;
     let cancelled = false;
     const orgId = currentOrg.id;
-    const seedOpts = { orgId, days };
-
     // Defer the loading-state update so it isn't called synchronously
     // within the effect body (avoids cascading-render lint warning).
     queueMicrotask(() => {
       if (cancelled) return;
       setLoading(true);
     });
+    // Phase B.1: removed fetchWithFallback + makeSynthetic* — the
+    // /analytics/* sub-routes (Phase A.1) return real data now.
     Promise.all([
-      fetchWithFallback({
-        fetcher: () => api.getTokenUsage(orgId, days),
-        fallback: () => ({ by_day: makeSyntheticTokenUsageByDay(seedOpts) }),
-      }),
-      fetchWithFallback({
-        fetcher: () => api.getLatencyPercentiles(orgId, days),
-        fallback: () => ({ by_day: makeSyntheticLatencyByDay(seedOpts) }),
-      }),
-      fetchWithFallback({
-        fetcher: () => api.getThroughputByHour(orgId, days),
-        fallback: () => ({ by_hour: makeSyntheticThroughputByHour(seedOpts) }),
-      }),
-      fetchWithFallback({
-        fetcher: () => api.getTopAgentsByCost(orgId, days),
-        fallback: () => ({ agents: makeSyntheticTopAgents(seedOpts) }),
-      }),
+      api.getTokenUsage(orgId, days),
+      api.getLatencyPercentiles(orgId, days),
+      api.getThroughputByHour(orgId, days),
+      api.getTopAgentsByCost(orgId, days),
     ]).then(([tokens, lat, tp, ag]) => {
       if (cancelled) return;
-      const tokData = tokens.data as { by_day: typeof tokenByDay } | null;
-      const latData = lat.data as { by_day: typeof latencyByDay } | null;
-      const tpData = tp.data as { by_hour: typeof throughput } | null;
-      const agData = ag.data as { agents: typeof topAgents } | null;
-
-      setTokenByDay(tokData?.by_day ?? []);
-      setLatencyByDay(latData?.by_day ?? []);
-      setThroughput(tpData?.by_hour ?? []);
-      setTopAgents(agData?.agents ?? []);
-      setIsSynthetic(
-        tokens.isSynthetic || lat.isSynthetic || tp.isSynthetic || ag.isSynthetic
-      );
+      setTokenByDay(tokens?.by_day ?? []);
+      setLatencyByDay(lat?.by_day ?? []);
+      setThroughput(tp?.by_hour ?? []);
+      setTopAgents(ag?.agents ?? []);
+      setIsSynthetic(false);
+      setLoading(false);
+    }).catch(() => {
+      if (cancelled) return;
+      // On error, surface as empty data so the user sees the real
+      // empty state (with the existing empty-state UI) rather than
+      // a broken chart.
+      setTokenByDay([]);
+      setLatencyByDay([]);
+      setThroughput([]);
+      setTopAgents([]);
+      setIsSynthetic(false);
       setLoading(false);
     });
     return () => {
@@ -551,8 +544,8 @@ export default function AnalyticsPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          {isSynthetic && <SyntheticBadge />}
-          <div className="inline-flex rounded-lg border border-[var(--border)] bg-[var(--surface)] p-0.5 shadow-sm">
+          {isSynthetic && <RemovedSyntheticBadge />}
+          <div className="inline-flex rounded-lg border border-[var(--border)] bg-[var(--bg-primary)] p-0.5 shadow-sm">
             {DAY_OPTIONS.map((opt) => (
               <button
                 key={opt.value}
@@ -560,7 +553,7 @@ export default function AnalyticsPage() {
                 className={cn(
                   "rounded-md px-3 py-1.5 text-xs font-medium transition-all",
                   days === opt.value
-                    ? "bg-[var(--accent)] text-white shadow-sm"
+                    ? "bg-[var(--accent)] text-[var(--bg-primary)] shadow-sm"
                     : "text-[var(--text-muted)] hover:text-[var(--text-primary)]"
                 )}
               >
@@ -640,7 +633,7 @@ export default function AnalyticsPage() {
 
 function ChartSkeleton() {
   return (
-    <div className="flex h-[300px] items-center justify-center rounded-xl border border-[var(--border)] bg-[var(--surface)]">
+    <div className="flex h-[300px] items-center justify-center rounded-xl border border-[var(--border)] bg-[var(--bg-primary)]">
       <Loader2 className="h-5 w-5 animate-spin text-[var(--text-muted)]" />
     </div>
   );

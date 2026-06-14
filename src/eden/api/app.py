@@ -10,8 +10,6 @@ from pydantic import BaseModel, Field
 
 from eden.config import get_settings
 from eden.kb import initialize_kb, health_check as kb_health_check
-from eden.pipeline.graph import compile_eden_graph
-from eden.storage.checkpointer import create_postgres_checkpointer
 from eden.api.routes import jobs, kb, auth, orgs, references, api_keys, audit, analytics, export, export_destinations, scim, billing, sso, benchmark, chain, ai_insights, pii_policy, retention_policy, region
 from eden.api.routes import (
     feature_flags,
@@ -23,13 +21,9 @@ from eden.api.routes import (
     marketplace,
     integrations_helicone,
 )
-from eden.api.routes.jobs import set_eden_graph
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
-
-# Pipeline graph (compiled on startup)
-eden_graph = None
 
 
 # ============================================================================
@@ -104,7 +98,6 @@ class HealthResponse(BaseModel):
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan handler."""
-    global eden_graph
     logger.info("Starting Eden API...")
 
     # Initialize Knowledge Base
@@ -122,27 +115,6 @@ async def lifespan(app: FastAPI):
         logger.info("Sandbox runner initialized")
     except Exception as e:
         logger.warning(f"Sandbox initialization warning: {e}")
-
-    # Compile pipeline graph with checkpointer
-    # Gated on the enable_eval_pipeline feature flag: when off, the legacy
-    # multi-stage pipeline is not used and we skip compilation entirely.
-    if settings.enable_eval_pipeline:
-        try:
-            checkpointer = None
-            if settings.checkpoint_enabled:
-                checkpointer = await create_postgres_checkpointer()
-
-            eden_graph = compile_eden_graph(checkpointer=checkpointer)
-            set_eden_graph(eden_graph)
-            logger.info("Pipeline graph compiled")
-        except Exception as e:
-            logger.warning(f"Graph compilation warning (expected in dev): {e}")
-            eden_graph = None
-            set_eden_graph(None)
-    else:
-        logger.info("enable_eval_pipeline=false: skipping pipeline graph compilation")
-        eden_graph = None
-        set_eden_graph(None)
 
     # Phase 7.1b follow-up — start the Insights detector loop.
     # Best-effort: a failure to start the loop must never block
