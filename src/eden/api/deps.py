@@ -2,9 +2,8 @@
 
 import hashlib
 from dataclasses import dataclass
-from typing import Optional
 
-from fastapi import Depends, HTTPException, Cookie, Header, status
+from fastapi import Cookie, Header, HTTPException, status
 from fastapi.security import HTTPBearer
 
 from eden.api.utils.auth import decode_access_token
@@ -28,6 +27,13 @@ PERMISSION_MAP: dict[str, set[str]] = {
         "jobs:read",
         "jobs:write",
         "org:transfer",
+        # June 2026: gating for the onboarding wizard's "Connect GitHub"
+        # + "Open Integration PR" path. Wiring a repo into an org
+        # exposes commit + branch-create access on behalf of the
+        # installation token; only owners/admins should be able to do
+        # that. Members and viewers see a "Request from your admin"
+        # callout instead.
+        "integrations:write",
     },
     "admin": {
         "references:read",
@@ -40,6 +46,7 @@ PERMISSION_MAP: dict[str, set[str]] = {
         "audit:view",
         "jobs:read",
         "jobs:write",
+        "integrations:write",
     },
     "member": {
         "references:read",
@@ -81,8 +88,8 @@ class OrgMember:
 
 
 async def get_current_org_member(
-    x_org_id: Optional[str] = Header(None, alias="X-Org-Id"),
-    authorization: Optional[str] = Cookie(None),
+    x_org_id: str | None = Header(None, alias="X-Org-Id"),
+    authorization: str | None = Cookie(None),
 ) -> OrgMember:
     """Authenticate a portal user and resolve their org membership.
 
@@ -139,7 +146,7 @@ async def get_current_org_member(
 
 
 async def get_current_user(
-    authorization: Optional[str] = Cookie(None),
+    authorization: str | None = Cookie(None),
 ) -> dict:
     """Validate JWT cookie and return user.
 
@@ -173,8 +180,8 @@ async def get_current_user(
 
 
 async def get_optional_user(
-    authorization: Optional[str] = Cookie(None),
-) -> Optional[dict]:
+    authorization: str | None = Cookie(None),
+) -> dict | None:
     """Validate JWT cookie and return user, or None if not authenticated."""
     if not authorization:
         return None
@@ -189,7 +196,7 @@ async def get_optional_user(
     }
 
 
-async def get_user_by_id(user_id: str) -> Optional[dict]:
+async def get_user_by_id(user_id: str) -> dict | None:
     """Fetch a user by their ID."""
     client = await get_postgres_client()
     query = "SELECT id, email, name, created_at, preferred_org_id FROM users WHERE id = $1"
@@ -197,10 +204,10 @@ async def get_user_by_id(user_id: str) -> Optional[dict]:
 
 
 async def get_current_org(
-    x_org_id: Optional[str] = Header(None, alias="X-Org-Id"),
-    authorization: Optional[str] = Cookie(None),
+    x_org_id: str | None = Header(None, alias="X-Org-Id"),
+    authorization: str | None = Cookie(None),
     include_archived: bool = False,
-) -> Optional[dict]:
+) -> dict | None:
     """Get current organization context from header or JWT.
 
     Returns org context if user is a member, None otherwise.
@@ -259,8 +266,8 @@ async def get_current_org(
 
 
 async def require_org_member(
-    x_org_id: Optional[str] = Header(None, alias="X-Org-Id"),
-    authorization: Optional[str] = Cookie(None),
+    x_org_id: str | None = Header(None, alias="X-Org-Id"),
+    authorization: str | None = Cookie(None),
 ) -> dict:
     """Require user to be an org member, otherwise raise 403."""
     org = await get_current_org(x_org_id, authorization)
@@ -273,8 +280,8 @@ async def require_org_member(
 
 
 async def require_org_admin(
-    x_org_id: Optional[str] = Header(None, alias="X-Org-Id"),
-    authorization: Optional[str] = Cookie(None),
+    x_org_id: str | None = Header(None, alias="X-Org-Id"),
+    authorization: str | None = Cookie(None),
 ) -> dict:
     """Require user to be an org admin/owner, otherwise raise 403."""
     org = await get_current_org(x_org_id, authorization)
@@ -292,8 +299,8 @@ async def require_org_admin(
 
 
 async def require_2fa(
-    x_org_id: Optional[str] = Header(None, alias="X-Org-Id"),
-    authorization: Optional[str] = Cookie(None),
+    x_org_id: str | None = Header(None, alias="X-Org-Id"),
+    authorization: str | None = Cookie(None),
 ) -> dict:
     """Require user to have 2FA enabled if org enforces it.
 
@@ -341,8 +348,8 @@ async def require_2fa(
 
 
 async def require_org_owner(
-    x_org_id: Optional[str] = Header(None, alias="X-Org-Id"),
-    authorization: Optional[str] = Cookie(None),
+    x_org_id: str | None = Header(None, alias="X-Org-Id"),
+    authorization: str | None = Cookie(None),
 ) -> dict:
     """Require user to be an org owner, otherwise raise 403."""
     org = await get_current_org(x_org_id, authorization)
@@ -361,8 +368,8 @@ async def require_org_owner(
 
 async def require_org_permission(
     permission: str,
-    x_org_id: Optional[str] = Header(None, alias="X-Org-Id"),
-    authorization: Optional[str] = Cookie(None),
+    x_org_id: str | None = Header(None, alias="X-Org-Id"),
+    authorization: str | None = Cookie(None),
 ) -> dict:
     """Require user to have a specific org permission, otherwise raise 403.
 
@@ -390,9 +397,9 @@ def require_org_permission_or_api_key(permission: str):
     For API key auth, checks scopes directly.
     """
     async def dependency(
-        x_org_id: Optional[str] = Header(None, alias="X-Org-Id"),
-        x_org_api_key: Optional[str] = Header(None, alias="X-Org-Api-Key"),
-        authorization: Optional[str] = Cookie(None),
+        x_org_id: str | None = Header(None, alias="X-Org-Id"),
+        x_org_api_key: str | None = Header(None, alias="X-Org-Api-Key"),
+        authorization: str | None = Cookie(None),
     ) -> dict:
         # Try API key first
         if x_org_api_key:
@@ -434,7 +441,7 @@ def require_org_permission_or_api_key(permission: str):
 
 async def get_current_org_api_key(
     x_org_id: str = Header(..., alias="X-Org-Id"),
-    x_org_api_key: Optional[str] = Header(None, alias="X-Org-Api-Key"),
+    x_org_api_key: str | None = Header(None, alias="X-Org-Api-Key"),
 ) -> dict:
     """Validate X-Org-Api-Key header and return org context.
 
@@ -480,10 +487,10 @@ async def get_current_org_api_key(
 
 
 async def get_optional_org(
-    x_org_id: Optional[str] = Header(None, alias="X-Org-Id"),
-    x_org_api_key: Optional[str] = Header(None, alias="X-Org-Api-Key"),
-    authorization: Optional[str] = Cookie(None),
-) -> Optional[dict]:
+    x_org_id: str | None = Header(None, alias="X-Org-Id"),
+    x_org_api_key: str | None = Header(None, alias="X-Org-Api-Key"),
+    authorization: str | None = Cookie(None),
+) -> dict | None:
     """Get org context from either API key or JWT cookie.
 
     Tries API key first, then falls back to cookie auth.
@@ -509,11 +516,11 @@ async def log_audit_event(
     org_id: str,
     user_id: str,
     action: str,
-    target_type: Optional[str] = None,
-    target_id: Optional[str] = None,
-    metadata: Optional[dict] = None,
-    ip_address: Optional[str] = None,
-    user_agent: Optional[str] = None,
+    target_type: str | None = None,
+    target_id: str | None = None,
+    metadata: dict | None = None,
+    ip_address: str | None = None,
+    user_agent: str | None = None,
 ) -> None:
     """Insert an audit log entry for an org action."""
     query = """
@@ -570,9 +577,9 @@ def require_feature_flag(flag_name: str):
 # ============================================================================
 
 async def get_ingestion_auth(
-    x_org_id: Optional[str] = Header(None, alias="X-Org-Id"),
-    x_org_api_key: Optional[str] = Header(None, alias="X-Org-Api-Key"),
-    authorization: Optional[str] = Cookie(None),
+    x_org_id: str | None = Header(None, alias="X-Org-Id"),
+    x_org_api_key: str | None = Header(None, alias="X-Org-Api-Key"),
+    authorization: str | None = Cookie(None),
 ) -> dict:
     """Authenticate an ingestion / gateway request.
 

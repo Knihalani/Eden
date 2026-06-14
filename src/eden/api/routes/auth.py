@@ -3,19 +3,22 @@
 import base64
 import io
 import logging
-from datetime import datetime
-from typing import Optional
 
 import pyotp
-from fastapi import Depends, APIRouter, HTTPException, Response, Cookie, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from pydantic import BaseModel, EmailStr, Field
 from qrcode import QRCode
 
-from eden.api.deps import get_current_user, get_user_by_id, get_optional_user, get_current_org, require_org_admin
-from eden.api.utils.auth import hash_password, verify_password, create_access_token
+from eden.api.deps import (
+    get_current_org,
+    get_current_user,
+    get_user_by_id,
+    require_org_admin,
+)
+from eden.api.utils.auth import create_access_token, hash_password, verify_password
 from eden.config import get_settings
-from eden.storage.postgres import get_postgres_client
 from eden.services.invitation_service import verify_invite_token
+from eden.storage.postgres import get_postgres_client
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -57,7 +60,7 @@ class UserResponse(BaseModel):
     name: str
     two_factor_enabled: bool = False
     organizations: list[dict] = []
-    current_org_id: Optional[str] = None
+    current_org_id: str | None = None
 
 
 class TwoFASetupResponse(BaseModel):
@@ -382,6 +385,65 @@ async def get_me(user: dict = Depends(get_current_user)):
         organizations=organizations,
         current_org_id=str(db_user["preferred_org_id"]) if db_user.get("preferred_org_id") else None,
     )
+
+
+@router.get("/me/pending-invites", response_model=list[dict])
+async def list_my_pending_invites(user: dict = Depends(get_current_user)):
+    """List all pending org invitations addressed to the current user.
+
+    Surfaces invites without requiring the user to paste a token —
+    the onboarding wizard's "Join existing organisation" branch uses
+    this to render a one-click list. Returns the same shape as the
+    per-org invite list, plus the org name + slug so the UI can
+    render a recognisable label.
+
+    Pending invites that have passed ``expires_at`` are filtered out
+    here (they would also be rejected by the accept route).
+    """
+    db_user = await get_user_by_id(user["user_id"])
+    if not db_user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found",
+        )
+
+    client = await get_postgres_client()
+    rows = await client.fetch(
+        """
+        SELECT
+            i.id            AS invitation_id,
+            i.org_id        AS org_id,
+            i.role          AS role,
+            i.expires_at    AS expires_at,
+            i.created_at    AS created_at,
+            o.name          AS org_name,
+            o.slug          AS org_slug,
+            inviter.name    AS invited_by_name,
+            inviter.email   AS invited_by_email
+        FROM org_invitations i
+        JOIN organizations o ON o.id = i.org_id
+        JOIN users inviter ON inviter.id = i.invited_by
+        WHERE i.email = $1
+          AND i.status = 'pending'
+          AND i.expires_at > NOW()
+        ORDER BY i.created_at DESC
+        """,
+        db_user["email"],
+    )
+    return [
+        {
+            "invitation_id": str(r["invitation_id"]),
+            "org_id": str(r["org_id"]),
+            "org_name": r["org_name"],
+            "org_slug": r["org_slug"],
+            "role": r["role"],
+            "expires_at": r["expires_at"].isoformat() if r["expires_at"] else None,
+            "created_at": r["created_at"].isoformat() if r["created_at"] else None,
+            "invited_by_name": r["invited_by_name"],
+            "invited_by_email": r["invited_by_email"],
+        }
+        for r in (rows or [])
+    ]
 
 
 @router.post("/2fa/setup", response_model=TwoFASetupResponse)
