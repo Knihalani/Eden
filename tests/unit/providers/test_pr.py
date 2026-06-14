@@ -182,36 +182,35 @@ class TestLocalPRProvider:
 
 
 class TestGitHubPRProvider:
+    """The GitHub PR provider hits real REST endpoints; we don't make
+    network calls in unit tests, so these tests assert constructor
+    behavior + the surface contract."""
+
     def test_provider_name(self):
         from eden.providers.pr import GitHubPRProvider
-        provider = GitHubPRProvider()
+        provider = GitHubPRProvider(token="ghs_test", repo="acme/foo")
         assert provider.name == "github"
 
-    @pytest.mark.asyncio
-    async def test_create_pr_raises(self):
-        from eden.providers.pr import GitHubPRProvider, PRCreateRequest
-        provider = GitHubPRProvider()
-        with pytest.raises(NotImplementedError):
-            await provider.create_pr(PRCreateRequest(
-                title="x", body="", branch="b", base="main",
-            ))
-
-    @pytest.mark.asyncio
-    async def test_commit_files_raises(self):
+    def test_requires_token(self):
         from eden.providers.pr import GitHubPRProvider
-        from eden.providers.repo import FileEntry
-        provider = GitHubPRProvider()
-        with pytest.raises(NotImplementedError):
-            await provider.commit_files(
-                "b", [FileEntry(path="x", size=1, content="x")], "m",
-            )
+        with pytest.raises(ValueError, match="token"):
+            GitHubPRProvider(token="", repo="acme/foo")
 
-    @pytest.mark.asyncio
-    async def test_revert_raises(self):
-        from eden.providers.pr import GitHubPRProvider, PRRevertRequest
-        provider = GitHubPRProvider()
-        with pytest.raises(NotImplementedError):
-            await provider.revert(PRRevertRequest(pr_number=1))
+    def test_requires_repo(self):
+        from eden.providers.pr import GitHubPRProvider
+        with pytest.raises(ValueError, match="repo"):
+            GitHubPRProvider(token="ghs_test", repo="invalid")
+
+    def test_surface(self):
+        """Verifies the contract methods exist; wire-format coverage
+        lives in the integration suite."""
+        from eden.providers.pr import GitHubPRProvider
+        provider = GitHubPRProvider(token="ghs_test", repo="acme/foo")
+        assert hasattr(provider, "create_branch")
+        assert hasattr(provider, "commit_files")
+        assert hasattr(provider, "create_pr")
+        assert hasattr(provider, "revert")
+        assert hasattr(provider, "comment")
 
 
 class TestGetDefaultPRProvider:
@@ -224,9 +223,23 @@ class TestGetDefaultPRProvider:
         assert isinstance(get_default_pr_provider(), LocalPRProvider)
 
     def test_github_when_env_set(self, monkeypatch):
+        """Returns GitHubPRProvider when env vars are populated."""
         monkeypatch.setenv("EDEN_PR_PROVIDER", "github")
+        monkeypatch.setenv("EDEN_GITHUB_TOKEN", "ghs_test")
+        monkeypatch.setenv("EDEN_GITHUB_REPO", "acme/foo")
         from eden.providers.pr import (
             GitHubPRProvider,
             get_default_pr_provider,
         )
         assert isinstance(get_default_pr_provider(), GitHubPRProvider)
+
+    def test_github_falls_back_to_local_without_creds(self, monkeypatch):
+        """Falls back to Local when env=github but creds missing."""
+        monkeypatch.setenv("EDEN_PR_PROVIDER", "github")
+        monkeypatch.delenv("EDEN_GITHUB_TOKEN", raising=False)
+        monkeypatch.delenv("EDEN_GITHUB_REPO", raising=False)
+        from eden.providers.pr import (
+            LocalPRProvider,
+            get_default_pr_provider,
+        )
+        assert isinstance(get_default_pr_provider(), LocalPRProvider)

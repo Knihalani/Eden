@@ -438,79 +438,204 @@ class LocalRepoProvider:
         return out[:limit]
 
 
-# ── GitHubRepoProvider (placeholder) ────────────────────────────
+# ── GitHubRepoProvider ──────────────────────────────────────────
 
 
 class GitHubRepoProvider:
     """A :class:`RepoProvider` backed by the GitHub REST API.
 
-    PLACEHOLDER. The real impl requires:
+    Constructed by the onboarding wizard with an installation token
+    minted via :meth:`eden.integrations.github.GitHubOAuthClient.installation_token`.
+    The token is short-lived (~1 h); the caller is responsible for
+    refreshing it before expiry (the route layer caches by
+    ``installation_id``).
 
-    1. A GitHub App registration (the Eden Agent App) with
-       ``contents:read`` + ``pull_requests:read`` + ``metadata:read``
-       permissions.
-    2. The App's private key + installation id per org.
-    3. A JWT-signing helper (the existing
-       ``eden.integrations.github_auth`` module is the
-       starting point).
+    Note: ``read_file`` returns the file content as a UTF-8 string,
+    decoding the base64 the Contents API returns. Files over the
+    1 MiB REST limit return ``""`` — onboarding-wizard manifest files
+    (requirements.txt, package.json, pyproject.toml) are always well
+    under this cap, so we don't fall back to the blobs API.
 
-    The placeholder methods raise
-    :class:`NotImplementedError` with a clear install
-    instruction. The provider class exists so the
-    ``get_default_repo_provider()`` factory can return it
-    when ``EDEN_REPO_PROVIDER=github`` is set, and so the
-    route bootstrap can route to it.
+    Read-only by design. The write side is :class:`GitHubPRProvider`
+    in :mod:`eden.providers.pr`.
     """
 
     name: str = "github"
 
-    def __init__(self, token: str = "", repo: str = "") -> None:
+    def __init__(self, token: str, repo: str) -> None:
+        """
+        Args:
+            token: An installation access token (``ghs_…``). Get one
+                from ``GitHubOAuthClient.installation_token()``.
+            repo: ``"owner/repo"`` (e.g. ``"acme/agent-runner"``).
+        """
         self.token = token
         self.repo = repo
+        if not token or not repo or "/" not in repo:
+            raise ValueError(
+                "GitHubRepoProvider requires a non-empty installation "
+                "token and a 'owner/repo' string."
+            )
+
+    @property
+    def _headers(self) -> dict[str, str]:
+        return {
+            "Accept": "application/vnd.github+json",
+            "Authorization": f"token {self.token}",
+            "X-GitHub-Api-Version": "2022-11-28",
+        }
 
     async def list_files(
         self, path_glob: str = "**/*",
     ) -> list[FileEntry]:
-        raise NotImplementedError(
-            "GitHubRepoProvider: install the GitHub App and "
-            "provide a token + repo to enable this method."
-        )
+        """List files via the git-trees API (recursive).
+
+        Returns up to 100,000 entries (GitHub's tree cap) filtered by
+        ``path_glob``. For the onboarding flow we only need the
+        manifest files, so the caller typically asks for
+        ``"requirements.txt"`` / ``"pyproject.toml"`` / ``"package.json"``
+        directly via :meth:`read_file` and skips this method.
+        """
+        import httpx as _httpx
+        default_branch = await self.get_default_branch()
+        async with _httpx.AsyncClient(timeout=30.0) as client:
+            r = await client.get(
+                f"https://api.github.com/repos/{self.repo}/git/trees/{default_branch}",
+                headers=self._headers,
+                params={"recursive": "1"},
+            )
+            if r.status_code != 200:
+                logger.debug("GitHubRepoProvider.list_files %s: %s", r.status_code, r.text[:200])
+                return []
+            tree = r.json().get("tree", [])
+        files = [
+            FileEntry(path=item["path"], size=int(item.get("size", 0)), sha=item.get("sha", ""))
+            for item in tree
+            if item.get("type") == "blob"
+        ]
+        return [f for f in files if _fnmatch_relpath(f.path, path_glob)]
 
     async def read_file(self, path: str) -> str:
-        raise NotImplementedError(
-            "GitHubRepoProvider: install the GitHub App and "
-            "provide a token + repo to enable this method."
-        )
+        """Read a file via the Contents API. Returns ``""`` on miss."""
+        import base64 as _base64
+
+        import httpx as _httpx
+        async with _httpx.AsyncClient(timeout=30.0) as client:
+            r = await client.get(
+                f"https://api.github.com/repos/{self.repo}/contents/{path}",
+                headers=self._headers,
+            )
+            if r.status_code == 404:
+                return ""
+            if r.status_code != 200:
+                logger.debug("GitHubRepoProvider.read_file %s: %s", r.status_code, r.text[:200])
+                return ""
+            payload = r.json()
+        # Contents API returns base64 for files. Submodules / dirs
+        # return a list — we treat those as "miss" and return "".
+        if isinstance(payload, list):
+            return ""
+        if payload.get("encoding") != "base64" or "content" not in payload:
+            return ""
+        try:
+            return _base64.b64decode(payload["content"]).decode("utf-8", errors="replace")
+        except Exception as exc:
+            logger.debug("GitHubRepoProvider.read_file decode failed: %s", exc)
+            return ""
 
     async def get_default_branch(self) -> str:
-        raise NotImplementedError(
-            "GitHubRepoProvider: install the GitHub App to "
-            "enable this method."
-        )
+        """Read the default branch from the repo metadata."""
+        import httpx as _httpx
+        async with _httpx.AsyncClient(timeout=15.0) as client:
+            r = await client.get(
+                f"https://api.github.com/repos/{self.repo}",
+                headers=self._headers,
+            )
+            if r.status_code != 200:
+                return "main"
+            return r.json().get("default_branch") or "main"
 
     async def get_recent_commits(
         self, limit: int = 10,
     ) -> list[CommitInfo]:
-        raise NotImplementedError(
-            "GitHubRepoProvider: install the GitHub App to "
-            "enable this method."
-        )
+        """List recent commits on the default branch."""
+        import httpx as _httpx
+        async with _httpx.AsyncClient(timeout=30.0) as client:
+            r = await client.get(
+                f"https://api.github.com/repos/{self.repo}/commits",
+                headers=self._headers,
+                params={"per_page": max(1, min(int(limit), 100))},
+            )
+            if r.status_code != 200:
+                return []
+            data = r.json()
+        out: list[CommitInfo] = []
+        for item in data:
+            commit = item.get("commit", {})
+            author_data = commit.get("author") or {}
+            ts_raw = author_data.get("date") or ""
+            try:
+                ts = datetime.fromisoformat(ts_raw.replace("Z", "+00:00"))
+            except Exception:
+                ts = datetime.now(UTC)
+            out.append(CommitInfo(
+                sha=item.get("sha", ""),
+                message=(commit.get("message") or "").splitlines()[0] if commit.get("message") else "",
+                author=f"{author_data.get('name', '')} <{author_data.get('email', '')}>",
+                timestamp=ts,
+            ))
+        return out
 
     async def get_pull_request(
         self, number: int,
     ) -> PullRequestInfo | None:
-        raise NotImplementedError(
-            "GitHubRepoProvider: install the GitHub App to "
-            "enable this method."
-        )
+        """Fetch one PR by number."""
+        import httpx as _httpx
+        async with _httpx.AsyncClient(timeout=15.0) as client:
+            r = await client.get(
+                f"https://api.github.com/repos/{self.repo}/pulls/{int(number)}",
+                headers=self._headers,
+            )
+            if r.status_code == 404:
+                return None
+            if r.status_code != 200:
+                return None
+            return _pr_info_from_github(r.json())
 
     async def list_pull_requests(
         self, state: str = "open", limit: int = 50,
     ) -> list[PullRequestInfo]:
-        raise NotImplementedError(
-            "GitHubRepoProvider: install the GitHub App to "
-            "enable this method."
+        """List PRs filtered by state ('open'|'closed'|'all')."""
+        import httpx as _httpx
+        gh_state = "all" if state == "all" else (
+            "closed" if state in ("merged", "closed") else "open"
         )
+        async with _httpx.AsyncClient(timeout=30.0) as client:
+            r = await client.get(
+                f"https://api.github.com/repos/{self.repo}/pulls",
+                headers=self._headers,
+                params={
+                    "state": gh_state,
+                    "per_page": max(1, min(int(limit), 100)),
+                    "sort": "created",
+                    "direction": "desc",
+                },
+            )
+            if r.status_code != 200:
+                return []
+            data = r.json()
+        out: list[PullRequestInfo] = []
+        for item in data:
+            info = _pr_info_from_github(item)
+            # Local convention: "merged" is a derived state from
+            # closed+merged_at; surface that to the caller.
+            if state == "merged" and info.state != "merged":
+                continue
+            if state == "closed" and info.state == "merged":
+                # Closed without merge — the convention is to include.
+                pass
+            out.append(info)
+        return out[:limit]
 
 
 # ── Helpers ─────────────────────────────────────────────────────
@@ -574,20 +699,54 @@ def _pr_info_from_dict(data: dict) -> PullRequestInfo:
     )
 
 
+def _pr_info_from_github(item: dict) -> PullRequestInfo:
+    """Parse a :class:`PullRequestInfo` from a GitHub REST PR payload.
+
+    Maps the GitHub ``state`` field ('open'|'closed') + ``merged_at``
+    to our 3-state model ('open'|'merged'|'closed').
+    """
+    gh_state = item.get("state", "open")
+    merged_at = item.get("merged_at")
+    state = "merged" if gh_state == "closed" and merged_at else gh_state
+    created_at_raw = item.get("created_at") or ""
+    try:
+        created_at = datetime.fromisoformat(created_at_raw.replace("Z", "+00:00"))
+    except Exception:
+        created_at = datetime.now(UTC)
+    head = item.get("head") or {}
+    base = item.get("base") or {}
+    return PullRequestInfo(
+        number=int(item.get("number", 0)),
+        title=str(item.get("title", "")),
+        body=str(item.get("body") or ""),
+        branch=str(head.get("ref", "")),
+        base=str(base.get("ref", "")),
+        url=str(item.get("html_url", "")),
+        state=state,
+        created_at=created_at,
+    )
+
+
 def get_default_repo_provider() -> RepoProvider:
     """The default :class:`RepoProvider` for the platform.
 
     Returns :class:`LocalRepoProvider` pointed at
     ``EDEN_LOCAL_REPO_PATH`` (default ``.``). When
-    ``EDEN_REPO_PROVIDER=github`` is set, returns a
-    :class:`GitHubRepoProvider` placeholder (the real impl
-    is gated on the GitHub App auth flow).
+    ``EDEN_REPO_PROVIDER=github`` is set AND both
+    ``EDEN_GITHUB_TOKEN`` + ``EDEN_GITHUB_REPO`` are populated,
+    returns a real :class:`GitHubRepoProvider`. Falls back to
+    Local if those env vars are missing — the GitHub provider
+    requires a non-empty token + repo.
     """
     provider_name = os.environ.get("EDEN_REPO_PROVIDER", "local")
     if provider_name == "github":
-        return GitHubRepoProvider(
-            token=os.environ.get("EDEN_GITHUB_TOKEN", ""),
-            repo=os.environ.get("EDEN_GITHUB_REPO", ""),
+        token = os.environ.get("EDEN_GITHUB_TOKEN", "")
+        repo = os.environ.get("EDEN_GITHUB_REPO", "")
+        if token and repo:
+            return GitHubRepoProvider(token=token, repo=repo)
+        logger.warning(
+            "EDEN_REPO_PROVIDER=github but EDEN_GITHUB_TOKEN/REPO not set; "
+            "falling back to LocalRepoProvider.",
         )
     return LocalRepoProvider(
         repo_path=os.environ.get("EDEN_LOCAL_REPO_PATH") or None,
