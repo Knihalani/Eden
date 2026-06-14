@@ -2,8 +2,16 @@
 const sidebars = {
   docs: [
     'index',
+    'quickstart',
     'development',
-    'architecture',
+    {
+      type: 'category',
+      label: 'Architecture',
+      items: [
+        'architecture',
+        'architecture/clickhouse-transport',
+      ],
+    },
     'deployment',
     'api',
     'roadmap',

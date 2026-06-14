@@ -48,6 +48,12 @@ const config = {
         items: [
           {
             type: 'doc',
+            docId: 'quickstart',
+            position: 'left',
+            label: 'Quickstart',
+          },
+          {
+            type: 'doc',
             docId: 'index',
             position: 'left',
             label: 'Docs',
@@ -65,6 +71,7 @@ const config = {
           {
             title: 'Docs',
             items: [
+              { label: 'Quickstart', to: '/quickstart' },
               { label: 'Getting started', to: '/development' },
               { label: 'Architecture', to: '/architecture' },
               { label: 'Deployment', to: '/deployment' },
