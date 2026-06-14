@@ -17,33 +17,59 @@
  *
  * Auto-save: every change writes the graph to localStorage
  * (debounced 500ms) so refreshes don't wipe work.
+ *
+ * Keyboard shortcuts:
+ *   - Delete/Backspace: remove selected node
+ *   - Cmd/Ctrl + D:     duplicate the selected node
+ *   - Cmd/Ctrl + Z:     undo
+ *   - Cmd/Ctrl + Shift + Z / Cmd/Ctrl + Y: redo
+ *   - Cmd/Ctrl + S:     save (flush the localStorage debounce)
+ *   - F:                fit the canvas to all nodes
+ *   - T:                tidy the layout
+ *   - Esc:              clear selection
  */
 
 import dynamic from "next/dynamic";
-import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ChevronDown,
+  Clipboard,
+  Copy,
+  Download,
   History,
   Loader2,
   Play,
+  Redo2,
   RotateCcw,
   Save,
+  Sparkles,
   Trash2,
+  Undo2,
+  Upload,
+  Wand2,
 } from "lucide-react";
+import { ReactFlowProvider, useReactFlow } from "@xyflow/react";
 
 import { Button } from "@/components/ui/button";
-import { useOrg } from "@/hooks/use-org";
 import { useToast } from "@/components/ui/toast";
-import { cn } from "@/lib/utils";
+import { useOrg } from "@/hooks/use-org";
+import { agentsApi, builderApi } from "@/lib/api";
 
 import { Inspector } from "./_components/Inspector";
 import { Palette } from "./_components/Palette";
+import { RunHistory } from "./_components/RunHistory";
 import { RunResultsDialog } from "./_components/RunResultsDialog";
+import { TemplatesMenu } from "./_components/TemplatesMenu";
 import { useBuilderState } from "./_hooks/useBuilderState";
-import { deleteSaved, listRecent, lookupAgentId } from "./_lib/storage";
-import { loadSavedByName } from "./_lib/storage";
+import { deleteSaved, flushGraph, listRecent, loadSavedByName } from "./_lib/storage";
+import {
+  downloadPortable,
+  importPortable,
+} from "./_lib/portableGraph";
+import type { BuilderTemplate } from "./_lib/templates";
+
 import type { SavedGraphMeta } from "@/lib/types";
+import type { SimRun } from "@/lib/api";
 
 // React Flow touches window/document on mount, so we have to
 // dynamic-import the canvas with ssr:false.
@@ -53,6 +79,14 @@ const Canvas = dynamic(
 );
 
 export default function BuilderPage() {
+  return (
+    <ReactFlowProvider>
+      <BuilderPageInner />
+    </ReactFlowProvider>
+  );
+}
+
+function BuilderPageInner() {
   const { currentOrg } = useOrg();
   const orgId = currentOrg?.id ?? null;
   const toast = useToast();
@@ -60,11 +94,21 @@ export default function BuilderPage() {
   const s = useBuilderState();
   const [recent, setRecent] = useState<SavedGraphMeta[]>([]);
   const [recentOpen, setRecentOpen] = useState(false);
+  const [historyRefreshKey, setHistoryRefreshKey] = useState(0);
+  const reactFlow = useReactFlow();
 
   // Refresh the recent list whenever the active graph changes.
   useEffect(() => {
     setRecent(listRecent());
   }, [s.graphName, s.lastSavedAt]);
+
+  // Bump the history key whenever a run transitions to "done" so
+  // the panel re-fetches the new run row.
+  useEffect(() => {
+    if (s.runState.kind === "done") {
+      setHistoryRefreshKey((k) => k + 1);
+    }
+  }, [s.runState]);
 
   const selectedNode = useMemo(
     () => s.nodes.find((n) => n.id === s.selectedNodeId) ?? null,
@@ -82,28 +126,208 @@ export default function BuilderPage() {
     return "Unsaved";
   }, [s.runState, s.lastSavedAt]);
 
-  const loadRecent = (meta: SavedGraphMeta) => {
-    const saved = loadSavedByName(meta.graphName);
-    if (!saved) {
-      toast.error(`No saved graph for "${meta.graphName}".`);
+  const loadRecent = useCallback(
+    (meta: SavedGraphMeta) => {
+      const saved = loadSavedByName(meta.graphName);
+      if (!saved) {
+        toast.error(`No saved graph for "${meta.graphName}".`);
+        return;
+      }
+      if (typeof window !== "undefined") {
+        window.localStorage.setItem(
+          "eden.builder.graph",
+          JSON.stringify(saved),
+        );
+        window.location.reload();
+      }
+      setRecentOpen(false);
+    },
+    [toast],
+  );
+
+  const loadTemplate = useCallback(
+    (template: BuilderTemplate) => {
+      if (
+        s.nodes.length > 0 &&
+        !window.confirm(
+          `Replace the current graph with the "${template.name}" template?`,
+        )
+      ) {
+        return;
+      }
+      const built = template.build();
+      s.replaceGraph(built.nodes, built.edges, built.graphName);
+      toast.success(`Loaded template "${template.name}".`);
+    },
+    [s, toast],
+  );
+
+  // ── Export / Import ───────────────────────────────────────────
+  const handleExportDownload = useCallback(() => {
+    downloadPortable(s.graphName, s.nodes, s.edges, s.yamlPreview);
+    toast.success(`Exported "${s.graphName}.builder.json".`);
+  }, [s.graphName, s.nodes, s.edges, s.yamlPreview, toast]);
+
+  const handleCopyYaml = useCallback(() => {
+    if (typeof navigator === "undefined" || !navigator.clipboard) {
+      toast.error("Clipboard not available in this browser.");
       return;
     }
-    s.setGraphName(saved.graphName);
-    // The simplest "load" path is to swap the active graph; we
-    // also update the agentId cache so a re-push reuses the
-    // same backend agent.
-    // We do this by writing to the active key + re-hydrating
-    // via a small helper on the state hook.
-    // For now we use a direct localStorage write + reload.
-    if (typeof window !== "undefined") {
-      window.localStorage.setItem(
-        "eden.builder.graph",
-        JSON.stringify(saved),
+    void navigator.clipboard
+      .writeText(s.yamlPreview)
+      .then(() => toast.success("YAML copied to clipboard."))
+      .catch(() => toast.error("Failed to copy YAML."));
+  }, [s.yamlPreview, toast]);
+
+  const handleImport = useCallback(() => {
+    if (typeof window === "undefined") return;
+    const input = window.document.createElement("input");
+    input.type = "file";
+    input.accept = ".json,application/json";
+    input.onchange = async () => {
+      const file = input.files?.[0];
+      if (!file) return;
+      const text = await file.text();
+      const result = importPortable(text);
+      if (!result.ok) {
+        toast.error(`Import failed: ${result.error}`);
+        return;
+      }
+      if (
+        s.nodes.length > 0 &&
+        !window.confirm(
+          `Replace the current graph with "${result.graph.graphName}"?`,
+        )
+      ) {
+        return;
+      }
+      s.replaceGraph(
+        result.graph.nodes,
+        result.graph.edges,
+        result.graph.graphName,
       );
-      window.location.reload();
+      toast.success(`Imported "${result.graph.graphName}".`);
+    };
+    input.click();
+  }, [s, toast]);
+
+  // ── Save to server ────────────────────────────────────────────
+  const handleSaveToServer = useCallback(async () => {
+    if (!orgId) {
+      toast.error("Pick an organisation first.");
+      return;
     }
-    setRecentOpen(false);
-  };
+    try {
+      const result = await builderApi.upsert(orgId, {
+        name: s.graphName,
+        graph: {
+          nodes: s.nodes as unknown[],
+          edges: s.edges as unknown[],
+        },
+        yaml: s.yamlPreview,
+      });
+      toast.success(
+        result.created
+          ? `Saved "${s.graphName}" to server.`
+          : `Updated "${s.graphName}" on server.`,
+      );
+    } catch (err) {
+      toast.error(`Save to server failed: ${(err as Error).message}`);
+    }
+  }, [orgId, s.graphName, s.nodes, s.edges, s.yamlPreview, toast]);
+
+  // ── Run history ──────────────────────────────────────────────
+  const openHistoricalRun = useCallback(
+    (run: SimRun, agentId: string) => {
+      s.showHistoricalRun(run, agentId);
+    },
+    [s],
+  );
+
+  const rerun = useCallback(
+    async (run: SimRun, agentId: string) => {
+      if (!orgId) {
+        toast.error("Pick an organisation first.");
+        return;
+      }
+      try {
+        const fresh = await agentsApi.triggerSimRun(orgId, agentId, {
+          upload_id: run.upload_id,
+          runner_kind: "subprocess",
+        });
+        toast.info(`Rerun started: ${fresh.id}`);
+        s.closeRunDialog();
+        void s.resumeRunDialog(orgId, fresh, agentId);
+      } catch (err) {
+        toast.error(`Rerun failed: ${(err as Error).message}`);
+      }
+    },
+    [orgId, s, toast],
+  );
+
+  // ── Keyboard shortcuts ────────────────────────────────────────
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const mod = e.metaKey || e.ctrlKey;
+      // Don't trigger shortcuts while typing in a form field.
+      const target = e.target as HTMLElement | null;
+      if (
+        target &&
+        (target.tagName === "INPUT" ||
+          target.tagName === "TEXTAREA" ||
+          target.tagName === "SELECT" ||
+          target.isContentEditable)
+      ) {
+        return;
+      }
+      if (mod && e.key === "z" && !e.shiftKey) {
+        e.preventDefault();
+        s.undo();
+        return;
+      }
+      if ((mod && e.key === "Z" && e.shiftKey) || (mod && e.key === "y")) {
+        e.preventDefault();
+        s.redo();
+        return;
+      }
+      if (mod && e.key === "d") {
+        e.preventDefault();
+        if (s.selectedNodeId) s.duplicateNode(s.selectedNodeId);
+        return;
+      }
+      if (mod && e.key === "s") {
+        e.preventDefault();
+        flushGraph();
+        toast.info("Graph saved to localStorage.");
+        return;
+      }
+      if (!mod && (e.key === "Delete" || e.key === "Backspace")) {
+        e.preventDefault();
+        if (s.selectedNodeId) s.removeNode(s.selectedNodeId);
+        return;
+      }
+      if (!mod && e.key === "f") {
+        e.preventDefault();
+        try {
+          reactFlow.fitView({ padding: 0.2, duration: 300 });
+        } catch {
+          // no nodes yet
+        }
+        return;
+      }
+      if (!mod && e.key === "t") {
+        e.preventDefault();
+        s.tidy();
+        return;
+      }
+      if (!mod && e.key === "Escape") {
+        s.setSelected(null);
+        return;
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [s, reactFlow, toast]);
 
   return (
     <div className="flex flex-col h-[calc(100vh-64px)]">
@@ -127,6 +351,131 @@ export default function BuilderPage() {
         </div>
 
         <div className="flex items-center gap-1.5">
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            onClick={s.undo}
+            disabled={!s.canUndo}
+            aria-label="Undo (Cmd/Ctrl+Z)"
+            title="Undo (⌘Z)"
+          >
+            <Undo2 className="w-3.5 h-3.5" />
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            onClick={s.redo}
+            disabled={!s.canRedo}
+            aria-label="Redo (Cmd/Ctrl+Shift+Z)"
+            title="Redo (⇧⌘Z)"
+          >
+            <Redo2 className="w-3.5 h-3.5" />
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            onClick={s.tidy}
+            aria-label="Tidy layout (T)"
+            title="Tidy layout (T)"
+          >
+            <Wand2 className="w-3.5 h-3.5" />
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            onClick={() => {
+              try {
+                reactFlow.fitView({ padding: 0.2, duration: 300 });
+              } catch {
+                // no nodes yet
+              }
+            }}
+            aria-label="Fit view (F)"
+            title="Fit view (F)"
+          >
+            <Sparkles className="w-3.5 h-3.5" />
+          </Button>
+
+          {s.selectedNodeId && (
+            <>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                onClick={() => s.duplicateNode(s.selectedNodeId!)}
+                aria-label="Duplicate node (Cmd/Ctrl+D)"
+                title="Duplicate (⌘D)"
+              >
+                <Copy className="w-3.5 h-3.5" />
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                onClick={() => s.removeNode(s.selectedNodeId!)}
+                aria-label="Delete node"
+                title="Delete (⌫)"
+                className="text-[var(--error)] hover:text-[var(--error)]"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+              </Button>
+            </>
+          )}
+
+          <div className="h-5 w-px bg-[var(--border-subtle)] mx-1" />
+
+          <TemplatesMenu onPick={loadTemplate} />
+
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            onClick={handleExportDownload}
+            aria-label="Download graph as .builder.json"
+            title="Download .builder.json"
+            data-testid="export-button"
+          >
+            <Download className="w-3.5 h-3.5" />
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            onClick={handleCopyYaml}
+            aria-label="Copy YAML to clipboard"
+            title="Copy YAML"
+            data-testid="copy-yaml-button"
+          >
+            <Clipboard className="w-3.5 h-3.5" />
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            onClick={handleImport}
+            aria-label="Import .builder.json"
+            title="Import .builder.json"
+            data-testid="import-button"
+          >
+            <Upload className="w-3.5 h-3.5" />
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={handleSaveToServer}
+            aria-label="Save to server (builder_graphs table)"
+            title="Save to server"
+            data-testid="save-to-server-button"
+            disabled={!orgId}
+          >
+            Save
+          </Button>
+
           {/* Recent ▾ */}
           <div className="relative">
             <Button
@@ -199,10 +548,10 @@ export default function BuilderPage() {
           <Button
             type="button"
             variant="ghost"
-            size="sm"
+            size="icon"
             onClick={() => s.loadFromStorage()}
             aria-label="Reload from localStorage"
-            title="Reload the saved graph from localStorage"
+            title="Reload saved graph"
           >
             <Save className="w-3.5 h-3.5" />
           </Button>
@@ -243,7 +592,6 @@ export default function BuilderPage() {
       <div className="flex flex-1 overflow-hidden">
         <Palette
           onAdd={(kind) =>
-            // Default drop position in the centre of the visible canvas.
             s.addNode(kind, { x: 220 + Math.random() * 60, y: 160 + Math.random() * 60 })
           }
         />
@@ -261,6 +609,9 @@ export default function BuilderPage() {
           onChange={(next) => s.onNodeDataChange(next.id, next.data)}
           onRemove={s.removeNode}
           yamlPreview={s.yamlPreview}
+          graphName={s.graphName}
+          onOpenRun={openHistoricalRun}
+          historyRefreshKey={historyRefreshKey}
         />
       </div>
 
@@ -268,6 +619,7 @@ export default function BuilderPage() {
         state={s.runState}
         onClose={s.closeRunDialog}
         orgId={orgId}
+        onRerun={rerun}
       />
     </div>
   );

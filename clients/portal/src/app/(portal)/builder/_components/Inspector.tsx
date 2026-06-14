@@ -13,6 +13,7 @@ import { Plus, Trash2, Wand2 } from "lucide-react";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import type { SimRun } from "@/lib/api";
 import type {
   AgentBlockData,
   BlockData,
@@ -26,12 +27,16 @@ import type {
   ToolBlockData,
 } from "../_lib/types";
 import { MAX_SEED } from "../_lib/types";
+import { RunHistory } from "./RunHistory";
 
 export interface InspectorProps {
   selected: EdenNode | null;
   onChange: (next: EdenNode) => void;
   onRemove: (id: string) => void;
   yamlPreview: string;
+  graphName: string;
+  onOpenRun: (run: SimRun, agentId: string) => void;
+  historyRefreshKey?: number;
 }
 
 export function Inspector({
@@ -39,6 +44,9 @@ export function Inspector({
   onChange,
   onRemove,
   yamlPreview,
+  graphName,
+  onOpenRun,
+  historyRefreshKey,
 }: InspectorProps) {
   return (
     <aside
@@ -64,7 +72,25 @@ export function Inspector({
       </div>
       <div className="flex-1 p-4 space-y-4">
         {selected ? (
-          <NodeForm selected={selected} onChange={onChange} />
+          <>
+            <FormRow label="Label" hint="Display name on the canvas.">
+              <input
+                className={inputCls}
+                value={selected.data.label}
+                onChange={(e) => {
+                  const newData = {
+                    ...(selected.data as Record<string, unknown>),
+                    label: e.target.value,
+                  } as unknown as Record<string, unknown> & BlockData;
+                  onChange({ ...selected, data: newData });
+                }}
+                placeholder="Display name"
+              />
+            </FormRow>
+            <div className="border-t border-[var(--border-subtle)] pt-4">
+              <NodeForm selected={selected} onChange={onChange} />
+            </div>
+          </>
         ) : (
           <EmptyState
             icon={Wand2}
@@ -75,18 +101,24 @@ export function Inspector({
         )}
       </div>
       <div className="border-t border-[var(--border-default)] p-4">
-        <details className="text-xs">
-          <summary className="cursor-pointer text-[var(--text-muted)] hover:text-[var(--text-primary)]">
-            Generated eden-sim-eval.yaml
+        <details open className="text-xs">
+          <summary className="cursor-pointer text-[var(--text-muted)] hover:text-[var(--text-primary)] flex items-center justify-between">
+            <span>Generated eden-sim-eval.yaml</span>
+            <span className="text-[10px] text-[var(--text-muted)]">live</span>
           </summary>
           <pre
-            className="mt-2 max-h-64 overflow-auto rounded-md border border-[var(--border-subtle)] bg-zinc-950 p-3 text-[11px] text-zinc-200 font-mono whitespace-pre"
+            className="mt-2 max-h-48 overflow-auto rounded-md border border-[var(--border-subtle)] bg-zinc-950 p-3 text-[11px] text-zinc-200 font-mono whitespace-pre"
             data-testid="yaml-preview"
           >
             {yamlPreview}
           </pre>
         </details>
       </div>
+      <RunHistory
+        graphName={graphName}
+        onOpenRun={onOpenRun}
+        {...(historyRefreshKey !== undefined ? { refreshKey: historyRefreshKey } : {})}
+      />
     </aside>
   );
 }
@@ -215,11 +247,212 @@ function ToolForm({
           <option value="custom">custom</option>
         </select>
       </FormRow>
-      <ConfigTable
-        config={node.data.config}
-        onChange={(cfg) => set({ config: cfg })}
-      />
+      {/* Per-kind structured form. The values are written into
+          the same `config` k/v map so the YAML output is
+          unchanged — we just render friendlier inputs per kind. */}
+      {node.data.toolKind === "shell" && (
+        <ShellToolConfig
+          config={node.data.config}
+          onChange={(cfg) => set({ config: cfg })}
+        />
+      )}
+      {node.data.toolKind === "file" && (
+        <FileToolConfig
+          config={node.data.config}
+          onChange={(cfg) => set({ config: cfg })}
+        />
+      )}
+      {node.data.toolKind === "http" && (
+        <HttpToolConfig
+          config={node.data.config}
+          onChange={(cfg) => set({ config: cfg })}
+        />
+      )}
+      {node.data.toolKind === "custom" && (
+        <ConfigTable
+          config={node.data.config}
+          onChange={(cfg) => set({ config: cfg })}
+        />
+      )}
     </>
+  );
+}
+
+function ShellToolConfig({
+  config,
+  onChange,
+}: {
+  config: Record<string, string>;
+  onChange: (next: Record<string, string>) => void;
+}) {
+  return (
+    <div className="space-y-2">
+      <FormRow
+        label="Command"
+        hint="Shell command template. {input} is substituted with the agent's last output."
+      >
+        <input
+          className={cn(inputCls, "font-mono text-xs")}
+          placeholder="echo {input}"
+          value={config["command"] ?? ""}
+          onChange={(e) => onChange({ ...config, command: e.target.value })}
+        />
+      </FormRow>
+      <FormRow label="Timeout (seconds)">
+        <input
+          className={inputCls}
+          type="number"
+          min={0}
+          max={600}
+          value={config["timeout_s"] ?? "30"}
+          onChange={(e) =>
+            onChange({ ...config, timeout_s: e.target.value })
+          }
+        />
+      </FormRow>
+    </div>
+  );
+}
+
+function FileToolConfig({
+  config,
+  onChange,
+}: {
+  config: Record<string, string>;
+  onChange: (next: Record<string, string>) => void;
+}) {
+  return (
+    <div className="space-y-2">
+      <FormRow
+        label="Path"
+        hint="Glob or literal path. {input} is substituted with the agent's last output."
+      >
+        <input
+          className={cn(inputCls, "font-mono text-xs")}
+          placeholder="/tmp/{input}.txt"
+          value={config["path"] ?? ""}
+          onChange={(e) => onChange({ ...config, path: e.target.value })}
+        />
+      </FormRow>
+      <FormRow label="Mode">
+        <select
+          className={inputCls}
+          value={config["mode"] ?? "read"}
+          onChange={(e) => onChange({ ...config, mode: e.target.value })}
+        >
+          <option value="read">read</option>
+          <option value="write">write</option>
+        </select>
+      </FormRow>
+    </div>
+  );
+}
+
+function HttpToolConfig({
+  config,
+  onChange,
+}: {
+  config: Record<string, string>;
+  onChange: (next: Record<string, string>) => void;
+}) {
+  // HTTP config stores the URL, method, and headers prefixed
+  // by "header." in the same flat k/v map. Custom headers
+  // are surfaced as their own key/value rows below the URL
+  // and method fields.
+  const headers: Record<string, string> = {};
+  for (const [k, v] of Object.entries(config)) {
+    if (k.startsWith("header.")) {
+      headers[k.slice("header.".length)] = v;
+    }
+  }
+  const [newHeader, setNewHeader] = useState("");
+  const [newValue, setNewValue] = useState("");
+
+  return (
+    <div className="space-y-2">
+      <FormRow label="URL">
+        <input
+          className={cn(inputCls, "font-mono text-xs")}
+          placeholder="https://api.example.com/v1/{input}"
+          value={config["url"] ?? ""}
+          onChange={(e) => onChange({ ...config, url: e.target.value })}
+        />
+      </FormRow>
+      <FormRow label="Method">
+        <select
+          className={inputCls}
+          value={config["method"] ?? "GET"}
+          onChange={(e) => onChange({ ...config, method: e.target.value })}
+        >
+          <option>GET</option>
+          <option>POST</option>
+          <option>PUT</option>
+          <option>PATCH</option>
+          <option>DELETE</option>
+        </select>
+      </FormRow>
+      <FormRow
+        label="Headers"
+        hint="Custom HTTP headers. Sent as-is on every call."
+      >
+        <div className="space-y-1.5">
+          {Object.entries(headers).map(([k, v]) => (
+            <div key={k} className="flex items-center gap-1.5 text-xs">
+              <span className="flex-1 font-mono truncate text-zinc-700">
+                {k}
+              </span>
+              <span className="flex-1 font-mono truncate text-zinc-500">
+                = {v}
+              </span>
+              <button
+                type="button"
+                className="text-zinc-400 hover:text-[var(--error)]"
+                onClick={() => {
+                  const next = { ...config };
+                  delete next[`header.${k}`];
+                  onChange(next);
+                }}
+                aria-label={`Remove header ${k}`}
+              >
+                <Trash2 className="w-3 h-3" />
+              </button>
+            </div>
+          ))}
+          <div className="flex items-center gap-1.5">
+            <input
+              className={cn(inputCls, "text-xs")}
+              placeholder="X-Header"
+              value={newHeader}
+              onChange={(e) => setNewHeader(e.target.value)}
+            />
+            <input
+              className={cn(inputCls, "text-xs")}
+              placeholder="value"
+              value={newValue}
+              onChange={(e) => setNewValue(e.target.value)}
+            />
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7"
+              onClick={() => {
+                if (!newHeader.trim()) return;
+                onChange({
+                  ...config,
+                  [`header.${newHeader.trim()}`]: newValue,
+                });
+                setNewHeader("");
+                setNewValue("");
+              }}
+              aria-label="Add header"
+            >
+              <Plus className="w-3.5 h-3.5" />
+            </Button>
+          </div>
+        </div>
+      </FormRow>
+    </div>
   );
 }
 

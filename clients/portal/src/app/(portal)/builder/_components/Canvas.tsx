@@ -27,9 +27,10 @@ import {
   type ReactFlowProps,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import { useCallback, useRef } from "react";
+import { useCallback, useMemo, useRef } from "react";
 
 import type { BlockKind } from "@/lib/types";
+import { makeIsValidConnection } from "../_lib/validHandles";
 import { type EdenEdge, type EdenNode } from "../_lib/types";
 import { nodeTypes } from "./nodeTypes";
 
@@ -97,6 +98,15 @@ export function Canvas({
     [handleConnect],
   );
 
+  // Connection validation: React Flow's isValidConnection hook
+  // shows a red "X" cursor when the user drags onto an
+  // invalid target, AND prevents the onConnect callback from
+  // firing for invalid pairs.
+  const isValidConnection = useMemo(
+    () => makeIsValidConnection(nodes as EdenNode[]),
+    [nodes],
+  );
+
   const reactFlowProps: Partial<ReactFlowProps> = {
     colorMode: "dark",
     fitView: true,
@@ -121,6 +131,7 @@ export function Canvas({
         onEdgesChange={onEdgesChange}
         onConnect={onConnectWithEdgeData}
         onSelectionChange={onSelectionChange}
+        isValidConnection={isValidConnection}
         nodeTypes={nodeTypes}
         {...reactFlowProps}
       >
