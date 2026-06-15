@@ -20,7 +20,7 @@ dependencies = [
     "openai>=1.0.0,<2.0.0",
     # Anthropic SDK — used by the AI Insights chat sidebar (B4).
     # OpenRouter above still drives the main pipeline.
-    "anthropic>=0.40.0,<1.0.0",
+    "anthropic>=0.109.1,<1.0.0",
 
     # Database
     "psycopg2-binary>=2.9.9,<3.0.0",
