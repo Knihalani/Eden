@@ -1,0 +1,34 @@
+DESCRIPTION "Telemetry events query for the time-travel + heatmap surfaces. Mirrors the Postgres `telemetry_events` table content for fast analytical reads."
+
+NODE telemetry_events_query_q
+SQL >
+    %
+    SELECT
+        event_id,
+        tenant_id,
+        trace_id,
+        realm,
+        event_type,
+        timestamp,
+        agent_id,
+        environment_id,
+        name,
+        duration_ms,
+        outcome,
+        model,
+        finish_reason,
+        cache_hit,
+        prompt_cache_savings_usd
+    FROM telemetry_events_ch
+    WHERE
+        1
+        {% if defined(tenant_id) %} AND tenant_id = {{ String(tenant_id) }} {% end %}
+        {% if defined(trace_id) %} AND trace_id = {{ String(trace_id) }} {% end %}
+        {% if defined(event_type) %} AND event_type = {{ String(event_type) }} {% end %}
+        {% if defined(realm) %} AND realm = {{ String(realm) }} {% end %}
+        {% if defined(start_time) %} AND timestamp >= parseDateTime64BestEffort({{ String(start_time) }}, 3) {% end %}
+        {% if defined(end_time) %} AND timestamp <= parseDateTime64BestEffort({{ String(end_time) }}, 3) {% end %}
+    ORDER BY timestamp DESC
+    LIMIT {{ Int32(limit, 1000) }}
+
+TYPE ENDPOINT

@@ -1,0 +1,25 @@
+DESCRIPTION "Benchmark results summary by benchmark. Pass-rate + average score over the requested window."
+
+NODE benchmark_results_q
+SQL >
+    %
+    SELECT
+        benchmark_id,
+        count() AS run_count,
+        avg(score) AS avg_score,
+        sum(passed) AS pass_count,
+        count() - sum(passed) AS fail_count,
+        round(sum(passed) * 100.0 / count(), 2) AS pass_rate_pct,
+        max(timestamp) AS last_run
+    FROM benchmark_results
+    WHERE
+        1
+        {% if defined(tenant_id) %} AND tenant_id = toUUIDOrZero({{ String(tenant_id) }}) {% end %}
+        {% if defined(benchmark_id) %} AND benchmark_id = toUUIDOrZero({{ String(benchmark_id) }}) {% end %}
+        {% if defined(start_time) %} AND timestamp >= parseDateTime64BestEffort({{ String(start_time) }}, 3) {% end %}
+        {% if defined(end_time) %} AND timestamp <= parseDateTime64BestEffort({{ String(end_time) }}, 3) {% end %}
+    GROUP BY benchmark_id
+    ORDER BY last_run DESC
+    LIMIT {{ Int32(limit, 100) }}
+
+TYPE ENDPOINT

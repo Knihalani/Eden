@@ -1,0 +1,23 @@
+DESCRIPTION "Pipeline stage duration + error counts. Mirrors `ClickHouseSink.query_pipeline_bottlenecks`."
+
+NODE pipeline_bottlenecks_q
+SQL >
+    %
+    SELECT
+        stage,
+        count() AS run_count,
+        avg(duration_ms) AS avg_duration_ms,
+        quantile(0.95)(duration_ms) AS p95_duration_ms,
+        max(duration_ms) AS max_duration_ms,
+        sumIf(1, status = 'error') AS error_count
+    FROM pipeline_stages
+    WHERE
+        1
+        {% if defined(tenant_id) %} AND tenant_id = toUUIDOrZero({{ String(tenant_id) }}) {% end %}
+        {% if defined(start_time) %} AND timestamp >= parseDateTime64BestEffort({{ String(start_time) }}, 3) {% end %}
+        {% if defined(end_time) %} AND timestamp <= parseDateTime64BestEffort({{ String(end_time) }}, 3) {% end %}
+    GROUP BY stage
+    ORDER BY avg_duration_ms DESC
+    LIMIT {{ Int32(limit, 100) }}
+
+TYPE ENDPOINT

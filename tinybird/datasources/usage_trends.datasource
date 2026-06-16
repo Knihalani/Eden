@@ -1,0 +1,20 @@
+DESCRIPTION >
+    Generated from /tmp/sample_usage_trends.ndjson
+
+SCHEMA >
+    cost_usd Float32 `json:$.cost_usd`,
+    event_type String `json:$.event_type`,
+    hour DateTime `json:$.hour`,
+    model String `json:$.model`,
+    quantity Float32 `json:$.quantity`,
+    resource String `json:$.resource`,
+    tenant_id String `json:$.tenant_id`,
+    unit String `json:$.unit`,
+    user_id String `json:$.user_id`
+
+ENGINE "MergeTree"
+# ENGINE_SORTING_KEY "user_id, timestamp"
+# ENGINE_TTL "timestamp + toIntervalDay(60)"
+# Learn more at https://www.tinybird.co/docs/forward/dev-reference/datafiles/datasource-filesENGINE_PARTITION_KEY "toYYYYMM(hour)"
+ENGINE_SORTING_KEY "tenant_id, event_type, hour"
+ENGINE_TTL "toDateTime(hour) + toIntervalDay(2555)"

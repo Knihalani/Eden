@@ -1,0 +1,21 @@
+DESCRIPTION >
+    Generated from /tmp/sample_agent_performance.ndjson
+
+SCHEMA >
+    agent_name String `json:$.agent_name`,
+    cost_usd Float32 `json:$.cost_usd`,
+    duration_ms Int32 `json:$.duration_ms`,
+    event_type String `json:$.event_type`,
+    input_tokens Int16 `json:$.input_tokens`,
+    job_id String `json:$.job_id`,
+    model String `json:$.model`,
+    output_tokens Int16 `json:$.output_tokens`,
+    pipeline_stage String `json:$.pipeline_stage`,
+    tenant_id String `json:$.tenant_id`,
+    timestamp DateTime `json:$.timestamp`,
+    total_tokens Int16 `json:$.total_tokens`
+
+ENGINE "MergeTree"
+ENGINE_PARTITION_KEY "toYYYYMM(timestamp)"
+ENGINE_SORTING_KEY "tenant_id, agent_name, timestamp"
+ENGINE_TTL "toDateTime(timestamp) + toIntervalDay(2555)"

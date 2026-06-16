@@ -1,0 +1,26 @@
+DESCRIPTION "Per-(tenant, agent) cost + latency summary for the agent performance observability surface. Mirrors `ClickHouseSink.query_agent_performance`."
+
+NODE agent_performance_q
+SQL >
+    %
+    SELECT
+        tenant_id,
+        agent_name,
+        count() AS call_count,
+        avg(duration_ms) AS avg_latency_ms,
+        quantile(0.95)(duration_ms) AS p95_latency_ms,
+        sum(total_tokens) AS total_tokens,
+        sum(cost_usd) AS total_cost_usd,
+        max(timestamp) AS last_seen
+    FROM agent_performance
+    WHERE
+        1
+        {% if defined(tenant_id) %} AND tenant_id = toUUIDOrZero({{ String(tenant_id) }}) {% end %}
+        {% if defined(agent_name) %} AND agent_name = {{ String(agent_name) }} {% end %}
+        {% if defined(start_time) %} AND timestamp >= parseDateTime64BestEffort({{ String(start_time) }}, 3) {% end %}
+        {% if defined(end_time) %} AND timestamp <= parseDateTime64BestEffort({{ String(end_time) }}, 3) {% end %}
+    GROUP BY tenant_id, agent_name
+    ORDER BY total_cost_usd DESC
+    LIMIT {{ Int32(limit, 1000) }}
+
+TYPE ENDPOINT
