@@ -1,0 +1,511 @@
+# =============================================================================
+# Eden — Northflank deployment manifest (Developer Sandbox / free tier)
+# =============================================================================
+#
+# Northflank free "Developer Sandbox" plan allocations:
+#   • 2 services (long-running containers with public ingress)
+#   • 2 jobs   (long-running workers + scheduled cron)
+#   • 1 addon  (managed Postgres / Redis / MongoDB / etc.)
+#   • 1 BYOC cluster allowed (we don't use it on the free tier)
+#
+# Stack fit:
+#   • eden-api       → service   (FastAPI, port 8000, /health)
+#   • eden-worker    → job       (background work: judges, sim, drift, RCA)
+#   • eden-cron      → job       (scheduled jobs, on Northflank cron trigger)
+#   • eden-postgres  → addon     (managed Postgres 16)
+#
+# External / out-of-sandbox (free tiers elsewhere):
+#   • Qdrant         → Qdrant Cloud free (1 GB cluster) — set QDRANT_HOST
+#   • Redis          → Upstash free (10k cmds/day) — set REDIS_URL
+#   • Tinybird       → already used by Cat 18 — no change
+#
+# Deploy from CLI (one-time):
+#   1. npm i -g @northflank/cli
+#   2. northflank login
+#   3. northflank create project --name eden-staging
+#   4. northflank combine --project eden-staging --path ./northflank.yml
+#
+# Or from the dashboard: New → Import Manifest → paste this file.
+#
+# After first deploy:
+#   • Note the API service URL (e.g. https://eden-api--<id>.northflank.app)
+#   • Set NEXT_PUBLIC_API_URL on Vercel to that URL
+#   • Set CORS_ORIGINS_RAW to the Vercel portal URL
+# =============================================================================
+
+apiVersion: defaults/v1
+kind: Project
+metadata:
+  name: eden-staging-us-central
+  description: Eden AI-native environment generation platform - staging
+spec:
+  # us-central is the only region that supports free-tier projects on
+  # this account. Vercel deploys to iad1 by default — there's a ~70ms
+  # inter-region hop but it's negligible for staging.
+  region: us-central
+
+  # ── Secrets to be set via the Northflank dashboard or
+  #    `northflank create secret` BEFORE applying this manifest. Names
+  #    below must match. Values come from `.env` locally or your secret
+  #    manager. Do NOT commit them to git.
+  secretGroups:
+    - name: eden-required
+      description: |
+        Required secrets for the API + worker. Generate the first three
+        with `python scripts/secrets_generate.py`. The rest come from
+        the corresponding vendor dashboards.
+      secrets:
+        - name: JWT_SECRET
+        - name: ENCRYPTION_KEY
+        - name: SESSION_SECRET
+        - name: OPENROUTER_API_KEY
+        - name: TINYBIRD_ADMIN_TOKEN
+        - name: TINYBIRD_BRANCH_TOKEN
+        - name: SENTRY_DSN
+        - name: GITHUB_APP_ID
+        - name: GITHUB_APP_CLIENT_ID
+        - name: GITHUB_APP_CLIENT_SECRET
+        - name: GITHUB_APP_PRIVATE_KEY
+        - name: GITHUB_APP_WEBHOOK_SECRET
+        - name: REDIS_URL
+        - name: QDRANT_API_KEY
+        # ── Postgres (Neon cutover, Phase 7) ────────────────────────
+        # All five POSTGRES_* vars come from the eden-required secret
+        # group. The values point at a Neon Scale project in us-east-2
+        # (Ohio). POSTGRES_SSLMODE=require is mandatory — Neon rejects
+        # unencrypted connections. See docs/deploy/neon-cutover.md for
+        # the cutover runbook.
+        - name: POSTGRES_HOST
+        - name: POSTGRES_PORT
+        - name: POSTGRES_DB
+        - name: POSTGRES_USER
+        - name: POSTGRES_PASSWORD
+        - name: POSTGRES_SSLMODE
+        - name: POSTGRES_CHANNEL_BINDING
+        - name: POSTGRES_ENDPOINT_ID
+        # ── Backblaze B2 cold tier (Phase 6) ─────────────────────────
+        - name: B2_ENDPOINT_URL
+        - name: B2_COLD_BUCKET
+        - name: B2_ACCESS_KEY_ID
+        - name: B2_SECRET_ACCESS_KEY
+
+# ─────────────────────────────────────────────────────────────────────
+# Service 1/2: eden-api (FastAPI)
+# ─────────────────────────────────────────────────────────────────────
+---
+apiVersion: workloads/v1
+kind: Service
+metadata:
+  name: eden-api
+spec:
+  # Free-tier preset: 0.2 vCPU, 512 MB RAM. Bump to nf-compute-50 or
+  # nf-compute-100-2 for production. Sandbox plan caps at nf-compute-20.
+  compute:
+    name: nf-compute-20
+  deployment:
+    instances: 1
+  build:
+    type: dockerfile
+    dockerfilePath: ./Dockerfile
+    dockerBuildContext: .
+  ports:
+    - name: http
+      port: 8000
+      type: http
+  healthCheck:
+    type: http
+    httpPath: /health
+    intervalSeconds: 30
+    timeoutSeconds: 5
+    failureThreshold: 3
+  # Northflank forwards SIGTERM and gives 30s for graceful drain, which
+  # matches what bin/serve.sh and the Dockerfile's STOPSIGNAL expect.
+  terminationGracePeriodSeconds: 30
+  env:
+    # ── App defaults ──────────────────────────────────────────────
+    - name: APP_NAME
+      value: Eden
+    - name: APP_VERSION
+      value: 0.1.0
+    - name: DEBUG
+      value: "false"
+    - name: HOST
+      value: 0.0.0.0
+    - name: PORT
+      value: "8000"
+    - name: LOG_LEVEL
+      value: INFO
+    - name: LOG_JSON
+      value: "true"
+    - name: SENTRY_ENVIRONMENT
+      value: northflank-staging
+    - name: SENTRY_TRACES_SAMPLE_RATE
+      value: "0.1"
+    # ── CORS — set this to your Vercel portal URL after first deploy ──
+    # Comma-separated, no wildcards. Examples:
+    #   https://eden-portal.vercel.app,https://edenobservability.com
+    - name: CORS_ORIGINS_RAW
+      value: https://edenobservability.com
+    # ── Postgres (Neon cutover, Phase 7) ────────────────────────
+    # All POSTGRES_* values are resolved from the eden-required secret
+    # group. POSTGRES_SSLMODE must be "require" (or stricter) — Neon
+    # rejects plain-text connections. See docs/deploy/neon-cutover.md.
+    - name: POSTGRES_HOST
+      valueFrom: { secretKeyRef: { group: eden-required, key: POSTGRES_HOST } }
+    - name: POSTGRES_PORT
+      valueFrom: { secretKeyRef: { group: eden-required, key: POSTGRES_PORT } }
+    - name: POSTGRES_DB
+      valueFrom: { secretKeyRef: { group: eden-required, key: POSTGRES_DB } }
+    - name: POSTGRES_USER
+      valueFrom: { secretKeyRef: { group: eden-required, key: POSTGRES_USER } }
+    - name: POSTGRES_PASSWORD
+      valueFrom: { secretKeyRef: { group: eden-required, key: POSTGRES_PASSWORD } }
+    - name: POSTGRES_SSLMODE
+      valueFrom: { secretKeyRef: { group: eden-required, key: POSTGRES_SSLMODE } }
+    - name: POSTGRES_CHANNEL_BINDING
+      valueFrom: { secretKeyRef: { group: eden-required, key: POSTGRES_CHANNEL_BINDING } }
+    - name: POSTGRES_ENDPOINT_ID
+      valueFrom: { secretKeyRef: { group: eden-required, key: POSTGRES_ENDPOINT_ID } }
+    - name: POSTGRES_POOL_SIZE
+      value: "10"            # 512 MB container — cap pool aggressively
+    - name: POSTGRES_MIN_POOL_SIZE
+      value: "2"
+    - name: POSTGRES_STATEMENT_TIMEOUT_MS
+      value: "30000"
+    # ── Backblaze B2 cold tier (Phase 6) ─────────────────────────
+    - name: B2_ENDPOINT_URL
+      valueFrom: { secretKeyRef: { group: eden-required, key: B2_ENDPOINT_URL } }
+    - name: B2_COLD_BUCKET
+      valueFrom: { secretKeyRef: { group: eden-required, key: B2_COLD_BUCKET } }
+    - name: B2_ACCESS_KEY_ID
+      valueFrom: { secretKeyRef: { group: eden-required, key: B2_ACCESS_KEY_ID } }
+    - name: B2_SECRET_ACCESS_KEY
+      valueFrom: { secretKeyRef: { group: eden-required, key: B2_SECRET_ACCESS_KEY } }
+    # ── Qdrant (external — Qdrant Cloud free tier) ──────────────
+    - name: QDRANT_HOST
+      value: https://58384b79-0261-480e-b61f-d86bbf1c0dad.us-east4-0.gcp.cloud.qdrant.io
+    - name: QDRANT_PORT
+      value: "6333"
+    - name: QDRANT_COLLECTION_PREFIX
+      value: eden_
+    - name: QDRANT_API_KEY
+      valueFrom: { secretKeyRef: { group: eden-required, key: QDRANT_API_KEY } }
+    # ── Redis (external — Upstash free tier) ────────────────────
+    - name: REDIS_URL
+      valueFrom: { secretKeyRef: { group: eden-required, key: REDIS_URL } }
+    # ── Tinybird (Cat 18 columnar) — already external ───────────
+    - name: CLICKHOUSE_URL
+      value: https://api.us-east.tinybird.co
+    - name: CLICKHOUSE_DATABASE
+      value: eden
+    - name: CLICKHOUSE_TIMEOUT
+      value: "30"
+    - name: TINYBIRD_API_HOST
+      value: https://api.us-east.tinybird.co
+    # ── LLM (defaults; OPENROUTER_API_KEY is a secret) ──────────
+    - name: OPENROUTER_BASE_URL
+      value: https://openrouter.ai/api/v1
+    - name: MINIMAX_BASE_URL
+      value: https://api.minimax.io/v1
+    - name: MINIMAX_MODEL
+      value: MiniMax-M3
+    - name: USE_MINIMAX
+      value: "false"
+    # ── Sandbox limits (tight on free tier) ─────────────────────
+    - name: SANDBOX_MEMORY_MB
+      value: "256"
+    - name: SANDBOX_CPU_COUNT
+      value: "1"
+    - name: SANDBOX_SNAPSHOT_POOL_SIZE
+      value: "5"
+    - name: SANDBOX_MAX_CONCURRENT
+      value: "10"
+    # ── Pipeline / observability defaults ───────────────────────
+    - name: PIPELINE_TIMEOUT_SECONDS
+      value: "300"
+    - name: PIPELINE_TIMEOUT_ENABLED
+      value: "true"
+    - name: BRONZE_BATCH_SIZE
+      value: "100"
+    - name: BRONZE_FLUSH_INTERVAL_SECONDS
+      value: "5.0"
+    - name: RATE_LIMIT_DEFAULT_PER_WINDOW
+      value: "60"
+    - name: RATE_LIMIT_WINDOW_SECONDS
+      value: "60"
+    - name: EVOLVER_AUTO_CANARY_PCT
+      value: "5"
+    # ── Token budgets (defaults from .env.example) ──────────────
+    - name: MAX_TOKENS_PLANNER
+      value: "50000"
+    - name: MAX_TOKENS_CRITIC
+      value: "30000"
+    - name: MAX_TOKENS_REFINER
+      value: "25000"
+    - name: MAX_TOKENS_FACT_CHECKER
+      value: "25000"
+    - name: MAX_TOKENS_EXECUTOR
+      value: "15000"
+    - name: MAX_TOKENS_CODE_QUALITY
+      value: "10000"
+    - name: MAX_TOKENS_VERIFIER
+      value: "10000"
+    - name: MAX_TOKENS_TESTER
+      value: "10000"
+    - name: MAX_TOKENS_ARCHIVIST
+      value: "60000"
+    # ── Secrets (from the secretGroup above) ────────────────────
+    - name: JWT_SECRET
+      valueFrom:
+        secretKeyRef:
+          group: eden-required
+          key: JWT_SECRET
+    - name: ENCRYPTION_KEY
+      valueFrom:
+        secretKeyRef:
+          group: eden-required
+          key: ENCRYPTION_KEY
+    - name: SESSION_SECRET
+      valueFrom:
+        secretKeyRef:
+          group: eden-required
+          key: SESSION_SECRET
+    - name: OPENROUTER_API_KEY
+      valueFrom:
+        secretKeyRef:
+          group: eden-required
+          key: OPENROUTER_API_KEY
+    - name: TINYBIRD_ADMIN_TOKEN
+      valueFrom:
+        secretKeyRef:
+          group: eden-required
+          key: TINYBIRD_ADMIN_TOKEN
+    - name: TINYBIRD_BRANCH_TOKEN
+      valueFrom:
+        secretKeyRef:
+          group: eden-required
+          key: TINYBIRD_BRANCH_TOKEN
+    - name: SENTRY_DSN
+      valueFrom:
+        secretKeyRef:
+          group: eden-required
+          key: SENTRY_DSN
+    - name: GITHUB_APP_ID
+      valueFrom:
+        secretKeyRef:
+          group: eden-required
+          key: GITHUB_APP_ID
+    - name: GITHUB_APP_CLIENT_ID
+      valueFrom:
+        secretKeyRef:
+          group: eden-required
+          key: GITHUB_APP_CLIENT_ID
+    - name: GITHUB_APP_CLIENT_SECRET
+      valueFrom:
+        secretKeyRef:
+          group: eden-required
+          key: GITHUB_APP_CLIENT_SECRET
+    - name: GITHUB_APP_PRIVATE_KEY
+      valueFrom:
+        secretKeyRef:
+          group: eden-required
+          key: GITHUB_APP_PRIVATE_KEY
+    - name: GITHUB_APP_WEBHOOK_SECRET
+      valueFrom:
+        secretKeyRef:
+          group: eden-required
+          key: GITHUB_APP_WEBHOOK_SECRET
+
+# ─────────────────────────────────────────────────────────────────────
+# Job 1/2: eden-worker (long-running background work)
+# ─────────────────────────────────────────────────────────────────────
+---
+apiVersion: workloads/v1
+kind: Job
+metadata:
+  name: eden-worker
+spec:
+  compute:
+    name: nf-compute-20
+  deployment:
+    instances: 1
+  build:
+    type: dockerfile
+    dockerfilePath: ./Dockerfile
+    dockerBuildContext: .
+  # The worker is a long-running service that never accepts HTTP.
+  # Set SKIP_MIGRATIONS=1 — the API service runs alembic on first boot.
+  # Override the default CMD via the start command. We exec into the
+  # same image with a different command that runs the worker loop.
+  command:
+    - bash
+    - -lc
+    - |
+      cd /app
+      export SKIP_MIGRATIONS=1
+      exec python -m eden.workers.main
+  env:
+    - name: APP_NAME
+      value: Eden
+    - name: APP_VERSION
+      value: 0.1.0
+    - name: DEBUG
+      value: "false"
+    - name: LOG_LEVEL
+      value: INFO
+    - name: LOG_JSON
+      value: "true"
+    - name: SENTRY_ENVIRONMENT
+      value: northflank-staging-worker
+    - name: POSTGRES_HOST
+      valueFrom: { secretKeyRef: { group: eden-required, key: POSTGRES_HOST } }
+    - name: POSTGRES_PORT
+      valueFrom: { secretKeyRef: { group: eden-required, key: POSTGRES_PORT } }
+    - name: POSTGRES_DB
+      valueFrom: { secretKeyRef: { group: eden-required, key: POSTGRES_DB } }
+    - name: POSTGRES_USER
+      valueFrom: { secretKeyRef: { group: eden-required, key: POSTGRES_USER } }
+    - name: POSTGRES_PASSWORD
+      valueFrom: { secretKeyRef: { group: eden-required, key: POSTGRES_PASSWORD } }
+    - name: POSTGRES_SSLMODE
+      valueFrom: { secretKeyRef: { group: eden-required, key: POSTGRES_SSLMODE } }
+    - name: POSTGRES_CHANNEL_BINDING
+      valueFrom: { secretKeyRef: { group: eden-required, key: POSTGRES_CHANNEL_BINDING } }
+    - name: POSTGRES_ENDPOINT_ID
+      valueFrom: { secretKeyRef: { group: eden-required, key: POSTGRES_ENDPOINT_ID } }
+    - name: B2_ENDPOINT_URL
+      valueFrom: { secretKeyRef: { group: eden-required, key: B2_ENDPOINT_URL } }
+    - name: B2_COLD_BUCKET
+      valueFrom: { secretKeyRef: { group: eden-required, key: B2_COLD_BUCKET } }
+    - name: B2_ACCESS_KEY_ID
+      valueFrom: { secretKeyRef: { group: eden-required, key: B2_ACCESS_KEY_ID } }
+    - name: B2_SECRET_ACCESS_KEY
+      valueFrom: { secretKeyRef: { group: eden-required, key: B2_SECRET_ACCESS_KEY } }
+    - name: POSTGRES_POOL_SIZE
+      value: "5"
+    - name: POSTGRES_MIN_POOL_SIZE
+      value: "1"
+    - name: QDRANT_HOST
+      value: https://58384b79-0261-480e-b61f-d86bbf1c0dad.us-east4-0.gcp.cloud.qdrant.io
+    - name: QDRANT_PORT
+      value: "6333"
+    - name: QDRANT_API_KEY
+      valueFrom: { secretKeyRef: { group: eden-required, key: QDRANT_API_KEY } }
+
+
+
+
+
+
+    - name: REDIS_URL
+      valueFrom: { secretKeyRef: { group: eden-required, key: REDIS_URL } }
+    - name: CLICKHOUSE_URL
+      value: https://api.us-east.tinybird.co
+    - name: CLICKHOUSE_DATABASE
+      value: eden
+    - name: TINYBIRD_API_HOST
+      value: https://api.us-east.tinybird.co
+    - name: OPENROUTER_BASE_URL
+      value: https://openrouter.ai/api/v1
+    - name: JWT_SECRET
+      valueFrom: { secretKeyRef: { group: eden-required, key: JWT_SECRET } }
+    - name: ENCRYPTION_KEY
+      valueFrom: { secretKeyRef: { group: eden-required, key: ENCRYPTION_KEY } }
+    - name: SESSION_SECRET
+      valueFrom: { secretKeyRef: { group: eden-required, key: SESSION_SECRET } }
+    - name: OPENROUTER_API_KEY
+      valueFrom: { secretKeyRef: { group: eden-required, key: OPENROUTER_API_KEY } }
+    - name: TINYBIRD_ADMIN_TOKEN
+      valueFrom: { secretKeyRef: { group: eden-required, key: TINYBIRD_ADMIN_TOKEN } }
+    - name: SENTRY_DSN
+      valueFrom: { secretKeyRef: { group: eden-required, key: SENTRY_DSN } }
+
+# ─────────────────────────────────────────────────────────────────────
+# Job 2/2: eden-cron (scheduled tasks)
+# ─────────────────────────────────────────────────────────────────────
+---
+apiVersion: workloads/v1
+kind: Job
+metadata:
+  name: eden-cron
+spec:
+  compute:
+    name: nf-compute-10       # 0.1 vCPU / 256 MB — enough for cron
+  build:
+    type: dockerfile
+    dockerfilePath: ./Dockerfile
+    dockerBuildContext: .
+  # Northflank cron jobs use the schedule spec. Times are in UTC.
+  # Eden's actual cron schedule lives in code — this entry just
+  # invokes the cron runner every 5 minutes.
+  schedule:
+    cronExpression: "*/5 * * * *"
+    timezone: UTC
+  command:
+    - bash
+    - -lc
+    - |
+      cd /app
+      export SKIP_MIGRATIONS=1
+      exec python -m eden.workers.cron_tick
+  env:
+    - name: APP_NAME
+      value: Eden
+    - name: DEBUG
+      value: "false"
+    - name: LOG_LEVEL
+      value: INFO
+    - name: LOG_JSON
+      value: "true"
+    - name: SENTRY_ENVIRONMENT
+      value: northflank-staging-cron
+    - name: POSTGRES_HOST
+      valueFrom: { secretKeyRef: { group: eden-required, key: POSTGRES_HOST } }
+    - name: POSTGRES_PORT
+      valueFrom: { secretKeyRef: { group: eden-required, key: POSTGRES_PORT } }
+    - name: POSTGRES_DB
+      valueFrom: { secretKeyRef: { group: eden-required, key: POSTGRES_DB } }
+    - name: POSTGRES_USER
+      valueFrom: { secretKeyRef: { group: eden-required, key: POSTGRES_USER } }
+    - name: POSTGRES_PASSWORD
+      valueFrom: { secretKeyRef: { group: eden-required, key: POSTGRES_PASSWORD } }
+    - name: POSTGRES_SSLMODE
+      valueFrom: { secretKeyRef: { group: eden-required, key: POSTGRES_SSLMODE } }
+    - name: POSTGRES_CHANNEL_BINDING
+      valueFrom: { secretKeyRef: { group: eden-required, key: POSTGRES_CHANNEL_BINDING } }
+    - name: POSTGRES_ENDPOINT_ID
+      valueFrom: { secretKeyRef: { group: eden-required, key: POSTGRES_ENDPOINT_ID } }
+    - name: B2_ENDPOINT_URL
+      valueFrom: { secretKeyRef: { group: eden-required, key: B2_ENDPOINT_URL } }
+    - name: B2_COLD_BUCKET
+      valueFrom: { secretKeyRef: { group: eden-required, key: B2_COLD_BUCKET } }
+    - name: B2_ACCESS_KEY_ID
+      valueFrom: { secretKeyRef: { group: eden-required, key: B2_ACCESS_KEY_ID } }
+    - name: B2_SECRET_ACCESS_KEY
+      valueFrom: { secretKeyRef: { group: eden-required, key: B2_SECRET_ACCESS_KEY } }
+    - name: POSTGRES_POOL_SIZE
+      value: "3"
+    - name: POSTGRES_MIN_POOL_SIZE
+      value: "1"
+    - name: REDIS_URL
+      valueFrom: { secretKeyRef: { group: eden-required, key: REDIS_URL } }
+    - name: JWT_SECRET
+      valueFrom: { secretKeyRef: { group: eden-required, key: JWT_SECRET } }
+    - name: ENCRYPTION_KEY
+      valueFrom: { secretKeyRef: { group: eden-required, key: ENCRYPTION_KEY } }
+    - name: SESSION_SECRET
+      valueFrom: { secretKeyRef: { group: eden-required, key: SESSION_SECRET } }
+    - name: OPENROUTER_API_KEY
+      valueFrom: { secretKeyRef: { group: eden-required, key: OPENROUTER_API_KEY } }
+
+# ─────────────────────────────────────────────────────────────────────
+# No Postgres addon — the database lives on Neon Scale
+# ─────────────────────────────────────────────────────────────────────
+# The previous eden-postgres addon was the source of the
+# ``externalAccessEnabled`` blocker: the Northflank API doesn't expose
+# the internal hostname for sandbox addons, and ``externalAccessEnabled:
+# true`` patches silently no-op. We migrated to Neon Scale (Phase 7 of
+# the Postgres + Compression plan); see docs/deploy/neon-cutover.md.
+# All POSTGRES_* values are now resolved from the eden-required secret
+# group, which the operator populates with the Neon connection details
+# during the cutover runbook.

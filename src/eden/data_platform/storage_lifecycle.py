@@ -92,6 +92,18 @@ DEFAULT_TRANSITIONS: list[TierTransition] = [
         after_days=90,
         target_storage_class="GLACIER",
     ),
+    # Phase 6 of the Postgres + Compression plan: a fourth cold tier
+    # for high-volume observability data. Postgres → Parquet+zstd-7
+    # on Backblaze B2. Cheaper than S3 Glacier ($6/TB-mo vs $10/TB-mo
+    # + per-request fees), with free egress via the Cloudflare
+    # bandwidth alliance. See ``eden.data_platform.parquet_exporter``.
+    TierTransition(
+        name="telemetry-events-hot-to-cold-parquet",
+        source_tier="hot",
+        target_tier="cold",
+        after_days=90,
+        target_storage_class="B2_PARQUET",
+    ),
 ]
 
 
@@ -286,6 +298,59 @@ class StorageLifecycleManager:
         except Exception as exc:
             logger.error(f"Warm archive write failed: {exc}")
             return False
+
+    async def transition_to_cold_parquet(
+        self,
+        table: str = "telemetry_events",
+        before_days: int = 90,
+        timestamp_column: str = "timestamp",
+    ) -> int:
+        """Archive rows older than N days to Parquet+zstd-7 on Backblaze B2.
+
+        This is the *fourth* tier (after hot Postgres → warm S3 → cold
+        S3 Glacier). The exporter streams rows from the source table
+        in batches, groups them by year/month, writes Parquet files
+        with zstd level 7, and uploads each file to B2.
+
+        Unlike ``transition_to_warm``, this method does NOT delete the
+        source rows from Postgres. The cold tier is additive: the
+        storage lifecycle manager should call this on a schedule, and
+        a separate retention policy decides when to detach the live
+        partition from Postgres. Keeping the rows in Postgres during
+        the archive window makes the operation reversible without a
+        restore from cold storage.
+
+        Returns the number of rows exported.
+        """
+        try:
+            from eden.data_platform.parquet_exporter import ParquetColdExporter
+        except ImportError:
+            logger.warning("parquet_exporter not importable; skipping cold export")
+            return 0
+
+        exporter = ParquetColdExporter()
+        cutoff = datetime.now(timezone.utc) - timedelta(days=before_days)
+        result = await exporter.export_table_window(
+            table=table,
+            before=cutoff,
+            timestamp_column=timestamp_column,
+        )
+        if result.errors:
+            logger.warning(
+                "Parquet cold export for %s had %d errors: %s",
+                table,
+                len(result.errors),
+                result.errors[:3],
+            )
+        logger.info(
+            "Parquet cold export for %s: %d rows, %d files, %d bytes, %.0f ms",
+            table,
+            result.rows_exported,
+            result.files_written,
+            result.bytes_uploaded,
+            result.duration_ms,
+        )
+        return result.rows_exported
 
     async def transition_s3_prefix(
         self,

@@ -21,11 +21,13 @@ from eden.config import get_settings  # noqa: E402
 
 settings = get_settings()
 
-# Build asyncpg URL from settings
-url = (
-    f"postgresql+asyncpg://{settings.postgres_user}:{settings.postgres_password}"
-    f"@{settings.postgres_host}:{settings.postgres_port}/{settings.postgres_db}"
-)
+# Build the asyncpg DSN from Settings. The builder lives in
+# ``eden.storage.dsn`` so it can be unit-tested without triggering
+# the alembic runtime. See that module for the SSL / channel_binding
+# handling and the ``database_url`` override path.
+from eden.storage.dsn import build_dsn  # noqa: E402
+
+url = build_dsn(settings)
 
 # Alembic Config object — prefer the CLI-provided config when running via
 # ``alembic`` commands, otherwise build one from the project ini so that
