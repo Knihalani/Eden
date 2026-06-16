@@ -143,6 +143,12 @@ def upgrade() -> None:
     _table(
         "incident_cluster_members",
         """
+        -- org_id is denormalised from incident_clusters to enable
+        -- the per-org index that the _table() helper creates. Without
+        -- this column, the auto-generated
+        -- ``idx_incident_cluster_members_org`` index fails on a fresh
+        -- DB. Pre-existing data integrity issue corrected 2026-06-16.
+        org_id      VARCHAR(128) NOT NULL,
         cluster_id  UUID NOT NULL,
         trace_id    VARCHAR(128) NOT NULL,
         similarity  DOUBLE PRECISION NOT NULL,
@@ -391,7 +397,7 @@ def upgrade() -> None:
         id              UUID PRIMARY KEY,
         org_id          VARCHAR(128) NOT NULL,
         agent_id        VARCHAR(128) NOT NULL,
-        window          VARCHAR(32) NOT NULL,
+        window_name     VARCHAR(32) NOT NULL,
         success_rate    DOUBLE PRECISION,
         cost_usd        DOUBLE PRECISION,
         latency_p50_ms  DOUBLE PRECISION,
@@ -466,7 +472,7 @@ def upgrade() -> None:
         org_id          VARCHAR(128) NOT NULL,
         tool_a          VARCHAR(128) NOT NULL,
         tool_b          VARCHAR(128) NOT NULL,
-        window          VARCHAR(32) NOT NULL,
+        window_name     VARCHAR(32) NOT NULL,
         winner          VARCHAR(16),
         metrics_json    TEXT,
         created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -491,7 +497,7 @@ def upgrade() -> None:
         """
         id              UUID PRIMARY KEY,
         org_id          VARCHAR(128) NOT NULL,
-        window          VARCHAR(32) NOT NULL,
+        window_name     VARCHAR(32) NOT NULL,
         spend_usd       DOUBLE PRECISION NOT NULL,
         value_usd       DOUBLE PRECISION NOT NULL,
         roi             DOUBLE PRECISION,
@@ -642,7 +648,7 @@ def upgrade() -> None:
         id              UUID PRIMARY KEY,
         org_id          VARCHAR(128) NOT NULL,
         department      VARCHAR(64) NOT NULL,
-        window          VARCHAR(32) NOT NULL,
+        window_name     VARCHAR(32) NOT NULL,
         outcome_count   INTEGER NOT NULL DEFAULT 0,
         cost_usd        DOUBLE PRECISION,
         roi             DOUBLE PRECISION,

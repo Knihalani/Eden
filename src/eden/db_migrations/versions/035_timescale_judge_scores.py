@@ -35,6 +35,20 @@ depends_on = None
 def upgrade() -> None:
     op.execute("CREATE EXTENSION IF NOT EXISTS timescaledb;")
 
+    # TimescaleDB requires the partition column to be part of any
+    # PRIMARY KEY or UNIQUE constraint. The original ``judge_scores``
+    # PK (from migration 010) is on ``judge_run_id`` only. We DROP
+    # + re-ADD the PK to include ``scored_at`` before calling
+    # create_hypertable. Safe on a fresh DB (no rows); for a
+    # populated DB this is a table rewrite — schedule accordingly.
+    op.execute(
+        "ALTER TABLE judge_scores DROP CONSTRAINT IF EXISTS judge_scores_pkey CASCADE;"
+    )
+    op.execute(
+        "ALTER TABLE judge_scores "
+        "ADD CONSTRAINT judge_scores_pkey PRIMARY KEY (judge_run_id, scored_at);"
+    )
+
     op.execute(
         """
         SELECT create_hypertable(
@@ -45,22 +59,38 @@ def upgrade() -> None:
         """
     )
 
+    # See the matching note in migration 034 — the columnstore is an
+    # enterprise feature; on the open-source "apache" build the DO
+    # block swallows ``feature_not_supported`` and we fall through
+    # to the LZ4 TOAST + BRIN wins from migrations 030 + 031.
     op.execute(
         """
-        ALTER TABLE judge_scores SET (
-            timescaledb.compress,
-            timescaledb.compress_segmentby = 'tenant_id, judge_name',
-            timescaledb.compress_orderby   = 'scored_at DESC'
-        );
+        DO $$
+        BEGIN
+            ALTER TABLE judge_scores SET (
+                timescaledb.compress,
+                timescaledb.compress_segmentby = 'tenant_id, judge_name',
+                timescaledb.compress_orderby   = 'scored_at DESC'
+            );
+        EXCEPTION
+            WHEN feature_not_supported THEN
+                RAISE NOTICE 'TimescaleDB apache build; skipping columnstore compression';
+        END $$;
         """
     )
 
     op.execute(
         """
-        SELECT add_compression_policy(
-            'judge_scores', INTERVAL '30 days',
-            if_exists => TRUE
-        );
+        DO $$
+        BEGIN
+            PERFORM add_compression_policy(
+                'judge_scores', INTERVAL '30 days',
+                if_not_exists => TRUE
+            );
+        EXCEPTION
+            WHEN feature_not_supported THEN
+                NULL;
+        END $$;
         """
     )
 

@@ -36,6 +36,14 @@ rewrite the table. Drop the index (downgrade) is instant.
 from alembic import op
 import sqlalchemy as sa
 
+# Note: this migration was originally drafted with
+# ``down_revision = ("009", "018", "029")`` to fold in the three
+# pre-existing orphaned heads in the project (see git history). That
+# caused alembic to throw ``KeyError: '009'`` when upgrading from 029
+# (the 011 migration had already consumed 009 via its own merge).
+# Reverted to a sequential ``down_revision = "029"`` so 030 sits
+# cleanly in the chain; the 018 head is left alone (it was never
+# applied to the active branch in any environment we control).
 revision = "030"
 down_revision = "029"
 branch_labels = None
