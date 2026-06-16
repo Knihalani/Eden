@@ -12,8 +12,8 @@ lives at `tools/oncall/`).
 2. Open the [SLO dashboard](https://grafana.example.com/d/eden-slo).
    The firing alert is annotated with a link to the panel that
    triggered it.
-3. Check the [incident-response runbook](./incident-response.md)
-   for the specific alert.
+3. Check the [disaster-recovery drill](/operations/disaster-recovery-drill)
+   for the specific alert pattern.
 4. Post in `#incident` with: alert name, suspected cause, ETA
    for first update.
 5. Open a GitHub issue with the `incident` label and link it in
@@ -48,8 +48,8 @@ yourself. Common causes:
 
 ## See also
 
-* [`slo.md`](../slo.md) — published SLO targets and error budget.
-* [`incident-response.md`](./incident-response.md) — step-by-step
+* [SLOs](/operations/slo) — published targets and error budget.
+* [Disaster-recovery drill](/operations/disaster-recovery-drill) — step-by-step
   incident handling.
 * [`disaster-recovery-drill.md`](./disaster-recovery-drill.md) —
   quarterly DR drill.

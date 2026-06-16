@@ -225,7 +225,7 @@ follows the v1.6 cat spec conventions:
   `org_audit_log` row on every invocation.
 
 The full request/response shapes are documented in
-`docs/eden-observability-gap-roadmap.md` (Cat 23) and
+`docs/observability/gap-roadmap.md` (Cat 23) and
 in the route file's Pydantic schemas.
 
 ## Data model
@@ -677,7 +677,7 @@ alignment:
 
 ## Cross-references
 
-* **Master doc:** `docs/eden-observability-gap-roadmap.md`
+* **Master doc:** `docs/observability/gap-roadmap.md`
   (Cat 23 — lines 1821-3210)
 * **STUB package:** `src/eden/code_change/` (21 service
   classes + 6 sub-packages)
@@ -697,7 +697,7 @@ alignment:
   Cat 13 (Predictive + Drift — the upstream drift detector
   the post-merge monitor reuses).
 * **SLM Initiative (v1.4 dependency):**
-  `docs/eden-judge-v2-plan.md` — the
+  `docs/observability/judge-v2-plan.md` — the
   `PatchGenerator`'s SLM-reads-the-code step requires the
   v1.4 SLM. Without the SLM, the cost per patch is
   $0.15-$0.40 and the daily budget cap

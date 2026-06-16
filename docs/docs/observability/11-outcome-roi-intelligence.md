@@ -496,8 +496,8 @@ Target: **~25 tests, ~1.0s.**
 
 ## Cross-references
 
-* Master doc: [`eden-observability-gap-roadmap.md`](../eden-observability-gap-roadmap.md) § Cat 11
-* Stub envelope: [`src/eden/intelligence_envelope.py`](../../src/eden/intelligence_envelope.py)
+* Master doc: [`eden-observability-gap-roadmap.md`](/observability/gap-roadmap) § Cat 11
+* Stub envelope: `src/eden/intelligence_envelope.py`
 * Cat 8 (Cost — `ROIAnalyzer.roi` is the upstream cost
   source): [`08-cost-intelligence.md`](./08-cost-intelligence.md)
 * Cat 9 (User — `user_behavioural_signals` is the

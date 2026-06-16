@@ -4,7 +4,7 @@ status: PLANNING (pre-execution)
 last_updated: 2026-06-11
 version: 0.1
 author: Eden Observability Team
-related: docs/eden-observability-gap-roadmap.md
+related: docs/observability/gap-roadmap.md
 ---
 
 # Eden Judge v2 — SLM-as-Judge Training Plan
@@ -963,11 +963,11 @@ These are the questions to lock before week 1:
 
 ### Master roadmap
 
-* `docs/eden-observability-gap-roadmap.md` § Cat 21
+* `docs/observability/gap-roadmap.md` § Cat 21
   (Custom-Metric Studio) — where the rubric + LLM-as-judge
   surface lives, and where the custom LoRA training route
   would ship
-* `docs/eden-observability-gap-roadmap.md` § Cat 17
+* `docs/observability/gap-roadmap.md` § Cat 17
   (Closed-loop wiring) — `MetricStudioHook
   .on_metric_promotion` fires on Luna head version bumps
 

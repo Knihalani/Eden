@@ -45,6 +45,38 @@ logger = logging.getLogger(__name__)
 settings = get_settings()
 
 
+def _cors_origins_list() -> list[str]:
+    """Resolve the CORS allow-list from ``CORS_ORIGINS_RAW`` (CSV).
+
+    ``*`` is not allowed when ``allow_credentials=True`` (browsers
+    reject the response). We split on comma, trim, and drop the
+    ``*`` token explicitly so a misconfiguration in prod surfaces
+    as a startup warning rather than a silent block.
+
+    Local dev defaults to ``http://localhost:3000`` and
+    ``http://127.0.0.1:3000`` (the Vercel portal's dev port).
+    """
+    raw = getattr(settings, "cors_origins_raw", "") or ""
+    parts = [p.strip() for p in raw.split(",") if p.strip()]
+    if "*" in parts:
+        logger.warning(
+            "CORS_ORIGINS_RAW contains '*' which is incompatible with "
+            "allow_credentials=True. The '*' token is dropped — set an "
+            "explicit allow-list (e.g. https://your-portal.example.com)."
+        )
+        parts = [p for p in parts if p != "*"]
+    if not parts:
+        # Dev defaults — the portal at localhost:3000 (Vercel) and
+        # the Vite dev server at 5173.
+        parts = [
+            "http://localhost:3000",
+            "http://127.0.0.1:3000",
+            "http://localhost:5173",
+            "http://127.0.0.1:5173",
+        ]
+    return parts
+
+
 # ============================================================================
 # Pydantic Schemas (kept for backwards compatibility and imports)
 # ============================================================================
@@ -182,10 +214,32 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    # Explicit origin list. ``allow_origins=["*"]`` + ``allow_credentials=True``
+    # is forbidden by the CORS spec (browsers reject it), and was the
+    # original state — so any credentialed request from the portal
+    # would silently fail. Allowed origins are read from the
+    # ``CORS_ORIGINS_RAW`` env var (comma-separated) and default to a
+    # localhost dev set.
+    allow_origins=_cors_origins_list(),
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=[
+        "Accept",
+        "Accept-Language",
+        "Authorization",
+        "Content-Type",
+        "If-Match",
+        "If-None-Match",
+        "X-CSRF-Token",
+        "X-Requested-With",
+    ],
+    # The session cookie is set with ``samesite="lax"`` by the auth
+    # routes, so we don't need to expose it here. We do expose ETag
+    # so the portal's optimistic-update flow works.
+    expose_headers=["ETag", "X-Request-ID"],
+    # Browser cache preflight results for 10 minutes — the auth +
+    # org headers rarely change.
+    max_age=600,
 )
 
 # Per-tenant sliding-window rate limiter. Registered AFTER CORS so

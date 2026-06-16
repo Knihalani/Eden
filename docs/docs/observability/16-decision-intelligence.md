@@ -485,10 +485,10 @@ def analyze(org_id, trace_id):
 
 ## Cross-references
 
-* Master doc: [`eden-observability-gap-roadmap.md`](../eden-observability-gap-roadmap.md)
-* Stub envelope: [`src/eden/intelligence_envelope.py`](../../src/eden/intelligence_envelope.py)
+* Master doc: [`eden-observability-gap-roadmap.md`](/observability/gap-roadmap)
+* Stub envelope: `src/eden/intelligence_envelope.py`
 * Cat 3 (Eval Quality — provides the 3 Galileo judges):
   [`03-evaluation-quality-intelligence.md`](./03-evaluation-quality-intelligence.md)
 * Cat 1 (Trace Replay — provides the trace tree):
   [`01-trace-replay.md`](./01-trace-replay.md)
-* Multi-agent trajectory: [`src/eden/multi_agent/planning.py`](../../src/eden/multi_agent/planning.py)
+* Multi-agent trajectory: `src/eden/multi_agent/planning.py`

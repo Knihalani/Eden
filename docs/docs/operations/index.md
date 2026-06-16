@@ -1,5 +1,4 @@
 ---
-id: operations-index
 title: Operations
 sidebar_label: Overview
 sidebar_position: 1

@@ -26,13 +26,13 @@ docs are no longer the source of truth.
 | File | What it described | Where the implementation lives now |
 |---|---|---|
 | `aider-fork-strategy.md` | The strategy for forking Aider to build the Eden coding agent — branding, philosophy, technical hooks, KB integration. | `cli/` directory (entry: `cli/eden/__main__.py`). The `EdenCoder` subclass lives at `cli/eden/coders/eden_coder.py`. |
-| `eden-agent-cli-roadmap.md` | The 12-week phased delivery plan for the Eden Agent CLI. | Tracked as a unit in the migration plan; the live roadmap is `eden-development-roadmap.md` at the repo root. |
+| `eden-agent-cli-roadmap.md` | The 12-week phased delivery plan for the Eden Agent CLI. | Tracked as a unit in the migration plan; the live roadmap is `/observability/roadmap` at the repo root. |
 | `eden-agent-cli-spec.md` | The full functional specification (slash commands, context providers, autonomy modes, safety guardrails). | The slash-command implementations are in `cli/eden/commands/` (`kb.py`, `traces.py`, `improve.py`, `pr.py`, `integrate.py`, `bench.py`, `pipeline.py`). Autonomy and safety live in `cli/eden/autonomy.py`. |
 
 ## If you're looking for…
 
 - **The current CLI documentation** — see `cli/README.md` in the `cli/` directory.
-- **The current platform roadmap** — see `eden-development-roadmap.md` at the repo root.
+- **The current platform roadmap** — see `/observability/roadmap` at the repo root.
 - **The current architecture** — see `docs/ARCHITECTURE.md` and `eden-master-architecture-index.md`.
 - **The migration plan that produced the current `cli/` directory** — see `/Users/kaiavnihalani/.claude/plans/composed-painting-pretzel.md`.
 

@@ -611,12 +611,12 @@ Target: **~28 tests, ~1.0s.**
 
 ## Cross-references
 
-* Master doc: [`eden-observability-gap-roadmap.md`](../eden-observability-gap-roadmap.md) § Cat 5
-* Stub envelope: [`src/eden/intelligence_envelope.py`](../../src/eden/intelligence_envelope.py)
+* Master doc: [`eden-observability-gap-roadmap.md`](/observability/gap-roadmap) § Cat 5
+* Stub envelope: `src/eden/intelligence_envelope.py`
 * Existing episodic client:
-  [`src/eden/kb/episodic/client.py`](../../src/eden/kb/episodic/client.py)
+  `src/eden/kb/episodic/client.py`
 * Data quality validator:
-  [`src/eden/api/routes/data_platform.py`](../../src/eden/api/routes/data_platform.py)
+  `src/eden/api/routes/data_platform.py`
 * Cat 4 (Retrieval — reuses attribution patterns):
   [`04-retrieval-intelligence.md`](./04-retrieval-intelligence.md)
 * Cat 16 (Decision — reuses provenance DAG patterns):

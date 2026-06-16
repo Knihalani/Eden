@@ -599,10 +599,10 @@ Target: **~25 tests, ~1.0s.**
 
 ## Cross-references
 
-* Master doc: [`eden-observability-gap-roadmap.md`](../eden-observability-gap-roadmap.md) § Cat 6
-* Stub envelope: [`src/eden/intelligence_envelope.py`](../../src/eden/intelligence_envelope.py)
-* Existing agent registry: [`src/eden/api/routes/agents.py`](../../src/eden/api/routes/agents.py)
-* Multi-agent trajectory: [`src/eden/multi_agent/planning.py`](../../src/eden/multi_agent/planning.py)
+* Master doc: [`eden-observability-gap-roadmap.md`](/observability/gap-roadmap) § Cat 6
+* Stub envelope: `src/eden/intelligence_envelope.py`
+* Existing agent registry: `src/eden/api/routes/agents.py`
+* Multi-agent trajectory: `src/eden/multi_agent/planning.py`
 * Cat 7 (Tool — the `HandoffAnalyzer` consumes tool
   attribution): [`07-tool-intelligence.md`](./07-tool-intelligence.md)
 * Cat 16 (Decision — Cat 16 trajectory analyzer provides

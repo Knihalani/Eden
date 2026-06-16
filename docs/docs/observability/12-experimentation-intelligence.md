@@ -515,11 +515,11 @@ Target: **~30 tests, ~1.2s.**
 
 ## Cross-references
 
-* Master doc: [`eden-observability-gap-roadmap.md`](../eden-observability-gap-roadmap.md) § Cat 12
-* Stub envelope: [`src/eden/intelligence_envelope.py`](../../src/eden/intelligence_envelope.py)
-* Canary deployment: [`src/eden/llmops/canary.py`](../../src/eden/llmops/canary.py)
+* Master doc: [`eden-observability-gap-roadmap.md`](/observability/gap-roadmap) § Cat 12
+* Stub envelope: `src/eden/intelligence_envelope.py`
+* Canary deployment: `src/eden/llmops/canary.py`
 * Eval versioner (deployment-SHA coupling):
-  [`src/eden/evaluation/eval_intel/versioner.py`](../../src/eden/evaluation/eval_intel/versioner.py)
+  `src/eden/evaluation/eval_intel/versioner.py`
 * Cat 3 (judges — the AutoEvaluator re-uses the full
   judge set): [`03-evaluation-quality-intelligence.md`](./03-evaluation-quality-intelligence.md)
 * Cat 17 (closed-loop — `ExperimentHook.on_winner`

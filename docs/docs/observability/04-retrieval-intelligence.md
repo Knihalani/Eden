@@ -310,11 +310,11 @@ async def attribution(org_id, trace_id):
 
 ## Cross-references
 
-* Master doc: [`eden-observability-gap-roadmap.md`](../eden-observability-gap-roadmap.md)
-* Stub envelope: [`src/eden/intelligence_envelope.py`](../../src/eden/intelligence_envelope.py)
+* Master doc: [`eden-observability-gap-roadmap.md`](/observability/gap-roadmap)
+* Stub envelope: `src/eden/intelligence_envelope.py`
 * Existing retrieval logger:
-  [`src/eden/kb/retrieval_logger.py`](../../src/eden/kb/retrieval_logger.py)
-* KB audit script: [`scripts/kb_audit.py`](../../scripts/kb_audit.py)
+  `src/eden/kb/retrieval_logger.py`
+* KB audit script: `scripts/kb_audit.py`
 * Cat 5 (Memory — reuses attribution patterns):
   [`05-memory-intelligence.md`](./05-memory-intelligence.md)
 

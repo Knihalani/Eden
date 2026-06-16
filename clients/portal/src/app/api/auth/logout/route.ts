@@ -1,12 +1,12 @@
-import { NextResponse } from "next/server";
-import { api } from "@/lib/api";
+import { forwardToBackend, proxyError } from "@/lib/proxy";
 
-export async function POST() {
+export async function POST(request: Request) {
   try {
-    const data = await api.logout();
-    return NextResponse.json(data);
+    return await forwardToBackend("/auth/logout", {
+      method: "POST",
+      cookieHeader: request.headers.get("cookie") ?? undefined,
+    });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Logout failed";
-    return NextResponse.json({ detail: message }, { status: 500 });
+    return proxyError(error, "Logout failed");
   }
 }

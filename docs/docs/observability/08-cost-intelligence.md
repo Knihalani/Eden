@@ -407,9 +407,9 @@ across 8 sections):
 
 ## Cross-references
 
-* Master doc: [`eden-observability-gap-roadmap.md`](../eden-observability-gap-roadmap.md)
-* Stub envelope: [`src/eden/intelligence_envelope.py`](../../src/eden/intelligence_envelope.py)
+* Master doc: [`eden-observability-gap-roadmap.md`](/observability/gap-roadmap)
+* Stub envelope: `src/eden/intelligence_envelope.py`
 * Existing usage service:
-  [`src/eden/services/usage_service.py`](../../src/eden/services/usage_service.py)
+  `src/eden/services/usage_service.py`
 * Cat 11 (Outcome — source of `outcomes` table):
   [`11-outcome-roi-intelligence.md`](./11-outcome-roi-intelligence.md)

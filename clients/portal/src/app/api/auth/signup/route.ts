@@ -1,13 +1,14 @@
-import { NextResponse } from "next/server";
-import { api } from "@/lib/api";
+import { forwardToBackend, proxyError } from "@/lib/proxy";
 
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const data = await api.signup(body);
-    return NextResponse.json(data);
+    return await forwardToBackend("/auth/signup", {
+      method: "POST",
+      body,
+      cookieHeader: request.headers.get("cookie") ?? undefined,
+    });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Signup failed";
-    return NextResponse.json({ detail: message }, { status: 409 });
+    return proxyError(error, "Signup failed");
   }
 }

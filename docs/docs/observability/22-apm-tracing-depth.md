@@ -442,10 +442,10 @@ Target: **~23 tests, ~0.8s.**
 
 ## Cross-references
 
-* Master doc: `docs/eden-observability-gap-roadmap.md` § Cat 22
+* Master doc: `docs/observability/gap-roadmap.md` § Cat 22
 * 2026 APM guide: <https://www.augmentcode.com/guides/application-performance-monitoring>
 * Tail-sampling sizing: <https://www.michal-drozd.com/en/blog/otel-tail-sampling/>
 * OTel GenAI semconv: <https://opentelemetry.io/docs/specs/semconv/gen-ai/>
 * OTel GenAI v1.41 Greptime deep-dive: <https://greptime.com/blogs/2026-05-09-opentelemetry-genai-semantic-conventions>
 * Distributed tracing for agentic workflows (Red Hat): <https://developers.redhat.com/articles/2026/04/06/distributed-tracing-agentic-workflows-opentelemetry>
-* Separate SLM plan: `docs/eden-judge-v2-plan.md`
+* Separate SLM plan: `docs/observability/judge-v2-plan.md`

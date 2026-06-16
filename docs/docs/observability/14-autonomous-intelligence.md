@@ -577,8 +577,8 @@ Dashboards:
 
 ## Cross-references
 
-* Master doc: [`eden-observability-gap-roadmap.md`](../eden-observability-gap-roadmap.md)
-* Stub envelope: [`src/eden/intelligence_envelope.py`](../../src/eden/intelligence_envelope.py)
+* Master doc: [`eden-observability-gap-roadmap.md`](/observability/gap-roadmap)
+* Stub envelope: `src/eden/intelligence_envelope.py`
 * Cat 3 (Eval Quality — provides `judge_regression` triggers):
   [`03-evaluation-quality-intelligence.md`](./03-evaluation-quality-intelligence.md)
 * Cat 13 (Predictive — provides `drift_alert` triggers):
@@ -587,6 +587,6 @@ Dashboards:
   [`15-runtime-protection-guardrails.md`](./15-runtime-protection-guardrails.md)
 * Cat 17 (Closed-loop — auto-disables noisy actions):
   [`17-closed-loop-wiring.md`](./17-closed-loop-wiring.md)
-* Multi-agent trajectory: [`src/eden/multi_agent/planning.py`](../../src/eden/multi_agent/planning.py)
-* Promotion loop: [`src/eden/llmops/promotion.py`](../../src/eden/llmops/promotion.py)
-* OpenRouter client: [`src/eden/llm/`](../../src/eden/llm/)
+* Multi-agent trajectory: `src/eden/multi_agent/planning.py`
+* Promotion loop: `src/eden/llmops/promotion.py`
+* OpenRouter client: `src/eden/llm/`

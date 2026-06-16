@@ -1,41 +1,119 @@
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+// API routing. The portal's frontend calls go through the catch-all
+// proxy at `/api/proxy/[...path]` (defined in
+// `src/app/api/proxy/[...path]/route.ts`), which forwards to FastAPI.
+// This keeps the request same-origin so the session cookie is sent
+// automatically under SameSite=Lax (Vercel → Northflank is
+// cross-origin and would otherwise block the cookie).
+//
+// Order of precedence:
+//   1. NEXT_PUBLIC_API_URL — set at build time. In production this
+//      is `/api/proxy`; in dev it can be `http://localhost:8000`
+//      to bypass the proxy for live FastAPI debugging.
+//   2. `/api/proxy` — the safe default. Works in dev (Next.js dev
+//      server proxies to localhost:8000 via the route handler) and
+//      in production (Vercel → Northflank via the env-configured
+//      upstream).
+const API_BASE =
+  process.env.NEXT_PUBLIC_API_URL || "/api/proxy";
+
+// Default timeout. SSE streams pass `stream: true` in options to
+// opt out — otherwise the timeout would close a long-lived
+// Server-Sent-Events connection.
+const DEFAULT_TIMEOUT_MS = 30_000;
+
+// In-flight GET request de-duplication. Multiple React components
+// mounting simultaneously used to fire N identical requests; the
+// pending-promise map collapses them into one.
+const inflight = new Map<string, Promise<unknown>>();
+
+function dedupKey(method: string, endpoint: string, body: unknown): string {
+  // Body is JSON-stringified by the time we get here. Hashing the
+  // string is overkill for our scale; a plain string key is fine.
+  return `${method} ${endpoint} ${body ? JSON.stringify(body) : ""}`;
+}
 
 interface FetchOptions extends RequestInit {
   credentials?: "include" | "omit";
+  /** Disable the 30s default timeout. Used for SSE streams. */
+  stream?: boolean;
+  /** Skip the in-flight de-duplication. Used for non-idempotent POSTs. */
+  noDedup?: boolean;
 }
 
 async function fetchApi<T>(
   endpoint: string,
   options: FetchOptions = {}
 ): Promise<T> {
-  const { credentials = "include", headers, body, ...rest } = options;
+  const { credentials = "include", headers, body, stream, noDedup, ...rest } = options;
+  const method = (rest.method as string | undefined) ?? "GET";
 
-  // Build headers - don't set Content-Type for FormData (browser will set it with boundary)
-  const requestHeaders: HeadersInit = {
-    ...(typeof headers === 'object' && headers !== null ? headers : {}),
-  };
-  if (!(body instanceof FormData)) {
-    (requestHeaders as Record<string, string>)["Content-Type"] = "application/json";
+  // In-flight dedup. Only safe for idempotent methods (GET / HEAD /
+  // OPTIONS). POSTs and friends always go through.
+  if (!noDedup && (method === "GET" || method === "HEAD" || method === "OPTIONS")) {
+    const key = dedupKey(method, endpoint, body);
+    const existing = inflight.get(key);
+    if (existing) return existing as Promise<T>;
   }
 
-  const response = await fetch(`${API_BASE}${endpoint}`, {
-    credentials,
-    headers: requestHeaders,
-    body,
-    ...rest,
-  });
+  const promise = (async (): Promise<T> => {
+    // Build headers - don't set Content-Type for FormData (browser
+    // will set it with the multipart boundary).
+    const requestHeaders: HeadersInit = {
+      ...(typeof headers === "object" && headers !== null ? headers : {}),
+    };
+    if (!(body instanceof FormData) && !stream) {
+      (requestHeaders as Record<string, string>)["Content-Type"] = "application/json";
+    }
 
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({ detail: "Request failed" }));
-    throw new Error(error.detail || `HTTP ${response.status}`);
+    // AbortController for the timeout. SSE streams pass `stream: true`
+    // and skip the timeout entirely.
+    const controller = new AbortController();
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    if (!stream) {
+      timer = setTimeout(() => controller.abort(), DEFAULT_TIMEOUT_MS);
+    }
+
+    try {
+      const response = await fetch(`${API_BASE}${endpoint}`, {
+        credentials,
+        headers: requestHeaders,
+        body,
+        signal: controller.signal,
+        ...rest,
+      });
+
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({ detail: "Request failed" }));
+        throw new Error(error.detail || `HTTP ${response.status}`);
+      }
+
+      // SSE streams don't return JSON.
+      if (stream || response.headers.get("content-type")?.includes("text/event-stream")) {
+        return (await response.text()) as unknown as T;
+      }
+
+      return response.json();
+    } catch (err) {
+      // Map AbortError to a clearer message.
+      if (err instanceof DOMException && err.name === "AbortError") {
+        throw new Error(`Request timed out after ${DEFAULT_TIMEOUT_MS}ms: ${endpoint}`);
+      }
+      throw err;
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
+  })();
+
+  if (!noDedup && (method === "GET" || method === "HEAD" || method === "OPTIONS")) {
+    const key = dedupKey(method, endpoint, body);
+    inflight.set(key, promise);
+    promise.finally(() => {
+      // Only delete if we're still the latest in-flight request.
+      if (inflight.get(key) === promise) inflight.delete(key);
+    });
   }
 
-  // SSE streams don't return JSON
-  if (response.headers.get("content-type")?.includes("text/event-stream")) {
-    return (await response.text()) as unknown as T;
-  }
-
-  return response.json();
+  return promise;
 }
 
 export const api = {
@@ -62,15 +140,32 @@ export const api = {
   delete: <T = unknown>(endpoint: string) =>
     fetchApi<T>(endpoint, { method: "DELETE" }),
 
-  // Auth
+  // Auth. ``/auth/signup`` and ``/auth/login`` both return the full
+  // ``UserResponse`` (user_id + email + name + organizations +
+  // current_org_id) so the frontend can populate the user context
+  // in a single roundtrip — no follow-up ``/auth/me`` needed.
   signup: (data: { email: string; password: string; name: string }) =>
-    fetchApi<{ user_id: string; email: string; message: string }>("/auth/signup", {
+    fetchApi<{
+      user_id: string;
+      email: string;
+      name: string;
+      two_factor_enabled: boolean;
+      organizations: Array<{ id: string; name: string; slug: string; role: string }>;
+      current_org_id: string | null;
+    }>("/auth/signup", {
       method: "POST",
       body: JSON.stringify(data),
     }),
 
   login: (data: { email: string; password: string }) =>
-    fetchApi<{ user_id: string; email: string; name: string }>("/auth/login", {
+    fetchApi<{
+      user_id: string;
+      email: string;
+      name: string;
+      two_factor_enabled: boolean;
+      organizations: Array<{ id: string; name: string; slug: string; role: string }>;
+      current_org_id: string | null;
+    }>("/auth/login", {
       method: "POST",
       body: JSON.stringify(data),
     }),

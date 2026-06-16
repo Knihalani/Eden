@@ -366,7 +366,7 @@ Target: **~22 tests, ~0.8s.**
 
 ## Cross-references
 
-* Master doc: [`eden-observability-gap-roadmap.md`](../eden-observability-gap-roadmap.md) § Cat 19
+* Master doc: [`eden-observability-gap-roadmap.md`](/observability/gap-roadmap) § Cat 19
 * Cat 18 (Columnar — the SQL execution substrate):
   [`18-query-performance.md`](./18-query-performance.md)
 * Cat 17 (closed-loop — `DSLHook.on_alert_lint_warning`):

@@ -317,8 +317,8 @@ def rewind_to_step(org_id, trace_id, step_index):
 
 ## Cross-references
 
-* Master doc: [`eden-observability-gap-roadmap.md`](../eden-observability-gap-roadmap.md)
-* Stub envelope: [`src/eden/intelligence_envelope.py`](../../src/eden/intelligence_envelope.py)
-* Existing trace tree: [`src/eden/api/routes/observability.py`](../../src/eden/api/routes/observability.py)
+* Master doc: [`eden-observability-gap-roadmap.md`](/observability/gap-roadmap)
+* Stub envelope: `src/eden/intelligence_envelope.py`
+* Existing trace tree: `src/eden/api/routes/observability.py`
 * Cat 16 (Decision — co-located routes):
   [`16-decision-intelligence.md`](./16-decision-intelligence.md)

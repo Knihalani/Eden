@@ -1,12 +1,12 @@
-import { NextResponse } from "next/server";
-import { api } from "@/lib/api";
+import { forwardToBackend, proxyError } from "@/lib/proxy";
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
-    const data = await api.getMe();
-    return NextResponse.json(data);
+    return await forwardToBackend("/auth/me", {
+      method: "GET",
+      cookieHeader: request.headers.get("cookie") ?? undefined,
+    });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Not authenticated";
-    return NextResponse.json({ detail: message }, { status: 401 });
+    return proxyError(error, "Not authenticated");
   }
 }

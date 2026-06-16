@@ -44,8 +44,8 @@
 
 ## How to report an issue
 
-See [`SECURITY.md`](../SECURITY.md) for the disclosure policy
-and contact channel. **Do not file public GitHub issues for
+Email **security@edenobservability.com** to disclose a
+vulnerability. **Do not file public GitHub issues for
 security vulnerabilities.**
 
 ## Incident history

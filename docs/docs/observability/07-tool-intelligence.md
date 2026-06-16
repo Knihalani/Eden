@@ -547,8 +547,8 @@ Target: **~20 tests, ~0.8s.**
 
 ## Cross-references
 
-* Master doc: [`eden-observability-gap-roadmap.md`](../eden-observability-gap-roadmap.md) § Cat 7
-* Stub envelope: [`src/eden/intelligence_envelope.py`](../../src/eden/intelligence_envelope.py)
+* Master doc: [`eden-observability-gap-roadmap.md`](/observability/gap-roadmap) § Cat 7
+* Stub envelope: `src/eden/intelligence_envelope.py`
 * Cat 4 (Retrieval — the `ChunkAttribution` pattern
   is reused here): [`04-retrieval-intelligence.md`](./04-retrieval-intelligence.md)
 * Cat 6 (Agent — the `AgentRelationshipGraph`

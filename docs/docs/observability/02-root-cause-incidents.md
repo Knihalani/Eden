@@ -368,9 +368,9 @@ async def summarize(org_id, cluster_id):
 
 ## Cross-references
 
-* Master doc: [`eden-observability-gap-roadmap.md`](../eden-observability-gap-roadmap.md)
-* Stub envelope: [`src/eden/intelligence_envelope.py`](../../src/eden/intelligence_envelope.py)
-* Existing detectors: [`src/eden/insights/detectors.py`](../../src/eden/insights/detectors.py)
+* Master doc: [`eden-observability-gap-roadmap.md`](/observability/gap-roadmap)
+* Stub envelope: `src/eden/intelligence_envelope.py`
+* Existing detectors: `src/eden/insights/detectors.py`
 * Cat 3 (Eval Quality — provides ground truth via judge
   scores): [`03-evaluation-quality-intelligence.md`](./03-evaluation-quality-intelligence.md)
 * Cat 17 (Closed-loop — auto-triggers investigation on alert):
