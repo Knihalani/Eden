@@ -75,6 +75,20 @@ class PostgresClient:
         async def _init_connection(conn: asyncpg.Connection) -> None:
             await conn.execute("SET statement_timeout = 30000")
 
+        # SSL config (Phase 7 — Neon cutover). Managed providers
+        # (Neon, RDS, Aurora) reject unencrypted connections; the
+        # local sandbox Postgres on Northflank (when the addon
+        # worked) didn't require SSL. ``ssl=True`` is the asyncpg
+        # equivalent of ``sslmode=require`` — it uses Python's default
+        # SSL context, which is enough for verifying the server
+        # certificate via the system CA bundle. Operators who need
+        # ``verify-full`` should set ``database_url`` instead and
+        # pass a DSN that asyncpg can parse.
+        ssl: bool | str = False
+        sslmode = getattr(settings, "postgres_sslmode", "")
+        if sslmode and sslmode.lower() not in {"disable", "allow", "prefer", ""}:
+            ssl = True
+
         self._pool = await asyncpg.create_pool(
             host=self.config.host,
             port=self.config.port,
@@ -85,6 +99,7 @@ class PostgresClient:
             max_size=self.config.max_size,
             command_timeout=60,
             init=_init_connection,
+            ssl=ssl,
         )
         logger.info(f"PostgreSQL pool initialized: {self.config.host}:{self.config.port}/{self.config.database}")
 

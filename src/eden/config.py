@@ -113,6 +113,31 @@ class Settings(BaseSettings):
     sendgrid_from_email: str = "noreply@eden.ai"
     sendgrid_from_name: str = "Eden"
 
+    # Postgres (Neon) — SSL config for the cutover
+    # When ``postgres_sslmode`` is empty (the dev default), the
+    # connection builder in ``db_migrations/env.py`` falls back to a
+    # plain ``postgresql://`` DSN. Set to ``require`` (or ``verify-full``)
+    # for managed providers (Neon, RDS, Aurora, Cloud SQL) which all
+    # require SSL. ``postgres_channel_binding`` is Neon-specific; safe
+    # to leave empty elsewhere.
+    # ``database_url`` is a full-URL override. When non-empty, it
+    # takes precedence over the individual ``POSTGRES_*`` vars — useful
+    # for PgBouncer pools, Neon endpoints with non-standard SSL, etc.
+    database_url: str = ""
+    postgres_sslmode: str = ""
+    postgres_channel_binding: str = ""
+    postgres_endpoint_id: str = ""
+
+    # Backblaze B2 cold tier (Phase 6 of the Postgres + Compression
+    # plan). All four must be set for ``ParquetColdExporter`` to write
+    # Parquet+zstd-7 archives; otherwise it's a no-op. B2 is S3-
+    # compatible, so we use boto3 with a custom endpoint_url. Cheapest
+    # hot US storage with free egress via Cloudflare bandwidth alliance.
+    b2_endpoint_url: str = ""            # e.g. https://s3.us-west-001.backblazeb2.com
+    b2_cold_bucket: str = ""             # e.g. eden-cold
+    b2_access_key_id: str = ""
+    b2_secret_access_key: str = ""
+
     # Portal
     portal_base_url: str = "https://portal.example.com"
     app_url: str = "https://portal.example.com"

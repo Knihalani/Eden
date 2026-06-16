@@ -64,6 +64,14 @@ COPY --chown=eden:eden src ./src
 COPY --chown=eden:eden migrations ./migrations
 COPY --chown=eden:eden alembic.ini ./alembic.ini
 
+# Copy the pre-trained zstd dictionary (Phase 3 of the Postgres +
+# Compression plan). ``eden.storage.compression`` looks for the file at
+# ``$EDEN_ZSTD_DICT_PATH`` (default ``/app/var/zstd_dict.bin``). If the
+# file is missing the service falls back to an empty dict — round-trip
+# still works, just without the ratio win. Generate the file via
+# ``scripts/train_zstd_dict.py``.
+COPY --chown=eden:eden var/zstd_dict.bin ./var/zstd_dict.bin
+
 # Switch to non-root user
 USER eden
 

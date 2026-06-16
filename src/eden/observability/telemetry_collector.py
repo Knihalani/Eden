@@ -405,6 +405,23 @@ class TelemetryCollector:
         if not client:
             return
         try:
+            # Compress the two LLM payload columns with the trained zstd
+            # dictionary (Phase 3 of the Postgres + Compression plan).
+            # The original JSONB columns stay populated for a 30-day
+            # burn-in so any pre-backfill row is still readable.
+            # See ``eden.storage.compression`` for the lossless guarantee.
+            from eden.storage.compression import compress_jsonb
+
+            request_body_zstd = (
+                compress_jsonb(event.request_body)
+                if event.request_body is not None
+                else None
+            )
+            response_body_zstd = (
+                compress_jsonb(event.response_body)
+                if event.response_body is not None
+                else None
+            )
             await client.execute(
                 """
                 INSERT INTO telemetry_events (
@@ -417,13 +434,14 @@ class TelemetryCollector:
                     logprobs, citations, finish_reason, stop_sequence,
                     system_fingerprint, cache_hit, prompt_cache_savings_usd,
                     model_version, service_tier,
+                    request_body_zstd, response_body_zstd,
                     created_at
                 )
                 VALUES (
                     $1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
                     $11, $12, $13, $14, $15, $16, $17, $18, $19, $20,
                     $21, $22, $23, $24, $25, $26, $27, $28, $29, $30,
-                    $31, $32, $33, $34, $35, $36, NOW()
+                    $31, $32, $33, $34, $35, $36, $37, $38, NOW()
                 )
                 ON CONFLICT (event_id) DO NOTHING
                 """,
@@ -463,6 +481,8 @@ class TelemetryCollector:
                 event.prompt_cache_savings_usd,
                 event.model_version,
                 event.service_tier,
+                request_body_zstd,
+                response_body_zstd,
             )
         except Exception as exc:
             logger.warning(f"Postgres telemetry insert failed: {exc}")
@@ -562,6 +582,28 @@ class TelemetryCollector:
         if not rows:
             return None
 
+        # Phase 3: read the zstd-compressed BYTEA columns first, fall
+        # back to the original JSONB columns for any pre-backfill row
+        # (the columns are kept in sync during the 30-day burn-in;
+        # migration 033 drops the originals).
+        from eden.storage.compression import decompress_jsonb
+
+        def _read_payload(row, zstd_col: str, jsonb_col: str) -> Any:
+            """Return the decompressed payload, preferring ``*_zstd``."""
+            zstd_val = row.get(zstd_col)
+            if zstd_val:
+                try:
+                    return decompress_jsonb(zstd_val)
+                except Exception as exc:  # noqa: BLE001
+                    logger.warning(
+                        "Failed to decompress %s for event %s (%s); "
+                        "falling back to JSONB column",
+                        zstd_col,
+                        row.get("event_id"),
+                        exc,
+                    )
+            return row.get(jsonb_col)
+
         span_map: dict[str, dict[str, Any]] = {}
         root_spans: list[dict[str, Any]] = []
         total_duration = 0.0
@@ -588,8 +630,8 @@ class TelemetryCollector:
                 "attributes": row.get("attributes") or {},
                 "payload": row.get("payload") or {},
                 "outcome": row.get("outcome"),
-                "request_body": row.get("request_body"),
-                "response_body": row.get("response_body"),
+                "request_body": _read_payload(row, "request_body_zstd", "request_body"),
+                "response_body": _read_payload(row, "response_body_zstd", "response_body"),
                 "reasoning": row.get("reasoning"),
                 "tool_calls_full": row.get("tool_calls_full") or [],
                 "tool_results": row.get("tool_results") or [],
