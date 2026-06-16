@@ -224,11 +224,11 @@ export const api = {
   markNotificationRead: (notificationId: string) =>
     fetchApi<{ id: string; is_read: boolean }>(
       `/notifications/${notificationId}/read`,
-      { method: "POST" },
+      { method: "PATCH" },
     ),
   markAllNotificationsRead: () =>
     fetchApi<{ updated: number }>("/notifications/read-all", {
-      method: "POST",
+      method: "PATCH",
     }),
   deleteNotification: (notificationId: string) =>
     fetchApi<{ id: string }>(`/notifications/${notificationId}`, {
