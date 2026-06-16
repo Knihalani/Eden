@@ -46,6 +46,51 @@ The plan + the code are committed on `main`. This runbook is the operator-facing
 5. Also add the **B2 cold-tier secrets** (Phase 6 — REMOVED 2026-06-16) to the same group:
    - _Phase 6 (Backblaze B2 + Parquet cold tier) was rolled back on 2026-06-16. The cold tier is now provided directly by Neon's S3-compatible API; no separate B2 account is needed._
 
+## Live Neon (provisioned 2026-06-16)
+
+The project is already live in Neon — the steps below document what was done and what the user needs to populate in Northflank.
+
+**Project details (already provisioned via the Neon CLI):**
+
+- **Project ID:** `fancy-heart-01662940`
+- **Region:** `aws-us-east-2` (Ohio)
+- **Postgres version:** 17.10
+- **Compute:** 2 CU (autoscaling disabled; fixed size)
+- **Org:** `org-plain-lab-44145952` (Kaiav)
+- **Branches (CoW):**
+  - `main`  — `br-odd-pond-ajnjw5bp`   (default, system of record)
+  - `dev`   — `br-summer-leaf-aj90i740`  (CoW from main)
+  - `staging` — `br-lingering-pond-ajiltk1r` (CoW from main)
+- **Migrations:** all 35 applied (verified via `SELECT version_num FROM alembic_version`).
+- **Extensions enabled:** `uuid-ossp`, `vector` (pgvector), `timescaledb` 2.17.1.
+- **Branch connection strings:**
+
+  ```bash
+  # main
+  postgresql://eden:npg_iGB5D9ajSpEL@ep-twilight-smoke-ajcqrcfp.c-3.us-east-2.aws.neon.tech/eden?sslmode=require&channel_binding=require
+
+  # dev
+  postgresql://eden:npg_iGB5D9ajSpEL@ep-noisy-scene-ajdmdws4.c-3.us-east-2.aws.neon.tech/eden?sslmode=require&channel_binding=require
+
+  # staging
+  postgresql://eden:npg_iGB5D9ajSpEL@ep-…-ajiltk1r.c-3.us-east-2.aws.neon.tech/eden?sslmode=require&channel_binding=require
+  ```
+
+  Get fresh strings any time with `neon connection-string <branch>`.
+
+**What you need to do in Northflank:**
+
+1. Open the `eden-required` secret group in the Northflank console.
+2. Populate the 8 POSTGRES_* secrets with the values from the main branch's connection string (see above; the password is `npg_iGB5D9ajSpEL`).
+3. The `northflank.yml` manifest already references these secrets via `secretKeyRef` (the addonRef blocks were removed in commit `df3a9731`). Re-deploy the API, worker, and cron services.
+
+The dev / staging / per-PR branches are available for Vercel preview deployments (Vercel's PR preview can target the `dev` branch via the `dev` connection string; the Neon CLI can spawn per-PR branches on demand with `neon branches create --name pr-123`).
+
+**Known limitations of the current Neon setup (vs the research plan):**
+
+- **TimescaleDB columnstore compression is a paid feature.** The open-source "apache" build (Neon's free / Launch / Scale tiers) doesn't include the `timescaledb.compress` option. The `apaches` build gives 90-97% columnstore win; the apache build falls through to the LZ4 TOAST + BRIN wins (migrations 030 + 031). The `add_compression_policy` calls are wrapped in `EXCEPTION WHEN feature_not_supported` so the migration succeeds on both editions; the DO block raises a NOTICE on apache.
+- **Migration 033 is a no-op.** It was supposed to drop the original `request_body` / `response_body` columns after a 30-day burn-in, but it lives in the alembic chain and would fire automatically. The actual drop is now a manual SQL script: `scripts/drop_original_payload_columns.sql`. Run it via `psql` or the Neon SQL editor after the four prerequisites in the script's header are met.
+
 ## 2. Day 0 — Apply the migrations to Neon
 
 The code on `main` includes 6 new migrations (`030`–`035`); the first three (BRIN, LZ4 TOAST, zstd columns) are non-destructive and run in seconds. The last three (Timescale hypertables) take minutes per table.
