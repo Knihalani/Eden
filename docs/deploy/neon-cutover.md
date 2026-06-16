@@ -43,10 +43,8 @@ The plan + the code are committed on `main`. This runbook is the operator-facing
    - `POSTGRES_SSLMODE` — `require` (Neon rejects plain-text connections)
    - `POSTGRES_CHANNEL_BINDING` — `require` (Neon recommendation)
    - `POSTGRES_ENDPOINT_ID` — the `ep-xxx-yyy` portion of the host
-5. Also add the **B2 cold-tier secrets** (Phase 6) to the same group:
-   - `B2_ENDPOINT_URL` — e.g. `https://s3.us-west-001.backblazeb2.com`
-   - `B2_COLD_BUCKET` — e.g. `eden-cold`
-   - `B2_ACCESS_KEY_ID` / `B2_SECRET_ACCESS_KEY` — from a B2 application key with `listFiles`, `readFiles`, `writeFiles`, `deleteFiles` on the bucket
+5. Also add the **B2 cold-tier secrets** (Phase 6 — REMOVED 2026-06-16) to the same group:
+   - _Phase 6 (Backblaze B2 + Parquet cold tier) was rolled back on 2026-06-16. The cold tier is now provided directly by Neon's S3-compatible API; no separate B2 account is needed._
 
 ## 2. Day 0 — Apply the migrations to Neon
 
@@ -143,7 +141,7 @@ If Neon fails after 14 days, restore from a Neon PITR snapshot (30-day PITR incl
 - **Postgres CPU** — Neon's "Always on" Compute plan bills per CU-hour; if you see sustained > 80% CPU, bump to the next compute tier.
 - **Storage growth rate** — should drop 60-80% within a week as the LZ4 TOAST and zstd-dict compressions take effect. Check `SELECT pg_size_pretty(pg_database_size(current_database()));` weekly.
 - **Compression ratio on `usage_events` (Phase 4)** — should hit 90-97% after the Timescale compression policy runs (30 days after migration 034 ships). Run the verification query from migration 034's docstring.
-- **B2 cold-tier growth** — should start non-zero on Day 8 (when the first 7-day-old telemetry archives), growing ~5-10 GB / week at current rates. Monitor `aws s3 ls s3://eden-cold/cold/telemetry_events/ --recursive --summarize | tail -5` weekly.
+- **B2 cold-tier growth** — _Phase 6 (B2) was rolled back 2026-06-16; cold tier is now provided by Neon directly. The S3 lifecycle rules on the Northflank bronze/silver prefixes (see `apply_s3_lifecycle_rules` in `storage_lifecycle.py`) still apply to the existing S3 bucket — those are independent of the Postgres provider._
 
 ## 8. References
 

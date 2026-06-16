@@ -83,11 +83,6 @@ spec:
         - name: POSTGRES_SSLMODE
         - name: POSTGRES_CHANNEL_BINDING
         - name: POSTGRES_ENDPOINT_ID
-        # ── Backblaze B2 cold tier (Phase 6) ─────────────────────────
-        - name: B2_ENDPOINT_URL
-        - name: B2_COLD_BUCKET
-        - name: B2_ACCESS_KEY_ID
-        - name: B2_SECRET_ACCESS_KEY
 
 # ─────────────────────────────────────────────────────────────────────
 # Service 1/2: eden-api (FastAPI)
@@ -172,15 +167,6 @@ spec:
       value: "2"
     - name: POSTGRES_STATEMENT_TIMEOUT_MS
       value: "30000"
-    # ── Backblaze B2 cold tier (Phase 6) ─────────────────────────
-    - name: B2_ENDPOINT_URL
-      valueFrom: { secretKeyRef: { group: eden-required, key: B2_ENDPOINT_URL } }
-    - name: B2_COLD_BUCKET
-      valueFrom: { secretKeyRef: { group: eden-required, key: B2_COLD_BUCKET } }
-    - name: B2_ACCESS_KEY_ID
-      valueFrom: { secretKeyRef: { group: eden-required, key: B2_ACCESS_KEY_ID } }
-    - name: B2_SECRET_ACCESS_KEY
-      valueFrom: { secretKeyRef: { group: eden-required, key: B2_SECRET_ACCESS_KEY } }
     # ── Qdrant (external — Qdrant Cloud free tier) ──────────────
     - name: QDRANT_HOST
       value: https://58384b79-0261-480e-b61f-d86bbf1c0dad.us-east4-0.gcp.cloud.qdrant.io
@@ -373,14 +359,6 @@ spec:
       valueFrom: { secretKeyRef: { group: eden-required, key: POSTGRES_CHANNEL_BINDING } }
     - name: POSTGRES_ENDPOINT_ID
       valueFrom: { secretKeyRef: { group: eden-required, key: POSTGRES_ENDPOINT_ID } }
-    - name: B2_ENDPOINT_URL
-      valueFrom: { secretKeyRef: { group: eden-required, key: B2_ENDPOINT_URL } }
-    - name: B2_COLD_BUCKET
-      valueFrom: { secretKeyRef: { group: eden-required, key: B2_COLD_BUCKET } }
-    - name: B2_ACCESS_KEY_ID
-      valueFrom: { secretKeyRef: { group: eden-required, key: B2_ACCESS_KEY_ID } }
-    - name: B2_SECRET_ACCESS_KEY
-      valueFrom: { secretKeyRef: { group: eden-required, key: B2_SECRET_ACCESS_KEY } }
     - name: POSTGRES_POOL_SIZE
       value: "5"
     - name: POSTGRES_MIN_POOL_SIZE
@@ -475,14 +453,6 @@ spec:
       valueFrom: { secretKeyRef: { group: eden-required, key: POSTGRES_CHANNEL_BINDING } }
     - name: POSTGRES_ENDPOINT_ID
       valueFrom: { secretKeyRef: { group: eden-required, key: POSTGRES_ENDPOINT_ID } }
-    - name: B2_ENDPOINT_URL
-      valueFrom: { secretKeyRef: { group: eden-required, key: B2_ENDPOINT_URL } }
-    - name: B2_COLD_BUCKET
-      valueFrom: { secretKeyRef: { group: eden-required, key: B2_COLD_BUCKET } }
-    - name: B2_ACCESS_KEY_ID
-      valueFrom: { secretKeyRef: { group: eden-required, key: B2_ACCESS_KEY_ID } }
-    - name: B2_SECRET_ACCESS_KEY
-      valueFrom: { secretKeyRef: { group: eden-required, key: B2_SECRET_ACCESS_KEY } }
     - name: POSTGRES_POOL_SIZE
       value: "3"
     - name: POSTGRES_MIN_POOL_SIZE
