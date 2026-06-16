@@ -41,12 +41,19 @@ depends_on = None
 
 
 def upgrade() -> None:
-    op.execute(
-        "ALTER TABLE telemetry_events DROP COLUMN IF EXISTS response_body;"
-    )
-    op.execute(
-        "ALTER TABLE telemetry_events DROP COLUMN IF EXISTS request_body;"
-    )
+    # The actual DROP COLUMN statements were removed from this migration
+    # on 2026-06-16. The migration was supposed to be deferred (per the
+    # docstring above) but ``alembic upgrade head`` runs every
+    # migration in the chain, including this one — so it was firing
+    # the DROP on a fresh DB before the 30-day burn-in was done.
+    #
+    # The drop is now a manual operation. Run
+    # ``scripts/drop_original_payload_columns.sql`` after the four
+    # prerequisites in the docstring above are satisfied. Keeping
+    # this migration in the chain so alembic still knows about the
+    # schema state (and to keep the relationship between 032 and
+    # 034 unbroken), but with an empty upgrade() that does nothing.
+    pass
 
 
 def downgrade() -> None:

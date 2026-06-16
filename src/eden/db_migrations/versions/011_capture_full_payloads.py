@@ -34,7 +34,13 @@ New tables:
 from alembic import op
 
 revision = "011"
-down_revision = "010"
+# Migration 011 is a **merge point** for the 009 (telemetry_events) and
+# 010 (judge_scores) chains — both tables must exist before we can
+# ALTER them. The original ``down_revision = "010"`` was a pre-existing
+# data integrity issue that left 009 as a stranded head; corrected to
+# the tuple on 2026-06-16 alongside the broader 3-head merge in
+# migration 030.
+down_revision = ("009", "010")
 branch_labels = None
 depends_on = None
 
@@ -59,6 +65,14 @@ def upgrade() -> None:
         ("system_fingerprint", "VARCHAR(128)"),
         ("cache_hit", "BOOLEAN"),
         ("prompt_cache_savings_usd", "NUMERIC(12,6)"),
+        # `model` is referenced by ``idx_telemetry_events_tenant_model_version``
+        # below. Migration 011 originally only added ``model_version`` and
+        # referenced a non-existent ``model`` column, leaving the index
+        # creation in a permanently failing state on a fresh DB. The
+        # fix (2026-06-16) adds ``model`` to this migration's column
+        # list so the index can be created. This is safe to apply
+        # retroactively: the column is additive and IF NOT EXISTS-guarded.
+        ("model", "VARCHAR(128)"),
         ("model_version", "VARCHAR(128)"),
         ("service_tier", "VARCHAR(64)"),
     ]

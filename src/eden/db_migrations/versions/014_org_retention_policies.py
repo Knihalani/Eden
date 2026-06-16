@@ -53,8 +53,11 @@ def upgrade() -> None:
         ADD COLUMN IF NOT EXISTS org_id VARCHAR(128)
     """)
     op.execute("""
+        -- The data_retention_log table (from migration 008) uses
+        -- ``completed_at`` not ``ran_at``; index the existing column
+        -- instead. Pre-existing typo corrected 2026-06-16.
         CREATE INDEX IF NOT EXISTS idx_drl_org
-        ON data_retention_log (org_id, ran_at DESC)
+        ON data_retention_log (org_id, completed_at DESC)
     """)
 
 

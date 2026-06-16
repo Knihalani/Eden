@@ -76,18 +76,18 @@ def upgrade() -> None:
         name                VARCHAR(128) NOT NULL,
         -- The original EQL query (SQL with optional
         -- root./parent./any. prefixes). Preserved for the
-        # "edit alert" UI path.
+        -- "edit alert" UI path.
         eql_query           TEXT NOT NULL,
         -- The compiled ClickHouse SQL (the form the cron
-        # watchdog actually executes). Stale by definition
-        # after the alert is recompiled; the audit log
-        # captures the recompile events.
+        -- watchdog actually executes). Stale by definition
+        -- after the alert is recompiled; the audit log
+        -- captures the recompile events.
         clickhouse_sql      TEXT NOT NULL,
         -- The EQL shape — 'traces' | 'spans' | 'summary'.
         -- Default 'traces' (Braintrust parity).
         shape               VARCHAR(16) NOT NULL DEFAULT 'traces',
         -- How often the alert fires (seconds). Minimum 60
-        # enforced at the service layer.
+        -- enforced at the service layer.
         interval_seconds    INT NOT NULL DEFAULT 3600,
         -- info | warning | high | critical.
         severity            VARCHAR(16) NOT NULL,
@@ -97,12 +97,12 @@ def upgrade() -> None:
         -- Kill switch. Disabled alerts do not fire.
         enabled             BOOLEAN NOT NULL DEFAULT true,
         -- Closed-loop: 'pending' | 'active' | 'auto_disabled'.
-        # 'auto_disabled' is set by the watchdog when the
-        # alert times out 3 times in a row (Braintrust
-        # parity; "log alert" behaviour).
+        -- 'auto_disabled' is set by the watchdog when the
+        -- alert times out 3 times in a row (Braintrust
+        -- parity; "log alert" behaviour).
         lifecycle_status    VARCHAR(16) NOT NULL DEFAULT 'active',
         -- The number of times this alert has fired. Useful
-        # for the per-org usage rollup.
+        -- for the per-org usage rollup.
         n_fired             BIGINT NOT NULL DEFAULT 0,
         created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
         """,
@@ -122,17 +122,17 @@ def upgrade() -> None:
         id                  UUID PRIMARY KEY,
         org_id              VARCHAR(128) NOT NULL,
         -- The query the linter ran on (truncated to 1k chars
-        # so a 100kB adversarial query can't bloat the table).
+        -- so a 100kB adversarial query can't bloat the table).
         query               TEXT NOT NULL,
         -- NO_FILTERS | ANY_SPAN_OVERUSE | MISSING_ORG |
-        # SHAPE_MISMATCH.
+        -- SHAPE_MISMATCH.
         warning_code        VARCHAR(32) NOT NULL,
         -- info | warning | error.
         severity            VARCHAR(16) NOT NULL,
         message             TEXT NOT NULL,
         -- The lint mode the customer used — 'default' returns
-        # the warnings; 'strict' blocks. Persisted so the
-        # audit log captures the customer's choice.
+        -- the warnings; 'strict' blocks. Persisted so the
+        -- audit log captures the customer's choice.
         lint_mode           VARCHAR(16) NOT NULL DEFAULT 'default',
         created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
         """,
@@ -155,23 +155,23 @@ def upgrade() -> None:
         -- Customer-facing identifier ("frk_xxxxxxxxxxxx").
         fork_id             VARCHAR(128) NOT NULL UNIQUE,
         -- The trace being forked. References
-        # telemetry_events.trace_id (no FK so the table can
-        # outlive a telemetry_events retention).
+        -- telemetry_events.trace_id (no FK so the table can
+        -- outlive a telemetry_events retention).
         parent_trace_id     VARCHAR(128) NOT NULL,
         -- NULL for the first fork; non-NULL for fork-of-fork.
         parent_fork_id      VARCHAR(128),
         -- The step the customer chose to fork at. The
-        # replayer serves steps 1..N-1 from cache.
+        -- replayer serves steps 1..N-1 from cache.
         fork_at_step        INT NOT NULL,
         name                VARCHAR(256) NOT NULL,
         -- The edits applied at fork time, JSON-encoded. The
-        # replayer reads this so a replay is reproducible
-        # even if the customer later edits the fork.
+        -- replayer reads this so a replay is reproducible
+        -- even if the customer later edits the fork.
         edits_json          TEXT,
         -- Aggregate counters. n_replays is incremented on
-        # each successful replay; last_replay_outcome tracks
-        # the latest result so the list-forks route can show
-        # the success/fail rate per fork.
+        -- each successful replay; last_replay_outcome tracks
+        -- the latest result so the list-forks route can show
+        -- the success/fail rate per fork.
         n_replays           BIGINT NOT NULL DEFAULT 0,
         last_replay_outcome VARCHAR(16),
         created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -193,23 +193,23 @@ def upgrade() -> None:
         fork_id             VARCHAR(128) NOT NULL,
         step_index          INT NOT NULL,
         -- True if the step was served from cache; False if
-        # it was re-executed live. The diff route reads this
-        # to render the side-by-side timeline.
+        -- it was re-executed live. The diff route reads this
+        -- to render the side-by-side timeline.
         served_from_cache   BOOLEAN NOT NULL,
         -- The cache key the recorder wrote. NULL when the
-        # step was not cacheable.
+        -- step was not cacheable.
         cache_key           TEXT,
         -- True if the step was re-executed live (always
-        # True for steps at/after fork_at_step; sometimes
-        # True for steps before the fork that had a cache
-        # miss).
+        -- True for steps at/after fork_at_step; sometimes
+        -- True for steps before the fork that had a cache
+        -- miss).
         re_executed         BOOLEAN NOT NULL,
         -- The hash of the response (matches the
-        # telemetry_events.response_hash convention). NULL
-        # when the step was not cacheable.
+        -- telemetry_events.response_hash convention). NULL
+        -- when the step was not cacheable.
         response_hash       TEXT,
         -- The token + cost tallies for the live step. 0
-        # for cache-served steps.
+        -- for cache-served steps.
         tokens_used         INT NOT NULL DEFAULT 0,
         cost_usd            DOUBLE PRECISION NOT NULL DEFAULT 0.0,
         created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()

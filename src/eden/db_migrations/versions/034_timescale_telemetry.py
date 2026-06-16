@@ -56,6 +56,20 @@ def upgrade() -> None:
     # fresh Neon database, the extension auto-loads from the allowlist.
     op.execute("CREATE EXTENSION IF NOT EXISTS timescaledb;")
 
+    # TimescaleDB requires the partition column to be part of any
+    # PRIMARY KEY or UNIQUE constraint. The original
+    # ``telemetry_events`` PK (from migration 009) is on ``event_id``
+    # only. We DROP + re-ADD the PK to include ``timestamp`` before
+    # calling create_hypertable. Safe on a fresh DB (no rows); for
+    # a populated DB this is a table rewrite — schedule accordingly.
+    op.execute(
+        "ALTER TABLE telemetry_events DROP CONSTRAINT IF EXISTS telemetry_events_pkey CASCADE;"
+    )
+    op.execute(
+        "ALTER TABLE telemetry_events "
+        "ADD CONSTRAINT telemetry_events_pkey PRIMARY KEY (event_id, timestamp);"
+    )
+
     # Convert to a hypertable. ``if_not_exists => TRUE`` makes the
     # migration idempotent (re-running it is a no-op).
     #
@@ -79,13 +93,30 @@ def upgrade() -> None:
     # triple (tenant_id, event_type, name) matches the dominant read
     # patterns from the Cat 13 predictive service: per-tenant, per-event,
     # time-ordered.
+    #
+    # NOTE: ``timescaledb.compress`` (the columnstore) is a
+    # **commercial / enterprise feature** of TimescaleDB. On the
+    # open-source "apache" build (the one shipped on Neon's free /
+    # Launch / Scale tiers), Timescale throws
+    # ``functionality not supported under the current "apache"
+    # license``. The DO block swallows that specific error so the
+    # migration succeeds on both editions; on enterprise it enables
+    # the 90-97% columnstore win, on apache it falls through to the
+    # LZ4 TOAST + BRIN compression wins (migrations 030 + 031).
     op.execute(
         """
-        ALTER TABLE telemetry_events SET (
-            timescaledb.compress,
-            timescaledb.compress_segmentby = 'tenant_id, event_type, name',
-            timescaledb.compress_orderby   = 'timestamp DESC'
-        );
+        DO $$
+        BEGIN
+            ALTER TABLE telemetry_events SET (
+                timescaledb.compress,
+                timescaledb.compress_segmentby = 'tenant_id, event_type, name',
+                timescaledb.compress_orderby   = 'timestamp DESC'
+            );
+        EXCEPTION
+            WHEN feature_not_supported THEN
+                RAISE NOTICE 'TimescaleDB apache build; skipping columnstore compression '
+                             '(see migrations 030 + 031 for the LZ4 TOAST + BRIN wins)';
+        END $$;
         """
     )
 
@@ -94,10 +125,16 @@ def upgrade() -> None:
     # 7 days once we observe 2.11+ DML-on-compressed behaviour in prod.
     op.execute(
         """
-        SELECT add_compression_policy(
-            'telemetry_events', INTERVAL '30 days',
-            if_not_exists => TRUE
-        );
+        DO $$
+        BEGIN
+            PERFORM add_compression_policy(
+                'telemetry_events', INTERVAL '30 days',
+                if_not_exists => TRUE
+            );
+        EXCEPTION
+            WHEN feature_not_supported THEN
+                NULL;  -- columnstore unavailable; see above
+        END $$;
         """
     )
 

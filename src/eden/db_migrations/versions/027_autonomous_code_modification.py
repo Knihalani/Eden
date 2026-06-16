@@ -273,7 +273,8 @@ def upgrade() -> None:
         denied_count             INT NOT NULL DEFAULT 0,
         edited_count             INT NOT NULL DEFAULT 0,
         last_outcome             VARCHAR(32),
-        last_updated             TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        last_updated             TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        created_at             TIMESTAMPTZ NOT NULL DEFAULT NOW()
         """,
         "CREATE UNIQUE INDEX IF NOT EXISTS idx_codebase_knowledge_graph_pk "
         "ON codebase_knowledge_graph (id)",
@@ -328,7 +329,8 @@ def upgrade() -> None:
         eligible_approvers       JSONB,
         missing_approver_roles   JSONB,
         status                   VARCHAR(32) NOT NULL DEFAULT 'awaiting',
-        updated_at               TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        updated_at               TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        created_at             TIMESTAMPTZ NOT NULL DEFAULT NOW()
         """,
         "CREATE UNIQUE INDEX IF NOT EXISTS idx_patch_approval_status_pk "
         "ON patch_approval_status (patch_id)",
@@ -391,7 +393,8 @@ def upgrade() -> None:
         failing_conditions       JSONB,
         actor_type               VARCHAR(16) NOT NULL,
         actor_user_id            VARCHAR(128),
-        evaluated_at             TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        evaluated_at             TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        created_at             TIMESTAMPTZ NOT NULL DEFAULT NOW()
         """,
         "CREATE INDEX IF NOT EXISTS idx_auto_approval_events_patch "
         "ON auto_approval_events (org_id, patch_id)",
@@ -407,7 +410,8 @@ def upgrade() -> None:
         would_have_auto_approved      INT NOT NULL DEFAULT 0,
         blocked_breakdown             JSONB,
         estimated_time_saved_minutes  INT NOT NULL DEFAULT 0,
-        evaluated_at                  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        evaluated_at                  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        created_at             TIMESTAMPTZ NOT NULL DEFAULT NOW()
         """,
         "CREATE INDEX IF NOT EXISTS idx_auto_approval_dry_runs_org "
         "ON auto_approval_dry_runs (org_id, evaluated_at DESC)",
@@ -469,7 +473,8 @@ def upgrade() -> None:
         complexity_median        INT NOT NULL DEFAULT 5,
         architecture_patterns    JSONB,
         last_learned_at          TIMESTAMPTZ,
-        last_learned_from_pr_id  VARCHAR(64)
+        last_learned_from_pr_id  VARCHAR(64),
+        created_at             TIMESTAMPTZ NOT NULL DEFAULT NOW()
         """,
         "CREATE UNIQUE INDEX IF NOT EXISTS idx_repo_style_profiles_pk "
         "ON repo_style_profiles (org_id, repo_id)",

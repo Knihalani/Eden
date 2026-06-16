@@ -118,8 +118,9 @@ class Settings(BaseSettings):
     # connection builder in ``db_migrations/env.py`` falls back to a
     # plain ``postgresql://`` DSN. Set to ``require`` (or ``verify-full``)
     # for managed providers (Neon, RDS, Aurora, Cloud SQL) which all
-    # require SSL. ``postgres_channel_binding`` is Neon-specific; safe
-    # to leave empty elsewhere.
+    # require SSL. ``postgres_channel_binding`` is Neon-specific;
+    # asyncpg's scram-sha-256 SSL handshake is the equivalent — the
+    # field is kept for libpq-style connections.
     # ``database_url`` is a full-URL override. When non-empty, it
     # takes precedence over the individual ``POSTGRES_*`` vars — useful
     # for PgBouncer pools, Neon endpoints with non-standard SSL, etc.
