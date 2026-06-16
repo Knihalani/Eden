@@ -1,5 +1,4 @@
 ---
-id: observability-index
 title: Observability
 sidebar_label: Overview
 sidebar_position: 0

@@ -474,10 +474,10 @@ Target: **~30 tests, ~1.2s.**
 
 ## Cross-references
 
-* Master doc: [`eden-observability-gap-roadmap.md`](../eden-observability-gap-roadmap.md) § Cat 10
-* Stub envelope: [`src/eden/intelligence_envelope.py`](../../src/eden/intelligence_envelope.py)
-* PII policy: [`src/eden/api/routes/pii_policy.py`](../../src/eden/api/routes/pii_policy.py)
-* PII filter: [`src/eden/llmops/ai_gateway.py`](../../src/eden/llmops/ai_gateway.py)
+* Master doc: [`eden-observability-gap-roadmap.md`](/observability/gap-roadmap) § Cat 10
+* Stub envelope: `src/eden/intelligence_envelope.py`
+* PII policy: `src/eden/api/routes/pii_policy.py`
+* PII filter: `src/eden/llmops/ai_gateway.py`
 * Cat 9 (User — implicit behavioural signals inform
   the satisfaction component of CC7.2): [`09-user-intelligence.md`](./09-user-intelligence.md)
 * Cat 15 (Guardrails — the intervention_log is

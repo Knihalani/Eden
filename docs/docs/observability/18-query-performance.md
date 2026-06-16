@@ -514,12 +514,12 @@ Target: **~20 tests, ~0.8s.**
 
 ## Cross-references
 
-* Master doc: [`eden-observability-gap-roadmap.md`](../eden-observability-gap-roadmap.md) § Cat 18
-* ClickHouse sink: [`src/eden/data_platform/clickhouse_sink.py`](../../src/eden/data_platform/clickhouse_sink.py)
+* Master doc: [`eden-observability-gap-roadmap.md`](/observability/gap-roadmap) § Cat 18
+* ClickHouse sink: `src/eden/data_platform/clickhouse_sink.py`
 * Cohorts (uses ClickHouse today):
-  [`src/eden/analytics/cohorts.py`](../../src/eden/analytics/cohorts.py)
+  `src/eden/analytics/cohorts.py`
 * Funnels (uses ClickHouse today):
-  [`src/eden/analytics/funnels.py`](../../src/eden/analytics/funnels.py)
+  `src/eden/analytics/funnels.py`
 * Cat 8 (Cost — the headline beneficiary of Cat 18):
   [`08-cost-intelligence.md`](./08-cost-intelligence.md)
 * Cat 9 (User cohort analytics):

@@ -43,18 +43,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [refreshUser]);
 
   const login = async (email: string, password: string) => {
+    // ``api.login()`` already returns the full user payload
+    // (the backend's /auth/login route was upgraded to include
+    // the user object + organizations). Don't do a follow-up
+    // getMe() — that's a wasted roundtrip and a race (the cookie
+    // may not have settled on the second request).
     const userData = await api.login({ email, password });
-    // After login, fetch full user with orgs
-    const fullUser = await api.getMe();
-    setUser(fullUser);
+    setUser(userData);
     setError(null);
   };
 
   const signup = async (email: string, password: string, name: string) => {
-    await api.signup({ email, password, name });
-    // Auto-login after signup - get full user with orgs
-    const fullUser = await api.getMe();
-    setUser(fullUser);
+    // Same as login: the backend returns the user on signup, so we
+    // skip the follow-up getMe() that the old code did.
+    const userData = await api.signup({ email, password, name });
+    setUser(userData);
   };
 
   const logout = async () => {

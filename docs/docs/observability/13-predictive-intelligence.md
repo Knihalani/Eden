@@ -497,12 +497,12 @@ Target: **~22 tests, ~0.9s.**
 
 ## Cross-references
 
-* Master doc: [`eden-observability-gap-roadmap.md`](../eden-observability-gap-roadmap.md) § Cat 13
-* Stub envelope: [`src/eden/intelligence_envelope.py`](../../src/eden/intelligence_envelope.py)
+* Master doc: [`eden-observability-gap-roadmap.md`](/observability/gap-roadmap) § Cat 13
+* Stub envelope: `src/eden/intelligence_envelope.py`
 * Anomaly detection (z-score baseline):
-  [`src/eden/data_platform/anomaly_alerts.py`](../../src/eden/data_platform/anomaly_alerts.py)
+  `src/eden/data_platform/anomaly_alerts.py`
 * Production monitor (Cat 0):
-  [`src/eden/llmops/production_monitor.py`](../../src/eden/llmops/production_monitor.py)
+  `src/eden/llmops/production_monitor.py`
 * Cat 8 (cost — `CostForecast` is the upstream OLS):
   [`08-cost-intelligence.md`](./08-cost-intelligence.md)
 * Cat 3 (judge — the input to `QualityPredictor`):

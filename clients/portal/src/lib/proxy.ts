@@ -11,12 +11,21 @@ export function proxyError(error: unknown, fallback: string) {
   return NextResponse.json({ detail: message }, { status });
 }
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+// Server-side resolution of the FastAPI upstream. The catch-all proxy
+// at /api/proxy/[...path] uses this to forward requests. Order of
+// precedence: API_INTERNAL_URL (preferred for server-side, never
+// exposed to the client) → NEXT_PUBLIC_API_URL (legacy fallback) →
+// localhost:8000 (dev default).
+const API_BASE =
+  process.env.API_INTERNAL_URL ||
+  process.env.NEXT_PUBLIC_API_URL ||
+  "http://localhost:8000";
 
 interface ForwardOptions {
   method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
   body?: unknown;
   cookieHeader?: string;
+  extraHeaders?: Record<string, string>;
 }
 
 /**
@@ -29,12 +38,21 @@ export async function forwardToBackend(
   path: string,
   options: ForwardOptions = {}
 ): Promise<NextResponse> {
-  const { method = "POST", body, cookieHeader } = options;
+  const { method = "POST", body, cookieHeader, extraHeaders } = options;
 
+  // Default to JSON content type. Override for FormData / multipart by
+  // passing an explicit `Content-Type` in `extraHeaders` — fetch will
+  // also auto-set the multipart boundary if you pass a FormData body.
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
   };
   if (cookieHeader) headers["Cookie"] = cookieHeader;
+  if (extraHeaders) {
+    for (const [k, v] of Object.entries(extraHeaders)) {
+      // Allow caller to override Content-Type for non-JSON bodies.
+      headers[k] = v;
+    }
+  }
 
   const response = await fetch(`${API_BASE}${path}`, {
     method,

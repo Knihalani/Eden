@@ -433,7 +433,7 @@ Target: **~20 tests, ~0.8s.**
 ## Acceptance criteria
 
 - [x] All 4 v1.3 services implemented (v2 SLM services
-  deferred to the separate `eden-judge-v2-plan.md`)
+  deferred to the separate `/observability/judge-v2-plan`)
 - [x] 1,500-token cap enforced (verified by
   `test_token_cap_enforced`)
 - [x] Judge registered in global `JudgeRegistry`
@@ -472,17 +472,17 @@ Target: **~20 tests, ~0.8s.**
 
 ## Cross-references
 
-* Master doc: [`eden-observability-gap-roadmap.md`](../eden-observability-gap-roadmap.md) § Cat 21
+* Master doc: [`eden-observability-gap-roadmap.md`](/observability/gap-roadmap) § Cat 21
 * JudgeRegistry (the destination):
-  [`src/eden/llmops/judges/registry.py`](../../src/eden/llmops/judges/registry.py)
+  `src/eden/llmops/judges/registry.py`
 * Builtin judges (the existing 7 + 3 Luna-2):
-  [`src/eden/llmops/judges/builtin_v9.py`](../../src/eden/llmops/judges/builtin_v9.py)
+  `src/eden/llmops/judges/builtin_v9.py`
 * Cat 3 (the LLM-as-judge opt-in policy):
   [`03-evaluation-quality-intelligence.md`](./03-evaluation-quality-intelligence.md)
 * Cat 17 (closed-loop — `MetricStudioHook.on_metric_promotion`):
   [`17-closed-loop-wiring.md`](./17-closed-loop-wiring.md)
 * SLM Initiative (the v1.4 plan for per-tenant LoRA):
-  [`../eden-judge-v2-plan.md`](../eden-judge-v2-plan.md)
+  [`..//observability/judge-v2-plan`](/observability/judge-v2-plan)
 * Research: Braintrust generate-scorer; Langfuse
   custom Python evaluators; Galileo CLHF; OpenRS Open
   Rubric; Microsoft LLM-Rubric (ACL 2024)
@@ -556,7 +556,7 @@ wiring demonstrated end-to-end.
 intentionally minimal — rubric + LLM-as-judge, no
 fine-tuning. The Luna-Studio SLM-as-judge path
 (per-tenant LoRA fine-tuner) is a separate deferred
-initiative tracked at `docs/eden-judge-v2-plan.md`.
+initiative tracked at `docs/observability/judge-v2-plan.md`.
 The v1.3 cat ships in 1 day because the
 synthesiser + judge + registry + hook pattern is the
 same shape as Cat 16's decision package; the

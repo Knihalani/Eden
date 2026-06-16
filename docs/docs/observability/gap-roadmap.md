@@ -112,7 +112,7 @@ author: Eden Observability Team
 > no automatic billing for LLM judge calls without
 > consent. This is non-negotiable — see § Conventions.
 > **The full Luna-2-style SLM-as-judge plan is in a
-> separate document at `docs/eden-judge-v2-plan.md`** —
+> separate document at `docs/observability/judge-v2-plan.md`** —
 > it covers the base model (**Qwen 3.5 4B** — Apache
 > 2.0, 262K context, natively multimodal, MMLU-Redux
 > 88.8, vLLM-native; SmolLM3 3B as fallback), the curated
@@ -143,7 +143,7 @@ author: Eden Observability Team
 > `columnar/`, `dsl/`, `time_travel/`, `metric_studio/`;
 > +1 in v1.4: `apm_depth/`; +1 in v1.6: `code_change/`),
 > 19 docs (+4 appendices in v1.3, +1 in v1.4, +1 in v1.6),
-> 1 separate plan document (`eden-judge-v2-plan.md` for
+> 1 separate plan document (`/observability/judge-v2-plan` for
 > the SLM work).
 > **v1.6 additions (2026-06-12):** **Cat 23 (Autonomous
 > Code Modification & Self-Healing Codebase)** ships. This
@@ -158,7 +158,7 @@ author: Eden Observability Team
 > `PromotionHook` and the Cat 17b `DSLHook` /
 > `ColumnarHook` / `MetricStudioHook` /
 > `JudgeBudgetHook`. The full plan is below; the
-> appendix is `docs/observability-gap/
+> appendix is `docs/observability/
 > 23-autonomous-code-modification.md`.
 > **Effort to ship all stubs:** 4-6 working days (completed).
 > **Effort to fully implement:** 6-12 months, prioritised by ROI.
@@ -242,7 +242,7 @@ as typed stubs so the team can flesh out features incrementally
 without re-architecting:
 
 * **1 master doc** (this file) + **17 appendices** in
-  `docs/observability-gap/`
+  `docs/observability/`
 * **1 consolidated migration** (`020_intelligence_gap_tables.py`,
   62 tables)
 * **15 new FastAPI routers** with **99 new routes**
@@ -1914,7 +1914,7 @@ recommendation (advisory only). The real Gate-1
 generator + reverter.
 
 See the v1.6 STUB verification checklist below
-and `docs/observability-gap/23-autonomous-code-modification.md`
+and `docs/observability/23-autonomous-code-modification.md`
 for the full 10-section appendix.
 
 **The agent's primary UX is the PR Inbox.**
@@ -4304,7 +4304,7 @@ opt-in flag.
   standard. **No Luna-Studio SLM fine-tune in v1.3** —
   the Luna path is a separate deferred initiative.)
   **The full Luna-2-style SLM-as-judge plan lives in
-  `docs/eden-judge-v2-plan.md`** — base model
+  `docs/observability/judge-v2-plan.md`** — base model
   (Qwen 3.5 4B), curated datasets (UltraFeedback,
   HelpSteer2, Prometheus, Auto-J, +4 in-house
   synthetic), SFT → DPO training recipe, vLLM + AWQ-4bit
@@ -4784,7 +4784,7 @@ training, no GPU. Latency: ~1.5s per scoring call. Cost:
 GPT-4o class. **Mirrors Braintrust, Langfuse, and pre-Luna
 Galileo** — the Luna-Studio SLM-as-judge path is a separate
 deferred initiative. **The full plan lives in
-`docs/eden-judge-v2-plan.md`** (Qwen 3.5 4B base, 10 LoRA
+`docs/observability/judge-v2-plan.md`** (Qwen 3.5 4B base, 10 LoRA
 heads, vLLM + AWQ-4bit serving, 8-week rollout, $4.2k
 training cost, 50-90× cost reduction vs GPT-4o).
 
@@ -5240,7 +5240,7 @@ fires correctly on a synthetic incident.
   They must share the deployment-SHA convention.
 * **Mitigation:** both use `deployment_sha VARCHAR(64)` with the
   same semantic meaning. Spec'd in this master doc and in
-  `docs/observability-gap/03-evaluation-quality-intelligence.md`.
+  `docs/observability/03-evaluation-quality-intelligence.md`.
 * **Status:** ✓ implemented.
 
 ### CLHF / Luna-2 ambiguity
@@ -6353,7 +6353,7 @@ All 10 verification steps from the plan file:
 - [x] **Lint clean:** no import errors, all module imports
   verified.
 - [x] **Docs render:** 18 docs (1 master + 17 appendices) in
-  `/docs/observability-gap/`.
+  `/docs/observability/`.
 - [x] **OpenAPI complete:** 15 `intelligence-*` tags visible
   in `/openapi.json`.
 - [x] **Feature flag works:** with `INTELLIGENCE_GAP_V0=false`,
@@ -6413,7 +6413,7 @@ co-located under the replay router at
   `tests/unit/observability/ingestion/` = 335/335 pass.
 - [x] **Migration unchanged:** `020_intelligence_gap_tables.py`
   is the only schema needed; no migration 021 required.
-- [x] **Cat 16 appendix updated:** `docs/observability-gap/
+- [x] **Cat 16 appendix updated:** `docs/observability/
   16-decision-intelligence.md` now reads
   `status: IMPLEMENTED v1` and the status blurb points to the
   real package.
@@ -6469,7 +6469,7 @@ the 3 Cat 2 tables added in migration 020.
   pass.
 - [x] **Migration unchanged:** `020_intelligence_gap_tables.py`
   is the only schema needed; no migration 021 required.
-- [x] **Cat 2 appendix updated:** `docs/observability-gap/
+- [x] **Cat 2 appendix updated:** `docs/observability/
   02-root-cause-incidents.md` now reads
   `status: IMPLEMENTED v1` and the algorithm section shows
   the actual rule table + deterministic-key clustering.
@@ -6532,7 +6532,7 @@ tables added in migration 020.
 - [x] **Migration unchanged:** `020_intelligence_gap_tables.py`
   is the only schema needed; no migration 021 required.
 - [x] **Cat 4 appendix updated:**
-  `docs/observability-gap/04-retrieval-intelligence.md`
+  `docs/observability/04-retrieval-intelligence.md`
   now reads `status: IMPLEMENTED v1` and the algorithm
   section describes the real implementation. The 6
   acceptance criteria checkboxes are now checked.
@@ -6601,7 +6601,7 @@ persisting to the 2 Cat 8 tables added in migration 020.
   `020_intelligence_gap_tables.py` is the only schema
   needed; no migration 021 required.
 - [x] **Cat 8 appendix updated:**
-  `docs/observability-gap/08-cost-intelligence.md` now
+  `docs/observability/08-cost-intelligence.md` now
   reads `status: IMPLEMENTED v1` and the algorithm
   section describes the real implementation. The 5
   acceptance criteria checkboxes are now checked.
@@ -6783,7 +6783,7 @@ department, window)` rollup that the front-end renders.
   `outcomes` and `outcome_department_rollups` tables
   were already in 020.
 - [x] **Cat 11 appendix updated:** status badge in
-  `docs/eden-observability-gap-roadmap.md` flipped from
+  `docs/observability/gap-roadmap.md` flipped from
   🟡 STUB to ✅ IMPLEMENTED v1; per-category write-up
   rewritten with "what's already in Eden" and "what
   ships next" sections matching the Cat 2 / Cat 8 / Cat
@@ -6888,7 +6888,7 @@ new `custom_metric_runs` table + the
   `organizations.features.custom_metrics` (no schema
   change needed).
 - [x] **Cat 21 appendix updated:**
-  `docs/observability-gap/21-custom-metric-studio.md`
+  `docs/observability/21-custom-metric-studio.md`
   now reads `status: ✅ IMPLEMENTED v1` and the "What's
   already in Eden" section describes the real
   implementation. The 9 acceptance criteria checkboxes
@@ -6939,7 +6939,7 @@ table and persisting to the 3 Cat 5 tables
   already in `020_intelligence_gap_tables.py`; no new
   migration required.
 - [x] **Cat 5 appendix updated:**
-  `docs/observability-gap/05-memory-intelligence.md`
+  `docs/observability/05-memory-intelligence.md`
   now reads `status: IMPLEMENTED v1` and a `## Ship log`
   section documents the v1 services + verification.
 - [x] **Master roadmap updated:** status matrix now
@@ -7049,7 +7049,7 @@ substrate, and persisting to the 3 Cat 18 tables
   the SLA-breach detector). Downgrade drops the
   indexes + the tables.
 - [x] **Cat 18 appendix updated:**
-  `docs/observability-gap/18-query-performance.md`
+  `docs/observability/18-query-performance.md`
   now reads `status: ✅ IMPLEMENTED v1` and a
   `## Ship log` section documents the v1 services +
   verification.
@@ -7139,7 +7139,7 @@ and persisting to the 5 Cat 6 tables in migration 020.
   already in `020_intelligence_gap_tables.py`; no
   new migration required.
 - [x] **Cat 6 appendix updated:**
-  `docs/observability-gap/06-agent-intelligence.md`
+  `docs/observability/06-agent-intelligence.md`
   now reads `status: ✅ IMPLEMENTED v1` and a
   `## Ship log` section documents the v1 services +
   verification.
@@ -7260,7 +7260,7 @@ cross-cat write to `guardrail_policies` from
   `020_intelligence_gap_tables.py` is the only schema
   needed; no migration 021 required.
 - [x] **Cat 3 appendix updated:**
-  `docs/observability-gap/03-evaluation-quality-intelligence.md`
+  `docs/observability/03-evaluation-quality-intelligence.md`
   now reads `status: IMPLEMENTED v1` and the acceptance
   criteria checkboxes are all checked. The verification
   checklist at the bottom of the appendix mirrors this
@@ -7324,7 +7324,7 @@ the 4 Cat 1 tables added in migration 020.
   pass.
 - [x] **Migration unchanged:** `020_intelligence_gap_tables.py`
   is the only schema needed; no migration 021 required.
-- [x] **Cat 1 appendix updated:** `docs/observability-gap/
+- [x] **Cat 1 appendix updated:** `docs/observability/
   01-trace-replay.md` now reads `status: IMPLEMENTED v1` and
   the status blurb points to the real packages.
 - [x] **Master roadmap updated:** status matrix now shows
@@ -7431,7 +7431,7 @@ tables in migration 020.
   already in `020_intelligence_gap_tables.py`; no new
   migration required.
 - [x] **Cat 7 appendix updated:**
-  `docs/observability-gap/07-tool-intelligence.md` now
+  `docs/observability/07-tool-intelligence.md` now
   reads `status: ✅ IMPLEMENTED v1` and the
   "What's already in Eden" section describes the real
   implementation. The 11 acceptance criteria checkboxes
@@ -7590,7 +7590,7 @@ the GPU spend. The Cat 21 package layout,
 forward-compatible with the Luna path (adding
 `fine_tuner.py` + `custom_metric_runs.finetune_*` columns
 is a non-breaking change). **The full plan lives in
-`docs/eden-judge-v2-plan.md`** (Qwen 3.5 4B base, 10 LoRA
+`docs/observability/judge-v2-plan.md`** (Qwen 3.5 4B base, 10 LoRA
 heads, vLLM + AWQ-4bit serving, 8-week rollout, $4.2k
 training cost, 50-90× cost reduction vs GPT-4o).
 
@@ -7933,7 +7933,7 @@ router (``intelligence_code_change.py``, ~500 lines,
 lines / 73 tests), 1 new hook class (``CodeChangeHook``,
 ~90 LOC) in ``promotion_hooks.py``, 1 mount block in
 ``app.py`` (2 lines). 1 new appendix
-(``docs/observability-gap/23-autonomous-code-modification.md``,
+(``docs/observability/23-autonomous-code-modification.md``,
 ~2,700 words following the standard 10-section skeleton
 + the 4-gate rollout plan + the 10 open questions).
 
@@ -7965,34 +7965,34 @@ and the daily budget supports 1,000+ patches. **Cat
 
 ## Appendix index
 
-The 18 appendices in `/docs/observability-gap/`:
+The 18 appendices in `/docs/observability/`:
 
-1. [01 — Trace Replay & Workflow](./observability-gap/01-trace-replay.md)
-2. [02 — Root Cause Attribution & Incident Clustering](./observability-gap/02-root-cause-incidents.md)
-3. [03 — Evaluation Quality Intelligence](./observability-gap/03-evaluation-quality-intelligence.md)
-4. [04 — Retrieval Intelligence](./observability-gap/04-retrieval-intelligence.md)
-5. [05 — Memory Intelligence](./observability-gap/05-memory-intelligence.md)
-6. [06 — Agent Intelligence (incl. Fleet)](./observability-gap/06-agent-intelligence.md)
-7. [07 — Tool Intelligence](./observability-gap/07-tool-intelligence.md)
-8. [08 — Cost Intelligence](./observability-gap/08-cost-intelligence.md)
-9. [09 — User Intelligence (incl. Conversation + Feedback)](./observability-gap/09-user-intelligence.md)
-10. [10 — Governance Intelligence (incl. Compliance + Security)](./observability-gap/10-governance-intelligence.md)
-11. [11 — Outcome / ROI Intelligence](./observability-gap/11-outcome-roi-intelligence.md)
-12. [12 — Experimentation Intelligence (incl. Simulation)](./observability-gap/12-experimentation-intelligence.md)
-13. [13 — Predictive Intelligence (incl. Drift)](./observability-gap/13-predictive-intelligence.md)
-14. [14 — Autonomous Intelligence (incl. NL Interface)](./observability-gap/14-autonomous-intelligence.md)
-15. [15 — Runtime Protection & Guardrails](./observability-gap/15-runtime-protection-guardrails.md) ⭐ NEW
-16. [16 — Decision Intelligence](./observability-gap/16-decision-intelligence.md) ⭐ NEW
-17. [17 — Closed-loop Wiring](./observability-gap/17-closed-loop-wiring.md)
-18. [18 — Query Performance / Columnar Engine](./observability-gap/18-query-performance.md) ⭐ NEW (v1.3)
-19. [19 — Trace Query DSL / EQL](./observability-gap/19-trace-query-dsl.md) ⭐ NEW (v1.3)
-20. [20 — Time-Travel Debugging](./observability-gap/20-time-travel-debugging.md) ⭐ NEW (v1.3)
-21. [21 — Custom-Metric Studio](./observability-gap/21-custom-metric-studio.md) ⭐ NEW (v1.3)
-22. [22 — APM Depth + Tracing Depth](./observability-gap/22-apm-tracing-depth.md) ⭐ NEW (v1.4)
-23. [23 — Autonomous Code Modification & Self-Healing Codebase](./observability-gap/23-autonomous-code-modification.md) ⭐ NEW (v1.6)
+1. [01 — Trace Replay & Workflow](./01-trace-replay.md)
+2. [02 — Root Cause Attribution & Incident Clustering](./02-root-cause-incidents.md)
+3. [03 — Evaluation Quality Intelligence](./03-evaluation-quality-intelligence.md)
+4. [04 — Retrieval Intelligence](./04-retrieval-intelligence.md)
+5. [05 — Memory Intelligence](./05-memory-intelligence.md)
+6. [06 — Agent Intelligence (incl. Fleet)](./06-agent-intelligence.md)
+7. [07 — Tool Intelligence](./07-tool-intelligence.md)
+8. [08 — Cost Intelligence](./08-cost-intelligence.md)
+9. [09 — User Intelligence (incl. Conversation + Feedback)](./09-user-intelligence.md)
+10. [10 — Governance Intelligence (incl. Compliance + Security)](./10-governance-intelligence.md)
+11. [11 — Outcome / ROI Intelligence](./11-outcome-roi-intelligence.md)
+12. [12 — Experimentation Intelligence (incl. Simulation)](./12-experimentation-intelligence.md)
+13. [13 — Predictive Intelligence (incl. Drift)](./13-predictive-intelligence.md)
+14. [14 — Autonomous Intelligence (incl. NL Interface)](./14-autonomous-intelligence.md)
+15. [15 — Runtime Protection & Guardrails](./15-runtime-protection-guardrails.md) ⭐ NEW
+16. [16 — Decision Intelligence](./16-decision-intelligence.md) ⭐ NEW
+17. [17 — Closed-loop Wiring](./17-closed-loop-wiring.md)
+18. [18 — Query Performance / Columnar Engine](./18-query-performance.md) ⭐ NEW (v1.3)
+19. [19 — Trace Query DSL / EQL](./19-trace-query-dsl.md) ⭐ NEW (v1.3)
+20. [20 — Time-Travel Debugging](./20-time-travel-debugging.md) ⭐ NEW (v1.3)
+21. [21 — Custom-Metric Studio](./21-custom-metric-studio.md) ⭐ NEW (v1.3)
+22. [22 — APM Depth + Tracing Depth](./22-apm-tracing-depth.md) ⭐ NEW (v1.4)
+23. [23 — Autonomous Code Modification & Self-Healing Codebase](./23-autonomous-code-modification.md) ⭐ NEW (v1.6)
 
 **Separate plan document (not in the 16/22/23 cats):**
-24. [Eden Judge v2 — SLM-as-Judge Plan](./eden-judge-v2-plan.md) ⭐ NEW (v1.4) — Luna-2-style in-house SLM
+24. [Eden Judge v2 — SLM-as-Judge Plan](/observability/judge-v2-plan) ⭐ NEW (v1.4) — Luna-2-style in-house SLM
 
 **v1.6 appendix 23 includes (in addition to the standard
 10-section skeleton):**
@@ -8041,8 +8041,8 @@ Each appendix follows the same 10-section skeleton:
 * v1.6 sandbox worker: `src/eden/sandbox/eden_ci/` ⭐ NEW
 * v1.6 knowledge graph: `src/eden/code_change/knowledge_graph.py` ⭐ NEW
 * Eden existing architecture docs: `/docs/eden-*.md`
-* v1.6 appendix: `docs/observability-gap/23-autonomous-code-modification.md` ⭐ NEW
-* SLM Initiative (v1.4 dependency): `docs/eden-judge-v2-plan.md`
+* v1.6 appendix: `docs/observability/23-autonomous-code-modification.md` ⭐ NEW
+* SLM Initiative (v1.4 dependency): `docs/observability/judge-v2-plan.md`
 
 ---
 
@@ -8141,7 +8141,7 @@ lines), 1 new router
 (`CodeChangeHook`, ~80 LOC) in
 `promotion_hooks.py`, 1 mount block in
 `app.py` (2 lines). 1 new appendix
-(`docs/observability-gap/
+(`docs/observability/
 23-autonomous-code-modification.md`, ~2,500
 words following the standard 10-section
 skeleton + the v1.6-specific security review

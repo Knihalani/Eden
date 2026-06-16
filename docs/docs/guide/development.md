@@ -83,5 +83,5 @@ mypy src/eden
 ## Architecture docs
 
 - `docs/ARCHITECTURE.md` — high-level system design
-- `eden-development-roadmap.md` — active roadmap
+- `/observability/roadmap` — active roadmap
 - `eden-master-architecture-index.md` — full doc index

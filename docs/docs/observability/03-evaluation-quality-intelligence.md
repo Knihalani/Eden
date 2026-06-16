@@ -945,10 +945,10 @@ closed-loop hooks fired (`on_judge_regression`,
 
 ## Cross-references
 
-* Master doc: [`eden-observability-gap-roadmap.md`](../eden-observability-gap-roadmap.md)
-* Stub envelope: [`src/eden/intelligence_envelope.py`](../../src/eden/intelligence_envelope.py)
-* Closed-loop hooks: [`src/eden/llmops/promotion_hooks.py`](../../src/eden/llmops/promotion_hooks.py)
+* Master doc: [`eden-observability-gap-roadmap.md`](/observability/gap-roadmap)
+* Stub envelope: `src/eden/intelligence_envelope.py`
+* Closed-loop hooks: `src/eden/llmops/promotion_hooks.py`
 * Cat 15 (Guardrails): [`15-runtime-protection-guardrails.md`](./15-runtime-protection-guardrails.md)
 * Cat 16 (Decision): [`16-decision-intelligence.md`](./16-decision-intelligence.md)
-* Existing judges: [`src/eden/llmops/judges/`](../../src/eden/llmops/judges/)
-* Auto-dataset: [`src/eden/evaluation/auto_dataset.py`](../../src/eden/evaluation/auto_dataset.py)
+* Existing judges: `src/eden/llmops/judges/`
+* Auto-dataset: `src/eden/evaluation/auto_dataset.py`

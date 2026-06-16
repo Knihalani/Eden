@@ -472,10 +472,10 @@ Target: **~30 tests, ~1.2s.**
 
 ## Cross-references
 
-* Master doc: [`eden-observability-gap-roadmap.md`](../eden-observability-gap-roadmap.md) § Cat 9
-* Stub envelope: [`src/eden/intelligence_envelope.py`](../../src/eden/intelligence_envelope.py)
-* Existing user feedback stub: [`src/eden/services/user_intel/analytics.py`](../../src/eden/services/user_intel/analytics.py)
-* Session store: [`src/eden/storage/redis.py`](../../src/eden/storage/redis.py) line 233
+* Master doc: [`eden-observability-gap-roadmap.md`](/observability/gap-roadmap) § Cat 9
+* Stub envelope: `src/eden/intelligence_envelope.py`
+* Existing user feedback stub: `src/eden/services/user_intel/analytics.py`
+* Session store: `src/eden/storage/redis.py` line 233
 * Cat 11 (Outcome — uses user_behavioural_signals as a
   ROI input): [`11-outcome-roi-intelligence.md`](./11-outcome-roi-intelligence.md)
 * Cat 3 (Evaluation — UserSatisfactionJudge consumes the

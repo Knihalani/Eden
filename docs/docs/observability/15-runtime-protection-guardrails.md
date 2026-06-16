@@ -593,11 +593,11 @@ Dashboards (in the existing Grafana setup):
 
 ## Cross-references
 
-* Master doc: [`eden-observability-gap-roadmap.md`](../eden-observability-gap-roadmap.md)
-* Stub envelope: [`src/eden/intelligence_envelope.py`](../../src/eden/intelligence_envelope.py)
+* Master doc: [`eden-observability-gap-roadmap.md`](/observability/gap-roadmap)
+* Stub envelope: `src/eden/intelligence_envelope.py`
 * Cat 3 (Eval Quality — the source of judge_link policies):
   [`03-evaluation-quality-intelligence.md`](./03-evaluation-quality-intelligence.md)
 * Cat 17 (Closed-loop — auto-disables noisy guardrails):
   [`17-closed-loop-wiring.md`](./17-closed-loop-wiring.md)
-* Existing PII policy: [`src/eden/api/routes/pii_policy.py`](../../src/eden/api/routes/pii_policy.py)
-* Existing judges: [`src/eden/llmops/judges/`](../../src/eden/llmops/judges/)
+* Existing PII policy: `src/eden/api/routes/pii_policy.py`
+* Existing judges: `src/eden/llmops/judges/`

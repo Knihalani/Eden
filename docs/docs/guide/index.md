@@ -1,5 +1,4 @@
 ---
-id: guide-index
 title: Guide
 sidebar_label: Overview
 sidebar_position: 1

@@ -454,13 +454,13 @@ Target: **~20 tests, ~0.9s.**
 
 ## Cross-references
 
-* Master doc: [`eden-observability-gap-roadmap.md`](../eden-observability-gap-roadmap.md) § Cat 20
+* Master doc: [`eden-observability-gap-roadmap.md`](/observability/gap-roadmap) § Cat 20
 * Existing CheckpointService (Cat 1):
-  [`src/eden/observability/checkpoint.py`](../../src/eden/observability/checkpoint.py)
+  `src/eden/observability/checkpoint.py`
 * SemanticCache (the cache substrate):
-  [`src/eden/llmops/semantic_cache.py`](../../src/eden/llmops/semantic_cache.py)
+  `src/eden/llmops/semantic_cache.py`
 * AIGateway (the live-step path):
-  [`src/eden/llmops/ai_gateway.py`](../../src/eden/llmops/ai_gateway.py)
+  `src/eden/llmops/ai_gateway.py`
 * Cat 1 (Cat 20 extends the CheckpointService):
   [`01-trace-replay.md`](./01-trace-replay.md)
 * Cat 17 (closed-loop — replays feed the

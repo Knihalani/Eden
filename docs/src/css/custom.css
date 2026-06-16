@@ -590,3 +590,121 @@ td {
 html {
   scroll-behavior: smooth;
 }
+
+/* ============================================================
+   404 page
+   ============================================================ */
+.eden-404 {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 60vh;
+  padding: 4rem 1rem;
+  background:
+    radial-gradient(ellipse at center, rgba(239, 68, 68, 0.05), transparent 60%);
+}
+
+.eden-404__inner {
+  max-width: 36rem;
+  text-align: center;
+}
+
+.eden-404__code {
+  font-family: var(--ifm-font-family-monospace);
+  font-size: 7rem;
+  font-weight: 700;
+  letter-spacing: -0.05em;
+  line-height: 1;
+  background: linear-gradient(90deg, #3b82f6, #60a5fa, #ef4444);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  margin-bottom: 1rem;
+}
+
+.eden-404__title {
+  font-family: var(--ifm-font-family-monospace);
+  font-size: 1.8rem;
+  font-weight: 600;
+  color: #f3f4f6;
+  margin: 0 0 1rem;
+}
+
+.eden-404__prompt {
+  color: #3b82f6;
+  margin-right: 0.5rem;
+}
+
+.eden-404__subtitle {
+  color: #9ca3af;
+  font-size: 1.05rem;
+  line-height: 1.6;
+  margin: 0 0 2rem;
+}
+
+.eden-404__cta {
+  display: flex;
+  gap: 0.8rem;
+  justify-content: center;
+  flex-wrap: wrap;
+  margin-bottom: 3rem;
+}
+
+.eden-404__hints {
+  background: #0d0d0d;
+  border: 1px solid #1f1f1f;
+  border-radius: 8px;
+  padding: 1.5rem;
+  text-align: left;
+}
+
+.eden-404__hint-label {
+  font-family: var(--ifm-font-family-monospace);
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #6b7280;
+  margin-bottom: 0.8rem;
+}
+
+.eden-404__hints ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 0.5rem;
+}
+
+.eden-404__hints ul li::before {
+  content: "→";
+  color: #3b82f6;
+  margin-right: 0.4rem;
+  font-family: var(--ifm-font-family-monospace);
+}
+
+.eden-404__hints ul li a {
+  color: #d1d5db;
+  font-size: 0.9rem;
+  text-decoration: none;
+  border-bottom: 1px solid transparent;
+}
+
+.eden-404__hints ul li a:hover {
+  color: #93c5fd;
+  border-bottom-color: #3b82f6;
+}
+
+[data-theme='light'] .eden-404__hints {
+  background: #ffffff;
+  border-color: #e5e7eb;
+}
+
+[data-theme='light'] .eden-404__subtitle,
+[data-theme='light'] .eden-404__hints ul li a {
+  color: #4b5563;
+}
+
+[data-theme='light'] .eden-404__title {
+  color: #0a0a0a;
+}

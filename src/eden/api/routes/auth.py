@@ -142,10 +142,15 @@ async def signup(request: SignupRequest, response: Response):
         path="/",
     )
 
-    return SignupResponse(
+    # Mirror /auth/login: return the full UserResponse (with empty
+    # organizations[]) so the frontend's useAuth() can populate the
+    # context in a single roundtrip.
+    return UserResponse(
         user_id=user_id,
         email=request.email,
-        message="Account created successfully",
+        name=request.name,
+        organizations=[],
+        current_org_id=None,
     )
 
 
@@ -189,10 +194,37 @@ async def login(request: LoginRequest, response: Response):
         path="/",
     )
 
+    # Fetch the user's organizations + preferred_org_id so the
+    # frontend's useAuth() can populate the user context in a
+    # single roundtrip (instead of the older pattern of
+    # /auth/login + /auth/me). Saves one HTTP request per login
+    # and avoids a race where the second request reads before the
+    # Set-Cookie header has settled on the first.
+    user_full = await client.fetchrow(
+        "SELECT two_factor_enabled, preferred_org_id FROM users WHERE id = $1",
+        user_id,
+    )
+    org_rows = await client.fetch(
+        """
+        SELECT o.id, o.name, o.slug, om.role
+          FROM org_members om
+          JOIN organizations o ON o.id = om.org_id
+         WHERE om.user_id = $1
+         ORDER BY o.name
+        """,
+        user_id,
+    )
+    organizations = [
+        {"id": str(r["id"]), "name": r["name"], "slug": r["slug"], "role": r["role"]}
+        for r in org_rows
+    ]
     return UserResponse(
         user_id=user_id,
         email=row["email"],
         name=row["name"],
+        two_factor_enabled=bool(user_full.get("two_factor_enabled", False)) if user_full else False,
+        organizations=organizations,
+        current_org_id=str(user_full["preferred_org_id"]) if user_full and user_full.get("preferred_org_id") else None,
     )
 
 

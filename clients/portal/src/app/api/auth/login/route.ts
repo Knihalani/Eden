@@ -1,13 +1,18 @@
-import { NextResponse } from "next/server";
-import { api } from "@/lib/api";
+import { cookies } from "next/headers";
+import { forwardToBackend, proxyError } from "@/lib/proxy";
 
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const data = await api.login(body);
-    return NextResponse.json(data);
+    // Read any existing session cookie so backend calls stay sticky
+    // during the login flow.
+    const cookieHeader = request.headers.get("cookie") ?? undefined;
+    return await forwardToBackend("/auth/login", {
+      method: "POST",
+      body,
+      cookieHeader,
+    });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Login failed";
-    return NextResponse.json({ detail: message }, { status: 401 });
+    return proxyError(error, "Login failed");
   }
 }

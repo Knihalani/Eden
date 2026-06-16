@@ -319,12 +319,12 @@ Target: **~15 tests, ~0.5s.**
 
 ## Cross-references
 
-* Master doc: [`eden-observability-gap-roadmap.md`](../eden-observability-gap-roadmap.md) § Cat 17
-* Hook file: [`src/eden/llmops/promotion_hooks.py`](../../src/eden/llmops/promotion_hooks.py)
+* Master doc: [`eden-observability-gap-roadmap.md`](/observability/gap-roadmap) § Cat 17
+* Hook file: `src/eden/llmops/promotion_hooks.py`
 * Promotion loop (the `rollback` callee):
-  [`src/eden/llmops/promotion.py`](../../src/eden/llmops/promotion.py)
+  `src/eden/llmops/promotion.py`
 * Production monitor (the event source):
-  [`src/eden/llmops/production_monitor.py`](../../src/eden/llmops/production_monitor.py)
+  `src/eden/llmops/production_monitor.py`
 * Cat 3 (judge — the `on_judge_regression` event
   source): [`03-evaluation-quality-intelligence.md`](./03-evaluation-quality-intelligence.md)
 * Cat 2 (RCA — the `on_drift_alert` event source):

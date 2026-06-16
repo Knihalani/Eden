@@ -2,7 +2,7 @@
 
 > **Owner:** Security & Compliance
 > **Review cadence:** monthly (see `docs/runbooks/security-training.md`)
-> **Status:** partial — see [§9.1.2 of the roadmap](./eden-development-roadmap.md) for the live status.
+> **Status:** partial — see [§9.1.2 of the roadmap](/observability/roadmap) for the live status.
 > **Source:** SOC 2 Type II — Trust Services Criteria (2017, updated 2022).
 
 This document maps every SOC 2 criterion to (a) the Eden component
@@ -17,7 +17,7 @@ for during a Type II engagement.
 | CC2.1 | Information & communication | Org-scoped RBAC + audit log | All cross-org data is blocked at the API layer | `src/eden/api/deps.py:get_current_org` + `migrations/020_rbac_custom_roles.sql` |
 | CC2.2 | Internal communication | Status page + on-call rotation | Incident updates posted to status page within 15 min | Status page log |
 | CC2.3 | External communication | Customer support + privacy@ inbox | Customer-impacting incidents emailed to all affected orgs | Email log + `docs/runbooks/security-training.md` |
-| CC3.1 | Risk assessment | Risk register (`docs/`) | Quarterly risk review meeting | `eden-development-roadmap.md` §11 |
+| CC3.1 | Risk assessment | Risk register (`docs/`) | Quarterly risk review meeting | `/observability/roadmap` §11 |
 | CC3.2 | Fraud risk | AI gateway cost controls + anomaly alerts | `cost_tracking` alarms when daily spend > 3x 30-day median | `src/eden/optimization/cost_tracker.py` + `src/eden/observability/alerts.py` |
 | CC4.1 | Monitoring activities | Telemetry + observability | All jobs emit `telemetry_events` rows; an anomaly detector runs nightly | `src/eden/observability/telemetry_collector.py` + `docs/runbooks/kb-audit.md` |
 | CC5.1 | Control activities — selection & development | Code review + CI | Every PR requires 2 approvals + green CI | `docs/BRANCH_PROTECTION.md` |
@@ -35,10 +35,10 @@ for during a Type II engagement.
 | CC7.4 | Incident recovery | DR drill | Quarterly restore-from-backup drill | `docs/runbooks/disaster-recovery-drill.md` + `docker/postgres/restore.sh` |
 | CC7.5 | Recovery testing | DR drill | See CC7.4 | Same |
 | CC8.1 | Change management | PR review + 2 approvals | Branch protection enforces 2 reviewers + green CI | `docs/BRANCH_PROTECTION.md` + `.github/CODEOWNERS` |
-| CC9.1 | Risk mitigation | Monitoring + alerts + DR | The §11 risk register is reviewed quarterly | `eden-development-roadmap.md` §11 |
+| CC9.1 | Risk mitigation | Monitoring + alerts + DR | The §11 risk register is reviewed quarterly | `/observability/roadmap` §11 |
 | CC9.2 | Vendor & business partner risks | Vendor list | Annual vendor risk review | Procurement records (out of Eden scope) |
 | A1.1 | Availability — capacity | Horizontal scaling | Stateless services; auto-scale group | K8s config (out of Eden scope) |
-| A1.2 | Environmental protections | Multi-region (planned) | Data residency for EU/US/Asia | `eden-development-roadmap.md` §6.5 (planned) |
+| A1.2 | Environmental protections | Multi-region (planned) | Data residency for EU/US/Asia | `/observability/roadmap` §6.5 (planned) |
 | A1.3 | Recovery — backup | `pg_dump` nightly | Daily `pg_dump` to S3 | `docker/postgres/backup.sh` |
 | C1.1 | Confidentiality — access restrictions | RBAC + tenant scoping | Every request scoped to a single org via `get_current_org` | `src/eden/api/deps.py:get_current_org` |
 | C1.2 | Confidentiality of disposed data | GDPR data deletion | Right-to-be-forgotten workflow | `src/eden/api/routes/audit.py:log_gdpr_request` |
