@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { api } from "@/lib/api";
+import { useOrg } from "@/hooks/use-org";
 import { cn } from "@/lib/utils";
 import { EmptyState } from "@/components/ui/empty-state";
 import { motion, AnimatePresence } from "framer-motion";
@@ -91,6 +92,7 @@ function formatTimestamp(ts: string): string {
 export default function TraceReplayPage() {
   const params = useParams();
   const router = useRouter();
+  const { currentOrg } = useOrg();
   const jobId = params.job_id as string;
 
   const [events, setEvents] = useState<TraceEvent[]>([]);
@@ -106,18 +108,22 @@ export default function TraceReplayPage() {
   const [showFilters, setShowFilters] = useState(false);
 
   const fetchTrace = useCallback(async () => {
+    if (!currentOrg?.id) return;
     try {
       setLoading(true);
-      const data = await api.getTraceReplay(jobId, 0, 2000);
-      setEvents(data.events);
-      if (data.summary) setSummary(data.summary);
+      const [replayData, summaryData] = await Promise.all([
+        api.getTraceReplay(currentOrg.id, jobId, 0, 1000),
+        api.getTraceSummary(currentOrg.id, jobId),
+      ]);
+      setEvents(replayData.events);
+      setSummary(summaryData);
       setError(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load trace");
     } finally {
       setLoading(false);
     }
-  }, [jobId]);
+  }, [currentOrg?.id, jobId]);
 
   useEffect(() => {
     fetchTrace();

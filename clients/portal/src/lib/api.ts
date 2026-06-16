@@ -1180,6 +1180,79 @@ export const api = {
     outcome: string | null;
   }> => fetchApi(`/orgs/${orgId}/observability/traces/${traceId}/tree`),
 
+  // ── Observability: trace replay (Replay page) ──────────────
+  // Paginated read of telemetry_events for a single trace via the
+  // Cat 1 intelligence replay service. The BE returns
+  // ``{events, next_cursor, total}`` and the Replay page consumes
+  // ``events`` directly. ``page_size`` is clamped to 1000 by the BE.
+  getTraceReplay: (
+    orgId: string,
+    traceId: string,
+    cursor: number = 0,
+    pageSize: number = 1000,
+  ): Promise<{
+    events: Array<{
+      event_id: string;
+      event_type: string;
+      timestamp: string;
+      sequence: number;
+      tenant_id: string;
+      user_id: string;
+      entity_id: string;
+      priority: string;
+      payload: Record<string, unknown>;
+      version: string;
+    }>;
+    next_cursor: number;
+    total: number;
+  }> =>
+    fetchApi(
+      `/orgs/${orgId}/intelligence/replay/${traceId}/replay`,
+      { method: "POST", body: JSON.stringify({ cursor, page_size: pageSize }) },
+    ),
+
+  // ── Observability: trace summary (Replay page header) ─────
+  // Synthesized from the timeline endpoint — the BE doesn't have a
+  // dedicated summary route. Returns event_count + types from the
+  // timeline steps so the page header has something meaningful
+  // without a second paginated read.
+  getTraceSummary: async (
+    orgId: string,
+    traceId: string,
+  ): Promise<{
+    event_count: number;
+    started_at: string;
+    ended_at: string;
+    duration_ms: number;
+    types: Record<string, number>;
+  }> => {
+    const tl = await fetchApi<{
+      trace_id: string;
+      steps: Array<{
+        start_ms: number;
+        end_ms: number;
+        event_type: string;
+      }>;
+    }>(`/orgs/${orgId}/observability/traces/${traceId}/timeline`);
+    const types: Record<string, number> = {};
+    let start = Number.POSITIVE_INFINITY;
+    let end = Number.NEGATIVE_INFINITY;
+    for (const step of tl.steps ?? []) {
+      types[step.event_type] = (types[step.event_type] ?? 0) + 1;
+      if (step.start_ms < start) start = step.start_ms;
+      if (step.end_ms > end) end = step.end_ms;
+    }
+    if (!Number.isFinite(start)) start = 0;
+    if (!Number.isFinite(end)) end = 0;
+    return {
+      event_count: tl.steps?.length ?? 0,
+      started_at: new Date(start).toISOString(),
+      ended_at: new Date(end).toISOString(),
+      duration_ms: Math.max(0, end - start),
+      types,
+    };
+  },
+
   // ── Observability: retention policy (Phase 7.3b) ─────────────
   // The existing `getRetentionPolicy` / `updateRetentionPolicy`
   // cover the singular config. ``listRetentionOverrides`` returns
