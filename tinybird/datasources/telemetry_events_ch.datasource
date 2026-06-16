@@ -1,0 +1,42 @@
+DESCRIPTION >
+    Generated from /tmp/sample_telemetry_events_ch.ndjson
+
+SCHEMA >
+    agent_id String `json:$.agent_id`,
+    agent_version String `json:$.agent_version`,
+    audio String `json:$.audio`,
+    cache_hit Int16 `json:$.cache_hit`,
+    citations String `json:$.citations`,
+    duration_ms Float32 `json:$.duration_ms`,
+    environment_id String `json:$.environment_id`,
+    event_id String `json:$.event_id`,
+    event_type String `json:$.event_type`,
+    finish_reason String `json:$.finish_reason`,
+    images String `json:$.images`,
+    ingested_at DateTime `json:$.ingested_at`,
+    logprobs String `json:$.logprobs`,
+    metrics String `json:$.metrics`,
+    model String `json:$.model`,
+    model_version String `json:$.model_version`,
+    name String `json:$.name`,
+    outcome String `json:$.outcome`,
+    project_id String `json:$.project_id`,
+    prompt_cache_savings_usd Float32 `json:$.prompt_cache_savings_usd`,
+    realm String `json:$.realm`,
+    reasoning String `json:$.reasoning`,
+    request_body String `json:$.request_body`,
+    response_body String `json:$.response_body`,
+    span_id String `json:$.span_id`,
+    tags String `json:$.tags`,
+    tenant_id String `json:$.tenant_id`,
+    timestamp DateTime `json:$.timestamp`,
+    tool_calls_full String `json:$.tool_calls_full`,
+    tool_results String `json:$.tool_results`,
+    trace_id String `json:$.trace_id`
+
+ENGINE "MergeTree"
+# ENGINE_SORTING_KEY "user_id, timestamp"
+# ENGINE_TTL "timestamp + toIntervalDay(60)"
+# Learn more at https://www.tinybird.co/docs/forward/dev-reference/datafiles/datasource-filesENGINE_PARTITION_KEY "toYYYYMM(timestamp)"
+ENGINE_SORTING_KEY "tenant_id, timestamp"
+ENGINE_TTL "toDateTime(timestamp) + toIntervalDay(90)"

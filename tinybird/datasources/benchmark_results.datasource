@@ -1,0 +1,17 @@
+DESCRIPTION >
+    Generated from /tmp/sample_benchmark_results.ndjson
+
+SCHEMA >
+    benchmark_id String `json:$.benchmark_id`,
+    duration_ms Int32 `json:$.duration_ms`,
+    event_type String `json:$.event_type`,
+    job_id String `json:$.job_id`,
+    passed Int16 `json:$.passed`,
+    score Float32 `json:$.score`,
+    tenant_id String `json:$.tenant_id`,
+    timestamp DateTime `json:$.timestamp`
+
+ENGINE "MergeTree"
+ENGINE_PARTITION_KEY "toYYYYMM(timestamp)"
+ENGINE_SORTING_KEY "tenant_id, benchmark_id, timestamp"
+ENGINE_TTL "toDateTime(timestamp) + toIntervalDay(2555)"
