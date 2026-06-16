@@ -83,14 +83,10 @@ dependencies = [
     "beautifulsoup4>=4.12.0,<5.0.0",  # for web scraping
     "lxml>=5.0.0,<6.0.0",
 
-    # Compression (Phase 3 + Phase 6 of the Postgres + Compression plan)
+    # Compression (Phase 3 of the Postgres + Compression plan)
     # zstandard: 4.76x avg compression on LLM prompt/response payloads (LoPace 2026).
     # Stored as BYTEA on telemetry_events (request_body_zstd, response_body_zstd).
     "zstandard>=0.23.0,<1.0.0",
-    # pyarrow + duckdb: Parquet+zstd-7 cold-tier export to Backblaze B2.
-    # DuckDB enables S3-compatible read path via httpfs for ad-hoc analytics.
-    "pyarrow>=15.0.0,<16.0.0",
-    "duckdb>=0.10.0,<1.0.0",
 ]
 
 [project.optional-dependencies]
