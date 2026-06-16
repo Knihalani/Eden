@@ -1,0 +1,592 @@
+/* Eden Docs — dark terminal theme.
+   Matches the Eden portal palette so the docs feel native. */
+
+:root {
+  --ifm-color-primary: #3b82f6;
+  --ifm-color-primary-dark: #2563eb;
+  --ifm-color-primary-darker: #1d4ed8;
+  --ifm-color-primary-darkest: #1e40af;
+  --ifm-color-primary-light: #60a5fa;
+  --ifm-color-primary-lighter: #93c5fd;
+  --ifm-color-primary-lightest: #bfdbfe;
+
+  --ifm-color-secondary: #60a5fa;
+  --ifm-color-success: #10b981;
+  --ifm-color-warning: #f59e0b;
+  --ifm-color-danger: #ef4444;
+  --ifm-color-info: #3b82f6;
+
+  --ifm-background-color: #0a0a0a;
+  --ifm-background-surface-color: #111111;
+
+  --ifm-code-background: #0d0d0d;
+  --ifm-code-color: #e5e7eb;
+  --ifm-code-font-size: 92%;
+
+  --ifm-font-family-base: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --ifm-font-family-monospace: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+
+  --ifm-heading-color: #f3f4f6;
+  --ifm-link-color: #60a5fa;
+  --ifm-link-hover-color: #93c5fd;
+  --ifm-table-head-background: #111111;
+  --ifm-table-stripe-background: #0d0d0d;
+  --ifm-hr-border-color: #1f1f1f;
+  --ifm-blockquote-border-left-color: #3b82f6;
+
+  --docusaurus-highlighted-code-line-bg: rgba(59, 130, 246, 0.12);
+}
+
+/* Light-mode tokens (used when the user toggles to light) */
+[data-theme='light'] {
+  --ifm-background-color: #ffffff;
+  --ifm-background-surface-color: #f8fafc;
+  --ifm-color-primary: #2563eb;
+  --ifm-color-primary-dark: #1d4ed8;
+  --ifm-color-primary-darker: #1e40af;
+  --ifm-color-primary-darkest: #1e3a8a;
+  --ifm-color-primary-light: #3b82f6;
+  --ifm-color-primary-lighter: #60a5fa;
+  --ifm-color-primary-lightest: #93c5fd;
+
+  --ifm-heading-color: #0a0a0a;
+  --ifm-link-color: #2563eb;
+  --ifm-table-head-background: #f1f5f9;
+  --ifm-table-stripe-background: #f8fafc;
+  --ifm-hr-border-color: #e5e7eb;
+}
+
+/* Body + typography */
+html,
+body {
+  background-color: var(--ifm-background-color);
+}
+
+body {
+  font-feature-settings: "ss01", "cv11";
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Navbar — terminal-style, sits on a flat black bar */
+.navbar {
+  background-color: #0a0a0a;
+  border-bottom: 1px solid #1f1f1f;
+  box-shadow: none;
+}
+
+.navbar__title {
+  font-family: var(--ifm-font-family-monospace);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: #f3f4f6;
+}
+
+.navbar__link {
+  font-family: var(--ifm-font-family-monospace);
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: #9ca3af;
+}
+
+.navbar__link:hover,
+.navbar__link--active {
+  color: #f3f4f6;
+}
+
+.navbar__items--right .navbar__link {
+  color: #9ca3af;
+}
+
+/* Sidebar */
+.theme-doc-sidebar-container {
+  background-color: #0a0a0a;
+  border-right: 1px solid #1f1f1f;
+}
+
+.menu__link {
+  font-family: var(--ifm-font-family-monospace);
+  font-size: 0.85rem;
+  color: #9ca3af;
+  border-radius: 4px;
+}
+
+.menu__link:hover {
+  background-color: #111111;
+  color: #f3f4f6;
+}
+
+.menu__link--active {
+  background-color: rgba(59, 130, 246, 0.12);
+  color: #93c5fd;
+}
+
+.menu__list-item-collapsible .menu__link {
+  font-weight: 600;
+  color: #e5e7eb;
+}
+
+/* Doc content */
+article header h1 {
+  font-family: var(--ifm-font-family-monospace);
+  letter-spacing: -0.02em;
+}
+
+.markdown h1,
+.markdown h2,
+.markdown h3,
+.markdown h4 {
+  font-family: var(--ifm-font-family-monospace);
+  font-weight: 600;
+  letter-spacing: -0.015em;
+}
+
+.markdown h2 {
+  border-bottom: 1px solid #1f1f1f;
+  padding-bottom: 0.4rem;
+}
+
+.markdown p,
+.markdown li {
+  color: #d1d5db;
+  line-height: 1.7;
+}
+
+.markdown a {
+  text-decoration: none;
+  border-bottom: 1px solid rgba(59, 130, 246, 0.4);
+}
+
+.markdown a:hover {
+  border-bottom-color: #93c5fd;
+}
+
+.markdown blockquote {
+  background-color: rgba(59, 130, 246, 0.06);
+  border-left: 3px solid #3b82f6;
+  color: #d1d5db;
+  border-radius: 0 4px 4px 0;
+  font-style: normal;
+}
+
+/* Code blocks */
+code {
+  background-color: #111111;
+  border: 1px solid #1f1f1f;
+  color: #e5e7eb;
+  border-radius: 3px;
+  padding: 0.1rem 0.35rem;
+}
+
+pre {
+  background-color: #0d0d0d;
+  border: 1px solid #1f1f1f;
+  border-radius: 6px;
+}
+
+pre code {
+  background: transparent;
+  border: 0;
+  padding: 0;
+}
+
+/* Tables */
+table {
+  border: 1px solid #1f1f1f;
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+th {
+  color: #f3f4f6;
+  font-family: var(--ifm-font-family-monospace);
+  font-weight: 600;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+td {
+  border-top: 1px solid #1f1f1f;
+}
+
+/* Footer */
+.footer {
+  background-color: #0a0a0a;
+  border-top: 1px solid #1f1f1f;
+}
+
+.footer__title {
+  font-family: var(--ifm-font-family-monospace);
+  color: #f3f4f6;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.footer__link-item {
+  color: #9ca3af;
+  font-size: 0.85rem;
+}
+
+.footer__link-item:hover {
+  color: #f3f4f6;
+}
+
+.footer__copyright {
+  color: #6b7280;
+  font-size: 0.8rem;
+}
+
+/* Table of contents (right rail) */
+.table-of-contents__link {
+  color: #9ca3af;
+  font-family: var(--ifm-font-family-monospace);
+  font-size: 0.8rem;
+}
+
+.table-of-contents__link--active {
+  color: #93c5fd;
+}
+
+/* Pagination */
+.pagination-nav__link {
+  background-color: #0d0d0d;
+  border: 1px solid #1f1f1f;
+  border-radius: 6px;
+}
+
+.pagination-nav__link:hover {
+  border-color: #3b82f6;
+}
+
+.pagination-nav__sublabel {
+  color: #9ca3af;
+  font-family: var(--ifm-font-family-monospace);
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.pagination-nav__label {
+  color: #f3f4f6;
+  font-weight: 600;
+}
+
+/* Admonitions */
+.admonition {
+  border-radius: 6px;
+  border-left-width: 4px;
+}
+
+.admonition-heading h5 {
+  font-family: var(--ifm-font-family-monospace);
+  text-transform: uppercase;
+  font-size: 0.75rem;
+  letter-spacing: 0.08em;
+}
+
+/* Code-block copy button */
+.theme-code-block button.copyButton,
+.theme-code-block .clean-btn {
+  color: #9ca3af;
+  background-color: transparent;
+  border: 1px solid #1f1f1f;
+  border-radius: 4px;
+}
+
+.theme-code-block button.copyButton:hover,
+.theme-code-block .clean-btn:hover {
+  color: #f3f4f6;
+  border-color: #3b82f6;
+}
+
+/* Badge / status pills (used by roadmap / observability pages) */
+.pill {
+  display: inline-block;
+  padding: 0.15rem 0.55rem;
+  font-family: var(--ifm-font-family-monospace);
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  border-radius: 999px;
+  border: 1px solid transparent;
+}
+
+.pill--shipped { background: rgba(16, 185, 129, 0.12); color: #34d399; border-color: rgba(16, 185, 129, 0.3); }
+.pill--stub    { background: rgba(245, 158, 11, 0.12); color: #fbbf24; border-color: rgba(245, 158, 11, 0.3); }
+.pill--planned { background: rgba(59, 130, 246, 0.12); color: #60a5fa; border-color: rgba(59, 130, 246, 0.3); }
+
+/* ============================================================
+   Hero (intro/index.md landing page)
+   ============================================================ */
+.eden-hero {
+  text-align: center;
+  padding: 5rem 1rem 3rem;
+  background:
+    radial-gradient(ellipse at top, rgba(59, 130, 246, 0.08), transparent 60%),
+    linear-gradient(180deg, #0a0a0a 0%, #0a0a0a 100%);
+  border-bottom: 1px solid #1f1f1f;
+  margin: -1rem -1rem 2rem;
+}
+
+.eden-hero__badge {
+  display: inline-block;
+  font-family: var(--ifm-font-family-monospace);
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  color: #60a5fa;
+  background: rgba(59, 130, 246, 0.08);
+  border: 1px solid rgba(59, 130, 246, 0.25);
+  padding: 0.3rem 0.9rem;
+  border-radius: 999px;
+  margin-bottom: 1.5rem;
+}
+
+.eden-hero__title {
+  font-family: var(--ifm-font-family-monospace);
+  font-size: clamp(2.2rem, 5vw, 3.4rem);
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  line-height: 1.1;
+  margin: 0 0 1.2rem;
+  color: #f3f4f6;
+}
+
+.eden-hero__title--accent {
+  background: linear-gradient(90deg, #3b82f6, #60a5fa, #93c5fd);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.eden-hero__subtitle {
+  font-size: 1.1rem;
+  color: #9ca3af;
+  max-width: 38rem;
+  margin: 0 auto 2rem;
+  line-height: 1.6;
+}
+
+.eden-hero__cta {
+  display: flex;
+  gap: 0.8rem;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+/* Buttons */
+.eden-btn {
+  display: inline-flex;
+  align-items: center;
+  font-family: var(--ifm-font-family-monospace);
+  font-size: 0.9rem;
+  font-weight: 600;
+  padding: 0.7rem 1.4rem;
+  border-radius: 6px;
+  text-decoration: none;
+  transition: all 0.15s ease;
+  border: 1px solid transparent;
+  white-space: nowrap;
+}
+
+.eden-btn--primary {
+  background: #3b82f6;
+  color: #ffffff;
+}
+
+.eden-btn--primary:hover {
+  background: #2563eb;
+  color: #ffffff;
+  transform: translateY(-1px);
+  box-shadow: 0 6px 20px rgba(59, 130, 246, 0.25);
+}
+
+.eden-btn--ghost {
+  background: transparent;
+  color: #e5e7eb;
+  border-color: #1f1f1f;
+}
+
+.eden-btn--ghost:hover {
+  border-color: #3b82f6;
+  color: #93c5fd;
+}
+
+/* ============================================================
+   Feature grid
+   ============================================================ */
+.eden-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 1rem;
+  margin: 1.5rem 0 2.5rem;
+}
+
+.eden-grid--compact {
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.eden-card {
+  background: #0d0d0d;
+  border: 1px solid #1f1f1f;
+  border-radius: 8px;
+  padding: 1.3rem;
+  transition: border-color 0.15s ease, transform 0.15s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.eden-card::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 3px;
+  height: 100%;
+  background: linear-gradient(180deg, #3b82f6, transparent);
+  opacity: 0.6;
+}
+
+.eden-card:hover {
+  border-color: #3b82f6;
+  transform: translateY(-2px);
+}
+
+.eden-card--small {
+  padding: 1rem 1.1rem;
+}
+
+.eden-card__icon {
+  font-size: 1.4rem;
+  margin-bottom: 0.6rem;
+}
+
+.eden-card h3 {
+  font-family: var(--ifm-font-family-monospace);
+  font-size: 1.05rem;
+  font-weight: 600;
+  margin: 0 0 0.5rem;
+  color: #f3f4f6;
+}
+
+.eden-card h4 {
+  font-family: var(--ifm-font-family-monospace);
+  font-size: 0.95rem;
+  font-weight: 600;
+  margin: 0 0 0.5rem;
+  color: #f3f4f6;
+  line-height: 1.5;
+}
+
+.eden-card p {
+  font-size: 0.9rem;
+  color: #9ca3af;
+  margin: 0 0 0.7rem;
+  line-height: 1.55;
+}
+
+.eden-card a {
+  font-family: var(--ifm-font-family-monospace);
+  font-size: 0.8rem;
+  color: #60a5fa;
+  text-decoration: none;
+  border-bottom: 1px solid transparent;
+}
+
+.eden-card a:hover {
+  border-bottom-color: #60a5fa;
+  color: #93c5fd;
+}
+
+.eden-card ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  font-size: 0.85rem;
+}
+
+.eden-card ul li {
+  padding: 0.15rem 0;
+  color: #9ca3af;
+}
+
+.eden-card ul li::before {
+  content: "→";
+  color: #3b82f6;
+  margin-right: 0.4rem;
+  font-family: var(--ifm-font-family-monospace);
+}
+
+.eden-card ul li a {
+  color: #d1d5db;
+  border: 0;
+  font-family: var(--ifm-font-family-base);
+  font-size: 0.85rem;
+}
+
+.eden-card ul li a:hover {
+  color: #93c5fd;
+}
+
+/* Announcement bar polish */
+.announcement-bar a {
+  color: #93c5fd;
+  text-decoration: underline;
+}
+
+.announcement-bar a:hover {
+  color: #bfdbfe;
+}
+
+/* GitHub star link in navbar */
+.navbar-github-link {
+  font-family: var(--ifm-font-family-monospace);
+  font-size: 0.8rem;
+  color: #fbbf24;
+  border: 1px solid rgba(251, 191, 36, 0.4);
+  border-radius: 4px;
+  padding: 0.3rem 0.7rem;
+  margin-left: 0.4rem;
+  transition: all 0.15s ease;
+}
+
+.navbar-github-link:hover {
+  background: rgba(251, 191, 36, 0.08);
+  color: #fcd34d;
+  border-color: rgba(251, 191, 36, 0.6);
+}
+
+/* Light mode adjustments */
+[data-theme='light'] .eden-hero {
+  background:
+    radial-gradient(ellipse at top, rgba(59, 130, 246, 0.06), transparent 60%),
+    linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+  border-bottom-color: #e5e7eb;
+}
+
+[data-theme='light'] .eden-card {
+  background: #ffffff;
+  border-color: #e5e7eb;
+}
+
+[data-theme='light'] .eden-card:hover {
+  border-color: #3b82f6;
+}
+
+[data-theme='light'] .eden-card p,
+[data-theme='light'] .eden-card ul li {
+  color: #4b5563;
+}
+
+[data-theme='light'] .eden-card h3,
+[data-theme='light'] .eden-card h4 {
+  color: #0a0a0a;
+}
+
+/* Smooth scrolling for the in-page TOC */
+html {
+  scroll-behavior: smooth;
+}

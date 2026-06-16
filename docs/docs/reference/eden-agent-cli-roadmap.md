@@ -213,7 +213,7 @@ Milestones:
   - Query KB on first message in a session
   - Query KB when user mentions errors, failures, performance issues
   - Query KB when discussing architecture or design decisions
-  - Don't re-query if last query was <5 minutes ago (cache)
+  - Don't re-query if last query was &lt;5 minutes ago (cache)
 - **Acceptance:** KB context auto-appears when user discusses relevant topics
 
 ### Week 4: KB Commands & Token Budget
@@ -798,9 +798,9 @@ Milestones:
 - **Acceptance:** Package installs cleanly on all platforms
 
 ### 8.5 Performance & Polish
-- [ ] Profile startup time (target: <3 seconds)
-- [ ] Profile KB context query latency (target: <2 seconds)
-- [ ] Profile observability context query latency (target: <2 seconds)
+- [ ] Profile startup time (target: &lt;3 seconds)
+- [ ] Profile KB context query latency (target: &lt;2 seconds)
+- [ ] Profile observability context query latency (target: &lt;2 seconds)
 - [ ] Add loading indicators for slow operations
 - [ ] Polish error messages (no raw tracebacks in user-facing output)
 - [ ] Add `--quiet` mode for scripting

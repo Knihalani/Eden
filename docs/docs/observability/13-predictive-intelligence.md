@@ -1,6 +1,6 @@
 ---
 title: "13 — Predictive Intelligence (Cat 13, incl. Drift)"
-status: ✅ IMPLEMENTED v1 (v0.2 surface: multi-day forecast + CUSUM anomalies + 5-component risk + per-agent cost + capacity scenarios)
+status: "✅ IMPLEMENTED v1 (v0.2 surface: multi-day forecast + CUSUM anomalies + 5-component risk + per-agent cost + capacity scenarios)"
 last_updated: 2026-06-12
 version: 1.2
 ---
