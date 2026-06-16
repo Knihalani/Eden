@@ -778,7 +778,7 @@ The CLI references portal URLs for rich visualizations: "View the full trace tim
 
 | Metric | Target | Measurement |
 |---|---|---|
-| Time to first eval run | <5 min from `eden` launch | Telemetry |
+| Time to first eval run | &lt;5 min from `eden` launch | Telemetry |
 | `/integrate-eden` success rate | >90% on first attempt | Telemetry |
 | PR acceptance rate | >70% of Eden-created PRs merged | GitHub API |
 | KB context relevance | >80% of injected KB entries used in reasoning | Archivist scoring |

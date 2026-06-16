@@ -99,6 +99,12 @@ class Settings(BaseSettings):
     # JWT Authentication
     jwt_secret: str = "change-me-in-production"
     jwt_exp_days: int = 7
+    # Optional JWT aud / iss claim support (opt-in). The auth helpers
+    # check for non-empty strings before adding them to the token;
+    # leaving them empty preserves the original behaviour. See
+    # ``src/eden/api/utils/auth.py``.
+    jwt_audience: str = ""
+    jwt_issuer: str = ""
 
     # Encryption (Fernet key for sensitive at-rest fields).
     # If empty, falls back to deriving a key from JWT_SECRET.

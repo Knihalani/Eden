@@ -20,7 +20,7 @@ version: 1.2
 1. [Goal & motivation](#goal--motivation)
 2. [Source articles](#source-articles)
 3. [What's already in Eden](#whats-already-in-eden)
-4. [The 5 v0 + 4 v1.3b hooks](#the-5-v0--4-v13b-hooks)
+4. [The 5 v0 + 4 v1.3b/v1.4 hooks](#the-5-v0--4-v13bv14-hooks)
 5. [Wiring model](#wiring-model)
 6. [Data model](#data-model)
 7. [Hook implementation patterns](#hook-implementation-patterns)
