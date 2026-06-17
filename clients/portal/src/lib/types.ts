@@ -8,6 +8,66 @@ export interface Invitation {
   invited_by?: string;
 }
 
+// ── Env-gen interview / spec surface ────────────────────────────
+// Used by src/components/chat/interview-chat.tsx (v2 quick-create
+// interview flow). The backend isn't wired yet, so the types are
+// intentionally minimal — only the fields the frontend actually
+// reads or sets. Extend as the env-gen v2 endpoints land.
+
+export type InterviewPhase =
+  | "interviewing"
+  | "generating_spec"
+  | "reviewing_spec"
+  | "creating_job"
+  | "job_created";
+
+export interface ChecklistItem {
+  key: string;
+  label: string;
+  satisfied: boolean;
+}
+
+export type FieldStatus = "pending" | "collected" | "skipped";
+
+export interface ChecklistFieldState {
+  status: FieldStatus;
+  value?: unknown;
+}
+
+export interface ChecklistCategory {
+  label: string;
+  fields: string[];
+}
+
+export interface ChecklistState {
+  fields: Record<string, ChecklistFieldState>;
+  readiness_score?: number;
+  user_marked_complete?: boolean;
+  // The /replay page reads `items` + `coverage`; keep those working
+  // even though the sidebar's primary view is `fields`.
+  items?: ChecklistItem[];
+  coverage?: number;
+}
+
+export interface GeneratedSpecEnvironment {
+  language?: string;
+  framework?: string;
+  dependencies?: string[];
+  tools?: string[];
+  [k: string]: unknown;
+}
+
+export interface GeneratedSpec {
+  name: string;
+  description: string;
+  tags: string[];
+  difficulty: "easy" | "medium" | "hard" | string;
+  environment: GeneratedSpecEnvironment;
+  metadata: Record<string, unknown>;
+  // Allow legacy code that treats a spec as a generic key/value bag.
+  [k: string]: unknown;
+}
+
 export interface VerifyInviteTokenResponse {
   valid: boolean;
   org_name: string;
