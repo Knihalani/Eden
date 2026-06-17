@@ -100,9 +100,12 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
     CMD curl -fsS http://localhost:8000/health | grep -q '"status"' || exit 1
 
 # Run uvicorn with a single worker per container (scale via replicas).
-# Uses shell form so PATH is set explicitly (Northflank's pre-start
-# wrapper clears the env before exec'ing the CMD; without the inline
-# PATH=/opt/venv/bin:… the venv's uvicorn is unreachable even though
-# the runtime image's ENV PATH includes it).
+# Use `python -m uvicorn` with the absolute Python path so we never
+# depend on PATH, the venv being activated, or /opt/venv/bin being on
+# PATH — Northflank's pre-start wrapper is known to strip the env
+# before exec'ing the CMD. `python -m uvicorn` resolves uvicorn via
+# the system site-packages where the safety-net pip install lives,
+# regardless of cache state. /usr/local/bin/python3 is where the
+# python:3.12-slim base image puts the interpreter.
 # --proxy-headers is required when behind a reverse proxy / load balancer.
-CMD ["/bin/sh", "-c", "PATH=/opt/venv/bin:$PATH exec uvicorn eden.api.app:app --host 0.0.0.0 --port 8000 --proxy-headers"]
+CMD ["/usr/local/bin/python3", "-m", "uvicorn", "eden.api.app:app", "--host", "0.0.0.0", "--port", "8000", "--proxy-headers"]
