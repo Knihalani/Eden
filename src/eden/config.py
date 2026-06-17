@@ -39,6 +39,30 @@ class Settings(BaseSettings):
     qdrant_port: int = 6333
     qdrant_collection_prefix: str = "eden_"
 
+    # Typesense — full-text search across spans (Phase B).
+    # TYPESENSE_API_KEY is required and must match docker-compose.yml.
+    # If the host is unreachable at startup the search layer falls back
+    # to a no-op stub so the rest of the app keeps working.
+    typesense_host: str = "localhost"
+    typesense_port: int = 8108
+    typesense_api_key: str = ""
+    typesense_protocol: str = "http"
+    typesense_collection: str = "eden_spans"
+    typesense_enabled: bool = True
+
+    # Phase C — unified AI agent (Cat 14 real + global panel).
+    # The agent uses the ModelRouter T3 tier (premium: claude-opus-4,
+    # gpt-4.5, deepseek-v4) per the user's "super super capable"
+    # requirement. ``max_turns`` caps the ReAct loop so a runaway
+    # query can't burn an unlimited number of LLM calls. The
+    # retention window controls how long persisted conversations
+    # live before a separate retention job prunes them.
+    ai_agent_enabled: bool = True
+    ai_agent_max_turns: int = 10
+    ai_agent_t3_model: str = ""  # blank → use ModelTier.T3 default
+    ai_agent_stream_chunk_ms: int = 50  # SSE chunk flush cadence
+    ai_agent_retention_days: int = 90
+
     # OpenRouter
     openrouter_api_key: str = ""
     openrouter_base_url: str = "https://openrouter.ai/api/v1"
@@ -105,6 +129,23 @@ class Settings(BaseSettings):
     # ``src/eden/api/utils/auth.py``.
     jwt_audience: str = ""
     jwt_issuer: str = ""
+
+    # Clerk (portal auth provider, June 2026 cutover)
+    # When ``clerk_secret_key`` is set, the API accepts Clerk session
+    # JWTs in the ``Authorization: Bearer`` header. When empty, Clerk
+    # verification is skipped and only Eden-issued cookie JWTs are
+    # accepted (legacy behaviour for the CLI / SDK / service-to-service).
+    # The JWKS URL is auto-derived from the publishable key when the
+    # secret is set; override via ``clerk_jwks_url`` for non-default
+    # Clerk deployments (EU region, custom domain).
+    clerk_secret_key: str = ""
+    clerk_jwt_key: str = ""  # asymmetric public key fallback (PEM)
+    clerk_jwks_url: str = ""
+    # Svix signing secret used to verify Clerk webhook deliveries.
+    # When empty, ``POST /webhooks/clerk`` rejects every request with
+    # 503. Set this in Vercel / Northflank as ``CLERK_WEBHOOK_SIGNING_SECRET``
+    # before subscribing to any user/org events in the Clerk dashboard.
+    clerk_webhook_signing_secret: str = ""
 
     # Encryption (Fernet key for sensitive at-rest fields).
     # If empty, falls back to deriving a key from JWT_SECRET.

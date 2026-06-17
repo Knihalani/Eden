@@ -26,6 +26,8 @@ interface ForwardOptions {
   body?: unknown;
   cookieHeader?: string;
   extraHeaders?: Record<string, string>;
+  /** Pre-built ``Authorization`` header value (e.g. ``Bearer <jwt>``). */
+  authorization?: string;
 }
 
 /**
@@ -38,7 +40,7 @@ export async function forwardToBackend(
   path: string,
   options: ForwardOptions = {}
 ): Promise<NextResponse> {
-  const { method = "POST", body, cookieHeader, extraHeaders } = options;
+  const { method = "POST", body, cookieHeader, extraHeaders, authorization } = options;
 
   // Default to JSON content type. Override for FormData / multipart by
   // passing an explicit `Content-Type` in `extraHeaders` — fetch will
@@ -47,6 +49,7 @@ export async function forwardToBackend(
     "Content-Type": "application/json",
   };
   if (cookieHeader) headers["Cookie"] = cookieHeader;
+  if (authorization) headers["Authorization"] = authorization;
   if (extraHeaders) {
     for (const [k, v] of Object.entries(extraHeaders)) {
       // Allow caller to override Content-Type for non-JSON bodies.
