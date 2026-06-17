@@ -387,3 +387,109 @@ async def export_trace_route(
         )
 
     return TraceExportResponse(trace_id=trace_id, format=fmt, data=data)
+
+
+# ── Phase B — Full-text search ──────────────────────────────────────────
+# Laminar parity: the "fast text search across spans" surface that sits
+# next to transcript + SQL on their landing page. Backed by Typesense
+# (configured via Settings.typesense_*). Per-org isolation is enforced
+# inside SearchService — callers cannot bypass tenant_id.
+
+
+class SpanSearchHit(BaseModel):
+    event_id: str
+    trace_id: str
+    span_id: str
+    agent_id: str
+    name: str
+    event_type: str
+    outcome: str
+    input_text_excerpt: str = ""
+    output_text_excerpt: str = ""
+    tool_names: list[str] = []
+    created_at: int = 0
+    duration_ms: float = 0.0
+    cost_usd: float = 0.0
+    highlight: dict[str, str] = {}
+
+
+class SpanSearchResponse(BaseModel):
+    hits: list[SpanSearchHit] = []
+    total: int = 0
+    facet_counts: dict[str, list[dict[str, Any]]] = {}
+    took_ms: float = 0.0
+    query: str = ""
+
+
+class SpanSuggestResponse(BaseModel):
+    suggestions: list[SpanSearchHit] = []
+    took_ms: float = 0.0
+
+
+@router.get("/spans/search", response_model=SpanSearchResponse)
+async def search_spans_route(
+    org_id: str = Path(..., description="Organization ID"),
+    q: str = Query("", description="Full-text query (matches input/output text + tool names + agent id)"),
+    agent: Optional[str] = Query(None, description="Filter to one agent_id"),
+    tool: Optional[str] = Query(None, description="Filter to one tool name"),
+    outcome: Optional[str] = Query(None, description="Filter to one outcome (success/failure/partial/timeout/crash)"),
+    event_type: Optional[str] = Query(None, description="Filter to one event_type"),
+    from_ts: Optional[int] = Query(None, description="Lower bound on created_at (epoch seconds)"),
+    to_ts: Optional[int] = Query(None, description="Upper bound on created_at (epoch seconds)"),
+    per_page: int = Query(20, ge=1, le=100),
+    page: int = Query(1, ge=1),
+    user: dict = Depends(get_current_user),
+) -> SpanSearchResponse:
+    """Full-text search across every span for this org (Laminar parity).
+
+    Returns hits, total count, and facet counts for the sidebar
+    filter UI. ``q`` may be empty (returns all spans matching the
+    filters, useful for "show me all failures in the last hour").
+    """
+    from eden.observability.search_service import get_search_service
+
+    service = get_search_service()
+    resp = await service.search(
+        tenant_id=org_id,
+        query=q,
+        agent_id=agent,
+        tool=tool,
+        outcome=outcome,
+        event_type=event_type,
+        from_ts=from_ts,
+        to_ts=to_ts,
+        per_page=per_page,
+        page=page,
+    )
+    return SpanSearchResponse(
+        hits=[SpanSearchHit(**h.to_dict()) for h in resp.hits],
+        total=resp.total,
+        facet_counts=resp.facet_counts,
+        took_ms=resp.took_ms,
+        query=resp.query,
+    )
+
+
+@router.get("/spans/search/suggest", response_model=SpanSuggestResponse)
+async def suggest_spans_route(
+    org_id: str = Path(..., description="Organization ID"),
+    q: str = Query(..., min_length=1, description="Prefix query for Cmd-K autocomplete"),
+    limit: int = Query(5, ge=1, le=20),
+    user: dict = Depends(get_current_user),
+) -> SpanSuggestResponse:
+    """Top-N autocomplete suggestions for the Cmd-K global search palette.
+
+    No facets, no highlights — just enough to render a dropdown of
+    "trace XYZ matched your query" rows. Latency budget: <50ms p95.
+    """
+    from eden.observability.search_service import get_search_service
+
+    service = get_search_service()
+    import time as _time
+    start = _time.perf_counter()
+    hits = await service.suggest(tenant_id=org_id, query=q, limit=limit)
+    elapsed = (_time.perf_counter() - start) * 1000
+    return SpanSuggestResponse(
+        suggestions=[SpanSearchHit(**h.to_dict()) for h in hits],
+        took_ms=round(elapsed, 2),
+    )

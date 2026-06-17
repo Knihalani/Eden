@@ -23,6 +23,14 @@ from eden.services.governance_intel.dashboard import ComplianceDashboardService
 from eden.services.governance_intel.gdpr import RightToBeForgottenService
 from eden.services.governance_intel.lineage import DataLineageService
 from eden.services.governance_intel.security import SecurityScanner
+from eden.services.governance_intel.rtbf_tracker import (
+    RtbfRequestTracker,
+    RTBF_STATUS_PENDING,
+    RTBF_STATUS_IN_PROGRESS,
+    RTBF_STATUS_COMPLETED,
+    RTBF_STATUS_FAILED,
+    ALL_RTBF_STATUSES,
+)
 
 __all__ = [
     "ApprovalWorkflowService",
@@ -31,4 +39,11 @@ __all__ = [
     "DataLineageService",
     "RightToBeForgottenService",
     "SecurityScanner",
+    # Phase K — RTBF lifecycle.
+    "RtbfRequestTracker",
+    "RTBF_STATUS_PENDING",
+    "RTBF_STATUS_IN_PROGRESS",
+    "RTBF_STATUS_COMPLETED",
+    "RTBF_STATUS_FAILED",
+    "ALL_RTBF_STATUSES",
 ]

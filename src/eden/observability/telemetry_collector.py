@@ -78,6 +78,15 @@ class TelemetryEvent:
     prompt_cache_savings_usd: Optional[float] = None
     model_version: Optional[str] = None
     service_tier: Optional[str] = None
+    # Phase A (Laminar 20x dedup) — content-addressed dedup of the
+    # request/response message arrays. Each entry is the 64-char hex
+    # SHA-256 of the canonical-JSON form of one message. Spans store
+    # the hash array; the full payload is reconstructed at read time by
+    # joining against ``trace_messages``. Empty list (the default) means
+    # "no dedup was attempted" — usually because the payload had no
+    # messages to extract.
+    request_message_hashes: list[str] = field(default_factory=list)
+    response_message_hashes: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -117,6 +126,8 @@ class TelemetryEvent:
             "prompt_cache_savings_usd": self.prompt_cache_savings_usd,
             "model_version": self.model_version,
             "service_tier": self.service_tier,
+            "request_message_hashes": self.request_message_hashes,
+            "response_message_hashes": self.response_message_hashes,
         }
 
     @classmethod
@@ -158,6 +169,8 @@ class TelemetryEvent:
             prompt_cache_savings_usd=data.get("prompt_cache_savings_usd"),
             model_version=data.get("model_version"),
             service_tier=data.get("service_tier"),
+            request_message_hashes=data.get("request_message_hashes") or [],
+            response_message_hashes=data.get("response_message_hashes") or [],
         )
 
 
@@ -385,6 +398,10 @@ class TelemetryCollector:
         await self._route_websocket(event)
         # OTel dual-emit (Phase 7.2c) — fire-and-forget mirror to OTLP
         await self._route_otel_dual_emit(event)
+        # Typesense full-text index (Phase B) — span text becomes
+        # searchable via /observability/search and Cmd-K. Best-effort:
+        # no-op when Typesense is down or disabled.
+        await self._route_typesense(event)
 
     async def _route_redis(self, event: TelemetryEvent) -> None:
         redis = await self._get_redis()
@@ -422,6 +439,31 @@ class TelemetryCollector:
                 if event.response_body is not None
                 else None
             )
+            # Phase A — content-addressed message dedup (Laminar 20x trick).
+            # Hash every message in request_body / response_body via the
+            # canonical-JSON SHA-256 in :mod:`eden.observability.canonical`
+            # and upsert into ``trace_messages``. The hash arrays go onto
+            # ``telemetry_events`` so the trace view can reconstruct the
+            # original payload via JOIN at read time. The guard
+            # ``if not event.request_message_hashes`` lets SDK callers
+            # pre-compute hashes (e.g. client-side dedup) without us
+            # re-doing the work.
+            if event.request_body is not None and not event.request_message_hashes:
+                try:
+                    from eden.observability.message_store import get_message_store
+                    event.request_message_hashes = await get_message_store().upsert_request(
+                        event.trace_id, event.request_body,
+                    )
+                except Exception as exc:
+                    logger.debug(f"dedup upsert_request failed (non-fatal): {exc}")
+            if event.response_body is not None and not event.response_message_hashes:
+                try:
+                    from eden.observability.message_store import get_message_store
+                    event.response_message_hashes = await get_message_store().upsert_response(
+                        event.trace_id, event.response_body,
+                    )
+                except Exception as exc:
+                    logger.debug(f"dedup upsert_response failed (non-fatal): {exc}")
             await client.execute(
                 """
                 INSERT INTO telemetry_events (
@@ -435,13 +477,14 @@ class TelemetryCollector:
                     system_fingerprint, cache_hit, prompt_cache_savings_usd,
                     model_version, service_tier,
                     request_body_zstd, response_body_zstd,
+                    request_message_hashes, response_message_hashes,
                     created_at
                 )
                 VALUES (
                     $1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
                     $11, $12, $13, $14, $15, $16, $17, $18, $19, $20,
                     $21, $22, $23, $24, $25, $26, $27, $28, $29, $30,
-                    $31, $32, $33, $34, $35, $36, $37, $38, NOW()
+                    $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, NOW()
                 )
                 ON CONFLICT (event_id) DO NOTHING
                 """,
@@ -483,6 +526,8 @@ class TelemetryCollector:
                 event.service_tier,
                 request_body_zstd,
                 response_body_zstd,
+                event.request_message_hashes or None,
+                event.response_message_hashes or None,
             )
         except Exception as exc:
             logger.warning(f"Postgres telemetry insert failed: {exc}")
@@ -558,6 +603,35 @@ class TelemetryCollector:
         except Exception as exc:
             logger.debug(f"OTel dual-emit route failed: {exc}")
 
+    async def _route_typesense(self, event: TelemetryEvent) -> None:
+        """Phase B — index the span into Typesense for full-text search.
+
+        Idempotent upsert on the (tenant_id, event_id) composite id.
+        A network error is logged at debug level only — Typesense
+        is best-effort; if it's down the trace view falls back to
+        Postgres, which is fine (just slower for cross-trace search).
+        Skipped when the event has no tenant_id or no payload worth
+        indexing (e.g. pure heartbeat telemetry).
+        """
+        try:
+            from eden.observability.typesense_client import (
+                get_typesense_client, build_span_doc,
+            )
+            client = get_typesense_client()
+            if client is None:
+                return
+            # Skip if there's nothing to index — pure heartbeat
+            # spans with no request/response waste a Typesense doc.
+            if (event.request_body is None
+                    and event.response_body is None
+                    and not event.tool_calls_full
+                    and not event.name):
+                return
+            doc = build_span_doc(event)
+            await client.index_span(doc)
+        except Exception as exc:
+            logger.debug(f"Typesense route failed (non-fatal): {exc}")
+
     # ── Query API ─────────────────────────────────────────────────────────
 
     async def get_trace_tree(self, tenant_id: str, trace_id: str) -> Optional[TraceTree]:
@@ -604,6 +678,36 @@ class TelemetryCollector:
                     )
             return row.get(jsonb_col)
 
+        # Phase A — content-addressed dedup reconstruction. If the row
+        # has request_message_hashes, the original request_body was
+        # already moved into trace_messages (with the JSONB kept as a
+        # 30-day burn-in) and we can rebuild it via JOIN. If the
+        # reconstruction returns nothing (hashes missing or DB
+        # transient failure) we fall through to the zstd/JSONB path
+        # so the trace view never goes blank.
+        from eden.observability.message_store import get_message_store
+        message_store = get_message_store()
+
+        async def _resolve_request(row) -> Any:
+            hashes = row.get("request_message_hashes")
+            if hashes:
+                reconstructed = await message_store.reconstruct_request_body(
+                    trace_id, list(hashes),
+                )
+                if reconstructed is not None:
+                    return reconstructed
+            return _read_payload(row, "request_body_zstd", "request_body")
+
+        async def _resolve_response(row) -> Any:
+            hashes = row.get("response_message_hashes")
+            if hashes:
+                reconstructed = await message_store.reconstruct_response_body(
+                    trace_id, list(hashes),
+                )
+                if reconstructed is not None:
+                    return reconstructed
+            return _read_payload(row, "response_body_zstd", "response_body")
+
         span_map: dict[str, dict[str, Any]] = {}
         root_spans: list[dict[str, Any]] = []
         total_duration = 0.0
@@ -630,8 +734,8 @@ class TelemetryCollector:
                 "attributes": row.get("attributes") or {},
                 "payload": row.get("payload") or {},
                 "outcome": row.get("outcome"),
-                "request_body": _read_payload(row, "request_body_zstd", "request_body"),
-                "response_body": _read_payload(row, "response_body_zstd", "response_body"),
+                "request_body": await _resolve_request(row),
+                "response_body": await _resolve_response(row),
                 "reasoning": row.get("reasoning"),
                 "tool_calls_full": row.get("tool_calls_full") or [],
                 "tool_results": row.get("tool_results") or [],
