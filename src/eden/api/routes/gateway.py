@@ -713,7 +713,7 @@ async def list_models(auth_ctx: dict = Depends(get_ingestion_auth)) -> ModelsLis
 
 
 @router.get(
-    "/models/{model_id}",
+    "/models/{model_id:path}",
     response_model=ModelInfo,
     summary="Get a single model",
 )
@@ -724,8 +724,10 @@ async def get_model(
     """``GET /gateway/v1/models/{model_id}`` — single model.
 
     Looks up the model in the static catalogue and returns 404 if
-    not present. (Phase 7.0 stub; the registry-backed version
-    arrives in unit A2.)
+    not present. The ``{model_id:path}`` converter is required
+    because OpenAI-style ids include a slash (e.g.
+    ``openai/gpt-4o-mini``); without it FastAPI would only match
+    the first path segment and 404 everything.
     """
     from eden.llmops.openai_adapter import STATIC_MODEL_CATALOGUE
 
