@@ -129,12 +129,17 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
     CMD curl -fsS http://localhost:8000/health | grep -q '"status"' || exit 1
 
 # Run uvicorn with a single worker per container (scale via replicas).
-# Use `python -m uvicorn` with the absolute Python path so we never
-# depend on PATH, the venv being activated, or /opt/venv/bin being on
-# PATH — Northflank's pre-start wrapper is known to strip the env
-# before exec'ing the CMD. `python -m uvicorn` resolves uvicorn via
-# the system site-packages where the safety-net pip install lives,
-# regardless of cache state. /usr/local/bin/python3 is where the
-# python:3.12-slim base image puts the interpreter.
+# Use the BUILDER'S venv Python at /opt/venv/bin/python3 — the
+# safety-net ``pip install`` of uvicorn into system site-packages was
+# necessary when the venv was missing uvicorn (the original Northflank
+# cache bug), but with the venv now healthy the safety net became a
+# whack-a-mole dep list (missed bcrypt, then qrcode, …). The venv's
+# ``uv sync`` already installed all 164 packages, so the venv's
+# interpreter finds uvicorn, fastapi, bcrypt, qrcode, passlib,
+# asyncpg, … without us maintaining an explicit list.
+#
+# PYTHONPATH=/app/src is still required so ``import eden`` resolves
+# (the venv's editable install points to /build/src/eden, which
+# doesn't exist in the runtime image).
 # --proxy-headers is required when behind a reverse proxy / load balancer.
-CMD ["/usr/local/bin/python3", "-m", "uvicorn", "eden.api.app:app", "--host", "0.0.0.0", "--port", "8000", "--proxy-headers"]
+CMD ["/opt/venv/bin/python3", "-m", "uvicorn", "eden.api.app:app", "--host", "0.0.0.0", "--port", "8000", "--proxy-headers"]
