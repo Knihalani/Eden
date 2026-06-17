@@ -335,6 +335,8 @@ Rows where Eden is **behind** are marked with the gap
 | **Time-travel debug** (fork + replay) | **🟡 v1.3 (Cat 20) ship in 1 week** | partial (rewind command) | ❌ | ❌ | ❌ | ❌ |
 | **Trace Query DSL** (root./parent./any.) | **🟡 v1.3 (Cat 19) ship in 1 week** | ✅ BTQL/SQL | ❌ | ⚠️ DDL (proprietary) | ❌ | ⚠️ partial |
 | **Columnar analytics** (per-org partitions) | **✅ v1.3 (Cat 18) shipped 2026-06-11** | ✅ Brainstore (best) | ⚠️ Postgres | ⚠️ DDSQL | ⚠️ Postgres | ⚠️ DuckDB |
+| **Content-addressed message dedup** (20x trace storage) | **✅ v1.4.1 shipped 2026-06-17** | ❌ | ❌ | ❌ | ❌ | ❌ |
+| **Full-text search across spans** (Typesense-backed) | **✅ v1.4.1 shipped 2026-06-17** | ✅ full-text + facets | ⚠️ partial | ✅ log search | ⚠️ partial | ❌ |
 | **Custom metrics** (rubric + LJ) | **✅ Cat 21 (rubric + LJM-as-judge, no fine-tuning)** | ✅ generate-scorer | ✅ Luna Studio (best) | ✅ | ✅ custom Python | ⚠️ partial |
 | **SLM-as-judge cost** ($/1M tokens) | **🟡 v1.4 (Qwen 3.5 4B) at $0.10** | $5 (GPT-4o) | **$0.02 (Luna-2)** | $5 (GPT-4o) | $5 (GPT-4o) | $5 (GPT-4o) |
 | **Judge latency p95** (typical) | **🟡 v1.4 SLM at <200ms** | 1-3s (LJ) | <200ms (Luna-2) | 1-3s (LJ) | 1-3s (LJ) | 1-3s (LJ) |

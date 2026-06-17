@@ -90,6 +90,38 @@ services:
       timeout: 5s
       retries: 5
 
+  # Typesense — backs the full-text search layer (Phase B). Indexes
+  # span input/output text + tool names so users can grep across
+  # all traces (Laminar parity for the "fast text search" surface).
+  # Single-binary, <50MB RAM at default scale.
+  #
+  # SECURITY: TYPESENSE_API_KEY MUST be set in .env. There is no
+  # fallback default — the service refuses to boot without one
+  # (see the `command` below which calls `--api-key=${...:?...}`).
+  # Generate one with `openssl rand -hex 32`. The same value must
+  # be set in eden_api via TYPESENSE_API_KEY so the collector can
+  # talk to it.
+  typesense:
+    image: typesense/typesense:27.1
+    container_name: eden_typesense
+    environment:
+      TYPESENSE_DATA_DIR: /data
+      TYPESENSE_API_KEY: ${TYPESENSE_API_KEY:?TYPESENSE_API_KEY must be set in .env (use: openssl rand -hex 32)}
+      TYPESENSE_ENABLE_API_ADMIN: 1
+    ports:
+      - "8108:8108"
+    volumes:
+      - typesense_data:/data
+    command:
+      - --data-dir=/data
+      - --api-key=${TYPESENSE_API_KEY:?TYPESENSE_API_KEY must be set in .env (use: openssl rand -hex 32)}
+      - --enable-cors
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:8108/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   # Optional: FalkorDB for knowledge graph (uncomment if needed)
   # falkordb:
   #   image: falkordb/falkordb:latest
@@ -126,5 +158,6 @@ volumes:
   qdrant_data:
   redis_data:
   clickhouse_data:
+  typesense_data:
   # falkordb_data:
   # vllm_model:
