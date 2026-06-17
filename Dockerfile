@@ -82,6 +82,10 @@ EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
     CMD curl -fsS http://localhost:8000/health | grep -q '"status"' || exit 1
 
-# Run uvicorn with a single worker per container (scale via replicas)
-# Use --proxy-headers when behind a reverse proxy / load balancer
-CMD ["uvicorn", "eden.api.app:app", "--host", "0.0.0.0", "--port", "8000", "--proxy-headers"]
+# Run uvicorn with a single worker per container (scale via replicas).
+# Use the absolute path to the venv's uvicorn so the entrypoint
+# wrapper doesn't need $PATH set when it execs the CMD (Northflank's
+# pre-start wrapper clears the env before exec'ing the user CMD —
+# the inline `PATH=...` form guarantees the binary resolves).
+# --proxy-headers is required when behind a reverse proxy / load balancer.
+CMD ["/bin/sh", "-c", "PATH=/opt/venv/bin:$PATH exec uvicorn eden.api.app:app --host 0.0.0.0 --port 8000 --proxy-headers"]
