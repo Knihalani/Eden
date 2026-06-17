@@ -162,12 +162,12 @@ export default function ReplayPage() {
 
   // Fetch trace when job changes
   const fetchTrace = useCallback(async () => {
-    if (!selectedJobId) return;
+    if (!selectedJobId || !currentOrg?.id) return;
     setLoadingTrace(true);
     try {
       const [replayData, summaryData] = await Promise.all([
-        api.getTraceReplay(selectedJobId, 0, 1000),
-        api.getTraceSummary(selectedJobId),
+        api.getTraceReplay(currentOrg.id, selectedJobId, 0, 1000),
+        api.getTraceSummary(currentOrg.id, selectedJobId),
       ]);
       setTraceEvents(replayData.events);
       setTraceSummary(summaryData);
@@ -178,7 +178,7 @@ export default function ReplayPage() {
     } finally {
       setLoadingTrace(false);
     }
-  }, [selectedJobId]);
+  }, [currentOrg?.id, selectedJobId]);
 
   useEffect(() => {
     fetchTrace();
@@ -362,15 +362,15 @@ export default function ReplayPage() {
             <div className="space-y-4">
               {/* Summary Cards */}
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                <StatCard label="Events" value={String(traceSummary.event_count)} icon={Layers} />
-                <StatCard label="Duration" value={formatDuration(traceSummary.duration_ms)} icon={Clock} />
+                <StatCard title="Events" value={String(traceSummary.event_count)} icon={Layers} />
+                <StatCard title="Duration" value={formatDuration(traceSummary.duration_ms)} icon={Clock} />
                 <StatCard
-                  label="Started"
+                  title="Started"
                   value={traceSummary.started_at ? new Date(traceSummary.started_at).toLocaleTimeString() : "—"}
                   icon={Play}
                 />
                 <StatCard
-                  label="Ended"
+                  title="Ended"
                   value={traceSummary.ended_at ? new Date(traceSummary.ended_at).toLocaleTimeString() : "—"}
                   icon={CheckCircle2}
                 />

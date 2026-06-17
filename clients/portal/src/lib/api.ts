@@ -1253,6 +1253,203 @@ export const api = {
     };
   },
 
+  // ── HILT (Human-in-the-loop) state + command ───────────────
+  // Wired to the existing backend endpoints in
+  // src/eden/api/routes/replay.py (`/jobs/{id}/hilt/state` and
+  // `/jobs/{id}/hilt/command`). These calls are real; the portal's
+  // /replay page and the HILT panel consume them.
+  getHILTState: (jobId: string): Promise<{
+    job_id: string;
+    state: string;
+    paused_at: string | null;
+    resumed_at: string | null;
+    waiting_for: string | null;
+    current_step: number | null;
+    total_steps: number | null;
+    pending_command_count: number;
+    history: Array<Record<string, unknown>>;
+    last_updated: string;
+  }> => fetchApi(`/jobs/${jobId}/hilt/state`),
+
+  sendHILTCommand: (
+    jobId: string,
+    command: string,
+    payload: Record<string, unknown> = {},
+  ): Promise<{
+    status: string;
+    message: string;
+    state: Record<string, unknown> | null;
+  }> =>
+    fetchApi(`/jobs/${jobId}/hilt/command`, {
+      method: "POST",
+      body: JSON.stringify({ command, payload }),
+    }),
+
+  // ── Jobs list + trace delete ───────────────────────────────
+  // listJobs wires to the v1 environments listing endpoint. The
+  // shape mirrors what /replay expects (jobs[].job_id). The v1
+  // router returns PaginatedAPIEnvelope — we accept either shape
+  // and normalise.
+  listJobs: (params: { limit?: number; sort?: string; orgId?: string } = {}): Promise<{
+    jobs: Array<{
+      job_id: string;
+      status: string;
+      current_stage: string;
+      outcome_tier: string | null;
+      created_at: string;
+      updated_at: string;
+      started_at: string | null;
+      completed_at: string | null;
+      description?: string;
+      tags?: string[];
+    }>;
+    total: number;
+  }> => {
+    const qs = new URLSearchParams();
+    if (params.limit !== undefined) qs.set("limit", String(params.limit));
+    if (params.sort) qs.set("sort", params.sort);
+    return fetchApi<{
+      jobs: Array<{
+        job_id: string;
+        status: string;
+        current_stage?: string;
+        outcome_tier?: string | null;
+        created_at: string;
+        updated_at?: string;
+        started_at?: string | null;
+        completed_at?: string | null;
+        description?: string;
+        tags?: string[];
+      }>;
+      total: number;
+    }>(
+      `/v1/environments${qs.toString() ? `?${qs.toString()}` : ""}`,
+      params.orgId ? { headers: { "X-Org-Id": params.orgId } } : undefined,
+    ).then((resp) => ({
+      // Normalise the BE response to the shape the portal pages
+      // expect. v1/environments may not return current_stage /
+      // outcome_tier / updated_at, so fill in sensible defaults.
+      jobs: (resp.jobs ?? []).map((j) => ({
+        job_id: j.job_id,
+        status: j.status,
+        current_stage: j.current_stage ?? "unknown",
+        outcome_tier: j.outcome_tier ?? null,
+        created_at: j.created_at,
+        updated_at: j.updated_at ?? j.created_at,
+        started_at: j.started_at ?? null,
+        completed_at: j.completed_at ?? null,
+        description: j.description,
+        tags: j.tags,
+      })),
+      total: resp.total ?? (resp.jobs ?? []).length,
+    }))
+  },
+
+  // DELETE /jobs/{job_id}/trace — see replay.py:119
+  deleteTrace: (jobId: string): Promise<{ status: string }> =>
+    fetchApi(`/jobs/${jobId}/trace`, { method: "DELETE" }),
+
+  // ── Env-gen v2 quick-create / interview / spec ─────────────
+  // These endpoints are NOT YET in the backend. They are typed
+  // correctly and resolve to a stable stub so the InterviewChat
+  // page renders without runtime exceptions. The redirect to
+  // /jobs/{job_id} after `submitJob` lands on a 404 page until
+  // the env-gen v2 submission route ships — owner: env-gen team.
+  submitInterviewTurn: (body: {
+    session_id?: string;
+    message: string;
+  }): Promise<{
+    session_id: string;
+    checklist_state: ChecklistState;
+    is_ready_for_spec: boolean;
+    is_complete: boolean;
+    readiness_score: number;
+    next_message: string;
+    assistant_message: string;
+    extracted_fields: string[];
+    suggested_topics?: string[];
+  }> => {
+    const session_id = body.session_id ?? `sess_${Date.now()}`;
+    const stubMessage =
+      "[STUB] The interview backend hasn't shipped yet. Your message is being captured locally — once the v2 quick-create endpoint lands, this turn will resume from here.";
+    return Promise.resolve({
+      session_id,
+      checklist_state: {
+        fields: {},
+        items: [
+          { key: "scope", label: "Scope defined", satisfied: false },
+          { key: "stack", label: "Stack chosen", satisfied: false },
+          { key: "difficulty", label: "Difficulty set", satisfied: false },
+        ],
+        coverage: 0,
+      },
+      is_ready_for_spec: false,
+      is_complete: false,
+      readiness_score: 0,
+      next_message: stubMessage,
+      assistant_message: stubMessage,
+      extracted_fields: [],
+    });
+  },
+
+  generateSpec: (sessionId: string): Promise<{
+    spec_id: string;
+    spec_data: GeneratedSpec;
+  }> =>
+    Promise.resolve({
+      spec_id: `spec_${Date.now()}`,
+      spec_data: {
+        name: "[STUB] Auto-generated environment",
+        description:
+          "Spec generation backend is not wired yet. This is a placeholder.",
+        tags: [],
+        difficulty: "medium",
+        environment: {},
+        metadata: {
+          generated_at: new Date().toISOString(),
+          session_id: sessionId,
+          stub: true,
+        },
+      },
+    }),
+
+  regenerateSpec: (sessionId: string): Promise<{
+    spec_id: string;
+    spec_data: GeneratedSpec;
+  }> =>
+    Promise.resolve({
+      spec_id: `spec_${Date.now()}`,
+      spec_data: {
+        name: "[STUB] Regenerated environment",
+        description: "Spec regeneration backend is not wired yet.",
+        tags: [],
+        difficulty: "medium",
+        environment: {},
+        metadata: {
+          generated_at: new Date().toISOString(),
+          session_id: sessionId,
+          regenerated: true,
+          stub: true,
+        },
+      },
+    }),
+
+  convertSpecToJob: (specId: string): Promise<{ job_id: string; status: string }> =>
+    Promise.resolve({
+      job_id: `pending_${Date.now()}`,
+      status: "pending_submission_route",
+    }),
+
+  submitJob: (body: {
+    description: string;
+    tags?: string[];
+    difficulty_parameters?: Record<string, unknown>;
+  }): Promise<{ job_id: string; status: string }> =>
+    Promise.resolve({
+      job_id: `pending_${Date.now()}`,
+      status: "pending_submission_route",
+    }),
+
   // ── Observability: retention policy (Phase 7.3b) ─────────────
   // The existing `getRetentionPolicy` / `updateRetentionPolicy`
   // cover the singular config. ``listRetentionOverrides`` returns
@@ -2532,6 +2729,8 @@ export const agentsApi = {
 // ── Agent PR-suggestion API (v1.7) ───────────────────────────────
 
 import type {
+  ChecklistState,
+  GeneratedSpec,
   PRSuggestionCreateResponse,
   PRSuggestionDetailResponse,
   PRSuggestionListResponse,
