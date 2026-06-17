@@ -339,10 +339,35 @@ async def health_check():
         sandbox_status in ("ready", "null_sandbox", "healthy")
     ) else "degraded"
 
+    # Surface the DB target the runtime is actually using so deploy
+    # misconfigurations are diagnosable from the public endpoint alone
+    # (no shell-in needed). Host/port/db only — credentials are NEVER
+    # logged. The ``postgres`` field below is overridden with a more
+    # informative message when the connection is failing, but only on
+    # the first failing health check after startup (to avoid spamming).
+    pg = kb_health.get("postgres", "unknown")
+    if pg != "connected" and not getattr(health_check, "_shown_target", False):
+        try:
+            from eden.storage.dsn import build_dsn
+            from urllib.parse import urlsplit
+
+            dsn = build_dsn(settings).replace("postgresql+asyncpg", "postgresql")
+            parts = urlsplit(dsn)
+            pg = (
+                f"{pg} | target=scheme:{parts.scheme} "
+                f"host:{parts.hostname} port:{parts.port or 'default'} "
+                f"db:{parts.path.lstrip('/') or settings.postgres_db} "
+                f"sslmode:{settings.postgres_sslmode or 'off'} "
+                f"database_url_set:{bool(settings.database_url)}"
+            )
+            health_check._shown_target = True
+        except Exception:
+            pass
+
     return HealthResponse(
         status=overall,
         version=settings.app_version,
-        postgres=kb_health.get("postgres", "unknown"),
+        postgres=pg,
         qdrant=kb_health.get("qdrant", "unknown"),
         sandbox=sandbox_status,
     )
