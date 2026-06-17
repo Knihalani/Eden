@@ -8,7 +8,7 @@ from typing import Optional, Any
 from collections import defaultdict
 from functools import lru_cache
 
-from openai import OpenAI, RateLimitError, APITimeoutError, APIError
+from openai import OpenAI, AsyncOpenAI, RateLimitError, APITimeoutError, APIError
 import tenacity
 
 from eden.config import get_settings
@@ -138,6 +138,13 @@ class OpenRouterClient:
             api_key=api_key or self.settings.openrouter_api_key,
             base_url=base_url,
         )
+        # Async client for the ``acall`` path. Kept as a separate
+        # attribute so tests can mock sync + async independently
+        # (the async mock needs ``create`` to be an ``AsyncMock``).
+        self.async_client = AsyncOpenAI(
+            api_key=api_key or self.settings.openrouter_api_key,
+            base_url=base_url,
+        )
         self.circuit_breaker = CircuitBreaker(
             failure_threshold=circuit_breaker_threshold,
             recovery_timeout=circuit_breaker_timeout,
@@ -207,12 +214,76 @@ class OpenRouterClient:
         system_prompt: Optional[str] = None,
         **kwargs,
     ) -> LLMResponse:
-        """Async wrapper using thread pool executor."""
-        import asyncio
-        loop = asyncio.get_event_loop()
-        return await loop.run_in_executor(
-            None, self.call, agent, prompt, slot, system_prompt
-        )
+        """Async LLM call using the async OpenAI client.
+
+        Uses :attr:`async_client` directly (not the sync
+        ``client`` wrapped in an executor) so the underlying
+        ``chat.completions.create`` is awaited natively. Retries
+        on transient errors (``APITimeoutError``,
+        ``RateLimitError``, ``APIError``) up to ``max_retries``.
+        """
+        if self.circuit_breaker.is_open(agent):
+            raise CircuitOpenError(f"Circuit breaker open for agent: {agent}")
+
+        model_config = self.MODEL_SLOTS.get(slot, self.MODEL_SLOTS["reasoning"])
+        model = model_config.primary
+        messages: list[dict] = []
+        if system_prompt:
+            messages.append({"role": "system", "content": system_prompt})
+        messages.append({"role": "user", "content": prompt})
+
+        last_exc: Exception | None = None
+        for attempt in range(self.max_retries + 1):
+            try:
+                response = await self.async_client.chat.completions.create(
+                    model=model,
+                    messages=messages,
+                    max_tokens=kwargs.get("max_tokens", model_config.max_tokens),
+                )
+                self.circuit_breaker.record_success(agent)
+                # Parse the OpenAI-style response into our LLMResponse.
+                from eden.llm.client import LLMResponse, UsageStats
+                usage = UsageStats(
+                    prompt_tokens=response.usage.prompt_tokens if response.usage else 0,
+                    completion_tokens=response.usage.completion_tokens if response.usage else 0,
+                    total_tokens=response.usage.total_tokens if response.usage else 0,
+                    cost=getattr(response.usage, "cost", None) if response.usage else None,
+                    cache_reads=getattr(response.usage, "cache_reads", 0) or 0,
+                    cache_writes=getattr(response.usage, "cache_writes", 0) or 0,
+                )
+                return LLMResponse(
+                    content=response.choices[0].message.content or "",
+                    usage=usage,
+                    model=model,
+                    finish_reason=response.choices[0].finish_reason or "unknown",
+                    raw_response=response,
+                )
+            except APITimeoutError as exc:
+                last_exc = exc
+                self.circuit_breaker.record_failure(agent)
+                if attempt < self.max_retries:
+                    import asyncio
+                    await asyncio.sleep(2 ** attempt)
+                    continue
+                raise
+            except RateLimitError as exc:
+                last_exc = exc
+                self.circuit_breaker.record_failure(agent)
+                if attempt < self.max_retries:
+                    import asyncio
+                    await asyncio.sleep(2 ** attempt)
+                    continue
+                raise
+            except APIError as exc:
+                last_exc = exc
+                if attempt < self.max_retries:
+                    import asyncio
+                    await asyncio.sleep(2 ** attempt)
+                    continue
+                raise
+        # Should never reach here, but for type-checker happiness:
+        assert last_exc is not None
+        raise last_exc
 
     def call(
         self,
