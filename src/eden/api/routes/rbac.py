@@ -17,6 +17,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field, field_validator
 
 from eden.api.deps import OrgMember, get_current_org_member, require_org_permission
+from eden.api.deps import PERMISSION_MAP, has_permission
 from eden.storage.postgres import get_postgres_client
 
 logger = logging.getLogger(__name__)
@@ -382,3 +383,49 @@ async def delete_assignment(
         assignment_id,
         role_id,
     )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Permissions catalogue (Phase 7.3d)
+# ─────────────────────────────────────────────────────────────────────────────
+
+permissions_router = APIRouter(prefix="/orgs/{org_id}", tags=["rbac"])
+
+
+@permissions_router.get("/permissions")
+async def get_permissions_catalogue(
+    org_id: str,
+    member: OrgMember = Depends(get_current_org_member),
+) -> dict:
+    """Return the full permissions catalogue for the org.
+
+    The catalogue is the union of every permission key in
+    :data:`PERMISSION_MAP`, annotated with the built-in roles
+    that grant each permission by default. Used by the portal
+    role-editor UI to render the available permission picker.
+    """
+    # Build reverse index: permission -> [roles that grant it].
+    grants: dict[str, list[str]] = {}
+    for role, perms in PERMISSION_MAP.items():
+        for perm in perms:
+            grants.setdefault(perm, []).append(role)
+
+    permissions: list[dict] = []
+    for key in sorted(grants):
+        if ":" not in key:
+            continue
+        resource, action = key.split(":", 1)
+        permissions.append(
+            {
+                "key": key,
+                "resource": resource,
+                "action": action,
+                "granted_by_default": sorted(grants[key]),
+            }
+        )
+
+    return {
+        "org_id": org_id,
+        "count": len(permissions),
+        "permissions": permissions,
+    }

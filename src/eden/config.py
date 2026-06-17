@@ -221,6 +221,18 @@ class Settings(BaseSettings):
     # promote it to a canary at this traffic percentage.
     # 0 disables auto-canary creation (variants stay inactive).
     evolver_auto_canary_pct: int = 5
+    # Maximum number of variants the evolver may generate per run.
+    # When more agents are degraded than this, the most-degraded
+    # (agent, judge) pairs win the slots.
+    evolver_max_variants_per_run: int = 3
+    # Minimum number of judge-score samples before the evolver will
+    # generate a variant for an (agent, judge) pair. Guards against
+    # noisy decisions on tiny windows.
+    evolver_min_samples: int = 20
+    # Judge-score threshold below which an (agent, judge) is
+    # considered degraded. Pairs below this mean over the lookback
+    # window are eligible for prompt variants.
+    evolver_degradation_threshold: float = 0.7
 
     # ── Promotion loop (Phase 7.1b follow-up) ───────────────────────
     # Used by ``eden.llmops.promotion.PromotionLoop`` to decide

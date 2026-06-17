@@ -71,6 +71,11 @@ PERMISSION_MAP: dict[str, set[str]] = {
         # that. Members and viewers see a "Request from your admin"
         # callout instead.
         "integrations:write",
+        # Phase 7.3d — the four sensitive permissions (June 2026).
+        "pii:edit",
+        "judges:run",
+        "gdpr:execute",
+        "retention:override",
     },
     "admin": {
         "references:read",
@@ -84,11 +89,14 @@ PERMISSION_MAP: dict[str, set[str]] = {
         "jobs:read",
         "jobs:write",
         "integrations:write",
+        "pii:edit",
+        "judges:run",
     },
     "member": {
         "references:read",
         "jobs:read",
         "jobs:write",
+        "judges:run",
     },
     "viewer": {
         "references:read",
@@ -105,6 +113,74 @@ def get_role_permissions(role: str) -> set[str]:
 def has_permission(role: str, permission: str) -> bool:
     """Check if a role has a specific permission."""
     return permission in get_role_permissions(role)
+
+
+async def check_resource_permission(
+    user_id: str,
+    org_id: str,
+    permission: str,
+    resource_type: str | None = None,
+    resource_id: str | None = None,
+) -> bool:
+    """Resource-scoped permission check.
+
+    Returns True if the user has the given permission either
+    org-wide (via their built-in role) or on a specific resource
+    (via a custom-role assignment).
+
+    The check is two-step:
+
+    1. Look up the user's role in the org. If the role grants
+       the permission (e.g. ``admin`` → ``jobs:write``), return
+       True immediately.
+    2. If a ``resource_type`` and ``resource_id`` are provided,
+       look up a custom-role assignment on that exact resource.
+       If one exists, the user gets the permission for that
+       resource only (org-wide access is NOT implied).
+
+    Used by routes that need finer-grained access than the
+    org-wide role map (e.g. "only the owner of this job can
+    cancel it"). Routes that only need org-wide access should
+    keep using :func:`require_org_permission`.
+    """
+    client = await get_postgres_client()
+
+    role_row = await client.fetchrow(
+        """
+        SELECT role
+        FROM organization_members
+        WHERE user_id = $1 AND org_id = $2
+        LIMIT 1
+        """,
+        user_id,
+        org_id,
+    )
+    role = (role_row or {}).get("role", "")
+    if has_permission(role, permission):
+        return True
+
+    if resource_type is None or resource_id is None:
+        return False
+
+    # Custom-role assignment on the specific resource.
+    assignment = await client.fetchval(
+        """
+        SELECT 1
+        FROM custom_role_assignments
+        WHERE user_id = $1
+          AND org_id = $2
+          AND resource_type = $3
+          AND resource_id = $4
+          AND permission = $5
+        LIMIT 1
+        """,
+        user_id,
+        org_id,
+        resource_type,
+        resource_id,
+        permission,
+    )
+    return assignment is not None
 
 
 @dataclass
@@ -481,6 +557,46 @@ async def require_org_permission(
             detail=f"Permission denied: {permission}",
         )
     return org
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Phase 7.3d — convenience guards for the four sensitive permissions.
+# Each is a thin alias for :func:`require_org_permission` keyed to
+# the named permission. Routes can ``Depends(require_pii_policy_edit)``
+# etc. for a self-documenting signature.
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+async def require_pii_policy_edit(
+    x_org_id: str | None = Header(None, alias="X-Org-Id"),
+    payload: dict | None = Depends(_try_resolve_token_payload),
+) -> dict:
+    """Require ``pii:edit`` — the ability to modify the org's PII policy."""
+    return await require_org_permission("pii:edit", x_org_id, payload)
+
+
+async def require_judges_run(
+    x_org_id: str | None = Header(None, alias="X-Org-Id"),
+    payload: dict | None = Depends(_try_resolve_token_payload),
+) -> dict:
+    """Require ``judges:run`` — the ability to trigger judge evaluations."""
+    return await require_org_permission("judges:run", x_org_id, payload)
+
+
+async def require_gdpr_execute(
+    x_org_id: str | None = Header(None, alias="X-Org-Id"),
+    payload: dict | None = Depends(_try_resolve_token_payload),
+) -> dict:
+    """Require ``gdpr:execute`` — owner-only RTBF / GDPR actions."""
+    return await require_org_permission("gdpr:execute", x_org_id, payload)
+
+
+async def require_retention_override(
+    x_org_id: str | None = Header(None, alias="X-Org-Id"),
+    payload: dict | None = Depends(_try_resolve_token_payload),
+) -> dict:
+    """Require ``retention:override`` — owner-only data-retention override."""
+    return await require_org_permission("retention:override", x_org_id, payload)
 
 
 def require_org_permission_or_api_key(permission: str):
