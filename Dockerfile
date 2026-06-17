@@ -69,9 +69,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # passlib[bcrypt], then qrcode, …). The pgbouncer entry is a comment
 # in the file, not a real package — awk filters that out by quoting.
 COPY pyproject.toml ./
+# Extract every dep from pyproject.toml's [project] dependencies and
+# hand them to pip. Uses python -c + tomllib (stdlib in 3.11+) so we
+# don't depend on awk/grep/sed — python:3.12-slim ships without those
+# coreutils. Filters out the pgbouncer entry (comment-marker for the
+# infra team, not a real package).
 RUN pip install --no-cache-dir --break-system-packages \
-    $(awk '/^dependencies = \[/,/^\]/' /app/pyproject.toml \
-        | grep -oE '"[^"]+"' | tr -d '"' | grep -v '^pgbouncer$' | tr '\n' ' ')
+    $(python -c "import tomllib; d=tomllib.loads(open('/app/pyproject.toml').read()); print(' '.join(p for p in d['project']['dependencies'] if not p.startswith('pgbouncer')))")
 
 # Copy virtual environment from builder (full app deps) — kept for
 # any binary wheels the app imports at runtime. ``eden`` user owns it
