@@ -187,7 +187,7 @@ export function BillingTab() {
       {!plan?.stripe_subscription_id && (
         <div className="p-6 bg-[var(--bg-primary)] rounded-xl border border-[var(--border)]">
           <h3 className="text-lg font-semibold mb-4">Upgrade Your Plan</h3>
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             {["starter", "pro", "enterprise"].map((planName) => (
               <div
                 key={planName}
@@ -231,7 +231,7 @@ export function BillingTab() {
           <button
             onClick={handleCancelSubscription}
             disabled={cancelling}
-            className="px-4 py-2 border border-red-300 text-[var(--error)] rounded-lg text-sm font-medium hover:bg-[var(--error-dim)] disabled:opacity-50 flex items-center gap-2"
+            className="px-4 py-2 border border-[var(--error)]/40 text-[var(--error)] rounded-lg text-sm font-medium hover:bg-[var(--error-dim)] disabled:opacity-50 flex items-center gap-2"
           >
             {cancelling ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
             Cancel Subscription

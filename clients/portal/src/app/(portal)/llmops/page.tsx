@@ -205,7 +205,11 @@ function ModelsTab({ orgId }: { orgId: string }) {
             className="w-full pl-9 pr-4 py-2 text-sm bg-[var(--bg-primary)] border border-[var(--border-default)] rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--accent)]/20 focus:border-[var(--accent)]"
           />
         </div>
-        <button onClick={loadArtifacts} className="p-2 rounded-lg hover:bg-[var(--bg-tertiary)] text-[var(--text-muted)]">
+        <button
+          onClick={loadArtifacts}
+          aria-label="Refresh artifacts"
+          className="p-2 rounded-lg hover:bg-[var(--bg-tertiary)] text-[var(--text-muted)]"
+        >
           <RefreshCw className="w-4 h-4" />
         </button>
       </div>

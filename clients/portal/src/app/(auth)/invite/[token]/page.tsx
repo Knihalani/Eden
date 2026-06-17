@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { api } from "@/lib/api";
 import { Loader2, Building2, User, Mail, Clock, AlertCircle } from "lucide-react";
@@ -90,12 +91,12 @@ export default function InvitePage() {
           <p className="text-[var(--text-secondary)] mb-6">
             {error || "This invitation link is invalid or has expired."}
           </p>
-          <a
+          <Link
             href="/login"
             className="inline-block px-6 py-2 bg-[var(--accent)] text-[var(--bg-base)] rounded-lg font-medium hover:bg-[var(--accent-hover)]"
           >
             Go to login
-          </a>
+          </Link>
         </div>
       </div>
     );
@@ -209,9 +210,9 @@ export default function InvitePage() {
 
           <p className="text-xs text-center text-[var(--text-muted)] mt-4">
             Already have an account?{" "}
-            <a href="/login" className="text-[var(--accent)] hover:underline">
+            <Link href="/login" className="text-[var(--accent)] hover:underline">
               Sign in
-            </a>
+            </Link>
           </p>
         </div>
       </div>

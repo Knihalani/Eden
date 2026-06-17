@@ -186,7 +186,7 @@ export function ChatMessage({ type, content, metadata }: ChatMessageProps) {
   if (type === "error") {
     return (
       <div className="message-appear">
-        <div className="flex gap-3 pl-2 border-l-2 border-red-300 bg-[var(--error-dim)] -mx-2 px-2 py-2 rounded-lg">
+        <div className="flex gap-3 pl-2 border-l-2 border-[var(--error)] bg-[var(--error-dim)] -mx-2 px-2 py-2 rounded-lg">
           <div className="w-8 h-8 rounded-lg bg-[var(--error-dim)] flex items-center justify-center flex-shrink-0">
             <XCircle className="w-4 h-4 text-[var(--error)]" />
           </div>
@@ -220,7 +220,7 @@ export function ChatMessage({ type, content, metadata }: ChatMessageProps) {
   if (type === "edp-preview") {
     return (
       <div className="message-appear">
-        <div className="flex gap-3 pl-2 border-l-2 border-emerald-200 bg-[var(--terminal-faint)] -mx-2 px-3 py-2 rounded-lg">
+        <div className="flex gap-3 pl-2 border-l-2 border-[var(--terminal)] bg-[var(--terminal-faint)] -mx-2 px-3 py-2 rounded-lg">
           <div className="w-8 h-8 rounded-lg bg-[var(--terminal-faint)] flex items-center justify-center flex-shrink-0">
             <svg className="w-4 h-4 text-[var(--terminal)]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M12 22c4-4 8-7.5 8-12a8 8 0 0 0-16 0c0 4.5 4 8 8 12z" />

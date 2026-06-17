@@ -613,7 +613,7 @@ function DisparityTab({
   return (
     <div className="space-y-6">
       {/* Stats */}
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div className="bg-[var(--bg-primary)] border border-[var(--border-default)] rounded-xl p-4">
           <p className="text-xs text-[var(--text-muted)] uppercase tracking-wide">Total Reports</p>
           <p className="text-2xl font-bold text-[var(--text-primary)] mt-1">{data.reports.length}</p>
@@ -1070,7 +1070,7 @@ function ClosedLoopTab() {
             <option value={180}>Last 180 days</option>
           </select>
         </div>
-        <div className="grid grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div>
             <div className="text-xs text-[var(--text-muted)] uppercase tracking-wide mb-1">
               Aggregate gold rate

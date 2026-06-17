@@ -3374,3 +3374,226 @@ export const onboardingApi = {
 
 (api as unknown as Record<string, unknown>).githubApi = githubApi;
 (api as unknown as Record<string, unknown>).onboardingApi = onboardingApi;
+
+// ── AI Agent (Phase C — unified panel) ───────────────────────────────────
+//
+// ``aiApi`` is the frontend surface for the Cat 14 real backend.
+// Streaming chat uses native ``fetch`` + ``ReadableStream`` so the
+// portal can render text deltas as they arrive instead of waiting
+// for the SSE stream to close.
+
+export interface AiToolCatalogEntry {
+  name: string;
+  summary: string;
+  args: Record<string, { type: string; required?: boolean; default?: unknown; description?: string; enum?: string[] }>;
+}
+
+export interface AiCitation {
+  kind: "span" | "trace" | "incident" | "agent" | "message" | "tool";
+  id: string;
+  label: string;
+  excerpt?: string;
+  trace_id?: string;
+}
+
+export interface AiChartSpec {
+  type: "line" | "bar" | "pie" | "scatter" | "table" | "heatmap" | "sankey";
+  title: string;
+  data: Array<Record<string, unknown>>;
+  unit?: string;
+  x_key?: string;
+  y_key?: string;
+  y2_key?: string;
+  group_key?: string;
+  label_key?: string;
+  value_key?: string;
+  row_key?: string;
+  col_key?: string;
+  source_key?: string;
+  target_key?: string;
+  columns?: string[];
+}
+
+export interface AiToolCall {
+  name: string;
+  args: Record<string, unknown>;
+  result?: unknown;
+  error?: string;
+  latency_ms?: number;
+}
+
+export interface AiChunkHandler {
+  onTextDelta?: (text: string) => void;
+  onToolCall?: (tc: AiToolCall) => void;
+  onChart?: (chart: AiChartSpec) => void;
+  onCitation?: (cite: AiCitation) => void;
+  onDone?: (summary: { conversation_id: string; turns: number; prompt_tokens: number; completion_tokens: number }) => void;
+  onError?: (error: string) => void;
+}
+
+export interface AiChatRequest {
+  conversation_id?: string | null;
+  message: string;
+  page_context?: Record<string, unknown>;
+}
+
+export interface AiConversationSummary {
+  id: string;
+  title: string;
+  page_context?: Record<string, unknown>;
+  turn_count: number;
+  total_tokens: number;
+  total_cost_usd: number;
+  created_at: string;
+  updated_at: string;
+  last_message_at?: string | null;
+}
+
+export interface AiMessage {
+  id: string;
+  role: "user" | "assistant" | "tool" | "system";
+  content: string;
+  tool_calls: AiToolCall[];
+  chart_specs: AiChartSpec[];
+  citations: AiCitation[];
+  prompt_tokens: number;
+  completion_tokens: number;
+  model_used?: string | null;
+  created_at: string;
+}
+
+export interface AiConversationDetail {
+  conversation: AiConversationSummary;
+  messages: AiMessage[];
+}
+
+export const aiApi = {
+  tools: (orgId: string) =>
+    fetchApi<AiToolCatalogEntry[]>(`/orgs/${orgId}/ai/tools`, {
+      headers: { "X-Org-Id": orgId },
+    }),
+
+  listConversations: (orgId: string, limit = 50) =>
+    fetchApi<AiConversationSummary[]>(`/orgs/${orgId}/ai/conversations?limit=${limit}`, {
+      headers: { "X-Org-Id": orgId },
+    }),
+
+  getConversation: (orgId: string, conversationId: string) =>
+    fetchApi<AiConversationDetail>(
+      `/orgs/${orgId}/ai/conversations/${conversationId}`,
+      { headers: { "X-Org-Id": orgId },
+    }),
+
+  archiveConversation: (orgId: string, conversationId: string) =>
+    fetchApi<{ archived: boolean; conversation_id: string }>(
+      `/orgs/${orgId}/ai/conversations/${conversationId}`,
+      { method: "DELETE", headers: { "X-Org-Id": orgId } },
+    ),
+
+  /**
+   * Stream a chat turn via SSE. The handler callbacks fire as events
+   * arrive — text deltas, tool calls, charts, citations, then done.
+   * Returns an AbortController so the caller can cancel the stream
+   * (e.g. on panel close).
+   */
+  streamChat: async (
+    orgId: string,
+    body: AiChatRequest,
+    handler: AiChunkHandler,
+  ): Promise<AbortController> => {
+    const controller = new AbortController();
+    const url = `${API_BASE}/orgs/${orgId}/ai/chat`;
+    try {
+      const res = await fetch(url, {
+        method: "POST",
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Org-Id": orgId,
+        },
+        body: JSON.stringify(body),
+        signal: controller.signal,
+      });
+      if (!res.ok || !res.body) {
+        handler.onError?.(`chat_failed: ${res.status}`);
+        return controller;
+      }
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      // SSE: events separated by blank lines, each line prefixed with
+      // "data: " (or "event:" etc).
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        let idx: number;
+        // Process each complete SSE event (terminated by blank line).
+        while ((idx = buffer.indexOf("\n\n")) !== -1) {
+          const eventText = buffer.slice(0, idx);
+          buffer = buffer.slice(idx + 2);
+          // Walk the data lines; an SSE "data:" may span multiple
+          // lines, joined by "\n".
+          const dataLines = eventText
+            .split("\n")
+            .filter((l) => l.startsWith("data: "))
+            .map((l) => l.slice("data: ".length))
+            .join("\n");
+          if (!dataLines) continue;
+          let parsed: { type?: string; text?: string; tool_call?: AiToolCall;
+                        chart?: AiChartSpec; citation?: AiCitation;
+                        error?: string;
+                        conversation_id?: string; turns?: number;
+                        prompt_tokens?: number; completion_tokens?: number };
+          try {
+            parsed = JSON.parse(dataLines);
+          } catch {
+            continue;
+          }
+          switch (parsed.type) {
+            case "text_delta":
+              handler.onTextDelta?.(parsed.text ?? "");
+              break;
+            case "tool_call":
+              if (parsed.tool_call) handler.onToolCall?.(parsed.tool_call);
+              break;
+            case "chart":
+              if (parsed.chart) handler.onChart?.(parsed.chart);
+              break;
+            case "citation":
+              if (parsed.citation) handler.onCitation?.(parsed.citation);
+              break;
+            case "error":
+              handler.onError?.(parsed.error ?? "unknown_error");
+              break;
+            case "summary":
+              handler.onDone?.({
+                conversation_id: parsed.conversation_id ?? "",
+                turns: parsed.turns ?? 0,
+                prompt_tokens: parsed.prompt_tokens ?? 0,
+                completion_tokens: parsed.completion_tokens ?? 0,
+              });
+              break;
+            case "done":
+              handler.onDone?.({
+                conversation_id: "",
+                turns: 0,
+                prompt_tokens: 0,
+                completion_tokens: 0,
+              });
+              break;
+            default:
+              break;
+          }
+        }
+      }
+    } catch (err) {
+      if ((err as Error).name !== "AbortError") {
+        handler.onError?.(`stream_error: ${(err as Error).message}`);
+      }
+    }
+    return controller;
+  },
+};
+
+(api as unknown as Record<string, unknown>).aiApi = aiApi;
