@@ -62,8 +62,13 @@ class PostgresClient:
         url_override = settings.database_url if settings.database_url else None
         if url_override:
             parts = urlsplit(url_override)
-            # asyncpg/DSN URLs can be ``postgres://`` or ``postgresql+asyncpg://``
-            scheme_db = parts.scheme.split("+")[-1]  # "postgres" or "postgresql"
+            # Accept the three shapes operators actually paste:
+            #   - libpq-style:       postgresql://user:pw@host/db?sslmode=require
+            #   - SQLAlchemy async:  postgresql+asyncpg://user:pw@host/db
+            #   - legacy alias:      postgres://user:pw@host/db
+            # Strip any ``+driver`` suffix so all three collapse to the same
+            # ``scheme_db`` for the allow-list check below.
+            scheme_db = parts.scheme.split("+", 1)[0]
             if scheme_db not in {"postgres", "postgresql"}:
                 raise ValueError(
                     f"Unsupported scheme in DATABASE_URL: {parts.scheme!r}"
