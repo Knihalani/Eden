@@ -18,6 +18,8 @@ from eden.api.routes import (
     billing,
     chain,
     clerk_webhooks,
+    datasets_spreadsheet,
+    debugger,
     evaluation,
     experiments,
     export,
@@ -25,15 +27,22 @@ from eden.api.routes import (
     feature_flags,
     integrations_helicone,
     kb,
+    labeling,
     marketplace,
     multi_agent,
     orgs,
     pii_policy,
+    prompts,
+    qa_generator,
     references,
+    redteam,
     region,
     retention_policy,
     sandbox,
     scim,
+    sharing,
+    signals,
+    sql_query,
     sso,
 )
 from eden.api.routes import (
@@ -272,6 +281,16 @@ app.include_router(sso.router)  # /sso
 app.include_router(chain.router)  # /chain
 app.include_router(ai_insights.router)  # /orgs/{org_id}/ai-insights
 app.include_router(ai_agent.router)  # /orgs/{org_id}/ai (Phase C unified agent)
+app.include_router(sharing.sharing_router)  # /orgs/{org_id}/traces/{trace_id}/share + saved-searches (Phase N)
+app.include_router(sharing.public_router)  # /public/traces/{token} (no auth, token-gated)
+app.include_router(sql_query.router)  # /orgs/{org_id}/sql (Phase M read-only SQL executor)
+app.include_router(qa_generator.router)  # /orgs/{org_id}/synthetic (Phase J synthetic Q/A generator)
+app.include_router(redteam.router)  # /orgs/{org_id}/redteam (Phase L red-team probes)
+app.include_router(labeling.router)  # /orgs/{org_id}/labeling (Phase D labeling queue)
+app.include_router(signals.router)  # /orgs/{org_id}/signals (Phase Q plain-English signals)
+app.include_router(debugger.router)  # /orgs/{org_id}/debugger (Phase P agent debugger)
+app.include_router(datasets_spreadsheet.router)  # /orgs/{org_id}/datasets/{dataset_id} (Phase S spreadsheet)
+app.include_router(prompts.router)  # /orgs/{org_id}/prompts (Phase I prompt management + playground)
 app.include_router(pii_policy.router)  # /orgs/{org_id}/pii-policy
 app.include_router(retention_policy.router)  # /orgs/{org_id}/retention-policy
 app.include_router(region.router)  # /orgs/{org_id}/region

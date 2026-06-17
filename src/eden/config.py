@@ -63,6 +63,19 @@ class Settings(BaseSettings):
     ai_agent_stream_chunk_ms: int = 50  # SSE chunk flush cadence
     ai_agent_retention_days: int = 90
 
+    # Phase R — stdlib ``logging`` shim (Logfire-style 5-min
+    # time-to-first-log). When the user calls ``eden.install()`` (or
+    # ``eden.install_logging()``) the EdenLoggingHandler is attached
+    # to the root logger and every ``logging.info("...")`` call from
+    # the user's app + any 3rd-party library becomes a
+    # ``TelemetryEvent(event_type="log")`` in the pipeline.
+    # ``eden_log_level`` sets the minimum level captured. Default
+    # INFO so WARNING/ERROR/CRITICAL are always captured.
+    eden_log_level: str = "INFO"
+    eden_log_project: str = "default"
+    eden_log_agent_id: str = ""  # optional cross-ref to an agent
+    eden_log_realm: str = "production"  # "production" | "environment"
+
     # OpenRouter
     openrouter_api_key: str = ""
     openrouter_base_url: str = "https://openrouter.ai/api/v1"
