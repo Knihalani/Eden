@@ -2,15 +2,52 @@
 
 import hashlib
 from dataclasses import dataclass
+from typing import Annotated
 
-from fastapi import Cookie, Header, HTTPException, status
-from fastapi.security import HTTPBearer
+from fastapi import Cookie, Depends, Header, HTTPException, status
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from eden.api.utils.auth import decode_access_token
+from eden.api.utils.clerk_auth import (
+    clerk_role_to_eden_role,
+    extract_org_id,
+    extract_org_role,
+    extract_user_id,
+    is_clerk_payload,
+    verify_clerk_token,
+)
 from eden.config import get_settings
 from eden.storage.postgres import get_postgres_client
 
 security = HTTPBearer(auto_error=False)
+
+
+# Bearer-JWT resolver used by the auth dependencies below. Pulls the
+# JWT from the ``Authorization: Bearer <jwt>`` header first (the path
+# the Clerk-authed portal uses), then falls back to the legacy Eden
+# ``authorization`` cookie (the path the CLI / SDK / service-to-service
+# callers use). Returns the decoded payload dict in either case, or
+# raises 401 if neither path yielded a valid token.
+async def _resolve_token_payload(
+    authorization_cookie: Annotated[str | None, Cookie(alias="authorization")] = None,
+    bearer: Annotated[HTTPAuthorizationCredentials | None, Depends(security)] = None,
+) -> dict:
+    # Clerk path: portal forwards the Clerk session JWT as a Bearer.
+    if bearer and bearer.scheme.lower() == "bearer":
+        clerk_payload = verify_clerk_token(bearer.credentials)
+        if clerk_payload:
+            return clerk_payload
+
+    # Legacy Eden-issued cookie JWT (CLI, SDK, internal services).
+    if authorization_cookie:
+        payload = decode_access_token(authorization_cookie)
+        if payload:
+            return payload
+
+    raise HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Not authenticated",
+    )
 
 # Permission map: role -> set of permissions
 PERMISSION_MAP: dict[str, set[str]] = {
@@ -89,7 +126,7 @@ class OrgMember:
 
 async def get_current_org_member(
     x_org_id: str | None = Header(None, alias="X-Org-Id"),
-    authorization: str | None = Cookie(None),
+    payload: dict = Depends(_resolve_token_payload),
 ) -> OrgMember:
     """Authenticate a portal user and resolve their org membership.
 
@@ -97,18 +134,7 @@ async def get_current_org_member(
     instead of a raw dict. Raises 401 on no/invalid auth, 403 on
     no membership in the requested org.
     """
-    if not authorization:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Not authenticated",
-        )
-    payload = decode_access_token(authorization)
-    if not payload:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid or expired token",
-        )
-    user_id = payload.get("sub")
+    user_id = payload.get("sub") or extract_user_id(payload)
     if not user_id:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -146,28 +172,13 @@ async def get_current_org_member(
 
 
 async def get_current_user(
-    authorization: str | None = Cookie(None),
+    payload: dict = Depends(_resolve_token_payload),
 ) -> dict:
-    """Validate JWT cookie and return user.
+    """Validate JWT (Clerk Bearer or Eden cookie) and return user.
 
     Raises HTTPException 401 if not authenticated.
     """
-    token = authorization
-
-    if not token:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Not authenticated",
-        )
-
-    payload = decode_access_token(token)
-    if not payload:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid or expired token",
-        )
-
-    user_id = payload.get("sub")
+    user_id = payload.get("sub") or extract_user_id(payload)
     email = payload.get("email")
 
     if not user_id:
@@ -179,21 +190,25 @@ async def get_current_user(
     return {"user_id": user_id, "email": email}
 
 
-async def get_optional_user(
-    authorization: str | None = Cookie(None),
+async def _try_resolve_token_payload(
+    authorization_cookie: Annotated[str | None, Cookie(alias="authorization")] = None,
+    bearer: Annotated[HTTPAuthorizationCredentials | None, Depends(security)] = None,
 ) -> dict | None:
-    """Validate JWT cookie and return user, or None if not authenticated."""
-    if not authorization:
+    """Same as ``_resolve_token_payload`` but returns None instead of raising."""
+    try:
+        return await _resolve_token_payload(authorization_cookie, bearer)
+    except HTTPException:
         return None
 
-    payload = decode_access_token(authorization)
+
+async def get_optional_user(
+    payload: dict | None = Depends(_try_resolve_token_payload),
+) -> dict | None:
+    """Validate JWT (Clerk Bearer or Eden cookie) and return user, or None."""
     if not payload:
         return None
-
-    return {
-        "user_id": payload.get("sub"),
-        "email": payload.get("email"),
-    }
+    user_id = payload.get("sub") or extract_user_id(payload)
+    return {"user_id": user_id, "email": payload.get("email")}
 
 
 async def get_user_by_id(user_id: str) -> dict | None:
@@ -205,22 +220,84 @@ async def get_user_by_id(user_id: str) -> dict | None:
 
 async def get_current_org(
     x_org_id: str | None = Header(None, alias="X-Org-Id"),
-    authorization: str | None = Cookie(None),
+    payload: dict | None = Depends(_try_resolve_token_payload),
     include_archived: bool = False,
 ) -> dict | None:
     """Get current organization context from header or JWT.
 
     Returns org context if user is a member, None otherwise.
     Optionally includes archived orgs (for admin views).
-    """
-    if not authorization:
-        return None
 
-    payload = decode_access_token(authorization)
+    Clerk path: when the JWT came from Clerk, ``org_id`` and
+    ``org_role`` are read directly off the session claims and we
+    skip the ``org_members`` lookup. The Eden row is still fetched
+    for ``name`` / ``slug`` / ``archived_at`` / ``last_active_at``
+    bookkeeping, but the role is trusted from Clerk (single source
+    of truth).
+    """
     if not payload:
         return None
 
-    user_id = payload.get("sub")
+    user_id = payload.get("sub") or extract_user_id(payload)
+    # Clerk path: trust the org_id + role claims from the session JWT.
+    is_clerk = is_clerk_payload(payload)
+    if is_clerk:
+        org_id = x_org_id or extract_org_id(payload)
+        if not org_id:
+            return None
+        clerk_role = extract_org_role(payload)
+        eden_role = clerk_role_to_eden_role(clerk_role)
+        client = await get_postgres_client()
+        if include_archived:
+            row = await client.fetchrow(
+                """
+                SELECT om.role, o.name, o.slug, o.owner_id, o.archived_at
+                FROM org_members om
+                JOIN organizations o ON o.id = om.org_id
+                WHERE om.user_id = $1 AND om.org_id = $2
+                """,
+                user_id,
+                org_id,
+            )
+        else:
+            row = await client.fetchrow(
+                """
+                SELECT om.role, o.name, o.slug, o.owner_id, o.archived_at
+                FROM org_members om
+                JOIN organizations o ON o.id = om.org_id
+                WHERE om.user_id = $1 AND om.org_id = $2 AND o.archived_at IS NULL
+                """,
+                user_id,
+                org_id,
+            )
+        if not row:
+            # Clerk says the user is in this org but Eden's
+            # ``org_members`` row doesn't exist yet — the Clerk
+            # webhook (``user.created`` / ``organizationMembership.created``)
+            # will create it shortly. Return a synthesised entry so the
+            # caller can still proceed with the Clerk-trusted role.
+            return {
+                "org_id": org_id,
+                "role": eden_role,
+                "name": org_id,
+                "slug": org_id,
+                "is_owner": eden_role == "owner",
+                "archived_at": None,
+                "_pending_sync": True,
+            }
+        # Clerk is the source of truth for role — overwrite whatever
+        # Eden's row says. This keeps role changes in Clerk in
+        # effect without waiting for a webhook round-trip.
+        return {
+            "org_id": org_id,
+            "role": eden_role,
+            "name": row["name"],
+            "slug": row["slug"],
+            "is_owner": row["owner_id"] == user_id,
+            "archived_at": row.get("archived_at"),
+        }
+
+    # Legacy Eden cookie path — unchanged.
     org_id = x_org_id or payload.get("current_org_id")
 
     if not org_id or not user_id:
@@ -267,10 +344,10 @@ async def get_current_org(
 
 async def require_org_member(
     x_org_id: str | None = Header(None, alias="X-Org-Id"),
-    authorization: str | None = Cookie(None),
+    payload: dict | None = Depends(_try_resolve_token_payload),
 ) -> dict:
     """Require user to be an org member, otherwise raise 403."""
-    org = await get_current_org(x_org_id, authorization)
+    org = await get_current_org(x_org_id, payload)
     if not org:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -281,10 +358,10 @@ async def require_org_member(
 
 async def require_org_admin(
     x_org_id: str | None = Header(None, alias="X-Org-Id"),
-    authorization: str | None = Cookie(None),
+    payload: dict | None = Depends(_try_resolve_token_payload),
 ) -> dict:
     """Require user to be an org admin/owner, otherwise raise 403."""
-    org = await get_current_org(x_org_id, authorization)
+    org = await get_current_org(x_org_id, payload)
     if not org:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -300,21 +377,29 @@ async def require_org_admin(
 
 async def require_2fa(
     x_org_id: str | None = Header(None, alias="X-Org-Id"),
-    authorization: str | None = Cookie(None),
+    payload: dict | None = Depends(_try_resolve_token_payload),
 ) -> dict:
     """Require user to have 2FA enabled if org enforces it.
 
     Returns user dict if:
     - Org does not enforce 2FA, OR
+    - User authenticated via Clerk (Clerk owns MFA — its session JWT
+      already proves the user passed any required factor), OR
     - Org enforces 2FA AND user has 2FA enabled
 
     Raises 403 with mfa_required code if:
-    - Org enforces 2FA AND user does not have 2FA enabled
+    - Org enforces 2FA AND user authenticated via the legacy Eden
+      cookie flow AND user does not have 2FA enabled in Eden's users
+      table.
     """
-    org = await get_current_org(x_org_id, authorization)
+    org = await get_current_org(x_org_id, payload)
     if not org:
         # If not in an org context, skip 2FA check
         return {"user_id": None, "email": None}
+
+    # Clerk-authed callers: Clerk owns MFA. Skip the Eden-side check.
+    if payload and _is_clerk_payload(payload):
+        return org
 
     # Check if org has 2FA enforcement
     client = await get_postgres_client()
@@ -327,12 +412,7 @@ async def require_2fa(
         # Org doesn't enforce 2FA, allow through
         return org
 
-    # Org enforces 2FA - check user has it enabled
-    payload = decode_access_token(authorization)
-    if not payload:
-        return org
-
-    user_id = payload.get("sub")
+    user_id = payload.get("sub") or extract_user_id(payload) if payload else None
     user_row = await client.fetchrow(
         "SELECT two_factor_enabled FROM users WHERE id = $1",
         user_id,
@@ -347,12 +427,25 @@ async def require_2fa(
     return org
 
 
+def _is_clerk_payload(payload: dict) -> bool:
+    """Best-effort detection of a Clerk session JWT payload.
+
+    Clerk's standard issuer is ``https://<slug>.clerk.accounts.dev$``
+    (dev) or ``https://clerk.<production-domain>.com`` (prod). We
+    accept any ``iss`` ending in ``.clerk.accounts.dev$`` or matching
+    ``clerk.`` as a prefix, which covers the common shapes without
+    coupling to a specific Clerk instance URL.
+    """
+    iss = (payload.get("iss") or "").lower()
+    return ".clerk.accounts.dev$" in iss or iss.startswith("https://clerk.")
+
+
 async def require_org_owner(
     x_org_id: str | None = Header(None, alias="X-Org-Id"),
-    authorization: str | None = Cookie(None),
+    payload: dict | None = Depends(_try_resolve_token_payload),
 ) -> dict:
     """Require user to be an org owner, otherwise raise 403."""
-    org = await get_current_org(x_org_id, authorization)
+    org = await get_current_org(x_org_id, payload)
     if not org:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -369,13 +462,13 @@ async def require_org_owner(
 async def require_org_permission(
     permission: str,
     x_org_id: str | None = Header(None, alias="X-Org-Id"),
-    authorization: str | None = Cookie(None),
+    payload: dict | None = Depends(_try_resolve_token_payload),
 ) -> dict:
     """Require user to have a specific org permission, otherwise raise 403.
 
     Uses the role-based permission map to determine access.
     """
-    org = await get_current_org(x_org_id, authorization)
+    org = await get_current_org(x_org_id, payload)
     if not org:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -399,7 +492,7 @@ def require_org_permission_or_api_key(permission: str):
     async def dependency(
         x_org_id: str | None = Header(None, alias="X-Org-Id"),
         x_org_api_key: str | None = Header(None, alias="X-Org-Api-Key"),
-        authorization: str | None = Cookie(None),
+        payload: dict | None = Depends(_try_resolve_token_payload),
     ) -> dict:
         # Try API key first
         if x_org_api_key:
@@ -411,13 +504,13 @@ def require_org_permission_or_api_key(permission: str):
                 pass
 
         # Fall back to user auth
-        if not authorization:
+        if not payload:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Not authenticated",
             )
 
-        org = await get_current_org(x_org_id, authorization)
+        org = await get_current_org(x_org_id, payload)
         if not org:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
