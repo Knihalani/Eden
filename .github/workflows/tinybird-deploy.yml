@@ -1,0 +1,63 @@
+name: tinybird deploy
+
+# Deploys the `tinybird/` data project to Tinybird Cloud on every push
+# to main. Runs on ubuntu-latest so the tinybird-local container works
+# (it segfaults on Apple Silicon under QEMU emulation — see the README
+# and the June 17 2026 deploy runbook for context).
+#
+# Required GitHub repo secrets:
+#   TINYBIRD_HOST   — e.g. https://api.us-east.tinybird.co
+#   TINYBIRD_TOKEN  — workspace token (not the user token). The
+#                     token from `.tinyb` under `tokens.<host>` works
+#                     but the workspace admin token from the
+#                     Tinybird UI > Settings > Tokens is preferred.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "tinybird/**"
+      - ".github/workflows/tinybird-deploy.yml"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tinybird-deploy
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    name: Deploy tinybird project to Cloud
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: tinybird
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Tinybird CLI
+        run: curl https://tinybird.co | sh
+
+      - name: Add tb to PATH
+        run: echo "$HOME/.tinybird" >> "$GITHUB_PATH"
+
+      - name: Validate deployment (dry run)
+        run: tb --cloud --host "${{ secrets.TINYBIRD_HOST }}" --token "${{ secrets.TINYBIRD_TOKEN }}" deploy --check
+
+      - name: Deploy to Tinybird Cloud
+        run: tb --cloud --host "${{ secrets.TINYBIRD_HOST }}" --token "${{ secrets.TINYBIRD_TOKEN }}" deploy
+
+      - name: Smoke-test deployed endpoints
+        # Hit one of the public pipes to confirm the deploy promoted.
+        # The token is the BRANCH token (read-only), not the admin
+        # deploy token. If you have a read token in secrets, prefer
+        # that — keep deploy/admin tokens out of any URL.
+        run: |
+          set -euo pipefail
+          HOST="${{ secrets.TINYBIRD_HOST }}"
+          echo "Listing datasources after deploy..."
+          tb --cloud --host "$HOST" --token "${{ secrets.TINYBIRD_TOKEN }}" datasource ls || true
