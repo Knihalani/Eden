@@ -62,15 +62,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # venv layer (so ``/opt/venv/bin/uvicorn`` was absent even with PATH
 # set + chown applied). ``--break-system-packages`` lets us coexist
 # with the system pip on the slim base image.
-#
-# Earlier versions of this block listed each runtime dep explicitly
-# (uvicorn, fastapi, pydantic, …) and we still hit
-# ``ModuleNotFoundError: No module named 'bcrypt'`` from
-# ``eden.api.utils.auth``. Replaced with ``pip install /app/src`` below
-# — hatchling reads pyproject.toml's ``dependencies`` and pulls in
-# every declared dep, so any future dep addition is covered without
-# touching this Dockerfile.
-RUN pip install --no-cache-dir --break-system-packages --upgrade pip
+RUN pip install --no-cache-dir --break-system-packages \
+    "uvicorn[standard]>=0.30.0,<1.0.0" \
+    "fastapi>=0.115.0,<1.0.0" \
+    "pydantic>=2.9.0,<3.0.0" \
+    "pydantic-settings>=2.5.0,<3.0.0" \
+    "python-jose[cryptography]>=3.3.0,<4.0.0" \
+    "asyncpg>=0.29.0,<1.0.0"
 
 # Copy virtual environment from builder (full app deps) — kept for
 # any binary wheels the app imports at runtime. ``eden`` user owns it
@@ -83,16 +81,11 @@ COPY --chown=eden:eden src ./src
 COPY --chown=eden:eden migrations ./migrations
 COPY --chown=eden:eden alembic.ini ./alembic.ini
 
-# Install the ``eden`` package itself into system site-packages. This
-# resolves every dep declared in pyproject.toml (uvicorn, fastapi,
-# passlib[bcrypt], asyncpg, …) — no more whack-a-mole with explicit
-# pip-install lists. ``--no-deps`` would skip the transitive deps;
-# we keep deps on (default) so a missing dep in the venv is covered.
-RUN pip install --no-cache-dir --break-system-packages /app/src
-
-# Make the ``eden`` package importable from /app/src even if a future
-# build skips the pip install above (e.g. offline registry). Cheap to
-# keep, redundant with the install but harmless.
+# Make the `eden` package importable when uvicorn runs from the
+# system Python (which is what `python -m uvicorn` uses). The package
+# lives at /app/src/eden/ but is not on sys.path by default — the
+# builder's venv at /opt/venv has it via `uv sync`, but we exec
+# /usr/local/bin/python3 (not the venv's interpreter) so we need this.
 ENV PYTHONPATH=/app/src
 
 # Copy the pre-trained zstd dictionary (Phase 3 of the Postgres +
