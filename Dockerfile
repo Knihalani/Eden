@@ -81,6 +81,13 @@ COPY --chown=eden:eden src ./src
 COPY --chown=eden:eden migrations ./migrations
 COPY --chown=eden:eden alembic.ini ./alembic.ini
 
+# Make the `eden` package importable when uvicorn runs from the
+# system Python (which is what `python -m uvicorn` uses). The package
+# lives at /app/src/eden/ but is not on sys.path by default — the
+# builder's venv at /opt/venv has it via `uv sync`, but we exec
+# /usr/local/bin/python3 (not the venv's interpreter) so we need this.
+ENV PYTHONPATH=/app/src
+
 # Copy the pre-trained zstd dictionary (Phase 3 of the Postgres +
 # Compression plan). ``eden.storage.compression`` looks for the file at
 # ``$EDEN_ZSTD_DICT_PATH`` (default ``/app/var/zstd_dict.bin``). If the
