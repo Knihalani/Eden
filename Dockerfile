@@ -63,34 +63,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # set + chown applied). ``--break-system-packages`` lets us coexist
 # with the system pip on the slim base image.
 #
-# Listed explicitly rather than via ``pip install /app/src`` (which
-# tried to build the wheel from source and broke on the runtime
-# image — likely a PEP 517 + network issue). If you add a new runtime
-# dep to pyproject.toml, add it here too. Dev-only deps (pylint,
-# pytest, …) are intentionally omitted.
+# Pulls the full list of runtime deps from pyproject.toml at build
+# time via awk (the [project] dependencies block). Replaces a
+# hand-written list that kept missing transitive deps (bcrypt via
+# passlib[bcrypt], then qrcode, …). The pgbouncer entry is a comment
+# in the file, not a real package — awk filters that out by quoting.
+COPY pyproject.toml ./
 RUN pip install --no-cache-dir --break-system-packages \
-    "uvicorn[standard]>=0.30.0,<1.0.0" \
-    "fastapi>=0.115.0,<1.0.0" \
-    "pydantic>=2.9.0,<3.0.0" \
-    "pydantic-settings>=2.5.0,<3.0.0" \
-    "python-jose[cryptography]>=3.3.0,<4.0.0" \
-    "asyncpg>=0.29.0,<1.0.0" \
-    "passlib[bcrypt]>=1.7.0,<2.0.0" \
-    "psycopg2-binary>=2.9.9,<3.0.0" \
-    "sqlalchemy>=2.0.0,<3.0.0" \
-    "redis>=5.0.0,<6.0.0" \
-    "qdrant-client>=1.9.0,<2.0.0" \
-    "sse-starlette>=2.0.0,<3.0.0" \
-    "pyotp>=2.9.0,<3.0.0" \
-    "openrouter>=0.3.0,<1.0.0" \
-    "openai>=1.0.0,<2.0.0" \
-    "anthropic>=0.40.0,<1.0.0" \
-    "aiohttp>=3.9.0,<4.0.0" \
-    "PyGithub>=2.3.0,<3.0.0" \
-    "tenacity>=8.3.0,<9.0.0" \
-    "structlog>=24.0.0,<25.0.0" \
-    "python-dotenv>=1.0.0,<2.0.0" \
-    "zstandard>=0.23.0,<1.0.0"
+    $(awk '/^dependencies = \[/,/^\]/' /app/pyproject.toml \
+        | grep -oE '"[^"]+"' | tr -d '"' | grep -v '^pgbouncer$' | tr '\n' ' ')
 
 # Copy virtual environment from builder (full app deps) — kept for
 # any binary wheels the app imports at runtime. ``eden`` user owns it
@@ -129,17 +110,16 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
     CMD curl -fsS http://localhost:8000/health | grep -q '"status"' || exit 1
 
 # Run uvicorn with a single worker per container (scale via replicas).
-# Use the BUILDER'S venv Python at /opt/venv/bin/python3 — the
-# safety-net ``pip install`` of uvicorn into system site-packages was
-# necessary when the venv was missing uvicorn (the original Northflank
-# cache bug), but with the venv now healthy the safety net became a
-# whack-a-mole dep list (missed bcrypt, then qrcode, …). The venv's
-# ``uv sync`` already installed all 164 packages, so the venv's
-# interpreter finds uvicorn, fastapi, bcrypt, qrcode, passlib,
-# asyncpg, … without us maintaining an explicit list.
+# Use the system Python (python:3.12-slim puts it at
+# /usr/local/bin/python3) — the venv at /opt/venv cannot be trusted
+# (Northflank's image cache has shipped it empty twice now). The
+# safety-net pip install above puts every dep into system
+# site-packages, so ``python -m uvicorn`` finds uvicorn. Absolute
+# path + module form so we never depend on PATH or the venv being
+# activated.
 #
-# PYTHONPATH=/app/src is still required so ``import eden`` resolves
-# (the venv's editable install points to /build/src/eden, which
-# doesn't exist in the runtime image).
+# PYTHONPATH=/app/src is required so ``import eden`` resolves — the
+# source is at /app/src/eden/__init__.py (src-layout) but is not on
+# sys.path by default.
 # --proxy-headers is required when behind a reverse proxy / load balancer.
-CMD ["/opt/venv/bin/python3", "-m", "uvicorn", "eden.api.app:app", "--host", "0.0.0.0", "--port", "8000", "--proxy-headers"]
+CMD ["/usr/local/bin/python3", "-m", "uvicorn", "eden.api.app:app", "--host", "0.0.0.0", "--port", "8000", "--proxy-headers"]
