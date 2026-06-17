@@ -49,7 +49,39 @@ class PostgresClient:
         password: str | None = None,
         min_pool_size: int = 5,
         max_pool_size: int = 20,
+        ssl: bool | str | None = None,
     ) -> None:
+        # Honour ``settings.database_url`` as the canonical override path
+        # for managed Postgres (Neon, RDS, Aurora, Cloud SQL). When set,
+        # we parse the DSN once here so the pool can use the right
+        # host/port/user/password/SSL — without this the pool would
+        # silently connect to ``localhost`` and the production deploy
+        # would talk to a non-existent DB.
+        from urllib.parse import urlsplit, parse_qs
+
+        url_override = settings.database_url if settings.database_url else None
+        if url_override:
+            parts = urlsplit(url_override)
+            # asyncpg/DSN URLs can be ``postgres://`` or ``postgresql+asyncpg://``
+            scheme_db = parts.scheme.split("+")[-1]  # "postgres" or "postgresql"
+            if scheme_db not in {"postgres", "postgresql"}:
+                raise ValueError(
+                    f"Unsupported scheme in DATABASE_URL: {parts.scheme!r}"
+                )
+            host = host or parts.hostname or settings.postgres_host
+            port = port or parts.port or settings.postgres_port
+            # Strip leading "/" from path so we don't end up with "/eden"
+            database = database or (parts.path.lstrip("/") or settings.postgres_db)
+            user = user or parts.username or settings.postgres_user
+            password = password or parts.password or settings.postgres_password
+            # asyncpg uses ``ssl=`` not libpq's ``sslmode=``. Honour the
+            # libpq value here so callers can paste a Neon-style URL
+            # verbatim. ``channel_binding`` is libpq-only and ignored
+            # (asyncpg uses scram-sha-256 by default which satisfies it).
+            query = parse_qs(parts.query)
+            if ssl is None and "sslmode" in query:
+                mode = query["sslmode"][0].lower()
+                ssl = mode not in {"disable", "allow", "prefer", ""}
         self.config = ConnectionConfig(
             host=host or settings.postgres_host,
             port=port or settings.postgres_port,
@@ -59,6 +91,9 @@ class PostgresClient:
             min_size=min_pool_size,
             max_size=max_pool_size,
         )
+        # Persist the explicit ``ssl`` arg (caller override) but prefer
+        # the parsed URL value when ``database_url`` was the source.
+        self._ssl_override = ssl
         self._pool: Pool | None = None
 
     async def initialize(self) -> None:
@@ -84,10 +119,13 @@ class PostgresClient:
         # certificate via the system CA bundle. Operators who need
         # ``verify-full`` should set ``database_url`` instead and
         # pass a DSN that asyncpg can parse.
-        ssl: bool | str = False
-        sslmode = getattr(settings, "postgres_sslmode", "")
-        if sslmode and sslmode.lower() not in {"disable", "allow", "prefer", ""}:
-            ssl = True
+        if self._ssl_override is not None:
+            ssl: bool | str = self._ssl_override
+        else:
+            ssl = False
+            sslmode = getattr(settings, "postgres_sslmode", "")
+            if sslmode and sslmode.lower() not in {"disable", "allow", "prefer", ""}:
+                ssl = True
 
         self._pool = await asyncpg.create_pool(
             host=self.config.host,
