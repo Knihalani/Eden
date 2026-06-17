@@ -1,0 +1,116 @@
+name: backend (lint + test + build)
+
+# CI for the FastAPI backend. Catches the kind of issues that
+# previously broke Northflank builds (e.g. pyproject.toml out of
+# sync with uv.lock, missing runtime deps, alembic revisions with
+# wrong down_revision pointers).
+
+on:
+  pull_request:
+    paths:
+      - "src/**"
+      - "pyproject.toml"
+      - "uv.lock"
+      - "alembic/**"
+      - "Dockerfile"
+      - ".github/workflows/backend-ci.yml"
+  push:
+    branches: [main]
+    paths:
+      - "src/**"
+      - "pyproject.toml"
+      - "uv.lock"
+      - "alembic/**"
+      - "Dockerfile"
+      - ".github/workflows/backend-ci.yml"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: backend-ci
+  cancel-in-progress: true
+
+jobs:
+  lock-check:
+    name: uv.lock is in sync
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v3
+        with:
+          version: "latest"
+      - name: Check pyproject vs uv.lock
+        run: uv lock --check
+
+  lint:
+    name: ruff + mypy
+    runs-on: ubuntu-latest
+    needs: lock-check
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v3
+        with:
+          version: "latest"
+      - run: uv sync --frozen --all-extras
+      - run: uv run ruff check src/
+      - run: uv run mypy src/ || true
+        # mypy is informational only — the codebase still has a lot
+        # of gradual typing. Flip to non-zero exit once we ship the
+        # cleanup pass tracked in eden-audit-phase8.
+
+  test:
+    name: pytest
+    runs-on: ubuntu-latest
+    needs: lock-check
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: eden
+          POSTGRES_PASSWORD: eden
+          POSTGRES_DB: eden_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql+asyncpg://eden:eden@localhost:5432/eden_test
+      POSTGRES_HOST: localhost
+      POSTGRES_PORT: "5432"
+      POSTGRES_USER: eden
+      POSTGRES_PASSWORD: eden
+      POSTGRES_DB: eden_test
+      POSTGRES_SSLMODE: disable
+      JWT_SECRET: test-secret-do-not-use-in-prod
+      ENCRYPTION_KEY: test-encryption-key-must-be-32-chars-long!
+      SESSION_SECRET: test-session-secret
+      ENVIRONMENT: test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v3
+        with:
+          version: "latest"
+      - run: uv sync --frozen --all-extras
+      - name: Apply migrations
+        run: uv run alembic upgrade head
+      - name: Run tests
+        run: uv run pytest -q --tb=short -x
+        # The 663-test full suite takes ~12 minutes; -x fails fast on
+        # the first error so a broken PR is caught in under a minute.
+
+  build:
+    name: docker build (Northflank shape)
+    runs-on: ubuntu-latest
+    needs: lock-check
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Build the production image
+        # This is the same build Northflank runs. Catches Dockerfile
+        # / uv.lock drift before the Northflank build does.
+        run: docker buildx build --load -t eden-api:ci-test .
