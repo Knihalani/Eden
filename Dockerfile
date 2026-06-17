@@ -55,8 +55,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy virtual environment from builder
-COPY --from=builder /opt/venv /opt/venv
+# Copy virtual environment from builder — --chown so the non-root
+# ``eden`` user can actually traverse it (without this, ``USER eden``
+# can't reach /opt/venv/bin/uvicorn even though it's on PATH).
+COPY --from=builder --chown=eden:eden /opt/venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 
 # Copy application code
@@ -83,9 +85,9 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
     CMD curl -fsS http://localhost:8000/health | grep -q '"status"' || exit 1
 
 # Run uvicorn with a single worker per container (scale via replicas).
-# Use the absolute path to the venv's uvicorn so the entrypoint
-# wrapper doesn't need $PATH set when it execs the CMD (Northflank's
-# pre-start wrapper clears the env before exec'ing the user CMD —
-# the inline `PATH=...` form guarantees the binary resolves).
+# Uses shell form so PATH is set explicitly (Northflank's pre-start
+# wrapper clears the env before exec'ing the CMD; without the inline
+# PATH=/opt/venv/bin:… the venv's uvicorn is unreachable even though
+# the runtime image's ENV PATH includes it).
 # --proxy-headers is required when behind a reverse proxy / load balancer.
 CMD ["/bin/sh", "-c", "PATH=/opt/venv/bin:$PATH exec uvicorn eden.api.app:app --host 0.0.0.0 --port 8000 --proxy-headers"]
