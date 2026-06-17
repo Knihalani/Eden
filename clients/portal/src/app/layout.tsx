@@ -1,3 +1,4 @@
+import {ClerkProvider} from "@clerk/nextjs";
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { AuthProvider } from "@/hooks/use-auth";
@@ -29,13 +30,15 @@ export default function RootLayout({
   return (
     <html lang="en" className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}>
       <body className="min-h-full flex flex-col bg-gray-50 grain-overlay">
-        <QueryProvider>
+        <ClerkProvider>
+          <QueryProvider>
           <AuthProvider>
-            <OrgProvider>
-              <ToastProvider>{children}</ToastProvider>
-            </OrgProvider>
+          <OrgProvider>
+          <ToastProvider>{children}</ToastProvider>
+          </OrgProvider>
           </AuthProvider>
-        </QueryProvider>
+          </QueryProvider>
+        </ClerkProvider>
       </body>
     </html>
   );

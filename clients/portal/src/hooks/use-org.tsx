@@ -8,9 +8,9 @@ import {
   useEffect,
   type ReactNode,
 } from "react";
+import { useOrganization, useOrganizationList, useUser } from "@clerk/nextjs";
 import { api } from "@/lib/api";
 import type { Organization } from "@/lib/types";
-import { useAuth } from "@/hooks/use-auth";
 
 interface OrgContextType {
   currentOrg: Organization | null;
@@ -18,57 +18,104 @@ interface OrgContextType {
   setCurrentOrg: (org: Organization | null) => void;
   refreshOrgs: () => Promise<void>;
   loading: boolean;
+  /** Clerk's active org id (``null`` if user has no active org). */
+  clerkOrgId: string | null;
+  /** Clerk's active org role (``org:admin`` / ``org:member`` / null). */
+  clerkOrgRole: string | null;
 }
 
 const OrgContext = createContext<OrgContextType | null>(null);
 
+/**
+ * Bridges Clerk's active organization to Eden's portal org context.
+ *
+ * Identity of truth for which org is active: Clerk (via
+ * ``useOrganization()`` + ``OrganizationSwitcher``). The Eden-side
+ * enrichment (member_count, archived_at, the local
+ * ``org_members`` row for permission checks) is fetched from FastAPI
+ * via ``/auth/me`` and merged into the ``Organization`` shape the
+ * rest of the portal already consumes.
+ *
+ * If Clerk says the user has no active org, ``currentOrg`` is
+ * ``null`` and the (portal)/layout's ``no-org-state`` component
+ * prompts the user to pick one (or create a new one via
+ * ``<CreateOrganization />``).
+ */
 export function OrgProvider({ children }: { children: ReactNode }) {
-  const { user } = useAuth();
+  const { organization: clerkOrg, isLoaded: clerkOrgLoaded } = useOrganization();
+  const { isLoaded: userListLoaded, userMemberships } = useOrganizationList({
+    userMemberships: { infinite: true },
+  });
+  const { user, isLoaded: userLoaded } = useUser();
   const [currentOrg, setCurrentOrgState] = useState<Organization | null>(null);
   const [organizations, setOrganizations] = useState<Organization[]>([]);
   const [loading, setLoading] = useState(false);
 
+  // Whenever the Clerk active org changes, refetch the Eden-side
+  // enrichment for that org. Failures are non-fatal — the user can
+  // still navigate the portal shell.
   const refreshOrgs = useCallback(async () => {
-    if (!user) return;
+    if (!user || !clerkOrg) {
+      setOrganizations([]);
+      setCurrentOrgState(null);
+      return;
+    }
     setLoading(true);
     try {
-      const orgs = await api.listOrgs();
-      setOrganizations(orgs);
+      const me = await api.getMe();
+      const enrichedOrgs: Organization[] = me.organizations ?? [];
+      setOrganizations(enrichedOrgs);
 
-      // Set current org from user's preferred_org_id or first org (only non-archived)
-      if (user.current_org_id) {
-        const preferred = orgs.find((o) => o.id === user.current_org_id);
-        if (preferred) setCurrentOrgState(preferred);
-        else if (orgs.length > 0) {
-          setCurrentOrgState(orgs[0]);
-        } else {
-          setCurrentOrgState(null);
-        }
-      } else if (orgs.length > 0) {
-        setCurrentOrgState(orgs[0]);
+      // Prefer the Clerk-active org if Eden knows about it; otherwise
+      // fall back to the user's ``current_org_id``; otherwise the
+      // first org in the list. (Same fallback chain as before.)
+      const fromClerk = clerkOrg
+        ? enrichedOrgs.find((o) => o.id === clerkOrg.id)
+        : undefined;
+      if (fromClerk) {
+        setCurrentOrgState(fromClerk);
+      } else if (me.current_org_id) {
+        const preferred = enrichedOrgs.find((o) => o.id === me.current_org_id);
+        setCurrentOrgState(preferred ?? enrichedOrgs[0] ?? null);
       } else {
-        setCurrentOrgState(null);
+        setCurrentOrgState(enrichedOrgs[0] ?? null);
       }
     } catch (e) {
       console.error("Failed to load orgs:", e);
     } finally {
       setLoading(false);
     }
-  }, [user]);
+  }, [user, clerkOrg]);
 
   useEffect(() => {
-    if (user) {
+    if (userLoaded && clerkOrgLoaded) {
       refreshOrgs();
     }
-  }, [user, refreshOrgs]);
+  }, [userLoaded, clerkOrgLoaded, refreshOrgs]);
 
   const setCurrentOrg = useCallback((org: Organization | null) => {
+    // Note: in practice, switching the active org is done via Clerk's
+    // ``<OrganizationSwitcher />`` — the local setter here only exists
+    // for the few places that need to optimistically pin an org
+    // before the Clerk switch resolves (e.g. onboarding wizard).
     setCurrentOrgState(org);
   }, []);
 
   return (
     <OrgContext.Provider
-      value={{ currentOrg, organizations, setCurrentOrg, refreshOrgs, loading }}
+      value={{
+        currentOrg,
+        organizations,
+        setCurrentOrg,
+        refreshOrgs,
+        loading,
+        clerkOrgId: clerkOrg?.id ?? null,
+        // Clerk role strings are ``org:admin`` / ``org:member`` by
+        // default; map them onto Eden's ``owner``/``member`` vocab so
+        // existing RBAC checks (`org["role"] === "admin"`) keep
+        // working. The full mapping lives in `lib/roles.ts`.
+        clerkOrgRole: clerkOrg ? userMemberships.data?.[0]?.role ?? null : null,
+      }}
     >
       {children}
     </OrgContext.Provider>
