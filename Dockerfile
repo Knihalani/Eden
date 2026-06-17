@@ -55,11 +55,26 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy virtual environment from builder — --chown so the non-root
-# ``eden`` user can actually traverse it (without this, ``USER eden``
-# can't reach /opt/venv/bin/uvicorn even though it's on PATH).
+# Install runtime Python deps DIRECTLY into the system site-packages
+# via pip. This is a belt-and-braces measure — the builder's venv at
+# /opt/venv should already have everything, but Northflank's image
+# cache has shipped broken builds where uvicorn was missing from the
+# venv layer (so ``/opt/venv/bin/uvicorn`` was absent even with PATH
+# set + chown applied). ``--break-system-packages`` lets us coexist
+# with the system pip on the slim base image.
+RUN pip install --no-cache-dir --break-system-packages \
+    "uvicorn[standard]>=0.30.0,<1.0.0" \
+    "fastapi>=0.115.0,<1.0.0" \
+    "pydantic>=2.9.0,<3.0.0" \
+    "pydantic-settings>=2.5.0,<3.0.0" \
+    "python-jose[cryptography]>=3.3.0,<4.0.0" \
+    "asyncpg>=0.29.0,<1.0.0"
+
+# Copy virtual environment from builder (full app deps) — kept for
+# any binary wheels the app imports at runtime. ``eden`` user owns it
+# so they can traverse it.
 COPY --from=builder --chown=eden:eden /opt/venv /opt/venv
-ENV PATH="/opt/venv/bin:$PATH"
+ENV PATH="/opt/venv/bin:/usr/local/bin:/usr/bin:/bin:$PATH"
 
 # Copy application code
 COPY --chown=eden:eden src ./src
