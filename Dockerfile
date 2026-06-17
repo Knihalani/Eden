@@ -103,6 +103,23 @@ COPY --chown=eden:eden src ./src
 COPY --chown=eden:eden migrations ./migrations
 COPY --chown=eden:eden alembic.ini ./alembic.ini
 
+# Re-install the ``eden`` package (and every declared dep) into the
+# venv at /opt/venv, regardless of what the builder's COPY brought
+# over. Northflank's image cache has shipped broken venvs twice now
+# (missing uvicorn in the original bug, empty / corrupted venv in
+# the post-rebuild image). Re-running ``pip install /app/src`` from
+# the venv's own pip:
+#   • idempotent: if everything's already there, no-op
+#   • covers ALL declared deps via pyproject.toml — no whack-a-mole
+#   • installs the package itself so the venv's site-packages has
+#     ``eden`` as a real distribution, not just a .pth pointer to a
+#     non-existent /build/src/eden
+#
+# Runs as root (USER eden is later). Root can write into the eden-
+# owned venv via CAP_DAC_OVERRIDE; new files are root-owned but
+# world-readable, so eden can import them at runtime.
+RUN /opt/venv/bin/pip install --no-cache-dir /app/src
+
 # Make the `eden` package importable when uvicorn runs from the
 # system Python (which is what `python -m uvicorn` uses). The package
 # lives at /app/src/eden/ but is not on sys.path by default — the
