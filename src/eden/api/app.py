@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field
 
 from eden.api.middleware.tenant_rate_limit import TenantRateLimitMiddleware
 from eden.api.routes import (
+    ai_agent,
     ai_insights,
     analytics,
     api_keys,
@@ -16,6 +17,7 @@ from eden.api.routes import (
     auth,
     billing,
     chain,
+    clerk_webhooks,
     evaluation,
     experiments,
     export,
@@ -256,6 +258,7 @@ if getattr(settings, "rate_limit_enabled", True):
 # Include route modules
 app.include_router(kb.router)
 app.include_router(auth.router)
+app.include_router(clerk_webhooks.router)  # /webhooks/clerk
 app.include_router(audit.router)  # /orgs/{org_id}/audit-log
 app.include_router(orgs.router)
 app.include_router(references.router)
@@ -268,6 +271,7 @@ app.include_router(scim.router)  # /orgs/{org_id}/scim/v2
 app.include_router(sso.router)  # /sso
 app.include_router(chain.router)  # /chain
 app.include_router(ai_insights.router)  # /orgs/{org_id}/ai-insights
+app.include_router(ai_agent.router)  # /orgs/{org_id}/ai (Phase C unified agent)
 app.include_router(pii_policy.router)  # /orgs/{org_id}/pii-policy
 app.include_router(retention_policy.router)  # /orgs/{org_id}/retention-policy
 app.include_router(region.router)  # /orgs/{org_id}/region

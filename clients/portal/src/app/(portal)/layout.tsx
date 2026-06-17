@@ -4,6 +4,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { useOrg } from "@/hooks/use-org";
 import { useNotifications } from "@/hooks/use-notifications";
 import { useFeatureFlags } from "@/hooks/use-feature-flags";
+import { OrganizationSwitcher, useClerk } from "@clerk/nextjs";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, useRef, useCallback } from "react";
 import {
@@ -54,9 +55,16 @@ import { ChatSidebar } from "@/components/ai-insights/ChatSidebar";
 const SIDEBAR_EXPANDED_WIDTH = 260;
 const SIDEBAR_COLLAPSED_WIDTH = 64;
 
-async function handleLogout(router: ReturnType<typeof useRouter>, closeDropdown: () => void) {
+// Logout delegates to Clerk (which terminates the session, clears the
+// __session cookie, and signs out across all tabs). We follow with a
+// router push to /login so the user lands back on the auth flow.
+async function handleLogout(
+  router: ReturnType<typeof useRouter>,
+  closeDropdown: () => void,
+  signOut: () => Promise<void>,
+) {
   closeDropdown();
-  await fetch("/api/auth/logout", { method: "POST" });
+  await signOut();
   router.push("/login");
 }
 
@@ -121,6 +129,7 @@ function buildBreadcrumbs(pathname: string): { label: string; href: string }[] {
 
 export default function PortalLayout({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
+  const { signOut } = useClerk();
   const { currentOrg, organizations, setCurrentOrg } = useOrg();
   const { flags } = useFeatureFlags();
   const router = useRouter();
@@ -128,19 +137,14 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
   const [userDropdownOpen, setUserDropdownOpen] = useState(false);
-  const [orgSwitcherOpen, setOrgSwitcherOpen] = useState(false);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const userDropdownRef = useRef<HTMLDivElement>(null);
-  const orgDropdownRef = useRef<HTMLDivElement>(null);
 
   // Close dropdown when clicking outside
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
       if (userDropdownRef.current && !userDropdownRef.current.contains(event.target as Node)) {
         setUserDropdownOpen(false);
-      }
-      if (orgDropdownRef.current && !orgDropdownRef.current.contains(event.target as Node)) {
-        setOrgSwitcherOpen(false);
       }
     }
     document.addEventListener("mousedown", handleClickOutside);
@@ -252,68 +256,37 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
           <ChevronLeft className={cn("w-3.5 h-3.5 text-[var(--text-secondary)] transition-transform duration-300", collapsed && "rotate-180")} />
         </button>
 
-        {/* Organization Switcher */}
-        {organizations.length > 0 && (
-          <div className="relative px-3 py-3">
-            {!collapsed ? (
-              <div ref={orgDropdownRef} className="relative">
-                <button
-                  onClick={() => setOrgSwitcherOpen(!orgSwitcherOpen)}
-                  className="w-full flex items-center gap-2 p-2 rounded-lg hover:bg-[var(--bg-tertiary)] transition-colors"
-                  aria-expanded={orgSwitcherOpen}
-                  aria-haspopup="listbox"
-                >
-                  <Building2 className="w-4 h-4 text-[var(--text-muted)] flex-shrink-0" />
-                  <span className="flex-1 text-sm font-medium text-left truncate">
-                    {currentOrg?.name || "Select org"}
-                  </span>
-                  <ChevronLeft className={cn("w-3 h-3 transition-transform duration-200", orgSwitcherOpen ? "rotate-90" : "")} />
-                </button>
-
-                {orgSwitcherOpen && (
-                  <div className="absolute left-0 right-0 mt-1 py-1 bg-[var(--bg-primary)] border border-[var(--border-default)] rounded-lg shadow-lg z-50" role="listbox" aria-label="Select organization">
-                    {organizations.map((org) => (
-                      <button
-                        key={org.id}
-                        onClick={() => {
-                          setCurrentOrg(org);
-                          setOrgSwitcherOpen(false);
-                        }}
-                        role="option"
-                        aria-selected={org.id === currentOrg?.id}
-                        className={cn(
-                          "w-full px-3 py-2 text-left text-sm hover:bg-[var(--bg-tertiary)] flex items-center justify-between",
-                          org.id === currentOrg?.id && "bg-[var(--accent-light)] text-[var(--accent)]"
-                        )}
-                      >
-                        <span className="truncate">{org.name}</span>
-                        <span className="text-xs text-[var(--text-muted)]">{org.role}</span>
-                      </button>
-                    ))}
-                    <div className="border-t border-[var(--border-default)] mt-1 pt-1">
-                      <Link
-                        href="/settings"
-                        className="w-full px-3 py-2 text-left text-sm text-[var(--accent)] hover:bg-[var(--accent-light)] flex items-center gap-2"
-                        onClick={() => setOrgSwitcherOpen(false)}
-                      >
-                        <Settings className="w-3.5 h-3.5" />
-                        Manage Organizations
-                      </Link>
-                    </div>
-                  </div>
-                )}
-              </div>
-            ) : (
-              <Link
-                href="/settings"
-                className="flex items-center justify-center p-2 rounded-lg hover:bg-[var(--bg-tertiary)] transition-colors"
-                title="Switch Organization"
-              >
-                <Building2 className="w-5 h-5 text-[var(--text-muted)]" />
-              </Link>
-            )}
-          </div>
-        )}
+        {/* Organization Switcher (Clerk) — the active org is the
+            source of truth for org-scoped reads. ``hidePersonal``
+            keeps this B2B-only; ``afterSelectOrganizationUrl`` and
+            ``afterCreateOrganizationUrl`` route back into the portal
+            so users land on a useful page after a switch. */}
+        <div className="relative px-3 py-3">
+          <OrganizationSwitcher
+            hidePersonal
+            afterCreateOrganizationUrl="/onboarding?step=org-ready"
+            afterSelectOrganizationUrl="/dashboard"
+            afterLeaveOrganizationUrl="/login"
+            createOrganizationMode="modal"
+            organizationProfileMode="modal"
+            appearance={{
+              elements: {
+                rootBox: "w-full",
+                organizationSwitcherTrigger: cn(
+                  "w-full flex items-center gap-2 p-2 rounded-lg",
+                  "hover:bg-[var(--bg-tertiary)] transition-colors",
+                  "text-left text-sm text-[var(--text-primary)]",
+                ),
+                organizationSwitcherTriggerIcon: "text-[var(--text-muted)]",
+                organizationPreview: "gap-2",
+                organizationPreviewTextContainer: "truncate",
+                organizationPreviewTitle: "text-sm font-medium text-[var(--text-primary)] truncate",
+                organizationPreviewSecondaryIdentifier:
+                  "text-xs text-[var(--text-muted)] truncate",
+              },
+            }}
+          />
+        </div>
 
         {/* Navigation */}
         <nav className="relative flex-1 p-3 space-y-4 overflow-y-auto" aria-label="Main navigation">
@@ -408,7 +381,7 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
                 Billing
               </Link>
               <button
-                onClick={() => handleLogout(router, () => setUserDropdownOpen(false))}
+                onClick={() => handleLogout(router, () => setUserDropdownOpen(false), signOut)}
                 className="user-dropdown-item danger w-full"
                 role="menuitem"
               >
@@ -421,7 +394,7 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
           {/* Logout button when collapsed */}
           {collapsed && (
             <button
-              onClick={() => handleLogout(router, () => {})}
+              onClick={() => handleLogout(router, () => {}, signOut)}
               className="w-full mt-2 p-2 text-[var(--text-muted)] hover:text-[var(--error)] hover:bg-[var(--error-bg)] rounded-lg transition-colors flex items-center justify-center"
               aria-label="Log out"
             >
