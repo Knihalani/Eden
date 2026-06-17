@@ -7,6 +7,16 @@ interface AuthFormCardProps {
   className?: string;
 }
 
+/**
+ * Generic card used by the native auth forms (forgot-password,
+ * reset-password). Clerk's `<SignIn />` / `<SignUp />` render
+ * their own card via the appearance config in `clerk-theme.ts`,
+ * so they don't go through this component.
+ *
+ * Visual style mirrors the brand panel: subtle backdrop-blur, a
+ * border-glow accent on the edge, and a fade-up entrance that
+ * counters the brand panel's mesh drift on the left.
+ */
 export function AuthFormCard({ title, subtitle, children, className }: AuthFormCardProps) {
   return (
     <div className={cn("auth-card", className)}>
@@ -17,23 +27,23 @@ export function AuthFormCard({ title, subtitle, children, className }: AuthFormC
       <style>{`
         .auth-card {
           width: 100%;
-          max-width: 360px;
-          padding: 2rem;
-          background: oklch(13% 0.014 250 / 0.6);
+          max-width: 380px;
+          padding: 1.75rem 1.75rem 1.5rem;
+          background: rgba(15, 20, 25, 0.7);
           backdrop-filter: blur(20px);
           -webkit-backdrop-filter: blur(20px);
           border: 1px solid var(--border-default);
           border-radius: var(--radius-xl);
           box-shadow:
-            0 0 48px oklch(0% 0 0 / 0.4),
-            0 0 0 1px oklch(70% 0.16 200 / 0.06);
+            0 0 48px rgba(0, 0, 0, 0.4),
+            0 0 0 1px rgba(91, 158, 255, 0.06);
           animation: fadeUp 0.5s var(--ease-out) both;
         }
 
         @keyframes fadeUp {
           from {
             opacity: 0;
-            transform: translateY(20px);
+            transform: translateY(16px);
           }
           to {
             opacity: 1;
@@ -53,6 +63,7 @@ export function AuthFormCard({ title, subtitle, children, className }: AuthFormC
           font-size: 0.875rem;
           color: var(--text-muted);
           margin-bottom: 1.5rem;
+          line-height: 1.5;
         }
       `}</style>
     </div>

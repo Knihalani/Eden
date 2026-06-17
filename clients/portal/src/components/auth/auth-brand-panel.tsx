@@ -1,23 +1,68 @@
 "use client";
 
-import { Layers, Zap, ShieldCheck, GitBranch } from "lucide-react";
-import { cn } from "@/lib/utils";
+import Link from "next/link";
+import {
+  Layers,
+  Activity,
+  Terminal,
+  GitPullRequest,
+  Sparkles,
+  ArrowRight,
+} from "lucide-react";
 
-const features = [
+// Pipeline nodes mirror the current product surface:
+//   Gateway → Workspace → /eden-improve → Shipped PR
+// Each node uses a real pipeline-stage token from globals.css so a
+// palette swap on the design-system side propagates here.
+const PIPELINE = [
+  { id: "gateway", label: "Gateway", color: "var(--stage-executing)" },
+  { id: "workspace", label: "Workspace", color: "var(--stage-refining)" },
+  { id: "improve", label: "/eden-improve", color: "var(--accent)" },
+  { id: "pr", label: "Shipped PR", color: "var(--stage-verifying)" },
+] as const;
+
+const FEATURES = [
   {
-    icon: GitBranch,
-    text: "Sequential multi-agent reasoning",
+    icon: Activity,
+    text: "OpenAI-compatible gateway — drop-in for any LLM",
   },
   {
-    icon: Zap,
-    text: "Real-time SSE streaming output",
+    icon: Terminal,
+    text: "Trace explorer + AI assistant, cited to trace IDs",
   },
   {
-    icon: ShieldCheck,
-    text: "Production-ready code output",
+    icon: GitPullRequest,
+    text: "/eden-improve turns failing traces into shipped PRs",
   },
 ];
 
+// Footer links point at routes that are guaranteed to resolve from
+// an unauthenticated session: the marketing landing page (with
+// in-page anchors) and Clerk's own sign-in flow. We deliberately
+// don't link to /docs, /privacy, /terms, or /status from here
+// because those routes don't exist as public surfaces yet — broken
+// links from the auth page would be worse than omitting them. The
+// marketing landing page has its own footer for those once they
+// land.
+const FOOTER_LINKS = [
+  { label: "Home", href: "/" },
+  { label: "Pillars", href: "/#pillars" },
+  { label: "Improve", href: "/#improve" },
+];
+
+/**
+ * Left half of the auth split-layout. Renders the Eden wordmark,
+ * a hero headline that matches the marketing landing page's
+ * positioning, a four-node "closed loop" pipeline diagram that
+ * visualises the Gateway → Workspace → /eden-improve → PR flow,
+ * three feature bullets aligned to the current pillars, a small
+ * status pill, and a footer with legal links.
+ *
+ * Background uses three soft radial gradients that drift on a 24s
+ * loop to give the panel some life without distracting from the
+ * form on the right. The grid overlay is a subtle 60px blueprint
+ * that ties into the rest of the dark-terminal aesthetic.
+ */
 export function AuthBrandPanel() {
   return (
     <div className="relative min-h-screen overflow-hidden bg-[var(--bg-primary)]">
@@ -28,55 +73,114 @@ export function AuthBrandPanel() {
       <div className="auth-grid-overlay" aria-hidden="true" />
 
       {/* Content */}
-      <div className="relative z-10 flex flex-col justify-center min-h-screen px-14 py-12">
-        {/* Logo */}
-        <div className="flex items-center gap-3 mb-12">
+      <div className="relative z-10 flex flex-col justify-between min-h-screen px-10 lg:px-14 py-10">
+        {/* Top: logo */}
+        <div className="flex items-center gap-3">
           <div className="auth-logo-mark">
-            <Layers className="w-6 h-6 text-[var(--bg-primary)]" />
+            <Layers className="w-5 h-5 text-[var(--bg-base)]" strokeWidth={2.5} />
           </div>
-          <span className="text-3xl font-bold tracking-tight text-[var(--text-primary)]">
-            eden
+          <span className="text-xl font-bold tracking-tight text-[var(--text-primary)]">
+            Eden
           </span>
         </div>
 
-        {/* Hero */}
-        <h1 className="auth-hero-line mb-4">
-          Build AI Agent<br />
-          <span className="text-[var(--accent)]">Environments.</span>
-        </h1>
-
-        <p className="text-lg text-[var(--text-secondary)] max-w-md mb-10 leading-relaxed">
-          Describe your environment in plain English. Eden&apos;s multi-agent pipeline designs,
-          generates, and validates — producing production-ready code without glue.
-        </p>
-
-        {/* Pipeline mini-visualizer */}
-        <div className="flex items-center gap-3 mb-10 flex-wrap">
-          {["Plan", "Verify", "Generate", "Deliver"].map((label, i) => (
-            <div key={label} className="flex items-center gap-2">
-              <div className={cn("flex flex-col items-center gap-1.5", i === 0 ? "opacity-100" : "opacity-40")}>
-                <div className={cn("auth-pipeline-dot", i === 0 && "animate-pulse")} />
-                <span className="text-[10px] font-mono tracking-widest uppercase text-[var(--text-muted)]">
-                  {label}
-                </span>
-              </div>
-              {i < 3 && (
-                <span className="text-[var(--accent)]/30 text-lg mt-[-10px]">→</span>
-              )}
+        {/* Middle: hero + pipeline + features */}
+        <div className="flex flex-col gap-10 max-w-lg">
+          {/* Hero */}
+          <div>
+            <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-full bg-[var(--accent-faint)] text-[var(--accent)] text-[11px] font-medium tracking-wide mb-5 border border-[var(--accent)]/20">
+              <Sparkles className="w-3 h-3" />
+              Observability + improvement for AI agents
             </div>
-          ))}
+
+            <h1 className="auth-hero-line mb-4">
+              Capture. Analyse.{" "}
+              <span className="text-[var(--accent)]">Improve.</span>
+            </h1>
+
+            <p className="text-[15px] text-[var(--text-secondary)] leading-relaxed max-w-md">
+              Every LLM call through Eden&apos;s gateway, every trace queryable in your
+              workspace, every regression turned into a shipped PR by{" "}
+              <code className="font-mono text-[var(--text-primary)] bg-[var(--bg-tertiary)] px-1.5 py-0.5 rounded text-[13px]">
+                /eden-improve
+              </code>
+              .
+            </p>
+          </div>
+
+          {/* Closed-loop pipeline visualizer */}
+          <div className="flex flex-col gap-3">
+            <p className="text-[10px] font-mono tracking-[0.18em] uppercase text-[var(--text-muted)]">
+              The closed loop
+            </p>
+            <div className="flex items-center gap-2 flex-wrap">
+              {PIPELINE.map((node, i) => (
+                <div key={node.id} className="flex items-center gap-2">
+                  <div className="flex items-center gap-2">
+                    <span
+                      className="auth-pipeline-dot"
+                      style={{
+                        background: node.color,
+                        boxShadow: `0 0 10px ${node.color}80`,
+                      }}
+                    />
+                    <span className="text-[12px] font-mono text-[var(--text-primary)]">
+                      {node.label}
+                    </span>
+                  </div>
+                  {i < PIPELINE.length - 1 && (
+                    <ArrowRight
+                      className="w-3 h-3 text-[var(--text-faint)]"
+                      aria-hidden
+                    />
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Feature list */}
+          <ul className="flex flex-col gap-2.5">
+            {FEATURES.map(({ icon: Icon, text }) => (
+              <li
+                key={text}
+                className="flex items-center gap-3 text-[13.5px] text-[var(--text-secondary)]"
+              >
+                <span className="auth-feature-icon shrink-0">
+                  <Icon className="w-3.5 h-3.5" strokeWidth={2.25} />
+                </span>
+                {text}
+              </li>
+            ))}
+          </ul>
         </div>
 
-        {/* Feature list */}
-        <div className="flex flex-col gap-3">
-          {features.map(({ icon: Icon, text }) => (
-            <div key={text} className="flex items-center gap-3 text-sm text-[var(--text-muted)]">
-              <div className="auth-feature-icon">
-                <Icon className="w-3.5 h-3.5" />
-              </div>
-              {text}
+        {/* Bottom: status badge + footer */}
+        <div className="flex flex-col gap-5">
+          <div className="inline-flex items-center gap-2 self-start px-2.5 py-1 rounded-full bg-[var(--success-bg)] border border-[var(--success)]/25 text-[11px] font-mono text-[var(--success)]">
+            <span className="relative flex h-1.5 w-1.5">
+              <span className="absolute inline-flex h-full w-full rounded-full bg-[var(--success)] opacity-60 animate-ping" />
+              <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-[var(--success)]" />
+            </span>
+            all systems operational
+          </div>
+
+          <div className="flex items-center justify-between gap-4 flex-wrap">
+            <p className="text-[11px] text-[var(--text-muted)] font-mono">
+              © {new Date().getFullYear()} Eden · v3.0
+            </p>
+            <div className="flex items-center gap-4">
+              {FOOTER_LINKS.map((link) => (
+                <Link
+                  key={link.href}
+                  href={link.href}
+                  className="text-[11px] text-[var(--text-muted)] hover:text-[var(--text-secondary)] transition-colors"
+                >
+                  {link.label}
+                </Link>
+              ))}
             </div>
-          ))}
+          </div>
         </div>
       </div>
 
@@ -86,30 +190,30 @@ export function AuthBrandPanel() {
           inset: 0;
           z-index: 0;
           background:
-            radial-gradient(ellipse 80% 60% at 50% 40%, rgba(70, 160, 220, 0.12) 0%, transparent 70%),
-            radial-gradient(ellipse 50% 40% at 20% 80%, rgba(72, 160, 140, 0.07) 0%, transparent 60%),
-            radial-gradient(ellipse 40% 30% at 85% 15%, rgba(100, 80, 200, 0.05) 0%, transparent 60%);
-          animation: meshDrift 20s ease-in-out infinite;
+            radial-gradient(ellipse 80% 60% at 50% 30%, rgba(91, 158, 255, 0.14) 0%, transparent 70%),
+            radial-gradient(ellipse 50% 40% at 15% 80%, rgba(95, 229, 168, 0.08) 0%, transparent 60%),
+            radial-gradient(ellipse 40% 30% at 85% 15%, rgba(192, 132, 252, 0.06) 0%, transparent 60%);
+          animation: meshDrift 24s ease-in-out infinite;
         }
 
         @keyframes meshDrift {
           0%, 100% {
             background:
-              radial-gradient(ellipse 80% 60% at 50% 40%, rgba(70, 160, 220, 0.12) 0%, transparent 70%),
-              radial-gradient(ellipse 50% 40% at 20% 80%, rgba(72, 160, 140, 0.07) 0%, transparent 60%),
-              radial-gradient(ellipse 40% 30% at 85% 15%, rgba(100, 80, 200, 0.05) 0%, transparent 60%);
+              radial-gradient(ellipse 80% 60% at 50% 30%, rgba(91, 158, 255, 0.14) 0%, transparent 70%),
+              radial-gradient(ellipse 50% 40% at 15% 80%, rgba(95, 229, 168, 0.08) 0%, transparent 60%),
+              radial-gradient(ellipse 40% 30% at 85% 15%, rgba(192, 132, 252, 0.06) 0%, transparent 60%);
           }
           33% {
             background:
-              radial-gradient(ellipse 80% 60% at 45% 45%, rgba(70, 160, 220, 0.10) 0%, transparent 70%),
-              radial-gradient(ellipse 50% 40% at 25% 75%, rgba(72, 160, 140, 0.08) 0%, transparent 60%),
-              radial-gradient(ellipse 40% 30% at 80% 20%, rgba(100, 80, 200, 0.06) 0%, transparent 60%);
+              radial-gradient(ellipse 80% 60% at 45% 35%, rgba(91, 158, 255, 0.12) 0%, transparent 70%),
+              radial-gradient(ellipse 50% 40% at 20% 75%, rgba(95, 229, 168, 0.09) 0%, transparent 60%),
+              radial-gradient(ellipse 40% 30% at 80% 20%, rgba(192, 132, 252, 0.07) 0%, transparent 60%);
           }
           66% {
             background:
-              radial-gradient(ellipse 80% 60% at 55% 35%, rgba(70, 160, 220, 0.08) 0%, transparent 70%),
-              radial-gradient(ellipse 50% 40% at 15% 85%, rgba(72, 160, 140, 0.06) 0%, transparent 60%),
-              radial-gradient(ellipse 40% 30% at 90% 10%, rgba(100, 80, 200, 0.04) 0%, transparent 60%);
+              radial-gradient(ellipse 80% 60% at 55% 25%, rgba(91, 158, 255, 0.10) 0%, transparent 70%),
+              radial-gradient(ellipse 50% 40% at 10% 85%, rgba(95, 229, 168, 0.07) 0%, transparent 60%),
+              radial-gradient(ellipse 40% 30% at 90% 10%, rgba(192, 132, 252, 0.05) 0%, transparent 60%);
           }
         }
 
@@ -121,47 +225,50 @@ export function AuthBrandPanel() {
             linear-gradient(rgba(100, 120, 160, 0.04) 1px, transparent 1px),
             linear-gradient(90deg, rgba(100, 120, 160, 0.04) 1px, transparent 1px);
           background-size: 60px 60px;
+          mask-image: radial-gradient(ellipse 70% 60% at 50% 50%, black 30%, transparent 90%);
+          -webkit-mask-image: radial-gradient(ellipse 70% 60% at 50% 50%, black 30%, transparent 90%);
         }
 
         .auth-logo-mark {
-          width: 52px;
-          height: 52px;
+          width: 40px;
+          height: 40px;
           background: var(--accent);
-          border-radius: var(--radius-lg);
+          border-radius: var(--radius-md);
           display: flex;
           align-items: center;
           justify-content: center;
-          box-shadow: 0 0 32px oklch(70% 0.16 200 / 0.4), 0 0 64px oklch(70% 0.16 200 / 0.2);
+          box-shadow:
+            0 0 24px rgba(91, 158, 255, 0.45),
+            0 0 48px rgba(91, 158, 255, 0.2),
+            inset 0 1px 0 rgba(255, 255, 255, 0.1);
           flex-shrink: 0;
         }
 
         .auth-hero-line {
-          font-size: clamp(40px, 5vw, 64px);
+          font-size: clamp(36px, 4.5vw, 54px);
           font-weight: 700;
-          line-height: 1;
-          letter-spacing: -0.05em;
+          line-height: 1.05;
+          letter-spacing: -0.04em;
           color: var(--text-primary);
         }
 
         .auth-feature-icon {
-          width: 30px;
-          height: 30px;
-          border-radius: 50%;
-          background: oklch(70% 0.16 200 / 0.1);
-          border: 1px solid oklch(70% 0.16 200 / 0.2);
+          width: 26px;
+          height: 26px;
+          border-radius: 6px;
+          background: rgba(91, 158, 255, 0.08);
+          border: 1px solid rgba(91, 158, 255, 0.18);
           display: flex;
           align-items: center;
           justify-content: center;
           color: var(--accent);
-          flex-shrink: 0;
         }
 
         .auth-pipeline-dot {
-          width: 12px;
-          height: 12px;
+          width: 10px;
+          height: 10px;
           border-radius: 50%;
-          background: oklch(70% 0.16 200);
-          box-shadow: 0 0 8px oklch(70% 0.16 200 / 0.6);
+          flex-shrink: 0;
         }
       `}</style>
     </div>

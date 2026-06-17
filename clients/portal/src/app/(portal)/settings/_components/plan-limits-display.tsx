@@ -50,7 +50,7 @@ export function PlanLimitsDisplay({
   }
 
   return (
-    <div className="grid grid-cols-3 gap-4">
+    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
       {limits.map((item) => {
         const percentage = item.limit > 0 ? Math.min((item.used / item.limit) * 100, 100) : 0;
         const isNearLimit = percentage >= 80;

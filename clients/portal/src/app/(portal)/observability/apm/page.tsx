@@ -280,7 +280,7 @@ export default function ApmPage() {
             className="space-y-4"
           >
             {/* Stats strip */}
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <StatBlock
                 label="Total evaluated"
                 value={samplingStats?.total_evaluated ?? 0}

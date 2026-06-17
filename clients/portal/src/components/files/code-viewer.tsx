@@ -100,7 +100,7 @@ export function CodeViewer({ filePath, content, language, isStreaming }: CodeVie
         )}
       </div>
       {isStreaming && (
-        <div className="px-4 py-2 bg-[var(--accent-faint)] border-t border-blue-100 flex items-center gap-2">
+        <div className="px-4 py-2 bg-[var(--accent-faint)] border-t border-[var(--accent)]/30 flex items-center gap-2">
           <div className="w-2 h-2 bg-[var(--accent)] rounded-full animate-pulse" />
           <span className="text-xs text-[var(--accent)]">Streaming...</span>
         </div>

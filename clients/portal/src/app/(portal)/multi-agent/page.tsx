@@ -354,7 +354,7 @@ function EnvironmentsTab({ envs, refresh, orgId }: { envs: MultiAgentEnv[]; refr
                   <Trash2 className="w-4 h-4" />
                 </button>
               </div>
-              <div className="grid grid-cols-3 gap-2 text-xs">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
                 <div className="px-2 py-1.5 bg-[var(--bg-tertiary)] rounded-lg text-center">
                   <div className="text-[var(--text-muted)]">Pattern</div>
                   <div className="font-medium text-[var(--text-primary)] capitalize">{env.pattern.replace("_", " ")}</div>

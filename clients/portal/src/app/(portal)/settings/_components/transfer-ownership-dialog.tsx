@@ -78,7 +78,7 @@ export function TransferOwnershipDialog({
           </div>
         </div>
 
-        <div className="mb-6 p-3 bg-[var(--accent-faint)] rounded-lg border border-blue-100">
+        <div className="mb-6 p-3 bg-[var(--accent-faint)] rounded-lg border border-[var(--accent)]/30">
           <p className="text-sm text-[var(--accent)]">
             <strong>What happens next:</strong>
           </p>

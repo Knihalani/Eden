@@ -29,7 +29,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}>
-      <body className="min-h-full flex flex-col bg-gray-50 grain-overlay">
+      <body className="min-h-full flex flex-col bg-[var(--bg-primary)] grain-overlay">
         <ClerkProvider>
           <QueryProvider>
           <AuthProvider>
