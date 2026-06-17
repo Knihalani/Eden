@@ -47,7 +47,7 @@ import time
 import uuid
 from typing import Any, AsyncIterator, Iterable, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 logger = logging.getLogger(__name__)
 
@@ -79,7 +79,35 @@ class ChatCompletionRequest(BaseModel):
 
     Every field is optional unless otherwise noted; the OpenAI client
     sends many defaults we don't actually need to validate.
+
+    ``extra='allow'`` so any forward-compat OpenAI fields the user
+    passes (e.g. a brand-new ``service_tier`` value, an experimental
+    sampling knob) round-trip into ``.extras`` and aren't silently
+    dropped. The gateway forwards ``extras`` to the upstream provider
+    so the call still works for callers on newer SDK versions.
     """
+
+    model_config = ConfigDict(extra="allow")
+
+    @model_validator(mode="before")
+    @classmethod
+    def _collect_extras(cls, data: Any) -> Any:
+        """Forward-compat: fold any unknown fields into ``extras``.
+
+        Pydantic's ``extra='allow'`` exposes unknown fields at the top
+        level (``body.future_field``); the gateway code (and tests) read
+        them via ``body.extras['future_field']`` so the rest of the
+        pipeline has a single place to look. Without this validator
+        callers would have to remember to inspect
+        ``model_fields_set`` vs declared fields themselves.
+        """
+        if isinstance(data, dict):
+            known = set(cls.model_fields)
+            extras = {k: v for k, v in data.items() if k not in known}
+            if extras:
+                existing = data.get("extras") or {}
+                data = {**data, "extras": {**existing, **extras}}
+        return data
 
     model: str = Field(..., description="Model identifier, e.g. openai/gpt-4o-mini")
     messages: list[dict[str, Any]] = Field(..., description="Chat messages")

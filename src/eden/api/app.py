@@ -316,8 +316,10 @@ app.include_router(github_routes.org_router)
 # look up the upstream provider, model id, and (decrypted) API
 # key for a given logical model name. The router is always
 # mounted; the routes themselves enforce org membership + admin.
+from eden.api.routes import gateway
 from eden.api.routes import gateway_models
 
+app.include_router(gateway.router)  # /gateway/v1 (OpenAI-compatible surface)
 app.include_router(gateway_models.router)
 
 

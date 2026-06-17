@@ -50,6 +50,12 @@ class Settings(BaseSettings):
     typesense_collection: str = "eden_spans"
     typesense_enabled: bool = True
 
+    # Feature flags — gates the per-Cat intelligence surface.
+    # The Cat 1-23 wiring tests flip these via monkeypatch; see
+    # ``tests/intelligence/test_intelligence_gap_stubs.py``.
+    intelligence_gap_v0: bool = False
+    enable_eval_pipeline: bool = False
+
     # Phase C — unified AI agent (Cat 14 real + global panel).
     # The agent uses the ModelRouter T3 tier (premium: claude-opus-4,
     # gpt-4.5, deepseek-v4) per the user's "super super capable"
@@ -79,6 +85,13 @@ class Settings(BaseSettings):
     # OpenRouter
     openrouter_api_key: str = ""
     openrouter_base_url: str = "https://openrouter.ai/api/v1"
+
+    # MiniMax — alternate upstream (Eden's primary model provider in v1+).
+    # Routes check ``use_minimax`` first and fall back to ``openrouter_api_key``
+    # when the MiniMax key is missing/disabled.
+    use_minimax: bool = False
+    minimax_api_key: str = ""
+    minimax_base_url: str = "https://api.minimax.chat/v1"
 
     # Model configuration
     model_reasoning: str = "anthropic/claude-sonnet-4.6"
