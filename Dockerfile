@@ -62,13 +62,35 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # venv layer (so ``/opt/venv/bin/uvicorn`` was absent even with PATH
 # set + chown applied). ``--break-system-packages`` lets us coexist
 # with the system pip on the slim base image.
+#
+# Listed explicitly rather than via ``pip install /app/src`` (which
+# tried to build the wheel from source and broke on the runtime
+# image — likely a PEP 517 + network issue). If you add a new runtime
+# dep to pyproject.toml, add it here too. Dev-only deps (pylint,
+# pytest, …) are intentionally omitted.
 RUN pip install --no-cache-dir --break-system-packages \
     "uvicorn[standard]>=0.30.0,<1.0.0" \
     "fastapi>=0.115.0,<1.0.0" \
     "pydantic>=2.9.0,<3.0.0" \
     "pydantic-settings>=2.5.0,<3.0.0" \
     "python-jose[cryptography]>=3.3.0,<4.0.0" \
-    "asyncpg>=0.29.0,<1.0.0"
+    "asyncpg>=0.29.0,<1.0.0" \
+    "passlib[bcrypt]>=1.7.0,<2.0.0" \
+    "psycopg2-binary>=2.9.9,<3.0.0" \
+    "sqlalchemy>=2.0.0,<3.0.0" \
+    "redis>=5.0.0,<6.0.0" \
+    "qdrant-client>=1.9.0,<2.0.0" \
+    "sse-starlette>=2.0.0,<3.0.0" \
+    "pyotp>=2.9.0,<3.0.0" \
+    "openrouter>=0.3.0,<1.0.0" \
+    "openai>=1.0.0,<2.0.0" \
+    "anthropic>=0.40.0,<1.0.0" \
+    "aiohttp>=3.9.0,<4.0.0" \
+    "PyGithub>=2.3.0,<3.0.0" \
+    "tenacity>=8.3.0,<9.0.0" \
+    "structlog>=24.0.0,<25.0.0" \
+    "python-dotenv>=1.0.0,<2.0.0" \
+    "zstandard>=0.23.0,<1.0.0"
 
 # Copy virtual environment from builder (full app deps) — kept for
 # any binary wheels the app imports at runtime. ``eden`` user owns it
