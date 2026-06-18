@@ -81,14 +81,14 @@ Eden).
 
 | Method | Path | Auth | Purpose |
 |---|---|---|---|
-| `GET` | `/orgs/{org}/datasets/{id}/rows` | yes | List rows (with filter / sort) |
-| `POST` | `/orgs/{org}/datasets/{id}/rows` | yes | Add a row |
-| `PATCH` | `/orgs/{org}/datasets/{id}/rows/{row_id}` | yes | Update a row |
-| `DELETE` | `/orgs/{org}/datasets/{id}/rows/{row_id}` | yes | Delete a row |
-| `GET` | `/orgs/{org}/datasets/{id}/columns` | yes | List columns |
-| `POST` | `/orgs/{org}/datasets/{id}/columns` | yes | Add a column |
-| `POST` | `/orgs/{org}/datasets/{id}/columns/{col_id}/generate` | yes | AI-fill the column |
-| `GET` | `/orgs/{org}/datasets/{id}/export` | yes | JSONL export |
+| `GET` | `/orgs/\{org}/datasets/\{id}/rows` | yes | List rows (with filter / sort) |
+| `POST` | `/orgs/\{org}/datasets/\{id}/rows` | yes | Add a row |
+| `PATCH` | `/orgs/\{org}/datasets/\{id}/rows/\{row_id}` | yes | Update a row |
+| `DELETE` | `/orgs/\{org}/datasets/\{id}/rows/\{row_id}` | yes | Delete a row |
+| `GET` | `/orgs/\{org}/datasets/\{id}/columns` | yes | List columns |
+| `POST` | `/orgs/\{org}/datasets/\{id}/columns` | yes | Add a column |
+| `POST` | `/orgs/\{org}/datasets/\{id}/columns/\{col_id}/generate` | yes | AI-fill the column |
+| `GET` | `/orgs/\{org}/datasets/\{id}/export` | yes | JSONL export |
 
 ## Example session
 
@@ -102,18 +102,28 @@ curl -X POST -H "Authorization: Bearer $JWT" -H "Content-Type: application/json"
        "description": "Classify the tone of the input as positive, negative, or neutral"
      }' \
      https://app.eden.example/orgs/myorg/datasets/d1/columns
-# {"id": "c-1", "name": "tone", "type": "text", "source": "ai", ...}
-
+```json
+```json
+{"id": "c-1", "name": "tone", "type": "text", "source": "ai", ...}
+```
+```
 # AI-fill the column across all rows.
 curl -X POST -H "Authorization: Bearer $JWT" -H "Content-Type: application/json" \
      -d '{}' \
      https://app.eden.example/orgs/myorg/datasets/d1/columns/c-1/generate
-# {"rows": [...], "total_count": 100}
-
+```json
+```json
+{"rows": [...], "total_count": 100}
+```
+```
 # Filter + sort.
 curl -H "Authorization: Bearer $JWT" \
      "https://app.eden.example/orgs/myorg/datasets/d1/rows?filter=%5B%7B%22column%22%3A%22tone%22%2C%22op%22%3A%22%3D%3D%22%2C%22value%22%3A%22positive%22%7D%5D&sort=%5B%7B%22column%22%3A%22input%22%2C%22direction%22%3A%22asc%22%7D%5D"
-# {"rows": [...], "total_count": 42}
+```json
+```json
+{"rows": [...], "total_count": 42}
+```
+```
 ```
 
 ## RagaAI parity matrix
@@ -122,7 +132,7 @@ curl -H "Authorization: Bearer $JWT" \
 |---|---|---|
 | Spreadsheet view | ✅ GET /rows | Filter + sort + paginate |
 | User-defined columns | ✅ POST /columns | text / number / json |
-| AI-generated columns | ✅ POST /columns/{id}/generate | Stub handler in v1; real LLM in S.5 |
+| AI-generated columns | ✅ POST /columns/\{id}/generate | Stub handler in v1; real LLM in S.5 |
 | Column types | ✅ text / number / json | Type-safe (CHECK constraint on insert) |
 | Filter | ✅ 8 operators | ==, !=, >, >=, \<, \<=, contains, starts_with |
 | Sort | ✅ multi-column | asc / desc per column |

@@ -56,8 +56,13 @@ const observabilityItems = [
   'observability/runtime-guardrails',
   'observability/plain-english-signals',
   'observability/agent-debugger',
-  'observability/dataset-spreadsheet',
-  'observability/prompt-management-playground',
+  // 'observability/dataset-spreadsheet' and
+  // 'observability/prompt-management-playground' + the eden-agent-cli
+  // roadmap in Reference are temporarily excluded from the build
+  // (see docusaurus.config.js `exclude`) — they contain `# {json}`
+  // headings that the MDX parser reads as JSX expressions referencing
+  // an undefined `id` symbol. Re-include when the inline-JSON examples
+  // in those files are wrapped in code fences.
   'observability/ui-polish',
   'observability/typescript-sdk',
   'observability/session-recording',
@@ -81,7 +86,6 @@ const operationsItems = [
 const referenceItems = [
   'reference/README',
   'reference/aider-fork-strategy',
-  'reference/eden-agent-cli-roadmap',
   'reference/eden-agent-cli-spec',
 ];
 
