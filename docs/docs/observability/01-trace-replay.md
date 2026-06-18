@@ -292,8 +292,8 @@ def rewind_to_step(org_id, trace_id, step_index):
 ## Acceptance criteria
 
 - [ ] `GET /replay/{trace_id}/workflow` returns a real graph
-  in <100ms for traces with <10k spans.
-- [ ] `GET /replay/live-tail` streams new events with <500ms
+  in \<100ms for traces with \<10k spans.
+- [ ] `GET /replay/live-tail` streams new events with \<500ms
   latency.
 - [ ] `POST /replay/{trace_id}/checkpoint/rewind` actually
   rewinds the stateful execution and re-runs forward from

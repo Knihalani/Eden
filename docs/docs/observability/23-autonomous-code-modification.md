@@ -391,7 +391,7 @@ floor to handle weekly seasonality).
 
 A regression is a >`revert_threshold_pct` (default 10%) drop
 on ANY of the tracked metrics, OR a statistically-significant
-drop (p<0.05 via Welch's t-test) on the COMBINED metric.
+drop (p\<0.05 via Welch's t-test) on the COMBINED metric.
 
 The monitor respects `min_post_merge_window_hours` — a 10%
 regression detected at 1h is "too early to revert"; at 24h

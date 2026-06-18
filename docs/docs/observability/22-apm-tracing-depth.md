@@ -537,9 +537,9 @@ Target: **~23 tests, ~0.8s.**
 ## Cross-references
 
 * Master doc: `docs/observability/gap-roadmap.md` § Cat 22
-* 2026 APM guide: <https://www.augmentcode.com/guides/application-performance-monitoring>
-* Tail-sampling sizing: <https://www.michal-drozd.com/en/blog/otel-tail-sampling/>
-* OTel GenAI semconv: <https://opentelemetry.io/docs/specs/semconv/gen-ai/>
-* OTel GenAI v1.41 Greptime deep-dive: <https://greptime.com/blogs/2026-05-09-opentelemetry-genai-semantic-conventions>
-* Distributed tracing for agentic workflows (Red Hat): <https://developers.redhat.com/articles/2026/04/06/distributed-tracing-agentic-workflows-opentelemetry>
+* 2026 APM guide: [www.augmentcode.com/guides/application-performance-monitoring](https://www.augmentcode.com/guides/application-performance-monitoring)
+* Tail-sampling sizing: [www.michal-drozd.com/en/blog/otel-tail-sampling/](https://www.michal-drozd.com/en/blog/otel-tail-sampling/)
+* OTel GenAI semconv: [opentelemetry.io/docs/specs/semconv/gen-ai/](https://opentelemetry.io/docs/specs/semconv/gen-ai/)
+* OTel GenAI v1.41 Greptime deep-dive: [greptime.com/blogs/2026-05-09-opentelemetry-genai-semantic-conventions](https://greptime.com/blogs/2026-05-09-opentelemetry-genai-semantic-conventions)
+* Distributed tracing for agentic workflows (Red Hat): [developers.redhat.com/articles/2026/04/06/distributed-tracing-agentic-workflows-opentelemetry](https://developers.redhat.com/articles/2026/04/06/distributed-tracing-agentic-workflows-opentelemetry)
 * Separate SLM plan: `docs/observability/judge-v2-plan.md`

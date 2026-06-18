@@ -284,7 +284,7 @@ async def attribution(org_id, trace_id):
 - [x] Attribution is deterministic (same trace → same
   attribution). Covered by
   `TestChunkAttribution::test_attribution_is_deterministic`.
-- [x] Utilization latency < 500ms for traces with <100
+- [x] Utilization latency < 500ms for traces with \<100
   chunks. The async service is two Postgres queries + in-
   memory overlap; well under the 500ms ceiling.
 - [ ] Utilization accuracy ≥ 85% vs human-labelled ground

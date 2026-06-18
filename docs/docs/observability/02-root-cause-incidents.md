@@ -321,7 +321,7 @@ async def summarize(org_id, cluster_id):
 * **No failed traces in window** — return empty clusters
   list with `data.message: "no failures in window"`.
 * **Cluster centroid becomes too large (>10k members)** — split
-  it recursively until each cluster has <10k members.
+  it recursively until each cluster has \<10k members.
 
 ## Telemetry
 
@@ -350,7 +350,7 @@ async def summarize(org_id, cluster_id):
   (idempotent on the same input).
 - [ ] Explain returns 1-3 contributing factors, each
   referencing a specific event in the trace.
-- [ ] Latency < 500ms for traces with <1k events.
+- [ ] Latency < 500ms for traces with \<1k events.
 - [ ] "Similar incidents" returns at least 1 result for
   50% of new failures.
 

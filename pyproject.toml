@@ -88,6 +88,11 @@ dependencies = [
     # zstandard: 4.76x avg compression on LLM prompt/response payloads (LoPace 2026).
     # Stored as BYTEA on telemetry_events (request_body_zstd, response_body_zstd).
     "zstandard>=0.23.0,<1.0.0",
+    # alembic is required by the migrations under
+    # src/eden/db_migrations/ — the runtime API never imports
+    # `alembic` directly, but the test-suite's CI workflow shells
+    # out to `alembic upgrade head` against the eden_test DB.
+    "alembic>=1.13.0,<2.0.0",
 ]
 
 [project.optional-dependencies]

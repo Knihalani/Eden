@@ -446,7 +446,7 @@ def analyze(org_id, trace_id):
 ## Acceptance criteria
 
 - [ ] Path reconstruction includes every agent step in order.
-- [ ] Explainer summary is <500 words and references ≥ 1
+- [ ] Explainer summary is \<500 words and references ≥ 1
   specific step.
 - [ ] Decision score is computed by the 3 Galileo judges and
   aggregated.

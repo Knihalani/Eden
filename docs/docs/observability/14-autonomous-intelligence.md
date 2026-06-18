@@ -540,7 +540,7 @@ Dashboards:
 - [ ] Weekly report includes: trends, incidents,
   recommendations, ROI.
 - [ ] Recommendations are ranked by estimated_impact.
-- [ ] NL-to-SQL translation has <10% SQL syntax error rate.
+- [ ] NL-to-SQL translation has \<10% SQL syntax error rate.
 
 ## Implementation order
 
