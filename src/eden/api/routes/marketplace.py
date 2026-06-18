@@ -25,7 +25,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
 
-from eden.api.deps import get_current_user, require_feature_flag
+from eden.api.deps import get_current_user, require_feature_flag, require_org_admin
 from eden.marketplace import (
     EnvCardSummary,
     ForkRequest,
@@ -248,8 +248,17 @@ class _ModerateRequest(BaseModel):
 async def moderate_review_route(
     review_id: UUID,
     req: _ModerateRequest,
+    admin: dict[str, Any] = Depends(require_org_admin),
     user: dict[str, Any] = Depends(get_current_user),
 ) -> dict[str, Any]:
+    """Approve / hide a flagged review (admin-only).
+
+    Any authenticated member can flag a review (see
+    ``/reviews/{id}/flag``) but only an owner/admin can approve or
+    hide it. ``require_org_admin`` resolves the caller's role from
+    ``X-Org-Id`` + Clerk session and 403s if the role is not
+    ``owner`` or ``admin``.
+    """
     ok = await moderate_review(
         review_id=review_id,
         moderator_id=UUID(user["user_id"]),
@@ -262,7 +271,15 @@ async def moderate_review_route(
 
 @router.get("/moderation/queue")
 async def moderation_queue_route(
+    admin: dict[str, Any] = Depends(require_org_admin),
     limit: int = Query(default=50, ge=1, le=200),
 ) -> dict[str, Any]:
+    """List reviews awaiting moderation (admin-only).
+
+    Previously this endpoint had NO auth dependency at all — any
+    anonymous caller could see every flagged review in the system.
+    ``require_org_admin`` now 403s anyone who isn't an owner/admin
+    of the active org.
+    """
     items = await moderation_queue(limit=limit)
     return {"items": items, "count": len(items)}
