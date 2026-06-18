@@ -54,12 +54,21 @@ class QdrantClientWrapper:
         self._client: QdrantClient | None = None
 
     def _get_client(self) -> QdrantClient:
-        """Get or create the Qdrant client."""
+        """Get or create the Qdrant client.
+
+        Honours the Qdrant Cloud contract when ``qdrant_https=True`` and
+        ``qdrant_api_key`` is set: switch to HTTPS, pass the key as the
+        ``api_key`` kwarg. Without these two settings the client assumes
+        a plain-HTTP local Qdrant (the legacy Eden default) which won't
+        authenticate against Qdrant Cloud clusters.
+        """
         if self._client is None:
-            self._client = QdrantClient(
-                host=self.host,
-                port=self.port,
-            )
+            client_kwargs: dict = {"host": self.host, "port": self.port}
+            if settings.qdrant_https:
+                client_kwargs["https"] = True
+            if settings.qdrant_api_key:
+                client_kwargs["api_key"] = settings.qdrant_api_key
+            self._client = QdrantClient(**client_kwargs)
         return self._client
 
     def initialize_collections(self) -> None:

@@ -38,6 +38,12 @@ class Settings(BaseSettings):
     qdrant_host: str = "localhost"
     qdrant_port: int = 6333
     qdrant_collection_prefix: str = "eden_"
+    # Qdrant Cloud (or any TLS-terminated upstream) needs HTTPS + API key.
+    # ``qdrant_api_key`` maps to env var ``QDRANT_API_KEY`` (the qdrant-client
+    # Python lib also reads ``QDRANT_API_KEY`` natively, but we plumb it
+    # through Settings so the rest of the app can read the same value).
+    qdrant_https: bool = False
+    qdrant_api_key: str = ""
 
     # Typesense — full-text search across spans (Phase B).
     # TYPESENSE_API_KEY is required and must match docker-compose.yml.
