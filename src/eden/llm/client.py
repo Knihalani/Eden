@@ -1,15 +1,14 @@
 """OpenRouter LLM client with retry logic, circuit breaker, and cost tracking."""
 
-import time
 import logging
-from enum import Enum
-from dataclasses import dataclass, field
-from typing import Optional, Any
+import time
 from collections import defaultdict
+from dataclasses import dataclass, field
+from enum import Enum
 from functools import lru_cache
+from typing import Any
 
-from openai import OpenAI, AsyncOpenAI, RateLimitError, APITimeoutError, APIError
-import tenacity
+from openai import APIError, APITimeoutError, AsyncOpenAI, OpenAI, RateLimitError
 
 from eden.config import get_settings
 
@@ -39,7 +38,7 @@ class UsageStats:
     prompt_tokens: int = 0
     completion_tokens: int = 0
     total_tokens: int = 0
-    cost: Optional[float] = None
+    cost: float | None = None
     cache_reads: int = 0
     cache_writes: int = 0
 
@@ -127,7 +126,7 @@ class OpenRouterClient:
 
     def __init__(
         self,
-        api_key: Optional[str] = None,
+        api_key: str | None = None,
         base_url: str = "https://openrouter.ai/api/v1",
         max_retries: int = 3,
         circuit_breaker_threshold: int = 5,
@@ -211,7 +210,7 @@ class OpenRouterClient:
         agent: str,
         prompt: str,
         slot: str = "reasoning",
-        system_prompt: Optional[str] = None,
+        system_prompt: str | None = None,
         **kwargs,
     ) -> LLMResponse:
         """Async LLM call using the async OpenAI client.
@@ -290,7 +289,7 @@ class OpenRouterClient:
         agent: str,
         prompt: str,
         slot: str = "reasoning",
-        system_prompt: Optional[str] = None,
+        system_prompt: str | None = None,
         **kwargs,
     ) -> LLMResponse:
         """Make an LLM call with retry and circuit breaker."""
@@ -355,7 +354,7 @@ class OpenRouterClient:
         self,
         model: str,
         prompt: str,
-        system_prompt: Optional[str] = None,
+        system_prompt: str | None = None,
         max_tokens: int = 4096,
         **kwargs,
     ) -> LLMResponse:

@@ -36,12 +36,11 @@ from __future__ import annotations
 import json
 import logging
 import os
-import time
 import uuid
-from datetime import datetime, timezone
-from typing import Any, AsyncIterator, Optional
+from collections.abc import AsyncIterator
+from typing import Any
 
-from fastapi import APIRouter, Body, Cookie, Depends, Header, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 from sse_starlette.sse import EventSourceResponse
 
@@ -65,7 +64,7 @@ router = APIRouter(
 class ChatRequest(BaseModel):
     """Body for POST /chat."""
     message: str = Field(..., min_length=1, max_length=8000)
-    session_id: Optional[str] = Field(
+    session_id: str | None = Field(
         None,
         description=(
             "Existing session to append to. Omit (or null) to start a "
@@ -112,7 +111,7 @@ def _anthropic_tools() -> list[dict[str, Any]]:
 # Persistence helpers
 # ============================================================================
 
-async def _load_session(org_id: str, user_id: str, session_id: str) -> Optional[dict[str, Any]]:
+async def _load_session(org_id: str, user_id: str, session_id: str) -> dict[str, Any] | None:
     client = await get_postgres_client()
     return await client.fetchrow(
         """
@@ -148,7 +147,7 @@ async def _append_message(session_id: str, role: str, content: list[dict[str, An
     )
 
 
-async def _touch_session(session_id: str, title: Optional[str] = None) -> None:
+async def _touch_session(session_id: str, title: str | None = None) -> None:
     client = await get_postgres_client()
     if title:
         await client.execute(
@@ -257,7 +256,7 @@ async def _stream_chat(
     iterations = 0
     final_text_parts: list[str] = []
     last_usage: dict[str, Any] = {}
-    last_stop_reason: Optional[str] = None
+    last_stop_reason: str | None = None
 
     try:
         while iterations < MAX_TOOL_ITERATIONS:

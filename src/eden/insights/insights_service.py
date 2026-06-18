@@ -6,15 +6,14 @@ execution, dataset generation, and comparative analysis.
 
 from __future__ import annotations
 
-import json
 import logging
-from datetime import datetime, timezone
-from typing import Any, Optional
+from datetime import UTC, datetime
+from typing import Any
 
-from eden.insights.unified_trace_model import UnifiedTrace, TraceNormalizer, Realm
-from eden.insights.detectors import DetectorRegistry, Insight
-from eden.insights.dataset_engine import DatasetGenerationEngine, DatasetEntry
 from eden.insights.comparative_analysis import ComparativeAnalysisEngine, DisparityReport
+from eden.insights.dataset_engine import DatasetEntry, DatasetGenerationEngine
+from eden.insights.detectors import DetectorRegistry, Insight
+from eden.insights.unified_trace_model import Realm, TraceNormalizer, UnifiedTrace
 
 logger = logging.getLogger(__name__)
 
@@ -99,13 +98,13 @@ class InsightsService:
             for tid in evicted:
                 self._traces.pop(tid, None)
 
-    def get_trace(self, trace_id: str) -> Optional[UnifiedTrace]:
+    def get_trace(self, trace_id: str) -> UnifiedTrace | None:
         return self._traces.get(trace_id)
 
     def list_traces(
         self,
         tenant_id: str,
-        realm: Optional[Realm] = None,
+        realm: Realm | None = None,
         limit: int = 100,
         offset: int = 0,
     ) -> list[UnifiedTrace]:
@@ -122,8 +121,8 @@ class InsightsService:
     def run_detectors(
         self,
         tenant_id: str,
-        detector_names: Optional[list[str]] = None,
-        realm: Optional[Realm] = None,
+        detector_names: list[str] | None = None,
+        realm: Realm | None = None,
     ) -> list[Insight]:
         """Run detectors on traces for a tenant."""
         traces = self.list_traces(tenant_id, realm=realm, limit=1000)
@@ -155,8 +154,8 @@ class InsightsService:
     def get_insights(
         self,
         tenant_id: str,
-        detector: Optional[str] = None,
-        severity: Optional[str] = None,
+        detector: str | None = None,
+        severity: str | None = None,
         limit: int = 100,
     ) -> list[Insight]:
         """Get stored insights for a tenant."""
@@ -170,7 +169,7 @@ class InsightsService:
             insights = [i for i in insights if i.severity == severity]
         return insights[:limit]
 
-    def get_insight_by_id(self, insight_id: str) -> Optional[Insight]:
+    def get_insight_by_id(self, insight_id: str) -> Insight | None:
         for i in self._insights:
             if i.insight_id == insight_id:
                 return i
@@ -183,7 +182,7 @@ class InsightsService:
     def generate_datasets(
         self,
         tenant_id: str,
-        trace_ids: Optional[list[str]] = None,
+        trace_ids: list[str] | None = None,
     ) -> dict[str, list[DatasetEntry]]:
         """Generate datasets from traces using configured rules."""
         if trace_ids:
@@ -198,7 +197,7 @@ class InsightsService:
         datasets = self.dataset_engine.list_datasets(tenant_id)
         return [d.to_dict() for d in datasets]
 
-    def get_dataset(self, dataset_id: str) -> Optional[dict[str, Any]]:
+    def get_dataset(self, dataset_id: str) -> dict[str, Any] | None:
         dataset = self.dataset_engine.get_dataset(dataset_id)
         return dataset.to_dict() if dataset else None
 
@@ -215,7 +214,7 @@ class InsightsService:
         self,
         dataset_id: str,
         format_type: str = "jsonl",
-        split_ratio: Optional[tuple[float, float]] = None,
+        split_ratio: tuple[float, float] | None = None,
     ) -> dict[str, Any]:
         return self.dataset_engine.export_dataset(dataset_id, format_type, split_ratio)
 
@@ -247,8 +246,8 @@ class InsightsService:
         self,
         insight: Insight,
         *,
-        organization_id: Optional[str] = None,
-    ) -> Optional[str]:
+        organization_id: str | None = None,
+    ) -> str | None:
         """Persist an insight as a KB semantic-graph entity.
 
         Returns the entity id (str) on success, or ``None`` if the
@@ -262,10 +261,11 @@ class InsightsService:
             # ``get_vector_client``. The class also has ``upsert`` (not
             # ``upsert_entity``) and no ``query_by_name`` — we use
             # ``search`` for AUDN dedup.
+            from datetime import datetime
+            from uuid import uuid4
+
             from eden.kb.semantic.vector_client import get_vector_client
             from eden.kb.shared.audit import evaluate_audn
-            from datetime import datetime, timezone
-            from uuid import uuid4
 
             semantic = get_vector_client()
             entity_name = f"insight:{insight.insight_id}"
@@ -281,7 +281,7 @@ class InsightsService:
                 "affected_trace_ids": insight.affected_trace_ids,
                 "recommendations": [insight.recommended_action] if insight.recommended_action else [],
                 "organization_id": organization_id,
-                "recorded_at": datetime.now(timezone.utc).isoformat(),
+                "recorded_at": datetime.now(UTC).isoformat(),
             }
 
             # §3.2 — Real embeddings, not a hash-derived stub. Build the
@@ -419,7 +419,7 @@ class InsightsService:
 
     async def write_all_pending_insights_to_kb(
         self,
-        organization_id: Optional[str] = None,
+        organization_id: str | None = None,
     ) -> dict[str, Any]:
         """Write every unprocessed insight to the KB. Returns a
         summary of what was written/skipped/failed so callers can
@@ -457,8 +457,8 @@ class InsightsService:
         self,
         insight: Insight,
         *,
-        organization_id: Optional[str] = None,
-    ) -> Optional[str]:
+        organization_id: str | None = None,
+    ) -> str | None:
         """Upsert an insight into the ``insights`` table (migration 019).
 
         Idempotent: re-running for the same ``insight_id`` is a no-op
@@ -611,7 +611,7 @@ class InsightsService:
     def get_disparity_reports(
         self,
         tenant_id: str,
-        min_score: Optional[float] = None,
+        min_score: float | None = None,
         limit: int = 100,
     ) -> list[DisparityReport]:
         reports = [r for r in self._disparity_reports if r.tenant_id == tenant_id]
@@ -621,7 +621,7 @@ class InsightsService:
         reports.sort(key=lambda r: r.overall_score, reverse=True)
         return reports[:limit]
 
-    def get_disparity_report(self, report_id: str) -> Optional[DisparityReport]:
+    def get_disparity_report(self, report_id: str) -> DisparityReport | None:
         for r in self._disparity_reports:
             if r.report_id == report_id:
                 return r
@@ -694,7 +694,7 @@ class InsightsService:
 
     def get_trends(self, tenant_id: str, days: int = 30) -> dict[str, Any]:
         """Get trend data over time for charts."""
-        cutoff = datetime.now(timezone.utc).timestamp() - (days * 86400)
+        cutoff = datetime.now(UTC).timestamp() - (days * 86400)
         traces = [
             t for t in self.list_traces(tenant_id, limit=5000)
             if t.started_at and t.started_at.timestamp() >= cutoff

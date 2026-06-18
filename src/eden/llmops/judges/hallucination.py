@@ -43,7 +43,7 @@ class HallucinationJudge(Judge):
     version = "2026-06-03"
     model_slot = "fast"
 
-    def matches(self, event: "TelemetryEvent") -> bool:
+    def matches(self, event: TelemetryEvent) -> bool:
         """Only fire on events that carry generated text in the payload."""
         if not super().matches(event):
             return False
@@ -58,7 +58,7 @@ class HallucinationJudge(Judge):
         )
 
     async def score(
-        self, event: "TelemetryEvent", ctx: JudgeContext
+        self, event: TelemetryEvent, ctx: JudgeContext
     ) -> JudgeScore:
         if ctx.llm_client is None:
             return self._low_confidence(event, ctx, reason="no llm_client")
@@ -99,7 +99,7 @@ class HallucinationJudge(Judge):
             )
 
     def _low_confidence(
-        self, event: "TelemetryEvent", ctx: JudgeContext, *, reason: str
+        self, event: TelemetryEvent, ctx: JudgeContext, *, reason: str
     ) -> JudgeScore:
         """Return a neutral score with a clear rationale when we
         cannot produce a real judgment (no LLM, empty content, etc).
@@ -117,7 +117,7 @@ class HallucinationJudge(Judge):
         )
 
 
-def _extract_text_and_spec(event: "TelemetryEvent") -> tuple[str, str]:
+def _extract_text_and_spec(event: TelemetryEvent) -> tuple[str, str]:
     """Pull the response text + spec from a TelemetryEvent's payload.
 
     The decoder-specific payload schemas are heterogeneous (Phase 0

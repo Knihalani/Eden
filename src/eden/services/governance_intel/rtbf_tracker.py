@@ -56,13 +56,12 @@ as a backup.
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
-from typing import Any, Optional
+from datetime import UTC, datetime
+from typing import Any
 
 from eden.services.governance_intel.gdpr import (
     RightToBeForgottenService,
 )
-
 
 logger = logging.getLogger(__name__)
 
@@ -94,7 +93,7 @@ class RtbfRequestTracker:
             new :class:`RightToBeForgottenService` instance.
     """
 
-    def __init__(self, pg: Any, rtbf: Optional[RightToBeForgottenService] = None) -> None:
+    def __init__(self, pg: Any, rtbf: RightToBeForgottenService | None = None) -> None:
         self._pg = pg
         self._rtbf = rtbf or RightToBeForgottenService()
 
@@ -106,7 +105,7 @@ class RtbfRequestTracker:
         *,
         target_user_id: str,
         requester_user_id: str,
-        reason: Optional[str] = None,
+        reason: str | None = None,
         sla_days: int = 14,
         dry_run: bool = False,
     ) -> dict[str, Any]:
@@ -217,7 +216,7 @@ class RtbfRequestTracker:
         org_id: str,
         *,
         limit: int = 50,
-        status: Optional[str] = None,
+        status: str | None = None,
     ) -> list[dict[str, Any]]:
         """List recent RTBF requests for an org, optionally
         filtered by status. Returns dicts in insertion order
@@ -273,7 +272,7 @@ class RtbfRequestTracker:
         )
         return [_row_to_dict(r) for r in rows]
 
-    async def get_by_id(self, request_id: str) -> Optional[dict[str, Any]]:
+    async def get_by_id(self, request_id: str) -> dict[str, Any] | None:
         if self._pg is None:
             return None
         row = await self._pg.fetchrow(
@@ -301,12 +300,12 @@ def _new_uuid() -> str:
 
 def _row_to_dict(row: Any) -> dict[str, Any]:
     """Coerce a DB row to a JSON-serialisable dict."""
-    def _iso(v: Any) -> Optional[str]:
+    def _iso(v: Any) -> str | None:
         if v is None:
             return None
         if isinstance(v, datetime):
             if v.tzinfo is None:
-                v = v.replace(tzinfo=timezone.utc)
+                v = v.replace(tzinfo=UTC)
             return v.isoformat()
         return str(v)
     return {

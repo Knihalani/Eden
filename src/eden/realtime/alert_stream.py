@@ -17,9 +17,9 @@ import json
 import logging
 import uuid
 from dataclasses import dataclass, field
-from datetime import datetime, timezone, timedelta
+from datetime import UTC, datetime
 from enum import Enum
-from typing import Any, Optional
+from typing import Any
 
 from eden.config import get_settings
 
@@ -58,8 +58,8 @@ class AlertRule:
     # Match conditions
     event_types: list[str] = field(default_factory=list)
     severity_threshold: AlertSeverity = AlertSeverity.WARNING
-    metric_threshold: Optional[float] = None
-    metric_name: Optional[str] = None
+    metric_threshold: float | None = None
+    metric_name: str | None = None
     window_seconds: int = 300  # 5 min default window
     # Actions
     channels: list[AlertChannel] = field(default_factory=lambda: [AlertChannel.IN_APP])
@@ -67,7 +67,7 @@ class AlertRule:
     escalation_delay_seconds: int = 300
     # Metadata
     enabled: bool = True
-    created_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+    created_at: str = field(default_factory=lambda: datetime.now(UTC).isoformat())
 
     def matches(self, event: dict[str, Any], context: dict[str, Any]) -> bool:
         """Check if this rule matches the given event."""
@@ -104,7 +104,7 @@ class GeneratedAlert:
     tenant_id: str
     channels: list[AlertChannel]
     context: dict[str, Any] = field(default_factory=dict)
-    timestamp: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+    timestamp: str = field(default_factory=lambda: datetime.now(UTC).isoformat())
     acknowledged: bool = False
 
     def to_dict(self) -> dict[str, Any]:
@@ -223,7 +223,7 @@ class AlertStreamProcessor:
         """Build evaluation context with rolling window metrics."""
         context = dict(event.get("payload", {}))
         context["event_type"] = event.get("event_type", "")
-        context["timestamp"] = event.get("timestamp", datetime.now(timezone.utc).isoformat())
+        context["timestamp"] = event.get("timestamp", datetime.now(UTC).isoformat())
 
         # Add rolling metric context if metric data is present
         metric_name = event.get("payload", {}).get("metric_name")
@@ -242,7 +242,7 @@ class AlertStreamProcessor:
         rule: AlertRule,
         event: dict[str, Any],
         context: dict[str, Any],
-    ) -> Optional[GeneratedAlert]:
+    ) -> GeneratedAlert | None:
         """Generate an alert from a matching rule and event."""
         event_type = event.get("event_type", "unknown")
         entity_id = event.get("entity_id", "unknown")
@@ -288,7 +288,7 @@ class AlertStreamProcessor:
     async def _should_dispatch(self, alert: GeneratedAlert) -> bool:
         """Check deduplication window to prevent alert spam."""
         async with self._lock:
-            now = datetime.now(timezone.utc)
+            now = datetime.now(UTC)
             # Cleanup expired dedup entries to prevent unbounded growth
             expired = [
                 k for k, t in self._dedup_window.items()
@@ -424,7 +424,7 @@ class AlertStreamProcessor:
 
 # ── Singleton accessor ──────────────────────────────────────────────────
 
-_alert_processor: Optional[AlertStreamProcessor] = None
+_alert_processor: AlertStreamProcessor | None = None
 
 
 async def get_alert_processor() -> AlertStreamProcessor:

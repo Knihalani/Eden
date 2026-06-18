@@ -5,11 +5,9 @@ Auto-generated convenience models for the v1 API envelope and resource payloads.
 
 from __future__ import annotations
 
-from datetime import datetime
-from typing import Any, Optional
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
-
 
 # ---------------------------------------------------------------------------
 # Meta / Envelope
@@ -65,7 +63,7 @@ class JobItem(BaseModel):
     job_id: str
     status: str
     current_stage: str
-    outcome_tier: Optional[str] = None
+    outcome_tier: str | None = None
     created_at: str
     updated_at: str
 
@@ -85,11 +83,11 @@ class JobResult(BaseModel):
 
     job_id: str
     status: str
-    outcome_tier: Optional[str] = None
-    environment_code: Optional[str] = None
-    test_results: Optional[dict[str, Any]] = None
-    quality_report: Optional[dict[str, Any]] = None
-    archivist_summary: Optional[dict[str, Any]] = None
+    outcome_tier: str | None = None
+    environment_code: str | None = None
+    test_results: dict[str, Any] | None = None
+    quality_report: dict[str, Any] | None = None
+    archivist_summary: dict[str, Any] | None = None
 
 
 class JobCreateRequest(BaseModel):
@@ -123,7 +121,7 @@ class EnvironmentItem(BaseModel):
 
     job_id: str
     status: str
-    outcome_tier: Optional[str] = None
+    outcome_tier: str | None = None
     created_at: str
     updated_at: str
 
@@ -136,10 +134,10 @@ class EnvironmentDetail(BaseModel):
     job_id: str
     status: str
     current_stage: str
-    outcome_tier: Optional[str] = None
-    environment_code: Optional[str] = None
-    test_results: Optional[dict[str, Any]] = None
-    quality_report: Optional[dict[str, Any]] = None
+    outcome_tier: str | None = None
+    environment_code: str | None = None
+    test_results: dict[str, Any] | None = None
+    quality_report: dict[str, Any] | None = None
     created_at: str
     updated_at: str
 
@@ -152,7 +150,7 @@ class EnvironmentVersion(BaseModel):
     iteration: int
     code: str
     timestamp: str
-    trigger: Optional[str] = None
+    trigger: str | None = None
 
 
 class EnvironmentTestReport(BaseModel):
@@ -169,7 +167,7 @@ class EnvironmentTestReport(BaseModel):
     total_errors: int
     exploits_detected: int
     adversarial_issues: int
-    mutation_score: Optional[float] = None
+    mutation_score: float | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -191,7 +189,7 @@ class BenchmarkRunRequest(BaseModel):
 
     model_config = ConfigDict(extra="ignore")
 
-    target_code: Optional[str] = None
+    target_code: str | None = None
 
 
 class BenchmarkRunResult(BaseModel):
@@ -216,7 +214,7 @@ class BenchmarkResultDetail(BaseModel):
     timestamp: str
     passed: bool
     scores: dict[str, float]
-    details: Optional[dict[str, Any]] = None
+    details: dict[str, Any] | None = None
 
 
 class BenchmarkHistoryItem(BaseModel):
@@ -253,7 +251,7 @@ class StatusEventData(BaseModel):
     job_id: str
     status: str
     current_stage: str
-    outcome_tier: Optional[str] = None
+    outcome_tier: str | None = None
     stage_history: list[dict[str, Any]] = Field(default_factory=list)
 
 
@@ -283,4 +281,4 @@ class CompleteEventData(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
     status: str
-    outcome_tier: Optional[str] = None
+    outcome_tier: str | None = None

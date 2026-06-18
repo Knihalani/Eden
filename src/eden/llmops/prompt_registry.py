@@ -7,9 +7,8 @@ promotion, and emergency rollback capability.
 from __future__ import annotations
 
 import hashlib
-import json
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 
@@ -24,7 +23,7 @@ class PromptTemplate:
     variables: dict[str, Any] = field(default_factory=dict)
     is_default: bool = False
     created_by: str | None = None
-    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     metadata: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
@@ -188,7 +187,7 @@ class PromptRegistry:
             raise ValueError(f"Prompt not found: {prompt_name}")
 
         try:
-            from jinja2 import Template, StrictUndefined
+            from jinja2 import StrictUndefined, Template
             jinja_tpl = Template(
                 template.template_text,
                 undefined=StrictUndefined,
@@ -206,7 +205,7 @@ class PromptRegistry:
         if winner:
             self.set_default(winner.prompt_name, winner.version)
             test.status = "completed"
-            test.end_date = datetime.now(timezone.utc)
+            test.end_date = datetime.now(UTC)
         return winner
 
     def rollback(self, prompt_name: str, version: int) -> PromptTemplate | None:

@@ -72,10 +72,10 @@ from __future__ import annotations
 import logging
 import re
 import uuid
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
-from typing import Any, Awaitable, Callable, Optional
-
+from datetime import UTC, datetime
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -514,7 +514,7 @@ def list_probes() -> list[Probe]:
     return sorted(PROBE_CATALOGUE.values(), key=lambda p: p.name)
 
 
-def get_probe(name: str) -> Optional[Probe]:
+def get_probe(name: str) -> Probe | None:
     return PROBE_CATALOGUE.get(name)
 
 
@@ -563,7 +563,7 @@ class ProbeRunner:
     def __init__(
         self,
         *,
-        on_finding: Optional[Callable[[ProbeFinding], Any]] = None,
+        on_finding: Callable[[ProbeFinding], Any] | None = None,
         pg: Any = None,
         fire_drift_hook: bool = True,
     ) -> None:
@@ -599,7 +599,7 @@ class ProbeRunner:
                 detection_reason=reason,
                 target_label=target_label,
                 tags=[probe.category, probe.severity],
-                created_at=datetime.now(timezone.utc).isoformat(),
+                created_at=datetime.now(UTC).isoformat(),
             )
             result.findings.append(finding)
             result.prompts_executed += 1

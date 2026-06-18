@@ -6,13 +6,12 @@ telemetry to find scenarios missing from the environment or behaviors that diver
 
 from __future__ import annotations
 
-import json
 import logging
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
-from typing import Any, Optional
+from datetime import UTC, datetime
+from typing import Any
 
-from eden.insights.unified_trace_model import UnifiedTrace, Realm, Outcome, SpanType
+from eden.insights.unified_trace_model import Outcome, SpanType, UnifiedTrace
 from eden.insights.utils import sequence_similarity
 
 logger = logging.getLogger(__name__)
@@ -129,7 +128,7 @@ class ComparativeAnalysisEngine:
             tenant_id=tenant_id,
             env_trace_id=env_trace.trace_id,
             prod_trace_id=prod_trace.trace_id,
-            generated_at=datetime.now(timezone.utc),
+            generated_at=datetime.now(UTC),
             overall_score=overall_score,
             dimensions=dimensions,
             recommendations=recommendations,
@@ -159,7 +158,7 @@ class ComparativeAnalysisEngine:
         self,
         env_trace: UnifiedTrace,
         prod_trace: UnifiedTrace,
-    ) -> Optional[DisparityDimension]:
+    ) -> DisparityDimension | None:
         env_actions = self._extract_actions(env_trace)
         prod_actions = self._extract_actions(prod_trace)
 
@@ -198,7 +197,7 @@ class ComparativeAnalysisEngine:
         self,
         env_trace: UnifiedTrace,
         prod_trace: UnifiedTrace,
-    ) -> Optional[DisparityDimension]:
+    ) -> DisparityDimension | None:
         env_outcome = env_trace.outcome.value
         prod_outcome = prod_trace.outcome.value
 
@@ -226,7 +225,7 @@ class ComparativeAnalysisEngine:
         self,
         env_trace: UnifiedTrace,
         prod_trace: UnifiedTrace,
-    ) -> Optional[DisparityDimension]:
+    ) -> DisparityDimension | None:
         env_lat = env_trace.duration_ms
         prod_lat = prod_trace.duration_ms
 
@@ -255,7 +254,7 @@ class ComparativeAnalysisEngine:
         self,
         env_trace: UnifiedTrace,
         prod_trace: UnifiedTrace,
-    ) -> Optional[DisparityDimension]:
+    ) -> DisparityDimension | None:
         env_states = self._extract_states(env_trace)
         prod_states = self._extract_states(prod_trace)
 
@@ -290,7 +289,7 @@ class ComparativeAnalysisEngine:
         self,
         env_trace: UnifiedTrace,
         prod_trace: UnifiedTrace,
-    ) -> Optional[DisparityDimension]:
+    ) -> DisparityDimension | None:
         env_tools = self._extract_tools(env_trace)
         prod_tools = self._extract_tools(prod_trace)
 
@@ -325,7 +324,7 @@ class ComparativeAnalysisEngine:
         self,
         env_trace: UnifiedTrace,
         prod_trace: UnifiedTrace,
-    ) -> Optional[DisparityDimension]:
+    ) -> DisparityDimension | None:
         env_errors = self._extract_error_categories(env_trace)
         prod_errors = self._extract_error_categories(prod_trace)
 

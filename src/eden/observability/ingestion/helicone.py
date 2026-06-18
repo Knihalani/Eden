@@ -40,7 +40,7 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Any, Optional
+from typing import Any
 
 from eden.observability.ingestion.attribution import Attribution
 from eden.observability.ingestion.errors import SchemaInvalidError
@@ -50,7 +50,7 @@ from eden.observability.telemetry_collector import TelemetryEvent
 logger = logging.getLogger(__name__)
 
 
-def _split_node_id(node_id: str) -> tuple[Optional[str], str]:
+def _split_node_id(node_id: str) -> tuple[str | None, str]:
     """Helicone's ``Helicone-Node-Id`` is ``"parent:child"``. Returns
     ``(parent_span_id, span_id)``. For a root request (``"abc"``) the
     parent is ``None`` and the span is ``"abc"``.
@@ -68,7 +68,7 @@ class HeliconeDecoder:
 
     source_format = "helicone"
 
-    def detect(self, body: bytes, content_type: Optional[str]) -> bool:
+    def detect(self, body: bytes, content_type: str | None) -> bool:
         try:
             parsed = json.loads(body)
         except (ValueError, UnicodeDecodeError):
@@ -275,7 +275,7 @@ def _nested_get(obj: Any, *path: str) -> Any:
     return obj
 
 
-def _extract_helicone_reasoning(response: Any) -> Optional[dict[str, Any]]:
+def _extract_helicone_reasoning(response: Any) -> dict[str, Any] | None:
     """Pull OpenAI o1 reasoning tokens out of the response (Helicone
     mirrors the provider response unchanged)."""
     if not isinstance(response, dict):
@@ -380,7 +380,7 @@ def _extract_helicone_images(request: Any) -> list[dict[str, Any]]:
     return out
 
 
-def _extract_helicone_logprobs(response: Any) -> Optional[dict[str, Any]]:
+def _extract_helicone_logprobs(response: Any) -> dict[str, Any] | None:
     if not isinstance(response, dict):
         return None
     choices = response.get("choices") or []
@@ -415,7 +415,7 @@ def _extract_helicone_citations(response: Any) -> list[dict[str, Any]]:
     return out
 
 
-def _extract_helicone_finish_reason(response: Any) -> Optional[str]:
+def _extract_helicone_finish_reason(response: Any) -> str | None:
     if not isinstance(response, dict):
         return None
     # OpenAI

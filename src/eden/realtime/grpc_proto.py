@@ -15,7 +15,7 @@ binds the servicer into a gRPC server.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, AsyncIterator, Callable
+from typing import Any
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Message types

@@ -248,7 +248,21 @@ export const api = {
     }>>(`/orgs${includeArchived ? "?include_archived=true" : ""}`),
 
   createOrg: (name: string, makeDefault?: boolean) =>
-    fetchApi<{ org_id: string; name: string; slug: string; role: string }>("/orgs", {
+    fetchApi<{
+      org_id: string;
+      name: string;
+      slug: string;
+      role: string;
+      /**
+       * Clerk organisation id (``org_2x...``) for the newly created
+       * org. Null when Clerk sync was degraded at create time; the
+       * portal falls back to Eden-only state and surfaces a soft
+       * warning via ``org_degraded``.
+       */
+      clerk_org_id: string | null;
+      /** True when the local row was written but Clerk was unreachable. */
+      org_degraded: boolean;
+    }>("/orgs", {
       method: "POST",
       body: JSON.stringify({ name, make_default: makeDefault ?? true }),
     }),
@@ -296,7 +310,13 @@ export const api = {
     }>>(`/orgs/${orgId}/invites`),
 
   acceptInvite: (orgId: string, invitationId: string) =>
-    fetchApi<{ message: string; org_id: string; role: string }>(
+    fetchApi<{
+      message: string;
+      org_id: string;
+      role: string;
+      /** Clerk org id; null if the org predates Clerk sync. */
+      clerk_org_id: string | null;
+    }>(
       `/orgs/${orgId}/invites/${invitationId}/accept`,
       { method: "POST" }
     ),

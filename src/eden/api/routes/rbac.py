@@ -10,14 +10,18 @@ from __future__ import annotations
 
 import logging
 import re
-from typing import Any, Optional
+from typing import Any
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field, field_validator
 
-from eden.api.deps import OrgMember, get_current_org_member, require_org_permission
-from eden.api.deps import PERMISSION_MAP, has_permission
+from eden.api.deps import (
+    PERMISSION_MAP,
+    OrgMember,
+    get_current_org_member,
+    require_org_permission,
+)
 from eden.storage.postgres import get_postgres_client
 
 logger = logging.getLogger(__name__)
@@ -47,7 +51,7 @@ def _validate_permission_key(key: str) -> str:
 class RoleCreateRequest(BaseModel):
     name: str = Field(..., min_length=1, max_length=64)
     base_role: str = Field(..., pattern=r"^(owner|admin|member|viewer)$")
-    description: Optional[str] = Field(None, max_length=500)
+    description: str | None = Field(None, max_length=500)
     permissions: list[str] = Field(default_factory=list)
 
     @field_validator("permissions")
@@ -59,8 +63,8 @@ class RoleCreateRequest(BaseModel):
 
 
 class RoleUpdateRequest(BaseModel):
-    description: Optional[str] = Field(None, max_length=500)
-    permissions: Optional[list[str]] = None
+    description: str | None = Field(None, max_length=500)
+    permissions: list[str] | None = None
 
     @field_validator("permissions")
     @classmethod
@@ -77,15 +81,15 @@ class RoleResponse(BaseModel):
     org_id: str
     name: str
     base_role: str
-    description: Optional[str] = None
+    description: str | None = None
     permissions: list[str] = []
     created_at: str
 
 
 class AssignmentCreateRequest(BaseModel):
     user_id: str
-    resource_type: Optional[str] = Field(None, max_length=32)
-    resource_id: Optional[str] = Field(None, max_length=128)
+    resource_type: str | None = Field(None, max_length=32)
+    resource_id: str | None = Field(None, max_length=128)
 
     @field_validator("user_id")
     @classmethod
@@ -101,9 +105,9 @@ class AssignmentResponse(BaseModel):
     id: str
     role_id: str
     user_id: str
-    resource_type: Optional[str] = None
-    resource_id: Optional[str] = None
-    granted_by: Optional[str] = None
+    resource_type: str | None = None
+    resource_id: str | None = None
+    granted_by: str | None = None
     created_at: str
 
 

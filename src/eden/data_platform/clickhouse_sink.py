@@ -17,12 +17,11 @@ Usage:
 
 from __future__ import annotations
 
-import asyncio
 import json
 import logging
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
-from typing import Any, Optional
+from datetime import UTC, datetime
+from typing import Any
 
 from eden.config import get_settings
 
@@ -41,7 +40,7 @@ class ClickHouseConfig:
     timeout: int = 30
 
     @classmethod
-    def from_settings(cls) -> "ClickHouseConfig":
+    def from_settings(cls) -> ClickHouseConfig:
         s = get_settings()
         return cls(
             url=getattr(s, "clickhouse_url", "http://localhost:8123"),
@@ -77,10 +76,10 @@ class ClickHouseSink:
     # Default batch size for ingestion
     BATCH_SIZE: int = 10_000
 
-    def __init__(self, config: Optional[ClickHouseConfig] = None) -> None:
+    def __init__(self, config: ClickHouseConfig | None = None) -> None:
         self.config = config or ClickHouseConfig.from_settings()
         self._initialized = False
-        self._session: Optional[Any] = None
+        self._session: Any | None = None
 
     async def _get_session(self) -> Any:
         if self._session is None:
@@ -95,7 +94,7 @@ class ClickHouseSink:
             await self._session.close()
             self._session = None
 
-    async def _execute(self, query: str, params: Optional[dict] = None) -> str:
+    async def _execute(self, query: str, params: dict | None = None) -> str:
         """Execute a ClickHouse query via HTTP interface."""
         session = await self._get_session()
         url = f"{self.config.url.rstrip('/')}/"
@@ -260,7 +259,7 @@ class ClickHouseSink:
             await self.init_schema()
 
         report = IngestionReport(table="agent_performance")
-        start = datetime.now(timezone.utc)
+        start = datetime.now(UTC)
 
         rows = []
         for t in traces:
@@ -276,7 +275,7 @@ class ClickHouseSink:
                 "cost_usd": float(t.get("cost_usd", 0) or 0),
                 "model": t.get("model", ""),
                 "pipeline_stage": t.get("pipeline_stage", ""),
-                "timestamp": t.get("timestamp", datetime.now(timezone.utc).isoformat()),
+                "timestamp": t.get("timestamp", datetime.now(UTC).isoformat()),
             }
             rows.append(row)
 
@@ -293,7 +292,7 @@ class ClickHouseSink:
             # Fallback: write to PostgreSQL for later retry
             await self._fallback_to_postgres("agent_performance", rows)
 
-        report.duration_ms = (datetime.now(timezone.utc) - start).total_seconds() * 1000
+        report.duration_ms = (datetime.now(UTC) - start).total_seconds() * 1000
         return report
 
     async def ingest_pipeline_stages(
@@ -305,7 +304,7 @@ class ClickHouseSink:
             await self.init_schema()
 
         report = IngestionReport(table="pipeline_stages")
-        start = datetime.now(timezone.utc)
+        start = datetime.now(UTC)
 
         rows = []
         for s in stages:
@@ -316,7 +315,7 @@ class ClickHouseSink:
                 "status": s.get("status", "unknown"),
                 "duration_ms": int(s.get("duration_ms", 0) or 0),
                 "error_message": s.get("error_message", ""),
-                "timestamp": s.get("timestamp", datetime.now(timezone.utc).isoformat()),
+                "timestamp": s.get("timestamp", datetime.now(UTC).isoformat()),
             }
             rows.append(row)
 
@@ -332,7 +331,7 @@ class ClickHouseSink:
             report.errors.append(str(exc))
             await self._fallback_to_postgres("pipeline_stages", rows)
 
-        report.duration_ms = (datetime.now(timezone.utc) - start).total_seconds() * 1000
+        report.duration_ms = (datetime.now(UTC) - start).total_seconds() * 1000
         return report
 
     async def ingest_usage_trends(
@@ -344,11 +343,11 @@ class ClickHouseSink:
             await self.init_schema()
 
         report = IngestionReport(table="usage_trends")
-        start = datetime.now(timezone.utc)
+        start = datetime.now(UTC)
 
         rows = []
         for e in events:
-            ts = e.get("timestamp") or e.get("created_at") or datetime.now(timezone.utc).isoformat()
+            ts = e.get("timestamp") or e.get("created_at") or datetime.now(UTC).isoformat()
             # Truncate to hour
             try:
                 dt = datetime.fromisoformat(ts.replace("Z", "+00:00"))
@@ -381,7 +380,7 @@ class ClickHouseSink:
             report.errors.append(str(exc))
             await self._fallback_to_postgres("usage_trends", rows)
 
-        report.duration_ms = (datetime.now(timezone.utc) - start).total_seconds() * 1000
+        report.duration_ms = (datetime.now(UTC) - start).total_seconds() * 1000
         return report
 
     async def ingest_benchmark_results(
@@ -393,7 +392,7 @@ class ClickHouseSink:
             await self.init_schema()
 
         report = IngestionReport(table="benchmark_results")
-        start = datetime.now(timezone.utc)
+        start = datetime.now(UTC)
 
         rows = []
         for r in results:
@@ -405,7 +404,7 @@ class ClickHouseSink:
                 "score": float(r.get("score", 0) or 0),
                 "passed": 1 if r.get("passed", False) else 0,
                 "duration_ms": int(r.get("duration_ms", 0) or 0),
-                "timestamp": r.get("timestamp", datetime.now(timezone.utc).isoformat()),
+                "timestamp": r.get("timestamp", datetime.now(UTC).isoformat()),
             }
             rows.append(row)
 
@@ -421,7 +420,7 @@ class ClickHouseSink:
             report.errors.append(str(exc))
             await self._fallback_to_postgres("benchmark_results", rows)
 
-        report.duration_ms = (datetime.now(timezone.utc) - start).total_seconds() * 1000
+        report.duration_ms = (datetime.now(UTC) - start).total_seconds() * 1000
         return report
 
     async def _insert_json(self, table: str, rows: list[dict[str, Any]]) -> None:
@@ -465,7 +464,7 @@ class ClickHouseSink:
         ClickHouse is unavailable.
         """
         report = IngestionReport(table=table)
-        start = datetime.now(timezone.utc)
+        start = datetime.now(UTC)
         if not rows:
             return report
         if not self._initialized:
@@ -476,7 +475,7 @@ class ClickHouseSink:
                 report.errors.append(str(exc))
                 report.rows_failed = len(rows)
                 await self._fallback_to_postgres(table, rows)
-                report.duration_ms = (datetime.now(timezone.utc) - start).total_seconds() * 1000
+                report.duration_ms = (datetime.now(UTC) - start).total_seconds() * 1000
                 return report
         try:
             await self._insert_json(table, rows)
@@ -486,7 +485,7 @@ class ClickHouseSink:
             report.rows_failed = len(rows)
             report.errors.append(str(exc))
             await self._fallback_to_postgres(table, rows)
-        report.duration_ms = (datetime.now(timezone.utc) - start).total_seconds() * 1000
+        report.duration_ms = (datetime.now(UTC) - start).total_seconds() * 1000
         return report
 
     async def _fallback_to_postgres(
@@ -512,10 +511,10 @@ class ClickHouseSink:
 
     async def query_agent_performance(
         self,
-        tenant_id: Optional[str] = None,
-        agent_name: Optional[str] = None,
-        start_time: Optional[str] = None,
-        end_time: Optional[str] = None,
+        tenant_id: str | None = None,
+        agent_name: str | None = None,
+        start_time: str | None = None,
+        end_time: str | None = None,
         limit: int = 1000,
     ) -> list[dict[str, Any]]:
         """Query agent performance metrics from ClickHouse."""
@@ -553,9 +552,9 @@ class ClickHouseSink:
 
     async def query_pipeline_bottlenecks(
         self,
-        tenant_id: Optional[str] = None,
-        start_time: Optional[str] = None,
-        end_time: Optional[str] = None,
+        tenant_id: str | None = None,
+        start_time: str | None = None,
+        end_time: str | None = None,
         limit: int = 100,
     ) -> list[dict[str, Any]]:
         """Identify pipeline bottlenecks by stage duration."""
@@ -587,10 +586,10 @@ class ClickHouseSink:
 
     async def query_usage_trends(
         self,
-        tenant_id: Optional[str] = None,
+        tenant_id: str | None = None,
         granularity: str = "hour",
-        start_time: Optional[str] = None,
-        end_time: Optional[str] = None,
+        start_time: str | None = None,
+        end_time: str | None = None,
         limit: int = 1000,
     ) -> list[dict[str, Any]]:
         """Query usage trends with configurable granularity."""
@@ -652,7 +651,7 @@ class ClickHouseError(Exception):
 
 
 # Singleton
-_clickhouse_sink: Optional[ClickHouseSink] = None
+_clickhouse_sink: ClickHouseSink | None = None
 
 
 async def get_clickhouse_sink() -> ClickHouseSink:

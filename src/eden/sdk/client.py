@@ -7,17 +7,14 @@ exponential backoff, and envelope unwrapping.
 from __future__ import annotations
 
 import asyncio
-import json
 import logging
 import uuid
-from contextlib import asynccontextmanager
-from typing import Any, AsyncIterator, Optional
+from typing import Any
 
 import httpx
 
 from eden.sdk.config import EdenConfig
-from eden.sdk.errors import raise_for_status, EdenError
-from eden.sdk.models import APIEnvelope, PaginatedEnvelope
+from eden.sdk.errors import EdenError, raise_for_status
 
 logger = logging.getLogger("eden.sdk")
 
@@ -32,14 +29,14 @@ class EdenClient:
             job = await eden.jobs.create(description="...")
     """
 
-    def __init__(self, *, config: Optional[EdenConfig] = None, **kwargs):
+    def __init__(self, *, config: EdenConfig | None = None, **kwargs):
         self.config = config or EdenConfig.load(**kwargs)
-        self._client: Optional[httpx.AsyncClient] = None
-        self._request_id: Optional[str] = None
+        self._client: httpx.AsyncClient | None = None
+        self._request_id: str | None = None
 
     # ── Lifecycle ──────────────────────────────────────────────────────
 
-    async def __aenter__(self) -> "EdenClient":
+    async def __aenter__(self) -> EdenClient:
         await self._ensure_client()
         return self
 
@@ -76,10 +73,10 @@ class EdenClient:
         method: str,
         path: str,
         *,
-        json_body: Optional[dict] = None,
-        params: Optional[dict] = None,
-        headers: Optional[dict] = None,
-        idempotency_key: Optional[str] = None,
+        json_body: dict | None = None,
+        params: dict | None = None,
+        headers: dict | None = None,
+        idempotency_key: str | None = None,
     ) -> dict[str, Any]:
         """Make an HTTP request with automatic retries and envelope unwrapping."""
         client = await self._ensure_client()
@@ -94,7 +91,7 @@ class EdenClient:
         self._request_id = str(uuid.uuid4())[:12]
         request_headers["X-Request-ID"] = self._request_id
 
-        last_exception: Optional[Exception] = None
+        last_exception: Exception | None = None
 
         for attempt in range(self.config.max_retries + 1):
             try:
@@ -184,21 +181,6 @@ class EdenClient:
         return result["_data"]
 
     # ── Resource accessors ─────────────────────────────────────────────
-
-    @property
-    def jobs(self) -> "JobsResource":
-        """Job resource accessor."""
-        from eden.sdk.resources.jobs import JobsResource
-        return JobsResource(self)
-
-    @property
-    def environments(self) -> "EnvironmentsResource":
-        """Environment resource accessor."""
-        from eden.sdk.resources.environments import EnvironmentsResource
-        return EnvironmentsResource(self)
-
-    @property
-    def benchmarks(self) -> "BenchmarksResource":
-        """Benchmark resource accessor."""
-        from eden.sdk.resources.benchmarks import BenchmarksResource
-        return BenchmarksResource(self)
+    # Job/Environment/Benchmark resources were retired with the
+    # env-gen pipeline (June 2026). The observability/gateway
+    # surface is the only public SDK surface that remains.

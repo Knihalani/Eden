@@ -22,11 +22,10 @@ surfaced as ``target_slo_met`` on the returned dict.
 
 from __future__ import annotations
 
-import json
 import logging
-from dataclasses import dataclass, field, asdict
-from datetime import datetime, timedelta, timezone
-from typing import Any, Optional
+from dataclasses import asdict, dataclass, field
+from datetime import UTC, datetime
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -50,7 +49,7 @@ class WeekBucket:
     kb_writes: int
     jobs_in_post_window: int
     gold_tier_in_post_window: int
-    gold_tier_rate: Optional[float]
+    gold_tier_rate: float | None
 
 
 @dataclass
@@ -69,12 +68,12 @@ class CorrelationReport:
         generated_at:            ISO-8601 UTC timestamp
     """
 
-    organization_id: Optional[str]
+    organization_id: str | None
     lookback_days: int
     weeks: list[WeekBucket] = field(default_factory=list)
     aggregate_post_jobs: int = 0
     aggregate_post_gold: int = 0
-    aggregate_post_rate: Optional[float] = None
+    aggregate_post_rate: float | None = None
     target_slo: float = GOLD_TIER_UPLIFT_TARGET
     target_slo_met: bool = False
     generated_at: str = ""
@@ -141,7 +140,7 @@ ORDER BY pw.week_start ASC
 
 
 async def correlation_report(
-    organization_id: Optional[str] = None,
+    organization_id: str | None = None,
     lookback_days: int = LOOKBACK_DAYS_DEFAULT,
 ) -> CorrelationReport:
     """Compute the closed-loop correlation report.
@@ -154,7 +153,7 @@ async def correlation_report(
     report = CorrelationReport(
         organization_id=organization_id,
         lookback_days=lookback_days,
-        generated_at=datetime.now(timezone.utc).isoformat(),
+        generated_at=datetime.now(UTC).isoformat(),
     )
 
     try:

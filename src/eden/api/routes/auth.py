@@ -13,11 +13,16 @@ from eden.api.deps import (
     get_current_org,
     get_current_user,
     get_user_by_id,
+    log_audit_event,
     require_org_admin,
 )
 from eden.api.utils.auth import create_access_token, hash_password, verify_password
+from eden.api.utils.validation import PasswordValidationError, validate_password_strength
 from eden.config import get_settings
-from eden.services.invitation_service import verify_invite_token
+from eden.services.invitation_service import (
+    accept_invitation,
+    verify_invite_token,
+)
 from eden.storage.postgres import get_postgres_client
 
 logger = logging.getLogger(__name__)
@@ -97,9 +102,21 @@ class EnforceTwoFAResponse(BaseModel):
     message: str
 
 
-@router.post("/signup", response_model=SignupResponse)
+@router.post("/signup", response_model=UserResponse)
 async def signup(request: SignupRequest, response: Response):
     """Create a new user account."""
+    # Enforce password strength policy before hitting the DB. The
+    # Pydantic `min_length=8` only checks length; the strength
+    # validator additionally rejects common passwords and requires
+    # upper/lower/digit/special character classes.
+    try:
+        validate_password_strength(request.password)
+    except PasswordValidationError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from exc
+
     client = await get_postgres_client()
 
     # Check if email already exists
@@ -364,6 +381,70 @@ async def signup_from_invite(request: SignupFromInviteRequest, response: Respons
     )
 
 
+@router.post("/invitations/accept", response_model=dict)
+async def accept_invitation_by_token(
+    token: str,
+    user: dict = Depends(get_current_user),
+):
+    """Accept a pending org invitation by its secret token.
+
+    The token comes from the invite email (``/invite/{token}`` link) or
+    a copy-paste from the admin. Resolves to the underlying invitation,
+    adds the current user to the org at the assigned role, and marks
+    the invite as accepted.
+
+    This is the "paste a token" path used by the onboarding wizard's
+    join branch when the user has no invites surfaced by
+    ``/auth/me/pending-invites`` (e.g. signed up with a different
+    email than the invite address, or the invite predates this
+    account). ``verify_invite_token`` re-checks expiry + status, so
+    the user can paste an old token without a 500.
+
+    No pre-existing membership required — the point of this call is
+    to *create* the membership. Returns ``{org_id, role, org_name,
+    message}`` so the portal can advance the wizard without a follow
+    up ``/auth/me`` round-trip.
+    """
+    invitation = await verify_invite_token(token)
+    if not invitation:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Invalid or expired invitation token",
+        )
+
+    org_id = invitation["org_id"]
+    try:
+        result = await accept_invitation(invitation["id"], user["user_id"])
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        )
+
+    client = await get_postgres_client()
+    await log_audit_event(
+        client=client,
+        org_id=org_id,
+        user_id=user["user_id"],
+        action="member.joined",
+        target_type="user",
+        target_id=user["user_id"],
+        metadata={"role": result["role"], "via": "token"},
+    )
+
+    return {
+        "message": "Invitation accepted",
+        "org_id": result["org_id"],
+        "role": result["role"],
+        "org_name": invitation["org_name"],
+        # Forwarded from ``accept_invitation`` (which performs the
+        # Clerk ``create_membership`` side-effect) so the portal can
+        # ``setActive({ organization: ... })`` without a follow-up
+        # Clerk lookup.
+        "clerk_org_id": result.get("clerk_org_id"),
+    }
+
+
 @router.post("/logout")
 async def logout(response: Response):
     """Clear the JWT cookie."""
@@ -510,7 +591,14 @@ async def setup_2fa(user: dict = Depends(get_current_user)):
 
     img = qr.make_image(fill_color="black", back_color="white")
     buffer = io.BytesIO()
-    img.save(buffer, format="PNG")
+    # `make_image` returns a PIL Image (Pillow installed) or a PyPNGImage
+    # (Pillow missing). PIL accepts `format=`, PyPNG does not — both
+    # accept a bare save(file) and infer PNG from the buffer.
+    try:
+        img.save(buffer, format="PNG")
+    except TypeError:
+        buffer.seek(0)
+        img.save(buffer)
     qr_code_base64 = base64.b64encode(buffer.getvalue()).decode()
 
     # Store the secret temporarily (not yet enabled)

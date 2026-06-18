@@ -9,7 +9,7 @@ holds the Pydantic models the API surfaces.
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any, Optional
+from typing import Any
 
 from pydantic import BaseModel, Field
 
@@ -18,7 +18,7 @@ class JudgeRunRequest(BaseModel):
     """Request body for ``POST /orgs/{org_id}/observability/judges/run``."""
 
     trace_id: str = Field(..., description="The trace to score")
-    judge_names: Optional[list[str]] = Field(
+    judge_names: list[str] | None = Field(
         None,
         description=(
             "Restrict to these judges. None = run all matching judges "
@@ -38,13 +38,13 @@ class JudgeRunRequest(BaseModel):
 class JudgeScoreResponse(BaseModel):
     """One score in the API response."""
 
-    judge_run_id: Optional[str] = None
+    judge_run_id: str | None = None
     judge_name: str
     judge_version: str
     trace_id: str
-    span_id: Optional[str] = None
+    span_id: str | None = None
     score: float
-    rationale: Optional[str] = None
+    rationale: str | None = None
     model: str
     scored_at: datetime
     latency_ms: float = 0.0
@@ -57,7 +57,7 @@ class JudgeRunResponse(BaseModel):
     judge_runs: list[JudgeScoreResponse] = Field(default_factory=list)
     count: int = 0
     queued: bool = False
-    job_id: Optional[str] = None
+    job_id: str | None = None
 
 
 class JudgeListResponse(BaseModel):

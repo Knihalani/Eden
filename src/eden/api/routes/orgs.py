@@ -4,23 +4,29 @@ import hashlib
 import logging
 import re
 import secrets
-from typing import Optional
 from uuid import uuid4
 
-from fastapi import Depends, APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
 
-from eden.api.deps import get_current_user, require_org_admin, require_org_member, require_org_owner, require_org_permission, log_audit_event
+from eden.api.deps import (
+    get_current_user,
+    log_audit_event,
+    require_org_admin,
+    require_org_member,
+    require_org_owner,
+    require_org_permission,
+)
 from eden.api.routes.billing import check_limit
+from eden.config import get_settings
 from eden.services.invitation_service import (
-    create_invitation,
-    get_pending_invitations,
     accept_invitation,
+    create_invitation,
     decline_invitation,
+    get_pending_invitations,
     send_invite_email,
 )
 from eden.storage.postgres import get_postgres_client
-from eden.config import get_settings
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -98,7 +104,32 @@ async def create_org(
     make_default: bool = True,
     user: dict = Depends(get_current_user),
 ):
-    """Create a new organization. Creator becomes owner."""
+    """Create a new organization. Creator becomes owner.
+
+    Backend-driven: we call Clerk Backend API first so the new Eden
+    row's ``clerk_org_id`` is populated and the membership webhook
+    will idempotently re-sync the ``org_members`` row from Clerk's
+    side. We also insert the ``org_members`` row directly here so the
+    user's first ``GET /auth/me`` roundtrip (which the onboarding
+    wizard performs after the create call) sees the membership
+    immediately, without waiting for webhook delivery.
+
+    If Clerk is unreachable, we still create the Eden row, log a
+    warning, and return it without ``clerk_org_id`` (response flag
+    ``org_degraded: true``). The frontend's ``useOrg`` hook already
+    handles this branch by falling through to the user's
+    ``current_org_id``; an operator can re-sync later via a backfill
+    script.
+    """
+    # Local imports keep the module-load cost cheap for tests that
+    # never exercise Clerk.
+    from eden.api.utils.clerk_client import (
+        ClerkAPIError,
+    )
+    from eden.api.utils.clerk_client import (
+        create_organization as clerk_create_org,
+    )
+
     client = await get_postgres_client()
     user_id = user["user_id"]
 
@@ -119,25 +150,66 @@ async def create_org(
     if existing:
         slug = f"{slug}-{uuid4().hex[:8]}"
 
-    # Create org
+    # Try Clerk first. On failure, log + continue with a backend-only
+    # row. The user gets a working org either way; the degraded flag
+    # surfaces a soft warning in the portal.
+    clerk_org_id: str | None = None
+    degraded = False
+    try:
+        clerk_org = await clerk_create_org(name=name, slug=slug)
+        clerk_org_id = str(clerk_org.get("id") or "") or None
+    except ClerkAPIError as exc:
+        logger.warning(
+            "Clerk org create failed for slug=%s: %s; continuing with backend-only org",
+            slug, exc,
+        )
+        degraded = True
+    except Exception as exc:  # noqa: BLE001 — defensive
+        logger.exception("Unexpected Clerk error on create_org slug=%s: %s", slug, exc)
+        degraded = True
+
+    # Create org (Eden row). We write the clerk_org_id we got from
+    # Clerk; for webhook-created rows in the future, the
+    # ``organization.created`` webhook will land at the
+    # ``_upsert_org`` handler and backfill the same column.
     org_id = str(uuid4())
-    query = """
-        INSERT INTO organizations (id, name, slug, owner_id, settings)
-        VALUES ($1, $2, $3, $4, '{}')
-        RETURNING id
-    """
-    row = await client.fetchrow(query, org_id, name, slug, user_id)
+    try:
+        query = """
+            INSERT INTO organizations (id, clerk_org_id, name, slug, owner_id, settings)
+            VALUES ($1, $2, $3, $4, $5, '{}')
+            RETURNING id
+        """
+        row = await client.fetchrow(query, org_id, clerk_org_id, name, slug, user_id)
+    except Exception as exc:
+        # If we created the Clerk org but failed to write the Eden
+        # row, we have an orphan in Clerk. Log loudly so an operator
+        # can run cleanup; don't auto-delete (Clerk charges per org
+        # on some plans and auto-delete is riskier than the leak).
+        logger.exception(
+            "Failed to write Eden org row after Clerk create "
+            "(org_id=%s clerk_org_id=%s): %s",
+            org_id, clerk_org_id, exc,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to create organization",
+        )
     if not row:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to create organization",
         )
 
-    # Add creator as owner member
+    # Add creator as owner member. The Clerk
+    # ``organizationMembership.created`` webhook will also write this
+    # row idempotently (see ``clerk_webhooks.py:_upsert_membership``);
+    # ``ON CONFLICT DO NOTHING`` keeps the local insert safe even if
+    # the webhook lands first.
     await client.execute(
         """
         INSERT INTO org_members (org_id, user_id, role, invited_by)
         VALUES ($1, $2, 'owner', $2)
+        ON CONFLICT (org_id, user_id) DO NOTHING
         """,
         org_id,
         user_id,
@@ -156,6 +228,8 @@ async def create_org(
         "name": name,
         "slug": slug,
         "role": "owner",
+        "clerk_org_id": clerk_org_id,
+        "org_degraded": degraded,
     }
 
 
@@ -354,9 +428,14 @@ async def accept_org_invitation(
     invitation_id: str,
     user: dict = Depends(get_current_user),
 ):
-    """Accept an organization invitation."""
-    await require_org_member(org_id)
+    """Accept an organization invitation.
 
+    The point of this call is to *create* a membership, so we do not
+    require pre-existing ``org_members`` membership (that would 403
+    for any first-time invitee). The ``accept_invitation`` service
+    re-queries the invite, validates status + expiry, and inserts
+    the row idempotently.
+    """
     try:
         result = await accept_invitation(invitation_id, user["user_id"])
     except ValueError as e:
@@ -381,6 +460,10 @@ async def accept_org_invitation(
         "message": "Invitation accepted",
         "org_id": result["org_id"],
         "role": result["role"],
+        # ``clerk_org_id`` is forwarded from the service; lets the
+        # portal ``setActive({ organization: ... })`` without a second
+        # Clerk lookup.
+        "clerk_org_id": result.get("clerk_org_id"),
     }
 
 
@@ -888,8 +971,6 @@ async def rotate_scim_token(
 # ============================================================================
 # Import hashlib for token hashing
 # ============================================================================
-import hashlib
-import secrets
 # DOMAIN RESTRICTION MANAGEMENT
 # ============================================================================
 

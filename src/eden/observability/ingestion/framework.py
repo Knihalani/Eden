@@ -27,10 +27,8 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Any, Optional
 
 from eden.observability.ingestion.attribution import Attribution
-from eden.observability.ingestion.normalizer import normalize_to_telemetry_event
 from eden.observability.telemetry_collector import TelemetryEvent
 
 logger = logging.getLogger(__name__)
@@ -74,9 +72,9 @@ _FRAMEWORK_HEADER_VALUES: dict[str, str] = {
 
 def _identify_framework(
     body: bytes,
-    content_type: Optional[str],
-    headers: Optional[dict[str, str]] = None,
-) -> Optional[str]:
+    content_type: str | None,
+    headers: dict[str, str] | None = None,
+) -> str | None:
     """Return the framework name if we can identify one, else None.
 
     Precedence: X-Source-Framework header → attribute prefix → None.
@@ -140,7 +138,7 @@ class FrameworkDecoder:
 
     source_format = "framework"
 
-    def detect(self, body: bytes, content_type: Optional[str]) -> bool:
+    def detect(self, body: bytes, content_type: str | None) -> bool:
         # We accept anything OTel-shaped — even if we can't identify a
         # specific framework, we still want to ingest it (with framework
         # name = "unknown" or absent).

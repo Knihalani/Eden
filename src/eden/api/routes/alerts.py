@@ -9,9 +9,8 @@ POST /alerts/{id}/ack  — mark an alert as acknowledged (no-op for the
 from __future__ import annotations
 
 import logging
-from typing import Any
 
-from fastapi import APIRouter, Cookie, Header, HTTPException
+from fastapi import APIRouter, Cookie
 from pydantic import BaseModel
 
 from eden.observability.alerts import evaluate_alerts

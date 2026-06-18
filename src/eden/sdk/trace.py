@@ -1,10 +1,12 @@
 from __future__ import annotations
 
-import time
 import functools
 import inspect
 import logging
-from typing import Any, AsyncIterator, Callable, Optional, TypeVar
+import time
+from collections.abc import AsyncIterator, Callable
+from datetime import UTC
+from typing import Any, TypeVar
 
 logger = logging.getLogger("eden.sdk.trace")
 
@@ -13,9 +15,9 @@ F = TypeVar("F", bound=Callable[..., Any])
 
 def trace_agent(
     *,
-    environment_id: Optional[str] = None,
-    tags: Optional[list[str]] = None,
-    metadata: Optional[dict[str, Any]] = None,
+    environment_id: str | None = None,
+    tags: list[str] | None = None,
+    metadata: dict[str, Any] | None = None,
 ) -> Callable[[F], F]:
     """Decorator that auto-traces agent function execution.
 
@@ -76,15 +78,15 @@ def trace_agent(
 
 def _build_trace_data(
     func: Callable[..., Any],
-    environment_id: Optional[str],
-    tags: Optional[list[str]],
-    metadata: Optional[dict[str, Any]],
+    environment_id: str | None,
+    tags: list[str] | None,
+    metadata: dict[str, Any] | None,
     args: tuple[Any, ...],
     kwargs: dict[str, Any],
 ) -> dict[str, Any]:
     """Build the trace payload."""
     import uuid
-    from datetime import datetime, timezone
+    from datetime import datetime
 
     # Sanitise arguments — never log sensitive values
     safe_args = [f"<{type(a).__name__}>" for a in args]
@@ -92,7 +94,7 @@ def _build_trace_data(
 
     return {
         "trace_id": str(uuid.uuid4()),
-        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "timestamp": datetime.now(UTC).isoformat(),
         "function": func.__qualname__,
         "module": func.__module__,
         "environment_id": environment_id,
@@ -106,7 +108,7 @@ def _build_trace_data(
 def _emit_trace(trace_data: dict[str, Any]) -> None:
     """Emit a trace to the Eden Telemetry Collector and log locally."""
     import uuid
-    from datetime import datetime, timezone
+    from datetime import datetime
 
     if logger.isEnabledFor(logging.DEBUG):
         logger.debug(f"[trace] {trace_data['trace_id']} {trace_data['function']} — {trace_data.get('status')} in {trace_data.get('duration_ms')}ms")
@@ -114,6 +116,7 @@ def _emit_trace(trace_data: dict[str, Any]) -> None:
     # Phase 6.5: Send to Eden Telemetry Collector
     try:
         import asyncio
+
         from eden.observability.telemetry_collector import TelemetryEvent, get_telemetry_collector
 
         event = TelemetryEvent(
@@ -123,7 +126,7 @@ def _emit_trace(trace_data: dict[str, Any]) -> None:
             trace_id=trace_data.get("trace_id", str(uuid.uuid4())),
             realm="production",
             event_type="agent.run",
-            timestamp=trace_data.get("timestamp", datetime.now(timezone.utc).isoformat()),
+            timestamp=trace_data.get("timestamp", datetime.now(UTC).isoformat()),
             agent_id=trace_data.get("environment_id"),
             name=trace_data.get("function"),
             duration_ms=trace_data.get("duration_ms"),
@@ -167,9 +170,9 @@ _instrumented: set[str] = set()
 
 def auto_instrument(
     *,
-    targets: Optional[list[str]] = None,
-    environment_id: Optional[str] = None,
-    tags: Optional[list[str]] = None,
+    targets: list[str] | None = None,
+    environment_id: str | None = None,
+    tags: list[str] | None = None,
 ) -> dict[str, bool]:
     """Auto-patch installed LLM SDKs to emit trace events.
 
@@ -231,10 +234,10 @@ def auto_instrument(
 
 # ── Streaming helpers (Phase 7.1a.1) ─────────────────────────────────────────
 
-def _extract_text_from_openai_chunk(chunk: Any) -> tuple[Optional[str], Optional[str]]:
+def _extract_text_from_openai_chunk(chunk: Any) -> tuple[str | None, str | None]:
     """Return ``(text_delta, finish_reason)`` for an OpenAI ``ChatCompletionChunk``."""
-    text: Optional[str] = None
-    finish_reason: Optional[str] = None
+    text: str | None = None
+    finish_reason: str | None = None
     try:
         if chunk.choices:
             first = chunk.choices[0]
@@ -248,7 +251,7 @@ def _extract_text_from_openai_chunk(chunk: Any) -> tuple[Optional[str], Optional
     return text, finish_reason
 
 
-def _extract_text_from_anthropic_event(event: Any) -> tuple[Optional[str], Optional[str]]:
+def _extract_text_from_anthropic_event(event: Any) -> tuple[str | None, str | None]:
     """Return ``(text_delta, finish_reason)`` for an Anthropic streaming event.
 
     Anthropic emits ``MessageStartEvent`` / ``ContentBlockStartEvent`` /
@@ -256,8 +259,8 @@ def _extract_text_from_anthropic_event(event: Any) -> tuple[Optional[str], Optio
     ``MessageDeltaEvent`` / ``MessageStopEvent``. Only the delta
     events carry text.
     """
-    text: Optional[str] = None
-    finish_reason: Optional[str] = None
+    text: str | None = None
+    finish_reason: str | None = None
     try:
         etype = getattr(event, "type", None)
         if etype == "content_block_delta":
@@ -298,7 +301,7 @@ def _itl_avg_ms(itl_sum_ms: float, itl_count: int) -> float:
 
 def _streaming_summary(
     t0: float,
-    t_first: Optional[float],
+    t_first: float | None,
     t_last: float,
     itl_sum_ms: float,
     itl_count: int,
@@ -329,8 +332,8 @@ async def _wrap_openai_stream(
     upstream: AsyncIterator[Any],
     *,
     model: str,
-    environment_id: Optional[str],
-    tags: Optional[list[str]],
+    environment_id: str | None,
+    tags: list[str] | None,
     provider: str,
 ) -> AsyncIterator[Any]:
     """Wrap an OpenAI ``stream=True`` response iterator.
@@ -350,16 +353,16 @@ async def _wrap_openai_stream(
     replay and Datadog-style latency analytics.
     """
     t0 = time.monotonic()
-    t_first: Optional[float] = None
-    t_prev: Optional[float] = None
+    t_first: float | None = None
+    t_prev: float | None = None
     t_last: float = t0
     itl_sum_ms = 0.0
     itl_count = 0
     output_tokens = 0
-    usage_output_tokens: Optional[int] = None
-    finish_reason: Optional[str] = None
+    usage_output_tokens: int | None = None
+    finish_reason: str | None = None
     chunk_count = 0
-    error_type: Optional[str] = None
+    error_type: str | None = None
     status = "success"
     buffered_chunks: list[dict[str, Any]] = []
     event_id = f"stream_{provider}_{int(time.time() * 1_000_000)}_{id(upstream)}"
@@ -434,7 +437,7 @@ async def _wrap_openai_stream(
 
 
 async def _flush_stream_chunks(
-    environment_id: Optional[str],
+    environment_id: str | None,
     chunks: list[dict[str, Any]],
 ) -> None:
     """POST buffered streaming chunks to /orgs/{org_id}/ingest/chunks.
@@ -467,7 +470,7 @@ async def _flush_stream_chunks(
         logger.debug(f"chunk flush HTTP call failed: {exc}")
 
 
-_sdk_http_client: Optional[Any] = None
+_sdk_http_client: Any | None = None
 
 
 async def _get_sdk_http_client() -> Any:
@@ -486,8 +489,8 @@ async def _wrap_anthropic_stream(
     upstream: AsyncIterator[Any],
     *,
     model: str,
-    environment_id: Optional[str],
-    tags: Optional[list[str]],
+    environment_id: str | None,
+    tags: list[str] | None,
     provider: str,
 ) -> AsyncIterator[Any]:
     """Wrap an Anthropic ``messages.stream=True`` response iterator.
@@ -495,17 +498,17 @@ async def _wrap_anthropic_stream(
     Mirrors the OpenAI wrapper but uses the Anthropic event types.
     """
     t0 = time.monotonic()
-    t_first: Optional[float] = None
-    t_prev: Optional[float] = None
+    t_first: float | None = None
+    t_prev: float | None = None
     t_last: float = t0
     itl_sum_ms = 0.0
     itl_count = 0
     output_tokens = 0
-    usage_output_tokens: Optional[int] = None
-    usage_input_tokens: Optional[int] = None
-    finish_reason: Optional[str] = None
+    usage_output_tokens: int | None = None
+    usage_input_tokens: int | None = None
+    finish_reason: str | None = None
     chunk_count = 0
-    error_type: Optional[str] = None
+    error_type: str | None = None
     status = "success"
 
     try:
@@ -574,13 +577,13 @@ async def _emit_provider_streaming_trace(
     *,
     provider: str,
     model: str,
-    environment_id: Optional[str],
-    tags: Optional[list[str]],
+    environment_id: str | None,
+    tags: list[str] | None,
     metrics: dict[str, float],
     chunk_count: int,
-    finish_reason: Optional[str],
+    finish_reason: str | None,
     status: str,
-    error_type: Optional[str],
+    error_type: str | None,
 ) -> None:
     """Emit a single ``llm_completion_stream`` event after a streaming
     response is exhausted. Mirrors the contract of
@@ -590,8 +593,8 @@ async def _emit_provider_streaming_trace(
     """
     try:
         from eden.observability.telemetry_collector import (
-            get_telemetry_collector,
             TelemetryEvent,
+            get_telemetry_collector,
         )
         event = TelemetryEvent(
             event_id=f"auto_stream_{provider}_{int(time.time() * 1_000_000)}",
@@ -633,8 +636,8 @@ def _is_streaming_call(kwargs: dict[str, Any]) -> bool:
 
 def _instrument_openai(
     *,
-    environment_id: Optional[str],
-    tags: Optional[list[str]],
+    environment_id: str | None,
+    tags: list[str] | None,
 ) -> bool:
     """Monkey-patch ``openai.resources.chat.Completions.create``."""
     try:
@@ -722,8 +725,8 @@ def _instrument_openai(
 
 def _instrument_anthropic(
     *,
-    environment_id: Optional[str],
-    tags: Optional[list[str]],
+    environment_id: str | None,
+    tags: list[str] | None,
 ) -> bool:
     """Monkey-patch ``anthropic.resources.messages.Messages.create``."""
     try:
@@ -778,8 +781,8 @@ def _instrument_anthropic(
 
 def _instrument_langchain(
     *,
-    environment_id: Optional[str],
-    tags: Optional[list[str]],
+    environment_id: str | None,
+    tags: list[str] | None,
 ) -> bool:
     """Monkey-patch ``langchain.chat_models.base.ChatModel._call`` /
     ``_agenerate`` to emit traces per chat call."""
@@ -827,11 +830,11 @@ def _emit_provider_trace(
     *,
     provider: str,
     model: str,
-    environment_id: Optional[str],
-    tags: Optional[list[str]],
+    environment_id: str | None,
+    tags: list[str] | None,
     duration_ms: int,
     status: str,
-    error_type: Optional[str],
+    error_type: str | None,
 ) -> None:
     """Emit a trace event for a provider call. Mirrors the contract of
     ``_emit_trace`` for ``@trace_agent`` but uses provider-specific
@@ -839,9 +842,9 @@ def _emit_provider_trace(
     must never break the user's call."""
     try:
         from eden.observability.telemetry_collector import (
-            get_telemetry_collector,
-            TelemetryEvent,
             Realm,
+            TelemetryEvent,
+            get_telemetry_collector,
         )
         event = TelemetryEvent(
             event_id=f"auto_{provider}_{int(time.time() * 1_000_000)}",

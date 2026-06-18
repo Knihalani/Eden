@@ -14,7 +14,6 @@ Tables added:
 """
 
 from alembic import op
-from alembic.runtime import migration
 
 revision = "008"
 down_revision = "007"

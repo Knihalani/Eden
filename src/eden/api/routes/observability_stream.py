@@ -22,10 +22,10 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-import time
-from typing import Any, AsyncIterator, Optional
+from collections.abc import AsyncIterator
+from typing import Any
 
-from fastapi import APIRouter, Depends, Header, Path, Query
+from fastapi import APIRouter, Depends, Path, Query
 from fastapi.responses import StreamingResponse
 
 from eden.api.deps import get_current_user
@@ -39,7 +39,7 @@ router = APIRouter(prefix="/orgs/{org_id}/observability", tags=["observability"]
 @router.get("/stream")
 async def stream_traces(
     org_id: str = Path(..., description="Organization ID"),
-    last_event_id: Optional[str] = Query(
+    last_event_id: str | None = Query(
         None,
         description="Last-Event-ID for resume",
     ),
@@ -64,7 +64,7 @@ async def stream_traces(
 
 async def _event_stream(
     org_id: str,
-    last_event_id: Optional[str],
+    last_event_id: str | None,
 ) -> AsyncIterator[bytes]:
     """Generator: yield SSE messages from the per-tenant channel."""
     redis = await get_redis_client()
@@ -109,7 +109,7 @@ async def _event_stream(
                     pubsub.get_message(ignore_subscribe_messages=True),
                     timeout=15.0,
                 )
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 # 15s keep-alive ping — keeps the connection open
                 # through proxies that idle-close.
                 yield _format_sse("ping", "{}")
@@ -145,7 +145,7 @@ async def _event_stream(
 def _format_sse(
     event: str,
     data: str,
-    event_id: Optional[str] = None,
+    event_id: str | None = None,
 ) -> bytes:
     """Format one SSE message."""
     out = f"event: {event}\ndata: {data}\n"

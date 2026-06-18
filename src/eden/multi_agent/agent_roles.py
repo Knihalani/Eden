@@ -5,13 +5,11 @@ Ref: eden-multi-agent-orchestration-architecture.md §3, §3.2
 
 from __future__ import annotations
 
-import asyncio
 import time
 from collections import defaultdict
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Optional
-
+from typing import Any
 
 # ──────────────────────────────────────────────────────────────────────────
 # Enums

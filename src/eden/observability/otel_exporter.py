@@ -18,11 +18,8 @@ and dropped. This matches the collector's overall best-effort posture.
 
 from __future__ import annotations
 
-import asyncio
-import json
 import logging
-import time
-from typing import Any, Optional
+from typing import Any
 
 import aiohttp
 
@@ -60,7 +57,7 @@ class OTelDualExporter:
     """
 
     def __init__(self) -> None:
-        self._session: Optional[aiohttp.ClientSession] = None
+        self._session: aiohttp.ClientSession | None = None
 
     async def _get_session(self) -> aiohttp.ClientSession:
         if self._session is None or self._session.closed:
@@ -276,7 +273,7 @@ class OTelDualExporter:
 # ── helpers ──────────────────────────────────────────────────────────
 
 
-def _iso_to_ns(iso: Optional[str]) -> int:
+def _iso_to_ns(iso: str | None) -> int:
     """Convert ISO 8601 timestamp to nanoseconds since epoch."""
     if not iso:
         return 0
@@ -288,7 +285,7 @@ def _iso_to_ns(iso: Optional[str]) -> int:
         return 0
 
 
-def _hex_trace_id(trace_id: Optional[str]) -> str:
+def _hex_trace_id(trace_id: str | None) -> str:
     """Format a trace_id as 32 hex chars (OTel spec)."""
     if not trace_id:
         return "0" * 32
@@ -296,7 +293,7 @@ def _hex_trace_id(trace_id: Optional[str]) -> str:
     return h.ljust(32, "0")[:32]
 
 
-def _hex_span_id(span_id: Optional[str]) -> str:
+def _hex_span_id(span_id: str | None) -> str:
     """Format a span_id as 16 hex chars (OTel spec)."""
     if not span_id:
         return "0" * 16
@@ -306,7 +303,7 @@ def _hex_span_id(span_id: Optional[str]) -> str:
 
 # ── singleton ────────────────────────────────────────────────────────
 
-_exporter: Optional[OTelDualExporter] = None
+_exporter: OTelDualExporter | None = None
 
 
 def get_otel_dual_exporter() -> OTelDualExporter:

@@ -18,22 +18,17 @@ from __future__ import annotations
 
 import logging
 import uuid
-from datetime import datetime, timezone
-from typing import Any, Optional
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Path
 from pydantic import BaseModel, Field
 
 from eden.data_platform.qa_generator import (
     ALL_QA_TYPES,
-    MAX_CONTEXT_CHARS,
-    QA_TYPE_ABSTRACTIVE,
     QA_TYPE_EXTRACTIVE,
-    QA_TYPE_MULTI_HOP,
     QAGenerator,
     SyntheticQA,
 )
-
 
 logger = logging.getLogger(__name__)
 

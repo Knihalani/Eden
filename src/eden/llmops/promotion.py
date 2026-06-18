@@ -21,8 +21,8 @@ losing to its predecessor, swap them."
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone, timedelta
-from typing import Any, Optional
+from datetime import UTC, datetime, timedelta
+from typing import Any
 
 from eden.config import get_settings
 
@@ -140,7 +140,7 @@ class PromotionLoop:
         settings = get_settings()
         # Lookback window
         lookback = timedelta(minutes=settings.promotion_lookback_minutes)
-        cutoff = datetime.now(timezone.utc) - lookback
+        cutoff = datetime.now(UTC) - lookback
 
         # Per-version call counts and latencies. We approximate these
         # from telemetry_events: each call to an agent produces a
@@ -245,7 +245,7 @@ class PromotionLoop:
         tenant_id: str,
     ) -> None:
         """Promote the canary to 100% traffic and audit-log."""
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         await client.execute(
             """
             UPDATE prompt_version_assignments
@@ -303,7 +303,7 @@ class PromotionLoop:
         tenant_id: str,
     ) -> None:
         """Roll back the canary. Tenant falls back to the global active."""
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         await client.execute(
             """
             UPDATE prompt_version_assignments
@@ -335,7 +335,7 @@ class PromotionLoop:
             logger.debug(f"audit log in rollback failed: {exc}")
 
 
-_promotion_loop: Optional[PromotionLoop] = None
+_promotion_loop: PromotionLoop | None = None
 
 
 def get_promotion_loop() -> PromotionLoop:

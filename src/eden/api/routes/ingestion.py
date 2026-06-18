@@ -32,7 +32,7 @@ from __future__ import annotations
 import logging
 import time
 from collections import defaultdict, deque
-from typing import Any, Optional
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Request
 from pydantic import BaseModel, Field
@@ -108,8 +108,8 @@ async def _ingest_handler(
     path_format: str,
     auth_ctx: dict,
     project_id: str = "default",
-    content_type: Optional[str] = None,
-    headers: Optional[dict[str, str]] = None,
+    content_type: str | None = None,
+    headers: dict[str, str] | None = None,
 ) -> IngestResponse:
     """Shared body for all 9 endpoints. Decode → PII pre-mask → collector."""
     settings = get_settings()

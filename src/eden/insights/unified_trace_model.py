@@ -5,13 +5,13 @@ Phase 6.3: Single schema spans environment, production, and comparative realms.
 
 from __future__ import annotations
 
-import json
 import hashlib
+import json
 import logging
-from dataclasses import dataclass, field, asdict
-from datetime import datetime, timezone
+from dataclasses import asdict, dataclass, field
+from datetime import UTC, datetime
 from enum import Enum
-from typing import Any, Optional
+from typing import Any
 from uuid import uuid4
 
 logger = logging.getLogger(__name__)
@@ -43,11 +43,11 @@ class SpanType(Enum):
 @dataclass
 class Span:
     span_id: str
-    parent_id: Optional[str] = None
+    parent_id: str | None = None
     name: str = ""
     span_type: SpanType = SpanType.SYSTEM
-    started_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
-    ended_at: Optional[datetime] = None
+    started_at: datetime = field(default_factory=lambda: datetime.now(UTC))
+    ended_at: datetime | None = None
     duration_ms: float = 0.0
     metrics: dict[str, float] = field(default_factory=dict)
     attributes: dict[str, str] = field(default_factory=dict)
@@ -80,10 +80,10 @@ class UnifiedTrace:
     realm: Realm = Realm.ENVIRONMENT
     agent_id: str = ""
     agent_version: str = ""
-    environment_id: Optional[str] = None
-    environment_version: Optional[str] = None
-    started_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
-    ended_at: Optional[datetime] = None
+    environment_id: str | None = None
+    environment_version: str | None = None
+    started_at: datetime = field(default_factory=lambda: datetime.now(UTC))
+    ended_at: datetime | None = None
     duration_ms: float = 0.0
     outcome: Outcome = Outcome.SUCCESS
     metrics: dict[str, float] = field(default_factory=dict)
@@ -280,7 +280,7 @@ def _normalize_span(data: dict[str, Any]) -> Span:
     except ValueError:
         st = SpanType.SYSTEM
 
-    started = _parse_timestamp(data.get("started_at")) if data.get("started_at") else datetime.now(timezone.utc)
+    started = _parse_timestamp(data.get("started_at")) if data.get("started_at") else datetime.now(UTC)
     ended = _parse_timestamp(data.get("ended_at")) if data.get("ended_at") else None
     duration = data.get("duration_ms", 0.0)
     if not duration and started and ended:
@@ -319,7 +319,7 @@ def _normalize_sdk_span(data: dict[str, Any]) -> Span:
     elif "user" in name.lower():
         span_type = SpanType.USER_INTERACTION
 
-    started = _parse_timestamp(data.get("start_time")) if data.get("start_time") else datetime.now(timezone.utc)
+    started = _parse_timestamp(data.get("start_time")) if data.get("start_time") else datetime.now(UTC)
     ended = _parse_timestamp(data.get("end_time")) if data.get("end_time") else None
     duration = data.get("duration_ms", 0.0)
     if not duration and started and ended:
@@ -432,12 +432,12 @@ def _auto_classify_errors(trace: UnifiedTrace) -> list[dict[str, Any]]:
 def _parse_timestamp(ts: Any) -> datetime:
     """Parse various timestamp formats."""
     if isinstance(ts, datetime):
-        return ts if ts.tzinfo else ts.replace(tzinfo=timezone.utc)
+        return ts if ts.tzinfo else ts.replace(tzinfo=UTC)
     if isinstance(ts, (int, float)):
         # Assume milliseconds if > 1e10, seconds otherwise
         if ts > 1e10:
-            return datetime.fromtimestamp(ts / 1000, tz=timezone.utc)
-        return datetime.fromtimestamp(ts, tz=timezone.utc)
+            return datetime.fromtimestamp(ts / 1000, tz=UTC)
+        return datetime.fromtimestamp(ts, tz=UTC)
     if isinstance(ts, str):
         try:
             return datetime.fromisoformat(ts.replace("Z", "+00:00"))
@@ -446,7 +446,7 @@ def _parse_timestamp(ts: Any) -> datetime:
         # Try common formats
         for fmt in ("%Y-%m-%dT%H:%M:%S.%f%z", "%Y-%m-%dT%H:%M:%S%z", "%Y-%m-%d %H:%M:%S"):
             try:
-                return datetime.strptime(ts, fmt).replace(tzinfo=timezone.utc)
+                return datetime.strptime(ts, fmt).replace(tzinfo=UTC)
             except ValueError:
                 continue
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)

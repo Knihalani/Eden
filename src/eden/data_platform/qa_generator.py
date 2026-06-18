@@ -52,11 +52,12 @@ import hashlib
 import io
 import logging
 import re
+from collections.abc import Iterable
 from dataclasses import dataclass, field
-from typing import Any, Iterable, Optional
+from datetime import UTC
+from typing import Any
 
 from eden.data_platform.faker_vault import FakerVault, get_default_vault
-
 
 logger = logging.getLogger(__name__)
 
@@ -345,7 +346,7 @@ class QAGenerator:
     def __init__(
         self,
         *,
-        vault: Optional[FakerVault] = None,
+        vault: FakerVault | None = None,
         chunk_size: int = DEFAULT_CHUNK_SIZE,
         chunk_overlap: int = DEFAULT_CHUNK_OVERLAP,
         qa_per_chunk: int = DEFAULT_QA_PER_CHUNK,
@@ -366,7 +367,7 @@ class QAGenerator:
         source_format: str = "text",
         locale: str = "en",
         qa_type: str = QA_TYPE_EXTRACTIVE,
-        tags: Optional[list[str]] = None,
+        tags: list[str] | None = None,
     ) -> list[SyntheticQA]:
         """Generate Q/A triples from ``text``.
 
@@ -405,7 +406,7 @@ class QAGenerator:
         text_column: str = "text",
         locale: str = "en",
         qa_type: str = QA_TYPE_EXTRACTIVE,
-        tags: Optional[list[str]] = None,
+        tags: list[str] | None = None,
     ) -> list[SyntheticQA]:
         """Parse ``csv_text`` and generate Q/A for every row's
         ``text_column`` value. Returns the concatenated list of
@@ -440,7 +441,7 @@ class QAGenerator:
         *,
         source_format: str,
         locale: str,
-        tags: Optional[list[str]],
+        tags: list[str] | None,
     ) -> list[SyntheticQA]:
         raw_chunks = chunk_text(
             text,
@@ -455,8 +456,8 @@ class QAGenerator:
             for c in raw_chunks
         ]
         out: list[SyntheticQA] = []
-        from datetime import datetime, timezone
-        now = datetime.now(timezone.utc).isoformat()
+        from datetime import datetime
+        now = datetime.now(UTC).isoformat()
         for chunk in chunks:
             sentences = _split_sentences(chunk.text)
             if not sentences:
@@ -496,7 +497,7 @@ class QAGenerator:
         *,
         source_format: str,
         locale: str,
-        tags: Optional[list[str]],
+        tags: list[str] | None,
     ) -> list[SyntheticQA]:
         """Generate abstractive Q/A via the LLM.
 
@@ -534,7 +535,7 @@ class QAGenerator:
         *,
         source_format: str,
         locale: str,
-        tags: Optional[list[str]],
+        tags: list[str] | None,
     ) -> list[SyntheticQA]:
         """Compose multi-hop Q/A pairs that require combining
         two adjacent chunks.
@@ -558,8 +559,8 @@ class QAGenerator:
             for c in raw_chunks
         ]
         out: list[SyntheticQA] = []
-        from datetime import datetime, timezone
-        now = datetime.now(timezone.utc).isoformat()
+        from datetime import datetime
+        now = datetime.now(UTC).isoformat()
         for i in range(len(chunks) - 1):
             left = chunks[i]
             right = chunks[i + 1]
@@ -607,7 +608,7 @@ def _qa_id(question: str, answer: str, source_id: str) -> str:
     triples reappear).
     """
     h = hashlib.sha256(
-        f"{question}\x00{answer}\x00{source_id}".encode("utf-8"),
+        f"{question}\x00{answer}\x00{source_id}".encode(),
     ).hexdigest()[:16]
     return f"qa-{h}"
 

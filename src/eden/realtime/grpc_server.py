@@ -30,9 +30,8 @@ import logging
 import os
 import signal
 import sys
-from concurrent import futures
-from datetime import datetime, timezone
-from typing import Any, AsyncIterator, Optional
+from datetime import UTC, datetime
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -157,7 +156,7 @@ def _build_servicer():
                     event_type=request.event_type,
                     entity_id=request.entity_id,
                     payload=payload,
-                    timestamp=datetime.now(timezone.utc),
+                    timestamp=datetime.now(UTC),
                 )
                 await store.append(request.entity_id, ev)
                 return _to_proto_ack(ok=True, event_id=request.event_id)
@@ -183,7 +182,7 @@ def _build_servicer():
                             event_type=ev.event_type,
                             entity_id=ev.entity_id,
                             payload=payload,
-                            timestamp=datetime.now(timezone.utc),
+                            timestamp=datetime.now(UTC),
                         ),
                     )
                     await upstream.put(ev)
@@ -198,7 +197,7 @@ def _build_servicer():
                         "event_type": ev.event_type,
                         "entity_id": ev.entity_id,
                         "payload": {},
-                        "timestamp_ms": int(datetime.now(timezone.utc).timestamp() * 1000),
+                        "timestamp_ms": int(datetime.now(UTC).timestamp() * 1000),
                     })
             finally:
                 task.cancel()

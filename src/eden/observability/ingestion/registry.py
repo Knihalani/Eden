@@ -18,7 +18,7 @@ maps a 415 before calling ``decode``).
 from __future__ import annotations
 
 import logging
-from typing import Optional, Protocol, runtime_checkable
+from typing import Protocol, runtime_checkable
 
 from eden.observability.ingestion.attribution import Attribution
 from eden.observability.ingestion.errors import FormatUnsupportedError
@@ -38,7 +38,7 @@ class SourceDecoder(Protocol):
 
     source_format: str
 
-    def detect(self, body: bytes, content_type: Optional[str]) -> bool:
+    def detect(self, body: bytes, content_type: str | None) -> bool:
         """Return True if this decoder can handle ``body`` / ``content_type``."""
         ...
 
@@ -96,8 +96,8 @@ class FormatRegistry:
         return await decoder.decode(body, attribution)
 
     def can_detect(
-        self, body: bytes, content_type: Optional[str]
-    ) -> Optional[str]:
+        self, body: bytes, content_type: str | None
+    ) -> str | None:
         """Try each decoder's ``detect`` method. Returns the first match
         or None. Order of registration matters for ambiguous bodies."""
         for fmt, decoder in self._decoders.items():

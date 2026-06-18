@@ -11,10 +11,9 @@ from __future__ import annotations
 
 import logging
 import uuid
-from datetime import datetime, timezone
-from typing import Any, Optional
+from datetime import UTC, datetime
 
-from fastapi import APIRouter, Depends, HTTPException, Path, Query
+from fastapi import APIRouter, Depends, HTTPException, Path
 from pydantic import BaseModel, Field
 
 from eden.api.deps import get_current_user
@@ -31,8 +30,8 @@ class RetentionPolicyIn(BaseModel):
     warm_days: int = Field(..., ge=0)
     cold_days: int = Field(..., ge=0)
     delete_days: int = Field(..., ge=0)
-    pii_scrub_after_days: Optional[int] = Field(default=None, ge=0)
-    notes: Optional[str] = None
+    pii_scrub_after_days: int | None = Field(default=None, ge=0)
+    notes: str | None = None
 
 
 class RetentionPolicyOut(BaseModel):
@@ -43,10 +42,10 @@ class RetentionPolicyOut(BaseModel):
     warm_days: int
     cold_days: int
     delete_days: int
-    pii_scrub_after_days: Optional[int]
+    pii_scrub_after_days: int | None
     effective_from: str
-    effective_until: Optional[str] = None
-    notes: Optional[str] = None
+    effective_until: str | None = None
+    notes: str | None = None
 
 
 @router.get("", response_model=list[RetentionPolicyOut])
@@ -101,7 +100,7 @@ async def put_retention_policy(
     if not client:
         raise HTTPException(status_code=503, detail="Database unavailable")
     new_id = str(uuid.uuid4())
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     try:
         await client.execute(
             """

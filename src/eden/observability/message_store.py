@@ -29,7 +29,8 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Any, Iterable
+from collections.abc import Iterable
+from typing import Any
 
 from eden.observability.canonical import canonical_hash
 

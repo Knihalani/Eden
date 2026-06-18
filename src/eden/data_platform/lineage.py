@@ -23,8 +23,8 @@ import json
 import logging
 import uuid
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
-from typing import Any, Optional
+from datetime import UTC, datetime
+from typing import Any
 
 from eden.config import get_settings
 
@@ -79,8 +79,8 @@ class LineageRun:
     outputs: list[Dataset] = field(default_factory=list)
     facets: dict[str, Any] = field(default_factory=dict)
     column_lineage: list[ColumnLineage] = field(default_factory=list)
-    started_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
-    ended_at: Optional[str] = None
+    started_at: str = field(default_factory=lambda: datetime.now(UTC).isoformat())
+    ended_at: str | None = None
 
     def to_openlineage(self) -> dict[str, Any]:
         return {
@@ -115,7 +115,7 @@ class LineageTracker:
     """
 
     def __init__(self) -> None:
-        self._postgres_client: Optional[Any] = None
+        self._postgres_client: Any | None = None
 
     async def _get_postgres(self) -> Any:
         if self._postgres_client is None:
@@ -129,11 +129,11 @@ class LineageTracker:
         inputs: list[Dataset],
         outputs: list[Dataset],
         event_type: str = "COMPLETE",
-        facets: Optional[dict[str, Any]] = None,
-        column_lineage: Optional[list[ColumnLineage]] = None,
-        run_id: Optional[str] = None,
-        started_at: Optional[str] = None,
-        ended_at: Optional[str] = None,
+        facets: dict[str, Any] | None = None,
+        column_lineage: list[ColumnLineage] | None = None,
+        run_id: str | None = None,
+        started_at: str | None = None,
+        ended_at: str | None = None,
     ) -> str:
         """Record a lineage run.
 
@@ -147,7 +147,7 @@ class LineageTracker:
             outputs=outputs,
             facets=facets or {},
             column_lineage=column_lineage or [],
-            started_at=started_at or datetime.now(timezone.utc).isoformat(),
+            started_at=started_at or datetime.now(UTC).isoformat(),
             ended_at=ended_at,
         )
 
@@ -187,10 +187,10 @@ class LineageTracker:
         job_id: str,
         stage: str,
         stage_status: str,
-        inputs: Optional[list[Dataset]] = None,
-        outputs: Optional[list[Dataset]] = None,
-        duration_ms: Optional[float] = None,
-        error_message: Optional[str] = None,
+        inputs: list[Dataset] | None = None,
+        outputs: list[Dataset] | None = None,
+        duration_ms: float | None = None,
+        error_message: str | None = None,
     ) -> str:
         """Convenience: record a pipeline stage run."""
         facets: dict[str, Any] = {"stage": stage, "job_id": job_id}
@@ -316,7 +316,7 @@ class LineageTracker:
 
     async def export_openlineage(
         self,
-        since: Optional[datetime] = None,
+        since: datetime | None = None,
         limit: int = 1000,
     ) -> list[dict[str, Any]]:
         """Export lineage runs as OpenLineage-compatible JSON.
@@ -364,7 +364,7 @@ class LineageTracker:
 
 
 # Singleton
-_lineage_tracker: Optional[LineageTracker] = None
+_lineage_tracker: LineageTracker | None = None
 
 
 async def get_lineage_tracker() -> LineageTracker:

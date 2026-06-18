@@ -10,7 +10,6 @@ from pydantic import BaseModel, Field
 from eden.integrations import INTEGRATION_API_VERSION
 from eden.integrations.langsmith import (
     LangSmithClient,
-    eden_env_to_langsmith_dataset,
     trace_to_langsmith_run,
 )
 

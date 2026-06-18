@@ -10,10 +10,10 @@ from __future__ import annotations
 import json
 import logging
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -103,7 +103,7 @@ class ReviewDecision:
     current_approvals: int = 0
     reviewers: list[str] = field(default_factory=list)
     auto_approved: bool = False
-    timestamp: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+    timestamp: str = field(default_factory=lambda: datetime.now(UTC).isoformat())
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -315,8 +315,8 @@ class ReviewGate:
 
     def __init__(
         self,
-        classifier: Optional[RiskClassifier] = None,
-        state_dir: Optional[Path] = None,
+        classifier: RiskClassifier | None = None,
+        state_dir: Path | None = None,
     ):
         """Initialize review gate.
 
@@ -331,7 +331,7 @@ class ReviewGate:
     def assess(
         self,
         diff: EnvironmentDiff,
-        test_results: Optional[dict[str, Any]] = None,
+        test_results: dict[str, Any] | None = None,
     ) -> ReviewDecision:
         """Assess an environment change and determine review path.
 
@@ -458,7 +458,7 @@ class ReviewGate:
         logger.info(f"{environment_id} rejected by {reviewer}: {reason}")
         return decision
 
-    def get_status(self, environment_id: str) -> Optional[ReviewDecision]:
+    def get_status(self, environment_id: str) -> ReviewDecision | None:
         """Get current review status for an environment."""
         return self._load_decision(environment_id)
 
@@ -489,7 +489,7 @@ class ReviewGate:
         path = self._state_dir / f"{decision.environment_id}.json"
         path.write_text(json.dumps(decision.to_dict(), indent=2), encoding="utf-8")
 
-    def _load_decision(self, environment_id: str) -> Optional[ReviewDecision]:
+    def _load_decision(self, environment_id: str) -> ReviewDecision | None:
         """Load a review decision from disk."""
         path = self._state_dir / f"{environment_id}.json"
         if not path.exists():

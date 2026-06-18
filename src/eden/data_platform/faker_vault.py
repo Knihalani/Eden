@@ -58,8 +58,6 @@ import re
 import secrets
 import unicodedata
 from dataclasses import dataclass, field
-from typing import Optional
-
 
 # ── Pools ──────────────────────────────────────────────────────────
 # Curated, public-domain lists. These are common names from
@@ -552,7 +550,7 @@ class FakerVault:
 
 # ── Singleton ─────────────────────────────────────────────────────
 
-_default_vault: Optional[FakerVault] = None
+_default_vault: FakerVault | None = None
 
 
 def get_default_vault() -> FakerVault:

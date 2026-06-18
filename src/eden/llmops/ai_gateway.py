@@ -7,16 +7,15 @@ automatic failover with circuit breakers.
 
 from __future__ import annotations
 
-import asyncio
 import hashlib
 import json
 import logging
-import random
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
-from typing import Any, Callable
+from typing import Any
 
 from eden.llmops.filters import (
     FilterRegistry,
@@ -74,7 +73,7 @@ class ProviderHealth:
     healthy: bool
     avg_latency_ms: int
     error_rate: float
-    last_checked: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    last_checked: datetime = field(default_factory=lambda: datetime.now(UTC))
 
 
 class CircuitBreaker:
@@ -107,7 +106,7 @@ class CircuitBreaker:
     async def call(self, fn: Callable, *args: Any, **kwargs: Any) -> Any:
         st = self.state
         if st == "open":
-            raise ProviderUnavailable(f"Circuit breaker OPEN for provider")
+            raise ProviderUnavailable("Circuit breaker OPEN for provider")
         try:
             result = await fn(*args, **kwargs)
             self.record_success()
@@ -433,7 +432,7 @@ class AIGateway:
             "latency_ms": latency_ms,
             "cost_usd": response.cost_usd,
             "cached": response.cached,
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
         })
 
     def get_metrics(self, tenant_id: str | None = None, limit: int = 1000) -> list[dict[str, Any]]:

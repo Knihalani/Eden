@@ -62,9 +62,9 @@ from __future__ import annotations
 import logging
 import re
 import time
+from collections.abc import Iterable
 from dataclasses import dataclass, field
-from typing import Any, Iterable, Optional
-
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -191,7 +191,7 @@ class SqlResult:
     rewritten_sql: str = ""
     # If the executor hit a row cap or time cap, this string
     # tells the user which. None = no cap hit.
-    cap_hit: Optional[str] = None
+    cap_hit: str | None = None
 
 
 # ── The executor ───────────────────────────────────────────────────
@@ -247,7 +247,7 @@ class SqlExecutor:
         sql: str,
         *,
         org_id: str,
-        params: Optional[dict[str, Any]] = None,
+        params: dict[str, Any] | None = None,
     ) -> SqlResult:
         """Run a read-only SQL query for the given org.
 
@@ -379,7 +379,7 @@ class SqlExecutor:
         AND one in.
         """
         # 1. Collect table references + check the allowlist.
-        refs: list[tuple[str, Optional[str], Optional[str]]] = []
+        refs: list[tuple[str, str | None, str | None]] = []
         for m in _TABLE_REF_RE.finditer(sql):
             schema = m.group(2)
             table = m.group(1).lower()

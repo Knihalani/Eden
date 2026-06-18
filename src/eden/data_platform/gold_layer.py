@@ -18,8 +18,8 @@ from __future__ import annotations
 import json
 import logging
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta, timezone
-from typing import Any, Optional
+from datetime import UTC, datetime, timedelta
+from typing import Any
 
 from eden.config import get_settings
 
@@ -43,7 +43,7 @@ class TrainingDataPoint:
     curriculum_tier: str = "standard"  # standard | advanced | expert
     tags: list[str] = field(default_factory=list)
     lineage: list[str] = field(default_factory=list)
-    created_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+    created_at: str = field(default_factory=lambda: datetime.now(UTC).isoformat())
 
 
 @dataclass
@@ -58,7 +58,7 @@ class BenchmarkSuite:
     difficulty: str  # easy | medium | hard | adversarial
     datapoints: list[dict[str, Any]] = field(default_factory=list)
     tags: list[str] = field(default_factory=list)
-    created_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+    created_at: str = field(default_factory=lambda: datetime.now(UTC).isoformat())
 
 
 @dataclass
@@ -103,7 +103,7 @@ class KPIBundle:
     pii_incidents: int
     quarantine_rate: float
 
-    computed_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+    computed_at: str = field(default_factory=lambda: datetime.now(UTC).isoformat())
 
 
 class GoldLayerEngine:
@@ -116,7 +116,7 @@ class GoldLayerEngine:
     """
 
     def __init__(self) -> None:
-        self._postgres_client: Optional[Any] = None
+        self._postgres_client: Any | None = None
 
     async def _get_postgres(self) -> Any:
         if self._postgres_client is None:
@@ -130,7 +130,7 @@ class GoldLayerEngine:
         self,
         tenant_id: str,
         min_quality_score: float = 0.7,
-        since: Optional[datetime] = None,
+        since: datetime | None = None,
         limit: int = 10000,
     ) -> list[TrainingDataPoint]:
         """Generate training dataset from high-quality Silver traces.
@@ -142,7 +142,7 @@ class GoldLayerEngine:
         - test pass rate > 0.6
         """
         client = await self._get_postgres()
-        cutoff = since or (datetime.now(timezone.utc) - timedelta(days=90))
+        cutoff = since or (datetime.now(UTC) - timedelta(days=90))
 
         rows = await client.fetch(
             """
@@ -215,14 +215,14 @@ class GoldLayerEngine:
         tenant_id: str,
         name: str,
         datapoints: list[TrainingDataPoint],
-        tags: Optional[list[str]] = None,
+        tags: list[str] | None = None,
     ) -> str:
         """Store a curated training dataset in PostgreSQL.
 
         Returns the dataset_id.
         """
         client = await self._get_postgres()
-        dataset_id = f"tds_{tenant_id}_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}"
+        dataset_id = f"tds_{tenant_id}_{datetime.now(UTC).strftime('%Y%m%d_%H%M%S')}"
 
         # Insert dataset metadata
         await client.execute(
@@ -328,7 +328,7 @@ class GoldLayerEngine:
             })
 
         suite = BenchmarkSuite(
-            suite_id=f"bench_{tenant_id}_{environment_class}_{datetime.now(timezone.utc).strftime('%Y%m%d')}",
+            suite_id=f"bench_{tenant_id}_{environment_class}_{datetime.now(UTC).strftime('%Y%m%d')}",
             tenant_id=tenant_id,
             name=f"{environment_class.title()} Benchmark Suite",
             description=f"Canonical {difficulty} benchmark for {environment_class} environments",
@@ -375,7 +375,7 @@ class GoldLayerEngine:
         Aggregates job, quality, cost, and data-quality metrics.
         """
         client = await self._get_postgres()
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         start = now - timedelta(days=days)
 
         # Basic job stats
@@ -629,7 +629,7 @@ class GoldLayerEngine:
             kpi.quarantine_rate,
         )
 
-    async def get_latest_kpis(self, org_id: str, days: int = 30) -> Optional[KPIBundle]:
+    async def get_latest_kpis(self, org_id: str, days: int = 30) -> KPIBundle | None:
         """Retrieve the most recently computed KPI bundle."""
         client = await self._get_postgres()
         row = await client.fetchrow(
@@ -679,7 +679,7 @@ class GoldLayerEngine:
     async def list_gold_datasets(
         self,
         tenant_id: str,
-        dataset_type: Optional[str] = None,
+        dataset_type: str | None = None,
         limit: int = 100,
     ) -> list[dict[str, Any]]:
         """List all Gold-layer datasets for a tenant."""

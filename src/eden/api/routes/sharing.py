@@ -16,7 +16,7 @@ require a valid user (org_member).
 from __future__ import annotations
 
 import logging
-from typing import Any, Optional
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Query
 from pydantic import BaseModel, Field
@@ -30,7 +30,6 @@ from eden.observability.sharing import (
     ShareService,
 )
 from eden.storage.postgres import get_postgres_client
-
 
 logger = logging.getLogger(__name__)
 
@@ -51,17 +50,17 @@ public_router = APIRouter(
 
 class CreateShareRequest(BaseModel):
     trace_id: str = Field(..., description="The trace to share")
-    expiry_days: Optional[int] = Field(
+    expiry_days: int | None = Field(
         default=DEFAULT_EXPIRY_DAYS,
         ge=1, le=MAX_EXPIRY_DAYS,
         description="Days until the share link expires. 1–30.",
     )
-    label: Optional[str] = Field(
+    label: str | None = Field(
         default=None,
         max_length=200,
         description="Optional human-readable label for the share",
     )
-    base_url: Optional[str] = Field(
+    base_url: str | None = Field(
         default=None,
         description="Override the base URL for the share link (testing)",
     )
@@ -73,16 +72,16 @@ class ShareResponse(BaseModel):
     org_id: str
     trace_id: str
     token_prefix: str
-    label: Optional[str] = None
-    expires_at: Optional[str] = None
-    revoked_at: Optional[str] = None
+    label: str | None = None
+    expires_at: str | None = None
+    revoked_at: str | None = None
     view_count: int
-    last_viewed_at: Optional[str] = None
+    last_viewed_at: str | None = None
     created_at: str
     active: bool
     # Only present on the create response.
-    token: Optional[str] = None
-    url: Optional[str] = None
+    token: str | None = None
+    url: str | None = None
 
 
 class ShareListResponse(BaseModel):
@@ -93,7 +92,7 @@ class PublicTraceResponse(BaseModel):
     """The redacted trace view served at the public route."""
     trace_id: str
     org_id: str
-    label: Optional[str] = None
+    label: str | None = None
     # The redaction is performed by the Cat 10 PII scanner (out of
     # scope for this PR); the route just passes the redacted view
     # through.
@@ -101,7 +100,7 @@ class PublicTraceResponse(BaseModel):
     message_count: int = 0
     span_count: int = 0
     duration_ms: float = 0.0
-    outcome: Optional[str] = None
+    outcome: str | None = None
     created_at: str
     # Note: PII-redaction pass is the next step; this skeleton
     # returns the raw span list.
@@ -118,13 +117,13 @@ class CreateSavedSearchRequest(BaseModel):
 
 
 class UpdateSavedSearchRequest(BaseModel):
-    name: Optional[str] = Field(default=None, min_length=1, max_length=200)
-    query: Optional[str] = Field(default=None, min_length=1, max_length=10000)
-    query_type: Optional[str] = Field(default=None, pattern="^(sql|eql|text)$")
-    params: Optional[dict[str, Any]] = None
-    is_shared: Optional[bool] = None
-    is_pinned: Optional[bool] = None
-    tags: Optional[list[str]] = None
+    name: str | None = Field(default=None, min_length=1, max_length=200)
+    query: str | None = Field(default=None, min_length=1, max_length=10000)
+    query_type: str | None = Field(default=None, pattern="^(sql|eql|text)$")
+    params: dict[str, Any] | None = None
+    is_shared: bool | None = None
+    is_pinned: bool | None = None
+    tags: list[str] | None = None
 
 
 class SavedSearchResponse(BaseModel):
@@ -138,7 +137,7 @@ class SavedSearchResponse(BaseModel):
     is_shared: bool
     is_pinned: bool
     tags: list[str]
-    last_used_at: Optional[str] = None
+    last_used_at: str | None = None
     use_count: int
     created_at: str
     updated_at: str
@@ -155,7 +154,7 @@ def _share_to_response(
     share: SharedTrace,
     *,
     include_plaintext: bool = False,
-    base_url: Optional[str] = None,
+    base_url: str | None = None,
 ) -> ShareResponse:
     payload = share.to_dict(include_plaintext=include_plaintext)
     url = None

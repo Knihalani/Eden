@@ -25,6 +25,7 @@ from eden.api.routes import (
     export,
     export_destinations,
     feature_flags,
+    ingestion,
     integrations_helicone,
     kb,
     labeling,
@@ -34,8 +35,8 @@ from eden.api.routes import (
     pii_policy,
     prompts,
     qa_generator,
-    references,
     redteam,
+    references,
     region,
     retention_policy,
     sandbox,
@@ -276,6 +277,7 @@ app.include_router(billing.router)  # /orgs/{org_id}/billing
 app.include_router(analytics.router)  # /orgs/{org_id}/analytics
 app.include_router(export.router)  # /orgs/{org_id}/export
 app.include_router(export_destinations.router)  # /orgs/{org_id}/export/{destinations,schedules,run-now}
+app.include_router(ingestion.router)  # /orgs/{org_id}/ingest (multi-format observability ingestion)
 app.include_router(scim.router)  # /orgs/{org_id}/scim/v2
 app.include_router(sso.router)  # /sso
 app.include_router(chain.router)  # /chain
@@ -316,8 +318,7 @@ app.include_router(github_routes.org_router)
 # look up the upstream provider, model id, and (decrypted) API
 # key for a given logical model name. The router is always
 # mounted; the routes themselves enforce org membership + admin.
-from eden.api.routes import gateway
-from eden.api.routes import gateway_models
+from eden.api.routes import gateway, gateway_models
 
 app.include_router(gateway.router)  # /gateway/v1 (OpenAI-compatible surface)
 app.include_router(gateway_models.router)
@@ -348,8 +349,9 @@ async def health_check():
     pg = kb_health.get("postgres", "unknown")
     if pg != "connected" and not getattr(health_check, "_shown_target", False):
         try:
-            from eden.storage.dsn import build_dsn
             from urllib.parse import urlsplit
+
+            from eden.storage.dsn import build_dsn
 
             dsn = build_dsn(settings).replace("postgresql+asyncpg", "postgresql")
             parts = urlsplit(dsn)

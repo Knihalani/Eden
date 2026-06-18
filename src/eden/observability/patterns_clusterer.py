@@ -21,8 +21,8 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-from datetime import datetime, timezone, timedelta
-from typing import Any, Optional
+from datetime import UTC, datetime, timedelta
+from typing import Any
 
 from eden.config import get_settings
 
@@ -39,7 +39,7 @@ logger = logging.getLogger(__name__)
 class PatternsClusterer:
     """One pass: read events → embed → cluster → label → persist."""
 
-    def __init__(self, llm_client: Optional[Any] = None) -> None:
+    def __init__(self, llm_client: Any | None = None) -> None:
         self.llm_client = llm_client
 
     async def run_once(self) -> dict[str, Any]:
@@ -76,7 +76,7 @@ class PatternsClusterer:
         settings = get_settings()
         lookback = getattr(settings, "patterns_clusterer_lookback_days", 7)
         min_cluster_size = getattr(settings, "patterns_clusterer_min_cluster_size", 20)
-        cutoff = datetime.now(timezone.utc) - timedelta(days=lookback)
+        cutoff = datetime.now(UTC) - timedelta(days=lookback)
 
         # 1) Pull events with non-null request_body
         from eden.storage.postgres import get_postgres_client
@@ -140,9 +140,10 @@ class PatternsClusterer:
             labels = clusterer.fit_predict(vectors)
         except ImportError:
             try:
-                from sklearn.cluster import KMeans
                 # Heuristic: sqrt(n / 2) clusters, capped at 20
                 import math
+
+                from sklearn.cluster import KMeans
                 k = max(2, min(20, int(math.sqrt(len(topics) / 2))))
                 km = KMeans(n_clusters=k, n_init=10, random_state=42)
                 labels = km.fit_predict(vectors)
@@ -152,7 +153,6 @@ class PatternsClusterer:
 
         # 5) For each non-noise cluster, label and persist
         import uuid
-        from collections import Counter
         cluster_topics: dict[int, list[str]] = {}
         cluster_traces: dict[int, list[str]] = {}
         for i, lbl in enumerate(labels):
@@ -194,7 +194,7 @@ class PatternsClusterer:
                     float(coherence),
                     len(items),
                     traces[:10],
-                    datetime.now(timezone.utc),
+                    datetime.now(UTC),
                     json.dumps({"sample_topics": sample[:3]}, default=str),
                 )
                 created += 1
@@ -306,7 +306,7 @@ def _coherence(vectors: list[list[float]], indices: list[int]) -> float:
     return max(0.0, min(1.0, (mean + 1) / 2))
 
 
-_clusterer: Optional[PatternsClusterer] = None
+_clusterer: PatternsClusterer | None = None
 
 
 def get_patterns_clusterer() -> PatternsClusterer:

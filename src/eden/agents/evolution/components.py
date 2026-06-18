@@ -28,9 +28,9 @@ from __future__ import annotations
 
 import json
 import logging
+from datetime import UTC
 from typing import Any
 
-from eden.config import get_settings
 from eden.kb.prompt_versions.client import get_prompt_versions_client
 from eden.storage.postgres import get_postgres_client
 
@@ -149,13 +149,11 @@ class JudgeScorePromptEvolver(EvolutionComponent):
         The tests patch the source module's ``get_prompt_versions_client``
         symbol, so we re-read the attribute on every call.
         """
-        from eden.kb.prompt_versions.client import get_prompt_versions_client
 
         return await _maybe_await(get_prompt_versions_client())
 
     async def _get_postgres(self) -> Any:
         """Lazily resolve the postgres client (with patch-friendly read)."""
-        from eden.storage.postgres import get_postgres_client
 
         return await _maybe_await(get_postgres_client())
 
@@ -390,14 +388,14 @@ class PromptEvolvers(EvolutionComponent):
 
             self.prompt_versions = await _maybe_await(get_prompt_versions_client())
 
-        from datetime import datetime, timezone
+        from datetime import datetime
 
         metrics = {
             "canary_status": "active",
             "canary_traffic_pct": pct,
             "ab_test_active": True,
             "ab_test_round": int(round),
-            "canary_created_at": datetime.now(timezone.utc).isoformat(),
+            "canary_created_at": datetime.now(UTC).isoformat(),
         }
         try:
             updated = await self.prompt_versions.update_quality_metrics(

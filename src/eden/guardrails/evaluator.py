@@ -18,9 +18,9 @@ from __future__ import annotations
 
 import logging
 import re
+from collections.abc import Awaitable, Callable, Iterable
 from dataclasses import dataclass, field
-from typing import Any, Awaitable, Callable, Iterable, Optional
-
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -163,7 +163,7 @@ def _length_match(policy: GuardrailPolicy, text: str) -> list[tuple[int, int, st
 async def _judge_match(
     policy: GuardrailPolicy,
     text: str,
-    judge: Optional[JudgeFn] = None,
+    judge: JudgeFn | None = None,
 ) -> list[tuple[int, int, str]]:
     if not isinstance(policy.rule, str) or judge is None:
         return []
@@ -178,8 +178,8 @@ async def evaluate(
     policies: list[GuardrailPolicy],
     *,
     direction: str = "input",
-    judge: Optional[JudgeFn] = None,
-    on_violation: Optional[Callable[[GuardrailViolation, str], Any]] = None,
+    judge: JudgeFn | None = None,
+    on_violation: Callable[[GuardrailViolation, str], Any] | None = None,
 ) -> GuardrailResult:
     """Run every enabled policy that matches ``direction`` against ``text``.
 

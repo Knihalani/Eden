@@ -54,7 +54,7 @@ class Attribution:
     auth_method: str = "api_key"
     client_ip: str | None = None
 
-    def with_source_format(self, source_format: str) -> "Attribution":
+    def with_source_format(self, source_format: str) -> Attribution:
         """Return a copy with the source format overridden. Useful when
         the route knows the format from the URL path but the decoder
         also writes it for clarity."""

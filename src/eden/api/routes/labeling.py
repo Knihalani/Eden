@@ -13,7 +13,7 @@ Six routes:
 from __future__ import annotations
 
 import logging
-from typing import Any, Optional
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Query
 from fastapi.responses import PlainTextResponse
@@ -21,12 +21,10 @@ from pydantic import BaseModel, Field
 
 from eden.evaluation.labeling import (
     Annotation,
-    IAAReport,
     LabelingItem,
     LabelingService,
 )
 from eden.storage.postgres import get_postgres_client
-
 
 logger = logging.getLogger(__name__)
 
@@ -43,14 +41,14 @@ router = APIRouter(
 class SeedItemRequest(BaseModel):
     payload: dict[str, Any] = Field(default_factory=dict)
     label_schema: dict[str, Any] = Field(default_factory=dict)
-    prompt: Optional[str] = None
+    prompt: str | None = None
     tags: list[str] = Field(default_factory=list)
     required_skills: list[str] = Field(default_factory=list)
     annotations_required: int = Field(default=1, ge=1, le=10)
-    source_trace_id: Optional[str] = None
-    source_span_id: Optional[str] = None
-    source_dataset_id: Optional[str] = None
-    source_synthetic_qa_id: Optional[str] = None
+    source_trace_id: str | None = None
+    source_span_id: str | None = None
+    source_dataset_id: str | None = None
+    source_synthetic_qa_id: str | None = None
 
 
 class SeedItemResponse(BaseModel):
@@ -62,16 +60,16 @@ class ItemResponse(BaseModel):
     org_id: str
     payload: dict[str, Any]
     label_schema: dict[str, Any]
-    prompt: Optional[str]
+    prompt: str | None
     status: str
     tags: list[str]
     annotations_required: int
     required_skills: list[str]
-    source_trace_id: Optional[str] = None
-    source_span_id: Optional[str] = None
-    source_dataset_id: Optional[str] = None
-    source_synthetic_qa_id: Optional[str] = None
-    assigned_to: Optional[str] = None
+    source_trace_id: str | None = None
+    source_span_id: str | None = None
+    source_dataset_id: str | None = None
+    source_synthetic_qa_id: str | None = None
+    assigned_to: str | None = None
 
 
 class QueueResponse(BaseModel):
@@ -82,8 +80,8 @@ class AnnotateRequest(BaseModel):
     item_id: str
     label: Any  # scalar or dict
     confidence: float = Field(default=0.5, ge=0.0, le=1.0)
-    notes: Optional[str] = None
-    time_spent_ms: Optional[int] = None
+    notes: str | None = None
+    time_spent_ms: int | None = None
     skills_exercised: list[str] = Field(default_factory=list)
 
 
@@ -94,8 +92,8 @@ class AnnotationResponse(BaseModel):
     annotator_id: str
     label: Any
     confidence: float
-    notes: Optional[str]
-    time_spent_ms: Optional[int]
+    notes: str | None
+    time_spent_ms: int | None
     skills_exercised: list[str]
     created_at: str
     updated_at: str
@@ -113,7 +111,7 @@ class IIAResponse(BaseModel):
 
 class SkipRequest(BaseModel):
     item_id: str
-    reason: Optional[str] = None
+    reason: str | None = None
 
 
 # ── Helpers ───────────────────────────────────────────────────────
@@ -271,7 +269,7 @@ async def skip(
 )
 async def compute_iia(
     org_id: str = Path(...),
-    item_ids: Optional[list[str]] = Query(default=None),
+    item_ids: list[str] | None = Query(default=None),
     user: dict = Depends(_get_user()),
 ) -> IIAResponse:
     pg = await get_postgres_client()

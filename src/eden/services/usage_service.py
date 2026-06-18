@@ -11,11 +11,10 @@ Database stores cost_usd as NUMERIC(18,6) cents-compatible.
 """
 
 import logging
-from datetime import datetime, timezone, timedelta
-from typing import Optional
+from datetime import UTC, datetime, timedelta
 
-from eden.storage.postgres import get_postgres_client
 from eden.services.plan_tiers import get_plan_tier
+from eden.storage.postgres import get_postgres_client
 
 logger = logging.getLogger(__name__)
 
@@ -34,12 +33,12 @@ class UsageService:
         resource: str,
         quantity: float,
         unit: str,
-        user_id: Optional[str] = None,
-        model: Optional[str] = None,
-        cost_usd: Optional[float] = None,
-        metadata: Optional[dict] = None,
-        correlation_id: Optional[str] = None,
-    ) -> Optional[str]:
+        user_id: str | None = None,
+        model: str | None = None,
+        cost_usd: float | None = None,
+        metadata: dict | None = None,
+        correlation_id: str | None = None,
+    ) -> str | None:
         """Record a single usage event. Returns the event UUID."""
         client = await get_postgres_client()
         try:
@@ -163,7 +162,7 @@ class UsageService:
         period: str = "month",  # "day" | "week" | "month" | "year"
     ) -> dict:
         """Return total spend for the current billing period."""
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         start = self._period_start(now, period)
 
         client = await get_postgres_client()
@@ -209,7 +208,7 @@ class UsageService:
         plan_name = limits.get("plan_name", "free") if limits else "free"
         tier = get_plan_tier(plan_name)
 
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         month_start = self._period_start(now, "month")
 
         # Aggregate actual usage from usage_events for the current month
@@ -319,7 +318,7 @@ class UsageService:
         days: int = 30,
     ) -> list[dict]:
         """Return a daily time-series of usage for dashboard charts."""
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         start = now - timedelta(days=days)
 
         client = await get_postgres_client()
@@ -369,7 +368,7 @@ class UsageService:
 
 
 # Singleton convenience instance
-_usage_service: Optional[UsageService] = None
+_usage_service: UsageService | None = None
 
 
 async def get_usage_service() -> UsageService:

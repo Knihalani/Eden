@@ -59,10 +59,10 @@ from __future__ import annotations
 import json
 import logging
 import uuid
+from collections.abc import Awaitable, Callable, Iterable
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
-from typing import Any, Awaitable, Callable, Iterable, Optional
-
+from datetime import UTC, datetime
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -323,7 +323,7 @@ class SpreadsheetService:
         return SpreadsheetColumn(
             id=col_id, name=name, type=type, source=source,
             description=description,
-            created_at=datetime.now(timezone.utc).isoformat(),
+            created_at=datetime.now(UTC).isoformat(),
         )
 
     async def list_columns(self, dataset_id: str) -> list[SpreadsheetColumn]:
@@ -352,7 +352,7 @@ class SpreadsheetService:
         dataset_id: str,
         input: str,
         expected_output: str = "",
-        values: Optional[dict[str, Any]] = None,
+        values: dict[str, Any] | None = None,
     ) -> SpreadsheetRow:
         """Add a new row to the dataset."""
         row_id = str(uuid.uuid4())
@@ -370,8 +370,8 @@ class SpreadsheetService:
             id=row_id, dataset_id=dataset_id,
             input=input, expected_output=expected_output,
             values=values or {},
-            created_at=datetime.now(timezone.utc).isoformat(),
-            updated_at=datetime.now(timezone.utc).isoformat(),
+            created_at=datetime.now(UTC).isoformat(),
+            updated_at=datetime.now(UTC).isoformat(),
         )
 
     async def update_row(
@@ -379,8 +379,8 @@ class SpreadsheetService:
         *,
         row_id: str,
         values: dict[str, Any],
-        input: Optional[str] = None,
-        expected_output: Optional[str] = None,
+        input: str | None = None,
+        expected_output: str | None = None,
     ) -> bool:
         """Update a row's values + optional input/output."""
         # Build a dynamic SET clause.
@@ -405,8 +405,8 @@ class SpreadsheetService:
         self,
         dataset_id: str,
         *,
-        filter_spec: Optional[list[dict[str, Any]]] = None,
-        sort_spec: Optional[list[dict[str, Any]]] = None,
+        filter_spec: list[dict[str, Any]] | None = None,
+        sort_spec: list[dict[str, Any]] | None = None,
         limit: int = 200,
         offset: int = 0,
     ) -> list[SpreadsheetRow]:
@@ -450,7 +450,7 @@ class SpreadsheetService:
             out = apply_sort(out, sort_spec)
         return out
 
-    async def get_row(self, row_id: str) -> Optional[SpreadsheetRow]:
+    async def get_row(self, row_id: str) -> SpreadsheetRow | None:
         """Load one row by id."""
         rows = await self._pg.fetch(
             """

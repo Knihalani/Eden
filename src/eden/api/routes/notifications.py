@@ -1,9 +1,8 @@
 """Notification routes for Eden API."""
 
 import logging
-from typing import Optional
 
-from fastapi import APIRouter, Query, Cookie
+from fastapi import APIRouter, Cookie, Query
 from pydantic import BaseModel
 
 from eden.api.deps import get_current_user
@@ -18,7 +17,7 @@ class Notification(BaseModel):
     """Single notification."""
     id: str
     user_id: str
-    org_id: Optional[str]
+    org_id: str | None
     type: str
     title: str
     message: str
@@ -41,7 +40,7 @@ class CreateNotificationRequest(BaseModel):
     type: str
     title: str
     message: str
-    org_id: Optional[str] = None
+    org_id: str | None = None
     metadata: dict = {}
 
 
@@ -56,7 +55,7 @@ async def list_notifications(
     limit: int = Query(20, ge=1, le=100),
     offset: int = Query(0, ge=0),
     unread_only: bool = Query(False),
-    authorization: Optional[str] = Cookie(None),
+    authorization: str | None = Cookie(None),
 ):
     """List notifications for the authenticated user.
 
@@ -130,7 +129,7 @@ async def list_notifications(
 @router.post("", response_model=NotificationResponse)
 async def create_notification(
     request: CreateNotificationRequest,
-    authorization: Optional[str] = Cookie(None),
+    authorization: str | None = Cookie(None),
 ):
     """Create a new notification for the authenticated user."""
     user = await get_current_user(authorization)
@@ -156,7 +155,7 @@ async def create_notification(
 @router.patch("/{notification_id}/read", response_model=dict)
 async def mark_notification_read(
     notification_id: str,
-    authorization: Optional[str] = Cookie(None),
+    authorization: str | None = Cookie(None),
 ):
     """Mark a notification as read."""
     user = await get_current_user(authorization)
@@ -188,7 +187,7 @@ async def mark_notification_read(
 
 @router.patch("/read-all", response_model=dict)
 async def mark_all_notifications_read(
-    authorization: Optional[str] = Cookie(None),
+    authorization: str | None = Cookie(None),
 ):
     """Mark all notifications as read for the authenticated user."""
     user = await get_current_user(authorization)
@@ -211,7 +210,7 @@ async def mark_all_notifications_read(
 @router.delete("/{notification_id}", response_model=dict)
 async def delete_notification(
     notification_id: str,
-    authorization: Optional[str] = Cookie(None),
+    authorization: str | None = Cookie(None),
 ):
     """Delete a notification."""
     user = await get_current_user(authorization)

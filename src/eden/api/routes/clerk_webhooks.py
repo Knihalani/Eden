@@ -75,7 +75,7 @@ def _verify_svix_signature(
         except Exception:
             return False
 
-    signed = f"{svix_id}.{svix_timestamp}.".encode("utf-8") + body
+    signed = f"{svix_id}.{svix_timestamp}.".encode() + body
     # Clerk may send multiple signatures (``v1,<base64>\nv1,<base64>``);
     # accept if ANY of them verify.
     for line in svix_signature.split():
@@ -143,36 +143,107 @@ async def _deactivate_user(data: dict[str, Any]) -> None:
 
 
 async def _upsert_org(data: dict[str, Any]) -> None:
+    """Sync a Clerk ``organization`` payload to the ``organizations`` table.
+
+    Three arrival orders are possible:
+
+    1. **Webhook first (Clerk-created)** — Clerk org was created via
+       the dashboard (or any path other than Eden's ``POST /orgs``).
+       No Eden row exists yet. The conditional INSERT below only
+       fires when ``clerk_id`` looks like a UUID (the format Clerk
+       emits when no custom id is passed to its Backend API). When
+       Clerk uses its default ``org_2x...`` string format, we skip
+       the insert and rely on Eden's ``POST /orgs`` to have written
+       the row first (case 2).
+
+    2. **Backend row first** — Eden's ``POST /orgs`` wrote a row
+       with ``id = uuid4()`` and ``clerk_org_id = clerk_id`` (from
+       the synchronous Clerk call), then the webhook arrives. The
+       ``UPDATE`` below matches on ``clerk_org_id`` and refreshes
+       ``name``/``slug`` (idempotent if the row is already linked).
+
+    3. **Legacy row** — webhook-created orgs from before migration
+       038 have ``clerk_org_id IS NULL`` and ``id = clerk_id``
+       (Postgres's UUID column accepted whatever Clerk sent).
+       Backfilled by the second UPDATE condition.
+
+    The INSERT deliberately refuses to insert non-UUID ``clerk_id``
+    values to avoid ``invalid input syntax for type uuid`` errors
+    that would otherwise surface as webhook delivery failures.
+    """
     clerk_id = data.get("id")
     if not clerk_id:
         return
     name = data.get("name") or ""
     slug = data.get("slug") or clerk_id
-    owner_id = ""
-    # Clerk populates ``created_by`` for new orgs but the field is
-    # on the membership, not the org itself. Best-effort: leave owner
-    # blank until the membership.created event fires.
     client = await get_postgres_client()
+
+    # Cases 2 + 3: refresh name/slug on the matching row. Idempotent
+    # for case 2 (already linked) and case 3 (legacy). The
+    # ``NOT EXISTS`` guard makes this a no-op if no row matches.
     await client.execute(
         """
-        INSERT INTO organizations (id, name, slug, owner_id, archived_at, updated_at)
-        VALUES ($1, $2, $3, NULL, NULL, NOW())
-        ON CONFLICT (id) DO UPDATE
-        SET name = EXCLUDED.name,
-            slug = EXCLUDED.slug,
-            updated_at = NOW()
+        UPDATE organizations
+        SET name = $3, slug = $4, updated_at = NOW()
+        WHERE (clerk_org_id = $1)
+           OR (clerk_org_id IS NULL AND id::text = $1)
         """,
+        clerk_id,
         clerk_id,
         name,
         slug,
     )
-    # Stash the name on the org metadata for name lookups.
-    _ = owner_id
+
+    # Case 1: insert if no row exists. Two safety guards:
+    # - ``WHERE NOT EXISTS`` prevents a duplicate row if the
+    #   ``UPDATE`` above just created one via a different code path.
+    # - The ``::uuid`` cast refuses non-UUID ``clerk_id`` values
+    #   (e.g. Clerk's default ``org_2x...`` format). The cast error
+    #   is caught by the outer try/except and logged — webhook
+    #   delivery is considered "best effort" for these orgs since
+    #   Eden's ``POST /orgs`` is the canonical source of truth.
+    try:
+        await client.execute(
+            """
+            INSERT INTO organizations
+                (id, clerk_org_id, name, slug, owner_id, archived_at, updated_at)
+            SELECT $1::uuid, $2, $3, $4, NULL, NULL, NOW()
+            WHERE NOT EXISTS (
+                SELECT 1 FROM organizations
+                WHERE clerk_org_id = $2 OR id::text = $2
+            )
+            """,
+            clerk_id,
+            clerk_id,
+            name,
+            slug,
+        )
+    except Exception as exc:  # noqa: BLE001
+        # Most common cause: clerk_id is a non-UUID string like
+        # ``org_2xabc``. Log and skip; the backfill script
+        # (``src/eden/scripts/backfill_legacy_orgs.py``) handles
+        # legacy rows explicitly, and Eden's ``POST /orgs`` handles
+        # new backend-created rows.
+        logger.info(
+            "_upsert_org: skipped INSERT for clerk_id=%s (likely non-UUID): %s",
+            clerk_id, exc,
+        )
 
 
 async def _upsert_membership(data: dict[str, Any]) -> None:
     """Sync a Clerk ``organizationMembership`` payload to
     ``org_members`` with the role mapped onto Eden's vocab.
+
+    Role-write conflict resolution: the initial ``organizationMembership.created``
+    webhook can fire within milliseconds of Eden's local
+    ``accept_invitation`` insert. If Eden wrote the row first with
+    ``last_writer_source = 'local'`` (e.g. an invitee accepted as
+    ``viewer``), the role mapping ``org:member → member`` in
+    ``clerk_role_to_eden_role`` would silently demote them. The
+    conditional in the ``DO UPDATE`` below skips the role overwrite
+    on the FIRST webhook arrival when Eden wrote the row first, then
+    flips ``last_writer_source`` to ``'clerk'`` so subsequent Clerk
+    role changes (admin promotions, etc.) propagate normally.
     """
     org_id = data.get("organization", {}).get("id") or data.get("organization_id")
     user_id = data.get("public_user_data", {}).get("user_id") or data.get("user_id")
@@ -187,7 +258,12 @@ async def _upsert_membership(data: dict[str, Any]) -> None:
         INSERT INTO org_members (org_id, user_id, role, last_active_at, created_at)
         VALUES ($1, $2, $3, NOW(), NOW())
         ON CONFLICT (org_id, user_id) DO UPDATE
-        SET role = EXCLUDED.role,
+        SET role = CASE
+                WHEN org_members.last_writer_source = 'clerk'
+                    THEN EXCLUDED.role
+                ELSE org_members.role
+            END,
+            last_writer_source = 'clerk',
             last_active_at = NOW()
         """,
         org_id,

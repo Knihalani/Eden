@@ -17,9 +17,9 @@ import json
 import logging
 import uuid
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
-from typing import Any, Optional
+from typing import Any
 
 from eden.config import get_settings
 
@@ -60,7 +60,7 @@ class HILTCommand:
     user_id: str
     command: HILTCommandType
     payload: dict[str, Any] = field(default_factory=dict)
-    timestamp: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+    timestamp: str = field(default_factory=lambda: datetime.now(UTC).isoformat())
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -79,14 +79,14 @@ class HILTStateRecord:
 
     job_id: str
     state: HILTState
-    paused_at: Optional[str] = None
-    resumed_at: Optional[str] = None
-    waiting_for: Optional[str] = None  # What the pipeline is waiting for
-    current_step: Optional[int] = None
-    total_steps: Optional[int] = None
+    paused_at: str | None = None
+    resumed_at: str | None = None
+    waiting_for: str | None = None  # What the pipeline is waiting for
+    current_step: int | None = None
+    total_steps: int | None = None
     pending_commands: list[HILTCommand] = field(default_factory=list)
     history: list[dict[str, Any]] = field(default_factory=list)
-    last_updated: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+    last_updated: str = field(default_factory=lambda: datetime.now(UTC).isoformat())
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -201,7 +201,7 @@ class HILTController:
             return {"status": "ok", "message": "Already paused", "state": state.to_dict()}
 
         state.state = HILTState.PAUSED
-        state.paused_at = datetime.now(timezone.utc).isoformat()
+        state.paused_at = datetime.now(UTC).isoformat()
 
         # Signal any resume event to prevent auto-resume
         if job_id in self._resume_events:
@@ -216,7 +216,7 @@ class HILTController:
             return {"status": "ok", "message": "Already running", "state": state.to_dict()}
 
         state.state = HILTState.RUNNING
-        state.resumed_at = datetime.now(timezone.utc).isoformat()
+        state.resumed_at = datetime.now(UTC).isoformat()
         state.paused_at = None
         state.waiting_for = None
 
@@ -264,7 +264,7 @@ class HILTController:
             await redis.rpush(inject_key, json.dumps({
                 "message": message,
                 "target": target,
-                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "timestamp": datetime.now(UTC).isoformat(),
             }))
             await redis.expire(inject_key, 3600)
 
@@ -293,7 +293,7 @@ class HILTController:
             approve_key = f"hilt:{job_id}:approvals"
             await redis.hset(approve_key, decision_id, json.dumps({
                 "approved": True,
-                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "timestamp": datetime.now(UTC).isoformat(),
                 "notes": payload.get("notes", ""),
             }))
             await redis.expire(approve_key, 3600)
@@ -323,7 +323,7 @@ class HILTController:
             reject_key = f"hilt:{job_id}:approvals"
             await redis.hset(reject_key, decision_id, json.dumps({
                 "approved": False,
-                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "timestamp": datetime.now(UTC).isoformat(),
                 "reason": reason,
             }))
             await redis.expire(reject_key, 3600)
@@ -354,7 +354,7 @@ class HILTController:
             rewind_key = f"hilt:{job_id}:rewind"
             await redis.set(rewind_key, json.dumps({
                 "checkpoint_id": checkpoint_id,
-                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "timestamp": datetime.now(UTC).isoformat(),
             }), ex=3600)
 
         state.state = HILTState.PAUSED
@@ -433,7 +433,7 @@ class HILTController:
 
         return False
 
-    async def wait_for_resume(self, job_id: str, timeout: Optional[float] = None) -> bool:
+    async def wait_for_resume(self, job_id: str, timeout: float | None = None) -> bool:
         """Block until resume signal or timeout.
 
         Called by pipeline when should_pause returns True.
@@ -448,7 +448,7 @@ class HILTController:
         try:
             await asyncio.wait_for(event.wait(), timeout=timeout or 300)
             return True
-        except asyncio.TimeoutError:
+        except TimeoutError:
             return False
 
     async def get_injected_messages(self, job_id: str) -> list[dict[str, Any]]:
@@ -470,7 +470,7 @@ class HILTController:
         await redis.delete(key)
         return messages
 
-    async def get_approval(self, job_id: str, decision_id: str = "default") -> Optional[dict[str, Any]]:
+    async def get_approval(self, job_id: str, decision_id: str = "default") -> dict[str, Any] | None:
         """Get approval status for a decision (called by pipeline)."""
         redis = await self._get_redis()
         if not redis:
@@ -501,7 +501,7 @@ class HILTController:
 
 # ── Singleton accessor ──────────────────────────────────────────────────
 
-_hilt_controller: Optional[HILTController] = None
+_hilt_controller: HILTController | None = None
 
 
 async def get_hilt_controller() -> HILTController:

@@ -24,8 +24,8 @@ import json
 import logging
 import os
 import time
-from dataclasses import dataclass, field
-from typing import Any, Optional, Protocol
+from dataclasses import dataclass
+from typing import Any, Protocol
 
 import aiohttp
 
@@ -71,7 +71,7 @@ class AblyProvider:
         token = base64.b64encode(api_key.encode()).decode()
         self._auth_header = f"Basic {token}"
         self._channel_prefix = channel_prefix.rstrip(":")
-        self._session: Optional[aiohttp.ClientSession] = None
+        self._session: aiohttp.ClientSession | None = None
 
     async def _ensure_session(self) -> aiohttp.ClientSession:
         if self._session is None or self._session.closed:
@@ -134,7 +134,7 @@ class CloudflareWorkersProvider:
         if not (worker_url and api_token and account_id):
             raise ValueError("CloudflareWorkersProvider requires worker_url, api_token, account_id")
         self._worker_url = worker_url
-        self._session: Optional[aiohttp.ClientSession] = None
+        self._session: aiohttp.ClientSession | None = None
 
     async def _ensure_session(self) -> aiohttp.ClientSession:
         if self._session is None or self._session.closed:
@@ -182,7 +182,7 @@ class LocalHTTPProvider:
         if not url:
             raise ValueError("LocalHTTPProvider requires a url")
         self._url = url
-        self._session: Optional[aiohttp.ClientSession] = None
+        self._session: aiohttp.ClientSession | None = None
 
     async def _ensure_session(self) -> aiohttp.ClientSession:
         if self._session is None or self._session.closed:
@@ -218,7 +218,7 @@ class LocalHTTPProvider:
 class FanoutStats:
     publishes: int = 0
     failures: int = 0
-    last_failure_at: Optional[float] = None
+    last_failure_at: float | None = None
 
 
 class EdgeFanout:
@@ -230,7 +230,7 @@ class EdgeFanout:
         self._lock = asyncio.Lock()
 
     @classmethod
-    def from_env(cls) -> "EdgeFanout":
+    def from_env(cls) -> EdgeFanout:
         """Build an instance from environment variables.
 
         Selection order: Ably > Cloudflare > Local.
@@ -294,7 +294,7 @@ def _env_truthy(key: str) -> bool:
 
 
 # Module-level singleton
-_edge_fanout: Optional[EdgeFanout] = None
+_edge_fanout: EdgeFanout | None = None
 
 
 def get_edge_fanout() -> EdgeFanout:

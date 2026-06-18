@@ -17,7 +17,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from fastapi import APIRouter, Header, HTTPException, Request, status, Depends
+from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
 from pydantic import BaseModel
 
 from eden.api.deps import require_feature_flag
@@ -94,8 +94,9 @@ async def helicone_webhook(
 @router.get("/test")
 async def helicone_test() -> dict[str, Any]:
     """Health check that exercises the upstream proxy."""
-    from eden.config import get_settings
     import httpx
+
+    from eden.config import get_settings
 
     settings = get_settings()
     if not settings.helicone_api_key:

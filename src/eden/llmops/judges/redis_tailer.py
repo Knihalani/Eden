@@ -16,9 +16,8 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-from typing import Any, Optional
+from typing import Any
 
-from .base import Judge
 from .registry import get_judge_registry
 from .runner import JudgeRunner
 
@@ -58,7 +57,7 @@ class RedisTailer:
         self.max_events_per_poll = max_events_per_poll
         self._semaphores: dict[str, asyncio.Semaphore] = {}
         self._stop = asyncio.Event()
-        self._task: Optional[asyncio.Task] = None
+        self._task: asyncio.Task | None = None
 
     async def start(self) -> None:
         """Start the background polling task. Idempotent."""
@@ -73,7 +72,7 @@ class RedisTailer:
         if self._task is not None:
             try:
                 await asyncio.wait_for(self._task, timeout=5.0)
-            except (asyncio.TimeoutError, asyncio.CancelledError):
+            except (TimeoutError, asyncio.CancelledError):
                 self._task.cancel()
 
     async def _run(self) -> None:
@@ -96,7 +95,7 @@ class RedisTailer:
                 await asyncio.wait_for(
                     self._stop.wait(), timeout=self.poll_interval_seconds
                 )
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 pass
         logger.info("judge redis tailer stopped")
 

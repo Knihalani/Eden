@@ -23,12 +23,12 @@ use of ``/resolve`` is blocked by an additional role check.
 from __future__ import annotations
 
 import logging
-from typing import Any, Optional
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Path
 from pydantic import BaseModel, Field
 
-from eden.api.deps import log_audit_event, OrgMember, get_current_org_member
+from eden.api.deps import OrgMember, get_current_org_member, log_audit_event
 from eden.llmops import registry_store
 from eden.llmops.registry_store import (
     SUPPORTED_PROVIDERS,
@@ -56,19 +56,19 @@ class GatewayModelCreate(BaseModel):
     provider: str = Field(..., min_length=1, max_length=64)
     upstream_model: str = Field(..., min_length=1, max_length=256)
     upstream_api_key: str = Field("", max_length=4096)
-    endpoint: Optional[str] = Field(None, max_length=2048)
+    endpoint: str | None = Field(None, max_length=2048)
     enabled: bool = True
     routing_priority: int = Field(100, ge=0, le=100000)
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
 class GatewayModelUpdate(BaseModel):
-    upstream_model: Optional[str] = Field(None, min_length=1, max_length=256)
-    upstream_api_key: Optional[str] = Field(None, max_length=4096)
-    endpoint: Optional[str] = Field(None, max_length=2048)
-    enabled: Optional[bool] = None
-    routing_priority: Optional[int] = Field(None, ge=0, le=100000)
-    metadata: Optional[dict[str, Any]] = None
+    upstream_model: str | None = Field(None, min_length=1, max_length=256)
+    upstream_api_key: str | None = Field(None, max_length=4096)
+    endpoint: str | None = Field(None, max_length=2048)
+    enabled: bool | None = None
+    routing_priority: int | None = Field(None, ge=0, le=100000)
+    metadata: dict[str, Any] | None = None
 
 
 class GatewayModelOut(BaseModel):
@@ -78,11 +78,11 @@ class GatewayModelOut(BaseModel):
     provider: str
     upstream_model: str
     upstream_key_prefix: str
-    endpoint: Optional[str]
+    endpoint: str | None
     enabled: bool
     routing_priority: int
     metadata: dict[str, Any]
-    created_by: Optional[str]
+    created_by: str | None
     created_at: str
     updated_at: str
 
@@ -103,7 +103,7 @@ class GatewayModelResolveOut(BaseModel):
     provider: str
     upstream_model: str
     upstream_api_key: str
-    endpoint: Optional[str]
+    endpoint: str | None
     routing_priority: int
 
 

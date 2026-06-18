@@ -1,12 +1,11 @@
 """Organization API Key management routes."""
 
+import hashlib
 import logging
 import secrets
-import hashlib
 from uuid import uuid4
 
-from fastapi import Depends, APIRouter, HTTPException, status, Header
-from typing import Optional
+from fastapi import APIRouter, Depends, Header, HTTPException, status
 
 from eden.api.deps import get_current_user, require_org_admin
 from eden.storage.postgres import get_postgres_client
@@ -177,7 +176,7 @@ async def revoke_api_key(
     return {"message": "API key revoked"}
 
 
-async def validate_org_api_key(org_id: str, key: str) -> Optional[dict]:
+async def validate_org_api_key(org_id: str, key: str) -> dict | None:
     """Validate an API key and return org context if valid.
 
     Returns None if key is invalid or doesn't match the org.
@@ -215,7 +214,7 @@ async def validate_org_api_key(org_id: str, key: str) -> Optional[dict]:
 # Dependency for routes that accept API key auth
 async def get_current_org_api_key(
     x_org_id: str = Header(..., alias="X-Org-Id"),
-    x_org_api_key: Optional[str] = Header(None, alias="X-Org-Api-Key"),
+    x_org_api_key: str | None = Header(None, alias="X-Org-Api-Key"),
 ):
     """Validate X-Org-Api-Key header and return org context.
 

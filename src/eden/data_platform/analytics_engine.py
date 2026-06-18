@@ -16,12 +16,11 @@ Usage:
 
 from __future__ import annotations
 
-import json
 import logging
 import statistics
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta, timezone
-from typing import Any, Optional
+from datetime import UTC, datetime, timedelta
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -49,7 +48,7 @@ class TrendAnalysis:
     moving_average_7d: float
     moving_average_30d: float
     data_points: list[TimeSeriesPoint] = field(default_factory=list)
-    forecast_next_7d: Optional[float] = None
+    forecast_next_7d: float | None = None
     anomaly_dates: list[str] = field(default_factory=list)
 
 
@@ -89,7 +88,7 @@ class AnalyticsEngine:
     """
 
     def __init__(self) -> None:
-        self._postgres_client: Optional[Any] = None
+        self._postgres_client: Any | None = None
 
     async def _get_postgres(self) -> Any:
         if self._postgres_client is None:
@@ -106,7 +105,7 @@ class AnalyticsEngine:
     ) -> TrendAnalysis:
         """Analyze job creation trends over time."""
         client = await self._get_postgres()
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         start = now - timedelta(days=days)
         prev_start = start - timedelta(days=days)
 
@@ -182,7 +181,7 @@ class AnalyticsEngine:
     ) -> TrendAnalysis:
         """Analyze quality score trends over time."""
         client = await self._get_postgres()
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         start = now - timedelta(days=days)
         prev_start = start - timedelta(days=days)
 
@@ -252,7 +251,7 @@ class AnalyticsEngine:
     ) -> TrendAnalysis:
         """Analyze cost trends over time."""
         client = await self._get_postgres()
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         start = now - timedelta(days=days)
         prev_start = start - timedelta(days=days)
 
@@ -327,7 +326,7 @@ class AnalyticsEngine:
         activation, retention, and engagement metrics.
         """
         client = await self._get_postgres()
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         start = now - timedelta(days=period_days)
 
         # Get members who joined in the period
@@ -462,7 +461,7 @@ class AnalyticsEngine:
     ) -> list[BenchmarkComparison]:
         """Compare organization metrics against global averages."""
         client = await self._get_postgres()
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         start = now - timedelta(days=days)
 
         metrics_to_compare = [
@@ -600,7 +599,7 @@ class AnalyticsEngine:
     ) -> dict[str, Any]:
         """Get a comprehensive metrics bundle for dashboards."""
         client = await self._get_postgres()
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         start = now - timedelta(days=days)
 
         # Jobs
@@ -695,13 +694,13 @@ class AnalyticsEngine:
     # ── Helper Methods ──────────────────────────────────────────────────
 
     @staticmethod
-    def _moving_average(values: list[float], window: int) -> Optional[float]:
+    def _moving_average(values: list[float], window: int) -> float | None:
         if len(values) < window:
             return None
         return sum(values[-window:]) / window
 
     @staticmethod
-    def _linear_forecast(values: list[float], days: int = 7) -> Optional[float]:
+    def _linear_forecast(values: list[float], days: int = 7) -> float | None:
         """Simple linear regression forecast."""
         if len(values) < 3:
             return None

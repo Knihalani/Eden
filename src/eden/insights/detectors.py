@@ -11,17 +11,16 @@ Six detectors that automatically analyze traces and generate actionable insights
 
 from __future__ import annotations
 
-import json
 import logging
 import statistics
 from abc import ABC, abstractmethod
 from collections import Counter, defaultdict
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta, timezone
-from typing import Any, Optional
+from datetime import UTC, datetime, timedelta
+from typing import Any
 
-from eden.insights.unified_trace_model import UnifiedTrace, Outcome, SpanType
-from eden.insights.utils import BoundedSet, sequence_similarity
+from eden.insights.unified_trace_model import Outcome, SpanType, UnifiedTrace
+from eden.insights.utils import BoundedSet
 
 logger = logging.getLogger(__name__)
 
@@ -36,7 +35,7 @@ class Insight:
     affected_trace_ids: list[str] = field(default_factory=list)
     pattern: dict[str, Any] = field(default_factory=dict)
     recommended_action: str = ""
-    auto_created_dataset: Optional[str] = None
+    auto_created_dataset: str | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
@@ -643,7 +642,7 @@ class DetectorRegistry:
     def register(self, name: str, detector: BaseDetector) -> None:
         self._detectors[name] = detector
 
-    def get(self, name: str) -> Optional[BaseDetector]:
+    def get(self, name: str) -> BaseDetector | None:
         return self._detectors.get(name)
 
     def run_all(self, traces: list[UnifiedTrace]) -> list[Insight]:
@@ -808,13 +807,12 @@ class JudgeDetector(BaseDetector):
         """Async variant: read ``judge_scores`` rows in the lookback
         window. Use this from async callers (the InsightsService is
         called from an async FastAPI handler)."""
-        from datetime import datetime, timezone, timedelta
         from eden.storage.postgres import get_postgres_client
 
         client = await get_postgres_client()
         if client is None:
             return []
-        cutoff = datetime.now(timezone.utc) - timedelta(seconds=self.lookback_seconds)
+        cutoff = datetime.now(UTC) - timedelta(seconds=self.lookback_seconds)
         rows = await client.fetch(
             """
             SELECT judge_run_id, judge_name, judge_version, trace_id, span_id,

@@ -47,27 +47,26 @@ import logging
 import os
 import traceback
 import uuid
-from datetime import datetime, timezone
-from typing import Any, Optional
+from datetime import UTC, datetime
+from typing import Any
 
 from eden.config import get_settings
-
 
 # ── Trace-id contextvar ──────────────────────────────────────────────
 # Set by the SDK / agent runtime when a trace is active. The handler
 # reads it; if unset, the record is attributed to a synthetic "ambient"
 # trace so we still get a tree of related log lines.
 
-_active_trace_id: contextvars.ContextVar[Optional[str]] = contextvars.ContextVar(
+_active_trace_id: contextvars.ContextVar[str | None] = contextvars.ContextVar(
     "eden_active_trace_id", default=None,
 )
-_active_span_id: contextvars.ContextVar[Optional[str]] = contextvars.ContextVar(
+_active_span_id: contextvars.ContextVar[str | None] = contextvars.ContextVar(
     "eden_active_span_id", default=None,
 )
-_active_project_id: contextvars.ContextVar[Optional[str]] = contextvars.ContextVar(
+_active_project_id: contextvars.ContextVar[str | None] = contextvars.ContextVar(
     "eden_active_project_id", default=None,
 )
-_active_tenant_id: contextvars.ContextVar[Optional[str]] = contextvars.ContextVar(
+_active_tenant_id: contextvars.ContextVar[str | None] = contextvars.ContextVar(
     "eden_active_tenant_id", default=None,
 )
 
@@ -183,10 +182,10 @@ class EdenLoggingHandler(logging.Handler):
         self,
         level: int = logging.INFO,
         *,
-        project_id: Optional[str] = None,
-        tenant_id: Optional[str] = None,
-        agent_id: Optional[str] = None,
-        agent_version: Optional[str] = None,
+        project_id: str | None = None,
+        tenant_id: str | None = None,
+        agent_id: str | None = None,
+        agent_version: str | None = None,
         realm: str = "production",
     ) -> None:
         super().__init__(level=level)
@@ -318,7 +317,7 @@ class EdenLoggingHandler(logging.Handler):
                 extras[k] = repr(v)
 
         # Map level number → outcome string for the dashboard.
-        outcome: Optional[str] = None
+        outcome: str | None = None
         if record.levelno >= logging.ERROR:
             outcome = "failure"
         elif record.levelno >= logging.WARNING:
@@ -352,7 +351,7 @@ class EdenLoggingHandler(logging.Handler):
             "realm": self.realm,
             "event_type": "log",
             "timestamp": datetime.fromtimestamp(
-                record.created, tz=timezone.utc,
+                record.created, tz=UTC,
             ).isoformat(),
             "agent_id": self.agent_id,
             "agent_version": self.agent_version,
@@ -457,15 +456,15 @@ _INSTALLED_ATTR = "_eden_logging_handler_installed"
 
 
 def install(
-    level: Optional[int] = None,
+    level: int | None = None,
     *,
-    project_id: Optional[str] = None,
-    tenant_id: Optional[str] = None,
-    agent_id: Optional[str] = None,
-    agent_version: Optional[str] = None,
+    project_id: str | None = None,
+    tenant_id: str | None = None,
+    agent_id: str | None = None,
+    agent_version: str | None = None,
     realm: str = "production",
     replace: bool = False,
-) -> Optional[EdenLoggingHandler]:
+) -> EdenLoggingHandler | None:
     """Install the Eden logging shim on the root logger.
 
     This is the public 5-minute-time-to-first-log surface. Most users
@@ -587,7 +586,7 @@ def _parse_level(value: str) -> int:
     return logging.getLevelName(name) if isinstance(logging.getLevelName(name), int) else logging.INFO
 
 
-def get_handler() -> Optional[EdenLoggingHandler]:
+def get_handler() -> EdenLoggingHandler | None:
     """Return the currently installed EdenLoggingHandler, or None."""
     root = logging.getLogger()
     for h in root.handlers:

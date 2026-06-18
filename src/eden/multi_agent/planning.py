@@ -14,8 +14,7 @@ from __future__ import annotations
 import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import Any, Optional
-
+from typing import Any
 
 # ──────────────────────────────────────────────────────────────────────────
 # Core data structures
@@ -181,7 +180,7 @@ class ChainOfThoughtEnvironment(PlanningFramework):
         self._framework_name = "chain_of_thought"
         self.thought_chain: list[str] = []
         self.last_thought: str = ""
-        self.completion_action: Optional[dict[str, Any]] = None
+        self.completion_action: dict[str, Any] | None = None
 
     def _format_thought(self, raw: str) -> str:
         """Strip optional ``Action:`` trailer and surface a clean thought.
@@ -191,7 +190,7 @@ class ChainOfThoughtEnvironment(PlanningFramework):
         present we capture it for execution.
         """
         thought = raw
-        action: Optional[dict[str, Any]] = None
+        action: dict[str, Any] | None = None
         if "Action:" in raw:
             thought, _, action_str = raw.partition("Action:")
             action_str = action_str.strip()

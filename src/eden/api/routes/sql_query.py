@@ -13,13 +13,12 @@ is the real surface; this module is the FastAPI wiring.
 from __future__ import annotations
 
 import logging
-from typing import Any, Optional
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Path
 from pydantic import BaseModel, Field
 
 from eden.observability.sql_executor import (
-    ALLOWED_TABLES,
     DEFAULT_MAX_ROWS,
     DEFAULT_MAX_SECONDS,
     MAX_MAX_ROWS,
@@ -27,14 +26,12 @@ from eden.observability.sql_executor import (
     SqlExecutor,
     SqlForbiddenStatementError,
     SqlMultiStatementError,
-    SqlResult,
     SqlTenantViolationError,
     SqlTimeoutError,
     SqlUnknownTableError,
     get_schema_summary,
 )
 from eden.storage.postgres import get_postgres_client
-
 
 logger = logging.getLogger(__name__)
 
@@ -58,12 +55,12 @@ class SqlExecuteRequest(BaseModel):
         default_factory=dict,
         description="Named params for :name placeholders.",
     )
-    max_rows: Optional[int] = Field(
+    max_rows: int | None = Field(
         default=None,
         ge=1, le=MAX_MAX_ROWS,
         description="Override the per-query row cap (max 10000).",
     )
-    max_seconds: Optional[int] = Field(
+    max_seconds: int | None = Field(
         default=None,
         ge=1, le=MAX_MAX_SECONDS,
         description="Override the per-query time cap (max 120s).",
@@ -76,13 +73,13 @@ class SqlExecuteResponse(BaseModel):
     row_count: int
     truncated: bool
     execution_ms: float
-    cap_hit: Optional[str] = None
+    cap_hit: str | None = None
 
 
 class SqlErrorResponse(BaseModel):
     error: str
     kind: str
-    detail: Optional[str] = None
+    detail: str | None = None
 
 
 class SqlSchemaResponse(BaseModel):
@@ -104,8 +101,8 @@ def _get_user():
     return get_current_user
 
 
-def _executor_for(org_id: str, *, max_rows: Optional[int] = None,
-                  max_seconds: Optional[int] = None) -> SqlExecutor:
+def _executor_for(org_id: str, *, max_rows: int | None = None,
+                  max_seconds: int | None = None) -> SqlExecutor:
     """Build a per-request executor. The pg client is fetched
     lazily so the lifespan has time to initialise."""
     # Note: we deliberately do NOT call get_postgres_client here —

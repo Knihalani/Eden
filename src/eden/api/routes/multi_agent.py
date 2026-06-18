@@ -9,7 +9,6 @@ Ref: eden-multi-agent-orchestration-architecture.md §2–10
 from __future__ import annotations
 
 import time
-import uuid
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -17,30 +16,23 @@ from pydantic import BaseModel, Field
 
 from eden.api.deps import get_current_user, require_feature_flag
 from eden.multi_agent import (
-    Message,
-    MessageBus,
-    SharedStateManager,
-    BlackboardEntry,
-    Blackboard,
-    MessagePassingEnvironment,
-    BlackboardEnvironment,
-    RoleSystem,
-    RoleConfig,
-    AgentObjective,
-    RoleHierarchy,
-    HITLManager,
     ActionType,
-    WorkingMemory,
-    EpisodicMemory,
-    SemanticMemory,
+    AgentObjective,
+    BlackboardEntry,
+    BlackboardEnvironment,
+    HITLManager,
     MemoryService,
-    Observation,
-    MemoryTier,
-    ReActEnvironment,
-    TreeOfThoughtsEnvironment,
-    PlanAndExecuteEnvironment,
-    ReflexionEnvironment,
+    Message,
+    MessagePassingEnvironment,
     MultiAgentTestSuite,
+    Observation,
+    PlanAndExecuteEnvironment,
+    ReActEnvironment,
+    ReflexionEnvironment,
+    RoleConfig,
+    RoleHierarchy,
+    RoleSystem,
+    TreeOfThoughtsEnvironment,
 )
 
 router = APIRouter(
@@ -896,7 +888,7 @@ async def run_episode(
         raise HTTPException(status_code=404, detail="Environment not found")
 
     # Create dummy agents dict for the framework
-    agents = {aid: None for aid in req.agent_ids}
+    agents = dict.fromkeys(req.agent_ids)
 
     framework: Any = None
     if req.framework == "react":

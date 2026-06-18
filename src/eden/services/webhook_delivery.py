@@ -22,8 +22,7 @@ import hashlib
 import hmac
 import json
 import logging
-from datetime import datetime, timezone, timedelta
-from typing import Optional
+from datetime import UTC, datetime
 from uuid import uuid4
 
 from pydantic import BaseModel
@@ -38,7 +37,7 @@ settings = get_settings()
 _RETRY_DELAYS = [0, 5, 15, 30, 60, 120, 300, 600, 1800, 3600]  # seconds
 
 # HTTP client import (lazy to avoid startup overhead)
-_httpx: Optional[type] = None
+_httpx: type | None = None
 
 
 def _get_httpx():
@@ -59,9 +58,9 @@ class WebhookTestResult(BaseModel):
     """Result of a webhook test delivery."""
 
     success: bool
-    http_status: Optional[int] = None
-    response_body: Optional[str] = None
-    error: Optional[str] = None
+    http_status: int | None = None
+    response_body: str | None = None
+    error: str | None = None
 
 
 class WebhookDeliveryService:
@@ -89,7 +88,7 @@ class WebhookDeliveryService:
         org_id: str,
         event_type: str,
         payload: dict,
-        webhook_id: Optional[str] = None,
+        webhook_id: str | None = None,
     ) -> list[str]:
         """Deliver an event to all active webhooks for an org.
 
@@ -124,7 +123,7 @@ class WebhookDeliveryService:
             event_payload = {
                 "id": delivery_id,
                 "event": event_type,
-                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "timestamp": datetime.now(UTC).isoformat(),
                 "data": payload,
             }
 
@@ -287,7 +286,7 @@ class WebhookDeliveryService:
         payload = {
             "id": str(uuid4()),
             "event": "webhook.test",
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
             "data": {"message": "This is a test event from Eden"},
         }
         payload_json = json.dumps(payload, separators=(",", ":"))

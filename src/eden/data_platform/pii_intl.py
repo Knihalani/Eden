@@ -71,10 +71,9 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from typing import Any, Optional
+from typing import Any
 
 from eden.data_platform.pii import PIIMasker, PIIPolicy
-
 
 # ── Pattern catalogue ─────────────────────────────────────────────
 
@@ -232,7 +231,7 @@ class MultiLangPIIMasker:
     the new ones.
     """
 
-    def __init__(self, *, policy: Optional[PIIPolicy] = None) -> None:
+    def __init__(self, *, policy: PIIPolicy | None = None) -> None:
         # If the caller didn't supply a policy, start from
         # the default base policy but extend ``enabled_categories``
         # to include every intl pattern. The base default

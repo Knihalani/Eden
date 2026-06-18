@@ -4,11 +4,9 @@ AUDN = Add / Update / Delete / None
 Determines how to handle proposed KB writes based on existing entries.
 """
 
-from dataclasses import dataclass
-from datetime import datetime
-from enum import Enum
-from typing import Optional, Any
 import logging
+from dataclasses import dataclass
+from enum import Enum
 
 logger = logging.getLogger(__name__)
 
@@ -27,7 +25,7 @@ class AUDNResult:
     """Result of AUDN evaluation."""
     action: AUDNAction
     reason: str
-    conflicting_entry: Optional[dict] = None
+    conflicting_entry: dict | None = None
 
 
 def evaluate_audn(
@@ -68,7 +66,7 @@ def evaluate_audn(
         if _contradicts(proposed, existing_entry):
             return AUDNResult(
                 action=AUDNAction.CONFLICT,
-                reason=f"Contradiction detected with existing entry",
+                reason="Contradiction detected with existing entry",
                 conflicting_entry=existing_entry,
             )
 

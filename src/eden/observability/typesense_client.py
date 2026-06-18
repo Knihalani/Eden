@@ -55,7 +55,8 @@ import asyncio
 import json
 import logging
 import time
-from typing import Any, Iterable, Optional
+from collections.abc import Iterable
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -277,7 +278,7 @@ class TypesenseClient:
         self._schema_ready = False
         # Track reachability so we don't keep retrying on every
         # span when Typesense is down at startup.
-        self._last_failure: Optional[float] = None
+        self._last_failure: float | None = None
         self._backoff_s = 5.0
 
     @property
@@ -448,11 +449,11 @@ class TypesenseClient:
 
 # ── Singleton accessor ──────────────────────────────────────────────
 
-_typesense_client: Optional[TypesenseClient] = None
+_typesense_client: TypesenseClient | None = None
 _typesense_lock = asyncio.Lock()
 
 
-def get_typesense_client() -> Optional[TypesenseClient]:
+def get_typesense_client() -> TypesenseClient | None:
     """Return the process-wide Typesense client, or ``None`` if disabled.
 
     Reads connection info from :class:`eden.config.Settings`. Returns

@@ -8,7 +8,6 @@ import hashlib
 import logging
 import time
 from dataclasses import dataclass
-from typing import Optional
 
 from eden.llm.client import LLMResponse
 
@@ -44,7 +43,7 @@ class RequestCoalescer:
         model: str,
         temperature: float,
         max_tokens: int,
-        system_prompt: Optional[str] = None,
+        system_prompt: str | None = None,
     ) -> str:
         """Create a deterministic coalescing key."""
         normalized = " ".join(prompt.split()).strip().lower()
@@ -59,7 +58,7 @@ class RequestCoalescer:
         model: str,
         temperature: float = 0.7,
         max_tokens: int = 4096,
-        system_prompt: Optional[str] = None,
+        system_prompt: str | None = None,
         call_fn=None,
     ) -> LLMResponse:
         """Execute a deduplicated LLM call.

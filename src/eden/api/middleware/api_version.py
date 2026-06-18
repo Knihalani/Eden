@@ -16,7 +16,6 @@ Version history:
 """
 
 import logging
-from typing import Optional
 
 from fastapi import Request
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -74,7 +73,7 @@ class APIVersionMiddleware(BaseHTTPMiddleware):
         return response
 
     @staticmethod
-    def _resolve_version(raw: Optional[str]) -> Optional[str]:
+    def _resolve_version(raw: str | None) -> str | None:
         """Resolve a version string to a supported version.
 
         Returns the version if supported, None otherwise.
@@ -89,7 +88,7 @@ class APIVersionMiddleware(BaseHTTPMiddleware):
         return None
 
 
-def get_api_version(request: Optional[Request] = None) -> str:
+def get_api_version(request: Request | None = None) -> str:
     """Get the resolved API version for the current request.
 
     Defaults to CURRENT_VERSION if the middleware has not run or request is None.

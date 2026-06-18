@@ -9,13 +9,12 @@ References: eden-api-developer-platform-architecture.md §9, §10
 
 from __future__ import annotations
 
-import asyncio
 import logging
 import random
 import secrets
 import time
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -104,7 +103,7 @@ class SandboxStatusResponse(BaseModel):
 class SandboxExecuteRequest(BaseModel):
     """Request to execute an API call within the sandbox."""
 
-    endpoint: str = Field(..., description="Target endpoint path (e.g. /v1/jobs)")
+    endpoint: str = Field(..., description="Target endpoint path (e.g. /v1/datasets)")
     method: str = Field("POST", pattern="^(GET|POST|PUT|PATCH|DELETE)$")
     body: dict[str, Any] | None = Field(None, description="Request payload")
     headers: dict[str, str] | None = Field(None, description="Additional headers")
@@ -293,13 +292,6 @@ async def get_sandbox_status(
         request_count=session.request_count,
         max_requests=100,
         endpoints_available=[
-            "POST /v1/jobs",
-            "GET /v1/jobs/{id}",
-            "GET /v1/jobs/{id}/stream",
-            "POST /v1/environments",
-            "GET /v1/environments/{id}",
-            "POST /v1/benchmarks",
-            "GET /v1/benchmarks/{id}",
             "POST /v1/datasets",
             "GET /v1/observability/traces",
             "GET /health",
@@ -546,9 +538,9 @@ async def sandbox_docs() -> dict[str, Any]:
                 "path": "/sandbox/sessions/{id}/execute",
                 "description": "Execute a mock API call",
                 "example": {
-                    "endpoint": "/v1/jobs",
+                    "endpoint": "/v1/datasets",
                     "method": "POST",
-                    "body": {"description": "A test environment"},
+                    "body": {"name": "A test dataset"},
                 },
             },
             {
@@ -591,130 +583,20 @@ async def sandbox_docs() -> dict[str, Any]:
 def _mock_endpoint(
     endpoint: str, method: str, body: dict[str, Any]
 ) -> tuple[dict[str, Any] | str, int, list[str] | None]:
-    """Return a mocked response for a sandboxed API call."""
+    """Return a mocked response for a sandboxed API call.
+
+    The /v1/jobs, /v1/environments, and /v1/benchmarks mock branches
+    were retired with the env-gen pipeline (June 2026); the routes
+    are gone, so the mocks are too.
+    """
     warnings: list[str] | None = None
     normalized = endpoint.lower().rstrip("/")
 
     def _extract_id_from_path(prefix: str) -> str:
-        """Extract an ID from a path like /v1/jobs/job_123 or /v1/jobs/job_123/stream."""
-        # Remove prefix and any trailing segments like /stream
+        """Extract an ID from a path like ``/v1/foo/abc123``."""
+        # Remove prefix and any trailing segments
         remainder = normalized[len(prefix):].lstrip("/")
         return remainder.split("/")[0] if remainder else "unknown"
-
-    # Jobs
-    if normalized == "/v1/jobs" and method == "POST":
-        job_id = f"job_sandbox_{secrets.token_hex(6)}"
-        return (
-            {
-                "object": "job",
-                "id": job_id,
-                "status": "queued",
-                "message": "Job queued in sandbox mode (no real LLM calls)",
-                "meta": {"request_id": f"req_{secrets.token_hex(8)}", "api_version": "2026-05-29"},
-            },
-            201,
-            ["Sandbox: job creation is simulated. No real environment will be generated."],
-        )
-
-    if "/v1/jobs/" in normalized and method == "GET":
-        if "/stream" in normalized:
-            job_id = _extract_id_from_path("/v1/jobs")
-            return (
-                {
-                    "object": "job_stream",
-                    "id": job_id,
-                    "events": [
-                        {"type": "stage_change", "stage": "design", "at": "2026-05-29T12:00:00Z"},
-                        {"type": "stage_change", "stage": "generate", "at": "2026-05-29T12:02:00Z"},
-                        {"type": "stage_change", "stage": "validate", "at": "2026-05-29T12:04:00Z"},
-                        {"type": "complete", "outcome_tier": "gold", "at": "2026-05-29T12:05:00Z"},
-                    ],
-                },
-                200,
-                ["Sandbox: stream events are synthetic."],
-            )
-        job_id = _extract_id_from_path("/v1/jobs")
-        return (
-            {
-                "object": "job",
-                "id": job_id,
-                "status": "completed",
-                "current_stage": "validate",
-                "outcome_tier": "gold",
-                "created_at": "2026-05-29T12:00:00Z",
-                "updated_at": "2026-05-29T12:05:00Z",
-                "stage_history": [
-                    {"from": None, "to": "design", "at": "2026-05-29T12:00:00Z"},
-                    {"from": "design", "to": "generate", "at": "2026-05-29T12:02:00Z"},
-                    {"from": "generate", "to": "validate", "at": "2026-05-29T12:04:00Z"},
-                ],
-            },
-            200,
-            None,
-        )
-
-    # Environments
-    if normalized == "/v1/environments" and method == "POST":
-        env_id = f"env_sandbox_{secrets.token_hex(6)}"
-        return (
-            {
-                "object": "environment",
-                "id": env_id,
-                "description": body.get("description", "Sandbox environment"),
-                "framework": body.get("framework", "gymnasium"),
-                "language": body.get("language", "python"),
-                "code": "# Sandbox environment\\nclass SandboxEnv:\\n    def reset(self):\\n        return {}\\n    def step(self, action):\\n        return {}, 0, False, False, {}",
-                "tests": [{"name": "test_reset", "passed": True}],
-                "provenance": {"model": "sandbox-mock", "prompt_hash": "sandbox"},
-            },
-            201,
-            ["Sandbox: environment is synthetic. No real code was generated."],
-        )
-
-    if "/v1/environments/" in normalized and method == "GET":
-        env_id = _extract_id_from_path("/v1/environments")
-        return (
-            {
-                "object": "environment",
-                "id": env_id,
-                "description": "A sandbox test environment",
-                "framework": "gymnasium",
-                "language": "python",
-                "code": "# Synthetic environment code for sandbox testing\\nclass TestEnv:\\n    pass",
-                "tests": [{"name": "test_reset", "passed": True}, {"name": "test_step", "passed": True}],
-            },
-            200,
-            None,
-        )
-
-    # Benchmarks
-    if normalized == "/v1/benchmarks" and method == "POST":
-        bench_id = f"bench_sandbox_{secrets.token_hex(6)}"
-        return (
-            {
-                "object": "benchmark",
-                "id": bench_id,
-                "name": body.get("name", "Sandbox Benchmark"),
-                "status": "created",
-            },
-            201,
-            None,
-        )
-
-    if normalized.startswith("/v1/benchmarks/") and "/execute" in normalized and method == "POST":
-        score = round(random.uniform(0.75, 0.95), 3)
-        return (
-            {
-                "object": "benchmark_result",
-                "id": f"br_sandbox_{secrets.token_hex(6)}",
-                "score": score,
-                "passed_tests": 42,
-                "failed_tests": 3,
-                "metrics": {"accuracy": score, "latency_ms": 850},
-            },
-            200,
-            [f"Sandbox: benchmark score is randomised ({score})."],
-        )
 
     # Datasets
     if normalized == "/v1/datasets" and method == "POST":
@@ -791,4 +673,4 @@ def _mock_endpoint(
 
 def _fmt_ts(ts: float) -> str:
     """Format a Unix timestamp to ISO 8601 UTC string."""
-    return datetime.fromtimestamp(ts, tz=timezone.utc).isoformat().replace("+00:00", "Z")
+    return datetime.fromtimestamp(ts, tz=UTC).isoformat().replace("+00:00", "Z")

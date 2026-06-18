@@ -61,14 +61,12 @@ naturally.
 
 from __future__ import annotations
 
-import asyncio
 import json
 import logging
 import time
-import uuid
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
-from typing import Any, Awaitable, Callable, Optional
+from typing import Any
 
 from eden.config import get_settings
 
@@ -197,9 +195,9 @@ class AgentChunk:
 
     type: str  # "text_delta" | "tool_call" | "tool_result" | "chart" | "citation" | "done" | "error"
     text: str = ""
-    chart: Optional[ChartSpec] = None
-    citation: Optional[Citation] = None
-    tool_call: Optional[ToolCall] = None
+    chart: ChartSpec | None = None
+    citation: Citation | None = None
+    tool_call: ToolCall | None = None
     error: str = ""
 
     def to_dict(self) -> dict[str, Any]:

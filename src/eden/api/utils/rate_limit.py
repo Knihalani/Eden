@@ -8,7 +8,6 @@ import asyncio
 import logging
 import time
 from collections import defaultdict
-from typing import Optional
 
 from eden.config import get_settings
 

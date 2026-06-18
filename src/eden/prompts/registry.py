@@ -27,10 +27,10 @@ from __future__ import annotations
 
 import logging
 import re
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
-from typing import Any, Awaitable, Callable, Optional
-
+from datetime import UTC, datetime
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -101,9 +101,9 @@ class PlaygroundResult:
     model: str
     response: str
     latency_ms: float
-    prompt_tokens: Optional[int] = None
-    completion_tokens: Optional[int] = None
-    cost_usd: Optional[float] = None
+    prompt_tokens: int | None = None
+    completion_tokens: int | None = None
+    cost_usd: float | None = None
     created_at: str = ""
 
     def to_dict(self) -> dict[str, Any]:
@@ -208,14 +208,14 @@ class PromptRegistry:
         self._store.setdefault(template.name, {})[template.version] = template
         return template
 
-    def get(self, name: str) -> Optional[PromptTemplate]:
+    def get(self, name: str) -> PromptTemplate | None:
         versions = self._store.get(name)
         if not versions:
             return None
         latest = max(versions)
         return versions[latest]
 
-    def get_version(self, name: str, version: int) -> Optional[PromptTemplate]:
+    def get_version(self, name: str, version: int) -> PromptTemplate | None:
         return self._store.get(name, {}).get(version)
 
     def update(self, template: PromptTemplate) -> PromptTemplate:
@@ -282,7 +282,7 @@ async def default_llm_handler(prompt_dict: dict[str, Any]) -> PlaygroundResult:
         prompt_tokens=len(text.split()),
         completion_tokens=5,
         cost_usd=0.0,
-        created_at=datetime.now(timezone.utc).isoformat(),
+        created_at=datetime.now(UTC).isoformat(),
     )
 
 
@@ -302,7 +302,7 @@ class Playground:
         result.template_name = template.name
         result.template_version = template.version
         if not result.created_at:
-            result.created_at = datetime.now(timezone.utc).isoformat()
+            result.created_at = datetime.now(UTC).isoformat()
         return result
 
     async def compare(

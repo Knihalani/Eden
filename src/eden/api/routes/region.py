@@ -10,7 +10,6 @@ audits can read the value.
 from __future__ import annotations
 
 import logging
-from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Path
 from pydantic import BaseModel, Field
@@ -30,15 +29,15 @@ ALLOWED_REGIONS = {None, "us", "eu", "ap"}
 
 
 class RegionIn(BaseModel):
-    region: Optional[str] = Field(
+    region: str | None = Field(
         default=None,
         description="One of 'us', 'eu', 'ap', or null to unset",
     )
 
 
 class RegionOut(BaseModel):
-    region: Optional[str]
-    updated_at: Optional[str] = None
+    region: str | None
+    updated_at: str | None = None
 
 
 @router.get("", response_model=RegionOut)

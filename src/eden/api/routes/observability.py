@@ -13,9 +13,9 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Any, Optional
+from typing import Any
 
-from fastapi import Depends, APIRouter, HTTPException, Query, Body, Path
+from fastapi import APIRouter, Body, Depends, HTTPException, Path, Query
 from pydantic import BaseModel, Field
 
 from eden.api.deps import get_current_user
@@ -38,18 +38,18 @@ class TelemetryEventIngest(BaseModel):
     realm: str = Field(..., pattern="^(environment|production)$")
     event_type: str
     timestamp: str
-    agent_id: Optional[str] = None
-    agent_version: Optional[str] = None
-    environment_id: Optional[str] = None
-    parent_span_id: Optional[str] = None
-    span_id: Optional[str] = None
-    name: Optional[str] = None
-    duration_ms: Optional[float] = None
+    agent_id: str | None = None
+    agent_version: str | None = None
+    environment_id: str | None = None
+    parent_span_id: str | None = None
+    span_id: str | None = None
+    name: str | None = None
+    duration_ms: float | None = None
     payload: dict[str, Any] = Field(default_factory=dict)
     metrics: dict[str, float] = Field(default_factory=dict)
     attributes: dict[str, str] = Field(default_factory=dict)
     tags: list[str] = Field(default_factory=list)
-    outcome: Optional[str] = None
+    outcome: str | None = None
 
 
 class TelemetryBatchIngest(BaseModel):
@@ -70,7 +70,7 @@ class TraceTreeResponse(BaseModel):
     root_spans: list[dict[str, Any]]
     total_duration_ms: float
     span_count: int
-    outcome: Optional[str] = None
+    outcome: str | None = None
 
 
 class HeatmapResponse(BaseModel):
@@ -115,9 +115,9 @@ class ComparativeResponse(BaseModel):
 class TraceListItem(BaseModel):
     trace_id: str
     realm: str
-    agent_id: Optional[str] = None
-    started_at: Optional[str] = None
-    outcome: Optional[str] = None
+    agent_id: str | None = None
+    started_at: str | None = None
+    outcome: str | None = None
     span_count: int = 0
     duration_ms: float = 0.0
 
@@ -218,9 +218,9 @@ async def ingest_telemetry_batch(
 @router.get("/traces", response_model=TraceListResponse)
 async def list_traces(
     org_id: str = Path(..., description="Organization ID"),
-    realm: Optional[str] = Query(None, pattern="^(environment|production)$"),
-    outcome: Optional[str] = Query(None),
-    agent_id: Optional[str] = Query(None),
+    realm: str | None = Query(None, pattern="^(environment|production)$"),
+    outcome: str | None = Query(None),
+    agent_id: str | None = Query(None),
     limit: int = Query(50, ge=1, le=500),
     offset: int = Query(0, ge=0),
     days: int = Query(7, ge=1, le=90),
@@ -430,12 +430,12 @@ class SpanSuggestResponse(BaseModel):
 async def search_spans_route(
     org_id: str = Path(..., description="Organization ID"),
     q: str = Query("", description="Full-text query (matches input/output text + tool names + agent id)"),
-    agent: Optional[str] = Query(None, description="Filter to one agent_id"),
-    tool: Optional[str] = Query(None, description="Filter to one tool name"),
-    outcome: Optional[str] = Query(None, description="Filter to one outcome (success/failure/partial/timeout/crash)"),
-    event_type: Optional[str] = Query(None, description="Filter to one event_type"),
-    from_ts: Optional[int] = Query(None, description="Lower bound on created_at (epoch seconds)"),
-    to_ts: Optional[int] = Query(None, description="Upper bound on created_at (epoch seconds)"),
+    agent: str | None = Query(None, description="Filter to one agent_id"),
+    tool: str | None = Query(None, description="Filter to one tool name"),
+    outcome: str | None = Query(None, description="Filter to one outcome (success/failure/partial/timeout/crash)"),
+    event_type: str | None = Query(None, description="Filter to one event_type"),
+    from_ts: int | None = Query(None, description="Lower bound on created_at (epoch seconds)"),
+    to_ts: int | None = Query(None, description="Upper bound on created_at (epoch seconds)"),
     per_page: int = Query(20, ge=1, le=100),
     page: int = Query(1, ge=1),
     user: dict = Depends(get_current_user),

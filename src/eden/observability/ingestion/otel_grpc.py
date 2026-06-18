@@ -16,9 +16,7 @@ and PII pre-mask happen downstream in the decoder.
 
 from __future__ import annotations
 
-import asyncio
 import logging
-from typing import Any, Optional
 
 import grpc
 from google.protobuf import json_format
@@ -92,7 +90,7 @@ async def _ingest_otlp_json(payload: str) -> None:
 
 # ── Server lifecycle ─────────────────────────────────────────────────
 
-_server: Optional[grpc.aio.Server] = None
+_server: grpc.aio.Server | None = None
 
 
 async def start_otel_grpc_server() -> None:

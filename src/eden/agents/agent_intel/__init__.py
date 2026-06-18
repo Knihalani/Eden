@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from typing import cast
+
 """Agent Intelligence services (Cat 6) — lazy re-exports.
 
 The five real services shipped in the v1 implementation:

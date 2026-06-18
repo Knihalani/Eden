@@ -33,8 +33,8 @@ Pre-conditions (verification, not gating):
 This migration is fully online and non-destructive: BRIN creation does not
 rewrite the table. Drop the index (downgrade) is instant.
 """
-from alembic import op
 import sqlalchemy as sa
+from alembic import op
 
 # Note: this migration was originally drafted with
 # ``down_revision = ("009", "018", "029")`` to fold in the three

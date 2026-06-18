@@ -10,7 +10,7 @@ from __future__ import annotations
 import math
 import time
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from enum import Enum
 from typing import Any
 
@@ -31,7 +31,7 @@ class MonitoringAlert:
     baseline_value: float
     threshold: float
     model_family: str
-    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     acknowledged: bool = False
 
     def to_dict(self) -> dict[str, Any]:
@@ -251,7 +251,7 @@ class ProductionMonitor:
         hours: int = 24,
     ) -> list[ModelHealthSnapshot]:
         key = f"{model_family}:"
-        cutoff = datetime.now(timezone.utc) - timedelta(hours=hours)
+        cutoff = datetime.now(UTC) - timedelta(hours=hours)
         all_snapshots: list[ModelHealthSnapshot] = []
         for k, snaps in self._snapshots.items():
             if k.startswith(key):
@@ -390,9 +390,9 @@ class ProductionMonitor:
         # LLM-judge path. Build a minimal TelemetryEvent-shaped
         # object that the HallucinationJudge can score.
         try:
-            from eden.llmops.judges.hallucination import HallucinationJudge
-            from eden.llmops.judges.base import JudgeContext
             from eden.llm.client import OpenRouterClient
+            from eden.llmops.judges.base import JudgeContext
+            from eden.llmops.judges.hallucination import HallucinationJudge
 
             class _E:
                 __slots__ = (

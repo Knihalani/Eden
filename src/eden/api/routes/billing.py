@@ -5,14 +5,11 @@ Handles Stripe webhook events, subscription management, and plan limits.
 
 import json
 import logging
-from datetime import datetime
-from typing import Optional
-from uuid import uuid4
 
-from fastapi import Depends, APIRouter, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel
 
-from eden.api.deps import require_org_permission, get_current_user, get_postgres_client
+from eden.api.deps import get_current_user, get_postgres_client, require_org_permission
 from eden.config import get_settings
 
 logger = logging.getLogger(__name__)
@@ -35,9 +32,9 @@ class PlanLimits(BaseModel):
     jobs_limit: int
     jobs_used: int
     active: bool
-    stripe_subscription_id: Optional[str] = None
-    subscription_status: Optional[str] = None
-    current_period_end: Optional[str] = None
+    stripe_subscription_id: str | None = None
+    subscription_status: str | None = None
+    current_period_end: str | None = None
 
 
 class SubscribeRequest(BaseModel):
@@ -54,7 +51,7 @@ class InvoiceResponse(BaseModel):
     currency: str
     status: str
     created: int  # Unix timestamp
-    invoice_url: Optional[str] = None
+    invoice_url: str | None = None
 
 
 # ============================================================================
@@ -100,7 +97,7 @@ def _get_settings_data(settings: any) -> dict:
     return {}
 
 
-async def get_org_plan(org_id: str) -> Optional[dict]:
+async def get_org_plan(org_id: str) -> dict | None:
     """Get the active plan for an organization."""
     client = await get_postgres_client()
     query = """

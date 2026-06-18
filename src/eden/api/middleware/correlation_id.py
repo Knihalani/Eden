@@ -7,7 +7,6 @@ logs, database queries, and downstream service calls.
 import contextvars
 import re
 import uuid
-from typing import Optional
 
 from fastapi import Request, Response
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -20,7 +19,7 @@ _CORR_ID_RE = re.compile(r"[^a-zA-Z0-9_.-]")
 _CORR_ID_MAX_LEN = 64
 
 
-def _sanitize_correlation_id(raw: Optional[str]) -> str:
+def _sanitize_correlation_id(raw: str | None) -> str:
     """Sanitize a correlation ID to prevent log injection.
 
     Strips any character outside ``[a-zA-Z0-9_.-]`` and truncates to 64

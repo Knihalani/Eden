@@ -16,9 +16,7 @@ import time
 from dataclasses import dataclass, field
 from typing import Any
 
-from eden.multi_agent.communication import MessageBus, SharedState, SharedStateManager, Message
-from eden.multi_agent.agent_roles import RoleSystem, RoleConfig, RoleHierarchy, AgentRole
-
+from eden.multi_agent.communication import Message, MessageBus, SharedStateManager
 
 # ──────────────────────────────────────────────────────────────────────────
 # Test result types

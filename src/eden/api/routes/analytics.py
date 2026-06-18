@@ -2,9 +2,8 @@
 
 import logging
 from datetime import datetime, timedelta
-from typing import Optional
 
-from fastapi import Depends, APIRouter, Query
+from fastapi import APIRouter, Depends, Query
 
 from eden.api.deps import get_current_user, require_org_permission
 from eden.storage.postgres import get_postgres_client

@@ -29,7 +29,7 @@ from __future__ import annotations
 import logging
 import time
 from dataclasses import dataclass, field
-from typing import Any, Optional
+from typing import Any
 
 from eden.observability.typesense_client import (
     TypesenseClient,
@@ -174,11 +174,11 @@ class SearchService:
         "model",
     )
 
-    def __init__(self, *, client: Optional[TypesenseClient] = None) -> None:
+    def __init__(self, *, client: TypesenseClient | None = None) -> None:
         self._client = client
 
     @property
-    def client(self) -> Optional[TypesenseClient]:
+    def client(self) -> TypesenseClient | None:
         if self._client is not None:
             return self._client
         return get_typesense_client()
@@ -365,7 +365,7 @@ class SearchService:
 
 # ── Singleton accessor ──────────────────────────────────────────────
 
-_search_service: Optional[SearchService] = None
+_search_service: SearchService | None = None
 
 
 def get_search_service() -> SearchService:
