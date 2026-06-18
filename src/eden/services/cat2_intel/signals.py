@@ -47,8 +47,7 @@ import hashlib
 import logging
 import re
 from dataclasses import dataclass, field
-from typing import Any, Optional
-
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -95,12 +94,12 @@ class NLSignal:
     description: str
     rule: CompiledRule
     enabled: bool = True
-    created_by: Optional[str] = None
+    created_by: str | None = None
     created_at: str = ""
     updated_at: str = ""
     # The cluster id (set by SignalClusterer). Signals in the
     # same cluster are semantically similar.
-    cluster_id: Optional[str] = None
+    cluster_id: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -429,7 +428,7 @@ class SignalClusterer:
     def __init__(
         self,
         similarity_threshold: float = 0.4,
-        embed_fn: Optional[Any] = None,
+        embed_fn: Any | None = None,
     ) -> None:
         self.similarity_threshold = similarity_threshold
         self.embed_fn = embed_fn  # reserved for future use

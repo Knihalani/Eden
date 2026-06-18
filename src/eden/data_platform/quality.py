@@ -12,12 +12,11 @@ Usage:
 
 from __future__ import annotations
 
-import json
 import logging
 import re
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
-from typing import Any, Callable, Optional
+from datetime import UTC, datetime
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -61,7 +60,7 @@ class ValidationReport:
     """Aggregated result of validating a dataset against multiple expectations."""
 
     table_name: str
-    timestamp: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+    timestamp: str = field(default_factory=lambda: datetime.now(UTC).isoformat())
     results: list[ExpectationResult] = field(default_factory=list)
     success: bool = False
     error_count: int = 0
@@ -199,7 +198,7 @@ class DataQualityValidator:
     adapted query patterns.
     """
 
-    def __init__(self, postgres_client: Optional[Any] = None) -> None:
+    def __init__(self, postgres_client: Any | None = None) -> None:
         self._client = postgres_client
 
     async def _get_client(self) -> Any:
@@ -212,7 +211,7 @@ class DataQualityValidator:
         self,
         table_name: str,
         expectations: list[Expectation],
-        where_clause: Optional[str] = None,
+        where_clause: str | None = None,
     ) -> ValidationReport:
         """Validate a PostgreSQL table against a suite of expectations."""
         client = await self._get_client()
@@ -249,7 +248,7 @@ class DataQualityValidator:
         client: Any,
         table_name: str,
         expectation: Expectation,
-        where_clause: Optional[str] = None,
+        where_clause: str | None = None,
     ) -> ExpectationResult:
         """Evaluate a single expectation against a table."""
         etype = expectation.expectation_type
@@ -388,11 +387,11 @@ class DataQualityValidator:
             message=f"Unknown expectation type: {etype}",
         )
 
-    async def validate_silver_events(self, where: Optional[str] = None) -> ValidationReport:
+    async def validate_silver_events(self, where: str | None = None) -> ValidationReport:
         """Convenience: validate the silver_events table."""
         return await self.validate_table("silver_events", SILVER_EVENT_EXPECTATIONS, where)
 
-    async def validate_usage_events(self, where: Optional[str] = None) -> ValidationReport:
+    async def validate_usage_events(self, where: str | None = None) -> ValidationReport:
         """Convenience: validate the usage_events table."""
         return await self.validate_table("usage_events", USAGE_EVENT_EXPECTATIONS, where)
 
@@ -464,7 +463,7 @@ class DataQualityValidator:
 # back, so users can author suites in either format and run them
 # against the same engine.
 
-def _to_ge_expectation(exp: "Expectation") -> Optional[Any]:
+def _to_ge_expectation(exp: Expectation) -> Any | None:
     """Convert an in-house :class:`Expectation` to a GE expectation
     (returns ``None`` if the type doesn't map)."""
     try:
@@ -531,9 +530,9 @@ class geExpectationFactory:
 
 async def run_with_great_expectations(
     table_name: str,
-    expectations: list["Expectation"],
+    expectations: list[Expectation],
     *,
-    where_clause: Optional[str] = None,
+    where_clause: str | None = None,
 ) -> dict[str, Any]:
     """Run the expectation suite through Great Expectations instead
     of the in-house validator. Useful for users with existing GE

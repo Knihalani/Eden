@@ -8,11 +8,10 @@ string match. Uses a three-tier storage: L1 Redis (exact), L2 pgvector
 from __future__ import annotations
 
 import hashlib
-import json
 import time
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any, Callable, Optional, Protocol
+from typing import Any, Protocol
 
 
 @dataclass
@@ -45,7 +44,7 @@ class SemanticCache:
     Redis + PostgreSQL/pgvector + S3.
     """
 
-    def __init__(self, *, embedder: Optional["Embedder"] = None) -> None:
+    def __init__(self, *, embedder: Embedder | None = None) -> None:
         """Construct a semantic cache.
 
         Args:
@@ -56,7 +55,7 @@ class SemanticCache:
                 ``SentenceTransformerEmbedder`` classes are
                 ready-to-use implementations.
         """
-        self._embedder: Optional[Embedder] = embedder
+        self._embedder: Embedder | None = embedder
         self._l1_exact: dict[str, tuple[str, float]] = {}  # hash -> (response, expires_at)
         self._l2_entries: list[CacheEntry] = []
         self._l3_archive: list[CacheEntry] = []
@@ -120,7 +119,6 @@ class SemanticCache:
             # configured.
             if self._embedder is not None:
                 try:
-                    import asyncio
                     q_vec = self._embedder.embed(query)
                     e_vec = self._embedder.embed(entry.query_text)
                     score = _cosine_similarity(q_vec, e_vec)

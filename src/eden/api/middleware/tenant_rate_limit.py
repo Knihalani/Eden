@@ -17,13 +17,11 @@ import asyncio
 import hashlib
 import logging
 import time
-from typing import Optional
 
 from fastapi import Request
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse, Response
 
-from eden.api.middleware.correlation_id import get_correlation_id
 from eden.api.utils.auth import decode_access_token
 from eden.config import get_settings
 from eden.storage.postgres import get_postgres_client
@@ -85,7 +83,7 @@ class TenantRateLimitMiddleware(BaseHTTPMiddleware):
         self._tier_cache: dict[str, tuple[int, int, str, float]] = {}  # org_id -> (limit, window, tier, expires_at)
         self._tier_cache_ttl = 5.0  # seconds
         self._redis = None  # Lazy-load Redis if available
-        self._cleanup_task: Optional[asyncio.Task] = None
+        self._cleanup_task: asyncio.Task | None = None
         self._running = True
         # Start periodic bucket cleanup background task
         self._cleanup_task = asyncio.create_task(self._periodic_bucket_cleanup())
@@ -135,7 +133,7 @@ class TenantRateLimitMiddleware(BaseHTTPMiddleware):
                 self._buckets[key] = TokenBucket(capacity, refill_rate)
             return self._buckets[key]
 
-    async def _resolve_org_from_request(self, request: Request) -> Optional[str]:
+    async def _resolve_org_from_request(self, request: Request) -> str | None:
         """Parse JWT cookie or API key header to extract org_id.
 
         Mirrors the logic in eden.api.deps but without depending on
@@ -225,7 +223,7 @@ class TenantRateLimitMiddleware(BaseHTTPMiddleware):
             except asyncio.CancelledError:
                 pass
 
-    async def _resolve_api_key_id(self, request: Request) -> Optional[str]:
+    async def _resolve_api_key_id(self, request: Request) -> str | None:
         """Resolve the API key id from the X-Org-Api-Key header.
 
         Returns the key's UUID (suitable for ``key:{id}`` rate limit

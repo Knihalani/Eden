@@ -57,7 +57,7 @@ class PostgresClient:
         # host/port/user/password/SSL — without this the pool would
         # silently connect to ``localhost`` and the production deploy
         # would talk to a non-existent DB.
-        from urllib.parse import urlsplit, parse_qs
+        from urllib.parse import parse_qs, urlsplit
 
         url_override = settings.database_url if settings.database_url else None
         if url_override:
@@ -819,7 +819,7 @@ async def get_postgres_client() -> PostgresClient:
     return _postgres_client
 
 
-async def set_session_org_context(client: "PostgresClient", org_id: str) -> None:
+async def set_session_org_context(client: PostgresClient, org_id: str) -> None:
     """Phase 7.3e — set the RLS GUC for the current request.
 
     The migration 015 RLS policies use

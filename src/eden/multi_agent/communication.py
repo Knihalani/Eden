@@ -15,10 +15,10 @@ import copy
 import time
 import uuid
 from collections import defaultdict, deque
+from collections.abc import Callable, Coroutine
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Callable, Coroutine, Optional
-
+from typing import Any
 
 # ──────────────────────────────────────────────────────────────────────────
 # Core data structures

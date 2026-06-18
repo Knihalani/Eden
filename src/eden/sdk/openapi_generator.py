@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import json
 import logging
-import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -64,7 +63,7 @@ class OpenAPIGenerator:
 
     def load_spec_from_file(self, path: str | Path) -> dict[str, Any]:
         """Load an OpenAPI spec from a local JSON file."""
-        with open(path, "r", encoding="utf-8") as f:
+        with open(path, encoding="utf-8") as f:
             self._spec = json.load(f)
         return self._spec
 

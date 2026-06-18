@@ -14,7 +14,7 @@ Five routes:
 from __future__ import annotations
 
 import logging
-from typing import Any, Optional
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Path
 from pydantic import BaseModel, Field
@@ -26,7 +26,6 @@ from eden.prompts.registry import (
     PromptTemplate,
     default_llm_handler,
 )
-
 
 logger = logging.getLogger(__name__)
 
@@ -87,20 +86,20 @@ class VersionListResponse(BaseModel):
 
 
 class UpdateTemplateRequest(BaseModel):
-    system: Optional[str] = None
-    user: Optional[str] = None
-    tools: Optional[list[dict[str, Any]]] = None
-    required_params: Optional[list[str]] = None
-    optional_params: Optional[list[str]] = None
-    model: Optional[str] = None
-    temperature: Optional[float] = None
-    max_tokens: Optional[int] = None
-    description: Optional[str] = None
+    system: str | None = None
+    user: str | None = None
+    tools: list[dict[str, Any]] | None = None
+    required_params: list[str] | None = None
+    optional_params: list[str] | None = None
+    model: str | None = None
+    temperature: float | None = None
+    max_tokens: int | None = None
+    description: str | None = None
 
 
 class PlaygroundRequest(BaseModel):
     params: dict[str, Any] = Field(default_factory=dict)
-    model: Optional[str] = None
+    model: str | None = None
 
 
 class PlaygroundResponse(BaseModel):
@@ -109,9 +108,9 @@ class PlaygroundResponse(BaseModel):
     model: str
     response: str
     latency_ms: float
-    prompt_tokens: Optional[int]
-    completion_tokens: Optional[int]
-    cost_usd: Optional[float]
+    prompt_tokens: int | None
+    completion_tokens: int | None
+    cost_usd: float | None
     created_at: str
 
 

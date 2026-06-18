@@ -28,8 +28,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-import uuid
-from typing import Any, Optional
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request
 from fastapi.responses import StreamingResponse
@@ -38,7 +37,6 @@ from pydantic import BaseModel, Field
 from eden.api.deps import get_current_user
 from eden.autonomous.agent import (
     AgentChunk,
-    ChatService,
     get_chat_service,
     tool_specs,
 )
@@ -51,7 +49,7 @@ router = APIRouter(prefix="/orgs/{org_id}/ai", tags=["ai-agent"])
 
 
 class ChatRequest(BaseModel):
-    conversation_id: Optional[str] = Field(
+    conversation_id: str | None = Field(
         None, description="Existing conversation id (omit to start a new one).",
     )
     message: str = Field(..., min_length=1, max_length=8_000)
@@ -80,7 +78,7 @@ class ConversationSummary(BaseModel):
     total_cost_usd: float = 0.0
     created_at: str
     updated_at: str
-    last_message_at: Optional[str] = None
+    last_message_at: str | None = None
 
 
 class MessageOut(BaseModel):
@@ -92,7 +90,7 @@ class MessageOut(BaseModel):
     citations: list[dict[str, Any]] = []
     prompt_tokens: int = 0
     completion_tokens: int = 0
-    model_used: Optional[str] = None
+    model_used: str | None = None
     created_at: str
 
 
@@ -187,7 +185,7 @@ async def chat_route(
         # Run the loop in a task; we drain its emit() events into the
         # stream. We do this with a small asyncio.Queue so the loop
         # can push events while we yield them.
-        queue: asyncio.Queue[Optional[AgentChunk]] = asyncio.Queue()
+        queue: asyncio.Queue[AgentChunk | None] = asyncio.Queue()
 
         async def emit_push(chunk: AgentChunk) -> None:
             await queue.put(chunk)
@@ -212,7 +210,7 @@ async def chat_route(
                     break
                 try:
                     chunk = await asyncio.wait_for(queue.get(), timeout=15.0)
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     # Heartbeat — keeps proxies from closing the SSE
                     # channel during long ReAct loops.
                     yield ": heartbeat\n\n"

@@ -26,7 +26,7 @@ import shutil
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Protocol, cast
+from typing import Any, Protocol
 
 logger = logging.getLogger("eden.sim_runner")
 

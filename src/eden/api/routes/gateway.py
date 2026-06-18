@@ -39,13 +39,12 @@ Risks / known limitations:
 
 from __future__ import annotations
 
-import asyncio
-import json
 import logging
 import time
 import uuid
-from datetime import datetime, timezone
-from typing import Any, AsyncIterator, Optional
+from collections.abc import AsyncIterator
+from datetime import UTC, datetime
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse, StreamingResponse
@@ -55,12 +54,11 @@ from pydantic import BaseModel, Field
 
 from eden.api.deps import get_ingestion_auth
 from eden.config import get_settings
-from eden.llmops.ai_gateway import AIGateway, ModelRequest, Provider
+from eden.llmops.ai_gateway import AIGateway, ModelRequest
 from eden.llmops.openai_adapter import (
     ChatCompletionRequest,
     CompletionRequest,
     EmbeddingRequest,
-    aiter_to_bytes_stream,
     chat_to_provider_kwargs,
     embeddings_to_provider_kwargs,
     messages_to_prompt,
@@ -91,8 +89,8 @@ router = APIRouter(prefix="/gateway/v1", tags=["gateway"])
 # ─────────────────────────────────────────────────────────────────────
 
 
-_async_client: Optional[AsyncOpenAI] = None
-_gateway: Optional[AIGateway] = None
+_async_client: AsyncOpenAI | None = None
+_gateway: AIGateway | None = None
 
 
 def _settings():
@@ -146,12 +144,12 @@ async def _emit_gateway_telemetry(
     model: str,
     endpoint: str,
     request_body: dict[str, Any],
-    response_body: Optional[dict[str, Any]] = None,
-    metrics: Optional[dict[str, float]] = None,
+    response_body: dict[str, Any] | None = None,
+    metrics: dict[str, float] | None = None,
     outcome: str = "success",
-    error_type: Optional[str] = None,
-    duration_ms: Optional[float] = None,
-    user_label: Optional[str] = None,
+    error_type: str | None = None,
+    duration_ms: float | None = None,
+    user_label: str | None = None,
 ) -> None:
     """Best-effort: write a TelemetryEvent to the collector for the
     gateway call. We do NOT raise on failure — the user-facing
@@ -172,7 +170,7 @@ async def _emit_gateway_telemetry(
             trace_id=f"gw_{org_id}_{int(time.time() * 1_000_000)}",
             realm="production",
             event_type="llm_completion",
-            timestamp=datetime.now(timezone.utc).isoformat(),
+            timestamp=datetime.now(UTC).isoformat(),
             name=f"gateway.{endpoint}",
             duration_ms=duration_ms,
             payload={
@@ -309,7 +307,7 @@ async def _chat_completions_unary(
     upstream_kwargs: dict[str, Any],
     request_body: dict[str, Any],
     start: float,
-    user_label: Optional[str],
+    user_label: str | None,
 ) -> JSONResponse:
     client = get_async_openai_client()
     try:
@@ -379,7 +377,7 @@ async def _chat_completions_stream(
     upstream_kwargs: dict[str, Any],
     request_body: dict[str, Any],
     start: float,
-    user_label: Optional[str],
+    user_label: str | None,
 ) -> StreamingResponse:
     """Streaming chat completions.
 
@@ -395,7 +393,7 @@ async def _chat_completions_stream(
         total_input = 0
         total_output = 0
         outcome = "success"
-        error_type: Optional[str] = None
+        error_type: str | None = None
         try:
             stream = await client.chat.completions.create(
                 **upstream_kwargs,
@@ -692,7 +690,7 @@ async def list_models(auth_ctx: dict = Depends(get_ingestion_auth)) -> ModelsLis
         else (s.openrouter_base_url or "https://openrouter.ai/api/v1")
     )
     api_key = (s.minimax_api_key if s.use_minimax else s.openrouter_api_key) or ""
-    upstream_rows: Optional[list[dict[str, Any]]] = None
+    upstream_rows: list[dict[str, Any]] | None = None
     if api_key and api_key != "sk-no-key-configured":
         try:
             import httpx

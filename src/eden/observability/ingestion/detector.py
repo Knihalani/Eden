@@ -20,7 +20,6 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Any, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -34,7 +33,7 @@ _CONTENT_TYPE_MAP: dict[str, str] = {
 }
 
 
-def detect_from_content_type(content_type: Optional[str]) -> Optional[str]:
+def detect_from_content_type(content_type: str | None) -> str | None:
     """Return a format name for a known OTLP-style content type, else None.
 
     Plain ``application/json`` is intentionally NOT in the map — too many
@@ -46,7 +45,7 @@ def detect_from_content_type(content_type: Optional[str]) -> Optional[str]:
     return _CONTENT_TYPE_MAP.get(ct)
 
 
-def detect_from_x_source_format(headers: dict[str, str]) -> Optional[str]:
+def detect_from_x_source_format(headers: dict[str, str]) -> str | None:
     """``X-Source-Format`` header lets a client force a specific decoder."""
     val = headers.get("x-source-format") or headers.get("X-Source-Format")
     if val:
@@ -121,10 +120,10 @@ def detect_from_body(body: bytes) -> str:
 
 def detect_format(
     *,
-    path_format: Optional[str],
-    content_type: Optional[str],
+    path_format: str | None,
+    content_type: str | None,
     body: bytes,
-    headers: Optional[dict[str, str]] = None,
+    headers: dict[str, str] | None = None,
 ) -> str:
     """Precedence: path → X-Source-Format header → Content-Type → body
     sniff → webhook fallback.

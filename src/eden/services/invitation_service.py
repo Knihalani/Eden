@@ -1,5 +1,6 @@
 """Invitation service for email-based org invitations."""
 
+import logging
 import secrets
 from datetime import datetime, timedelta
 from uuid import uuid4
@@ -7,6 +8,8 @@ from uuid import uuid4
 from eden.config import get_settings
 from eden.services.email_service import get_email_service
 from eden.storage.postgres import get_postgres_client
+
+logger = logging.getLogger(__name__)
 
 settings = get_settings()
 
@@ -165,13 +168,33 @@ async def verify_invite_token(token: str) -> dict | None:
 
 
 async def accept_invitation(invitation_id: str, user_id: str) -> dict:
-    """Accept an invitation and add user to organization."""
+    """Accept an invitation and add user to organization.
+
+    Now also adds the user to the matching Clerk org so the user's
+    session JWT carries ``org_id`` / ``org_role`` on the next refresh.
+    The membership webhook re-syncs the ``org_members`` row
+    idempotently; failures are logged but never propagate so a Clerk
+    outage does not block a legitimate join.
+
+    Returns ``{org_id, role, clerk_org_id}``. ``clerk_org_id`` is
+    ``None`` for legacy rows where the column wasn't populated; the
+    FE's ``setActive({ organization: ... })`` no-ops on null.
+    """
+    # Local imports keep this service usable from tests that never
+    # touch Clerk; the lazy import also avoids any circular-import
+    # risk with route modules that import this service.
+    from eden.api.utils.clerk_client import (
+        ClerkAPIError,
+        create_membership,
+        resolve_clerk_org_id,
+    )
+
     client = await get_postgres_client()
 
     # Get invitation
     invitation = await client.fetchrow(
         """
-        SELECT id, org_id, email, role, status, expires_at
+        SELECT id, org_id, email, role, status, expires_at, invited_by
         FROM org_invitations
         WHERE id = $1
         """,
@@ -187,11 +210,25 @@ async def accept_invitation(invitation_id: str, user_id: str) -> dict:
     if invitation["expires_at"] < datetime.utcnow():
         raise ValueError("Invitation has expired")
 
-    # Add user to org
+    # Add user to org. ``ON CONFLICT DO NOTHING`` is defensive against
+    # the rare case where the invitation is accepted twice (network
+    # retry on the FE) — both rows are no-ops and the webhook's
+    # idempotent upsert still lands cleanly.
+    #
+    # ``last_writer_source = 'local'`` tells the
+    # ``organizationMembership.created`` webhook handler to skip the
+    # initial role overwrite: Clerk's role string (``org:member`` /
+    # ``org:admin``) collapses ``viewer`` to ``member`` in our mapping
+    # (``src/eden/api/utils/clerk_auth.py``), so without this guard
+    # the webhook would silently demote ``viewer`` invitees. After
+    # the webhook first lands, it flips ``last_writer_source`` to
+    # ``'clerk'`` so subsequent Clerk-side role changes (admin
+    # promotions etc.) propagate normally.
     await client.execute(
         """
-        INSERT INTO org_members (org_id, user_id, role, invited_by)
-        VALUES ($1, $2, $3, $4)
+        INSERT INTO org_members (org_id, user_id, role, invited_by, last_writer_source)
+        VALUES ($1, $2, $3, $4, 'local')
+        ON CONFLICT (org_id, user_id) DO NOTHING
         """,
         str(invitation["org_id"]),
         user_id,
@@ -209,9 +246,45 @@ async def accept_invitation(invitation_id: str, user_id: str) -> dict:
         invitation_id,
     )
 
+    # Best-effort Clerk side-effect. Resolves legacy rows via the
+    # ``COALESCE(clerk_org_id, id::text)`` fallback in
+    # ``resolve_clerk_org_id`` so this works for both webhook-created
+    # (id = clerk id) and backend-created (clerk_org_id column) rows.
+    clerk_org_id = await resolve_clerk_org_id(
+        client, str(invitation["org_id"]),
+    )
+    if clerk_org_id:
+        try:
+            await create_membership(
+                clerk_org_id=clerk_org_id,
+                user_id=user_id,
+                role=invitation["role"],
+            )
+        except ClerkAPIError as exc:
+            # 422 "already a member" is benign — log at info level so
+            # we don't page on retried accepts. Anything else is a
+            # real outage; warn + let the webhook reconcile.
+            if "already" in str(exc).lower():
+                logger.info(
+                    "Clerk membership already exists (user=%s org=%s)",
+                    user_id, clerk_org_id,
+                )
+            else:
+                logger.warning(
+                    "Clerk membership create failed (user=%s org=%s): %s; "
+                    "webhook will reconcile",
+                    user_id, clerk_org_id, exc,
+                )
+        except Exception as exc:  # noqa: BLE001 — defensive
+            logger.exception(
+                "Unexpected Clerk side-effect on accept_invitation (user=%s org=%s): %s",
+                user_id, clerk_org_id, exc,
+            )
+
     return {
         "org_id": str(invitation["org_id"]),
         "role": invitation["role"],
+        "clerk_org_id": clerk_org_id,
     }
 
 

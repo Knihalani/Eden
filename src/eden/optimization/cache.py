@@ -7,11 +7,11 @@ L2: Semantic cache (Qdrant) — embedding similarity search
 import hashlib
 import json
 import logging
-from typing import Optional
+from datetime import UTC
 
-from eden.storage.redis import get_redis_client
-from eden.storage.qdrant import get_qdrant_client, SearchResult
 from eden.llm.client import LLMResponse
+from eden.storage.qdrant import get_qdrant_client
+from eden.storage.redis import get_redis_client
 
 logger = logging.getLogger(__name__)
 
@@ -44,7 +44,7 @@ class ExactMatchCache:
         model: str,
         temperature: float,
         max_tokens: int,
-        system_prompt: Optional[str] = None,
+        system_prompt: str | None = None,
     ) -> str:
         """Create deterministic cache key."""
         normalized = self._normalize(prompt)
@@ -61,11 +61,11 @@ class ExactMatchCache:
         model: str,
         temperature: float = 0.7,
         max_tokens: int = 4096,
-        system_prompt: Optional[str] = None,
+        system_prompt: str | None = None,
         *,
-        tenant_id: Optional[str] = None,
-        trace_id: Optional[str] = None,
-    ) -> Optional[LLMResponse]:
+        tenant_id: str | None = None,
+        trace_id: str | None = None,
+    ) -> LLMResponse | None:
         """Try to get a cached response.
 
         When ``settings.optimization_cache_emit_metrics`` is True and
@@ -122,8 +122,8 @@ class ExactMatchCache:
 
 async def _maybe_emit_cache_hit(
     *,
-    tenant_id: Optional[str],
-    trace_id: Optional[str],
+    tenant_id: str | None,
+    trace_id: str | None,
     model: str,
     tier: str,
     latency_ms: float,
@@ -168,8 +168,8 @@ async def _maybe_emit_cache_hit(
         response: LLMResponse,
         temperature: float = 0.7,
         max_tokens: int = 4096,
-        system_prompt: Optional[str] = None,
-        ttl: Optional[int] = None,
+        system_prompt: str | None = None,
+        ttl: int | None = None,
     ) -> bool:
         """Cache a response."""
         key = self._make_key(prompt, model, temperature, max_tokens, system_prompt)
@@ -236,12 +236,13 @@ class SemanticCache:
         self.threshold = similarity_threshold
         self._hits = 0
         self._misses = 0
-        self._embed_client: Optional[object] = None
+        self._embed_client: object | None = None
 
     async def _get_embedding(self, text: str) -> list[float]:
         """Get embedding for text. Uses OpenAI-compatible API."""
         if self._embed_client is None:
             from openai import OpenAI
+
             from eden.config import get_settings
 
             s = get_settings()
@@ -279,8 +280,8 @@ class SemanticCache:
         self,
         prompt: str,
         model: str,
-        similarity_threshold: Optional[float] = None,
-    ) -> Optional[LLMResponse]:
+        similarity_threshold: float | None = None,
+    ) -> LLMResponse | None:
         """Try to get a semantically similar cached response."""
         import asyncio
         threshold = similarity_threshold or self.threshold
@@ -360,7 +361,7 @@ class SemanticCache:
     ) -> bool:
         """Cache a response with its embedding."""
         import asyncio
-        from datetime import datetime, timezone
+        from datetime import datetime
 
         qdrant = get_qdrant_client()
         loop = asyncio.get_event_loop()
@@ -378,7 +379,7 @@ class SemanticCache:
                     "total_tokens": response.usage.total_tokens,
                     "cost": response.usage.cost,
                     "finish_reason": response.finish_reason,
-                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                    "timestamp": datetime.now(UTC).isoformat(),
                 },
             }
             await loop.run_in_executor(
@@ -426,7 +427,7 @@ async def record_kb_cache_lookup(
     tier: str,
     hit: bool,
     latency_ms: float,
-    cache_key: Optional[str] = None,
+    cache_key: str | None = None,
 ) -> bool:
     """Emit a TelemetryEvent for a KB cache lookup, tagged with the
     tier (``L1`` / ``L2`` / ``DB``). Closes §11.2 — the existing cache

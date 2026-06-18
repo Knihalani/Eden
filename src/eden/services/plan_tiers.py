@@ -5,7 +5,6 @@ This is the single source of truth for all billing-tier logic.
 """
 
 from dataclasses import dataclass, field
-from typing import Optional
 
 
 @dataclass(frozen=True)
@@ -14,7 +13,7 @@ class PlanTier:
 
     name: str
     display_name: str
-    price_monthly_usd: Optional[int]
+    price_monthly_usd: int | None
     seats_limit: int
     references_limit: int
     jobs_soft_limit: int

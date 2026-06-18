@@ -6,34 +6,34 @@
   "result": {
     "status": "failed",
     "failed_checks": [
-      "error_rate"
+      "latency_p99"
     ],
     "action": "rollback",
     "confidence": 0.8,
     "metrics": {
       "error_rate": {
-        "baseline": 0.0041,
-        "candidate": 0.0172,
-        "regression_pct": 318.55,
+        "baseline": 0.0176,
+        "candidate": 0.0027,
+        "regression_pct": -84.83,
         "threshold_pct": 5.0,
-        "failed": true
-      },
-      "latency_p99": {
-        "baseline": 440.5871,
-        "candidate": 273.5636,
-        "regression_pct": -37.91,
-        "threshold_pct": 50.0,
         "failed": false
       },
+      "latency_p99": {
+        "baseline": 213.1643,
+        "candidate": 413.8905,
+        "regression_pct": 94.17,
+        "threshold_pct": 50.0,
+        "failed": true
+      },
       "success_rate": {
-        "baseline": 0.9521,
-        "candidate": 0.9626,
-        "regression_pct": -1.11,
+        "baseline": 0.955,
+        "candidate": 0.9946,
+        "regression_pct": -4.14,
         "threshold_pct": 5.0,
         "failed": false
       }
     },
-    "duration_ms": 3002.17,
-    "timestamp": "2026-05-31T16:43:10.584077+00:00"
+    "duration_ms": 3001.39,
+    "timestamp": "2026-06-18T19:44:52.260133+00:00"
   }
 }

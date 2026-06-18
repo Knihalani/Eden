@@ -1,12 +1,11 @@
 """Audit log routes for Eden API."""
 
 import logging
-from typing import Optional
 
-from fastapi import APIRouter, Query, Cookie, Header
+from fastapi import APIRouter, Cookie, Header, Query
 from pydantic import BaseModel
 
-from eden.api.deps import get_current_user, require_org_permission
+from eden.api.deps import require_org_permission
 from eden.storage.postgres import get_postgres_client
 
 logger = logging.getLogger(__name__)
@@ -38,11 +37,11 @@ class AuditLogEntry(BaseModel):
     org_id: str
     user_id: str
     action: str
-    target_type: Optional[str]
-    target_id: Optional[str]
+    target_type: str | None
+    target_id: str | None
     metadata: dict
-    ip_address: Optional[str]
-    user_agent: Optional[str]
+    ip_address: str | None
+    user_agent: str | None
     created_at: str
 
 
@@ -57,14 +56,14 @@ class AuditLogResponse(BaseModel):
 @router.get("/{org_id}/audit-log", response_model=AuditLogResponse)
 async def get_audit_log(
     org_id: str,
-    action: Optional[str] = Query(None, description="Filter by action type (e.g., 'member.invited')"),
-    user_id: Optional[str] = Query(None, description="Filter by user ID"),
-    from_date: Optional[str] = Query(None, description="Filter from date (ISO format)"),
-    to_date: Optional[str] = Query(None, description="Filter to date (ISO format)"),
+    action: str | None = Query(None, description="Filter by action type (e.g., 'member.invited')"),
+    user_id: str | None = Query(None, description="Filter by user ID"),
+    from_date: str | None = Query(None, description="Filter from date (ISO format)"),
+    to_date: str | None = Query(None, description="Filter to date (ISO format)"),
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
-    x_org_id: Optional[str] = Header(None, alias="X-Org-Id"),
-    authorization: Optional[str] = Cookie(None),
+    x_org_id: str | None = Header(None, alias="X-Org-Id"),
+    authorization: str | None = Cookie(None),
 ):
     """Get audit log for an organization.
 
@@ -151,8 +150,8 @@ async def get_audit_log(
 @router.get("/{org_id}/audit-log/verify-chain", response_model=ChainVerifyResponse)
 async def verify_audit_chain(
     org_id: str,
-    x_org_id: Optional[str] = Header(None, alias="X-Org-Id"),
-    authorization: Optional[str] = Cookie(None),
+    x_org_id: str | None = Header(None, alias="X-Org-Id"),
+    authorization: str | None = Cookie(None),
 ):
     """§6.4 — verify the audit-log hash chain for tamper-evidence.
 
@@ -187,10 +186,10 @@ async def verify_audit_chain(
 async def export_audit_log(
     org_id: str,
     format: str = Query("jsonl", pattern="^(jsonl|csv)$"),
-    from_date: Optional[str] = Query(None),
-    to_date: Optional[str] = Query(None),
-    x_org_id: Optional[str] = Header(None, alias="X-Org-Id"),
-    authorization: Optional[str] = Cookie(None),
+    from_date: str | None = Query(None),
+    to_date: str | None = Query(None),
+    x_org_id: str | None = Header(None, alias="X-Org-Id"),
+    authorization: str | None = Cookie(None),
 ):
     """§6.4 — streaming export of the audit log as JSONL or CSV.
 
@@ -198,10 +197,11 @@ async def export_audit_log(
     record per chunk. JSONL writes one record per line; CSV writes
     a header row followed by one record per line.
     """
-    from fastapi.responses import StreamingResponse
     import csv as _csv
     import io as _io
     import json as _json
+
+    from fastapi.responses import StreamingResponse
 
     await require_org_permission("audit:view", org_id, authorization)
     client = await get_postgres_client()

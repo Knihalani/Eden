@@ -21,8 +21,8 @@ import asyncio
 import json
 import logging
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta, timezone
-from typing import Any, Optional
+from datetime import UTC, datetime, timedelta
+from typing import Any
 
 from eden.config import get_settings
 from eden.data_platform.pii import PIIMasker
@@ -40,7 +40,7 @@ class RetentionPolicy:
     warm_days: int
     cold_days: int
     delete_after_days: int
-    scrub_pii_after_days: Optional[int] = None
+    scrub_pii_after_days: int | None = None
 
 
 DEFAULT_POLICIES: list[RetentionPolicy] = [
@@ -73,13 +73,13 @@ class DataRetentionManager:
 
     def __init__(
         self,
-        policies: Optional[list[RetentionPolicy]] = None,
+        policies: list[RetentionPolicy] | None = None,
         dry_run: bool = False,
     ) -> None:
         self.policies = policies or DEFAULT_POLICIES
         self.dry_run = dry_run
         self._masker = PIIMasker()
-        self._postgres_client: Optional[Any] = None
+        self._postgres_client: Any | None = None
 
     async def _get_postgres(self) -> Any:
         if self._postgres_client is None:
@@ -177,7 +177,7 @@ class DataRetentionManager:
             import boto3
             s3 = boto3.client("s3")
             prefix = f"cold/{table}"
-            ts = datetime.now(timezone.utc)
+            ts = datetime.now(UTC)
             key = f"{prefix}/year={ts.year}/month={ts.month:02d}/day={ts.day:02d}/{ts.isoformat()}.ndjson"
 
             body = "\n".join(json.dumps(dict(r), default=str) for r in rows)
@@ -296,8 +296,8 @@ class DataRetentionManager:
             import boto3
             s3 = boto3.client("s3")
             # Write a deletion marker object
-            key = f"gdpr-deletion-requests/{tenant_id}/{datetime.now(timezone.utc).isoformat()}.json"
-            body = json.dumps({"tenant_id": tenant_id, "requested_at": datetime.now(timezone.utc).isoformat()})
+            key = f"gdpr-deletion-requests/{tenant_id}/{datetime.now(UTC).isoformat()}.json"
+            body = json.dumps({"tenant_id": tenant_id, "requested_at": datetime.now(UTC).isoformat()})
             loop = asyncio.get_event_loop()
             await loop.run_in_executor(
                 None,
@@ -321,7 +321,7 @@ class DataRetentionManager:
     async def run_retention_policy(self, policy: RetentionPolicy) -> RetentionReport:
         """Run a single retention policy end-to-end."""
         report = RetentionReport()
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
 
         # PII scrubbing
         if policy.scrub_pii_after_days is not None:
@@ -370,7 +370,7 @@ class DataRetentionManager:
         client = await self._get_postgres()
         export: dict[str, Any] = {
             "tenant_id": tenant_id,
-            "exported_at": datetime.now(timezone.utc).isoformat(),
+            "exported_at": datetime.now(UTC).isoformat(),
             "tables": {},
         }
 

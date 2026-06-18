@@ -52,8 +52,8 @@ GOTCHA — RDS-style JSONB growth:
     measure ``pg_column_size`` before/after on a representative sample,
     and per-column-rollback any column that grew.
 """
-from alembic import op
 import sqlalchemy as sa
+from alembic import op
 
 revision = "031"
 down_revision = "030"

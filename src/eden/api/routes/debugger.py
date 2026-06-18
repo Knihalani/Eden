@@ -10,21 +10,18 @@ Three routes:
 from __future__ import annotations
 
 import logging
-from typing import Any, Optional
+from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Path
+from fastapi import APIRouter, Depends, Path
 from pydantic import BaseModel, Field
 
 from eden.debugger.checkpoints import (
     Checkpoint,
     CheckpointStore,
     ReRunEngine,
-    ReRunResult,
-    RolloutEntrypoint,
     discover_entrypoint,
 )
 from eden.storage.postgres import get_postgres_client
-
 
 logger = logging.getLogger(__name__)
 
@@ -46,7 +43,7 @@ class CheckpointResponse(BaseModel):
     tool_calls: list[dict[str, Any]]
     tool_results: list[dict[str, Any]]
     response: dict[str, Any]
-    prompt_override: Optional[str] = None
+    prompt_override: str | None = None
     started_at: str
     ended_at: str
     duration_ms: float
@@ -63,7 +60,7 @@ class RerunRequest(BaseModel):
         default=0, ge=0,
         description="The step to start from (inclusive).",
     )
-    prompt_override: Optional[str] = Field(
+    prompt_override: str | None = Field(
         default=None,
         description="Optional system-prompt override for the first replayed step.",
     )
@@ -73,7 +70,7 @@ class RerunResponse(BaseModel):
     source_trace_id: str
     from_step: int
     to_step: int
-    prompt_override: Optional[str] = None
+    prompt_override: str | None = None
     checkpoints: list[CheckpointResponse]
     diff: list[dict[str, Any]]
 

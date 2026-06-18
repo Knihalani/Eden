@@ -45,7 +45,8 @@ import json
 import logging
 import time
 import uuid
-from typing import Any, AsyncIterator, Iterable, Optional
+from collections.abc import AsyncIterator, Iterable
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -59,9 +60,9 @@ logger = logging.getLogger(__name__)
 
 class ToolFunctionDef(BaseModel):
     name: str
-    description: Optional[str] = None
-    parameters: Optional[dict[str, Any]] = None
-    strict: Optional[bool] = None
+    description: str | None = None
+    parameters: dict[str, Any] | None = None
+    strict: bool | None = None
 
 
 class ToolDef(BaseModel):
@@ -71,7 +72,7 @@ class ToolDef(BaseModel):
 
 class ResponseFormat(BaseModel):
     type: str  # "text" | "json_object" | "json_schema"
-    json_schema: Optional[dict[str, Any]] = None
+    json_schema: dict[str, Any] | None = None
 
 
 class ChatCompletionRequest(BaseModel):
@@ -112,41 +113,41 @@ class ChatCompletionRequest(BaseModel):
     model: str = Field(..., description="Model identifier, e.g. openai/gpt-4o-mini")
     messages: list[dict[str, Any]] = Field(..., description="Chat messages")
     # Sampling
-    temperature: Optional[float] = None
-    top_p: Optional[float] = None
-    max_tokens: Optional[int] = None
-    max_completion_tokens: Optional[int] = None
-    n: Optional[int] = 1
+    temperature: float | None = None
+    top_p: float | None = None
+    max_tokens: int | None = None
+    max_completion_tokens: int | None = None
+    n: int | None = 1
     # Stop
-    stop: Optional[Any] = None  # str | list[str]
+    stop: Any | None = None  # str | list[str]
     # Tool calling (modern)
-    tools: Optional[list[ToolDef]] = None
-    tool_choice: Optional[Any] = None  # "none"|"auto"|"required"|{"type":"function","function":{...}}
+    tools: list[ToolDef] | None = None
+    tool_choice: Any | None = None  # "none"|"auto"|"required"|{"type":"function","function":{...}}
     # Tool calling (legacy, pre-1.0)
-    functions: Optional[list[ToolFunctionDef]] = None
-    function_call: Optional[Any] = None
+    functions: list[ToolFunctionDef] | None = None
+    function_call: Any | None = None
     # Output shape
-    response_format: Optional[ResponseFormat] = None
+    response_format: ResponseFormat | None = None
     # Determinism / metadata
-    seed: Optional[int] = None
-    user: Optional[str] = None
-    store: Optional[bool] = None
+    seed: int | None = None
+    user: str | None = None
+    store: bool | None = None
     # Penalties
-    presence_penalty: Optional[float] = None
-    frequency_penalty: Optional[float] = None
-    logit_bias: Optional[dict[str, float]] = None
-    logprobs: Optional[bool] = None
-    top_logprobs: Optional[int] = None
+    presence_penalty: float | None = None
+    frequency_penalty: float | None = None
+    logit_bias: dict[str, float] | None = None
+    logprobs: bool | None = None
+    top_logprobs: int | None = None
     # Streaming
-    stream: Optional[bool] = False
-    stream_options: Optional[dict[str, Any]] = None
+    stream: bool | None = False
+    stream_options: dict[str, Any] | None = None
     # o-series reasoning
-    reasoning_effort: Optional[str] = None
+    reasoning_effort: str | None = None
     # Misc
-    modalities: Optional[list[str]] = None
-    audio: Optional[dict[str, Any]] = None
-    service_tier: Optional[str] = None
-    metadata: Optional[dict[str, Any]] = None
+    modalities: list[str] | None = None
+    audio: dict[str, Any] | None = None
+    service_tier: str | None = None
+    metadata: dict[str, Any] | None = None
     # Allow forward-compat: any extra fields land in ``extras``
     extras: dict[str, Any] = Field(default_factory=dict)
 
@@ -156,30 +157,30 @@ class CompletionRequest(BaseModel):
 
     model: str
     prompt: Any  # str | list[str] | list[int] | list[list[int]]
-    max_tokens: Optional[int] = None
-    temperature: Optional[float] = None
-    top_p: Optional[float] = None
-    n: Optional[int] = 1
-    stream: Optional[bool] = False
-    logprobs: Optional[int] = None
-    stop: Optional[Any] = None
-    seed: Optional[int] = None
-    user: Optional[str] = None
-    suffix: Optional[str] = None
-    echo: Optional[bool] = None
-    presence_penalty: Optional[float] = None
-    frequency_penalty: Optional[float] = None
-    best_of: Optional[int] = None
-    logit_bias: Optional[dict[str, float]] = None
+    max_tokens: int | None = None
+    temperature: float | None = None
+    top_p: float | None = None
+    n: int | None = 1
+    stream: bool | None = False
+    logprobs: int | None = None
+    stop: Any | None = None
+    seed: int | None = None
+    user: str | None = None
+    suffix: str | None = None
+    echo: bool | None = None
+    presence_penalty: float | None = None
+    frequency_penalty: float | None = None
+    best_of: int | None = None
+    logit_bias: dict[str, float] | None = None
     extras: dict[str, Any] = Field(default_factory=dict)
 
 
 class EmbeddingRequest(BaseModel):
     model: str
     input: Any  # str | list[str] | list[int] | list[list[int]]
-    encoding_format: Optional[str] = None  # "float" | "base64"
-    dimensions: Optional[int] = None
-    user: Optional[str] = None
+    encoding_format: str | None = None  # "float" | "base64"
+    dimensions: int | None = None
+    user: str | None = None
     extras: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -536,7 +537,7 @@ STATIC_MODEL_CATALOGUE: list[dict[str, Any]] = [
 
 
 def shape_models_response(
-    *, upstream_models: Optional[Iterable[dict[str, Any]]] = None
+    *, upstream_models: Iterable[dict[str, Any]] | None = None
 ) -> dict[str, Any]:
     """Shape a /v1/models response in the OpenAI format."""
     rows = list(upstream_models) if upstream_models is not None else STATIC_MODEL_CATALOGUE
@@ -560,7 +561,7 @@ def shape_models_response(
 # ─────────────────────────────────────────────────────────────────────
 
 
-def sse_format(data: dict[str, Any], *, event: Optional[str] = None) -> bytes:
+def sse_format(data: dict[str, Any], *, event: str | None = None) -> bytes:
     """Encode one SSE message in the OpenAI streaming style.
 
     OpenAI uses ``data: <json>\\n\\n`` and signals end-of-stream with

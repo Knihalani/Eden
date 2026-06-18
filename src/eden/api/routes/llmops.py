@@ -6,9 +6,8 @@ production monitoring, and semantic cache endpoints.
 
 from __future__ import annotations
 
-import time
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -16,20 +15,20 @@ from pydantic import BaseModel, Field
 
 from eden.api.deps import get_current_user
 from eden.llmops import (
-    ModelArtifactRegistry,
-    ModelArtifact,
-    ArtifactType,
+    AIGateway,
     ArtifactEvaluation,
-    PromptRegistry,
-    PromptTemplate,
-    PromptABTest,
-    ExperimentTracker,
+    ArtifactType,
     Experiment,
     ExperimentRun,
-    AIGateway,
+    ExperimentTracker,
+    ModelArtifact,
+    ModelArtifactRegistry,
+    ModelHealthSnapshot,
     ModelRequest,
     ProductionMonitor,
-    ModelHealthSnapshot,
+    PromptABTest,
+    PromptRegistry,
+    PromptTemplate,
     SemanticCache,
 )
 
@@ -110,7 +109,7 @@ _experiment_tracker.create_experiment(Experiment(
     config_snapshot={"spec_generator": {"model": "claude-sonnet-4", "temperature": 0.7}},
     prompt_ids=["prompt_spec_generator_v1"],
     status="completed",
-    completed_at=datetime.now(timezone.utc),
+    completed_at=datetime.now(UTC),
 ))
 _experiment_tracker.add_run(ExperimentRun(
     run_id="run_001",
@@ -124,7 +123,7 @@ _experiment_tracker.add_run(ExperimentRun(
 _production_monitor.record_snapshot(ModelHealthSnapshot(
     model_family="claude",
     model_version="claude-sonnet-4-20250514",
-    timestamp=datetime.now(timezone.utc),
+    timestamp=datetime.now(UTC),
     output_drift_kl=0.03,
     hallucination_rate=0.02,
     token_efficiency=1.0,
@@ -436,7 +435,7 @@ async def create_ab_test(
         variant_b_id=body.variant_b_id,
         traffic_split=body.traffic_split,
         success_metric=body.success_metric,
-        start_date=datetime.now(timezone.utc),
+        start_date=datetime.now(UTC),
     )
     _prompt_registry.create_ab_test(test)
     return {"test": test.to_dict()}
@@ -656,7 +655,7 @@ async def record_health_snapshot(
     snapshot = ModelHealthSnapshot(
         model_family=body.model_family,
         model_version=body.model_version,
-        timestamp=datetime.now(timezone.utc),
+        timestamp=datetime.now(UTC),
         output_drift_kl=body.output_drift_kl,
         hallucination_rate=body.hallucination_rate,
         token_efficiency=body.token_efficiency,

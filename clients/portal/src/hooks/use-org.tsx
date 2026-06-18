@@ -55,7 +55,7 @@ export function OrgProvider({ children }: { children: ReactNode }) {
   // enrichment for that org. Failures are non-fatal — the user can
   // still navigate the portal shell.
   const refreshOrgs = useCallback(async () => {
-    if (!user || !clerkOrg) {
+    if (!user) {
       setOrganizations([]);
       setCurrentOrgState(null);
       return;
@@ -69,6 +69,16 @@ export function OrgProvider({ children }: { children: ReactNode }) {
       // Prefer the Clerk-active org if Eden knows about it; otherwise
       // fall back to the user's ``current_org_id``; otherwise the
       // first org in the list. (Same fallback chain as before.)
+      //
+      // Clerk-null branch: when the user has joined an Eden org via
+      // an invite but hasn't been synced into the matching Clerk
+      // organization yet (``clerkOrg === null``), don't clear the
+      // Eden-side state — the user can still proceed through the
+      // onboarding wizard with the Eden org as the active context.
+      // The (portal) layout's Clerk ``<OrganizationSwitcher>`` will
+      // render empty until the membership webhook syncs, which is
+      // acceptable for the brief window between invite-accept and
+      // webhook delivery.
       const fromClerk = clerkOrg
         ? enrichedOrgs.find((o) => o.id === clerkOrg.id)
         : undefined;

@@ -11,18 +11,18 @@ Exposes endpoints for:
 
 import json
 import logging
-from datetime import datetime, timezone
-from typing import Any, Optional
+from datetime import datetime
+from typing import Any
 
-from fastapi import APIRouter, HTTPException, Query, Depends, Header
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 
 from eden.api.deps import get_current_user, require_org_admin
-from eden.data_platform.silver_etl import SilverETLPipeline, ETLReport
-from eden.data_platform.retention import DataRetentionManager, RetentionPolicy
-from eden.data_platform.storage_lifecycle import StorageLifecycleManager
-from eden.data_platform.lineage import LineageTracker, get_lineage_tracker
+from eden.data_platform.lineage import get_lineage_tracker
 from eden.data_platform.quality import DataQualityValidator
+from eden.data_platform.retention import DataRetentionManager
+from eden.data_platform.silver_etl import SilverETLPipeline
+from eden.data_platform.storage_lifecycle import StorageLifecycleManager
 from eden.storage.postgres import get_postgres_client
 
 logger = logging.getLogger(__name__)
@@ -38,7 +38,7 @@ class ETLLaunchRequest(BaseModel):
     """Request to trigger a Silver ETL run."""
 
     limit: int = Field(default=10000, ge=1, le=50000, description="Max Bronze events to process")
-    since: Optional[str] = Field(default=None, description="ISO datetime — only process events after this time")
+    since: str | None = Field(default=None, description="ISO datetime — only process events after this time")
 
 
 class ETLRunResponse(BaseModel):
@@ -87,7 +87,7 @@ class RetentionRunRequest(BaseModel):
     """Request to run a retention policy."""
 
     dry_run: bool = Field(default=True, description="If true, only log what would be done")
-    policy_name: Optional[str] = Field(default=None, description="Run a specific policy by name; omit for all")
+    policy_name: str | None = Field(default=None, description="Run a specific policy by name; omit for all")
 
 
 class RetentionRunResponse(BaseModel):
@@ -108,7 +108,7 @@ class GDPRExportResponse(BaseModel):
     tenant_id: str
     exported_at: str
     tables: dict[str, Any]
-    download_url: Optional[str] = None
+    download_url: str | None = None
 
 
 class LineageQueryResponse(BaseModel):
@@ -192,7 +192,7 @@ async def get_latest_etl_report(
 @router.get("/quarantine", response_model=QuarantineListResponse)
 async def list_quarantine(
     org_id: str,
-    resolution: Optional[str] = Query(None),
+    resolution: str | None = Query(None),
     limit: int = Query(50, ge=1, le=500),
     offset: int = Query(0, ge=0),
     user: dict = Depends(get_current_user),
@@ -335,7 +335,7 @@ async def get_quality_report(
 @router.get("/quality/reports/history")
 async def get_quality_history(
     org_id: str,
-    table_name: Optional[str] = Query(None),
+    table_name: str | None = Query(None),
     limit: int = Query(50, ge=1, le=500),
     offset: int = Query(0, ge=0),
     user: dict = Depends(get_current_user),
@@ -415,7 +415,7 @@ async def get_job_lineage(
 @router.get("/lineage/export")
 async def export_lineage(
     org_id: str,
-    since: Optional[str] = Query(None),
+    since: str | None = Query(None),
     limit: int = Query(1000, ge=1, le=10000),
     user: dict = Depends(get_current_user),
 ):

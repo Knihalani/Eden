@@ -1,8 +1,10 @@
 /**
- * /onboarding — Step 1: Welcome
+ * /onboarding — Step 1: Welcome.
  *
- * Briefly introduces Eden, names the upcoming steps. The "Continue"
- * button persists step=org_setup so a refresh resumes correctly.
+ * Briefly introduces Eden, names the upcoming steps, and links to a
+ * "join" path up-front so users who already have a token or pending
+ * invite know there's a faster way through. The "Continue" button
+ * persists step=org_setup so a refresh resumes correctly.
  */
 "use client";
 
@@ -10,7 +12,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useOrg } from "@/hooks/use-org";
 import { onboardingApi } from "@/lib/api";
-import { ArrowRight, Eye, GitBranch, Sparkles } from "lucide-react";
+import { ArrowRight, Eye, GitBranch, KeyRound, Sparkles, UserPlus } from "lucide-react";
 
 export default function OnboardingWelcomePage() {
   const router = useRouter();
@@ -46,7 +48,8 @@ export default function OnboardingWelcomePage() {
             <div className="font-medium">Set up your organisation</div>
             <div className="text-[var(--text-muted)]">
               Create a new one — or join an existing one if a teammate
-              already invited you.
+              already invited you. Both paths take the same number of
+              steps from here.
             </div>
           </div>
         </li>
@@ -71,6 +74,37 @@ export default function OnboardingWelcomePage() {
           </div>
         </li>
       </ul>
+
+      {/* Side-channel: skip the wizard for users who just need to redeem
+          a token. Keeps the primary CTA clean (create org) but doesn't
+          make the join path invisible. */}
+      <div className="rounded-lg border border-dashed border-[var(--border-default)] bg-[var(--bg-secondary)]/50 p-4">
+        <div className="mb-2 text-sm font-medium text-[var(--text-secondary)]">
+          Joining a team?
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Link
+            href="/onboarding/org?intent=join"
+            onClick={(e) => {
+              // Light pre-navigation hint so the org page lands on the
+              // join branch directly. Falls back to the menu if the
+              // page can't honour the hint yet.
+              e.stopPropagation();
+            }}
+            className="inline-flex items-center gap-1.5 rounded border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-1.5 text-xs text-[var(--text-secondary)] hover:border-[var(--accent)] hover:text-[var(--accent)]"
+          >
+            <UserPlus className="h-3.5 w-3.5" />
+            Use a pending invite
+          </Link>
+          <Link
+            href="/onboarding/org?intent=join"
+            className="inline-flex items-center gap-1.5 rounded border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-1.5 text-xs text-[var(--text-secondary)] hover:border-[var(--accent)] hover:text-[var(--accent)]"
+          >
+            <KeyRound className="h-3.5 w-3.5" />
+            Paste an invite token
+          </Link>
+        </div>
+      </div>
 
       <div className="flex justify-end">
         <button

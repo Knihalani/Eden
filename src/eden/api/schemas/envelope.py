@@ -18,8 +18,7 @@ The envelope is applied automatically by the APIVersionMiddleware
 for all routes under /v1/.
 """
 
-from datetime import datetime, timezone
-from typing import Any
+from datetime import UTC, datetime
 
 from pydantic import BaseModel, Field
 
@@ -63,7 +62,7 @@ class APIEnvelope(BaseModel):
             meta=APIMeta(
                 api_version=api_version,
                 request_id=request_id,
-                timestamp=datetime.now(timezone.utc).isoformat(),
+                timestamp=datetime.now(UTC).isoformat(),
             ),
         )
 
@@ -90,7 +89,7 @@ class PaginatedAPIEnvelope(BaseModel):
             meta=PaginatedMeta(
                 api_version=api_version,
                 request_id=request_id,
-                timestamp=datetime.now(timezone.utc).isoformat(),
+                timestamp=datetime.now(UTC).isoformat(),
                 total=total,
                 page=page,
                 per_page=per_page,
@@ -117,6 +116,6 @@ class ErrorEnvelope(BaseModel):
             meta=APIMeta(
                 api_version=api_version,
                 request_id=request_id,
-                timestamp=datetime.now(timezone.utc).isoformat(),
+                timestamp=datetime.now(UTC).isoformat(),
             ),
         )

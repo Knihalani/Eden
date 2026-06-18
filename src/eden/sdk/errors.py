@@ -6,8 +6,6 @@ docs_url, and actionable suggestions.
 
 from __future__ import annotations
 
-from typing import Optional
-
 
 class EdenError(Exception):
     """Base class for all Eden SDK errors."""
@@ -20,13 +18,13 @@ class EdenError(Exception):
         self,
         message: str,
         *,
-        request_id: Optional[str] = None,
-        error_code: Optional[str] = None,
-        status_code: Optional[int] = None,
-        docs_url: Optional[str] = None,
-        suggestion: Optional[str] = None,
-        retry_after: Optional[int] = None,
-        response_body: Optional[dict] = None,
+        request_id: str | None = None,
+        error_code: str | None = None,
+        status_code: int | None = None,
+        docs_url: str | None = None,
+        suggestion: str | None = None,
+        retry_after: int | None = None,
+        response_body: dict | None = None,
     ):
         super().__init__(message)
         self.message = message
@@ -86,7 +84,7 @@ class ValidationError(EdenError):
     error_code = "validation_failed"
     docs_url = "https://docs.eden.dev/errors/validation"
 
-    def __init__(self, *args, field_errors: Optional[dict] = None, **kwargs):
+    def __init__(self, *args, field_errors: dict | None = None, **kwargs):
         super().__init__(*args, **kwargs)
         self.field_errors = field_errors or {}
 
@@ -106,7 +104,7 @@ class PipelineError(EdenError):
     error_code = "pipeline_failed"
     docs_url = "https://docs.eden.dev/errors/pipeline"
 
-    def __init__(self, *args, failed_node: Optional[str] = None, node_logs: Optional[str] = None, **kwargs):
+    def __init__(self, *args, failed_node: str | None = None, node_logs: str | None = None, **kwargs):
         super().__init__(*args, **kwargs)
         self.failed_node = failed_node
         self.node_logs = node_logs or ""
@@ -119,7 +117,7 @@ class SandboxTimeoutError(EdenError):
     error_code = "sandbox_timeout"
     docs_url = "https://docs.eden.dev/errors/sandbox-timeout"
 
-    def __init__(self, *args, timeout_seconds: Optional[int] = None, **kwargs):
+    def __init__(self, *args, timeout_seconds: int | None = None, **kwargs):
         super().__init__(*args, **kwargs)
         self.timeout_seconds = timeout_seconds
 
@@ -148,7 +146,7 @@ class IdempotencyError(EdenError):
     docs_url = "https://docs.eden.dev/errors/idempotency"
 
 
-def raise_for_status(status_code: int, body: dict, request_id: Optional[str] = None) -> None:
+def raise_for_status(status_code: int, body: dict, request_id: str | None = None) -> None:
     """Raise the appropriate EdenError for an HTTP status code."""
     detail = body.get("detail", body.get("message", "Unknown error"))
     meta = body.get("meta", {})

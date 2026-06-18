@@ -6,11 +6,10 @@ Provides real-time budget enforcement with soft/hard limits.
 
 import logging
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
-from typing import Optional
+from datetime import UTC, datetime
 
-from eden.storage.redis import get_redis_client
 from eden.config import get_settings
+from eden.storage.redis import get_redis_client
 
 logger = logging.getLogger(__name__)
 
@@ -20,8 +19,8 @@ class CostEvent:
     """A single cost event with full attribution."""
 
     tenant_id: str
-    user_id: Optional[str]
-    job_id: Optional[str]
+    user_id: str | None
+    job_id: str | None
     model: str
     pipeline_node: str
     cost_type: str  # llm_tokens | sandbox_compute | storage | api_call
@@ -33,7 +32,7 @@ class CostEvent:
     total_cost_cents: float = 0.0
     cache_hit: bool = False
     model_tier: str = "unknown"
-    timestamp: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+    timestamp: str = field(default_factory=lambda: datetime.now(UTC).isoformat())
     metadata: dict = field(default_factory=dict)
 
 
@@ -69,7 +68,7 @@ class CostTracker:
             return
 
         try:
-            now = datetime.now(timezone.utc)
+            now = datetime.now(UTC)
             day_key = now.strftime("%Y-%m-%d")
             hour_key = now.strftime("%Y-%m-%d-%H")
 
@@ -143,7 +142,7 @@ class CostTracker:
 
         try:
             # Get current month spend from Redis (with fallback to 0)
-            now = datetime.now(timezone.utc)
+            now = datetime.now(UTC)
             month_key = now.strftime("%Y-%m")
             current_raw = await client.hget(
                 f"eden:cost:{tenant_id}:month:{month_key}",
@@ -200,7 +199,7 @@ class CostTracker:
         except Exception:
             return {"soft_limit_cents": float("inf"), "hard_limit_cents": float("inf"), "plan_name": "unknown"}
 
-    def get_events(self, tenant_id: Optional[str] = None) -> list[CostEvent]:
+    def get_events(self, tenant_id: str | None = None) -> list[CostEvent]:
         """Get tracked events, optionally filtered by tenant."""
         if tenant_id is None:
             return list(self._events)
@@ -276,7 +275,7 @@ def generate_monthly_report(
       - by_node:  cents per pipeline node
     """
     from collections import defaultdict
-    from datetime import datetime, timezone
+    from datetime import datetime
 
     by_model: dict[str, float] = defaultdict(float)
     by_node: dict[str, float] = defaultdict(float)
@@ -307,5 +306,5 @@ def generate_monthly_report(
         total_tokens=total_tokens,
         by_model=dict(by_model),
         by_node=dict(by_node),
-        generated_at=datetime.now(timezone.utc).isoformat(),
+        generated_at=datetime.now(UTC).isoformat(),
     )

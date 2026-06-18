@@ -9,7 +9,6 @@ and org_plans enhancements for soft/hard limits and plan-tier features.
 """
 
 from alembic import op
-import sqlalchemy as sa
 
 # revision identifiers
 revision = "007"

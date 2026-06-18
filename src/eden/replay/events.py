@@ -44,10 +44,9 @@ import json
 import logging
 import re
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
-from typing import Any, Optional
-
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -86,7 +85,7 @@ class SessionEvent:
     # Optional: the trace_id this session is associated
     # with. The session may be the user-side mirror of an
     # agent run.
-    trace_id: Optional[str] = None
+    trace_id: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -116,14 +115,14 @@ class Session:
     id: str
     org_id: str
     started_at: str
-    ended_at: Optional[str] = None
+    ended_at: str | None = None
     # Optional: the user agent (for replay context).
     user_agent: str = ""
     # Optional: the viewport size at start.
     viewport_w: int = 0
     viewport_h: int = 0
     # Optional: the trace this session is associated with.
-    trace_id: Optional[str] = None
+    trace_id: str | None = None
     # Counters (computed at replay time).
     event_count: int = 0
 
@@ -240,11 +239,11 @@ class SessionRecorder:
         user_agent: str = "",
         viewport_w: int = 0,
         viewport_h: int = 0,
-        trace_id: Optional[str] = None,
+        trace_id: str | None = None,
     ) -> Session:
         import uuid as _uuid
         sid = "sess-" + _uuid.uuid4().hex[:16]
-        now = datetime.now(timezone.utc).isoformat()
+        now = datetime.now(UTC).isoformat()
         s = Session(
             id=sid, org_id=org_id, started_at=now,
             user_agent=user_agent,
@@ -255,11 +254,11 @@ class SessionRecorder:
         self._events[sid] = []
         return s
 
-    def end(self, session_id: str) -> Optional[Session]:
+    def end(self, session_id: str) -> Session | None:
         s = self._sessions.get(session_id)
         if s is None:
             return None
-        s.ended_at = datetime.now(timezone.utc).isoformat()
+        s.ended_at = datetime.now(UTC).isoformat()
         s.event_count = len(self._events.get(session_id, []))
         return s
 
@@ -268,7 +267,7 @@ class SessionRecorder:
         session_id: str,
         event_type: str,
         payload: dict[str, Any],
-    ) -> Optional[SessionEvent]:
+    ) -> SessionEvent | None:
         """Append one event to a session."""
         s = self._sessions.get(session_id)
         if s is None:
@@ -281,7 +280,7 @@ class SessionRecorder:
             session_id=session_id,
             sequence=seq,
             event_type=event_type,
-            timestamp=datetime.now(timezone.utc).isoformat(),
+            timestamp=datetime.now(UTC).isoformat(),
             payload=payload,
         )
         if self._redact:
@@ -292,7 +291,7 @@ class SessionRecorder:
     def list_events(self, session_id: str) -> list[SessionEvent]:
         return list(self._events.get(session_id, []))
 
-    def get_session(self, session_id: str) -> Optional[Session]:
+    def get_session(self, session_id: str) -> Session | None:
         return self._sessions.get(session_id)
 
 

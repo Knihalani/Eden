@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Any, Optional
+from typing import Any
 
 from eden.observability.ingestion.attribution import Attribution
 from eden.observability.ingestion.errors import SchemaInvalidError
@@ -61,9 +61,9 @@ def _openai_to_raw(item: dict[str, Any]) -> dict[str, Any]:
     # Choices: extract first message content for backward-compat with
     # downstream detectors that read payload["openai"]["first_message_content"].
     choices = item.get("choices") or []
-    first_content: Optional[str] = None
-    first_role: Optional[str] = None
-    finish_reason: Optional[str] = None
+    first_content: str | None = None
+    first_role: str | None = None
+    finish_reason: str | None = None
     if isinstance(choices, list) and choices:
         first = choices[0] or {}
         msg = first.get("message") or {}
@@ -111,7 +111,7 @@ def _openai_to_raw(item: dict[str, Any]) -> dict[str, Any]:
                 pass
 
     # ── Logprobs: top_logprobs blob verbatim ──
-    logprobs_data: Optional[dict[str, Any]] = None
+    logprobs_data: dict[str, Any] | None = None
     raw_logprobs = (choices[0] if choices else {}).get("logprobs") if choices else None
     if raw_logprobs and isinstance(raw_logprobs, dict):
         logprobs_data = raw_logprobs
@@ -136,7 +136,7 @@ def _openai_to_raw(item: dict[str, Any]) -> dict[str, Any]:
 
     # ── Cache hit detection ──
     cache_hit = bool(reasoning.get("cached_input_tokens", 0) and reasoning["cached_input_tokens"] > 0)
-    prompt_cache_savings_usd: Optional[float] = None
+    prompt_cache_savings_usd: float | None = None
     # The cost engine fills this in later. We just record that cache hit.
 
     # Cost: leave to upstream cost service; we don't hardcode pricing
@@ -174,7 +174,7 @@ def _openai_to_raw(item: dict[str, Any]) -> dict[str, Any]:
 
     # The full response body is captured as-is. The portal transcript
     # view renders it without re-parsing.
-    response_body: Optional[dict[str, Any]] = dict(item) if item else None
+    response_body: dict[str, Any] | None = dict(item) if item else None
     if response_body is not None:
         # Strip any top-level keys we already expose as dedicated fields
         # to avoid duplicating massive JSON in the request_body.
@@ -185,7 +185,7 @@ def _openai_to_raw(item: dict[str, Any]) -> dict[str, Any]:
     # request alongside the response) is passed in via the
     # `request_payload` key. Otherwise we leave it None and the
     # portal can fall back to a synthetic reconstruction.
-    request_body: Optional[dict[str, Any]] = item.get("request_payload") or item.get("request")
+    request_body: dict[str, Any] | None = item.get("request_payload") or item.get("request")
 
     return {
         "event_id": response_id or f"openai_{model}_{usage.get('total_tokens', '')}",
@@ -234,7 +234,7 @@ def _openai_to_raw(item: dict[str, Any]) -> dict[str, Any]:
 class OpenAIDecoder:
     source_format = "openai"
 
-    def detect(self, body: bytes, content_type: Optional[str]) -> bool:
+    def detect(self, body: bytes, content_type: str | None) -> bool:
         try:
             parsed = json.loads(body)
         except (ValueError, UnicodeDecodeError):
@@ -388,7 +388,7 @@ def _anthropic_to_raw(item: dict[str, Any]) -> dict[str, Any]:
 
     # Full response body — every content block, every field. The
     # transcript view renders straight from this.
-    response_body: Optional[dict[str, Any]] = None
+    response_body: dict[str, Any] | None = None
     if response_id or content is not None:
         response_body = {
             "id": response_id or None,
@@ -403,7 +403,7 @@ def _anthropic_to_raw(item: dict[str, Any]) -> dict[str, Any]:
 
     # System block + messages: only present if the SDK forwards the
     # original request via `request_payload`. We accept it as-is.
-    request_body: Optional[dict[str, Any]] = item.get("request_payload") or item.get("request")
+    request_body: dict[str, Any] | None = item.get("request_payload") or item.get("request")
     if isinstance(request_body, dict):
         # Add media descriptors if any were on the request side.
         pass
@@ -490,7 +490,7 @@ def _anthropic_to_raw(item: dict[str, Any]) -> dict[str, Any]:
 class AnthropicDecoder:
     source_format = "anthropic"
 
-    def detect(self, body: bytes, content_type: Optional[str]) -> bool:
+    def detect(self, body: bytes, content_type: str | None) -> bool:
         try:
             parsed = json.loads(body)
         except (ValueError, UnicodeDecodeError):
@@ -671,7 +671,7 @@ def _bedrock_to_raw(item: dict[str, Any]) -> dict[str, Any]:
 class BedrockDecoder:
     source_format = "bedrock"
 
-    def detect(self, body: bytes, content_type: Optional[str]) -> bool:
+    def detect(self, body: bytes, content_type: str | None) -> bool:
         try:
             parsed = json.loads(body)
         except (ValueError, UnicodeDecodeError):
@@ -753,8 +753,8 @@ def _gemini_to_raw(item: dict[str, Any]) -> dict[str, Any]:
 
     # Extract first text from candidates for backward-compat detectors
     candidates = item.get("candidates") or []
-    first_text: Optional[str] = None
-    finish_reason: Optional[str] = None
+    first_text: str | None = None
+    finish_reason: str | None = None
     if isinstance(candidates, list) and candidates:
         first = candidates[0] or {}
         finish_reason = first.get("finishReason")
@@ -876,14 +876,12 @@ def _gemini_to_raw(item: dict[str, Any]) -> dict[str, Any]:
         outcome = "success"
     elif finish_reason in ("MAX_TOKENS",):
         outcome = "partial"
-    elif finish_reason in ("SAFETY", "RECITATION", "OTHER"):
-        outcome = "failure"
-    elif finish_reason == "BLOCKLIST":
+    elif finish_reason in ("SAFETY", "RECITATION", "OTHER") or finish_reason == "BLOCKLIST":
         outcome = "failure"
 
     # Full response body — portal transcript view renders straight from
     # this. Keep the entire response in JSONB.
-    response_body: Optional[dict[str, Any]] = {
+    response_body: dict[str, Any] | None = {
         "candidates": candidates,
         "modelVersion": model or None,
         "responseId": response_id or None,
@@ -891,7 +889,7 @@ def _gemini_to_raw(item: dict[str, Any]) -> dict[str, Any]:
         "modelVersion": item.get("modelVersion"),
     } if (candidates or usage_metadata) else None
 
-    request_body: Optional[dict[str, Any]] = item.get("request_payload") or item.get("request")
+    request_body: dict[str, Any] | None = item.get("request_payload") or item.get("request")
 
     return {
         "event_id": response_id or f"gemini_{model}",
@@ -928,7 +926,7 @@ def _gemini_to_raw(item: dict[str, Any]) -> dict[str, Any]:
 class GeminiDecoder:
     source_format = "gemini"
 
-    def detect(self, body: bytes, content_type: Optional[str]) -> bool:
+    def detect(self, body: bytes, content_type: str | None) -> bool:
         try:
             parsed = json.loads(body)
         except (ValueError, UnicodeDecodeError):

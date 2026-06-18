@@ -36,9 +36,8 @@ import re
 import secrets
 import uuid
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta, timezone
-from typing import Any, Optional
-
+from datetime import UTC, datetime, timedelta
+from typing import Any
 
 # ── Constants ──────────────────────────────────────────────────────
 
@@ -83,7 +82,7 @@ def _validate_token_format(token: str) -> bool:
     return bool(re.match(r"^[A-Za-z0-9_-]+$", token))
 
 
-def _resolve_expiry(days: Optional[int]) -> Optional[datetime]:
+def _resolve_expiry(days: int | None) -> datetime | None:
     """Convert a user-supplied expiry-in-days into a UTC timestamp.
 
     ``None`` means "no expiry" — only admins may set this; the
@@ -92,7 +91,7 @@ def _resolve_expiry(days: Optional[int]) -> Optional[datetime]:
     if days is None:
         return None
     days = max(1, min(int(days), MAX_EXPIRY_DAYS))
-    return datetime.now(timezone.utc) + timedelta(days=days)
+    return datetime.now(UTC) + timedelta(days=days)
 
 
 # ── Dataclasses ────────────────────────────────────────────────────
@@ -114,17 +113,17 @@ class SharedTrace:
     token_hash: str
     token_prefix: str
     created_by: str
-    label: Optional[str]
-    expires_at: Optional[datetime]
-    revoked_at: Optional[datetime]
+    label: str | None
+    expires_at: datetime | None
+    revoked_at: datetime | None
     view_count: int
-    last_viewed_at: Optional[datetime]
+    last_viewed_at: datetime | None
     created_at: datetime
     # The plaintext token — set ONLY on creation, never loaded
     # from the DB. The serialiser (``to_dict``) drops this field
     # for all return paths except the one that hands the URL to
     # the user who just minted the share.
-    _plaintext_token: Optional[str] = field(default=None, repr=False)
+    _plaintext_token: str | None = field(default=None, repr=False)
 
     def public_url(self, base_url: str) -> str:
         """Render the share URL. Only valid when ``_plaintext_token`` is set."""
@@ -135,13 +134,13 @@ class SharedTrace:
             )
         return f"{base_url.rstrip('/')}/public/traces/{self._plaintext_token}"
 
-    def is_active(self, now: Optional[datetime] = None) -> bool:
+    def is_active(self, now: datetime | None = None) -> bool:
         """True if the share link is currently usable."""
         if self.revoked_at is not None:
             return False
         if self.expires_at is None:
             return True
-        now = now or datetime.now(timezone.utc)
+        now = now or datetime.now(UTC)
         return self.expires_at > now
 
     def to_dict(self, *, include_plaintext: bool = False) -> dict[str, Any]:
@@ -185,7 +184,7 @@ class SavedSearch:
     is_shared: bool
     is_pinned: bool
     tags: list[str]
-    last_used_at: Optional[datetime]
+    last_used_at: datetime | None
     use_count: int
     created_at: datetime
     updated_at: datetime
@@ -233,8 +232,8 @@ class ShareService:
         org_id: str,
         trace_id: str,
         created_by: str,
-        expiry_days: Optional[int] = DEFAULT_EXPIRY_DAYS,
-        label: Optional[str] = None,
+        expiry_days: int | None = DEFAULT_EXPIRY_DAYS,
+        label: str | None = None,
         base_url: str = "https://app.eden.example",
     ) -> SharedTrace:
         """Mint a new share link.
@@ -271,13 +270,13 @@ class ShareService:
             revoked_at=None,
             view_count=0,
             last_viewed_at=None,
-            created_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
             _plaintext_token=token,
         )
 
     # ── Lookup (internal + public) ─────────────────────────────
 
-    async def get_by_token(self, token: str) -> Optional[SharedTrace]:
+    async def get_by_token(self, token: str) -> SharedTrace | None:
         """Look up a share by its plaintext token. The public route uses this.
 
         Validates expiry + revocation. Does NOT bump view_count
@@ -300,7 +299,7 @@ class ShareService:
             return None
         return _row_to_shared_trace(row)
 
-    async def get_by_id(self, org_id: str, share_id: str) -> Optional[SharedTrace]:
+    async def get_by_id(self, org_id: str, share_id: str) -> SharedTrace | None:
         """Look up a share by its DB id (admin UI: list / revoke)."""
         row = await self._pg.fetchrow(
             """
@@ -374,7 +373,7 @@ class ShareService:
             share_id,
         )
 
-    async def purge_expired(self, org_id: Optional[str] = None) -> int:
+    async def purge_expired(self, org_id: str | None = None) -> int:
         """Delete shares whose ``expires_at`` is in the past and which
         are not revoked. Returns the count deleted.
 
@@ -428,10 +427,10 @@ class SavedSearchService:
         name: str,
         query_type: str,
         query: str,
-        params: Optional[dict[str, Any]] = None,
+        params: dict[str, Any] | None = None,
         is_shared: bool = False,
         is_pinned: bool = False,
-        tags: Optional[list[str]] = None,
+        tags: list[str] | None = None,
     ) -> SavedSearch:
         """Persist a new saved search.
 
@@ -464,14 +463,14 @@ class SavedSearchService:
         org_id: str,
         search_id: str,
         *,
-        name: Optional[str] = None,
-        query: Optional[str] = None,
-        query_type: Optional[str] = None,
-        params: Optional[dict[str, Any]] = None,
-        is_shared: Optional[bool] = None,
-        is_pinned: Optional[bool] = None,
-        tags: Optional[list[str]] = None,
-    ) -> Optional[SavedSearch]:
+        name: str | None = None,
+        query: str | None = None,
+        query_type: str | None = None,
+        params: dict[str, Any] | None = None,
+        is_shared: bool | None = None,
+        is_pinned: bool | None = None,
+        tags: list[str] | None = None,
+    ) -> SavedSearch | None:
         """Update an existing saved search. Only the owner or an admin
         may update; the route layer is responsible for the auth check.
 
@@ -529,7 +528,7 @@ class SavedSearchService:
 
     # ── Read ───────────────────────────────────────────────────
 
-    async def get_by_id(self, org_id: str, search_id: str) -> Optional[SavedSearch]:
+    async def get_by_id(self, org_id: str, search_id: str) -> SavedSearch | None:
         row = await self._pg.fetchrow(
             """
             SELECT id, org_id, owner_id, name, query_type, query,
@@ -633,7 +632,7 @@ def _row_to_shared_trace(row: dict[str, Any]) -> SharedTrace:
         revoked_at=_to_utc(row.get("revoked_at")),
         view_count=int(row.get("view_count") or 0),
         last_viewed_at=_to_utc(row.get("last_viewed_at")),
-        created_at=_to_utc(row["created_at"]) or datetime.now(timezone.utc),
+        created_at=_to_utc(row["created_at"]) or datetime.now(UTC),
     )
 
 
@@ -651,12 +650,12 @@ def _row_to_saved_search(row: dict[str, Any]) -> SavedSearch:
         tags=list(row.get("tags") or []),
         last_used_at=_to_utc(row.get("last_used_at")),
         use_count=int(row.get("use_count") or 0),
-        created_at=_to_utc(row["created_at"]) or datetime.now(timezone.utc),
-        updated_at=_to_utc(row["updated_at"]) or datetime.now(timezone.utc),
+        created_at=_to_utc(row["created_at"]) or datetime.now(UTC),
+        updated_at=_to_utc(row["updated_at"]) or datetime.now(UTC),
     )
 
 
-def _to_utc(value: Any) -> Optional[datetime]:
+def _to_utc(value: Any) -> datetime | None:
     """Coerce an asyncpg timestamptz to a UTC-aware datetime.
 
     asyncpg returns aware datetimes; we still normalise to UTC for
@@ -666,8 +665,8 @@ def _to_utc(value: Any) -> Optional[datetime]:
         return None
     if isinstance(value, datetime):
         if value.tzinfo is None:
-            return value.replace(tzinfo=timezone.utc)
-        return value.astimezone(timezone.utc)
+            return value.replace(tzinfo=UTC)
+        return value.astimezone(UTC)
     # asyncpg sometimes returns a datetime.date — shouldn't happen
     # for timestamptz, but defensive.
     if hasattr(value, "isoformat"):

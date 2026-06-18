@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import logging
 import uuid
-from typing import Any, Optional
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Path
 from pydantic import BaseModel, Field
@@ -26,7 +26,6 @@ from eden.services.cat2_intel.signals import (
     signal_signature,
 )
 from eden.storage.postgres import get_postgres_client
-
 
 logger = logging.getLogger(__name__)
 
@@ -63,8 +62,8 @@ class SignalResponse(BaseModel):
     description: str
     rule: CompiledRuleResponse
     enabled: bool
-    created_by: Optional[str]
-    cluster_id: Optional[str]
+    created_by: str | None
+    cluster_id: str | None
     match_count: int
     created_at: str
     updated_at: str

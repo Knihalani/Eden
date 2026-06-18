@@ -48,8 +48,7 @@ import logging
 import uuid
 from collections import Counter
 from dataclasses import dataclass, field
-from typing import Any, Optional
-
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -65,16 +64,16 @@ class LabelingItem:
     org_id: str
     payload: dict[str, Any]
     label_schema: dict[str, Any]
-    prompt: Optional[str]
+    prompt: str | None
     status: str
     tags: list[str]
     annotations_required: int
     required_skills: list[str]
-    source_trace_id: Optional[str] = None
-    source_span_id: Optional[str] = None
-    source_dataset_id: Optional[str] = None
-    source_synthetic_qa_id: Optional[str] = None
-    assigned_to: Optional[str] = None
+    source_trace_id: str | None = None
+    source_span_id: str | None = None
+    source_dataset_id: str | None = None
+    source_synthetic_qa_id: str | None = None
+    assigned_to: str | None = None
     created_at: str = ""
     updated_at: str = ""
 
@@ -89,8 +88,8 @@ class Annotation:
     annotator_id: str
     label: Any  # scalar or dict, depending on label_schema
     confidence: float
-    notes: Optional[str]
-    time_spent_ms: Optional[int]
+    notes: str | None
+    time_spent_ms: int | None
     skills_exercised: list[str]
     created_at: str = ""
     updated_at: str = ""
@@ -139,7 +138,7 @@ class IAAReport:
 def cohens_kappa(
     labels_a: list[Any],
     labels_b: list[Any],
-) -> Optional[float]:
+) -> float | None:
     """Compute Cohen's kappa for two annotators.
 
     Returns ``None`` if there's no overlap, only one unique
@@ -170,7 +169,7 @@ def cohens_kappa(
 def krippendorffs_alpha(
     annotations_by_annotator: dict[str, list[Any]],
     n_items: int,
-) -> Optional[float]:
+) -> float | None:
     """Compute Krippendorff's alpha for interval-disagreement
     on nominal data, with arbitrary N annotators and missing
     values.
@@ -259,7 +258,7 @@ class LabelingService:
         self,
         pg: Any,
         *,
-        user_skills: Optional[Any] = None,
+        user_skills: Any | None = None,
     ) -> None:
         self._pg = pg
         self._user_skills = user_skills or (lambda _uid: [])
@@ -272,14 +271,14 @@ class LabelingService:
         org_id: str,
         payload: dict[str, Any],
         label_schema: dict[str, Any],
-        prompt: Optional[str] = None,
-        tags: Optional[list[str]] = None,
-        required_skills: Optional[list[str]] = None,
+        prompt: str | None = None,
+        tags: list[str] | None = None,
+        required_skills: list[str] | None = None,
         annotations_required: int = 1,
-        source_trace_id: Optional[str] = None,
-        source_span_id: Optional[str] = None,
-        source_dataset_id: Optional[str] = None,
-        source_synthetic_qa_id: Optional[str] = None,
+        source_trace_id: str | None = None,
+        source_span_id: str | None = None,
+        source_dataset_id: str | None = None,
+        source_synthetic_qa_id: str | None = None,
     ) -> str:
         """Insert one item into the queue. Returns the new id."""
         item_id = str(uuid.uuid4())
@@ -412,9 +411,9 @@ class LabelingService:
         annotator_id: str,
         label: Any,
         confidence: float = 0.5,
-        notes: Optional[str] = None,
-        time_spent_ms: Optional[int] = None,
-        skills_exercised: Optional[list[str]] = None,
+        notes: str | None = None,
+        time_spent_ms: int | None = None,
+        skills_exercised: list[str] | None = None,
     ) -> Annotation:
         """Submit an annotation. UPSERT on (item, annotator)
         so revisions overwrite."""
@@ -497,7 +496,7 @@ class LabelingService:
         org_id: str,
         item_id: str,
         annotator_id: str,
-        reason: Optional[str] = None,
+        reason: str | None = None,
     ) -> None:
         """Mark an item as skipped (un-labelable)."""
         # Mark assignment completed (with the reason in notes
@@ -529,7 +528,7 @@ class LabelingService:
         self,
         *,
         org_id: str,
-        item_ids: Optional[list[str]] = None,
+        item_ids: list[str] | None = None,
     ) -> IAAReport:
         """Compute the IAA report.
 

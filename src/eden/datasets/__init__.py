@@ -1,7 +1,7 @@
 """Datasets module."""
 from eden.datasets.spreadsheet import (
-    AIHandler,
     FILTER_OPERATORS,
+    AIHandler,
     SpreadsheetColumn,
     SpreadsheetRow,
     SpreadsheetService,

@@ -19,8 +19,8 @@ import json
 import logging
 import statistics
 from dataclasses import dataclass, field
-from datetime import datetime, timezone, timedelta
-from typing import Any, Optional
+from datetime import UTC, datetime, timedelta
+from typing import Any
 
 from eden.config import get_settings
 
@@ -35,13 +35,13 @@ class AnomalyAlert:
     alert_id: str
     alert_type: str  # data_quality, throughput, cost_spike, pii_breach, schema_drift
     severity: str  # info, warning, critical
-    table: Optional[str]
+    table: str | None
     metric: str
     observed_value: float
     expected_range: tuple[float, float]
     deviation_percent: float
     message: str
-    timestamp: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+    timestamp: str = field(default_factory=lambda: datetime.now(UTC).isoformat())
     context: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
@@ -69,7 +69,7 @@ class AlertReport:
     alerts_triggered: int = 0
     alerts: list[AnomalyAlert] = field(default_factory=list)
     duration_ms: float = 0.0
-    timestamp: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+    timestamp: str = field(default_factory=lambda: datetime.now(UTC).isoformat())
 
 
 class AnomalyDetector:
@@ -100,7 +100,7 @@ class AnomalyDetector:
         self.throughput_window_hours = throughput_window_hours
         self.cost_spike_multiplier = cost_spike_multiplier
         self.pii_threshold = pii_threshold
-        self._postgres_client: Optional[Any] = None
+        self._postgres_client: Any | None = None
 
     async def _get_postgres(self) -> Any:
         if self._postgres_client is None:
@@ -112,7 +112,7 @@ class AnomalyDetector:
 
     async def check_all(self) -> AlertReport:
         """Run all anomaly detection checks and return aggregated alerts."""
-        start = datetime.now(timezone.utc)
+        start = datetime.now(UTC)
         report = AlertReport()
 
         # Run checks in parallel
@@ -134,7 +134,7 @@ class AnomalyDetector:
             report.checked_metrics += 1
 
         report.alerts_triggered = len(report.alerts)
-        report.duration_ms = (datetime.now(timezone.utc) - start).total_seconds() * 1000
+        report.duration_ms = (datetime.now(UTC) - start).total_seconds() * 1000
 
         # Persist alerts
         await self._persist_alerts(report.alerts)
@@ -154,7 +154,7 @@ class AnomalyDetector:
         alerts: list[AnomalyAlert] = []
 
         # Get last 7 days of quality scores
-        since = datetime.now(timezone.utc) - timedelta(days=7)
+        since = datetime.now(UTC) - timedelta(days=7)
         rows = await client.fetch(
             """
             SELECT quality_score, timestamp
@@ -181,7 +181,7 @@ class AnomalyDetector:
             if z_score < -self.z_threshold:
                 deviation = abs((current_score - mean) / mean) * 100 if mean > 0 else 0
                 alerts.append(AnomalyAlert(
-                    alert_id=f"dq-{table_name}-{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}",
+                    alert_id=f"dq-{table_name}-{datetime.now(UTC).strftime('%Y%m%d%H%M%S')}",
                     alert_type="data_quality",
                     severity="critical" if current_score < 0.5 else "warning",
                     table=table_name,
@@ -215,7 +215,7 @@ class AnomalyDetector:
                 if z_error > self.z_threshold:
                     deviation = (current_errors / max(mean_errors, 1)) * 100
                     alerts.append(AnomalyAlert(
-                        alert_id=f"dq-err-{table_name}-{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}",
+                        alert_id=f"dq-err-{table_name}-{datetime.now(UTC).strftime('%Y%m%d%H%M%S')}",
                         alert_type="data_quality",
                         severity="warning",
                         table=table_name,
@@ -233,7 +233,7 @@ class AnomalyDetector:
         client = await self._get_postgres()
         alerts: list[AnomalyAlert] = []
 
-        since = datetime.now(timezone.utc) - timedelta(hours=self.throughput_window_hours * 2)
+        since = datetime.now(UTC) - timedelta(hours=self.throughput_window_hours * 2)
         rows = await client.fetch(
             """
             SELECT
@@ -260,7 +260,7 @@ class AnomalyDetector:
             if z_score < -self.z_threshold:
                 deviation = abs((current_count - mean) / mean) * 100
                 alerts.append(AnomalyAlert(
-                    alert_id=f"throughput-{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}",
+                    alert_id=f"throughput-{datetime.now(UTC).strftime('%Y%m%d%H%M%S')}",
                     alert_type="throughput",
                     severity="critical" if current_count == 0 else "warning",
                     table="usage_events",
@@ -279,7 +279,7 @@ class AnomalyDetector:
         client = await self._get_postgres()
         alerts: list[AnomalyAlert] = []
 
-        since = datetime.now(timezone.utc) - timedelta(days=7)
+        since = datetime.now(UTC) - timedelta(days=7)
         rows = await client.fetch(
             """
             SELECT
@@ -303,7 +303,7 @@ class AnomalyDetector:
         if mean_cost > 0 and current_cost > mean_cost * self.cost_spike_multiplier:
             deviation = (current_cost / mean_cost) * 100
             alerts.append(AnomalyAlert(
-                alert_id=f"cost-{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}",
+                alert_id=f"cost-{datetime.now(UTC).strftime('%Y%m%d%H%M%S')}",
                 alert_type="cost_spike",
                 severity="critical" if current_cost > mean_cost * 10 else "warning",
                 table="usage_events",
@@ -322,7 +322,7 @@ class AnomalyDetector:
         client = await self._get_postgres()
         alerts: list[AnomalyAlert] = []
 
-        since = datetime.now(timezone.utc) - timedelta(days=1)
+        since = datetime.now(UTC) - timedelta(days=1)
         row = await client.fetchrow(
             """
             SELECT
@@ -343,7 +343,7 @@ class AnomalyDetector:
 
         if pii_rate > self.pii_threshold:
             alerts.append(AnomalyAlert(
-                alert_id=f"pii-{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}",
+                alert_id=f"pii-{datetime.now(UTC).strftime('%Y%m%d%H%M%S')}",
                 alert_type="pii_breach",
                 severity="critical",
                 table="usage_events",
@@ -395,7 +395,7 @@ class AnomalyDetector:
 
             if current_col_count != baseline_count:
                 alerts.append(AnomalyAlert(
-                    alert_id=f"schema-{table_name}-{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}",
+                    alert_id=f"schema-{table_name}-{datetime.now(UTC).strftime('%Y%m%d%H%M%S')}",
                     alert_type="schema_drift",
                     severity="warning",
                     table=table_name,
@@ -426,14 +426,14 @@ class AnomalyDetector:
     async def dispatch_alerts(
         self,
         alerts: list[AnomalyAlert],
-        channels: Optional[list[str]] = None,
+        channels: list[str] | None = None,
     ) -> dict[str, int]:
         """Dispatch alerts to configured channels.
 
         Channels: in_app, websocket, email, webhook, slack
         """
         channels = channels or ["in_app"]
-        dispatched = {c: 0 for c in channels}
+        dispatched = dict.fromkeys(channels, 0)
 
         for alert in alerts:
             for channel in channels:
@@ -540,9 +540,9 @@ class AnomalyDetector:
 
     async def get_alert_history(
         self,
-        alert_type: Optional[str] = None,
-        severity: Optional[str] = None,
-        since: Optional[datetime] = None,
+        alert_type: str | None = None,
+        severity: str | None = None,
+        since: datetime | None = None,
         limit: int = 100,
     ) -> list[dict[str, Any]]:
         """Get historical alerts from PostgreSQL."""

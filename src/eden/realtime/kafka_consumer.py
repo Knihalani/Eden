@@ -23,8 +23,8 @@ import asyncio
 import json
 import logging
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
-from typing import Any, Callable, Optional
+from datetime import UTC, datetime
+from typing import Any
 
 from eden.config import get_settings
 
@@ -57,7 +57,7 @@ class KafkaMessage:
     topic: str
     partition: int
     offset: int
-    key: Optional[str]
+    key: str | None
     value: dict[str, Any]
     timestamp: datetime
     headers: dict[str, str] = field(default_factory=dict)
@@ -77,7 +77,7 @@ class KafkaEventConsumer:
 
     def __init__(
         self,
-        bootstrap_servers: Optional[str] = None,
+        bootstrap_servers: str | None = None,
         group_id: str = "eden-consumer",
         auto_offset_reset: str = "earliest",
         max_poll_records: int = 500,
@@ -108,7 +108,7 @@ class KafkaEventConsumer:
 
         self._consumer: Any = None
         self._running = False
-        self._semaphore: Optional[asyncio.Semaphore] = None
+        self._semaphore: asyncio.Semaphore | None = None
         self._tasks: set[asyncio.Task] = set()
         self._metrics = {
             "messages_consumed": 0,
@@ -202,8 +202,8 @@ class KafkaEventConsumer:
                             key=msg.key,
                             value=msg.value,
                             timestamp=datetime.fromtimestamp(
-                                msg.timestamp / 1000.0, tz=timezone.utc
-                            ) if msg.timestamp else datetime.now(timezone.utc),
+                                msg.timestamp / 1000.0, tz=UTC
+                            ) if msg.timestamp else datetime.now(UTC),
                             headers={k: v.decode("utf-8") for k, v in (msg.headers or [])},
                         )
 
@@ -219,7 +219,7 @@ class KafkaEventConsumer:
                         await self._send_to_dlq(msg, str(exc))
 
                     self._metrics["messages_consumed"] += 1
-                    self._metrics["last_message_at"] = datetime.now(timezone.utc).isoformat()
+                    self._metrics["last_message_at"] = datetime.now(UTC).isoformat()
 
         except Exception as exc:
             logger.error(f"Kafka consumer error: {exc}")
@@ -270,7 +270,7 @@ class KafkaEventConsumer:
                         await self._send_to_dlq(msg, str(exc))
 
                     self._metrics["messages_consumed"] += 1
-                    self._metrics["last_message_at"] = datetime.now(timezone.utc).isoformat()
+                    self._metrics["last_message_at"] = datetime.now(UTC).isoformat()
 
         except Exception as exc:
             logger.error(f"Kafka Silver ETL consumer error: {exc}")
@@ -331,7 +331,7 @@ class KafkaEventConsumer:
                         await self._send_to_dlq(msg, str(exc))
 
                     self._metrics["messages_consumed"] += 1
-                    self._metrics["last_message_at"] = datetime.now(timezone.utc).isoformat()
+                    self._metrics["last_message_at"] = datetime.now(UTC).isoformat()
 
         except Exception as exc:
             logger.error(f"Kafka ClickHouse consumer error: {exc}")
@@ -359,7 +359,7 @@ class KafkaEventConsumer:
                 "partition": msg.partition,
                 "offset": msg.offset,
                 "error": error,
-                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "timestamp": datetime.now(UTC).isoformat(),
                 "value": msg.value,
             }
 
@@ -405,7 +405,7 @@ class KafkaEventProducer:
 
     def __init__(
         self,
-        bootstrap_servers: Optional[str] = None,
+        bootstrap_servers: str | None = None,
     ) -> None:
         self.bootstrap_servers = bootstrap_servers or getattr(
             settings, "kafka_bootstrap_servers", "localhost:9092"
@@ -434,7 +434,7 @@ class KafkaEventProducer:
         self,
         topic: str,
         event: dict[str, Any],
-        key: Optional[str] = None,
+        key: str | None = None,
     ) -> None:
         """Publish an event to a Kafka topic."""
         producer = await self._get_producer()
@@ -458,8 +458,8 @@ class KafkaEventProducer:
 
 # ── Singleton accessors ──────────────────────────────────────────────────
 
-_kafka_consumer: Optional[KafkaEventConsumer] = None
-_kafka_producer: Optional[KafkaEventProducer] = None
+_kafka_consumer: KafkaEventConsumer | None = None
+_kafka_producer: KafkaEventProducer | None = None
 
 
 async def get_kafka_consumer() -> KafkaEventConsumer:

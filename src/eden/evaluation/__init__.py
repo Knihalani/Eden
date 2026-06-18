@@ -4,53 +4,53 @@ Phase 5.6: Continuous evaluation, golden datasets, canary deployments,
 security scanning, auto-dataset promotion, and review gates.
 """
 
-from .golden_dataset import (
-    GoldenDataset,
-    GoldenCase,
-    DatasetRegistry,
-    EnvironmentCategory,
-    DifficultyLevel,
-    load_canonical_datasets,
-)
-from .ci_pipeline import (
-    CIPipeline,
-    StageName,
-    StageStatus,
-    StageResult,
-    PipelineReport,
+from .auto_dataset import (
+    AutoDatasetPromoter,
+    TraceQualityScore,
+    TraceQualityScorer,
 )
 from .canary import (
     CanaryDeployment,
     CanaryResult,
+    CanaryStatus,
     DeploymentConfig,
+    DeploymentStrategy,
     MetricThreshold,
     RollbackController,
-    DeploymentStrategy,
-    CanaryStatus,
     RolloutStage,
 )
+from .ci_pipeline import (
+    CIPipeline,
+    PipelineReport,
+    StageName,
+    StageResult,
+    StageStatus,
+)
+from .golden_dataset import (
+    DatasetRegistry,
+    DifficultyLevel,
+    EnvironmentCategory,
+    GoldenCase,
+    GoldenDataset,
+    load_canonical_datasets,
+)
 from .review_gate import (
+    EnvironmentDiff,
+    ReviewDecision,
+    ReviewGate,
     RiskClassifier,
     RiskLevel,
-    ReviewGate,
-    ReviewDecision,
-    EnvironmentDiff,
 )
 from .security_scanner import (
-    SecurityScanner,
-    SecurityIssue,
-    Severity,
-    IssueCategory,
-    ScanResult,
-    SecurityGatePolicy,
     DependencyVerifier,
+    IssueCategory,
     SASTScanner,
     SBOMGenerator,
-)
-from .auto_dataset import (
-    AutoDatasetPromoter,
-    TraceQualityScorer,
-    TraceQualityScore,
+    ScanResult,
+    SecurityGatePolicy,
+    SecurityIssue,
+    SecurityScanner,
+    Severity,
 )
 
 __all__ = [

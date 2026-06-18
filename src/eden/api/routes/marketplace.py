@@ -30,7 +30,6 @@ from eden.marketplace import (
     EnvCardSummary,
     ForkRequest,
     QualityBand,
-    Review,
     SubmitRequest,
     create_card,
     flag_review,

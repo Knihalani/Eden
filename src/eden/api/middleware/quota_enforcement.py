@@ -14,16 +14,13 @@ Depends on:
 """
 
 import logging
-from typing import Optional
 
 from fastapi import Request
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse, Response
 
-from eden.api.middleware.tenant_rate_limit import TenantRateLimitMiddleware
 from eden.api.utils.auth import decode_access_token
 from eden.services.usage_service import UsageService
-from eden.storage.postgres import get_postgres_client
 
 logger = logging.getLogger(__name__)
 
@@ -31,7 +28,6 @@ logger = logging.getLogger(__name__)
 # A request may trigger checks for multiple resources.
 PATH_RESOURCE_MAP: dict[str, list[str]] = {
     "/jobs": ["jobs"],
-    "/v1/jobs": ["jobs"],
     "/specs": ["jobs"],
     "/benchmark": ["jobs"],
     "/orgs/": ["seats", "references"],  # org-scoped writes (members, refs, etc.)
@@ -52,7 +48,7 @@ class QuotaEnforcementMiddleware(BaseHTTPMiddleware):
 
     def __init__(self, app):
         super().__init__(app)
-        self._usage_service: Optional[UsageService] = None
+        self._usage_service: UsageService | None = None
 
     async def _get_usage_service(self) -> UsageService:
         if self._usage_service is None:
@@ -60,7 +56,7 @@ class QuotaEnforcementMiddleware(BaseHTTPMiddleware):
         return self._usage_service
 
     @staticmethod
-    async def _resolve_org_id(request: Request) -> Optional[str]:
+    async def _resolve_org_id(request: Request) -> str | None:
         """Extract org_id from headers, cookies, or API key."""
         # 1. Header (used by API keys and some cookie flows)
         org_id = request.headers.get("x-org-id")

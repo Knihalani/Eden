@@ -15,8 +15,7 @@ Non-mutating requests (GET, HEAD, OPTIONS) are ignored.
 import hashlib
 import json
 import logging
-from datetime import datetime, timezone, timedelta
-from typing import Optional
+from datetime import UTC, datetime, timedelta
 
 from fastapi import Request
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -125,7 +124,7 @@ class IdempotencyMiddleware(BaseHTTPMiddleware):
 
         return response
 
-    async def _lookup_redis(self, cache_key: str) -> Optional[dict]:
+    async def _lookup_redis(self, cache_key: str) -> dict | None:
         try:
             redis = await get_redis_client()
             if redis is None:
@@ -137,7 +136,7 @@ class IdempotencyMiddleware(BaseHTTPMiddleware):
             logger.warning(f"Redis idempotency lookup failed: {exc}")
         return None
 
-    async def _lookup_postgres(self, key: str, method: str, path: str, body_hash: str, identity: str) -> Optional[dict]:
+    async def _lookup_postgres(self, key: str, method: str, path: str, body_hash: str, identity: str) -> dict | None:
         try:
             from eden.storage.postgres import get_postgres_client
             client = await get_postgres_client()
@@ -210,7 +209,7 @@ class IdempotencyMiddleware(BaseHTTPMiddleware):
         try:
             from eden.storage.postgres import get_postgres_client
             client = await get_postgres_client()
-            expires_at = datetime.now(timezone.utc) + timedelta(seconds=_TTL_SECONDS)
+            expires_at = datetime.now(UTC) + timedelta(seconds=_TTL_SECONDS)
             await client.execute(
                 """
                 INSERT INTO idempotency_keys (

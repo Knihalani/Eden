@@ -15,10 +15,9 @@ from __future__ import annotations
 
 import json
 import logging
-import uuid
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
-from typing import Any, Optional
+from datetime import UTC, datetime
+from typing import Any
 
 from eden.config import get_settings
 
@@ -56,7 +55,7 @@ class TraceEvent:
         }
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "TraceEvent":
+    def from_dict(cls, data: dict[str, Any]) -> TraceEvent:
         return cls(
             event_id=data["event_id"],
             event_type=data["event_type"],
@@ -133,7 +132,7 @@ class TraceEventStore:
             event.sequence = sequence
         else:
             # Fallback: use timestamp-based pseudo-sequence
-            event.sequence = int(datetime.now(timezone.utc).timestamp() * 1000)
+            event.sequence = int(datetime.now(UTC).timestamp() * 1000)
             sequence = event.sequence
 
         # Write to Redis stream (hot path)
@@ -292,7 +291,7 @@ class TraceEventStore:
         self,
         entity_id: str,
         from_sequence: int = 0,
-        to_sequence: Optional[int] = None,
+        to_sequence: int | None = None,
         limit: int = 1000,
     ) -> list[TraceEvent]:
         """Retrieve events for a trace, preferring Redis hot path.
@@ -434,7 +433,7 @@ class TraceEventStore:
 
 # ── Singleton accessor ──────────────────────────────────────────────────
 
-_trace_store: Optional[TraceEventStore] = None
+_trace_store: TraceEventStore | None = None
 
 
 async def get_trace_store() -> TraceEventStore:

@@ -27,13 +27,13 @@ from __future__ import annotations
 import logging
 
 from .base import Judge, JudgeContext, JudgeScore
+from .redis_tailer import RedisTailer
 from .registry import (
     JudgeRegistry,
     get_judge_registry,
     reset_judge_registry,
 )
 from .runner import JudgeRunner, run_judges_for_event
-from .redis_tailer import RedisTailer
 
 __all__ = [
     "Judge",
@@ -59,8 +59,8 @@ def register_default_judges(registry: JudgeRegistry) -> None:
     that don't need the built-ins. Idempotent — re-registering
     overwrites existing entries.
     """
-    from .hallucination import HallucinationJudge
     from .correctness import CorrectnessJudge
+    from .hallucination import HallucinationJudge
     from .tone import ToneJudge
 
     registry.register(HallucinationJudge())

@@ -9,22 +9,19 @@ Provides real-time visibility into:
 """
 
 import logging
-from datetime import datetime, timedelta, timezone
-from typing import Optional
+from datetime import UTC, datetime, timedelta
 
-from fastapi import APIRouter, HTTPException, Query, Depends
+from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel
 
 from eden.api.deps import get_current_user, require_org_permission
 from eden.optimization import (
-    ModelRouter,
-    TaskClassifier,
-    QualityValidator,
-    ExactMatchCache,
-    SemanticCache,
-    CostTracker,
-    BudgetStatus,
     BudgetExceededError,
+    BudgetStatus,
+    CostTracker,
+    ExactMatchCache,
+    ModelRouter,
+    SemanticCache,
 )
 from eden.optimization.cost_tracker import CostEvent
 
@@ -137,10 +134,10 @@ class CacheInvalidateResponse(BaseModel):
 # Module-level singletons (stateful across requests for real-time stats)
 # ============================================================================
 
-_model_router: Optional[ModelRouter] = None
-_exact_cache: Optional[ExactMatchCache] = None
-_semantic_cache: Optional[SemanticCache] = None
-_cost_tracker: Optional[CostTracker] = None
+_model_router: ModelRouter | None = None
+_exact_cache: ExactMatchCache | None = None
+_semantic_cache: SemanticCache | None = None
+_cost_tracker: CostTracker | None = None
 
 
 def _get_model_router() -> ModelRouter:
@@ -223,7 +220,7 @@ async def get_optimization_overview(
     )
 
     # Cost breakdown (from in-memory tracker, filtered by tenant)
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     start = now - timedelta(days=days)
     events = tracker.get_events(tenant_id=org_id)
     filtered = [e for e in events if datetime.fromisoformat(e.timestamp) >= start]
@@ -411,7 +408,7 @@ async def get_cost_breakdown(
     await require_org_permission("billing:view", org_id)
 
     tracker = _get_cost_tracker()
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     start = now - timedelta(days=days)
     events = tracker.get_events(tenant_id=org_id)
     filtered = [e for e in events if datetime.fromisoformat(e.timestamp) >= start]
@@ -504,7 +501,7 @@ async def get_budget_status(
     redis = await get_redis_client()
     current_spend = 0.0
     if redis:
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         month_key = now.strftime("%Y-%m")
         raw = await redis.hget(f"eden:cost:{org_id}:month:{month_key}", "total_cents")
         current_spend = float(raw or 0.0)

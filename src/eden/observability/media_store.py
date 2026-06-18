@@ -35,7 +35,7 @@ import logging
 import os
 import uuid
 from dataclasses import dataclass
-from typing import Any, Optional
+from typing import Any
 
 from eden.config import get_settings
 
@@ -104,7 +104,7 @@ class MediaStore:
         media_type: str,
         content_type: str,
         data: bytes,
-        metadata: Optional[dict[str, Any]] = None,
+        metadata: dict[str, Any] | None = None,
     ) -> MediaBlob:
         """Store bytes and return the blob metadata.
 
@@ -228,7 +228,7 @@ def _safe_tenant(tenant_id: str) -> str:
 
 # ── singleton ────────────────────────────────────────────────────────
 
-_store: Optional[MediaStore] = None
+_store: MediaStore | None = None
 
 
 def get_media_store() -> MediaStore:

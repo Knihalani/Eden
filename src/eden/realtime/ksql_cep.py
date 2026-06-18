@@ -19,11 +19,10 @@ ksqlDB API surface used:
 
 from __future__ import annotations
 
-import asyncio
 import json
 import logging
 import os
-from typing import Any, AsyncIterator, Optional
+from typing import Any
 
 import aiohttp
 
@@ -94,11 +93,11 @@ class KsqlDBClient:
 
     def __init__(self, base_url: str) -> None:
         self._base_url = base_url.rstrip("/")
-        self._session: Optional[aiohttp.ClientSession] = None
+        self._session: aiohttp.ClientSession | None = None
         self._statements_applied: set[str] = set()
 
     @classmethod
-    def from_env(cls) -> Optional["KsqlDBClient"]:
+    def from_env(cls) -> KsqlDBClient | None:
         """Return a client if ksqlDB is enabled in env, else None.
 
         The None return value lets the rest of the platform fall
@@ -117,7 +116,7 @@ class KsqlDBClient:
             )
         return self._session
 
-    async def apply_statements(self, names: Optional[list[str]] = None) -> dict[str, bool]:
+    async def apply_statements(self, names: list[str] | None = None) -> dict[str, bool]:
         """Apply DDL statements. Idempotent — ksqlDB rejects
         ``CREATE TABLE`` re-runs but a 400 is treated as 'already
         exists' and returned as success."""
@@ -136,10 +135,7 @@ class KsqlDBClient:
                     headers={"Accept": "application/vnd.ksql.v1+json"},
                 ) as resp:
                     body = await resp.json()
-                    if resp.status < 300:
-                        results[name] = True
-                        self._statements_applied.add(name)
-                    elif "already exists" in json.dumps(body).lower():
+                    if resp.status < 300 or "already exists" in json.dumps(body).lower():
                         results[name] = True
                         self._statements_applied.add(name)
                     else:
@@ -153,7 +149,7 @@ class KsqlDBClient:
     async def query(
         self,
         sql: str,
-        params: Optional[dict[str, Any]] = None,
+        params: dict[str, Any] | None = None,
     ) -> list[dict[str, Any]]:
         """Run a SELECT and return the materialized rows."""
         session = await self._ensure_session()
@@ -195,10 +191,10 @@ class KsqlDBClient:
 # ─────────────────────────────────────────────────────────────────────────────
 
 
-_ksql_client: Optional[KsqlDBClient] = None
+_ksql_client: KsqlDBClient | None = None
 
 
-def get_ksql_client() -> Optional[KsqlDBClient]:
+def get_ksql_client() -> KsqlDBClient | None:
     """Lazy singleton. Returns None if ksqlDB is not enabled."""
     global _ksql_client
     if _ksql_client is None:

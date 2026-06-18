@@ -8,8 +8,6 @@ a single place to monkey-patch.
 
 from __future__ import annotations
 
-from typing import Any
-
 from eden.storage.postgres import get_postgres_client
 
 

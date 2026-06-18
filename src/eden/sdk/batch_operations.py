@@ -7,8 +7,9 @@ and async dataset operations with progress tracking.
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Callable, Coroutine, Iterator
 from dataclasses import dataclass, field
-from typing import Any, Callable, Coroutine, Iterator, TypeVar
+from typing import Any, TypeVar
 
 T = TypeVar("T")
 

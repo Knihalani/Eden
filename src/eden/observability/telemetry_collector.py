@@ -19,8 +19,8 @@ import time
 import uuid
 from collections import defaultdict
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
-from typing import Any, Optional
+from datetime import UTC, datetime
+from typing import Any
 
 from eden.config import get_settings
 
@@ -39,45 +39,45 @@ class TelemetryEvent:
     realm: str  # "environment" | "production"
     event_type: str  # "span.start", "span.end", "tool.call", "llm.completion", "env.step", etc.
     timestamp: str  # ISO 8601
-    agent_id: Optional[str] = None
-    agent_version: Optional[str] = None
-    environment_id: Optional[str] = None
-    parent_span_id: Optional[str] = None
-    span_id: Optional[str] = None
-    name: Optional[str] = None
-    duration_ms: Optional[float] = None
+    agent_id: str | None = None
+    agent_version: str | None = None
+    environment_id: str | None = None
+    parent_span_id: str | None = None
+    span_id: str | None = None
+    name: str | None = None
+    duration_ms: float | None = None
     payload: dict[str, Any] = field(default_factory=dict)
     metrics: dict[str, float] = field(default_factory=dict)
     attributes: dict[str, str] = field(default_factory=dict)
     tags: list[str] = field(default_factory=list)
-    outcome: Optional[str] = None  # "success", "failure", "partial", "timeout", "crash"
+    outcome: str | None = None  # "success", "failure", "partial", "timeout", "crash"
     # Phase 7.0 — which ingestion format produced this row. Defaults to
     # the existing in-process emit path. The multi-format ingestion layer
     # stamps one of: "otel", "helicone", "langfuse", "openai", "anthropic",
     # "bedrock", "gemini", "framework", "webhook". The collector also
     # backfills this for events created in-process by the SDK decorators
     # and auto-instrumentation.
-    source_format: Optional[str] = "eden_native"
+    source_format: str | None = "eden_native"
     # Phase 7.2 — full LLM call capture. The decoders populate these
     # fields with the COMPLETE request/response bodies and any provider
     # extensions (reasoning, tool calls, images, logprobs, citations).
     # The transcript view in the portal renders straight from these.
-    request_body: Optional[dict[str, Any]] = None
-    response_body: Optional[dict[str, Any]] = None
-    reasoning: Optional[dict[str, Any]] = None
+    request_body: dict[str, Any] | None = None
+    response_body: dict[str, Any] | None = None
+    reasoning: dict[str, Any] | None = None
     tool_calls_full: list[dict[str, Any]] = field(default_factory=list)
     tool_results: list[dict[str, Any]] = field(default_factory=list)
     images: list[dict[str, Any]] = field(default_factory=list)
     audio: list[dict[str, Any]] = field(default_factory=list)
-    logprobs: Optional[dict[str, Any]] = None
+    logprobs: dict[str, Any] | None = None
     citations: list[dict[str, Any]] = field(default_factory=list)
-    finish_reason: Optional[str] = None
-    stop_sequence: Optional[str] = None
-    system_fingerprint: Optional[str] = None
+    finish_reason: str | None = None
+    stop_sequence: str | None = None
+    system_fingerprint: str | None = None
     cache_hit: bool = False
-    prompt_cache_savings_usd: Optional[float] = None
-    model_version: Optional[str] = None
-    service_tier: Optional[str] = None
+    prompt_cache_savings_usd: float | None = None
+    model_version: str | None = None
+    service_tier: str | None = None
     # Phase A (Laminar 20x dedup) — content-addressed dedup of the
     # request/response message arrays. Each entry is the 64-char hex
     # SHA-256 of the canonical-JSON form of one message. Spans store
@@ -131,7 +131,7 @@ class TelemetryEvent:
         }
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "TelemetryEvent":
+    def from_dict(cls, data: dict[str, Any]) -> TelemetryEvent:
         return cls(
             event_id=data["event_id"],
             tenant_id=data["tenant_id"],
@@ -185,7 +185,7 @@ class TraceTree:
     span_map: dict[str, dict[str, Any]]
     total_duration_ms: float
     span_count: int
-    outcome: Optional[str] = None
+    outcome: str | None = None
 
 
 @dataclass
@@ -363,7 +363,7 @@ class TelemetryCollector:
         # Ingestion latency
         try:
             event_ts = datetime.fromisoformat(event.timestamp.replace("Z", "+00:00"))
-            ingest_latency_ms = (datetime.now(timezone.utc) - event_ts).total_seconds() * 1000
+            ingest_latency_ms = (datetime.now(UTC) - event_ts).total_seconds() * 1000
             event.metrics["_ingest_latency_ms"] = max(0.0, round(ingest_latency_ms, 2))
         except Exception:
             pass
@@ -568,7 +568,7 @@ class TelemetryCollector:
                 "model_version": event.model_version or "",
                 "cache_hit": 1 if event.cache_hit else 0,
                 "prompt_cache_savings_usd": float(event.prompt_cache_savings_usd or 0.0),
-                "ingested_at": datetime.now(timezone.utc).isoformat(),
+                "ingested_at": datetime.now(UTC).isoformat(),
             }])
         except Exception as exc:
             logger.debug(f"ClickHouse telemetry insert failed: {exc}")
@@ -615,7 +615,8 @@ class TelemetryCollector:
         """
         try:
             from eden.observability.typesense_client import (
-                get_typesense_client, build_span_doc,
+                build_span_doc,
+                get_typesense_client,
             )
             client = get_typesense_client()
             if client is None:
@@ -634,7 +635,7 @@ class TelemetryCollector:
 
     # ── Query API ─────────────────────────────────────────────────────────
 
-    async def get_trace_tree(self, tenant_id: str, trace_id: str) -> Optional[TraceTree]:
+    async def get_trace_tree(self, tenant_id: str, trace_id: str) -> TraceTree | None:
         """Build a hierarchical trace tree from stored telemetry events."""
         client = await self._get_postgres()
         if not client:
@@ -711,7 +712,7 @@ class TelemetryCollector:
         span_map: dict[str, dict[str, Any]] = {}
         root_spans: list[dict[str, Any]] = []
         total_duration = 0.0
-        outcome: Optional[str] = None
+        outcome: str | None = None
         realm = "environment"
 
         for row in rows:
@@ -780,7 +781,7 @@ class TelemetryCollector:
         metric_name: str = "duration_ms",
         x_axis: str = "name",
         days: int = 7,
-    ) -> Optional[HeatmapData]:
+    ) -> HeatmapData | None:
         """Build a performance heatmap from telemetry events."""
         client = await self._get_postgres()
         if not client:
@@ -853,7 +854,7 @@ class TelemetryCollector:
             max_value=max_val if max_val != float("-inf") else 0.0,
         )
 
-    async def get_timeline(self, tenant_id: str, trace_id: str) -> Optional[TimelineData]:
+    async def get_timeline(self, tenant_id: str, trace_id: str) -> TimelineData | None:
         """Build a step timeline for a single trace."""
         client = await self._get_postgres()
         if not client:
@@ -877,7 +878,7 @@ class TelemetryCollector:
 
         steps: list[dict[str, Any]] = []
         markers: list[dict[str, Any]] = []
-        base_time: Optional[datetime] = None
+        base_time: datetime | None = None
 
         for row in rows:
             try:
@@ -922,7 +923,7 @@ class TelemetryCollector:
         tenant_id: str,
         env_trace_id: str,
         prod_trace_id: str,
-    ) -> Optional[dict[str, Any]]:
+    ) -> dict[str, Any] | None:
         """Build a comparative summary between environment and production traces."""
         env_tree = await self.get_trace_tree(tenant_id, env_trace_id)
         prod_tree = await self.get_trace_tree(tenant_id, prod_trace_id)
@@ -1017,7 +1018,7 @@ class TelemetryCollector:
         tier: str,            # 'L1' | 'L2' | 'DB'
         hit: bool,
         latency_ms: float,
-        cache_key: Optional[str] = None,
+        cache_key: str | None = None,
     ) -> bool:
         """Emit a TelemetryEvent for a KB cache lookup. The event
         carries ``tier`` and ``hit`` as tags so the dashboard can
@@ -1187,7 +1188,7 @@ class TelemetryCollector:
 
 # ── Singleton accessor ──────────────────────────────────────────────────
 
-_telemetry_collector: Optional[TelemetryCollector] = None
+_telemetry_collector: TelemetryCollector | None = None
 
 
 async def get_telemetry_collector() -> TelemetryCollector:

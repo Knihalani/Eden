@@ -14,10 +14,10 @@ import json
 import logging
 import time
 from dataclasses import dataclass, field
-from datetime import datetime, timezone, timedelta
+from datetime import UTC, datetime
 from enum import Enum
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -48,7 +48,7 @@ class MetricThreshold:
 
     metric: str
     max_regression_pct: float = 5.0  # For most metrics, lower is regression
-    max_absolute_value: Optional[float] = None
+    max_absolute_value: float | None = None
     window_minutes: int = 5
 
 
@@ -81,7 +81,7 @@ class CanaryResult:
     confidence: float = 0.0
     metrics: dict[str, Any] = field(default_factory=dict)
     duration_ms: float = 0.0
-    timestamp: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+    timestamp: str = field(default_factory=lambda: datetime.now(UTC).isoformat())
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -165,7 +165,7 @@ class CanaryDeployment:
         )
     """
 
-    def __init__(self, state_dir: Optional[Path] = None):
+    def __init__(self, state_dir: Path | None = None):
         """Initialize canary deployment manager.
 
         Args:
@@ -390,7 +390,7 @@ class CanaryDeployment:
 
         # Check post-switch health
         if post_switch_metrics.get("error_rate", 0) > 0.05:
-            logger.warning(f"High error rate after switch. Rolling back.")
+            logger.warning("High error rate after switch. Rolling back.")
             await self._rollback(deployment_id, environment_id, current_version)
             return CanaryResult(
                 status="failed",
@@ -519,7 +519,7 @@ class CanaryDeployment:
         state_path = self._state_dir / f"{deployment_id}.json"
         if state_path.exists():
             state = json.loads(state_path.read_text())
-            state["rolled_back_at"] = datetime.now(timezone.utc).isoformat()
+            state["rolled_back_at"] = datetime.now(UTC).isoformat()
             state["rolled_back_to"] = previous_version
             state_path.write_text(json.dumps(state, indent=2))
 
@@ -530,7 +530,7 @@ class CanaryDeployment:
         state_path = self._state_dir / f"{deployment_id}.json"
         state_path.write_text(json.dumps(state, indent=2, default=str), encoding="utf-8")
 
-    def get_deployment_state(self, deployment_id: str) -> Optional[dict[str, Any]]:
+    def get_deployment_state(self, deployment_id: str) -> dict[str, Any] | None:
         """Get persisted deployment state."""
         state_path = self._state_dir / f"{deployment_id}.json"
         if not state_path.exists():
@@ -571,7 +571,7 @@ class RollbackController:
         },
     }
 
-    def __init__(self, canary: Optional[CanaryDeployment] = None):
+    def __init__(self, canary: CanaryDeployment | None = None):
         """Initialize rollback controller.
 
         Args:
@@ -617,7 +617,7 @@ class RollbackController:
             "environment_id": environment_id,
             "rolled_back_to": previous_version,
             "reason": reason,
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
             "verified": True,
         }
 

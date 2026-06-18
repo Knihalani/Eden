@@ -7,10 +7,8 @@ reproducibility and comparison.
 
 from __future__ import annotations
 
-import json
-import uuid
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 
@@ -26,7 +24,7 @@ class Experiment:
     prompt_ids: list[str] = field(default_factory=list)
     feature_store_refs: dict[str, Any] = field(default_factory=dict)
     status: str = "running"  # running | completed | failed | aborted
-    started_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    started_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     completed_at: datetime | None = None
     created_by: str | None = None
     baseline_experiment_id: str | None = None
@@ -60,7 +58,7 @@ class ExperimentRun:
     outputs: dict[str, Any] = field(default_factory=dict)
     artifacts: dict[str, Any] = field(default_factory=dict)
     status: str = "running"
-    started_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    started_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     completed_at: datetime | None = None
 
     def to_dict(self) -> dict[str, Any]:
@@ -126,7 +124,7 @@ class ExperimentTracker:
         experiment = self._experiments.get(experiment_id)
         if experiment:
             experiment.status = status
-            experiment.completed_at = datetime.now(timezone.utc)
+            experiment.completed_at = datetime.now(UTC)
         return experiment
 
     def set_baseline(self, experiment_name: str, experiment_id: str) -> None:

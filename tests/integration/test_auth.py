@@ -1,11 +1,14 @@
 """Integration tests for Eden authentication routes.
 
 Covers: signup, login, logout, /me, 2FA setup/verify/disable,
-        password reset flow, and invite-token signup.
+        password reset flow, invite-token signup, and the
+        authenticated ``/auth/invitations/accept`` token-redeem path
+        used by the onboarding wizard.
 """
 
 import pytest
 from fastapi.testclient import TestClient
+from unittest.mock import patch
 
 
 class TestAuthSignup:
@@ -231,3 +234,79 @@ class TestAuthInviteToken:
         })
 
         assert response.status_code == 404
+
+
+class TestAuthInvitationAccept:
+    """Tests for the token-redeem path used by ``/onboarding/org``'s
+    join branch. The endpoint is auth-gated and resolves a plaintext
+    invite token to a membership row."""
+
+    def test_accept_invitation_invalid_token(self, api_client: TestClient, auth_headers: dict):
+        """Invalid or expired token returns 404 (not 500)."""
+        # The autouse ``patch_invite_service`` fixture makes
+        # ``verify_invite_token`` return None, which the endpoint
+        # surfaces as 404. No membership row is touched.
+        response = api_client.post(
+            "/auth/invitations/accept?token=invalid-token",
+            headers=auth_headers,
+        )
+        assert response.status_code == 404
+        assert "Invalid" in response.json()["detail"]
+
+    def test_accept_invitation_unauthenticated(self, api_client: TestClient):
+        """Unauthenticated callers get 401 — the endpoint creates a
+        membership, so anonymous access would be a privilege issue."""
+        response = api_client.post(
+            "/auth/invitations/accept?token=anything",
+        )
+        assert response.status_code == 401
+
+    def test_accept_invitation_valid_token(
+        self, api_client: TestClient, auth_headers: dict
+    ):
+        """Valid token resolves the invite and returns org_id+role.
+
+        We override the autouse ``verify_invite_token`` patch with a
+        happy-path invite, then patch the DB-touching
+        ``accept_invitation`` to return its expected shape. The
+        endpoint should stitch them together and return
+        ``{org_id, role, org_name, message}``.
+
+        The autouse ``patch_invite_service`` fixture wraps the test,
+        so we patch at the import-site (the auth route module) to
+        bypass the wrapping. The auth route's ``verify_invite_token``
+        is just a module-level name rebound to the service's symbol,
+        so patching the import site is the canonical way to override
+        it inside a single test.
+        """
+        fake_invite = {
+            "id": "inv-1",
+            "org_id": "org-1",
+            "org_name": "Acme AI Labs",
+            "email": "test@example.com",
+            "role": "member",
+            "invited_by": "user-0",
+            "inviter_name": "Admin",
+            "expires_at": "2099-01-01T00:00:00",
+            "status": "pending",
+        }
+        from eden.api.routes import auth as auth_routes
+        with patch.object(
+            auth_routes,
+            "verify_invite_token",
+            return_value=fake_invite,
+        ), patch.object(
+            auth_routes,
+            "accept_invitation",
+            return_value={"org_id": "org-1", "role": "member"},
+        ):
+            response = api_client.post(
+                "/auth/invitations/accept?token=any-plaintext-token",
+                headers=auth_headers,
+            )
+        assert response.status_code == 200, response.text
+        body = response.json()
+        assert body["org_id"] == "org-1"
+        assert body["role"] == "member"
+        assert body["org_name"] == "Acme AI Labs"
+        assert "accepted" in body["message"].lower()

@@ -59,8 +59,7 @@ from __future__ import annotations
 import logging
 import uuid
 from dataclasses import dataclass, field
-from typing import Any, Optional
-
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -83,7 +82,7 @@ class Checkpoint:
     tool_calls: list[dict[str, Any]]      # tool calls in this step
     tool_results: list[dict[str, Any]]    # tool results
     response: dict[str, Any]              # the LLM response
-    prompt_override: Optional[str] = None  # user-supplied override
+    prompt_override: str | None = None  # user-supplied override
     started_at: str = ""
     ended_at: str = ""
     duration_ms: float = 0.0
@@ -115,7 +114,7 @@ class ReRunResult:
     from_step: int
     to_step: int
     checkpoints: list[Checkpoint]
-    prompt_override: Optional[str] = None
+    prompt_override: str | None = None
     # Diff vs the original trajectory — list of
     # (step_number, original_response, replayed_response)
     # for steps where the response differs.
@@ -176,7 +175,7 @@ class CheckpointStore:
     async def list_for_trace(
         self,
         trace_id: str,
-        org_id: Optional[str] = None,
+        org_id: str | None = None,
     ) -> list[Checkpoint]:
         """Load every checkpoint for a trace, in step order."""
         rows = await self._pg.fetch(
@@ -202,7 +201,7 @@ class CheckpointStore:
         self,
         trace_id: str,
         step_number: int,
-    ) -> Optional[Checkpoint]:
+    ) -> Checkpoint | None:
         """Load one specific checkpoint."""
         rows = await self._pg.fetch(
             """
@@ -244,7 +243,7 @@ class ReRunEngine:
         trace_id: str,
         *,
         from_step: int = 0,
-        prompt_override: Optional[str] = None,
+        prompt_override: str | None = None,
     ) -> ReRunResult:
         """Replay the trace from ``from_step`` onwards.
 

@@ -24,8 +24,8 @@ from __future__ import annotations
 
 import logging
 from dataclasses import asdict, dataclass, field
-from datetime import datetime, timezone
-from typing import Any, Optional
+from datetime import UTC, datetime
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -57,7 +57,7 @@ class AlertRule:
     description: str
     threshold: float
 
-    def evaluate(self, current_value: float) -> Optional[Alert]:
+    def evaluate(self, current_value: float) -> Alert | None:
         """Return an Alert if the rule fires (value > threshold), else
         ``None``. Rules are simple upper-bound checks — no sustained
         windowing here (that's the §10.3 monitoring layer's job)."""
@@ -69,7 +69,7 @@ class AlertRule:
                 message=self.description,
                 value=current_value,
                 threshold=self.threshold,
-                fired_at=datetime.now(timezone.utc).isoformat(),
+                fired_at=datetime.now(UTC).isoformat(),
             )
         return None
 
@@ -107,7 +107,7 @@ DEFAULT_RULES: list[AlertRule] = [
 ]
 
 
-def _percentile_from_histogram(rows: list[dict], pct: float) -> Optional[float]:
+def _percentile_from_histogram(rows: list[dict], pct: float) -> float | None:
     """Compute a percentile from the latency-histogram snapshot.
 
     The histogram is cumulative (Prometheus-style): ``buckets[b]``

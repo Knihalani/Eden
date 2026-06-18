@@ -42,7 +42,7 @@ class CorrectnessJudge(Judge):
     model_slot = "fast"
 
     async def score(
-        self, event: "TelemetryEvent", ctx: JudgeContext
+        self, event: TelemetryEvent, ctx: JudgeContext
     ) -> JudgeScore:
         if ctx.llm_client is None:
             return self._unknown(event, ctx, reason="no llm_client")
@@ -81,7 +81,7 @@ class CorrectnessJudge(Judge):
             return self._unknown(event, ctx, reason=f"judge_error:{type(exc).__name__}")
 
     def _unknown(
-        self, event: "TelemetryEvent", ctx: JudgeContext, *, reason: str
+        self, event: TelemetryEvent, ctx: JudgeContext, *, reason: str
     ) -> JudgeScore:
         return JudgeScore(
             judge_name=self.name,

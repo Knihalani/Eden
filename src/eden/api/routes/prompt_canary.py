@@ -10,8 +10,8 @@ from __future__ import annotations
 
 import logging
 import uuid
-from datetime import datetime, timezone
-from typing import Any, Optional
+from datetime import UTC, datetime
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Path
 from pydantic import BaseModel, Field
@@ -27,8 +27,8 @@ router = APIRouter(prefix="/orgs/{org_id}/prompts", tags=["prompts"])
 class CanaryCreateRequest(BaseModel):
     candidate_version: int
     traffic_pct: int = Field(..., ge=0, le=100)
-    expires_at: Optional[str] = None  # ISO 8601
-    notes: Optional[str] = None
+    expires_at: str | None = None  # ISO 8601
+    notes: str | None = None
 
 
 class CanaryPromoteRequest(BaseModel):
@@ -155,7 +155,7 @@ async def promote_canary(
         if not row:
             raise HTTPException(status_code=404, detail="Experiment not found")
         candidate_version = row["candidate_version"]
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         # Set the candidate to 100
         await client.execute(
             """
@@ -232,7 +232,7 @@ async def rollback_canary(
     client = await get_postgres_client()
     if not client:
         raise HTTPException(status_code=503, detail="Database unavailable")
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     try:
         await client.execute(
             """

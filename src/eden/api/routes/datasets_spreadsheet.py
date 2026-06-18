@@ -15,7 +15,7 @@ Five routes:
 from __future__ import annotations
 
 import logging
-from typing import Any, Optional
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Query
 from fastapi.responses import PlainTextResponse
@@ -28,7 +28,6 @@ from eden.datasets.spreadsheet import (
     generate_column,
 )
 from eden.storage.postgres import get_postgres_client
-
 
 logger = logging.getLogger(__name__)
 
@@ -84,9 +83,9 @@ class AddRowRequest(BaseModel):
 
 
 class UpdateRowRequest(BaseModel):
-    input: Optional[str] = None
-    expected_output: Optional[str] = None
-    values: Optional[dict[str, Any]] = None
+    input: str | None = None
+    expected_output: str | None = None
+    values: dict[str, Any] | None = None
 
 
 class FilterSpec(BaseModel):
@@ -101,8 +100,8 @@ class SortSpec(BaseModel):
 
 
 class ListRowsQuery(BaseModel):
-    filter: Optional[list[FilterSpec]] = None
-    sort: Optional[list[SortSpec]] = None
+    filter: list[FilterSpec] | None = None
+    sort: list[SortSpec] | None = None
     limit: int = Field(default=200, ge=1, le=10_000)
     offset: int = Field(default=0, ge=0)
 
@@ -111,7 +110,7 @@ class GenerateRequest(BaseModel):
     # The default stub handler is used unless the caller
     # supplies a real one via the app.state.llm_client.
     # For the v1 surface we always use the stub.
-    handler: Optional[str] = Field(default=None)
+    handler: str | None = Field(default=None)
 
 
 # ─- Helpers ──────────────────────────────────────────────────────
@@ -230,8 +229,8 @@ async def generate_column_route(
 async def list_rows_route(
     org_id: str = Path(...),
     dataset_id: str = Path(...),
-    filter: Optional[str] = Query(default=None, description="JSON-encoded list of filter specs."),
-    sort: Optional[str] = Query(default=None, description="JSON-encoded list of sort specs."),
+    filter: str | None = Query(default=None, description="JSON-encoded list of filter specs."),
+    sort: str | None = Query(default=None, description="JSON-encoded list of sort specs."),
     limit: int = Query(default=200, ge=1, le=10_000),
     offset: int = Query(default=0, ge=0),
     user: dict = Depends(_get_user()),

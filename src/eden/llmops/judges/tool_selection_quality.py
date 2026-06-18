@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import logging
 import time
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING
 
 from .base import Judge, JudgeContext, JudgeScore
 from .hallucination import _parse_judge_response

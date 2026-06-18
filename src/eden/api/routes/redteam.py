@@ -11,22 +11,19 @@ Three routes:
 from __future__ import annotations
 
 import logging
-from typing import Any, Optional
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Query
 from pydantic import BaseModel, Field
 
 from eden.redteam.probes import (
-    AgentInvoker,
-    ALL_CATEGORIES,
-    ALL_SEVERITIES,
     PROBE_CATALOGUE,
+    AgentInvoker,
     Probe,
-    ProbeRunResult,
     ProbeRunner,
+    ProbeRunResult,
     list_probes,
 )
-
 
 logger = logging.getLogger(__name__)
 
@@ -63,7 +60,7 @@ class RunProbeRequest(BaseModel):
     # The target endpoint URL (alternative to a registered
     # name). When set, the runner POSTs each attack prompt
     # to ``target_endpoint`` and reads the response body.
-    target_endpoint: Optional[str] = Field(
+    target_endpoint: str | None = Field(
         default=None,
         description="Optional URL to POST attack prompts to. The response body is the agent's response.",
     )
@@ -93,7 +90,7 @@ class ProbeRunResponse(BaseModel):
 
 class ScanRequest(BaseModel):
     target_name: str = Field(default="default", description="Registered agent name.")
-    target_endpoint: Optional[str] = Field(
+    target_endpoint: str | None = Field(
         default=None,
         description="Optional URL to POST attack prompts to.",
     )
@@ -275,8 +272,8 @@ async def list_findings_route(
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
     only_failures: bool = Query(default=False),
-    severity: Optional[str] = Query(default=None, pattern="^(low|medium|high|critical)$"),
-    probe_name: Optional[str] = Query(default=None),
+    severity: str | None = Query(default=None, pattern="^(low|medium|high|critical)$"),
+    probe_name: str | None = Query(default=None),
     user: dict = Depends(_get_user()),
 ) -> FindingsListResponse:
     """Read-side helper. The 501 stub for now; the persistence
