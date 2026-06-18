@@ -132,8 +132,8 @@ Milestones:
   ```
   Eden Agent CLI — AI-native agent development
 
-  Detected: Python project with {framework}
-  Indexed: {file_count} files, {line_count} lines
+  Detected: Python project with \{framework}
+  Indexed: \{file_count} files, \{line_count} lines
 
   ✓ Knowledge base: {connected/not configured}
   ✓ Observability: {connected/not configured}
@@ -168,7 +168,7 @@ Milestones:
     - `get_global_context(query, budget_tokens)` → formatted string
     - `get_tenant_context(query, budget_tokens)` → formatted string
     - `get_combined_context(query, budget_tokens)` → formatted string
-  - Query Eden API: `GET /v1/kb/query?query={q}&scope=global&limit={n}`
+  - Query Eden API: `GET /v1/kb/query?query=\{q}&scope=global&limit=\{n}`
   - Format results into structured sections: entry title, content, confidence, source
   - Token budget management: truncate/summarize to fit within budget
   - Caching: cache results for 5 minutes to avoid redundant API calls
@@ -277,7 +277,7 @@ Milestones:
 - [ ] Create `eden/observability_context.py`:
   - `ObservabilityContextProvider` class:
     - `get_context(agent_id, limit)` → formatted string
-    - Query Eden API: `GET /orgs/{org_id}/observability/traces?limit={n}`
+    - Query Eden API: `GET /orgs/\{org_id}/observability/traces?limit=\{n}`
     - For each trace, summarize: duration, outcome, error count, tool calls, cost
     - Compute aggregates: p50/p95/p99 latency, error rate, cost trend
     - Format as structured section for LLM consumption
@@ -291,7 +291,7 @@ Milestones:
 - [ ] Extend `EdenCoder._build_eden_context_message()`:
   - Add `[OBSERVABILITY CONTEXT]` section after KB sections
   - Include: recent traces, error distribution, latency percentiles, cost trends
-  - Include portal URL for detailed viewing: `{base_url}/portal/{org_id}/observability`
+  - Include portal URL for detailed viewing: `\{base_url}/portal/\{org_id}/observability`
 - [ ] Token budget: allocate remaining budget after KB (default ~2000 tokens for observability)
 - **Acceptance:** LLM references observability data in responses when relevant
 
@@ -305,7 +305,7 @@ Milestones:
     - `eden-traces show <trace_id>` — show detailed trace with ASCII span tree
     - `eden-traces compare <id1> <id2>` — compare two traces
   - Display as rich table: trace_id (short), realm, duration, outcome, spans, cost
-- [ ] Add portal URL references: "View full trace at `{portal_url}/traces/{trace_id}`"
+- [ ] Add portal URL references: "View full trace at `\{portal_url}/traces/\{trace_id}`"
 - **Acceptance:** `/eden-traces` shows real trace data from Eden API
 
 ### 3.4 Tests for Observability
@@ -336,7 +336,7 @@ Milestones:
     - `poll_job(job_id, callback)` → final `Job` status
     - `stream_job(job_id, callback)` → async stream of events
     - `format_results(job)` → formatted summary string
-  - Use Eden API: `POST /v1/jobs` to submit, `GET /v1/jobs/{id}` to poll
+  - Use Eden API: `POST /v1/jobs` to submit, `GET /v1/jobs/\{id}` to poll
   - Support both `--wait` (polling) and streaming modes
   - Handle timeouts (default 1800s), cancellations, and failures
 - **Acceptance:** `PipelineInvoker.submit_job("test env")` creates a job and returns job ID
@@ -407,7 +407,7 @@ Milestones:
     - `eden-bench run <benchmark_id>`
     - `eden-bench compare <baseline_id> <current_id>`
     - `eden-bench history`
-  - Delegate to Eden API: `POST /v1/benchmarks`, `GET /v1/benchmarks/{id}`
+  - Delegate to Eden API: `POST /v1/benchmarks`, `GET /v1/benchmarks/\{id}`
 - **Acceptance:** `/eden-bench history` shows past benchmark runs
 
 #### 4.6 `/eden-explain` Slash Command
@@ -689,7 +689,7 @@ Milestones:
 - [ ] Override Aider's `confirm_ask()` in `EdenIO`:
   - For file edits: "Apply this change? [y/n/d(etails)]"
   - For test runs: "Run evaluation? [y/n]"
-  - For PR creation: "Create PR on {platform}? [y/n/d(etails)]"
+  - For PR creation: "Create PR on \{platform}? [y/n/d(etails)]"
   - For pipeline invocation: "Run Eden pipeline? [y/n]"
   - Details: show what will be changed/run/created
 - [ ] Support `--autonomous` and `--semi-autonomous` CLI flags

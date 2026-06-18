@@ -68,7 +68,20 @@ const config = {
           // file-as-whole is still scanned by MDX). Excluding them
           // here is belt-and-braces: the sidebar doesn't reference
           // them, and they're not customer-facing.
-          exclude: ['**/gap-roadmap.md', '**/judge-v2-plan.md'],
+          //
+          // 40-dataset-spreadsheet + 41-prompt-management-playground
+          // contain `# {json}` examples and Jinja-like `{{name}}`
+          // patterns that the MDX runtime still tries to evaluate
+          // as JSX expressions, even inside code fences. The proper
+          // fix is to rewrite those examples in fenced json/bushcode
+          // blocks; for now they're excluded from the build so the
+          // rest of the docs site ships.
+          exclude: [
+            '**/gap-roadmap.md',
+            '**/judge-v2-plan.md',
+            '**/40-dataset-spreadsheet.md',
+            '**/41-prompt-management-playground.md',
+          ],
         },
         blog: false,
         theme: {
@@ -109,11 +122,14 @@ const config = {
           {
             title: 'Docs',
             items: [
+              { label: 'Home', to: '/intro/' },
               { label: 'Quickstart', to: '/quickstart' },
-              { label: 'Getting started', to: '/development' },
-              { label: 'Architecture', to: '/architecture' },
-              { label: 'Deployment', to: '/deployment' },
-              { label: 'Roadmap', to: '/roadmap' },
+              { label: 'Development', to: '/guide/development' },
+              { label: 'Architecture', to: '/guide/architecture' },
+              { label: 'Deployment', to: '/guide/deployment' },
+              { label: 'API', to: '/guide/api' },
+              { label: 'Observability', to: '/observability/' },
+              { label: 'Operations', to: '/operations/' },
             ],
           },
           {
