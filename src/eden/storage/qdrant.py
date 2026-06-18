@@ -56,19 +56,27 @@ class QdrantClientWrapper:
     def _get_client(self) -> QdrantClient:
         """Get or create the Qdrant client.
 
-        Honours the Qdrant Cloud contract when ``qdrant_https=True`` and
-        ``qdrant_api_key`` is set: switch to HTTPS, pass the key as the
-        ``api_key`` kwarg. Without these two settings the client assumes
-        a plain-HTTP local Qdrant (the legacy Eden default) which won't
-        authenticate against Qdrant Cloud clusters.
+        For Qdrant Cloud (or any TLS-terminated upstream) we build a
+        full ``url=`` rather than host/port. Some qdrant-client versions
+        pick the wrong scheme (http://) when given just host/port even
+        with ``https=True``, which surfaces as ``[Errno 99] Cannot assign
+        requested address`` on the cloud cluster because the gateway
+        redirects to HTTPS on a different port. Using ``url=https://...``
+        avoids that and matches the qdrant-client docs' Cloud recipe.
         """
         if self._client is None:
-            client_kwargs: dict = {"host": self.host, "port": self.port}
-            if settings.qdrant_https:
-                client_kwargs["https"] = True
-            if settings.qdrant_api_key:
-                client_kwargs["api_key"] = settings.qdrant_api_key
-            self._client = QdrantClient(**client_kwargs)
+            if settings.qdrant_https and settings.qdrant_api_key:
+                url = f"https://{self.host}:{self.port}"
+                self._client = QdrantClient(
+                    url=url,
+                    api_key=settings.qdrant_api_key,
+                )
+            else:
+                # Legacy path: plain HTTP Qdrant on host/port (local dev).
+                self._client = QdrantClient(
+                    host=self.host,
+                    port=self.port,
+                )
         return self._client
 
     def initialize_collections(self) -> None:
