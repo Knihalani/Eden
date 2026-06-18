@@ -135,7 +135,7 @@ const config = {
           {
             title: 'More',
             items: [
-              { label: 'API reference', to: '/api' },
+              { label: 'API reference', to: '/guide/api' },
               { label: 'GitHub', href: 'https://github.com/eden/eden' },
             ],
           },
