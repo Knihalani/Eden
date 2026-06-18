@@ -320,7 +320,7 @@ full-text search layer backed by Typesense.
 | `build_span_doc(event)` | same | Pure function: convert a `TelemetryEvent` to a Typesense document. Extracts input/output text via `_extract_text` and tool names via `_extract_tool_names`. |
 | 6th collector sink | `src/eden/observability/telemetry_collector.py` | `_route_typesense` indexes every span on ingest. No-op when Typesense is disabled or unreachable. |
 | `GET /spans/search` | `src/eden/api/routes/observability.py` | Full search endpoint: `q`, `agent`, `tool`, `outcome`, `event_type`, `from_ts`, `to_ts`, pagination. |
-| `GET /spans/search/suggest` | same | Cmd-K autocomplete: top-5 hits, narrow facet set, <50ms budget. |
+| `GET /spans/search/suggest` | same | Cmd-K autocomplete: top-5 hits, narrow facet set, \<50ms budget. |
 | Docker service | `docker/docker-compose.yml` | `typesense:27.1` image, persistent volume, healthcheck, port 8108. **Required: TYPESENSE_API_KEY env var (no fallback)**. |
 | Settings | `src/eden/config.py` | `typesense_host`, `typesense_port`, `typesense_api_key`, `typesense_collection`, `typesense_enabled`. |
 
@@ -401,10 +401,10 @@ it detects a text-search operator.
 
 ### Acceptance criteria
 
-* [x] `/spans/search` returns hits in <100ms p95 on 1M-doc collection
+* [x] `/spans/search` returns hits in \<100ms p95 on 1M-doc collection
       (single-binary Typesense on commodity hardware — measured
-      in dev at <20ms p95 on 100k docs)
-* [x] Cmd-K suggest endpoint returns <5 results in <50ms
+      in dev at \<20ms p95 on 100k docs)
+* [x] Cmd-K suggest endpoint returns \<5 results in \<50ms
 * [x] Per-org isolation: cross-tenant query returns 0 hits
 * [x] Facet counts returned for: `agent_id`, `tool_names`,
       `outcome`, `event_type`, `model`

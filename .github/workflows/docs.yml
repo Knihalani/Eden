@@ -1,0 +1,68 @@
+name: docs (Docusaurus build + Pages deploy)
+
+# Builds the Docusaurus docs site under `docs/` and deploys to
+# GitHub Pages on every push to main that touches the docs tree
+# or the workflow file itself. Manual dispatch available for
+# ad-hoc rebuilds.
+#
+# Two non-obvious things:
+#   1. sidebars.js was rewritten to use the actual doc IDs that
+#      Docusaurus derives from the file paths (e.g.
+#      `observability/01-trace-replay.md` → `observability/trace-replay`).
+#   2. docusaurus.config.js installs a remark plugin
+#      (`remarkEscapeBareLt`) that backslash-escapes bare `<` chars
+#      not followed by a valid HTML/JSX tag start letter. The
+#      observability implementation write-ups routinely contain
+#      "<200ms p95" / "<$0.01 per call" prose that the MDX parser
+#      otherwise reads as JSX tag starts.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "docs/**"
+      - "docs/docusaurus.config.js"
+      - "docs/sidebars.js"
+      - "docs/package.json"
+      - ".github/workflows/docs.yml"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: docs/package-lock.json
+      - working-directory: docs
+        run: |
+          npm ci
+          npm run build
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: docs/build
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

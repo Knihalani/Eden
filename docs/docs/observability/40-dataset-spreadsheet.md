@@ -124,7 +124,7 @@ curl -H "Authorization: Bearer $JWT" \
 | User-defined columns | ✅ POST /columns | text / number / json |
 | AI-generated columns | ✅ POST /columns/{id}/generate | Stub handler in v1; real LLM in S.5 |
 | Column types | ✅ text / number / json | Type-safe (CHECK constraint on insert) |
-| Filter | ✅ 8 operators | ==, !=, >, >=, <, <=, contains, starts_with |
+| Filter | ✅ 8 operators | ==, !=, >, >=, \<, \<=, contains, starts_with |
 | Sort | ✅ multi-column | asc / desc per column |
 | JSONL import | ✅ Service.import_rows() | One row per line |
 | JSONL export | ✅ GET /export | Stdlib fine-tuning format |

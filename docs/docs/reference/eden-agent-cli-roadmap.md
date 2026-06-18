@@ -805,7 +805,7 @@ Milestones:
 - [ ] Polish error messages (no raw tracebacks in user-facing output)
 - [ ] Add `--quiet` mode for scripting
 - [ ] Add `--json` output mode for CI integration
-- **Acceptance:** Startup <3s, all operations feel responsive
+- **Acceptance:** Startup \<3s, all operations feel responsive
 
 ### 8.6 Release Checklist
 - [ ] All tests pass (Aider + Eden)

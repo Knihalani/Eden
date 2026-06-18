@@ -461,7 +461,7 @@ def what_if(org_id, baseline_window_start, baseline_window_end, what_if):
   traces; each judge gets a posterior
 * Recommender: 6 test cases — ship (clear winner),
   dont_ship (safety regression), ship_with_monitoring
-  (mixed signal), need_more_data (n<100), tie
+  (mixed signal), need_more_data (n\<100), tie
   (no clear winner), low_confidence (wide CIs)
 * Winner detector: Bayesian vs frequentist agreement
   on a 10k-pair fixture

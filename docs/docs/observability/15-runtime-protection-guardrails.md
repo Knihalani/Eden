@@ -528,9 +528,9 @@ Dashboards (in the existing Grafana setup):
   * 100 known hallucination cases → 90%+ caught
   * 100 known content violations → 95%+ caught
 * **False-positive tests**:
-  * 100 legitimate prompts → <5% false positive rate on
+  * 100 legitimate prompts → \<5% false positive rate on
     injection detection
-  * 100 legitimate PII mentions in B2B context → <5% FPR
+  * 100 legitimate PII mentions in B2B context → \<5% FPR
 * **End-to-end tests**: deploy a new judge_link policy, run
   evaluations, verify the policy is enforced.
 
@@ -544,7 +544,7 @@ Dashboards (in the existing Grafana setup):
   ≥ 90% accuracy.
 - [ ] Eval-to-guardrail promote creates a working guardrail in
   under 1 minute.
-- [ ] LLM firewall adds <50ms to the request latency.
+- [ ] LLM firewall adds \<50ms to the request latency.
 - [ ] Intervention engine stub returns `verdict: "allow"` with
   `live: false` (production flows don't break).
 - [ ] Intervention log captures all denies and edits with

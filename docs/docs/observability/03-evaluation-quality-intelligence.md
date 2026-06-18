@@ -306,7 +306,7 @@ POST /orgs/{org_id}/intelligence/eval/clhf/generate
 ```
 
 CLHF requires **2-5 examples** (Galileo's spec). Requests with
-<2 or >5 examples return 400.
+\<2 or >5 examples return 400.
 
 ### Group E (HiL + pairwise)
 
@@ -749,7 +749,7 @@ def promote_to_guardrail(org_id, judge_name, threshold):
 
 ## Failure modes & guardrails
 
-* **CLHF with <2 or >5 examples** — return 400 with explicit
+* **CLHF with \<2 or >5 examples** — return 400 with explicit
   error message. Do not generate a metric.
 * **CLHF metric disagrees with examples** — raise `ValueError`;
   the metric is not registered. The user must add more examples
