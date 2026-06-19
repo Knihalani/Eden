@@ -18,7 +18,6 @@ import {
   Menu,
   X,
   Home,
-  User,
   ChevronLeft,
   Settings,
   CreditCard,
@@ -500,14 +499,19 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
           {children}
         </div>
 
-        {/* Mobile bottom navigation */}
-        <nav className="lg:hidden fixed bottom-0 left-0 right-0 bg-[var(--bg-primary)] border-t border-[var(--border-default)] z-40" aria-label="Mobile navigation">
+        {/* Mobile bottom navigation. Centered "Observe" item is the
+            raised/pill style via `isCenter`; pb-safe gives the bar
+            enough breathing room for notched phones. */}
+        <nav
+          className="lg:hidden fixed bottom-0 left-0 right-0 bg-[var(--bg-primary)] border-t border-[var(--border-default)] z-40 pb-safe"
+          aria-label="Mobile navigation"
+        >
           <div className="flex items-center justify-around h-16 px-1">
             <BottomNavItem href="/dashboard" icon={Home} label="Home" />
             <BottomNavItem href="/traces" icon={Layers} label="Traces" />
-            <BottomNavItem href="/observability" icon={Activity} label="Observe" />
+            <BottomNavItem href="/observability" icon={Activity} label="Observe" isCenter />
+            <BottomNavItem href="/alerts" icon={Bell} label="Alerts" />
             <BottomNavItem href="/settings" icon={Settings} label="Settings" />
-            <BottomNavItem href="/profile" icon={User} label="Profile" />
           </div>
         </nav>
 
@@ -830,15 +834,18 @@ function BottomNavItem({
       aria-current={active ? "page" : undefined}
       className={cn(
         "flex flex-col items-center justify-center min-w-[44px] min-h-[44px] gap-1 transition-colors",
-        isCenter
-          ? "text-[var(--accent)] hover:text-[var(--accent-hover)]"
-          : active
-            ? "text-[var(--accent)]"
-            : "text-[var(--text-muted)] hover:text-[var(--text-secondary)]"
+        isCenter && "relative -mt-3",
+        active ? "text-[var(--accent)]" : "text-[var(--text-muted)] hover:text-[var(--text-secondary)]"
       )}
     >
-      <Icon className={cn("w-5 h-5", isCenter && "w-6 h-6")} />
-      <span className="text-[10px] font-medium">{label}</span>
+      {isCenter ? (
+        <span className="flex items-center justify-center w-12 h-12 rounded-full bg-[var(--accent)] text-[var(--accent-foreground)] shadow-lg shadow-[var(--accent)]/30">
+          <Icon className="w-6 h-6" />
+        </span>
+      ) : (
+        <Icon className="w-5 h-5" />
+      )}
+      <span className={cn("text-[10px] font-medium", isCenter && "sr-only")}>{label}</span>
     </Link>
   );
 }
