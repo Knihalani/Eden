@@ -235,6 +235,29 @@ export const api = {
       method: "DELETE",
     }),
 
+  // Sidebar preferences (per-user, per-org) — June 2026 Phase 1.
+  // The shape mirrors the SidebarPrefs in use-sidebar-prefs.ts.
+  getSidebarPrefs: (orgId: string) =>
+    fetchApi<{
+      pinned: string[];
+      hidden: string[];
+      group_order: string[];
+      density: "comfortable" | "compact";
+    } | null>(`/orgs/${orgId}/sidebar-prefs`),
+  setSidebarPrefs: (
+    orgId: string,
+    prefs: {
+      pinned: string[];
+      hidden: string[];
+      group_order: string[];
+      density: "comfortable" | "compact";
+    }
+  ) =>
+    fetchApi<{ ok: true }>(`/orgs/${orgId}/sidebar-prefs`, {
+      method: "PUT",
+      body: JSON.stringify(prefs),
+    }),
+
   // Organizations
   listOrgs: (includeArchived?: boolean) =>
     fetchApi<Array<{

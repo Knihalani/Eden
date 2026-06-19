@@ -395,8 +395,8 @@ export default function BillingPage() {
         <div className="flex items-center justify-between p-4 border border-[var(--border-default)] rounded-lg">
           {paymentMethod ? (
             <div className="flex items-center gap-3">
-              <div className="w-12 h-7 bg-gradient-to-r from-blue-600 to-blue-800 rounded flex items-center justify-center">
-                <span className="text-white text-[10px] font-bold uppercase">
+              <div className="w-12 h-7 bg-gradient-to-r from-[var(--accent)] to-[var(--accent-dim)] rounded flex items-center justify-center">
+                <span className="text-[var(--accent-foreground)] text-[10px] font-bold uppercase">
                   {paymentMethod.brand}
                 </span>
               </div>
