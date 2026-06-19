@@ -271,7 +271,7 @@ export default function UsersPage() {
   }
 
   return (
-    <div className="p-4 lg:p-6 max-w-7xl mx-auto space-y-6">
+    <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-6">
       <PageHeader
         title="User Intelligence"
         subtitle="The 97% problem: behaviour-driven satisfaction, behavioural cohorts, and goal tracking"
