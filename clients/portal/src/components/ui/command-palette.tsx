@@ -27,6 +27,7 @@ import {
   CreditCard,
   FileText,
   User,
+  Users,
   X,
   ChevronRight,
   Wrench,
@@ -52,19 +53,19 @@ type NavEntry = {
 // sidebar groups in `(portal)/layout.tsx` so anything the user can
 // reach from the sidebar is also reachable from Cmd+K.
 const COMMANDS: NavEntry[] = [
-  // Workspace
-  { href: "/dashboard", label: "Dashboard", description: "Org-level metrics and recent activity", group: "Workspace", icon: Sparkles, accent: "terminal" },
-  { href: "/agents", label: "Agents", description: "Manage registered agents", group: "Workspace", icon: Bot },
-  { href: "/builder", label: "Builder", description: "Scaffold new agent configs", group: "Workspace", icon: Wand2, accent: "accent" },
-  { href: "/marketplace", label: "Marketplace", description: "Browse community agents", group: "Workspace", icon: Box },
-  { href: "/multi-agent", label: "Multi-Agent", description: "Orchestrate multi-agent flows", group: "Workspace", icon: Network },
-  { href: "/sandbox", label: "Sandbox", description: "Run code in a sandboxed env", group: "Workspace", icon: Server },
+  // Build
+  { href: "/dashboard", label: "Dashboard", description: "Org-level metrics and recent activity", group: "Build", icon: Sparkles, accent: "terminal" },
+  { href: "/agents", label: "Agents", description: "Manage registered agents", group: "Build", icon: Bot },
+  { href: "/builder", label: "Builder", description: "Scaffold new agent configs", group: "Build", icon: Wand2, accent: "accent" },
+  { href: "/marketplace", label: "Marketplace", description: "Browse community agents", group: "Build", icon: Box },
+  { href: "/multi-agent", label: "Multi-Agent", description: "Orchestrate multi-agent flows", group: "Build", icon: Network },
+  { href: "/sandbox", label: "Sandbox", description: "Run code in a sandboxed env", group: "Build", icon: Server },
   // Observe
   { href: "/traces", label: "Trace Explorer", description: "Browse and filter traces", group: "Observe", icon: Layers },
   { href: "/replay", label: "Replay", description: "Step through a past trace", group: "Observe", icon: PlayCircle },
   { href: "/observability", label: "Observability", description: "Telemetry overview", group: "Observe", icon: Activity },
   { href: "/observability/apm", label: "APM Tracing", group: "Observe", icon: Activity },
-  { href: "/observability/cohorts", label: "Cohorts", group: "Observe", icon: Activity },
+  { href: "/observability/cohorts", label: "Columnar Engine", group: "Observe", icon: Activity },
   { href: "/observability/decisions", label: "Decisions", group: "Observe", icon: Activity },
   { href: "/observability/eval", label: "Eval", group: "Observe", icon: Activity },
   { href: "/observability/memory", label: "Memory", group: "Observe", icon: Activity },
@@ -77,23 +78,23 @@ const COMMANDS: NavEntry[] = [
   { href: "/inspector", label: "Inspector", description: "Debug a specific trace", group: "Observe", icon: Compass },
   { href: "/alerts", label: "Alerts", description: "Active alerts and rules", group: "Observe", icon: Bell },
   { href: "/llmops", label: "LLMOps", description: "LLM observability + judge ops", group: "Observe", icon: Cog },
+  { href: "/analytics", label: "Analytics", description: "Token & traffic analytics", group: "Observe", icon: BarChart3 },
   // Optimize
   { href: "/optimization", label: "Cost", description: "Cost overview", group: "Optimize", icon: Sparkles, accent: "accent" },
   { href: "/optimization/outcomes", label: "Outcomes", group: "Optimize", icon: Sparkles },
   { href: "/optimization/predict", label: "Predictive", group: "Optimize", icon: Sparkles },
   { href: "/studio", label: "Custom Metrics", description: "Build custom eval metrics", group: "Optimize", icon: FlaskConical },
-  // Protect
-  { href: "/guardrails", label: "Guardrails", description: "Active runtime policies", group: "Protect", icon: Shield },
+  { href: "/guardrails", label: "Guardrails", description: "Active runtime policies", group: "Optimize", icon: Shield },
   // Automate
   { href: "/autonomous", label: "Autonomous", description: "Self-healing code changes", group: "Automate", icon: Wand2 },
   { href: "/closed-loop", label: "Closed-Loop", description: "Auto-improvement loop", group: "Automate", icon: Inbox },
   { href: "/pr-suggestions", label: "PR Suggestions", description: "Suggested code improvements", group: "Automate", icon: GitPullRequestArrow },
-  { href: "/analytics", label: "Analytics", description: "Cost & usage analytics", group: "Automate", icon: BarChart3 },
-  // Account
-  { href: "/settings", label: "Settings", description: "Org + account settings", group: "Account", icon: Settings },
-  { href: "/billing", label: "Billing", description: "Plan + payment method", group: "Account", icon: CreditCard },
-  { href: "/profile", label: "Profile", description: "Your profile", group: "Account", icon: User },
-  { href: "/docs", label: "Documentation", description: "API docs and guides", group: "Account", icon: FileText },
+  // Admin
+  { href: "/settings", label: "Settings", description: "Org + account settings", group: "Admin", icon: Settings },
+  { href: "/users", label: "Members", description: "Org members and seats", group: "Admin", icon: Users },
+  { href: "/billing", label: "Billing", description: "Plan + payment method", group: "Admin", icon: CreditCard },
+  { href: "/profile", label: "Profile", description: "Your profile", group: "Admin", icon: User },
+  { href: "/docs", label: "Documentation", description: "API docs and guides", group: "Admin", icon: FileText },
 ];
 
 const ACCENT_BG: Record<NonNullable<NavEntry["accent"]>, string> = {

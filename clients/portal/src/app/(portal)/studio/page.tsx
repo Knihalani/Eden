@@ -6,6 +6,7 @@ import { metricStudioApi } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { EmptyState } from "@/components/ui/empty-state";
 import { NoOrgState } from "@/components/ui/no-org-state";
+import { PageHeader } from "@/components/layout/page-header";
 import {
   Dialog,
   DialogContent,
@@ -73,17 +74,11 @@ export default function StudioPage() {
 
   return (
     <div className="p-4 lg:p-6 max-w-7xl mx-auto space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-[var(--text-primary)] flex items-center gap-2">
-            <Sparkles className="w-6 h-6 text-[var(--accent)]" />
-            Custom-Metric Studio
-          </h1>
-          <p className="text-sm text-[var(--text-muted)] mt-1">
-            Design, generate, and version custom evaluation rubrics from templates or examples.
-          </p>
-        </div>
-      </div>
+      <PageHeader
+        title="Custom-Metric Studio"
+        subtitle="Design, generate, and version custom evaluation rubrics from templates or examples."
+        icon={Sparkles}
+      />
 
       {error && (
         <div className="bg-[var(--error-bg)] text-[var(--error)] text-sm px-4 py-3 rounded-xl flex items-center gap-2.5 border border-[var(--error)]/20">

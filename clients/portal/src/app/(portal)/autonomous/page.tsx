@@ -10,6 +10,7 @@ import {
   Wrench,
   ShieldAlert,
   Database,
+  Wand2,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -19,6 +20,7 @@ import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@
 import { EmptyState } from "@/components/ui/empty-state";
 import { useOrg } from "@/hooks/use-org";
 import { autonomousApi } from "@/lib/api";
+import { PageHeader } from "@/components/layout/page-header";
 import { cn } from "@/lib/utils";
 
 /* ----------------------- NL Query section ---------------------------- */
@@ -575,14 +577,11 @@ export default function AutonomousPage() {
 
   return (
     <div className="page-enter mx-auto max-w-7xl space-y-6 p-4 sm:p-6 lg:p-8">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight text-[var(--text-primary)] sm:text-3xl">
-          Autonomous intelligence
-        </h1>
-        <p className="mt-1 text-sm text-[var(--text-muted)]">
-          Ask questions in plain English, run investigations, and propose self-heals.
-        </p>
-      </div>
+      <PageHeader
+        title="Autonomous intelligence"
+        subtitle="Ask questions in plain English, run investigations, and propose self-heals."
+        icon={Wand2}
+      />
 
       <NLQuerySection />
 

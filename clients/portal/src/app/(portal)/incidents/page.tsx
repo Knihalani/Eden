@@ -6,6 +6,7 @@ import { useOrg } from "@/hooks/use-org";
 import { cn } from "@/lib/utils";
 import { EmptyState } from "@/components/ui/empty-state";
 import { NoOrgState } from "@/components/ui/no-org-state";
+import { PageHeader } from "@/components/layout/page-header";
 import {
   AlertOctagon,
   AlertTriangle,
@@ -102,36 +103,31 @@ export default function IncidentsPage() {
 
   return (
     <div className="p-4 lg:p-6 max-w-7xl mx-auto space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-[var(--text-primary)] flex items-center gap-2">
-            <AlertOctagon className="w-6 h-6 text-[var(--accent)]" />
-            Incidents
-          </h1>
-          <p className="text-sm text-[var(--text-muted)] mt-1">
-            Cluster-level RCA summaries of recurring failures — catch the same bug biting 50 users before it bites 5,000
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={loadIncidents}
-            disabled={loading}
-            className="inline-flex items-center gap-2 px-3 py-2 bg-[var(--bg-tertiary)] text-[var(--text-primary)] rounded-lg text-sm font-medium hover:bg-[var(--border-default)] disabled:opacity-50 transition-colors"
-          >
-            <RefreshCw className="w-4 h-4" />
-            Refresh
-          </button>
-          <button
-            onClick={handleCluster}
-            disabled={clustering}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-[var(--accent)] text-[var(--bg-base)] rounded-lg text-sm font-medium hover:bg-[var(--accent-hover)] disabled:opacity-50 transition-colors"
-          >
-            {clustering ? <Loader2 className="w-4 h-4 animate-spin" /> : <Zap className="w-4 h-4" />}
-            Run clustering
-          </button>
-        </div>
-      </div>
+      <PageHeader
+        title="Incidents"
+        subtitle="Cluster-level RCA summaries of recurring failures — catch the same bug biting 50 users before it bites 5,000"
+        icon={AlertOctagon}
+        actions={
+          <div className="flex items-center gap-2">
+            <button
+              onClick={loadIncidents}
+              disabled={loading}
+              className="inline-flex items-center gap-2 px-3 py-2 bg-[var(--bg-tertiary)] text-[var(--text-primary)] rounded-lg text-sm font-medium hover:bg-[var(--border-default)] disabled:opacity-50 transition-colors"
+            >
+              <RefreshCw className="w-4 h-4" />
+              Refresh
+            </button>
+            <button
+              onClick={handleCluster}
+              disabled={clustering}
+              className="inline-flex items-center gap-2 px-4 py-2 bg-[var(--accent)] text-[var(--bg-base)] rounded-lg text-sm font-medium hover:bg-[var(--accent-hover)] disabled:opacity-50 transition-colors"
+            >
+              {clustering ? <Loader2 className="w-4 h-4 animate-spin" /> : <Zap className="w-4 h-4" />}
+              Run clustering
+            </button>
+          </div>
+        }
+      />
 
       {error && (
         <div className="bg-[var(--error-bg)] text-[var(--error)] text-sm px-4 py-3 rounded-xl flex items-center gap-2.5 border border-[var(--error)]/20">

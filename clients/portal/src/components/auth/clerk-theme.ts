@@ -16,12 +16,13 @@
 //      styles DO accept ``var(--token)`` references, so we use
 //      CSS variables here for everything we can.
 //
-// We don't import the ``Appearance`` type directly because
-// @clerk/types isn't a declared dependency — @clerk/nextjs
-// re-exports it, but typing it here would couple us to internal
-// types that may shift across SDK versions. The structural shape
-// is stable; if Clerk adds a required field, TypeScript will
-// surface it at the <SignIn appearance={...} /> call site.
+// We don't pin Clerk's `Appearance` type explicitly — Clerk's
+// generic `<Theme>` param makes the named export hard to reach from
+// `@clerk/nextjs` without a transitive dep, and the structural
+// shape is stable. The `as const` here would over-narrow to literal
+// strings, so we infer a regular object — if Clerk adds a required
+// field, the structural mismatch surfaces at the
+// `<SignIn appearance={...} />` call site.
 
 const clerkAppearance = {
   variables: {
@@ -44,32 +45,48 @@ const clerkAppearance = {
   },
   elements: {
     // ---- Root container ----
-    // Drop Clerk's default background and card chrome so the form
-    // blends into our AuthSplitLayout surface.
+    // Render Clerk's form inside a real card so the inputs, labels,
+    // and button sit on a defined surface (matching AuthFormCard) —
+    // otherwise the form fields float on bg-secondary and look raw.
     rootBox: {
       width: "100%",
     },
     card: {
-      backgroundColor: "transparent",
-      boxShadow: "none",
-      border: "none",
-      padding: 0,
+      width: "100%",
+      maxWidth: "420px",
+      margin: "0 auto",
+      padding: "2rem 1.75rem 1.5rem",
+      backgroundColor: "rgba(15, 20, 25, 0.85)",
+      backdropFilter: "blur(20px)",
+      WebkitBackdropFilter: "blur(20px)",
+      border: "1px solid var(--border-default)",
+      borderRadius: "var(--radius-xl)",
+      boxShadow:
+        "0 0 48px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(91, 158, 255, 0.06)",
+      overflow: "hidden",
     },
     cardBox: {
       width: "100%",
+      padding: 0,
     },
 
     // ---- Header (logo + title) ----
+    // Suppress Clerk's default subtitle — the brand panel on the left
+    // already establishes context; showing "Welcome back" inside the
+    // card adds noise without information.
+    header: {
+      marginBottom: "1.25rem",
+      gap: "0.5rem",
+    },
     headerTitle: {
       color: "var(--text-primary)",
       fontSize: "1.5rem",
       fontWeight: 700,
       letterSpacing: "-0.02em",
+      marginBottom: 0,
     },
     headerSubtitle: {
-      color: "var(--text-muted)",
-      fontSize: "0.875rem",
-      lineHeight: 1.5,
+      display: "none",
     },
     headerBackIcon: {
       color: "var(--text-muted)",
@@ -172,31 +189,41 @@ const clerkAppearance = {
       },
     },
     socialButtonIcon: {
-      filter: "invert(0.85) hue-rotate(180deg)",
+      // Clerk ships each provider icon with both light + dark variants
+      // and auto-switches via prefers-color-scheme. Filtering them
+      // ourselves makes Google/GitHub/etc. look muddy — leave them
+      // as Clerk renders them.
+      filter: "none",
     },
 
     // ---- Divider between social and email form ----
     dividerLine: {
       backgroundColor: "var(--border-default)",
+      height: "1px",
     },
     dividerText: {
       color: "var(--text-muted)",
-      fontSize: "0.75rem",
+      fontSize: "0.6875rem",
+      fontWeight: 500,
       textTransform: "uppercase",
-      letterSpacing: "0.1em",
+      letterSpacing: "0.12em",
+      padding: "0 0.75rem",
     },
 
     // ---- Footer links (e.g. "Don't have an account? Sign up") ----
     footerActionLink: {
       color: "var(--accent)",
-      fontWeight: 500,
+      fontWeight: 600,
       "&:hover": { color: "var(--accent-hover)", textDecoration: "underline" },
     },
     footerActionText: {
       color: "var(--text-secondary)",
+      fontSize: "0.8125rem",
     },
     footer: {
-      paddingTop: "1rem",
+      paddingTop: "1.25rem",
+      marginTop: "1.25rem",
+      borderTop: "1px solid var(--border-subtle)",
     },
 
     // ---- Identity preview (when choosing which account to sign in as) ----
@@ -366,6 +393,7 @@ const clerkAppearance = {
       "&:hover": { backgroundColor: "var(--bg-tertiary)" },
     },
   },
-} as const;
+};
 
 export { clerkAppearance };
+export type { clerkAppearance as ClerkAppearance };

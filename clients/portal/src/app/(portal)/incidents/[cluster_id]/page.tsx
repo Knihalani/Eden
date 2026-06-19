@@ -108,8 +108,25 @@ export default function IncidentDetailPage() {
     if (currentOrg) load();
   }, [currentOrg, load]);
 
-  function handleResolve() {
-    toast.success("Cluster marked as resolved — local-only action");
+  async function handleResolve() {
+    if (!currentOrg) return;
+    try {
+      // Best-effort: tell the backend to mark this cluster resolved.
+      // The endpoint is intentionally permissive — older deployments
+      // return 404 and we just log it.
+      const res = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL}/orgs/${currentOrg.id}/intelligence/rca/incidents/${cluster_id}/resolve`,
+        { method: "POST", credentials: "include" },
+      );
+      if (res.ok) {
+        toast.success("Cluster resolved");
+        await load();
+      } else {
+        toast.info("Marked resolved locally — backend resolve endpoint not available yet");
+      }
+    } catch {
+      toast.info("Marked resolved locally — backend resolve endpoint not available yet");
+    }
   }
 
   if (!currentOrg) {

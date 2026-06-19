@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback, useRef, useMemo } from "react";
+import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   GitPullRequestArrow,
@@ -33,6 +34,7 @@ import { Card } from "@/components/ui/card";
 import { PRStatusBadge } from "@/components/ui/status-badge";
 import { useToast } from "@/components/ui/toast";
 import { EmptyState } from "@/components/ui/empty-state";
+import { PageHeader } from "@/components/layout/page-header";
 import type {
   PRSuggestion,
   PRSuggestionStatus,
@@ -208,9 +210,11 @@ function SuggestionCard({
 function CreateSuggestionForm({
   onCreated,
   onCancel,
+  recentFiles: parentRecentFiles = [],
 }: {
   onCreated: (id: string) => void;
   onCancel: () => void;
+  recentFiles?: string[];
 }) {
   const { currentOrg } = useOrg();
   const toast = useToast();
@@ -254,15 +258,9 @@ function CreateSuggestionForm({
     setFiles(s.files.join("\n"));
   }
 
-  // Recent files autocomplete — show file paths from the
-  // last 5 suggestions in the inbox. We read the
-  // ``recentFiles`` from a ref to avoid re-fetching on
-  // every render.
-  const recentFiles = useMemo(() => {
-    return Array.from(
-      new Set<string>(),
-    );
-  }, []);
+  // Recent files autocomplete — pass recent file paths from the parent
+  // (the suggestion list). Falls back to an empty list while loading.
+  const recentFiles = parentRecentFiles;
 
   const fileList = files
     .split("\n")
@@ -498,6 +496,7 @@ function BulkActionBar({
 // ── Main page ──────────────────────────────────────────────────
 
 export default function PRSuggestionsPage() {
+  const router = useRouter();
   const { currentOrg } = useOrg();
   const toast = useToast();
   const [suggestions, setSuggestions] = useState<PRSuggestion[]>([]);
@@ -550,6 +549,21 @@ export default function PRSuggestionsPage() {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     loadSuggestions();
   }, [loadSuggestions]);
+
+  // Recent files autocomplete — collect file paths from the
+  // most recent suggestions in the inbox. Dedupe + cap at 12
+  // entries so the dropdown stays short.
+  const recentFiles = useMemo(() => {
+    const collected: string[] = [];
+    for (const s of suggestions.slice(0, 20)) {
+      for (const f of s.files ?? []) {
+        if (!collected.includes(f.path)) collected.push(f.path);
+        if (collected.length >= 12) break;
+      }
+      if (collected.length >= 12) break;
+    }
+    return collected;
+  }, [suggestions]);
 
   // Stats
   const stats = {
@@ -638,35 +652,30 @@ export default function PRSuggestionsPage() {
 
   return (
     <div className="p-6 space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-[var(--text-primary)] flex items-center gap-2">
-            <GitPullRequestArrow className="h-6 w-6 text-[var(--accent)]" />
-            PR Suggestions
-          </h1>
-          <p className="text-sm text-[var(--text-muted)] mt-1">
-            Agent-proposed code changes based on observability signals
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            onClick={loadSuggestions}
-            disabled={loading}
-            size="sm"
-          >
-            <RefreshCw
-              className={cn("h-4 w-4 mr-1", loading && "animate-spin")}
-            />
-            Refresh
-          </Button>
-          <Button onClick={() => setShowCreate((v) => !v)} size="sm">
-            <Plus className="h-4 w-4 mr-1" />
-            {showCreate ? "Cancel" : "New suggestion"}
-          </Button>
-        </div>
-      </div>
+      <PageHeader
+        title="PR Suggestions"
+        subtitle="Agent-proposed code changes based on observability signals"
+        icon={GitPullRequestArrow}
+        actions={
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              onClick={loadSuggestions}
+              disabled={loading}
+              size="sm"
+            >
+              <RefreshCw
+                className={cn("h-4 w-4 mr-1", loading && "animate-spin")}
+              />
+              Refresh
+            </Button>
+            <Button onClick={() => setShowCreate((v) => !v)} size="sm">
+              <Plus className="h-4 w-4 mr-1" />
+              {showCreate ? "Cancel" : "New suggestion"}
+            </Button>
+          </div>
+        }
+      />
 
       {/* Stats strip */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -694,9 +703,10 @@ export default function PRSuggestionsPage() {
           <CreateSuggestionForm
             onCreated={(id) => {
               setShowCreate(false);
-              window.location.href = `/pr-suggestions/${id}`;
+              router.push(`/pr-suggestions/${id}`);
             }}
             onCancel={() => setShowCreate(false)}
+            recentFiles={recentFiles}
           />
         )}
       </AnimatePresence>
@@ -793,9 +803,7 @@ export default function PRSuggestionsPage() {
               suggestion={s}
               selected={selected.has(s.id)}
               onSelectToggle={() => toggleSelect(s.id)}
-              onClick={() => {
-                window.location.href = `/pr-suggestions/${s.id}`;
-              }}
+              onClick={() => router.push(`/pr-suggestions/${s.id}`)}
             />
           ))}
         </div>

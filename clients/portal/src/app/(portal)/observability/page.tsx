@@ -37,6 +37,7 @@ import {
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { NoOrgState } from "@/components/ui/no-org-state";
+import { PageHeader } from "@/components/layout/page-header";
 
 type Tab = "traces" | "tree" | "timeline" | "heatmap" | "compare" | "scores";
 
@@ -249,18 +250,11 @@ export default function ObservabilityPage() {
 
   return (
     <div className="p-4 lg:p-6 max-w-7xl mx-auto space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-[var(--text-primary)] flex items-center gap-2">
-            <Activity className="w-6 h-6 text-[var(--accent)]" />
-            Observability
-          </h1>
-          <p className="text-sm text-[var(--text-muted)] mt-1">
-            Real-time telemetry, trace trees, heatmaps, and comparative analysis
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
+      <PageHeader
+        title="Observability"
+        subtitle="Real-time telemetry, trace trees, heatmaps, and comparative analysis"
+        icon={Activity}
+        actions={
           <button
             onClick={loadTraces}
             className="inline-flex items-center gap-2 px-4 py-2 bg-[var(--bg-tertiary)] text-[var(--text-primary)] rounded-lg text-sm font-medium hover:bg-[var(--border-default)] transition-colors"
@@ -268,8 +262,8 @@ export default function ObservabilityPage() {
             <Activity className="w-4 h-4" />
             Refresh
           </button>
-        </div>
-      </div>
+        }
+      />
 
       {error && (
         <div className="bg-[var(--error-bg)] text-[var(--error)] text-sm px-4 py-3 rounded-xl flex items-center gap-2.5 border border-[var(--error)]/20">

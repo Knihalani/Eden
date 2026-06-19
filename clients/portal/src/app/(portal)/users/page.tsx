@@ -5,6 +5,7 @@ import { useOrg } from "@/hooks/use-org";
 import { cn } from "@/lib/utils";
 import { EmptyState } from "@/components/ui/empty-state";
 import { NoOrgState } from "@/components/ui/no-org-state";
+import { PageHeader } from "@/components/layout/page-header";
 import {
   Users,
   Target,
@@ -271,18 +272,11 @@ export default function UsersPage() {
 
   return (
     <div className="p-4 lg:p-6 max-w-7xl mx-auto space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-[var(--text-primary)] flex items-center gap-2">
-            <Users className="w-6 h-6 text-[var(--accent)]" />
-            User Intelligence
-          </h1>
-          <p className="text-sm text-[var(--text-muted)] mt-1">
-            The 97% problem: behaviour-driven satisfaction, behavioural cohorts, and goal tracking
-          </p>
-        </div>
-      </div>
+      <PageHeader
+        title="User Intelligence"
+        subtitle="The 97% problem: behaviour-driven satisfaction, behavioural cohorts, and goal tracking"
+        icon={Users}
+      />
 
       {error && (
         <div className="bg-[var(--error-bg)] text-[var(--error)] text-sm px-4 py-3 rounded-xl flex items-center gap-2.5 border border-[var(--error)]/20">

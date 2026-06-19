@@ -7,6 +7,9 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { StatCard } from "@/components/ui/stat-card";
 import { EmptyState } from "@/components/ui/empty-state";
+import { PageHeader } from "@/components/layout/page-header";
+import { useToast } from "@/components/ui/toast";
+import { useConfirm } from "@/hooks/use-confirm";
 import {
   Loader2,
   Plus,
@@ -95,6 +98,8 @@ function useMultiAgentData(orgId: string | undefined) {
 
 export default function MultiAgentPage() {
   const { currentOrg } = useOrg();
+  const toast = useToast();
+  const { confirm, ConfirmDialog } = useConfirm();
   const orgId = currentOrg?.id;
   const { envs, loading, error, refresh } = useMultiAgentData(orgId);
 
@@ -115,20 +120,11 @@ export default function MultiAgentPage() {
 
   return (
     <div className="p-6 max-w-7xl mx-auto" onKeyDown={handleKeyDown}>
-      {/* Header */}
-      <div className="mb-8">
-        <div className="flex items-center gap-3 mb-2">
-          <div className="p-2.5 bg-[var(--accent-faint)] rounded-xl">
-            <Users className="w-6 h-6 text-[var(--accent)]" />
-          </div>
-          <div>
-            <h1 className="text-2xl font-bold text-[var(--text-primary)]">Multi-Agent Environments</h1>
-            <p className="text-sm text-[var(--text-muted)] mt-0.5">
-              Orchestrate, observe, and evaluate multi-agent systems
-            </p>
-          </div>
-        </div>
-      </div>
+      <PageHeader
+        title="Multi-Agent Environments"
+        subtitle="Orchestrate, observe, and evaluate multi-agent systems"
+        icon={Users}
+      />
 
       {/* Environment selector */}
       <div className="mb-6 flex flex-wrap items-center gap-3">
@@ -211,6 +207,7 @@ export default function MultiAgentPage() {
           <HitlTab env={selectedEnv} orgId={orgId} />
         )}
       </div>
+      {ConfirmDialog}
     </div>
   );
 }
@@ -220,6 +217,8 @@ export default function MultiAgentPage() {
 // ──────────────────────────────────────────────────────────────────────────
 
 function EnvironmentsTab({ envs, refresh, orgId }: { envs: MultiAgentEnv[]; refresh: () => void; orgId: string | undefined }) {
+  const toast = useToast();
+  const { confirm } = useConfirm();
   const [creating, setCreating] = useState(false);
   const [name, setName] = useState("");
   const [pattern, setPattern] = useState("message_passing");
@@ -244,20 +243,27 @@ function EnvironmentsTab({ envs, refresh, orgId }: { envs: MultiAgentEnv[]; refr
       setCreating(false);
       refresh();
     } catch (err) {
-      alert(err instanceof Error ? err.message : "Create failed");
+      toast.error(err instanceof Error ? err.message : "Create failed");
     } finally {
       setBusy(false);
     }
   };
 
   const handleDelete = async (envId: string) => {
-    if (!orgId || !confirm("Delete this environment?")) return;
+    if (!orgId) return;
+    const ok = await confirm({
+      title: "Delete this environment?",
+      description: "This removes the environment and all its history. This cannot be undone.",
+      confirmLabel: "Delete",
+      variant: "destructive",
+    });
+    if (!ok) return;
     setBusy(true);
     try {
       await api.deleteMultiAgentEnv(orgId, envId);
       refresh();
     } catch (err) {
-      alert(err instanceof Error ? err.message : "Delete failed");
+      toast.error(err instanceof Error ? err.message : "Delete failed");
     } finally {
       setBusy(false);
     }
@@ -381,6 +387,7 @@ function EnvironmentsTab({ envs, refresh, orgId }: { envs: MultiAgentEnv[]; refr
 // ──────────────────────────────────────────────────────────────────────────
 
 function CommunicationTab({ env, orgId }: { env: MultiAgentEnv | null; orgId: string | undefined }) {
+  const toast = useToast();
   const [fromAgent, setFromAgent] = useState("agent_0");
   const [toAgent, setToAgent] = useState("agent_1");
   const [msgContent, setMsgContent] = useState("{}");
@@ -434,7 +441,7 @@ function CommunicationTab({ env, orgId }: { env: MultiAgentEnv | null; orgId: st
       fetchMessages();
       fetchStats();
     } catch (err) {
-      alert(err instanceof Error ? err.message : "Send failed");
+      toast.error(err instanceof Error ? err.message : "Send failed");
     } finally {
       setSending(false);
     }
@@ -450,7 +457,7 @@ function CommunicationTab({ env, orgId }: { env: MultiAgentEnv | null; orgId: st
       setBroadcastContent("{}");
       fetchStats();
     } catch (err) {
-      alert(err instanceof Error ? err.message : "Broadcast failed");
+      toast.error(err instanceof Error ? err.message : "Broadcast failed");
     } finally {
       setSending(false);
     }
@@ -569,6 +576,7 @@ function CommunicationTab({ env, orgId }: { env: MultiAgentEnv | null; orgId: st
 // ──────────────────────────────────────────────────────────────────────────
 
 function RolesTab({ env, orgId }: { env: MultiAgentEnv | null; orgId: string | undefined }) {
+  const toast = useToast();
   const [roles, setRoles] = useState<Record<string, unknown>[]>([]);
   const [configs, setConfigs] = useState<Record<string, unknown>[]>([]);
   const [creatingConfig, setCreatingConfig] = useState(false);
@@ -606,7 +614,7 @@ function RolesTab({ env, orgId }: { env: MultiAgentEnv | null; orgId: string | u
       setCreatingConfig(false);
       fetchData();
     } catch (err) {
-      alert(err instanceof Error ? err.message : "Failed");
+      toast.error(err instanceof Error ? err.message : "Failed");
     }
   };
 
@@ -618,7 +626,7 @@ function RolesTab({ env, orgId }: { env: MultiAgentEnv | null; orgId: string | u
       setAssigning(false);
       fetchData();
     } catch (err) {
-      alert(err instanceof Error ? err.message : "Failed");
+      toast.error(err instanceof Error ? err.message : "Failed");
     }
   };
 
@@ -737,6 +745,7 @@ function RolesTab({ env, orgId }: { env: MultiAgentEnv | null; orgId: string | u
 // ──────────────────────────────────────────────────────────────────────────
 
 function MemoryTab({ env, orgId }: { env: MultiAgentEnv | null; orgId: string | undefined }) {
+  const toast = useToast();
   const [agentId, setAgentId] = useState("agent_0");
   const [obsContent, setObsContent] = useState("");
   const [memoryData, setMemoryData] = useState<Record<string, unknown> | null>(null);
@@ -774,7 +783,7 @@ function MemoryTab({ env, orgId }: { env: MultiAgentEnv | null; orgId: string | 
       fetchMemory();
       fetchStats();
     } catch (err) {
-      alert(err instanceof Error ? err.message : "Failed");
+      toast.error(err instanceof Error ? err.message : "Failed");
     } finally {
       setAdding(false);
     }
@@ -787,7 +796,7 @@ function MemoryTab({ env, orgId }: { env: MultiAgentEnv | null; orgId: string | 
       fetchMemory();
       fetchStats();
     } catch (err) {
-      alert(err instanceof Error ? err.message : "Failed");
+      toast.error(err instanceof Error ? err.message : "Failed");
     }
   };
 
@@ -885,6 +894,7 @@ function MemoryTab({ env, orgId }: { env: MultiAgentEnv | null; orgId: string | 
 // ──────────────────────────────────────────────────────────────────────────
 
 function PlanningTab({ env, orgId }: { env: MultiAgentEnv | null; orgId: string | undefined }) {
+  const toast = useToast();
   const [frameworks, setFrameworks] = useState<Framework[]>([]);
   const [selectedFramework, setSelectedFramework] = useState("react");
   const [agentIds, setAgentIds] = useState("agent_0,agent_1");
@@ -907,7 +917,7 @@ function PlanningTab({ env, orgId }: { env: MultiAgentEnv | null; orgId: string 
       const res = await api.runEpisode(orgId, env.env_id, { framework: selectedFramework, agent_ids: ids, max_steps: maxSteps });
       setResult(res.result);
     } catch (err) {
-      alert(err instanceof Error ? err.message : "Run failed");
+      toast.error(err instanceof Error ? err.message : "Run failed");
     } finally {
       setRunning(false);
     }
@@ -985,6 +995,7 @@ function PlanningTab({ env, orgId }: { env: MultiAgentEnv | null; orgId: string 
 // ──────────────────────────────────────────────────────────────────────────
 
 function TestsTab({ env, orgId }: { env: MultiAgentEnv | null; orgId: string | undefined }) {
+  const toast = useToast();
   const [running, setRunning] = useState(false);
   const [testResults, setTestResults] = useState<{
     total_tests: number;
@@ -1003,7 +1014,7 @@ function TestsTab({ env, orgId }: { env: MultiAgentEnv | null; orgId: string | u
       const res = await api.runMultiAgentTests(orgId, env.env_id);
       setTestResults(res);
     } catch (err) {
-      alert(err instanceof Error ? err.message : "Tests failed");
+      toast.error(err instanceof Error ? err.message : "Tests failed");
     } finally {
       setRunning(false);
     }
@@ -1016,7 +1027,7 @@ function TestsTab({ env, orgId }: { env: MultiAgentEnv | null; orgId: string | u
       const res = await api.runMultiAgentBenchmark(orgId, env.env_id);
       setBenchmarks(res);
     } catch (err) {
-      alert(err instanceof Error ? err.message : "Benchmark failed");
+      toast.error(err instanceof Error ? err.message : "Benchmark failed");
     } finally {
       setRunning(false);
     }
@@ -1095,6 +1106,7 @@ function TestsTab({ env, orgId }: { env: MultiAgentEnv | null; orgId: string | u
 // ──────────────────────────────────────────────────────────────────────────
 
 function HitlTab({ env, orgId }: { env: MultiAgentEnv | null; orgId: string | undefined }) {
+  const toast = useToast();
   const [rules, setRules] = useState<Record<string, string>>({});
   const [pending, setPending] = useState<Record<string, unknown>[]>([]);
   const [actionType, setActionType] = useState("code_execution");
@@ -1124,7 +1136,7 @@ function HitlTab({ env, orgId }: { env: MultiAgentEnv | null; orgId: string | un
       await api.setHitlRule(orgId, env.env_id, { action_type: actionType, rule });
       fetchData();
     } catch (err) {
-      alert(err instanceof Error ? err.message : "Failed");
+      toast.error(err instanceof Error ? err.message : "Failed");
     } finally {
       setBusy(false);
     }
@@ -1137,7 +1149,7 @@ function HitlTab({ env, orgId }: { env: MultiAgentEnv | null; orgId: string | un
       await api.resolveApproval(orgId, env.env_id, approvalId, approve);
       fetchData();
     } catch (err) {
-      alert(err instanceof Error ? err.message : "Failed");
+      toast.error(err instanceof Error ? err.message : "Failed");
     } finally {
       setBusy(false);
     }

@@ -17,6 +17,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useOrg } from "@/hooks/use-org";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { useConfirm } from "@/hooks/use-confirm";
 import {
   Loader2,
   Plus,
@@ -85,6 +86,7 @@ interface Assignment {
 
 export default function RolesTab() {
   const { currentOrg } = useOrg();
+  const { confirm, ConfirmDialog } = useConfirm();
   const [roles, setRoles] = useState<Role[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -147,7 +149,13 @@ export default function RolesTab() {
 
   async function handleDelete(role: Role) {
     if (!currentOrg) return;
-    if (!window.confirm(`Delete role "${role.name}"? This cannot be undone.`)) return;
+    const ok = await confirm({
+      title: `Delete role "${role.name}"?`,
+      description: "This cannot be undone. Members with this role will lose these permissions.",
+      confirmLabel: "Delete role",
+      variant: "destructive",
+    });
+    if (!ok) return;
     try {
       await api.delete(`/orgs/${currentOrg.id}/roles/${role.id}`);
       loadRoles();

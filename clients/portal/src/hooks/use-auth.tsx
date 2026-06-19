@@ -8,7 +8,7 @@ import {
   useCallback,
   type ReactNode,
 } from "react";
-import { useUser, useClerk } from "@clerk/nextjs";
+import { useUser } from "@clerk/nextjs";
 import { api } from "@/lib/api";
 import type { User, Organization } from "@/lib/types";
 
@@ -30,7 +30,7 @@ const AuthContext = createContext<AuthContextType | null>(null);
  *
  * Clerk owns identity (id, email, name). Eden owns org membership +
  * which org is currently selected — those still come from FastAPI's
- * `/auth/me` endpoint, which now accepts the Clerk session JWT in the
+ * `/auth/me` endpoint, which accepts the Clerk session JWT in the
  * `Authorization` header.
  */
 function buildEdenUser(
@@ -62,7 +62,6 @@ function buildEdenUser(
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const { user: clerkUser, isLoaded: clerkLoaded } = useUser();
-  const clerk = useClerk();
   const [organizations, setOrganizations] = useState<Organization[]>([]);
   const [currentOrgId, setCurrentOrgId] = useState<string | null>(null);
   const [profileLoading, setProfileLoading] = useState(false);
@@ -108,7 +107,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         // Once resolved, profile loading is reported via `error` (null
         // = loaded fine). Existing consumers treat a non-null user as
         // "ready" and a null user as "logged out" — both still work.
-        loading: !clerkLoaded || (!!clerkUser && profileLoading && organizations.length === 0),
+        loading:
+          !clerkLoaded ||
+          (!!clerkUser && profileLoading && organizations.length === 0),
         error,
         refreshUser,
       }}
@@ -118,36 +119,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   );
 }
 
-/**
- * @deprecated Clerk owns sign-in / sign-up / sign-out now — use
- * `<SignIn />` / `<SignUp />` components or the `useClerk()` hook
- * (`signOut()`) directly. This stub keeps existing call sites that
- * destructured `login` / `signup` / `logout` compiling, but throws
- * if anyone actually invokes them so the dead path is obvious.
- */
-function notClerkDeprecated() {
-  throw new Error(
-    "useAuth().login/signup/logout was removed when we migrated to Clerk. " +
-      "Use <SignIn />, <SignUp />, or useClerk().signOut() instead.",
-  );
-}
-
 export function useAuth(): AuthContextType {
   const context = useContext(AuthContext);
   if (!context) {
     throw new Error("useAuth must be used within AuthProvider");
   }
-  return {
-    ...context,
-    // Stubs so legacy destructuring like `const { login } = useAuth()` keeps
-    // compiling. Calling them throws — see deprecation note above.
-    login: notClerkDeprecated as never,
-    signup: notClerkDeprecated as never,
-    logout: notClerkDeprecated as never,
-  } as AuthContextType;
+  return context;
 }
 
-// Re-export the Clerk client so consumers that need to sign out can
-// import a single hook surface (`useClerk` is also exported directly
-// from `@clerk/nextjs`, but this gives a stable internal import path).
-export { useClerk };
+// Sign-in / sign-up / sign-out are handled by Clerk directly:
+//   - Pages: <SignIn /> / <SignUp /> in src/app/sign-{in,up}/[[...]]/page.tsx
+//   - Sign-out: `useClerk().signOut()` from @clerk/nextjs
+// Keep this comment so future readers don't reach for useAuth() helpers.

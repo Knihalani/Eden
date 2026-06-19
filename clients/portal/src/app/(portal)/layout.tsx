@@ -3,7 +3,6 @@
 import { useAuth } from "@/hooks/use-auth";
 import { useOrg } from "@/hooks/use-org";
 import { useNotifications } from "@/hooks/use-notifications";
-import { useFeatureFlags } from "@/hooks/use-feature-flags";
 import { OrganizationSwitcher, useClerk } from "@clerk/nextjs";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, useRef, useCallback } from "react";
@@ -76,7 +75,7 @@ function buildBreadcrumbs(pathname: string): { label: string; href: string }[] {
   const labelMap: Record<string, string> = {
     dashboard: "Dashboard",
     analytics: "Analytics",
-    optimization: "Optimization",
+    optimization: "Cost",
     settings: "Settings",
     billing: "Billing",
     docs: "Documentation",
@@ -93,7 +92,7 @@ function buildBreadcrumbs(pathname: string): { label: string; href: string }[] {
     marketplace: "Marketplace",
     "multi-agent": "Multi-Agent",
     sandbox: "Sandbox",
-    users: "Users",
+    users: "Members",
     guardrails: "Guardrails",
     autonomous: "Autonomous",
     studio: "Custom Metrics",
@@ -102,13 +101,13 @@ function buildBreadcrumbs(pathname: string): { label: string; href: string }[] {
     memory: "Memory",
     time: "Time-Travel",
     "time-travel": "Time-Travel",
-    apm: "APM",
+    apm: "APM Tracing",
     decisions: "Decisions",
     outcomes: "Outcomes",
     predict: "Predictive",
     tools: "Tools",
     query: "Query",
-    cohorts: "Cohorts",
+    cohorts: "Columnar Engine",
     governance: "Governance",
     eval: "Eval",
     traces: "Trace Explorer",
@@ -130,7 +129,6 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
   const { user, loading } = useAuth();
   const { signOut } = useClerk();
   const { currentOrg, organizations, setCurrentOrg } = useOrg();
-  const { flags } = useFeatureFlags();
   const router = useRouter();
   const pathname = usePathname();
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -288,8 +286,8 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
         </div>
 
         {/* Navigation */}
-        <nav className="relative flex-1 p-3 space-y-4 overflow-y-auto" aria-label="Main navigation">
-          <NavGroup label="Workspace" collapsed={collapsed}>
+        <nav className="relative flex-1 p-3 space-y-5 overflow-y-auto" aria-label="Main navigation">
+          <NavGroup label="Build" collapsed={collapsed}>
             <NavItem href="/dashboard" icon={LayoutDashboard} label="Dashboard" collapsed={collapsed} onClick={() => setSidebarOpen(false)} />
             <NavItem href="/agents" icon={Bot} label="Agents" collapsed={collapsed} onClick={() => setSidebarOpen(false)} />
             <NavItem href="/builder" icon={Wand2} label="Builder" collapsed={collapsed} onClick={() => setSidebarOpen(false)} />
@@ -309,7 +307,7 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
               onClick={() => setSidebarOpen(false)}
             >
               <NavSubItem href="/observability/apm" label="APM Tracing" onClick={() => setSidebarOpen(false)} />
-              <NavSubItem href="/observability/cohorts" label="Cohorts" onClick={() => setSidebarOpen(false)} />
+              <NavSubItem href="/observability/cohorts" label="Columnar Engine" onClick={() => setSidebarOpen(false)} />
               <NavSubItem href="/observability/decisions" label="Decisions" onClick={() => setSidebarOpen(false)} />
               <NavSubItem href="/observability/eval" label="Eval" onClick={() => setSidebarOpen(false)} />
               <NavSubItem href="/observability/memory" label="Memory" onClick={() => setSidebarOpen(false)} />
@@ -318,11 +316,12 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
               <NavSubItem href="/observability/time-travel" label="Time-Travel" onClick={() => setSidebarOpen(false)} />
             </NavItem>
             <NavItem href="/tools" icon={Wrench} label="Tools" collapsed={collapsed} onClick={() => setSidebarOpen(false)} />
-            <NavItem href="/incidents" icon={AlertOctagon} label="Incidents" collapsed={collapsed} onClick={() => setSidebarOpen(false)} />
             <NavItem href="/insights" icon={Brain} label="Insights" collapsed={collapsed} onClick={() => setSidebarOpen(false)} />
             <NavItem href="/inspector" icon={Compass} label="Inspector" collapsed={collapsed} onClick={() => setSidebarOpen(false)} />
+            <NavItem href="/incidents" icon={AlertOctagon} label="Incidents" collapsed={collapsed} onClick={() => setSidebarOpen(false)} />
             <NavItem href="/alerts" icon={Bell} label="Alerts" collapsed={collapsed} onClick={() => setSidebarOpen(false)} />
             <NavItem href="/llmops" icon={Cog} label="LLMOps" collapsed={collapsed} onClick={() => setSidebarOpen(false)} />
+            <NavItem href="/analytics" icon={BarChart3} label="Analytics" collapsed={collapsed} onClick={() => setSidebarOpen(false)} />
           </NavGroup>
 
           <NavGroup label="Optimize" collapsed={collapsed}>
@@ -337,9 +336,6 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
               <NavSubItem href="/optimization/predict" label="Predictive" onClick={() => setSidebarOpen(false)} />
             </NavItem>
             <NavItem href="/studio" icon={FlaskConical} label="Custom Metrics" collapsed={collapsed} onClick={() => setSidebarOpen(false)} />
-          </NavGroup>
-
-          <NavGroup label="Protect" collapsed={collapsed}>
             <NavItem href="/guardrails" icon={Shield} label="Guardrails" collapsed={collapsed} onClick={() => setSidebarOpen(false)} />
           </NavGroup>
 
@@ -347,11 +343,11 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
             <NavItem href="/autonomous" icon={Wand2} label="Autonomous" collapsed={collapsed} onClick={() => setSidebarOpen(false)} />
             <NavItem href="/closed-loop" icon={Inbox} label="Closed-Loop" collapsed={collapsed} onClick={() => setSidebarOpen(false)} />
             <NavItem href="/pr-suggestions" icon={GitPullRequestArrow} label="PR Suggestions" collapsed={collapsed} onClick={() => setSidebarOpen(false)} />
-            <NavItem href="/analytics" icon={BarChart3} label="Analytics" collapsed={collapsed} onClick={() => setSidebarOpen(false)} />
           </NavGroup>
 
-          <NavGroup label="Account" collapsed={collapsed}>
+          <NavGroup label="Admin" collapsed={collapsed}>
             <NavItem href="/settings" icon={Settings} label="Settings" collapsed={collapsed} onClick={() => setSidebarOpen(false)} />
+            <NavItem href="/users" icon={Users} label="Members" collapsed={collapsed} onClick={() => setSidebarOpen(false)} />
             <NavItem href="/billing" icon={CreditCard} label="Billing" collapsed={collapsed} onClick={() => setSidebarOpen(false)} />
             <NavItem href="/docs" icon={FileText} label="Docs" collapsed={collapsed} onClick={() => setSidebarOpen(false)} />
             <NavItem href="/profile" icon={User} label="Profile" collapsed={collapsed} onClick={() => setSidebarOpen(false)} />
@@ -457,18 +453,44 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
               >
                 <Home className="w-4 h-4" />
               </Link>
-              {breadcrumbs.map((crumb, index) => (
-                <span key={crumb.href} className="flex items-center gap-1.5">
-                  <ChevronRight className="w-3 h-3 text-[var(--text-muted)]" />
-                  {index === breadcrumbs.length - 1 ? (
-                    <span className="font-medium text-[var(--text-primary)]">{crumb.label}</span>
-                  ) : (
-                    <Link href={crumb.href} className="text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors">
-                      {crumb.label}
-                    </Link>
-                  )}
-                </span>
-              ))}
+              {(() => {
+                // For deep paths (≥3 crumbs), collapse the middle and
+                // show only the immediate parent + current. This keeps
+                // the breadcrumb header tight without losing "you are
+                // here under X" context.
+                const visible = breadcrumbs.length > 2
+                  ? [breadcrumbs[breadcrumbs.length - 2], breadcrumbs[breadcrumbs.length - 1]]
+                  : breadcrumbs;
+                return visible.map((crumb, index) => {
+                  const isLast = index === visible.length - 1;
+                  // When collapsed, prefix the parent crumb with "…" to
+                  // signal that the chain is shortened.
+                  const showEllipsis = breadcrumbs.length > 2 && index === 0;
+                  return (
+                    <span key={crumb.href} className="flex items-center gap-1.5 min-w-0">
+                      {showEllipsis && (
+                        <>
+                          <span className="text-[var(--text-muted)]">…</span>
+                          <ChevronRight className="w-3 h-3 text-[var(--text-muted)]" />
+                        </>
+                      )}
+                      {!showEllipsis && (
+                        <ChevronRight className="w-3 h-3 text-[var(--text-muted)]" />
+                      )}
+                      {isLast ? (
+                        <span className="font-medium text-[var(--text-primary)] truncate">{crumb.label}</span>
+                      ) : (
+                        <Link
+                          href={crumb.href}
+                          className="text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors truncate"
+                        >
+                          {crumb.label}
+                        </Link>
+                      )}
+                    </span>
+                  );
+                });
+              })()}
             </nav>
 
             {/* Right: Search + Notifications */}
@@ -694,13 +716,20 @@ function NavSubItem({
       href={href}
       onClick={onClick}
       aria-label={label}
+      aria-current={active ? "page" : undefined}
       className={cn(
-        "nav-subitem block pl-9 pr-3 py-1.5 rounded-md text-xs font-medium transition-colors",
+        "nav-subitem block pl-9 pr-3 py-1.5 rounded-md text-xs font-medium transition-colors relative",
         active
-          ? "text-[var(--accent)] bg-[var(--accent-light)]"
+          ? "text-[var(--accent)] bg-[var(--accent-light)]/60"
           : "text-[var(--text-muted)] hover:text-[var(--text-secondary)] hover:bg-[var(--bg-tertiary)]"
       )}
     >
+      {active && (
+        <span
+          aria-hidden="true"
+          className="absolute left-3 top-1/2 -translate-y-1/2 w-1 h-1 rounded-full bg-[var(--accent)]"
+        />
+      )}
       <span className="truncate">{label}</span>
     </Link>
   );
@@ -731,17 +760,26 @@ function NavItem({
         href={href}
         onClick={onClick}
         aria-label={label}
+        aria-current={active ? "page" : undefined}
         className={cn(
-          "nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors relative",
+          "nav-item flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-150 relative",
           active
-            ? "active"
-            : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+            ? "bg-[var(--accent-light)] text-[var(--accent)]"
+            : "text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)]"
         )}
       >
+        {/* Left-edge accent bar for active items — gives a stronger
+            visual "you are here" cue than just icon color. */}
+        {active && (
+          <span
+            aria-hidden="true"
+            className="absolute left-0 top-1.5 bottom-1.5 w-0.5 rounded-full bg-[var(--accent)]"
+          />
+        )}
         <Icon
           className={cn(
             "flex-shrink-0 nav-icon transition-all duration-200",
-            active ? "w-5 h-5 text-[var(--accent)]" : "w-4 h-4 text-[var(--text-muted)]"
+            active ? "w-4 h-4 text-[var(--accent)]" : "w-4 h-4 text-[var(--text-muted)] group-hover:text-[var(--text-secondary)]"
           )}
         />
         {!collapsed && <span className="truncate">{label}</span>}
@@ -802,8 +840,8 @@ function NavGroup({
     return <div className="space-y-0.5 border-t border-[var(--border-subtle)] pt-2 first:border-t-0 first:pt-0">{children}</div>;
   }
   return (
-    <div className="space-y-0.5">
-      <div className="px-3 py-1 text-[10px] font-semibold uppercase tracking-wider text-[var(--text-muted)] opacity-70">
+    <div className="space-y-1">
+      <div className="px-3 pt-1 pb-0.5 text-[10px] font-mono font-semibold uppercase tracking-[0.14em] text-[var(--text-muted)]/80">
         {label}
       </div>
       {children}

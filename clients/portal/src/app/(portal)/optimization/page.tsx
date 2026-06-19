@@ -10,6 +10,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
 import { EmptyState } from "@/components/ui/empty-state";
 import { StatCard } from "@/components/ui/stat-card";
+import { PageHeader } from "@/components/layout/page-header";
 import { useOrg } from "@/hooks/use-org";
 import { costApi } from "@/lib/api";
 import { cn } from "@/lib/utils";
@@ -620,15 +621,11 @@ export default function OptimizationPage() {
 
   return (
     <div className="page-enter mx-auto max-w-7xl space-y-6 p-4 sm:p-6 lg:p-8">
-      {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight text-[var(--text-primary)] sm:text-3xl">
-          Cost & usage optimization
-        </h1>
-        <p className="mt-1 text-sm text-[var(--text-muted)]">
-          Where your tokens go, what caching saves, and how the budget is burning.
-        </p>
-      </div>
+      <PageHeader
+        title="Cost & usage optimization"
+        subtitle="Where your tokens go, what caching saves, and how the budget is burning."
+        icon={Sparkles}
+      />
 
       <Tabs
         value={tab}

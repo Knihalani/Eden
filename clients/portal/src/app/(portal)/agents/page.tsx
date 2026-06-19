@@ -10,6 +10,7 @@ import { Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Skeleton } from "@/components/ui/skeleton";
 import { NoOrgState } from "@/components/ui/no-org-state";
+import { PageHeader } from "@/components/layout/page-header";
 import { useToast } from "@/components/ui/toast";
 import {
   Bot,
@@ -109,37 +110,34 @@ export default function AgentsPage() {
 
   return (
     <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-6 page-enter">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
-        <div>
-          <h1 className="text-2xl sm:text-3xl font-bold text-[var(--text-primary)] tracking-tight flex items-center gap-2">
-            <Bot className="w-7 h-7 text-[var(--accent)]" />
-            Agents
-          </h1>
-          <p className="text-sm text-[var(--text-muted)] mt-1">
-            {loading
-              ? "Loading…"
-              : `${agents.length} registered · click an agent to upload code, run sims, and inspect results.`}
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <Link
-            href="/agents/connect"
-            className="inline-flex items-center gap-1.5 px-3 py-2 bg-[var(--accent)] text-[var(--bg-primary)] rounded-lg text-sm font-medium hover:opacity-90 transition-opacity"
-          >
-            <Plus className="w-4 h-4" />
-            Connect new agent
-          </Link>
-          <button
-            onClick={load}
-            disabled={loading}
-            className="inline-flex items-center gap-1.5 px-3 py-2 bg-[var(--bg-tertiary)] text-[var(--text-primary)] rounded-lg text-sm font-medium hover:bg-[var(--border-default)] disabled:opacity-50 transition-colors"
-          >
-            <RefreshCw className={cn("w-4 h-4", loading && "animate-spin")} />
-            Refresh
-          </button>
-        </div>
-      </div>
+      <PageHeader
+        title="Agents"
+        subtitle={
+          loading
+            ? "Loading…"
+            : `${agents.length} registered · click an agent to upload code, run sims, and inspect results.`
+        }
+        icon={Bot}
+        actions={
+          <div className="flex items-center gap-2">
+            <Link
+              href="/agents/connect"
+              className="inline-flex items-center gap-1.5 px-3 py-2 bg-[var(--accent)] text-[var(--bg-primary)] rounded-lg text-sm font-medium hover:opacity-90 transition-opacity"
+            >
+              <Plus className="w-4 h-4" />
+              Connect new agent
+            </Link>
+            <button
+              onClick={load}
+              disabled={loading}
+              className="inline-flex items-center gap-1.5 px-3 py-2 bg-[var(--bg-tertiary)] text-[var(--text-primary)] rounded-lg text-sm font-medium hover:bg-[var(--border-default)] disabled:opacity-50 transition-colors"
+            >
+              <RefreshCw className={cn("w-4 h-4", loading && "animate-spin")} />
+              Refresh
+            </button>
+          </div>
+        }
+      />
 
       {error && (
         <div className="p-3 rounded-lg border border-[var(--error)]/20 bg-[var(--error-bg)] text-sm text-[var(--error)] flex items-center gap-2">

@@ -12,14 +12,18 @@ export function proxyError(error: unknown, fallback: string) {
 }
 
 // Server-side resolution of the FastAPI upstream. The catch-all proxy
-// at /api/proxy/[...path] uses this to forward requests. Order of
-// precedence: API_INTERNAL_URL (preferred for server-side, never
-// exposed to the client) → NEXT_PUBLIC_API_URL (legacy fallback) →
-// localhost:8000 (dev default).
+// at /api/proxy/[...path] uses this to forward requests.
+//
+// Node's native fetch needs an absolute URL — it does NOT accept
+// relative paths like `/api/proxy`. So we must NOT fall back to the
+// client-safe NEXT_PUBLIC_API_URL (which is `/api/proxy` in production
+// to keep the request same-origin). Order of precedence:
+//   1. API_INTERNAL_URL — preferred, never exposed to the client.
+//   2. localhost:8000 — dev default; matches FastAPI's default port.
+// We explicitly drop NEXT_PUBLIC_API_URL from the lookup because it
+// would crash server-side fetches when set to `/api/proxy`.
 const API_BASE =
-  process.env.API_INTERNAL_URL ||
-  process.env.NEXT_PUBLIC_API_URL ||
-  "http://localhost:8000";
+  process.env.API_INTERNAL_URL || "http://localhost:8000";
 
 interface ForwardOptions {
   method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";

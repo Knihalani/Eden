@@ -10,6 +10,7 @@ const isPublicRoute = createRouteMatcher([
   "/forgot-password(.*)",
   "/reset-password(.*)",
   "/invite(.*)",
+  "/docs(.*)",
   "/api/proxy(.*)",
   "/__clerk(.*)",
   "/sign-in(.*)",

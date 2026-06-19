@@ -108,8 +108,8 @@ export interface User {
   user_id: string;
   email: string;
   name: string;
-  organizations?: Organization[];
-  current_org_id?: string | null;
+  organizations: Organization[];
+  current_org_id: string | null;
 }
 
 export interface Organization {

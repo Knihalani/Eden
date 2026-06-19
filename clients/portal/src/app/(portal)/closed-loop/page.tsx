@@ -5,7 +5,10 @@ import { useOrg } from "@/hooks/use-org";
 import { closedLoopApi } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { useToast } from "@/components/ui/toast";
+import { useConfirm } from "@/hooks/use-confirm";
 import { Check, X, Play, AlertCircle, Loader2, Inbox, History, BarChart3 } from "lucide-react";
+import { PageHeader } from "@/components/layout/page-header";
 
 type Action = {
   action_id: string;
@@ -25,6 +28,8 @@ type Dashboard = {
 
 export default function ClosedLoopPage() {
   const { currentOrg } = useOrg();
+  const toast = useToast();
+  const { confirm, ConfirmDialog } = useConfirm();
   const [tab, setTab] = useState<"pending" | "history" | "dashboard">("pending");
   const [pending, setPending] = useState<Action[]>([]);
   const [history, setHistory] = useState<Action[]>([]);
@@ -62,9 +67,10 @@ export default function ClosedLoopPage() {
     setBusyActionId(actionId);
     try {
       await closedLoopApi.approveAction(currentOrg.id, actionId);
+      toast.success("Action approved");
       await loadAll();
     } catch (e: any) {
-      alert(e?.message ?? "Failed to approve");
+      toast.error(e?.message ?? "Failed to approve");
     } finally {
       setBusyActionId(null);
     }
@@ -72,13 +78,17 @@ export default function ClosedLoopPage() {
 
   const handleDeny = async (actionId: string) => {
     if (!currentOrg) return;
-    const reason = prompt("Optional reason for denial:") ?? undefined;
+    // ponytail: window.prompt retained as a minimal-but-native way to
+    // collect a denial reason. A styled modal is the proper fix; defer
+    // until a reason input is needed in more than one place.
+    const reason = window.prompt("Optional reason for denial:") ?? undefined;
     setBusyActionId(actionId);
     try {
       await closedLoopApi.denyAction(currentOrg.id, actionId, { reason });
+      toast.success("Action denied");
       await loadAll();
     } catch (e: any) {
-      alert(e?.message ?? "Failed to deny");
+      toast.error(e?.message ?? "Failed to deny");
     } finally {
       setBusyActionId(null);
     }
@@ -86,13 +96,20 @@ export default function ClosedLoopPage() {
 
   const handleApply = async (actionId: string) => {
     if (!currentOrg) return;
-    if (!confirm("Apply this action? This will execute the underlying change.")) return;
+    const ok = await confirm({
+      title: "Apply this action?",
+      description: "This will execute the underlying change. Are you sure?",
+      confirmLabel: "Apply",
+      variant: "destructive",
+    });
+    if (!ok) return;
     setBusyActionId(actionId);
     try {
       await closedLoopApi.applyAction(currentOrg.id, actionId);
+      toast.success("Action applied");
       await loadAll();
     } catch (e: any) {
-      alert(e?.message ?? "Failed to apply");
+      toast.error(e?.message ?? "Failed to apply");
     } finally {
       setBusyActionId(null);
     }
@@ -108,12 +125,11 @@ export default function ClosedLoopPage() {
 
   return (
     <div className="p-6 max-w-6xl">
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-[var(--text-primary)]">Closed-Loop Actions</h1>
-        <p className="text-sm text-[var(--text-muted)] mt-1">
-          Review and act on automated recommendations from the promotion loop, judge regressions, drift alerts, and experiment winners.
-        </p>
-      </div>
+      <PageHeader
+        title="Closed-Loop Actions"
+        subtitle="Review and act on automated recommendations from the promotion loop, judge regressions, drift alerts, and experiment winners."
+        icon={Inbox}
+      />
 
       {/* Dashboard summary cards */}
       {dashboard && (
@@ -166,6 +182,7 @@ export default function ClosedLoopPage() {
       ) : (
         <DashboardView dashboard={dashboard} />
       )}
+      {ConfirmDialog}
     </div>
   );
 }

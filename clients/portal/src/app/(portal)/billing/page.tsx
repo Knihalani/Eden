@@ -5,6 +5,7 @@ import { useOrg } from "@/hooks/use-org";
 import { api } from "@/lib/api";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { PageHeader } from "@/components/layout/page-header";
 import {
   CreditCard,
   Check,
@@ -24,6 +25,7 @@ import {
   FileText,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useToast } from "@/components/ui/toast";
 
 interface PlanSpec {
   name: string;
@@ -100,6 +102,7 @@ const INVOICES_PER_PAGE = 5;
 
 export default function BillingPage() {
   const { currentOrg } = useOrg();
+  const toast = useToast();
   const [loading, setLoading] = useState(true);
   const [usage, setUsage] = useState<UsageData | null>(null);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
@@ -150,7 +153,7 @@ export default function BillingPage() {
       }
     } catch (e: unknown) {
       const message = e instanceof Error ? e.message : "Failed to upgrade";
-      alert(message);
+      toast.error(message);
     } finally {
       setUpgrading(null);
     }
@@ -176,19 +179,18 @@ export default function BillingPage() {
 
   return (
     <div className="p-4 sm:p-6 lg:p-8 max-w-6xl mx-auto space-y-6 page-enter">
-      {/* Header */}
-      <div>
-        <h1 className="text-2xl sm:text-3xl font-bold text-[var(--text-primary)] tracking-tight flex items-center gap-2">
-          <CircleDollarSign className="w-7 h-7 text-[var(--accent)]" />
-          Billing
-        </h1>
-        <p className="text-sm text-[var(--text-muted)] mt-1">
-          Manage your subscription and billing for{" "}
-          <span className="text-[var(--text-secondary)] font-medium">
-            {currentOrg?.name || "your organization"}
-          </span>
-        </p>
-      </div>
+      <PageHeader
+        title="Billing"
+        subtitle={
+          <>
+            Manage your subscription and billing for{" "}
+            <span className="text-[var(--text-secondary)] font-medium">
+              {currentOrg?.name || "your organization"}
+            </span>
+          </>
+        }
+        icon={CircleDollarSign}
+      />
 
       {/* Current plan + usage */}
       <Card className="p-6">

@@ -76,7 +76,7 @@ export interface UseBuilderState {
   removeNode: (id: string) => void;
   duplicateNode: (id: string) => void;
   renameNode: (id: string, label: string) => void;
-  reset: () => void;
+  reset: (confirmFn?: () => Promise<boolean>) => Promise<void>;
   loadFromStorage: () => void;
   setSelected: (id: string | null) => void;
   onNodesChange: (changes: NodeChange[]) => void;
@@ -254,18 +254,27 @@ export function useBuilderState(): UseBuilderState {
     [nodes, edges, pushHistory],
   );
 
-  const reset = useCallback(() => {
-    if (typeof window !== "undefined" && !window.confirm("Discard the current graph?")) {
-      return;
-    }
-    const d = defaultGraph();
-    setNodes(d.nodes);
-    setEdges(d.edges);
-    setGraphNameState(DEFAULT_GRAPH_NAME);
-    setSelectedNodeId(null);
-    pushHistory({ nodes: d.nodes, edges: d.edges });
-    toast.info("Builder reset to defaults.");
-  }, [toast, pushHistory]);
+  // reset accepts an optional async `confirmFn` so the caller can
+  // use the styled `useConfirm` dialog instead of `window.confirm`.
+  // Falls back to window.confirm for any legacy direct callers.
+  const reset = useCallback(
+    async (confirmFn?: () => Promise<boolean>) => {
+      const ok = confirmFn
+        ? await confirmFn()
+        : typeof window !== "undefined"
+          ? window.confirm("Discard the current graph?")
+          : true;
+      if (!ok) return;
+      const d = defaultGraph();
+      setNodes(d.nodes);
+      setEdges(d.edges);
+      setGraphNameState(DEFAULT_GRAPH_NAME);
+      setSelectedNodeId(null);
+      pushHistory({ nodes: d.nodes, edges: d.edges });
+      toast.info("Builder reset to defaults.");
+    },
+    [toast, pushHistory],
+  );
 
   const loadFromStorage = useCallback(() => {
     const saved = loadGraph();
