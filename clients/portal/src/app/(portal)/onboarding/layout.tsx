@@ -11,7 +11,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { ArrowRight, Sparkles, Check } from "lucide-react";
+import { ArrowRight, Check } from "lucide-react";
+import { Logo } from "@/components/brand/logo";
 
 const STEPS: { slug: string; label: string }[] = [
   { slug: "/onboarding", label: "Welcome" },
@@ -47,9 +48,8 @@ export default function OnboardingLayout({ children }: { children: React.ReactNo
       {/* Top bar */}
       <div className="border-b border-[var(--border-default)] bg-[var(--bg-secondary)] px-6 py-3">
         <div className="mx-auto flex max-w-3xl items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Sparkles className="h-5 w-5 text-[var(--accent)]" />
-            <span className="font-semibold tracking-tight">Eden</span>
+          <div className="flex items-center gap-3">
+            <Logo size="md" showWordmark priority href="/dashboard" />
             <span className="text-xs text-[var(--text-muted)]">— onboarding</span>
           </div>
           <button

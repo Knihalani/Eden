@@ -2,13 +2,13 @@
 
 import Link from "next/link";
 import {
-  Layers,
   Activity,
   Terminal,
   GitPullRequest,
   Sparkles,
   ArrowRight,
 } from "lucide-react";
+import { Logo } from "@/components/brand/logo";
 
 // Pipeline nodes mirror the current product surface:
 //   Gateway → Workspace → /eden-improve → Shipped PR
@@ -76,12 +76,7 @@ export function AuthBrandPanel() {
       <div className="relative z-10 flex flex-col justify-between min-h-screen px-10 lg:px-14 py-10">
         {/* Top: logo */}
         <div className="flex items-center gap-3">
-          <div className="auth-logo-mark">
-            <Layers className="w-5 h-5 text-[var(--bg-base)]" strokeWidth={2.5} />
-          </div>
-          <span className="text-xl font-bold tracking-tight text-[var(--text-primary)]">
-            Eden
-          </span>
+          <Logo size="lg" showWordmark priority href={null} />
         </div>
 
         {/* Middle: hero + pipeline + features */}
