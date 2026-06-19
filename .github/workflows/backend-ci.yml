@@ -70,10 +70,11 @@ jobs:
     needs: lock-check
     services:
       postgres:
-        # Use the pgvector image rather than plain postgres:16 — the
-        # migrations create the `vector` extension and the standard
-        # postgres image doesn't ship the extension binaries.
-        image: pgvector/pgvector:pg16
+        # Use the TimescaleDB HA image rather than plain postgres:16 —
+        # the migrations create both the `vector` (pgvector) and
+        # `timescaledb` extensions, and the stock postgres image
+        # doesn't ship either extension's binaries.
+        image: timescale/timescaledb-ha:pg16
         env:
           POSTGRES_USER: eden
           POSTGRES_PASSWORD: eden
