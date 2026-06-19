@@ -70,7 +70,10 @@ jobs:
     needs: lock-check
     services:
       postgres:
-        image: postgres:16
+        # Use the pgvector image rather than plain postgres:16 — the
+        # migrations create the `vector` extension and the standard
+        # postgres image doesn't ship the extension binaries.
+        image: pgvector/pgvector:pg16
         env:
           POSTGRES_USER: eden
           POSTGRES_PASSWORD: eden
