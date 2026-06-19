@@ -11,6 +11,9 @@ import {
   Layers,
   LayoutDashboard,
   GitBranch,
+  Bell,
+  ArrowRight,
+  Eye,
 } from "lucide-react";
 import { api } from "@/lib/api";
 import { useOrg } from "@/hooks/use-org";
@@ -27,7 +30,6 @@ import {
   type TraceRow,
 } from "./_components/recent-traces-card";
 import { QuickLinks } from "./_components/quick-links";
-import { IntelligenceGrid } from "./_components/intelligence-grid";
 
 interface DashboardData {
   traces: TraceRow[];
@@ -276,13 +278,68 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* Row 3: top-of-funnel cards for every observability category */}
-      <div className="mt-6 sm:mt-8">
-        <IntelligenceGrid />
-      </div>
+      {/* Row 3: Quick actions — the user's main navigation surface.
+          Replaces the old 22-card IntelligenceGrid (overwhelming + slow
+          to load + the user can navigate to the categories via the sidebar
+          anyway). Focused on the 4 actions that matter most for a
+          returning user. */}
+      <section className="mt-8">
+        <h2 className="text-base font-semibold text-[var(--text-primary)] tracking-tight mb-3">
+          Jump in
+        </h2>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+          {[
+            {
+              href: "/agents/connect",
+              icon: GitBranch,
+              title: "Connect a repo",
+              body: "Link a GitHub repo to auto-instrument your agent",
+              accent: "bg-[var(--accent-faint)] text-[var(--accent)]",
+            },
+            {
+              href: "/traces",
+              icon: Eye,
+              title: "Browse traces",
+              body: "Search and inspect every trace in your system",
+              accent: "bg-[var(--terminal-faint)] text-[var(--terminal)]",
+            },
+            {
+              href: "/optimization",
+              icon: DollarSign,
+              title: "Track cost",
+              body: "Token + cost overview across models and agents",
+              accent: "bg-[var(--warning-bg)] text-[var(--warning)]",
+            },
+            {
+              href: "/alerts",
+              icon: Bell,
+              title: "Set up alerts",
+              body: "Get notified when cost spikes or quality drops",
+              accent: "bg-[var(--error-bg)] text-[var(--error)]",
+            },
+          ].map((a) => (
+            <Link
+              key={a.href}
+              href={a.href}
+              className="group block p-4 bg-[var(--bg-primary)] border border-[var(--border-default)] rounded-xl transition-all hover:border-[var(--accent)]/50 hover:shadow-sm"
+            >
+              <div className={`w-9 h-9 rounded-lg flex items-center justify-center mb-3 ${a.accent}`}>
+                <a.icon className="w-5 h-5" />
+              </div>
+              <p className="text-sm font-semibold text-[var(--text-primary)] group-hover:text-[var(--accent)] transition-colors">
+                {a.title}
+              </p>
+              <p className="mt-1 text-xs text-[var(--text-muted)] leading-relaxed">
+                {a.body}
+              </p>
+              <ArrowRight className="w-3.5 h-3.5 text-[var(--text-muted)] mt-3 group-hover:text-[var(--accent)] group-hover:translate-x-0.5 transition-all" />
+            </Link>
+          ))}
+        </div>
+      </section>
 
       {/* Footer trace count summary */}
-      <div className="mt-6 text-xs text-[var(--text-muted)] flex items-center gap-2">
+      <div className="mt-8 pt-6 border-t border-[var(--border-subtle)] text-xs text-[var(--text-muted)] flex items-center gap-2">
         <Layers className="w-3.5 h-3.5" />
         {loading ? (
           <span className="inline-flex items-center gap-1.5">
