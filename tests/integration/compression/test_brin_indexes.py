@@ -41,9 +41,17 @@ async def _try_get_pool():
     return client
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture
 async def pg_client():
-    """Module-scoped PostgresClient. Skips the module if no DB is reachable."""
+    """Function-scoped PostgresClient. Skips if no DB is reachable.
+
+    Function-scoped (not module-scoped) so each test gets a fresh
+    asyncpg pool bound to the current pytest-asyncio event loop.
+    Module-scoped pools were being bound to a loop that was torn
+    down between tests, causing
+    "got Future ... attached to a different loop" + "another
+    operation is in progress" errors.
+    """
     client = await _try_get_pool()
     if client is None:
         pytest.skip("Postgres test database is not reachable")
