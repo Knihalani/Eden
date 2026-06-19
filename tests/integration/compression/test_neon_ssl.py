@@ -82,7 +82,9 @@ class TestDSNBuilder:
             postgres_sslmode="require",
         )
         dsn = build_dsn(settings)
-        assert "sslmode=require" in dsn
+        # asyncpg's DSN format uses `ssl=...` (not libpq's `sslmode=...`).
+        # See eden/storage/dsn.py for the mapping.
+        assert "ssl=require" in dsn
         assert dsn.startswith(
             "postgresql+asyncpg://eden:secret@ep-test.us-east-2.aws.neon.tech:5432/eden"
         )
@@ -100,8 +102,10 @@ class TestDSNBuilder:
             postgres_channel_binding="require",
         )
         dsn = build_dsn(settings)
-        assert "sslmode=require" in dsn
-        assert "channel_binding=require" in dsn
+        # asyncpg's DSN format: `ssl=...` (not libpq's `sslmode=...`).
+        # channel_binding is libpq-only and is silently dropped by
+        # the DSN builder (see eden/storage/dsn.py).
+        assert "ssl=require" in dsn
 
     def test_no_query_string_when_no_ssl(self):
         """Local dev (no SSL) produces a plain DSN, no query string."""
