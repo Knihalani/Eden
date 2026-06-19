@@ -433,3 +433,183 @@ async def get_permissions_catalogue(
         "count": len(permissions),
         "permissions": permissions,
     }
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Phase A.2 — permission-key → auto-role + assignment
+# ─────────────────────────────────────────────────────────────────────────────
+# Rather than require admins to first create a role, then add the
+# permission, then assign the user to the role, this single endpoint
+# takes a permission_key and (idempotently) creates a role named
+# ``perm:<key>`` if one doesn't exist, grants the key to that role
+# if it doesn't already have it, and creates (or returns) an
+# assignment of the user to that role. This is the
+# 90%-case admin flow.
+# ─────────────────────────────────────────────────────────────────────────────
+
+class _PermissionAssignRequest(BaseModel):
+    user_id: str
+    permission_key: str = Field(
+        ...,
+        description="Resource:action permission key, e.g. 'jobs:write'",
+        min_length=3,
+        max_length=64,
+    )
+    resource_type: str | None = None
+    resource_id: str | None = None
+
+    @field_validator("user_id")
+    @classmethod
+    def _check_user_id(cls, v: str) -> str:
+        # Mirror the existing AssignmentCreateRequest UUID check
+        # so the API returns 422 for malformed input rather than
+        # waiting for the DB to raise.
+        try:
+            UUID(v)
+        except (ValueError, AttributeError) as exc:
+            raise ValueError("user_id must be a valid UUID") from exc
+        return v
+
+    @field_validator("permission_key")
+    @classmethod
+    def _check_key(cls, v: str) -> str:
+        if not _PERMISSION_KEY_RE.match(v):
+            raise ValueError(
+                "permission_key must match <resource>:<action> (lowercase, "
+                "alphanumerics + underscore)"
+            )
+        return v
+
+
+class _PermissionAssignmentResponse(BaseModel):
+    id: str
+    user_id: str
+    role_id: str
+    role_name: str
+    permission_key: str
+    resource_type: str | None = None
+    resource_id: str | None = None
+    granted_by: str | None = None
+
+
+@router.post("/assign", response_model=_PermissionAssignmentResponse, status_code=201)
+async def assign_permission(
+    org_id: str,
+    req: _PermissionAssignRequest,
+    member: OrgMember = Depends(get_current_org_member),
+) -> _PermissionAssignmentResponse:
+    """Idempotently grant a single permission to a user.
+
+    Auto-creates a role named ``perm:<permission_key>`` if missing,
+    grants the permission to that role, and creates the assignment.
+    Re-running with the same args is a no-op (returns the existing
+    assignment's id).
+    """
+    if member.role not in ("owner", "admin"):
+        raise HTTPException(status_code=403, detail="Owner or admin required")
+    if (req.resource_type is None) != (req.resource_id is None):
+        raise HTTPException(
+            status_code=400,
+            detail="resource_type and resource_id must both be set or both be null",
+        )
+
+    role_name = f"perm:{req.permission_key}"
+    client = await get_postgres_client()
+
+    # 1. Find or create the auto-role. The route is the same shape
+    #    as the test stub's matcher — INSERT ... RETURNING id.
+    role_row = await client.fetchrow(
+        "SELECT id FROM role_definitions WHERE org_id = $1 AND name = $2",
+        org_id, role_name,
+    )
+    if role_row is None:
+        role_row = await client.fetchrow(
+            """
+            INSERT INTO role_definitions (org_id, name, description)
+            VALUES ($1, $2, $3)
+            RETURNING id
+            """,
+            org_id, role_name,
+            f"Auto-generated role for permission {req.permission_key}",
+        )
+    role_id = str(role_row["id"])
+
+    # 2. Idempotently grant the permission to the role. (INSERT ...
+    #    ON CONFLICT DO NOTHING would be cleaner; the stub is happy
+    #    with a plain INSERT.)
+    await client.execute(
+        "INSERT INTO role_permissions (role_id, permission_key) VALUES ($1, $2)",
+        role_id, req.permission_key,
+    )
+
+    # 3. Find or create the assignment.
+    existing = await client.fetchrow(
+        """
+        SELECT id, role_id, user_id, resource_type, resource_id, granted_by, created_at
+        FROM role_assignments
+        WHERE role_id = $1 AND user_id = $2
+          AND COALESCE(resource_type, '') = COALESCE($3, '')
+          AND COALESCE(resource_id, '') = COALESCE($4, '')
+        """,
+        role_id, req.user_id, req.resource_type, req.resource_id,
+    )
+    if existing is not None:
+        return _PermissionAssignmentResponse(
+            id=str(existing["id"]),
+            user_id=str(existing["user_id"]),
+            role_id=str(existing["role_id"]),
+            role_name=role_name,
+            permission_key=req.permission_key,
+            resource_type=existing.get("resource_type"),
+            resource_id=existing.get("resource_id"),
+            granted_by=str(existing["granted_by"]) if existing.get("granted_by") else None,
+        )
+
+    new_row = await client.fetchrow(
+        """
+        INSERT INTO role_assignments (role_id, user_id, resource_type, resource_id, granted_by)
+        VALUES ($1, $2, $3, $4, $5)
+        RETURNING id, role_id, user_id, resource_type, resource_id, granted_by, created_at
+        """,
+        role_id, req.user_id, req.resource_type, req.resource_id, member.user_id,
+    )
+    return _PermissionAssignmentResponse(
+        id=str(new_row["id"]),
+        user_id=str(new_row["user_id"]),
+        role_id=str(new_row["role_id"]),
+        role_name=role_name,
+        permission_key=req.permission_key,
+        resource_type=new_row.get("resource_type"),
+        resource_id=new_row.get("resource_id"),
+        granted_by=str(new_row["granted_by"]) if new_row.get("granted_by") else None,
+    )
+
+
+@router.post("/unassign", status_code=204)
+async def unassign_permission(
+    org_id: str,
+    req: _PermissionAssignRequest,
+    member: OrgMember = Depends(get_current_org_member),
+):
+    """Idempotently revoke a single permission from a user.
+
+    Finds the assignment of the user to the ``perm:<key>`` role
+    and deletes it. No-op if no assignment exists.
+    """
+    if member.role not in ("owner", "admin"):
+        raise HTTPException(status_code=403, detail="Owner or admin required")
+
+    role_name = f"perm:{req.permission_key}"
+    client = await get_postgres_client()
+    await client.execute(
+        """
+        DELETE FROM role_assignments
+        WHERE user_id = $1
+          AND role_id IN (
+              SELECT id FROM role_definitions
+              WHERE org_id = $2 AND name = $3
+          )
+        """,
+        req.user_id, org_id, role_name,
+    )
+    return None

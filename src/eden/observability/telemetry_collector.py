@@ -439,6 +439,41 @@ class TelemetryCollector:
                 if event.response_body is not None
                 else None
             )
+            # Phase B2 (2026-06-19) — extend zstd compression to 6 more
+            # JSONB columns. Same dictionary, same lossless guarantee
+            # as request_body / response_body. The original JSONB
+            # columns stay populated for the 30-day burn-in (mirrors
+            # migration 038's docstring).
+            reasoning_zstd = (
+                compress_jsonb(event.reasoning)
+                if event.reasoning is not None
+                else None
+            )
+            tool_calls_full_zstd = (
+                compress_jsonb(event.tool_calls_full)
+                if event.tool_calls_full
+                else None
+            )
+            tool_results_zstd = (
+                compress_jsonb(event.tool_results)
+                if event.tool_results
+                else None
+            )
+            payload_zstd = (
+                compress_jsonb(event.payload)
+                if event.payload is not None
+                else None
+            )
+            metrics_zstd = (
+                compress_jsonb(event.metrics)
+                if event.metrics is not None
+                else None
+            )
+            attributes_zstd = (
+                compress_jsonb(event.attributes)
+                if event.attributes is not None
+                else None
+            )
             # Phase A — content-addressed message dedup (Laminar 20x trick).
             # Hash every message in request_body / response_body via the
             # canonical-JSON SHA-256 in :mod:`eden.observability.canonical`
@@ -477,6 +512,8 @@ class TelemetryCollector:
                     system_fingerprint, cache_hit, prompt_cache_savings_usd,
                     model_version, service_tier,
                     request_body_zstd, response_body_zstd,
+                    reasoning_zstd, tool_calls_full_zstd, tool_results_zstd,
+                    payload_zstd, metrics_zstd, attributes_zstd,
                     request_message_hashes, response_message_hashes,
                     created_at
                 )
@@ -484,7 +521,8 @@ class TelemetryCollector:
                     $1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
                     $11, $12, $13, $14, $15, $16, $17, $18, $19, $20,
                     $21, $22, $23, $24, $25, $26, $27, $28, $29, $30,
-                    $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, NOW()
+                    $31, $32, $33, $34, $35, $36, $37, $38, $39, $40,
+                    $41, $42, $43, $44, $45, $46, NOW()
                 )
                 ON CONFLICT (event_id) DO NOTHING
                 """,
@@ -526,6 +564,12 @@ class TelemetryCollector:
                 event.service_tier,
                 request_body_zstd,
                 response_body_zstd,
+                reasoning_zstd,
+                tool_calls_full_zstd,
+                tool_results_zstd,
+                payload_zstd,
+                metrics_zstd,
+                attributes_zstd,
                 event.request_message_hashes or None,
                 event.response_message_hashes or None,
             )
@@ -635,8 +679,41 @@ class TelemetryCollector:
 
     # ── Query API ─────────────────────────────────────────────────────────
 
+    async def _load_from_archive(
+        self,
+        trace_id: str,
+    ) -> list[dict[str, Any]]:
+        """Cold-archive fallback for ``get_trace_tree`` (Phase B3).
+
+        Called when the Postgres query for ``trace_id`` returns no
+        rows. Looks up the trace in ``trace_archive_index`` and
+        rehydrates from Impossible Cloud via :class:`ArchiveService`.
+
+        Returns a list of row dicts (same shape as the Postgres
+        ``SELECT *`` output) or an empty list. Errors are logged
+        and treated as "not found" so the trace view returns 404
+        cleanly.
+        """
+        try:
+            from eden.services.data_platform import ArchiveService
+        except Exception as exc:
+            logger.debug(f"_load_from_archive: import failed: {exc}")
+            return []
+        archive = ArchiveService()
+        try:
+            return await archive.rehydrate(trace_id)
+        except Exception as exc:
+            logger.warning(f"_load_from_archive: rehydrate failed for {trace_id}: {exc}")
+            return []
+
     async def get_trace_tree(self, tenant_id: str, trace_id: str) -> TraceTree | None:
-        """Build a hierarchical trace tree from stored telemetry events."""
+        """Build a hierarchical trace tree from stored telemetry events.
+
+        Phase B3 (2026-06-19): falls back to the Impossible Cloud
+        cold archive (via :class:`ArchiveService.rehydrate`) when
+        the trace isn't in Postgres — happens for any trace older
+        than the configured cold-archive age (default 90 days).
+        """
         client = await self._get_postgres()
         if not client:
             return None
@@ -655,7 +732,14 @@ class TelemetryCollector:
             return None
 
         if not rows:
-            return None
+            # Phase B3 (2026-06-19): cold-archive fallback. If the
+            # trace isn't in Postgres, check ``trace_archive_index``
+            # and rehydrate from Impossible Cloud. The reader
+            # continues with the same shape so the rest of this
+            # method doesn't need to branch.
+            rows = await self._load_from_archive(trace_id)
+            if not rows:
+                return None
 
         # Phase 3: read the zstd-compressed BYTEA columns first, fall
         # back to the original JSONB columns for any pre-backfill row
@@ -731,15 +815,15 @@ class TelemetryCollector:
                 "event_type": row.get("event_type"),
                 "timestamp": row.get("timestamp"),
                 "duration_ms": duration,
-                "metrics": row.get("metrics") or {},
-                "attributes": row.get("attributes") or {},
-                "payload": row.get("payload") or {},
+                "metrics": _read_payload(row, "metrics_zstd", "metrics") or {},
+                "attributes": _read_payload(row, "attributes_zstd", "attributes") or {},
+                "payload": _read_payload(row, "payload_zstd", "payload") or {},
                 "outcome": row.get("outcome"),
                 "request_body": await _resolve_request(row),
                 "response_body": await _resolve_response(row),
-                "reasoning": row.get("reasoning"),
-                "tool_calls_full": row.get("tool_calls_full") or [],
-                "tool_results": row.get("tool_results") or [],
+                "reasoning": _read_payload(row, "reasoning_zstd", "reasoning"),
+                "tool_calls_full": _read_payload(row, "tool_calls_full_zstd", "tool_calls_full") or [],
+                "tool_results": _read_payload(row, "tool_results_zstd", "tool_results") or [],
                 "images": row.get("images") or [],
                 "audio": row.get("audio") or [],
                 "logprobs": row.get("logprobs"),

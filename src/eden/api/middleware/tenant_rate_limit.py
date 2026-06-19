@@ -82,6 +82,7 @@ class TenantRateLimitMiddleware(BaseHTTPMiddleware):
         self._bucket_lock = asyncio.Lock()
         self._tier_cache: dict[str, tuple[int, int, str, float]] = {}  # org_id -> (limit, window, tier, expires_at)
         self._tier_cache_ttl = 5.0  # seconds
+        self._region_cache: dict[str, str | None] = {}  # org_id -> region
         self._redis = None  # Lazy-load Redis if available
         self._cleanup_task: asyncio.Task | None = None
         self._running = True
@@ -222,6 +223,38 @@ class TenantRateLimitMiddleware(BaseHTTPMiddleware):
                 await self._cleanup_task
             except asyncio.CancelledError:
                 pass
+
+    async def _resolve_region(self, org_id: str | None) -> str | None:
+        """Resolve the org's region for the ``X-Region-Hint`` header.
+
+        Best-effort: returns ``None`` for any of:
+          - no org_id (unauthenticated request)
+          - DB lookup error (we'd rather drop the header than fail
+            the request)
+          - the org exists but has no region set
+          - the org doesn't exist
+
+        Results are cached in-process so the lookup is amortised
+        across requests for the same org.
+        """
+        if not org_id:
+            return None
+        if org_id in self._region_cache:
+            return self._region_cache[org_id]
+        try:
+            from eden.storage.postgres import get_postgres_client
+            client = await get_postgres_client()
+            row = await client.fetchrow(
+                "SELECT region FROM organizations WHERE id = $1",
+                org_id,
+            )
+        except Exception:
+            # Best-effort: a DB blip must not break the request.
+            self._region_cache[org_id] = None
+            return None
+        region = row.get("region") if row else None
+        self._region_cache[org_id] = region
+        return region
 
     async def _resolve_api_key_id(self, request: Request) -> str | None:
         """Resolve the API key id from the X-Org-Api-Key header.

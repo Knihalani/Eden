@@ -13,6 +13,7 @@ from eden.api.routes import (
     ai_insights,
     analytics,
     api_keys,
+    app_events,
     audit,
     auth,
     billing,
@@ -33,6 +34,7 @@ from eden.api.routes import (
     multi_agent,
     orgs,
     pii_policy,
+    presigned_feedback,
     prompts,
     qa_generator,
     redteam,
@@ -41,6 +43,7 @@ from eden.api.routes import (
     retention_policy,
     sandbox,
     scim,
+    sessions,
     sharing,
     signals,
     sql_query,
@@ -278,6 +281,7 @@ app.include_router(analytics.router)  # /orgs/{org_id}/analytics
 app.include_router(export.router)  # /orgs/{org_id}/export
 app.include_router(export_destinations.router)  # /orgs/{org_id}/export/{destinations,schedules,run-now}
 app.include_router(ingestion.router)  # /orgs/{org_id}/ingest (multi-format observability ingestion)
+app.include_router(app_events.router)  # /orgs/{org_id}/ingest/app (Phase A1 app/site events)
 app.include_router(scim.router)  # /orgs/{org_id}/scim/v2
 app.include_router(sso.router)  # /sso
 app.include_router(chain.router)  # /chain
@@ -285,6 +289,10 @@ app.include_router(ai_insights.router)  # /orgs/{org_id}/ai-insights
 app.include_router(ai_agent.router)  # /orgs/{org_id}/ai (Phase C unified agent)
 app.include_router(sharing.sharing_router)  # /orgs/{org_id}/traces/{trace_id}/share + saved-searches (Phase N)
 app.include_router(sharing.public_router)  # /public/traces/{token} (no auth, token-gated)
+# Phase A1: session lifecycle + presigned feedback tokens
+app.include_router(sessions.router)  # /orgs/{org_id}/intelligence/user/sessions/...
+app.include_router(presigned_feedback.auth_router)  # /orgs/{org_id}/intelligence/user/feedback/presigned-token
+app.include_router(presigned_feedback.public_router)  # /api/v1/feedback/tokens/{token_id} (no auth, token-gated)
 app.include_router(sql_query.router)  # /orgs/{org_id}/sql (Phase M read-only SQL executor)
 app.include_router(qa_generator.router)  # /orgs/{org_id}/synthetic (Phase J synthetic Q/A generator)
 app.include_router(redteam.router)  # /orgs/{org_id}/redteam (Phase L red-team probes)

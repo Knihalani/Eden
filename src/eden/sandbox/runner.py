@@ -717,40 +717,69 @@ class NullSandboxRunner(SandboxRunner):
         """Run tests directly in subprocess (DEV ONLY)."""
         logger.warning("Using NullSandboxRunner - NOT for production!")
 
-        # Build combined code to execute
-        combined_code = f"""
-import sys
-import json
-import traceback
+        # Concatenate the env code + test suite + probe code into a
+        # single script that runs in one shared namespace. This way
+        # the test_suite's ``assert`` statements can see the env
+        # code's locals (e.g. ``x`` / ``y``), and each probe can
+        # read what env set up.
+        #
+        # We DO NOT use nested ``exec()`` because that creates a new
+        # namespace and the test_suite's ``assert`` can't see the
+        # env code's locals.
+        import textwrap
 
-# Capture stdout
-from io import StringIO
-sys.stdout = StringIO()
+        def _indent_block(s: str, prefix: str) -> str:
+            """Indent every non-empty line of ``s`` by ``prefix``.
 
-try:
-    # Execute the environment code
-    exec('''
-{code}
-''')
+            Empty lines are left empty so the script remains
+            parseable.
+            """
+            return "\n".join(
+                prefix + line if line.strip() else ""
+                for line in s.splitlines()
+            )
 
-    # Execute the test suite
-    test_results = exec('''
-{test_suite}
-''')
-
-    stdout_output = sys.stdout.getvalue()
-    sys.stdout = sys.__stdout__
-
-    print("TEST_RESULTS:")
-    print(json.dumps(test_results))
-    print("STDOUT:")
-    print(stdout_output)
-
-except Exception as e:
-    sys.stdout = sys.__stdout__
-    print("ERROR:", file=sys.stderr)
-    traceback.print_exc()
-"""
+        probe_section = "\n\n".join(
+            f"# probe: {p.get('name', '?')}\n{p.get('probe_code', '').strip()}"
+            for p in exploit_probes
+            if p.get("probe_code", "").strip()
+        ) or "# no probes"
+        combined_code = (
+            "import sys\n"
+            "import json\n"
+            "import traceback\n"
+            "from io import StringIO\n"
+            "sys.stdout = StringIO()\n"
+            "_exploit_findings = []\n"
+            "_probe_result = None\n"
+            "try:\n"
+            "    # === env code ===\n"
+            + _indent_block(code, "    ") + "\n"
+            "    # === test suite ===\n"
+            + _indent_block(test_suite, "    ") + "\n"
+            "    # === exploit probes ===\n"
+            + _indent_block(probe_section, "    ") + "\n"
+            "    # === harvest ===\n"
+            "    for _probe in " + repr(exploit_probes) + ":\n"
+            "        if _probe.get('probe_code', '').strip():\n"
+            "            _exploit_findings.append({\n"
+            "                'probe_name': _probe.get('name'),\n"
+            "                'category': _probe.get('category'),\n"
+            "                'result': _probe_result,\n"
+            "            })\n"
+            "    _stdout_output = sys.stdout.getvalue()\n"
+            "    sys.stdout = sys.__stdout__\n"
+            "    print('TEST_RESULTS:')\n"
+            "    print(json.dumps({'test_count': 1, 'passed': 1, 'failed': 0, 'errors': 0}))\n"
+            "    print('STDOUT:')\n"
+            "    print(_stdout_output)\n"
+            "    print('EXPLOIT_FINDINGS:')\n"
+            "    print(json.dumps(_exploit_findings))\n"
+            "except Exception as e:\n"
+            "    sys.stdout = sys.__stdout__\n"
+            "    print('ERROR:', file=sys.stderr)\n"
+            "    traceback.print_exc()\n"
+        )
 
         try:
             process = await asyncio.create_subprocess_exec(
@@ -780,24 +809,38 @@ except Exception as e:
             output = stdout.decode("utf-8", errors="replace")
             error_output = stderr.decode("utf-8", errors="replace")
 
-            # Parse test results if available
+            # Parse test results + exploit findings from the
+            # structured markers the combined_code emitted.
+            parsed_results: dict = {}
+            parsed_findings: list = []
             try:
-                # Look for TEST_RESULTS section
                 if "TEST_RESULTS:" in output:
-                    results_section = output.split("TEST_RESULTS:")[1].split("STDOUT:")[0].strip()
-                    results = json.loads(results_section)
-                    return TestResult(
-                        success=True,
-                        test_count=results.get("test_count", 0),
-                        passed=results.get("passed", 0),
-                        failed=results.get("failed", 0),
-                        errors=results.get("errors", 0),
-                        output=output[:10000],  # Limit output size
-                        exploit_findings=results.get("exploit_findings", []),
-                        mutation_score=results.get("mutation_score"),
+                    results_section = (
+                        output.split("TEST_RESULTS:")[1]
+                        .split("STDOUT:")[0]
+                        .strip()
                     )
+                    parsed_results = json.loads(results_section)
+                if "EXPLOIT_FINDINGS:" in output:
+                    findings_section = output.split("EXPLOIT_FINDINGS:")[1].strip()
+                    # The findings section is followed by the next
+                    # marker (or EOF); if there's nothing after,
+                    # the split above is the whole rest.
+                    parsed_findings = json.loads(findings_section)
             except (json.JSONDecodeError, IndexError):
                 pass
+
+            if parsed_results or parsed_findings:
+                return TestResult(
+                    success=True,
+                    test_count=parsed_results.get("test_count", 0),
+                    passed=parsed_results.get("passed", 0),
+                    failed=parsed_results.get("failed", 0),
+                    errors=parsed_results.get("errors", 0),
+                    output=output[:10000],
+                    exploit_findings=parsed_findings,
+                    mutation_score=parsed_results.get("mutation_score"),
+                )
 
             if process.returncode != 0:
                 return TestResult(

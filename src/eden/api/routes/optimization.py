@@ -24,6 +24,7 @@ from eden.optimization import (
     SemanticCache,
 )
 from eden.optimization.cost_tracker import CostEvent
+from eden.storage.postgres import get_postgres_client
 
 logger = logging.getLogger(__name__)
 
@@ -574,3 +575,53 @@ async def get_token_savings(
         compression_ratio=1.0,
         coalesced_requests=0,
     )
+
+
+# ───────────────────────────────────────────────────────────────────
+# Phase A.1 — /optimization/cost-per-trace
+# Joins usage_events (per-call cost) with telemetry_events (per-trace
+# latency) on correlation_id so the portal can plot cost vs latency
+# scatter for the most expensive traces.
+# ────────────────────────────────────────────────────────────────────
+
+@router.get("/cost-per-trace", response_model=dict)
+async def cost_per_trace(
+    org_id: str,
+    days: int = Query(default=30, ge=1, le=365),
+    _user: dict = Depends(get_current_user),
+):
+    """Top 100 traces by total LLM cost in the window."""
+    from datetime import datetime, timedelta  # local import to avoid touching module-level
+    from eden.storage import postgres as _pg_module
+    start = datetime.utcnow() - timedelta(days=days)
+    client = await _pg_module.get_postgres_client()
+    rows = await client.fetch(
+        """
+        SELECT u.correlation_id   AS trace_id,
+               u.model           AS model,
+               u.cost_usd        AS cost_usd,
+               u.quantity        AS tokens,
+               COALESCE(t.duration_ms, 0) AS latency_ms
+        FROM usage_events u
+        LEFT JOIN telemetry_events t
+          ON t.correlation_id = u.correlation_id
+         AND t.tenant_id = u.org_id
+        WHERE u.org_id = $1
+          AND u.event_type = 'llm_call'
+          AND u.correlation_id IS NOT NULL
+          AND u.created_at >= $2
+        ORDER BY u.cost_usd DESC
+        LIMIT 100
+        """,
+        org_id, start,
+    )
+    return {
+        "points": [
+            {"trace_id": r["trace_id"],
+             "model": r["model"] or "unknown",
+             "cost_usd": float(r["cost_usd"] or 0.0),
+             "tokens": int(r["tokens"] or 0),
+             "latency_ms": float(r["latency_ms"] or 0.0)}
+            for r in rows
+        ]
+    }

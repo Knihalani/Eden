@@ -113,3 +113,148 @@ async def get_org_analytics(
         "storage_bytes_used": storage_bytes_used,
         "member_activity": member_activity,
     }
+
+
+# ───────────────────────────────────────────────────────────────────
+# Phase A.1 — sub-routes for the analytics dashboard.
+# Each emits one SQL aggregate against ``usage_events`` or
+# ``telemetry_events`` scoped to the request's org_id and the
+# trailing N-day window (default 30).
+# ────────────────────────────────────────────────────────────────────
+
+@router.get("/token-usage", response_model=dict)
+async def token_usage(
+    org_id: str,
+    days: int = Query(default=30, ge=1, le=365),
+    _user: dict = Depends(get_current_user),
+):
+    """Sum input/output tokens per day from ``usage_events``."""
+    start = datetime.utcnow() - timedelta(days=days)
+    client = await get_postgres_client()
+    rows = await client.fetch(
+        """
+        SELECT DATE(created_at) AS day,
+               SUM(COALESCE((metadata->>'input_tokens')::int, 0))  AS input_tokens,
+               SUM(COALESCE((metadata->>'output_tokens')::int, 0)) AS output_tokens
+        FROM usage_events
+        WHERE org_id = $1
+          AND event_type = 'llm_call'
+          AND created_at >= $2
+        GROUP BY DATE(created_at)
+        ORDER BY day
+        """,
+        org_id, start,
+    )
+    return {
+        "by_day": [
+            {"day": r["day"].isoformat() if hasattr(r["day"], "isoformat") else r["day"],
+             "input_tokens": int(r["input_tokens"]),
+             "output_tokens": int(r["output_tokens"])}
+            for r in rows
+        ]
+    }
+
+
+@router.get("/latency", response_model=dict)
+async def latency(
+    org_id: str,
+    days: int = Query(default=30, ge=1, le=365),
+    _user: dict = Depends(get_current_user),
+):
+    """Per-day latency percentiles from ``telemetry_events``."""
+    start = datetime.utcnow() - timedelta(days=days)
+    client = await get_postgres_client()
+    rows = await client.fetch(
+        """
+        SELECT DATE(timestamp) AS day,
+               percentile_cont(0.50) WITHIN GROUP (ORDER BY duration_ms) AS p50_ms,
+               percentile_cont(0.95) WITHIN GROUP (ORDER BY duration_ms) AS p95_ms,
+               percentile_cont(0.99) WITHIN GROUP (ORDER BY duration_ms) AS p99_ms
+        FROM telemetry_events
+        WHERE tenant_id = $1
+          AND duration_ms IS NOT NULL
+          AND timestamp >= $2
+        GROUP BY DATE(timestamp)
+        ORDER BY day
+        """,
+        org_id, start,
+    )
+    return {
+        "by_day": [
+            {"day": r["day"].isoformat() if hasattr(r["day"], "isoformat") else r["day"],
+             "p50_ms": float(r["p50_ms"]) if r["p50_ms"] is not None else None,
+             "p95_ms": float(r["p95_ms"]) if r["p95_ms"] is not None else None,
+             "p99_ms": float(r["p99_ms"]) if r["p99_ms"] is not None else None}
+            for r in rows
+        ]
+    }
+
+
+@router.get("/throughput", response_model=dict)
+async def throughput(
+    org_id: str,
+    days: int = Query(default=30, ge=1, le=365),
+    _user: dict = Depends(get_current_user),
+):
+    """Request counts per (weekday, hour-of-day) bucket for heatmap viz."""
+    start = datetime.utcnow() - timedelta(days=days)
+    client = await get_postgres_client()
+    rows = await client.fetch(
+        """
+        SELECT EXTRACT(HOUR FROM timestamp)::int AS hour,
+               EXTRACT(DOW FROM timestamp)::int AS weekday,
+               COUNT(*) AS requests
+        FROM telemetry_events
+        WHERE tenant_id = $1
+          AND timestamp >= $2
+        GROUP BY EXTRACT(HOUR FROM timestamp), EXTRACT(DOW FROM timestamp)
+        ORDER BY weekday, hour
+        """,
+        org_id, start,
+    )
+    return {
+        "by_hour": [
+            {"hour": int(r["hour"]), "weekday": int(r["weekday"]),
+             "requests": int(r["requests"])}
+            for r in rows
+        ]
+    }
+
+
+@router.get("/top-agents", response_model=dict)
+async def top_agents(
+    org_id: str,
+    days: int = Query(default=30, ge=1, le=365),
+    _user: dict = Depends(get_current_user),
+):
+    """Top 25 models by spend over the window. ``agent`` is the
+    canonical proxy for "what model was called" until we get a
+    proper agent_id column on ``usage_events``."""
+    start = datetime.utcnow() - timedelta(days=days)
+    client = await get_postgres_client()
+    rows = await client.fetch(
+        """
+        SELECT model AS agent,
+               COUNT(*) AS requests,
+               COALESCE(SUM(cost_usd), 0) AS cost_usd,
+               COALESCE(AVG((metadata->>'latency_ms')::float), 0) AS avg_latency_ms
+        FROM usage_events
+        WHERE org_id = $1
+          AND event_type = 'llm_call'
+          AND model IS NOT NULL
+          AND created_at >= $2
+        GROUP BY model
+        ORDER BY cost_usd DESC
+        LIMIT 25
+        """,
+        org_id, start,
+    )
+    return {
+        "agents": [
+            {"agent": r["agent"],
+             "requests": int(r["requests"]),
+             "cost_usd": float(r["cost_usd"]),
+             "avg_latency_ms": float(r["avg_latency_ms"])}
+            for r in rows
+        ]
+    }

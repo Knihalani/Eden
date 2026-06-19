@@ -97,13 +97,12 @@ DEFAULT_RULES: list[AlertRule] = [
         description="KB cache p95 is over 250ms. Tier-L2/DB hit rate may be high.",
         threshold=250.0,
     ),
-    AlertRule(
-        rule_id="pipeline_timeout_rate",
-        severity="critical",
-        title="Pipeline timeout rate > 5%",
-        description="Pipeline nodes are timing out at > 5%. Check tool timeouts and external-service latency.",
-        threshold=0.05,
-    ),
+    # Note (June 2026): the ``pipeline_timeout_rate`` rule that used
+    # to live here was retired with the env-gen pipeline. Per-agent
+    # failure-mode alerting now lives in
+    # ``eden.insights.detector_loop`` (Cat 2 RCA + Cat 6 fleet),
+    # and Cat 13's predictive module surfaces the timeout trend
+    # before it crosses the SLO.
 ]
 
 
@@ -178,19 +177,11 @@ def evaluate_alerts() -> list[Alert]:
     # (Production: see §10.3 monitoring/alerting pipeline.)
 
     # Rule 4: Pipeline timeout rate
-    try:
-        from eden.pipeline.metrics import get_pipeline_metrics_snapshot
-        snap = get_pipeline_metrics_snapshot()
-        for node, rate in snap.get("timeout_rates", {}).items():
-            for rule in DEFAULT_RULES:
-                if rule.rule_id == "pipeline_timeout_rate":
-                    a = rule.evaluate(rate)
-                    if a:
-                        a.labels["node"] = node
-                        fired.append(a)
-                    break
-    except Exception as exc:  # noqa: BLE001
-        logger.debug("evaluate_alerts: pipeline check failed: %s", exc)
+    # Note (June 2026): the pipeline-timeout-rate check that used to
+    # live here was retired with the env-gen pipeline. Per-agent
+    # failure-mode alerting now lives in
+    # ``eden.insights.detector_loop`` and the timeout trend is
+    # surfaced by ``eden.predictive`` before it crosses the SLO.
 
     return fired
 

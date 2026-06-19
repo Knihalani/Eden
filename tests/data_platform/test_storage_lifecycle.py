@@ -73,3 +73,55 @@ class TestStorageLifecycleManager:
         assert report.transitions_run == 0
         assert report.rows_moved == 0
         assert report.errors == []
+
+
+class TestImpossibleCloudBehavior:
+    """Phase B1 (2026-06-19): Impossible Cloud is a single-tier backend.
+
+    ``transition_s3_prefix`` must short-circuit (no tier transitions
+    possible). Both behaviours are gated on
+    ``EDEN_STORAGE_BACKEND=impossible_cloud``.
+    """
+
+    @pytest.mark.asyncio
+    async def test_transition_s3_prefix_is_noop_on_impossible_cloud(
+        self, monkeypatch: pytest.MonkeyPatch
+    ):
+        monkeypatch.setenv("EDEN_STORAGE_BACKEND", "impossible_cloud")
+        # Reimport the module so the env-driven ``_IMPOSSIBLE_CLOUD`` flag
+        # picks up the new value.
+        import importlib
+
+        from eden.data_platform import storage_lifecycle
+
+        importlib.reload(storage_lifecycle)
+
+        manager = storage_lifecycle.StorageLifecycleManager()
+        n = await manager.transition_s3_prefix(
+            prefix="bronze/events/", to_storage_class="GLACIER_IR", before_days=30
+        )
+        assert n == 0
+
+    def test_module_flag_true_when_backend_is_impossible_cloud(
+        self, monkeypatch: pytest.MonkeyPatch
+    ):
+        monkeypatch.setenv("EDEN_STORAGE_BACKEND", "impossible_cloud")
+        import importlib
+
+        from eden.data_platform import storage_lifecycle
+
+        importlib.reload(storage_lifecycle)
+
+        assert storage_lifecycle._IMPOSSIBLE_CLOUD is True
+
+    def test_module_flag_false_when_backend_unset(
+        self, monkeypatch: pytest.MonkeyPatch
+    ):
+        monkeypatch.delenv("EDEN_STORAGE_BACKEND", raising=False)
+        import importlib
+
+        from eden.data_platform import storage_lifecycle
+
+        importlib.reload(storage_lifecycle)
+
+        assert storage_lifecycle._IMPOSSIBLE_CLOUD is False

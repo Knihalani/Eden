@@ -240,6 +240,11 @@ class Settings(BaseSettings):
     # promote it to a canary at this traffic percentage.
     # 0 disables auto-canary creation (variants stay inactive).
     evolver_auto_canary_pct: int = 5
+    # When True, the production monitor's hallucination judge uses
+    # the configured LLM (model_reasoning) as a tiebreaker when
+    # the heuristic is inconclusive. Off by default — the
+    # heuristic + judge_scores table is the primary signal.
+    production_monitor_use_llm_judge: bool = False
     # Maximum number of variants the evolver may generate per run.
     # When more agents are degraded than this, the most-degraded
     # (agent, judge) pairs win the slots.

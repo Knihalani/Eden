@@ -68,3 +68,19 @@ export {
   type TraceOptions,
   type TraceContext,
 } from "./trace";
+
+// App/site-layer integration (Phase A1, 2026-06-19). For server-side
+// usage (Next.js route handlers, Node.js, Edge functions).
+export {
+  EdenApp,
+  type EdenAppConfig,
+  type FeedbackInput,
+  type FeedbackResult,
+  type FeedbackValue,
+  type PresignedTokenInput,
+  type PresignedTokenResult,
+  type SessionStartInput,
+  type SessionStartResult,
+  type SessionSummary,
+  type TrackOptions,
+} from "./app";
