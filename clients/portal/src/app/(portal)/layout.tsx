@@ -258,10 +258,13 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
             Users reach org controls via Settings → Organization. */}
 
         {/* Navigation — data-driven from DEFAULT_SIDEBAR + user prefs
-            (pinned / hidden / reordered). The aside scrolls independently
-            of the page because the flex item has min-h-0 + overflow-y-auto. */}
+            (pinned / hidden / reordered). The aside scrolls internally
+            (flex-1 min-h-0 + overflow-y-auto + max-h to be doubly sure
+            the sidebar NEVER pushes the page height past the viewport).
+            The outer row is h-screen + overflow-clip so the user
+            section is pinned to the bottom of the aside via mt-auto. */}
         <nav
-          className="relative flex-1 min-h-0 p-3 space-y-5 overflow-y-auto overscroll-contain"
+          className="relative flex-1 min-h-0 max-h-full p-3 space-y-5 overflow-y-auto overscroll-contain"
           aria-label="Main navigation"
         >
           {pinnedItems.length > 0 && (
