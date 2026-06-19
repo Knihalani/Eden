@@ -343,7 +343,7 @@ export default function GuardrailsPage() {
   const evalTodayEstimate = Math.max(policies.length * 47, 12);
 
   return (
-    <div className="p-4 lg:p-6 max-w-7xl mx-auto space-y-6">
+    <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-6">
       <PageHeader
         title="Guardrails"
         eyebrow="Security"

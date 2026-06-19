@@ -139,7 +139,7 @@ export default function MarketplacePage() {
   }
 
   return (
-    <div className="p-4 lg:p-6 space-y-6 max-w-7xl mx-auto">
+    <div className="p-4 sm:p-6 lg:p-8 space-y-6 max-w-7xl mx-auto">
       <PageHeader
         title="Marketplace"
         subtitle="Discover, fork, and contribute quality-gated Eden environments."

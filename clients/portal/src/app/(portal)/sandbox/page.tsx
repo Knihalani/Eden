@@ -338,7 +338,7 @@ export default function SandboxPage() {
   // ─── Render ───────────────────────────────────────────────────────────────
 
   return (
-    <div className="p-4 lg:p-6 max-w-7xl mx-auto">
+    <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto">
       <PageHeader
         title="API Sandbox"
         subtitle="Free, isolated environment for testing Eden APIs. No quotas consumed."
