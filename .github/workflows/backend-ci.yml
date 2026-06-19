@@ -107,7 +107,11 @@ jobs:
       - name: Apply migrations
         run: uv run alembic upgrade head
       - name: Run tests
-        run: uv run pytest -q --tb=short -x
+        run: uv run pytest -q --tb=short -x --ignore=tests/e2e
+        # tests/e2e requires the `playwright` Python package and the
+        # playwright browser binary, neither of which is installed in
+        # this CI image. The e2e suite is exercised on a separate
+        # cron-scheduled workflow instead.
         # The 663-test full suite takes ~12 minutes; -x fails fast on
         # the first error so a broken PR is caught in under a minute.
 
