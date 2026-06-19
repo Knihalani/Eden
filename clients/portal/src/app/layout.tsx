@@ -6,6 +6,7 @@ import { OrgProvider } from "@/hooks/use-org";
 import { ToastProvider } from "@/components/ui/toast";
 import { NotificationsProvider } from "@/hooks/use-notifications";
 import { QueryProvider } from "@/components/providers/query-provider";
+import { MotionProvider } from "@/components/providers/motion-provider";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -51,7 +52,9 @@ export default function RootLayout({
           <AuthProvider>
           <OrgProvider>
           <ToastProvider>
-            <NotificationsProvider>{children}</NotificationsProvider>
+            <MotionProvider>
+              <NotificationsProvider>{children}</NotificationsProvider>
+            </MotionProvider>
           </ToastProvider>
           </OrgProvider>
           </AuthProvider>
