@@ -301,7 +301,22 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
 
           <NavGroup label="Observe" collapsed={collapsed}>
             <NavItem href="/traces" icon={Layers} label="Trace Explorer" collapsed={collapsed} onClick={() => setSidebarOpen(false)} />
-            <NavItem href="/observability" icon={Activity} label="Observability" collapsed={collapsed} onClick={() => setSidebarOpen(false)} />
+            <NavItem
+              href="/observability"
+              icon={Activity}
+              label="Observability"
+              collapsed={collapsed}
+              onClick={() => setSidebarOpen(false)}
+            >
+              <NavSubItem href="/observability/apm" label="APM Tracing" onClick={() => setSidebarOpen(false)} />
+              <NavSubItem href="/observability/cohorts" label="Cohorts" onClick={() => setSidebarOpen(false)} />
+              <NavSubItem href="/observability/decisions" label="Decisions" onClick={() => setSidebarOpen(false)} />
+              <NavSubItem href="/observability/eval" label="Eval" onClick={() => setSidebarOpen(false)} />
+              <NavSubItem href="/observability/memory" label="Memory" onClick={() => setSidebarOpen(false)} />
+              <NavSubItem href="/observability/query" label="Query" onClick={() => setSidebarOpen(false)} />
+              <NavSubItem href="/observability/retrieval" label="Retrieval" onClick={() => setSidebarOpen(false)} />
+              <NavSubItem href="/observability/time-travel" label="Time-Travel" onClick={() => setSidebarOpen(false)} />
+            </NavItem>
             <NavItem href="/incidents" icon={AlertOctagon} label="Incidents" collapsed={collapsed} onClick={() => setSidebarOpen(false)} />
             <NavItem href="/insights" icon={Brain} label="Insights" collapsed={collapsed} onClick={() => setSidebarOpen(false)} />
             <NavItem href="/inspector" icon={Compass} label="Inspector" collapsed={collapsed} onClick={() => setSidebarOpen(false)} />
@@ -310,7 +325,16 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
           </NavGroup>
 
           <NavGroup label="Optimize" collapsed={collapsed}>
-            <NavItem href="/optimization" icon={Sparkles} label="Cost" collapsed={collapsed} onClick={() => setSidebarOpen(false)} />
+            <NavItem
+              href="/optimization"
+              icon={Sparkles}
+              label="Cost"
+              collapsed={collapsed}
+              onClick={() => setSidebarOpen(false)}
+            >
+              <NavSubItem href="/optimization/outcomes" label="Outcomes" onClick={() => setSidebarOpen(false)} />
+              <NavSubItem href="/optimization/predict" label="Predictive" onClick={() => setSidebarOpen(false)} />
+            </NavItem>
             <NavItem href="/studio" icon={FlaskConical} label="Custom Metrics" collapsed={collapsed} onClick={() => setSidebarOpen(false)} />
           </NavGroup>
 
@@ -654,7 +678,35 @@ function NotificationsDropdown() {
 }
 
 function isActivePath(pathname: string, href: string): boolean {
-  return pathname === href || (href !== "/dashboard" && pathname.startsWith(href));
+  return pathname === href || (href !== "/dashboard" && pathname.startsWith(href + "/") || href === pathname);
+}
+
+function NavSubItem({
+  href,
+  label,
+  onClick,
+}: {
+  href: string;
+  label: string;
+  onClick?: () => void;
+}) {
+  const pathname = usePathname();
+  const active = isActivePath(pathname, href);
+  return (
+    <Link
+      href={href}
+      onClick={onClick}
+      aria-label={label}
+      className={cn(
+        "nav-subitem block pl-9 pr-3 py-1.5 rounded-md text-xs font-medium transition-colors",
+        active
+          ? "text-[var(--accent)] bg-[var(--accent-light)]"
+          : "text-[var(--text-muted)] hover:text-[var(--text-secondary)] hover:bg-[var(--bg-tertiary)]"
+      )}
+    >
+      <span className="truncate">{label}</span>
+    </Link>
+  );
 }
 
 function NavItem({
@@ -663,37 +715,45 @@ function NavItem({
   label,
   collapsed,
   onClick,
+  children,
 }: {
   href: string;
   icon: typeof LayoutDashboard;
   label: string;
   collapsed: boolean;
   onClick?: () => void;
+  children?: React.ReactNode;
 }) {
   const pathname = usePathname();
   const active = isActivePath(pathname, href);
+  const hasChildren = !collapsed && children;
 
   return (
-    <Link
-      href={href}
-      onClick={onClick}
-      aria-label={label}
-      className={cn(
-        "nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors relative",
-        active
-          ? "active"
-          : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
-      )}
-    >
-      <Icon
+    <div>
+      <Link
+        href={href}
+        onClick={onClick}
+        aria-label={label}
         className={cn(
-          "flex-shrink-0 nav-icon transition-all duration-200",
-          active ? "w-5 h-5 text-[var(--accent)]" : "w-4 h-4 text-[var(--text-muted)]"
+          "nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors relative",
+          active
+            ? "active"
+            : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
         )}
-      />
-      {!collapsed && <span className="truncate">{label}</span>}
-      {collapsed && <span className="nav-tooltip">{label}</span>}
-    </Link>
+      >
+        <Icon
+          className={cn(
+            "flex-shrink-0 nav-icon transition-all duration-200",
+            active ? "w-5 h-5 text-[var(--accent)]" : "w-4 h-4 text-[var(--text-muted)]"
+          )}
+        />
+        {!collapsed && <span className="truncate">{label}</span>}
+        {collapsed && <span className="nav-tooltip">{label}</span>}
+      </Link>
+      {hasChildren && (
+        <div className="mt-0.5 space-y-0.5">{children}</div>
+      )}
+    </div>
   );
 }
 
