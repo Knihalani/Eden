@@ -212,7 +212,11 @@ export default function TraceInspectorPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[var(--bg-base)]">
+    // ponytail: min-h-full (was min-h-screen) — the (portal) layout
+    // constrains the row to h-screen + overflow-clip, so a child page
+    // using min-h-screen forces a second scroll bar. Use min-h-full
+    // inside the page wrapper instead. June 2026 fix.
+    <div className="min-h-full bg-[var(--bg-base)]">
       <div className="mx-auto max-w-6xl px-6 py-8">
         <header className="mb-6">
           <h1 className="font-mono text-2xl text-[var(--text-primary)]">
