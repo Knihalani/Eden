@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
+import { useOrganizationList } from "@clerk/nextjs";
 import { useOrg } from "@/hooks/use-org";
 import { useAuth } from "@/hooks/use-auth";
 import { usePermissions } from "@/hooks/use-permissions";
@@ -51,6 +52,7 @@ const TABS = [
 export default function SettingsPage() {
   const { user } = useAuth();
   const { currentOrg, organizations, setCurrentOrg, refreshOrgs } = useOrg();
+  const { setActive: setActiveOrg } = useOrganizationList();
   const searchParams = useSearchParams();
   const initialTab = (searchParams.get("tab") as Tab) || "org";
   const [activeTab, setActiveTab] = useState<Tab>(
@@ -145,7 +147,17 @@ export default function SettingsPage() {
                   value={currentOrg?.id || ""}
                   onChange={(e) => {
                     const org = organizations.find((o) => o.id === e.target.value);
-                    setCurrentOrg(org || null);
+                    if (org) {
+                      setCurrentOrg(org);
+                      // Sync Clerk's active org so useOrganization() returns
+                      // the same org everywhere (sidebar, top nav, etc).
+                      // June 2026 UI overhaul — without this, switching
+                      // orgs from settings updated local state only.
+                      const clerkOrgId = (org as { clerk_org_id?: string }).clerk_org_id;
+                      if (clerkOrgId && setActiveOrg) {
+                        void setActiveOrg({ organization: clerkOrgId });
+                      }
+                    }
                   }}
                   className="flex-1 min-w-0 px-3 py-2 rounded-lg border border-[var(--border-default)] bg-[var(--bg-secondary)] text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--accent)]"
                 >

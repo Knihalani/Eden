@@ -220,8 +220,8 @@ export function SSOTab({ orgId }: SSOTabProps) {
             <div key={provider.id} className="p-4 border dark:border-[var(--text-secondary)] rounded-lg">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 bg-[var(--accent-faint)] bg-blue-/30 rounded-lg flex items-center justify-center">
-                    <span className="text-[var(--accent)] dark:text-[var(--accent)] font-bold text-sm">
+                  <div className="w-10 h-10 bg-[var(--accent-faint)] rounded-lg flex items-center justify-center">
+                    <span className="text-[var(--accent)] font-bold text-sm">
                       {provider.provider_type.slice(0, 2).toUpperCase()}
                     </span>
                   </div>
@@ -277,9 +277,9 @@ export function SSOTab({ orgId }: SSOTabProps) {
         </div>
       )}
 
-      <div className="p-4 bg-[var(--accent-faint)] bg-blue-/20 border border-[var(--accent)] border-blue- rounded-lg">
-        <h3 className="font-medium text-[var(--accent)] dark:text-[var(--accent)] mb-2">How SSO Works</h3>
-        <ul className="text-sm text-[var(--accent)] text-blue- space-y-1">
+      <div className="p-4 bg-[var(--accent-faint)] border border-[var(--accent)] rounded-lg">
+        <h3 className="font-medium text-[var(--accent)] mb-2">How SSO Works</h3>
+        <ul className="text-sm text-[var(--accent)] space-y-1">
           <li>• Users with emails at <strong>{'{domain}'}</strong> will be automatically redirected to SSO</li>
           <li>• When SSO is enforced, password login is disabled for all org members</li>
           <li>• SCIM tokens are used for automated user provisioning (see SCIM tab)</li>

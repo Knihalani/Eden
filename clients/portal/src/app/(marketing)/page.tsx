@@ -1,10 +1,20 @@
 "use client";
 
+// ponytail: force-dynamic so the marketing page is never statically
+// cached. Without this, Next.js can serve a cached HTML that always
+// renders the "Sign in / Get started" CTA, even when the user has a
+// Clerk session cookie. The page also uses Clerk's useUser() below,
+// which runs client-side after hydration; force-dynamic ensures the
+// initial server render doesn't pin a stale CTA.
+export const dynamic = "force-dynamic";
+
 import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
+import { useUser } from "@clerk/nextjs";
+import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
+import { Logo } from "@/components/brand/logo";
 import {
-  Layers,
   Activity,
   Terminal,
   LayoutDashboard,
@@ -14,6 +24,7 @@ import {
   X,
   Bot,
   MessageSquare,
+  ArrowRight,
 } from "lucide-react";
 
 const NAV_LINKS = [
@@ -136,6 +147,21 @@ export default function LandingPage() {
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [typed, setTyped] = useState("");
 
+  // ponytail: isSignedIn toggles the marketing CTAs into "Open app"
+  // entries instead of "Sign in / Get started" — so a returning
+  // user lands on the marketing page and immediately gets a way
+  // back into the portal.
+  const { isSignedIn, isLoaded, user } = useUser();
+  const signedIn = isLoaded && isSignedIn;
+  const router = useRouter();
+  // ponytail: on auth-state change, force a re-render so the
+  // server-rendered CTA matches the live Clerk session. Without this,
+  // a returning user could see "Sign in / Get started" frozen for a
+  // beat while the client hydrates and Clerk resolves the cookie.
+  useEffect(() => {
+    if (isLoaded) router.refresh();
+  }, [isLoaded, router]);
+
   const FULL_PROMPT = "/eden-improve";
 
   // Hero fade-in
@@ -239,10 +265,7 @@ export default function LandingPage() {
       >
         <div className="max-w-6xl mx-auto px-6 h-full flex items-center justify-between">
           <Link href="/" className="flex items-center gap-2 text-xl font-bold text-[var(--text-primary)]">
-            <div className="w-9 h-9 bg-[var(--accent)] rounded-xl flex items-center justify-center">
-              <Layers className="w-5 h-5 text-white" />
-            </div>
-            <span>Eden</span>
+            <Logo size="md" showWordmark priority href="/" />
           </Link>
 
           <div className="hidden md:flex items-center gap-1">
@@ -258,18 +281,35 @@ export default function LandingPage() {
           </div>
 
           <div className="hidden md:flex items-center gap-2">
-            <Link
-              href="/login"
-              className="px-4 py-2 text-sm text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors"
-            >
-              Sign in
-            </Link>
-            <Link
-              href="/signup"
-              className="px-4 py-2 text-sm font-medium bg-[var(--accent)] text-white rounded-lg hover:bg-[var(--accent-hover)] transition-colors"
-            >
-              Get started
-            </Link>
+            {signedIn ? (
+              <>
+                <span className="text-xs text-[var(--text-muted)] hidden lg:inline">
+                  {user?.firstName || user?.emailAddresses?.[0]?.emailAddress?.split("@")[0] || "Welcome back"}
+                </span>
+                <Link
+                  href="/dashboard"
+                  className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium bg-[var(--accent)] text-white rounded-lg hover:bg-[var(--accent-hover)] transition-colors"
+                >
+                  Open app
+                  <ArrowRight className="w-4 h-4" />
+                </Link>
+              </>
+            ) : (
+              <>
+                <Link
+                  href="/sign-in"
+                  className="px-4 py-2 text-sm text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors"
+                >
+                  Sign in
+                </Link>
+                <Link
+                  href="/sign-up"
+                  className="px-4 py-2 text-sm font-medium bg-[var(--accent)] text-white rounded-lg hover:bg-[var(--accent-hover)] transition-colors"
+                >
+                  Get started
+                </Link>
+              </>
+            )}
           </div>
 
           <button
@@ -294,20 +334,32 @@ export default function LandingPage() {
               </Link>
             ))}
             <div className="flex flex-col gap-2 mt-2 pt-2 border-t border-[var(--border-subtle)]">
-              <Link
-                href="/login"
-                className="px-4 py-2 text-sm text-center text-[var(--text-secondary)] border border-[var(--border-default)] rounded-lg hover:bg-[var(--bg-tertiary)] transition-colors"
-                onClick={() => setMobileMenuOpen(false)}
-              >
-                Sign in
-              </Link>
-              <Link
-                href="/signup"
-                className="px-4 py-2 text-sm text-center font-medium bg-[var(--accent)] text-white rounded-lg hover:bg-[var(--accent-hover)] transition-colors"
-                onClick={() => setMobileMenuOpen(false)}
-              >
-                Get started
-              </Link>
+              {signedIn ? (
+                <Link
+                  href="/dashboard"
+                  className="px-4 py-2 text-sm text-center font-medium bg-[var(--accent)] text-white rounded-lg hover:bg-[var(--accent-hover)] transition-colors"
+                  onClick={() => setMobileMenuOpen(false)}
+                >
+                  Open app
+                </Link>
+              ) : (
+                <>
+                  <Link
+                    href="/sign-in"
+                    className="px-4 py-2 text-sm text-center text-[var(--text-secondary)] border border-[var(--border-default)] rounded-lg hover:bg-[var(--bg-tertiary)] transition-colors"
+                    onClick={() => setMobileMenuOpen(false)}
+                  >
+                    Sign in
+                  </Link>
+                  <Link
+                    href="/sign-up"
+                    className="px-4 py-2 text-sm text-center font-medium bg-[var(--accent)] text-white rounded-lg hover:bg-[var(--accent-hover)] transition-colors"
+                    onClick={() => setMobileMenuOpen(false)}
+                  >
+                    Get started
+                  </Link>
+                </>
+              )}
             </div>
           </div>
         )}
@@ -351,10 +403,10 @@ export default function LandingPage() {
 
                 <div className="flex flex-wrap gap-3">
                   <Link
-                    href="/signup"
+                    href={signedIn ? "/dashboard" : "/sign-up"}
                     className="inline-flex items-center gap-2 px-6 py-3 text-sm font-medium bg-[var(--accent)] text-white rounded-xl hover:bg-[var(--accent-hover)] transition-colors"
                   >
-                    Start free
+                    {signedIn ? "Open dashboard" : "Start free"}
                     <ChevronRight className="w-4 h-4" />
                   </Link>
                   <Link
@@ -366,7 +418,9 @@ export default function LandingPage() {
                 </div>
 
                 <p className="mt-5 text-xs text-[var(--text-muted)]">
-                  Free up to 100K trace events / month. No credit card.
+                  {signedIn
+                    ? "Pick up where you left off."
+                    : "Free up to 100K trace events / month. No credit card."}
                 </p>
               </div>
 
@@ -756,18 +810,20 @@ export default function LandingPage() {
             <div className="bg-[var(--bg-primary)] border border-[var(--accent)]/20 rounded-2xl p-8 md:p-10 flex flex-col md:flex-row items-center justify-between gap-6">
               <div>
                 <h2 className="text-2xl md:text-3xl font-bold text-[var(--text-primary)] mb-2">
-                  Ship better agents, faster.
+                  {signedIn ? "Welcome back." : "Ship better agents, faster."}
                 </h2>
                 <p className="text-sm text-[var(--text-muted)]">
-                  Capture, analyse, improve — start free in under five minutes.
+                  {signedIn
+                    ? "Pick up where you left off in your workspace."
+                    : "Capture, analyse, improve — start free in under five minutes."}
                 </p>
               </div>
               <div className="flex flex-wrap gap-3 shrink-0">
                 <Link
-                  href="/signup"
+                  href={signedIn ? "/dashboard" : "/sign-up"}
                   className="inline-flex items-center gap-2 px-6 py-3 text-sm font-medium bg-[var(--accent)] text-white rounded-xl hover:bg-[var(--accent-hover)] transition-colors"
                 >
-                  Start free
+                  {signedIn ? "Open dashboard" : "Start free"}
                   <ChevronRight className="w-4 h-4" />
                 </Link>
                 <Link
@@ -786,10 +842,7 @@ export default function LandingPage() {
           <div className="max-w-6xl mx-auto flex flex-col md:flex-row items-start md:items-center justify-between gap-8">
             <div className="flex flex-col gap-3">
               <Link href="/" className="flex items-center gap-2 text-lg font-bold text-[var(--text-primary)]">
-                <div className="w-8 h-8 bg-[var(--accent)] rounded-lg flex items-center justify-center">
-                  <Layers className="w-4 h-4 text-white" />
-                </div>
-                Eden
+                <Logo size="sm" showWordmark href="/" />
               </Link>
               <p className="text-sm text-[var(--text-muted)]">
                 Observability + improvement for AI agents and LLM apps.

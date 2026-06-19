@@ -3,7 +3,7 @@
 import { useAuth } from "@/hooks/use-auth";
 import { useOrg } from "@/hooks/use-org";
 import { useNotifications } from "@/hooks/use-notifications";
-import { OrganizationSwitcher, useClerk } from "@clerk/nextjs";
+import { useClerk } from "@clerk/nextjs";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, useRef, useCallback } from "react";
 import {
@@ -51,6 +51,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { CommandPalette } from "@/components/ui/command-palette";
 import { ChatSidebar } from "@/components/ai-insights/ChatSidebar";
+import { Logo } from "@/components/brand/logo";
 
 const SIDEBAR_EXPANDED_WIDTH = 260;
 const SIDEBAR_COLLAPSED_WIDTH = 64;
@@ -188,7 +189,13 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
   const breadcrumbs = buildBreadcrumbs(pathname);
 
   return (
-    <div className="flex min-h-screen bg-[var(--bg-secondary)]">
+    // ponytail: h-screen + overflow-clip on the row, min-h-0 on main —
+    // this is what makes the sidebar scroll internally instead of pushing
+    // the whole page past the viewport. overflow-clip (vs overflow-hidden)
+    // keeps `position: sticky` working on the top header inside <main>;
+    // overflow-hidden breaks sticky on Firefox because it creates a new
+    // containing block. June 2026 UI overhaul.
+    <div className="flex h-screen overflow-clip bg-[var(--bg-secondary)]">
       {/* Skip-to-content link — visually hidden until focused, allows keyboard users to bypass the sidebar nav */}
       <a href="#main-content" className="skip-to-content">
         Skip to main content
@@ -206,7 +213,7 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
       {/* Sidebar: fixed drawer on mobile, in-flow on lg */}
       <aside
         className={cn(
-          "sidebar flex flex-col relative bg-[var(--bg-primary)] border-r border-[var(--border-default)] z-50",
+          "sidebar flex flex-col relative bg-[var(--bg-primary)] border-r border-[var(--border-default)] z-50 h-full",
           "fixed inset-y-0 left-0 lg:static lg:inset-auto lg:flex-shrink-0",
           collapsed ? "collapsed" : "",
           sidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0",
@@ -219,74 +226,41 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
         {/* Gradient overlay */}
         <div className="absolute inset-0 sidebar-gradient pointer-events-none" />
 
-        {/* Logo & Org */}
-        <div className="relative p-4 border-b border-[var(--border-default)]">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3 min-w-0">
-              <div className="w-9 h-9 bg-[var(--accent)] rounded-xl flex items-center justify-center flex-shrink-0">
-                <Layers className="w-5 h-5 text-[var(--bg-primary)]" />
-              </div>
-              {!collapsed && (
-                <div className="min-w-0">
-                  <span className="text-xl font-bold text-[var(--text-primary)] block truncate">Eden</span>
-                  {currentOrg && (
-                    <span className="text-xs text-[var(--text-muted)] block truncate">{currentOrg.name}</span>
-                  )}
-                </div>
-              )}
-            </div>
-            <button
-              onClick={() => setSidebarOpen(false)}
-              className="lg:hidden p-2 text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)] rounded-lg transition-colors"
-            >
-              <X className="w-5 h-5" />
-            </button>
-          </div>
+        {/* Brand header: real Eden logo + wordmark.
+            No competing "Eden wordmark + tiny Clerk org avatar" stack —
+            the active org is reached via Settings → Organization, never
+            surfaced in the chrome. */}
+        <div className="relative flex items-center justify-between gap-2 px-4 h-14 border-b border-[var(--border-default)] shrink-0">
+          <Logo size="md" showWordmark priority className="min-w-0" />
+          <button
+            onClick={() => setSidebarOpen(false)}
+            className="lg:hidden p-1.5 text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)] rounded-md transition-colors"
+            aria-label="Close menu"
+          >
+            <X className="w-4 h-4" />
+          </button>
         </div>
 
-        {/* Collapse button */}
+        {/* Collapse button (desktop only) */}
         <button
           onClick={handleCollapse}
-          className="hidden md:flex absolute -right-3 top-24 w-6 h-6 bg-[var(--bg-primary)] border border-[var(--border-default)] rounded-full items-center justify-center shadow-sm hover:shadow-md transition-all sidebar-collapse-btn z-10"
+          className="hidden md:flex absolute -right-3 top-[68px] w-6 h-6 bg-[var(--bg-primary)] border border-[var(--border-default)] rounded-full items-center justify-center shadow-sm hover:shadow-md transition-all sidebar-collapse-btn z-10"
           aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
         >
           <ChevronLeft className={cn("w-3.5 h-3.5 text-[var(--text-secondary)] transition-transform duration-300", collapsed && "rotate-180")} />
         </button>
 
-        {/* Organization Switcher (Clerk) — the active org is the
-            source of truth for org-scoped reads. ``hidePersonal``
-            keeps this B2B-only; ``afterSelectOrganizationUrl`` and
-            ``afterCreateOrganizationUrl`` route back into the portal
-            so users land on a useful page after a switch. */}
-        <div className="relative px-3 py-3">
-          <OrganizationSwitcher
-            hidePersonal
-            afterCreateOrganizationUrl="/onboarding?step=org-ready"
-            afterSelectOrganizationUrl="/dashboard"
-            afterLeaveOrganizationUrl="/login"
-            createOrganizationMode="modal"
-            organizationProfileMode="modal"
-            appearance={{
-              elements: {
-                rootBox: "w-full",
-                organizationSwitcherTrigger: cn(
-                  "w-full flex items-center gap-2 p-2 rounded-lg",
-                  "hover:bg-[var(--bg-tertiary)] transition-colors",
-                  "text-left text-sm text-[var(--text-primary)]",
-                ),
-                organizationSwitcherTriggerIcon: "text-[var(--text-muted)]",
-                organizationPreview: "gap-2",
-                organizationPreviewTextContainer: "truncate",
-                organizationPreviewTitle: "text-sm font-medium text-[var(--text-primary)] truncate",
-                organizationPreviewSecondaryIdentifier:
-                  "text-xs text-[var(--text-muted)] truncate",
-              },
-            }}
-          />
-        </div>
+        {/* Organization switcher REMOVED — June 2026 UI overhaul.
+            The active org still flows through Clerk + useOrg(), but
+            the sidebar no longer surfaces an org logo/avatar (which
+            looked like a second brand mark next to the Eden logo).
+            Users reach org controls via Settings → Organization. */}
 
-        {/* Navigation */}
-        <nav className="relative flex-1 p-3 space-y-5 overflow-y-auto" aria-label="Main navigation">
+        {/* Navigation — flex-1 + min-h-0 + overflow-y-auto is what makes
+            it scroll independently of the rest of the page. Without
+            min-h-0, the flex item refuses to shrink below its content
+            height and the aside grows past the viewport. */}
+        <nav className="relative flex-1 min-h-0 p-3 space-y-5 overflow-y-auto overscroll-contain" aria-label="Main navigation">
           <NavGroup label="Build" collapsed={collapsed}>
             <NavItem href="/dashboard" icon={LayoutDashboard} label="Dashboard" collapsed={collapsed} onClick={() => setSidebarOpen(false)} />
             <NavItem href="/agents" icon={Bot} label="Agents" collapsed={collapsed} onClick={() => setSidebarOpen(false)} />
@@ -354,8 +328,9 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
           </NavGroup>
         </nav>
 
-        {/* User section */}
-        <div className="relative p-3 border-t border-[var(--border-default)]">
+        {/* User section — shrink-0 + mt-auto keeps it pinned to the
+            bottom of the aside even when the nav is short on items. */}
+        <div className="relative mt-auto p-3 border-t border-[var(--border-default)] shrink-0">
           <div ref={userDropdownRef} className="relative">
             {/* User button */}
             <button
@@ -385,6 +360,14 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
 
             {/* Dropdown */}
             <div className={cn("user-dropdown", userDropdownOpen ? "open" : "")} role="menu" aria-label="User menu">
+              <Link
+                href="/settings?tab=org"
+                className="user-dropdown-item"
+                onClick={() => setUserDropdownOpen(false)}
+              >
+                <Building2 className="w-4 h-4" />
+                Organization
+              </Link>
               <Link
                 href="/settings"
                 className="user-dropdown-item"
@@ -425,8 +408,9 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
         </div>
       </aside>
 
-      {/* Main content */}
-      <main id="main-content" className="flex-1 overflow-auto pb-20 lg:pb-0" tabIndex={-1}>
+      {/* Main content — min-h-0 lets the flex item actually shrink so
+          its overflow-auto can scroll instead of pushing the row. */}
+      <main id="main-content" className="flex-1 min-w-0 min-h-0 overflow-auto pb-20 lg:pb-0 flex flex-col" tabIndex={-1}>
         {/* Top bar */}
         <header className="sticky top-0 z-30 bg-[var(--bg-primary)] border-b border-[var(--border-default)]">
           <div className="flex items-center justify-between px-4 lg:px-6 py-3">
@@ -439,9 +423,7 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
               >
                 <Menu className="w-5 h-5" />
               </button>
-              <div className="w-8 h-8 bg-[var(--accent)] rounded-lg flex items-center justify-center">
-                <Layers className="w-4 h-4 text-[var(--bg-primary)]" />
-              </div>
+              <Logo size="sm" showWordmark={false} priority />
             </div>
 
             {/* Breadcrumb */}
@@ -516,8 +498,11 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
           </div>
         </header>
 
-        {/* Page content */}
-        <div className="page-enter">
+        {/* Page content — flex-1 + min-h-0 lets the wrapper shrink
+            with the parent <main> so pages with `min-h-screen` or
+            `h-screen` don't push the whole flex row past the viewport.
+            June 2026 UI overhaul. */}
+        <div className="page-enter flex-1 min-h-0 flex flex-col">
           {children}
         </div>
 

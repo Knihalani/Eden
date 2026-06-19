@@ -70,7 +70,12 @@ export default function LLMOpsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[var(--bg-secondary)]">
+    // ponytail: min-h-full (was min-h-screen) so the page fills the
+    // available main area instead of pushing the portal flex row past
+    // the viewport. The (portal)/layout wraps <main> in overflow-auto
+    // + min-h-0, so a child `min-h-screen` would force a second scroll
+    // bar. June 2026 UI overhaul.
+    <div className="min-h-full bg-[var(--bg-secondary)]">
       {/* Header */}
       <div className="bg-[var(--bg-primary)] border-b border-[var(--border-default)] px-6 py-6">
         <div className="flex items-center gap-3 mb-1">

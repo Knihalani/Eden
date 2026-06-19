@@ -485,7 +485,7 @@ export function InterviewChat() {
               exit={{ opacity: 0 }}
               transition={{ duration: 0.2 }}
               onClick={() => setDrawerOpen(false)}
-              className="fixed inset-0 bg-black/50 z-[45] lg:hidden border-0 p-0 cursor-default"
+              className="fixed inset-0 bg-[var(--overlay)] z-[45] lg:hidden border-0 p-0 cursor-default"
               aria-label="Close checklist drawer"
             />
             {/* Drawer Panel */}

@@ -10,22 +10,28 @@
   "scope": "/",
   "icons": [
     {
-      "src": "/favicon.ico",
-      "sizes": "48x48",
-      "type": "image/x-icon",
+      "src": "/favicon.png",
+      "sizes": "32x32",
+      "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "/icon-192x192.svg",
+      "src": "/icon-192x192.png",
       "sizes": "192x192",
-      "type": "image/svg+xml",
+      "type": "image/png",
       "purpose": "any maskable"
     },
     {
-      "src": "/icon-512x512.svg",
+      "src": "/icon-512x512.png",
       "sizes": "512x512",
-      "type": "image/svg+xml",
+      "type": "image/png",
       "purpose": "any maskable"
+    },
+    {
+      "src": "/logo.svg",
+      "sizes": "478x458",
+      "type": "image/svg+xml",
+      "purpose": "any"
     }
   ],
   "categories": ["developer", "productivity", "utilities"],
@@ -53,14 +59,14 @@
       "short_name": "Obs",
       "description": "View live agent observability (traces, judges, failure modes)",
       "url": "/observability",
-      "icons": [{ "src": "/icon-192x192.svg", "sizes": "192x192" }]
+      "icons": [{ "src": "/icon-192x192.png", "sizes": "192x192" }]
     },
     {
       "name": "Settings",
       "short_name": "Settings",
       "description": "Manage organization settings",
       "url": "/settings",
-      "icons": [{ "src": "/icon-192x192.svg", "sizes": "192x192" }]
+      "icons": [{ "src": "/icon-192x192.png", "sizes": "192x192" }]
     }
   ],
   "related_applications": [],
