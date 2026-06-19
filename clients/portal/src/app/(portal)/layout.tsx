@@ -232,7 +232,13 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
             the active org is reached via Settings → Organization, never
             surfaced in the chrome. */}
         <div className="relative flex items-center justify-between gap-2 px-4 h-14 border-b border-[var(--border-default)] shrink-0">
-          <Logo size="md" showWordmark priority className="min-w-0" />
+          <Link
+            href="/dashboard"
+            className="min-w-0 flex items-center hover:opacity-80 transition-opacity"
+            aria-label="Eden home"
+          >
+            <Logo size="md" showWordmark priority className="min-w-0" />
+          </Link>
           <button
             onClick={() => setSidebarOpen(false)}
             className="lg:hidden p-1.5 text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)] rounded-md transition-colors"
