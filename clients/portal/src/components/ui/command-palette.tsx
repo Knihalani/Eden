@@ -6,12 +6,31 @@ import { useRouter } from "next/navigation";
 import {
   Search,
   Plus,
-  FileCode,
-  Settings,
+  Bot,
+  Wand2,
+  Box,
+  Network,
+  Server,
+  Activity,
+  Layers,
+  Brain,
+  Compass,
   Bell,
-  ChevronRight,
-  ArrowRight,
+  Cog,
+  Sparkles,
+  FlaskConical,
+  Shield,
+  Inbox,
+  GitPullRequestArrow,
+  BarChart3,
+  Settings,
+  CreditCard,
+  FileText,
+  User,
   X,
+  ChevronRight,
+  Wrench,
+  PlayCircle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -19,6 +38,69 @@ interface CommandPaletteProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
+
+type NavEntry = {
+  href: string;
+  label: string;
+  description?: string;
+  group: string;
+  icon: React.ComponentType<{ className?: string }>;
+  accent?: "accent" | "terminal" | "muted";
+};
+
+// Single source of truth for the command palette. Mirrors the
+// sidebar groups in `(portal)/layout.tsx` so anything the user can
+// reach from the sidebar is also reachable from Cmd+K.
+const COMMANDS: NavEntry[] = [
+  // Workspace
+  { href: "/dashboard", label: "Dashboard", description: "Org-level metrics and recent activity", group: "Workspace", icon: Sparkles, accent: "terminal" },
+  { href: "/agents", label: "Agents", description: "Manage registered agents", group: "Workspace", icon: Bot },
+  { href: "/builder", label: "Builder", description: "Scaffold new agent configs", group: "Workspace", icon: Wand2, accent: "accent" },
+  { href: "/marketplace", label: "Marketplace", description: "Browse community agents", group: "Workspace", icon: Box },
+  { href: "/multi-agent", label: "Multi-Agent", description: "Orchestrate multi-agent flows", group: "Workspace", icon: Network },
+  { href: "/sandbox", label: "Sandbox", description: "Run code in a sandboxed env", group: "Workspace", icon: Server },
+  // Observe
+  { href: "/traces", label: "Trace Explorer", description: "Browse and filter traces", group: "Observe", icon: Layers },
+  { href: "/replay", label: "Replay", description: "Step through a past trace", group: "Observe", icon: PlayCircle },
+  { href: "/observability", label: "Observability", description: "Telemetry overview", group: "Observe", icon: Activity },
+  { href: "/observability/apm", label: "APM Tracing", group: "Observe", icon: Activity },
+  { href: "/observability/cohorts", label: "Cohorts", group: "Observe", icon: Activity },
+  { href: "/observability/decisions", label: "Decisions", group: "Observe", icon: Activity },
+  { href: "/observability/eval", label: "Eval", group: "Observe", icon: Activity },
+  { href: "/observability/memory", label: "Memory", group: "Observe", icon: Activity },
+  { href: "/observability/query", label: "Query", group: "Observe", icon: Activity },
+  { href: "/observability/retrieval", label: "Retrieval", group: "Observe", icon: Activity },
+  { href: "/observability/time-travel", label: "Time-Travel", group: "Observe", icon: Activity },
+  { href: "/tools", label: "Tools", description: "Tool attribution and recommendations", group: "Observe", icon: Wrench },
+  { href: "/incidents", label: "Incidents", description: "Open RCA clusters", group: "Observe", icon: Bell },
+  { href: "/insights", label: "Insights", description: "Auto-generated intelligence", group: "Observe", icon: Brain },
+  { href: "/inspector", label: "Inspector", description: "Debug a specific trace", group: "Observe", icon: Compass },
+  { href: "/alerts", label: "Alerts", description: "Active alerts and rules", group: "Observe", icon: Bell },
+  { href: "/llmops", label: "LLMOps", description: "LLM observability + judge ops", group: "Observe", icon: Cog },
+  // Optimize
+  { href: "/optimization", label: "Cost", description: "Cost overview", group: "Optimize", icon: Sparkles, accent: "accent" },
+  { href: "/optimization/outcomes", label: "Outcomes", group: "Optimize", icon: Sparkles },
+  { href: "/optimization/predict", label: "Predictive", group: "Optimize", icon: Sparkles },
+  { href: "/studio", label: "Custom Metrics", description: "Build custom eval metrics", group: "Optimize", icon: FlaskConical },
+  // Protect
+  { href: "/guardrails", label: "Guardrails", description: "Active runtime policies", group: "Protect", icon: Shield },
+  // Automate
+  { href: "/autonomous", label: "Autonomous", description: "Self-healing code changes", group: "Automate", icon: Wand2 },
+  { href: "/closed-loop", label: "Closed-Loop", description: "Auto-improvement loop", group: "Automate", icon: Inbox },
+  { href: "/pr-suggestions", label: "PR Suggestions", description: "Suggested code improvements", group: "Automate", icon: GitPullRequestArrow },
+  { href: "/analytics", label: "Analytics", description: "Cost & usage analytics", group: "Automate", icon: BarChart3 },
+  // Account
+  { href: "/settings", label: "Settings", description: "Org + account settings", group: "Account", icon: Settings },
+  { href: "/billing", label: "Billing", description: "Plan + payment method", group: "Account", icon: CreditCard },
+  { href: "/profile", label: "Profile", description: "Your profile", group: "Account", icon: User },
+  { href: "/docs", label: "Documentation", description: "API docs and guides", group: "Account", icon: FileText },
+];
+
+const ACCENT_BG: Record<NonNullable<NavEntry["accent"]>, string> = {
+  accent: "bg-[var(--accent-faint)] text-[var(--accent)]",
+  terminal: "bg-[var(--terminal-faint)] text-[var(--terminal)]",
+  muted: "bg-[var(--bg-tertiary)] text-[var(--text-secondary)]",
+};
 
 export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
   const router = useRouter();
@@ -40,6 +122,13 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
     onOpenChange(false);
     router.push(path);
   };
+
+  // Group commands by their `group` field, preserving the order
+  // they were declared in (which mirrors the sidebar).
+  const grouped = COMMANDS.reduce<Record<string, NavEntry[]>>((acc, c) => {
+    (acc[c.group] = acc[c.group] || []).push(c);
+    return acc;
+  }, {});
 
   return (
     <div className="fixed inset-0 z-50">
@@ -63,7 +152,7 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
           <Cmnd.Input
             value={search}
             onValueChange={setSearch}
-            placeholder="Search commands, jobs, files..."
+            placeholder="Search pages, observability, settings…"
             className="flex-1 py-4 text-sm outline-none bg-transparent placeholder:text-[var(--text-muted)]"
           />
           <button
@@ -79,105 +168,35 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
             No results found.
           </Cmnd.Empty>
 
-          <Cmnd.Group heading="Navigation" className="px-2">
-            <Cmnd.Item
-              onSelect={() => runCommand("/jobs/new")}
-              className="flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-[var(--bg-secondary)] cursor-pointer transition-colors"
-            >
-              <div className="w-8 h-8 rounded-lg bg-[var(--accent-faint)] flex items-center justify-center">
-                <Plus className="w-4 h-4 text-[var(--accent)]" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-[var(--text-primary)]">New Job</p>
-                <p className="text-xs text-[var(--text-muted)]">Create a new environment generation job</p>
-              </div>
-              <ChevronRight className="w-4 h-4 text-[var(--text-muted)]" />
-            </Cmnd.Item>
-
-            <Cmnd.Item
-              onSelect={() => runCommand("/jobs")}
-              className="flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-[var(--bg-secondary)] cursor-pointer transition-colors"
-            >
-              <div className="w-8 h-8 rounded-lg bg-[var(--bg-tertiary)] flex items-center justify-center">
-                <FileCode className="w-4 h-4 text-[var(--text-secondary)]" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-[var(--text-primary)]">Jobs</p>
-                <p className="text-xs text-[var(--text-muted)]">View all your jobs</p>
-              </div>
-              <ChevronRight className="w-4 h-4 text-[var(--text-muted)]" />
-            </Cmnd.Item>
-
-            <Cmnd.Item
-              onSelect={() => runCommand("/dashboard")}
-              className="flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-[var(--bg-secondary)] cursor-pointer transition-colors"
-            >
-              <div className="w-8 h-8 rounded-lg bg-[var(--terminal-faint)] flex items-center justify-center">
-                <svg className="w-4 h-4 text-[var(--terminal)]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <rect x="3" y="3" width="7" height="7" rx="1" />
-                  <rect x="14" y="3" width="7" height="7" rx="1" />
-                  <rect x="14" y="14" width="7" height="7" rx="1" />
-                  <rect x="3" y="14" width="7" height="7" rx="1" />
-                </svg>
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-[var(--text-primary)]">Dashboard</p>
-                <p className="text-xs text-[var(--text-muted)]">View analytics and statistics</p>
-              </div>
-              <ChevronRight className="w-4 h-4 text-[var(--text-muted)]" />
-            </Cmnd.Item>
-
-            <Cmnd.Item
-              onSelect={() => runCommand("/docs")}
-              className="flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-[var(--bg-secondary)] cursor-pointer transition-colors"
-            >
-              <div className="w-8 h-8 rounded-lg bg-[var(--accent-faint)] flex items-center justify-center">
-                <svg className="w-4 h-4 text-[var(--accent)]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
-                  <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
-                </svg>
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-[var(--text-primary)]">Documentation</p>
-                <p className="text-xs text-[var(--text-muted)]">API docs and guides</p>
-              </div>
-              <ChevronRight className="w-4 h-4 text-[var(--text-muted)]" />
-            </Cmnd.Item>
-
-            <Cmnd.Item
-              onSelect={() => runCommand("/settings")}
-              className="flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-[var(--bg-secondary)] cursor-pointer transition-colors"
-            >
-              <div className="w-8 h-8 rounded-lg bg-[var(--bg-tertiary)] flex items-center justify-center">
-                <Settings className="w-4 h-4 text-[var(--text-secondary)]" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-[var(--text-primary)]">Settings</p>
-                <p className="text-xs text-[var(--text-muted)]">Manage your account and organization</p>
-              </div>
-              <ChevronRight className="w-4 h-4 text-[var(--text-muted)]" />
-            </Cmnd.Item>
-          </Cmnd.Group>
-
-          <Cmnd.Group heading="Actions" className="px-2 mt-2">
-            <Cmnd.Item
-              onSelect={() => {
-                onOpenChange(false);
-                if (typeof window !== "undefined") {
-                  window.location.href = "/jobs/new";
-                }
-              }}
-              className="flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-[var(--bg-secondary)] cursor-pointer transition-colors"
-            >
-              <div className="w-8 h-8 rounded-lg bg-[var(--terminal-faint)] flex items-center justify-center">
-                <ArrowRight className="w-4 h-4 text-[var(--terminal)]" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-[var(--text-primary)]">Create Job</p>
-                <p className="text-xs text-[var(--text-muted)]">Start a new environment generation</p>
-              </div>
-            </Cmnd.Item>
-          </Cmnd.Group>
+          {Object.entries(grouped).map(([group, items]) => (
+            <Cmnd.Group key={group} heading={group} className="px-2 mt-2 first:mt-0">
+              {items.map((item) => {
+                const Icon = item.icon;
+                const accentClass = item.accent
+                  ? ACCENT_BG[item.accent]
+                  : "bg-[var(--bg-tertiary)] text-[var(--text-secondary)]";
+                return (
+                  <Cmnd.Item
+                    key={item.href}
+                    value={`${item.label} ${item.href} ${group}`}
+                    onSelect={() => runCommand(item.href)}
+                    className="flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-[var(--bg-secondary)] cursor-pointer transition-colors"
+                  >
+                    <div className={cn("w-8 h-8 rounded-lg flex items-center justify-center", accentClass)}>
+                      <Icon className="w-4 h-4" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-[var(--text-primary)]">{item.label}</p>
+                      {item.description && (
+                        <p className="text-xs text-[var(--text-muted)]">{item.description}</p>
+                      )}
+                    </div>
+                    <ChevronRight className="w-4 h-4 text-[var(--text-muted)]" />
+                  </Cmnd.Item>
+                );
+              })}
+            </Cmnd.Group>
+          ))}
 
           <div className="px-4 py-3 border-t border-[var(--border-subtle)] mt-2">
             <div className="flex items-center gap-4 text-xs text-[var(--text-muted)]">
