@@ -10,6 +10,8 @@ export interface PageHeaderProps {
   actions?: React.ReactNode;
   icon?: React.ComponentType<{ className?: string }>;
   className?: string;
+  /** Optional "Welcome back, X" badge shown above the title. */
+  greeting?: string;
 }
 
 export function PageHeader({
@@ -19,6 +21,7 @@ export function PageHeader({
   actions,
   icon: Icon,
   className,
+  greeting,
 }: PageHeaderProps) {
   return (
     <div className={cn("flex items-start justify-between gap-4 mb-8", className)}>
@@ -29,6 +32,9 @@ export function PageHeader({
           </div>
         )}
         <div className="min-w-0">
+          {greeting && (
+            <p className="text-xs font-mono text-[var(--text-muted)] mb-1.5">{greeting}</p>
+          )}
           {eyebrow && (
             <p className="text-xs font-mono font-semibold uppercase tracking-widest text-[var(--accent)] mb-1.5">
               {eyebrow}

@@ -169,6 +169,7 @@ export default function DashboardPage() {
         title="Telemetry Overview"
         subtitle="Live signals from your agents and pipelines."
         icon={LayoutDashboard}
+        greeting={currentOrg ? `Welcome back · ${currentOrg.name}` : undefined}
         actions={
           <Link
             href="/observability"
