@@ -42,16 +42,6 @@ async def _try_get_pool():
 
 
 @pytest.fixture(scope="module")
-def event_loop():
-    """Override the function-scoped event loop fixture with a module-scoped
-    one so the connection pool can be reused across all tests in this file.
-    """
-    loop = asyncio.new_event_loop()
-    yield loop
-    loop.close()
-
-
-@pytest.fixture(scope="module")
 async def pg_client():
     """Module-scoped PostgresClient. Skips the module if no DB is reachable."""
     client = await _try_get_pool()
