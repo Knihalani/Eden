@@ -76,6 +76,7 @@ export const DEFAULT_SIDEBAR: SidebarGroup[] = [
     items: [
       { id: "dashboard",   href: "/dashboard",    label: "Dashboard",     icon: LayoutDashboard },
       { id: "agents",      href: "/agents",       label: "Agents",        icon: Bot },
+      { id: "connect",     href: "/agents/connect", label: "Connect repo", icon: GitBranch },
       { id: "builder",     href: "/builder",      label: "Builder",       icon: Wand2 },
       { id: "marketplace", href: "/marketplace",  label: "Marketplace",   icon: Box },
       { id: "multi-agent", href: "/multi-agent",  label: "Multi-Agent",   icon: Network, badge: "beta" },

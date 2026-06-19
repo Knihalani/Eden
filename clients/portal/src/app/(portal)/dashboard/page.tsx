@@ -9,6 +9,7 @@ import {
   ExternalLink,
   Layers,
   LayoutDashboard,
+  GitBranch,
 } from "lucide-react";
 import { api } from "@/lib/api";
 import { useOrg } from "@/hooks/use-org";
@@ -163,6 +164,11 @@ export default function DashboardPage() {
     return (data?.traces ?? []).filter((t) => new Date(t.started_at).getTime() >= cutoff);
   }, [data?.traces]);
 
+  // Detect first-run: no traces AND no agents — show a "Get started"
+  // card with a primary CTA to link a repo. Otherwise the dashboard
+  // is a wall of "— / 0 / no data" placeholders, which is hostile.
+  const isFirstRun = !loading && (data?.tracesTotal ?? 0) === 0 && (data?.traces ?? []).length === 0;
+
   return (
     <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto page-enter">
       <PageHeader
@@ -171,15 +177,58 @@ export default function DashboardPage() {
         icon={LayoutDashboard}
         greeting={currentOrg ? `Welcome back · ${currentOrg.name}` : undefined}
         actions={
-          <Link
-            href="/observability"
-            className="inline-flex items-center gap-1.5 text-sm font-medium text-[var(--accent)] hover:text-[var(--accent-hover)] transition-colors"
-          >
-            Open full observability
-            <ExternalLink className="w-3.5 h-3.5" />
-          </Link>
+          <div className="flex items-center gap-2">
+            <Link
+              href="/agents/connect"
+              className="inline-flex items-center gap-1.5 px-3 py-2 bg-[var(--accent)] text-[var(--accent-foreground)] rounded-lg text-sm font-medium hover:bg-[var(--accent-hover)] transition-colors"
+            >
+              <GitBranch className="w-3.5 h-3.5" />
+              Connect a repo
+            </Link>
+            <Link
+              href="/observability"
+              className="inline-flex items-center gap-1.5 text-sm font-medium text-[var(--text-muted)] hover:text-[var(--accent)] transition-colors"
+            >
+              Full observability
+              <ExternalLink className="w-3.5 h-3.5" />
+            </Link>
+          </div>
         }
       />
+
+      {isFirstRun && (
+        <div className="mb-6 p-5 rounded-xl border border-[var(--border-default)] bg-gradient-to-br from-[var(--accent-faint)] to-[var(--bg-primary)] flex flex-col sm:flex-row items-start gap-4">
+          <div className="flex-shrink-0 w-10 h-10 rounded-lg bg-[var(--accent)] text-[var(--accent-foreground)] flex items-center justify-center">
+            <GitBranch className="w-5 h-5" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <h2 className="text-sm font-semibold text-[var(--text-primary)]">
+              Link your first agent
+            </h2>
+            <p className="mt-1 text-sm text-[var(--text-secondary)] max-w-2xl">
+              Eden captures every LLM call from your agents and surfaces
+              them as traces here. Link a GitHub repo to auto-instrument
+              it, or install the SDK and call{" "}
+              <code className="font-mono text-xs px-1 py-0.5 rounded bg-[var(--bg-tertiary)] text-[var(--text-primary)]">
+                eden.init()
+              </code>{" "}
+              in your existing agent code.
+            </p>
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <Link
+                href="/agents/connect"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[var(--accent)] text-[var(--accent-foreground)] rounded-md text-xs font-medium hover:bg-[var(--accent-hover)] transition-colors"
+              >
+                <GitBranch className="w-3.5 h-3.5" />
+                Link a GitHub repo
+              </Link>
+              <code className="px-2 py-1 rounded bg-[var(--bg-secondary)] font-mono text-xs text-[var(--text-secondary)] border border-[var(--border-subtle)]">
+                pip install eden-ai
+              </code>
+            </div>
+          </div>
+        </div>
+      )}
 
       {error && (
         <div className="mb-6 p-4 rounded-lg border border-[var(--error)] bg-[var(--error-bg)] text-[var(--error-strong)] text-sm">
