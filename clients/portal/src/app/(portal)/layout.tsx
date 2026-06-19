@@ -11,6 +11,7 @@ import {
   Loader2,
   LayoutDashboard,
   PlusCircle,
+  PlayCircle,
   FileText,
   LogOut,
   Layers,
@@ -74,8 +75,6 @@ function buildBreadcrumbs(pathname: string): { label: string; href: string }[] {
 
   const labelMap: Record<string, string> = {
     dashboard: "Dashboard",
-    jobs: "Eval Harnesses",
-    "eval-harnesses": "Eval Harnesses",
     analytics: "Analytics",
     optimization: "Optimization",
     settings: "Settings",
@@ -301,6 +300,7 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
 
           <NavGroup label="Observe" collapsed={collapsed}>
             <NavItem href="/traces" icon={Layers} label="Trace Explorer" collapsed={collapsed} onClick={() => setSidebarOpen(false)} />
+            <NavItem href="/replay" icon={PlayCircle} label="Replay" collapsed={collapsed} onClick={() => setSidebarOpen(false)} />
             <NavItem
               href="/observability"
               icon={Activity}
@@ -317,6 +317,7 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
               <NavSubItem href="/observability/retrieval" label="Retrieval" onClick={() => setSidebarOpen(false)} />
               <NavSubItem href="/observability/time-travel" label="Time-Travel" onClick={() => setSidebarOpen(false)} />
             </NavItem>
+            <NavItem href="/tools" icon={Wrench} label="Tools" collapsed={collapsed} onClick={() => setSidebarOpen(false)} />
             <NavItem href="/incidents" icon={AlertOctagon} label="Incidents" collapsed={collapsed} onClick={() => setSidebarOpen(false)} />
             <NavItem href="/insights" icon={Brain} label="Insights" collapsed={collapsed} onClick={() => setSidebarOpen(false)} />
             <NavItem href="/inspector" icon={Compass} label="Inspector" collapsed={collapsed} onClick={() => setSidebarOpen(false)} />
@@ -502,12 +503,8 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
         <nav className="lg:hidden fixed bottom-0 left-0 right-0 bg-[var(--bg-primary)] border-t border-[var(--border-default)] z-40" aria-label="Mobile navigation">
           <div className="flex items-center justify-around h-16 px-1">
             <BottomNavItem href="/dashboard" icon={Home} label="Home" />
-            {flags.enable_eval_pipeline && (
-              <>
-                <BottomNavItem href="/eval-harnesses" icon={Layers} label="Harnesses" />
-                <BottomNavItem href="/eval-harnesses/new" icon={PlusCircle} label="New" isCenter />
-              </>
-            )}
+            <BottomNavItem href="/traces" icon={Layers} label="Traces" />
+            <BottomNavItem href="/observability" icon={Activity} label="Observe" />
             <BottomNavItem href="/settings" icon={Settings} label="Settings" />
             <BottomNavItem href="/profile" icon={User} label="Profile" />
           </div>
