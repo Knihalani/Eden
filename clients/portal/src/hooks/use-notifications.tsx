@@ -50,7 +50,16 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
       setUnreadCount(data.unread_count);
       setError(null);
     } catch (e) {
-      console.error("Failed to load notifications:", e);
+      // ponytail: the /notifications endpoint isn't deployed on
+      // the production FastAPI yet (returns 404). Silently fail —
+      // the bell icon just shows no badge. Without this, the user
+      // sees a "Failed to load notifications" error in the console
+      // for every page load. June 2026 fix.
+      if (e instanceof Error && !/404|not\s*found/i.test(e.message)) {
+        console.error("Failed to load notifications:", e);
+      }
+      setNotifications([]);
+      setUnreadCount(0);
       setError("Failed to load notifications");
     }
   }, []);

@@ -8,6 +8,7 @@ import {
   useEffect,
   type ReactNode,
 } from "react";
+import { useRouter } from "next/navigation";
 import { useOrganization, useOrganizationList, useUser } from "@clerk/nextjs";
 import { api } from "@/lib/api";
 import type { Organization } from "@/lib/types";
@@ -18,6 +19,11 @@ interface OrgContextType {
   setCurrentOrg: (org: Organization | null) => void;
   refreshOrgs: () => Promise<void>;
   loading: boolean;
+  /** Non-fatal auth error (e.g. 401 from /api/proxy/auth/me). When set,
+   *  the consuming page should render a "Session expired" card with a
+   *  re-auth button. Cleared by the user clicking "Sign in" + retry. */
+  authError: string | null;
+  clearAuthError: () => void;
   /** Clerk's active org id (``null`` if user has no active org). */
   clerkOrgId: string | null;
   /** Clerk's active org role (``org:admin`` / ``org:member`` / null). */
@@ -47,9 +53,11 @@ export function OrgProvider({ children }: { children: ReactNode }) {
     userMemberships: { infinite: true },
   });
   const { user, isLoaded: userLoaded } = useUser();
+  const router = useRouter();
   const [currentOrg, setCurrentOrgState] = useState<Organization | null>(null);
   const [organizations, setOrganizations] = useState<Organization[]>([]);
   const [loading, setLoading] = useState(false);
+  const [authError, setAuthError] = useState<string | null>(null);
 
   // Whenever the Clerk active org changes, refetch the Eden-side
   // enrichment for that org. Failures are non-fatal — the user can
@@ -92,6 +100,27 @@ export function OrgProvider({ children }: { children: ReactNode }) {
       }
     } catch (e) {
       console.error("Failed to load orgs:", e);
+      // ponytail: a 401 here means the Clerk session is valid
+      // (useUser() returned a user) but the portal's /api/proxy/auth/me
+      // route is failing to forward it to FastAPI. Before this fix, the
+      // dashboard stayed in its loading skeleton forever because
+      // `currentOrg` stayed null. Now we surface the error and
+      // redirect to the sign-in page so the user can re-establish
+      // a fresh session. June 2026 fix.
+      const message = e instanceof Error ? e.message : "Failed to load orgs";
+      if (/401|not\s*authenticated|unauthorized/i.test(message)) {
+        setAuthError("Session expired. Please sign in again.");
+        if (typeof window !== "undefined") {
+          window.sessionStorage.setItem("eden:auth:error", "session_expired");
+        }
+        // Don't hard-redirect — let the consuming components render
+        // a "Session expired" card with a "Sign in" button. The hard
+        // redirect is reserved for pages that have no escape hatch.
+      } else {
+        setAuthError(message);
+      }
+      setOrganizations([]);
+      setCurrentOrgState(null);
     } finally {
       setLoading(false);
     }
@@ -119,6 +148,8 @@ export function OrgProvider({ children }: { children: ReactNode }) {
         setCurrentOrg,
         refreshOrgs,
         loading,
+        authError,
+        clearAuthError: () => setAuthError(null),
         clerkOrgId: clerkOrg?.id ?? null,
         // Clerk role strings are ``org:admin`` / ``org:member`` by
         // default; map them onto Eden's ``owner``/``member`` vocab so
