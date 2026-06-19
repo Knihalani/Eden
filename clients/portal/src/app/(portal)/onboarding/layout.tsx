@@ -10,6 +10,12 @@
  * sync.
  */
 
+// ponytail: dynamic = "force-dynamic" because the Wizard config holds
+// `render` functions, which Next.js cannot serialize for static
+// prerendering. Onboarding is interactive-only anyway (it depends on
+// the current user + org, never a cacheable surface).
+export const dynamic = "force-dynamic";
+
 import { Wizard, type WizardStep } from "@/components/ui/wizard";
 import { WelcomeStep } from "./_steps/welcome";
 import { DoneStep } from "./_steps/done";
