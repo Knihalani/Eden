@@ -50,6 +50,15 @@ class LifecycleReport:
 
 
 DEFAULT_TRANSITIONS: list[TierTransition] = [
+    # Phase B1 (2026-06-19): Impossible Cloud is a single always-hot tier.
+    # The hot→warm→cold transition chain was meaningful on AWS S3 (STANDARD_IA
+    # cheaper than STANDARD, GLACIER_IR/GLACIER cheaper still) but is moot
+    # here — Impossible Cloud charges €7.99/TB/mo flat with no tier
+    # transitions. The transitions below are retained for backwards
+    # compatibility with operators that may point ``bronze_s3_bucket`` at
+    # AWS S3 or another tiered backend, but the default lifecycle rules
+    # emitted by ``apply_s3_lifecycle_rules`` skip the ``Transitions``
+    # blocks on Impossible Cloud.
     TierTransition(
         name="bronze-hot-to-warm",
         source_tier="hot",
@@ -95,14 +104,28 @@ DEFAULT_TRANSITIONS: list[TierTransition] = [
 ]
 
 
+# True when ``bronze_s3_bucket`` points at an Impossible Cloud endpoint.
+# Set via the ``EDEN_STORAGE_BACKEND=impossible_cloud`` env var. When true,
+# ``apply_s3_lifecycle_rules`` omits the ``Transitions`` blocks because
+# Impossible Cloud has a single always-hot tier.
+import os as _os
+
+_IMPOSSIBLE_CLOUD = _os.environ.get("EDEN_STORAGE_BACKEND", "").lower() == "impossible_cloud"
+
+
 class StorageLifecycleManager:
-    """Manages tiered storage transitions for the data platform.
+    """Manages storage lifecycle rules for the data platform.
 
     Handles:
-    - PostgreSQL → S3 warm (partition offloading)
-    - S3 standard → S3 IA → S3 Glacier transitions
+    - PostgreSQL → object-storage (Impossible Cloud or AWS S3) archive
     - S3 lifecycle rule configuration
     - Expiration of temporary/debug data
+
+    On Impossible Cloud (the Eden default since 2026-06-19) the
+    tier-transition chain collapses to expiration-only because there
+    is only one storage class. ``apply_s3_lifecycle_rules`` emits
+    ``Transitions`` blocks only when ``EDEN_STORAGE_BACKEND`` is
+    unset or set to a tiered backend like ``aws``.
     """
 
     def __init__(
@@ -135,29 +158,47 @@ class StorageLifecycleManager:
                 "ID": "eden-bronze-tiering",
                 "Status": "Enabled",
                 "Filter": {"Prefix": "bronze/events/"},
-                "Transitions": [
-                    {"Days": 7, "StorageClass": "STANDARD_IA"},
-                    {"Days": 30, "StorageClass": "GLACIER_IR"},
-                ],
+                **(
+                    {
+                        "Transitions": [
+                            {"Days": 7, "StorageClass": "STANDARD_IA"},
+                            {"Days": 30, "StorageClass": "GLACIER_IR"},
+                        ],
+                    }
+                    if not _IMPOSSIBLE_CLOUD
+                    else {}
+                ),
                 "Expiration": {"Days": 2555},  # 7 years
             },
             {
                 "ID": "eden-silver-tiering",
                 "Status": "Enabled",
                 "Filter": {"Prefix": "silver/"},
-                "Transitions": [
-                    {"Days": 7, "StorageClass": "STANDARD_IA"},
-                    {"Days": 90, "StorageClass": "GLACIER"},
-                ],
+                **(
+                    {
+                        "Transitions": [
+                            {"Days": 7, "StorageClass": "STANDARD_IA"},
+                            {"Days": 90, "StorageClass": "GLACIER"},
+                        ],
+                    }
+                    if not _IMPOSSIBLE_CLOUD
+                    else {}
+                ),
                 "Expiration": {"Days": 2555},
             },
             {
                 "ID": "eden-datasets-tiering",
                 "Status": "Enabled",
                 "Filter": {"Prefix": "datasets/"},
-                "Transitions": [
-                    {"Days": 30, "StorageClass": "GLACIER"},
-                ],
+                **(
+                    {
+                        "Transitions": [
+                            {"Days": 30, "StorageClass": "GLACIER"},
+                        ],
+                    }
+                    if not _IMPOSSIBLE_CLOUD
+                    else {}
+                ),
             },
             {
                 "ID": "eden-debug-cleanup",
@@ -295,8 +336,18 @@ class StorageLifecycleManager:
     ) -> int:
         """Transition S3 objects in a prefix to a different storage class.
 
-        Returns number of objects transitioned.
+        Returns number of objects transitioned. On Impossible Cloud
+        (``EDEN_STORAGE_BACKEND=impossible_cloud``) this is a no-op
+        because the backend has a single always-hot tier — there is
+        nothing to transition to. Returns 0 immediately.
         """
+        if _IMPOSSIBLE_CLOUD:
+            logger.info(
+                f"[impossible_cloud] skipping tier transition of "
+                f"s3://.../{prefix} → {to_storage_class} (single-tier backend)"
+            )
+            return 0
+
         bucket = getattr(settings, "bronze_s3_bucket", "")
         if not bucket:
             return 0

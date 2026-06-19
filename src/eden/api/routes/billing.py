@@ -6,10 +6,15 @@ Handles Stripe webhook events, subscription management, and plan limits.
 import json
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
 from pydantic import BaseModel
 
-from eden.api.deps import get_current_user, get_postgres_client, require_org_permission
+from eden.api.deps import (
+    _try_resolve_token_payload,
+    get_current_user,
+    get_postgres_client,
+    require_org_permission,
+)
 from eden.config import get_settings
 
 logger = logging.getLogger(__name__)
@@ -624,3 +629,80 @@ async def handle_subscription_event(event: dict) -> None:
             stripe_sub_id,
             org_id,
         )
+
+
+# ───────────────────────────────────────────────────────────────────
+# GET /orgs/{org_id}/billing/payment-method
+# ───────────────────────────────────────────────────────────────────
+# Reads the org's stored Stripe customer id, then asks the Stripe
+# API for the default payment method. Returns None for any of:
+#   - Stripe not configured (no secret key)
+#   - Org has no stripe_customer_id
+#   - Customer has no default payment method set
+#   - Any Stripe API error (graceful: we don't want a billing UI to
+#     break because Stripe is having a bad day; the portal will
+#     just hide the card and show "Add a card")
+
+class _PaymentMethodResponse(BaseModel):
+    brand: str
+    last4: str
+    exp_month: int
+    exp_year: int
+
+
+@router.get("/payment-method", response_model=_PaymentMethodResponse | None)
+async def get_payment_method(
+    org_id: str,
+    _user: dict = Depends(get_current_user),
+):
+    """Return the org's default Stripe payment method, or None.
+
+    Returns null (not 404) when no method is on file so the
+    portal can render a "Add a card" CTA without a separate
+    not-found state.
+    """
+    if not getattr(settings, "stripe_secret_key", None):
+        return None
+
+    client = await get_postgres_client()
+    row = await client.fetchrow(
+        "SELECT settings FROM organizations WHERE id = $1",
+        org_id,
+    )
+    if not row:
+        return None
+    org_settings = row.get("settings") or {}
+    if isinstance(org_settings, str):
+        try:
+            org_settings = json.loads(org_settings)
+        except (ValueError, TypeError):
+            org_settings = {}
+    customer_id = org_settings.get("stripe_customer_id")
+    if not customer_id:
+        return None
+
+    # Lazy import: the stripe SDK is only required when this endpoint
+    # is actually called. Avoids a hard dep for the rest of the app.
+    try:
+        import stripe
+        stripe.api_key = settings.stripe_secret_key
+        customer = stripe.Customer.retrieve(customer_id)
+        default_pm = getattr(
+            customer.invoice_settings.default_payment_method, "id", None
+        )
+        if not default_pm:
+            return None
+        pm = stripe.PaymentMethod.retrieve(default_pm)
+        return _PaymentMethodResponse(
+            brand=pm.card.brand,
+            last4=pm.card.last4,
+            exp_month=pm.card.exp_month,
+            exp_year=pm.card.exp_year,
+        )
+    except Exception as exc:
+        # Don't break the portal if Stripe is down. Log + return null
+        # so the UI falls back to a "card on file unavailable" state.
+        logger.warning(
+            "Stripe payment-method lookup failed for org %s: %s", org_id, exc,
+        )
+        return None

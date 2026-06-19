@@ -493,3 +493,110 @@ async def suggest_spans_route(
         suggestions=[SpanSearchHit(**h.to_dict()) for h in hits],
         took_ms=round(elapsed, 2),
     )
+
+
+# ───────────────────────────────────────────────────────────────────
+# GET /orgs/{org_id}/observability/summary
+# ───────────────────────────────────────────────────────────────────
+# Deeper-fingerprint rollup over a sliding window. Returns the
+# tenant's call/error mix, latency percentiles, top failure modes,
+# top tools, hot paths, and per-model cost breakdown — the same
+# fields the portal's "Observability" summary card renders.
+
+@router.get("/summary", response_model=dict)
+async def observability_summary(
+    org_id: str,
+    window_hours: int = Query(24, ge=1, le=720),
+    agent_id: str | None = Query(None),
+):
+    """Top-of-dashboard summary for an org.
+
+    Issues one query per shape (totals, percentiles, failure modes,
+    tools, hot paths, models) and assembles the response. Each
+    subquery is a single GROUP BY / aggregate over ``telemetry_events``
+    scoped to the org + window.
+    """
+    from datetime import datetime, timedelta
+    from eden.storage import postgres as _pg_module
+    client = await _pg_module.get_postgres_client()
+    since = datetime.utcnow() - timedelta(hours=window_hours)
+    common_where = "tenant_id = $1 AND timestamp >= $2"
+    if agent_id:
+        common_where += f" AND attributes->>'agent_id' = '{agent_id}'"
+    common_args = [org_id, since]
+
+    # 1) Totals + error count.
+    totals = await client.fetchrow(
+        f"SELECT count(*) AS total, "
+        f"sum(CASE WHEN error IS NOT NULL THEN 1 ELSE 0 END) AS errors "
+        f"FROM telemetry_events WHERE {common_where}",
+        *common_args,
+    )
+    total = int(totals["total"] or 0) if totals else 0
+    errors = int(totals["errors"] or 0) if totals else 0
+    error_rate = (errors / total) if total else 0.0
+
+    # 2) Latency percentiles.
+    pct = await client.fetchrow(
+        f"SELECT percentile_cont(0.50) WITHIN GROUP (ORDER BY duration_ms) AS p50, "
+        f"percentile_cont(0.95) WITHIN GROUP (ORDER BY duration_ms) AS p95, "
+        f"percentile_cont(0.99) WITHIN GROUP (ORDER BY duration_ms) AS p99, "
+        f"coalesce(sum(cost_usd), 0) AS cost "
+        f"FROM telemetry_events WHERE {common_where}",
+        *common_args,
+    )
+
+    # 3) Top failure modes — group by the error.type field.
+    failure_modes = await client.fetch(
+        f"SELECT coalesce(error->>'type', error->>'category', event_type) AS name, "
+        f"count(*) AS count, "
+        f"array_agg(distinct trace_id) FILTER (WHERE trace_id IS NOT NULL) AS sample_trace_ids "
+        f"FROM telemetry_events WHERE {common_where} AND error IS NOT NULL "
+        f"GROUP BY 1 ORDER BY count DESC LIMIT 10",
+        *common_args,
+    )
+
+    # 4) Top tools — group by tool_name in payload.
+    top_tools = await client.fetch(
+        f"SELECT coalesce(payload->>'tool_name', event_type) AS tool_name, "
+        f"tool.name AS name, count(*) AS count "
+        f"FROM telemetry_events WHERE {common_where} "
+        f"  AND event_type IN ('tool_call', 'tool_result') "
+        f"GROUP BY 1, 2 ORDER BY count DESC LIMIT 10",
+        *common_args,
+    )
+
+    # 5) Hot paths — per event_type with avg duration.
+    hot_paths = await client.fetch(
+        f"SELECT event_type AS name, count(*) AS count, "
+        f"avg(duration_ms) AS avg_duration_ms "
+        f"FROM telemetry_events WHERE {common_where} "
+        f"GROUP BY 1 ORDER BY count DESC LIMIT 10",
+        *common_args,
+    )
+
+    # 6) Model breakdown — per model with call count + total cost.
+    model_breakdown = await client.fetch(
+        f"SELECT attributes->>'model' AS model, "
+        f"count(*) AS calls, "
+        f"coalesce(sum(cost_usd), 0) AS cost_usd "
+        f"FROM telemetry_events WHERE {common_where} "
+        f"  AND event_type = 'llm_call' "
+        f"GROUP BY 1",
+        *common_args,
+    )
+
+    return {
+        "window_hours": window_hours,
+        "agent_id": agent_id,
+        "total_traces": total,
+        "error_rate": error_rate,
+        "p50_ms": float(pct["p50"]) if pct and pct["p50"] is not None else None,
+        "p95_ms": float(pct["p95"]) if pct and pct["p95"] is not None else None,
+        "p99_ms": float(pct["p99"]) if pct and pct["p99"] is not None else None,
+        "total_cost_usd": float(pct["cost"]) if pct and pct["cost"] is not None else 0.0,
+        "top_failure_modes": [dict(r) for r in failure_modes],
+        "top_tools": [dict(r) for r in top_tools],
+        "hot_paths": [dict(r) for r in hot_paths],
+        "model_breakdown": [dict(r) for r in model_breakdown],
+    }

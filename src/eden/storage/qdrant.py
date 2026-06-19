@@ -80,7 +80,16 @@ class QdrantClientWrapper:
         return self._client
 
     def initialize_collections(self) -> None:
-        """Initialize Eden's collections if they don't exist."""
+        """Initialize Eden's collections if they don't exist.
+
+        All 3 collections ship with scalar int8 quantization and
+        on-disk payload mmap (Phase B6 — June 2026). Quantization
+        reduces RAM by ~4× (1536-dim float32 → int8) with <1% recall
+        loss on MTEB benchmarks; on-disk payload mmap keeps the
+        index in RAM while pushing the (usually large) payload to
+        disk. For existing collections, run
+        ``scripts/qdrant_enable_quantization.py`` to reindex.
+        """
         client = self._get_client()
 
         collections_to_create = {
@@ -109,7 +118,16 @@ class QdrantClientWrapper:
                     vectors_config=models.VectorParams(
                         size=int(config["vector_size"]),
                         distance=models.Distance(config["distance"]),
+                        on_disk=True,
                     ),
+                    quantization_config=models.ScalarQuantization(
+                        scalar=models.ScalarQuantizationConfig(
+                            type=models.ScalarType.INT8,
+                            quantile=0.99,
+                            always_ram=True,
+                        ),
+                    ),
+                    on_disk_payload=True,
                 )
                 logger.info(f"Created Qdrant collection: {name}")
 

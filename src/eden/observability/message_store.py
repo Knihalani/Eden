@@ -256,6 +256,59 @@ class MessageStore:
 
     # ── Stats ────────────────────────────────────────────────────────
 
+    async def gc_orphans(self, batch_size: int = 500) -> int:
+        """Delete ``trace_messages`` rows whose trace has no rows in
+        ``telemetry_events`` (Phase B4).
+
+        Called by the daily retention cron. Phase B3's archive path
+        deletes the messages inline; this sweep catches anything
+        left over (failed archives, manual SQL deletes, replayed
+        traces that were re-ingested from cold).
+
+        Returns the total number of orphan rows deleted.
+        """
+        client = await self._get_client()
+        if client is None:
+            return 0
+        try:
+            total = 0
+            while True:
+                # Postgres-only anti-join: rows in trace_messages whose
+                # trace_id has no remaining telemetry_events row.
+                rows = await client.fetch(
+                    """
+                    SELECT tm.trace_id
+                      FROM trace_messages tm
+                     WHERE NOT EXISTS (
+                               SELECT 1 FROM telemetry_events te
+                                WHERE te.trace_id = tm.trace_id
+                           )
+                     LIMIT $1
+                    """,
+                    batch_size,
+                )
+                if not rows:
+                    break
+                trace_ids = [r["trace_id"] for r in rows]
+                deleted = await client.execute(
+                    "DELETE FROM trace_messages WHERE trace_id = ANY($1::text[])",
+                    trace_ids,
+                )
+                # Parse "DELETE n" from the asyncpg status string.
+                try:
+                    n = int(str(deleted).split()[-1])
+                except (ValueError, AttributeError, IndexError):
+                    n = 0
+                total += n
+                logger.info(f"trace_messages gc: deleted {n} orphan rows (total={total})")
+                # If this batch was full, loop; otherwise done.
+                if len(trace_ids) < batch_size:
+                    break
+            return total
+        except Exception as exc:
+            logger.warning(f"MessageStore.gc_orphans failed: {exc}")
+            return 0
+
     async def trace_stats(self, trace_id: str) -> dict[str, int]:
         """Return dedup stats for a trace: unique messages + total refs.
 

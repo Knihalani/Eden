@@ -205,8 +205,9 @@ class ClickHouseSink:
         # telemetry_events_ch — mirror of the Postgres telemetry_events
         # table for fast analytical queries (heatmap, p50/p95/p99 over
         # millions of rows). JSONB is stored as String for simplicity;
-        # the portal parses on the way out. 90-day TTL keeps the cluster
-        # bounded; Postgres + cold storage hold the long tail.
+        # the portal parses on the way out. 30-day TTL (tightened from
+        # 90d in Phase B1 / 2026-06-19 — Postgres + Impossible Cloud cold
+        # storage hold the long tail) keeps the cluster bounded.
         await self._execute(f"""
             CREATE TABLE IF NOT EXISTS {self.config.database}.telemetry_events_ch (
                 event_id           String,
@@ -244,7 +245,7 @@ class ClickHouseSink:
             ENGINE = MergeTree()
             PARTITION BY toYYYYMM(timestamp)
             ORDER BY (tenant_id, timestamp)
-            TTL timestamp + INTERVAL 90 DAY
+            TTL timestamp + INTERVAL 30 DAY
         """)
 
         self._initialized = True

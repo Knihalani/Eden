@@ -205,7 +205,9 @@ async def export_audit_log(
 
     await require_org_permission("audit:view", org_id, authorization)
     client = await get_postgres_client()
-    rows = await client.fetch(
+    # Use ``fetchiter`` (async iterator) so we don't materialise the
+    # full audit log in memory for a multi-year export.
+    rows = client.fetchiter(
         "SELECT id, user_id, user_email, action, target_type, target_id, "
         "metadata, ip_address, user_agent, created_at, prev_hash, entry_hash "
         "FROM audit_log WHERE org_id = %s "
@@ -230,7 +232,7 @@ async def export_audit_log(
     async def _iter():
         if format == "csv":
             yield (",".join(csv_fields) + "\n").encode("utf-8")
-        for r in rows:
+        async for r in rows:
             yield _serialize(r).encode("utf-8")
 
     return StreamingResponse(
