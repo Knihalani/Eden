@@ -67,26 +67,38 @@ const config = {
           routeBasePath: '/',
           sidebarPath: 'sidebars.js',
           remarkPlugins: [remarkEscapeBareLt],
-          // gap-roadmap.md + judge-v2-plan.md are the long internal
-          // status docs whose `<200ms` style MDX-hostile content
-          // the remark plugin above can't fully neutralise (it runs
-          // after the frontmatter has already been read, so the
-          // file-as-whole is still scanned by MDX). Excluding them
-          // here is belt-and-braces: the sidebar doesn't reference
-          // them, and they're not customer-facing.
+          // Internal docs that are NOT part of the public site.
+          // The public sidebar (sidebars.js) only references
+          // developer-facing content. Everything below is kept on
+          // disk for internal reference but excluded from the
+          // build so the public site only ships the 5 developer
+          // pages: Home, Quickstart, Guide, Reference, Changelog.
           //
-          // 40-dataset-spreadsheet + 41-prompt-management-playground
-          // contain `# {json}` examples and Jinja-like `{{name}}`
-          // patterns that the MDX runtime still tries to evaluate
-          // as JSX expressions, even inside code fences. The proper
-          // fix is to rewrite those examples in fenced json/bushcode
-          // blocks; for now they're excluded from the build so the
-          // rest of the docs site ships.
+          //   docs/docs/observability/*  — 23 cat implementation
+          //     write-ups (Cat 1 — Trace Replay, …, Cat 22 — APM
+          //     Depth). Internal roadmap status docs.
+          //   docs/docs/operations/*     — Internal runbook
+          //     (security, oncall, SLO, KB audit, etc.).
+          //   docs/docs/observability/gap-roadmap.md
+          //   docs/docs/observability/judge-v2-plan.md
+          //     Status docs with too many MDX-hostile `<200ms`
+          //     patterns for the remark plugin to neutralise.
+          //   docs/docs/observability/40-dataset-spreadsheet.md
+          //   docs/docs/observability/41-prompt-management-playground.md
+          //     `# {json}` and `{{name}}` examples that the MDX
+          //     runtime still tries to evaluate as JSX even inside
+          //     code fences. Rewrite needed.
+          //   docs/docs/reference/eden-agent-cli-roadmap.md
+          //     Outdated (June 6) pre-retirement roadmap; kept on
+          //     disk for historical reference.
           exclude: [
+            'docs/docs/observability/**',
+            'docs/docs/operations/**',
             '**/gap-roadmap.md',
             '**/judge-v2-plan.md',
             '**/40-dataset-spreadsheet.md',
             '**/41-prompt-management-playground.md',
+            '**/eden-agent-cli-roadmap.md',
           ],
         },
         blog: false,
