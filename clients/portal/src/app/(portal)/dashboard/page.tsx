@@ -168,10 +168,12 @@ export default function DashboardPage() {
     return (data?.traces ?? []).filter((t) => new Date(t.started_at).getTime() >= cutoff);
   }, [data?.traces]);
 
-  // Detect first-run: no traces AND no agents — show a "Get started"
-  // card with a primary CTA to link a repo. Otherwise the dashboard
-  // is a wall of "— / 0 / no data" placeholders, which is hostile.
-  const isFirstRun = !loading && (data?.tracesTotal ?? 0) === 0 && (data?.traces ?? []).length === 0;
+  // Detect first-run: no traces AND the API call completed — show a
+  // "Get started" card with a primary CTA to link a repo. Otherwise
+  // the dashboard is a wall of "— / 0 / no data" placeholders, which
+  // is hostile. Uses `data` not `data?.traces` so we don't show
+  // first-run while the API is still in-flight.
+  const isFirstRun = !loading && data !== null && data.tracesTotal === 0;
 
   return (
     <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto page-enter">
