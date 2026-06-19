@@ -2,6 +2,8 @@
 
 import { useState, useEffect } from "react";
 import { api } from "@/lib/api";
+import { useToast } from "@/components/ui/toast";
+import { useConfirm } from "@/hooks/use-confirm";
 import {
   Download,
   Loader2,
@@ -61,6 +63,8 @@ interface ExportsTabProps {
 }
 
 export function ExportsTab({ orgId, canManage }: ExportsTabProps) {
+  const toast = useToast();
+  const { confirm, ConfirmDialog } = useConfirm();
   const [destinations, setDestinations] = useState<any[]>([]);
   const [schedules, setSchedules] = useState<any[]>([]);
   const [loadingDest, setLoadingDest] = useState(true);
@@ -252,12 +256,17 @@ export function ExportsTab({ orgId, canManage }: ExportsTabProps) {
                     <td className="px-4 py-2 text-right">
                       <button
                         onClick={async () => {
-                          if (!confirm(`Delete destination "${d.name}"?`)) return;
+                          const ok = await confirm({
+                            title: `Delete destination "${d.name}"?`,
+                            confirmLabel: "Delete",
+                            variant: "destructive",
+                          });
+                          if (!ok) return;
                           try {
                             await api.deleteExportDestination(orgId, d.destination_id);
                             await loadAll();
                           } catch (err: unknown) {
-                            alert(err instanceof Error ? err.message : "Failed to delete");
+                            toast.error(err instanceof Error ? err.message : "Failed to delete");
                           }
                         }}
                         className="p-1.5 text-[var(--error)] hover:bg-[var(--error-bg)] rounded"
@@ -368,12 +377,17 @@ export function ExportsTab({ orgId, canManage }: ExportsTabProps) {
                           </button>
                           <button
                             onClick={async () => {
-                              if (!confirm("Delete this schedule?")) return;
+                              const ok = await confirm({
+                                title: "Delete this schedule?",
+                                confirmLabel: "Delete",
+                                variant: "destructive",
+                              });
+                              if (!ok) return;
                               try {
                                 await api.deleteExportSchedule(orgId, s.schedule_id);
                                 await loadAll();
                               } catch (err: unknown) {
-                                alert(err instanceof Error ? err.message : "Failed to delete");
+                                toast.error(err instanceof Error ? err.message : "Failed to delete");
                               }
                             }}
                             className="p-1.5 text-[var(--error)] hover:bg-[var(--error-bg)] rounded"
@@ -396,6 +410,7 @@ export function ExportsTab({ orgId, canManage }: ExportsTabProps) {
       <section>
         <LegacyExportFallback orgId={orgId} />
       </section>
+      {ConfirmDialog}
     </div>
   );
 }

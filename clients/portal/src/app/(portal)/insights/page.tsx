@@ -5,6 +5,7 @@ import { useOrg } from "@/hooks/use-org";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { EmptyState } from "@/components/ui/empty-state";
+import { PageHeader } from "@/components/layout/page-header";
 import {
   Lightbulb,
   Activity,
@@ -178,39 +179,34 @@ export default function InsightsPage() {
 
   return (
     <div className="p-4 lg:p-6 max-w-7xl mx-auto space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-[var(--text-primary)] flex items-center gap-2">
-            <Lightbulb className="w-6 h-6 text-[var(--accent)]" />
-            Insights
-          </h1>
-          <p className="text-sm text-[var(--text-muted)] mt-1">
-            Automatic pattern detection, disparity analysis, and dataset generation
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={handleRunDetectors}
-            disabled={runningDetectors}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-[var(--accent)] text-[var(--bg-base)] rounded-lg text-sm font-medium hover:bg-[var(--accent-hover)] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-          >
-            {runningDetectors ? (
-              <Loader2 className="w-4 h-4 animate-spin" />
-            ) : (
-              <Play className="w-4 h-4" />
-            )}
-            Run Detectors
-          </button>
-          <button
-            onClick={loadOverview}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-[var(--bg-tertiary)] text-[var(--text-primary)] rounded-lg text-sm font-medium hover:bg-[var(--border-default)] transition-colors"
-          >
-            <Activity className="w-4 h-4" />
-            Refresh
-          </button>
-        </div>
-      </div>
+      <PageHeader
+        title="Insights"
+        subtitle="Automatic pattern detection, disparity analysis, and dataset generation"
+        icon={Lightbulb}
+        actions={
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleRunDetectors}
+              disabled={runningDetectors}
+              className="inline-flex items-center gap-2 px-4 py-2 bg-[var(--accent)] text-[var(--bg-base)] rounded-lg text-sm font-medium hover:bg-[var(--accent-hover)] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              {runningDetectors ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <Play className="w-4 h-4" />
+              )}
+              Run Detectors
+            </button>
+            <button
+              onClick={loadOverview}
+              className="inline-flex items-center gap-2 px-4 py-2 bg-[var(--bg-tertiary)] text-[var(--text-primary)] rounded-lg text-sm font-medium hover:bg-[var(--border-default)] transition-colors"
+            >
+              <Activity className="w-4 h-4" />
+              Refresh
+            </button>
+          </div>
+        }
+      />
 
       {error && (
         <div className="bg-[var(--error-bg)] text-[var(--error)] text-sm px-4 py-3 rounded-xl flex items-center gap-2.5 border border-[var(--error)]/20">

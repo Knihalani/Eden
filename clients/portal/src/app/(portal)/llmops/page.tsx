@@ -6,6 +6,7 @@ import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { StatCard } from "@/components/ui/stat-card";
 import { EmptyState } from "@/components/ui/empty-state";
+import { NoOrgState } from "@/components/ui/no-org-state";
 import {
   Cpu,
   Box,
@@ -63,6 +64,10 @@ export default function LLMOpsPage() {
   const [error, setError] = useState("");
 
   const orgId = currentOrg?.id;
+
+  if (!currentOrg) {
+    return <NoOrgState feature="LLMOps" />;
+  }
 
   return (
     <div className="min-h-screen bg-[var(--bg-secondary)]">

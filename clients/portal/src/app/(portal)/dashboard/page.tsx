@@ -8,9 +8,11 @@ import {
   AlertTriangle,
   ExternalLink,
   Layers,
+  LayoutDashboard,
 } from "lucide-react";
 import { api } from "@/lib/api";
 import { useOrg } from "@/hooks/use-org";
+import { PageHeader } from "@/components/layout/page-header";
 import { StatCard } from "@/components/ui/stat-card";
 import { ThroughputCard } from "./_components/throughput-card";
 import { LatencyCard } from "./_components/latency-card";
@@ -30,20 +32,25 @@ interface DashboardData {
   tracesTotal: number;
   judgeScores: JudgeScoreRow[];
   optimization: {
-    routing: { total_requests: number; models_used: number; fallback_count: number; avg_latency_ms: number };
-    cache: { hits: number; misses: number; hit_rate: number; tokens_saved: number };
     costs: {
-      period_days: number;
       total_cost_cents: number;
-      total_cost_usd: number;
-      total_tokens: number;
-      events_count: number;
-      avg_cost_per_call_cents: number;
+      prompt_cost_cents?: number;
+      completion_cost_cents?: number;
+      cache_savings_cents?: number;
+      token_total?: number;
     };
-    budget: { period_cents: number; spend_cents: number; remaining_cents: number; percent_used: number; status: "ok" | "warning" | "exceeded" };
-    savings: { tokens_saved: number; estimated_cost_saved_cents: number; compression_ratio: number; coalesced_requests: number };
+    efficiency?: {
+      cache_hit_rate?: number;
+      avg_cost_per_request_cents?: number;
+      p50_latency_ms?: number;
+      p95_latency_ms?: number;
+    };
+    forecast?: {
+      next_7d_cost_cents?: number;
+      next_30d_cost_cents?: number;
+    };
   } | null;
-  alerts: Array<{ rule_id: string; severity: string; title: string; fired_at: string }>;
+  alerts: Array<{ rule_id?: string; severity: string; title: string; fired_at?: string }>;
   /** monthly cost in cents — synthesized from current period when not separately tracked */
   costThisMonthCents: number;
   costLastMonthCents: number;
@@ -71,7 +78,7 @@ export default function DashboardPage() {
           api.listObservabilityTraces(currentOrg.id, { limit: 50, days: 7 }),
           api.listJudgeScores(currentOrg.id, { limit: 100 }),
           api.getOptimizationOverview(currentOrg.id, 30),
-          api.listAlerts(),
+          api.listAlerts(currentOrg.id, { limit: 50 }),
         ]);
 
         if (cancelled) return;
@@ -86,8 +93,8 @@ export default function DashboardPage() {
           traces: (tracesRes.traces ?? []) as unknown as TraceRow[],
           tracesTotal: tracesRes.total ?? tracesRes.traces?.length ?? 0,
           judgeScores: (scoresRes.scores ?? []) as JudgeScoreRow[],
-          optimization: optimization as unknown as DashboardData["optimization"],
-          alerts: (alerts ?? []) as unknown as DashboardData["alerts"],
+          optimization,
+          alerts: (alerts as unknown as DashboardData["alerts"]) ?? [],
           costThisMonthCents: thisMonth,
           costLastMonthCents: lastMonth,
         });
@@ -158,24 +165,20 @@ export default function DashboardPage() {
 
   return (
     <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto page-enter">
-      {/* Header */}
-      <div className="mb-6 sm:mb-8 flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h1 className="text-2xl sm:text-3xl font-bold text-[var(--text-primary)] tracking-tight">
-            Telemetry Overview
-          </h1>
-          <p className="text-[var(--text-muted)] mt-1 text-sm">
-            Live signals from your agents and pipelines.
-          </p>
-        </div>
-        <Link
-          href="/observability"
-          className="inline-flex items-center gap-1.5 text-sm font-medium text-[var(--accent)] hover:text-[var(--accent-hover)] transition-colors"
-        >
-          Open full observability
-          <ExternalLink className="w-3.5 h-3.5" />
-        </Link>
-      </div>
+      <PageHeader
+        title="Telemetry Overview"
+        subtitle="Live signals from your agents and pipelines."
+        icon={LayoutDashboard}
+        actions={
+          <Link
+            href="/observability"
+            className="inline-flex items-center gap-1.5 text-sm font-medium text-[var(--accent)] hover:text-[var(--accent-hover)] transition-colors"
+          >
+            Open full observability
+            <ExternalLink className="w-3.5 h-3.5" />
+          </Link>
+        }
+      />
 
       {error && (
         <div className="mb-6 p-4 rounded-lg border border-[var(--error)] bg-[var(--error-bg)] text-[var(--error-strong)] text-sm">

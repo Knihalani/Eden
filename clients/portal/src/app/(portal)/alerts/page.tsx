@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils";
 import { formatRelativeTime } from "@/lib/format";
 import { EmptyState } from "@/components/ui/empty-state";
 import { NoOrgState } from "@/components/ui/no-org-state";
+import { PageHeader } from "@/components/layout/page-header";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Bell,
@@ -188,25 +189,19 @@ export default function AlertsPage() {
 
   return (
     <div className="p-6 lg:p-8 max-w-6xl mx-auto">
-      {/* Header */}
-      <div className="flex items-start justify-between mb-6">
-        <div>
-          <h1 className="text-2xl font-bold text-[var(--text-primary)] tracking-tight flex items-center gap-2">
-            <Bell className="w-6 h-6 text-[var(--accent)]" />
-            Alert Feed
-          </h1>
-          <p className="text-sm text-[var(--text-muted)] mt-1">
-            {loading ? "..." : `${total} alerts · ${unreadCount} unread`}
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={fetchAlerts}
-            className="p-2 text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)] rounded-lg transition-colors"
-            title="Refresh"
-          >
-            <RefreshCw className={cn("w-4 h-4", loading && "animate-spin")} />
-          </button>
+      <PageHeader
+        title="Alert Feed"
+        subtitle={loading ? "..." : `${total} alerts · ${unreadCount} unread`}
+        icon={Bell}
+        actions={
+          <div className="flex items-center gap-2">
+            <button
+              onClick={fetchAlerts}
+              className="p-2 text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)] rounded-lg transition-colors"
+              title="Refresh"
+            >
+              <RefreshCw className={cn("w-4 h-4", loading && "animate-spin")} />
+            </button>
           {hasSelection && (
             <motion.button
               initial={{ opacity: 0, scale: 0.9 }}
@@ -218,8 +213,9 @@ export default function AlertsPage() {
               Acknowledge {selectedAlerts.size}
             </motion.button>
           )}
-        </div>
-      </div>
+          </div>
+        }
+      />
 
       {/* Stats Cards */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mb-6">

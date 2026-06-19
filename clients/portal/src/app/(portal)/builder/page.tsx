@@ -52,6 +52,7 @@ import { ReactFlowProvider, useReactFlow } from "@xyflow/react";
 
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/toast";
+import { useConfirm } from "@/hooks/use-confirm";
 import { useOrg } from "@/hooks/use-org";
 import { agentsApi, builderApi } from "@/lib/api";
 
@@ -90,6 +91,7 @@ function BuilderPageInner() {
   const { currentOrg } = useOrg();
   const orgId = currentOrg?.id ?? null;
   const toast = useToast();
+  const { confirm, ConfirmDialog } = useConfirm();
 
   const s = useBuilderState();
   const [recent, setRecent] = useState<SavedGraphMeta[]>([]);
@@ -146,14 +148,15 @@ function BuilderPageInner() {
   );
 
   const loadTemplate = useCallback(
-    (template: BuilderTemplate) => {
-      if (
-        s.nodes.length > 0 &&
-        !window.confirm(
-          `Replace the current graph with the "${template.name}" template?`,
-        )
-      ) {
-        return;
+    async (template: BuilderTemplate) => {
+      if (s.nodes.length > 0) {
+        const ok = await confirm({
+          title: `Replace current graph with "${template.name}"?`,
+          description: "Your unsaved changes will be lost.",
+          confirmLabel: "Replace",
+          variant: "destructive",
+        });
+        if (!ok) return;
       }
       const built = template.build();
       s.replaceGraph(built.nodes, built.edges, built.graphName);
@@ -193,13 +196,14 @@ function BuilderPageInner() {
         toast.error(`Import failed: ${result.error}`);
         return;
       }
-      if (
-        s.nodes.length > 0 &&
-        !window.confirm(
-          `Replace the current graph with "${result.graph.graphName}"?`,
-        )
-      ) {
-        return;
+      if (s.nodes.length > 0) {
+        const ok = await confirm({
+          title: `Replace current graph with "${result.graph.graphName}"?`,
+          description: "Your unsaved changes will be lost.",
+          confirmLabel: "Replace",
+          variant: "destructive",
+        });
+        if (!ok) return;
       }
       s.replaceGraph(
         result.graph.nodes,
@@ -559,7 +563,12 @@ function BuilderPageInner() {
             type="button"
             variant="ghost"
             size="sm"
-            onClick={s.reset}
+            onClick={() => s.reset(() => confirm({
+              title: "Reset the builder?",
+              description: "All nodes and edges will be discarded. This cannot be undone.",
+              confirmLabel: "Reset",
+              variant: "destructive",
+            }))}
             aria-label="Reset to defaults"
           >
             <RotateCcw className="w-3.5 h-3.5" />
@@ -621,6 +630,7 @@ function BuilderPageInner() {
         orgId={orgId}
         onRerun={rerun}
       />
+      {ConfirmDialog}
     </div>
   );
 }

@@ -2,14 +2,12 @@
 
 import { useEffect, useMemo, useState } from "react";
 import {
-  AlertTriangle,
   ArrowDownRight,
   ArrowUpRight,
   BarChart3,
   Clock,
   Coins,
   Loader2,
-  Sparkles,
   Zap,
 } from "lucide-react";
 import {
@@ -48,18 +46,6 @@ import {
 // implemented (Phase A.1). The portal calls the real API directly
 // and renders real data — no synthetic fallback needed. The badge
 // import below is kept for legacy callers but is no longer used.)
-
-/* eslint-disable-next-line @typescript-eslint/no-unused-vars */
-function RemovedSyntheticBadge() {
-  return (
-    <span
-      title="Backend /analytics/* sub-routes not yet implemented"
-      className="inline-flex items-center gap-1 rounded-full border border-[var(--border-subtle)] bg-[var(--bg-tertiary)] px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-[var(--text-muted)]"
-    >
-      <Sparkles className="h-3 w-3" /> Synthetic
-    </span>
-  );
-}
 
 /* ------------------------- KPI strip ---------------------------------- */
 
@@ -444,7 +430,6 @@ export default function AnalyticsPage() {
   const { currentOrg } = useOrg();
   const [days, setDays] = useState<number>(30);
   const [loading, setLoading] = useState(true);
-  const [isSynthetic, setIsSynthetic] = useState(false);
 
   const [tokenByDay, setTokenByDay] = useState<
     Array<{ date: string; input_tokens: number; output_tokens: number }>
@@ -482,7 +467,6 @@ export default function AnalyticsPage() {
       setLatencyByDay(lat?.by_day ?? []);
       setThroughput(tp?.by_hour ?? []);
       setTopAgents(ag?.agents ?? []);
-      setIsSynthetic(false);
       setLoading(false);
     }).catch(() => {
       if (cancelled) return;
@@ -493,7 +477,6 @@ export default function AnalyticsPage() {
       setLatencyByDay([]);
       setThroughput([]);
       setTopAgents([]);
-      setIsSynthetic(false);
       setLoading(false);
     });
     return () => {
@@ -544,7 +527,6 @@ export default function AnalyticsPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          {isSynthetic && <RemovedSyntheticBadge />}
           <div className="inline-flex rounded-lg border border-[var(--border)] bg-[var(--bg-primary)] p-0.5 shadow-sm">
             {DAY_OPTIONS.map((opt) => (
               <button
@@ -610,23 +592,6 @@ export default function AnalyticsPage() {
         {loading ? <ChartSkeleton /> : <ThroughputHeatmap data={throughput} />}
         {loading ? <ChartSkeleton /> : <TopAgentsChart data={topAgents} />}
       </div>
-
-      {isSynthetic && (
-        <div className="flex items-start gap-2 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-tertiary)] p-3 text-xs text-[var(--text-muted)]">
-          <AlertTriangle className="h-4 w-4 shrink-0 text-[var(--warning)]" />
-          <p>
-            Showing synthetic data because the server does not yet implement{" "}
-            <code className="font-mono text-[var(--text-secondary)]">
-              /orgs/&#123;id&#125;/analytics/* sub-routes
-            </code>
-            . Replace{" "}
-            <code className="font-mono text-[var(--text-secondary)]">
-              fetchWithFallback(&#123; fetcher, fallback &#125;)
-            </code>{" "}
-            with the real API call once the backend ships.
-          </p>
-        </div>
-      )}
     </div>
   );
 }

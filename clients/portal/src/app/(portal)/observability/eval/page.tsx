@@ -2,26 +2,8 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { useOrg } from "@/hooks/use-org";
-import { api } from "@/lib/api";
+import { evalApi } from "@/lib/api";
 import { cn } from "@/lib/utils";
-
-// `evalApi` is a module-local const in `@/lib/api` (not exported).
-// Reach it via the `api` object using the same pattern as
-// `intelligence-grid.tsx`.
-const evalApi = (api as unknown as {
-  evalApi: {
-    tagVersion(orgId: string, data: { judge_name: string; version: string; notes?: string }): Promise<{ version_id: string; judge_name: string; version: string; tagged_at: string }>;
-    listVersions(orgId: string): Promise<{ versions: Version[] }>;
-    failureClusters(orgId: string, data: { days?: number }): Promise<{ clusters: Cluster[] }>;
-    clhfGenerate(orgId: string, data: { seed_traces: string[]; n?: number }): Promise<{ generation_id: string; samples: CLHFSample[] }>;
-    hilTask(orgId: string, data: { trace_id: string; question: string }): Promise<HILTask>;
-    hilAnnotation(orgId: string, data: { task_id: string; answer: string; confidence: number }): Promise<{ annotation_id: string; task_id: string }>;
-    pairwiseQueue(orgId: string, data: { n: number }): Promise<{ queue_id: string; pairs: Pair[] }>;
-    pairwisePreference(orgId: string, data: { queue_id: string; pair_id: string; preferred: "a" | "b" }): Promise<{ preference_id: string; queue_id: string }>;
-    multimodalEvaluate(orgId: string, data: { trace_id: string; modality: string }): Promise<{ score: number; rationale: string; modality: string }>;
-    promoteToGuardrail(orgId: string, data: { judge_name: string; version: string; threshold: number }): Promise<{ policy_id: string; judge_name: string; threshold: number }>;
-  };
-}).evalApi;
 import { EmptyState } from "@/components/ui/empty-state";
 import { NoOrgState } from "@/components/ui/no-org-state";
 import {

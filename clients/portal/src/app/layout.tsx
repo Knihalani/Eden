@@ -1,9 +1,10 @@
-import {ClerkProvider} from "@clerk/nextjs";
+import { ClerkProvider } from "@clerk/nextjs";
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { AuthProvider } from "@/hooks/use-auth";
 import { OrgProvider } from "@/hooks/use-org";
 import { ToastProvider } from "@/components/ui/toast";
+import { NotificationsProvider } from "@/hooks/use-notifications";
 import { QueryProvider } from "@/components/providers/query-provider";
 import "./globals.css";
 
@@ -22,6 +23,21 @@ export const metadata: Metadata = {
   description: "AI-native environment generation system for reinforcement learning and agent evaluation",
 };
 
+/**
+ * Clerk redirects back to our origin after OAuth + email-link flows.
+ * We whitelist localhost + the production site so user-supplied
+ * redirect URLs (e.g. /onboarding, /dashboard) are accepted.
+ *
+ * Update `NEXT_PUBLIC_SITE_URL` for staging / preview deploys; the
+ * defaults cover `localhost:3000` (dev) and the canonical prod
+ * domain. Wildcard would be insecure — keep the list explicit.
+ */
+const ALLOWED_REDIRECT_ORIGINS = [
+  "http://localhost:3000",
+  "https://edenobservability.com",
+  process.env.NEXT_PUBLIC_SITE_URL,
+].filter((origin): origin is string => Boolean(origin));
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -30,11 +46,13 @@ export default function RootLayout({
   return (
     <html lang="en" className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}>
       <body className="min-h-full flex flex-col bg-[var(--bg-primary)] grain-overlay">
-        <ClerkProvider>
+        <ClerkProvider allowedRedirectOrigins={ALLOWED_REDIRECT_ORIGINS}>
           <QueryProvider>
           <AuthProvider>
           <OrgProvider>
-          <ToastProvider>{children}</ToastProvider>
+          <ToastProvider>
+            <NotificationsProvider>{children}</NotificationsProvider>
+          </ToastProvider>
           </OrgProvider>
           </AuthProvider>
           </QueryProvider>

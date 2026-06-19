@@ -6,6 +6,8 @@ import { usePermissions } from "@/hooks/use-permissions";
 import { api } from "@/lib/api";
 import { Loader2, Shield, ShieldCheck, ShieldAlert, AlertTriangle, User as UserIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useToast } from "@/components/ui/toast";
+import { useConfirm } from "@/hooks/use-confirm";
 import { TwoFASetupDialog } from "./2fa-setup-dialog";
 
 interface Member2FAStatus {
@@ -20,6 +22,8 @@ interface Member2FAStatus {
 export function SecurityTab() {
   const { currentOrg } = useOrg();
   const { hasPermission } = usePermissions();
+  const toast = useToast();
+  const { confirm, ConfirmDialog } = useConfirm();
   const [user2FAEnabled, setUser2FAEnabled] = useState(false);
   const [enforcementStatus, setEnforcementStatus] = useState(false);
   const [members2FA, setMembers2FA] = useState<Member2FAStatus[]>([]);
@@ -70,10 +74,12 @@ export function SecurityTab() {
       // Warn about potential lockout
       const non2FAMembers = members2FA.filter((m) => !m.two_factor_enabled);
       if (non2FAMembers.length > 0) {
-        const confirmed = window.confirm(
-          `Warning: ${non2FAMembers.length} member(s) do not have 2FA enabled. ` +
-            `They will be locked out until they set up 2FA. Continue anyway?`
-        );
+        const confirmed = await confirm({
+          title: "Some members will be locked out",
+          description: `${non2FAMembers.length} member(s) do not have 2FA enabled. They will be locked out until they set up 2FA. Continue anyway?`,
+          confirmLabel: "Enforce anyway",
+          variant: "destructive",
+        });
         if (!confirmed) return;
       }
     }
@@ -82,7 +88,7 @@ export function SecurityTab() {
       await api.enforceOrg2FA(currentOrg.id, newEnforce);
       setEnforcementStatus(newEnforce);
     } catch (e: any) {
-      alert(e.message || "Failed to update 2FA enforcement");
+      toast.error(e.message || "Failed to update 2FA enforcement");
     }
   };
 
@@ -265,6 +271,7 @@ export function SecurityTab() {
           }}
         />
       )}
+      {ConfirmDialog}
     </div>
   );
 }

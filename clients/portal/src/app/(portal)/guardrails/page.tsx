@@ -6,6 +6,7 @@ import { api, guardrailsApi } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { EmptyState } from "@/components/ui/empty-state";
 import { StatCard } from "@/components/ui/stat-card";
+import { PageHeader } from "@/components/layout/page-header";
 import {
   Dialog,
   DialogContent,
@@ -343,22 +344,12 @@ export default function GuardrailsPage() {
 
   return (
     <div className="p-4 lg:p-6 max-w-7xl mx-auto space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-[var(--text-primary)] flex items-center gap-2">
-            <ShieldCheck className="w-6 h-6 text-[var(--accent)]" />
-            Guardrails
-            <span className="ml-1 inline-flex items-center gap-1 text-[10px] uppercase tracking-wider font-semibold px-2 py-0.5 rounded-full bg-[var(--error-bg)] text-[var(--error)] border border-[var(--error)]/20">
-              <Lock className="w-2.5 h-2.5" />
-              Security
-            </span>
-          </h1>
-          <p className="text-sm text-[var(--text-muted)] mt-1">
-            Content safety, prompt-injection defense, and PII redaction — live test bench and policy management
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
+      <PageHeader
+        title="Guardrails"
+        eyebrow="Security"
+        subtitle="Content safety, prompt-injection defense, and PII redaction — live test bench and policy management"
+        icon={ShieldCheck}
+        actions={
           <button
             onClick={() => setActiveTab("test")}
             className="inline-flex items-center gap-2 px-4 py-2 bg-[var(--accent)] text-[var(--bg-base)] rounded-lg text-sm font-medium hover:bg-[var(--accent-hover)] transition-colors"
@@ -366,8 +357,8 @@ export default function GuardrailsPage() {
             <TestTube2 className="w-4 h-4" />
             Test content
           </button>
-        </div>
-      </div>
+        }
+      />
 
       {/* Stat strip — always visible, security-flavored */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">

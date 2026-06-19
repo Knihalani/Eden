@@ -2,22 +2,8 @@
 
 import { useState } from "react";
 import { useOrg } from "@/hooks/use-org";
-import { api } from "@/lib/api";
+import { replayApi } from "@/lib/api";
 import { cn } from "@/lib/utils";
-
-// `replayApi` is a module-local const in `@/lib/api` (not exported).
-// Reach it via the `api` object using the same pattern as
-// `intelligence-grid.tsx`.
-const replayApi = (api as unknown as {
-  replayApi: {
-    createSession(orgId: string, data: { trace_id: string; name?: string }): Promise<{ session_id: string; trace_id: string }>;
-    listSessions(orgId: string): Promise<{ sessions: Array<{ session_id: string; trace_id: string; name: string | null; created_at: string }> }>;
-    getTree(orgId: string, sessionId: string): Promise<{ session_id: string; steps: Array<{ step_index: number; name: string; event_type: string }> }>;
-    getMessageView(orgId: string, sessionId: string): Promise<{ session_id: string; messages: Array<{ role: string; content: string; ts: string }> }>;
-    decisionPath(orgId: string, data: { trace_id: string }): Promise<DecisionPath>;
-    reasoningExplain(orgId: string, data: { trace_id: string; step_index: number }): Promise<Reasoning>;
-  };
-}).replayApi;
 import { EmptyState } from "@/components/ui/empty-state";
 import { NoOrgState } from "@/components/ui/no-org-state";
 import { motion, AnimatePresence } from "framer-motion";

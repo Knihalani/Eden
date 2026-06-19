@@ -4,6 +4,8 @@ import { useState, useEffect } from "react";
 import { api } from "@/lib/api";
 import { Loader2, Mail, X, Clock } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useToast } from "@/components/ui/toast";
+import { useConfirm } from "@/hooks/use-confirm";
 import type { Invitation } from "@/lib/types";
 
 interface InvitePanelProps {
@@ -12,6 +14,8 @@ interface InvitePanelProps {
 }
 
 export function InvitePanel({ orgId, canManage }: InvitePanelProps) {
+  const toast = useToast();
+  const { confirm, ConfirmDialog } = useConfirm();
   const [invitations, setInvitations] = useState<Invitation[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -36,12 +40,18 @@ export function InvitePanel({ orgId, canManage }: InvitePanelProps) {
   }, [orgId]);
 
   const handleDecline = async (invitationId: string) => {
-    if (!confirm("Are you sure you want to cancel this invitation?")) return;
+    const ok = await confirm({
+      title: "Cancel this invitation?",
+      description: "The invitee will no longer be able to join with this link.",
+      confirmLabel: "Cancel invitation",
+      variant: "destructive",
+    });
+    if (!ok) return;
     try {
       await api.declineInvite(orgId, invitationId);
       await loadInvitations();
     } catch (e: any) {
-      alert(e.message || "Failed to cancel invitation");
+      toast.error(e.message || "Failed to cancel invitation");
     }
   };
 
@@ -106,6 +116,7 @@ export function InvitePanel({ orgId, canManage }: InvitePanelProps) {
           ))}
         </div>
       )}
+      {ConfirmDialog}
     </div>
   );
 }

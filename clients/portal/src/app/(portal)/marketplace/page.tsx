@@ -2,10 +2,11 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Search, Tag, Star, GitFork, ArrowRight, Sparkles } from "lucide-react";
+import { Search, Tag, Star, GitFork, ArrowRight, Sparkles, Box } from "lucide-react";
 import { api } from "@/lib/api";
 import { useOrg } from "@/hooks/use-org";
 import { EmptyState } from "@/components/ui/empty-state";
+import { PageHeader } from "@/components/layout/page-header";
 import { cn } from "@/lib/utils";
 
 interface EnvCardSummary {
@@ -139,13 +140,11 @@ export default function MarketplacePage() {
 
   return (
     <div className="p-4 lg:p-6 space-y-6 max-w-7xl mx-auto">
-      {/* Header */}
-      <div className="flex flex-col gap-1">
-        <h1 className="text-2xl font-bold text-[var(--text-primary)]">Marketplace</h1>
-        <p className="text-sm text-[var(--text-secondary)]">
-          Discover, fork, and contribute quality-gated Eden environments.
-        </p>
-      </div>
+      <PageHeader
+        title="Marketplace"
+        subtitle="Discover, fork, and contribute quality-gated Eden environments."
+        icon={Box}
+      />
 
       {/* Featured row */}
       {featured.length > 0 && (

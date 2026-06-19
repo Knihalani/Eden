@@ -7,6 +7,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/components/ui/toast";
+import { NoOrgState } from "@/components/ui/no-org-state";
 import {
   Search,
   ChevronRight,
@@ -205,6 +206,10 @@ export default function TraceInspectorPage() {
     }
   };
   walk(null);
+
+  if (!currentOrg) {
+    return <NoOrgState feature="Trace Inspector" />;
+  }
 
   return (
     <div className="min-h-screen bg-[var(--bg-base)]">

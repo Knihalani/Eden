@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils";
 import { formatRelativeTime } from "@/lib/format";
 import { StatCard } from "@/components/ui/stat-card";
 import { EmptyState } from "@/components/ui/empty-state";
+import { PageHeader } from "@/components/layout/page-header";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   PlayCircle,
@@ -252,21 +253,15 @@ export default function ReplayPage() {
 
   return (
     <div className="p-6 lg:p-8 max-w-6xl mx-auto">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4 mb-6">
-        <div>
-          <h1 className="text-2xl font-bold text-[var(--text-primary)] tracking-tight flex items-center gap-2">
-            <History className="w-6 h-6 text-[var(--accent)]" />
-            Trace Replay
-          </h1>
-          <p className="text-sm text-[var(--text-muted)] mt-1">
-            Inspect pipeline traces and control execution via HILT
-          </p>
-        </div>
+      <PageHeader
+        title="Trace Replay"
+        subtitle="Inspect pipeline traces and control execution via HILT"
+        icon={History}
+      />
 
-        {/* Job Selector */}
-        <div className="min-w-[260px]">
-          <label className="text-xs text-[var(--text-muted)] mb-1.5 block font-medium">Select Job</label>
+      {/* Job Selector */}
+      <div className="min-w-[260px] mb-6">
+        <label className="text-xs text-[var(--text-muted)] mb-1.5 block font-medium">Select Job</label>
           <div className="relative">
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[var(--text-muted)]" />
             <select
@@ -306,7 +301,6 @@ export default function ReplayPage() {
               </span>
             </div>
           )}
-        </div>
       </div>
 
       {/* Error */}

@@ -6,10 +6,15 @@ import { api } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Loader2, User, Mail, Lock, Shield, ShieldCheck, ShieldAlert, Trash2, Camera, Check, X } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { PageHeader } from "@/components/layout/page-header";
+import { useToast } from "@/components/ui/toast";
+import { useConfirm } from "@/hooks/use-confirm";
 import { TwoFASetupDialog } from "./_components/2fa-setup-dialog";
 
 export default function ProfilePage() {
   const { user, refreshUser } = useAuth();
+  const toast = useToast();
+  const { confirm, ConfirmDialog } = useConfirm();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [saving, setSaving] = useState(false);
@@ -70,7 +75,7 @@ export default function ProfilePage() {
       await refreshUser();
       setTimeout(() => setSaveSuccess(false), 2000);
     } catch (e: any) {
-      alert(e.message || "Failed to save profile");
+      toast.error(e.message || "Failed to save profile");
     } finally {
       setSaving(false);
     }
@@ -111,12 +116,12 @@ export default function ProfilePage() {
     if (!file) return;
 
     if (!file.type.startsWith("image/")) {
-      alert("Please select an image file");
+      toast.error("Please select an image file");
       return;
     }
 
     if (file.size > 2 * 1024 * 1024) {
-      alert("Image must be smaller than 2MB");
+      toast.error("Image must be smaller than 2MB");
       return;
     }
 
@@ -125,27 +130,35 @@ export default function ProfilePage() {
       await api.uploadAvatar(file);
       await refreshUser();
     } catch (e: any) {
-      alert(e.message || "Failed to upload avatar");
+      toast.error(e.message || "Failed to upload avatar");
     } finally {
       setUploadingAvatar(false);
     }
   };
 
   const handleDeleteAccount = async () => {
-    if (!confirm("Are you sure you want to delete your account? This action cannot be undone and all your data will be permanently deleted.")) {
-      return;
-    }
+    const firstConfirm = await confirm({
+      title: "Delete your account?",
+      description: "This action cannot be undone and all your data will be permanently deleted.",
+      confirmLabel: "Continue",
+      variant: "destructive",
+    });
+    if (!firstConfirm) return;
 
-    if (!confirm("This will permanently delete your account and all associated organizations. Are you absolutely sure?")) {
-      return;
-    }
+    const secondConfirm = await confirm({
+      title: "Are you absolutely sure?",
+      description: "This will permanently delete your account and all associated organizations.",
+      confirmLabel: "Delete forever",
+      variant: "destructive",
+    });
+    if (!secondConfirm) return;
 
     setDeleting(true);
     try {
       await api.deleteAccount("DELETE");
       window.location.href = "/";
     } catch (e: any) {
-      alert(e.message || "Failed to delete account");
+      toast.error(e.message || "Failed to delete account");
       setDeleting(false);
     }
   };
@@ -154,10 +167,11 @@ export default function ProfilePage() {
 
   return (
     <div className="p-6 max-w-2xl">
-      <div className="mb-8">
-        <h1 className="text-2xl font-bold text-[var(--text-primary)]">Profile</h1>
-        <p className="text-sm text-[var(--text-muted)] mt-1">Manage your account settings</p>
-      </div>
+      <PageHeader
+        title="Profile"
+        subtitle="Manage your account settings"
+        icon={User}
+      />
 
       {/* User Info Section */}
       <div className="bg-[var(--bg-primary)] rounded-lg border border-[var(--border)] p-6 mb-6">
@@ -450,6 +464,7 @@ export default function ProfilePage() {
           }}
         />
       )}
+      {ConfirmDialog}
     </div>
   );
 }
