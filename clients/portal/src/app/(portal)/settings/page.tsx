@@ -68,6 +68,14 @@ const SidebarSettingsTab = dynamic(
 );
 
 import { DataExportPanel } from "./_components/data-export-panel";
+
+// Phase 5 (June 2026) — extracted from the inlined functions below
+// so each tab can be developed / tested / lazy-loaded independently.
+import { OrgTab } from "./_components/org-tab";
+import { MembersTab } from "./_components/members-tab";
+import { ReferencesTab } from "./_components/references-tab";
+import { ApiKeysTab } from "./_components/api-keys-tab";
+
 import { useToast } from "@/components/ui/toast";
 import { useConfirm } from "@/hooks/use-confirm";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -218,10 +226,10 @@ export default function SettingsPage() {
 
           {/* Tab Content */}
           <div className="page-enter" role="tabpanel" aria-labelledby={`settings-tab-${activeTab}`}>
-            {activeTab === "org" && <OrgSettings org={currentOrg} />}
-            {activeTab === "members" && <MembersSettings org={currentOrg} />}
-            {activeTab === "references" && <ReferencesSettings org={currentOrg} />}
-            {activeTab === "api-keys" && <ApiKeysSettings org={currentOrg} />}
+            {activeTab === "org" && <OrgTab org={currentOrg} />}
+            {activeTab === "members" && <MembersTab org={currentOrg} />}
+            {activeTab === "references" && <ReferencesTab org={currentOrg} />}
+            {activeTab === "api-keys" && <ApiKeysTab org={currentOrg} />}
             {activeTab === "security" && <SecurityTab />}
             {activeTab === "scim" && <ScimTab org={currentOrg} />}
             {activeTab === "sso" && <SSOTab orgId={currentOrg?.id || ""} />}
