@@ -2,6 +2,7 @@
 
 import { useAuth } from "@/hooks/use-auth";
 import { useNotifications } from "@/hooks/use-notifications";
+import { useOrg } from "@/hooks/use-org";
 import { useSidebarPrefs, applySidebarPrefs } from "@/hooks/use-sidebar-prefs";
 import { useClerk } from "@clerk/nextjs";
 import { useRouter } from "next/navigation";
@@ -32,6 +33,8 @@ import {
   Activity,
   Brain,
   AlertOctagon,
+  AlertTriangle,
+  ArrowRight,
   Wand2,
   Bot,
   Wrench,
@@ -130,6 +133,7 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
   const { user, loading } = useAuth();
   const { signOut } = useClerk();
   const { prefs, togglePin } = useSidebarPrefs();
+  const { authError, clearAuthError } = useOrg();
   const { pinnedItems, groups } = applySidebarPrefs(prefs);
   const router = useRouter();
   const pathname = usePathname();
@@ -186,6 +190,12 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
   if (!user) {
     return null;
   }
+
+  // Show a session-expired banner above the page if the Clerk session
+  // is valid but the portal's /api/proxy/auth/me call failed (401).
+  // Without this, every page stays in its loading skeleton because
+  // `currentOrg` never resolves. June 2026 fix.
+  const showAuthBanner = !loading && user && authError;
 
   const breadcrumbs = buildBreadcrumbs(pathname);
 
@@ -505,6 +515,26 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
             `h-screen` don't push the whole flex row past the viewport.
             June 2026 UI overhaul. */}
         <div className="page-enter flex-1 min-h-0 flex flex-col">
+          {showAuthBanner && (
+            <div className="flex items-center justify-between gap-3 px-4 sm:px-6 py-3 bg-[var(--error-dim)] border-b border-[var(--error)]/30 text-sm">
+              <div className="flex items-center gap-2 min-w-0">
+                <AlertTriangle className="w-4 h-4 text-[var(--error)] shrink-0" />
+                <span className="text-[var(--error)] truncate">
+                  {authError ?? "Session expired. Please sign in again."}
+                </span>
+              </div>
+              <button
+                onClick={() => {
+                  clearAuthError();
+                  router.push("/login");
+                }}
+                className="shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 bg-[var(--error)] text-[var(--bg-base)] rounded-md text-xs font-medium hover:opacity-90 transition-opacity"
+              >
+                Sign in
+                <ArrowRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          )}
           {children}
         </div>
 

@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   Loader2,
   DollarSign,
@@ -60,7 +61,8 @@ interface DashboardData {
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 export default function DashboardPage() {
-  const { currentOrg } = useOrg();
+  const { currentOrg, authError, clearAuthError } = useOrg();
+  const router = useRouter();
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
