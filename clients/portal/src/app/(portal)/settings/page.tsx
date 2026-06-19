@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
+import dynamic from "next/dynamic";
 import { useOrganizationList } from "@clerk/nextjs";
 import { useOrg } from "@/hooks/use-org";
 import { useAuth } from "@/hooks/use-auth";
@@ -12,19 +13,61 @@ import Link from "next/link";
 import { DeleteOrgDialog } from "./_components/delete-org-dialog";
 import { TransferOwnershipDialog } from "./_components/transfer-ownership-dialog";
 import { InvitePanel } from "./_components/invite-panel";
-import { AuditLogTab } from "./_components/audit-log-tab";
-import { AnalyticsTab } from "./_components/analytics-tab";
+
+// Heavy tabs — code-split via next/dynamic so the initial settings bundle
+// doesn't ship recharts / @xyflow / 2FA crypto / SCIM flows. Each lazy
+// import keeps a LoadingSkeleton fallback so the tab-rail layout
+// doesn't jump when the user clicks the tab. (June 2026 perf pass.)
+const AnalyticsTab = dynamic(
+  () => import("./_components/analytics-tab").then((m) => ({ default: m.AnalyticsTab })),
+  { ssr: false, loading: () => <Skeleton className="h-64 w-full" /> }
+);
+const AuditLogTab = dynamic(
+  () => import("./_components/audit-log-tab").then((m) => ({ default: m.AuditLogTab })),
+  { ssr: false, loading: () => <Skeleton className="h-64 w-full" /> }
+);
+const BillingTab = dynamic(
+  () => import("./_components/billing-tab").then((m) => ({ default: m.BillingTab })),
+  { ssr: false, loading: () => <Skeleton className="h-64 w-full" /> }
+);
+const ExportsTab = dynamic(
+  () => import("./_components/exports-tab").then((m) => ({ default: m.ExportsTab })),
+  { ssr: false, loading: () => <Skeleton className="h-64 w-full" /> }
+);
+const GatewayTab = dynamic(
+  () => import("./_components/gateway-tab").then((m) => ({ default: m.GatewayTab })),
+  { ssr: false, loading: () => <Skeleton className="h-64 w-full" /> }
+);
+const PiiPolicyTab = dynamic(
+  () => import("./_components/pii-policy-tab").then((m) => ({ default: m.PiiPolicyTab })),
+  { ssr: false, loading: () => <Skeleton className="h-64 w-full" /> }
+);
+const RegionTab = dynamic(
+  () => import("./_components/region-tab").then((m) => ({ default: m.RegionTab })),
+  { ssr: false, loading: () => <Skeleton className="h-64 w-full" /> }
+);
+const RetentionPolicyTab = dynamic(
+  () => import("./_components/retention-policy-tab").then((m) => ({ default: m.RetentionPolicyTab })),
+  { ssr: false, loading: () => <Skeleton className="h-64 w-full" /> }
+);
+const ScimTab = dynamic(
+  () => import("./_components/scim-tab").then((m) => ({ default: m.ScimTab })),
+  { ssr: false, loading: () => <Skeleton className="h-64 w-full" /> }
+);
+const SecurityTab = dynamic(
+  () => import("./_components/security-tab").then((m) => ({ default: m.SecurityTab })),
+  { ssr: false, loading: () => <Skeleton className="h-64 w-full" /> }
+);
+const SSOTab = dynamic(
+  () => import("./_components/sso-tab").then((m) => ({ default: m.SSOTab })),
+  { ssr: false, loading: () => <Skeleton className="h-64 w-full" /> }
+);
+const SidebarSettingsTab = dynamic(
+  () => import("./_components/sidebar-settings-tab").then((m) => ({ default: m.SidebarSettingsTab })),
+  { ssr: false, loading: () => <Skeleton className="h-64 w-full" /> }
+);
+
 import { DataExportPanel } from "./_components/data-export-panel";
-import { ExportsTab } from "./_components/exports-tab";
-import { SidebarSettingsTab } from "./_components/sidebar-settings-tab";
-import { SecurityTab } from "./_components/security-tab";
-import { ScimTab } from "./_components/scim-tab";
-import { SSOTab } from "./_components/sso-tab";
-import { BillingTab } from "./_components/billing-tab";
-import { GatewayTab } from "./_components/gateway-tab";
-import { PiiPolicyTab } from "./_components/pii-policy-tab";
-import { RetentionPolicyTab } from "./_components/retention-policy-tab";
-import { RegionTab } from "./_components/region-tab";
 import { useToast } from "@/components/ui/toast";
 import { useConfirm } from "@/hooks/use-confirm";
 import { Skeleton } from "@/components/ui/skeleton";
