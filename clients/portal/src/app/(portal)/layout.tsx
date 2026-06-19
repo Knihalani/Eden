@@ -1,11 +1,12 @@
 "use client";
 
 import { useAuth } from "@/hooks/use-auth";
-import { useOrg } from "@/hooks/use-org";
 import { useNotifications } from "@/hooks/use-notifications";
+import { useSidebarPrefs, applySidebarPrefs } from "@/hooks/use-sidebar-prefs";
 import { useClerk } from "@clerk/nextjs";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, useRef, useCallback } from "react";
+import { Pin } from "lucide-react";
 import {
   Loader2,
   LayoutDashboard,
@@ -129,7 +130,8 @@ function buildBreadcrumbs(pathname: string): { label: string; href: string }[] {
 export default function PortalLayout({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
   const { signOut } = useClerk();
-  const { currentOrg, organizations, setCurrentOrg } = useOrg();
+  const { prefs, togglePin } = useSidebarPrefs();
+  const { pinnedItems, groups } = applySidebarPrefs(prefs);
   const router = useRouter();
   const pathname = usePathname();
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -256,76 +258,68 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
             looked like a second brand mark next to the Eden logo).
             Users reach org controls via Settings → Organization. */}
 
-        {/* Navigation — flex-1 + min-h-0 + overflow-y-auto is what makes
-            it scroll independently of the rest of the page. Without
-            min-h-0, the flex item refuses to shrink below its content
-            height and the aside grows past the viewport. */}
-        <nav className="relative flex-1 min-h-0 p-3 space-y-5 overflow-y-auto overscroll-contain" aria-label="Main navigation">
-          <NavGroup label="Build" collapsed={collapsed}>
-            <NavItem href="/dashboard" icon={LayoutDashboard} label="Dashboard" collapsed={collapsed} onClick={() => setSidebarOpen(false)} />
-            <NavItem href="/agents" icon={Bot} label="Agents" collapsed={collapsed} onClick={() => setSidebarOpen(false)} />
-            <NavItem href="/builder" icon={Wand2} label="Builder" collapsed={collapsed} onClick={() => setSidebarOpen(false)} />
-            <NavItem href="/marketplace" icon={Box} label="Marketplace" collapsed={collapsed} onClick={() => setSidebarOpen(false)} />
-            <NavItem href="/multi-agent" icon={Network} label="Multi-Agent" collapsed={collapsed} onClick={() => setSidebarOpen(false)} />
-            <NavItem href="/sandbox" icon={Server} label="Sandbox" collapsed={collapsed} onClick={() => setSidebarOpen(false)} />
-          </NavGroup>
+        {/* Navigation — data-driven from DEFAULT_SIDEBAR + user prefs
+            (pinned / hidden / reordered). The aside scrolls independently
+            of the page because the flex item has min-h-0 + overflow-y-auto. */}
+        <nav
+          className="relative flex-1 min-h-0 p-3 space-y-5 overflow-y-auto overscroll-contain"
+          aria-label="Main navigation"
+        >
+          {pinnedItems.length > 0 && (
+            <NavGroup label="Pinned" collapsed={collapsed}>
+              {pinnedItems.map((item) => (
+                <NavItem
+                  key={item.id}
+                  href={item.href}
+                  icon={item.icon}
+                  label={item.label}
+                  collapsed={collapsed}
+                  onClick={() => setSidebarOpen(false)}
+                  pinned
+                  onTogglePin={() => togglePin(item.id)}
+                />
+              ))}
+            </NavGroup>
+          )}
 
-          <NavGroup label="Observe" collapsed={collapsed}>
-            <NavItem href="/traces" icon={Layers} label="Trace Explorer" collapsed={collapsed} onClick={() => setSidebarOpen(false)} />
-            <NavItem href="/replay" icon={PlayCircle} label="Replay" collapsed={collapsed} onClick={() => setSidebarOpen(false)} />
-            <NavItem
-              href="/observability"
-              icon={Activity}
-              label="Observability"
-              collapsed={collapsed}
-              onClick={() => setSidebarOpen(false)}
+          {groups.map((group) => (
+            <NavGroup key={group.id} label={group.label} collapsed={collapsed}>
+              {group.items.map((item) => {
+                const isPinned = prefs.pinned.includes(item.id);
+                return (
+                  <NavItem
+                    key={item.id}
+                    href={item.href}
+                    icon={item.icon}
+                    label={item.label}
+                    badge={item.badge}
+                    collapsed={collapsed}
+                    onClick={() => setSidebarOpen(false)}
+                    pinned={isPinned}
+                    onTogglePin={() => togglePin(item.id)}
+                  >
+                    {item.children?.map((child) => (
+                      <NavSubItem
+                        key={child.id}
+                        href={child.href}
+                        label={child.label}
+                        onClick={() => setSidebarOpen(false)}
+                      />
+                    ))}
+                  </NavItem>
+                );
+              })}
+            </NavGroup>
+          ))}
+
+          {!collapsed && (
+            <Link
+              href="/settings?tab=sidebar"
+              className="flex items-center justify-center gap-2 px-3 py-2 text-xs text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)] rounded-lg transition-colors"
             >
-              <NavSubItem href="/observability/apm" label="APM Tracing" onClick={() => setSidebarOpen(false)} />
-              <NavSubItem href="/observability/cohorts" label="Columnar Engine" onClick={() => setSidebarOpen(false)} />
-              <NavSubItem href="/observability/decisions" label="Decisions" onClick={() => setSidebarOpen(false)} />
-              <NavSubItem href="/observability/eval" label="Eval" onClick={() => setSidebarOpen(false)} />
-              <NavSubItem href="/observability/memory" label="Memory" onClick={() => setSidebarOpen(false)} />
-              <NavSubItem href="/observability/query" label="Query" onClick={() => setSidebarOpen(false)} />
-              <NavSubItem href="/observability/retrieval" label="Retrieval" onClick={() => setSidebarOpen(false)} />
-              <NavSubItem href="/observability/time-travel" label="Time-Travel" onClick={() => setSidebarOpen(false)} />
-            </NavItem>
-            <NavItem href="/tools" icon={Wrench} label="Tools" collapsed={collapsed} onClick={() => setSidebarOpen(false)} />
-            <NavItem href="/insights" icon={Brain} label="Insights" collapsed={collapsed} onClick={() => setSidebarOpen(false)} />
-            <NavItem href="/inspector" icon={Compass} label="Inspector" collapsed={collapsed} onClick={() => setSidebarOpen(false)} />
-            <NavItem href="/incidents" icon={AlertOctagon} label="Incidents" collapsed={collapsed} onClick={() => setSidebarOpen(false)} />
-            <NavItem href="/alerts" icon={Bell} label="Alerts" collapsed={collapsed} onClick={() => setSidebarOpen(false)} />
-            <NavItem href="/llmops" icon={Cog} label="LLMOps" collapsed={collapsed} onClick={() => setSidebarOpen(false)} />
-            <NavItem href="/analytics" icon={BarChart3} label="Analytics" collapsed={collapsed} onClick={() => setSidebarOpen(false)} />
-          </NavGroup>
-
-          <NavGroup label="Optimize" collapsed={collapsed}>
-            <NavItem
-              href="/optimization"
-              icon={Sparkles}
-              label="Cost"
-              collapsed={collapsed}
-              onClick={() => setSidebarOpen(false)}
-            >
-              <NavSubItem href="/optimization/outcomes" label="Outcomes" onClick={() => setSidebarOpen(false)} />
-              <NavSubItem href="/optimization/predict" label="Predictive" onClick={() => setSidebarOpen(false)} />
-            </NavItem>
-            <NavItem href="/studio" icon={FlaskConical} label="Custom Metrics" collapsed={collapsed} onClick={() => setSidebarOpen(false)} />
-            <NavItem href="/guardrails" icon={Shield} label="Guardrails" collapsed={collapsed} onClick={() => setSidebarOpen(false)} />
-          </NavGroup>
-
-          <NavGroup label="Automate" collapsed={collapsed}>
-            <NavItem href="/autonomous" icon={Wand2} label="Autonomous" collapsed={collapsed} onClick={() => setSidebarOpen(false)} />
-            <NavItem href="/closed-loop" icon={Inbox} label="Closed-Loop" collapsed={collapsed} onClick={() => setSidebarOpen(false)} />
-            <NavItem href="/pr-suggestions" icon={GitPullRequestArrow} label="PR Suggestions" collapsed={collapsed} onClick={() => setSidebarOpen(false)} />
-          </NavGroup>
-
-          <NavGroup label="Admin" collapsed={collapsed}>
-            <NavItem href="/settings" icon={Settings} label="Settings" collapsed={collapsed} onClick={() => setSidebarOpen(false)} />
-            <NavItem href="/users" icon={Users} label="Members" collapsed={collapsed} onClick={() => setSidebarOpen(false)} />
-            <NavItem href="/billing" icon={CreditCard} label="Billing" collapsed={collapsed} onClick={() => setSidebarOpen(false)} />
-            <NavItem href="/docs" icon={FileText} label="Docs" collapsed={collapsed} onClick={() => setSidebarOpen(false)} />
-            <NavItem href="/profile" icon={User} label="Profile" collapsed={collapsed} onClick={() => setSidebarOpen(false)} />
-          </NavGroup>
+              Customize sidebar
+            </Link>
+          )}
         </nav>
 
         {/* User section — shrink-0 + mt-auto keeps it pinned to the
@@ -727,6 +721,9 @@ function NavItem({
   collapsed,
   onClick,
   children,
+  badge,
+  pinned,
+  onTogglePin,
 }: {
   href: string;
   icon: typeof LayoutDashboard;
@@ -734,13 +731,19 @@ function NavItem({
   collapsed: boolean;
   onClick?: () => void;
   children?: React.ReactNode;
+  /** Optional badge shown next to the label (e.g. "new", "beta"). */
+  badge?: string;
+  /** Whether this item is currently in the "Pinned" section. */
+  pinned?: boolean;
+  /** Toggle the pinned state. When provided, a pin button appears on hover. */
+  onTogglePin?: () => void;
 }) {
   const pathname = usePathname();
   const active = isActivePath(pathname, href);
   const hasChildren = !collapsed && children;
 
   return (
-    <div>
+    <div className="group/navitem relative">
       <Link
         href={href}
         onClick={onClick}
@@ -767,7 +770,36 @@ function NavItem({
             active ? "w-4 h-4 text-[var(--accent)]" : "w-4 h-4 text-[var(--text-muted)] group-hover:text-[var(--text-secondary)]"
           )}
         />
-        {!collapsed && <span className="truncate">{label}</span>}
+        {!collapsed && (
+          <>
+            <span className="truncate flex-1">{label}</span>
+            {badge && (
+              <span className="px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider rounded bg-[var(--accent-faint)] text-[var(--accent)]">
+                {badge}
+              </span>
+            )}
+            {onTogglePin && (
+              <button
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  onTogglePin();
+                }}
+                aria-label={pinned ? `Unpin ${label}` : `Pin ${label}`}
+                aria-pressed={pinned}
+                className={cn(
+                  "p-1 rounded transition-all",
+                  pinned
+                    ? "text-[var(--accent)] opacity-100"
+                    : "text-[var(--text-muted)] opacity-0 group-hover/navitem:opacity-100 hover:text-[var(--accent)] hover:bg-[var(--bg-tertiary)]"
+                )}
+                title={pinned ? "Unpin from sidebar" : "Pin to top of sidebar"}
+              >
+                <Pin className={cn("w-3.5 h-3.5", pinned && "fill-current")} />
+              </button>
+            )}
+          </>
+        )}
         {collapsed && <span className="nav-tooltip">{label}</span>}
       </Link>
       {hasChildren && (

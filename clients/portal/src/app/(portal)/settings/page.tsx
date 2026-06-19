@@ -6,7 +6,7 @@ import { useOrg } from "@/hooks/use-org";
 import { useAuth } from "@/hooks/use-auth";
 import { usePermissions } from "@/hooks/use-permissions";
 import { api } from "@/lib/api";
-import { Loader2, Plus, Trash2, Building2, Users, Code, Copy, Check, Archive, RefreshCw, Key, FileText, Shield, CreditCard, KeyRound, Lock, BarChart2, Server, EyeOff, Database, Globe, FileArchive } from "lucide-react";
+import { Loader2, Plus, Trash2, Building2, Users, Code, Copy, Check, Archive, RefreshCw, Key, FileText, Shield, CreditCard, KeyRound, Lock, BarChart2, Server, EyeOff, Database, Globe, FileArchive, Settings2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import Link from "next/link";
 import { DeleteOrgDialog } from "./_components/delete-org-dialog";
@@ -16,6 +16,7 @@ import { AuditLogTab } from "./_components/audit-log-tab";
 import { AnalyticsTab } from "./_components/analytics-tab";
 import { DataExportPanel } from "./_components/data-export-panel";
 import { ExportsTab } from "./_components/exports-tab";
+import { SidebarSettingsTab } from "./_components/sidebar-settings-tab";
 import { SecurityTab } from "./_components/security-tab";
 import { ScimTab } from "./_components/scim-tab";
 import { SSOTab } from "./_components/sso-tab";
@@ -29,7 +30,7 @@ import { useConfirm } from "@/hooks/use-confirm";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useSearchParams } from "next/navigation";
 
-type Tab = "org" | "members" | "references" | "api-keys" | "security" | "scim" | "sso" | "audit-log" | "analytics" | "billing" | "gateway" | "pii" | "retention" | "region" | "exports";
+type Tab = "org" | "members" | "references" | "api-keys" | "security" | "scim" | "sso" | "audit-log" | "analytics" | "billing" | "gateway" | "pii" | "retention" | "region" | "exports" | "sidebar";
 
 const TABS = [
   { id: "org", label: "Organization", icon: Building2 },
@@ -47,6 +48,7 @@ const TABS = [
   { id: "audit-log", label: "Audit Log", icon: FileText },
   { id: "analytics", label: "Analytics", icon: BarChart2 },
   { id: "billing", label: "Billing", icon: CreditCard },
+  { id: "sidebar", label: "Sidebar", icon: Settings2 },
 ] as const;
 
 export default function SettingsPage() {
@@ -193,6 +195,7 @@ export default function SettingsPage() {
                 canManage={currentOrg?.role === "owner" || currentOrg?.role === "admin"}
               />
             )}
+            {activeTab === "sidebar" && <SidebarSettingsTab />}
           </div>
         </div>
       </div>
