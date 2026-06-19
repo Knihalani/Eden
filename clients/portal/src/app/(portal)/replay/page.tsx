@@ -252,7 +252,7 @@ export default function ReplayPage() {
   const totalEvents = traceEvents.length;
 
   return (
-    <div className="p-6 lg:p-8 max-w-6xl mx-auto">
+    <div className="p-4 sm:p-6 lg:p-8 max-w-6xl mx-auto">
       <PageHeader
         title="Trace Replay"
         subtitle="Inspect pipeline traces and control execution via HILT"
