@@ -74,7 +74,16 @@ const SIDEBAR_WIDTH = 360;
 export function ChatSidebar() {
   const { currentOrg } = useOrg();
   const toast = useToast();
-  const [open, setOpen] = useState(false);
+  // ponytail: open state is persisted to sessionStorage so a
+  // returning user sees the AI assistant in the state they left it.
+  // Default is closed — the user explicitly opts in via the
+  // floating toggle button (bottom-right). The previous behavior
+  // (always closed, no persistence) made accidental click-throughs
+  // impossible to recover from without a page reload. June 2026 fix.
+  const [open, setOpen] = useState<boolean>(() => {
+    if (typeof window === "undefined") return false;
+    return window.sessionStorage.getItem("eden:ai-sidebar:open") === "1";
+  });
   const [sessions, setSessions] = useState<Session[]>([]);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -83,6 +92,22 @@ export function ChatSidebar() {
   const [loadingSessions, setLoadingSessions] = useState(false);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const eventSourceRef = useRef<EventSource | null>(null);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.sessionStorage.setItem("eden:ai-sidebar:open", open ? "1" : "0");
+  }, [open]);
+
+  // ponytail: Esc closes the chat. Saves the user from hunting for
+  // the close button when the chat covers the right side of the page.
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [open]);
 
   const orgId = currentOrg?.id;
 
@@ -465,12 +490,22 @@ export function ChatSidebar() {
   // ── Render ────────────────────────────────────────────────────────
   return (
     <>
+      {/* Backdrop — click to close. Always behind the panel. */}
+      {open && (
+        <button
+          type="button"
+          aria-label="Close AI assistant"
+          onClick={() => setOpen(false)}
+          className="fixed inset-0 z-20 bg-transparent cursor-default border-0 p-0"
+        />
+      )}
+
       {/* Floating toggle button (always visible, even when collapsed). */}
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
         className={cn(
-          "fixed bottom-4 right-4 z-40 flex h-11 w-11 items-center justify-center rounded-full",
+          "fixed bottom-4 right-4 z-40 flex h-12 w-12 items-center justify-center rounded-full",
           "bg-[var(--accent)] text-[var(--bg-base)] shadow-lg transition-transform",
           "hover:scale-105 active:scale-95",
           open && "translate-x-[180px]",
