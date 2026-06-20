@@ -1,3 +1,5 @@
+"use client";
+
 import Link from "next/link";
 import { Home, Search, Compass } from "lucide-react";
 
@@ -6,7 +8,11 @@ import { Home, Search, Compass } from "lucide-react";
  *  plain white 404. Three affordances: back-to-dashboard, search-via-
  *  command-palette, list-of-popular-routes. The route group folders
  *  ((portal), (auth), (marketing)) each have their own error.tsx; this
- *  one fires for genuinely missing paths. */
+ *  one fires for genuinely missing paths.
+ *
+ *  "use client" so the command-palette dispatch works on click — the
+ *  server-side prerender would otherwise reject onClick on a button
+ *  (Next.js 15 RSC). */
 export default function GlobalNotFound() {
   return (
     <div className="min-h-[80vh] flex items-center justify-center px-4 py-16">
