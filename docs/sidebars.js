@@ -1,48 +1,112 @@
+// @ts-check
 /** @type {import('@docusaurus/plugin-content-docs').SidebarsConfig} */
+
+// Four Diátaxis-aligned sidebars. Each surfaces in the navbar with
+// its own dropdown so users can navigate to the kind of content that
+// matches their need (learning a thing / doing a thing / looking
+// something up / understanding a thing).
+//
 // Doc IDs are the file path under `docs/docs/` with the `.md`/`.mdx`
 // extension stripped.
-//
-// Public docs site — only the docs a developer integrating Eden needs:
-//   - Home (landing page)
-//   - Quickstart (5-minute integration guide)
-//   - Guide (development, architecture, deployment, API reference,
-//     clickhouse transport internals)
-//   - Reference (design docs + CLI spec)
-//
-// Internal observability cat write-ups (23 cats), operations runbook,
-// the gap-roadmap, and the SLM rollout plan are NOT in the public
-// sidebar. They live in `docs/docs/` for internal reference but are
-// excluded from the build via `docusaurus.config.js` `exclude` so
-// the public site doesn't ship them.
 
-const sidebars = {
-  docs: [
-    'intro/index',
-    'quickstart',
+const tutorialsSidebar = {
+  tutorials: [
     {
       type: 'category',
-      label: 'Guide',
+      label: 'Tutorials',
       collapsed: false,
       items: [
-        'guide/development',
-        'guide/architecture',
-        'guide/deployment',
-        'guide/api',
-        'architecture/clickhouse-transport',
+        'tutorials/index',
+        'tutorials/auto-instrument-openai',
+        'tutorials/trace-multi-agent',
+        'tutorials/judge-model-output',
+        'tutorials/cost-budget-alert',
+      ],
+    },
+  ],
+};
+
+const howtoSidebar = {
+  howto: [
+    {
+      type: 'category',
+      label: 'How-to guides',
+      collapsed: false,
+      items: [
+        'how-to/index',
+        'how-to/auth',
+        'how-to/api-keys',
+        'how-to/deploy',
+        'how-to/github',
+        'how-to/pii',
+        'how-to/cost-budgets',
+        'how-to/auto-instrument',
+        'how-to/judges',
+        'how-to/connect-llm-provider',
+        'how-to/sso',
+        'how-to/webhooks',
+      ],
+    },
+  ],
+};
+
+const referenceSidebar = {
+  reference: [
+    {
+      type: 'category',
+      label: 'SDKs',
+      collapsed: false,
+      items: [
+        'reference/index',
+        'reference/sdk-python',
+        'reference/sdk-typescript',
+        'reference/auto-instrumentation',
       ],
     },
     {
       type: 'category',
-      label: 'Reference',
+      label: 'API',
+      items: [
+        'reference/api',
+        'reference/api-ingestion',
+        'reference/api-traces',
+        'reference/api-agents',
+        'reference/api-eval',
+        'reference/api-cost',
+        'reference/api-organization',
+        'reference/api-error-codes',
+      ],
+    },
+    {
+      type: 'category',
+      label: 'Configuration & ops',
+      items: [
+        'reference/cli',
+        'reference/configuration',
+        'reference/environment-variables',
+        'reference/rbac',
+        'reference/webhooks',
+      ],
+    },
+    {
+      type: 'category',
+      label: 'Explanation',
       collapsed: true,
       items: [
-        'reference/README',
-        'reference/aider-fork-strategy',
-        'reference/eden-agent-cli-spec',
+        'explanation/architecture',
+        'explanation/data-model',
+        'explanation/intelligence-categories',
+        'explanation/security-model',
+        'explanation/multi-tenancy',
+        'explanation/sampling-and-retention',
       ],
     },
     'intro/changelog',
   ],
 };
 
-module.exports = sidebars;
+module.exports = {
+  ...tutorialsSidebar,
+  ...howtoSidebar,
+  ...referenceSidebar,
+};

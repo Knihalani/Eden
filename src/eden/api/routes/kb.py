@@ -44,8 +44,7 @@ async def query_kb(
 
     episodic_client = get_episodic_client()
 
-    if collection in ("all", "episodic", "jobs"):
-        # Full-text search on job descriptions
+    if collection in ("all", "episodic"):
         episodic_results = await episodic_client.search_by_description(query, limit)
         total_episodic = len(episodic_results)
 

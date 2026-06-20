@@ -7,7 +7,7 @@ import { useSidebarPrefs, applySidebarPrefs } from "@/hooks/use-sidebar-prefs";
 import { useClerk } from "@clerk/nextjs";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, useRef, useCallback } from "react";
-import { Pin } from "lucide-react";
+import { Pin, PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import {
   Loader2,
   LayoutDashboard,
@@ -58,6 +58,19 @@ import { Logo } from "@/components/brand/logo";
 
 const SIDEBAR_EXPANDED_WIDTH = 260;
 const SIDEBAR_COLLAPSED_WIDTH = 64;
+const COLLAPSE_STORAGE_KEY = "eden:sidebar:collapsed";
+
+/** ponytail: read collapsed state from localStorage once on mount.
+ *  Defaults to `false` (expanded). SSR-safe — returns false on the
+ *  server so the hydration markup matches the first client paint. */
+function readCollapsedPreference(): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    return window.localStorage.getItem(COLLAPSE_STORAGE_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
 
 // Logout delegates to Clerk (which terminates the session, clears the
 // __session cookie, and signs out across all tabs). We follow with a
@@ -142,6 +155,29 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
   const [userDropdownOpen, setUserDropdownOpen] = useState(false);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const userDropdownRef = useRef<HTMLDivElement>(null);
+  // ponytail: hydrated after mount so the first client paint matches the
+  // SSR markup (collapsed=false). Without the gate the sidebar would
+  // jump from expanded → collapsed on every reload, which is jarring.
+  const [collapseHydrated, setCollapseHydrated] = useState(false);
+
+  // Hydrate collapse preference from localStorage on mount.
+  useEffect(() => {
+    setCollapsed(readCollapsedPreference());
+    setCollapseHydrated(true);
+  }, []);
+
+  // Persist collapse preference on change.
+  useEffect(() => {
+    if (!collapseHydrated) return;
+    try {
+      window.localStorage.setItem(
+        COLLAPSE_STORAGE_KEY,
+        collapsed ? "1" : "0",
+      );
+    } catch {
+      // localStorage may be disabled — non-fatal.
+    }
+  }, [collapsed, collapseHydrated]);
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -154,12 +190,29 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  // Keyboard shortcut for command palette
+  // Keyboard shortcut for command palette + sidebar toggle
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
+      // Skip when the user is typing in a form field — otherwise typing
+      // "b" in a search box would collapse the sidebar.
+      const target = e.target as HTMLElement | null;
+      const isFormField =
+        target?.tagName === "INPUT" ||
+        target?.tagName === "TEXTAREA" ||
+        target?.isContentEditable;
+
       if (e.key === "k" && (e.metaKey || e.ctrlKey)) {
         e.preventDefault();
         setCommandPaletteOpen((prev) => !prev);
+        return;
+      }
+      // Cmd/Ctrl+B (or just `\` outside inputs) toggles the sidebar.
+      if (
+        (e.key === "b" && (e.metaKey || e.ctrlKey)) ||
+        (e.key === "\\" && !isFormField && !e.metaKey && !e.ctrlKey)
+      ) {
+        e.preventDefault();
+        setCollapsed((prev) => !prev);
       }
     }
     document.addEventListener("keydown", handleKeyDown);
@@ -237,18 +290,38 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
         {/* Gradient overlay */}
         <div className="absolute inset-0 sidebar-gradient pointer-events-none" />
 
-        {/* Brand header: real Eden logo + wordmark.
-            No competing "Eden wordmark + tiny Clerk org avatar" stack —
-            the active org is reached via Settings → Organization, never
-            surfaced in the chrome. */}
-        <div className="relative flex items-center justify-between gap-2 px-4 h-14 border-b border-[var(--border-default)] shrink-0">
+        {/* Brand header: real Eden logo + wordmark + a discoverable
+            collapse toggle when expanded. The collapsed state hides
+            the wordmark and shows just the logo, with an always-
+            visible expand affordance in the same header row so the
+            user never has to hunt for how to bring it back. */}
+        <div
+          className={cn(
+            "relative flex items-center border-b border-[var(--border-default)] shrink-0 h-14",
+            collapsed ? "justify-center px-0" : "justify-between gap-2 px-4",
+          )}
+        >
           <Link
             href="/dashboard"
             className="min-w-0 flex items-center hover:opacity-80 transition-opacity"
             aria-label="Eden home"
           >
-            <Logo size="md" showWordmark priority className="min-w-0" />
+            <Logo size="md" showWordmark={!collapsed} priority className="min-w-0" />
           </Link>
+          {/* Expand toggle — visible only when collapsed, lives in the
+              same header row so it's always at the same x position as
+              the logo. The expanded-state toggle sits below as a row
+              of icon buttons (collapse + hint). */}
+          {collapsed && (
+            <button
+              onClick={handleCollapse}
+              className="absolute -right-3 top-1/2 -translate-y-1/2 w-6 h-6 bg-[var(--bg-primary)] border border-[var(--border-default)] rounded-full items-center justify-center shadow-sm hover:shadow-md hover:border-[var(--accent)] transition-all z-10 hidden md:flex"
+              aria-label="Expand sidebar (⌘B)"
+              title="Expand sidebar (⌘B)"
+            >
+              <PanelLeftOpen className="w-3.5 h-3.5 text-[var(--accent)]" />
+            </button>
+          )}
           <button
             onClick={() => setSidebarOpen(false)}
             className="lg:hidden p-1.5 text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)] rounded-md transition-colors"
@@ -258,14 +331,41 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
           </button>
         </div>
 
-        {/* Collapse button (desktop only) */}
-        <button
-          onClick={handleCollapse}
-          className="hidden md:flex absolute -right-3 top-[68px] w-6 h-6 bg-[var(--bg-primary)] border border-[var(--border-default)] rounded-full items-center justify-center shadow-sm hover:shadow-md transition-all sidebar-collapse-btn z-10"
-          aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-        >
-          <ChevronLeft className={cn("w-3.5 h-3.5 text-[var(--text-secondary)] transition-transform duration-300", collapsed && "rotate-180")} />
-        </button>
+        {/* Collapse button (desktop, expanded only).
+            The button is a labelled icon in the bottom-right of the
+            sidebar — visible at all times, with a keyboard hint so the
+            user learns the shortcut. The collapsed-state expand lives
+            in the header above; the floating chevron at the edge is
+            kept for users who mouse to the gutter. */}
+        {!collapsed && (
+          <div className="relative hidden md:flex items-center justify-end px-3 pt-2 shrink-0">
+            <button
+              onClick={handleCollapse}
+              className="flex items-center gap-1.5 text-[11px] text-[var(--text-muted)] hover:text-[var(--accent)] hover:bg-[var(--bg-tertiary)] px-2 py-1 rounded-md transition-colors"
+              aria-label="Collapse sidebar (⌘B)"
+              title="Collapse sidebar (⌘B)"
+            >
+              <PanelLeftClose className="w-3.5 h-3.5" />
+              <span>Collapse</span>
+              <kbd className="ml-1 px-1 py-0.5 bg-[var(--bg-base)] border border-[var(--border-default)] rounded text-[10px] font-mono text-[var(--text-muted)]">
+                ⌘B
+              </kbd>
+            </button>
+          </div>
+        )}
+
+        {/* Floating chevron at the sidebar gutter — preserved so users
+            who mouse to the very edge still find an affordance. */}
+        {!collapsed && (
+          <button
+            onClick={handleCollapse}
+            className="hidden md:flex absolute -right-3 top-[120px] w-6 h-6 bg-[var(--bg-primary)] border border-[var(--border-default)] rounded-full items-center justify-center shadow-sm hover:shadow-md hover:border-[var(--accent)] transition-all sidebar-collapse-btn z-10"
+            aria-label="Collapse sidebar (⌘B)"
+            title="Collapse sidebar (⌘B)"
+          >
+            <ChevronLeft className="w-3.5 h-3.5 text-[var(--text-secondary)]" />
+          </button>
+        )}
 
         {/* Organization switcher REMOVED — June 2026 UI overhaul.
             The active org still flows through Clerk + useOrg(), but
@@ -341,14 +441,17 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
         </nav>
 
         {/* User section — shrink-0 + mt-auto keeps it pinned to the
-            bottom of the aside even when the nav is short on items. */}
+            bottom of the aside even when the nav is short on items.
+            When collapsed, the avatar is centred so it sits under the
+            centered logo (visual symmetry). The dropdown is the same
+            either way — width is independent of collapse. */}
         <div className="relative mt-auto p-3 border-t border-[var(--border-default)] shrink-0">
           <div ref={userDropdownRef} className="relative">
-            {/* User button */}
             <button
               onClick={() => setUserDropdownOpen(!userDropdownOpen)}
               className={cn(
                 "w-full flex items-center gap-3 p-2 rounded-lg transition-colors",
+                collapsed && "justify-center",
                 userDropdownOpen
                   ? "bg-[var(--accent-light)]"
                   : "hover:bg-[var(--bg-tertiary)]"
@@ -356,6 +459,7 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
               aria-expanded={userDropdownOpen}
               aria-haspopup="true"
               aria-label="User menu"
+              title={collapsed ? `${user.name} · ${user.email}` : undefined}
             >
               <div className="user-avatar user-avatar-online w-9 h-9 rounded-full flex items-center justify-center text-sm flex-shrink-0">
                 {user.name.charAt(0).toUpperCase()}

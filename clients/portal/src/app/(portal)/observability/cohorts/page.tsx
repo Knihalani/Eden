@@ -5,6 +5,7 @@ import { useOrg } from "@/hooks/use-org";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/components/ui/toast";
 import { NoOrgState } from "@/components/ui/no-org-state";
+import { PageHeader } from "@/components/layout/page-header";
 import { Database, Play, Layers, RefreshCw, Loader2, AlertTriangle, Archive, FileText } from "lucide-react";
 import { motion } from "framer-motion";
 
@@ -169,19 +170,13 @@ export default function CohortsPage() {
   }
 
   return (
-    <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-[var(--text-primary)] flex items-center gap-2">
-            <Database className="w-6 h-6 text-[var(--accent)]" />
-            Columnar Engine
-          </h1>
-          <p className="text-sm text-[var(--text-muted)] mt-1">
-            Read-only SQL across per-org monthly partitions with hourly / daily / weekly rollups
-          </p>
-        </div>
-      </div>
+    <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-6 page-enter">
+      <PageHeader
+        title="Columnar Engine"
+        subtitle="Read-only SQL across per-org monthly partitions with hourly / daily / weekly rollups"
+        icon={Database}
+        eyebrow="Observe"
+      />
 
       {/* Maintenance actions */}
       <div className="bg-[var(--bg-primary)] border border-[var(--border-default)] rounded-xl p-4">

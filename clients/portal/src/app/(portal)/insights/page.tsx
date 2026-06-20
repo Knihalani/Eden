@@ -264,7 +264,28 @@ export default function InsightsPage() {
             {activeTab === "closed-loop" && <ClosedLoopTab />}
           </motion.div>
         </AnimatePresence>
-      ) : null}
+      ) : (
+        <EmptyState
+          icon={Lightbulb}
+          title="No insights yet"
+          description="Insights appear after detectors run over your traces. Hit Run Detectors to scan now — this takes about a minute on a fresh dataset."
+          size="lg"
+          action={
+            <button
+              onClick={handleRunDetectors}
+              disabled={runningDetectors}
+              className="inline-flex items-center gap-2 px-4 py-2 bg-[var(--accent)] text-[var(--bg-base)] rounded-lg text-sm font-medium hover:bg-[var(--accent-hover)] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              {runningDetectors ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <Play className="w-4 h-4" />
+              )}
+              Run Detectors
+            </button>
+          }
+        />
+      )}
 
       {/* Insight Detail Modal */}
       <AnimatePresence>

@@ -32,12 +32,18 @@ def upgrade() -> None:
         ALTER TABLE telemetry_events
         ADD COLUMN IF NOT EXISTS session_id VARCHAR(64);
     """)
+    # The telemetry_events table uses ``tenant_id`` (not ``org_id``).
+    # This matches migration 009 (Phase 7.0) and every other index
+    # on the table. The DESC on ``timestamp`` mirrors the
+    # existing read pattern (recent-first scans).
     op.execute("""
         CREATE INDEX IF NOT EXISTS idx_telemetry_events_session
-        ON telemetry_events (org_id, session_id, timestamp DESC)
-        WHERE session_id IS NOT NULL;
+        ON telemetry_events (tenant_id, session_id, timestamp DESC);
     """)
-    # BRIN for the session_id range scan
+    # BRIN for the session_id range scan — the partial WHERE
+    # clause triggers a planner error on BRIN, so leave it
+    # unconditional. Cheap to maintain; unused rows just have
+    # null session_id which the index handles fine.
     op.execute("""
         CREATE INDEX IF NOT EXISTS idx_telemetry_events_session_brin
         ON telemetry_events USING BRIN (session_id);

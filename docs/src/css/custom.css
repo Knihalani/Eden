@@ -66,6 +66,20 @@ body {
   font-feature-settings: "ss01", "cv11";
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+/* Universal focus ring — keyboard nav visibility. */
+*:focus-visible {
+  outline: 2px solid #60a5fa;
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* Selection */
+::selection {
+  background: rgba(59, 130, 246, 0.35);
+  color: #ffffff;
 }
 
 /* Navbar — terminal-style, sits on a flat black bar */
@@ -73,6 +87,20 @@ body {
   background-color: #0a0a0a;
   border-bottom: 1px solid #1f1f1f;
   box-shadow: none;
+  backdrop-filter: saturate(180%) blur(8px);
+}
+
+.navbar__brand {
+  transition: opacity 0.15s ease;
+}
+
+.navbar__brand:hover {
+  opacity: 0.85;
+}
+
+.navbar__logo {
+  border-radius: 6px;
+  filter: drop-shadow(0 0 8px rgba(59, 130, 246, 0.25));
 }
 
 .navbar__title {
@@ -80,6 +108,30 @@ body {
   font-weight: 600;
   letter-spacing: -0.01em;
   color: #f3f4f6;
+  font-size: 1rem;
+}
+
+/* "← edenobservability.com" back-link badge in the navbar.
+   Green-tinted pill so it reads as an "exit" affordance rather
+   than another nav item. */
+.navbar-back-link.navbar__item .navbar__link,
+.navbar-back-link.navbar__link {
+  font-family: var(--ifm-font-family-monospace);
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #34d399 !important;
+  border: 1px solid rgba(52, 211, 153, 0.35);
+  border-radius: 4px;
+  padding: 0.3rem 0.7rem;
+  margin-left: 0.4rem;
+  transition: all 0.15s ease;
+}
+
+.navbar-back-link:hover .navbar__link,
+.navbar-back-link.navbar__link:hover {
+  background-color: rgba(52, 211, 153, 0.08);
+  color: #6ee7b7 !important;
+  border-color: rgba(52, 211, 153, 0.6);
 }
 
 .navbar__link {
@@ -181,7 +233,28 @@ code {
 pre {
   background-color: #0d0d0d;
   border: 1px solid #1f1f1f;
-  border-radius: 6px;
+  border-radius: 8px;
+  padding: 1rem 1.1rem;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.25);
+}
+
+/* Code-block file-tab strip (when fenced blocks have a `title=`) */
+.codeBlockTitle_node_modules-\@docusaurus-theme-classic-lib-theme-CodeBlock-Content-styles-module,
+div[class*='codeBlockTitle'] {
+  background: #111111 !important;
+  border: 1px solid #1f1f1f !important;
+  border-bottom: 0 !important;
+  border-radius: 8px 8px 0 0 !important;
+  font-family: var(--ifm-font-family-monospace) !important;
+  color: #93c5fd !important;
+  font-size: 0.78rem !important;
+  font-weight: 500 !important;
+  padding: 0.5rem 1rem !important;
+}
+
+div[class*='codeBlockTitle'] + pre {
+  border-radius: 0 0 8px 8px !important;
+  border-top: 0 !important;
 }
 
 pre code {
@@ -322,52 +395,86 @@ td {
    Hero (intro/index.md landing page)
    ============================================================ */
 .eden-hero {
+  position: relative;
   text-align: center;
-  padding: 5rem 1rem 3rem;
+  padding: 6rem 1rem 4rem;
   background:
-    radial-gradient(ellipse at top, rgba(59, 130, 246, 0.08), transparent 60%),
+    radial-gradient(ellipse 80% 60% at 50% 0%, rgba(59, 130, 246, 0.18), transparent 70%),
+    radial-gradient(ellipse 60% 50% at 20% 30%, rgba(16, 185, 129, 0.05), transparent 70%),
+    radial-gradient(ellipse 60% 50% at 80% 30%, rgba(139, 92, 246, 0.05), transparent 70%),
     linear-gradient(180deg, #0a0a0a 0%, #0a0a0a 100%);
   border-bottom: 1px solid #1f1f1f;
   margin: -1rem -1rem 2rem;
+  overflow: hidden;
+}
+
+/* Subtle grid pattern overlay */
+.eden-hero::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(59, 130, 246, 0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(59, 130, 246, 0.04) 1px, transparent 1px);
+  background-size: 48px 48px;
+  background-position: -1px -1px;
+  mask-image: radial-gradient(ellipse 80% 60% at 50% 0%, black, transparent 70%);
+  -webkit-mask-image: radial-gradient(ellipse 80% 60% at 50% 0%, black, transparent 70%);
+  pointer-events: none;
+}
+
+.eden-hero > * {
+  position: relative;
 }
 
 .eden-hero__badge {
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
   font-family: var(--ifm-font-family-monospace);
-  font-size: 0.7rem;
+  font-size: 0.72rem;
   font-weight: 600;
   letter-spacing: 0.18em;
-  color: #60a5fa;
+  color: #93c5fd;
   background: rgba(59, 130, 246, 0.08);
-  border: 1px solid rgba(59, 130, 246, 0.25);
-  padding: 0.3rem 0.9rem;
+  border: 1px solid rgba(59, 130, 246, 0.3);
+  padding: 0.4rem 1rem;
   border-radius: 999px;
-  margin-bottom: 1.5rem;
+  margin-bottom: 1.8rem;
+}
+
+.eden-hero__badge::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #3b82f6;
+  box-shadow: 0 0 8px #3b82f6;
 }
 
 .eden-hero__title {
   font-family: var(--ifm-font-family-monospace);
-  font-size: clamp(2.2rem, 5vw, 3.4rem);
+  font-size: clamp(2.4rem, 5.5vw, 3.8rem);
   font-weight: 700;
-  letter-spacing: -0.03em;
-  line-height: 1.1;
-  margin: 0 0 1.2rem;
+  letter-spacing: -0.035em;
+  line-height: 1.08;
+  margin: 0 0 1.4rem;
   color: #f3f4f6;
 }
 
 .eden-hero__title--accent {
-  background: linear-gradient(90deg, #3b82f6, #60a5fa, #93c5fd);
+  background: linear-gradient(135deg, #60a5fa 0%, #a78bfa 50%, #34d399 100%);
   -webkit-background-clip: text;
   background-clip: text;
   -webkit-text-fill-color: transparent;
 }
 
 .eden-hero__subtitle {
-  font-size: 1.1rem;
+  font-size: 1.15rem;
   color: #9ca3af;
-  max-width: 38rem;
-  margin: 0 auto 2rem;
-  line-height: 1.6;
+  max-width: 40rem;
+  margin: 0 auto 2.2rem;
+  line-height: 1.65;
 }
 
 .eden-hero__cta {
@@ -375,6 +482,63 @@ td {
   gap: 0.8rem;
   justify-content: center;
   flex-wrap: wrap;
+  margin-bottom: 2.5rem;
+}
+
+/* Quick-install snippet (rendered below the hero CTAs). */
+.eden-hero__install {
+  max-width: 36rem;
+  margin: 0 auto;
+  background: #0d0d0d;
+  border: 1px solid #1f1f1f;
+  border-radius: 10px;
+  padding: 0.5rem;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  text-align: left;
+  position: relative;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+}
+
+.eden-hero__install-prompt {
+  font-family: var(--ifm-font-family-monospace);
+  color: #34d399;
+  padding: 0 0.25rem 0 0.5rem;
+  user-select: none;
+}
+
+.eden-hero__install-code {
+  flex: 1;
+  font-family: var(--ifm-font-family-monospace);
+  font-size: 0.92rem;
+  color: #e5e7eb;
+  background: transparent;
+  border: 0;
+  padding: 0.6rem 0;
+}
+
+.eden-hero__install-copy {
+  font-family: var(--ifm-font-family-monospace);
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: #9ca3af;
+  background: #111111;
+  border: 1px solid #1f1f1f;
+  border-radius: 5px;
+  padding: 0.35rem 0.7rem;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.eden-hero__install-copy:hover {
+  color: #f3f4f6;
+  border-color: #3b82f6;
+}
+
+.eden-hero__install-copy.copied {
+  color: #34d399;
+  border-color: rgba(52, 211, 153, 0.4);
 }
 
 /* Buttons */

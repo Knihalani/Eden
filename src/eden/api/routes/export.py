@@ -97,31 +97,9 @@ async def export_org_data(
             json.dumps({"references": references_data, "exported_at": datetime.utcnow().isoformat()}, indent=2)
         )
 
-        # 3. Export jobs (metadata only)
-        jobs_query = """
-            SELECT job_id, request, status, current_stage, outcome_tier,
-                   created_at, updated_at, completed_at
-            FROM jobs
-            WHERE org_id = $1
-            ORDER BY created_at DESC
-        """
-        job_rows = await client.fetch(jobs_query, org_id)
-        jobs_data = [
-            {
-                "job_id": r["job_id"],
-                "request": r["request"],
-                "status": r["status"],
-                "current_stage": r["current_stage"],
-                "outcome_tier": r.get("outcome_tier"),
-                "created_at": r["created_at"].isoformat() if r.get("created_at") else None,
-                "updated_at": r["updated_at"].isoformat() if r.get("updated_at") else None,
-                "completed_at": r["completed_at"].isoformat() if r.get("completed_at") else None,
-            }
-            for r in job_rows
-        ]
-        zip_file.writestr(
-            "jobs.json",
-            json.dumps({"jobs": jobs_data, "exported_at": datetime.utcnow().isoformat()}, indent=2)
+        # 3. (jobs feature removed June 2026 — previously exported job metadata here)
+
+        # 4. Export audit log
         )
 
         # 4. Export audit log

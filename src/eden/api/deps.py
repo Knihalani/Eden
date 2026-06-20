@@ -61,8 +61,6 @@ PERMISSION_MAP: dict[str, set[str]] = {
         "billing:view",
         "billing:edit",
         "audit:view",
-        "jobs:read",
-        "jobs:write",
         "org:transfer",
         # June 2026: gating for the onboarding wizard's "Connect GitHub"
         # + "Open Integration PR" path. Wiring a repo into an org
@@ -86,21 +84,16 @@ PERMISSION_MAP: dict[str, set[str]] = {
         "settings:edit",
         "billing:view",
         "audit:view",
-        "jobs:read",
-        "jobs:write",
         "integrations:write",
         "pii:edit",
         "judges:run",
     },
     "member": {
         "references:read",
-        "jobs:read",
-        "jobs:write",
         "judges:run",
     },
     "viewer": {
         "references:read",
-        "jobs:read",
     },
 }
 
@@ -131,7 +124,7 @@ async def check_resource_permission(
     The check is two-step:
 
     1. Look up the user's role in the org. If the role grants
-       the permission (e.g. ``admin`` → ``jobs:write``), return
+       the permission (e.g. ``admin`` → ``members:invite``), return
        True immediately.
     2. If a ``resource_type`` and ``resource_id`` are provided,
        look up a custom-role assignment on that exact resource.
@@ -139,8 +132,8 @@ async def check_resource_permission(
        resource only (org-wide access is NOT implied).
 
     Used by routes that need finer-grained access than the
-    org-wide role map (e.g. "only the owner of this job can
-    cancel it"). Routes that only need org-wide access should
+    org-wide role map (e.g. "only the owner of this resource can
+    delete it"). Routes that only need org-wide access should
     keep using :func:`require_org_permission`.
     """
     client = await get_postgres_client()
@@ -765,8 +758,8 @@ def require_feature_flag(flag_name: str):
     tests can monkeypatch ENABLE_EVAL_PIPELINE between requests.
 
     Usage:
-        @router.get("/jobs", dependencies=[Depends(require_feature_flag("enable_eval_pipeline"))])
-        async def list_jobs(...): ...
+        @router.get("/experiments", dependencies=[Depends(require_feature_flag("enable_experiment_v2"))])
+        async def list_experiments(...): ...
     """
 
     async def _dependency() -> None:

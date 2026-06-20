@@ -1,163 +1,167 @@
 ---
 id: index
-title: Eden — the intelligence layer for AI agents
-description: Observability, evaluation, governance, and self-healing for LLM applications and AI agents in production.
-keywords: [eden, llm, observability, ai agents, evaluation, tracing]
+title: Eden — observability, evaluation, governance for AI agents
+description: Drop-in observability and evals for LLM applications and AI agents. OpenTelemetry-native, auto-instrumentation, deterministic judge scores, cost intelligence.
+keywords: [eden, llm, observability, ai agents, evaluation, tracing, opentelemetry]
 sidebar_label: Home
 sidebar_position: 1
 hide_title: true
 hide_table_of_contents: true
 ---
 
-<!-- Hero -->
 <div class="eden-hero">
   <div class="eden-hero__badge">EDEN · v1.7</div>
   <h1 class="eden-hero__title">
-    The intelligence layer<br/>
-    <span class="eden-hero__title--accent">for AI agents.</span>
+    Observability, evaluation,<br/>
+    <span class="eden-hero__title--accent">governance for AI agents.</span>
   </h1>
   <p class="eden-hero__subtitle">
-    Generate, observe, evaluate, govern, and self-heal LLM applications
-    and AI agents — in one platform.
+    Drop-in tracing, auto-instrumentation, deterministic judges, cost
+    intelligence, and a portal that turns trace data into action.
   </p>
   <div class="eden-hero__cta">
-    <a class="eden-btn eden-btn--primary" href="/guide/development">Get started →</a>
-    <a class="eden-btn eden-btn--ghost" href="/observability/roadmap">See the roadmap</a>
+    <a class="eden-btn eden-btn--primary" href="/quickstart">Get started →</a>
+    <a class="eden-btn eden-btn--ghost" href="/reference/sdk-python">Browse SDKs</a>
+  </div>
+  <div class="eden-hero__install" role="group" aria-label="Install command">
+    <span class="eden-hero__install-prompt" aria-hidden="true">$</span>
+    <code class="eden-hero__install-code">pip install eden-sdk</code>
+    <button class="eden-hero__install-copy" type="button" aria-label="Copy install command">copy</button>
   </div>
 </div>
 
 ---
 
-## Why Eden
+## What is Eden?
 
-AI applications are not software. They drift, hallucinate, regress silently,
-and their failures look like successes. Traditional observability and APM
-tools miss the point — they capture the *what*, not the *why*.
+Eden is the data plane for production AI agents. You point the SDK at
+your code, Eden captures every LLM call (tokens, cost, latency, model,
+prompt, response), and the portal turns the firehose into traces,
+judge scores, cost breakdowns, regression alerts, and audit-ready
+governance evidence.
 
-Eden is built for the agentic era. It captures traces, evaluations, outcomes,
-costs, and behavioural signals, then closes the loop with continuous
-improvement: better prompts, better evals, better guardrails, and — in v1.7 —
-self-healing code changes.
+The platform ships:
+
+- **Two production SDKs** — Python (`eden-sdk`) and TypeScript
+  (`@eden-ai/sdk`). Each one is fire-and-forget; producer p99
+  overhead is budgeted at ≤ 5 ms.
+- **Open ingestion** — the API accepts OpenAI, Anthropic, LangChain,
+  Vercel AI, and raw `custom` events. Wire it from your own code
+  even if you don't use an SDK.
+- **22 intelligence surfaces** — trace replay, RCA, evaluation,
+  retrieval, memory, agents, cost, user, governance, outcome,
+  experimentation, prediction, autonomy, APM depth, and more.
+- **One portal** — Next.js dashboard at `portal.edenobservability.com` (or
+  self-hosted). Observability, evaluators, cost intelligence, judges,
+  incidents, and self-healing controls.
 
 ---
 
-## The five pillars
+## The four pillars
 
 <div class="eden-grid">
-  <div class="eden-card">
-    <div class="eden-card__icon">⚡</div>
-    <h3>Generate</h3>
-    <p>Interview → spec → environment, with adversarial testing baked in.</p>
-    <a href="/guide/architecture">Architecture →</a>
-  </div>
+
   <div class="eden-card">
     <div class="eden-card__icon">🔭</div>
     <h3>Observe</h3>
-    <p>Traces, metrics, insights, and 22 specialised intelligence surfaces.</p>
-    <a href="/observability/roadmap">Observability →</a>
+    <p>OTel-compatible ingestion, full trace timelines, agent-graph view, and 22 specialised intelligence surfaces.</p>
+    <a href="/reference/api-ingestion">Ingestion reference →</a>
   </div>
+
   <div class="eden-card">
     <div class="eden-card__icon">🧠</div>
-    <h3>Learn</h3>
-    <p>Archivist, dual-layer KB, dataset generation, closed-loop prompts.</p>
-    <a href="/observability/closed-loop-wiring">Closed loop →</a>
+    <h3>Evaluate</h3>
+    <p>Deterministic + LLM judges, regression alerts, golden datasets, batch replay, and closed-loop prompt evolution.</p>
+    <a href="/tutorials/judge-model-output">Judge tutorial →</a>
   </div>
+
+  <div class="eden-card">
+    <div class="eden-card__icon">💸</div>
+    <h3>Control cost</h3>
+    <p>Per-org token budgets, soft/hard limits, cost forecasting, anomaly detection, and ROI by department.</p>
+    <a href="/how-to/cost-budgets">Set a budget →</a>
+  </div>
+
   <div class="eden-card">
     <div class="eden-card__icon">🛡️</div>
-    <h3>Trust</h3>
-    <p>Guardrails, compliance (SOC 2, HIPAA, GDPR), security, audit, lineage.</p>
-    <a href="/operations/security">Security →</a>
+    <h3>Govern</h3>
+    <p>PII scanner with in-place redaction, RTBF anonymisation, SOC 2 / HIPAA / GDPR evidence packs, audit log, RBAC.</p>
+    <a href="/explanation/security-model">Security model →</a>
   </div>
-  <div class="eden-card">
-    <div class="eden-card__icon">🔁</div>
-    <h3>Self-heal</h3>
-    <p>Investigate, propose, sandbox, ship — Eden writes the patch, you approve.</p>
-    <a href="/observability/autonomous-code-modification">Autonomy →</a>
-  </div>
+
 </div>
 
 ---
 
-## What's in the box
+## Pick a starting point
 
 <div class="eden-grid eden-grid--compact">
+
   <div class="eden-card eden-card--small">
-    <h4><span class="pill pill--shipped">v1.7</span> 22 intelligence surfaces</h4>
-    <p>Trace replay, RCA, evaluation, retrieval, memory, agents, cost, user, governance, outcome, experimentation, prediction, autonomy, APM depth, and more.</p>
+    <h4>📘 I'm new here</h4>
+    <ul>
+      <li><a href="/quickstart">5-minute quickstart</a></li>
+      <li><a href="/tutorials/auto-instrument-openai">Auto-instrument OpenAI</a></li>
+      <li><a href="/tutorials/trace-multi-agent">Trace a multi-agent run</a></li>
+    </ul>
   </div>
+
   <div class="eden-card eden-card--small">
-    <h4><span class="pill pill--shipped">v1.6</span> Autonomous code modification</h4>
-    <p>21 services + 19 tables + 24 routes that propose, sandbox, and ship code changes — gated on a two-stage opt-in.</p>
+    <h4>🛠️ I need to integrate</h4>
+    <ul>
+      <li><a href="/reference/sdk-python">Python SDK</a></li>
+      <li><a href="/reference/sdk-typescript">TypeScript SDK</a></li>
+      <li><a href="/reference/sdk-go">Go SDK</a></li>
+      <li><a href="/reference/sdk-rust">Rust SDK</a></li>
+      <li><a href="/reference/api">REST API</a></li>
+    </ul>
   </div>
+
   <div class="eden-card eden-card--small">
-    <h4><span class="pill pill--shipped">v1.5</span> SLM-as-judge (Luna-2)</h4>
-    <p>50-90× cheaper than GPT-4o judges, vLLM-served, 10 LoRA heads.</p>
+    <h4>🔒 I'm a security / compliance person</h4>
+    <ul>
+      <li><a href="/how-to/auth">Auth model</a></li>
+      <li><a href="/how-to/pii">Set a PII policy</a></li>
+      <li><a href="/explanation/security-model">Security model</a></li>
+      <li><a href="/explanation/multi-tenancy">Multi-tenancy</a></li>
+    </ul>
   </div>
+
   <div class="eden-card eden-card--small">
-    <h4><span class="pill pill--shipped">v1.4</span> APM depth</h4>
-    <p>Tail-based sampling, K8s attribute enrichment, Pyroscope continuous profiling.</p>
+    <h4>🚢 I need to deploy</h4>
+    <ul>
+      <li><a href="/how-to/deploy">Self-host with Docker / Kubernetes</a></li>
+      <li><a href="/reference/environment-variables">Environment variables</a></li>
+      <li><a href="/reference/configuration">Settings reference</a></li>
+    </ul>
   </div>
-  <div class="eden-card eden-card--small">
-    <h4><span class="pill pill--shipped">v1.3</span> Query DSL & time-travel</h4>
-    <p>EQL for traces, per-step edit DSL, replay &amp; rewind.</p>
-  </div>
-  <div class="eden-card eden-card--small">
-    <h4><span class="pill pill--shipped">v1.2</span> Closed-loop learning</h4>
-    <p>Trace → insight → KB → prompt, automatically.</p>
-  </div>
+
 </div>
 
 ---
 
-## Quick links
-
-<div class="eden-grid eden-grid--compact">
-  <div class="eden-card eden-card--small">
-    <h4>📘 For new users</h4>
-    <ul>
-      <li><a href="/guide/development">Getting started</a></li>
-      <li><a href="/guide/architecture">How Eden is built</a></li>
-      <li><a href="/guide/api">API reference</a></li>
-    </ul>
-  </div>
-  <div class="eden-card eden-card--small">
-    <h4>🛠️ For operators</h4>
-    <ul>
-      <li><a href="/guide/deployment">Deployment guide</a></li>
-      <li><a href="/operations/branch_protection">Branch protection</a></li>
-      <li><a href="/operations/oncall">On-call runbook</a></li>
-    </ul>
-  </div>
-  <div class="eden-card eden-card--small">
-    <h4>📊 For product &amp; finance</h4>
-    <ul>
-      <li><a href="/observability/cost-intelligence">Cost intelligence</a></li>
-      <li><a href="/observability/outcome-roi-intelligence">Outcome / ROI</a></li>
-      <li><a href="/observability/user-intelligence">User intelligence</a></li>
-    </ul>
-  </div>
-  <div class="eden-card eden-card--small">
-    <h4>🔒 For security &amp; compliance</h4>
-    <ul>
-      <li><a href="/operations/security">Security model</a></li>
-      <li><a href="/operations/soc2-control-mapping">SOC 2 mapping</a></li>
-      <li><a href="/observability/governance-intelligence">Governance intelligence</a></li>
-    </ul>
-  </div>
-</div>
-
----
-
-## Ship status
+## Open the box
 
 ```
-22 / 23 productised intelligence categories IMPLEMENTED
- 1 / 23 STUB surface (autonomous code modification — gated on 4 hard gates)
-
-Closed-loop hooks wired across 12 of 22 categories.
-Fly.io staging, Northflank production, Vercel portal — 99.5% SLO target.
+eden/
+├── src/eden/
+│   ├── api/              FastAPI app (auth, ingestion, intel routes)
+│   ├── observability/    Telemetry collector, OTel adapters
+│   ├── kb/               Episodic + semantic KB, memory intel
+│   ├── llm/              AI gateway, prompt registry
+│   ├── evaluation/       Judges, eval runs, golden datasets
+│   ├── cost/             Cost intel, budgeting, forecasting
+│   ├── experiments/      A/B + Bayesian experimentation
+│   ├── autonomous/       NL queries, self-heal (read-only by default)
+│   ├── code_change/      Patch proposals, two-stage opt-in
+│   └── ...               (22 intelligence services in total)
+├── sdk/
+│   ├── python/           pip install eden-sdk
+│   └── ts-ai/            npm install @eden-ai/sdk
+└── clients/portal/       Next.js 16 dashboard
 ```
 
-See the [live roadmap](/observability/roadmap) for what shipped this week,
-or the [observability gap roadmap](/observability/gap-roadmap) for the
-strategic plan.
+The two SDKs both hit the same ingestion endpoint
+(`POST /orgs/{org_id}/ingest/{format}`); they're equivalent at the
+wire level. The Go and Rust clients are in the repo but not yet
+documented for production use.

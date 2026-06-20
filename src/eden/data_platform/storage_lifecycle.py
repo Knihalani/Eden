@@ -22,6 +22,28 @@ from typing import Any
 from eden.config import get_settings
 
 logger = logging.getLogger(__name__)
+
+
+def _make_s3_client() -> Any:
+    """Build an S3 client honouring the configured storage backend.
+
+    Falls back to the AWS default endpoint when ``EDEN_STORAGE_ENDPOINT``
+    is empty (i.e. AWS S3 in us-east-1). Uses ``s3v4`` signatures —
+    required by Impossible Cloud and most S3-compatible backends.
+    """
+    import boto3
+    from botocore.client import Config
+
+    s = get_settings()
+    endpoint = s.eden_storage_endpoint or None
+    return boto3.client(
+        "s3",
+        endpoint_url=endpoint,
+        aws_access_key_id=s.eden_storage_access_key or None,
+        aws_secret_access_key=s.eden_storage_secret_key or None,
+        region_name="us-east-1",
+        config=Config(signature_version="s3v4"),
+    )
 settings = get_settings()
 
 
@@ -105,10 +127,17 @@ DEFAULT_TRANSITIONS: list[TierTransition] = [
 
 
 # True when ``bronze_s3_bucket`` points at an Impossible Cloud endpoint.
-# Set via the ``EDEN_STORAGE_BACKEND=impossible_cloud`` env var. When true,
-# ``apply_s3_lifecycle_rules`` omits the ``Transitions`` blocks because
-# Impossible Cloud has a single always-hot tier.
+#: True when the configured backend is Impossible Cloud (set via
+#: ``EDEN_STORAGE_BACKEND=impossible_cloud`` env var or
+#: ``eden_storage_backend`` Settings field). When true,
+#: ``apply_s3_lifecycle_rules`` omits the ``Transitions`` blocks because
+#: Impossible Cloud has a single always-hot tier — the
+#: STANDARD_IA / GLACIER_IR / GLACIER transitions are meaningless.
 import os as _os
+
+_IMPOSSIBLE_CLOUD = (
+    _os.environ.get("EDEN_STORAGE_BACKEND", "").lower() == "impossible_cloud"
+)
 
 _IMPOSSIBLE_CLOUD = _os.environ.get("EDEN_STORAGE_BACKEND", "").lower() == "impossible_cloud"
 
@@ -220,7 +249,7 @@ class StorageLifecycleManager:
 
         try:
             import boto3
-            s3 = boto3.client("s3")
+            s3 = _make_s3_client()
             loop = asyncio.get_event_loop()
             await loop.run_in_executor(
                 None,
@@ -232,6 +261,21 @@ class StorageLifecycleManager:
             logger.info(f"Applied {len(rules)} S3 lifecycle rules to {bucket}")
             return True
         except Exception as exc:
+            # Impossible Cloud (single-tier) doesn't support
+            # lifecycle policies — the operation returns 501 Not
+            # Implemented. That's fine: IC has no tier transitions,
+            # so the policy is a no-op anyway. Log at debug and
+            # return True so the cron doesn't fail.
+            err_str = str(exc).lower()
+            if (
+                "notimplemented" in err_str
+                or "not implemented" in err_str
+                or "501" in err_str
+            ):
+                logger.debug(
+                    f"backend doesn't support lifecycle rules (OK for Impossible Cloud): {exc}"
+                )
+                return True
             logger.error(f"Failed to apply S3 lifecycle rules: {exc}")
             return False
 
@@ -303,7 +347,7 @@ class StorageLifecycleManager:
 
         try:
             import boto3
-            s3 = boto3.client("s3")
+            s3 = _make_s3_client()
             prefix = f"warm/{table}"
             ts = datetime.now(UTC)
             key = (
@@ -356,7 +400,7 @@ class StorageLifecycleManager:
 
         try:
             import boto3
-            s3 = boto3.client("s3")
+            s3 = _make_s3_client()
             loop = asyncio.get_event_loop()
 
             # List objects
@@ -414,7 +458,7 @@ class StorageLifecycleManager:
 
         try:
             import boto3
-            s3 = boto3.client("s3")
+            s3 = _make_s3_client()
             loop = asyncio.get_event_loop()
 
             for prefix in prefixes:
@@ -474,7 +518,7 @@ class StorageLifecycleManager:
         if bucket:
             try:
                 import boto3
-                s3 = boto3.client("s3")
+                s3 = _make_s3_client()
                 loop = asyncio.get_event_loop()
 
                 # Get bucket size via CloudWatch or ListObjectsV2 heuristic

@@ -1,0 +1,345 @@
+"""Unit tests for the cold archive service + migration 040 (Phase B3).
+
+Verifies:
+- ArchiveService.archive_old_rows: candidate selection, per-trace
+  batching, idempotent re-runs (ON CONFLICT), NDJSON shape.
+- ArchiveService.lookup / rehydrate: round-trip the in-process cache.
+- Migration 040 syntax + revision chain.
+- Retention cron wires ArchiveService.
+- Read shim in telemetry_collector falls back to archive when the
+  Postgres query returns no rows.
+"""
+from __future__ import annotations
+
+import importlib.util
+import inspect
+from datetime import UTC, datetime, timedelta
+from pathlib import Path
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
+
+from eden.services.data_platform import DEFAULT_COLD_AGE_DAYS, ArchiveService
+
+
+# ── Constants ─────────────────────────────────────────────────────────
+
+
+def test_default_cold_age_is_90_days():
+    assert DEFAULT_COLD_AGE_DAYS == 90
+
+
+# ── Migration 040 syntax ─────────────────────────────────────────────
+
+
+class TestMigration040Syntax:
+    @staticmethod
+    def _load_migration():
+        path = Path(
+            "/Users/kaiavnihalani/Downloads/Eden/src/eden/db_migrations/versions/"
+            "040_trace_archive_index.py"
+        )
+        spec = importlib.util.spec_from_file_location(
+            "trace_archive_index", path
+        )
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        return mod
+
+    def test_revision_chain(self):
+        m = self._load_migration()
+        assert m.revision == "040"
+        assert m.down_revision == "039"
+
+    def test_index_columns(self):
+        """The trace_archive_index table has the 5 expected columns."""
+        path = Path(
+            "/Users/kaiavnihalani/Downloads/Eden/src/eden/db_migrations/versions/"
+            "040_trace_archive_index.py"
+        )
+        text = path.read_text()
+        for col in (
+            "trace_id",
+            "org_id",
+            "archive_path",
+            "row_count",
+            "archived_at",
+        ):
+            assert col in text, f"trace_archive_index missing column {col}"
+
+    def test_indexes_created(self):
+        path = Path(
+            "/Users/kaiavnihalani/Downloads/Eden/src/eden/db_migrations/versions/"
+            "040_trace_archive_index.py"
+        )
+        text = path.read_text()
+        assert "idx_trace_archive_org_archived" in text
+        assert "idx_trace_archive_archived_brin" in text
+
+
+# ── ArchiveService.archive_old_rows ───────────────────────────────────
+
+
+class TestArchiveOldRows:
+    @pytest.mark.asyncio
+    async def test_returns_zero_when_no_postgres(self):
+        svc = ArchiveService()
+        with patch(
+            "eden.storage.postgres.get_postgres_client",
+            new=AsyncMock(return_value=None),
+        ):
+            result = await svc.archive_old_rows("org_1", dry_run=False)
+        assert result == {"traces_archived": 0, "rows_archived": 0, "s3_objects": 0}
+
+    @pytest.mark.asyncio
+    async def test_no_eligible_traces_returns_zero(self):
+        svc = ArchiveService()
+        client = MagicMock()
+        client.fetch = AsyncMock(return_value=[])
+        with patch(
+            "eden.storage.postgres.get_postgres_client",
+            new=AsyncMock(return_value=client),
+        ):
+            result = await svc.archive_old_rows("org_1", dry_run=False)
+        assert result["traces_archived"] == 0
+
+    @pytest.mark.asyncio
+    async def test_dry_run_reports_counts_without_writes(self):
+        svc = ArchiveService()
+        client = MagicMock()
+        # First call returns the candidate list; subsequent calls return
+        # the per-trace rows (5 for trace_a, 3 for trace_b).
+        candidates = [
+            {"trace_id": "trace_a", "n": 5, "first_ts": datetime.now(UTC)},
+            {"trace_id": "trace_b", "n": 3, "first_ts": datetime.now(UTC)},
+        ]
+        rows_a = [{"event_id": f"evt_a_{i}", "trace_id": "trace_a"} for i in range(5)]
+        rows_b = [{"event_id": f"evt_b_{i}", "trace_id": "trace_b"} for i in range(3)]
+        call_count = {"n": 0}
+
+        async def fetch_side_effect(*args, **kwargs):
+            call_count["n"] += 1
+            if call_count["n"] == 1:
+                return candidates
+            if call_count["n"] == 2:
+                return rows_a
+            return rows_b
+
+        client.fetch = AsyncMock(side_effect=fetch_side_effect)
+        with patch(
+            "eden.storage.postgres.get_postgres_client",
+            new=AsyncMock(return_value=client),
+        ):
+            result = await svc.archive_old_rows("org_1", dry_run=True)
+        assert result["traces_archived"] == 2
+        assert result["rows_archived"] == 8
+        # No INSERT / DELETE in dry-run
+        assert not client.execute.called
+
+    @pytest.mark.asyncio
+    async def test_archive_one_trace_writes_impossible_cloud_and_deletes(self):
+        svc = ArchiveService()
+        client = MagicMock()
+        # First call: per-trace SELECT (returns 3 rows).
+        client.fetch = AsyncMock(
+            side_effect=[
+                [
+                    {
+                        "event_id": "evt_1",
+                        "tenant_id": "org_1",
+                        "trace_id": "trace_x",
+                        "timestamp": datetime.now(UTC),
+                        "payload": '{"x":1}',
+                    },
+                    {
+                        "event_id": "evt_2",
+                        "tenant_id": "org_1",
+                        "trace_id": "trace_x",
+                        "timestamp": datetime.now(UTC),
+                        "payload": '{"x":2}',
+                    },
+                    {
+                        "event_id": "evt_3",
+                        "tenant_id": "org_1",
+                        "trace_id": "trace_x",
+                        "timestamp": datetime.now(UTC),
+                        "payload": '{"x":3}',
+                    },
+                ],
+            ]
+        )
+        client.execute = AsyncMock()
+        client.transaction = MagicMock()
+        client.transaction.return_value.__aenter__ = AsyncMock(
+            return_value=None
+        )
+        client.transaction.return_value.__aexit__ = AsyncMock(
+            return_value=None
+        )
+        with patch(
+            "eden.storage.postgres.get_postgres_client",
+            new=AsyncMock(return_value=client),
+        ):
+            svc._write_impossible_cloud = AsyncMock()
+            n = await svc._archive_one_trace(
+                client, "org_1", "trace_x", dry_run=False
+            )
+        assert n == 3
+        svc._write_impossible_cloud.assert_called_once()
+        # The path includes org + trace_id.
+        write_kwargs = svc._write_impossible_cloud.call_args.args
+        assert "cold/telemetry_events/org=org_1/trace=trace_x/" in write_kwargs[0]
+        # Transaction-wrapped: 1 INSERT (index) + 1 DELETE (rows).
+        # Plus 1 DELETE outside the transaction for the dedup table
+        # (Phase B4 — see :meth:`ArchiveService._archive_one_trace`).
+        assert client.execute.await_count == 3
+
+
+# ── ArchiveService.lookup + rehydrate ──────────────────────────────────
+
+
+class TestArchiveLookup:
+    @pytest.mark.asyncio
+    async def test_lookup_returns_none_when_no_postgres(self):
+        svc = ArchiveService()
+        with patch(
+            "eden.storage.postgres.get_postgres_client",
+            new=AsyncMock(return_value=None),
+        ):
+            result = await svc.lookup("trace_x")
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_lookup_returns_row_when_found(self):
+        svc = ArchiveService()
+        client = MagicMock()
+        client.fetchrow = AsyncMock(
+            return_value={
+                "trace_id": "trace_x",
+                "org_id": "org_1",
+                "archive_path": "cold/telemetry_events/org=org_1/trace=trace_x/x.ndjson",
+                "row_count": 5,
+                "archived_at": datetime.now(UTC),
+            }
+        )
+        with patch(
+            "eden.storage.postgres.get_postgres_client",
+            new=AsyncMock(return_value=client),
+        ):
+            result = await svc.lookup("trace_x")
+        assert result is not None
+        assert result["trace_id"] == "trace_x"
+        assert result["row_count"] == 5
+
+    @pytest.mark.asyncio
+    async def test_rehydrate_returns_empty_when_not_archived(self):
+        svc = ArchiveService()
+        # lookup returns None → rehydrate returns []
+        with patch(
+            "eden.storage.postgres.get_postgres_client",
+            new=AsyncMock(return_value=None),
+        ):
+            rows = await svc.rehydrate("trace_unknown")
+        assert rows == []
+
+
+class TestArchiveRehydrateCache:
+    @pytest.mark.asyncio
+    async def test_rehydrate_returns_empty_on_cache_miss_without_postgres(self):
+        """When the cache is empty and Postgres is unavailable, rehydrate
+        returns [] without raising (the lookup path returns None)."""
+        svc = ArchiveService()
+        from eden.services.data_platform.archive import _rehydrate_cache
+
+        _rehydrate_cache.cache_clear()
+        with patch(
+            "eden.storage.postgres.get_postgres_client",
+            new=AsyncMock(return_value=None),
+        ):
+            rows = await svc.rehydrate("trace_unknown")
+        assert rows == []
+        _rehydrate_cache.cache_clear()
+
+
+# ── Retention cron wires ArchiveService ───────────────────────────────
+
+
+class TestRetentionCronArchive:
+    @pytest.mark.asyncio
+    async def test_cron_calls_archive_old_rows(self):
+        from eden.data_platform import retention_cron
+
+        # Mock ArchiveService and the orgs-with-old-traces list.
+        mock_archive = MagicMock()
+        mock_archive.archive_old_rows = AsyncMock(
+            return_value={"traces_archived": 0, "rows_archived": 0, "s3_objects": 0}
+        )
+        mock_retention = MagicMock()
+        mock_retention.policies = []
+        mock_retention.run_retention_policy = AsyncMock(
+            return_value=MagicMock(errors=[])
+        )
+        mock_lifecycle = MagicMock()
+        mock_lifecycle.apply_s3_lifecycle_rules = AsyncMock(return_value=True)
+        mock_lifecycle.expire_temporary_data = AsyncMock(return_value=0)
+
+        with (
+            patch(
+                "eden.data_platform.retention_cron.ArchiveService",
+                return_value=mock_archive,
+            ),
+            patch(
+                "eden.data_platform.retention_cron.DataRetentionManager",
+                return_value=mock_retention,
+            ),
+            patch(
+                "eden.data_platform.retention_cron.StorageLifecycleManager",
+                return_value=mock_lifecycle,
+            ),
+            patch(
+                "eden.data_platform.retention_cron._list_orgs_with_old_traces",
+                new=AsyncMock(return_value=["org_1"]),
+            ),
+        ):
+            results = await retention_cron.run(dry_run=True)
+
+        assert "cold_archive" in results
+        assert "org_1" in results["cold_archive"]
+        mock_archive.archive_old_rows.assert_awaited_once_with(
+            "org_1", dry_run=True
+        )
+
+
+# ── TelemetryCollector._load_from_archive fallback ────────────────────
+
+
+class TestTraceTreeArchiveFallback:
+    @pytest.mark.asyncio
+    async def test_load_from_archive_returns_list(self):
+        from eden.observability.telemetry_collector import TelemetryCollector
+
+        collector = TelemetryCollector()
+
+        with patch(
+            "eden.services.data_platform.ArchiveService.rehydrate",
+            new=AsyncMock(
+                return_value=[{"event_id": "evt_cold", "trace_id": "trace_cold"}]
+            ),
+        ):
+            rows = await collector._load_from_archive("trace_cold")
+        assert len(rows) == 1
+        assert rows[0]["event_id"] == "evt_cold"
+
+    @pytest.mark.asyncio
+    async def test_load_from_archive_handles_failure(self):
+        """A rehydrate failure must not raise — return [] so the
+        caller (get_trace_tree) renders a clean 404."""
+        from eden.observability.telemetry_collector import TelemetryCollector
+
+        collector = TelemetryCollector()
+        with patch(
+            "eden.services.data_platform.ArchiveService.rehydrate",
+            new=AsyncMock(side_effect=RuntimeError("boom")),
+        ):
+            rows = await collector._load_from_archive("trace_x")
+        assert rows == []

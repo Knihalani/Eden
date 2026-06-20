@@ -6,6 +6,7 @@ import { evalApi } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { EmptyState } from "@/components/ui/empty-state";
 import { NoOrgState } from "@/components/ui/no-org-state";
+import { PageHeader } from "@/components/layout/page-header";
 import {
   Dialog,
   DialogContent,
@@ -16,6 +17,7 @@ import {
 } from "@/components/ui/dialog";
 import { motion, AnimatePresence } from "framer-motion";
 import {
+  BarChart3,
   Gauge,
   Loader2,
   Plus,
@@ -73,18 +75,13 @@ export default function EvalPage() {
   const [error, setError] = useState("");
 
   return (
-    <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-[var(--text-primary)] flex items-center gap-2">
-            <Gauge className="w-6 h-6 text-[var(--accent)]" />
-            Evaluation Quality
-          </h1>
-          <p className="text-sm text-[var(--text-muted)] mt-1">
-            Judge versioning, failure clusters, CLHF data generation, HIL annotation, and pairwise preference.
-          </p>
-        </div>
-      </div>
+    <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-6 page-enter">
+      <PageHeader
+        title="Evaluation"
+        subtitle="Judge scores, comparison, and quality signals"
+        icon={BarChart3}
+        eyebrow="Observe"
+      />
 
       {error && (
         <div className="bg-[var(--error-bg)] text-[var(--error)] text-sm px-4 py-3 rounded-xl flex items-center gap-2.5 border border-[var(--error)]/20">

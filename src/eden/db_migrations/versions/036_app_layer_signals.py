@@ -36,10 +36,15 @@ depends_on = None
 
 
 def upgrade() -> None:
-    # app_events: high-volume, partition by ts monthly
+    # app_events: high-volume, partition by ts monthly.
+    # Note: Postgres requires unique constraints on partitioned
+    # tables to include all partitioning columns, so the PRIMARY
+    # KEY is (id, ts) not just (id). The existing PK semantics
+    # still hold (id is unique within a partition; cross-partition
+    # uniqueness is via the unique id check at write time).
     op.execute("""
         CREATE TABLE IF NOT EXISTS app_events (
-            id            UUID PRIMARY KEY,
+            id            UUID NOT NULL,
             org_id        VARCHAR(128) NOT NULL,
             session_id    VARCHAR(64),
             user_id       VARCHAR(128),
@@ -48,7 +53,8 @@ def upgrade() -> None:
             source        VARCHAR(16) NOT NULL DEFAULT 'browser',
             ts            TIMESTAMPTZ NOT NULL,
             properties    JSONB,
-            created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            PRIMARY KEY (id, ts)
         ) PARTITION BY RANGE (ts);
     """)
     # Default partition catches anything outside the explicit monthly partitions

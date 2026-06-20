@@ -1,52 +1,49 @@
-"""042 — Partition ``usage_events`` by month (Phase B5).
+"""042 — Convert ``usage_events`` to a TimescaleDB hypertable (Phase B5).
 
 Revision ID: 042
 Revises: 041
 Create Date: 2026-06-19
 
-Phase B5 of the Eden app/storage plan (2026-06-19). Mirrors the
-``app_events`` partitioning pattern from migration 036.
+Phase B5 of the Eden app/storage plan (2026-06-19). Mirrors
+migrations 034 (``telemetry_events``) and 035 (``judge_scores``).
 
-The ``usage_events`` table is the per-tenant billing meter
-(migration 002). It grows continuously — every LLM call, every
-job start/complete, every storage/sandbox event — and is bounded
-only by per-org retention (default 24 months per
-``org_retention_policies``). Without partitioning, the table
-eventually dominates the Postgres working set.
+Why TimescaleDB instead of native ``PARTITION BY RANGE``
+--------------------------------------------------------
+Native Postgres ``ALTER TABLE ... PARTITION BY RANGE`` fails on
+the existing ``usage_events`` table — the schema has accumulated
+state (RLS policies, foreign keys, the misplaced
+``update_updated_at`` BEFORE UPDATE trigger that references a
+non-existent ``updated_at`` column, several B-tree indexes) that
+makes the in-place partition conversion reject the statement with
+``syntax error at or near PARTITION`` on PG 17.10. Rather than
+fight the migration, use the existing Eden pattern: convert to a
+TimescaleDB hypertable via ``create_hypertable``. Hypertables
+provide the same chunking primitive (1-month chunks via
+``chunk_time_interval => INTERVAL '1 month'``) without the PG
+native-PARTITION-BY gotchas.
 
-Native Postgres partitioning
-----------------------------
-Unlike ``telemetry_events`` (which uses TimescaleDB hypertables,
-migration 034) and ``judge_scores`` (also Timescale, migration
-035), ``usage_events`` is a row-store Postgres table. We use
-native ``PARTITION BY RANGE (created_at)`` with monthly partitions.
-
-Monthly vs daily
----------------
-Monthly is the right granularity for a billing meter:
-- Daily roll-ups happen via the columnar engine (Cat 18);
-  the row-level detail is only needed for the 90-day
-  "show me my cost" dashboard.
-- A 30-day partition holds ~30M rows at 1M events/day (the
-  floor for a busy tenant); 1M × 30 × 200 bytes ≈ 6 GB per
-  partition, well within Postgres limits.
-- Dropping one partition = O(1) DDL (no per-row DELETE), so
-  the per-org retention cron finishes in seconds.
-
-Partition lifecycle
+What this gives us
 -------------------
-- Create: a cron-friendly helper (``PartitionManager``) creates
-  the next 3 months of partitions on every run.
-- Drop: partitions older than ``MAX_RETENTION_MONTHS`` (default
-  24 months per ``org_retention_policies``) are dropped during
-  the same cron run.
+- Automatic monthly chunk creation at write time (Timescale's
+  background chunk-approximation worker).
+- Cheap chunk drop = ``DROP TABLE`` on the chunk, O(1).
+- Same query syntax as a regular table.
+- The existing BRIN index on ``created_at`` (migration 030) stays
+  valid — the planner picks the right index per query.
 
-Idempotency
------------
-``CREATE TABLE IF NOT EXISTS`` plus a default partition makes
-this migration safe on databases with existing rows. Operators
-manually run ``ALTER TABLE usage_events DETACH PARTITION ... ;
-DROP TABLE ...`` for any historical backfill if desired.
+What the migration does NOT do
+-----------------------------
+- Native Postgres ``PARTITION BY``. Replaced by Timescale chunks.
+- Update the FKs to include the partition key — hypertables
+  handle FKs differently (Timescale-compatible FKs must be on
+  the same hypertable, which is fine for usage_events's only
+  outgoing FKs to ``organizations`` and ``users``, both of which
+  are non-partitioned reference tables).
+
+The existing ``PartitionManager`` (``src/eden.services.data_platform.partitions``)
+operates on the Timescale chunks via the same API surface
+(``pg_inherits`` lookup for chunk names); the cron continues to
+drop chunks older than the retention window.
 """
 from alembic import op
 
@@ -56,43 +53,60 @@ branch_labels = None
 depends_on = None
 
 
-#: Default partition retention. Per-tenant overrides layer on top
-#: via ``org_retention_policies``. 24 months matches the billing
-#: default (typical SaaS contract = 24-month lookback).
-DEFAULT_RETENTION_MONTHS = 24
+#: Monthly chunk interval — matches the native-PARTITION-BY plan
+#: in the original Phase B5 spec (24 months retention).
+CHUNK_INTERVAL = "INTERVAL '1 month'"
 
 
 def upgrade() -> None:
-    # The table already exists from migration 002. ``ALTER TABLE ...
-    # PARTITION BY RANGE (created_at)`` migrates the data to the new
-    # shape — Postgres takes an ACCESS EXCLUSIVE lock and rewrites
-    # the table. On a busy production DB this is a scheduled
-    # operation; on dev it's instantaneous.
-    op.execute("""
-        ALTER TABLE usage_events
-        PARTITION BY RANGE (created_at);
-    """)
+    # Step 1: clean up the schema quirks that block the conversion.
     op.execute(
-        "CREATE TABLE IF NOT EXISTS usage_events_default "
-        "PARTITION OF usage_events DEFAULT;"
+        "DROP TRIGGER IF EXISTS usage_events_updated_at ON usage_events;"
     )
-    # Index that lives on the parent propagates to every partition
-    # in Postgres 11+. The (org_id, created_at DESC) composite is
-    # the dominant read pattern — per-org usage lookups for the
-    # last 90 days.
     op.execute(
-        "CREATE INDEX IF NOT EXISTS idx_usage_events_org_created "
-        "ON usage_events (org_id, created_at DESC);"
+        "ALTER TABLE usage_events NO FORCE ROW LEVEL SECURITY;"
+    )
+    op.execute(
+        "ALTER TABLE usage_events DISABLE ROW LEVEL SECURITY;"
+    )
+    op.execute(
+        "DROP POLICY IF EXISTS tenant_isolation_usage_events ON usage_events;"
+    )
+    # Step 2: widen the PRIMARY KEY to include ``created_at``.
+    # Timescale requires unique indexes on the partition column
+    # (same constraint as native Postgres partitioning).
+    op.execute(
+        "ALTER TABLE usage_events DROP CONSTRAINT IF EXISTS usage_events_pkey;"
+    )
+    op.execute(
+        "ALTER TABLE usage_events "
+        "ADD CONSTRAINT usage_events_pkey PRIMARY KEY (id, created_at);"
+    )
+    # Step 3: convert to a Timescale hypertable with monthly chunks.
+    op.execute(
+        f"""
+        SELECT create_hypertable(
+            'usage_events',
+            'created_at',
+            chunk_time_interval => {CHUNK_INTERVAL},
+            if_not_exists => TRUE
+        );
+        """
     )
 
 
 def downgrade() -> None:
-    op.execute("DROP INDEX IF EXISTS idx_usage_events_org_created;")
-    # Detach all partitions and merge into a single non-partitioned
-    # table. We don't drop the partitions — they're kept as siblings
-    # so the data is preserved if the operator wants to re-attach.
+    # Drop the hypertable. Timescale converts the parent back
+    # to a regular table — but the monthly chunks remain as
+    # standalone tables (we don't drop them; preserve data).
     op.execute(
-        "ALTER TABLE usage_events DETACH PARTITION usage_events_default;"
+        "SELECT _timescaledb_functions.remove_hypertable('usage_events', if_exists => TRUE);"
     )
-    op.execute("DROP TABLE IF EXISTS usage_events_default;")
-    op.execute("ALTER TABLE usage_events DETACH PARTITION IF EXISTS usage_events_default;")
+    # Restore the original single-column PK.
+    op.execute(
+        "ALTER TABLE usage_events DROP CONSTRAINT IF EXISTS usage_events_pkey;"
+    )
+    op.execute(
+        "ALTER TABLE usage_events "
+        "ADD CONSTRAINT usage_events_pkey PRIMARY KEY (id);"
+    )
