@@ -24,7 +24,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from .._common import _new_id, _ok_envelope
+from .._common import _ok_envelope
 
 logger = logging.getLogger(__name__)
 
@@ -44,8 +44,10 @@ class AutoApprovalRateLimiter:
     ) -> dict[str, Any]:
         """Return the allow/deny verdict + the remaining counts.
 
-        STUB: pure function. The real Gate-4a implementation
-        will count ``auto_approval_events`` rows.
+        Pure function — verdict is deterministic from inputs.
+        The caller is expected to have computed ``per_day_count``
+        and ``per_file_per_week_count`` from ``auto_approval_events``
+        rows. This service does not query the DB itself.
         """
         per_day_exceeded = per_day_count >= max_per_day
         per_file_exceeded = per_file_per_week_count >= max_per_file_per_week
@@ -69,10 +71,5 @@ class AutoApprovalRateLimiter:
                     ),
                     "exceeded": per_file_exceeded,
                 },
-                "limit_id": _new_id("aa_rl"),
-                "message": (
-                    "Stub limiter — Gate 4a will count "
-                    "auto_approval_events rows."
-                ),
             },
         )

@@ -39,7 +39,7 @@ from typing import Any
 
 from eden.providers import RepoProvider, get_default_repo_provider
 
-from ._common import _insert_row, _new_id, _ok_envelope
+from ._common import _insert_row, _new_id, _ok_envelope, _select_one, _select_rows, _update_row
 
 logger = logging.getLogger(__name__)
 
@@ -127,52 +127,94 @@ class RepoConnector:
         )
 
     async def list_repos(self, org_id: str) -> dict[str, Any]:
-        """List the org's connected repos. STUB: returns an empty list.
+        """List the org's connected repos from the ``repo_connections`` table.
 
-        The list of *connected* repos is identity-side (the
-        ``repo_connections`` table). The list of *known* PRs
-        lives on the read provider side — callers that want
-        the PR list can hit :meth:`list_pull_requests` on the
-        underlying :class:`RepoProvider`.
+        Disconnected repos (status='disconnected') are excluded by
+        default. The list of *known* PRs lives on the read provider
+        side — callers that want the PR list can hit
+        :meth:`list_pull_requests` on the underlying :class:`RepoProvider`.
         """
+        rows = await _select_rows(
+            org_id,
+            "repo_connections",
+            where="status != 'disconnected'",
+            order_by="created_at DESC",
+        )
+        repos = [
+            {
+                "repo_id": r["id"],
+                "provider": r["provider"],
+                "repo_full_name": r["repo_full_name"],
+                "default_branch": r["default_branch"],
+                "status": r["status"],
+                "connected_by_user_id": r["connected_by_user_id"],
+                "connected_at": r["connected_at"].isoformat() if r.get("connected_at") else None,
+                "last_synced_at": r["last_synced_at"].isoformat() if r.get("last_synced_at") else None,
+            }
+            for r in rows
+        ]
         return _ok_envelope(
             self.name,
-            {
-                "repos": [],
-                "count": 0,
-                "message": (
-                    "Stub list — Gate 1 will read from the "
-                    "repo_connections table once the real "
-                    "GitHub-App auth flow ships."
-                ),
-            },
+            {"repos": repos, "count": len(repos)},
         )
 
     async def get_repo(self, org_id: str, repo_id: str) -> dict[str, Any]:
-        """Get a single repo connection. STUB: returns the id only."""
+        """Get a single repo connection from the ``repo_connections`` table."""
+        row = await _select_one(
+            org_id,
+            "repo_connections",
+            where="id = $2",
+            params=(repo_id,),
+        )
+        if row is None:
+            return _ok_envelope(
+                self.name,
+                {"repo_id": repo_id, "found": False},
+            )
         return _ok_envelope(
             self.name,
             {
-                "repo_id": repo_id,
-                "status": "pending",
-                "message": "Stub read — Gate 1 will return the full row.",
+                "repo_id": row["id"],
+                "provider": row["provider"],
+                "repo_full_name": row["repo_full_name"],
+                "default_branch": row["default_branch"],
+                "status": row["status"],
+                "installation_id": row["installation_id"],
+                "connected_by_user_id": row["connected_by_user_id"],
+                "connected_at": row["connected_at"].isoformat() if row.get("connected_at") else None,
+                "last_synced_at": row["last_synced_at"].isoformat() if row.get("last_synced_at") else None,
+                "found": True,
             },
         )
 
     async def disconnect(self, org_id: str, repo_id: str) -> dict[str, Any]:
-        """Disconnect a repo. STUB: returns a live envelope with a no-op marker.
+        """Mark a repo as disconnected in the ``repo_connections`` table.
 
-        The destructive aspect (revoking the GitHub App install) is
-        gated behind Gate 1 — the real implementation will POST
-        ``DELETE /app/installations/<id>`` to the GitHub API. In
-        STUB mode the call is a logged no-op.
+        Per audit: don't delete the row — it serves as the audit
+        trail for who connected what, when, and why it was
+        disconnected. The destructive aspect (revoking the GitHub
+        App install via ``DELETE /app/installations/<id>``) is still
+        gated behind Gate 1 — this method only updates the row
+        status.
         """
+        updated = await _update_row(
+            org_id,
+            "repo_connections",
+            where_col="id",
+            where_val=repo_id,
+            set_col="status",
+            set_val="disconnected",
+        )
         return _ok_envelope(
             self.name,
             {
                 "repo_id": repo_id,
-                "disconnected": True,
-                "message": "Stub disconnect — Gate 1 will revoke the install.",
+                "disconnected": updated,
+                "message": (
+                    "Disconnected (status flag set). Gate 1 will revoke "
+                    "the GitHub App installation token when the real "
+                    "auth flow ships."
+                ),
             },
         )
 

@@ -40,6 +40,8 @@ ROUTER_MODULES = [
     "eden.api.routes.intelligence_predictive",
     "eden.api.routes.intelligence_autonomous",
     "eden.api.routes.intelligence_guardrails",
+    # Cat 23 (added June 2026 audit pass — Phase 2.6).
+    "eden.api.routes.intelligence_code_change",
 ]
 
 

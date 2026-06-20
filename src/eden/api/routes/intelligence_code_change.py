@@ -93,6 +93,7 @@ from eden.code_change import (
     PRQualityScorer,
     PRReviewerNotifier,
     PRReviewService,
+    PRPatternService,
     RepoConnector,
     TestPlanRunner,
 )
@@ -135,6 +136,7 @@ _revert = AutoRevertEngine()
 _notifier = PRReviewerNotifier()
 _style_learner = CodeStyleLearner()
 _knowledge_graph = CodebaseKnowledgeGraph()
+_pr_pattern_service = PRPatternService()
 
 
 # ─── Schemas ───────────────────────────────────────────────────────
@@ -500,14 +502,15 @@ async def auto_approval_rate_limit(
 
 # ─── PRs ─────────────────────────────────────────────────────────
 @router.get("/prs")
-async def list_prs(org_id: str = Path(...)) -> dict[str, Any]:
-    """List the org's PRs. STUB: empty list."""
-    return not_implemented(
-        "list_prs",
-        message=(
-            "Stub list — Gate 4a will read from pull_requests + "
-            "patch_approvals + patch_approval_status."
-        ),
+async def list_prs(
+    org_id: str = Path(...),
+    state: str = "open",
+    repo_id: str | None = None,
+    limit: int = 50,
+) -> dict[str, Any]:
+    """List the org's PRs from the ``pull_requests`` table."""
+    return await _pr_creator.list_prs(
+        org_id, repo_id=repo_id, state=state, limit=limit,
     )
 
 
@@ -516,11 +519,7 @@ async def get_pr(
     org_id: str = Path(...),
     pr_id: str = Path(...),
 ) -> dict[str, Any]:
-    return not_implemented(
-        "get_pr",
-        message="Stub read — Gate 4a will return the full row.",
-        data={"pr_id": pr_id},
-    )
+    return await _pr_creator.get_pr(org_id, pr_id)
 
 
 @router.post("/prs/{pr_id}/revert")
@@ -551,3 +550,192 @@ async def start_watching(
         patch_id=body.patch_id,
         affected_metrics=body.affected_metrics,
     )
+
+
+# ─── Real Cat 23 service routes (June 2026 audit pass) ────────
+
+
+class LearnRepoRequest(BaseModel):
+    """POST /repos/{id}/learn body. Empty = use the connected
+    repo's files (the RepoConnector will pull them via the
+    configured provider)."""
+
+    sample_size: int = 20
+
+
+class BlastRadiusRequest(BaseModel):
+    diff: str
+
+
+class ExplainRequest(BaseModel):
+    patch_id: str
+    rca_summary: str = ""
+    diff_summary: str = ""
+    predicted_cost_savings_usd: float = 0.0
+
+
+class QualityScoreRequest(BaseModel):
+    patch_id: str
+    diff: str
+
+
+class TestPlanRequest(BaseModel):
+    patch_id: str
+    rca_summary: str = ""
+    diff: str = ""
+
+
+class RCALinkRequest(BaseModel):
+    rca_id: str
+    rca_description: str = ""
+    stack_trace: str | None = None
+    request_path: str | None = None
+    trace_id: str | None = None
+
+
+@router.post("/repos/{repo_id}/learn")
+async def learn_repo(
+    org_id: str = Path(...),
+    repo_id: str = Path(...),
+    body: LearnRepoRequest = Body(default_factory=LearnRepoRequest),
+) -> dict[str, Any]:
+    """Trigger style + PR pattern learning for the connected repo."""
+    style_result = await _style_learner.learn(org_id, repo_id)
+    pr_pattern_result = await _pr_pattern_service.learn(org_id, repo_id)
+    return {
+        "status": "ok",
+        "feature": "learn",
+        "live": True,
+        "trace_id": _new_id("learn"),
+        "timestamp": None,
+        "data": {
+            "style": style_result.get("data"),
+            "pr_patterns": pr_pattern_result.get("data"),
+        },
+    }
+
+
+@router.get("/repos/{repo_id}/style")
+async def get_style(
+    org_id: str = Path(...),
+    repo_id: str = Path(...),
+) -> dict[str, Any]:
+    return await _style_learner.get_profile(org_id, repo_id)
+
+
+@router.get("/repos/{repo_id}/patterns")
+async def get_pr_patterns(
+    org_id: str = Path(...),
+    repo_id: str = Path(...),
+) -> dict[str, Any]:
+    return await _pr_pattern_service.get_patterns(org_id, repo_id)
+
+
+@router.get("/repos/{repo_id}/knowledge")
+async def get_knowledge(
+    org_id: str = Path(...),
+    repo_id: str = Path(...),
+    rca_category: str | None = None,
+    telemetry_signature: str | None = None,
+) -> dict[str, Any]:
+    """Return the per-repo knowledge graph summary."""
+    if rca_category:
+        return await _knowledge_graph.same_rca_category_history(
+            org_id, repo_id, rca_category,
+        )
+    if telemetry_signature:
+        return await _knowledge_graph.telemetry_signature_match(
+            org_id, repo_id, telemetry_signature,
+        )
+    return {
+        "status": "ok",
+        "feature": "knowledge",
+        "live": True,
+        "trace_id": _new_id("know"),
+        "timestamp": None,
+        "data": {
+            "repo_id": repo_id,
+            "message": "Pass ?rca_category=<prefix> or "
+                       "?telemetry_signature=<sig> to query a "
+                       "specific slice of the knowledge graph.",
+        },
+    }
+
+
+@router.post("/patches/{patch_id}/blast-radius")
+async def blast_radius(
+    org_id: str = Path(...),
+    patch_id: str = Path(...),
+    body: BlastRadiusRequest = Body(...),
+) -> dict[str, Any]:
+    return await _blast_radius.analyze(
+        org_id, diff=body.diff, repo_id=patch_id,
+    )
+
+
+@router.post("/patches/{patch_id}/explain")
+async def explain(
+    org_id: str = Path(...),
+    patch_id: str = Path(...),
+    body: ExplainRequest = Body(...),
+) -> dict[str, Any]:
+    return await _explanation.generate(
+        org_id,
+        patch_id=body.patch_id,
+        rca_summary=body.rca_summary,
+        diff_summary=body.diff_summary,
+        predicted_cost_savings_usd=body.predicted_cost_savings_usd,
+    )
+
+
+@router.post("/patches/{patch_id}/quality")
+async def quality(
+    org_id: str = Path(...),
+    patch_id: str = Path(...),
+    body: QualityScoreRequest = Body(...),
+) -> dict[str, Any]:
+    return await _quality_scorer.score(
+        org_id,
+        patch_id=body.patch_id,
+        diff=body.diff,
+        repo_id=patch_id,
+    )
+
+
+@router.post("/patches/{patch_id}/test-plan")
+async def test_plan(
+    org_id: str = Path(...),
+    patch_id: str = Path(...),
+    body: TestPlanRequest = Body(...),
+) -> dict[str, Any]:
+    return await _test_runner.generate_plan(
+        org_id,
+        patch_id=body.patch_id,
+        rca_summary=body.rca_summary,
+        diff=body.diff,
+    )
+
+
+@router.post("/rca/link")
+async def link_rca(
+    org_id: str = Path(...),
+    body: RCALinkRequest = Body(...),
+) -> dict[str, Any]:
+    return await _rca_linker.link(
+        org_id,
+        rca_id=body.rca_id,
+        repo_id="",
+        rca_description=body.rca_description,
+        stack_trace=body.stack_trace,
+        request_path=body.request_path,
+        trace_id=body.trace_id,
+    )
+
+
+def _new_id(prefix: str) -> str:
+    """Thin ``<prefix>_<16-hex>`` helper used only by the
+    new Cat 23 service routes. Mirrors ``_common._new_id``.
+    """
+    import uuid as _uuid
+    return f"{prefix}_{_uuid.uuid4().hex[:16]}"
+

@@ -116,6 +116,7 @@ __all__ = [
     "PRCreator",
     "PRExplanationService",
     "PRInboxService",
+    "PRPatternService",
     "PRQualityScorer",
     "PRReviewerNotifier",
     "PRReviewService",
@@ -144,6 +145,7 @@ if TYPE_CHECKING:  # pragma: no cover - import only
     from .policy import CodeChangePolicyService
     from .post_merge_monitor import PostMergeMonitor
     from .pr_creator import PRCreator
+    from .pr_patterns import PRPatternService
     from .quality.quality_scorer import PRQualityScorer
     from .rca_linker import CodeRootCauseLinker
     from .repo_connector import RepoConnector
@@ -186,6 +188,7 @@ _LAZY_IMPORTS: dict[str, tuple[str, str]] = {
     "PRCreator": (".pr_creator", "PRCreator"),
     "PRExplanationService": (".explanation", "PRExplanationService"),
     "PRInboxService": (".inbox.inbox", "PRInboxService"),
+    "PRPatternService": (".pr_patterns", "PRPatternService"),
     "PRQualityScorer": (".quality.quality_scorer", "PRQualityScorer"),
     "PRReviewerNotifier": (".notify", "PRReviewerNotifier"),
     "PRReviewService": (".inbox.review", "PRReviewService"),

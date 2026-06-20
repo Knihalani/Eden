@@ -29,7 +29,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from .._common import _new_id, _ok_envelope
+from .._common import _not_implemented_envelope
 
 logger = logging.getLogger(__name__)
 
@@ -50,26 +50,28 @@ class AutoApprovalDryRunService:
         requested_by_user_id: str,
         window_days: int = 30,
     ) -> dict[str, Any]:
-        """Run the dry-run. STUB: zero-patches history."""
-        return _ok_envelope(
+        """Run the dry-run. STUB: not implemented.
+
+        The dry-run needs to replay every ``proposed_patches``
+        row in the window against the org's
+        ``auto_approval_policies`` config — that's a Gate-4a
+        feature (the rule evaluator + the time-saved estimator
+        aren't built yet). Per the audit pass: return a clean
+        ``not_implemented`` envelope with no synthesised IDs
+        so the front-end can distinguish "stub" from "real but
+        empty" via the envelope shape.
+        """
+        return _not_implemented_envelope(
             self.name,
-            {
+            message=(
+                "Auto-approval dry-run requires Gate 4a (the rule "
+                "evaluator + time-saved estimator). STUB returns "
+                "a blocked envelope with no synthetic IDs."
+            ),
+            gate="4a_blocked",
+            data={
                 "org_id": org_id,
                 "window_days": window_days,
-                "total_patches_evaluated": 0,
-                "would_have_auto_approved": 0,
-                "would_have_blocked_by_threshold": {},
-                "would_have_blocked_by_protected_paths": 0,
-                "would_have_blocked_by_first_pr_to_file": 0,
-                "would_have_blocked_by_cool_off": 0,
-                "would_have_blocked_by_rate_limit": 0,
-                "estimated_time_saved_minutes": 0,
-                "dry_run_id": _new_id("aa_dr"),
                 "requested_by_user_id": requested_by_user_id,
-                "message": (
-                    "Stub dry-run — no patches in the last "
-                    f"{window_days} days. Gate 4a will replay "
-                    "proposed_patches + auto_approval_events."
-                ),
             },
         )

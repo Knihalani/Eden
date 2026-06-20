@@ -100,9 +100,6 @@ async def export_org_data(
         # 3. (jobs feature removed June 2026 — previously exported job metadata here)
 
         # 4. Export audit log
-        )
-
-        # 4. Export audit log
         audit_query = """
             SELECT oal.id, oal.user_id, oal.action,
                    oal.target_type, oal.target_id, oal.metadata,

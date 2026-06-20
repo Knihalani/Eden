@@ -20,7 +20,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from .._common import _new_id, _ok_envelope, diff_files_changed, diff_line_count
+from .._common import _ok_envelope, diff_files_changed, diff_line_count
 
 logger = logging.getLogger(__name__)
 
@@ -51,16 +51,10 @@ class AutoApprovalMetricsCollector:
                     "lines_changed": diff_line_count(diff),
                     "files_changed": len(diff_files_changed(diff)),
                     "files": diff_files_changed(diff),
-                    "is_first_pr_to_file": True,  # Gate-5 will read
+                    "is_first_pr_to_file": True,  # Gate-5 will read from codebase_knowledge_graph
                     "blast_radius_score": blast_radius_score,
                     "quality_score": quality_score,
                     "rca_confidence": rca_confidence,
                 },
-                "metrics_id": _new_id("aa_mtr"),
-                "message": (
-                    "Stub metrics — is_first_pr_to_file defaults to "
-                    "True because the real codebase_knowledge_graph "
-                    "lookup requires Gate 5."
-                ),
             },
         )

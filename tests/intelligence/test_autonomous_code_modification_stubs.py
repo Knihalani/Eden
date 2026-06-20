@@ -46,14 +46,14 @@ from fastapi.testclient import TestClient
 
 
 class TestPackageReExports:
-    """The 25 public names listed in ``__all__`` resolve via PEP 562
+    """The 26 public names (PRPatternService added June 2026) listed in ``__all__`` resolve via PEP 562
     lazy ``__getattr__`` to the implementation in the corresponding
     submodule."""
 
-    def test_all_25_names_importable(self) -> None:
+    def test_all_26_names_importable(self) -> None:
         from eden.code_change import __all__
 
-        assert len(__all__) == 25
+        assert len(__all__) == 26
         for name in __all__:
             assert isinstance(name, str)
             assert name, "empty public name"
@@ -102,7 +102,7 @@ class TestPackageReExports:
         from eden import code_change
 
         public = set(code_change.__dir__())
-        # The 25 public names + the package's own module-level
+        # The 26 public names (PRPatternService added June 2026) + the package's own module-level
         # names (``__all__``, ``_LAZY_IMPORTS``, ``__getattr__``,
         # ``__dir__``).
         for name in (
@@ -269,58 +269,94 @@ class TestDestructiveRoutesReturnNotImplemented:
         result = await PatchGenerator().generate(
             "org_test", rca_id="rca_x", trace_id="trace_x", repo_id="repo_x"
         )
+        # June 2026 audit pass: real implementation exists.
+        # Without a router, gate="router_missing". The legacy
+        # "4a_blocked" gate is also accepted for backwards-
+        # compat with the v1.6 STUB checklist.
         assert result["status"] == "not_implemented"
-        assert result["data"]["gate"] == "4a_blocked"
+        assert result["data"]["gate"] in {"router_missing", "4a_blocked"}
 
     @pytest.mark.asyncio
-    async def test_rca_linker_returns_gate_2(self) -> None:
+    async def test_rca_linker_real(self) -> None:
+        """June 2026 audit pass: real implementation.
+
+        Without any of the 4 input signals, returns the empty
+        envelope (``links: []``). With ``stack_trace`` or
+        ``candidate_files`` the linker scores candidates and
+        persists the top match.
+        """
         from eden.code_change import CodeRootCauseLinker
 
         result = await CodeRootCauseLinker().link(
-            "org_test", rca_id="rca_x", repo_id="repo_x"
+            "org_test", rca_id="rca_x", repo_id="repo_x",
         )
-        assert result["status"] == "not_implemented"
-        assert result["data"]["gate"] == "2_blocked"
-        # The link id is content-derived for idempotent re-runs.
-        assert result["data"]["data"]["link_id"].startswith("crcl_")
-        assert len(result["data"]["data"]["link_id"]) == len("crcl_") + 16
+        assert result["status"] == "ok"
+        assert result["data"]["links"] == []
+        assert result["data"]["primary_link_id"] is None
+
+        # With stack trace, the linker extracts files.
+        result2 = await CodeRootCauseLinker().link(
+            "org_test", rca_id="rca_x", repo_id="repo_x",
+            stack_trace='File "src/x.py", line 1, in foo',
+        )
+        assert result2["status"] == "ok"
+        assert any(
+            link["path"] == "src/x.py"
+            for link in result2["data"]["links"]
+        )
 
     @pytest.mark.asyncio
-    async def test_blast_radius_returns_gate_2(self) -> None:
+    async def test_blast_radius_real(self) -> None:
+        """June 2026 audit pass: real implementation.
+
+        Returns ``status=ok`` with a 0..1 blast_radius_score.
+        The score is the 40/60 weighted average of the static
+        + dynamic dimensions per the v1.6 cat spec.
+        """
         from eden.code_change import BlastRadiusAnalyzer
 
         result = await BlastRadiusAnalyzer().analyze(
-            "org_test", diff="+ a\n- b\n", repo_id="repo_x"
+            "org_test",
+            diff=(
+                "--- a/src/rate_limiter.py\n+++ b/src/rate_limiter.py\n@@ -1 +1 @@\n"
+                "-old\n+new\n"
+            ),
+            repo_id="repo_x",
         )
-        assert result["status"] == "not_implemented"
-        assert result["data"]["gate"] == "2_blocked"
+        assert result["status"] == "ok"
+        assert 0.0 <= result["data"]["blast_radius_score"] <= 1.0
         # The 40/60 weighting is the canonical signal mix.
-        assert result["data"]["data"]["static_weight"] == 0.4
-        assert result["data"]["data"]["dynamic_weight"] == 0.6
+        assert result["data"]["static_weight"] == 0.4
+        assert result["data"]["dynamic_weight"] == 0.6
 
     @pytest.mark.asyncio
-    async def test_knowledge_graph_read_paths_gate_5(self) -> None:
+    async def test_knowledge_graph_read_paths_real(self) -> None:
         from eden.code_change import CodebaseKnowledgeGraph
 
         kg = CodebaseKnowledgeGraph()
+        # June 2026 audit pass: read paths now query the real
+        # ``codebase_knowledge_graph`` table (no Gate-5 stub).
+        # conftest's ``patch_postgres`` mocks ``get_postgres_client``.
+        # Note: the real impl takes ``(org_id, repo_id, ...)``;
+        # the stub-era test passed only 2 args — fixed here.
         for method, args, key in (
             ("same_file_history", ("org_test", "repo_x", "src/x.py"), "node_id"),
             (
                 "same_rca_category_history",
-                ("org_test", "rate_limiter"),
+                ("org_test", "repo_x", "rate_limiter"),
                 "rca_category",
             ),
             (
                 "telemetry_signature_match",
-                ("org_test", "sig_123"),
+                ("org_test", "repo_x", "sig_123"),
                 "telemetry_signature",
             ),
         ):
             result = await getattr(kg, method)(*args)
-            assert result["status"] == "not_implemented"
-            assert result["data"]["gate"] == "5_blocked"
-            # The inner ``data`` sub-payload carries the per-method payload.
-            assert key in result["data"]["data"]
+            # Real path: status=ok, ``data`` carries the
+            # method's payload directly (no nested ``data.data``).
+            assert result["status"] == "ok"
+            assert key in result["data"]
 
 
 # ─── 5. Two-stage opt-in is enforced BEFORE any side-effect ───────
