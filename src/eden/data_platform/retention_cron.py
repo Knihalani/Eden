@@ -103,6 +103,18 @@ async def run(dry_run: bool = False) -> dict:
         logger.error(f"[partition_manager] failed: {exc}")
         results["partition_manager"] = {"errors": [str(exc)]}
 
+    # 7. Neon-cost pass #2 (June 2026) — Postgres hot-table cleanup.
+    #    Sweeps tables the cold-archive pipeline doesn't touch
+    #    (jobs, notifications, stripe_events, expired invitations).
+    #    Each sweep is batch-limited so the daily cron can't hold a
+    #    long lock even on a customer with millions of old rows.
+    try:
+        from eden.data_platform.cleanup import run as run_cleanup
+        results["postgres_cleanup"] = await run_cleanup(dry_run=dry_run)
+    except Exception as exc:
+        logger.error(f"[postgres_cleanup] failed: {exc}")
+        results["postgres_cleanup"] = {"errors": [str(exc)]}
+
     return results
 
 

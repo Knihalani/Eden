@@ -19,7 +19,12 @@ from asyncpg.transaction import Transaction
 from eden.config import get_settings
 
 logger = logging.getLogger(__name__)
-settings = get_settings()
+# Note: ``settings`` is intentionally NOT bound to a module-level
+# reference — every method that needs a setting calls ``get_settings()``
+# (lru_cache'd, so the cost is one dict lookup) so that tests can
+# monkeypatch the env and immediately observe the new values, and so
+# a future code path that mutates ``Settings`` (e.g. a CLI flag)
+# works without re-importing this module.
 
 
 @dataclass
@@ -47,10 +52,16 @@ class PostgresClient:
         database: str | None = None,
         user: str | None = None,
         password: str | None = None,
-        min_pool_size: int = 5,
-        max_pool_size: int = 20,
+        min_pool_size: int | None = None,
+        max_pool_size: int | None = None,
         ssl: bool | str | None = None,
     ) -> None:
+        # Resolve settings on every call (lru_cache'd, so the cost is
+        # one dict lookup) — keeps monkeypatched env vars in tests
+        # observable, and means a future caller can swap the config
+        # without re-importing this module.
+        s = get_settings()
+
         # Honour ``settings.database_url`` as the canonical override path
         # for managed Postgres (Neon, RDS, Aurora, Cloud SQL). When set,
         # we parse the DSN once here so the pool can use the right
@@ -59,7 +70,7 @@ class PostgresClient:
         # would talk to a non-existent DB.
         from urllib.parse import parse_qs, urlsplit
 
-        url_override = settings.database_url if settings.database_url else None
+        url_override = s.database_url if s.database_url else None
         if url_override:
             parts = urlsplit(url_override)
             # Accept the three shapes operators actually paste:
@@ -73,12 +84,12 @@ class PostgresClient:
                 raise ValueError(
                     f"Unsupported scheme in DATABASE_URL: {parts.scheme!r}"
                 )
-            host = host or parts.hostname or settings.postgres_host
-            port = port or parts.port or settings.postgres_port
+            host = host or parts.hostname or s.postgres_host
+            port = port or parts.port or s.postgres_port
             # Strip leading "/" from path so we don't end up with "/eden"
-            database = database or (parts.path.lstrip("/") or settings.postgres_db)
-            user = user or parts.username or settings.postgres_user
-            password = password or parts.password or settings.postgres_password
+            database = database or (parts.path.lstrip("/") or s.postgres_db)
+            user = user or parts.username or s.postgres_user
+            password = password or parts.password or s.postgres_password
             # asyncpg uses ``ssl=`` not libpq's ``sslmode=``. Honour the
             # libpq value here so callers can paste a Neon-style URL
             # verbatim. ``channel_binding`` is libpq-only and ignored
@@ -88,13 +99,22 @@ class PostgresClient:
                 mode = query["sslmode"][0].lower()
                 ssl = mode not in {"disable", "allow", "prefer", ""}
         self.config = ConnectionConfig(
-            host=host or settings.postgres_host,
-            port=port or settings.postgres_port,
-            database=database or settings.postgres_db,
-            user=user or settings.postgres_user,
-            password=password or settings.postgres_password,
-            min_size=min_pool_size,
-            max_size=max_pool_size,
+            host=host or s.postgres_host,
+            port=port or s.postgres_port,
+            database=database or s.postgres_db,
+            user=user or s.postgres_user,
+            password=password or s.postgres_password,
+            # Honour ``settings.postgres_*_pool_size`` when the caller
+            # didn't pass an explicit override — the Northflank manifest
+            # sets ``POSTGRES_POOL_SIZE=10`` / ``POSTGRES_MIN_POOL_SIZE=2``
+            # for the API container; the previous defaults ignored those
+            # env vars and silently kept the hardcoded 5/20 baseline.
+            min_size=min_pool_size
+            if min_pool_size is not None
+            else s.postgres_min_pool_size,
+            max_size=max_pool_size
+            if max_pool_size is not None
+            else s.postgres_pool_size,
         )
         # Persist the explicit ``ssl`` arg (caller override) but prefer
         # the parsed URL value when ``database_url`` was the source.
@@ -106,14 +126,30 @@ class PostgresClient:
         if self._pool is not None:
             return
 
-        # ``statement_timeout`` is a server-side ``SET`` parameter, not
-        # a kwarg accepted by ``asyncpg.create_pool``.  Apply it via the
-        # ``init`` callback so every connection in the pool has the
-        # 30 s query cap before being handed out.  ``command_timeout``
-        # IS a valid kwarg — it caps the client-side wait for any
-        # single query.
+        # ``statement_timeout`` + ``idle_in_transaction_session_timeout`` are
+        # server-side ``SET`` parameters, not kwargs accepted by
+        # ``asyncpg.create_pool``. Apply them via the ``init`` callback
+        # so every connection in the pool has both caps before being
+        # handed out. ``statement_timeout`` caps any single query;
+        # ``idle_in_transaction_session_timeout`` kills connections that
+        # sit idle *inside* a transaction — a "tx in flight but no work
+        # happening" connection holds row locks that block vacuum + other
+        # writers, and burns Neon CU until the TCP timeout kicks in.
+        _settings_init = get_settings()
+        _statement_timeout_ms = int(
+            getattr(_settings_init, "postgres_statement_timeout_ms", 30_000)
+        )
+        _idle_in_tx_timeout_ms = int(
+            getattr(
+                _settings_init, "postgres_idle_in_transaction_timeout_ms", 60_000
+            )
+        )
+
         async def _init_connection(conn: asyncpg.Connection) -> None:
-            await conn.execute("SET statement_timeout = 30000")
+            await conn.execute(f"SET statement_timeout = {_statement_timeout_ms}")
+            await conn.execute(
+                f"SET idle_in_transaction_session_timeout = {_idle_in_tx_timeout_ms}"
+            )
 
         # SSL config (Phase 7 — Neon cutover). Managed providers
         # (Neon, RDS, Aurora) reject unencrypted connections; the

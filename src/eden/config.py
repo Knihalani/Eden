@@ -31,8 +31,28 @@ class Settings(BaseSettings):
     postgres_db: str = "eden"
     postgres_user: str = "eden"
     postgres_password: str = ""
+    # Defaults are deliberately conservative (20/5 = ~80 conns across
+    # the API + 2 jobs + worker). The Northflank manifest overrides
+    # down to 10/2 per container; PostgresClient honours these.
     postgres_pool_size: int = 20
     postgres_min_pool_size: int = 5
+    # Server-side ``statement_timeout`` cap, applied to every pooled
+    # connection via ``SET statement_timeout`` in the pool's init
+    # callback. 30 s matches the previous hardcoded value; override
+    # with ``POSTGRES_STATEMENT_TIMEOUT_MS`` in the deployment manifest
+    # (useful for tightening on dev or relaxing for heavy ETL).
+    postgres_statement_timeout_ms: int = 30_000
+    # ``idle_in_transaction_session_timeout`` — auto-kills connections
+    # that have been sitting in a transaction without running a query
+    # for longer than this. The default (60 s) catches the "developer
+    # opened a tx in psql and went to lunch" + the "app crashed mid-tx
+    # and the connection sits open holding locks" failure modes, both
+    # of which silently burn Neon CU until the connection times out
+    # at the TCP layer (potentially hours). 60 s is aggressive enough
+    # to keep Neon cheap without breaking long ETL jobs that
+    # legitimately hold a tx open — those run on a dedicated
+    # connection with a custom ``statement_timeout``.
+    postgres_idle_in_transaction_timeout_ms: int = 60_000
 
     # Qdrant
     qdrant_host: str = "localhost"
