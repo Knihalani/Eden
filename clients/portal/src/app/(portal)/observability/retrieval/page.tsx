@@ -5,6 +5,7 @@ import { useOrg } from "@/hooks/use-org";
 import { cn } from "@/lib/utils";
 import { EmptyState } from "@/components/ui/empty-state";
 import { NoOrgState } from "@/components/ui/no-org-state";
+import { PageHeader } from "@/components/layout/page-header";
 import {
   Tabs,
   TabsList,
@@ -17,6 +18,7 @@ import {
   Database,
   Lightbulb,
   Loader2,
+  Network,
   Search,
   Shuffle,
   Sparkles,
@@ -86,17 +88,13 @@ export default function RetrievalIntelligencePage() {
   }
 
   return (
-    <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-6">
-      {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold text-[var(--text-primary)] flex items-center gap-2">
-          <Database className="w-6 h-6 text-[var(--accent)]" />
-          Retrieval Intelligence
-        </h1>
-        <p className="text-sm text-[var(--text-muted)] mt-1">
-          Stop paying for chunks you never read — turn a $50k/mo RAG bill into $5k/mo by reordering, closing gaps, and dropping dead weight
-        </p>
-      </div>
+    <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-6 page-enter">
+      <PageHeader
+        title="Retrieval"
+        subtitle="Chunk attribution, gap detection, and reorder signals"
+        icon={Network}
+        eyebrow="Observe"
+      />
 
       {error && (
         <div className="bg-[var(--error-bg)] text-[var(--error)] text-sm px-4 py-3 rounded-xl flex items-center gap-2.5 border border-[var(--error)]/20">

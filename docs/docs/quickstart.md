@@ -1,130 +1,177 @@
 ---
 title: Quickstart
-description: From signup to your first trace in 60 seconds.
+description: From signup to your first trace in under five minutes.
 sidebar_position: 2
 ---
 
 # Quickstart
 
-Get from zero to a live trace in your dashboard in about a minute.
+Get from zero to a live trace in your dashboard in under five minutes.
 
-## 1. Sign up
+## 1. Sign up & grab a key
 
-Go to **[`https://portal.example.com/signup`](https://portal.example.com/signup)**.
-Pick an email + password. You'll land in the onboarding wizard.
-
-> **Self-hosting?** Run `docker compose -f docker/docker-compose.yml up -d`
-> from the repo root and visit `http://localhost:3000/signup`. The
-> compose stack ships Postgres, Qdrant, Redis, ClickHouse, and pgbouncer.
-
-## 2. Create or join an org
-
-The wizard's first step asks whether you're starting fresh or joining
-a team:
-
-- **Create new organisation** — pick a name, optionally invite teammates.
-  You become the owner with `integrations:write` permission.
-- **Join existing organisation** — paste an invite token or accept one
-  of the pending invites listed on the page. Your role (`member` /
-  `viewer`) is set by the inviter. If you join with `member` or
-  `viewer`, the GitHub repo step is skipped — that step requires
-  `integrations:write`, which only owners and admins have. Your admin
-  can connect repos for you from the portal at any time.
-
-## 3. Grab your API key
-
-The wizard reveals an API key for the active org. Copy it somewhere
-safe — it's shown once.
+1. Sign up at the portal (cloud or self-hosted — see
+   [How-to → Deploy](/how-to/deploy) for the self-host path).
+2. The wizard creates your first org and reveals an API key. Copy
+   it — it's shown once.
 
 ```bash
-export EDEN_API_KEY="eden_sk_…"
-export EDEN_DEFAULT_ORG="org_…"
-export EDEN_BASE_URL="http://localhost:8000"   # or your portal URL
+export EDEN_API_KEY="sk_eden_…"
+export EDEN_ORG_ID="org_…"
+export EDEN_BASE_URL="https://api.edenobservability.com"   # cloud default
 ```
 
-## 4. Install the SDK
+The API key is per-org. You'll issue one per environment
+(`prod`, `staging`, `dev`) and rotate them from the portal's
+Settings → API Keys page.
 
-Python:
+## 2. Install the SDK
+
+Pick whichever matches your service. The two production SDKs both
+write to the same ingestion endpoint.
 
 ```bash
-pip install eden-ai
-```
+# Python
+pip install eden-sdk
 
-TypeScript:
-
-```bash
+# TypeScript / Node / Bun
 npm install @eden-ai/sdk
 ```
 
-## 5. Send your first trace
+## 3. Send your first trace
 
-Python:
+### Python
 
 ```python
 import os
 import eden
 
-eden.init(
+eden.configure(
     api_key=os.environ["EDEN_API_KEY"],
-    org_id=os.environ["EDEN_DEFAULT_ORG"],
-    base_url=os.environ.get("EDEN_BASE_URL", "https://api.eden.ai"),
+    org_id=os.environ["EDEN_ORG_ID"],
+    base_url=os.environ.get("EDEN_BASE_URL", "https://api.edenobservability.com"),
 )
 
-with eden.trace(name="hello-world") as t:
-    t.log("First Eden trace 🎉")
-    t.usage(input_tokens=10, output_tokens=20, model="gpt-4o-mini")
+# One call to auto-instrument every installed framework.
+eden.instrument()
+
+@eden.trace_agent(name="hello-world", tags=["quickstart"])
+def answer(question: str) -> str:
+    from openai import OpenAI
+    client = OpenAI()
+    resp = client.chat.completions.create(
+        model="gpt-4o-mini",
+        messages=[{"role": "user", "content": question}],
+    )
+    return resp.choices[0].message.content
+
+if __name__ == "__main__":
+    print(answer("Say hello in five languages"))
 ```
 
-TypeScript:
+### TypeScript
 
 ```ts
-import { init, trace } from "@eden-ai/sdk";
+import { configure, instrument, traceAgent } from "@eden-ai/sdk";
 
-init({
+configure({
   apiKey: process.env.EDEN_API_KEY!,
-  orgId: process.env.EDEN_DEFAULT_ORG!,
-  baseUrl: process.env.EDEN_BASE_URL ?? "https://api.eden.ai",
+  orgId: process.env.EDEN_ORG_ID!,
+  baseUrl: process.env.EDEN_BASE_URL,
 });
 
-await trace({ name: "hello-world" }, async (t) => {
-  t.log("First Eden trace 🎉");
-  t.usage({ inputTokens: 10, outputTokens: 20, model: "gpt-4o-mini" });
-});
+instrument(); // patches OpenAI, Anthropic, Vercel AI, LangChain
+
+class Greeter {
+  @traceAgent({ name: "hello-world", tags: ["quickstart"] })
+  async greet(question: string) {
+    const openai = (await import("openai")).default;
+    const client = new openai();
+    const resp = await client.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: [{ role: "user", content: question }],
+    });
+    return resp.choices[0].message.content;
+  }
+}
+
+new Greeter().greet("Say hello in five languages");
 ```
 
-## 6. See it in the dashboard
+### Go
 
-Open **[`/traces`](/traces)** in the portal. Your trace should appear
-within a second or two. Click it to drill into the timeline, see
-per-step latency / cost / token usage, and run an LLM judge on the
-output.
+```go
+package main
 
-> **Didn't show up?** Check the API key is for the right org, and
-> that `EDEN_BASE_URL` resolves from your machine. The portal's
-> Settings → Diagnostics page exposes the last 10 ingestion errors
-> for your org.
+import (
+    "context"
+    "os"
+    eden "github.com/eden-ai/eden-go"
+    "github.com/eden-ai/eden-go/openai"
+    openaipkg "github.com/sashabaranov/go-openai"
+)
+
+func main() {
+    eden.Configure(eden.ConfigFromEnv())
+
+    inner := openaipkg.NewClient(os.Getenv("OPENAI_API_KEY"))
+    client := openai.Wrap(inner)
+
+    resp, err := client.CreateChatCompletion(context.Background(), openaipkg.ChatCompletionRequest{
+        Model: openaipkg.GPT4oMini,
+        Messages: []openaipkg.ChatCompletionMessage{{
+            Role: openaipkg.ChatMessageRoleUser,
+            Content: "Say hello in five languages",
+        }},
+    })
+    if err != nil {
+        panic(err)
+    }
+    println(resp.Choices[0].Message.Content)
+}
+```
+
+### Rust
+
+```rust
+use eden::{openai, Client, Config};
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let cfg = Config::from_env()?;
+    let client = Client::new(cfg)?;
+
+    let response = openai::wrap(&client, "gpt-4o-mini", &serde_json::json!({
+        "choices": [{"message": {"role": "assistant", "content": "Hello"}}],
+    })).await?;
+
+    println!("{response}");
+    Ok(())
+}
+```
+
+## 4. See it in the portal
+
+Open the portal's **Traces** tab. Your trace appears within a second.
+Click into it to see the per-step latency, cost, tokens, model,
+prompt, and response.
+
+> **Not appearing?** Check the **Settings → Diagnostics** page — it
+> shows the last 10 ingestion errors for your org. Most are a wrong
+> org id (`X-Org-Id` header) or a typo in the API key.
 
 ## What's next
 
-- **[Auto-instrument your agent repo](./onboarding-pr-flow.md)** —
-  let Eden open a pull request that wires the SDK into a detected
-  LangChain / CrewAI / AutoGen / LlamaIndex / OpenAI / Anthropic
-  agent automatically.
-- **[Connect more integrations](./integrations/index.md)** — Slack
-  alerts, GitHub Actions, Helicone import, Langfuse import.
-- **[Set up cost budgets](./optimization/cost.md)** — get notified
-  before runaway agent loops burn through your budget.
-- **[Configure PII policy](./governance/pii-policy.md)** — what gets
-  redacted and what's allowed to land in the dashboard.
+- [Tutorial: auto-instrument a real OpenAI app](/tutorials/auto-instrument-openai)
+- [Tutorial: trace a multi-agent run](/tutorials/trace-multi-agent)
+- [Tutorial: judge a model output](/tutorials/judge-model-output)
+- [How-to: open the dashboard, build your first eval](/how-to/judges)
 
 ## Common gotchas
 
-- **`401 unauthorized`** — the API key is correct but the request is
-  missing `X-Org-Id`. The SDK sets this automatically; if you're
-  using raw `curl`, add `-H "X-Org-Id: $EDEN_DEFAULT_ORG"`.
-- **`429 too many requests`** — you've hit the default per-tenant
-  rate limit (60 req / 60s). Upgrade the org tier in Settings →
-  Billing, or batch requests via the SDK's auto-buffering.
-- **Traces look truncated** — ingestion enforces a 5 MiB body cap.
-  Either chunk the trace or pre-redact large payloads with the SDK's
-  `eden.redact(body)` helper.
+| Error | Cause | Fix |
+|-------|-------|-----|
+| `401 unauthorized` | Missing `X-Org-Id` header (raw `curl`) | SDKs set this automatically; otherwise add `-H "X-Org-Id: $EDEN_ORG_ID"` |
+| `429 too many requests` | Default per-tenant rate limit (60 req/60 s) | Upgrade the plan in Settings → Billing, or batch via the SDK's auto-buffering |
+| Trace truncated at 5 MiB | Ingestion body cap | Chunk the trace, or pre-redact with `eden.redact(body)` |
+| `org_id not found` | API key is for org A but request is scoped to org B | Issue per-env keys from the portal; never share keys across orgs |

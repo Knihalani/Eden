@@ -5,6 +5,7 @@ import { useOrg } from "@/hooks/use-org";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/components/ui/toast";
 import { NoOrgState } from "@/components/ui/no-org-state";
+import { PageHeader } from "@/components/layout/page-header";
 import {
   Gauge,
   Loader2,
@@ -240,19 +241,13 @@ export default function ApmPage() {
   }
 
   return (
-    <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-[var(--text-primary)] flex items-center gap-2">
-            <Gauge className="w-6 h-6 text-[var(--accent)]" />
-            APM Depth
-          </h1>
-          <p className="text-sm text-[var(--text-muted)] mt-1">
-            Tail sampling, per-step evaluation, and per-agent performance metrics
-          </p>
-        </div>
-      </div>
+    <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-6 page-enter">
+      <PageHeader
+        title="APM Depth"
+        subtitle="Tail sampling, per-step evaluation, and per-agent performance metrics"
+        icon={Gauge}
+        eyebrow="Observe"
+      />
 
       <Tabs defaultValue="sampling" className="w-full">
         <TabsList className="bg-[var(--bg-tertiary)] rounded-xl p-1 gap-1">

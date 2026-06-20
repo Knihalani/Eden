@@ -31,20 +31,6 @@ async def get_org_analytics(
     now = datetime.utcnow()
     start_date = now - timedelta(days=days)
 
-    # Job counts by day
-    job_counts_query = """
-        SELECT DATE(created_at) as day, COUNT(*) as count
-        FROM jobs
-        WHERE org_id = $1 AND created_at >= $2
-        GROUP BY DATE(created_at)
-        ORDER BY day ASC
-    """
-    job_counts_rows = await client.fetch(job_counts_query, org_id, start_date)
-    job_counts_by_day = [
-        {"date": row["day"].isoformat(), "count": row["count"]}
-        for row in job_counts_rows
-    ]
-
     # Reference uploads by day
     ref_uploads_query = """
         SELECT DATE(created_at) as day, COUNT(*) as count
@@ -106,7 +92,7 @@ async def get_org_analytics(
     ]
 
     return {
-        "job_counts_by_day": job_counts_by_day,
+        "job_counts_by_day": [],  # jobs feature removed June 2026
         "reference_uploads_by_day": reference_uploads_by_day,
         "active_members_count": active_members_count,
         "total_references": total_references,

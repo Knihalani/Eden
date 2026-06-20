@@ -83,7 +83,12 @@ def count_points(client: QdrantClient, collection: str) -> int:
 
 
 def scroll_all(client: QdrantClient, collection: str, batch: int = 100) -> list[Any]:
-    """Scroll every point in the collection. Returns a flat list."""
+    """Scroll every point in the collection. Returns a flat list.
+
+    Uses ``with_payload`` (singular) — the qdrant-client 1.7+ name.
+    Earlier versions used ``with_payloads`` (plural) which now
+    raises ``Unknown arguments``.
+    """
     points: list[Any] = []
     offset: Any = None
     while True:
@@ -92,7 +97,7 @@ def scroll_all(client: QdrantClient, collection: str, batch: int = 100) -> list[
             limit=batch,
             offset=offset,
             with_vectors=True,
-            with_payloads=True,
+            with_payload=True,
         )
         points.extend(batch_points)
         if next_offset is None:

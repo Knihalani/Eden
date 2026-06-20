@@ -27,9 +27,6 @@ logger = logging.getLogger(__name__)
 # Map URL path prefixes to the resource dimensions that should be checked.
 # A request may trigger checks for multiple resources.
 PATH_RESOURCE_MAP: dict[str, list[str]] = {
-    "/jobs": ["jobs"],
-    "/specs": ["jobs"],
-    "/benchmark": ["jobs"],
     "/orgs/": ["seats", "references"],  # org-scoped writes (members, refs, etc.)
 }
 
@@ -138,7 +135,7 @@ class QuotaEnforcementMiddleware(BaseHTTPMiddleware):
 
         headers: dict[str, str] = {}
 
-        for resource in ("jobs", "tokens", "storage_mb", "sandbox_seconds"):
+        for resource in ("tokens", "storage_mb", "sandbox_seconds"):
             res_data = budget.get(resource, {})
             used = res_data.get("used", 0)
             soft = res_data.get("soft_limit", 0)

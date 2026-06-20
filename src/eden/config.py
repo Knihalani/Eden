@@ -240,6 +240,23 @@ class Settings(BaseSettings):
     # promote it to a canary at this traffic percentage.
     # 0 disables auto-canary creation (variants stay inactive).
     evolver_auto_canary_pct: int = 5
+
+    # ── Object storage (Phase B1, 2026-06-19) ─────────────────────────
+    # Single-bucket object storage for the data platform
+    # (bronze/silver/datasets/cold archives, NDJSON exports, raw
+    # event archives). Phase B1 added Impossible Cloud as the
+    # default backend (€7.99/TB/mo flat, zero egress, EU-only).
+    #
+    # ``bronze_s3_bucket`` is the bucket name; the access key /
+    # secret / endpoint come from the EDEN_STORAGE_* trio below.
+    # Backwards-compat: if ``EDEN_STORAGE_BACKEND`` is unset or
+    # empty, the platform falls back to AWS S3 (legacy) using the
+    # AWS_* env vars.
+    bronze_s3_bucket: str = ""
+    eden_storage_backend: str = ""  # "" = AWS S3, "impossible_cloud" = Impossible Cloud
+    eden_storage_endpoint: str = ""  # S3 endpoint URL (empty for AWS)
+    eden_storage_access_key: str = ""
+    eden_storage_secret_key: str = ""
     # When True, the production monitor's hallucination judge uses
     # the configured LLM (model_reasoning) as a tiebreaker when
     # the heuristic is inconclusive. Off by default — the

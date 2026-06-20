@@ -6,47 +6,80 @@ sidebar_position: 99
 
 # What's new
 
-Track the recent changes to the Eden docs site.
+## v1.7 — June 2026
 
-## 2026-06-16 — Hero redesign + full standalone Docusaurus
+### Docs
 
-The docs site is now a fully standalone, properly-themed Docusaurus
-site. Only the logo in the navbar links back to the main site; everything
-else is internal.
+- **Massive docs overhaul.** Restructured around the Diátaxis
+  framework (tutorials / how-to / reference / explanation).
+  Replaced the ad-hoc guide tree with four dropdown sidebars
+  in the navbar.
+- **SDK reference** — full pages for the two production SDKs
+  (Python and TypeScript), plus an auto-instrumentation matrix
+  covering every framework the SDKs patch.
+- **REST API reference** — every endpoint that was previously
+  in `guide/api.md` is now in dedicated, navigable pages
+  (`/reference/api`, `/reference/api-ingestion`, `/reference/api-traces`,
+  `/reference/api-eval`, `/reference/api-cost`,
+  `/reference/api-organization`, `/reference/api-error-codes`).
+- **How-to guides** — auth, API keys, deploy, GitHub, PII policy,
+  cost budgets, auto-instrument, judges, custom LLM providers,
+  SSO, webhooks.
+- **Explanation pages** — architecture, data model, the 22
+  intelligence categories, security model, multi-tenancy,
+  sampling and retention.
 
-**New**
-- Hero landing page on `/` with badge, gradient title, 5-pillar grid,
-  6 productised-feature cards, 4 audience quick-link cards
-- 3 section landing pages with feature grids:
-  - [/guide](/guide) — Getting started, Architecture, Deployment, API
-  - [/observability](/observability) — 22-row status table
-  - [/operations](/operations) — Release, Reliability, Security, SOC 2, Runbooks
-- 404 page with terminal-style design
-- OpenGraph image for social previews
-- Announcement bar above the navbar (closeable)
-- "★ Star" GitHub button in the navbar
-- Last-updated timestamp + author on every page
-- Full SEO metadata (description, keywords, og:*, twitter:card)
+### Platform
 
-**Changed**
-- Logo in navbar now links to **https://edenobservability.com** (the only
-  back-link to the main site; everything else is internal)
-- Dark terminal theme matching the Eden portal (black/blue, monospace
-  headings, blue accents)
-- Footer expanded from 2 columns to 4 (Documentation / Product / Reference / Eden)
+- **Jobs feature removed.** The async env-gen "jobs" pipeline
+  (route handlers, pydantic models, DB tables, quota tracking,
+  RBAC permissions, SDK exports) has been retired. The
+  corresponding code, billing quotas, permissions, and docs
+  references have been deleted. The five SDKs that remain
+  (Python `eden-sdk`, TypeScript `@eden-ai/sdk`, Go `eden-go`,
+  Rust `eden-sdk`) all focus on the observability + ingestion
+  surface.
+- **Env-gen SDK packages deleted.** The `src/eden/sdk/` Python
+  module and `sdk/ts/` TypeScript package (both job-centric
+  clients) are gone. The remaining SDKs all live under their
+  top-level language folders in `sdk/`.
 
-**Fixed**
-- ~60 stale cross-doc links across the observability corpus
-- docIds for section landing pages (no more `guide/guide-index` weirdness)
-- YAML frontmatter in `13-predictive-intelligence.md` and `gap-roadmap.md`
-- Broken TOC anchor in `17-closed-loop-wiring.md`
+## v1.6 — June 2026
 
-**Removed**
-- 7 capital-case duplicate docs files
-- Stale `obs-gap/`, `runbooks/`, `legacy/` directories (all content now
-  under `docs/docs/{section}/`)
-- Footer link to the main site
+- Cat 23 (Autonomous Code Modification) STUB surface shipped:
+  21 services + 19 tables + 24 routes. Two-stage opt-in enforced.
+  Real end-to-end ship remains gated on the SLM Initiative.
 
-See `docs/CHANGELOG.md` in the source repo for the full
-machine-readable changelog (this page is the human-friendly
-version).
+## v1.5 — June 2026
+
+- Cat 14 (Autonomous Intelligence) shipped: 7 services for NL
+  queries, investigations, recommendations, and self-heal proposals.
+- Master observability doc bumped to v1.5 with 22 intelligence
+  categories, "what we do NOT build" transparency, and a
+  competitive matrix.
+
+## v1.4 — June 2026
+
+- Cat 22 (APM Depth + Tracing Depth) shipped: 5-keep-rule sampling,
+  tail sampling buffer, K8s enrichment, Pyroscope continuous profiling.
+
+## v1.3 — June 2026
+
+- Cat 19 (Trace Query DSL / EQL) and Cat 20 (Time-Travel Debug)
+  shipped. SQL-only EQL parser, per-step edit DSL.
+
+## v1.2 — June 2026
+
+- Cat 12 (Experimentation Intelligence) shipped: traffic splitter,
+  Bayesian recommender, replay-in-staging simulator.
+
+## v1.1 — June 2026
+
+- Cat 8 (Cost Intelligence), Cat 10 (Governance), Cat 11
+  (Outcome / ROI), Cat 13 (Predictive) shipped.
+
+## v1.0 — June 2026
+
+- The five SDKs (Python, TypeScript, Go, Rust, TS AI Runtime)
+  GA. Multi-format ingestion. Portal GA with 22 intelligence
+  surfaces.

@@ -19,20 +19,24 @@ export default function NotFound() {
             renamed, moved, or never shipped.
           </p>
           <div className="eden-404__cta">
-            <Link className="eden-btn eden-btn--primary" to="/intro/">
+            <Link className="eden-btn eden-btn--primary" to="/">
               ← Back to docs home
             </Link>
-            <Link className="eden-btn eden-btn--ghost" to="/observability/roadmap">
-              See what's shipping
+            <Link className="eden-btn eden-btn--ghost" to="/quickstart">
+              Get started
             </Link>
+            <a className="eden-btn eden-btn--ghost" href="https://edenobservability.com">
+              edenobservability.com ↗
+            </a>
           </div>
           <div className="eden-404__hints">
             <div className="eden-404__hint-label">Looking for something specific?</div>
             <ul>
-              <li><Link to="/guide/development">Getting started</Link></li>
-              <li><Link to="/guide/api">API reference</Link></li>
-              <li><Link to="/observability/">Observability categories</Link></li>
-              <li><Link to="/operations/">Operations runbooks</Link></li>
+              <li><Link to="/quickstart">Quickstart</Link></li>
+              <li><Link to="/tutorials/auto-instrument-openai">Auto-instrument tutorial</Link></li>
+              <li><Link to="/reference/api">REST API reference</Link></li>
+              <li><Link to="/reference/sdk-python">Python SDK</Link></li>
+              <li><Link to="/how-to/deploy">Deploy self-hosted</Link></li>
             </ul>
           </div>
         </div>

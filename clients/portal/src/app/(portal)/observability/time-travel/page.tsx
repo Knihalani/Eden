@@ -5,6 +5,7 @@ import { useOrg } from "@/hooks/use-org";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/components/ui/toast";
 import { NoOrgState } from "@/components/ui/no-org-state";
+import { PageHeader } from "@/components/layout/page-header";
 import {
   History,
   Loader2,
@@ -197,17 +198,12 @@ export default function TimeTravelPage() {
 
   return (
     <div className="p-4 sm:p-6 lg:p-8 max-w-5xl mx-auto space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-[var(--text-primary)] flex items-center gap-2">
-            <History className="w-6 h-6 text-[var(--accent)]" />
-            Time-Travel Debugging
-          </h1>
-          <p className="text-sm text-[var(--text-muted)] mt-1">
-            Fork at any step, edit state, replay from that point — non-destructive, original trace unchanged
-          </p>
-        </div>
+      <PageHeader
+        title="Time-Travel"
+        subtitle="Replay traces with point-in-time state restoration"
+        icon={History}
+        eyebrow="Observe"
+      />
         {recordingId && (
           <button
             onClick={resetAll}
@@ -217,7 +213,6 @@ export default function TimeTravelPage() {
             Reset
           </button>
         )}
-      </div>
 
       <div className="bg-[var(--accent-faint)]/50 border border-[var(--accent)]/20 rounded-xl px-4 py-2.5 flex items-center gap-2 text-xs text-[var(--text-secondary)]">
         <Info className="w-3.5 h-3.5 text-[var(--accent)] flex-shrink-0" />

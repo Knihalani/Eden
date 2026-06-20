@@ -122,12 +122,12 @@ async def _list_orgs_with_old_traces(archive: ArchiveService) -> list[str]:
         return []
     rows = await client.fetch(
         """
-        SELECT DISTINCT org_id FROM telemetry_events
+        SELECT DISTINCT tenant_id FROM telemetry_events
         WHERE timestamp < NOW() - INTERVAL '90 days'
         LIMIT 1000
         """
     )
-    return [r["org_id"] for r in rows]
+    return [r["tenant_id"] for r in rows]
 
 
 def main() -> int:

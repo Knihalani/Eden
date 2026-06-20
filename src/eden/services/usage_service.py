@@ -212,10 +212,10 @@ class UsageService:
         month_start = self._period_start(now, "month")
 
         # Aggregate actual usage from usage_events for the current month
+        # (jobs feature removed June 2026 — no longer tracked)
         usage_query = """
             SELECT
                 COALESCE(SUM(quantity) FILTER (WHERE event_type = 'llm_call'), 0) as tokens_used,
-                COALESCE(SUM(quantity) FILTER (WHERE event_type = 'job_start'), 0) as jobs_used,
                 COALESCE(SUM(quantity) FILTER (WHERE resource = 'storage_mb'), 0) as storage_mb_used,
                 COALESCE(SUM(quantity) FILTER (WHERE resource = 'sandbox_seconds'), 0) as sandbox_seconds_used,
                 COALESCE(SUM(cost_usd), 0) as total_cost_usd
@@ -226,17 +226,13 @@ class UsageService:
         usage_row = await client.fetchrow(usage_query, org_id, month_start)
 
         tokens_used = float(usage_row["tokens_used"]) if usage_row else 0.0
-        jobs_used = float(usage_row["jobs_used"]) if usage_row else 0.0
         storage_mb_used = float(usage_row["storage_mb_used"]) if usage_row else 0.0
         sandbox_seconds_used = float(usage_row["sandbox_seconds_used"]) if usage_row else 0.0
         total_cost_usd = float(usage_row["total_cost_usd"]) if usage_row else 0.0
 
-        # Use tier limits as the effective limits if the DB row has zeros or is missing values
         def _limit(val, fallback):
             return int(val) if val and int(val) > 0 else fallback
 
-        jobs_soft = _limit(limits.get("jobs_soft_limit"), tier.jobs_soft_limit)
-        jobs_hard = _limit(limits.get("jobs_hard_limit"), tier.jobs_hard_limit)
         tokens_soft = _limit(limits.get("tokens_soft_limit"), tier.tokens_soft_limit)
         tokens_hard = _limit(limits.get("tokens_hard_limit"), tier.tokens_hard_limit)
         storage_soft = _limit(limits.get("storage_mb_soft_limit"), tier.storage_mb_soft_limit)
@@ -267,13 +263,6 @@ class UsageService:
             "plan_name": plan_name,
             "period": "month",
             "period_start": month_start.isoformat(),
-            "jobs": {
-                "used": jobs_used,
-                "soft_limit": jobs_soft,
-                "hard_limit": jobs_hard,
-                "percentage": _pct(jobs_used, jobs_hard),
-                "status": _status(jobs_used, jobs_soft, jobs_hard),
-            },
             "tokens": {
                 "used": tokens_used,
                 "soft_limit": tokens_soft,

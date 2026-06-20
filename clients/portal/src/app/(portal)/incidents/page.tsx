@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { useOrg } from "@/hooks/use-org";
+import { rcaApi } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { EmptyState } from "@/components/ui/empty-state";
 import { NoOrgState } from "@/components/ui/no-org-state";
@@ -16,28 +17,6 @@ import {
   Zap,
 } from "lucide-react";
 import { useToast } from "@/components/ui/toast";
-
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-
-async function callApi<T>(endpoint: string, init: RequestInit = {}): Promise<T> {
-  const res = await fetch(`${API_BASE}${endpoint}`, {
-    credentials: "include",
-    headers: { "Content-Type": "application/json", ...(init.headers ?? {}) },
-    ...init,
-  });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({ detail: "Request failed" }));
-    throw new Error(err.detail || `HTTP ${res.status}`);
-  }
-  return res.json() as Promise<T>;
-}
-
-const rcaApi = {
-  listIncidents: (orgId: string) =>
-    callApi<{ incidents: Array<Record<string, unknown>>; }>(`/orgs/${orgId}/intelligence/rca/incidents`),
-  clusterIncidents: (orgId: string) =>
-    callApi<{ clusters: Array<Record<string, unknown>>; cluster_count: number; }>(`/orgs/${orgId}/intelligence/rca/incidents/cluster`, { method: "POST" }),
-};
 
 interface Incident {
   cluster_id: string;

@@ -34,8 +34,6 @@ class PlanLimits(BaseModel):
     seats_used: int
     references_limit: int
     references_used: int
-    jobs_limit: int
-    jobs_used: int
     active: bool
     stripe_subscription_id: str | None = None
     subscription_status: str | None = None
@@ -67,19 +65,16 @@ PLAN_DEFINITIONS = {
     "starter": {
         "seats_limit": 5,
         "references_limit": 50,
-        "jobs_limit": 100,
-        "price_monthly": 29,  # dollars
+        "price_monthly": 29,
     },
     "pro": {
         "seats_limit": 15,
         "references_limit": 200,
-        "jobs_limit": 500,
         "price_monthly": 79,
     },
     "enterprise": {
         "seats_limit": 50,
         "references_limit": 1000,
-        "jobs_limit": 2000,
         "price_monthly": 199,
     },
 }
@@ -118,12 +113,11 @@ async def sync_plan_usage(org_id: str) -> None:
     """Sync plan usage with actual counts."""
     client = await get_postgres_client()
 
-    # Use a single query with all three counts
+    # Single query for all usage counts
     query = """
         SELECT
             (SELECT COUNT(*) FROM org_members WHERE org_id = $1) as seats_used,
-            (SELECT COUNT(*) FROM code_references WHERE org_id = $1) as references_used,
-            (SELECT COUNT(*) FROM jobs WHERE org_id = $1) as jobs_used
+            (SELECT COUNT(*) FROM code_references WHERE org_id = $1) as references_used
     """
     row = await client.fetchrow(query, org_id)
 
@@ -131,12 +125,11 @@ async def sync_plan_usage(org_id: str) -> None:
         await client.execute(
             """
             UPDATE org_plans
-            SET seats_used = $1, references_used = $2, jobs_used = $3, updated_at = NOW()
-            WHERE org_id = $4 AND active = true
+            SET seats_used = $1, references_used = $2, updated_at = NOW()
+            WHERE org_id = $3 AND active = true
             """,
             row["seats_used"],
             row["references_used"],
-            row["jobs_used"],
             org_id,
         )
 
@@ -163,47 +156,41 @@ async def create_or_update_plan(org_id: str, plan_name: str) -> None:
         await client.execute(
             """
             UPDATE org_plans
-            SET plan_name = $1, seats_limit = $2, references_limit = $3, jobs_limit = $4, updated_at = NOW()
-            WHERE org_id = $5 AND active = true
+            SET plan_name = $1, seats_limit = $2, references_limit = $3, updated_at = NOW()
+            WHERE org_id = $4 AND active = true
             """,
             plan_name,
             plan_def["seats_limit"],
             plan_def["references_limit"],
-            plan_def["jobs_limit"],
             org_id,
         )
     else:
         # Create new plan
         await client.execute(
             """
-            INSERT INTO org_plans (org_id, plan_name, seats_limit, references_limit, jobs_limit, seats_used, references_used, jobs_used)
-            VALUES ($1, $2, $3, $4, $5, 0, 0, 0)
+            INSERT INTO org_plans (org_id, plan_name, seats_limit, references_limit, seats_used, references_used)
+            VALUES ($1, $2, $3, $4, 0, 0)
             """,
             org_id,
             plan_name,
             plan_def["seats_limit"],
             plan_def["references_limit"],
-            plan_def["jobs_limit"],
         )
 
 
 async def check_limit(
     org_id: str,
-    limit_type: str,  # 'seats', 'references', 'jobs'
+    limit_type: str,  # 'seats' or 'references'
 ) -> bool:
     """Check if org is at or over a limit. Returns True if limit exceeded."""
     plan = await get_org_plan(org_id)
     if not plan:
-        # No plan = unlimited (free tier)
-        return False
+        return False  # No plan = free tier (limited but untracked)
 
-    # Check directly without syncing first (sync is done lazily on plan view)
     if limit_type == "seats":
         return plan["seats_used"] >= plan["seats_limit"]
     elif limit_type == "references":
         return plan["references_used"] >= plan["references_limit"]
-    elif limit_type == "jobs":
-        return plan["jobs_used"] >= plan["jobs_limit"]
 
     return False
 
@@ -223,15 +210,12 @@ async def get_plans(org_id: str, user: dict = Depends(get_current_user)):
     plan = await get_org_plan(org_id)
 
     if not plan:
-        # Return default free plan
         return PlanLimits(
             plan_name="free",
             seats_limit=2,
             seats_used=0,
             references_limit=10,
             references_used=0,
-            jobs_limit=20,
-            jobs_used=0,
             active=True,
         )
 
@@ -241,8 +225,6 @@ async def get_plans(org_id: str, user: dict = Depends(get_current_user)):
         seats_used=plan["seats_used"],
         references_limit=plan["references_limit"],
         references_used=plan["references_used"],
-        jobs_limit=plan["jobs_limit"],
-        jobs_used=plan["jobs_used"],
         active=plan["active"],
         stripe_subscription_id=plan.get("stripe_subscription_id"),
         subscription_status=plan.get("subscription_status"),
@@ -317,7 +299,7 @@ async def subscribe(
                     "currency": "usd",
                     "product_data": {
                         "name": f"Eden {request.plan_name.title()} Plan",
-                        "description": f"{plan_def['seats_limit']} seats, {plan_def['references_limit']} references, {plan_def['jobs_limit']} jobs/month",
+                        "description": f"{plan_def['seats_limit']} seats, {plan_def['references_limit']} references",
                     },
                     "unit_amount": plan_def["price_monthly"] * 100,
                     "recurring": {"interval": "month"},

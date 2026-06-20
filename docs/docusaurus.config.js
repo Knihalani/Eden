@@ -1,28 +1,25 @@
 // @ts-check
 // Docusaurus config for the Eden docs site.
-// See https://docusaurus.io/docs/api/docusaurus-config
-
-// The Eden docs (especially the observability/ implementation write-ups)
-// routinely contain bare `<` characters — e.g. "<200ms p95",
-// "<$0.01 per call", "<https://github.com/...>" — that the MDX
-// parser reads as the start of a JSX tag and refuses to compile.
-// Plain Markdown would render them as text, but MDX requires us
-// to either escape them in the source (`\<200ms`) or process the
-// AST to neutralise them.
+// https://docusaurus.io/docs/api/docusaurus-config
 //
-// Rather than edit every prose file, we add a remark plugin that
-// walks the mdast text nodes and escapes any bare `<` not followed
-// by something that looks like a real HTML/JSX tag (a letter, !,
-// ?, or /). Real HTML tags like `<div>` and MDX components like
-// `<MyComponent>` pass through untouched.
-const {visit} = require('unist-util-visit');
+// Content is organised by the Diátaxis framework
+// (https://diataxis.fr/):
+//
+//   tutorials/      — learning-oriented, hands-on lessons
+//   how-to/         — task-oriented, goal-driven recipes
+//   reference/      — information-oriented API / CLI / config
+//   explanation/    — understanding-oriented deep dives
+//
+// Internal-only docs (observability cat write-ups, ops runbook,
+// gap-roadmap, judge-v2 plan) live under `docs/docs/` but are
+// excluded from the public build so the site ships only the
+// developer-facing material.
 
-/** @type {import('unified').Plugin} */
+const { visit } = require('unist-util-visit');
+
+/** Escape bare `<` so MDX doesn't choke on `<200ms` style text. */
 function remarkEscapeBareLt() {
   return (tree) => {
-    // Walk all node types and escape bare `<` in any `value` field
-    // (text nodes have `.value`, but some Docusaurus-specific nodes
-    // can carry markdown in other string fields).
     visit(tree, (node) => {
       if (typeof node.value === 'string') {
         node.value = node.value.replace(/<(?![a-zA-Z!?/])/g, '\\<');
@@ -33,29 +30,78 @@ function remarkEscapeBareLt() {
 
 /** @type {import('@docusaurus/types').Config} */
 const config = {
-  title: 'Eden',
-  tagline: 'AI-Native Environment Generation',
+  title: 'Eden Docs',
+  tagline: 'Observability, evaluation, governance for AI agents',
   favicon: 'img/favicon.ico',
 
-  url: 'https://docs.eden.example.com',
+  url: 'https://docs.edenobservability.com',
   baseUrl: '/',
 
   organizationName: 'eden',
   projectName: 'eden',
 
-  // The Docusaurus site has a `routeBasePath: '/'` so the docs
-  // tree serves from the site root. Docusaurus still auto-generates
-  // `to: '/'` links for the navbar logo + edit-this-page affordances
-  // that don't resolve to any individual doc, so the broken-link
-  // check fires for every page. `warn` lets the build pass; the
-  // links still work (the site's root IS the docs index).
+  // Inline client script that wires up the home-page install-snippet
+  // copy button. Vanilla JS, no framework. Runs once on DOMContentLoaded
+  // and again on any SPA route change (Docusaurus does soft navigations).
+  headTags: [
+    {
+      tagName: 'script',
+      attributes: { type: 'text/javascript' },
+      innerHTML: `
+(function () {
+  function wire() {
+    document.querySelectorAll('.eden-hero__install-copy').forEach(function (btn) {
+      if (btn.dataset.wired) return;
+      btn.dataset.wired = 'true';
+      btn.addEventListener('click', function () {
+        var wrap = btn.closest('.eden-hero__install');
+        var code = wrap && wrap.querySelector('.eden-hero__install-code');
+        if (!code) return;
+        var text = code.textContent.trim();
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(text);
+        } else {
+          var ta = document.createElement('textarea');
+          ta.value = text;
+          ta.setAttribute('readonly', '');
+          ta.style.position = 'absolute';
+          ta.style.left = '-9999px';
+          document.body.appendChild(ta);
+          ta.select();
+          try { document.execCommand('copy'); } catch (_) {}
+          document.body.removeChild(ta);
+        }
+        var prev = btn.textContent;
+        btn.textContent = 'copied';
+        btn.classList.add('copied');
+        setTimeout(function () {
+          btn.textContent = prev;
+          btn.classList.remove('copied');
+        }, 1400);
+      });
+    });
+  }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', wire);
+  } else {
+    wire();
+  }
+  var _push = history.pushState;
+  history.pushState = function () {
+    var r = _push.apply(this, arguments);
+    setTimeout(wire, 0);
+    return r;
+  };
+  window.addEventListener('popstate', function () { setTimeout(wire, 0); });
+})();
+      `,
+    },
+  ],
+
   onBrokenLinks: 'warn',
   onBrokenMarkdownLinks: 'warn',
 
-  i18n: {
-    defaultLocale: 'en',
-    locales: ['en'],
-  },
+  i18n: { defaultLocale: 'en', locales: ['en'] },
 
   presets: [
     [
@@ -67,33 +113,9 @@ const config = {
           routeBasePath: '/',
           sidebarPath: 'sidebars.js',
           remarkPlugins: [remarkEscapeBareLt],
-          // Internal docs that are NOT part of the public site.
-          // The public sidebar (sidebars.js) only references
-          // developer-facing content. Everything below is kept on
-          // disk for internal reference but excluded from the
-          // build so the public site only ships the 5 developer
-          // pages: Home, Quickstart, Guide, Reference, Changelog.
-          //
-          //   docs/docs/observability/*  — 23 cat implementation
-          //     write-ups (Cat 1 — Trace Replay, …, Cat 22 — APM
-          //     Depth). Internal roadmap status docs.
-          //   docs/docs/operations/*     — Internal runbook
-          //     (security, oncall, SLO, KB audit, etc.).
-          //   docs/docs/observability/gap-roadmap.md
-          //   docs/docs/observability/judge-v2-plan.md
-          //     Status docs with too many MDX-hostile `<200ms`
-          //     patterns for the remark plugin to neutralise.
-          //   docs/docs/observability/40-dataset-spreadsheet.md
-          //   docs/docs/observability/41-prompt-management-playground.md
-          //     `# {json}` and `{{name}}` examples that the MDX
-          //     runtime still tries to evaluate as JSX even inside
-          //     code fences. Rewrite needed.
-          //   docs/docs/reference/eden-agent-cli-roadmap.md
-          //     Outdated (June 6) pre-retirement roadmap; kept on
-          //     disk for historical reference.
           exclude: [
-            'docs/docs/observability/**',
-            'docs/docs/operations/**',
+            'docs/observability/**',
+            'docs/operations/**',
             '**/gap-roadmap.md',
             '**/judge-v2-plan.md',
             '**/40-dataset-spreadsheet.md',
@@ -102,9 +124,7 @@ const config = {
           ],
         },
         blog: false,
-        theme: {
-          customCss: 'src/css/custom.css',
-        },
+        theme: { customCss: 'src/css/custom.css' },
       }),
     ],
   ],
@@ -113,55 +133,70 @@ const config = {
     /** @type {import('@docusaurus/preset-classic').ThemeConfig} */
     ({
       navbar: {
-        title: 'Eden',
+        // Logo + brand text, linking back to the main Eden site.
+        // The docs are a sub-product — the logo is the escape hatch
+        // back to edenobservability.com (portal, pricing, marketing).
+        logo: {
+          alt: 'Eden — back to edenobservability.com',
+          src: 'img/logo.svg',
+          srcDark: 'img/logo.svg',
+          href: 'https://edenobservability.com',
+          target: '_self',
+          height: 28,
+        },
+        title: 'Eden Docs',
         items: [
-          {
-            type: 'doc',
-            docId: 'quickstart',
-            position: 'left',
-            label: 'Quickstart',
-          },
-          {
-            type: 'doc',
-            docId: 'intro/index',
-            position: 'left',
-            label: 'Docs',
-          },
-          {
-            href: 'https://github.com/eden/eden',
-            label: 'GitHub',
-            position: 'right',
-          },
+          { type: 'doc', docId: 'intro/index', position: 'left', label: 'Home' },
+          { type: 'doc', docId: 'quickstart', position: 'left', label: 'Quickstart' },
+          { type: 'docSidebar', sidebarId: 'tutorials', position: 'left', label: 'Tutorials' },
+          { type: 'docSidebar', sidebarId: 'howto', position: 'left', label: 'How-to' },
+          { type: 'docSidebar', sidebarId: 'reference', position: 'left', label: 'Reference' },
+          { href: 'https://edenobservability.com', label: '← edenobservability.com', position: 'right', className: 'navbar-back-link' },
+          { href: 'https://github.com/eden/eden', label: 'GitHub', position: 'right' },
         ],
       },
       footer: {
         style: 'dark',
         links: [
           {
-            title: 'Docs',
+            title: 'Get started',
             items: [
-              { label: 'Home', to: '/intro/' },
+              { label: 'Home', to: '/' },
               { label: 'Quickstart', to: '/quickstart' },
-              { label: 'Development', to: '/guide/development' },
-              { label: 'Architecture', to: '/guide/architecture' },
-              { label: 'Deployment', to: '/guide/deployment' },
-              { label: 'API', to: '/guide/api' },
-              { label: 'Observability', to: '/observability/' },
-              { label: 'Operations', to: '/operations/' },
             ],
           },
           {
-            title: 'More',
+            title: 'Tutorials',
             items: [
-              { label: 'API reference', to: '/guide/api' },
-              { label: 'GitHub', href: 'https://github.com/eden/eden' },
+              { label: 'Auto-instrument OpenAI', to: '/tutorials/auto-instrument-openai' },
+              { label: 'Trace a multi-agent run', to: '/tutorials/trace-multi-agent' },
+              { label: 'Judge a model output', to: '/tutorials/judge-model-output' },
+            ],
+          },
+          {
+            title: 'How-to',
+            items: [
+              { label: 'Set up auth', to: '/how-to/auth' },
+              { label: 'Deploy self-hosted', to: '/how-to/deploy' },
+              { label: 'Connect GitHub', to: '/how-to/github' },
+              { label: 'Set PII policy', to: '/how-to/pii' },
+            ],
+          },
+          {
+            title: 'Reference',
+            items: [
+              { label: 'Python SDK', to: '/reference/sdk-python' },
+              { label: 'TypeScript SDK', to: '/reference/sdk-typescript' },
+              { label: 'REST API', to: '/reference/api' },
+              { label: 'CLI', to: '/reference/cli' },
+              { label: 'Configuration', to: '/reference/configuration' },
             ],
           },
         ],
         copyright: `Copyright © ${new Date().getFullYear()} Eden contributors. Built with Docusaurus.`,
       },
       prism: {
-        additionalLanguages: ['python', 'typescript', 'bash', 'sql', 'yaml'],
+        additionalLanguages: ['python', 'typescript', 'bash', 'sql', 'yaml', 'json', 'rust', 'go'],
       },
     }),
 };

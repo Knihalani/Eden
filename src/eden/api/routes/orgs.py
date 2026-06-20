@@ -661,11 +661,7 @@ async def delete_org(org_id: str, user: dict = Depends(get_current_user)):
 
     client = await get_postgres_client()
 
-    # Check for existing data
-    job_count = await client.fetchval(
-        "SELECT COUNT(*) FROM jobs WHERE org_id = $1",
-        org_id,
-    )
+    # Check for existing data (jobs feature removed June 2026)
     skill_count = await client.fetchval(
         "SELECT COUNT(*) FROM skills WHERE org_id = $1",
         org_id,
@@ -675,11 +671,11 @@ async def delete_org(org_id: str, user: dict = Depends(get_current_user)):
         org_id,
     )
 
-    total_data = (job_count or 0) + (skill_count or 0) + (ref_count or 0)
+    total_data = (skill_count or 0) + (ref_count or 0)
     if total_data > 0:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Cannot delete org with existing data: {job_count} jobs, {skill_count} skills, {ref_count} code references. Remove all data first.",
+            detail=f"Cannot delete org with existing data: {skill_count} skills, {ref_count} code references. Remove all data first.",
         )
 
     # Verify no archived_at (must be actively deleted)

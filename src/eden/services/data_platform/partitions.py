@@ -1,9 +1,17 @@
-"""Postgres native partition manager (Phase B5).
+"""Postgres partition manager (Phase B5).
 
-:class:`PartitionManager` — ensures that ``usage_events`` (and
-any other natively-partitioned Eden tables) have forward-looking
-partitions and drop expired ones. Called by the daily retention
-cron.
+:class:`PartitionManager` — ensures that natively-partitioned
+Eden tables have forward-looking partitions and drop expired
+ones. Called by the daily retention cron.
+
+TimescaleDB hypertables (``telemetry_events``, ``judge_scores``,
+``usage_events`` since migration 042) self-manage chunks via
+Timescale's background worker — no manual partition management
+needed. They are excluded from the managed list below.
+
+Native Postgres partitions (e.g. ``app_events`` from migration
+036) DO need this manager. After Phase B5, ``app_events`` is the
+only remaining natively-partitioned time-series table.
 
 Why a manager, not pg_partman
 ----------------------------
@@ -41,12 +49,14 @@ DEFAULT_FORWARD_MONTHS: int = 3
 
 
 # Tables under management. Each entry: (table, time_column).
-# ``usage_events`` is the only natively-partitioned time-series
-# table left after Phase B5 (telemetry_events + judge_scores are
-# Timescale hypertables; app_events was already partitioned in
-# migration 036).
+# Only natively-partitioned tables go here. Timescale hypertables
+# (``telemetry_events``, ``judge_scores``, ``usage_events`` since
+# migration 042) self-manage chunks via Timescale's background
+# worker — they're excluded.
+# After Phase B5, ``app_events`` is the only natively-partitioned
+# time-series table the manager needs to handle.
 MANAGED_TABLES: list[tuple[str, str]] = [
-    ("usage_events", "created_at"),
+    ("app_events", "ts"),
 ]
 
 
@@ -154,7 +164,6 @@ class PartitionManager:
             datetime.now(UTC).replace(day=1, hour=0, minute=0, second=0, microsecond=0),
             -self.retention_months,
         )
-        cutoff_iso = cutoff.isoformat()
 
         # Discover existing partitions for this table.
         rows = await client.fetch(
