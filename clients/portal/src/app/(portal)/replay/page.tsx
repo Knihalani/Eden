@@ -313,7 +313,18 @@ export default function ReplayPage() {
       )}
 
       {/* Tabs */}
-      <div className="flex items-center gap-1 bg-[var(--bg-primary)] border border-[var(--border-default)] rounded-lg p-1 mb-6 w-fit">
+      <div
+        role="tablist"
+        aria-label="Replay view"
+        className="flex items-center gap-1 bg-[var(--bg-primary)] border border-[var(--border-default)] rounded-lg p-1 mb-6 w-fit"
+        onKeyDown={(e) => {
+          if (e.key !== "ArrowRight" && e.key !== "ArrowLeft") return;
+          const order: TabKey[] = ["timeline", "events", "hilt"];
+          const idx = order.indexOf(activeTab);
+          const next = e.key === "ArrowRight" ? (idx + 1) % order.length : (idx - 1 + order.length) % order.length;
+          setActiveTab(order[next]);
+        }}
+      >
         {([
           { key: "timeline" as TabKey, label: "Timeline", icon: BarChart3 },
           { key: "events" as TabKey, label: `Events (${totalEvents})`, icon: Layers },
@@ -323,6 +334,10 @@ export default function ReplayPage() {
           return (
             <button
               key={tab.key}
+              role="tab"
+              aria-selected={activeTab === tab.key}
+              aria-controls={`replay-panel-${tab.key}`}
+              id={`replay-tab-${tab.key}`}
               onClick={() => setActiveTab(tab.key)}
               className={cn(
                 "flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-colors",

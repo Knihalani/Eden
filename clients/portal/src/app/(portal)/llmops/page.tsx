@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils";
 import { StatCard } from "@/components/ui/stat-card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { NoOrgState } from "@/components/ui/no-org-state";
+import { PageHeader } from "@/components/layout/page-header";
 import {
   Cpu,
   Box,
@@ -70,25 +71,16 @@ export default function LLMOpsPage() {
   }
 
   return (
-    // ponytail: min-h-full (was min-h-screen) so the page fills the
-    // available main area instead of pushing the portal flex row past
-    // the viewport. The (portal)/layout wraps <main> in overflow-auto
-    // + min-h-0, so a child `min-h-screen` would force a second scroll
-    // bar. June 2026 UI overhaul.
-    <div className="min-h-full bg-[var(--bg-secondary)]">
-      {/* Header */}
-      <div className="bg-[var(--bg-primary)] border-b border-[var(--border-default)] px-6 py-6">
-        <div className="flex items-center gap-3 mb-1">
-          <Cpu className="w-6 h-6 text-[var(--accent)]" />
-          <h1 className="text-2xl font-bold text-[var(--text-primary)]">LLMOps & Experiments</h1>
-        </div>
-        <p className="text-sm text-[var(--text-muted)] ml-9">
-          Model registry, prompt management, experiment tracking, and production monitoring
-        </p>
-      </div>
+    <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-6 page-enter">
+      <PageHeader
+        title="LLMOps & Experiments"
+        subtitle="Model registry, prompt management, experiment tracking, and production monitoring"
+        icon={Cpu}
+        eyebrow="Operate"
+      />
 
       {/* Tab Navigation */}
-      <div className="bg-[var(--bg-primary)] border-b border-[var(--border-default)]">
+      <div className="border-b border-[var(--border-default)] -mx-4 sm:-mx-6 lg:-mx-8 px-4 sm:px-6 lg:px-8">
         <div className="flex overflow-x-auto scrollbar-hide">
           {TABS.map((tab) => {
             const Icon = tab.icon;
@@ -128,34 +120,26 @@ export default function LLMOpsPage() {
         </div>
       </div>
 
-      {/* Content */}
-      <div className="p-6 max-w-7xl mx-auto">
-        {error && (
-          <div className="bg-[var(--error-bg)] text-[var(--error)] text-sm px-4 py-3 rounded-xl flex items-center gap-2.5 border border-[var(--error-border)] mb-6">
-            <AlertCircle className="w-4 h-4" />
-            {error}
-          </div>
-        )}
+      {error && (
+        <div className="bg-[var(--error-bg)] text-[var(--error)] text-sm px-4 py-3 rounded-xl flex items-center gap-2.5 border border-[var(--error)]/20">
+          <AlertCircle className="w-4 h-4 flex-shrink-0" />
+          {error}
+        </div>
+      )}
 
-        {!orgId ? (
-          <div className="text-center py-20">
-            <Cpu className="w-10 h-10 mx-auto mb-3 text-[var(--text-muted)]" />
-            <p className="text-[var(--text-muted)] text-sm">Select an organization to view LLMOps data</p>
-          </div>
-        ) : (
-          <>
-            <div role="tabpanel" id={`llmops-panel-${activeTab}`} aria-labelledby={`llmops-tab-${activeTab}`}>
-              {activeTab === "models" && <ModelsTab orgId={orgId} />}
-              {activeTab === "prompts" && <PromptsTab orgId={orgId} />}
-              {activeTab === "experiments" && <ExperimentsTab orgId={orgId} />}
-              {activeTab === "abtests" && <ABTestsTab orgId={orgId} />}
-              {activeTab === "gateway" && <GatewayTab orgId={orgId} />}
-              {activeTab === "monitoring" && <MonitoringTab orgId={orgId} />}
-              {activeTab === "cache" && <CacheTab orgId={orgId} />}
-            </div>
-          </>
-        )}
-      </div>
+      {!orgId ? (
+        <NoOrgState feature="LLMOps" icon={Cpu} description="Select an organization to view LLMOps data" />
+      ) : (
+        <div role="tabpanel" id={`llmops-panel-${activeTab}`} aria-labelledby={`llmops-tab-${activeTab}`}>
+          {activeTab === "models" && <ModelsTab orgId={orgId} />}
+          {activeTab === "prompts" && <PromptsTab orgId={orgId} />}
+          {activeTab === "experiments" && <ExperimentsTab orgId={orgId} />}
+          {activeTab === "abtests" && <ABTestsTab orgId={orgId} />}
+          {activeTab === "gateway" && <GatewayTab orgId={orgId} />}
+          {activeTab === "monitoring" && <MonitoringTab orgId={orgId} />}
+          {activeTab === "cache" && <CacheTab orgId={orgId} />}
+        </div>
+      )}
     </div>
   );
 }

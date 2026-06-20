@@ -6,7 +6,7 @@ import { usePermissions } from "@/hooks/use-permissions";
 import { useToast } from "@/components/ui/toast";
 import { useConfirm } from "@/hooks/use-confirm";
 import { api } from "@/lib/api";
-import { SettingsCard } from "@/components/ui/settings-card";
+import { SettingsCard } from "@/components/settings/settings-card";
 import { EmptyState } from "@/components/ui/empty-state";
 import type { CodeReference, Organization } from "@/lib/types";
 

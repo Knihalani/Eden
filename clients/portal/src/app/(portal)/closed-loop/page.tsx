@@ -4,6 +4,8 @@ import { useEffect, useState, useCallback } from "react";
 import { useOrg } from "@/hooks/use-org";
 import { closedLoopApi } from "@/lib/api";
 import { Button } from "@/components/ui/button";
+import { EmptyState } from "@/components/ui/empty-state";
+import { NoOrgState } from "@/components/ui/no-org-state";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/components/ui/toast";
 import { useConfirm } from "@/hooks/use-confirm";
@@ -116,11 +118,7 @@ export default function ClosedLoopPage() {
   };
 
   if (!currentOrg) {
-    return (
-      <div className="p-6 text-sm text-[var(--text-muted)]">
-        Select an organization to view closed-loop actions.
-      </div>
-    );
+    return <NoOrgState feature="Closed-Loop Actions" icon={Inbox} description="Select an organization to review automated promotion recommendations" />;
   }
 
   return (
@@ -247,8 +245,8 @@ function ActionList({
 }) {
   if (actions.length === 0) {
     return (
-      <div className="rounded-lg border border-dashed border-[var(--border)] bg-[var(--bg-primary)] p-12 text-center text-sm text-[var(--text-muted)]">
-        {emptyMessage}
+      <div className="bg-[var(--bg-primary)] border border-[var(--border-default)] border-dashed rounded-xl">
+        <EmptyState icon={Inbox} title={emptyMessage} description="Actions will appear here once the promotion loop fires" />
       </div>
     );
   }

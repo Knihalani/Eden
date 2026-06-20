@@ -32,6 +32,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { PRStatusBadge } from "@/components/ui/status-badge";
+import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/components/ui/toast";
 import { EmptyState } from "@/components/ui/empty-state";
 import { PageHeader } from "@/components/layout/page-header";
@@ -75,23 +76,23 @@ function relativeTime(iso: string): string {
 function SkeletonCard() {
   return (
     <Card className="border-[var(--border-default)] bg-[var(--bg-base)]">
-      <div className="p-5 space-y-3 animate-pulse">
+      <div className="p-5 space-y-3">
         <div className="flex items-center justify-between">
-          <div className="h-5 bg-[var(--bg-tertiary)] rounded w-24" />
-          <div className="h-5 bg-[var(--bg-tertiary)] rounded w-20" />
+          <Skeleton className="h-5 w-24" />
+          <Skeleton className="h-5 w-20" />
         </div>
         <div className="space-y-2">
-          <div className="h-4 bg-[var(--bg-tertiary)] rounded w-full" />
-          <div className="h-3 bg-[var(--bg-tertiary)] rounded w-4/5" />
+          <Skeleton className="h-4 w-full" />
+          <Skeleton className="h-3 w-4/5" />
         </div>
         <div className="flex gap-1">
-          <div className="h-4 bg-[var(--bg-tertiary)] rounded w-16" />
-          <div className="h-4 bg-[var(--bg-tertiary)] rounded w-12" />
-          <div className="h-4 bg-[var(--bg-tertiary)] rounded w-20" />
+          <Skeleton className="h-4 w-16" />
+          <Skeleton className="h-4 w-12" />
+          <Skeleton className="h-4 w-20" />
         </div>
         <div className="flex justify-between">
-          <div className="h-3 bg-[var(--bg-tertiary)] rounded w-20" />
-          <div className="h-3 bg-[var(--bg-tertiary)] rounded w-16" />
+          <Skeleton className="h-3 w-20" />
+          <Skeleton className="h-3 w-16" />
         </div>
       </div>
     </Card>

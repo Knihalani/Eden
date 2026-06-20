@@ -30,6 +30,7 @@ import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { StatCard } from "@/components/ui/stat-card";
 import { PageHeader } from "@/components/layout/page-header";
+import { EmptyState } from "@/components/ui/empty-state";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -433,9 +434,10 @@ export default function SandboxPage() {
           </div>
         ) : sessions.length === 0 ? (
           <EmptyState
-            icon={<Terminal className="w-8 h-8" />}
+            icon={Terminal}
             title="No active sessions"
             description="Create a sandbox session to start testing Eden APIs."
+            size="lg"
             action={
               <button
                 onClick={handleCreateSession}
@@ -467,10 +469,25 @@ export default function SandboxPage() {
       {activeSession && (
         <div>
           {/* Tab bar */}
-          <div className="flex items-center gap-1 mb-4 border-b border-[var(--border-default)]">
+          <div
+            role="tablist"
+            aria-label="Sandbox session view"
+            className="flex items-center gap-1 mb-4 border-b border-[var(--border-default)]"
+            onKeyDown={(e) => {
+              if (e.key !== "ArrowRight" && e.key !== "ArrowLeft") return;
+              const order = ["playground", "logs", "docs"] as const;
+              const idx = order.indexOf(activeTab);
+              const next = e.key === "ArrowRight" ? (idx + 1) % order.length : (idx - 1 + order.length) % order.length;
+              setActiveTab(order[next]);
+            }}
+          >
             {(["playground", "logs", "docs"] as const).map((tab) => (
               <button
                 key={tab}
+                role="tab"
+                aria-selected={activeTab === tab}
+                aria-controls={`sandbox-panel-${tab}`}
+                id={`sandbox-tab-${tab}`}
                 onClick={() => setActiveTab(tab)}
                 className={cn(
                   "px-4 py-2.5 text-sm font-medium border-b-2 transition-colors capitalize",
@@ -1010,27 +1027,6 @@ function DocStat({ label, value }: { label: string; value: string }) {
     <div className="bg-[var(--bg-secondary)] border border-[var(--border-default)] rounded-lg p-3 text-center">
       <p className="text-lg font-bold text-[var(--text-primary)]">{value}</p>
       <p className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider mt-1">{label}</p>
-    </div>
-  );
-}
-
-function EmptyState({
-  icon,
-  title,
-  description,
-  action,
-}: {
-  icon: React.ReactNode;
-  title: string;
-  description: string;
-  action?: React.ReactNode;
-}) {
-  return (
-    <div className="bg-[var(--bg-primary)] border border-[var(--border-default)] border-dashed rounded-xl p-8 text-center">
-      <div className="text-[var(--text-muted)] mb-3">{icon}</div>
-      <p className="text-sm font-medium text-[var(--text-primary)]">{title}</p>
-      <p className="text-xs text-[var(--text-muted)] mt-1">{description}</p>
-      {action}
     </div>
   );
 }
