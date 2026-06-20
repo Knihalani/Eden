@@ -256,6 +256,29 @@ spec:
         secretKeyRef:
           group: eden-required
           key: SESSION_SECRET
+    # ── Clerk (portal auth provider, June 2026 cutover) ────────
+    # CLERK_SECRET_KEY is the live secret key for the Clerk instance
+    # hosting the portal — must be the SAME value as the one set on
+    # Vercel for the portal (NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY is
+    # paired with this key). Without it the FastAPI side of the auth
+    # chain can't verify Clerk session JWTs forwarded by the portal's
+    # /api/proxy catch-all route.
+    # CLERK_JWKS_URL is the public-key endpoint for that instance.
+    # CLERK_PUBLISHABLE_KEY is the client-side key (intentionally
+    # public) — only used here to auto-derive the JWKS URL when
+    # CLERK_JWKS_URL is empty.
+    - name: CLERK_SECRET_KEY
+      valueFrom:
+        secretKeyRef:
+          group: eden-required
+          key: CLERK_SECRET_KEY
+    - name: CLERK_PUBLISHABLE_KEY
+      valueFrom:
+        secretKeyRef:
+          group: eden-required
+          key: CLERK_PUBLISHABLE_KEY
+    - name: CLERK_JWKS_URL
+      value: https://clerk.edenobservability.com/.well-known/jwks.json
     - name: OPENROUTER_API_KEY
       valueFrom:
         secretKeyRef:

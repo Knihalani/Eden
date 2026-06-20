@@ -21,12 +21,15 @@ export function WelcomeStep(_ctx: WizardContext) {
   async function goNext() {
     if (currentOrg?.id) {
       try {
-        await onboardingApi.patchState(currentOrg.id, { step: "org_setup" });
+        // The autonomous-disclosure step is the next page in
+        // the flow. ``step`` is set to "autonomous" so a
+        // refresh resumes at the right place.
+        await onboardingApi.patchState(currentOrg.id, { step: "autonomous" });
       } catch {
         // best-effort
       }
     }
-    router.push("/onboarding/org");
+    router.push("/onboarding/autonomous");
   }
 
   return (

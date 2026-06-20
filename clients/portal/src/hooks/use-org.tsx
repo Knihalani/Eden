@@ -18,6 +18,9 @@ interface OrgContextType {
   organizations: Organization[];
   setCurrentOrg: (org: Organization | null) => void;
   refreshOrgs: () => Promise<void>;
+  /** Alias for ``refreshOrgs`` — kept for backwards compat with
+   *  onboarding code that uses the shorter name. */
+  refreshOrg: () => Promise<void>;
   loading: boolean;
   /** Non-fatal auth error (e.g. 401 from /api/proxy/auth/me). When set,
    *  the consuming page should render a "Session expired" card with a
@@ -147,6 +150,7 @@ export function OrgProvider({ children }: { children: ReactNode }) {
         organizations,
         setCurrentOrg,
         refreshOrgs,
+        refreshOrg: refreshOrgs,
         loading,
         authError,
         clearAuthError: () => setAuthError(null),

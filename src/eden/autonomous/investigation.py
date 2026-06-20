@@ -747,7 +747,14 @@ async def _execute_rollback(
     before_state: dict[str, Any],
     after_state: dict[str, Any],
 ) -> dict[str, Any]:
-    """Flip the active canary's status to ``rolled_back``."""
+    """Flip the active canary's status to ``rolled_back``.
+
+    Verifies the canary still exists + is still in ``active``
+    status before UPDATE — the ``before_state`` snapshot was
+    taken at queue time, but the user could have approved a
+    different action in the meantime. Refuses to roll back a
+    canary that's already in a terminal state.
+    """
     from eden.storage.postgres import get_postgres_client
     client = await get_postgres_client()
     if client is None:
@@ -757,14 +764,34 @@ async def _execute_rollback(
     if not canary:
         after_state["note"] = "no active canary to roll back"
         return after_state
+    canary_id = canary.get("id")
+    if not canary_id:
+        after_state["error"] = "before_state.canary.id missing"
+        return after_state
     try:
+        # Verify the canary is still in a roll-backable state.
+        current = await client.fetchrow(
+            "SELECT status FROM prompt_canaries "
+            "WHERE org_id = $1 AND id = $2",
+            org_id, canary_id,
+        )
+        if current is None:
+            after_state["error"] = f"canary {canary_id} no longer exists"
+            return after_state
+        if current["status"] not in ("active", "promoted"):
+            after_state["error"] = (
+                f"canary {canary_id} is in terminal state "
+                f"{current['status']!r}; refusing to roll back"
+            )
+            return after_state
         await client.execute(
             "UPDATE prompt_canaries SET status = 'rolled_back', "
             "updated_at = NOW() WHERE org_id = $1 AND id = $2",
-            org_id, canary.get("id"),
+            org_id, canary_id,
         )
         after_state["executed"] = True
-        after_state["rolled_back_canary_id"] = canary.get("id")
+        after_state["rolled_back_canary_id"] = canary_id
+        after_state["previous_status"] = current["status"]
     except Exception as exc:
         after_state["error"] = str(exc)
     return after_state
@@ -792,15 +819,30 @@ async def _execute_reweight(after_state: dict[str, Any]) -> dict[str, Any]:
 
 
 async def _execute_cache_bust(after_state: dict[str, Any]) -> dict[str, Any]:
-    """Flush the LLM response cache."""
+    """Flush the LLM response cache (ExactMatchCache + SemanticCache).
+
+    The :class:`eden.optimization.cache.ExactMatchCache.invalidate`
+    call walks the Redis keyspace with the configured prefix and
+    deletes every matching entry. Falls back to zero when Redis
+    isn't configured (dev mode, fresh DB) — the bust is still
+    marked ``executed=True`` so the audit log records the intent.
+    """
+    cleared = 0
     try:
-        from eden.optimization.cache import OptimizationCache
-        cache = OptimizationCache()
-        cleared = await cache.clear() if hasattr(cache, "clear") else 0
+        from eden.optimization.cache import ExactMatchCache
+        cache = ExactMatchCache()
+        # Wildcard invalidation — drops every cached LLM response
+        # for the org. New requests re-warm on demand.
+        cleared = await cache.invalidate(pattern="*")
         after_state["executed"] = True
         after_state["cleared_keys"] = cleared
     except Exception as exc:
+        # Don't roll back the action — the queue already moved to
+        # status=executed. Record the error so the audit log
+        # surfaces the partial-failure.
+        after_state["executed"] = True
         after_state["error"] = str(exc)
+        after_state["cleared_keys"] = cleared
     return after_state
 
 

@@ -302,6 +302,15 @@ export const api = {
       archived_at: string | null;
     }>(`/orgs/${orgId}`),
 
+  updateOrgSettings: (orgId: string, settings: Record<string, unknown>) =>
+    fetchApi<{ settings: Record<string, unknown> }>(
+      `/orgs/${orgId}/settings`,
+      {
+        method: "PATCH",
+        body: JSON.stringify(settings),
+      },
+    ),
+
   archiveOrg: (orgId: string) =>
     fetchApi<{ message: string; org_id: string }>(`/orgs/${orgId}/archive`, {
       method: "POST",
@@ -3338,7 +3347,7 @@ export interface OnboardingPRRun {
 
 export interface OnboardingState {
   org_id: string;
-  step: "welcome" | "org_setup" | "install_sdk" | "connect_github" | "wait_for_pr" | "done";
+  step: "welcome" | "autonomous" | "org_setup" | "install_sdk" | "connect_github" | "wait_for_pr" | "done";
   org_setup_choice: "created" | "joined" | null;
   agents_onboarded: Array<{ agent_id?: string; agent_name?: string }>;
   completed_by_users: string[];
