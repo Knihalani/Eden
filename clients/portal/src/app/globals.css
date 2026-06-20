@@ -45,6 +45,10 @@
   --primary-light: #0F1F33;
   --primary-foreground: #03060A;
 
+  /* Accent Purple — used by Badge purple variant + chart-pie-4. */
+  --accent-purple: #C084FC;
+  --accent-purple-bg: rgba(192, 132, 252, 0.15);
+
   /* Semantic — terminal-themed */
   --success: #5FE5A8;
   --success-bg: #0F1F18;
@@ -203,6 +207,8 @@
   --color-accent-faint: var(--accent-faint);
   --color-accent-light: var(--accent-light);
   --color-accent-2: var(--accent-2);
+  --color-accent-purple: var(--accent-purple);
+  --color-accent-purple-bg: var(--accent-purple-bg);
   --color-terminal: var(--terminal);
   --color-terminal-dim: var(--terminal-dim);
   --color-terminal-faint: var(--terminal-faint);

@@ -26,6 +26,7 @@ import {
 
 import { ChartCard } from "@/components/ui/chart-card";
 import { PageHeader } from "@/components/layout/page-header";
+import { NoOrgState } from "@/components/ui/no-org-state";
 import { useOrg } from "@/hooks/use-org";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
@@ -509,11 +510,7 @@ export default function AnalyticsPage() {
   }, [tokenByDay, latencyByDay, throughput]);
 
   if (!currentOrg) {
-    return (
-      <div className="p-8 text-center text-sm text-[var(--text-muted)]">
-        Select an organization to view analytics.
-      </div>
-    );
+    return <NoOrgState feature="Analytics" icon={BarChart3} description="Select an organization to view analytics" />;
   }
 
   return (

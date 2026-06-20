@@ -18,6 +18,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
 import { EmptyState } from "@/components/ui/empty-state";
+import { NoOrgState } from "@/components/ui/no-org-state";
 import { useOrg } from "@/hooks/use-org";
 import { autonomousApi } from "@/lib/api";
 import { PageHeader } from "@/components/layout/page-header";
@@ -568,11 +569,7 @@ export default function AutonomousPage() {
   const [tab, setTab] = useState<Tab>("investigate");
 
   if (!currentOrg) {
-    return (
-      <div className="p-8 text-center text-sm text-[var(--text-muted)]">
-        Select an organization to view autonomous intelligence.
-      </div>
-    );
+    return <NoOrgState feature="Autonomous intelligence" icon={Wand2} description="Select an organization to run investigations and self-heals" />;
   }
 
   return (

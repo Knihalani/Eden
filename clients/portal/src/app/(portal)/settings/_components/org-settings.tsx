@@ -7,7 +7,7 @@ import { useToast } from "@/components/ui/toast";
 import { useConfirm } from "@/hooks/use-confirm";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
-import { SettingsCard } from "@/components/ui/settings-card";
+import { SettingsCard } from "@/components/settings/settings-card";
 import { EmptyState } from "@/components/ui/empty-state";
 import type { Organization } from "@/lib/types";
 import { DeleteOrgDialog } from "./delete-org-dialog";

@@ -42,7 +42,7 @@ const badgeVariants = cva(
 
         // Color variants
         cyan: "border-transparent bg-[var(--accent-dim)] text-[var(--accent)]",
-        purple: "border-transparent bg-[rgba(140,_70,_220,_0.15)] text-[#c084fc]",
+        purple: "border-transparent bg-[var(--accent-purple-bg)] text-[var(--accent-purple)]",
         emerald: "border-transparent bg-[var(--success-dim)] text-[var(--success)]",
       },
     },
