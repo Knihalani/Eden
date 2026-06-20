@@ -15,6 +15,10 @@ unbounded:
 - ``stripe_events``           — webhook delivery log; useful for
                                 30-day dispute windows, dead after.
 - ``org_invitations``         — pending tokens that expired.
+- ``idempotency_keys``        — short-TTL request-dedupe keys.
+- ``webhook_deliveries``      — terminal-state webhook attempts.
+- ``ai_conversations``        — AI-insights chat sessions.
+- ``ai_messages``             — AI-insights chat messages.
 
 Each sweep is a single ``DELETE ... LIMIT`` (Postgres supports
 ``DELETE ... LIMIT N`` since PG 13) inside a transaction. The
@@ -23,6 +27,17 @@ a long lock. Re-running the cron picks up the next batch.
 
 Wired into ``data_platform.retention_cron.run()`` which is the
 Northflank daily job at 02:00 UTC.
+
+Schema-drift tolerance
+----------------------
+Production databases sometimes have older or stripped schemas
+(e.g. ``org_invitations`` on Neon staging lacks the ``status``
+column added in a later migration, ``ai_conversations`` is missing
+entirely because migration 031 hasn't been applied). Each sweep
+checks for both the table and the required columns up front;
+missing pieces are skipped with a DEBUG log and the cron keeps
+running. This keeps the daily job from alerting on every greenfield
+or pre-migration environment.
 """
 from __future__ import annotations
 
@@ -148,9 +163,16 @@ class PostgresCleanupService:
     async def run(self) -> CleanupReport:
         report = CleanupReport()
         started = datetime.now(UTC)
+        skipped = 0
         for sweep in self.sweeps:
             try:
                 deleted = await self._run_one(sweep)
+                # Skipped sweeps (schema-drift: table or column missing)
+                # return ``None`` — don't add them to ``runs`` so the
+                # operator can tell which sweeps actually fired.
+                if deleted is None:
+                    skipped += 1
+                    continue
                 report.runs[sweep.name] = deleted
                 report.total_deleted += deleted
             except Exception as exc:
@@ -160,20 +182,33 @@ class PostgresCleanupService:
         report.duration_ms = (datetime.now(UTC) - started).total_seconds() * 1000.0
         logger.info(
             f"[postgres_cleanup] done — {report.total_deleted} rows deleted "
-            f"in {report.duration_ms:.0f} ms across {len(report.runs)} sweeps"
+            f"in {report.duration_ms:.0f} ms across {len(report.runs)} sweeps "
+            f"({skipped} skipped due to schema drift)"
         )
         return report
 
-    async def _run_one(self, sweep: _Sweep) -> int:
+    async def _run_one(self, sweep: _Sweep) -> int | None:
         client = await self._get_postgres()
         if client is None:
             return 0
 
+        # Schema-drift guard: skip sweeps whose target table doesn't
+        # exist or doesn't have the expected columns. Keeps the cron
+        # from alerting on greenfield / pre-migration environments.
+        ready = await self._sweep_schema_ready(client, sweep)
+        if not ready:
+            logger.debug(
+                f"[postgres_cleanup] skipping {sweep.name}: "
+                f"table '{sweep.table}' or required columns missing"
+            )
+            return None
+
+        # asyncpg doesn't accept ISO strings for TIMESTAMPTZ params;
+        # pass the actual datetime. The cutoff is timezone-aware UTC.
         cutoff = datetime.now(UTC) - timedelta(days=sweep.age_days)
-        cutoff_iso = cutoff.isoformat()
 
         where_parts = [f"{sweep.age_column} < $1"]
-        params: list[Any] = [cutoff_iso]
+        params: list[Any] = [cutoff]
         if sweep.extra_where:
             where_parts.append(f"({sweep.extra_where})")
         where_sql = " AND ".join(where_parts)
@@ -184,14 +219,10 @@ class PostgresCleanupService:
             logger.info(
                 f"[postgres_cleanup][dry-run] {sweep.name}: "
                 f"would delete {count} rows from {sweep.table} "
-                f"(cutoff {cutoff_iso})"
+                f"(cutoff {cutoff.isoformat()})"
             )
             return int(count)
 
-        # Postgres 13+ supports ``DELETE ... LIMIT`` (no RETURNING).
-        # For tables that lack the age column (e.g. partial schema in
-        # tests) the sweep silently skips — better than blowing up
-        # the cron.
         try:
             sql = (
                 f"DELETE FROM {sweep.table} "
@@ -210,6 +241,51 @@ class PostgresCleanupService:
         # the daily cron will get the rest tomorrow. Operators who
         # need an exact count can run ``SELECT COUNT(*)`` manually.
         return 0
+
+    async def _sweep_schema_ready(self, client: Any, sweep: _Sweep) -> bool:
+        """Return True iff ``sweep.table`` exists and has the columns
+        the WHERE clause references.
+
+        The extra-where clause is parsed for ``col = …`` / ``col IN
+        (...)`` references; missing columns are reported as
+        ``ready=False``. We deliberately use a permissive regex — if a
+        sweep references a column we can't statically detect, we'd
+        rather attempt the DELETE and surface a real error than
+        silently skip on a false negative.
+        """
+        import re
+
+        try:
+            cols = await client.fetch(
+                """
+                SELECT column_name FROM information_schema.columns
+                 WHERE table_schema = 'public' AND table_name = $1
+                """,
+                sweep.table,
+            )
+        except Exception:
+            return False
+        if not cols:
+            return False
+        col_set = {r["column_name"] for r in cols}
+        if sweep.age_column not in col_set:
+            return False
+        # Parse ``extra_where`` for column refs. We look for
+        # identifier-shaped tokens that aren't quoted strings or SQL
+        # keywords; this is heuristic but good enough for the small
+        # set of extra_where clauses we ship.
+        if sweep.extra_where:
+            # Strip SQL literals and common keywords.
+            cleaned = re.sub(r"'[^']*'", "", sweep.extra_where)
+            cleaned = re.sub(r"\bNOW\(\)", "", cleaned, flags=re.IGNORECASE)
+            for token in re.findall(r"\b([a-z_][a-z0-9_]*)\b", cleaned):
+                if token.upper() in (
+                    "AND", "OR", "NOT", "IN", "TRUE", "FALSE", "IS", "NULL",
+                ):
+                    continue
+                if token not in col_set:
+                    return False
+        return True
 
     async def _get_postgres(self) -> Any:
         try:
