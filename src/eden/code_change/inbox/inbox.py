@@ -38,7 +38,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from .._common import _new_id, _ok_envelope, _select_one, _select_rows
+from .._common import _ok_envelope, _select_one, _select_rows
 
 logger = logging.getLogger(__name__)
 

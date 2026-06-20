@@ -97,7 +97,7 @@ from eden.code_change import (
     RepoConnector,
     TestPlanRunner,
 )
-from eden.intelligence_envelope import not_implemented
+from eden.code_change._common import _new_id
 
 logger = logging.getLogger(__name__)
 
@@ -730,12 +730,4 @@ async def link_rca(
         request_path=body.request_path,
         trace_id=body.trace_id,
     )
-
-
-def _new_id(prefix: str) -> str:
-    """Thin ``<prefix>_<16-hex>`` helper used only by the
-    new Cat 23 service routes. Mirrors ``_common._new_id``.
-    """
-    import uuid as _uuid
-    return f"{prefix}_{_uuid.uuid4().hex[:16]}"
 

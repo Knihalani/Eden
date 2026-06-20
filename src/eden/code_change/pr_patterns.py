@@ -133,7 +133,7 @@ class PRPatternService:
                     common_branch_prefix,
                     last_pr_id,
                     last_pr_number,
-                ) = await self._learn_from_provider(provider)
+                ) = await self._learn_from_provider(provider, org_id)
             except Exception as exc:
                 logger.warning(
                     "pr_patterns.learn failed for repo %s: %s",
@@ -248,7 +248,7 @@ class PRPatternService:
         )
 
     async def _learn_from_provider(
-        self, provider: Any,
+        self, provider: Any, org_id: str,
     ) -> tuple[str, str, list[str], list[str], str, str | None, int | None]:
         """Pull merged PRs, call T1, return extracted patterns."""
         # ``state='closed'`` is the GitHub convention for merged

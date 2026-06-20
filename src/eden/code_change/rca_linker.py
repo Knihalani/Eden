@@ -29,10 +29,10 @@ import logging
 import re
 from typing import Any
 
-from eden.code_change._common import _delete_then_insert, _select_one
+from eden.code_change._common import _delete_then_insert
 from eden.optimization.model_router import ModelRouter, PipelineTask
 
-from ._common import _new_id, _ok_envelope
+from ._common import _ok_envelope
 
 logger = logging.getLogger(__name__)
 
