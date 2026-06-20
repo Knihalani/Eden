@@ -276,6 +276,7 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
 
       {/* Sidebar: fixed drawer on mobile, in-flow on lg */}
       <aside
+        aria-label="Main sidebar navigation"
         className={cn(
           "sidebar flex flex-col relative bg-[var(--bg-primary)] border-r border-[var(--border-default)] z-50 h-full",
           "fixed inset-y-0 left-0 lg:static lg:inset-auto lg:flex-shrink-0",

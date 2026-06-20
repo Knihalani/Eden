@@ -335,6 +335,13 @@ class Settings(BaseSettings):
     clickhouse_password: str = ""
     clickhouse_timeout: int = 30
 
+    # Prometheus /metrics scrape auth. When set, scrapers must present
+    # ``Authorization: Bearer <token>`` to read /metrics. When empty,
+    # /metrics returns 503 — the endpoint is never publicly exposed.
+    # Set this on the Prometheus side and as METRICS_BEARER_TOKEN on
+    # the Eden backend (Northflank project secret).
+    metrics_bearer_token: str = ""
+
     # Redis — used by TenantRateLimitMiddleware, IdempotencyMiddleware,
     # OptimizationCache, and the RedisTailer judge pipeline. Empty
     # string disables Redis (in-memory fallback for all middlewares).

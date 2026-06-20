@@ -33,7 +33,7 @@ export default function OnboardingWelcomePage() {
   return (
     <div className="space-y-8">
       <div>
-        <h1 className="text-3xl font-bold tracking-tight">Welcome to Eden 🌱</h1>
+        <h1 className="text-3xl font-bold tracking-tight">Welcome to Eden</h1>
         <p className="mt-2 text-[var(--text-secondary)]">
           The next ~2 minutes get you from signup to seeing your first
           agent trace in the dashboard. You can leave at any time and

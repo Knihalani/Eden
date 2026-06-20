@@ -18,6 +18,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Path
 from pydantic import BaseModel, Field
 
+from eden.api.routes.auth import get_current_user
 from eden.observability.sql_executor import (
     DEFAULT_MAX_ROWS,
     DEFAULT_MAX_SECONDS,
@@ -93,24 +94,6 @@ class SqlLimitsResponse(BaseModel):
     hard_cap_seconds: int = MAX_MAX_SECONDS
 
 
-# ── Helpers ────────────────────────────────────────────────────────
-
-
-def _get_user():
-    from eden.api.routes.auth import get_current_user
-    return get_current_user
-
-
-def _executor_for(org_id: str, *, max_rows: int | None = None,
-                  max_seconds: int | None = None) -> SqlExecutor:
-    """Build a per-request executor. The pg client is fetched
-    lazily so the lifespan has time to initialise."""
-    # Note: we deliberately do NOT call get_postgres_client here —
-    # the route handler does that and passes the result. This
-    # helper is only for parameter wiring.
-    raise NotImplementedError  # pragma: no cover
-
-
 # ── Routes ─────────────────────────────────────────────────────────
 
 
@@ -127,7 +110,7 @@ def _executor_for(org_id: str, *, max_rows: int | None = None,
 async def execute_sql(
     body: SqlExecuteRequest,
     org_id: str = Path(..., description="Organization ID"),
-    user: dict = Depends(_get_user()),
+    user: dict = Depends(get_current_user),
 ) -> SqlExecuteResponse:
     """Execute a single SELECT against the allowlisted tables.
 
@@ -218,7 +201,7 @@ async def execute_sql(
 )
 async def get_sql_schema(
     org_id: str = Path(...),
-    user: dict = Depends(_get_user()),
+    user: dict = Depends(get_current_user),
 ) -> SqlSchemaResponse:
     """Return the schema of every allowlisted table.
 
@@ -239,7 +222,7 @@ async def get_sql_schema(
 )
 async def get_sql_limits(
     org_id: str = Path(...),
-    user: dict = Depends(_get_user()),
+    user: dict = Depends(get_current_user),
 ) -> SqlLimitsResponse:
     """Surface the current org's caps. Admins can override
     these via Settings (``sql_max_rows`` / ``sql_max_seconds``)

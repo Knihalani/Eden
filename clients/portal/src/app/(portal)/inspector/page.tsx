@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/components/ui/toast";
 import { NoOrgState } from "@/components/ui/no-org-state";
+import { PageHeader } from "@/components/layout/page-header";
 import {
   Search,
   ChevronRight,
@@ -19,6 +20,7 @@ import {
   EyeOff,
   Clock,
   XCircle,
+  Compass,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -218,14 +220,12 @@ export default function TraceInspectorPage() {
     // inside the page wrapper instead. June 2026 fix.
     <div className="page-enter min-h-full bg-[var(--bg-base)]">
       <div className="mx-auto max-w-6xl px-6 py-8">
-        <header className="mb-6">
-          <h1 className="font-mono text-2xl text-[var(--text-primary)]">
-            Trace Inspector
-          </h1>
-          <p className="mt-1 text-sm text-[var(--text-secondary)]">
-            Drill into one trace: span tree, tool calls, model thoughts, env steps.
-          </p>
-        </header>
+        <PageHeader
+          eyebrow="Observe"
+          title="Trace Inspector"
+          subtitle="Drill into one trace: span tree, tool calls, model thoughts, env steps."
+          icon={Compass}
+        />
 
         {/* Toolbar */}
         <div className="mb-4 flex flex-wrap items-center gap-2">

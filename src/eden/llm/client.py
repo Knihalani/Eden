@@ -281,7 +281,8 @@ class OpenRouterClient:
                     continue
                 raise
         # Should never reach here, but for type-checker happiness:
-        assert last_exc is not None
+        if last_exc is None:
+            raise RuntimeError("LLM retry loop exited without success or exception")
         raise last_exc
 
     def call(

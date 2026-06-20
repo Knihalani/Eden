@@ -53,7 +53,10 @@ _WEIGHTS: dict[str, float] = {
     "security": 0.20,
     "idiomatic_fit": 0.15,
 }
-assert abs(sum(_WEIGHTS.values()) - 1.0) < 1e-9, "weights must sum to 1.0"
+if abs(sum(_WEIGHTS.values()) - 1.0) >= 1e-9:
+    raise ValueError(
+        f"PRQualityScorer weights must sum to 1.0, got {sum(_WEIGHTS.values())}"
+    )
 
 # Patterns the stub-mode security check uses. The real Gate-4a
 # implementation will use a proper AST-level scan.

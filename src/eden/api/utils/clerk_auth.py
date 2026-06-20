@@ -29,10 +29,11 @@ from __future__ import annotations
 
 import json
 import logging
+import threading
 import time
 from typing import Any
-from urllib.request import Request as UrlRequest
-from urllib.request import urlopen
+
+import httpx
 
 from jose import JWTError, jwt
 
@@ -46,6 +47,10 @@ _settings = get_settings()
 # if a fresh key appears, because we re-fetch on cache miss.
 _JWKS_CACHE: dict[str, Any] = {"fetched_at": 0.0, "keys": None}
 _JWKS_TTL_SECONDS = 3600
+# Lock guards the read-modify-write on _JWKS_CACHE so concurrent
+# first-call bursts don't stomp each other. Per-request cache hits
+# stay lock-free via the TTL fast-path.
+_JWKS_LOCK = threading.Lock()
 
 
 def _derive_jwks_url() -> str:
@@ -71,19 +76,26 @@ def _derive_jwks_url() -> str:
 def _fetch_jwks() -> dict[str, Any]:
     """Fetch and cache the Clerk JWKS document."""
     now = time.time()
+    # Fast path: cache hit, no lock needed.
     if _JWKS_CACHE["keys"] is not None and now - _JWKS_CACHE["fetched_at"] < _JWKS_TTL_SECONDS:
         return _JWKS_CACHE["keys"]
-    url = _derive_jwks_url()
-    try:
-        req = UrlRequest(url, headers={"User-Agent": "eden-api/1.0"})
-        with urlopen(req, timeout=5) as resp:  # noqa: S310 — controlled URL
-            data = json.loads(resp.read().decode("utf-8"))
-        _JWKS_CACHE["keys"] = data
-        _JWKS_CACHE["fetched_at"] = now
-        return data
-    except Exception as exc:
-        logger.warning("Failed to fetch Clerk JWKS from %s: %s", url, exc)
-        return _JWKS_CACHE["keys"] or {"keys": []}
+    # Slow path: take the lock so only one fetch happens at a time.
+    with _JWKS_LOCK:
+        # Re-check after acquiring the lock — another thread may
+        # have refreshed while we were waiting.
+        if _JWKS_CACHE["keys"] is not None and now - _JWKS_CACHE["fetched_at"] < _JWKS_TTL_SECONDS:
+            return _JWKS_CACHE["keys"]
+        url = _derive_jwks_url()
+        try:
+            resp = httpx.get(url, timeout=5.0, headers={"User-Agent": "eden-api/1.0"})
+            resp.raise_for_status()
+            data = resp.json()
+            _JWKS_CACHE["keys"] = data
+            _JWKS_CACHE["fetched_at"] = now
+            return data
+        except Exception as exc:
+            logger.warning("Failed to fetch Clerk JWKS from %s: %s", url, exc)
+            return _JWKS_CACHE["keys"] or {"keys": []}
 
 
 def verify_clerk_token(token: str) -> dict[str, Any] | None:
