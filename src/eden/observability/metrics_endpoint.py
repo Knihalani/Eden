@@ -11,13 +11,20 @@ The format is Prometheus text exposition 0.0.4 — the standard
 to add it as a hard dependency. The implementation here is
 deliberately small and only renders the metrics that already
 exist in the platform.
+
+Auth: ``metrics_bearer_token`` (env ``METRICS_BEARER_TOKEN``)
+must match the ``Authorization: Bearer <token>`` header. When
+the token is empty, the endpoint returns 503 — Prometheus will
+silently skip the target. This prevents public scraping.
 """
 from __future__ import annotations
 
+import hmac
 import logging
 
-from fastapi import APIRouter, Response
+from fastapi import APIRouter, Depends, Header, HTTPException, Response, status
 
+from eden.config import get_settings
 from eden.observability.slo import published_slos
 
 logger = logging.getLogger(__name__)
@@ -32,7 +39,33 @@ def _render(name: str, *, help_text: str, value: float, labels: dict[str, str] |
     return f"# HELP {name} {help_text}\n# TYPE {name} gauge\n{name}{label_str} {value}\n"
 
 
-@router.get("/metrics")
+async def _check_metrics_auth(authorization: str | None = Header(default=None)) -> None:
+    """Constant-time bearer check against ``metrics_bearer_token``.
+
+    Empty token → 503 (the scraper is misconfigured). Wrong token → 401.
+    """
+    expected = get_settings().metrics_bearer_token
+    if not expected:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="metrics endpoint not configured (METRICS_BEARER_TOKEN unset)",
+        )
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="missing or malformed Authorization header",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    presented = authorization[len("Bearer "):]
+    if not hmac.compare_digest(presented, expected):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="invalid metrics bearer token",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+
+@router.get("/metrics", dependencies=[Depends(_check_metrics_auth)])
 async def metrics() -> Response:
     """Render the platform's metrics in Prometheus text format."""
     lines: list[str] = []

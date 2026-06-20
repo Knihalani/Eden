@@ -25,6 +25,7 @@ import {
 } from "recharts";
 
 import { ChartCard } from "@/components/ui/chart-card";
+import { PageHeader } from "@/components/layout/page-header";
 import { useOrg } from "@/hooks/use-org";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
@@ -517,17 +518,13 @@ export default function AnalyticsPage() {
 
   return (
     <div className="page-enter mx-auto max-w-7xl space-y-6 p-4 sm:p-6 lg:p-8">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight text-[var(--text-primary)] sm:text-3xl">
-            Analytics
-          </h1>
-          <p className="mt-1 text-sm text-[var(--text-muted)]">
-            Token throughput, latency, traffic patterns, and per-agent cost.
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <div className="inline-flex rounded-lg border border-[var(--border)] bg-[var(--bg-primary)] p-0.5 shadow-sm">
+      <PageHeader
+        eyebrow="Observe"
+        title="Analytics"
+        subtitle="Token throughput, latency, traffic patterns, and per-agent cost."
+        icon={BarChart3}
+        actions={
+          <div className="inline-flex rounded-lg border border-[var(--border-default)] bg-[var(--bg-primary)] p-0.5 shadow-sm">
             {DAY_OPTIONS.map((opt) => (
               <button
                 key={opt.value}
@@ -543,8 +540,8 @@ export default function AnalyticsPage() {
               </button>
             ))}
           </div>
-        </div>
-      </div>
+        }
+      />
 
       {/* KPI strip */}
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">

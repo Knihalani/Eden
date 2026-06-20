@@ -28,6 +28,7 @@ from eden.api.routes import (
     feature_flags,
     ingestion,
     integrations_helicone,
+    intelligence_code_change,
     kb,
     labeling,
     marketplace,
@@ -310,6 +311,7 @@ app.include_router(evaluation.router)  # /evaluation (gated)
 app.include_router(multi_agent.router)  # /orgs/{org_id}/multi-agent (gated)
 app.include_router(marketplace.router)  # /marketplace (gated)
 app.include_router(integrations_helicone.router)  # /integrations/helicone (gated)
+app.include_router(intelligence_code_change.router)  # /orgs/{org_id}/intelligence/code-change (Cat 23, gated by intelligence_gap_v0)
 app.include_router(feature_flags.router)  # /feature-flags (public)
 
 # Onboarding wizard (June 2026) — GitHub App OAuth + per-org

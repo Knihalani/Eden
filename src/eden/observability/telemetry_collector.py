@@ -12,6 +12,7 @@ Usage:
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
 import logging
@@ -1273,13 +1274,19 @@ class TelemetryCollector:
 # ── Singleton accessor ──────────────────────────────────────────────────
 
 _telemetry_collector: TelemetryCollector | None = None
+_telemetry_collector_lock = asyncio.Lock()
 
 
 async def get_telemetry_collector() -> TelemetryCollector:
     """Get the singleton telemetry collector."""
     global _telemetry_collector
-    if _telemetry_collector is None:
-        _telemetry_collector = TelemetryCollector()
+    # Fast path: no lock when already initialised.
+    if _telemetry_collector is not None:
+        return _telemetry_collector
+    # Slow path: lock so only one TelemetryCollector is ever constructed.
+    async with _telemetry_collector_lock:
+        if _telemetry_collector is None:
+            _telemetry_collector = TelemetryCollector()
     return _telemetry_collector
 
 

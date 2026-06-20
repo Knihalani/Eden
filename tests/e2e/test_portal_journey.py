@@ -7,10 +7,17 @@ These tests require the Next.js portal to be running on localhost:3000
 and the FastAPI backend on localhost:8000.
 
 Run with:  pytest tests/e2e/ --headed  (to see the browser)
+
+Playwright is optional — if not installed, every test in this file is
+skipped via ``pytest.importorskip`` so pytest collection doesn't break
+the rest of the suite. To run E2E: ``uv pip install playwright pytest-playwright``
+and ``playwright install chromium``.
 """
 
 import pytest
-from playwright.sync_api import Page, expect
+
+playwright = pytest.importorskip("playwright")  # noqa: F401 — skip the whole module if missing
+from playwright.sync_api import Page, expect  # noqa: E402
 
 pytestmark = pytest.mark.e2e
 
