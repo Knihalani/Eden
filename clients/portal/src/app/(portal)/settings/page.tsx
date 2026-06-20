@@ -7,7 +7,7 @@ import { useOrg } from "@/hooks/use-org";
 import { useAuth } from "@/hooks/use-auth";
 import { usePermissions } from "@/hooks/use-permissions";
 import { api } from "@/lib/api";
-import { Loader2, Plus, Trash2, Building2, Users, Code, Copy, Check, Archive, RefreshCw, Key, FileText, Shield, CreditCard, KeyRound, Lock, BarChart2, Server, EyeOff, Database, Globe, FileArchive, Settings2 } from "lucide-react";
+import { Loader2, Plus, Trash2, Building2, Users, Code, Copy, Check, Archive, RefreshCw, Key, FileText, Shield, CreditCard, KeyRound, Lock, BarChart2, Server, EyeOff, Database, Globe, FileArchive, Settings2, Bot } from "lucide-react";
 import { cn } from "@/lib/utils";
 import Link from "next/link";
 import { DeleteOrgDialog } from "./_components/delete-org-dialog";
@@ -20,6 +20,10 @@ import { InvitePanel } from "./_components/invite-panel";
 // doesn't jump when the user clicks the tab. (June 2026 perf pass.)
 const AnalyticsTab = dynamic(
   () => import("./_components/analytics-tab").then((m) => ({ default: m.AnalyticsTab })),
+  { ssr: false, loading: () => <Skeleton className="h-64 w-full" /> }
+);
+const AutonomousTab = dynamic(
+  () => import("./_components/autonomous-tab").then((m) => ({ default: m.default })),
   { ssr: false, loading: () => <Skeleton className="h-64 w-full" /> }
 );
 const AuditLogTab = dynamic(
@@ -81,7 +85,7 @@ import { useConfirm } from "@/hooks/use-confirm";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useSearchParams } from "next/navigation";
 
-type Tab = "org" | "members" | "references" | "api-keys" | "security" | "scim" | "sso" | "audit-log" | "analytics" | "billing" | "gateway" | "pii" | "retention" | "region" | "exports" | "sidebar";
+type Tab = "org" | "members" | "references" | "api-keys" | "security" | "scim" | "sso" | "audit-log" | "analytics" | "billing" | "gateway" | "pii" | "retention" | "region" | "exports" | "sidebar" | "autonomous";
 
 const TABS = [
   { id: "org", label: "Organization", icon: Building2 },
@@ -99,6 +103,7 @@ const TABS = [
   { id: "audit-log", label: "Audit Log", icon: FileText },
   { id: "analytics", label: "Analytics", icon: BarChart2 },
   { id: "billing", label: "Billing", icon: CreditCard },
+  { id: "autonomous", label: "Autonomous", icon: Bot },
   { id: "sidebar", label: "Sidebar", icon: Settings2 },
 ] as const;
 
@@ -240,6 +245,7 @@ export default function SettingsPage() {
             {activeTab === "audit-log" && <AuditLogTab org={currentOrg} />}
             {activeTab === "analytics" && <AnalyticsTab />}
             {activeTab === "billing" && <BillingTab />}
+            {activeTab === "autonomous" && <AutonomousTab />}
             {activeTab === "exports" && (
               <ExportsTab
                 orgId={currentOrg?.id || ""}

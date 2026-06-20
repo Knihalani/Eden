@@ -53,24 +53,50 @@ _JWKS_TTL_SECONDS = 3600
 _JWKS_LOCK = threading.Lock()
 
 
-def _derive_jwks_url() -> str:
-    """Pull the JWKS URL out of Clerk's publishable key.
+def _derive_jwks_url() -> str | None:
+    """Resolve the JWKS URL for the configured Clerk instance.
 
-    The pk_test_/pk_live_ token encodes the Clerk frontend API host,
-    e.g. ``pk_test_bW9kZXN0LWJ1Zy03LmNsZXJrLmFjY291bnRzLmRldiQ`` decodes
-    to ``modest-bug-7.clerk.accounts.dev$``. We construct the standard
-    JWKS URL from that host.
+    Priority:
+    1. ``CLERK_JWKS_URL`` — explicit override (recommended for
+       production; matches what the Clerk dashboard shows under
+       "Endpoints > Show endpoint URLs > JWT public key").
+    2. Auto-derive from ``CLERK_PUBLISHABLE_KEY`` — the publishable key
+       embeds the Clerk frontend-API host. ``pk_live_…$`` decodes
+       (base64) to ``<frontend-api>$`` and the JWKS URL is
+       ``https://<frontend-api>/.well-known/jwks.json``.
+    3. ``None`` — neither configured. The caller treats this as
+       "skip Clerk verification" and falls back to the legacy Eden
+       cookie path, instead of crashing the request thread with
+       ``RuntimeError`` like the previous implementation did.
     """
     if _settings.clerk_jwks_url:
         return _settings.clerk_jwks_url
-    pk = _settings.clerk_secret_key  # secret key alone isn't enough;
-    # we need the publishable key. In dev the user is expected to set
-    # CLERK_JWT_KEY (static PEM) — see Settings docstring.
-    raise RuntimeError(
-        "clerk_jwks_url not configured. Set CLERK_JWKS_URL to your "
-        "Clerk instance's /.well-known/jwks.json endpoint, or set "
-        "CLERK_JWT_KEY to the static PEM public key."
+    pk = _settings.clerk_publishable_key
+    if pk and (pk.startswith("pk_test_") or pk.startswith("pk_live_")):
+        # Strip the ``pk_{test,live}_`` prefix; the remainder is a
+        # base64-encoded payload whose first (and only, for modern
+        # keys) line is the frontend-API host + trailing ``$``.
+        body = pk.split("_", 2)[-1]
+        try:
+            import base64
+            # Pad to a multiple of 4 for base64 decoding.
+            padded = body + "=" * (-len(body) % 4)
+            decoded = base64.b64decode(padded).decode("utf-8", errors="ignore").strip()
+            # Format: ``clerk.edenobservability.com$`` (prod) or
+            # ``modest-bug-7.clerk.accounts.dev$`` (dev).
+            host = decoded.rstrip("$").strip()
+            if host:
+                return f"https://{host}/.well-known/jwks.json"
+        except Exception as exc:
+            logger.debug("Failed to decode Clerk publishable key: %s", exc)
+    logger.warning(
+        "Clerk JWKS URL not configured and CLERK_PUBLISHABLE_KEY is "
+        "missing or unparseable. Set CLERK_JWKS_URL to your Clerk "
+        "instance's /.well-known/jwks.json endpoint, or set "
+        "CLERK_JWT_KEY to the static PEM public key. Clerk verification "
+        "is being skipped — only legacy Eden cookie auth will succeed."
     )
+    return None
 
 
 def _fetch_jwks() -> dict[str, Any]:
@@ -86,6 +112,11 @@ def _fetch_jwks() -> dict[str, Any]:
         if _JWKS_CACHE["keys"] is not None and now - _JWKS_CACHE["fetched_at"] < _JWKS_TTL_SECONDS:
             return _JWKS_CACHE["keys"]
         url = _derive_jwks_url()
+        if not url:
+            # JWKS not configured — can't verify Clerk tokens. Return an
+            # empty key set so the caller can short-circuit without
+            # raising into a request thread.
+            return {"keys": []}
         try:
             resp = httpx.get(url, timeout=5.0, headers={"User-Agent": "eden-api/1.0"})
             resp.raise_for_status()

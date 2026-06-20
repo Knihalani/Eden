@@ -120,6 +120,9 @@ export interface Organization {
   is_owner?: boolean;
   member_count?: number;
   archived_at?: string | null;
+  /** Backend ``organizations.features`` JSONB column. May be
+   *  undefined for older ``getOrg`` responses that didn't return it. */
+  settings?: Record<string, unknown>;
 }
 
 export interface CodeReference {

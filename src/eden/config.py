@@ -79,13 +79,20 @@ class Settings(BaseSettings):
     # Feature flags — gates the per-Cat intelligence surface.
     # The Cat 1-23 wiring tests flip these via monkeypatch; see
     # ``tests/intelligence/test_intelligence_gap_stubs.py``.
-    intelligence_gap_v0: bool = False
+    #
+    # Both default to **True** so the Cat 23 + Cat 14 surfaces are
+    # accessible out-of-the-box. Users are informed during
+    # /onboarding that these features are active and can opt
+    # out per-org via the Settings page (or per-deploy by
+    # setting the env var to "false" in the Northflank env).
+    intelligence_gap_v0: bool = True
     # Cat 14 (autonomous) destructive-action flag. The
     # ``/heal``, ``/heal/{id}/approve``, ``/heal/{id}/deny`` routes
-    # require this + the per-action two-stage opt-in. Defaults
-    # false so destructive actions are blocked until explicitly
-    # enabled per tenant.
-    autonomous_actions_v0: bool = False
+    # require this + the per-action two-stage opt-in. Default
+    # true so the recommendations + SelfHealer queue are
+    # reachable; the human-approval gate is what actually
+    # blocks the side-effect.
+    autonomous_actions_v0: bool = True
     enable_eval_pipeline: bool = False
 
     # Phase C — unified AI agent (Cat 14 real + global panel).
@@ -199,6 +206,12 @@ class Settings(BaseSettings):
     clerk_secret_key: str = ""
     clerk_jwt_key: str = ""  # asymmetric public key fallback (PEM)
     clerk_jwks_url: str = ""
+    # Publishable key — only used server-side to auto-derive the
+    # JWKS URL when ``clerk_jwks_url`` isn't set. Safe to keep here:
+    # publishable keys are intentionally public; we just don't want
+    # to expose them via ``NEXT_PUBLIC_*`` because we don't need
+    # them in the browser bundle.
+    clerk_publishable_key: str = ""
     # Svix signing secret used to verify Clerk webhook deliveries.
     # When empty, ``POST /webhooks/clerk`` rejects every request with
     # 503. Set this in Vercel / Northflank as ``CLERK_WEBHOOK_SIGNING_SECRET``
