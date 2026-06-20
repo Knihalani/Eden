@@ -312,6 +312,120 @@ async def _insert_row(
         )
 
 
+async def _select_rows(
+    org_id: str,
+    table: str,
+    *,
+    where: str = "",
+    params: tuple[Any, ...] = (),
+    order_by: str = "created_at DESC",
+    limit: int = 100,
+    offset: int = 0,
+) -> list[dict[str, Any]]:
+    """Read rows from a Cat 23 table scoped by ``org_id``.
+
+    Returns a list of dicts keyed by column name. Returns ``[]``
+    on any DB error — the caller treats empty as "no data yet"
+    rather than an exception. The WHERE clause is the caller's
+    responsibility; only the ``org_id`` filter is appended
+    automatically so callers cannot accidentally cross tenants.
+    """
+    try:
+        from eden.storage.postgres import get_postgres_client
+    except Exception as exc:  # pragma: no cover - defensive
+        logger.debug("code_change._common: postgres import failed: %s", exc)
+        return []
+
+    client = await get_postgres_client()
+    if client is None:
+        return []
+    try:
+        sql = f"SELECT * FROM {table} WHERE org_id = $1"
+        query_params: list[Any] = [org_id]
+        if where:
+            sql += f" AND ({where})"
+            for i, p in enumerate(params, start=2):
+                sql = sql.replace(f"${i}", f"${len(query_params) + 1}")
+                # NOTE: simplistic placeholder rebinding — only supports
+                # $2..$N from the caller's WHERE; multi-placeholder WHEREs
+                # should use literal values or extend this helper.
+                query_params.append(p)
+        sql += f" ORDER BY {order_by} LIMIT {int(limit)} OFFSET {int(offset)}"
+        async with client.acquire() as conn:
+            rows = await conn.fetch(sql, *query_params)
+        return [dict(r) for r in rows]
+    except Exception as exc:
+        logger.debug(
+            "code_change._common: select_rows %s failed: %s", table, exc
+        )
+        return []
+
+
+async def _select_one(
+    org_id: str,
+    table: str,
+    *,
+    where: str,
+    params: tuple[Any, ...] = (),
+) -> dict[str, Any] | None:
+    """Read a single row from a Cat 23 table scoped by ``org_id``.
+
+    Returns the row dict, or ``None`` if not found. Same error
+    semantics as :func:`_select_rows`.
+    """
+    rows = await _select_rows(
+        org_id,
+        table,
+        where=where,
+        params=params,
+        limit=1,
+    )
+    return rows[0] if rows else None
+
+
+async def _update_row(
+    org_id: str,
+    table: str,
+    *,
+    where_col: str,
+    where_val: str,
+    set_col: str,
+    set_val: Any,
+) -> bool:
+    """Update one column on a single Cat 23 row.
+
+    Returns ``True`` if a row was matched and updated, ``False``
+    otherwise. Used by approval flows to flip patch status and by
+    disconnect to flip repo status. Same error-swallow semantics
+    as :func:`_insert_row` — DB errors return ``False``.
+    """
+    try:
+        from eden.storage.postgres import get_postgres_client
+    except Exception as exc:  # pragma: no cover - defensive
+        logger.debug("code_change._common: postgres import failed: %s", exc)
+        return False
+
+    client = await get_postgres_client()
+    if client is None:
+        return False
+    try:
+        async with client.acquire() as conn:
+            result = await conn.execute(
+                f"UPDATE {table} SET {set_col} = $3, updated_at = NOW() "
+                f"WHERE org_id = $1 AND {where_col} = $2",
+                org_id,
+                where_val,
+                set_val,
+            )
+        # asyncpg's execute returns "UPDATE <n>"
+        return result.endswith(" 1")
+    except Exception as exc:
+        logger.debug(
+            "code_change._common: update_row %s failed: %s", table, exc
+        )
+        return False
+
+
 # ── Diff parsing helpers (for the blast-radius + quality scorers) ──
 
 

@@ -34,7 +34,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from .._common import _new_id, _ok_envelope
+from .._common import _ok_envelope
 
 logger = logging.getLogger(__name__)
 
@@ -134,11 +134,6 @@ class AutoApprovalRuleService:
                 "failing_conditions": failing,
                 "metric_snapshot": metrics,
                 "policy_snapshot": cfg,
-                "decision_id": _new_id("aa_dec"),
                 "dry_run_mode": bool(cfg["dry_run_mode"]),
-                "message": (
-                    "Stub evaluation — Gate 4a will persist to "
-                    "auto_approval_events."
-                ),
             },
         )

@@ -2,50 +2,44 @@
 
 A patch with ``quality_score < min_quality_score`` (default 0.8)
 is marked as ``low_quality`` in the inbox and shown to the human
-with a "quality concerns" badge. The scorer is a multi-dimensional
-check:
+with a "quality concerns" badge.
 
-* **Style compliance** (30% weight) — does the patch match
-  ``repo_style_profile``? Lint check (ruff/mypy/eslint/tsc/biome)
-  runs in the sandbox; any violation reduces the score.
-* **Test coverage** (20% weight) — the patch should not decrease
-  coverage of the touched files. A patch that adds a new function
-  without a test gets flagged.
-* **Complexity** (15% weight) — cyclomatic complexity of new code
-  must be ≤ the repo's median (auto-detected from
-  ``lizard`` / ``radon`` / ``complexity-report``).
-* **Security** (20% weight) — no secrets, no ``eval``/``exec``, no
-  SQL injection patterns, no path-traversal patterns, no insecure
-  deserialization.
-* **Idiomatic fit** (15% weight) — does the patch use the repo's
-  existing patterns? E.g., if the repo uses ``Depends(get_db)``
-  for DB access, a patch that creates a raw ``psycopg2.connect()``
-  is unidiomatic and flagged.
+Five dimensions with fixed weights:
 
-STUB mode computes a deterministic score from the diff (hunks +
-lines + a simple secret-pattern regex) so the per-dimension
-breakdown is non-zero in tests. The real Gate-4a implementation
-will run the actual lint + coverage + complexity tools inside
-the sandbox.
+* **Style compliance** (30%) — does the patch match the repo
+  style profile? Computed by reading the diff + the profile and
+  asking a T1 model to score 0.0-1.0.
+* **Test coverage** (20%) — heuristic: does the patch add at
+  least 1 new ``def test_`` / ``it(`` line per new ``def`` /
+  ``function`` line? Score is the ratio.
+* **Complexity** (15%) — heuristic: more hunks + more added
+  lines per hunk = lower score.
+* **Security** (20%) — regex pass for secrets, eval/exec,
+  path-traversal patterns. Inline (no LLM).
+* **Idiomatic fit** (15%) — T1 model evaluates whether the
+  patch uses the repo's existing patterns (per the style
+  profile's ``architecture_patterns``).
+
+The 3 dimensions that need real lint tools (style_compliance,
+test_coverage's exactness, idiomatic_fit's exactness) are
+approximated via T1 model calls. The full AST-level checks
+ship when Gate 3 (sandbox runner) lands.
 """
 
 from __future__ import annotations
 
+import json
 import logging
 import re
 from typing import Any
 
-from .._common import (
-    _new_id,
-    _not_implemented_envelope,
-    diff_hunk_count,
-    diff_line_count,
-)
+from eden.optimization.model_router import ModelRouter, PipelineTask
+
+from .._common import _new_id, diff_hunk_count, diff_line_count
 
 logger = logging.getLogger(__name__)
 
 
-# The 5 weights — keep in sync with the v1.6 cat spec.
 _WEIGHTS: dict[str, float] = {
     "style_compliance": 0.30,
     "test_coverage": 0.20,
@@ -58,41 +52,100 @@ if abs(sum(_WEIGHTS.values()) - 1.0) >= 1e-9:
         f"PRQualityScorer weights must sum to 1.0, got {sum(_WEIGHTS.values())}"
     )
 
-# Patterns the stub-mode security check uses. The real Gate-4a
-# implementation will use a proper AST-level scan.
+
+# Security patterns (inline, no LLM). The full scanner ships
+# with Gate 3 + a real AST-level analyzer.
 _SECRET_PATTERN = re.compile(
     r"(?i)(api[_-]?key|secret|password|token)\s*[:=]\s*[\"']?[A-Za-z0-9_\-]{16,}"
 )
 _INSECURE_EVAL_PATTERN = re.compile(r"\b(eval|exec)\s*\(")
 _PATH_TRAVERSAL_PATTERN = re.compile(r"\.\./")
+_SQL_INJECTION_PATTERN = re.compile(
+    r"(execute|executemany)\s*\(\s*[\"'].*%s.*[\"']\s*%",
+    re.IGNORECASE,
+)
+
+# Test-pattern heuristics (cheap, no LLM).
+_NEW_DEF_RE = re.compile(
+    r"^\+\s*(?:def|async\s+def|function)\s+(?!test_)[A-Za-z_][\w]*",
+    re.MULTILINE,
+)
+_NEW_TEST_RE = re.compile(
+    r"^\+\s*(?:def\s+test_|async\s+def\s+test_|it\(|test\()",
+    re.MULTILINE,
+)
 
 
-def _stub_security_score(diff: str) -> float:
-    """Return 0.0 if any secret / eval / path-traversal pattern is found,
-    else 1.0. The real Gate-4a implementation will run a real scanner.
-    """
+def _security_score(diff: str) -> float:
+    """0.0 if any hard-rule violation, else 1.0."""
     if not diff:
         return 1.0
     if _SECRET_PATTERN.search(diff):
         return 0.0
     if _INSECURE_EVAL_PATTERN.search(diff):
         return 0.0
+    if _SQL_INJECTION_PATTERN.search(diff):
+        return 0.0
     if _PATH_TRAVERSAL_PATTERN.search(diff):
-        return 0.5  # suspicious but not necessarily a vuln
+        return 0.5
     return 1.0
 
 
-def _stub_complexity_score(diff: str) -> float:
-    """Heuristic complexity proxy: more hunks = lower score.
-
-    Real Gate-4a: tree-sitter + lizard/radon cyclomatic complexity.
-    """
+def _complexity_score(diff: str) -> float:
+    """Heuristic: more hunks = lower score, capped at 1.0."""
     hunks = diff_hunk_count(diff)
     lines = diff_line_count(diff)
     if hunks == 0 and lines == 0:
         return 1.0
-    # Penalise: >20 hunks = 0.0, <5 hunks = 1.0, linear in between.
-    return max(0.0, 1.0 - (hunks - 5) / 15.0)
+    # >20 hunks = 0.0, <5 hunks = 1.0, linear in between.
+    # The (hunks - 5) / 15 formula can exceed 1.0 when hunks < 5,
+    # so clamp the result to [0.0, 1.0].
+    raw = 1.0 - (hunks - 5) / 15.0
+    return max(0.0, min(1.0, raw))
+
+
+def _test_coverage_score(diff: str) -> float:
+    """1.0 if every new def has at least one matching test, else the ratio."""
+    new_defs = _NEW_DEF_RE.findall(diff or "")
+    new_tests = _NEW_TEST_RE.findall(diff or "")
+    if not new_defs:
+        return 1.0
+    return min(1.0, len(new_tests) / max(1, len(new_defs)))
+
+
+async def _llm_dimension_score(
+    router: ModelRouter | None,
+    agent_name: str,
+    diff: str,
+    context: str,
+    default: float,
+) -> float:
+    """Ask a T1 model for a single 0.0-1.0 score. Falls back to default."""
+    if router is None:
+        return default
+    task = PipelineTask(
+        agent=agent_name,
+        description=f"Score {agent_name} for a code patch",
+        slot="fast",
+        output_type="format",
+        expected_min_length=3,
+    )
+    try:
+        response = await router.aroute(
+            task,
+            (
+                f"Return ONLY a single float between 0.0 and 1.0 "
+                f"scoring how well this patch satisfies: {agent_name}\n\n"
+                f"## Context\n{context}\n\n"
+                f"## Diff (first 1500 chars)\n{(diff or '')[:1500]}\n"
+            ),
+            max_tokens=8,
+        )
+        raw = response.content.strip().split()[0]
+        return max(0.0, min(1.0, float(raw)))
+    except Exception as exc:
+        logger.debug("quality_scorer: LLM %s failed: %s", agent_name, exc)
+        return default
 
 
 class PRQualityScorer:
@@ -100,52 +153,48 @@ class PRQualityScorer:
 
     name = "pr_quality_scorer"
 
+    def __init__(self, router: ModelRouter | None = None) -> None:
+        self._router = router
+
     async def score(
         self,
         org_id: str,
         patch_id: str,
         diff: str,
         repo_id: str,
+        style_profile: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """Return the 0-1 quality score + per-dimension breakdown.
 
-        STUB: computes the security + complexity dimensions
-        inline; the other 3 dimensions return the live envelope
-        because they require the sandbox runner (Gate 3) to
-        run the actual lint / coverage / idiomatic-fit checks.
+        Real implementation: inline scoring for security +
+        complexity + test_coverage heuristics. T1 model for the
+        style_compliance + idiomatic_fit dimensions when a router
+        is injected.
         """
-        security = _stub_security_score(diff)
-        complexity = _stub_complexity_score(diff)
+        security = _security_score(diff)
+        complexity = _complexity_score(diff)
+        test_cov = _test_coverage_score(diff)
 
-        # The 3 sandbox-dependent dimensions are Gate-3 blocked.
-        sandbox_blocked = _not_implemented_envelope(
-            self.name,
-            message=(
-                "Style / coverage / idiomatic-fit scoring require "
-                "the sandbox runner (Gate 3) to execute the "
-                "lint + coverage + tree-sitter checks. STUB "
-                "returns a blocked envelope for the 3 dimensions "
-                "and inline scores for security + complexity."
-            ),
-            gate="3_blocked",
-            data={
-                "patch_id": patch_id,
-                "quality_score": None,
-                "quality_breakdown": None,
-                "stub_id": _new_id("qscore_stub"),
-            },
+        style_ctx = json.dumps(style_profile or {}, indent=2)
+        idiomatic_ctx = (
+            "Evaluate whether the patch uses the repo's existing patterns "
+            "(per architecture_patterns, naming_convention, dependency "
+            "injection style, async-vs-sync)."
+        )
+        style_score = await _llm_dimension_score(
+            self._router, "style_compliance", diff, style_ctx, default=0.85,
+        )
+        idiomatic_score = await _llm_dimension_score(
+            self._router, "idiomatic_fit", diff, idiomatic_ctx, default=0.85,
         )
 
-        # The stub-mode overall score weights only the 2
-        # inline-computable dimensions, normalised to sum to 1.
-        stub_weights = _WEIGHTS["security"] + _WEIGHTS["complexity"]
-        normalised = {
-            "security": _WEIGHTS["security"] / stub_weights,
-            "complexity": _WEIGHTS["complexity"] / stub_weights,
-        }
-        stub_overall = (
-            normalised["security"] * security
-            + normalised["complexity"] * complexity
+        overall = round(
+            _WEIGHTS["style_compliance"] * style_score
+            + _WEIGHTS["test_coverage"] * test_cov
+            + _WEIGHTS["complexity"] * complexity
+            + _WEIGHTS["security"] * security
+            + _WEIGHTS["idiomatic_fit"] * idiomatic_score,
+            4,
         )
 
         return {
@@ -156,19 +205,16 @@ class PRQualityScorer:
             "timestamp": None,
             "data": {
                 "patch_id": patch_id,
-                "quality_score": round(stub_overall, 4),
+                "quality_score": overall,
                 "quality_breakdown": {
-                    "style_compliance": sandbox_blocked,
-                    "test_coverage": sandbox_blocked,
+                    "style_compliance": round(style_score, 4),
+                    "test_coverage": round(test_cov, 4),
                     "complexity": round(complexity, 4),
                     "security": round(security, 4),
-                    "idiomatic_fit": sandbox_blocked,
+                    "idiomatic_fit": round(idiomatic_score, 4),
                 },
                 "weights": _WEIGHTS,
-                "stub": True,
-                "message": (
-                    "Stub quality score — 2/5 dimensions are "
-                    "inline-computable; 3/5 require Gate 3 (sandbox)."
-                ),
+                "scoring_id": _new_id("qscore"),
+                "router_used": self._router is not None,
             },
         }

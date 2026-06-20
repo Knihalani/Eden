@@ -74,6 +74,15 @@ class HealRequest(BaseModel):
     action_type: str
 
 
+class HealApproveRequest(BaseModel):
+    approved_by_user_id: str
+
+
+class HealDenyRequest(BaseModel):
+    denied_by_user_id: str
+    reason: str = ""
+
+
 class NLQueryRequest(BaseModel):
     question: str
 
@@ -126,6 +135,43 @@ async def heal(
     body: HealRequest = Body(...),
 ) -> dict[str, Any]:
     return await _healer.heal(org_id, action_type=body.action_type)
+
+
+@router.post(
+    "/heal/{action_id}/approve",
+    dependencies=[
+        Depends(require_feature_flag(_UMBRELLA_FLAG)),
+        Depends(require_org_admin),
+    ],
+)
+async def heal_approve(
+    org_id: str = Path(...),
+    action_id: str = Path(...),
+    body: HealApproveRequest = Body(...),
+) -> dict[str, Any]:
+    return await _healer.approve(
+        org_id, action_id,
+        approved_by_user_id=body.approved_by_user_id,
+    )
+
+
+@router.post(
+    "/heal/{action_id}/deny",
+    dependencies=[
+        Depends(require_feature_flag(_UMBRELLA_FLAG)),
+        Depends(require_org_admin),
+    ],
+)
+async def heal_deny(
+    org_id: str = Path(...),
+    action_id: str = Path(...),
+    body: HealDenyRequest = Body(...),
+) -> dict[str, Any]:
+    return await _healer.deny(
+        org_id, action_id,
+        denied_by_user_id=body.denied_by_user_id,
+        reason=body.reason,
+    )
 
 
 @router.post("/nl/query")

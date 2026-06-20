@@ -23,19 +23,19 @@ class ModelTier(Enum):
 # Tier-to-model mapping (configurable via settings)
 TIER_MODELS: dict[ModelTier, list[str]] = {
     ModelTier.T1: [
-        "openai/gpt-4o-mini",
-        "anthropic/claude-3-haiku",
-        "google/gemini-2.0-flash",
+        "deepseek/deepseek-v4-flash",
+        "xiaomi/mimo-v2.5",
+        "tencent/hy3-preview",
     ],
     ModelTier.T2: [
-        "openai/gpt-4o",
-        "anthropic/claude-sonnet-4",
-        "google/gemini-2.5-pro",
+        "deepseek/deepseek-v4-pro",
+        "minimax/minimax-m3",
+        "xiaomi/mimo-v2.5-pro",
     ],
     ModelTier.T3: [
-        "anthropic/claude-opus-4",
-        "openai/gpt-4.5",
-        "deepseek/deepseek-v4",
+        "minimax/minimax-m3",
+        "deepseek/deepseek-v4-pro",
+        "xiaomi/mimo-v2.5-pro",
     ],
     ModelTier.T4: [
         "custom/fine-tuned",
@@ -562,11 +562,14 @@ class ModelRouter:
         return order[start_idx:]
 
     def _get_models_for_tier(self, tier: ModelTier) -> list[str]:
-        """Get model list for a tier, respecting runtime overrides."""
-        overrides = getattr(self.settings, f"optimization_tier_{tier.value}_models", None)
-        if overrides:
-            return overrides if isinstance(overrides, list) else [overrides]
-        return TIER_MODELS.get(tier, TIER_MODELS[ModelTier.T2])
+        """Return the fallback chain for a tier.
+
+        Single source of truth: :data:`TIER_MODELS`. The chains
+        are tried in order — primary first, then each fallback —
+        so a primary-model outage or validation failure still
+        returns a usable response.
+        """
+        return list(TIER_MODELS.get(tier, TIER_MODELS[ModelTier.T2]))
 
     def get_stats(self) -> dict:
         """Return routing statistics."""

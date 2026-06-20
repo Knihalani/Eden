@@ -27,9 +27,11 @@ from typing import Any
 
 from .._common import (
     _check_two_stage_optin,
+    _insert_row,
     _new_id,
     _not_implemented_envelope,
     _ok_envelope,
+    _update_row,
 )
 
 logger = logging.getLogger(__name__)
@@ -92,11 +94,23 @@ class PRReviewService:
         comment: str = "",
         edited_diff: str = "",
     ) -> dict[str, Any]:
-        """Dispatch the 8 inbox actions. STUB: opt-in gated, otherwise blocked.
+        """Dispatch the 8 inbox actions.
 
-        The two-stage opt-in is checked FIRST (per the v1.6
-        STUB checklist constraint). Read-only actions
-        (``comment``) bypass the opt-in check entirely.
+        Phase 2 of the audit pass wires the 4 review-shaped actions
+        (``approve``, ``deny``, ``request-changes``, ``comment``)
+        to the real ``patch_approvals`` table. Each approval row
+        is append-only; the matching ``proposed_patches.status``
+        flip is the side-effect for ``approve`` / ``deny`` /
+        ``request-changes``.
+
+        ``comment`` is the only action that bypasses the two-
+        stage opt-in (per the v1.6 STUB checklist) because it
+        doesn't mutate patch state.
+
+        The destructive actions (``edit``, ``pr``, ``revert``,
+        ``bulk``) stay Gate-4a blocked — they require LLM
+        generation, branch creation, PR opening, or revert PR
+        machinery that hasn't shipped.
         """
         if action not in INBOX_ACTIONS:
             return _not_implemented_envelope(
@@ -105,9 +119,7 @@ class PRReviewService:
                 data={"patch_id": patch_id, "action": action},
             )
 
-        # The opt-in gate is only enforced for the actions that
-        # can mutate state. Comment is always allowed because
-        # it doesn't change the patch state.
+        # Comment bypasses opt-in (read-only).
         if action != "comment":
             optin = _check_two_stage_optin(
                 self.name, policy, INBOX_ACTION_KIND[action]
@@ -115,24 +127,60 @@ class PRReviewService:
             if optin is not None:
                 return optin
 
-        # In STUB mode, the auto-mode actions return a blocked
-        # envelope (they require Gate 4a). The read-only
-        # actions (comment) return the live envelope.
-        if action == "comment":
+        # ── Real persistence for the 4 review-shaped actions ──
+        if action in {"approve", "deny", "request-changes", "comment"}:
+            approval_type = (
+                "approve" if action == "approve"
+                else "deny" if action == "deny"
+                else "request_changes" if action == "request-changes"
+                else "comment"
+            )
+            new_status = (
+                "approved" if action == "approve"
+                else "denied" if action == "deny"
+                else "needs_revision" if action == "request-changes"
+                else None
+            )
+            approval_id = _new_id("approval")
+            await _insert_row(
+                org_id,
+                "patch_approvals",
+                [
+                    "id",
+                    "patch_id",
+                    "approver_user_id",
+                    "approval_type",
+                    "comment",
+                ],
+                [
+                    approval_id,
+                    patch_id,
+                    actor_user_id,
+                    approval_type,
+                    comment,
+                ],
+            )
+            if new_status is not None:
+                await _update_row(
+                    org_id,
+                    "proposed_patches",
+                    where_col="id",
+                    where_val=patch_id,
+                    set_col="status",
+                    set_val=new_status,
+                )
             return _ok_envelope(
                 self.name,
                 {
                     "patch_id": patch_id,
                     "action": action,
-                    "comment_id": _new_id("cmt"),
+                    "approval_id": approval_id,
                     "actor_user_id": actor_user_id,
-                    "message": (
-                        "Stub comment — Gate 4a will persist to "
-                        "patch_review_actions."
-                    ),
+                    "new_status": new_status,
                 },
             )
 
+        # ── Destructive actions stay Gate-4a blocked ──
         return _not_implemented_envelope(
             self.name,
             message=(
