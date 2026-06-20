@@ -56,6 +56,7 @@ from eden.api.routes import (
 from eden.config import get_settings
 from eden.kb import health_check as kb_health_check
 from eden.kb import initialize_kb
+from eden.observability.metrics_endpoint import router as metrics_endpoint_router
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -312,6 +313,7 @@ app.include_router(multi_agent.router)  # /orgs/{org_id}/multi-agent (gated)
 app.include_router(marketplace.router)  # /marketplace (gated)
 app.include_router(integrations_helicone.router)  # /integrations/helicone (gated)
 app.include_router(intelligence_code_change.router)  # /orgs/{org_id}/intelligence/code-change (Cat 23, gated by intelligence_gap_v0)
+app.include_router(metrics_endpoint_router)  # /metrics (Prometheus, bearer-token auth)
 app.include_router(feature_flags.router)  # /feature-flags (public)
 
 # Onboarding wizard (June 2026) — GitHub App OAuth + per-org

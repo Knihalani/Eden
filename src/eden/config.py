@@ -80,6 +80,12 @@ class Settings(BaseSettings):
     # The Cat 1-23 wiring tests flip these via monkeypatch; see
     # ``tests/intelligence/test_intelligence_gap_stubs.py``.
     intelligence_gap_v0: bool = False
+    # Cat 14 (autonomous) destructive-action flag. The
+    # ``/heal``, ``/heal/{id}/approve``, ``/heal/{id}/deny`` routes
+    # require this + the per-action two-stage opt-in. Defaults
+    # false so destructive actions are blocked until explicitly
+    # enabled per tenant.
+    autonomous_actions_v0: bool = False
     enable_eval_pipeline: bool = False
 
     # Phase C — unified AI agent (Cat 14 real + global panel).
