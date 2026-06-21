@@ -26,6 +26,7 @@ import {
   type TraceRow,
 } from "./_components/recent-traces-card";
 import { QuickLinks } from "./_components/quick-links";
+import { NoOrgState } from "@/components/ui/no-org-state";
 
 interface DashboardData {
   traces: TraceRow[];
@@ -165,6 +166,19 @@ export default function DashboardPage() {
   // is hostile. Uses `data` not `data?.traces` so we don't show
   // first-run while the API is still in-flight.
   const isFirstRun = !loading && data !== null && data.tracesTotal === 0;
+
+  // No-org branch: brand-new Clerk signups land here before they've
+  // joined or created an org. Without this guard the page sat in
+  // its loading skeleton forever because ``useEffect`` short-circuits
+  // when ``currentOrg`` is null but ``loading`` stayed true.
+  if (!currentOrg && !authError) {
+    return (
+      <NoOrgState
+        feature="The dashboard"
+        description="Create or join an organization to start capturing traces, alerts, and cost data for your agents."
+      />
+    );
+  }
 
   return (
     <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto page-enter">
