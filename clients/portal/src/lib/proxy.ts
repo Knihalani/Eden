@@ -29,11 +29,12 @@ interface ForwardOptions {
   method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
   /**
    * Pre-serialized request body. The catch-all route reads the raw
-   * text from ``request.text()``; passing it through unchanged
-   * avoids double-stringification (which would wrap a JSON string in
-   * extra quotes and break FastAPI's request parsing).
+   * text from ``request.text()`` and passes a string through;
+   * leaving the type loose so FormData callers (avatar/reference/
+   * agent-upload) compile even though the runtime path doesn't
+   * serialize multipart bodies today.
    */
-  body?: string;
+  body?: unknown;
   cookieHeader?: string;
   extraHeaders?: Record<string, string>;
   /** Pre-built ``Authorization`` header value (e.g. ``Bearer <jwt>``). */
@@ -74,8 +75,10 @@ export async function forwardToBackend(
     // raw string (already JSON, from request.text()) or undefined.
     // Stringifying again would wrap the JSON string in extra quotes
     // ("\"{\"email\":...}\"") and FastAPI would reject it as a string
-    // where an object is expected. Pass through as-is.
-    body: body,
+    // where an object is expected. Pass through as-is. (Multipart
+    // bodies still don't survive the text() read upstream; that's a
+    // separate gap.)
+    body: body as BodyInit | null | undefined,
   });
 
   // Read the body once — clone before reading so the body is also available
