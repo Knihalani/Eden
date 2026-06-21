@@ -16,6 +16,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { motion, AnimatePresence } from "framer-motion";
+import { DataTable } from "@/components/ui/data-table";
 import {
   Sparkles,
   Loader2,
@@ -177,42 +178,42 @@ function TemplatesTab({ orgId, onError }: { orgId: string; onError: (s: string) 
         />
       ) : (
         <div className="bg-[var(--bg-primary)] border border-[var(--border-default)] rounded-xl overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-[var(--border-default)] bg-[var(--bg-secondary)]">
-                  <th className="text-left px-4 py-3 text-xs font-medium text-[var(--text-muted)] uppercase tracking-wide">Name</th>
-                  <th className="text-left px-4 py-3 text-xs font-medium text-[var(--text-muted)] uppercase tracking-wide">Category</th>
-                  <th className="text-left px-4 py-3 text-xs font-medium text-[var(--text-muted)] uppercase tracking-wide">Examples</th>
-                  <th className="text-left px-4 py-3 text-xs font-medium text-[var(--text-muted)] uppercase tracking-wide">Rubric preview</th>
-                  <th className="text-right px-4 py-3 text-xs font-medium text-[var(--text-muted)] uppercase tracking-wide">Action</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-[var(--border-subtle)]">
-                {templates.map((tpl) => (
-                  <tr key={tpl.template_id} className="hover:bg-[var(--bg-tertiary)]/50 transition-colors">
-                    <td className="px-4 py-3 font-medium text-[var(--text-primary)]">{tpl.name}</td>
-                    <td className="px-4 py-3">
-                      <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-[var(--bg-tertiary)] text-[var(--text-secondary)]">
-                        {tpl.category}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-[var(--text-secondary)]">{tpl.example_count}</td>
-                    <td className="px-4 py-3 text-[var(--text-muted)] max-w-md truncate">{tpl.rubric}</td>
-                    <td className="px-4 py-3 text-right">
-                      <button
-                        onClick={() => setOpenTemplate(tpl)}
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[var(--accent)] text-[var(--bg-base)] rounded-lg text-xs font-medium hover:bg-[var(--accent-hover)] transition-colors"
-                      >
-                        <Wand2 className="w-3.5 h-3.5" />
-                        Use template
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <DataTable
+            columns={[
+              { key: "name", header: "Name", sortable: true, cell: (tpl) => <span className="font-medium text-[var(--text-primary)]">{tpl.name}</span> },
+              {
+                key: "category",
+                header: "Category",
+                cell: (tpl) => (
+                  <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-[var(--bg-tertiary)] text-[var(--text-secondary)]">
+                    {tpl.category}
+                  </span>
+                ),
+              },
+              { key: "example_count", header: "Examples", sortable: true, align: "right", cell: (tpl) => <span className="text-[var(--text-secondary)]">{tpl.example_count}</span> },
+              { key: "rubric", header: "Rubric preview", cell: (tpl) => <span className="text-[var(--text-muted)] max-w-md truncate inline-block">{tpl.rubric}</span> },
+              {
+                key: "template_id",
+                header: "Action",
+                align: "right",
+                cell: (tpl) => (
+                  <button
+                    onClick={() => setOpenTemplate(tpl)}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[var(--accent)] text-[var(--bg-base)] rounded-lg text-xs font-medium hover:bg-[var(--accent-hover)] transition-colors"
+                  >
+                    <Wand2 className="w-3.5 h-3.5" />
+                    Use template
+                  </button>
+                ),
+              },
+            ]}
+            rows={templates}
+            rowKey={(tpl) => tpl.template_id}
+            defaultSort={{ key: "name", direction: "asc" }}
+            emptyTitle="No templates yet"
+            emptyDescription="Built-in rubric templates will appear here as they are added."
+            pageSize={25}
+          />
         </div>
       )}
 
@@ -518,52 +519,55 @@ function MyMetricsTab({ orgId, onError }: { orgId: string; onError: (s: string) 
         />
       ) : (
         <div className="bg-[var(--bg-primary)] border border-[var(--border-default)] rounded-xl overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-[var(--border-default)] bg-[var(--bg-secondary)]">
-                  <th className="text-left px-4 py-3 text-xs font-medium text-[var(--text-muted)] uppercase tracking-wide">Name</th>
-                  <th className="text-left px-4 py-3 text-xs font-medium text-[var(--text-muted)] uppercase tracking-wide">Version</th>
-                  <th className="text-left px-4 py-3 text-xs font-medium text-[var(--text-muted)] uppercase tracking-wide">Created</th>
-                  <th className="text-left px-4 py-3 text-xs font-medium text-[var(--text-muted)] uppercase tracking-wide">Status</th>
-                  <th className="text-right px-4 py-3 text-xs font-medium text-[var(--text-muted)] uppercase tracking-wide">Action</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-[var(--border-subtle)]">
-                {metrics.map((m) => (
-                  <tr key={m.metric_id} className="hover:bg-[var(--bg-tertiary)]/50 transition-colors">
-                    <td className="px-4 py-3 font-medium text-[var(--text-primary)]">{m.name}</td>
-                    <td className="px-4 py-3 text-[var(--text-secondary)] font-mono text-xs">{m.version}</td>
-                    <td className="px-4 py-3 text-[var(--text-muted)] text-xs">
-                      {m.created_at ? new Date(m.created_at).toLocaleString() : "—"}
-                    </td>
-                    <td className="px-4 py-3">
-                      {m.approved ? (
-                        <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full font-medium bg-[var(--terminal-faint)] text-[var(--terminal)]">
-                          <CheckCircle2 className="w-3 h-3" />
-                          Approved
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full font-medium bg-[var(--warning-bg)] text-[var(--warning)]">
-                          <Clock className="w-3 h-3" />
-                          Pending
-                        </span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      <button
-                        onClick={() => openMetric(m.metric_id)}
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[var(--bg-tertiary)] text-[var(--text-primary)] rounded-lg text-xs font-medium hover:bg-[var(--border-default)] transition-colors"
-                      >
-                        <Eye className="w-3.5 h-3.5" />
-                        View
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <DataTable
+            columns={[
+              { key: "name", header: "Name", sortable: true, cell: (m) => <span className="font-medium text-[var(--text-primary)]">{m.name}</span> },
+              { key: "version", header: "Version", cell: (m) => <span className="text-[var(--text-secondary)] font-mono text-xs">{m.version}</span> },
+              {
+                key: "created_at",
+                header: "Created",
+                sortable: true,
+                cell: (m) => <span className="text-[var(--text-muted)] text-xs">{m.created_at ? new Date(m.created_at).toLocaleString() : "—"}</span>,
+              },
+              {
+                key: "approved",
+                header: "Status",
+                cell: (m) =>
+                  m.approved ? (
+                    <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full font-medium bg-[var(--terminal-faint)] text-[var(--terminal)]">
+                      <CheckCircle2 className="w-3 h-3" />
+                      Approved
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full font-medium bg-[var(--warning-bg)] text-[var(--warning)]">
+                      <Clock className="w-3 h-3" />
+                      Pending
+                    </span>
+                  ),
+              },
+              {
+                key: "metric_id",
+                header: "Action",
+                align: "right",
+                cell: (m) => (
+                  <button
+                    onClick={() => openMetric(m.metric_id)}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[var(--bg-tertiary)] text-[var(--text-primary)] rounded-lg text-xs font-medium hover:bg-[var(--border-default)] transition-colors"
+                  >
+                    <Eye className="w-3.5 h-3.5" />
+                    View
+                  </button>
+                ),
+              },
+            ]}
+            rows={metrics}
+            rowKey={(m) => m.metric_id}
+            defaultSort={{ key: "created_at", direction: "desc" }}
+            emptyTitle="No metrics yet"
+            emptyDescription="Generate one from the “From examples” tab to see it here."
+            emptyIcon={Layers}
+            pageSize={25}
+          />
         </div>
       )}
 

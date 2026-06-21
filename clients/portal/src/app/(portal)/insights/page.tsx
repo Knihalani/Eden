@@ -5,6 +5,7 @@ import { useOrg } from "@/hooks/use-org";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { EmptyState } from "@/components/ui/empty-state";
+import { SeverityBadge, SeverityIcon } from "@/components/ui/status-badge";
 import { PageHeader } from "@/components/layout/page-header";
 import {
   Lightbulb,
@@ -30,6 +31,7 @@ import {
   Info,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
+import { DataTable } from "@/components/ui/data-table";
 import { NoOrgState } from "@/components/ui/no-org-state";
 
 interface OverviewData {
@@ -383,15 +385,20 @@ function OverviewTab({ data }: { data: OverviewData }) {
               const count = insights.by_severity[severity] || 0;
               const total = summary.total_insights || 1;
               const pct = (count / total) * 100;
+              // ponytail: progress bar fills get the *solid* color for
+              // each severity tier so the bar reads at a glance — the
+              // subtle wash tokens (warning-bg, accent-faint) are
+              // reserved for badge backgrounds. The info tier falls
+              // through to text-muted for an unobtrusive "no signal" bar.
               const color =
                 severity === "critical"
                   ? "bg-[var(--error)]"
                   : severity === "high"
-                  ? "bg-[var(--warning-bg)]"
+                  ? "bg-[var(--warning)]"
                   : severity === "medium"
                   ? "bg-[var(--warning)]"
                   : severity === "low"
-                  ? "bg-[var(--accent)]"
+                  ? "bg-[var(--accent-faint)]"
                   : "bg-[var(--text-muted)]";
               return (
                 <div key={severity}>
@@ -967,34 +974,6 @@ function ReportDetailModal({
 // Helpers
 // ──────────────────────────────────────────────────────────────────────────
 
-function SeverityIcon({ severity }: { severity: string }) {
-  const map: Record<string, { icon: typeof AlertTriangle; color: string }> = {
-    critical: { icon: XCircle, color: "text-[var(--error)]" },
-    high: { icon: AlertTriangle, color: "text-[var(--warning)]" },
-    medium: { icon: AlertTriangle, color: "text-[var(--warning)]" },
-    low: { icon: Info, color: "text-[var(--accent)]" },
-    info: { icon: Info, color: "text-[var(--text-muted)]" },
-  };
-  const { icon: Icon, color } = map[severity] || map.info;
-  return <Icon className={cn("w-5 h-5 flex-shrink-0", color)} />;
-}
-
-function SeverityBadge({ severity }: { severity: string }) {
-  const classes: Record<string, string> = {
-    critical: "bg-[var(--error-bg)] text-[var(--error)]",
-    high: "bg-[var(--warning-bg)] text-[var(--warning)]",
-    medium: "bg-[var(--warning-bg)] text-[var(--warning)]",
-    low: "bg-[var(--accent-faint)] text-[var(--accent)]",
-    info: "bg-[var(--bg-tertiary)] text-[var(--text-secondary)]",
-  };
-  return (
-    <span className={cn("text-xs px-2 py-0.5 rounded-full font-medium", classes[severity] || classes.info)}>
-      {severity}
-    </span>
-  );
-}
-
-
 // ────────────────────────────────────────────────────────────────────────────
 // §3.2 — Closed-loop correlation tab
 // ────────────────────────────────────────────────────────────────────────────
@@ -1143,43 +1122,28 @@ function ClosedLoopTab() {
             No insights written in the {days}-day window.
           </div>
         ) : (
-          <table className="w-full text-sm">
-            <thead className="bg-[var(--bg-tertiary)] text-[var(--text-muted)] text-xs uppercase">
-              <tr>
-                <th className="text-left px-4 py-2 font-medium">Week</th>
-                <th className="text-right px-4 py-2 font-medium">Insights</th>
-                <th className="text-right px-4 py-2 font-medium">KB writes</th>
-                <th className="text-right px-4 py-2 font-medium">Jobs (post)</th>
-                <th className="text-right px-4 py-2 font-medium">Gold-tier</th>
-                <th className="text-right px-4 py-2 font-medium">Gold rate</th>
-              </tr>
-            </thead>
-            <tbody>
-              {report.weeks.map((w) => (
-                <tr
-                  key={w.week_start}
-                  className="border-t border-[var(--border-default)] hover:bg-[var(--bg-tertiary)]/50"
-                >
-                  <td className="px-4 py-2 font-mono text-xs">
-                    {w.week_start}
-                  </td>
-                  <td className="px-4 py-2 text-right">{w.insights_written}</td>
-                  <td className="px-4 py-2 text-right">{w.kb_writes}</td>
-                  <td className="px-4 py-2 text-right">
-                    {w.jobs_in_post_window}
-                  </td>
-                  <td className="px-4 py-2 text-right">
-                    {w.gold_tier_in_post_window}
-                  </td>
-                  <td className="px-4 py-2 text-right font-medium">
-                    {w.gold_tier_rate
-                      ? `${(w.gold_tier_rate * 100).toFixed(1)}%`
-                      : "—"}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <DataTable
+            columns={[
+              { key: "week_start", header: "Week", sortable: true, cell: (w) => <span className="font-mono text-xs">{w.week_start}</span> },
+              { key: "insights_written", header: "Insights", sortable: true, align: "right", cell: (w) => w.insights_written },
+              { key: "kb_writes", header: "KB writes", sortable: true, align: "right", cell: (w) => w.kb_writes },
+              { key: "jobs_in_post_window", header: "Jobs (post)", sortable: true, align: "right", cell: (w) => w.jobs_in_post_window },
+              { key: "gold_tier_in_post_window", header: "Gold-tier", sortable: true, align: "right", cell: (w) => w.gold_tier_in_post_window },
+              {
+                key: "gold_tier_rate",
+                header: "Gold rate",
+                sortable: true,
+                align: "right",
+                cell: (w) => <span className="font-medium">{w.gold_tier_rate ? `${(w.gold_tier_rate * 100).toFixed(1)}%` : "—"}</span>,
+              },
+            ]}
+            rows={report.weeks}
+            rowKey={(w) => w.week_start}
+            defaultSort={{ key: "week_start", direction: "desc" }}
+            emptyTitle="No insights written in this window"
+            emptyDescription="Adjust the days filter or wait for more activity."
+            pageSize={25}
+          />
         )}
       </div>
     </div>

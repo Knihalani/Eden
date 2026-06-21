@@ -8,11 +8,12 @@ import hashlib
 import logging
 from uuid import uuid4
 
-from fastapi import APIRouter, File, Form, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 
 from eden.api.deps import (
     require_org_member,
     require_org_permission,
+    require_org_permission_dep,
 )
 from eden.api.routes.billing import check_limit
 from eden.storage.postgres import get_postgres_client
@@ -118,6 +119,7 @@ async def upload_reference(
     description: str | None = Form(None),
     file: UploadFile = File(...),
     user: dict | None = None,
+        _check_references_upload: dict = Depends(require_org_permission_dep('references:upload')),
 ):
     """Upload a code reference to the organization's library.
 
@@ -126,7 +128,6 @@ async def upload_reference(
     - description: Optional description
     - file: The code file to upload
     """
-    await require_org_permission("references:upload", org_id)
 
     # Check reference limit before uploading
     if await check_limit(org_id, "references"):
@@ -289,11 +290,12 @@ async def get_reference(org_id: str, ref_id: str, user: dict | None = None):
 
 
 @router.delete("/{ref_id}", response_model=dict)
-async def delete_reference(org_id: str, ref_id: str, user: dict | None = None):
+async def delete_reference(org_id: str, ref_id: str, user: dict | None = None,
+        _check_references_delete: dict = Depends(require_org_permission_dep('references:delete')),
+):
     """Delete a code reference (requires references:delete permission or be the uploader)."""
     # First check if user has delete permission (owner/admin)
     try:
-        await require_org_permission("references:delete", org_id)
         can_delete = True
     except HTTPException:
         can_delete = False

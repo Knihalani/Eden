@@ -11,6 +11,7 @@ import {
   ShieldCheck,
   Wrench,
   Network,
+  Gavel,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -71,6 +72,13 @@ const QUICK_LINKS: QuickLinkItem[] = [
     href: "/guardrails",
     icon: ShieldCheck,
     accent: "blue",
+  },
+  {
+    label: "Judge Scores",
+    description: "LLM-as-judge evaluations",
+    href: "/observability/eval",
+    icon: Gavel,
+    accent: "violet",
   },
   {
     label: "Incidents",

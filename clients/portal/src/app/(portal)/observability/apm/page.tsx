@@ -23,6 +23,7 @@ import {
 } from "lucide-react";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { motion } from "framer-motion";
+import { DataTable } from "@/components/ui/data-table";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
@@ -434,36 +435,35 @@ export default function ApmPage() {
               </div>
             ) : (
               <div className="bg-[var(--bg-primary)] border border-[var(--border-default)] rounded-xl overflow-hidden">
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b border-[var(--border-default)] bg-[var(--bg-secondary)]">
-                        <th className="text-left px-4 py-3 text-xs font-medium text-[var(--text-muted)] uppercase tracking-wide">Step</th>
-                        <th className="text-left px-4 py-3 text-xs font-medium text-[var(--text-muted)] uppercase tracking-wide">Score</th>
-                        <th className="text-left px-4 py-3 text-xs font-medium text-[var(--text-muted)] uppercase tracking-wide">Cost (¢)</th>
-                        <th className="text-left px-4 py-3 text-xs font-medium text-[var(--text-muted)] uppercase tracking-wide">Duration (ms)</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-[var(--border-subtle)]">
-                      {steps.map((s) => (
-                        <tr key={s.step_index} className="hover:bg-[var(--bg-tertiary)]/50 transition-colors">
-                          <td className="px-4 py-2.5 font-mono text-xs text-[var(--text-primary)]">
-                            {s.step_index}
-                          </td>
-                          <td className="px-4 py-2.5 font-mono text-xs text-[var(--text-secondary)]">
-                            {s.evaluation_score !== null ? s.evaluation_score.toFixed(3) : "—"}
-                          </td>
-                          <td className="px-4 py-2.5 font-mono text-xs text-[var(--text-secondary)]">
-                            {s.cost_cents.toFixed(2)}
-                          </td>
-                          <td className="px-4 py-2.5 font-mono text-xs text-[var(--text-secondary)]">
-                            {s.duration_ms.toFixed(1)}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                <DataTable
+                  columns={[
+                    { key: "step_index", header: "Step", cell: (s) => <span className="font-mono text-xs">{s.step_index}</span> },
+                    {
+                      key: "evaluation_score",
+                      header: "Score",
+                      sortable: true,
+                      cell: (s) => <span className="font-mono text-xs">{s.evaluation_score !== null ? s.evaluation_score.toFixed(3) : "—"}</span>,
+                    },
+                    {
+                      key: "cost_cents",
+                      header: "Cost (¢)",
+                      sortable: true,
+                      align: "right",
+                      cell: (s) => <span className="font-mono text-xs">{s.cost_cents.toFixed(2)}</span>,
+                    },
+                    {
+                      key: "duration_ms",
+                      header: "Duration (ms)",
+                      sortable: true,
+                      align: "right",
+                      cell: (s) => <span className="font-mono text-xs">{s.duration_ms.toFixed(1)}</span>,
+                    },
+                  ]}
+                  rows={steps}
+                  rowKey={(s) => String(s.step_index)}
+                  defaultSort={{ key: "step_index", direction: "asc" }}
+                  pageSize={50}
+                />
               </div>
             )}
           </motion.div>
@@ -503,36 +503,34 @@ export default function ApmPage() {
               </div>
             ) : (
               <div className="bg-[var(--bg-primary)] border border-[var(--border-default)] rounded-xl overflow-hidden">
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b border-[var(--border-default)] bg-[var(--bg-secondary)]">
-                        <th className="text-left px-4 py-3 text-xs font-medium text-[var(--text-muted)] uppercase tracking-wide">Agent</th>
-                        <th className="text-left px-4 py-3 text-xs font-medium text-[var(--text-muted)] uppercase tracking-wide">Task completion</th>
-                        <th className="text-left px-4 py-3 text-xs font-medium text-[var(--text-muted)] uppercase tracking-wide">Tool failure</th>
-                        <th className="text-left px-4 py-3 text-xs font-medium text-[var(--text-muted)] uppercase tracking-wide">Avg iter / success</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-[var(--border-subtle)]">
-                      {agentMetrics.map((a) => (
-                        <tr key={a.agent_id} className="hover:bg-[var(--bg-tertiary)]/50 transition-colors">
-                          <td className="px-4 py-2.5 font-mono text-xs text-[var(--text-primary)]">
-                            {a.agent_id}
-                          </td>
-                          <td className="px-4 py-2.5 font-mono text-xs">
-                            <RateBar value={a.task_completion_rate} kind="good" />
-                          </td>
-                          <td className="px-4 py-2.5 font-mono text-xs">
-                            <RateBar value={a.tool_failure_rate} kind="bad" />
-                          </td>
-                          <td className="px-4 py-2.5 font-mono text-xs text-[var(--text-secondary)]">
-                            {a.avg_iterations_to_success.toFixed(2)}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                <DataTable
+                  columns={[
+                    { key: "agent_id", header: "Agent", cell: (a) => <span className="font-mono text-xs">{a.agent_id}</span> },
+                    {
+                      key: "task_completion_rate",
+                      header: "Task completion",
+                      sortable: true,
+                      cell: (a) => <RateBar value={a.task_completion_rate} kind="good" />,
+                    },
+                    {
+                      key: "tool_failure_rate",
+                      header: "Tool failure",
+                      sortable: true,
+                      cell: (a) => <RateBar value={a.tool_failure_rate} kind="bad" />,
+                    },
+                    {
+                      key: "avg_iterations_to_success",
+                      header: "Avg iter / success",
+                      sortable: true,
+                      align: "right",
+                      cell: (a) => <span className="font-mono text-xs">{a.avg_iterations_to_success.toFixed(2)}</span>,
+                    },
+                  ]}
+                  rows={agentMetrics}
+                  rowKey={(a) => a.agent_id}
+                  defaultSort={{ key: "agent_id", direction: "asc" }}
+                  pageSize={50}
+                />
               </div>
             )}
           </motion.div>

@@ -6,10 +6,10 @@ import logging
 import zipfile
 from datetime import datetime
 
-from fastapi import APIRouter, Cookie
+from fastapi import APIRouter, Cookie, Depends
 from fastapi.responses import StreamingResponse
 
-from eden.api.deps import require_org_permission
+from eden.api.deps import require_org_permission, require_org_permission_dep
 from eden.storage.postgres import get_postgres_client
 
 logger = logging.getLogger(__name__)
@@ -21,6 +21,7 @@ router = APIRouter(prefix="/orgs", tags=["export"])
 async def export_org_data(
     org_id: str,
     authorization: str | None = Cookie(None),
+        _check_audit_view: dict = Depends(require_org_permission_dep('audit:view')),
 ):
     """Export all organization data as a ZIP archive for GDPR compliance.
 
@@ -34,7 +35,6 @@ async def export_org_data(
     Requires audit:view permission (owner and admin only).
     """
     # Require audit:view permission
-    await require_org_permission("audit:view", org_id)
 
     client = await get_postgres_client()
 

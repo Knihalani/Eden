@@ -16,6 +16,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { motion, AnimatePresence } from "framer-motion";
+import { DataTable } from "@/components/ui/data-table";
 import {
   BarChart3,
   Gauge,
@@ -219,32 +220,27 @@ function VersionsTab({ orgId, onError }: { orgId: string; onError: (s: string) =
         />
       ) : (
         <div className="bg-[var(--bg-primary)] border border-[var(--border-default)] rounded-xl overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-[var(--border-default)] bg-[var(--bg-secondary)]">
-                  <th className="text-left px-4 py-3 text-xs font-medium text-[var(--text-muted)] uppercase tracking-wide">Judge</th>
-                  <th className="text-left px-4 py-3 text-xs font-medium text-[var(--text-muted)] uppercase tracking-wide">Version</th>
-                  <th className="text-left px-4 py-3 text-xs font-medium text-[var(--text-muted)] uppercase tracking-wide">Tagged at</th>
-                  <th className="text-left px-4 py-3 text-xs font-medium text-[var(--text-muted)] uppercase tracking-wide">Notes</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-[var(--border-subtle)]">
-                {versions.map((v) => (
-                  <tr key={v.version_id} className="hover:bg-[var(--bg-tertiary)]/50 transition-colors">
-                    <td className="px-4 py-3 font-medium text-[var(--text-primary)]">{v.judge_name}</td>
-                    <td className="px-4 py-3 font-mono text-xs text-[var(--text-secondary)]">{v.version}</td>
-                    <td className="px-4 py-3 text-[var(--text-muted)] text-xs">
-                      {v.tagged_at ? new Date(v.tagged_at).toLocaleString() : "—"}
-                    </td>
-                    <td className="px-4 py-3 text-[var(--text-secondary)] text-xs max-w-md truncate">
-                      {v.notes || <span className="text-[var(--text-muted)]">—</span>}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <DataTable
+            columns={[
+              { key: "judge_name", header: "Judge", sortable: true, cell: (v) => <span className="font-medium text-[var(--text-primary)]">{v.judge_name}</span> },
+              { key: "version", header: "Version", sortable: true, cell: (v) => <span className="font-mono text-xs text-[var(--text-secondary)]">{v.version}</span> },
+              {
+                key: "tagged_at",
+                header: "Tagged at",
+                sortable: true,
+                cell: (v) => <span className="text-[var(--text-muted)] text-xs">{v.tagged_at ? new Date(v.tagged_at).toLocaleString() : "—"}</span>,
+              },
+              {
+                key: "notes",
+                header: "Notes",
+                cell: (v) => <span className="text-[var(--text-secondary)] text-xs max-w-md truncate inline-block">{v.notes || "—"}</span>,
+              },
+            ]}
+            rows={versions}
+            rowKey={(v) => v.version_id}
+            defaultSort={{ key: "tagged_at", direction: "desc" }}
+            pageSize={25}
+          />
         </div>
       )}
 
@@ -396,36 +392,41 @@ function FailureClustersTab({ orgId, onError }: { orgId: string; onError: (s: st
         />
       ) : (
         <div className="bg-[var(--bg-primary)] border border-[var(--border-default)] rounded-xl overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-[var(--border-default)] bg-[var(--bg-secondary)]">
-                  <th className="text-left px-4 py-3 text-xs font-medium text-[var(--text-muted)] uppercase tracking-wide">Cluster</th>
-                  <th className="text-left px-4 py-3 text-xs font-medium text-[var(--text-muted)] uppercase tracking-wide">Size</th>
-                  <th className="text-left px-4 py-3 text-xs font-medium text-[var(--text-muted)] uppercase tracking-wide">Representative failure</th>
-                  <th className="text-right px-4 py-3 text-xs font-medium text-[var(--text-muted)] uppercase tracking-wide">Action</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-[var(--border-subtle)]">
-                {clusters.map((c) => (
-                  <tr key={c.cluster_id} className="hover:bg-[var(--bg-tertiary)]/50 transition-colors">
-                    <td className="px-4 py-3 font-mono text-xs text-[var(--text-primary)]">{c.cluster_id}</td>
-                    <td className="px-4 py-3 text-[var(--text-secondary)]">{c.size}</td>
-                    <td className="px-4 py-3 text-[var(--text-secondary)] max-w-xl truncate">{c.representative_failure}</td>
-                    <td className="px-4 py-3 text-right">
-                      <button
-                        onClick={() => setOpenCluster(c)}
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[var(--accent)] text-[var(--bg-base)] rounded-lg text-xs font-medium hover:bg-[var(--accent-hover)] transition-colors"
-                      >
-                        <Shield className="w-3.5 h-3.5" />
-                        Promote to guardrail
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <DataTable
+            columns={[
+              { key: "cluster_id", header: "Cluster", sortable: true, cell: (c) => <span className="font-mono text-xs text-[var(--text-primary)]">{c.cluster_id}</span> },
+              {
+                key: "size",
+                header: "Size",
+                sortable: true,
+                align: "right",
+                cell: (c) => <span className="text-[var(--text-secondary)]">{c.size}</span>,
+              },
+              {
+                key: "representative_failure",
+                header: "Representative failure",
+                cell: (c) => <span className="text-[var(--text-secondary)] max-w-xl truncate inline-block">{c.representative_failure}</span>,
+              },
+              {
+                key: "actions",
+                header: "",
+                align: "right",
+                cell: (c) => (
+                  <button
+                    onClick={() => setOpenCluster(c)}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[var(--accent)] text-[var(--bg-base)] rounded-lg text-xs font-medium hover:bg-[var(--accent-hover)] transition-colors"
+                  >
+                    <Shield className="w-3.5 h-3.5" />
+                    Promote to guardrail
+                  </button>
+                ),
+              },
+            ]}
+            rows={clusters}
+            rowKey={(c) => c.cluster_id}
+            defaultSort={{ key: "size", direction: "desc" }}
+            pageSize={25}
+          />
         </div>
       )}
 

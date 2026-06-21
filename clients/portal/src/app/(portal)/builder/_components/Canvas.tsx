@@ -113,7 +113,7 @@ export function Canvas({
     fitViewOptions: { padding: 0.2 },
     proOptions: { hideAttribution: true },
     defaultEdgeOptions: { animated: false, data: { kind: "data" } },
-    connectionLineStyle: { stroke: "#10b981", strokeWidth: 2 },
+    connectionLineStyle: { stroke: "var(--node-agent)", strokeWidth: 2 },
   };
 
   return (
@@ -139,7 +139,7 @@ export function Canvas({
           variant={BackgroundVariant.Dots}
           gap={18}
           size={1}
-          color="#3f3f46"
+          color="var(--node-grid)"
         />
         <Controls
           position="bottom-left"
@@ -150,25 +150,25 @@ export function Canvas({
           position="bottom-right"
           pannable
           zoomable
-          maskColor="rgba(0,0,0,0.6)"
+          maskColor="var(--overlay)"
           nodeColor={(n) => {
             switch (n.type) {
               case "agent":
-                return "#10b981";
+                return "var(--node-agent)";
               case "tool":
-                return "#0ea5e9";
+                return "var(--node-tool)";
               case "scenario":
-                return "#f59e0b";
+                return "var(--node-scenario)";
               case "scoring":
-                return "#a855f7";
+                return "var(--node-scoring)";
               case "memory":
-                return "#ec4899";
+                return "var(--node-memory)";
               case "loop":
-                return "#06b6d4";
+                return "var(--node-loop)";
               case "seed":
-                return "#f97316";
+                return "var(--node-seed)";
               default:
-                return "#71717a";
+                return "var(--node-default)";
             }
           }}
           className="!bg-[var(--bg-base)] !border-[var(--border-default)]"

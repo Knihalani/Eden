@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { useOrg } from "@/hooks/use-org";
 import { api } from "@/lib/api";
+import { SALES_EMAIL } from "@/lib/constants";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/layout/page-header";
@@ -284,7 +285,8 @@ export default function BillingPage() {
               <Card
                 key={plan.name}
                 className={cn(
-                  "p-5 relative transition-all",
+                  "p-5 relative transition-all cursor-pointer hover:border-[var(--accent)]/60 hover:-translate-y-0.5",
+                  "focus-within:ring-2 focus-within:ring-[var(--accent)]/40",
                   plan.popular &&
                     "ring-1 ring-[var(--accent)]/40 border-[var(--accent)]/50",
                   isCurrentPlan && "border-[var(--terminal)]/40 ring-1 ring-[var(--terminal)]/30",
@@ -347,7 +349,7 @@ export default function BillingPage() {
                   <Button
                     variant="outline"
                     className="w-full"
-                    onClick={() => (window.location.href = "mailto:sales@eden.dev")}
+                    onClick={() => (window.location.href = `mailto:${SALES_EMAIL}`)}
                   >
                     Contact sales
                     <ArrowUpRight className="w-3 h-3 ml-1" />
@@ -395,8 +397,8 @@ export default function BillingPage() {
         <div className="flex items-center justify-between p-4 border border-[var(--border-default)] rounded-lg">
           {paymentMethod ? (
             <div className="flex items-center gap-3">
-              <div className="w-12 h-7 bg-gradient-to-r from-[var(--accent)] to-[var(--accent-dim)] rounded flex items-center justify-center">
-                <span className="text-[var(--accent-foreground)] text-[10px] font-bold uppercase">
+              <div className="w-12 h-7 bg-[var(--accent-faint)] rounded flex items-center justify-center">
+                <span className="text-[var(--accent)] text-[10px] font-bold uppercase">
                   {paymentMethod.brand}
                 </span>
               </div>

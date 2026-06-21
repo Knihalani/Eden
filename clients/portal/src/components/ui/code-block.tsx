@@ -77,7 +77,7 @@ export const CodeBlock = React.forwardRef<HTMLPreElement, CodeBlockProps>(
             ref={ref}
             className={cn(
               "p-4 overflow-x-auto text-sm font-mono leading-relaxed",
-              "text-[var(--fg-secondary)]"
+              "text-[var(--text-secondary)]"
             )}
             {...props}
           >
@@ -87,10 +87,10 @@ export const CodeBlock = React.forwardRef<HTMLPreElement, CodeBlockProps>(
                   <tbody>
                     {lines.map((line, i) => (
                       <tr key={i}>
-                        <td className="pr-4 text-right text-[var(--fg-faint)] select-none w-10 align-top">
+                        <td className="pr-4 text-right text-[var(--text-faint)] select-none w-10 align-top">
                           {i + 1}
                         </td>
-                        <td className="whitespace-pre text-[var(--fg-secondary)]">
+                        <td className="whitespace-pre text-[var(--text-secondary)]">
                           {line || " "}
                         </td>
                       </tr>

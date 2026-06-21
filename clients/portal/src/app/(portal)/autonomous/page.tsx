@@ -16,7 +16,7 @@ import { motion, AnimatePresence } from "framer-motion";
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
+import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
 import { EmptyState } from "@/components/ui/empty-state";
 import { NoOrgState } from "@/components/ui/no-org-state";
 import { useOrg } from "@/hooks/use-org";
@@ -122,31 +122,23 @@ function NLQuerySection() {
                 </p>
                 {result.rows.length > 0 ? (
                   <div className="rounded-md border border-[var(--border-subtle)]">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          {Object.keys(result.rows[0]).map((k) => (
-                            <TableHead key={k}>{k}</TableHead>
-                          ))}
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {result.rows.map((r, i) => (
-                          <TableRow key={i}>
-                            {Object.values(r).map((v, j) => (
-                              <TableCell
-                                key={j}
-                                className="font-mono text-xs text-[var(--text-secondary)]"
-                              >
-                                {typeof v === "object" && v !== null
-                                  ? JSON.stringify(v)
-                                  : String(v ?? "—")}
-                              </TableCell>
-                            ))}
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
+                    <DataTable
+                      columns={Object.keys(result.rows[0]).map((k) => ({
+                        key: k,
+                        header: k,
+                        cell: (r: Record<string, unknown>) => (
+                          <span className="font-mono text-xs text-[var(--text-secondary)]">
+                            {(() => {
+                              const v = r[k];
+                              return typeof v === "object" && v !== null ? JSON.stringify(v) : String(v ?? "—");
+                            })()}
+                          </span>
+                        ),
+                      }))}
+                      rows={result.rows as Array<Record<string, unknown>>}
+                      rowKey={(_, i) => `row_${i}`}
+                      pageSize={50}
+                    />
                   </div>
                 ) : (
                   <EmptyState icon={Database} title="No rows returned" size="sm" />
@@ -367,39 +359,32 @@ function RecommendationsTab() {
         <CardDescription>Suggestions ranked by impact and effort</CardDescription>
       </CardHeader>
       <CardContent className="px-0 pb-0">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Title</TableHead>
-              <TableHead>Impact</TableHead>
-              <TableHead>Effort</TableHead>
-              <TableHead>Rationale</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {items.map((r) => (
-              <TableRow key={r.id}>
-                <TableCell className="font-medium text-[var(--text-primary)]">
-                  {r.title}
-                </TableCell>
-                <TableCell>
-                  <span
-                    className={cn(
-                      "inline-flex rounded-full px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide",
-                      IMPACT_COLORS[r.impact] ?? "bg-[var(--bg-tertiary)] text-[var(--text-muted)]"
-                    )}
-                  >
-                    {r.impact}
-                  </span>
-                </TableCell>
-                <TableCell className="text-[var(--text-secondary)]">{r.effort}</TableCell>
-                <TableCell className="max-w-md text-[var(--text-secondary)]">
-                  {r.rationale}
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+        <DataTable
+          columns={[
+            { key: "title", header: "Title", cell: (r) => <span className="font-medium text-[var(--text-primary)]">{r.title}</span>, sortable: true },
+            {
+              key: "impact",
+              header: "Impact",
+              cell: (r) => (
+                <span
+                  className={cn(
+                    "inline-flex rounded-full px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide",
+                    IMPACT_COLORS[r.impact] ?? "bg-[var(--bg-tertiary)] text-[var(--text-muted)]"
+                  )}
+                >
+                  {r.impact}
+                </span>
+              ),
+            },
+            { key: "effort", header: "Effort", cell: (r) => <span className="text-[var(--text-secondary)]">{r.effort}</span> },
+            { key: "rationale", header: "Rationale", cell: (r) => <span className="max-w-md text-[var(--text-secondary)]">{r.rationale}</span> },
+          ]}
+          rows={items}
+          rowKey={(r) => r.id}
+          defaultSort={{ key: "title", direction: "asc" }}
+          emptyIcon={Lightbulb}
+          emptyTitle="No recommendations"
+        />
       </CardContent>
     </Card>
   );

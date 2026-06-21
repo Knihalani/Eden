@@ -86,6 +86,9 @@ export {
   SortableTableHead,
 } from "./table";
 
+export { DataTable, DataTableSearch } from "./data-table";
+export type { DataTableColumn, DataTableBulkAction, DataTableProps } from "./data-table";
+
 export { Separator } from "./separator";
 
 export { CommandPalette } from "./command-palette";

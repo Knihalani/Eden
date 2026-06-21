@@ -14,7 +14,7 @@ from datetime import UTC, datetime, timedelta
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel
 
-from eden.api.deps import get_current_user, require_org_permission
+from eden.api.deps import get_current_user, require_org_permission, require_org_permission_dep
 from eden.optimization import (
     BudgetExceededError,
     BudgetStatus,
@@ -178,13 +178,13 @@ async def get_optimization_overview(
     org_id: str,
     days: int = Query(default=30, ge=1, le=365),
     user: dict = Depends(get_current_user),
+        _check_billing_view: dict = Depends(require_org_permission_dep('billing:view')),
 ):
     """Get a combined optimization overview for the dashboard.
 
     Returns routing stats, cache performance, cost breakdown, budget status,
     and token savings in a single call.
     """
-    await require_org_permission("billing:view", org_id)
 
     router_inst = _get_model_router()
     exact = _get_exact_cache()
@@ -314,13 +314,13 @@ async def get_optimization_overview(
 async def get_routing_stats(
     org_id: str,
     user: dict = Depends(get_current_user),
+        _check_billing_view: dict = Depends(require_org_permission_dep('billing:view')),
 ):
     """Get model routing statistics.
 
     Shows how many calls were routed to each tier, how many fallbacks
     occurred, and the classifier hit rate.
     """
-    await require_org_permission("billing:view", org_id)
 
     stats = _get_model_router().get_stats()
     classifier = stats.pop("classifier_stats", {})
@@ -345,9 +345,9 @@ async def get_routing_stats(
 async def get_cache_stats(
     org_id: str,
     user: dict = Depends(get_current_user),
+        _check_billing_view: dict = Depends(require_org_permission_dep('billing:view')),
 ):
     """Get cache performance statistics."""
-    await require_org_permission("billing:view", org_id)
 
     exact = _get_exact_cache()
     semantic = _get_semantic_cache()
@@ -371,13 +371,13 @@ async def invalidate_cache(
     org_id: str,
     request: CacheInvalidateRequest,
     user: dict = Depends(get_current_user),
+        _check_billing_edit: dict = Depends(require_org_permission_dep('billing:edit')),
 ):
     """Invalidate cache entries.
 
     Requires billing:edit permission. Use with caution — invalidating L2
     (semantic) cache may be expensive as it requires vector DB operations.
     """
-    await require_org_permission("billing:edit", org_id)
 
     count = 0
     if request.cache_type in ("l1", "all"):
@@ -404,9 +404,9 @@ async def get_cost_breakdown(
     org_id: str,
     days: int = Query(default=30, ge=1, le=365),
     user: dict = Depends(get_current_user),
+        _check_billing_view: dict = Depends(require_org_permission_dep('billing:view')),
 ):
     """Get detailed cost breakdown by tier, pipeline node, and model."""
-    await require_org_permission("billing:view", org_id)
 
     tracker = _get_cost_tracker()
     now = datetime.now(UTC)
@@ -445,13 +445,13 @@ async def track_cost_event(
     org_id: str,
     payload: CostEventPayload,
     user: dict = Depends(get_current_user),
+        _check_billing_edit: dict = Depends(require_org_permission_dep('billing:edit')),
 ):
     """Record a cost event for granular tracking.
 
     This endpoint is typically called internally by the pipeline, but is
     exposed for external integrations and debugging.
     """
-    await require_org_permission("billing:edit", org_id)
 
     tracker = _get_cost_tracker()
     event = CostEvent(
@@ -483,9 +483,9 @@ async def track_cost_event(
 async def get_budget_status(
     org_id: str,
     user: dict = Depends(get_current_user),
+        _check_billing_view: dict = Depends(require_org_permission_dep('billing:view')),
 ):
     """Get real-time budget status with soft/hard limit information."""
-    await require_org_permission("billing:view", org_id)
 
     tracker = _get_cost_tracker()
 
@@ -525,13 +525,13 @@ async def check_budget_before_call(
     org_id: str,
     estimated_cost_cents: float = Query(default=0.0, ge=0.0),
     user: dict = Depends(get_current_user),
+        _check_billing_view: dict = Depends(require_org_permission_dep('billing:view')),
 ):
     """Check if a call would exceed budget before incurring costs.
 
     Returns the budget status and whether the call is allowed.
     This is used by the pipeline to gate LLM calls proactively.
     """
-    await require_org_permission("billing:view", org_id)
 
     tracker = _get_cost_tracker()
     try:
@@ -557,13 +557,13 @@ async def check_budget_before_call(
 async def get_token_savings(
     org_id: str,
     user: dict = Depends(get_current_user),
+        _check_billing_view: dict = Depends(require_org_permission_dep('billing:view')),
 ):
     """Get estimated token and cost savings from optimization.
 
     Shows tokens saved by routing to cheaper tiers, estimated cost savings,
     and coalesced request counts.
     """
-    await require_org_permission("billing:view", org_id)
 
     router_stats = _get_model_router().get_stats()
     tokens_saved = router_stats.get("tokens_saved", 0)
@@ -625,3 +625,7 @@ async def cost_per_trace(
             for r in rows
         ]
     }
+
+
+# NOTE: ``/orgs/{org}/cost/comparison`` lives in ``routes/cost.py``
+# so the path matches the portal expectation. Mounted in ``app.py``.

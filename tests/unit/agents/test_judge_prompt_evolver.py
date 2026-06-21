@@ -112,17 +112,24 @@ def _patch_dependencies(monkeypatch, pv: _FakePromptVersions, pg: _FakePostgres,
     async def _get_pg():
         return pg
 
-    # The components module does ``from X import Y`` for both clients,
-    # but the import happens lazily inside ``run()`` and
-    # ``_get_prompt_versions``. Each invocation re-reads the
-    # source attribute, so patching the source module's attribute
-    # is sufficient.
+    # Patch BOTH the source modules (where the imports live) AND the
+    # consumer module (where ``from X import Y`` creates a local
+    # binding). Patching only the source has no effect on consumer
+    # modules that captured the symbol at import time.
     monkeypatch.setattr(
         "eden.kb.prompt_versions.client.get_prompt_versions_client",
         _get_pv,
     )
     monkeypatch.setattr(
         "eden.storage.postgres.get_postgres_client",
+        _get_pg,
+    )
+    monkeypatch.setattr(
+        "eden.agents.evolution.components.get_prompt_versions_client",
+        _get_pv,
+    )
+    monkeypatch.setattr(
+        "eden.agents.evolution.components.get_postgres_client",
         _get_pg,
     )
 

@@ -22,10 +22,6 @@ import { StatCard } from "@/components/ui/stat-card";
 import { ThroughputCard } from "./_components/throughput-card";
 import { LatencyCard } from "./_components/latency-card";
 import {
-  JudgeScoresCard,
-  type JudgeScoreRow,
-} from "./_components/judge-scores-card";
-import {
   RecentTracesCard,
   type TraceRow,
 } from "./_components/recent-traces-card";
@@ -34,7 +30,6 @@ import { QuickLinks } from "./_components/quick-links";
 interface DashboardData {
   traces: TraceRow[];
   tracesTotal: number;
-  judgeScores: JudgeScoreRow[];
   optimization: {
     costs: {
       total_cost_cents: number;
@@ -55,9 +50,11 @@ interface DashboardData {
     };
   } | null;
   alerts: Array<{ rule_id?: string; severity: string; title: string; fired_at?: string }>;
-  /** monthly cost in cents — synthesized from current period when not separately tracked */
+  /** monthly cost in cents — current period only. `null` until
+   *  /orgs/{org}/cost/comparison ships — DO NOT synthesize a
+   *  baseline here (June 2026 cleanup — fake deltas destroy trust). */
   costThisMonthCents: number;
-  costLastMonthCents: number;
+  costLastMonthCents: number | null;
 }
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -79,25 +76,25 @@ export default function DashboardPage() {
       setLoading(true);
       setError(null);
       try {
-        const [tracesRes, scoresRes, optimization, alerts] = await Promise.all([
+        const [tracesRes, optimization, alerts, costComparison] = await Promise.all([
           api.listObservabilityTraces(currentOrg.id, { limit: 50, days: 7 }),
-          api.listJudgeScores(currentOrg.id, { limit: 100 }),
           api.getOptimizationOverview(currentOrg.id, 30),
           api.listAlerts(currentOrg.id, { limit: 50 }),
+          api.getCostComparison(currentOrg.id).catch(() => null),
         ]);
 
         if (cancelled) return;
 
-        // Compute cost this month / last month from optimization
+        // Cat 23 audit (2026-06-21): real last-month baseline now
+        // arrives via /orgs/{org}/cost/comparison. We surface it as-is
+        // and fall back to `null` (rendered as "—") when Redis has
+        // no recorded spend for either month — never a fabricated delta.
         const thisMonth = optimization?.costs?.total_cost_cents ?? 0;
-        // We don't have a separate last-month endpoint — best-effort: use
-        // a fixed historical baseline to keep the delta meaningful.
-        const lastMonth = Math.round(thisMonth * 0.85);
+        const lastMonth = costComparison?.previous_month_cents ?? null;
 
         setData({
           traces: (tracesRes.traces ?? []) as unknown as TraceRow[],
           tracesTotal: tracesRes.total ?? tracesRes.traces?.length ?? 0,
-          judgeScores: (scoresRes.scores ?? []) as JudgeScoreRow[],
           optimization,
           alerts: (alerts as unknown as DashboardData["alerts"]) ?? [],
           costThisMonthCents: thisMonth,
@@ -145,20 +142,14 @@ export default function DashboardPage() {
   );
 
   const costThisMonth = data?.costThisMonthCents ?? 0;
-  const costLastMonth = data?.costLastMonthCents ?? 0;
-  const costDeltaPct = costLastMonth > 0
+  const costLastMonth = data?.costLastMonthCents ?? null;
+  // No last-month data → no trend arrow. The StatCard subtitle will
+  // render "—" rather than a fake dollar comparison.
+  const costDeltaPct = costLastMonth !== null && costLastMonth > 0
     ? Math.round(((costThisMonth - costLastMonth) / costLastMonth) * 100)
     : 0;
-  const costTrend: "up" | "down" | null = costDeltaPct === 0 ? null : costDeltaPct > 0 ? "up" : "down";
-
-  // Lowest 5 judge scores
-  const lowestScores = useMemo(() => {
-    const cutoff = Date.now() - DAY_MS;
-    return (data?.judgeScores ?? [])
-      .filter((s) => new Date(s.scored_at).getTime() >= cutoff)
-      .sort((a, b) => a.score - b.score)
-      .slice(0, 5);
-  }, [data?.judgeScores]);
+  const costTrend: "up" | "down" | null =
+    costLastMonth === null ? null : costDeltaPct === 0 ? null : costDeltaPct > 0 ? "up" : "down";
 
   const anomalyCount = data?.alerts?.length ?? 0;
 
@@ -255,27 +246,70 @@ export default function DashboardPage() {
           p95Ms={p95}
           p50Ms={p50}
         />
-        <CostCard
-          loading={loading}
-          centsThisMonth={costThisMonth}
-          centsLastMonth={costLastMonth}
-          trend={costTrend}
-          trendValue={`${Math.abs(costDeltaPct)}%`}
-        />
-        <AnomalyCard
-          loading={loading}
-          count={anomalyCount}
-          severityCounts={countBySeverity(data?.alerts ?? [])}
-        />
+        {(() => {
+          const centsThisMonth = costThisMonth;
+          const centsLastMonth = costLastMonth;
+          const usd = centsThisMonth / 100;
+          const empty = !loading && centsThisMonth === 0;
+          const subtitle = empty
+            ? "no cost data yet"
+            : centsLastMonth === null
+            ? "last month: —"
+            : `last month: $${(centsLastMonth / 100).toFixed(2)}`;
+          return (
+            <StatCard
+              title="Cost this month"
+              value={empty ? "—" : `$${usd.toFixed(2)}`}
+              subtitle={subtitle}
+              trend={costTrend}
+              trendValue={costTrend ? `${Math.abs(costDeltaPct)}%` : "—"}
+              trendIsGood="down"
+              icon={DollarSign}
+              accent="accent"
+              loading={loading}
+              empty={empty}
+              emptyText="No cost data — start routing calls to populate."
+              href="/optimization"
+            />
+          );
+        })()}
+        {(() => {
+          const severityCounts = countBySeverity(data?.alerts ?? []);
+          const severityClass = anomalyCount === 0
+            ? "bg-[var(--accent-faint)] text-[var(--accent)]"
+            : severityCounts.critical
+              ? "bg-[var(--error-bg)] text-[var(--error)]"
+              : severityCounts.warning
+                ? "bg-[var(--warning-bg)] text-[var(--warning-strong)]"
+                : "bg-[var(--accent-faint)] text-[var(--accent)]";
+          return (
+            <StatCard
+              title="Anomalies (24h)"
+              value={anomalyCount}
+              subtitle={
+                anomalyCount === 0
+                  ? "all systems normal"
+                  : `${severityCounts.critical ?? 0} critical · ${severityCounts.warning ?? 0} warning`
+              }
+              icon={AlertTriangle}
+              iconClassName={severityClass}
+              loading={loading}
+              href="/alerts"
+              empty={false}
+            />
+          );
+        })()}
       </div>
 
-      {/* Row 2: lowest judge scores + recent traces + quick links */}
+      {/* Row 2: recent traces + quick links. (Judge Scores used to
+          live as a standalone widget here; demoted to a Quick Link
+          in June 2026 cleanup since the eval dashboard is a
+          subdomain, not a top-level signal.) */}
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-4 sm:gap-6">
-        <div className="xl:col-span-1">
-          <JudgeScoresCard loading={loading} scores={lowestScores} />
-        </div>
-        <div className="xl:col-span-2 space-y-6">
+        <div className="xl:col-span-2">
           <RecentTracesCard loading={loading} traces={lastDayTraces.slice(0, 10)} />
+        </div>
+        <div className="xl:col-span-1">
           <QuickLinks />
         </div>
       </div>
@@ -360,74 +394,6 @@ export default function DashboardPage() {
 }
 
 // ─── subviews ──────────────────────────────────────────────────────
-
-function CostCard({
-  loading,
-  centsThisMonth,
-  centsLastMonth,
-  trend,
-  trendValue,
-}: {
-  loading: boolean;
-  centsThisMonth: number;
-  centsLastMonth: number;
-  trend: "up" | "down" | null;
-  trendValue: string;
-}) {
-  const usd = centsThisMonth / 100;
-  const empty = !loading && centsThisMonth === 0;
-  return (
-    <StatCard
-      title="Cost this month"
-      value={empty ? "—" : `$${usd.toFixed(2)}`}
-      subtitle={empty ? "no cost data yet" : `last month: $${(centsLastMonth / 100).toFixed(2)}`}
-      trend={trend}
-      trendValue={trendValue}
-      trendIsGood="down"
-      icon={DollarSign}
-      iconClassName="bg-[var(--accent-light)] text-[var(--accent)]"
-      loading={loading}
-      empty={empty}
-      emptyText="No cost data — start routing calls to populate."
-      href="/optimization"
-    />
-  );
-}
-
-function AnomalyCard({
-  loading,
-  count,
-  severityCounts,
-}: {
-  loading: boolean;
-  count: number;
-  severityCounts: Record<string, number>;
-}) {
-  const severityClass = count === 0
-    ? "bg-[var(--accent-light)] text-[var(--accent)]"
-    : severityCounts.critical
-      ? "bg-[var(--error-bg)] text-[var(--error)]"
-      : severityCounts.warning
-        ? "bg-[var(--warning-bg)] text-[var(--warning-strong)]"
-        : "bg-[var(--primary-light)] text-[var(--primary)]";
-
-  return (
-    <StatCard
-      title="Anomalies (24h)"
-      value={count}
-      subtitle={
-        count === 0
-          ? "all systems normal"
-          : `${severityCounts.critical ?? 0} critical · ${severityCounts.warning ?? 0} warning`
-      }
-      icon={AlertTriangle}
-      iconClassName={severityClass}
-      loading={loading}
-      href="/alerts"
-      empty={false}
-    />
-  );
-}
 
 // ─── helpers ───────────────────────────────────────────────────────
 

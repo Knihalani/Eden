@@ -1,8 +1,7 @@
 "use client";
 
-import { ArrowUpRight, ArrowDownRight, type LucideIcon } from "lucide-react";
+import { ArrowUpRight, ArrowDownRight, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { Loader2 } from "lucide-react";
 
 export type StatCardAccent = "neutral" | "accent" | "terminal" | "warning" | "error" | "info";
 
@@ -20,7 +19,7 @@ export interface StatCardProps {
   /** Which trend direction is "good" for this stat (controls color). */
   trendIsGood?: "up" | "down";
   /** Icon shown in the top-left chip. */
-  icon: LucideIcon;
+  icon: React.ComponentType<{ className?: string }>;
   /** Override the icon chip's color classes. */
   iconClassName?: string;
   /** Quick accent preset — alternative to `iconClassName`. */
@@ -42,6 +41,9 @@ const ACCENT_CLASSES: Record<StatCardAccent, string> = {
   terminal:"bg-[var(--terminal-faint)] text-[var(--terminal)]",
   warning: "bg-[var(--warning-bg)] text-[var(--warning)]",
   error:   "bg-[var(--error-dim)] text-[var(--error)]",
+  // ponytail: `info` is a legacy alias of `accent` (same classes).
+  // Kept for the one call site that already uses it; new code
+  // should use `accent` directly.
   info:    "bg-[var(--accent-faint)] text-[var(--accent)]",
 };
 

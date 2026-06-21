@@ -3,7 +3,12 @@
 import { useAuth } from "@/hooks/use-auth";
 import { useNotifications } from "@/hooks/use-notifications";
 import { useOrg } from "@/hooks/use-org";
-import { useSidebarPrefs, applySidebarPrefs } from "@/hooks/use-sidebar-prefs";
+import {
+  useSidebarPrefs,
+  applySidebarPrefs,
+  readAdvancedCollapsed,
+  writeAdvancedCollapsed,
+} from "@/hooks/use-sidebar-prefs";
 import { useClerk } from "@clerk/nextjs";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, useRef, useCallback } from "react";
@@ -55,6 +60,7 @@ import { usePathname } from "next/navigation";
 import { CommandPalette } from "@/components/ui/command-palette";
 import { ChatSidebar } from "@/components/ai-insights/ChatSidebar";
 import { Logo } from "@/components/brand/logo";
+import { buildBreadcrumbs } from "@/lib/breadcrumbs";
 
 const SIDEBAR_EXPANDED_WIDTH = 260;
 const SIDEBAR_COLLAPSED_WIDTH = 64;
@@ -85,73 +91,20 @@ async function handleLogout(
   router.push("/login");
 }
 
-function buildBreadcrumbs(pathname: string): { label: string; href: string }[] {
-  const segments = pathname.split("/").filter(Boolean);
-  const crumbs: { label: string; href: string }[] = [];
-
-  const labelMap: Record<string, string> = {
-    dashboard: "Dashboard",
-    analytics: "Analytics",
-    optimization: "Cost",
-    settings: "Settings",
-    billing: "Billing",
-    docs: "Documentation",
-    profile: "Profile",
-    new: "New",
-    observability: "Observability",
-    incidents: "Incidents",
-    insights: "Insights",
-    inspector: "Inspector",
-    alerts: "Alerts",
-    llmops: "LLMOps",
-    agents: "Agents",
-    builder: "Builder",
-    marketplace: "Marketplace",
-    "multi-agent": "Multi-Agent",
-    sandbox: "Sandbox",
-    users: "Members",
-    guardrails: "Guardrails",
-    autonomous: "Autonomous",
-    studio: "Custom Metrics",
-    "pr-suggestions": "PR Suggestions",
-    retrieval: "Retrieval",
-    memory: "Memory",
-    time: "Time-Travel",
-    "time-travel": "Time-Travel",
-    apm: "APM Tracing",
-    decisions: "Decisions",
-    outcomes: "Outcomes",
-    predict: "Predictive",
-    tools: "Tools",
-    query: "Query",
-    cohorts: "Columnar Engine",
-    governance: "Governance",
-    eval: "Eval",
-    traces: "Trace Explorer",
-    onboarding: "Onboarding",
-    connect: "Connect Agent",
-  };
-
-  let path = "";
-  for (const segment of segments) {
-    path += `/${segment}`;
-    const label = labelMap[segment] ?? segment.charAt(0).toUpperCase() + segment.slice(1);
-    crumbs.push({ label, href: path });
-  }
-
-  return crumbs;
-}
+// buildBreadcrumbs is imported from @/lib/breadcrumbs.
+// Extracted in June 2026 cleanup — keeps the layout file focused on
+// chrome and makes breadcrumb labels discoverable in one place.
 
 export default function PortalLayout({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
   const { signOut } = useClerk();
   const { prefs, togglePin } = useSidebarPrefs();
   const { authError, clearAuthError } = useOrg();
-  const { pinnedItems, groups } = applySidebarPrefs(prefs);
   const router = useRouter();
   const pathname = usePathname();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
+  const [advancedCollapsed, setAdvancedCollapsed] = useState(false);
   const [userDropdownOpen, setUserDropdownOpen] = useState(false);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const userDropdownRef = useRef<HTMLDivElement>(null);
@@ -163,7 +116,16 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
   // Hydrate collapse preference from localStorage on mount.
   useEffect(() => {
     setCollapsed(readCollapsedPreference());
+    setAdvancedCollapsed(readAdvancedCollapsed());
     setCollapseHydrated(true);
+  }, []);
+
+  const toggleAdvanced = useCallback(() => {
+    setAdvancedCollapsed((prev) => {
+      const next = !prev;
+      writeAdvancedCollapsed(next);
+      return next;
+    });
   }, []);
 
   // Persist collapse preference on change.
@@ -190,7 +152,7 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  // Keyboard shortcut for command palette + sidebar toggle
+  // Keyboard shortcuts: command palette + sidebar toggle + Escape close
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
       // Skip when the user is typing in a form field — otherwise typing
@@ -206,6 +168,13 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
         setCommandPaletteOpen((prev) => !prev);
         return;
       }
+      // Escape closes the mobile sidebar overlay. Don't intercept
+      // Escape while typing — that's owned by the form field itself.
+      if (e.key === "Escape" && sidebarOpen && !isFormField) {
+        e.preventDefault();
+        setSidebarOpen(false);
+        return;
+      }
       // Cmd/Ctrl+B (or just `\` outside inputs) toggles the sidebar.
       if (
         (e.key === "b" && (e.metaKey || e.ctrlKey)) ||
@@ -217,7 +186,7 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
     }
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
-  }, []);
+  }, [sidebarOpen]);
 
   const handleCollapse = useCallback(() => {
     setCollapsed((prev) => !prev);
@@ -251,6 +220,7 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
   const showAuthBanner = !loading && user && authError;
 
   const breadcrumbs = buildBreadcrumbs(pathname);
+  const { pinnedItems, groups } = applySidebarPrefs(prefs, advancedCollapsed);
 
   return (
     // ponytail: h-screen + overflow-clip on the row, min-h-0 on main —
@@ -432,12 +402,35 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
           ))}
 
           {!collapsed && (
-            <Link
-              href="/settings?tab=sidebar"
-              className="flex items-center justify-center gap-2 px-3 py-2 text-xs text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)] rounded-lg transition-colors"
-            >
-              Customize sidebar
-            </Link>
+            <>
+              <Link
+                href="/settings?tab=sidebar"
+                className="flex items-center justify-center gap-2 px-3 py-2 text-xs text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)] rounded-lg transition-colors"
+              >
+                Customize sidebar
+              </Link>
+              <button
+                onClick={toggleAdvanced}
+                aria-pressed={!advancedCollapsed}
+                className="flex items-center justify-between gap-2 px-3 py-1.5 mt-1 text-[11px] text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)] rounded-lg transition-colors"
+                title={advancedCollapsed ? "Show advanced surfaces" : "Hide advanced surfaces"}
+              >
+                <span>{advancedCollapsed ? "Show advanced" : "Hide advanced"}</span>
+                <span
+                  className={cn(
+                    "w-7 h-3.5 rounded-full p-0.5 transition-colors",
+                    advancedCollapsed ? "bg-[var(--bg-tertiary)]" : "bg-[var(--accent)]"
+                  )}
+                >
+                  <span
+                    className={cn(
+                      "block w-2.5 h-2.5 rounded-full bg-white transition-transform",
+                      advancedCollapsed ? "translate-x-0" : "translate-x-3.5"
+                    )}
+                  />
+                </span>
+              </button>
+            </>
           )}
         </nav>
 
@@ -565,6 +558,13 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
                   // When collapsed, prefix the parent crumb with "…" to
                   // signal that the chain is shortened.
                   const showEllipsis = breadcrumbs.length > 2 && index === 0;
+                  // Category prefix (e.g. "Observe · APM Tracing") on
+                  // the last crumb — gives a stronger "you are here
+                  // under X" cue than just the segment name.
+                  const categoryPrefix =
+                    isLast && crumb.category
+                      ? `${crumb.category.charAt(0).toUpperCase()}${crumb.category.slice(1)} · `
+                      : "";
                   return (
                     <span key={crumb.href} className="flex items-center gap-1.5 min-w-0">
                       {showEllipsis && (
@@ -577,7 +577,12 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
                         <ChevronRight className="w-3 h-3 text-[var(--text-muted)]" />
                       )}
                       {isLast ? (
-                        <span className="font-medium text-[var(--text-primary)] truncate">{crumb.label}</span>
+                        <span className="font-medium text-[var(--text-primary)] truncate" title={categoryPrefix + crumb.label}>
+                          {categoryPrefix && (
+                            <span className="text-[var(--text-muted)] font-normal">{categoryPrefix}</span>
+                          )}
+                          {crumb.label}
+                        </span>
                       ) : (
                         <Link
                           href={crumb.href}
@@ -621,23 +626,35 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
             June 2026 UI overhaul. */}
         <div className="page-enter flex-1 min-h-0 flex flex-col">
           {showAuthBanner && (
-            <div className="flex items-center justify-between gap-3 px-4 sm:px-6 py-3 bg-[var(--error-dim)] border-b border-[var(--error)]/30 text-sm">
+            <div
+              role="alert"
+              className="flex items-center justify-between gap-3 px-4 sm:px-6 py-3 bg-[var(--error-dim)] border-b border-[var(--error)]/30 text-sm"
+            >
               <div className="flex items-center gap-2 min-w-0">
                 <AlertTriangle className="w-4 h-4 text-[var(--error)] shrink-0" />
                 <span className="text-[var(--error)] truncate">
                   {authError ?? "Session expired. Please sign in again."}
                 </span>
               </div>
-              <button
-                onClick={() => {
-                  clearAuthError();
-                  router.push("/login");
-                }}
-                className="shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 bg-[var(--error)] text-[var(--bg-base)] rounded-md text-xs font-medium hover:opacity-90 transition-opacity"
-              >
-                Sign in
-                <ArrowRight className="w-3.5 h-3.5" />
-              </button>
+              <div className="flex items-center gap-1.5 shrink-0">
+                <button
+                  onClick={clearAuthError}
+                  aria-label="Dismiss session error"
+                  className="p-1.5 text-[var(--error)] hover:bg-[var(--error)]/10 rounded-md transition-colors"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={() => {
+                    clearAuthError();
+                    router.push("/sign-in");
+                  }}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[var(--error)] text-[var(--bg-base)] rounded-md text-xs font-medium hover:opacity-90 transition-opacity"
+                >
+                  Sign in
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </button>
+              </div>
             </div>
           )}
           {children}
@@ -674,6 +691,7 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
 function NotificationsDropdown() {
   const [open, setOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
   const { notifications, unreadCount, loading, markAsRead, markAllAsRead, deleteNotification } = useNotifications();
 
   // Close on click outside
@@ -687,6 +705,21 @@ function NotificationsDropdown() {
       document.addEventListener("mousedown", handleClickOutside);
       return () => document.removeEventListener("mousedown", handleClickOutside);
     }
+  }, [open]);
+
+  // Escape closes; returns focus to the bell so keyboard users land
+  // somewhere predictable.
+  useEffect(() => {
+    if (!open) return;
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") {
+        e.stopPropagation();
+        setOpen(false);
+        buttonRef.current?.focus();
+      }
+    }
+    document.addEventListener("keydown", onKey, true);
+    return () => document.removeEventListener("keydown", onKey, true);
   }, [open]);
 
   const formatRelativeTime = (dateString: string) => {
@@ -718,6 +751,7 @@ function NotificationsDropdown() {
   return (
     <div ref={dropdownRef} className="relative">
       <button
+        ref={buttonRef}
         type="button"
         onClick={() => setOpen(!open)}
         className={cn(
@@ -727,6 +761,7 @@ function NotificationsDropdown() {
             : "text-[var(--text-secondary)] hover:bg-[var(--bg-tertiary)]"
         )}
         aria-label="Notifications"
+        aria-haspopup="menu"
         aria-expanded={open}
       >
         <Bell className="w-5 h-5" />
@@ -738,7 +773,11 @@ function NotificationsDropdown() {
       </button>
 
       {open && (
-        <div className="absolute right-0 mt-2 w-80 bg-[var(--bg-primary)] border border-[var(--border-default)] rounded-lg shadow-lg z-50 overflow-hidden">
+        <div
+          role="menu"
+          aria-label="Notifications"
+          className="absolute right-0 mt-2 w-80 bg-[var(--bg-primary)] border border-[var(--border-default)] rounded-lg shadow-lg z-50 overflow-hidden"
+        >
           {/* Header */}
           <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--border-default)]">
             <h3 className="font-semibold text-sm text-[var(--text-primary)]">Notifications</h3>
@@ -824,7 +863,12 @@ function NotificationsDropdown() {
 }
 
 function isActivePath(pathname: string, href: string): boolean {
-  return pathname === href || (href !== "/dashboard" && pathname.startsWith(href + "/") || href === pathname);
+  if (!pathname || !href) return false;
+  // Dashboard is treated as the root — only matches the exact path,
+  // never its sub-pages (otherwise /dashboard would stay highlighted
+  // while you're on /dashboard/something).
+  if (href === "/dashboard") return pathname === "/dashboard";
+  return pathname === href || pathname.startsWith(href + "/");
 }
 
 function NavSubItem({
@@ -936,10 +980,10 @@ function NavItem({
                 aria-label={pinned ? `Unpin ${label}` : `Pin ${label}`}
                 aria-pressed={pinned}
                 className={cn(
-                  "p-1 rounded transition-all",
+                  "pin-button p-1 rounded transition-all",
                   pinned
                     ? "text-[var(--accent)] opacity-100"
-                    : "text-[var(--text-muted)] opacity-0 group-hover/navitem:opacity-100 hover:text-[var(--accent)] hover:bg-[var(--bg-tertiary)]"
+                    : "text-[var(--text-muted)] hover:text-[var(--accent)] hover:bg-[var(--bg-tertiary)]"
                 )}
                 title={pinned ? "Unpin from sidebar" : "Pin to top of sidebar"}
               >

@@ -15,6 +15,8 @@
 import { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useOrg } from "@/hooks/use-org";
+import { usePermissions } from "@/hooks/use-permissions";
+import { NoOrgState } from "@/components/ui/no-org-state";
 import { onboardingApi, type OnboardingPRRun } from "@/lib/api";
 import { OnboardingConnectFlow } from "@/components/onboarding/OnboardingConnectFlow";
 
@@ -22,7 +24,17 @@ export default function OnboardingConnectPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { currentOrg } = useOrg();
+  const { hasPermission } = usePermissions();
   const [preselected, setPreselected] = useState<number | null>(null);
+
+  if (!hasPermission("jobs:write")) {
+    return (
+      <NoOrgState
+        feature="Admins only"
+        description="The GitHub connect step requires the `jobs:write` permission. Switch to an org where you're an owner/admin, or ask one to complete this step."
+      />
+    );
+  }
 
   useEffect(() => {
     const idStr = searchParams.get("installation_id");

@@ -71,18 +71,36 @@ const CardDescription = React.forwardRef<
 ));
 CardDescription.displayName = "CardDescription";
 
-const CardContent = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>(
-  ({ className, ...props }, ref) => (
-    <div ref={ref} className={cn("p-5 pt-0", className)} {...props} />
-  )
-);
+// ponytail: CardContent and CardFooter respect the same `padding`
+// variant as the outer Card. The default is `lg` to match the
+// previous hardcoded `p-5 pt-0`; callers can pass `padding="none"`
+// to opt out when the Card's own padding is enough.
+const CardContent = React.forwardRef<
+  HTMLDivElement,
+  React.HTMLAttributes<HTMLDivElement> & VariantProps<typeof cardVariants>
+>(({ className, padding, ...props }, ref) => {
+  const { padding: _outer, ...content } = { padding };
+  void _outer;
+  return (
+    <div
+      ref={ref}
+      className={cn(cardVariants({ padding, className }), "shadow-none border-0 bg-transparent")}
+      {...content}
+    />
+  );
+});
 CardContent.displayName = "CardContent";
 
-const CardFooter = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>(
-  ({ className, ...props }, ref) => (
-    <div ref={ref} className={cn("flex items-center p-5 pt-0", className)} {...props} />
-  )
-);
+const CardFooter = React.forwardRef<
+  HTMLDivElement,
+  React.HTMLAttributes<HTMLDivElement> & VariantProps<typeof cardVariants>
+>(({ className, padding, ...props }, ref) => (
+  <div
+    ref={ref}
+    className={cn(cardVariants({ padding, className }), "flex items-center shadow-none border-0 bg-transparent")}
+    {...props}
+  />
+));
 CardFooter.displayName = "CardFooter";
 
 export {

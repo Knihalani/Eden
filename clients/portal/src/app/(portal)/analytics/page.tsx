@@ -25,6 +25,7 @@ import {
 } from "recharts";
 
 import { ChartCard } from "@/components/ui/chart-card";
+import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
 import { PageHeader } from "@/components/layout/page-header";
 import { NoOrgState } from "@/components/ui/no-org-state";
 import { useOrg } from "@/hooks/use-org";
@@ -297,46 +298,38 @@ function ThroughputHeatmap({
     >
       <div className="flex h-full flex-col">
         <div className="flex-1 overflow-x-auto">
-          <table className="w-full min-w-[640px] border-separate border-spacing-[2px] text-[10px]">
-            <thead>
-              <tr>
-                <th className="w-10 text-left font-normal text-[var(--text-muted)]">Day</th>
-                {Array.from({ length: 24 }).map((_, h) => (
-                  <th
-                    key={h}
-                    className="text-center font-normal text-[var(--text-muted)]"
-                    title={formatHour(h)}
-                  >
-                    {h % 3 === 0 ? formatHour(h).replace(/(am|pm)/, "") : ""}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((row, dayIdx) => (
-                <tr key={dayIdx}>
-                  <td className="pr-2 text-left font-medium text-[var(--text-muted)]">
-                    {WEEKDAY_LABELS[dayIdx]}
-                  </td>
-                  {Array.from({ length: 24 }).map((_, h) => {
-                    const v = (row[`h${h}`] as number) ?? 0;
-                    // Theme-aligned: cells use the accent color with varying
-                    // alpha. We build a per-intensity color so the lowest
-                    // values are still visible against the dark surface.
-                    const intensity = 0.08 + (v / max) * 0.85;
-                    return (
-                      <td
-                        key={h}
-                        className="h-5 min-w-[18px] rounded-sm transition-all hover:ring-1 hover:ring-[var(--accent)]"
-                        style={{ backgroundColor: `var(--accent)`, opacity: intensity }}
-                        title={`${WEEKDAY_LABELS[dayIdx]} ${formatHour(h)} · ${v} req`}
-                      />
-                    );
-                  })}
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <DataTable
+            columns={[
+              {
+                key: "weekday",
+                header: "Day",
+                cell: (r) => <span className="font-medium text-[var(--text-muted)]">{String(r.weekday)}</span>,
+              },
+              ...Array.from({ length: 24 }).map<DataTableColumn<Record<string, number | string>>>((_, h) => ({
+                key: `h${h}`,
+                header: h % 3 === 0 ? formatHour(h).replace(/(am|pm)/, "") : "",
+                align: "center",
+                headerClassName: "font-normal text-[var(--text-muted)]",
+                cell: (r) => {
+                  const v = (r[`h${h}`] as number) ?? 0;
+                  // Theme-aligned: cells use the accent color with varying
+                  // alpha. We build a per-intensity color so the lowest
+                  // values are still visible against the dark surface.
+                  const intensity = 0.08 + (v / max) * 0.85;
+                  return (
+                    <div
+                      className="h-5 min-w-[18px] rounded-sm transition-all hover:ring-1 hover:ring-[var(--accent)]"
+                      style={{ backgroundColor: `var(--accent)`, opacity: intensity }}
+                      title={`${r.weekday} ${formatHour(h)} · ${v} req`}
+                    />
+                  );
+                },
+              })),
+            ]}
+            rows={rows}
+            rowKey={(r) => String(r.weekday)}
+            pageSize={10}
+          />
         </div>
         <div className="mt-2 flex items-center justify-end gap-1 text-[10px] text-[var(--text-muted)]">
           <span>Low</span>

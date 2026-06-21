@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
+import { DataTable } from "@/components/ui/data-table";
 import {
   Terminal,
   Play,
@@ -714,67 +715,83 @@ export default function SandboxPage() {
                     </span>
                   </div>
                   <div className="overflow-x-auto">
-                    {requestLog.length === 0 ? (
-                      <div className="py-12 text-center text-[var(--text-muted)]">
-                        <History className="w-8 h-8 mx-auto mb-2 opacity-30" />
-                        <p className="text-sm">No requests yet</p>
-                      </div>
-                    ) : (
-                      <table className="w-full text-sm">
-                        <thead>
-                          <tr className="border-b border-[var(--border-default)] bg-[var(--bg-secondary)]/50">
-                            <th className="px-4 py-2 text-left text-xs font-medium text-[var(--text-muted)]">Time</th>
-                            <th className="px-4 py-2 text-left text-xs font-medium text-[var(--text-muted)]">Method</th>
-                            <th className="px-4 py-2 text-left text-xs font-medium text-[var(--text-muted)]">Endpoint</th>
-                            <th className="px-4 py-2 text-left text-xs font-medium text-[var(--text-muted)]">Status</th>
-                            <th className="px-4 py-2 text-right text-xs font-medium text-[var(--text-muted)]">Duration</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-[var(--border-subtle)]">
-                          {requestLog.map((entry, i) => (
-                            <tr key={i} className="hover:bg-[var(--bg-tertiary)]/50 transition-colors">
-                              <td className="px-4 py-2.5 text-[var(--text-secondary)] whitespace-nowrap">
-                                {new Date(entry.timestamp).toLocaleTimeString()}
-                              </td>
-                              <td className="px-4 py-2.5">
-                                <span
-                                  className={cn(
-                                    "text-xs font-medium px-1.5 py-0.5 rounded",
-                                    entry.method === "GET" && "bg-[var(--accent-faint)] text-[var(--accent)]  ",
-                                    entry.method === "POST" && "bg-[var(--terminal-faint)] text-[var(--terminal)]  ",
-                                    entry.method === "PUT" && "bg-[var(--warning-bg)] text-[var(--warning)]  ",
-                                    entry.method === "PATCH" && "bg-[var(--accent-faint)] text-[var(--accent)]  ",
-                                    entry.method === "DELETE" && "bg-[var(--error-dim)] text-[var(--error)]  "
-                                  )}
-                                >
-                                  {entry.method}
-                                </span>
-                              </td>
-                              <td className="px-4 py-2.5 text-[var(--text-primary)] font-mono text-xs truncate max-w-[200px]">
-                                {entry.endpoint}
-                              </td>
-                              <td className="px-4 py-2.5">
-                                <span
-                                  className={cn(
-                                    "text-xs font-medium",
-                                    entry.status_code < 300
-                                      ? "text-[var(--terminal)] "
-                                      : entry.status_code < 400
-                                        ? "text-[var(--warning)] "
-                                        : "text-[var(--error)] "
-                                  )}
-                                >
-                                  {entry.status_code}
-                                </span>
-                              </td>
-                              <td className="px-4 py-2.5 text-right text-[var(--text-muted)] whitespace-nowrap">
-                                {entry.duration_ms}ms
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    )}
+                    <DataTable
+                      columns={[
+                        {
+                          key: "timestamp",
+                          header: "Time",
+                          sortable: true,
+                          cell: (entry) => (
+                            <span className="text-[var(--text-secondary)] whitespace-nowrap">
+                              {new Date(entry.timestamp).toLocaleTimeString()}
+                            </span>
+                          ),
+                        },
+                        {
+                          key: "method",
+                          header: "Method",
+                          cell: (entry) => (
+                            <span
+                              className={cn(
+                                "text-xs font-medium px-1.5 py-0.5 rounded",
+                                entry.method === "GET" && "bg-[var(--accent-faint)] text-[var(--accent)]",
+                                entry.method === "POST" && "bg-[var(--terminal-faint)] text-[var(--terminal)]",
+                                entry.method === "PUT" && "bg-[var(--warning-bg)] text-[var(--warning)]",
+                                entry.method === "PATCH" && "bg-[var(--accent-faint)] text-[var(--accent)]",
+                                entry.method === "DELETE" && "bg-[var(--error-dim)] text-[var(--error)]",
+                              )}
+                            >
+                              {entry.method}
+                            </span>
+                          ),
+                        },
+                        {
+                          key: "endpoint",
+                          header: "Endpoint",
+                          cell: (entry) => (
+                            <span className="text-[var(--text-primary)] font-mono text-xs truncate max-w-[200px] inline-block">
+                              {entry.endpoint}
+                            </span>
+                          ),
+                        },
+                        {
+                          key: "status_code",
+                          header: "Status",
+                          sortable: true,
+                          align: "right",
+                          cell: (entry) => (
+                            <span
+                              className={cn(
+                                "text-xs font-medium",
+                                entry.status_code < 300
+                                  ? "text-[var(--terminal)]"
+                                  : entry.status_code < 400
+                                    ? "text-[var(--warning)]"
+                                    : "text-[var(--error)]",
+                              )}
+                            >
+                              {entry.status_code}
+                            </span>
+                          ),
+                        },
+                        {
+                          key: "duration_ms",
+                          header: "Duration",
+                          sortable: true,
+                          align: "right",
+                          cell: (entry) => (
+                            <span className="text-[var(--text-muted)] whitespace-nowrap">{entry.duration_ms}ms</span>
+                          ),
+                        },
+                      ]}
+                      rows={requestLog}
+                      rowKey={(_entry, i) => String(i)}
+                      defaultSort={{ key: "timestamp", direction: "desc" }}
+                      emptyTitle="No requests yet"
+                      emptyDescription="Send a request above to populate the log."
+                      emptyIcon={History}
+                      pageSize={25}
+                    />
                   </div>
                 </div>
               </motion.div>

@@ -157,7 +157,7 @@ export function VersionDiff({ oldVersion, newVersion }: VersionDiffProps) {
       </div>
 
       {/* Diff view */}
-      <div className="overflow-auto max-h-96 bg-[#1e1e1e]">
+      <div className="overflow-auto max-h-96 bg-[var(--code-surface)]">
         <table className="w-full text-sm font-mono">
           <tbody>
             {diff.map((line, idx) => (
