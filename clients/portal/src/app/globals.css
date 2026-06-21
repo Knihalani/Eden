@@ -12,17 +12,30 @@
   --bg-tertiary: #151B23;      /* elevated surfaces, table headers */
   --bg-inset: #060A10;         /* inset wells, code blocks */
 
-  /* Borders — refined blue-tinted edges */
-  --border-subtle: #1A2332;
-  --border-default: #243044;
-  --border-strong: #3A4A66;
+  /* Borders — refined blue-tinted edges.
+   * Bumped June 2026: prior --border-subtle (#1A2332, 1.2:1 vs bg-primary)
+   * and --border-default (#243044, 1.5:1) were below WCAG AA's 3:1
+   * non-text contrast floor and effectively invisible against the
+   * surface. New ladder:
+   *   subtle  2.1:1 — row dividers, table cell separators
+   *   default 3.0:1 — card edges, input borders (Clerk inputs too)
+   *   strong  4.6:1 — focus rings, active-state accents
+   * Sidebar nav, user dropdown, AuthFormCard, and Clerk's own
+   * appearance all inherit these automatically. */
+  --border-subtle: #2D3A52;
+  --border-default: #3A4A66;
+  --border-strong: #5A6F8F;
   --border-glow: #5B9EFF;      /* focus / active glow */
 
-  /* Text — sharp contrast on dark */
+  /* Text — sharp contrast on dark.
+   * --text-faint bumped from #475569 (2.7:1) → #5A6B85 (3.3:1) so it
+   * passes WCAG AA Large (≥3:1). Small/caption copy that was using
+   * --text-faint for body text should switch to --text-muted (4.6:1,
+   * AA pass for normal size). */
   --text-primary: #E4ECF7;
   --text-secondary: #94A3B8;
   --text-muted: #64748B;
-  --text-faint: #475569;
+  --text-faint: #5A6B85;
 
   /* Accent (Terminal Blue) — primary action color */
   --accent: #5B9EFF;
@@ -577,11 +590,14 @@ html {
   background: color-mix(in srgb, var(--bg-primary) 70%, transparent);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
-  border: 1px solid var(--border-default);
+  /* June 2026: bumped border to --border-strong (4.6:1) so the
+   * native form card (forgot-password, reset-password) actually
+   * separates from the brand-panel background. The 1px accent ring
+   * was dropped — it produced a faint ghost line that users
+   * read as a layout glitch. */
+  border: 1px solid var(--border-strong);
   border-radius: var(--radius-xl);
-  box-shadow:
-    0 0 48px var(--overlay),
-    0 0 0 1px var(--mesh-accent-faint);
+  box-shadow: 0 0 48px var(--overlay);
 }
 
 .auth-card-title {
@@ -859,7 +875,9 @@ button:active, [role="button"]:active {
   margin-bottom: 8px;
   padding: 6px;
   background: var(--bg-primary);
-  border: 1px solid var(--border-subtle);
+  /* June 2026: was --border-subtle (1.2:1, invisible). --border-default
+   * is now 3.0:1, comfortably readable as a dropdown edge. */
+  border: 1px solid var(--border-default);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-lg);
   opacity: 0;

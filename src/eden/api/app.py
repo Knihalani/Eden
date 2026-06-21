@@ -55,6 +55,7 @@ from eden.api.routes import (
     labeling,
     marketplace,
     multi_agent,
+    notifications,
     orgs,
     pii_policy,
     presigned_feedback,
@@ -379,6 +380,7 @@ app.include_router(sandbox.router)  # /sandbox (gated)
 app.include_router(experiments.router)  # /experiments (gated)
 app.include_router(evaluation.router)  # /evaluation (gated)
 app.include_router(multi_agent.router)  # /orgs/{org_id}/multi-agent (gated)
+app.include_router(notifications.router)  # /notifications (user-scoped feed; June 2026 Cat 5 mount fix)
 app.include_router(marketplace.router)  # /marketplace (gated)
 app.include_router(integrations_helicone.router)  # /integrations/helicone (gated)
 app.include_router(intelligence_code_change.router)  # /orgs/{org_id}/intelligence/code-change (Cat 23, gated by intelligence_gap_v0)

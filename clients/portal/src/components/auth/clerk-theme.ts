@@ -59,10 +59,15 @@ const clerkAppearance = {
       backgroundColor: "rgba(15, 20, 25, 0.85)",
       backdropFilter: "blur(20px)",
       WebkitBackdropFilter: "blur(20px)",
-      border: "1px solid var(--border-default)",
+      // June 2026: bumped border from --border-default (was 1.5:1,
+      // invisible on the bg-secondary surface) to --border-strong
+      // (4.6:1) so the card edge is actually readable against the
+      // brand-panel background. Dropped the outer 1px accent ring
+      // (rgba 91,158,255,0.06) — it was producing the "weird line"
+      // users reported around the auth form.
+      border: "1px solid var(--border-strong)",
       borderRadius: "var(--radius-xl)",
-      boxShadow:
-        "0 0 48px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(91, 158, 255, 0.06)",
+      boxShadow: "0 0 48px rgba(0, 0, 0, 0.4)",
       overflow: "hidden",
     },
     cardBox: {
