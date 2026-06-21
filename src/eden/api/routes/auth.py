@@ -463,13 +463,45 @@ async def logout(response: Response):
 
 @router.get("/me", response_model=UserResponse)
 async def get_me(user: dict = Depends(get_current_user)):
-    """Return the currently authenticated user."""
+    """Return the currently authenticated user.
+
+    Auto-provisions the user on first authenticated call: if the
+    Clerk JWT verifies but no Postgres row exists for the Clerk ID
+    (e.g. the user signed up before the webhook could sync, or the
+    webhook is degraded), we INSERT a minimal row from the JWT
+    payload so the portal can render. Idempotent — safe to re-run.
+    """
+    client = await get_postgres_client()
     db_user = await get_user_by_id(user["user_id"])
     if not db_user:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="User not found",
-        )
+        # Self-heal: webhook hasn't synced yet (Clerk cutover June 17
+        # had users.id as UUID so INSERTs failed; users signed up
+        # between then and the migration date 2026-06-21 are in
+        # Clerk but not in Postgres). Best-effort auto-provision.
+        clerk_id = user["user_id"]
+        email = user.get("email") or ""
+        # JWT payload may not carry the name; fall back to the local
+        # part of the email so the row isn't blank.
+        name = (email.split("@", 1)[0] if email else "") or "Eden user"
+        try:
+            await client.execute(
+                """
+                INSERT INTO users (id, email, name, created_at, updated_at)
+                VALUES ($1, $2, $3, NOW(), NOW())
+                ON CONFLICT (id) DO NOTHING
+                """,
+                clerk_id,
+                email,
+                name,
+            )
+            db_user = await get_user_by_id(clerk_id)
+        except Exception as exc:
+            logger.warning("auto-provision /auth/me failed for %s: %s", clerk_id, exc)
+        if not db_user:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="User not found",
+            )
 
     client = await get_postgres_client()
 
