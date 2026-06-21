@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 
 from fastapi import APIRouter, Depends, Query
 
-from eden.api.deps import get_current_user, require_org_permission
+from eden.api.deps import get_current_user, require_org_permission, require_org_permission_dep
 from eden.storage.postgres import get_postgres_client
 
 logger = logging.getLogger(__name__)
@@ -18,6 +18,7 @@ async def get_org_analytics(
     org_id: str,
     days: int = Query(default=30, ge=1, le=365),
     user: dict = Depends(get_current_user),
+        _check_audit_view: dict = Depends(require_org_permission_dep('audit:view')),
 ):
     """Get analytics for an organization.
 
@@ -25,7 +26,6 @@ async def get_org_analytics(
     trends, member activity, and storage usage.
     """
     # Require audit:view permission (owner/admin)
-    await require_org_permission("audit:view", org_id)
 
     client = await get_postgres_client()
     now = datetime.utcnow()

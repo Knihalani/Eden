@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useOrg } from "@/hooks/use-org";
 import { cn } from "@/lib/utils";
+import { api } from "@/lib/api";
 import { EmptyState } from "@/components/ui/empty-state";
 import { NoOrgState } from "@/components/ui/no-org-state";
 import { PageHeader } from "@/components/layout/page-header";
@@ -21,6 +22,7 @@ import {
   Search,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
+import { DataTable } from "@/components/ui/data-table";
 
 type Tab = "sessions" | "goals" | "satisfaction" | "cohorts" | "segments";
 
@@ -70,32 +72,14 @@ interface Segment {
   criteria: Record<string, unknown>;
 }
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || "/api/proxy";
 
 async function postJson<T>(endpoint: string, body?: unknown): Promise<T> {
-  const res = await fetch(`${API_BASE}${endpoint}`, {
-    method: "POST",
-    credentials: "include",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body ?? {}),
-  });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({ detail: "Request failed" }));
-    throw new Error(err.detail || `HTTP ${res.status}`);
-  }
-  return res.json();
+  return api.post<T>(endpoint, body ?? {});
 }
 
 async function getJson<T>(endpoint: string): Promise<T> {
-  const res = await fetch(`${API_BASE}${endpoint}`, {
-    credentials: "include",
-    headers: { "Content-Type": "application/json" },
-  });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({ detail: "Request failed" }));
-    throw new Error(err.detail || `HTTP ${res.status}`);
-  }
-  return res.json();
+  return api.get<T>(endpoint);
 }
 
 export default function UsersPage() {
@@ -419,50 +403,46 @@ function SessionsTab({
         />
       ) : (
         <div className="bg-[var(--bg-primary)] border border-[var(--border-default)] rounded-xl overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-[var(--border-default)] bg-[var(--bg-secondary)]">
-                  <th className="text-left px-4 py-3 text-xs font-medium text-[var(--text-muted)] uppercase tracking-wide">
-                    User
-                  </th>
-                  <th className="text-left px-4 py-3 text-xs font-medium text-[var(--text-muted)] uppercase tracking-wide">
-                    Session
-                  </th>
-                  <th className="text-right px-4 py-3 text-xs font-medium text-[var(--text-muted)] uppercase tracking-wide">
-                    Traces
-                  </th>
-                  <th className="text-left px-4 py-3 text-xs font-medium text-[var(--text-muted)] uppercase tracking-wide">
-                    First Seen
-                  </th>
-                  <th className="text-left px-4 py-3 text-xs font-medium text-[var(--text-muted)] uppercase tracking-wide">
-                    Last Seen
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-[var(--border-subtle)]">
-                {sessions.map((s) => (
-                  <tr key={s.session_id} className="hover:bg-[var(--bg-tertiary)]/50 transition-colors">
-                    <td className="px-4 py-3 font-mono text-xs text-[var(--text-primary)]">
-                      {s.user_id.slice(0, 12)}...
-                    </td>
-                    <td className="px-4 py-3 font-mono text-xs text-[var(--text-muted)]">
-                      {s.session_id.slice(0, 12)}...
-                    </td>
-                    <td className="px-4 py-3 text-right text-[var(--text-secondary)] tabular-nums">
-                      {s.trace_count}
-                    </td>
-                    <td className="px-4 py-3 text-[var(--text-secondary)] text-xs">
-                      {new Date(s.first_seen).toLocaleString()}
-                    </td>
-                    <td className="px-4 py-3 text-[var(--text-secondary)] text-xs">
-                      {new Date(s.last_seen).toLocaleString()}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <DataTable
+            columns={[
+              {
+                key: "user_id",
+                header: "User",
+                cell: (s) => <span className="font-mono text-xs text-[var(--text-primary)]">{s.user_id.slice(0, 12)}...</span>,
+              },
+              {
+                key: "session_id",
+                header: "Session",
+                cell: (s) => <span className="font-mono text-xs text-[var(--text-muted)]">{s.session_id.slice(0, 12)}...</span>,
+              },
+              {
+                key: "trace_count",
+                header: "Traces",
+                sortable: true,
+                align: "right",
+                cell: (s) => <span className="text-[var(--text-secondary)] tabular-nums">{s.trace_count}</span>,
+              },
+              {
+                key: "first_seen",
+                header: "First Seen",
+                sortable: true,
+                cell: (s) => <span className="text-[var(--text-secondary)] text-xs">{new Date(s.first_seen).toLocaleString()}</span>,
+              },
+              {
+                key: "last_seen",
+                header: "Last Seen",
+                sortable: true,
+                cell: (s) => <span className="text-[var(--text-secondary)] text-xs">{new Date(s.last_seen).toLocaleString()}</span>,
+              },
+            ]}
+            rows={sessions}
+            rowKey={(s) => s.session_id}
+            defaultSort={{ key: "last_seen", direction: "desc" }}
+            emptyTitle="No sessions yet"
+            emptyDescription="Aggregated user sessions appear here once your agents start serving real users."
+            emptyIcon={Users}
+            pageSize={25}
+          />
         </div>
       )}
     </div>
@@ -732,11 +712,25 @@ function SatisfactionTab({
                 Beta-Binomial Correction
               </h3>
               <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
-                <Stat label="Raw" value={correction.raw.toFixed(3)} />
-                <Stat label="Corrected" value={correction.corrected.toFixed(3)} highlight />
-                <Stat label="α" value={correction.alpha.toFixed(2)} />
-                <Stat label="β" value={correction.beta.toFixed(2)} />
-                <Stat label="n" value={String(correction.n)} />
+                {(
+                  [
+                    { label: "Raw", value: correction.raw.toFixed(3) },
+                    { label: "Corrected", value: correction.corrected.toFixed(3), highlight: true },
+                    { label: "α", value: correction.alpha.toFixed(2) },
+                    { label: "β", value: correction.beta.toFixed(2) },
+                    { label: "n", value: String(correction.n) },
+                  ] as Array<{ label: string; value: string; highlight?: boolean }>
+                ).map(({ label, value, highlight }) => (
+                  <div key={label}>
+                    <p className="text-[10px] text-[var(--text-muted)] uppercase tracking-wide">{label}</p>
+                    <p className={cn(
+                      "text-lg font-semibold tabular-nums",
+                      highlight ? "text-[var(--accent)]" : "text-[var(--text-primary)]"
+                    )}>
+                      {value}
+                    </p>
+                  </div>
+                ))}
               </div>
             </div>
           )}
@@ -749,58 +743,28 @@ function SatisfactionTab({
           <div className="p-4 border-b border-[var(--border-default)]">
             <h3 className="text-sm font-semibold text-[var(--text-primary)]">Recent traces</h3>
           </div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-[var(--border-default)] bg-[var(--bg-secondary)]">
-                  <th className="text-left px-4 py-3 text-xs font-medium text-[var(--text-muted)] uppercase tracking-wide">
-                    Trace
-                  </th>
-                  <th className="text-right px-4 py-3 text-xs font-medium text-[var(--text-muted)] uppercase tracking-wide">
-                    Satisfaction
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-[var(--border-subtle)]">
-                {recent.map((r) => (
-                  <tr key={r.trace_id} className="hover:bg-[var(--bg-tertiary)]/50 transition-colors">
-                    <td className="px-4 py-3 font-mono text-xs text-[var(--text-primary)]">
-                      {r.trace_id.slice(0, 20)}...
-                    </td>
-                    <td className="px-4 py-3 text-right text-sm font-semibold text-[var(--accent)] tabular-nums">
-                      {(r.satisfaction * 100).toFixed(1)}%
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <DataTable
+            columns={[
+              {
+                key: "trace_id",
+                header: "Trace",
+                cell: (r) => <span className="font-mono text-xs text-[var(--text-primary)]">{r.trace_id.slice(0, 20)}...</span>,
+              },
+              {
+                key: "satisfaction",
+                header: "Satisfaction",
+                sortable: true,
+                align: "right",
+                cell: (r) => <span className="text-sm font-semibold text-[var(--accent)] tabular-nums">{(r.satisfaction * 100).toFixed(1)}%</span>,
+              },
+            ]}
+            rows={recent}
+            rowKey={(r) => r.trace_id}
+            defaultSort={{ key: "satisfaction", direction: "desc" }}
+            pageSize={25}
+          />
         </div>
       )}
-    </div>
-  );
-}
-
-function Stat({
-  label,
-  value,
-  highlight,
-}: {
-  label: string;
-  value: string;
-  highlight?: boolean;
-}) {
-  return (
-    <div>
-      <p className="text-[10px] text-[var(--text-muted)] uppercase tracking-wide">{label}</p>
-      <p
-        className={cn(
-          "text-lg font-semibold tabular-nums",
-          highlight ? "text-[var(--accent)]" : "text-[var(--text-primary)]"
-        )}
-      >
-        {value}
-      </p>
     </div>
   );
 }
@@ -844,53 +808,52 @@ function CohortsTab({
         />
       ) : (
         <div className="bg-[var(--bg-primary)] border border-[var(--border-default)] rounded-xl overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-[var(--border-default)] bg-[var(--bg-secondary)]">
-                  <th className="text-left px-4 py-3 text-xs font-medium text-[var(--text-muted)] uppercase tracking-wide">
-                    Cohort
-                  </th>
-                  <th className="text-right px-4 py-3 text-xs font-medium text-[var(--text-muted)] uppercase tracking-wide">
-                    Users
-                  </th>
-                  <th className="text-right px-4 py-3 text-xs font-medium text-[var(--text-muted)] uppercase tracking-wide">
-                    Satisfaction
-                  </th>
-                  <th className="text-right px-4 py-3 text-xs font-medium text-[var(--text-muted)] uppercase tracking-wide">
-                    Regen Rate
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-[var(--border-subtle)]">
-                {cohorts.map((c, idx) => (
-                  <tr key={`${c.name}-${idx}`} className="hover:bg-[var(--bg-tertiary)]/50 transition-colors">
-                    <td className="px-4 py-3 text-[var(--text-primary)] font-medium">{c.name}</td>
-                    <td className="px-4 py-3 text-right text-[var(--text-secondary)] tabular-nums">
-                      {c.user_count.toLocaleString()}
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      <span
-                        className={cn(
-                          "text-sm font-semibold tabular-nums",
-                          c.satisfaction >= 0.8
-                            ? "text-[var(--terminal)]"
-                            : c.satisfaction >= 0.5
-                            ? "text-[var(--warning)]"
-                            : "text-[var(--error)]"
-                        )}
-                      >
-                        {(c.satisfaction * 100).toFixed(1)}%
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-right text-[var(--text-secondary)] tabular-nums">
-                      {(c.regen_rate * 100).toFixed(1)}%
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <DataTable
+            columns={[
+              { key: "name", header: "Cohort", sortable: true, cell: (c) => <span className="text-[var(--text-primary)] font-medium">{c.name}</span> },
+              {
+                key: "user_count",
+                header: "Users",
+                sortable: true,
+                align: "right",
+                cell: (c) => <span className="text-[var(--text-secondary)] tabular-nums">{c.user_count.toLocaleString()}</span>,
+              },
+              {
+                key: "satisfaction",
+                header: "Satisfaction",
+                sortable: true,
+                align: "right",
+                cell: (c) => (
+                  <span
+                    className={cn(
+                      "text-sm font-semibold tabular-nums",
+                      c.satisfaction >= 0.8
+                        ? "text-[var(--terminal)]"
+                        : c.satisfaction >= 0.5
+                          ? "text-[var(--warning)]"
+                          : "text-[var(--error)]",
+                    )}
+                  >
+                    {(c.satisfaction * 100).toFixed(1)}%
+                  </span>
+                ),
+              },
+              {
+                key: "regen_rate",
+                header: "Regen Rate",
+                sortable: true,
+                align: "right",
+                cell: (c) => <span className="text-[var(--text-secondary)] tabular-nums">{(c.regen_rate * 100).toFixed(1)}%</span>,
+              },
+            ]}
+            rows={cohorts}
+            rowKey={(c, i) => `${c.name}-${i}`}
+            defaultSort={{ key: "user_count", direction: "desc" }}
+            emptyTitle="No cohorts yet"
+            emptyDescription="Behavioural cohorts surface once the system has enough traces to group users by behaviour patterns."
+            emptyIcon={Users2}
+            pageSize={25}
+          />
         </div>
       )}
     </div>
@@ -936,38 +899,34 @@ function SegmentsTab({
         />
       ) : (
         <div className="bg-[var(--bg-primary)] border border-[var(--border-default)] rounded-xl overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-[var(--border-default)] bg-[var(--bg-secondary)]">
-                  <th className="text-left px-4 py-3 text-xs font-medium text-[var(--text-muted)] uppercase tracking-wide">
-                    Segment
-                  </th>
-                  <th className="text-right px-4 py-3 text-xs font-medium text-[var(--text-muted)] uppercase tracking-wide">
-                    Users
-                  </th>
-                  <th className="text-left px-4 py-3 text-xs font-medium text-[var(--text-muted)] uppercase tracking-wide">
-                    Criteria
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-[var(--border-subtle)]">
-                {segments.map((s) => (
-                  <tr key={s.segment_id} className="hover:bg-[var(--bg-tertiary)]/50 transition-colors">
-                    <td className="px-4 py-3 text-[var(--text-primary)] font-medium">{s.name}</td>
-                    <td className="px-4 py-3 text-right text-[var(--text-secondary)] tabular-nums">
-                      {s.user_count.toLocaleString()}
-                    </td>
-                    <td className="px-4 py-3">
-                      <pre className="text-[10px] bg-[var(--bg-secondary)] rounded p-2 max-w-md overflow-x-auto text-[var(--text-muted)]">
-                        {JSON.stringify(s.criteria, null, 2)}
-                      </pre>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <DataTable
+            columns={[
+              { key: "name", header: "Segment", sortable: true, cell: (s) => <span className="text-[var(--text-primary)] font-medium">{s.name}</span> },
+              {
+                key: "user_count",
+                header: "Users",
+                sortable: true,
+                align: "right",
+                cell: (s) => <span className="text-[var(--text-secondary)] tabular-nums">{s.user_count.toLocaleString()}</span>,
+              },
+              {
+                key: "criteria",
+                header: "Criteria",
+                cell: (s) => (
+                  <pre className="text-[10px] bg-[var(--bg-secondary)] rounded p-2 max-w-md overflow-x-auto text-[var(--text-muted)]">
+                    {JSON.stringify(s.criteria, null, 2)}
+                  </pre>
+                ),
+              },
+            ]}
+            rows={segments}
+            rowKey={(s) => s.segment_id}
+            defaultSort={{ key: "name", direction: "asc" }}
+            emptyTitle="No segments defined"
+            emptyDescription="User segments are derived from behavioural signals — they will appear here automatically as patterns emerge."
+            emptyIcon={Layers}
+            pageSize={25}
+          />
         </div>
       )}
     </div>

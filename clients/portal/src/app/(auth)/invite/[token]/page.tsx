@@ -83,7 +83,7 @@ export default function InvitePage() {
   if (error || !inviteData?.valid) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-[var(--bg-secondary)]">
-        <div className="max-w-md w-full mx-4 p-8 bg-[var(--bg-primary)] rounded-2xl border border-[var(--border)] text-center">
+        <div className="max-w-md w-full mx-4 p-8 bg-[var(--bg-primary)] rounded-2xl border border-[var(--border-default)] text-center">
           <div className="w-12 h-12 bg-[var(--error-bg)] rounded-full flex items-center justify-center mx-auto mb-4">
             <AlertCircle className="w-6 h-6 text-[var(--error)]" />
           </div>
@@ -92,7 +92,7 @@ export default function InvitePage() {
             {error || "This invitation link is invalid or has expired."}
           </p>
           <Link
-            href="/login"
+            href="/sign-in"
             className="inline-block px-6 py-2 bg-[var(--accent)] text-[var(--bg-base)] rounded-lg font-medium hover:bg-[var(--accent-hover)]"
           >
             Go to login
@@ -105,7 +105,7 @@ export default function InvitePage() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-[var(--bg-secondary)] p-4">
       <div className="max-w-md w-full">
-        <div className="p-6 bg-[var(--bg-primary)] rounded-2xl border border-[var(--border)] mb-6">
+        <div className="p-6 bg-[var(--bg-primary)] rounded-2xl border border-[var(--border-default)] mb-6">
           <div className="flex items-center gap-3 mb-4">
             <div className="w-10 h-10 bg-[var(--accent-faint)] rounded-lg flex items-center justify-center">
               <Building2 className="w-5 h-5 text-[var(--accent)]" />
@@ -140,7 +140,7 @@ export default function InvitePage() {
             </div>
           </div>
 
-          <div className="mt-4 pt-4 border-t border-[var(--border)]">
+          <div className="mt-4 pt-4 border-t border-[var(--border-default)]">
             <span
               className={cn(
                 "px-3 py-1 rounded-lg text-sm font-medium",
@@ -154,7 +154,7 @@ export default function InvitePage() {
           </div>
         </div>
 
-        <div className="p-6 bg-[var(--bg-primary)] rounded-2xl border border-[var(--border)]">
+        <div className="p-6 bg-[var(--bg-primary)] rounded-2xl border border-[var(--border-default)]">
           <h1 className="text-xl font-bold mb-1 text-[var(--text-primary)]">Create your account</h1>
           <p className="text-sm text-[var(--text-secondary)] mb-6">
             Join {inviteData.org_name} by creating your account
@@ -174,7 +174,7 @@ export default function InvitePage() {
                 required
                 minLength={1}
                 maxLength={100}
-                className="w-full px-3 py-2 rounded-lg border border-[var(--border)] bg-[var(--bg-secondary)] text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--accent)]"
+                className="w-full px-3 py-2 rounded-lg border border-[var(--border-default)] bg-[var(--bg-secondary)] text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--accent)]"
               />
             </div>
 
@@ -190,7 +190,7 @@ export default function InvitePage() {
                 placeholder="Minimum 8 characters"
                 required
                 minLength={8}
-                className="w-full px-3 py-2 rounded-lg border border-[var(--border)] bg-[var(--bg-secondary)] text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--accent)]"
+                className="w-full px-3 py-2 rounded-lg border border-[var(--border-default)] bg-[var(--bg-secondary)] text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--accent)]"
               />
             </div>
 
@@ -210,7 +210,7 @@ export default function InvitePage() {
 
           <p className="text-xs text-center text-[var(--text-muted)] mt-4">
             Already have an account?{" "}
-            <Link href="/login" className="text-[var(--accent)] hover:underline">
+            <Link href="/sign-in" className="text-[var(--accent)] hover:underline">
               Sign in
             </Link>
           </p>

@@ -7,7 +7,7 @@ import { motion, AnimatePresence } from "framer-motion";
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
+import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
 import { EmptyState } from "@/components/ui/empty-state";
 import { StatCard } from "@/components/ui/stat-card";
 import { PageHeader } from "@/components/layout/page-header";
@@ -489,54 +489,39 @@ function CostTab() {
           <CardDescription>Cost vs revenue attributed per agent</CardDescription>
         </CardHeader>
         <CardContent className="px-0 pb-0">
-          {roi && roi.per_agent.length > 0 ? (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Agent</TableHead>
-                  <TableHead className="text-right">Cost</TableHead>
-                  <TableHead className="text-right">Revenue</TableHead>
-                  <TableHead className="text-right">ROI</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {roi.per_agent.map((a) => (
-                  <TableRow key={a.agent_id}>
-                    <TableCell className="font-mono text-xs text-[var(--text-secondary)]">
-                      {a.agent_id}
-                    </TableCell>
-                    <TableCell className="text-right text-[var(--text-primary)]">
-                      {formatCurrency(a.cost, { compact: true })}
-                    </TableCell>
-                    <TableCell className="text-right text-[var(--text-primary)]">
-                      {formatCurrency(a.revenue, { compact: true })}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <span
-                        className={cn(
-                          "inline-flex rounded-full px-2 py-0.5 text-xs font-medium",
-                          a.roi >= 2
-                            ? "bg-[var(--success-bg)] text-[var(--success)]"
-                            : a.roi >= 1
-                              ? "bg-[var(--warning-bg)] text-[var(--warning)]"
-                              : "bg-[var(--error-bg)] text-[var(--error)]"
-                        )}
-                      >
-                        {a.roi.toFixed(2)}
-                      </span>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          ) : (
-            <EmptyState
-              icon={BarChart3}
-              title="No ROI data"
-              description="Track outcomes on traces to populate agent ROI."
-              size="sm"
-            />
-          )}
+          <DataTable
+            columns={[
+              { key: "agent_id", header: "Agent", cell: (a) => <span className="font-mono text-xs text-[var(--text-secondary)]">{a.agent_id}</span>, sortable: true },
+              { key: "cost", header: "Cost", align: "right", cell: (a) => formatCurrency(a.cost, { compact: true }), sortable: true },
+              { key: "revenue", header: "Revenue", align: "right", cell: (a) => formatCurrency(a.revenue, { compact: true }), sortable: true },
+              {
+                key: "roi",
+                header: "ROI",
+                align: "right",
+                cell: (a) => (
+                  <span
+                    className={cn(
+                      "inline-flex rounded-full px-2 py-0.5 text-xs font-medium",
+                      a.roi >= 2
+                        ? "bg-[var(--success-bg)] text-[var(--success)]"
+                        : a.roi >= 1
+                          ? "bg-[var(--warning-bg)] text-[var(--warning)]"
+                          : "bg-[var(--error-bg)] text-[var(--error)]"
+                    )}
+                  >
+                    {a.roi.toFixed(2)}
+                  </span>
+                ),
+                sortable: true,
+              },
+            ]}
+            rows={roi?.per_agent ?? []}
+            rowKey={(a) => a.agent_id}
+            defaultSort={{ key: "roi", direction: "desc" }}
+            emptyIcon={BarChart3}
+            emptyTitle="No ROI data"
+            emptyDescription="Track outcomes on traces to populate agent ROI."
+          />
         </CardContent>
       </Card>
 
@@ -549,56 +534,38 @@ function CostTab() {
           </CardDescription>
         </CardHeader>
         <CardContent className="px-0 pb-0">
-          {anomalies && anomalies.anomalies.length > 0 ? (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Date</TableHead>
-                  <TableHead>Agent</TableHead>
-                  <TableHead className="text-right">Cost</TableHead>
-                  <TableHead className="text-right">Z-score</TableHead>
-                  <TableHead>Severity</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {anomalies.anomalies.map((a, i) => (
-                  <TableRow key={`${a.date}-${a.agent_id}-${i}`}>
-                    <TableCell className="text-[var(--text-secondary)]">{a.date}</TableCell>
-                    <TableCell className="font-mono text-xs text-[var(--text-secondary)]">
-                      {a.agent_id}
-                    </TableCell>
-                    <TableCell className="text-right text-[var(--text-primary)]">
-                      {formatCurrency(a.cost, { compact: true })}
-                    </TableCell>
-                    <TableCell className="text-right text-[var(--text-primary)]">
-                      {formatNumber(a.z_score)}
-                    </TableCell>
-                    <TableCell>
-                      <span
-                        className={cn(
-                          "inline-flex rounded-full px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide",
-                          a.severity === "high" || Math.abs(a.z_score) > 4
-                            ? "bg-[var(--error-bg)] text-[var(--error)]"
-                            : a.severity === "medium"
-                              ? "bg-[var(--warning-bg)] text-[var(--warning)]"
-                              : "bg-[var(--bg-tertiary)] text-[var(--text-muted)]"
-                        )}
-                      >
-                        {a.severity}
-                      </span>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          ) : (
-            <EmptyState
-              icon={Sparkles}
-              title="No anomalies detected"
-              description="All costs within expected z-score range."
-              size="sm"
-            />
-          )}
+          <DataTable
+            columns={[
+              { key: "date", header: "Date", cell: (a) => <span className="text-[var(--text-secondary)]">{a.date}</span>, sortable: true },
+              { key: "agent_id", header: "Agent", cell: (a) => <span className="font-mono text-xs text-[var(--text-secondary)]">{a.agent_id}</span> },
+              { key: "cost", header: "Cost", align: "right", cell: (a) => formatCurrency(a.cost, { compact: true }), sortable: true },
+              { key: "z_score", header: "Z-score", align: "right", cell: (a) => formatNumber(a.z_score), sortable: true },
+              {
+                key: "severity",
+                header: "Severity",
+                cell: (a) => (
+                  <span
+                    className={cn(
+                      "inline-flex rounded-full px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide",
+                      a.severity === "high" || Math.abs(a.z_score) > 4
+                        ? "bg-[var(--error-bg)] text-[var(--error)]"
+                        : a.severity === "medium"
+                          ? "bg-[var(--warning-bg)] text-[var(--warning)]"
+                          : "bg-[var(--bg-tertiary)] text-[var(--text-muted)]"
+                    )}
+                  >
+                    {a.severity}
+                  </span>
+                ),
+              },
+            ]}
+            rows={anomalies?.anomalies ?? []}
+            rowKey={(a, i) => `${a.date}-${a.agent_id}-${i}`}
+            defaultSort={{ key: "z_score", direction: "desc" }}
+            emptyIcon={Sparkles}
+            emptyTitle="No anomalies detected"
+            emptyDescription="All costs within expected z-score range."
+          />
         </CardContent>
       </Card>
     </div>

@@ -30,6 +30,17 @@ const FORWARDED_REQUEST_HEADERS = [
   "x-correlation-id",
 ];
 
+/** Max body size the proxy will accept before rejecting with 413.
+ *  Matches the typical FastAPI ``--limit-max-requests`` / Nginx
+ *  ``client_max_body_size`` defaults. 10MB is plenty for traces,
+ *  datasets, and the largest eval uploads. Bump via the env var
+ *  ``EDEN_PROXY_MAX_BYTES`` if a real workload needs more.
+ */
+const MAX_BODY_BYTES = Number.parseInt(
+  process.env.EDEN_PROXY_MAX_BYTES || "10485760",
+  10,
+);
+
 async function handle(
   request: NextRequest,
   { params }: { params: Promise<{ path: string[] }> },
@@ -48,10 +59,29 @@ async function handle(
 
   let body: string | undefined;
   if (request.method !== "GET" && request.method !== "HEAD") {
+    // Cheap pre-check via the Content-Length header when present
+    // (catches the obvious case without reading the stream).
+    const declared = request.headers.get("content-length");
+    if (declared && Number.parseInt(declared, 10) > MAX_BODY_BYTES) {
+      return new NextResponse(
+        JSON.stringify({
+          detail: `Request body exceeds ${MAX_BODY_BYTES} bytes`,
+        }),
+        { status: 413, headers: { "Content-Type": "application/json" } },
+      );
+    }
     try {
       body = await request.text();
     } catch {
       body = undefined;
+    }
+    if (body && body.length > MAX_BODY_BYTES) {
+      return new NextResponse(
+        JSON.stringify({
+          detail: `Request body exceeds ${MAX_BODY_BYTES} bytes`,
+        }),
+        { status: 413, headers: { "Content-Type": "application/json" } },
+      );
     }
   }
 

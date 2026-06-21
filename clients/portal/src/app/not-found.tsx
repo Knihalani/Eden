@@ -1,22 +1,48 @@
 "use client";
 
 import Link from "next/link";
-import { Home, Search, Compass } from "lucide-react";
+import { usePathname } from "next/navigation";
+import { Home, Search, Compass, ArrowRight, Activity, Bot, Sparkles, Bell } from "lucide-react";
 
-/** Global 404 — ponytail: matches the dark-terminal design system so
- *  unknown routes (typos, dead links) don't fall through to Next's
- *  plain white 404. Three affordances: back-to-dashboard, search-via-
- *  command-palette, list-of-popular-routes. The route group folders
- *  ((portal), (auth), (marketing)) each have their own error.tsx; this
- *  one fires for genuinely missing paths.
- *
- *  "use client" so the command-palette dispatch works on click — the
- *  server-side prerender would otherwise reject onClick on a button
- *  (Next.js 15 RSC). */
+/**
+ * Global 404 — ponytail: matches the dark-terminal design system so
+ * unknown routes (typos, dead links) don't fall through to Next's
+ * plain white 404. June 2026 update: surfaces the typed path so the
+ * user knows what URL was tried, and offers category-grouped popular
+ * destinations so they can navigate by intent rather than guess.
+ */
+const POPULAR: Array<{
+  group: string;
+  items: Array<{ href: string; icon: typeof Home; label: string; description: string }>;
+}> = [
+  {
+    group: "Build",
+    items: [
+      { href: "/dashboard", icon: Home, label: "Dashboard", description: "Live signals from your agents" },
+      { href: "/agents", icon: Bot, label: "Agents", description: "Manage your agent fleet" },
+    ],
+  },
+  {
+    group: "Observe",
+    items: [
+      { href: "/traces", icon: Activity, label: "Trace Explorer", description: "Search every trace in your system" },
+      { href: "/incidents", icon: Bell, label: "Incidents", description: "Open RCA clusters" },
+    ],
+  },
+  {
+    group: "Optimize",
+    items: [
+      { href: "/optimization", icon: Sparkles, label: "Cost", description: "Token + cost overview" },
+      { href: "/alerts", icon: Bell, label: "Alerts", description: "Active alerts and rules" },
+    ],
+  },
+];
+
 export default function GlobalNotFound() {
+  const pathname = usePathname();
   return (
     <div className="min-h-[80vh] flex items-center justify-center px-4 py-16">
-      <div className="max-w-xl w-full text-center space-y-8">
+      <div className="max-w-3xl w-full text-center space-y-8">
         <div className="space-y-3">
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[var(--accent-faint)] text-[var(--accent)] text-[11px] font-mono uppercase tracking-wider border border-[var(--accent)]/20">
             <Compass className="w-3 h-3" />
@@ -27,34 +53,55 @@ export default function GlobalNotFound() {
           </h1>
           <p className="text-sm text-[var(--text-secondary)] max-w-md mx-auto leading-relaxed">
             The page you&apos;re looking for either moved, never existed, or the
-            link is from a deploy that&apos;s no longer live. Try one of these:
+            link is from a deploy that&apos;s no longer live.
           </p>
+          {pathname && pathname !== "/" && (
+            <code className="inline-block mt-2 px-3 py-1.5 rounded-md bg-[var(--bg-primary)] border border-[var(--border-default)] text-xs font-mono text-[var(--text-muted)]">
+              {pathname}
+            </code>
+          )}
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-left">
+        {/* Category-grouped popular routes. Renders 3 columns on lg,
+            1 column on mobile. Mirrors the sidebar grouping so users
+            can navigate by intent (e.g. "I want to look at traces"). */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-left">
+          {POPULAR.map((group) => (
+            <div key={group.group} className="space-y-2">
+              <p className="text-[10px] font-mono font-semibold uppercase tracking-[0.14em] text-[var(--text-muted)] px-1">
+                {group.group}
+              </p>
+              {group.items.map((item) => {
+                const Icon = item.icon;
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    className="group flex items-start gap-3 p-3 bg-[var(--bg-primary)] border border-[var(--border-default)] rounded-lg hover:border-[var(--accent)]/50 hover:bg-[var(--bg-secondary)]/40 transition-all"
+                  >
+                    <Icon className="w-4 h-4 text-[var(--accent)] mt-0.5 shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-[var(--text-primary)] group-hover:text-[var(--accent)] transition-colors truncate">
+                        {item.label}
+                      </p>
+                      <p className="text-xs text-[var(--text-muted)] truncate">
+                        {item.description}
+                      </p>
+                    </div>
+                  </Link>
+                );
+              })}
+            </div>
+          ))}
+        </div>
+
+        <div className="flex items-center justify-center gap-3 pt-2">
           <Link
             href="/dashboard"
-            className="group block p-4 bg-[var(--bg-primary)] border border-[var(--border-default)] rounded-xl hover:border-[var(--accent)]/50 hover:bg-[var(--bg-secondary)]/40 transition-all"
+            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-[var(--accent)] text-[var(--accent-foreground)] text-sm font-medium hover:opacity-90 transition-opacity"
           >
-            <Home className="w-4 h-4 text-[var(--accent)] mb-2" />
-            <p className="text-sm font-medium text-[var(--text-primary)] group-hover:text-[var(--accent)] transition-colors">
-              Dashboard
-            </p>
-            <p className="text-xs text-[var(--text-muted)] mt-1">
-              Live signals from your agents
-            </p>
-          </Link>
-          <Link
-            href="/traces"
-            className="group block p-4 bg-[var(--bg-primary)] border border-[var(--border-default)] rounded-xl hover:border-[var(--accent)]/50 hover:bg-[var(--bg-secondary)]/40 transition-all"
-          >
-            <Search className="w-4 h-4 text-[var(--accent)] mb-2" />
-            <p className="text-sm font-medium text-[var(--text-primary)] group-hover:text-[var(--accent)] transition-colors">
-              Trace Explorer
-            </p>
-            <p className="text-xs text-[var(--text-muted)] mt-1">
-              Search every trace in your system
-            </p>
+            Back to dashboard
+            <ArrowRight className="w-3.5 h-3.5" />
           </Link>
           <button
             type="button"
@@ -68,15 +115,10 @@ export default function GlobalNotFound() {
                 );
               }
             }}
-            className="group block p-4 bg-[var(--bg-primary)] border border-[var(--border-default)] rounded-xl hover:border-[var(--accent)]/50 hover:bg-[var(--bg-secondary)]/40 transition-all text-left"
+            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg border border-[var(--border-default)] bg-[var(--bg-primary)] text-sm text-[var(--text-secondary)] hover:bg-[var(--bg-tertiary)] transition-colors"
           >
-            <Search className="w-4 h-4 text-[var(--accent)] mb-2" />
-            <p className="text-sm font-medium text-[var(--text-primary)] group-hover:text-[var(--accent)] transition-colors">
-              Search <kbd className="ml-1 px-1 py-0.5 bg-[var(--bg-base)] border border-[var(--border-default)] rounded text-[10px] font-mono text-[var(--text-muted)]">⌘K</kbd>
-            </p>
-            <p className="text-xs text-[var(--text-muted)] mt-1">
-              Jump anywhere in the portal
-            </p>
+            Search
+            <kbd className="ml-1 px-1 py-0.5 bg-[var(--bg-base)] border border-[var(--border-default)] rounded text-[10px] font-mono text-[var(--text-muted)]">⌘K</kbd>
           </button>
         </div>
       </div>

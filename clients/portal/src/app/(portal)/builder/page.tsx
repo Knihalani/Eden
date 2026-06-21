@@ -584,7 +584,7 @@ function BuilderPageInner() {
               }
               void s.pushAndRun({ orgId });
             }}
-            isLoading={s.runState.kind === "pushing" || s.runState.kind === "polling"}
+            loading={s.runState.kind === "pushing" || s.runState.kind === "polling"}
             data-testid="push-and-run"
           >
             {s.runState.kind === "pushing" || s.runState.kind === "polling" ? (

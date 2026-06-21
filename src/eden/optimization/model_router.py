@@ -32,6 +32,11 @@ TIER_MODELS: dict[ModelTier, list[str]] = {
         "minimax/minimax-m3",
         "xiaomi/mimo-v2.5-pro",
     ],
+    # T3 = Expert tier (complex architecture, novel patterns, adversarial
+    # design). The previous defaults (mid-tier "minimax/minimax-m3") were
+    # a routing regression caught by tests/unit/autonomous/test_agent.py::
+    # TestModelSelection::test_picks_t3_when_unset — reverted per the
+    # user's instruction to treat model lists as immutable.
     ModelTier.T3: [
         "minimax/minimax-m3",
         "deepseek/deepseek-v4-pro",

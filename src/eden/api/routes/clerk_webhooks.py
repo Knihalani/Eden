@@ -46,6 +46,13 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/webhooks", tags=["webhooks"])
 
 _settings = get_settings()
+# Public alias for tests that need to monkeypatch the secret at runtime
+# (the private ``_settings`` is captured at import time, so direct
+# ``monkeypatch.setattr`` on it is harmless, but the test files use
+# ``clerk_webhooks.settings`` for clarity).  Keep both in sync via
+# attribute assignment, not a re-import, so the secret is read from
+# the same singleton on every request.
+settings = _settings
 
 
 def _verify_svix_signature(

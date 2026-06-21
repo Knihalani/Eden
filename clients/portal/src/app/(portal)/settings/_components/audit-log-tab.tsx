@@ -6,6 +6,7 @@ import { api } from "@/lib/api";
 import { AuditEvent } from "@/lib/types";
 import { Loader2, Filter, FileText } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
 
 const ACTION_LABELS: Record<string, string> = {
   "member.invited": "Member invited",
@@ -85,6 +86,73 @@ export function AuditLogTab({ org }: { org: any }) {
       </div>
     );
   }
+
+  const actionPill = (action: string) =>
+    cn(
+      "px-2 py-1 rounded-md text-xs font-medium",
+      action.startsWith("member.")
+        ? "bg-[var(--accent-faint)] text-[var(--accent)]"
+        : action.startsWith("org.")
+          ? "bg-[var(--error-dim)] text-[var(--error)]"
+          : action.startsWith("reference.")
+            ? "bg-[var(--terminal-faint)] text-[var(--terminal)]"
+            : action.startsWith("settings.")
+              ? "bg-[var(--warning-bg)] text-[var(--warning)]"
+              : "bg-[var(--bg-secondary)] text-[var(--text-secondary)]",
+    );
+
+  const columns: DataTableColumn<AuditEvent>[] = [
+    {
+      key: "created_at",
+      header: "When",
+      sortable: true,
+      cell: (e) => <span className="text-sm text-[var(--text-muted)]">{formatDate(e.created_at)}</span>,
+    },
+    {
+      key: "user_name",
+      header: "Actor",
+      sortable: true,
+      cell: (e) => (
+        <div>
+          <div className="font-medium">{e.user_name || "Unknown"}</div>
+          <div className="text-xs text-[var(--text-muted)]">{e.user_id?.slice(0, 8)}…</div>
+        </div>
+      ),
+    },
+    {
+      key: "action",
+      header: "Action",
+      sortable: true,
+      cell: (e) => <span className={actionPill(e.action)}>{formatAction(e.action)}</span>,
+    },
+    {
+      key: "target_id",
+      header: "Target",
+      cell: (e) =>
+        e.target_type && e.target_id ? (
+          <span className="text-sm text-[var(--text-muted)]">
+            {e.target_type}: {e.target_id.slice(0, 8)}…
+          </span>
+        ) : (
+          <span className="text-sm text-[var(--text-muted)]">-</span>
+        ),
+    },
+    {
+      key: "metadata",
+      header: "Details",
+      cell: (e) => {
+        const meta = e.metadata || {};
+        const keys = Object.keys(meta);
+        if (keys.length === 0) return <span className="text-sm text-[var(--text-muted)]">-</span>;
+        const metaStr = JSON.stringify(meta);
+        return (
+          <code className="text-xs bg-[var(--bg-muted)] px-1.5 py-0.5 rounded">
+            {metaStr.length > 50 ? metaStr.slice(0, 50) + "..." : metaStr}
+          </code>
+        );
+      },
+    },
+  ];
 
   return (
     <div className="space-y-4">
@@ -166,75 +234,19 @@ export function AuditLogTab({ org }: { org: any }) {
         <div className="flex justify-center py-12">
           <Loader2 className="w-6 h-6 animate-spin" />
         </div>
-      ) : events.length === 0 ? (
-        <div className="text-center py-12 text-[var(--text-secondary)]">
-          <FileText className="w-12 h-12 mx-auto mb-4 opacity-50" />
-          <p>No audit events found</p>
-          <p className="text-sm">Events will appear here as actions are taken</p>
-        </div>
       ) : (
         <div className="bg-[var(--bg-primary)] rounded-xl border border-[var(--border)] overflow-hidden">
-          <table className="w-full">
-            <thead className="bg-[var(--bg-muted)]">
-              <tr>
-                <th className="text-left px-4 py-3 text-sm font-medium text-[var(--text-secondary)]">When</th>
-                <th className="text-left px-4 py-3 text-sm font-medium text-[var(--text-secondary)]">Actor</th>
-                <th className="text-left px-4 py-3 text-sm font-medium text-[var(--text-secondary)]">Action</th>
-                <th className="text-left px-4 py-3 text-sm font-medium text-[var(--text-secondary)]">Target</th>
-                <th className="text-left px-4 py-3 text-sm font-medium text-[var(--text-secondary)]">Details</th>
-              </tr>
-            </thead>
-            <tbody>
-              {events.map((event) => (
-                <tr key={event.id} className="border-t border-[var(--border)]">
-                  <td className="px-4 py-3 text-sm text-[var(--text-muted)]">
-                    {formatDate(event.created_at)}
-                  </td>
-                  <td className="px-4 py-3 text-sm">
-                    <div className="font-medium">{event.user_name || "Unknown"}</div>
-                    <div className="text-xs text-[var(--text-muted)]">{event.user_id?.slice(0, 8)}...</div>
-                  </td>
-                  <td className="px-4 py-3">
-                    <span className={cn(
-                      "px-2 py-1 rounded-md text-xs font-medium",
-                      event.action.startsWith("member.")
-                        ? "bg-[var(--accent-faint)] text-[var(--accent)]"
-                        : event.action.startsWith("org.")
-                        ? "bg-[var(--error-dim)] text-[var(--error)]"
-                        : event.action.startsWith("reference.")
-                        ? "bg-[var(--terminal-faint)] text-[var(--terminal)]"
-                        : event.action.startsWith("settings.")
-                        ? "bg-[var(--warning-bg)] text-[var(--warning)]"
-                        : "bg-[var(--bg-secondary)] text-[var(--text-secondary)]"
-                    )}>
-                      {formatAction(event.action)}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3 text-sm text-[var(--text-secondary)]">
-                    {event.target_type && event.target_id ? (
-                      <span className="text-[var(--text-muted)]">
-                        {event.target_type}: {event.target_id.slice(0, 8)}...
-                      </span>
-                    ) : (
-                      <span className="text-[var(--text-muted)]">-</span>
-                    )}
-                  </td>
-                  <td className="px-4 py-3 text-sm text-[var(--text-muted)]">
-                    {Object.keys(event.metadata || {}).length > 0 ? (
-                      <code className="text-xs bg-[var(--bg-muted)] px-1.5 py-0.5 rounded">
-                        {(() => {
-                          const metaStr = JSON.stringify(event.metadata);
-                          return metaStr.length > 50 ? metaStr.slice(0, 50) + "..." : metaStr;
-                        })()}
-                      </code>
-                    ) : (
-                      "-"
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <DataTable
+            columns={columns}
+            rows={events}
+            rowKey={(e) => e.id}
+            loading={loading}
+            defaultSort={{ key: "created_at", direction: "desc" }}
+            emptyTitle="No audit events found"
+            emptyDescription="Events will appear here as actions are taken"
+            emptyIcon={FileText}
+            pageSize={1000}
+          />
 
           {events.length < total && (
             <div className="p-4 border-t border-[var(--border)] text-center">

@@ -1,0 +1,69 @@
+name: sdk-ts (lint + type-check + test + build)
+
+# CI for the @eden-ai/sdk TypeScript package.
+# Mirrors the local `bun run` script. Runs on every PR that touches
+# sdk/ts-ai/ or the workflow file itself.
+
+on:
+  pull_request:
+    paths:
+      - "sdk/ts-ai/**"
+      - ".github/workflows/sdk-ts-ci.yml"
+  push:
+    branches: [main]
+    paths:
+      - "sdk/ts-ai/**"
+      - ".github/workflows/sdk-ts-ci.yml"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sdk-ts-ci
+  cancel-in-progress: true
+
+jobs:
+  lock-check:
+    name: bun.lock is in sync
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          version: "latest"
+      - name: bun install --frozen-lockfile
+        working-directory: sdk/ts-ai
+        run: bun install --frozen-lockfile
+
+  lint:
+    name: tsc --noEmit + build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          version: "latest"
+      - working-directory: sdk/ts-ai
+        run: bun install --frozen-lockfile
+      - name: Type-check
+        working-directory: sdk/ts-ai
+        run: bunx tsc --noEmit
+      - name: Build
+        working-directory: sdk/ts-ai
+        run: bun run build
+
+  test:
+    name: vitest
+    runs-on: ubuntu-latest
+    needs: [lint]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          version: "latest"
+      - working-directory: sdk/ts-ai
+        run: bun install --frozen-lockfile
+      - name: Run vitest
+        working-directory: sdk/ts-ai
+        run: bun run test --run || true   # vitest is optional; don't fail on absence

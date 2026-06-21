@@ -71,7 +71,7 @@ function ResetPasswordForm() {
       setSubmitted(true);
       // Auto-redirect to login after 3 seconds
       setTimeout(() => {
-        router.push("/login");
+        router.push("/sign-in");
       }, 3000);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Reset failed");
@@ -99,7 +99,7 @@ function ResetPasswordForm() {
               You will be redirected to the login page in a few seconds...
             </p>
             <Link
-              href="/login"
+              href="/sign-in"
               className="inline-flex items-center gap-2 text-sm text-[var(--accent)] hover:underline font-medium"
             >
               <ArrowLeft className="w-4 h-4" />
@@ -195,7 +195,7 @@ function ResetPasswordForm() {
             </Button>
 
             <p className="text-center text-sm text-[var(--text-secondary)]">
-              <Link href="/login" className="text-[var(--accent)] hover:underline font-medium">
+              <Link href="/sign-in" className="text-[var(--accent)] hover:underline font-medium">
                 Back to login
               </Link>
             </p>

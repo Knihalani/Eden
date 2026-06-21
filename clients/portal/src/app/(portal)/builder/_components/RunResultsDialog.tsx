@@ -10,6 +10,7 @@
 import { useEffect } from "react";
 import { CheckCircle2, Loader2, XCircle, AlertCircle, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { DataTable } from "@/components/ui/data-table";
 import type { SimRun } from "@/lib/api";
 
 export type RunDialogState =
@@ -191,37 +192,19 @@ function DoneView({
 
       {scenarios.length > 0 && (
         <div className="rounded-md border border-[var(--border-default)] overflow-hidden">
-          <table className="w-full text-xs">
-            <thead className="bg-[var(--bg-base)] text-[var(--text-muted)]">
-              <tr>
-                <th className="text-left px-3 py-2 font-medium">Scenario</th>
-                <th className="text-left px-3 py-2 font-medium">Status</th>
-                <th className="text-right px-3 py-2 font-medium">Episodes</th>
-                <th className="text-right px-3 py-2 font-medium">Pass</th>
-                <th className="text-right px-3 py-2 font-medium">Fail</th>
-              </tr>
-            </thead>
-            <tbody>
-              {scenarios.map((s, i) => (
-                <tr
-                  key={`${s.scenario_id}-${i}`}
-                  className="border-t border-[var(--border-default)] text-[var(--text-muted)]"
-                >
-                  <td className="px-3 py-1.5 font-mono">{s.scenario_id}</td>
-                  <td className="px-3 py-1.5">
-                    <StatusBadge status={s.status} />
-                  </td>
-                  <td className="px-3 py-1.5 text-right">{s.episodes}</td>
-                  <td className="px-3 py-1.5 text-right text-[var(--terminal)]">
-                    {s.passed_steps}
-                  </td>
-                  <td className="px-3 py-1.5 text-right text-[var(--warning)]">
-                    {s.failed_steps}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <DataTable
+            columns={[
+              { key: "scenario_id", header: "Scenario", cell: (s) => <span className="font-mono">{s.scenario_id}</span> },
+              { key: "status", header: "Status", cell: (s) => <StatusBadge status={s.status} /> },
+              { key: "episodes", header: "Episodes", sortable: true, align: "right", cell: (s) => s.episodes },
+              { key: "passed_steps", header: "Pass", sortable: true, align: "right", cell: (s) => <span className="text-[var(--terminal)]">{s.passed_steps}</span> },
+              { key: "failed_steps", header: "Fail", sortable: true, align: "right", cell: (s) => <span className="text-[var(--warning)]">{s.failed_steps}</span> },
+            ]}
+            rows={scenarios}
+            rowKey={(s, i) => `${s.scenario_id}-${i}`}
+            defaultSort={{ key: "scenario_id", direction: "asc" }}
+            pageSize={50}
+          />
         </div>
       )}
 

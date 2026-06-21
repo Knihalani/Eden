@@ -61,6 +61,10 @@ export interface SidebarItem {
   badge?: string;
   /** Nested items (rendered as a sub-group under the parent). */
   children?: SidebarItem[];
+  /** Tag the item as "advanced" — it hides behind the
+   *  "Advanced" toggle in the sidebar (June 2026 cleanup).
+   *  Defaults to undefined = "core" (always visible). */
+  category?: "core" | "advanced";
 }
 
 export interface SidebarGroup {
@@ -95,23 +99,23 @@ export const DEFAULT_SIDEBAR: SidebarGroup[] = [
         label: "Observability",
         icon: Activity,
         children: [
-          { id: "obs-apm",         href: "/observability/apm",         label: "APM Tracing",     icon: GitBranch },
-          { id: "obs-cohorts",     href: "/observability/cohorts",     label: "Columnar Engine", icon: Database },
-          { id: "obs-decisions",   href: "/observability/decisions",   label: "Decisions",       icon: Compass },
-          { id: "obs-eval",        href: "/observability/eval",        label: "Eval",            icon: BarChart3 },
-          { id: "obs-memory",      href: "/observability/memory",      label: "Memory",          icon: Brain },
-          { id: "obs-query",       href: "/observability/query",       label: "Query",           icon: Sparkles },
-          { id: "obs-retrieval",   href: "/observability/retrieval",   label: "Retrieval",       icon: Network },
-          { id: "obs-time-travel", href: "/observability/time-travel", label: "Time-Travel",     icon: History },
+          { id: "obs-apm",         href: "/observability/apm",         label: "APM Tracing",     icon: GitBranch, category: "advanced" },
+          { id: "obs-cohorts",     href: "/observability/cohorts",     label: "Columnar Engine", icon: Database, category: "advanced" },
+          { id: "obs-decisions",   href: "/observability/decisions",   label: "Decisions",       icon: Compass, category: "advanced" },
+          { id: "obs-eval",        href: "/observability/eval",        label: "Eval",            icon: BarChart3, category: "advanced" },
+          { id: "obs-memory",      href: "/observability/memory",      label: "Memory",          icon: Brain, category: "advanced" },
+          { id: "obs-query",       href: "/observability/query",       label: "Query",           icon: Sparkles, category: "advanced" },
+          { id: "obs-retrieval",   href: "/observability/retrieval",   label: "Retrieval",       icon: Network, category: "advanced" },
+          { id: "obs-time-travel", href: "/observability/time-travel", label: "Time-Travel",     icon: History, category: "advanced" },
         ],
       },
-      { id: "tools",     href: "/tools",     label: "Tools",     icon: Wrench },
+      { id: "tools",     href: "/tools",     label: "Tools",     icon: Wrench, category: "advanced" },
       { id: "insights",  href: "/insights",  label: "Insights",  icon: Brain },
-      { id: "inspector", href: "/inspector", label: "Inspector", icon: Compass },
+      { id: "inspector", href: "/inspector", label: "Inspector", icon: Compass, category: "advanced" },
       { id: "incidents", href: "/incidents", label: "Incidents", icon: AlertOctagon },
       { id: "alerts",    href: "/alerts",    label: "Alerts",    icon: Bell },
-      { id: "llmops",    href: "/llmops",    label: "LLMOps",    icon: Cog },
-      { id: "analytics", href: "/analytics", label: "Analytics", icon: BarChart3 },
+      { id: "llmops",    href: "/llmops",    label: "LLMOps",    icon: Cog, category: "advanced" },
+      { id: "analytics", href: "/analytics", label: "Analytics", icon: BarChart3, category: "advanced" },
     ],
   },
   {
@@ -128,7 +132,7 @@ export const DEFAULT_SIDEBAR: SidebarGroup[] = [
           { id: "opt-predict",  href: "/optimization/predict",  label: "Predictive", icon: BarChart3 },
         ],
       },
-      { id: "studio",     href: "/studio",     label: "Custom Metrics", icon: FlaskConical },
+      { id: "studio",     href: "/studio",     label: "Custom Metrics", icon: FlaskConical, category: "advanced" },
       { id: "guardrails", href: "/guardrails", label: "Guardrails",     icon: Shield },
     ],
   },
@@ -137,8 +141,8 @@ export const DEFAULT_SIDEBAR: SidebarGroup[] = [
     label: "Automate",
     items: [
       { id: "autonomous",     href: "/autonomous",     label: "Autonomous",     icon: Wand2 },
-      { id: "closed-loop",    href: "/closed-loop",    label: "Closed-Loop",    icon: Inbox },
-      { id: "pr-suggestions", href: "/pr-suggestions", label: "PR Suggestions", icon: GitPullRequestArrow, badge: "new" },
+      { id: "closed-loop",    href: "/closed-loop",    label: "Closed-Loop",    icon: Inbox, category: "advanced" },
+      { id: "pr-suggestions", href: "/pr-suggestions", label: "PR Suggestions", icon: GitPullRequestArrow, badge: "new", category: "advanced" },
     ],
   },
   {

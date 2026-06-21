@@ -9,6 +9,7 @@ import { Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { NoOrgState } from "@/components/ui/no-org-state";
 import { useToast } from "@/components/ui/toast";
+import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
 import {
   ArrowLeft,
   ChevronRight,
@@ -104,6 +105,75 @@ export default function TestRunsPage() {
     if (search && !r.id.toLowerCase().includes(search.toLowerCase())) return false;
     return true;
   });
+
+  const columns: DataTableColumn<SimRun>[] = [
+    {
+      key: "id",
+      header: "Run ID",
+      sortable: true,
+      cell: (r) => (
+        <span className="font-mono text-xs text-[var(--text-primary)]">
+          {r.id.length > 20 ? `${r.id.slice(0, 20)}…` : r.id}
+        </span>
+      ),
+    },
+    {
+      key: "status",
+      header: "Status",
+      sortable: true,
+      cell: (r) => (
+        <span
+          className={cn(
+            "text-[10px] font-medium uppercase tracking-wide px-1.5 py-0.5 rounded",
+            STATUS_BADGE[r.status] ?? STATUS_BADGE.pending,
+          )}
+        >
+          {r.status}
+        </span>
+      ),
+    },
+    {
+      key: "runner_kind",
+      header: "Runner",
+      sortable: true,
+      cell: (r) => (
+        <span className="text-[var(--text-muted)] text-xs font-mono">{r.runner_kind ?? "—"}</span>
+      ),
+    },
+    {
+      key: "started_at",
+      header: "Started",
+      sortable: true,
+      cell: (r) => (
+        <span className="text-[var(--text-muted)] text-xs">{formatTime(r.started_at)}</span>
+      ),
+    },
+    {
+      key: "duration_ms",
+      header: "Duration",
+      sortable: true,
+      align: "right",
+      cell: (r) => (
+        <span className="text-[var(--text-secondary)] text-xs tabular-nums">
+          {formatDuration(r.duration_ms)}
+        </span>
+      ),
+    },
+    {
+      key: "id_link",
+      header: "",
+      align: "right",
+      cell: (r) => (
+        <Link
+          href={`/agents/${encodeURIComponent(agentId)}/test-runs/${r.id}`}
+          className="inline-flex items-center gap-1 text-xs text-[var(--accent)] hover:text-[var(--accent-hover)] transition-colors"
+        >
+          Inspect
+          <ChevronRight className="w-3.5 h-3.5" />
+        </Link>
+      ),
+    },
+  ];
 
   if (!currentOrg) {
     return (
@@ -229,70 +299,14 @@ export default function TestRunsPage() {
 
       {filtered.length > 0 && (
         <Card className="overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-[var(--border-default)] bg-[var(--bg-secondary)]">
-                  <th className="text-left px-4 py-3 text-xs font-medium text-[var(--text-muted)] uppercase tracking-wide">
-                    Run ID
-                  </th>
-                  <th className="text-left px-4 py-3 text-xs font-medium text-[var(--text-muted)] uppercase tracking-wide">
-                    Status
-                  </th>
-                  <th className="text-left px-4 py-3 text-xs font-medium text-[var(--text-muted)] uppercase tracking-wide">
-                    Runner
-                  </th>
-                  <th className="text-left px-4 py-3 text-xs font-medium text-[var(--text-muted)] uppercase tracking-wide">
-                    Started
-                  </th>
-                  <th className="text-left px-4 py-3 text-xs font-medium text-[var(--text-muted)] uppercase tracking-wide">
-                    Duration
-                  </th>
-                  <th className="text-right px-4 py-3 text-xs font-medium text-[var(--text-muted)] uppercase tracking-wide"></th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-[var(--border-subtle)]">
-                {filtered.map((r) => (
-                  <tr
-                    key={r.id}
-                    className="hover:bg-[var(--bg-tertiary)]/50 transition-colors"
-                  >
-                    <td className="px-4 py-3 font-mono text-xs text-[var(--text-primary)]">
-                      {r.id.length > 20 ? `${r.id.slice(0, 20)}…` : r.id}
-                    </td>
-                    <td className="px-4 py-3">
-                      <span
-                        className={cn(
-                          "text-[10px] font-medium uppercase tracking-wide px-1.5 py-0.5 rounded",
-                          STATUS_BADGE[r.status] ?? STATUS_BADGE.pending,
-                        )}
-                      >
-                        {r.status}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-[var(--text-muted)] text-xs font-mono">
-                      {r.runner_kind ?? "—"}
-                    </td>
-                    <td className="px-4 py-3 text-[var(--text-muted)] text-xs">
-                      {formatTime(r.started_at)}
-                    </td>
-                    <td className="px-4 py-3 text-[var(--text-secondary)] text-xs tabular-nums">
-                      {formatDuration(r.duration_ms)}
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      <Link
-                        href={`/agents/${encodeURIComponent(agentId)}/test-runs/${r.id}`}
-                        className="inline-flex items-center gap-1 text-xs text-[var(--accent)] hover:text-[var(--accent-hover)] transition-colors"
-                      >
-                        Inspect
-                        <ChevronRight className="w-3.5 h-3.5" />
-                      </Link>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <DataTable
+            columns={columns}
+            rows={filtered}
+            rowKey={(r) => r.id}
+            loading={loading}
+            defaultSort={{ key: "started_at", direction: "desc" }}
+            pageSize={25}
+          />
         </Card>
       )}
 

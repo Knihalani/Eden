@@ -1,9 +1,14 @@
 """Eden configuration."""
 
+import logging
 from functools import lru_cache
 from pathlib import Path
+from typing import Annotated
 
+from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+logger = logging.getLogger(__name__)
 
 
 class Settings(BaseSettings):
@@ -94,6 +99,16 @@ class Settings(BaseSettings):
     # blocks the side-effect.
     autonomous_actions_v0: bool = True
     enable_eval_pipeline: bool = False
+
+    # Cat 23 Code-Change two-stage opt-in (see eden/code_change/approvals).
+    # ``code_change_enabled`` is the master switch — the patch propose
+    # route refuses every request when this is false. ``auto_pr_enabled``
+    # and ``auto_revert_enabled`` are the second stage; both are required
+    # for any auto side-effect (PR creation, revert). All three default
+    # to ``False`` so a fresh deployment cannot accidentally mutate code.
+    code_change_enabled: bool = False
+    auto_pr_enabled: bool = False
+    auto_revert_enabled: bool = False
 
     # Phase C — unified AI agent (Cat 14 real + global panel).
     # The agent uses the ModelRouter T3 tier (premium: claude-opus-4,
@@ -203,7 +218,20 @@ class Settings(BaseSettings):
     # The JWKS URL is auto-derived from the publishable key when the
     # secret is set; override via ``clerk_jwks_url`` for non-default
     # Clerk deployments (EU region, custom domain).
-    clerk_secret_key: str = ""
+    #
+    # ``AliasChoices`` accepts both the canonical uppercase-underscore
+    # env var (``CLERK_SECRET_KEY``) and the hyphenated name
+    # Northflank uses for the existing secret (``CLERK-SECRET-KEY``).
+    # pydantic-settings is case-insensitive but does NOT auto-convert
+    # hyphens to underscores, so we have to declare both explicitly.
+    clerk_secret_key: str = Field(
+        default="",
+        validation_alias=AliasChoices(
+            "clerk_secret_key",
+            "CLERK-SECRET-KEY",
+            "clerk-secret-key",
+        ),
+    )
     clerk_jwt_key: str = ""  # asymmetric public key fallback (PEM)
     clerk_jwks_url: str = ""
     # Publishable key — only used server-side to auto-derive the
@@ -215,8 +243,19 @@ class Settings(BaseSettings):
     # Svix signing secret used to verify Clerk webhook deliveries.
     # When empty, ``POST /webhooks/clerk`` rejects every request with
     # 503. Set this in Vercel / Northflank as ``CLERK_WEBHOOK_SIGNING_SECRET``
-    # before subscribing to any user/org events in the Clerk dashboard.
-    clerk_webhook_signing_secret: str = ""
+    # (canonical uppercase-underscore) or, in the existing Northflank
+    # deployment, as the hyphenated ``clerk-webhook-signing-secret``
+    # that was used at creation time. ``AliasChoices`` accepts both
+    # so a stale ``clerk-webhook-signing-secret`` secret still works
+    # without forcing an NF rename.
+    clerk_webhook_signing_secret: str = Field(
+        default="",
+        validation_alias=AliasChoices(
+            "clerk_webhook_signing_secret",
+            "clerk-webhook-signing-secret",
+            "CLERK_WEBHOOK-SIGNING-SECRET",
+        ),
+    )
 
     # Encryption (Fernet key for sensitive at-rest fields).
     # If empty, falls back to deriving a key from JWT_SECRET.
@@ -402,5 +441,28 @@ class Settings(BaseSettings):
 
 @lru_cache
 def get_settings() -> Settings:
-    """Get cached settings instance."""
-    return Settings()
+    """Get cached settings instance.
+
+    Cat 23 audit (2026-06-21): refuse to boot when ``jwt_secret`` is
+    still the placeholder default in any non-test environment. Tests
+    set ``EDEN_TESTING=1`` (or similar) so unit suites can keep using
+    a fixture secret.
+    """
+    import os
+
+    settings = Settings()
+    placeholder = "change-me-in-production"
+    if settings.jwt_secret == placeholder:
+        testing = os.environ.get("EDEN_TESTING", "").lower() in (
+            "1", "true", "yes",
+        ) or os.environ.get("PYTEST_CURRENT_TEST")
+        if testing:
+            logger.debug("jwt_secret using placeholder (test mode)")
+        else:
+            raise RuntimeError(
+                "jwt_secret is still set to the placeholder default "
+                "'change-me-in-production'. Set EDEN_JWT_SECRET (or "
+                "JWT_SECRET) to a real secret before booting in any "
+                "non-test environment."
+            )
+    return settings

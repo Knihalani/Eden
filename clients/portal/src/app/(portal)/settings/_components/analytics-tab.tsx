@@ -8,7 +8,35 @@ import type { OrgAnalytics } from "@/lib/types";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, PieChart, Pie, Cell } from "recharts";
 import { Loader2, TrendingUp, Users, Database, Code } from "lucide-react";
 
-const STORAGE_COLORS = ["#3b82f6", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6"];
+// ponytail: SSR-safe chart-palette reader. Recharts' <Cell fill="…">
+// does not resolve CSS var() — it needs concrete strings — so we
+// pre-compute the palette at module init from the design tokens
+// (with hardcoded fallbacks for SSR, when window is undefined).
+const CHART_COLORS_SSR = [
+  "var(--chart-pie-1)",
+  "var(--chart-pie-2)",
+  "var(--chart-pie-3)",
+  "var(--chart-pie-4)",
+  "var(--chart-pie-5)",
+] as const;
+const CHART_COLORS_FALLBACK = [
+  "#3b82f6",
+  "#10b981",
+  "#f59e0b",
+  "#ef4444",
+  "#8b5cf6",
+] as const;
+
+function readChartColors(): string[] {
+  if (typeof window === "undefined") return [...CHART_COLORS_FALLBACK];
+  const style = getComputedStyle(document.documentElement);
+  return [1, 2, 3, 4, 5].map((i, idx) => {
+    const v = style.getPropertyValue(`--chart-pie-${i}`).trim();
+    return v || CHART_COLORS_FALLBACK[idx];
+  });
+}
+
+const STORAGE_COLORS = readChartColors();
 
 export function AnalyticsTab() {
   const { currentOrg } = useOrg();
@@ -151,7 +179,7 @@ export function AnalyticsTab() {
                   labelFormatter={(value) => new Date(value).toLocaleDateString()}
                   formatter={(value) => [`${value} jobs`, "Count"]}
                 />
-                <Bar dataKey="count" fill="#3b82f6" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="count" fill="var(--chart-primary)" radius={[4, 4, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -180,7 +208,7 @@ export function AnalyticsTab() {
                   labelFormatter={(value) => new Date(value).toLocaleDateString()}
                   formatter={(value) => [`${value} uploads`, "Count"]}
                 />
-                <Line type="monotone" dataKey="count" stroke="#10b981" strokeWidth={2} dot={{ r: 4 }} />
+                <Line type="monotone" dataKey="count" stroke="var(--chart-success)" strokeWidth={2} dot={{ r: 4 }} />
               </LineChart>
             </ResponsiveContainer>
           </div>

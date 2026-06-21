@@ -13,8 +13,8 @@ import {
 import { useToast } from "@/components/ui/toast";
 import { useConfirm } from "@/hooks/use-confirm";
 import { api } from "@/lib/api";
-import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
+import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
 
 interface GatewayModel {
   model_id: string;
@@ -198,6 +198,88 @@ export function GatewayTab({ org }: GatewayTabProps) {
       </div>
     );
   }
+
+  const columns: DataTableColumn<GatewayModel>[] = [
+    { key: "name", header: "Name", sortable: true, sticky: true, cell: (m) => <span className="font-medium text-[var(--text-primary)]">{m.name}</span> },
+    {
+      key: "provider",
+      header: "Provider",
+      sortable: true,
+      cell: (m) => (
+        <span className="px-2 py-0.5 bg-[var(--bg-tertiary)] text-[var(--text-primary)] rounded text-xs">
+          {m.provider}
+        </span>
+      ),
+    },
+    {
+      key: "upstream_model",
+      header: "Upstream model",
+      sortable: true,
+      cell: (m) => (
+        <span className="text-sm text-[var(--text-secondary)] font-mono">{m.upstream_model}</span>
+      ),
+    },
+    {
+      key: "upstream_key_prefix",
+      header: "Key",
+      cell: (m) => (
+        <code className="text-sm text-[var(--text-muted)] font-mono">
+          {m.upstream_key_prefix ? `...${m.upstream_key_prefix}` : "—"}
+        </code>
+      ),
+    },
+    {
+      key: "routing_priority",
+      header: "Priority",
+      sortable: true,
+      align: "right",
+      cell: (m) => <span className="text-sm text-[var(--text-muted)]">{m.routing_priority}</span>,
+    },
+    {
+      key: "enabled",
+      header: "Status",
+      sortable: true,
+      cell: (m) => {
+        const cls = cn(
+          "px-2 py-0.5 rounded text-xs font-medium",
+          m.enabled
+            ? "bg-[var(--terminal-faint)] text-[var(--terminal)]"
+            : "bg-[var(--bg-tertiary)] text-[var(--text-muted)]",
+        );
+        return canManage ? (
+          <button onClick={() => handleToggleEnabled(m)} className={cls}>
+            {m.enabled ? "Enabled" : "Disabled"}
+          </button>
+        ) : (
+          <span className={cls}>{m.enabled ? "Enabled" : "Disabled"}</span>
+        );
+      },
+    },
+    {
+      key: "model_id",
+      header: "",
+      align: "right",
+      cell: (m) =>
+        canManage ? (
+          <div className="flex items-center gap-1 justify-end">
+            <button
+              onClick={() => startEdit(m)}
+              className="px-2 py-1 text-xs text-[var(--accent)] hover:bg-[var(--bg-tertiary)] rounded"
+            >
+              Edit
+            </button>
+            <button
+              onClick={() => handleDelete(m)}
+              className="p-1.5 text-[var(--error)] hover:bg-[var(--error-dim)] rounded-lg"
+              title="Delete"
+              aria-label={`Delete ${m.name}`}
+            >
+              <Trash2 className="w-4 h-4" />
+            </button>
+          </div>
+        ) : null,
+    },
+  ];
 
   return (
     <div className="space-y-4">
@@ -424,126 +506,21 @@ export function GatewayTab({ org }: GatewayTabProps) {
             />
           </button>
         </div>
-        {loading ? (
-          <div className="p-4 space-y-3">
-            {Array.from({ length: 3 }).map((_, i) => (
-              <Skeleton key={i} className="h-12 w-full" />
-            ))}
-          </div>
-        ) : models.length === 0 ? (
-          <div className="px-4 py-12 text-center">
-            <Server className="w-8 h-8 mx-auto mb-3 text-[var(--text-muted)]" />
-            <p className="text-sm text-[var(--text-secondary)]">
-              No upstream models yet
-            </p>
-            <p className="text-xs text-[var(--text-muted)] mt-1">
-              {canManage
-                ? "Register an upstream provider to start routing traffic."
-                : "An owner or admin must register an upstream provider first."}
-            </p>
-          </div>
-        ) : (
-          <table className="w-full">
-            <thead className="bg-[var(--bg-tertiary)]">
-              <tr>
-                <th className="text-left px-4 py-3 text-sm font-medium text-[var(--text-secondary)]">
-                  Name
-                </th>
-                <th className="text-left px-4 py-3 text-sm font-medium text-[var(--text-secondary)]">
-                  Provider
-                </th>
-                <th className="text-left px-4 py-3 text-sm font-medium text-[var(--text-secondary)]">
-                  Upstream model
-                </th>
-                <th className="text-left px-4 py-3 text-sm font-medium text-[var(--text-secondary)]">
-                  Key
-                </th>
-                <th className="text-left px-4 py-3 text-sm font-medium text-[var(--text-secondary)]">
-                  Priority
-                </th>
-                <th className="text-left px-4 py-3 text-sm font-medium text-[var(--text-secondary)]">
-                  Status
-                </th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              {models.map((m) => (
-                <tr
-                  key={m.model_id}
-                  className="border-t border-[var(--border-default)]"
-                >
-                  <td className="px-4 py-3 font-medium text-[var(--text-primary)]">
-                    {m.name}
-                  </td>
-                  <td className="px-4 py-3">
-                    <span className="px-2 py-0.5 bg-[var(--bg-tertiary)] text-[var(--text-primary)] rounded text-xs">
-                      {m.provider}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3 text-sm text-[var(--text-secondary)] font-mono">
-                    {m.upstream_model}
-                  </td>
-                  <td className="px-4 py-3">
-                    <code className="text-sm text-[var(--text-muted)] font-mono">
-                      {m.upstream_key_prefix
-                        ? `...${m.upstream_key_prefix}`
-                        : "—"}
-                    </code>
-                  </td>
-                  <td className="px-4 py-3 text-sm text-[var(--text-muted)]">
-                    {m.routing_priority}
-                  </td>
-                  <td className="px-4 py-3">
-                    {canManage ? (
-                      <button
-                        onClick={() => handleToggleEnabled(m)}
-                        className={cn(
-                          "px-2 py-0.5 rounded text-xs font-medium",
-                          m.enabled
-                            ? "bg-[var(--terminal-faint)] text-[var(--terminal)]"
-                            : "bg-[var(--bg-tertiary)] text-[var(--text-muted)]"
-                        )}
-                      >
-                        {m.enabled ? "Enabled" : "Disabled"}
-                      </button>
-                    ) : (
-                      <span
-                        className={cn(
-                          "px-2 py-0.5 rounded text-xs font-medium",
-                          m.enabled
-                            ? "bg-[var(--terminal-faint)] text-[var(--terminal)]"
-                            : "bg-[var(--bg-tertiary)] text-[var(--text-muted)]"
-                        )}
-                      >
-                        {m.enabled ? "Enabled" : "Disabled"}
-                      </span>
-                    )}
-                  </td>
-                  <td className="px-4 py-3">
-                    {canManage && (
-                      <div className="flex items-center gap-1 justify-end">
-                        <button
-                          onClick={() => startEdit(m)}
-                          className="px-2 py-1 text-xs text-[var(--accent)] hover:bg-[var(--bg-tertiary)] rounded"
-                        >
-                          Edit
-                        </button>
-                        <button
-                          onClick={() => handleDelete(m)}
-                          className="p-1.5 text-[var(--error)] hover:bg-[var(--error-dim)] rounded-lg"
-                          title="Delete"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
+        <DataTable
+          columns={columns}
+          rows={models}
+          rowKey={(m) => m.model_id}
+          loading={loading}
+          defaultSort={{ key: "name", direction: "asc" }}
+          emptyTitle="No upstream models yet"
+          emptyDescription={
+            canManage
+              ? "Register an upstream provider to start routing traffic."
+              : "An owner or admin must register an upstream provider first."
+          }
+          emptyIcon={Server}
+          pageSize={25}
+        />
       </div>
       {ConfirmDialog}
     </div>
