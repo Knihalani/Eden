@@ -27,7 +27,13 @@ const API_BASE =
 
 interface ForwardOptions {
   method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
-  body?: unknown;
+  /**
+   * Pre-serialized request body. The catch-all route reads the raw
+   * text from ``request.text()``; passing it through unchanged
+   * avoids double-stringification (which would wrap a JSON string in
+   * extra quotes and break FastAPI's request parsing).
+   */
+  body?: string;
   cookieHeader?: string;
   extraHeaders?: Record<string, string>;
   /** Pre-built ``Authorization`` header value (e.g. ``Bearer <jwt>``). */
@@ -64,7 +70,12 @@ export async function forwardToBackend(
   const response = await fetch(`${API_BASE}${path}`, {
     method,
     headers,
-    body: body !== undefined ? JSON.stringify(body) : undefined,
+    // ``body`` arrives from the catch-all route handler as either a
+    // raw string (already JSON, from request.text()) or undefined.
+    // Stringifying again would wrap the JSON string in extra quotes
+    // ("\"{\"email\":...}\"") and FastAPI would reject it as a string
+    // where an object is expected. Pass through as-is.
+    body: body,
   });
 
   // Read the body once — clone before reading so the body is also available

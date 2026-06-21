@@ -490,16 +490,6 @@ export function ChatSidebar() {
   // ── Render ────────────────────────────────────────────────────────
   return (
     <>
-      {/* Backdrop — click to close. Always behind the panel. */}
-      {open && (
-        <button
-          type="button"
-          aria-label="Close AI assistant"
-          onClick={() => setOpen(false)}
-          className="fixed inset-0 z-20 bg-transparent cursor-default border-0 p-0"
-        />
-      )}
-
       {/* Floating toggle button (always visible, even when collapsed). */}
       <button
         type="button"
@@ -508,7 +498,7 @@ export function ChatSidebar() {
           "fixed bottom-4 right-4 z-40 flex h-12 w-12 items-center justify-center rounded-full",
           "bg-[var(--accent)] text-[var(--bg-base)] shadow-lg transition-transform",
           "hover:scale-105 active:scale-95",
-          open && "translate-x-[180px]",
+          open && "translate-x-[-200px]",
         )}
         aria-label={open ? "Close AI assistant" : "Open AI assistant"}
       >
