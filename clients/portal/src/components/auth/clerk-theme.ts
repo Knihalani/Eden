@@ -394,7 +394,10 @@ const clerkAppearance = {
       borderRadius: "var(--radius-md)",
     },
     deviceListItem: {
-      borderColor: "var(--border-subtle)",
+      // June 2026 contrast bump: was --border-subtle (2.1:1), now
+      // --border-default (3.0:1) so device entries in the SSO /
+      // session picker read as distinct cards against bg-secondary.
+      borderColor: "var(--border-default)",
       "&:hover": { backgroundColor: "var(--bg-tertiary)" },
     },
   },

@@ -16,25 +16,24 @@
    * Bumped June 2026: prior --border-subtle (#1A2332, 1.2:1 vs bg-primary)
    * and --border-default (#243044, 1.5:1) were below WCAG AA's 3:1
    * non-text contrast floor and effectively invisible against the
-   * surface. New ladder:
-   *   subtle  2.1:1 — row dividers, table cell separators
-   *   default 3.0:1 — card edges, input borders (Clerk inputs too)
-   *   strong  4.6:1 — focus rings, active-state accents
+   * surface. Final ladder (all ≥ AA on bg-primary AND bg-secondary):
+   *   subtle  3.3:1 — row dividers, table cell separators, deckle edges
+   *   default 4.5:1 — card edges, input borders (Clerk inputs too)
+   *   strong  6.4:1 — focus rings, active-state accents
    * Sidebar nav, user dropdown, AuthFormCard, and Clerk's own
    * appearance all inherit these automatically. */
-  --border-subtle: #2D3A52;
-  --border-default: #3A4A66;
-  --border-strong: #5A6F8F;
+  --border-subtle: #526384;
+  --border-default: #6B7C9E;
+  --border-strong: #8AA1C4;
   --border-glow: #5B9EFF;      /* focus / active glow */
 
   /* Text — sharp contrast on dark.
    * --text-faint bumped from #475569 (2.7:1) → #5A6B85 (3.3:1) so it
-   * passes WCAG AA Large (≥3:1). Small/caption copy that was using
-   * --text-faint for body text should switch to --text-muted (4.6:1,
-   * AA pass for normal size). */
+   * passes WCAG AA Large (≥3:1). --text-muted bumped from #64748B
+   * (4.2:1) → #708090 (4.7:1) to pass AA Normal (≥4.5:1). */
   --text-primary: #E4ECF7;
   --text-secondary: #94A3B8;
-  --text-muted: #64748B;
+  --text-muted: #708090;
   --text-faint: #5A6B85;
 
   /* Accent (Terminal Blue) — primary action color */
