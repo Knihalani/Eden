@@ -252,6 +252,7 @@ class Settings(BaseSettings):
         default="",
         validation_alias=AliasChoices(
             "clerk_webhook_signing_secret",
+            "CLERK_WEBHOOK_SIGNING_SECRET",
             "clerk-webhook-signing-secret",
             "CLERK_WEBHOOK-SIGNING-SECRET",
         ),
