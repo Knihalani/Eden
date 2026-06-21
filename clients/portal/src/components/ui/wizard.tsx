@@ -58,8 +58,8 @@ export interface WizardProps {
   storageKey: string;
   /** Slug that shows the "Done" CTA instead of "Next". */
   completeSlug: string;
-  /** Optional logo to show in the top bar. */
-  brand?: { logo?: boolean; tagline?: string };
+  /** Optional brand label in the top bar. Empty string hides it. */
+  brand?: { name?: string; tagline?: string };
   /** Optional custom progress UI; defaults to the built-in stepper. */
   progressBar?: React.ReactNode;
   children?: React.ReactNode;
@@ -71,7 +71,7 @@ export function Wizard({
   steps,
   storageKey,
   completeSlug,
-  brand = { logo: true },
+  brand = { name: "Eden" },
   progressBar,
   children,
   skipHref = "/dashboard",
@@ -187,10 +187,10 @@ export function Wizard({
       <div className="border-b border-[var(--border-default)] bg-[var(--bg-secondary)] px-6 py-3">
         <div className="mx-auto flex max-w-3xl items-center justify-between">
           <div className="flex items-center gap-3">
-            {brand.logo && (
-              <span className="font-semibold tracking-tight">Eden</span>
+            {brand?.name && (
+              <span className="font-semibold tracking-tight">{brand.name}</span>
             )}
-            {brand.tagline && (
+            {brand?.tagline && (
               <span className="text-xs text-[var(--text-muted)]">— {brand.tagline}</span>
             )}
           </div>

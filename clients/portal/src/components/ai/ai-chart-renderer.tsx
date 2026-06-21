@@ -33,10 +33,10 @@ const COLORS = [
   "var(--terminal)",
   "var(--warning)",
   "var(--error)",
-  "var(--info, #3b82f6)",
-  "#a855f7",
-  "#ec4899",
-  "#14b8a6",
+  "var(--info)",
+  "var(--accent-purple)",
+  "var(--stage-archiving)",
+  "var(--stage-refining)",
 ];
 
 interface Props {
@@ -210,8 +210,8 @@ function HeatmapRenderer({ chart }: { chart: AiChartSpec }) {
                 return (
                   <td key={c} className="p-1 text-center"
                       style={{
-                        background: `rgba(59, 130, 246, ${0.1 + intensity * 0.7})`,
-                        color: intensity > 0.5 ? "white" : "var(--text-primary)",
+                        background: `color-mix(in srgb, var(--accent) ${Math.round((0.1 + intensity * 0.7) * 100)}%, transparent)`,
+                        color: intensity > 0.5 ? "var(--bg-base)" : "var(--text-primary)",
                       }}>
                     {chart.unit === "$" ? `$${v.toFixed(2)}` : v.toFixed(2)}
                   </td>

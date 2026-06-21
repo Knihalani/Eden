@@ -110,6 +110,15 @@ dev = [
 # June 2026 backlog cleanup — onboarding now happens through the
 # portal wizard + SDK; FrameworkDetector + SDKIntegrator moved to
 # src/eden/integrations/.
+#
+# June 2026 (audit pass): a thin ``eden-ops`` console script was
+# re-introduced for operator tasks (rotate API keys, dump a trace,
+# replay offline, list members, change role, archive org). It is a
+# pure front-end on the existing REST surface — no business logic
+# is reimplemented. See ``src/eden/cli/__init__.py``.
+
+[project.scripts]
+eden-ops = "eden.cli:main"
 
 [build-system]
 requires = ["hatchling"]

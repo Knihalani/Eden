@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Layers } from "lucide-react";
+import { PRODUCT_VERSION } from "@/lib/constants";
 
 interface AuthSplitLayoutProps {
   brandPanel: React.ReactNode;
@@ -37,8 +38,8 @@ export function AuthSplitLayout({ brandPanel, children }: AuthSplitLayoutProps) 
             Eden
           </span>
         </Link>
-        <p className="text-[11px] font-mono text-[var(--text-muted)] tracking-wide">
-          v3.0 · observability
+        <p className="text-[11px] font-mono text-[var(--text-muted)] tracking-wide" aria-label="Eden product version">
+          {PRODUCT_VERSION} · observability
         </p>
       </div>
 

@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useEffect, useState } from "react";
 import {
   Activity,
   Terminal,
@@ -9,6 +10,24 @@ import {
   ArrowRight,
 } from "lucide-react";
 import { Logo } from "@/components/brand/logo";
+import { PRODUCT_VERSION, HEALTH_REFRESH_INTERVAL_MS } from "@/lib/constants";
+
+type HealthState = "ok" | "degraded" | "down" | "unknown";
+
+/**
+ * Map a backend `/health` response into one of four UI states.
+ * The backend returns `{ status: "healthy" | "degraded" | "unhealthy" }`
+ * but we treat anything that isn't a clear 2xx with a known status as
+ * `unknown` rather than alarming the user.
+ */
+function mapHealth(body: unknown): HealthState {
+  if (!body || typeof body !== "object") return "unknown";
+  const status = (body as { status?: string }).status?.toLowerCase();
+  if (status === "healthy" || status === "ok") return "ok";
+  if (status === "degraded") return "degraded";
+  if (status === "unhealthy" || status === "down") return "down";
+  return "unknown";
+}
 
 // Pipeline nodes mirror the current product surface:
 //   Gateway → Workspace → /eden-improve → Shipped PR
@@ -64,6 +83,48 @@ const FOOTER_LINKS = [
  * that ties into the rest of the dark-terminal aesthetic.
  */
 export function AuthBrandPanel() {
+  const [health, setHealth] = useState<HealthState>("unknown");
+
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      try {
+        const res = await fetch("/health", {
+          credentials: "include",
+          headers: { Accept: "application/json" },
+        });
+        if (!res.ok) {
+          if (!cancelled) setHealth("unknown");
+          return;
+        }
+        const body = await res.json().catch(() => null);
+        if (!cancelled) setHealth(mapHealth(body));
+      } catch {
+        if (!cancelled) setHealth("unknown");
+      }
+    };
+    load();
+    const id = window.setInterval(load, HEALTH_REFRESH_INTERVAL_MS);
+    return () => {
+      cancelled = true;
+      window.clearInterval(id);
+    };
+  }, []);
+
+  const STATUS_LABEL: Record<HealthState, string> = {
+    ok: "All systems operational",
+    degraded: "Partial degradation",
+    down: "Service disruption",
+    unknown: "Status unknown",
+  };
+  const STATUS_TOKEN: Record<HealthState, string> = {
+    ok: "var(--success)",
+    degraded: "var(--warning)",
+    down: "var(--error)",
+    unknown: "var(--text-muted)",
+  };
+  const statusColor = STATUS_TOKEN[health];
+
   return (
     <div className="relative min-h-screen overflow-hidden bg-[var(--bg-primary)]">
       {/* Animated mesh gradient background — pure CSS */}
@@ -152,17 +213,32 @@ export function AuthBrandPanel() {
 
         {/* Bottom: status badge + footer */}
         <div className="flex flex-col gap-5">
-          <div className="inline-flex items-center gap-2 self-start px-2.5 py-1 rounded-full bg-[var(--success-bg)] border border-[var(--success)]/25 text-[11px] font-mono text-[var(--success)]">
+          <div
+            role="status"
+            aria-live="polite"
+            className="inline-flex items-center gap-2 self-start px-2.5 py-1 rounded-full border text-[11px] font-mono"
+            style={{
+              background: `color-mix(in srgb, ${statusColor} 10%, transparent)`,
+              borderColor: `color-mix(in srgb, ${statusColor} 25%, transparent)`,
+              color: statusColor,
+            }}
+          >
             <span className="relative flex h-1.5 w-1.5">
-              <span className="absolute inline-flex h-full w-full rounded-full bg-[var(--success)] opacity-60 animate-ping" />
-              <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-[var(--success)]" />
+              <span
+                className="absolute inline-flex h-full w-full rounded-full opacity-60 animate-ping"
+                style={{ background: statusColor }}
+              />
+              <span
+                className="relative inline-flex h-1.5 w-1.5 rounded-full"
+                style={{ background: statusColor }}
+              />
             </span>
-            all systems operational
+            {STATUS_LABEL[health]}
           </div>
 
           <div className="flex items-center justify-between gap-4 flex-wrap">
             <p className="text-[11px] text-[var(--text-muted)] font-mono">
-              © {new Date().getFullYear()} Eden · v3.0
+              © {new Date().getFullYear()} Eden · {PRODUCT_VERSION}
             </p>
             <div className="flex items-center gap-4">
               {FOOTER_LINKS.map((link) => (
@@ -178,94 +254,6 @@ export function AuthBrandPanel() {
           </div>
         </div>
       </div>
-
-      <style>{`
-        .auth-mesh-gradient {
-          position: absolute;
-          inset: 0;
-          z-index: 0;
-          background:
-            radial-gradient(ellipse 80% 60% at 50% 30%, rgba(91, 158, 255, 0.14) 0%, transparent 70%),
-            radial-gradient(ellipse 50% 40% at 15% 80%, rgba(95, 229, 168, 0.08) 0%, transparent 60%),
-            radial-gradient(ellipse 40% 30% at 85% 15%, rgba(192, 132, 252, 0.06) 0%, transparent 60%);
-          animation: meshDrift 24s ease-in-out infinite;
-        }
-
-        @keyframes meshDrift {
-          0%, 100% {
-            background:
-              radial-gradient(ellipse 80% 60% at 50% 30%, rgba(91, 158, 255, 0.14) 0%, transparent 70%),
-              radial-gradient(ellipse 50% 40% at 15% 80%, rgba(95, 229, 168, 0.08) 0%, transparent 60%),
-              radial-gradient(ellipse 40% 30% at 85% 15%, rgba(192, 132, 252, 0.06) 0%, transparent 60%);
-          }
-          33% {
-            background:
-              radial-gradient(ellipse 80% 60% at 45% 35%, rgba(91, 158, 255, 0.12) 0%, transparent 70%),
-              radial-gradient(ellipse 50% 40% at 20% 75%, rgba(95, 229, 168, 0.09) 0%, transparent 60%),
-              radial-gradient(ellipse 40% 30% at 80% 20%, rgba(192, 132, 252, 0.07) 0%, transparent 60%);
-          }
-          66% {
-            background:
-              radial-gradient(ellipse 80% 60% at 55% 25%, rgba(91, 158, 255, 0.10) 0%, transparent 70%),
-              radial-gradient(ellipse 50% 40% at 10% 85%, rgba(95, 229, 168, 0.07) 0%, transparent 60%),
-              radial-gradient(ellipse 40% 30% at 90% 10%, rgba(192, 132, 252, 0.05) 0%, transparent 60%);
-          }
-        }
-
-        .auth-grid-overlay {
-          position: absolute;
-          inset: 0;
-          z-index: 1;
-          background-image:
-            linear-gradient(rgba(100, 120, 160, 0.04) 1px, transparent 1px),
-            linear-gradient(90deg, rgba(100, 120, 160, 0.04) 1px, transparent 1px);
-          background-size: 60px 60px;
-          mask-image: radial-gradient(ellipse 70% 60% at 50% 50%, black 30%, transparent 90%);
-          -webkit-mask-image: radial-gradient(ellipse 70% 60% at 50% 50%, black 30%, transparent 90%);
-        }
-
-        .auth-logo-mark {
-          width: 40px;
-          height: 40px;
-          background: var(--accent);
-          border-radius: var(--radius-md);
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          box-shadow:
-            0 0 24px rgba(91, 158, 255, 0.45),
-            0 0 48px rgba(91, 158, 255, 0.2),
-            inset 0 1px 0 rgba(255, 255, 255, 0.1);
-          flex-shrink: 0;
-        }
-
-        .auth-hero-line {
-          font-size: clamp(36px, 4.5vw, 54px);
-          font-weight: 700;
-          line-height: 1.05;
-          letter-spacing: -0.04em;
-          color: var(--text-primary);
-        }
-
-        .auth-feature-icon {
-          width: 26px;
-          height: 26px;
-          border-radius: 6px;
-          background: rgba(91, 158, 255, 0.08);
-          border: 1px solid rgba(91, 158, 255, 0.18);
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          color: var(--accent);
-        }
-
-        .auth-pipeline-dot {
-          width: 10px;
-          height: 10px;
-          border-radius: 50%;
-          flex-shrink: 0;
-        }
-      `}</style>
     </div>
   );
 }

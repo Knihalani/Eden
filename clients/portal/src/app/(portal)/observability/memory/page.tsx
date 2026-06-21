@@ -23,6 +23,7 @@ import {
   Zap,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
+import { DataTable } from "@/components/ui/data-table";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
@@ -452,43 +453,37 @@ function ReaverTab({
         <div className="flex items-center justify-center py-20">
           <Loader2 className="w-8 h-8 animate-spin text-[var(--accent)]" />
         </div>
-      ) : suggestions.length === 0 ? (
-        <div className="bg-[var(--bg-primary)] border border-[var(--border-default)] rounded-xl">
-          <EmptyState
-            icon={Combine}
-            title="No reweaver suggestions"
-            description="Your memory store is already clean — nothing to merge, archive, or demote"
-            size="lg"
-          />
-        </div>
       ) : (
         <div className="bg-[var(--bg-primary)] border border-[var(--border-default)] rounded-xl overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-[var(--border-default)] bg-[var(--bg-secondary)]">
-                  <th className="text-left px-4 py-3 text-xs font-medium text-[var(--text-muted)] uppercase tracking-wide">Memory ID</th>
-                  <th className="text-left px-4 py-3 text-xs font-medium text-[var(--text-muted)] uppercase tracking-wide w-36">Action</th>
-                  <th className="text-left px-4 py-3 text-xs font-medium text-[var(--text-muted)] uppercase tracking-wide">Reason</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-[var(--border-subtle)]">
-                {suggestions.map((s) => (
-                  <tr key={s.memory_id} className="hover:bg-[var(--bg-tertiary)]/50 transition-colors">
-                    <td className="px-4 py-3 font-mono text-xs text-[var(--text-primary)]">
-                      {s.memory_id}
-                    </td>
-                    <td className="px-4 py-3">
-                      <ActionBadge action={s.action} />
-                    </td>
-                    <td className="px-4 py-3 text-[var(--text-secondary)] text-xs">
-                      {s.reason}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <DataTable
+            columns={[
+              {
+                key: "memory_id",
+                header: "Memory ID",
+                sortable: true,
+                cell: (s) => <span className="font-mono text-xs text-[var(--text-primary)]">{s.memory_id}</span>,
+              },
+              {
+                key: "action",
+                header: "Action",
+                sortable: true,
+                cell: (s) => <ActionBadge action={s.action} />,
+              },
+              {
+                key: "reason",
+                header: "Reason",
+                cell: (s) => <span className="text-[var(--text-secondary)] text-xs">{s.reason}</span>,
+              },
+            ]}
+            rows={suggestions}
+            rowKey={(s) => s.memory_id}
+            loading={loading}
+            defaultSort={{ key: "action", direction: "asc" }}
+            emptyTitle="No reweaver suggestions"
+            emptyDescription="Your memory store is already clean — nothing to merge, archive, or demote"
+            emptyIcon={Combine}
+            pageSize={25}
+          />
         </div>
       )}
     </div>

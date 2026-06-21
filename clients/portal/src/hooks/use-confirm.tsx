@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useState, useRef } from "react";
-import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 export interface ConfirmOptions {
@@ -56,14 +55,14 @@ export function useConfirm() {
     <div
       role="dialog"
       aria-modal="true"
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-[var(--overlay)] backdrop-blur-sm"
       onClick={() => close(false)}
     >
       <div
         className="w-full max-w-md rounded-lg border border-[var(--border)] bg-[var(--bg-primary)] p-6 shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
-        <h2 className="text-lg font-semibold text-[var(--text)]">
+        <h2 className="text-lg font-semibold text-[var(--text-primary)]">
           {state.title}
         </h2>
         {state.description && (
@@ -93,6 +92,3 @@ export function useConfirm() {
 
   return { confirm, ConfirmDialog };
 }
-
-// Silence unused-import warning when Loader2 isn't used directly.
-void Loader2;

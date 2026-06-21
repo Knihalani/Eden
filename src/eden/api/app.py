@@ -19,6 +19,7 @@ from eden.api.routes import (
     billing,
     chain,
     clerk_webhooks,
+    cost,
     datasets_spreadsheet,
     debugger,
     evaluation,
@@ -28,7 +29,28 @@ from eden.api.routes import (
     feature_flags,
     ingestion,
     integrations_helicone,
+    intelligence_agents,
+    intelligence_apm_depth,
+    intelligence_autonomous,
+    intelligence_closed_loop,
     intelligence_code_change,
+    intelligence_columnar,
+    intelligence_cost,
+    intelligence_dsl,
+    intelligence_eval,
+    intelligence_experiments,
+    intelligence_governance,
+    intelligence_guardrails,
+    intelligence_memory,
+    intelligence_metric_studio,
+    intelligence_outcomes,
+    intelligence_predictive,
+    intelligence_rca,
+    intelligence_replay,
+    intelligence_retrieval,
+    intelligence_time_travel,
+    intelligence_tools,
+    intelligence_user,
     kb,
     labeling,
     marketplace,
@@ -168,12 +190,58 @@ async def lifespan(app: FastAPI):
     """Application lifespan handler."""
     logger.info("Starting Eden API...")
 
+    # Audit (June 21 2026) — surface missing Clerk webhook secret at
+    # startup. Downgraded ERROR → WARNING so a fresh dev environment
+    # (where webhooks aren't wired up) doesn't trip alerting. The
+    # runtime webhook handler at src/eden/api/routes/clerk_webhooks.py
+    # still rejects unsigned webhooks with 503. Set the secret via
+    # the Clerk dashboard (Webhooks → click your endpoint → reveal
+    # the "Signing Secret"), then store in NF:
+    #   northflank patch secret --secretId CLERK_WEBHOOK_SIGNING_SECRET \
+    #     --projectId eden-staging-us-central --input '<json with the whsec_... value>'
+    # To silence this warning entirely in local dev, set
+    # CLERK_WEBHOOK_SIGNING_SECRET=whsec_dev_placeholder in .env
+    # — the runtime handler will still reject real webhooks until a
+    # valid signing secret is configured.
+    clerk_secret = getattr(settings, "clerk_webhook_signing_secret", "") or ""
+    if not clerk_secret:
+        logger.warning(
+            "CLERK_WEBHOOK_SIGNING_SECRET is not set — Clerk webhooks "
+            "(user.created, organizationMembership.*, etc.) will be "
+            "rejected with 503 at runtime. Get the signing secret from "
+            "Clerk Dashboard → Webhooks → click your endpoint → reveal "
+            "'Signing Secret'."
+        )
+    else:
+        logger.info("CLERK_WEBHOOK_SIGNING_SECRET is set")
+
     # Initialize Knowledge Base
     try:
         await initialize_kb()
         logger.info("Knowledge Base initialized")
     except Exception as e:
         logger.warning(f"KB initialization warning: {e}")
+
+    # Audit (June 21 2026) — non-fatal Qdrant startup probe. The audit
+    # flagged "Qdrant / Typesense startup check" as cosmetic-only since
+    # ``/health`` already covers liveness.  This surfaces the probe in
+    # the startup log so a misconfigured QDRANT_HOST is loud at deploy
+    # time, not silent until the next ``/health`` scrape.
+    try:
+        kb_health = await kb_health_check()
+        if kb_health.get("qdrant") == "connected":
+            logger.info("Qdrant probe: connected")
+        else:
+            logger.warning(
+                f"Qdrant probe: {kb_health.get('qdrant', 'unknown')} — "
+                "check QDRANT_HOST / QDRANT_PORT"
+            )
+        if kb_health.get("postgres") == "connected":
+            logger.info("Postgres probe: connected")
+        else:
+            logger.warning(f"Postgres probe: {kb_health.get('postgres', 'unknown')}")
+    except Exception as e:
+        logger.warning(f"KB startup probe warning: {e}")
 
     # Initialize sandbox runner
     try:
@@ -279,6 +347,7 @@ app.include_router(orgs.router)
 app.include_router(references.router)
 app.include_router(api_keys.router)
 app.include_router(billing.router)  # /orgs/{org_id}/billing
+app.include_router(cost.router)  # /orgs/{org_id}/cost/comparison (Cat 23 audit)
 app.include_router(analytics.router)  # /orgs/{org_id}/analytics
 app.include_router(export.router)  # /orgs/{org_id}/export
 app.include_router(export_destinations.router)  # /orgs/{org_id}/export/{destinations,schedules,run-now}
@@ -313,6 +382,30 @@ app.include_router(multi_agent.router)  # /orgs/{org_id}/multi-agent (gated)
 app.include_router(marketplace.router)  # /marketplace (gated)
 app.include_router(integrations_helicone.router)  # /integrations/helicone (gated)
 app.include_router(intelligence_code_change.router)  # /orgs/{org_id}/intelligence/code-change (Cat 23, gated by intelligence_gap_v0)
+# Intelligence gap surface — Cat 4/5/6/8/9/10/11/12/13/14/18/19/20/22
+# All self-gate on `intelligence_gap_v0` via the per-router `dependencies=`
+# list; this just makes them reachable when the flag is on.
+app.include_router(intelligence_agents.router)
+app.include_router(intelligence_apm_depth.router)
+app.include_router(intelligence_autonomous.router)
+app.include_router(intelligence_closed_loop.router)
+app.include_router(intelligence_columnar.router)
+app.include_router(intelligence_cost.router)
+app.include_router(intelligence_dsl.router)
+app.include_router(intelligence_eval.router)
+app.include_router(intelligence_experiments.router)
+app.include_router(intelligence_governance.router)
+app.include_router(intelligence_guardrails.router)
+app.include_router(intelligence_memory.router)
+app.include_router(intelligence_metric_studio.router)
+app.include_router(intelligence_outcomes.router)
+app.include_router(intelligence_predictive.router)
+app.include_router(intelligence_rca.router)
+app.include_router(intelligence_replay.router)
+app.include_router(intelligence_retrieval.router)
+app.include_router(intelligence_time_travel.router)
+app.include_router(intelligence_tools.router)
+app.include_router(intelligence_user.router)
 app.include_router(metrics_endpoint_router)  # /metrics (Prometheus, bearer-token auth)
 app.include_router(feature_flags.router)  # /feature-flags (public)
 

@@ -12,7 +12,7 @@ export function Skeleton({
     <div
       className={cn(
         "relative overflow-hidden rounded-md bg-[var(--bg-tertiary)]",
-        "after:absolute after:inset-0 after:-translate-x-full after:bg-gradient-to-r after:from-transparent after:via-white/5 after:to-transparent after:animate-[skeleton-shimmer_1.6s_infinite]",
+        "after:absolute after:inset-0 after:-translate-x-full after:bg-gradient-to-r after:from-transparent after:via-[var(--shimmer)] after:to-transparent after:animate-[skeleton-shimmer_1.6s_infinite]",
         className,
       )}
       {...props}
@@ -96,6 +96,65 @@ export function LoadingSkeleton({
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+/**
+ * SkeletonCard — a card-shaped shell with header + body lines + a
+ * CTA. Use in place of a spinning loader for surfaces that show a
+ * single hero card (e.g. /agents/[id] detail, /billing plan card).
+ */
+export function SkeletonCard({ className }: { className?: string }) {
+  return (
+    <div className={cn("bg-[var(--bg-primary)] rounded-xl p-5 border border-[var(--border-default)] space-y-4", className)}>
+      <div className="flex items-center justify-between">
+        <Skeleton className="h-5 w-32" />
+        <Skeleton className="h-4 w-12" />
+      </div>
+      <div className="space-y-2">
+        <Skeleton className="h-3 w-full" />
+        <Skeleton className="h-3 w-3/4" />
+        <Skeleton className="h-3 w-1/2" />
+      </div>
+      <Skeleton className="h-8 w-24 rounded-md" />
+    </div>
+  );
+}
+
+/**
+ * SkeletonTableRow — a single placeholder row for a table.
+ * Pass `columns` to control the per-cell width ratio. Defaults to a
+ * 5-column row with sensible widths.
+ */
+export function SkeletonTableRow({
+  columns = ["w-32", "w-24", "w-20", "w-28", "w-16"],
+  className,
+}: {
+  columns?: string[];
+  className?: string;
+}) {
+  return (
+    <div className={cn("flex items-center gap-4 px-4 py-3 border-t border-[var(--border-subtle)]", className)}>
+      {columns.map((w, i) => (
+        <Skeleton key={i} className={cn("h-3", w)} />
+      ))}
+    </div>
+  );
+}
+
+/**
+ * SkeletonListItem — a single placeholder row for a list
+ * (avatar + primary line + secondary line).
+ */
+export function SkeletonListItem({ className }: { className?: string }) {
+  return (
+    <div className={cn("flex items-center gap-3 px-4 py-3 border-t border-[var(--border-subtle)]", className)}>
+      <Skeleton className="h-8 w-8 rounded-full shrink-0" />
+      <div className="flex-1 space-y-1.5 min-w-0">
+        <Skeleton className="h-3 w-1/3" />
+        <Skeleton className="h-2.5 w-1/2" />
+      </div>
     </div>
   );
 }

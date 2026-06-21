@@ -4,10 +4,10 @@ import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { useOrg } from "@/hooks/use-org";
 import { rcaApi } from "@/lib/api";
-import { cn } from "@/lib/utils";
-import { EmptyState } from "@/components/ui/empty-state";
+import { SeverityBadge } from "@/components/ui/status-badge";
 import { NoOrgState } from "@/components/ui/no-org-state";
 import { PageHeader } from "@/components/layout/page-header";
+import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
 import {
   AlertOctagon,
   AlertTriangle,
@@ -80,6 +80,67 @@ export default function IncidentsPage() {
     );
   }
 
+  const columns: DataTableColumn<Incident>[] = [
+    {
+      key: "cluster_id",
+      header: "Cluster ID",
+      sortable: true,
+      cell: (inc) => (
+        <span className="font-mono text-xs text-[var(--text-primary)]">
+          {inc.cluster_id.length > 20 ? `${inc.cluster_id.slice(0, 20)}…` : inc.cluster_id}
+        </span>
+      ),
+    },
+    {
+      key: "severity",
+      header: "Severity",
+      sortable: true,
+      cell: (inc) => <SeverityBadge severity={inc.severity} />,
+    },
+    {
+      key: "member_count",
+      header: "Members",
+      sortable: true,
+      align: "right",
+      cell: (inc) => <span className="text-[var(--text-secondary)]">{inc.member_count}</span>,
+    },
+    {
+      key: "first_seen",
+      header: "First seen",
+      sortable: true,
+      cell: (inc) => <span className="text-[var(--text-muted)] text-xs">{formatTime(inc.first_seen)}</span>,
+    },
+    {
+      key: "last_seen",
+      header: "Last seen",
+      sortable: true,
+      cell: (inc) => <span className="text-[var(--text-muted)] text-xs">{formatTime(inc.last_seen)}</span>,
+    },
+    {
+      key: "top_failure_mode",
+      header: "Top failure mode",
+      cell: (inc) => (
+        <span className="text-[var(--text-secondary)] text-xs max-w-xs truncate block">
+          {inc.top_failure_mode ?? "—"}
+        </span>
+      ),
+    },
+    {
+      key: "cluster_id_link",
+      header: "",
+      align: "right",
+      cell: (inc) => (
+        <Link
+          href={`/incidents/${inc.cluster_id}`}
+          className="inline-flex items-center gap-1 text-xs font-medium text-[var(--accent)] hover:text-[var(--accent-hover)] transition-colors"
+        >
+          Inspect
+          <ChevronRight className="w-3.5 h-3.5" />
+        </Link>
+      ),
+    },
+  ];
+
   return (
     <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-6">
       <PageHeader
@@ -116,108 +177,28 @@ export default function IncidentsPage() {
       )}
 
       {/* Incidents table */}
-      {loading && incidents.length === 0 ? (
-        <div className="flex items-center justify-center py-20">
-          <Loader2 className="w-8 h-8 animate-spin text-[var(--accent)]" />
-        </div>
-      ) : incidents.length === 0 ? (
-        <div className="bg-[var(--bg-primary)] border border-[var(--border-default)] rounded-xl">
-          <EmptyState
-            icon={AlertOctagon}
-            title="No incidents yet"
-            description="Run clustering to detect recurring failures"
-            size="lg"
-            action={
-              <button
-                onClick={handleCluster}
-                disabled={clustering}
-                className="inline-flex items-center gap-2 px-4 py-2 bg-[var(--accent)] text-[var(--bg-base)] rounded-lg text-sm font-medium hover:bg-[var(--accent-hover)] disabled:opacity-50 transition-colors"
-              >
-                {clustering ? <Loader2 className="w-4 h-4 animate-spin" /> : <Zap className="w-4 h-4" />}
-                Run clustering
-              </button>
-            }
-          />
-        </div>
-      ) : (
-        <div className="bg-[var(--bg-primary)] border border-[var(--border-default)] rounded-xl overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-[var(--border-default)] bg-[var(--bg-secondary)]">
-                  <th className="text-left px-4 py-3 text-xs font-medium text-[var(--text-muted)] uppercase tracking-wide">Cluster ID</th>
-                  <th className="text-left px-4 py-3 text-xs font-medium text-[var(--text-muted)] uppercase tracking-wide">Severity</th>
-                  <th className="text-left px-4 py-3 text-xs font-medium text-[var(--text-muted)] uppercase tracking-wide">Members</th>
-                  <th className="text-left px-4 py-3 text-xs font-medium text-[var(--text-muted)] uppercase tracking-wide">First seen</th>
-                  <th className="text-left px-4 py-3 text-xs font-medium text-[var(--text-muted)] uppercase tracking-wide">Last seen</th>
-                  <th className="text-left px-4 py-3 text-xs font-medium text-[var(--text-muted)] uppercase tracking-wide">Top failure mode</th>
-                  <th className="text-right px-4 py-3 text-xs font-medium text-[var(--text-muted)] uppercase tracking-wide"></th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-[var(--border-subtle)]">
-                {incidents.map((inc) => (
-                  <tr
-                    key={inc.cluster_id}
-                    className="hover:bg-[var(--bg-tertiary)]/50 transition-colors"
-                  >
-                    <td className="px-4 py-3 font-mono text-xs text-[var(--text-primary)]">
-                      {inc.cluster_id.length > 20
-                        ? `${inc.cluster_id.slice(0, 20)}…`
-                        : inc.cluster_id}
-                    </td>
-                    <td className="px-4 py-3">
-                      <SeverityBadge severity={inc.severity} />
-                    </td>
-                    <td className="px-4 py-3 text-[var(--text-secondary)]">
-                      {inc.member_count}
-                    </td>
-                    <td className="px-4 py-3 text-[var(--text-muted)] text-xs">
-                      {formatTime(inc.first_seen)}
-                    </td>
-                    <td className="px-4 py-3 text-[var(--text-muted)] text-xs">
-                      {formatTime(inc.last_seen)}
-                    </td>
-                    <td className="px-4 py-3 text-[var(--text-secondary)] text-xs max-w-xs truncate">
-                      {inc.top_failure_mode ?? "—"}
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      <Link
-                        href={`/incidents/${inc.cluster_id}`}
-                        className="inline-flex items-center gap-1 text-xs font-medium text-[var(--accent)] hover:text-[var(--accent-hover)] transition-colors"
-                      >
-                        Inspect
-                        <ChevronRight className="w-3.5 h-3.5" />
-                      </Link>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
+      <DataTable
+        columns={columns}
+        rows={incidents}
+        rowKey={(inc) => inc.cluster_id}
+        loading={loading && incidents.length === 0}
+        defaultSort={{ key: "last_seen", direction: "desc" }}
+        emptyTitle="No incidents yet"
+        emptyDescription="Run clustering to detect recurring failures"
+        emptyIcon={AlertOctagon}
+        emptyAction={
+          <button
+            onClick={handleCluster}
+            disabled={clustering}
+            className="inline-flex items-center gap-2 px-4 py-2 bg-[var(--accent)] text-[var(--bg-base)] rounded-lg text-sm font-medium hover:bg-[var(--accent-hover)] disabled:opacity-50 transition-colors"
+          >
+            {clustering ? <Loader2 className="w-4 h-4 animate-spin" /> : <Zap className="w-4 h-4" />}
+            Run clustering
+          </button>
+        }
+        pageSize={25}
+      />
     </div>
-  );
-}
-
-function SeverityBadge({ severity }: { severity: string }) {
-  const sev = (severity || "unknown").toLowerCase();
-  const classes: Record<string, string> = {
-    high: "bg-[var(--error-bg)] text-[var(--error)]",
-    critical: "bg-[var(--error-bg)] text-[var(--error)]",
-    medium: "bg-[var(--warning-bg)] text-[var(--warning)]",
-    low: "bg-[var(--terminal-faint)] text-[var(--terminal)]",
-    info: "bg-[var(--bg-tertiary)] text-[var(--text-secondary)]",
-  };
-  return (
-    <span
-      className={cn(
-        "text-xs px-2 py-0.5 rounded-full font-medium",
-        classes[sev] || classes.info
-      )}
-    >
-      {sev}
-    </span>
   );
 }
 

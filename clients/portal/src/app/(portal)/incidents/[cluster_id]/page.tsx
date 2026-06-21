@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useOrg } from "@/hooks/use-org";
 import { cn } from "@/lib/utils";
+import { SeverityBadge } from "@/components/ui/status-badge";
 import { NoOrgState } from "@/components/ui/no-org-state";
 import { useToast } from "@/components/ui/toast";
 import {
@@ -284,27 +285,6 @@ export default function IncidentDetailPage() {
         </>
       ) : null}
     </div>
-  );
-}
-
-function SeverityBadge({ severity }: { severity: string }) {
-  const sev = (severity || "unknown").toLowerCase();
-  const classes: Record<string, string> = {
-    high: "bg-[var(--error-bg)] text-[var(--error)]",
-    critical: "bg-[var(--error-bg)] text-[var(--error)]",
-    medium: "bg-[var(--warning-bg)] text-[var(--warning)]",
-    low: "bg-[var(--terminal-faint)] text-[var(--terminal)]",
-    info: "bg-[var(--bg-tertiary)] text-[var(--text-secondary)]",
-  };
-  return (
-    <span
-      className={cn(
-        "text-xs px-2 py-0.5 rounded-full font-medium",
-        classes[sev] || classes.info
-      )}
-    >
-      {sev}
-    </span>
   );
 }
 

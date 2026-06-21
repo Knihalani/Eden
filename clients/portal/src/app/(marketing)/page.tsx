@@ -8,12 +8,16 @@
 // initial server render doesn't pin a stale CTA.
 export const dynamic = "force-dynamic";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useUser } from "@clerk/nextjs";
 import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { Logo } from "@/components/brand/logo";
+import {
+  PRODUCT_VERSION,
+  PRODUCT_COPYRIGHT_YEAR,
+} from "@/lib/constants";
 import {
   Activity,
   Terminal,
@@ -78,21 +82,6 @@ const PILLARS = [
   },
 ];
 
-const QUOTES = [
-  {
-    quote:
-      "We swapped our base URL to Eden's gateway on a Friday. By Monday we had full per-trace cost and eval data we had been hand-rolling for two quarters.",
-    author: "Head of ML Platform",
-    company: "Series B LLM SaaS",
-  },
-  {
-    quote:
-      "/eden-improve caught a prompt regression on a tool-use branch we didn't even have alerting on. The PR merged the same day.",
-    author: "Founding Engineer",
-    company: "Agent infra startup",
-  },
-];
-
 const INSTALL_BLOCKS = [
   {
     id: "gateway",
@@ -141,7 +130,6 @@ const IMPROVE_LOG = [
 
 export default function LandingPage() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [heroVisible, setHeroVisible] = useState(false);
   const [activeTab, setActiveTab] = useState("gateway");
   const [logRevealed, setLogRevealed] = useState(0);
   const [copiedId, setCopiedId] = useState<string | null>(null);
@@ -164,18 +152,44 @@ export default function LandingPage() {
 
   const FULL_PROMPT = "/eden-improve";
 
-  // Hero fade-in
-  useEffect(() => {
-    const t = setTimeout(() => setHeroVisible(true), 200);
-    return () => clearTimeout(t);
-  }, []);
+  // ponytail: kick off the typing animation on mount. We dropped the
+  // 200ms hero-fade-in delay + 600ms transition that used to gate
+  // this — content is visible immediately, the typing animation
+  // starts as soon as the component hydrates.
 
-  // Grid canvas background
+  // Grid canvas background. Skip the rAF loop entirely for users with
+  // prefers-reduced-motion — the canvas is then just an empty element,
+  // and the page background gradient (var(--bg-primary)) shows through.
   useEffect(() => {
     const canvas = document.getElementById("grid-canvas") as HTMLCanvasElement;
     if (!canvas) return;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
+
+    const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (reducedMotion) {
+      // Static single-frame render — no loop, no time-based offset.
+      const w = (canvas.width = window.innerWidth);
+      const h = (canvas.height = window.innerHeight);
+      const gridStroke = getComputedStyle(document.documentElement)
+        .getPropertyValue("--grid-stroke")
+        .trim() || "rgba(130, 140, 160, 0.045)";
+      ctx.strokeStyle = gridStroke;
+      ctx.lineWidth = 1;
+      for (let x = 0; x < w; x += 52) {
+        ctx.beginPath();
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x, h);
+        ctx.stroke();
+      }
+      for (let y = 0; y < h; y += 52) {
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(w, y);
+        ctx.stroke();
+      }
+      return;
+    }
 
     let animationId: number;
     let time = 0;
@@ -188,9 +202,14 @@ export default function LandingPage() {
     resize();
     window.addEventListener("resize", resize);
 
+    // ponytail: read the design-token stroke once at effect init so the
+    // canvas honors theme changes without per-frame DOM access.
+    const gridStroke = getComputedStyle(document.documentElement)
+      .getPropertyValue("--grid-stroke")
+      .trim();
     const draw = () => {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
-      ctx.strokeStyle = "rgba(130, 140, 160, 0.045)";
+      ctx.strokeStyle = gridStroke || "rgba(130, 140, 160, 0.045)";
       ctx.lineWidth = 1;
       const offset = (time * 0.15) % GRID_SIZE;
       for (let x = offset; x < canvas.width; x += GRID_SIZE) {
@@ -207,6 +226,10 @@ export default function LandingPage() {
       }
     };
     const loop = () => {
+      if ((window as unknown as { __eden_canvas_paused?: boolean }).__eden_canvas_paused) {
+        animationId = requestAnimationFrame(loop);
+        return;
+      }
       time++;
       draw();
       animationId = requestAnimationFrame(loop);
@@ -218,27 +241,41 @@ export default function LandingPage() {
     };
   }, []);
 
-  // Typing animation for /eden-improve prompt
+  // Pause the grid canvas when the tab is hidden so we don't burn CPU
+  // on a hidden background animation. Visibility API is well-supported.
   useEffect(() => {
-    if (!heroVisible) return;
+    function onVisibility() {
+      // The main useEffect re-runs the rAF loop on mount; we hook in
+      // here purely to gate it. We use a small marker on window so the
+      // main loop can read it on each frame.
+      (window as unknown as { __eden_canvas_paused?: boolean }).__eden_canvas_paused =
+        document.hidden;
+    }
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => document.removeEventListener("visibilitychange", onVisibility);
+  }, []);
+
+  // Typing animation for /eden-improve prompt. Dropped from 70ms/char
+  // to 40ms/char (was ~500ms total, now ~280ms) and the post-typing
+  // 4×400ms log-reveal stagger is replaced with a single 300ms delay
+  // then all 6 lines together — the page is meant to be read, not
+  // choreographed.
+  useEffect(() => {
     const logTimers: ReturnType<typeof setTimeout>[] = [];
     let i = 0;
     const iv = setInterval(() => {
       setTyped(FULL_PROMPT.slice(0, i++));
       if (i > FULL_PROMPT.length) {
         clearInterval(iv);
-        // Reveal improve log lines after typing
-        IMPROVE_LOG.forEach((_, idx) => {
-          const t = setTimeout(() => setLogRevealed(idx + 1), 400 + idx * 400);
-          logTimers.push(t);
-        });
+        const t = setTimeout(() => setLogRevealed(IMPROVE_LOG.length), 300);
+        logTimers.push(t);
       }
-    }, 70);
+    }, 40);
     return () => {
       clearInterval(iv);
       logTimers.forEach((t) => clearTimeout(t));
     };
-  }, [heroVisible]);
+  }, []);
 
   const activeBlock = INSTALL_BLOCKS.find((b) => b.id === activeTab) ?? INSTALL_BLOCKS[0];
 
@@ -370,17 +407,10 @@ export default function LandingPage() {
         <section className="pt-16 pb-12 px-6">
           <div className="max-w-6xl mx-auto">
             <div className="flex flex-col lg:flex-row items-center gap-10">
-              <div
-                className="flex-1 max-w-xl"
-                style={{
-                  opacity: heroVisible ? 1 : 0,
-                  transform: heroVisible ? "translateY(0)" : "translateY(16px)",
-                  transition: "opacity 600ms ease, transform 600ms ease",
-                }}
-              >
+              <div className="flex-1 max-w-xl fade-in">
                 <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[var(--accent-light)] text-[var(--accent)] text-xs font-medium mb-6">
-                  <span className="w-1.5 h-1.5 rounded-full bg-[var(--accent)] animate-pulse" />
-                  Observability + improvement, v3.0
+                  <span className="w-1.5 h-1.5 rounded-full bg-[var(--accent)]" />
+                  Observability + improvement, {PRODUCT_VERSION}
                 </div>
 
                 <h1
@@ -426,18 +456,11 @@ export default function LandingPage() {
 
               {/* Hero right: /eden-improve terminal */}
               <div className="w-full lg:w-[640px] flex-shrink-0">
-                <div
-                  className="bg-[var(--bg-primary)] border border-[var(--border-subtle)] rounded-2xl overflow-hidden shadow-xl"
-                  style={{
-                    opacity: heroVisible ? 1 : 0,
-                    transform: heroVisible ? "translateY(0)" : "translateY(16px)",
-                    transition: "opacity 600ms ease 100ms, transform 600ms ease 100ms",
-                  }}
-                >
+                <div className="bg-[var(--bg-primary)] border border-[var(--border-subtle)] rounded-2xl overflow-hidden shadow-xl fade-in">
                   <div className="flex items-center gap-1.5 px-4 py-3 bg-[var(--bg-tertiary)] border-b border-[var(--border-subtle)]">
-                    <span className="w-2.5 h-2.5 rounded-full bg-[#ff5f57]" />
-                    <span className="w-2.5 h-2.5 rounded-full bg-[#febc2e]" />
-                    <span className="w-2.5 h-2.5 rounded-full bg-[#28c840]" />
+                    <span className="w-2.5 h-2.5 rounded-full bg-[var(--traffic-close)]" />
+                    <span className="w-2.5 h-2.5 rounded-full bg-[var(--traffic-minimize)]" />
+                    <span className="w-2.5 h-2.5 rounded-full bg-[var(--traffic-zoom)]" />
                     <span className="ml-2 text-[11px] font-mono text-[var(--text-muted)] tracking-wider">
                       eden — /eden-improve
                     </span>
@@ -448,7 +471,7 @@ export default function LandingPage() {
                       <span className="text-[var(--text-primary)] font-mono text-sm">
                         {typed}
                         {typed.length <= FULL_PROMPT.length && (
-                          <span className="inline-block w-2 h-4 bg-[var(--accent)] ml-0.5 animate-cursor-blink rounded-sm" />
+                          <span className="inline-block w-2 h-4 bg-[var(--accent)] ml-0.5 rounded-sm" />
                         )}
                       </span>
                     </div>
@@ -484,25 +507,6 @@ export default function LandingPage() {
                   </div>
                 </div>
               </div>
-            </div>
-          </div>
-        </section>
-
-        {/* Trust bar */}
-        <section className="py-8 border-y border-[var(--border-subtle)] bg-[var(--bg-primary)]/50">
-          <div className="max-w-6xl mx-auto px-6 flex flex-col items-center gap-4">
-            <p className="text-[11px] font-mono text-[var(--text-muted)] uppercase tracking-widest">
-              Trusted by engineering teams shipping AI agents
-            </p>
-            <div className="flex flex-wrap items-center justify-center gap-8">
-              {["Vercel", "Linear", "Notion", "Figma", "Stripe", "Supabase"].map((brand) => (
-                <span
-                  key={brand}
-                  className="text-sm text-[var(--text-muted)] font-medium opacity-60"
-                >
-                  {brand}
-                </span>
-              ))}
             </div>
           </div>
         </section>
@@ -610,7 +614,7 @@ export default function LandingPage() {
                 >
                   {copiedId === activeBlock.id ? "Copied" : "Copy"}
                 </button>
-                <pre className="bg-[var(--text-primary)] text-[var(--bg-primary)] p-5 text-xs font-mono overflow-auto leading-relaxed">
+                <pre className="bg-[var(--code-surface)] text-[var(--text-primary)] p-5 text-xs font-mono overflow-auto leading-relaxed">
                   {activeBlock.code}
                 </pre>
               </div>
@@ -667,9 +671,9 @@ export default function LandingPage() {
 
               <div className="bg-[var(--bg-primary)] border border-[var(--border-subtle)] rounded-2xl p-5">
                 <div className="flex items-center gap-1.5 mb-4 pb-3 border-b border-[var(--border-subtle)]">
-                  <span className="w-2.5 h-2.5 rounded-full bg-[#ff5f57]" />
-                  <span className="w-2.5 h-2.5 rounded-full bg-[#febc2e]" />
-                  <span className="w-2.5 h-2.5 rounded-full bg-[#28c840]" />
+                  <span className="w-2.5 h-2.5 rounded-full bg-[var(--traffic-close)]" />
+                  <span className="w-2.5 h-2.5 rounded-full bg-[var(--traffic-minimize)]" />
+                  <span className="w-2.5 h-2.5 rounded-full bg-[var(--traffic-zoom)]" />
                   <span className="ml-2 text-[11px] font-mono text-[var(--text-muted)]">
                     eden — PR opened
                   </span>
@@ -779,31 +783,6 @@ export default function LandingPage() {
           </div>
         </section>
 
-        {/* Quotes */}
-        <section className="py-16 px-6 border-t border-[var(--border-subtle)]">
-          <div className="max-w-6xl mx-auto">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-              {QUOTES.map((q, idx) => (
-                <figure
-                  key={idx}
-                  className="bg-[var(--bg-primary)] border border-[var(--border-subtle)] rounded-2xl p-6"
-                >
-                  <blockquote className="text-sm text-[var(--text-primary)] leading-relaxed mb-4">
-                    "{q.quote}"
-                  </blockquote>
-                  <figcaption className="text-xs text-[var(--text-muted)]">
-                    <span className="font-semibold text-[var(--text-secondary)]">
-                      {q.author}
-                    </span>
-                    {" · "}
-                    {q.company}
-                  </figcaption>
-                </figure>
-              ))}
-            </div>
-          </div>
-        </section>
-
         {/* CTA */}
         <section className="py-16 px-6 border-t border-[var(--border-subtle)]">
           <div className="max-w-6xl mx-auto">
@@ -857,25 +836,36 @@ export default function LandingPage() {
                 <Link href="/docs" className="text-sm text-[var(--text-secondary)] hover:text-[var(--text-primary)]">
                   Documentation
                 </Link>
-                <Link href="/signup" className="text-sm text-[var(--text-secondary)] hover:text-[var(--text-primary)]">
+                <Link href="/sign-up" className="text-sm text-[var(--text-secondary)] hover:text-[var(--text-primary)]">
                   Sign up
                 </Link>
-                <Link href="/login" className="text-sm text-[var(--text-secondary)] hover:text-[var(--text-primary)]">
+                <Link href="/sign-in" className="text-sm text-[var(--text-secondary)] hover:text-[var(--text-primary)]">
                   Sign in
                 </Link>
               </div>
               <div className="flex flex-col gap-2">
                 <span className="text-xs text-[var(--text-muted)] uppercase tracking-wider">
-                  Company
+                  Resources
                 </span>
-                <span className="text-sm text-[var(--text-secondary)]">About</span>
-                <span className="text-sm text-[var(--text-secondary)]">Blog</span>
-                <span className="text-sm text-[var(--text-secondary)]">Careers</span>
+                <Link href="/docs#getting-started" className="text-sm text-[var(--text-secondary)] hover:text-[var(--text-primary)]">
+                  Getting started
+                </Link>
+                <Link href="/docs#api-reference" className="text-sm text-[var(--text-secondary)] hover:text-[var(--text-primary)]">
+                  API reference
+                </Link>
+                <a
+                  href="https://status.edenobservability.com"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-sm text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+                >
+                  Status
+                </a>
               </div>
             </div>
 
             <p className="text-xs text-[var(--text-muted)]">
-              © 2026 Eden · v3.0
+              © {PRODUCT_COPYRIGHT_YEAR} Eden · {PRODUCT_VERSION}
             </p>
           </div>
         </footer>

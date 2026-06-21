@@ -24,6 +24,7 @@ const buttonVariants = cva(
           "bg-[var(--accent-2)] text-[var(--bg-base)] hover:bg-[var(--accent-2)]/90 focus:ring-[var(--accent-2)]",
         danger:
           "bg-[var(--error-dim)] text-[var(--error)] border border-[var(--error)]/30 hover:bg-[var(--error)]/20 focus:ring-[var(--error)]",
+        link: "text-[var(--accent)] underline-offset-4 hover:underline focus:ring-[var(--accent)]",
       },
       size: {
         default: "h-10 px-4 py-2",
@@ -43,20 +44,22 @@ export interface ButtonProps
   extends React.ButtonHTMLAttributes<HTMLButtonElement>,
     VariantProps<typeof buttonVariants> {
   asChild?: boolean;
-  isLoading?: boolean;
+  /** ponytail: aligned with StatCard's `loading` prop. Shows a
+   *  spinner + disables the button while true. */
+  loading?: boolean;
 }
 
 const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
-  ({ className, variant, size, asChild = false, isLoading, children, disabled, ...props }, ref) => {
+  ({ className, variant, size, asChild = false, loading, children, disabled, ...props }, ref) => {
     const Comp = asChild ? Slot : "button";
     return (
       <Comp
         className={cn(buttonVariants({ variant, size, className }))}
         ref={ref}
-        disabled={disabled || isLoading}
+        disabled={disabled || loading}
         {...props}
       >
-        {isLoading ? (
+        {loading ? (
           <>
             <Loader2 className="animate-spin" />
             {children}

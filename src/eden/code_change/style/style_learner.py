@@ -163,7 +163,7 @@ class CodeStyleLearner:
 
         if provider is not None:
             profile, last_pr_id = await self._learn_from_repo(
-                provider, profile
+                provider, profile, org_id
             )
 
         # Persist (delete-then-insert) to repo_style_profiles.
@@ -283,6 +283,7 @@ class CodeStyleLearner:
         self,
         provider: Any,
         base_profile: dict[str, Any],
+        org_id: str,
     ) -> tuple[dict[str, Any], str | None]:
         """Read sample files + lint configs, call T1, merge results."""
         samples: list[dict[str, str]] = []

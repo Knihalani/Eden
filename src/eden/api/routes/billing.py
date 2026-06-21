@@ -14,6 +14,7 @@ from eden.api.deps import (
     get_current_user,
     get_postgres_client,
     require_org_permission,
+    require_org_permission_dep,
 )
 from eden.config import get_settings
 
@@ -200,9 +201,10 @@ async def check_limit(
 # ============================================================================
 
 @router.get("/plans", response_model=PlanLimits)
-async def get_plans(org_id: str, user: dict = Depends(get_current_user)):
+async def get_plans(org_id: str, user: dict = Depends(get_current_user),
+        _check_billing_view: dict = Depends(require_org_permission_dep('billing:view')),
+):
     """Get current plan and usage for the organization."""
-    await require_org_permission("billing:view", org_id)
 
     # Sync usage to get accurate counts
     await sync_plan_usage(org_id)
@@ -237,9 +239,9 @@ async def subscribe(
     org_id: str,
     request: SubscribeRequest,
     user: dict = Depends(get_current_user),
+        _check_billing_edit: dict = Depends(require_org_permission_dep('billing:edit')),
 ):
     """Create a Stripe checkout session for subscription."""
-    await require_org_permission("billing:edit", org_id)
 
     # Check if Stripe is configured
     stripe_api_key = getattr(settings, "stripe_secret_key", None) or ""
@@ -334,9 +336,10 @@ async def subscribe(
 
 
 @router.get("/invoices", response_model=list[InvoiceResponse])
-async def get_invoices(org_id: str, user: dict = Depends(get_current_user)):
+async def get_invoices(org_id: str, user: dict = Depends(get_current_user),
+        _check_billing_view: dict = Depends(require_org_permission_dep('billing:view')),
+):
     """Get billing invoices for the organization."""
-    await require_org_permission("billing:view", org_id)
 
     stripe_api_key = getattr(settings, "stripe_secret_key", None) or ""
     if not stripe_api_key or stripe_api_key == "":
@@ -380,16 +383,23 @@ async def get_invoices(org_id: str, user: dict = Depends(get_current_user)):
         ]
 
     except ImportError:
-        return []
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Stripe is not installed.",
+        )
     except Exception as e:
         logger.error(f"Stripe invoice error: {e}")
-        return []
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Stripe is currently unavailable.",
+        )
 
 
 @router.post("/cancel", response_model=dict)
-async def cancel_subscription(org_id: str, user: dict = Depends(get_current_user)):
+async def cancel_subscription(org_id: str, user: dict = Depends(get_current_user),
+        _check_billing_edit: dict = Depends(require_org_permission_dep('billing:edit')),
+):
     """Cancel the current subscription."""
-    await require_org_permission("billing:edit", org_id)
 
     stripe_api_key = getattr(settings, "stripe_secret_key", None) or ""
     if not stripe_api_key or stripe_api_key == "":

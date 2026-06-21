@@ -318,13 +318,15 @@ function Disable2FADialog({
               onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
               placeholder="000000"
               maxLength={6}
+              aria-invalid={Boolean(error)}
+              aria-describedby={error ? "disable-2fa-error" : undefined}
               className="w-full px-3 py-2 text-center text-2xl tracking-widest border border-[var(--border)] rounded-lg"
               autoFocus
             />
           </div>
 
           {error && (
-            <p className="text-sm text-[var(--error)]">{error}</p>
+            <p id="disable-2fa-error" className="text-sm text-[var(--error)]">{error}</p>
           )}
 
           <div className="flex gap-3 justify-end">

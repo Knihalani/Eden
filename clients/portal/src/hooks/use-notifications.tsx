@@ -64,12 +64,35 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  // Initial fetch and polling
+  // Initial fetch and polling. Pause polling when the tab is hidden
+  // so we don't burn API calls in background tabs; resume on return.
   useEffect(() => {
     refresh().finally(() => setLoading(false));
 
-    const interval = setInterval(refresh, POLL_INTERVAL);
-    return () => clearInterval(interval);
+    let interval: ReturnType<typeof setInterval> | null = null;
+    const start = () => {
+      if (interval) return;
+      interval = setInterval(refresh, POLL_INTERVAL);
+    };
+    const stop = () => {
+      if (!interval) return;
+      clearInterval(interval);
+      interval = null;
+    };
+    const onVisibility = () => {
+      if (typeof document === "undefined") return;
+      if (document.hidden) stop();
+      else {
+        refresh();
+        start();
+      }
+    };
+    start();
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      stop();
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
   }, [refresh]);
 
   const markAsRead = useCallback(async (notificationId: string) => {

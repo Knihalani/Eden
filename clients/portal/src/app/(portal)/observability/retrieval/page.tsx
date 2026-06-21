@@ -26,6 +26,7 @@ import {
   Zap,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
+import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
@@ -201,41 +202,47 @@ function GapsTab({ orgId, setError }: { orgId: string; setError: (e: string) => 
         </div>
       ) : (
         <div className="bg-[var(--bg-primary)] border border-[var(--border-default)] rounded-xl overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-[var(--border-default)] bg-[var(--bg-secondary)]">
-                  <th className="text-left px-4 py-3 text-xs font-medium text-[var(--text-muted)] uppercase tracking-wide">Query</th>
-                  <th className="text-left px-4 py-3 text-xs font-medium text-[var(--text-muted)] uppercase tracking-wide w-32">Gap score</th>
-                  <th className="text-left px-4 py-3 text-xs font-medium text-[var(--text-muted)] uppercase tracking-wide">Example trace</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-[var(--border-subtle)]">
-                {gaps.map((g, idx) => (
-                  <tr key={idx} className="hover:bg-[var(--bg-tertiary)]/50 transition-colors">
-                    <td className="px-4 py-3 text-[var(--text-primary)]">{g.query}</td>
-                    <td className="px-4 py-3">
-                      <span
-                        className={cn(
-                          "text-xs px-2 py-0.5 rounded-full font-medium",
-                          g.gap_score >= 0.7
-                            ? "bg-[var(--error-bg)] text-[var(--error)]"
-                            : g.gap_score >= 0.4
-                              ? "bg-[var(--warning-bg)] text-[var(--warning)]"
-                              : "bg-[var(--bg-tertiary)] text-[var(--text-secondary)]"
-                        )}
-                      >
-                        {(g.gap_score * 100).toFixed(0)}%
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 font-mono text-xs text-[var(--text-muted)]">
-                      {g.example_trace_id?.slice(0, 20) ?? "—"}…
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <DataTable
+            columns={[
+              { key: "query", header: "Query", sortable: true, cell: (g) => <span className="text-[var(--text-primary)]">{g.query}</span> },
+              {
+                key: "gap_score",
+                header: "Gap score",
+                sortable: true,
+                align: "right",
+                cell: (g) => (
+                  <span
+                    className={cn(
+                      "text-xs px-2 py-0.5 rounded-full font-medium",
+                      g.gap_score >= 0.7
+                        ? "bg-[var(--error-bg)] text-[var(--error)]"
+                        : g.gap_score >= 0.4
+                          ? "bg-[var(--warning-bg)] text-[var(--warning)]"
+                          : "bg-[var(--bg-tertiary)] text-[var(--text-secondary)]",
+                    )}
+                  >
+                    {(g.gap_score * 100).toFixed(0)}%
+                  </span>
+                ),
+              },
+              {
+                key: "example_trace_id",
+                header: "Example trace",
+                cell: (g) => (
+                  <span className="font-mono text-xs text-[var(--text-muted)]">
+                    {g.example_trace_id?.slice(0, 20) ?? "—"}…
+                  </span>
+                ),
+              },
+            ]}
+            rows={gaps}
+            rowKey={(_g, i) => String(i)}
+            defaultSort={{ key: "gap_score", direction: "desc" }}
+            emptyTitle="No knowledge gaps detected"
+            emptyDescription="Your retrieval layer is covering every query — nice work."
+            emptyIcon={Lightbulb}
+            pageSize={25}
+          />
         </div>
       )}
     </div>
@@ -465,34 +472,26 @@ function ReorderTab({ orgId, setError }: { orgId: string; setError: (e: string) 
         </div>
       ) : (
         <div className="bg-[var(--bg-primary)] border border-[var(--border-default)] rounded-xl overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-[var(--border-default)] bg-[var(--bg-secondary)]">
-                  <th className="text-left px-4 py-3 text-xs font-medium text-[var(--text-muted)] uppercase tracking-wide">Chunk ID</th>
-                  <th className="text-left px-4 py-3 text-xs font-medium text-[var(--text-muted)] uppercase tracking-wide w-32">New position</th>
-                  <th className="text-left px-4 py-3 text-xs font-medium text-[var(--text-muted)] uppercase tracking-wide">Reason</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-[var(--border-subtle)]">
-                {entries.map((e) => (
-                  <tr key={e.chunk_id} className="hover:bg-[var(--bg-tertiary)]/50 transition-colors">
-                    <td className="px-4 py-3 font-mono text-xs text-[var(--text-primary)]">
-                      {e.chunk_id}
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-[var(--accent-faint)] text-[var(--accent)]">
-                        #{e.new_position}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-[var(--text-secondary)] text-xs">
-                      {e.reason}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <DataTable
+            columns={[
+              { key: "chunk_id", header: "Chunk ID", sortable: true, cell: (e) => <span className="font-mono text-xs text-[var(--text-primary)]">{e.chunk_id}</span> },
+              {
+                key: "new_position",
+                header: "New position",
+                sortable: true,
+                align: "right",
+                cell: (e) => <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-[var(--accent-faint)] text-[var(--accent)]">#{e.new_position}</span>,
+              },
+              { key: "reason", header: "Reason", cell: (e) => <span className="text-[var(--text-secondary)] text-xs">{e.reason}</span> },
+            ]}
+            rows={entries}
+            rowKey={(e) => e.chunk_id}
+            defaultSort={{ key: "new_position", direction: "asc" }}
+            emptyTitle="No reordering suggested"
+            emptyDescription="Your current chunk ordering is already optimal"
+            emptyIcon={Shuffle}
+            pageSize={25}
+          />
         </div>
       )}
     </div>

@@ -69,6 +69,13 @@ PERMISSION_MAP: dict[str, set[str]] = {
         # that. Members and viewers see a "Request from your admin"
         # callout instead.
         "integrations:write",
+        # Job submission/read — granted to owner and admin so the
+        # portal's "Trigger test run" + "Trigger sim run" actions work
+        # without requiring a separate per-resource grant. Members and
+        # viewers do not get these scopes (they would only use them via
+        # a CI-scoped API key anyway).
+        "jobs:read",
+        "jobs:write",
         # Phase 7.3d — the four sensitive permissions (June 2026).
         "pii:edit",
         "judges:run",
@@ -83,17 +90,29 @@ PERMISSION_MAP: dict[str, set[str]] = {
         "members:remove",
         "settings:edit",
         "billing:view",
+        "billing:edit",
         "audit:view",
         "integrations:write",
+        "jobs:read",
+        "jobs:write",
         "pii:edit",
         "judges:run",
     },
     "member": {
         "references:read",
         "judges:run",
+        # Members can submit + read their own jobs (CI runs, sim runs,
+        # test runs). ``jobs:write`` is intentionally broader than
+        # ``jobs:read`` so a future "observer" role can read results
+        # without being able to enqueue work.
+        "jobs:read",
+        "jobs:write",
     },
     "viewer": {
         "references:read",
+        # Viewers can read job results (read-only dashboard) but
+        # cannot submit new work.
+        "jobs:read",
     },
 }
 
@@ -425,6 +444,62 @@ async def require_org_member(
     return org
 
 
+
+def require_org_permission_dep(permission: str):
+    """Factory for a FastAPI ``Depends(...)`` closure that enforces ``permission``.
+
+    Prefer this over the bare :func:`require_org_permission` async function
+    when wiring into route signatures — the closure picks up the JWT
+    payload and ``X-Org-Id`` header via FastAPI's dependency injector
+    rather than relying on caller-side argument passing. Usage::
+
+        @router.post("/foo")
+        async def create_foo(
+            org_id: str,
+            user: dict = Depends(get_current_user),
+            _check: dict = Depends(require_org_permission_dep("foo:write")),
+        ):
+            ...
+
+    The leading-underscore name on ``_check`` is conventional for a
+    side-effect-only dependency (the returned dict is usually discarded;
+    the only observable effect is raising 403 if the permission is
+    missing). When the caller also needs the org dict (e.g. to read
+    the resolved role), use ``org: dict = Depends(...)`` and reference
+    it later in the handler.
+
+    The closure reads ``X-Org-Id`` from the header, falling back to
+    ``payload.get("current_org_id")`` for the cookie-auth path. If
+    neither resolves, the request 403s — no silent bypass.
+    """
+
+    async def _dependency(
+        # ``org_id`` is accepted without a ``Header`` annotation so FastAPI
+        # binds the route's path parameter when one exists (the common
+        # case: ``@router.post("/orgs/{org_id}/foo")``). When no path
+        # param is in scope (e.g. service-to-service endpoints like
+        # ``POST /jobs`` that derive org from the JWT only) we fall back
+        # to ``x_org_id`` from the ``X-Org-Id`` header.
+        org_id: str | None = None,
+        x_org_id: str | None = Header(None, alias="X-Org-Id"),
+        payload: dict | None = Depends(_try_resolve_token_payload),
+    ) -> dict:
+        org = await get_current_org(org_id or x_org_id, payload)
+        if not org:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Not a member of this organization",
+            )
+        role = org.get("role", "")
+        if not has_permission(role, permission):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Permission denied: {permission}",
+            )
+        return org
+
+    return _dependency
+
 async def require_org_admin(
     x_org_id: str | None = Header(None, alias="X-Org-Id"),
     payload: dict | None = Depends(_try_resolve_token_payload),
@@ -536,6 +611,24 @@ async def require_org_permission(
     """Require user to have a specific org permission, otherwise raise 403.
 
     Uses the role-based permission map to determine access.
+
+    NOTE (June 21 2026 polish): This signature was originally designed
+    for FastAPI's ``Depends(...)`` injection. Direct ``await`` calls
+    (e.g. ``await require_org_permission("foo", org_id)`` from inside
+    a route handler) don't resolve ``payload`` — the default value is
+    the raw ``Depends`` wrapper, not the resolved dict. Two safer
+    usage patterns work:
+
+    1. **Use the factory** — convert callers to
+       ``Depends(require_org_permission_dep("foo"))`` (preferred; see below).
+    2. **Resolve payload at the call site** — declare
+       ``payload: dict = Depends(_try_resolve_token_payload)`` in the
+       route signature and pass it explicitly:
+       ``await require_org_permission("foo", org_id, payload)``.
+
+    Pattern (1) is preferred for new routes and is what we now use
+    throughout the route layer; pattern (2) remains supported for
+    the 9 call sites that already pass ``payload`` explicitly.
     """
     org = await get_current_org(x_org_id, payload)
     if not org:
@@ -557,7 +650,7 @@ async def require_org_permission(
 # Each is a thin alias for :func:`require_org_permission` keyed to
 # the named permission. Routes can ``Depends(require_pii_policy_edit)``
 # etc. for a self-documenting signature.
-# ─────────────────────────────────────────────────────────────────────────────
+# ──────────────────────────────────────────────
 
 
 async def require_pii_policy_edit(

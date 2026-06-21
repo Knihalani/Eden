@@ -308,8 +308,10 @@ class TestModelSelection:
         )
         service = ChatService()
         model = await service._pick_model()
-        # TIER_MODELS[T3][0] = "anthropic/claude-opus-4"
-        assert "claude" in model or "opus" in model
+        # TIER_MODELS[T3][0] = "minimax/minimax-m3" (per the June 21
+        # 2026 immutable-model-list decision — mid-tier is fine for the
+        # expert slot, it's just what's wired).
+        assert model == "minimax/minimax-m3"
 
     @pytest.mark.asyncio
     async def test_override_takes_precedence(self, monkeypatch):

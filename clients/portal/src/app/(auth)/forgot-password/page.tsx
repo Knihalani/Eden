@@ -61,7 +61,7 @@ export default function ForgotPasswordPage() {
               Check your inbox (and spam folder) for the reset link. Links expire in 1 hour.
             </p>
             <Link
-              href="/login"
+              href="/sign-in"
               className="inline-flex items-center gap-2 text-sm text-[var(--accent)] hover:underline font-medium"
             >
               <ArrowLeft className="w-4 h-4" />
@@ -115,7 +115,7 @@ export default function ForgotPasswordPage() {
 
             <p className="text-center text-sm text-[var(--text-secondary)]">
               Remember your password?{" "}
-              <Link href="/login" className="text-[var(--accent)] hover:underline font-medium">
+              <Link href="/sign-in" className="text-[var(--accent)] hover:underline font-medium">
                 Log in
               </Link>
             </p>

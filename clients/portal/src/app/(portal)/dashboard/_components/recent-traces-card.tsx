@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { Loader2, GitBranch, ArrowRight, Clock } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { EmptyState } from "@/components/ui/empty-state";
+import { Button } from "@/components/ui/button";
 
 export interface TraceRow {
   trace_id: string;
@@ -45,19 +47,21 @@ export function RecentTracesCard({ loading, traces }: RecentTracesCardProps) {
           <Loader2 className="w-5 h-5 animate-spin text-[var(--text-muted)]" />
         </div>
       ) : empty ? (
-        <div className="text-center py-10 px-5">
-          <GitBranch className="w-8 h-8 mx-auto mb-3 text-[var(--text-muted)] stroke-1 opacity-60" />
-          <p className="text-sm text-[var(--text-secondary)]">No traces yet</p>
-          <p className="text-xs text-[var(--text-muted)] mt-1">
-            Traces will appear here once your agents emit telemetry.
-          </p>
-          <Link
-            href="/observability"
-            className="mt-3 inline-flex items-center gap-1 text-xs font-medium text-[var(--accent)] hover:text-[var(--accent-hover)]"
-          >
-            Open observability
-            <ArrowRight className="w-3 h-3" />
-          </Link>
+        <div className="px-5 pb-5">
+          <EmptyState
+            icon={GitBranch}
+            title="No traces yet"
+            description="Traces will appear here once your agents emit telemetry. Connect an agent to see live signals in seconds."
+            action={
+              <Link href="/agents/connect">
+                <Button>
+                  <GitBranch className="w-4 h-4" />
+                  Connect a repo
+                </Button>
+              </Link>
+            }
+            size="sm"
+          />
         </div>
       ) : (
         <ul className="divide-y divide-[var(--border-subtle)]">

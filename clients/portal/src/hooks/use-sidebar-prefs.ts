@@ -39,6 +39,29 @@ export const DEFAULT_PREFS: SidebarPrefs = {
   density: "comfortable",
 };
 
+// ponytail: Advanced-collapse is a UI-only toggle (localStorage). Not
+// persisted to the backend because it's a "show less" affordance, not
+// a real per-org preference — most users want the same default everywhere.
+const ADVANCED_KEY = "eden:sidebar:advanced-collapsed";
+
+export function readAdvancedCollapsed(): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    return window.localStorage.getItem(ADVANCED_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+export function writeAdvancedCollapsed(v: boolean) {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(ADVANCED_KEY, v ? "1" : "0");
+  } catch {
+    // non-fatal
+  }
+}
+
 const STORAGE_PREFIX = "eden:sidebar-prefs:";
 const SAVE_DEBOUNCE_MS = 1000;
 
@@ -211,10 +234,13 @@ export function useSidebarPrefs(): UseSidebarPrefs {
 
 /**
  * Apply prefs to the default sidebar config. Returns the ordered groups
- * with hidden items removed, ready to render.
+ * with hidden items removed, ready to render. Items flagged
+ * `category: "advanced"` in the config are filtered out when
+ * `advancedCollapsed` is true — they reappear when expanded.
  */
 export function applySidebarPrefs(
-  prefs: SidebarPrefs
+  prefs: SidebarPrefs,
+  advancedCollapsed = false
 ): { pinnedItems: SidebarGroup["items"][number][]; groups: SidebarGroup[] } {
   const byId = new Map<string, SidebarItemWithGroup>();
   for (const group of DEFAULT_SIDEBAR) {
@@ -227,15 +253,31 @@ export function applySidebarPrefs(
   }
 
   const isHidden = (id: string) => prefs.hidden.includes(id);
+  const isAdvancedHidden = (id: string) => {
+    if (!advancedCollapsed) return false;
+    const item = byId.get(id);
+    return item?.category === "advanced";
+  };
+  const keepItem = (id: string) => !isHidden(id) && !isAdvancedHidden(id);
+
   const filtered = DEFAULT_SIDEBAR.map((group) => ({
     ...group,
     items: group.items
-      .filter((item) => !isHidden(item.id))
+      .filter((item) => keepItem(item.id))
       .map((item) =>
         item.children
-          ? { ...item, children: item.children.filter((c) => !isHidden(c.id)) }
+          ? {
+              ...item,
+              children: item.children.filter((c) => keepItem(c.id)),
+              // If every child is hidden, drop the parent too.
+            }
           : item
-      ),
+      )
+      // Parent items with all children hidden: hide the parent.
+      .filter((item) => {
+        if (item.children && item.children.length === 0) return false;
+        return true;
+      }),
   }));
 
   const ordered: SidebarGroup[] = prefs.groupOrder
@@ -244,7 +286,10 @@ export function applySidebarPrefs(
 
   const pinnedItems = prefs.pinned
     .map((id) => byId.get(id))
-    .filter((item): item is SidebarItemWithGroup => Boolean(item) && !isHidden(item!.id));
+    .filter(
+      (item): item is SidebarItemWithGroup =>
+        Boolean(item) && keepItem(item!.id)
+    );
 
   return { pinnedItems, groups: ordered };
 }

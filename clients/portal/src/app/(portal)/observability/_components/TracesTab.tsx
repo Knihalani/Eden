@@ -14,11 +14,10 @@
  * deep link like `/traces?trace_id=abc-123` can pre-select a row.
  */
 
-import { Filter, Loader2, TreePine, Clock, PlayCircle, Download } from "lucide-react";
+import { Filter, Loader2, TreePine, Clock, PlayCircle, Download, Layers } from "lucide-react";
 import Link from "next/link";
-import { EmptyState } from "@/components/ui/empty-state";
-import { OutcomeBadge } from "@/components/ui/outcome-badge";
-import { cn } from "@/lib/utils";
+import { TraceOutcomeBadge } from "@/components/ui/status-badge";
+import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
 import type { TraceFilter, TraceItem } from "../_lib/types";
 
 interface TracesTabProps {
@@ -48,6 +47,117 @@ export function TracesTab({
   initialTraceId,
   showReplayLink = true,
 }: TracesTabProps) {
+  const columns: DataTableColumn<TraceItem>[] = [
+    {
+      key: "trace_id",
+      header: "Trace ID",
+      sortable: true,
+      sticky: true,
+      cell: (t) => (
+        <span className="font-mono text-xs text-[var(--text-primary)]">
+          {t.trace_id.slice(0, 16)}…
+        </span>
+      ),
+    },
+    {
+      key: "realm",
+      header: "Realm",
+      sortable: true,
+      cell: (t) => (
+        <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-[var(--accent-faint)] text-[var(--accent)]">
+          {t.realm}
+        </span>
+      ),
+    },
+    {
+      key: "outcome",
+      header: "Outcome",
+      sortable: true,
+      cell: (t) => <TraceOutcomeBadge outcome={t.outcome} />,
+    },
+    {
+      key: "span_count",
+      header: "Spans",
+      sortable: true,
+      align: "right",
+      cell: (t) => <span className="text-[var(--text-secondary)]">{t.span_count}</span>,
+    },
+    {
+      key: "duration_ms",
+      header: "Duration",
+      sortable: true,
+      align: "right",
+      cell: (t) => <span className="text-[var(--text-secondary)]">{t.duration_ms.toFixed(0)}ms</span>,
+    },
+    {
+      key: "streaming_metrics",
+      header: "Streaming",
+      cell: (t) =>
+        t.streaming_metrics ? (
+          <div className="flex flex-col gap-0.5 text-[var(--text-muted)] text-xs">
+            <span>TTFT {t.streaming_metrics.ttft_ms?.toFixed(0)}ms</span>
+            <span>ITL {t.streaming_metrics.itl_ms_avg?.toFixed(1)}ms</span>
+            <span>TPOT {t.streaming_metrics.tpot_ms?.toFixed(1)}ms</span>
+          </div>
+        ) : (
+          <span className="text-[var(--text-muted)] text-xs">—</span>
+        ),
+    },
+    {
+      key: "actions",
+      header: "Actions",
+      align: "right",
+      cell: (t) => (
+        <div className="flex items-center justify-end gap-1">
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onSelectTrace(t.trace_id);
+            }}
+            className="p-1.5 text-[var(--text-muted)] hover:text-[var(--accent)] hover:bg-[var(--accent-faint)] rounded-lg transition-colors"
+            title="View Trace Tree"
+            aria-label="View Trace Tree"
+          >
+            <TreePine className="w-4 h-4" />
+          </button>
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onViewTimeline(t.trace_id);
+            }}
+            className="p-1.5 text-[var(--text-muted)] hover:text-[var(--accent)] hover:bg-[var(--accent-faint)] rounded-lg transition-colors"
+            title="View Timeline"
+            aria-label="View Timeline"
+          >
+            <Clock className="w-4 h-4" />
+          </button>
+          {showReplayLink && (
+            <Link
+              href={`/replay?trace_id=${t.trace_id}`}
+              onClick={(e) => e.stopPropagation()}
+              className="p-1.5 text-[var(--text-muted)] hover:text-[var(--accent)] hover:bg-[var(--accent-faint)] rounded-lg transition-colors"
+              title="Open in Replay"
+              aria-label="Open in Replay"
+            >
+              <PlayCircle className="w-4 h-4" />
+            </Link>
+          )}
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onExport(t.trace_id);
+            }}
+            className="p-1.5 text-[var(--text-muted)] hover:text-[var(--accent)] hover:bg-[var(--accent-faint)] rounded-lg transition-colors"
+            title="Export"
+            aria-label="Export"
+          >
+            <Download className="w-4 h-4" />
+          </button>
+        </div>
+      ),
+    },
+  ];
+
   return (
     <div className="space-y-4">
       {/* Filters */}
@@ -87,113 +197,21 @@ export function TracesTab({
         <div className="flex items-center justify-center py-20">
           <Loader2 className="w-8 h-8 animate-spin text-[var(--accent)]" />
         </div>
-      ) : traces.length === 0 ? (
-        <EmptyState
-          icon={Loader2}
-          title="No traces found"
-          description="Send telemetry from the Eden SDK or run a job — traces will appear here as your agents run."
-          size="lg"
-        />
       ) : (
-        <div className="bg-[var(--bg-primary)] border border-[var(--border-default)] rounded-xl overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-[var(--border-default)] bg-[var(--bg-secondary)]">
-                  <th className="text-left px-4 py-3 text-xs font-medium text-[var(--text-muted)] uppercase tracking-wide sticky left-0 bg-[var(--bg-secondary)]">
-                    Trace ID
-                  </th>
-                  <th className="text-left px-4 py-3 text-xs font-medium text-[var(--text-muted)] uppercase tracking-wide">Realm</th>
-                  <th className="text-left px-4 py-3 text-xs font-medium text-[var(--text-muted)] uppercase tracking-wide">Outcome</th>
-                  <th className="text-left px-4 py-3 text-xs font-medium text-[var(--text-muted)] uppercase tracking-wide">Spans</th>
-                  <th className="text-left px-4 py-3 text-xs font-medium text-[var(--text-muted)] uppercase tracking-wide">Duration</th>
-                  <th className="text-left px-4 py-3 text-xs font-medium text-[var(--text-muted)] uppercase tracking-wide">Streaming</th>
-                  <th className="text-right px-4 py-3 text-xs font-medium text-[var(--text-muted)] uppercase tracking-wide">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-[var(--border-subtle)]">
-                {traces.map((trace) => {
-                  const isSelected = initialTraceId === trace.trace_id;
-                  return (
-                    <tr
-                      key={trace.trace_id}
-                      data-trace-id={trace.trace_id}
-                      className={cn(
-                        "transition-colors",
-                        isSelected
-                          ? "bg-[var(--accent-faint)] hover:bg-[var(--accent-faint)]"
-                          : "hover:bg-[var(--bg-tertiary)]/50"
-                      )}
-                    >
-                      <td className="px-4 py-3 font-mono text-xs text-[var(--text-primary)] sticky left-0 bg-[var(--bg-primary)]">
-                        {trace.trace_id.slice(0, 16)}…
-                      </td>
-                      <td className="px-4 py-3">
-                        <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-[var(--accent-faint)] text-[var(--accent)]">
-                          {trace.realm}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3">
-                        <OutcomeBadge outcome={trace.outcome} />
-                      </td>
-                      <td className="px-4 py-3 text-[var(--text-secondary)]">{trace.span_count}</td>
-                      <td className="px-4 py-3 text-[var(--text-secondary)]">{trace.duration_ms.toFixed(0)}ms</td>
-                      <td className="px-4 py-3 text-[var(--text-muted)] text-xs">
-                        {trace.streaming_metrics ? (
-                          <div className="flex flex-col gap-0.5">
-                            <span>TTFT {trace.streaming_metrics.ttft_ms?.toFixed(0)}ms</span>
-                            <span>ITL {trace.streaming_metrics.itl_ms_avg?.toFixed(1)}ms</span>
-                            <span>TPOT {trace.streaming_metrics.tpot_ms?.toFixed(1)}ms</span>
-                          </div>
-                        ) : (
-                          <span>—</span>
-                        )}
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="flex items-center justify-end gap-1">
-                          <button
-                            onClick={() => onSelectTrace(trace.trace_id)}
-                            className="p-1.5 text-[var(--text-muted)] hover:text-[var(--accent)] hover:bg-[var(--accent-faint)] rounded-lg transition-colors"
-                            title="View Trace Tree"
-                            aria-label="View Trace Tree"
-                          >
-                            <TreePine className="w-4 h-4" />
-                          </button>
-                          <button
-                            onClick={() => onViewTimeline(trace.trace_id)}
-                            className="p-1.5 text-[var(--text-muted)] hover:text-[var(--accent)] hover:bg-[var(--accent-faint)] rounded-lg transition-colors"
-                            title="View Timeline"
-                            aria-label="View Timeline"
-                          >
-                            <Clock className="w-4 h-4" />
-                          </button>
-                          {showReplayLink && (
-                            <Link
-                              href={`/replay?trace_id=${trace.trace_id}`}
-                              className="p-1.5 text-[var(--text-muted)] hover:text-[var(--accent)] hover:bg-[var(--accent-faint)] rounded-lg transition-colors"
-                              title="Open in Replay"
-                              aria-label="Open in Replay"
-                            >
-                              <PlayCircle className="w-4 h-4" />
-                            </Link>
-                          )}
-                          <button
-                            onClick={() => onExport(trace.trace_id)}
-                            className="p-1.5 text-[var(--text-muted)] hover:text-[var(--accent)] hover:bg-[var(--accent-faint)] rounded-lg transition-colors"
-                            title="Export"
-                            aria-label="Export"
-                          >
-                            <Download className="w-4 h-4" />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        </div>
+        <DataTable
+          columns={columns}
+          rows={traces}
+          rowKey={(t) => t.trace_id}
+          loading={loading && traces.length > 0}
+          defaultSort={{ key: "duration_ms", direction: "desc" }}
+          emptyTitle="No traces found"
+          emptyDescription="Send telemetry from the Eden SDK or run a job — traces will appear here as your agents run."
+          emptyIcon={Layers}
+          onRowClick={(t) => onSelectTrace(t.trace_id)}
+          rowAttrs={(t) => ({ "data-trace-id": t.trace_id })}
+          highlightRowId={initialTraceId}
+          pageSize={25}
+        />
       )}
     </div>
   );

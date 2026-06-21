@@ -12,6 +12,7 @@ import { Plus, Trash2, Wand2 } from "lucide-react";
 
 import { EmptyState } from "@/components/ui/empty-state";
 import { Button } from "@/components/ui/button";
+import { useConfirm } from "@/hooks/use-confirm";
 import { cn } from "@/lib/utils";
 import type { SimRun } from "@/lib/api";
 import type {
@@ -48,6 +49,18 @@ export function Inspector({
   onOpenRun,
   historyRefreshKey,
 }: InspectorProps) {
+  const { confirm, ConfirmDialog } = useConfirm();
+  const handleRemove = useCallback(async () => {
+    if (!selected) return;
+    const ok = await confirm({
+      title: "Delete block?",
+      description: `This will remove "${selected.data.label}" from the graph.`,
+      confirmLabel: "Delete",
+      variant: "destructive",
+    });
+    if (ok) onRemove(selected.id);
+  }, [selected, confirm, onRemove]);
+
   return (
     <aside
       aria-label="Inspector"
@@ -62,7 +75,7 @@ export function Inspector({
             type="button"
             variant="ghost"
             size="sm"
-            onClick={() => onRemove(selected.id)}
+            onClick={handleRemove}
             className="text-[var(--error)] hover:text-[var(--error)]"
             aria-label="Delete block"
           >
@@ -119,6 +132,7 @@ export function Inspector({
         onOpenRun={onOpenRun}
         {...(historyRefreshKey !== undefined ? { refreshKey: historyRefreshKey } : {})}
       />
+      {ConfirmDialog}
     </aside>
   );
 }

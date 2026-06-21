@@ -39,6 +39,22 @@ def _render(name: str, *, help_text: str, value: float, labels: dict[str, str] |
     return f"# HELP {name} {help_text}\n# TYPE {name} gauge\n{name}{label_str} {value}\n"
 
 
+def _render_histogram(name: str, *, help_text: str, buckets_ms: list, row: dict) -> str:
+    """Render a single histogram row as Prometheus text format.
+
+    ``row`` must contain keys for each bucket boundary in ``buckets_ms``
+    plus ``+Inf``, ``_sum``, and ``_count``.
+    """
+    lines = [f"# HELP {name} {help_text}", f"# TYPE {name} histogram"]
+    for b in buckets_ms:
+        key = f"{b}"
+        lines.append(f'{name}_bucket{{le="{b}"}} {row.get(key, 0)}')
+    lines.append(f'{name}_bucket{{le="+Inf"}} {row.get("+Inf", 0)}')
+    lines.append(f"{name}_sum {row.get('_sum', 0)}")
+    lines.append(f"{name}_count {int(row.get('_count', 0))}")
+    return "\n".join(lines) + "\n"
+
+
 async def _check_metrics_auth(authorization: str | None = Header(default=None)) -> None:
     """Constant-time bearer check against ``metrics_bearer_token``.
 
@@ -95,6 +111,30 @@ async def metrics() -> Response:
                 labels={"slo": slo["name"], "category": slo["category"]},
             )
         )
+
+    # Audit (June 21 2026) — expose the request latency histogram from
+    # ``api/middleware/latency.py`` so Prometheus can compute p95/p99
+    # via ``histogram_quantile``.  The audit flagged this as "needs
+    # proper middleware; defer to APM v1.5" — the histogram data
+    # already exists, only the rendering was missing.
+    try:
+        from eden.api.middleware.latency import get_metrics_snapshot
+
+        snap = get_metrics_snapshot()
+        buckets_ms = snap.get("buckets_ms") or []
+        for r in snap.get("rows") or []:
+            raw = r.get("buckets") or {}
+            row = {**raw, "_sum": r.get("sum_ms", 0), "_count": r.get("count", 0)}
+            lines.append(
+                _render_histogram(
+                    "eden_request_duration_ms",
+                    help_text="Per-route request duration in milliseconds.",
+                    buckets_ms=buckets_ms,
+                    row=row,
+                )
+            )
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("metrics: failed to render latency histogram: %s", exc)
 
     body = "".join(lines)
     return Response(content=body, media_type="text/plain; version=0.0.4; charset=utf-8")

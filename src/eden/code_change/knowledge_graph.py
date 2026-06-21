@@ -29,7 +29,7 @@ import hashlib
 import logging
 from typing import Any
 
-from ._common import _insert_row, _new_id, _ok_envelope, _select_rows, _update_row
+from ._common import _insert_row, _new_id, _ok_envelope, _select_rows
 
 logger = logging.getLogger(__name__)
 

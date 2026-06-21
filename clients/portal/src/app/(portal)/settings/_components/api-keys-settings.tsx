@@ -7,6 +7,7 @@ import { useConfirm } from "@/hooks/use-confirm";
 import { api } from "@/lib/api";
 import { SettingsCard } from "@/components/settings/settings-card";
 import { EmptyState } from "@/components/ui/empty-state";
+import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
 import type { Organization } from "@/lib/types";
 
 interface ApiKey {
@@ -119,6 +120,56 @@ export function ApiKeysSettings({ org }: ApiKeysSettingsProps) {
 
   const canManage = org.role === "owner" || org.role === "admin";
 
+  const columns: DataTableColumn<ApiKey>[] = [
+    { key: "name", header: "Name", sortable: true, sticky: true, cell: (k) => <span className="font-medium text-[var(--text-primary)]">{k.name}</span> },
+    {
+      key: "key_prefix",
+      header: "Key",
+      cell: (k) => <code className="text-sm text-[var(--text-muted)] font-mono">...{k.key_prefix}</code>,
+    },
+    {
+      key: "scopes",
+      header: "Scopes",
+      cell: (k) => (
+        <div className="flex flex-wrap gap-1">
+          {k.scopes.map((scope) => (
+            <span key={scope} className="px-2 py-0.5 bg-[var(--accent-bg)] text-[var(--accent)] rounded text-xs">
+              {scope}
+            </span>
+          ))}
+        </div>
+      ),
+    },
+    {
+      key: "created_at",
+      header: "Created",
+      sortable: true,
+      cell: (k) => <span className="text-sm text-[var(--text-muted)]">{k.created_at ? new Date(k.created_at).toLocaleDateString() : "—"}</span>,
+    },
+    {
+      key: "last_used_at",
+      header: "Last Used",
+      sortable: true,
+      cell: (k) => <span className="text-sm text-[var(--text-muted)]">{k.last_used_at ? new Date(k.last_used_at).toLocaleDateString() : "Never"}</span>,
+    },
+    {
+      key: "id",
+      header: "",
+      align: "right",
+      cell: (k) =>
+        canManage ? (
+          <button
+            onClick={() => handleRevoke(k.id)}
+            className="p-2 text-[var(--error)] hover:bg-[var(--error-bg)] rounded-lg"
+            title="Revoke key"
+            aria-label={`Revoke ${k.name}`}
+          >
+            <Trash2 className="w-4 h-4" />
+          </button>
+        ) : null,
+    },
+  ];
+
   return (
     <div className="space-y-4">
       {canManage && (
@@ -230,72 +281,17 @@ export function ApiKeysSettings({ org }: ApiKeysSettingsProps) {
       )}
 
       <SettingsCard title="Active keys" description={`${keys.length} on file`}>
-        {loading ? (
-          <div className="flex justify-center py-8">
-            <Loader2 className="w-6 h-6 animate-spin text-[var(--text-muted)]" />
-          </div>
-        ) : keys.length === 0 ? (
-          <EmptyState
-            icon={Key}
-            title="No API keys yet"
-            description="Create a key to call the Eden API from CI or your own scripts."
-            size="md"
-          />
-        ) : (
-          <div className="overflow-hidden rounded-lg border border-[var(--border-subtle)]">
-            <table className="w-full">
-              <thead className="bg-[var(--bg-tertiary)]">
-                <tr>
-                  <th className="text-left px-4 py-3 text-sm font-medium text-[var(--text-secondary)]">Name</th>
-                  <th className="text-left px-4 py-3 text-sm font-medium text-[var(--text-secondary)]">Key</th>
-                  <th className="text-left px-4 py-3 text-sm font-medium text-[var(--text-secondary)]">Scopes</th>
-                  <th className="text-left px-4 py-3 text-sm font-medium text-[var(--text-secondary)]">Created</th>
-                  <th className="text-left px-4 py-3 text-sm font-medium text-[var(--text-secondary)]">Last Used</th>
-                  <th></th>
-                </tr>
-              </thead>
-              <tbody>
-                {keys.map((key) => (
-                  <tr key={key.id} className="border-t border-[var(--border-default)]">
-                    <td className="px-4 py-3 font-medium text-[var(--text-primary)]">{key.name}</td>
-                    <td className="px-4 py-3">
-                      <code className="text-sm text-[var(--text-muted)] font-mono">...{key.key_prefix}</code>
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="flex flex-wrap gap-1">
-                        {key.scopes.map((scope) => (
-                          <span
-                            key={scope}
-                            className="px-2 py-0.5 bg-[var(--accent-bg)] text-[var(--accent)] rounded text-xs"
-                          >
-                            {scope}
-                          </span>
-                        ))}
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 text-sm text-[var(--text-muted)]">
-                      {key.created_at ? new Date(key.created_at).toLocaleDateString() : "—"}
-                    </td>
-                    <td className="px-4 py-3 text-sm text-[var(--text-muted)]">
-                      {key.last_used_at ? new Date(key.last_used_at).toLocaleDateString() : "Never"}
-                    </td>
-                    <td className="px-4 py-3">
-                      {canManage && (
-                        <button
-                          onClick={() => handleRevoke(key.id)}
-                          className="p-2 text-[var(--error)] hover:bg-[var(--error-bg)] rounded-lg"
-                          title="Revoke key"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+        <DataTable
+          columns={columns}
+          rows={keys}
+          rowKey={(k) => k.id}
+          loading={loading}
+          defaultSort={{ key: "name", direction: "asc" }}
+          emptyTitle="No API keys yet"
+          emptyDescription="Create a key to call the Eden API from CI or your own scripts."
+          emptyIcon={Key}
+          pageSize={25}
+        />
       </SettingsCard>
       {ConfirmDialog}
     </div>

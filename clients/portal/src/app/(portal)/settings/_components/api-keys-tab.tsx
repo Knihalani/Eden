@@ -12,6 +12,8 @@ import { useToast } from "@/components/ui/toast";
 import { useConfirm } from "@/hooks/use-confirm";
 import { api } from "@/lib/api";
 import { SettingsCard } from "@/components/settings/settings-card";
+import { Button } from "@/components/ui/button";
+import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
 
 interface ApiKeysTabProps {
   org: { id: string; name: string; role: string } | null;
@@ -111,6 +113,73 @@ export function ApiKeysTab({ org }: ApiKeysTabProps) {
       </div>
     );
   }
+
+  const canManage = org.role === "owner" || org.role === "admin";
+
+  const columns: DataTableColumn<ApiKey>[] = [
+    { key: "name", header: "Name", sortable: true, sticky: true, cell: (k) => <span className="font-medium text-[var(--text-primary)]">{k.name}</span> },
+    {
+      key: "key_prefix",
+      header: "Key",
+      cell: (k) => (
+        <code className="text-sm text-[var(--text-muted)] font-mono">...{k.key_prefix}</code>
+      ),
+    },
+    {
+      key: "scopes",
+      header: "Scopes",
+      cell: (k) => (
+        <div className="flex flex-wrap gap-1">
+          {k.scopes.map((scope) => (
+            <span
+              key={scope}
+              className="px-2 py-0.5 bg-[var(--accent-faint)] text-[var(--accent)] rounded text-xs"
+            >
+              {scope}
+            </span>
+          ))}
+        </div>
+      ),
+    },
+    {
+      key: "created_at",
+      header: "Created",
+      sortable: true,
+      cell: (k) =>
+        k.created_at ? (
+          <span className="text-sm text-[var(--text-muted)]">{new Date(k.created_at).toLocaleDateString()}</span>
+        ) : (
+          <span className="text-sm text-[var(--text-muted)]">-</span>
+        ),
+    },
+    {
+      key: "last_used_at",
+      header: "Last Used",
+      sortable: true,
+      cell: (k) =>
+        k.last_used_at ? (
+          <span className="text-sm text-[var(--text-muted)]">{new Date(k.last_used_at).toLocaleDateString()}</span>
+        ) : (
+          <span className="text-sm text-[var(--text-muted)]">Never</span>
+        ),
+    },
+    {
+      key: "id",
+      header: "",
+      align: "right",
+      cell: (k) =>
+        canManage ? (
+          <button
+            onClick={() => handleRevoke(k.id)}
+            className="p-2 text-[var(--error)] hover:bg-[var(--error-dim)] rounded-lg"
+            title="Revoke key"
+            aria-label={`Revoke ${k.name}`}
+          >
+            <Trash2 className="w-4 h-4" />
+          </button>
+        ) : null,
+    },
+  ];
 
   return (
     <div className="space-y-4">
@@ -221,81 +290,57 @@ export function ApiKeysTab({ org }: ApiKeysTabProps) {
         </SettingsCard>
       )}
 
-      {loading ? (
-        <div className="flex justify-center py-8">
-          <Loader2 className="w-6 h-6 animate-spin text-[var(--accent)]" />
-        </div>
-      ) : keys.length === 0 ? (
-        <div className="text-center py-12 text-[var(--text-secondary)]">
-          <Key className="w-12 h-12 mx-auto mb-4 opacity-50" />
-          <p>No API keys yet</p>
-          <p className="text-sm">Create an API key for programmatic access</p>
-        </div>
-      ) : (
-        <SettingsCard contentClassName="p-0">
-          <table className="w-full">
-            <thead className="bg-[var(--bg-tertiary)]">
-              <tr>
-                <th className="text-left px-4 py-3 text-sm font-medium text-[var(--text-secondary)] sticky left-0 bg-[var(--bg-tertiary)]">
-                  Name
-                </th>
-                <th className="text-left px-4 py-3 text-sm font-medium text-[var(--text-secondary)]">Key</th>
-                <th className="text-left px-4 py-3 text-sm font-medium text-[var(--text-secondary)]">Scopes</th>
-                <th className="text-left px-4 py-3 text-sm font-medium text-[var(--text-secondary)]">Created</th>
-                <th className="text-left px-4 py-3 text-sm font-medium text-[var(--text-secondary)]">Last Used</th>
-                <th aria-label="Actions" />
-              </tr>
-            </thead>
-            <tbody>
-              {keys.map((key) => (
-                <tr
-                  key={key.id}
-                  className="border-t border-[var(--border-default)] hover:bg-[var(--bg-tertiary)]/30"
-                >
-                  <td className="px-4 py-3 font-medium text-[var(--text-primary)] sticky left-0 bg-[var(--bg-primary)]">
-                    {key.name}
-                  </td>
-                  <td className="px-4 py-3">
-                    <code className="text-sm text-[var(--text-muted)] font-mono">
-                      ...{key.key_prefix}
-                    </code>
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="flex flex-wrap gap-1">
-                      {key.scopes.map((scope) => (
-                        <span
-                          key={scope}
-                          className="px-2 py-0.5 bg-[var(--accent-faint)] text-[var(--accent)] rounded text-xs"
-                        >
-                          {scope}
-                        </span>
-                      ))}
-                    </div>
-                  </td>
-                  <td className="px-4 py-3 text-sm text-[var(--text-muted)]">
-                    {key.created_at ? new Date(key.created_at).toLocaleDateString() : "-"}
-                  </td>
-                  <td className="px-4 py-3 text-sm text-[var(--text-muted)]">
-                    {key.last_used_at ? new Date(key.last_used_at).toLocaleDateString() : "Never"}
-                  </td>
-                  <td className="px-4 py-3">
-                    {(org.role === "owner" || org.role === "admin") && (
-                      <button
-                        onClick={() => handleRevoke(key.id)}
-                        className="p-2 text-[var(--error)] hover:bg-[var(--error-dim)] rounded-lg"
-                        title="Revoke key"
-                        aria-label={`Revoke ${key.name}`}
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </SettingsCard>
-      )}
+      <SettingsCard contentClassName="p-0">
+        <DataTable
+          columns={columns}
+          rows={keys}
+          rowKey={(k) => k.id}
+          loading={loading}
+          defaultSort={{ key: "name", direction: "asc" }}
+          emptyTitle="No API keys yet"
+          emptyDescription="Create an API key to authenticate programmatic access to Eden."
+          emptyIcon={Key}
+          emptyAction={
+            canManage ? (
+              <Button onClick={() => setShowCreate(true)}>
+                <Plus className="w-4 h-4" />
+                Create API key
+              </Button>
+            ) : undefined
+          }
+          selectable={canManage}
+          bulkActions={
+            canManage
+              ? [
+                  {
+                    label: "Revoke selected",
+                    variant: "destructive",
+                    onClick: async (rows) => {
+                      if (!org) return;
+                      if (
+                        !(await confirm({
+                          title: "Revoke API keys",
+                          description: `Permanently revoke ${rows.length} API key${rows.length === 1 ? "" : "s"}? Any systems using ${rows.length === 1 ? "it" : "them"} will immediately lose access.`,
+                          confirmLabel: "Revoke",
+                          variant: "destructive",
+                        }))
+                      )
+                        return;
+                      try {
+                        for (const k of rows) await api.revokeApiKey(org.id, k.id);
+                        await loadKeys();
+                        toast.success(`Revoked ${rows.length} key${rows.length === 1 ? "" : "s"}`);
+                      } catch (err: unknown) {
+                        toast.error(err instanceof Error ? err.message : "Failed to revoke keys");
+                      }
+                    },
+                  },
+                ]
+              : undefined
+          }
+          pageSize={25}
+        />
+      </SettingsCard>
       {ConfirmDialog}
     </div>
   );

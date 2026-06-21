@@ -1,15 +1,14 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Trash2, Users, Loader2 } from "lucide-react";
+import { Trash2, Users } from "lucide-react";
 import { usePermissions } from "@/hooks/use-permissions";
 import { useToast } from "@/components/ui/toast";
 import { useConfirm } from "@/hooks/use-confirm";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
-import { Skeleton } from "@/components/ui/skeleton";
 import { SettingsCard } from "@/components/settings/settings-card";
-import { EmptyState } from "@/components/ui/empty-state";
+import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
 import { formatRelativeTime } from "@/lib/format";
 import type { Organization } from "@/lib/types";
 import { InvitePanel } from "./invite-panel";
@@ -90,15 +89,63 @@ export function MembersSettings({ org }: MembersSettingsProps) {
   if (!org) {
     return (
       <SettingsCard title="Members">
-        <EmptyState
-          icon={Users}
-          title="No organization selected"
-          description="Select an organization above to manage its members."
-          size="md"
-        />
+        <div className="text-center py-8 text-[var(--text-secondary)] text-sm">
+          Select an organization above to manage its members.
+        </div>
       </SettingsCard>
     );
   }
+
+  const columns: DataTableColumn<Member>[] = [
+    { key: "name", header: "Name", sortable: true, sticky: true, cell: (m) => <span className="font-medium text-[var(--text-primary)]">{m.name}</span> },
+    { key: "email", header: "Email", sortable: true, cell: (m) => <span className="text-[var(--text-secondary)]">{m.email}</span> },
+    {
+      key: "role",
+      header: "Role",
+      sortable: true,
+      cell: (m) => (
+        <span
+          className={cn(
+            "px-2 py-1 rounded-md text-sm font-medium",
+            m.role === "owner"
+              ? "bg-[var(--warning-bg)] text-[var(--warning)]"
+              : m.role === "admin"
+                ? "bg-[var(--accent-bg)] text-[var(--accent)]"
+                : "bg-[var(--bg-tertiary)] text-[var(--text-secondary)]",
+          )}
+        >
+          {m.role}
+        </span>
+      ),
+    },
+    {
+      key: "joined_at",
+      header: "Joined",
+      sortable: true,
+      cell: (m) => <span className="text-[var(--text-muted)] text-sm">{new Date(m.joined_at).toLocaleDateString()}</span>,
+    },
+    {
+      key: "last_active_at",
+      header: "Last Active",
+      sortable: true,
+      cell: (m) => <span className="text-[var(--text-muted)] text-sm">{m.last_active_at ? formatRelativeTime(m.last_active_at) : "Never"}</span>,
+    },
+    {
+      key: "user_id",
+      header: "",
+      align: "right",
+      cell: (m) =>
+        m.role !== "owner" ? (
+          <button
+            onClick={() => handleRemove(m.user_id)}
+            className="p-2 text-[var(--error)] hover:bg-[var(--error-bg)] rounded-lg"
+            aria-label={`Remove ${m.name} from organization`}
+          >
+            <Trash2 className="w-4 h-4" />
+          </button>
+        ) : null,
+    },
+  ];
 
   return (
     <div className="space-y-4">
@@ -135,74 +182,17 @@ export function MembersSettings({ org }: MembersSettingsProps) {
       )}
 
       <SettingsCard title="Members" description={`${members.length} active`}>
-        {loading ? (
-          <div className="space-y-2">
-            {Array.from({ length: 4 }).map((_, i) => (
-              <Skeleton key={i} className="h-12 w-full" />
-            ))}
-          </div>
-        ) : members.length === 0 ? (
-          <EmptyState
-            icon={Users}
-            title="No members yet"
-            description="Invite teammates to share environments and review output together."
-            size="sm"
-          />
-        ) : (
-          <div className="overflow-hidden rounded-lg border border-[var(--border-subtle)]">
-            <table className="w-full">
-              <thead className="bg-[var(--bg-tertiary)]">
-                <tr>
-                  <th className="text-left px-4 py-3 text-sm font-medium text-[var(--text-secondary)]">Name</th>
-                  <th className="text-left px-4 py-3 text-sm font-medium text-[var(--text-secondary)]">Email</th>
-                  <th className="text-left px-4 py-3 text-sm font-medium text-[var(--text-secondary)]">Role</th>
-                  <th className="text-left px-4 py-3 text-sm font-medium text-[var(--text-secondary)]">Joined</th>
-                  <th className="text-left px-4 py-3 text-sm font-medium text-[var(--text-secondary)]">Last Active</th>
-                  <th></th>
-                </tr>
-              </thead>
-              <tbody>
-                {members.map((member) => (
-                  <tr key={member.user_id} className="border-t border-[var(--border-default)]">
-                    <td className="px-4 py-3 text-[var(--text-primary)]">{member.name}</td>
-                    <td className="px-4 py-3 text-[var(--text-secondary)]">{member.email}</td>
-                    <td className="px-4 py-3">
-                      <span
-                        className={cn(
-                          "px-2 py-1 rounded-md text-sm font-medium",
-                          member.role === "owner"
-                            ? "bg-[var(--warning-bg)] text-[var(--warning)]"
-                            : member.role === "admin"
-                              ? "bg-[var(--accent-bg)] text-[var(--accent)]"
-                              : "bg-[var(--bg-tertiary)] text-[var(--text-secondary)]",
-                        )}
-                      >
-                        {member.role}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-[var(--text-muted)] text-sm">
-                      {new Date(member.joined_at).toLocaleDateString()}
-                    </td>
-                    <td className="px-4 py-3 text-[var(--text-muted)] text-sm">
-                      {member.last_active_at ? formatRelativeTime(member.last_active_at) : "Never"}
-                    </td>
-                    <td className="px-4 py-3">
-                      {member.role !== "owner" && (
-                        <button
-                          onClick={() => handleRemove(member.user_id)}
-                          className="p-2 text-[var(--error)] hover:bg-[var(--error-bg)] rounded-lg"
-                          aria-label={`Remove ${member.name} from organization`}
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+        <DataTable
+          columns={columns}
+          rows={members}
+          rowKey={(m) => m.user_id}
+          loading={loading}
+          defaultSort={{ key: "name", direction: "asc" }}
+          emptyTitle="No members yet"
+          emptyDescription="Invite teammates to share environments and review output together."
+          emptyIcon={Users}
+          pageSize={25}
+        />
       </SettingsCard>
 
       <InvitePanel orgId={org.id} canManage={hasPermission("members:invite")} />
