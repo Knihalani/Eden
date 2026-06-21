@@ -40,6 +40,24 @@ export function TraceExportModal({ open, onOpenChange, orgId, traceId }: TraceEx
       .finally(() => setLoading(false));
   }, [open, orgId, traceId, format]);
 
+  // Escape closes the modal; lock body scroll while open.
+  useEffect(() => {
+    if (!open) return;
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") {
+        e.stopPropagation();
+        onOpenChange(false);
+      }
+    }
+    document.addEventListener("keydown", onKey, true);
+    return () => {
+      document.body.style.overflow = prevOverflow;
+      document.removeEventListener("keydown", onKey, true);
+    };
+  }, [open, onOpenChange]);
+
   function handleDownload() {
     const mime =
       format === "csv"
@@ -67,6 +85,9 @@ export function TraceExportModal({ open, onOpenChange, orgId, traceId }: TraceEx
           exit={{ opacity: 0 }}
           className="fixed inset-0 bg-[var(--overlay)] z-50 flex items-center justify-center p-4"
           onClick={() => onOpenChange(false)}
+          role="dialog"
+          aria-modal="true"
+          aria-label="Export trace"
         >
           <motion.div
             initial={{ scale: 0.95, opacity: 0 }}
@@ -82,7 +103,7 @@ export function TraceExportModal({ open, onOpenChange, orgId, traceId }: TraceEx
               </h3>
               <button
                 onClick={() => onOpenChange(false)}
-                className="p-1 text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors"
+                className="p-1 text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--accent)] rounded"
                 aria-label="Close export dialog"
               >
                 <X className="w-5 h-5" />

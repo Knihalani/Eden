@@ -12,10 +12,22 @@ import { useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, ExternalLink } from "lucide-react";
 import { OnboardingConnectFlow } from "@/components/onboarding/OnboardingConnectFlow";
+import { NoOrgState } from "@/components/ui/no-org-state";
+import { usePermissions } from "@/hooks/use-permissions";
 import type { OnboardingPRRun } from "@/lib/api";
 
 export default function ConnectAgentPage() {
   const [lastRun, setLastRun] = useState<OnboardingPRRun | null>(null);
+  const { hasPermission } = usePermissions();
+
+  if (!hasPermission("jobs:write")) {
+    return (
+      <NoOrgState
+        feature="Admins only"
+        description="Connecting a new agent requires the `jobs:write` permission. Ask an org owner to perform this step."
+      />
+    );
+  }
 
   return (
     <div className="mx-auto max-w-3xl p-6 lg:p-8">

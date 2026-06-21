@@ -17,6 +17,7 @@ import * as React from "react";
 import { Gauge, RefreshCw, Play, Check, ChevronDown, Loader2 } from "lucide-react";
 import { api } from "@/lib/api";
 import { useToast } from "@/components/ui/toast";
+import { DataTable } from "@/components/ui/data-table";
 
 interface ScoresTabProps {
   orgId: string;
@@ -248,31 +249,17 @@ export function ScoresTab({ orgId, traceId }: ScoresTabProps) {
 
       {/* Score rows */}
       <div className="min-h-0 flex-1 overflow-y-auto">
-        <table className="w-full text-xs">
-          <thead className="sticky top-0 bg-[var(--bg-secondary)] text-[var(--text-muted)]">
-            <tr className="border-b border-[var(--border-default)]">
-              <th className="px-3 py-1.5 text-left">Judge</th>
-              <th className="px-3 py-1.5 text-left">Version</th>
-              <th className="px-3 py-1.5 text-right">Score</th>
-              <th className="px-3 py-1.5 text-left">Model</th>
-              <th className="px-3 py-1.5 text-left">Scored at</th>
-              <th className="px-3 py-1.5 text-left">Rationale</th>
-            </tr>
-          </thead>
-          <tbody>
-            {scores.map((s) => {
-              const sev = scoreSeverity(s.score);
-              const isOpen = expanded[s.judge_run_id] ?? false;
-              return (
-                <tr
-                  key={s.judge_run_id}
-                  className="border-b border-[var(--border-default)]/50 hover:bg-[var(--bg-secondary)]/50"
-                >
-                  <td className="px-3 py-2">
-                    <span
-                      className="font-mono"
-                      style={{ color: SEVERITY_COLORS[sev] }}
-                    >
+        <DataTable
+          columns={[
+            {
+              key: "judge_name",
+              header: "Judge",
+              sortable: true,
+              cell: (s) => {
+                const sev = scoreSeverity(s.score);
+                return (
+                  <div>
+                    <span className="font-mono" style={{ color: SEVERITY_COLORS[sev] }}>
                       {s.judge_name}
                     </span>
                     {s.span_id && (
@@ -280,50 +267,68 @@ export function ScoresTab({ orgId, traceId }: ScoresTabProps) {
                         span: {s.span_id.slice(0, 12)}…
                       </div>
                     )}
-                  </td>
-                  <td className="px-3 py-2 font-mono text-[10px] text-[var(--text-muted)]">
-                    {s.judge_version}
-                  </td>
-                  <td className="px-3 py-2 text-right">
-                    <span
-                      className="font-mono tabular-nums text-sm"
-                      style={{ color: SEVERITY_COLORS[sev] }}
-                    >
-                      {s.score.toFixed(2)}
-                    </span>
-                  </td>
-                  <td className="px-3 py-2 font-mono text-[10px] text-[var(--text-muted)]">
-                    {s.model}
-                  </td>
-                  <td className="px-3 py-2 font-mono text-[10px] text-[var(--text-muted)]">
-                    {s.scored_at}
-                  </td>
-                  <td className="px-3 py-2">
-                    {s.rationale ? (
-                      <button
-                        onClick={() =>
-                          setExpanded((p) => ({
-                            ...p,
-                            [s.judge_run_id]: !p[s.judge_run_id],
-                          }))
-                        }
-                        className="text-left text-[var(--text-primary)] hover:text-[var(--accent)]"
-                      >
-                        {isOpen
-                          ? s.rationale
-                          : s.rationale.length > 200
-                          ? s.rationale.slice(0, 200) + "…"
-                          : s.rationale}
-                      </button>
-                    ) : (
-                      <span className="text-[var(--text-muted)]">—</span>
-                    )}
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+                  </div>
+                );
+              },
+            },
+            {
+              key: "judge_version",
+              header: "Version",
+              cell: (s) => <span className="font-mono text-[10px] text-[var(--text-muted)]">{s.judge_version}</span>,
+            },
+            {
+              key: "score",
+              header: "Score",
+              sortable: true,
+              align: "right",
+              cell: (s) => {
+                const sev = scoreSeverity(s.score);
+                return (
+                  <span className="font-mono tabular-nums text-sm" style={{ color: SEVERITY_COLORS[sev] }}>
+                    {s.score.toFixed(2)}
+                  </span>
+                );
+              },
+            },
+            {
+              key: "model",
+              header: "Model",
+              cell: (s) => <span className="font-mono text-[10px] text-[var(--text-muted)]">{s.model}</span>,
+            },
+            {
+              key: "scored_at",
+              header: "Scored at",
+              sortable: true,
+              cell: (s) => <span className="font-mono text-[10px] text-[var(--text-muted)]">{s.scored_at}</span>,
+            },
+            {
+              key: "rationale",
+              header: "Rationale",
+              cell: (s) => {
+                const isOpen = expanded[s.judge_run_id] ?? false;
+                return s.rationale ? (
+                  <button
+                    onClick={() =>
+                      setExpanded((p) => ({ ...p, [s.judge_run_id]: !p[s.judge_run_id] }))
+                    }
+                    className="text-left text-[var(--text-primary)] hover:text-[var(--accent)]"
+                  >
+                    {isOpen ? s.rationale : s.rationale.length > 200 ? s.rationale.slice(0, 200) + "…" : s.rationale}
+                  </button>
+                ) : (
+                  <span className="text-[var(--text-muted)]">—</span>
+                );
+              },
+            },
+          ]}
+          rows={scores}
+          rowKey={(s) => s.judge_run_id}
+          defaultSort={{ key: "score", direction: "desc" }}
+          emptyTitle="No judge scores yet"
+          emptyDescription="Run judges to score this trace."
+          emptyIcon={Gauge}
+          pageSize={50}
+        />
       </div>
     </div>
   );

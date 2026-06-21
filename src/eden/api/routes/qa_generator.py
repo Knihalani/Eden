@@ -171,10 +171,11 @@ async def generate_qa(
     )
 
 
-# Stub routes for the list / fetch endpoints. The persistence
-# layer is the next PR; for now we return a 501 with a clear
-# message. The generator itself is fully functional via
-# ``POST /generate``.
+# ── Run history (Phase J.5 follow-up) ──────────────────────────────────────
+# Persistence of past generation runs is deferred. For now the
+# endpoints return an empty list / 404 so the portal renders
+# the page cleanly instead of bouncing a 501 on every load.
+
 
 @router.get(
     "/runs",
@@ -184,13 +185,7 @@ async def list_runs(
     org_id: str = Path(...),
     user: dict = Depends(_get_user()),
 ) -> dict[str, Any]:
-    raise HTTPException(
-        status_code=501,
-        detail={
-            "error": "not_implemented",
-            "detail": "synthetic Q/A run persistence ships in Phase J.5 (sibling of Cat 3 dataset promotion)",
-        },
-    )
+    return {"runs": [], "total": 0, "detail": "run history ships in Phase J.5"}
 
 
 @router.get(
@@ -203,9 +198,9 @@ async def get_run(
     user: dict = Depends(_get_user()),
 ) -> dict[str, Any]:
     raise HTTPException(
-        status_code=501,
+        status_code=404,
         detail={
-            "error": "not_implemented",
-            "detail": "synthetic Q/A run persistence ships in Phase J.5",
+            "error": "not_found",
+            "detail": "run persistence ships in Phase J.5 — no runs on disk yet",
         },
     )

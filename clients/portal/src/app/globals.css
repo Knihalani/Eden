@@ -52,14 +52,34 @@
   /* Semantic — terminal-themed */
   --success: #5FE5A8;
   --success-bg: #0F1F18;
+  --success-dim: #0F2A1F;
   --success-strong: #2D6B4F;
   --warning: #FFB547;
   --warning-bg: rgba(255, 181, 71, 0.1);
+  --warning-dim: rgba(255, 181, 71, 0.06);
   --warning-strong: #B45309;
   --error: #FF6B7A;
   --error-bg: rgba(255, 107, 122, 0.1);
   --error-dim: #3A1A1F;
   --error-strong: #B91C1C;
+  --info: #22D3EE;
+  --info-bg: rgba(34, 211, 238, 0.10);
+  --info-strong: #0E7490;
+
+  /* Category tokens (used by hilt-panel + clerk-theme) */
+  --cat-success-dim: #0F1F18;
+  --cat-success-fg:  #5FE5A8;
+  --cat-warning-dim: rgba(255, 181, 71, 0.10);
+  --cat-warning-fg:  #FFB547;
+  --cat-danger-dim:  #3A1A1F;
+  --cat-danger-fg:   #FF6B7A;
+  --cat-info-dim:    rgba(34, 211, 238, 0.10);
+  --cat-info-fg:     #22D3EE;
+  --cat-purple-dim:  rgba(192, 132, 252, 0.15);
+  --cat-purple-fg:   #C084FC;
+
+  /* Elevated surface */
+  --surface-elevated: var(--bg-tertiary);
 
   /* Pipeline Stage Colors — 9 distinct hues, dark-base friendly */
   --stage-planning: #818CF8;
@@ -87,6 +107,7 @@
   --chart-error: #FF6B7A;
   --chart-grid: #1A2332;
   --chart-axis: #475569;
+  --chart-label: var(--chart-axis);
   --chart-pie-1: #5B9EFF;
   --chart-pie-2: #5FE5A8;
   --chart-pie-3: #FFB547;
@@ -98,6 +119,11 @@
   --chart-outcome-bronze: #C084FC;
   --chart-outcome-partial: #5B9EFF;
   --chart-outcome-failed: #FF6B7A;
+
+  /* Heatmap intensity stops (RGB triplets for use in rgba()) */
+  --heat-low: 95, 229, 168;
+  --heat-mid: 255, 181, 71;
+  --heat-high: 255, 107, 122;
 
   /* Overlay — modal scrim */
   --overlay: rgba(0, 0, 0, 0.72);
@@ -179,6 +205,39 @@
   --indicator-bg: rgba(91, 158, 255, 0.08);
   --indicator-border: rgba(91, 158, 255, 0.15);
   --indicator-blur: 8px;
+
+  /* macOS window chrome (terminal mocks) */
+  --traffic-close: #ff5f57;
+  --traffic-minimize: #febc2e;
+  --traffic-zoom: #28c840;
+
+  /* Code/diff surface (VS Code dark parity) */
+  --code-surface: #1e1e1e;
+
+  /* Marketing hero grid stroke */
+  --grid-stroke: rgba(130, 140, 160, 0.045);
+
+  /* Auth brand panel mesh gradient stops */
+  --mesh-accent: rgba(91, 158, 255, 0.14);
+  --mesh-accent-soft: rgba(91, 158, 255, 0.08);
+  --mesh-accent-faint: rgba(91, 158, 255, 0.06);
+  --mesh-accent-glow: rgba(91, 158, 255, 0.45);
+  --mesh-terminal: rgba(95, 229, 168, 0.08);
+  --mesh-purple: rgba(192, 132, 252, 0.06);
+
+  /* Skeleton shimmer overlay */
+  --shimmer: rgba(255, 255, 255, 0.05);
+
+  /* Builder canvas node colors (8 distinct hues) */
+  --node-agent: #10b981;
+  --node-tool: #0ea5e9;
+  --node-scenario: #f59e0b;
+  --node-scoring: #a855f7;
+  --node-memory: #ec4899;
+  --node-loop: #06b6d4;
+  --node-seed: #f97316;
+  --node-default: #71717a;
+  --node-grid: #3f3f46;
 }
 
 /* ==================== Tailwind v4 Theme Integration ==================== */
@@ -277,11 +336,32 @@ body {
   color: var(--accent);
 }
 
-/* Focus — distinctive ring, not the default browser outline */
+/* Focus — distinctive ring, distinct from the active nav `--accent`.
+   June 2026 cleanup: switched from --accent (purple/blue, same as
+   the active nav row) to --terminal (phosphor green). The two-tone
+   box-shadow adds a 2px gap so the ring reads cleanly against any
+   background, including button surfaces. */
+:root {
+  --focus-ring: var(--terminal);
+  --focus-ring-offset: var(--bg-primary);
+}
+
 :focus-visible {
   outline: none;
-  box-shadow: 0 0 0 2px var(--bg-primary), 0 0 0 4px var(--accent);
+  box-shadow: 0 0 0 2px var(--focus-ring-offset), 0 0 0 4px var(--focus-ring);
   border-radius: 4px;
+}
+
+/* Skip the ring on elements that already paint their own (form
+   controls and SidebarNavItem — both use --accent for their active
+   state and we want focus to read as "ring around active" not
+   "ring collides with active"). */
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible,
+.nav-item:focus-visible,
+.pin-button:focus-visible {
+  box-shadow: 0 0 0 2px var(--focus-ring-offset), 0 0 0 4px var(--focus-ring);
 }
 
 /* Smooth Scrolling */
@@ -393,25 +473,6 @@ html {
   animation: fade-slide-up var(--duration-normal) var(--ease-out);
 }
 
-/* Sidebar collapse */
-@keyframes sidebar-collapse {
-  from {
-    width: 240px;
-  }
-  to {
-    width: 64px;
-  }
-}
-
-@keyframes sidebar-expand {
-  from {
-    width: 64px;
-  }
-  to {
-    width: 240px;
-  }
-}
-
 /* Stage pulse */
 @keyframes stage-pulse {
   0%, 100% {
@@ -454,12 +515,10 @@ html {
 
 /* Glow pulse — terminal active states */
 @keyframes glow-pulse {
+  /* reserved — no .animate-glow-pulse class right now; keep keyframe
+     for future use so the terminal-glow token is already wired. */
   0%, 100% { box-shadow: 0 0 0 0 var(--terminal-glow); }
   50% { box-shadow: 0 0 12px 2px var(--terminal-glow); }
-}
-
-.animate-glow-pulse {
-  animation: glow-pulse 2s ease-in-out infinite;
 }
 
 /* Cursor blink */
@@ -492,23 +551,6 @@ html {
   animation: scale-in var(--duration-normal) var(--ease-out) forwards;
 }
 
-/* Shake */
-@keyframes shake {
-  0%, 100% {
-    transform: translateX(0);
-  }
-  10%, 30%, 50%, 70%, 90% {
-    transform: translateX(-4px);
-  }
-  20%, 40%, 60%, 80% {
-    transform: translateX(4px);
-  }
-}
-
-.shake {
-  animation: shake 0.5s ease-in-out;
-}
-
 /* Stagger children */
 .stagger-children > * {
   opacity: 0;
@@ -525,6 +567,104 @@ html {
 .stagger-children > *:nth-child(8) { animation-delay: 350ms; }
 .stagger-children > *:nth-child(9) { animation-delay: 400ms; }
 .stagger-children > *:nth-child(10) { animation-delay: 450ms; }
+
+/* ==================== Auth Form Card ==================== */
+
+.auth-card {
+  width: 100%;
+  max-width: 420px;
+  padding: 1.75rem 1.75rem 1.5rem;
+  background: color-mix(in srgb, var(--bg-primary) 70%, transparent);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-xl);
+  box-shadow:
+    0 0 48px var(--overlay),
+    0 0 0 1px var(--mesh-accent-faint);
+}
+
+.auth-card-title {
+  font-size: 1.5rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--text-primary);
+  margin-bottom: 0.25rem;
+}
+
+.auth-card-subtitle {
+  font-size: 0.875rem;
+  color: var(--text-muted);
+  margin-bottom: 1.5rem;
+  line-height: 1.5;
+}
+
+/* ==================== Auth Brand Panel ==================== */
+
+.auth-mesh-gradient {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background:
+    radial-gradient(ellipse 80% 60% at 50% 30%, var(--mesh-accent) 0%, transparent 70%),
+    radial-gradient(ellipse 50% 40% at 15% 80%, var(--mesh-terminal) 0%, transparent 60%),
+    radial-gradient(ellipse 40% 30% at 85% 15%, var(--mesh-purple) 0%, transparent 60%);
+  animation: meshDrift 12s ease-in-out infinite;
+}
+
+@keyframes meshDrift {
+  0%, 100% {
+    background:
+      radial-gradient(ellipse 80% 60% at 50% 30%, var(--mesh-accent) 0%, transparent 70%),
+      radial-gradient(ellipse 50% 40% at 15% 80%, var(--mesh-terminal) 0%, transparent 60%),
+      radial-gradient(ellipse 40% 30% at 85% 15%, var(--mesh-purple) 0%, transparent 60%);
+  }
+  50% {
+    background:
+      radial-gradient(ellipse 80% 60% at 50% 35%, var(--mesh-accent) 0%, transparent 70%),
+      radial-gradient(ellipse 50% 40% at 15% 75%, var(--mesh-terminal) 0%, transparent 60%),
+      radial-gradient(ellipse 40% 30% at 85% 20%, var(--mesh-purple) 0%, transparent 60%);
+  }
+}
+
+.auth-grid-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  background-image:
+    linear-gradient(rgba(100, 120, 160, 0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(100, 120, 160, 0.04) 1px, transparent 1px);
+  background-size: 60px 60px;
+  mask-image: radial-gradient(ellipse 70% 60% at 50% 50%, black 30%, transparent 90%);
+  -webkit-mask-image: radial-gradient(ellipse 70% 60% at 50% 50%, black 30%, transparent 90%);
+}
+
+.auth-hero-line {
+  font-size: clamp(36px, 4.5vw, 54px);
+  font-weight: 700;
+  line-height: 1.05;
+  letter-spacing: -0.04em;
+  color: var(--text-primary);
+}
+
+.auth-feature-icon {
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  background: var(--mesh-accent-soft);
+  border: 1px solid var(--mesh-accent-faint);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--accent);
+}
+
+.auth-pipeline-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
 
 /* ==================== Component Base ==================== */
 
@@ -564,10 +704,10 @@ button:active, [role="button"]:active {
 .sidebar-gradient {
   background: linear-gradient(
     to bottom,
-    rgba(91, 158, 255, 0.04) 0%,
+    rgba(91, 158, 255, 0.015) 0%,
     transparent 20%,
     transparent 80%,
-    rgba(95, 229, 168, 0.02) 100%
+    rgba(95, 229, 168, 0.008) 100%
   );
 }
 
@@ -582,7 +722,7 @@ button:active, [role="button"]:active {
   left: 0;
   top: 50%;
   transform: translateY(-50%) scaleY(0);
-  width: 3px;
+  width: 2px;
   height: 60%;
   background: var(--accent);
   border-radius: 0 2px 2px 0;
@@ -607,6 +747,30 @@ button:active, [role="button"]:active {
 .nav-item.active .nav-icon {
   color: var(--accent);
   filter: drop-shadow(0 0 4px var(--terminal-glow));
+}
+
+/* Keyboard-focused nav items get a visible left accent so the
+   active/hover state isn't only discoverable with a mouse. */
+.nav-item:focus-visible {
+  outline: none;
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+
+.pin-button {
+  opacity: 0;
+  transition: opacity var(--duration-fast) ease;
+}
+
+.nav-item:hover .pin-button,
+.nav-item:focus-within .pin-button {
+  opacity: 1;
+}
+
+.pin-button:focus-visible {
+  opacity: 1;
+  outline: none;
+  box-shadow: 0 0 0 2px var(--bg-primary), 0 0 0 4px var(--accent);
+  border-radius: var(--radius-sm);
 }
 
 .nav-tooltip {
@@ -651,6 +815,12 @@ button:active, [role="button"]:active {
 }
 
 .sidebar-collapse-btn:hover {
+  opacity: 1;
+}
+
+.sidebar-collapse-btn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--bg-primary), 0 0 0 4px var(--accent);
   opacity: 1;
 }
 
@@ -844,7 +1014,7 @@ input::placeholder, textarea::placeholder {
 
 .file-new {
   animation: fade-slide-up 2s var(--ease-out);
-}
+} /* reserved — no call site yet, retained for the file-upload reveal */
 
 .code-streaming {
   border-left: 2px solid var(--accent);

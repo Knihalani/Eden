@@ -1,19 +1,22 @@
 import Link from "next/link";
-import { Building2, type LucideIcon } from "lucide-react";
+import { Building2 } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 interface NoOrgStateProps {
   feature: string;
   description?: string;
-  icon?: LucideIcon;
+  icon?: React.ComponentType<{ className?: string }>;
+  className?: string;
 }
 
 export function NoOrgState({
   feature,
   description = "Create an organization to start using this feature and collaborating with your team.",
   icon: Icon = Building2,
+  className,
 }: NoOrgStateProps) {
   return (
-    <div className="flex flex-col items-center justify-center min-h-[60vh] p-6 text-center">
+    <div className={cn("flex flex-col items-center justify-center min-h-[60vh] p-6 text-center", className)}>
       <div className="w-14 h-14 rounded-2xl bg-[var(--bg-tertiary)] border border-[var(--border-default)] flex items-center justify-center mb-5">
         <Icon className="w-7 h-7 text-[var(--text-muted)]" />
       </div>

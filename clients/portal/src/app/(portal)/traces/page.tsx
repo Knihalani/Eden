@@ -17,7 +17,7 @@
  */
 
 import { useCallback, useEffect, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { useSearchParams, useRouter } from "next/navigation";
 import { Layers } from "lucide-react";
 import { PageHeader } from "@/components/layout/page-header";
 import { NoOrgState } from "@/components/ui/no-org-state";
@@ -29,6 +29,7 @@ import { TraceExportModal } from "../observability/_components/TraceExportModal"
 
 export default function TracesPage() {
   const { currentOrg } = useOrg();
+  const router = useRouter();
   const searchParams = useSearchParams();
   const initialTraceId = searchParams.get("trace_id") || undefined;
 
@@ -84,11 +85,16 @@ export default function TracesPage() {
           loading={loading}
           filter={filter}
           onFilterChange={setFilter}
-          onSelectTrace={setSelectedTraceId}
-          onViewTimeline={(id) => {
-            // The Trace Tree / Timeline views live on the
-            // /observability landing; for /traces we just select.
+          onSelectTrace={(id) => {
             setSelectedTraceId(id);
+            // Open the trace tree on the observability landing page.
+            // Pre-selecting via ?trace=… lets the landing highlight
+            // the row in its own table.
+            router.push(`/observability?trace=${encodeURIComponent(id)}`);
+          }}
+          onViewTimeline={(id) => {
+            setSelectedTraceId(id);
+            router.push(`/replay?trace=${encodeURIComponent(id)}`);
           }}
           onExport={(id) => {
             setExportTraceId(id);

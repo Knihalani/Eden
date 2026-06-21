@@ -120,6 +120,19 @@ class TraceListItem(BaseModel):
     outcome: str | None = None
     span_count: int = 0
     duration_ms: float = 0.0
+    # Cat 23 audit — fields promised by the portal type but missing here.
+    # Portal `clients/portal/src/lib/api.ts:2452-2470` reads these; keeping
+    # the model honest avoids `undefined` values after the empty stub is
+    # replaced with a real query.
+    tenant_id: str | None = None
+    model: str | None = None
+    provider: str | None = None
+    input_tokens: int | None = None
+    output_tokens: int | None = None
+    cost_cents: int | None = None
+    error: dict[str, Any] | None = None
+    streaming_metrics: dict[str, Any] | None = None
+    tags: list[str] = Field(default_factory=list)
 
 
 class TraceListResponse(BaseModel):
@@ -226,15 +239,101 @@ async def list_traces(
     days: int = Query(7, ge=1, le=90),
     user: dict = Depends(get_current_user),
 ) -> TraceListResponse:
-    """List traces for an organization with optional filters."""
-    # For MVP, return an empty list with simulated metadata
-    # In production this would query the telemetry store
-    return TraceListResponse(
-        traces=[],
-        total=0,
-        limit=limit,
-        offset=offset,
-    )
+    """List traces for an organization with optional filters.
+
+    Groups ``telemetry_events`` by ``trace_id`` to produce one row
+    per trace. Per-trace aggregates:
+        - span_count, duration_ms (max event duration, not sum),
+          started_at (min timestamp), outcome, error, model, provider,
+          token totals, cost (sum cost_usd → cents).
+    Filters: realm, outcome, agent_id, days.
+    Falls back to an empty list if Postgres is unavailable (same
+    defensive pattern Cat 1 uses).
+    """
+    from datetime import datetime, timedelta
+    try:
+        from eden.storage import postgres as _pg_module
+        client = await _pg_module.get_postgres_client()
+    except Exception as exc:
+        logger.warning("list_traces: postgres unavailable: %s", exc)
+        return TraceListResponse(traces=[], total=0, limit=limit, offset=offset)
+    if client is None:
+        return TraceListResponse(traces=[], total=0, limit=limit, offset=offset)
+
+    since = datetime.utcnow() - timedelta(days=days)
+    where = "tenant_id = $1 AND timestamp >= $2"
+    args: list[Any] = [org_id, since]
+    if realm:
+        where += f" AND realm = ${len(args) + 1}"
+        args.append(realm)
+    if agent_id:
+        where += f" AND attributes->>'agent_id' = ${len(args) + 1}"
+        args.append(agent_id)
+    # outcome filters on the rollup; we drop traces that have no
+    # matching outcome event so the count is stable.
+    if outcome:
+        where += (
+            f" AND trace_id IN (SELECT trace_id FROM telemetry_events "
+            f"WHERE tenant_id = $1 AND outcome = ${len(args) + 1})"
+        )
+        args.append(outcome)
+
+    try:
+        rows = await client.fetch(
+            f"""
+            SELECT trace_id,
+                   min(timestamp) AS started_at,
+                   max(realm) AS realm,
+                   max(attributes->>'agent_id') AS agent_id,
+                   max(attributes->>'model') AS model,
+                   max(attributes->>'provider') AS provider,
+                   max(outcome) AS outcome,
+                   max(error) AS error,
+                   sum((payload->>'input_tokens')::int) AS input_tokens,
+                   sum((payload->>'output_tokens')::int) AS output_tokens,
+                   coalesce(sum(cost_usd), 0) AS cost_usd,
+                   count(*) AS span_count,
+                   max(duration_ms) AS duration_ms,
+                   array_agg(DISTINCT tag) FILTER (WHERE tag IS NOT NULL) AS tags
+            FROM telemetry_events
+            LEFT JOIN LATERAL unnest(tags) AS tag ON TRUE
+            WHERE {where}
+            GROUP BY trace_id
+            ORDER BY started_at DESC
+            LIMIT ${len(args) + 1} OFFSET ${len(args) + 2}
+            """,
+            *args, limit, offset,
+        )
+        total = await client.fetchval(
+            f"SELECT count(DISTINCT trace_id) FROM telemetry_events WHERE {where}",
+            *args,
+        )
+    except Exception as exc:
+        logger.warning("list_traces: query failed: %s", exc)
+        return TraceListResponse(traces=[], total=0, limit=limit, offset=offset)
+
+    items = [
+        TraceListItem(
+            trace_id=r["trace_id"],
+            tenant_id=org_id,
+            realm=r["realm"] or "production",
+            agent_id=r["agent_id"],
+            started_at=r["started_at"].isoformat() if r["started_at"] else None,
+            outcome=r["outcome"],
+            span_count=int(r["span_count"] or 0),
+            duration_ms=float(r["duration_ms"] or 0.0),
+            model=r["model"],
+            provider=r["provider"],
+            input_tokens=int(r["input_tokens"] or 0) if r["input_tokens"] else None,
+            output_tokens=int(r["output_tokens"] or 0) if r["output_tokens"] else None,
+            cost_cents=int(round(float(r["cost_usd"] or 0.0) * 100)),
+            error=dict(r["error"]) if r["error"] else None,
+            streaming_metrics=None,
+            tags=list(r["tags"] or []),
+        )
+        for r in rows
+    ]
+    return TraceListResponse(traces=items, total=int(total or 0), limit=limit, offset=offset)
 
 
 @router.get("/traces/{trace_id}/tree", response_model=TraceTreeResponse)

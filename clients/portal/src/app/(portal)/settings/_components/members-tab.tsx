@@ -6,14 +6,14 @@
  */
 
 import { useEffect, useState } from "react";
-import { Loader2, Trash2, Users } from "lucide-react";
+import { Trash2, Users } from "lucide-react";
 import { usePermissions } from "@/hooks/use-permissions";
 import { useToast } from "@/components/ui/toast";
 import { useConfirm } from "@/hooks/use-confirm";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
-import { Skeleton } from "@/components/ui/skeleton";
 import { SettingsCard } from "@/components/settings/settings-card";
+import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
 import { InvitePanel } from "./invite-panel";
 
 interface MembersTabProps {
@@ -110,6 +110,60 @@ export function MembersTab({ org }: MembersTabProps) {
     );
   }
 
+  type Member = (typeof members)[number];
+  const columns: DataTableColumn<Member>[] = [
+    { key: "name", header: "Name", sortable: true, sticky: true, cell: (m) => <span className="font-medium">{m.name}</span> },
+    { key: "email", header: "Email", sortable: true },
+    {
+      key: "role",
+      header: "Role",
+      sortable: true,
+      cell: (m) => (
+        <span
+          className={cn(
+            "px-2 py-1 rounded-md text-sm font-medium",
+            m.role === "owner"
+              ? "bg-[var(--warning-bg)] text-[var(--warning)]"
+              : m.role === "admin"
+              ? "bg-[var(--accent-faint)] text-[var(--accent)]"
+              : "bg-[var(--bg-tertiary)] text-[var(--text-secondary)]",
+          )}
+        >
+          {m.role}
+        </span>
+      ),
+    },
+    {
+      key: "joined_at",
+      header: "Joined",
+      sortable: true,
+      cell: (m) => new Date(m.joined_at).toLocaleDateString(),
+      className: "text-[var(--text-muted)] text-sm",
+    },
+    {
+      key: "last_active_at",
+      header: "Last Active",
+      sortable: true,
+      cell: (m) => formatRelativeTime(m.last_active_at),
+      className: "text-[var(--text-muted)] text-sm",
+    },
+    {
+      key: "user_id",
+      header: "",
+      align: "right",
+      cell: (m) =>
+        m.role !== "owner" ? (
+          <button
+            onClick={() => handleRemove(m.user_id)}
+            className="p-2 text-[var(--error)] hover:bg-[var(--error-dim)] rounded-lg"
+            aria-label={`Remove ${m.name} from organization`}
+          >
+            <Trash2 className="w-4 h-4" />
+          </button>
+        ) : null,
+    },
+  ];
+
   return (
     <div className="space-y-4">
       {hasPermission("members:invite") && (
@@ -144,88 +198,21 @@ export function MembersTab({ org }: MembersTabProps) {
       )}
 
       <SettingsCard contentClassName="p-0">
-        <table className="w-full">
-          <thead className="bg-[var(--bg-tertiary)]">
-            <tr>
-              <th className="text-left px-4 py-3 text-sm font-medium text-[var(--text-secondary)] sticky left-0 bg-[var(--bg-tertiary)]">
-                Name
-              </th>
-              <th className="text-left px-4 py-3 text-sm font-medium text-[var(--text-secondary)]">
-                Email
-              </th>
-              <th className="text-left px-4 py-3 text-sm font-medium text-[var(--text-secondary)]">Role</th>
-              <th className="text-left px-4 py-3 text-sm font-medium text-[var(--text-secondary)]">Joined</th>
-              <th className="text-left px-4 py-3 text-sm font-medium text-[var(--text-secondary)]">Last Active</th>
-              <th aria-label="Actions" />
-            </tr>
-          </thead>
-          <tbody>
-            {loading ? (
-              Array.from({ length: 4 }).map((_, i) => (
-                <tr key={i} className="border-t border-[var(--border-default)]">
-                  <td className="px-4 py-3" colSpan={6}>
-                    <Skeleton className="h-4 w-full" />
-                  </td>
-                </tr>
-              ))
-            ) : members.length === 0 ? (
-              <tr>
-                <td colSpan={6} className="px-4 py-12 text-center">
-                  <Users className="w-8 h-8 mx-auto mb-2 text-[var(--text-muted)]" />
-                  <p className="text-sm text-[var(--text-secondary)]">No members yet</p>
-                  {hasPermission("members:invite") && (
-                    <p className="text-xs text-[var(--text-muted)] mt-1">
-                      Use the invite form above to add your team.
-                    </p>
-                  )}
-                </td>
-              </tr>
-            ) : (
-              members.map((member) => (
-                <tr
-                  key={member.user_id}
-                  className="border-t border-[var(--border-default)] hover:bg-[var(--bg-tertiary)]/30"
-                >
-                  <td className="px-4 py-3 text-[var(--text-primary)] sticky left-0 bg-[var(--bg-primary)]">
-                    {member.name}
-                  </td>
-                  <td className="px-4 py-3 text-[var(--text-secondary)]">{member.email}</td>
-                  <td className="px-4 py-3">
-                    <span
-                      className={cn(
-                        "px-2 py-1 rounded-md text-sm font-medium",
-                        member.role === "owner"
-                          ? "bg-[var(--warning-bg)] text-[var(--warning)]"
-                          : member.role === "admin"
-                          ? "bg-[var(--accent-faint)] text-[var(--accent)]"
-                          : "bg-[var(--bg-tertiary)] text-[var(--text-secondary)]"
-                      )}
-                    >
-                      {member.role}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3 text-[var(--text-muted)] text-sm">
-                    {new Date(member.joined_at).toLocaleDateString()}
-                  </td>
-                  <td className="px-4 py-3 text-[var(--text-muted)] text-sm">
-                    {formatRelativeTime(member.last_active_at)}
-                  </td>
-                  <td className="px-4 py-3">
-                    {member.role !== "owner" && (
-                      <button
-                        onClick={() => handleRemove(member.user_id)}
-                        className="p-2 text-[var(--error)] hover:bg-[var(--error-dim)] rounded-lg"
-                        aria-label={`Remove ${member.name} from organization`}
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    )}
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
+        <DataTable
+          columns={columns}
+          rows={members}
+          rowKey={(m) => m.user_id}
+          loading={loading}
+          defaultSort={{ key: "name", direction: "asc" }}
+          emptyTitle="No members yet"
+          emptyDescription={
+            hasPermission("members:invite")
+              ? "Use the invite form above to add your team."
+              : undefined
+          }
+          emptyIcon={Users}
+          pageSize={25}
+        />
       </SettingsCard>
 
       <InvitePanel orgId={org.id} canManage={hasPermission("members:invite")} />

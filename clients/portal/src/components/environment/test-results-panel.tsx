@@ -137,9 +137,9 @@ function ExploitFindings({ findings }: { findings: Array<{ probe: string; result
   }
 
   const severityColors: Record<string, string> = {
-    high: "bg-[var(--error-dim)] text-[var(--error)] border-red-300",
+    high: "bg-[var(--error-dim)] text-[var(--error)] border-[var(--error)]/30",
     medium: "bg-[var(--warning-bg)] text-[var(--warning)] border-[var(--warning)]",
-    low: "bg-[var(--warning-bg)] text-[var(--warning)] border-yellow-300",
+    low: "bg-[var(--warning-bg)] text-[var(--warning)] border-[var(--warning)]/30",
   };
 
   return (

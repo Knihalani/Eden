@@ -44,7 +44,12 @@ import logging
 import re
 from typing import Any
 
-from eden.code_change._common import _insert_row, _select_one
+from eden.code_change._common import (
+    _insert_row,
+    diff_files_changed,
+    diff_hunk_count,
+    diff_line_count,
+)
 from eden.optimization.model_router import ModelRouter, PipelineTask
 
 from ._common import _new_id, _not_implemented_envelope, _ok_envelope
@@ -126,14 +131,16 @@ def _extract_diff_from_response(content: str) -> str:
 
 
 def _estimate_diff_metrics(diff: str) -> dict[str, Any]:
-    """Return lines_changed + files_changed for the diff."""
+    """Return lines_changed + files_changed for the diff.
+
+    Reuses the compiled helpers in :mod:`eden.code_change._common`
+    rather than recompiling the same patterns inline.
+    """
     if not diff:
         return {"lines_changed": 0, "files_changed": 0, "files": []}
-    files = re.findall(r"^\+\+\+\s+\S+", diff, re.MULTILINE)
-    files = [f.replace("+++ b/", "").replace("+++ ", "") for f in files]
-    lines = re.findall(r"^[+-](?!\+\+)(?!--)", diff, re.MULTILINE)
+    files = [f.replace("+++ b/", "").replace("+++ ", "") for f in diff_files_changed(diff)]
     return {
-        "lines_changed": len(lines),
+        "lines_changed": diff_line_count(diff),
         "files_changed": len(set(files)),
         "files": sorted(set(files)),
     }
@@ -327,7 +334,7 @@ class PatchGenerator:
 
         patch_id = _new_id("patch")
         # Build a 1-paragraph description from the diff hunk count.
-        hunk_count = len(re.findall(r"^@@", diff, re.MULTILINE))
+        hunk_count = diff_hunk_count(diff)
         description = (
             f"Patch addresses {rca_id} in {repo_id}: "
             f"{metrics['files_changed']} files, "

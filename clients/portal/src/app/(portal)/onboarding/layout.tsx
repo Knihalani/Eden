@@ -39,21 +39,8 @@ const STEPS: WizardStep[] = [
     id: "install",
     slug: "/onboarding/install",
     label: "Install SDK",
-    optional: true,
-    render: () => null,
-  },
-  {
-    id: "connect",
-    slug: "/onboarding/connect",
-    label: "Connect GitHub",
-    optional: true,
-    render: () => null,
-  },
-  {
-    id: "wait",
-    slug: "/onboarding/wait",
-    label: "Open PR",
-    optional: true,
+    // Now NON-optional — this is the activation step (June 2026 cleanup).
+    // After install, users go straight to /onboarding/done.
     render: () => null,
   },
   {
@@ -64,13 +51,19 @@ const STEPS: WizardStep[] = [
   },
 ];
 
+// ponytail: removed the "connect" (GitHub PR flow) and "wait" (poll-for-PR)
+// steps from the wizard in June 2026. Theyre still reachable as deep links
+// (/agents/connect, /onboarding/wait) but no longer part of the default
+// happy path — the install step now leads directly to /onboarding/done,
+// which is the activation moment for most users.
+
 export default function OnboardingLayout({ children }: { children: React.ReactNode }) {
   return (
     <Wizard
       steps={STEPS}
       storageKey="eden:onboarding"
       completeSlug="/onboarding/done"
-      brand={{ logo: true, tagline: "setup" }}
+      brand={{ name: "Eden", tagline: "setup" }}
     >
       {children}
     </Wizard>

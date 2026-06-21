@@ -70,7 +70,7 @@ export function CodeHighlightBlock({
           customStyle={{
             margin: 0,
             padding: "1rem",
-            background: "#1e1e1e",
+            background: "var(--code-surface)",
             fontSize: "0.8125rem",
             lineHeight: "1.6",
           }}

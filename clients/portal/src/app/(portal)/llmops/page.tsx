@@ -5,9 +5,9 @@ import { useOrg } from "@/hooks/use-org";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { StatCard } from "@/components/ui/stat-card";
-import { EmptyState } from "@/components/ui/empty-state";
 import { NoOrgState } from "@/components/ui/no-org-state";
 import { PageHeader } from "@/components/layout/page-header";
+import { DataTable } from "@/components/ui/data-table";
 import {
   Cpu,
   Box,
@@ -729,42 +729,44 @@ function GatewayTab({ orgId }: { orgId: string }) {
       {/* Metrics */}
       <div className="bg-[var(--bg-primary)] rounded-xl border border-[var(--border-default)] p-6">
         <h3 className="text-sm font-semibold text-[var(--text-primary)] mb-4">Recent Metrics ({metrics.length})</h3>
-        {metrics.length > 0 ? (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-[var(--border-default)] text-[var(--text-muted)] text-xs uppercase">
-                  <th className="text-left py-2 px-3">Provider</th>
-                  <th className="text-left py-2 px-3">Model</th>
-                  <th className="text-right py-2 px-3">Latency</th>
-                  <th className="text-right py-2 px-3">Tokens</th>
-                  <th className="text-right py-2 px-3">Cost</th>
-                  <th className="text-center py-2 px-3">Cached</th>
-                </tr>
-              </thead>
-              <tbody>
-                {metrics.map((m: any, i: number) => (
-                  <tr key={i} className="border-b border-[var(--border-subtle)] hover:bg-[var(--bg-tertiary)]">
-                    <td className="py-2 px-3 text-[var(--text-primary)] capitalize">{m.provider || "-"}</td>
-                    <td className="py-2 px-3 text-[var(--text-secondary)]">{m.model || "-"}</td>
-                    <td className="py-2 px-3 text-right font-mono">{m.latency_ms}ms</td>
-                    <td className="py-2 px-3 text-right font-mono">{((m.input_tokens || 0) + (m.output_tokens || 0))}</td>
-                    <td className="py-2 px-3 text-right font-mono">${(m.cost_usd || 0).toFixed(4)}</td>
-                    <td className="py-2 px-3 text-center">
-                      {m.cached ? (
-                        <span className="text-xs px-2 py-0.5 rounded-full bg-[var(--terminal-dim)] text-[var(--terminal)]">Hit</span>
-                      ) : (
-                        <span className="text-xs text-[var(--text-muted)]">-</span>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        ) : (
-          <p className="text-sm text-[var(--text-muted)]">No metrics recorded yet</p>
-        )}
+        <DataTable
+          columns={[
+            { key: "provider", header: "Provider", cell: (m: any) => <span className="text-[var(--text-primary)] capitalize">{m.provider || "-"}</span> },
+            { key: "model", header: "Model", cell: (m: any) => <span className="text-[var(--text-secondary)]">{m.model || "-"}</span> },
+            { key: "latency_ms", header: "Latency", sortable: true, align: "right", cell: (m: any) => <span className="font-mono">{m.latency_ms}ms</span> },
+            {
+              key: "tokens",
+              header: "Tokens",
+              sortable: true,
+              align: "right",
+              cell: (m: any) => <span className="font-mono">{((m.input_tokens || 0) + (m.output_tokens || 0))}</span>,
+            },
+            {
+              key: "cost_usd",
+              header: "Cost",
+              sortable: true,
+              align: "right",
+              cell: (m: any) => <span className="font-mono">${(m.cost_usd || 0).toFixed(4)}</span>,
+            },
+            {
+              key: "cached",
+              header: "Cached",
+              align: "center",
+              cell: (m: any) =>
+                m.cached ? (
+                  <span className="text-xs px-2 py-0.5 rounded-full bg-[var(--terminal-dim)] text-[var(--terminal)]">Hit</span>
+                ) : (
+                  <span className="text-xs text-[var(--text-muted)]">-</span>
+                ),
+            },
+          ]}
+          rows={metrics}
+          rowKey={(_m, i) => String(i)}
+          defaultSort={{ key: "latency_ms", direction: "desc" }}
+          emptyTitle="No metrics recorded yet"
+          emptyDescription="Send traffic through the gateway to populate."
+          pageSize={25}
+        />
       </div>
     </div>
   );

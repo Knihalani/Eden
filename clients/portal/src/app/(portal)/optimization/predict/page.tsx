@@ -12,7 +12,7 @@ import { motion, AnimatePresence } from "framer-motion";
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
+import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
 import { EmptyState } from "@/components/ui/empty-state";
 import { StatCard } from "@/components/ui/stat-card";
 import { useOrg } from "@/hooks/use-org";
@@ -311,30 +311,16 @@ function CapacityTab() {
           <EmptyState icon={AlertTriangle} title="Could not load capacity" description={error} size="md" />
         ) : (
           <>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Scenario</TableHead>
-                  <TableHead className="text-right">GPU hours</TableHead>
-                  <TableHead className="text-right">Cost</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {Object.entries(scenarios).map(([name, s]) => (
-                  <TableRow key={name}>
-                    <TableCell className="font-medium text-[var(--text-primary)]">
-                      {name}
-                    </TableCell>
-                    <TableCell className="text-right text-[var(--text-primary)]">
-                      {formatNumber(s.gpu_hours)}
-                    </TableCell>
-                    <TableCell className="text-right text-[var(--text-primary)]">
-                      {formatCurrency(s.cost, { compact: true })}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+            <DataTable
+              columns={[
+                { key: "name", header: "Scenario", cell: (r) => <span className="font-medium text-[var(--text-primary)]">{r.name}</span> },
+                { key: "gpu_hours", header: "GPU hours", align: "right", cell: (r) => formatNumber(r.s.gpu_hours), sortable: true },
+                { key: "cost", header: "Cost", align: "right", cell: (r) => formatCurrency(r.s.cost, { compact: true }), sortable: true },
+              ]}
+              rows={Object.entries(scenarios).map(([name, s]) => ({ name, s }))}
+              rowKey={(r) => r.name}
+              emptyTitle="No capacity scenarios"
+            />
             {predictions.length > 0 && (
               <div>
                 <p className="mb-2 text-xs font-medium uppercase tracking-wide text-[var(--text-muted)]">
@@ -469,35 +455,37 @@ function DriftTab() {
           </CardDescription>
         </CardHeader>
         <CardContent className="px-0 pb-0">
-          {judgeDrift && judgeDrift.top_shifts.length > 0 ? (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Field</TableHead>
-                  <TableHead className="text-right">Δ</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {judgeDrift.top_shifts.map((s, i) => (
-                  <TableRow key={i}>
-                    <TableCell className="font-mono text-xs text-[var(--text-secondary)]">
-                      {String((s as { key?: string; field?: string }).key ?? (s as { field?: string }).field ?? `shift_${i}`)}
-                    </TableCell>
-                    <TableCell className="text-right text-[var(--text-primary)]">
-                      {formatNumber(
-                        ((s as { delta?: number; shift?: number; value?: number }).delta ??
-                          (s as { shift?: number }).shift ??
-                          (s as { value?: number }).value ??
-                          0) as number
-                      )}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          ) : (
-            <EmptyState icon={Sparkles} title="No top shifts" size="sm" />
-          )}
+          <DataTable
+            columns={[
+              {
+                key: "field",
+                header: "Field",
+                cell: (s) => (
+                  <span className="font-mono text-xs text-[var(--text-secondary)]">
+                    {String((s as { key?: string; field?: string }).key ?? (s as { field?: string }).field ?? "shift")}
+                  </span>
+                ),
+              },
+              {
+                key: "delta",
+                header: "Δ",
+                align: "right",
+                cell: (s) =>
+                  formatNumber(
+                    ((s as { delta?: number; shift?: number; value?: number }).delta ??
+                      (s as { shift?: number }).shift ??
+                      (s as { value?: number }).value ??
+                      0) as number
+                  ),
+                sortable: true,
+              },
+            ]}
+            rows={judgeDrift?.top_shifts ?? []}
+            rowKey={(_, i) => `shift_${i}`}
+            emptyIcon={Sparkles}
+            emptyTitle="No top shifts"
+            defaultSort={{ key: "delta", direction: "desc" }}
+          />
         </CardContent>
       </Card>
     </div>

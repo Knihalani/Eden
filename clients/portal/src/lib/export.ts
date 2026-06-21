@@ -94,7 +94,7 @@ export async function downloadPng(
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const mod: any = await (Function("m", "return import(m)") as any)("html-to-image");
     const dataUrl = await mod.toPng(element, {
-      backgroundColor: "#03060A",  // var(--bg-base)
+      backgroundColor: "#03060A",  // var(--bg-base — hardcoded: html-to-image can't read CSS vars
       pixelRatio: 2,
     });
     const a = document.createElement("a");

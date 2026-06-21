@@ -19,6 +19,7 @@ import {
   FileArchive,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
 
 // ────────────────────────────────────────────────────────────────────
 // Catalog (must match eden.api.routes.export_destinations.DATA_TYPES
@@ -65,8 +66,10 @@ interface ExportsTabProps {
 export function ExportsTab({ orgId, canManage }: ExportsTabProps) {
   const toast = useToast();
   const { confirm, ConfirmDialog } = useConfirm();
-  const [destinations, setDestinations] = useState<any[]>([]);
-  const [schedules, setSchedules] = useState<any[]>([]);
+  type Destination = Awaited<ReturnType<typeof api.listExportDestinations>>[number];
+  type Schedule = Awaited<ReturnType<typeof api.listExportSchedules>>[number];
+  const [destinations, setDestinations] = useState<Destination[]>([]);
+  const [schedules, setSchedules] = useState<Schedule[]>([]);
   const [loadingDest, setLoadingDest] = useState(true);
   const [loadingSched, setLoadingSched] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -141,6 +144,121 @@ export function ExportsTab({ orgId, canManage }: ExportsTabProps) {
       </div>
     );
   }
+
+  const destColumns: DataTableColumn<Destination>[] = [
+    { key: "name", header: "Name", sortable: true, cell: (d) => <span className="text-sm font-medium">{d.name}</span> },
+    {
+      key: "type",
+      header: "Type",
+      cell: (d) => <span className="px-2 py-0.5 bg-[var(--bg-tertiary)] rounded text-xs uppercase">{d.type}</span>,
+    },
+    {
+      key: "bucket",
+      header: "Bucket",
+      cell: (d) => <span className="text-sm font-mono text-[var(--text-muted)]">{String(d.config?.bucket || "—")}</span>,
+    },
+    {
+      key: "created_at",
+      header: "Created",
+      sortable: true,
+      cell: (d) => <span className="text-xs text-[var(--text-muted)]">{d.created_at ? new Date(d.created_at).toLocaleString() : "—"}</span>,
+    },
+    {
+      key: "destination_id",
+      header: "",
+      align: "right",
+      cell: (d) => (
+        <button
+          onClick={async () => {
+            const ok = await confirm({
+              title: `Delete destination "${d.name}"?`,
+              confirmLabel: "Delete",
+              variant: "destructive",
+            });
+            if (!ok) return;
+            try {
+              await api.deleteExportDestination(orgId, d.destination_id);
+              await loadAll();
+            } catch (err: unknown) {
+              toast.error(err instanceof Error ? err.message : "Failed to delete");
+            }
+          }}
+          className="p-1.5 text-[var(--error)] hover:bg-[var(--error-bg)] rounded"
+          title="Delete destination"
+          aria-label={`Delete destination ${d.name}`}
+        >
+          <Trash2 className="w-4 h-4" />
+        </button>
+      ),
+    },
+  ];
+
+  const schedColumns: DataTableColumn<Schedule>[] = [
+    {
+      key: "data_type",
+      header: "Data",
+      cell: (s) => {
+        const dest = destinations.find((d) => d.destination_id === s.destination_id);
+        return (
+          <>
+            <span className="px-2 py-0.5 bg-[var(--bg-tertiary)] rounded text-xs mr-1">{s.data_type}</span>
+            <span className="text-xs text-[var(--text-muted)]">→ {dest?.name || "download"}</span>
+          </>
+        );
+      },
+    },
+    { key: "format", header: "Format", cell: (s) => <span className="text-sm text-[var(--text-secondary)] uppercase">{s.format}</span> },
+    {
+      key: "cron_expression",
+      header: "Schedule",
+      cell: (s) => <span className="text-sm font-mono text-[var(--text-muted)]">{s.cron_expression || "one-shot"}</span>,
+    },
+    {
+      key: "last_run_at",
+      header: "Last run",
+      sortable: true,
+      cell: (s) => <span className="text-xs text-[var(--text-muted)]">{s.last_run_at ? new Date(s.last_run_at).toLocaleString() : "—"}</span>,
+    },
+    {
+      key: "schedule_id",
+      header: "",
+      align: "right",
+      cell: (s) => (
+        <div className="flex justify-end gap-1">
+          <button
+            onClick={() => handleRunNow(s.schedule_id)}
+            disabled={running === s.schedule_id}
+            className="p-1.5 text-[var(--accent)] hover:bg-[var(--bg-tertiary)] rounded disabled:opacity-50"
+            title="Run now"
+            aria-label="Run now"
+          >
+            {running === s.schedule_id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4" />}
+          </button>
+          <button
+            onClick={async () => {
+              const ok = await confirm({
+                title: "Delete this schedule?",
+                confirmLabel: "Delete",
+                variant: "destructive",
+              });
+              if (!ok) return;
+              try {
+                await api.deleteExportSchedule(orgId, s.schedule_id);
+                await loadAll();
+              } catch (err: unknown) {
+                toast.error(err instanceof Error ? err.message : "Failed to delete");
+              }
+            }}
+            className="p-1.5 text-[var(--error)] hover:bg-[var(--error-bg)] rounded"
+            title="Delete schedule"
+            aria-label="Delete schedule"
+          >
+            <Trash2 className="w-4 h-4" />
+          </button>
+        </div>
+      ),
+    },
+  ];
 
   return (
     <div className="space-y-6">
@@ -220,65 +338,16 @@ export function ExportsTab({ orgId, canManage }: ExportsTabProps) {
           </div>
         ) : (
           <div className="bg-[var(--bg-primary)] rounded-xl border border-[var(--border-default)] overflow-hidden">
-            <table className="w-full">
-              <thead className="bg-[var(--bg-tertiary)]">
-                <tr>
-                  <th className="text-left px-4 py-2 text-xs font-medium text-[var(--text-secondary)] uppercase tracking-wider">
-                    Name
-                  </th>
-                  <th className="text-left px-4 py-2 text-xs font-medium text-[var(--text-secondary)] uppercase tracking-wider">
-                    Type
-                  </th>
-                  <th className="text-left px-4 py-2 text-xs font-medium text-[var(--text-secondary)] uppercase tracking-wider">
-                    Bucket
-                  </th>
-                  <th className="text-left px-4 py-2 text-xs font-medium text-[var(--text-secondary)] uppercase tracking-wider">
-                    Created
-                  </th>
-                  <th />
-                </tr>
-              </thead>
-              <tbody>
-                {destinations.map((d) => (
-                  <tr key={d.destination_id} className="border-t border-[var(--border-default)]">
-                    <td className="px-4 py-2 text-sm font-medium">{d.name}</td>
-                    <td className="px-4 py-2 text-sm text-[var(--text-secondary)]">
-                      <span className="px-2 py-0.5 bg-[var(--bg-tertiary)] rounded text-xs uppercase">
-                        {d.type}
-                      </span>
-                    </td>
-                    <td className="px-4 py-2 text-sm font-mono text-[var(--text-muted)]">
-                      {String(d.config?.bucket || "—")}
-                    </td>
-                    <td className="px-4 py-2 text-xs text-[var(--text-muted)]">
-                      {d.created_at ? new Date(d.created_at).toLocaleString() : "—"}
-                    </td>
-                    <td className="px-4 py-2 text-right">
-                      <button
-                        onClick={async () => {
-                          const ok = await confirm({
-                            title: `Delete destination "${d.name}"?`,
-                            confirmLabel: "Delete",
-                            variant: "destructive",
-                          });
-                          if (!ok) return;
-                          try {
-                            await api.deleteExportDestination(orgId, d.destination_id);
-                            await loadAll();
-                          } catch (err: unknown) {
-                            toast.error(err instanceof Error ? err.message : "Failed to delete");
-                          }
-                        }}
-                        className="p-1.5 text-[var(--error)] hover:bg-[var(--error-bg)] rounded"
-                        title="Delete destination"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <DataTable
+              columns={destColumns}
+              rows={destinations}
+              rowKey={(d) => d.destination_id}
+              defaultSort={{ key: "name", direction: "asc" }}
+              emptyTitle="No destinations yet"
+              emptyDescription="Add an S3 or GCS bucket to start exporting."
+              emptyIcon={Cloud}
+              pageSize={25}
+            />
           </div>
         )}
       </section>
@@ -323,85 +392,16 @@ export function ExportsTab({ orgId, canManage }: ExportsTabProps) {
           </div>
         ) : (
           <div className="bg-[var(--bg-primary)] rounded-xl border border-[var(--border-default)] overflow-hidden">
-            <table className="w-full">
-              <thead className="bg-[var(--bg-tertiary)]">
-                <tr>
-                  <th className="text-left px-4 py-2 text-xs font-medium text-[var(--text-secondary)] uppercase tracking-wider">
-                    Data
-                  </th>
-                  <th className="text-left px-4 py-2 text-xs font-medium text-[var(--text-secondary)] uppercase tracking-wider">
-                    Format
-                  </th>
-                  <th className="text-left px-4 py-2 text-xs font-medium text-[var(--text-secondary)] uppercase tracking-wider">
-                    Schedule
-                  </th>
-                  <th className="text-left px-4 py-2 text-xs font-medium text-[var(--text-secondary)] uppercase tracking-wider">
-                    Last run
-                  </th>
-                  <th />
-                </tr>
-              </thead>
-              <tbody>
-                {schedules.map((s) => {
-                  const dest = destinations.find((d) => d.destination_id === s.destination_id);
-                  return (
-                    <tr key={s.schedule_id} className="border-t border-[var(--border-default)]">
-                      <td className="px-4 py-2 text-sm">
-                        <span className="px-2 py-0.5 bg-[var(--bg-tertiary)] rounded text-xs mr-1">
-                          {s.data_type}
-                        </span>
-                        <span className="text-xs text-[var(--text-muted)]">
-                          → {dest?.name || "download"}
-                        </span>
-                      </td>
-                      <td className="px-4 py-2 text-sm text-[var(--text-secondary)] uppercase">{s.format}</td>
-                      <td className="px-4 py-2 text-sm font-mono text-[var(--text-muted)]">
-                        {s.cron_expression || "one-shot"}
-                      </td>
-                      <td className="px-4 py-2 text-xs text-[var(--text-muted)]">
-                        {s.last_run_at ? new Date(s.last_run_at).toLocaleString() : "—"}
-                      </td>
-                      <td className="px-4 py-2 text-right">
-                        <div className="flex justify-end gap-1">
-                          <button
-                            onClick={() => handleRunNow(s.schedule_id)}
-                            disabled={running === s.schedule_id}
-                            className="p-1.5 text-[var(--accent)] hover:bg-[var(--bg-tertiary)] rounded disabled:opacity-50"
-                            title="Run now"
-                          >
-                            {running === s.schedule_id ? (
-                              <Loader2 className="w-4 h-4 animate-spin" />
-                            ) : (
-                              <Play className="w-4 h-4" />
-                            )}
-                          </button>
-                          <button
-                            onClick={async () => {
-                              const ok = await confirm({
-                                title: "Delete this schedule?",
-                                confirmLabel: "Delete",
-                                variant: "destructive",
-                              });
-                              if (!ok) return;
-                              try {
-                                await api.deleteExportSchedule(orgId, s.schedule_id);
-                                await loadAll();
-                              } catch (err: unknown) {
-                                toast.error(err instanceof Error ? err.message : "Failed to delete");
-                              }
-                            }}
-                            className="p-1.5 text-[var(--error)] hover:bg-[var(--error-bg)] rounded"
-                            title="Delete schedule"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+            <DataTable
+              columns={schedColumns}
+              rows={schedules}
+              rowKey={(s) => s.schedule_id}
+              defaultSort={{ key: "last_run_at", direction: "desc" }}
+              emptyTitle="No schedules yet"
+              emptyDescription="Recurring or one-shot, you decide."
+              emptyIcon={Calendar}
+              pageSize={25}
+            />
           </div>
         )}
       </section>

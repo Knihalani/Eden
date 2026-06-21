@@ -6,6 +6,7 @@ import { cn } from "@/lib/utils";
 import { EmptyState } from "@/components/ui/empty-state";
 import { NoOrgState } from "@/components/ui/no-org-state";
 import { PageHeader } from "@/components/layout/page-header";
+import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
 import {
   Wrench,
   GitCompare,
@@ -81,8 +82,6 @@ export default function ToolsPage() {
   const [tools, setTools] = useState<ToolAttribution[]>([]);
   const [attributionLoading, setAttributionLoading] = useState(false);
   const [attributionDays, setAttributionDays] = useState(30);
-  const [attributionSortKey, setAttributionSortKey] = useState<"call_count" | "success_rate" | "tool_name">("call_count");
-  const [attributionSortDir, setAttributionSortDir] = useState<"asc" | "desc">("desc");
 
   // Compare
   const [allToolNames, setAllToolNames] = useState<string[]>([]);
@@ -187,21 +186,6 @@ export default function ToolsPage() {
     );
   }
 
-  const sortedTools = [...tools].sort((a, b) => {
-    const dir = attributionSortDir === "asc" ? 1 : -1;
-    if (attributionSortKey === "tool_name") return a.tool_name.localeCompare(b.tool_name) * dir;
-    return (a[attributionSortKey] - b[attributionSortKey]) * dir;
-  });
-
-  function toggleSort(key: "call_count" | "success_rate" | "tool_name") {
-    if (attributionSortKey === key) {
-      setAttributionSortDir(attributionSortDir === "asc" ? "desc" : "asc");
-    } else {
-      setAttributionSortKey(key);
-      setAttributionSortDir("desc");
-    }
-  }
-
   return (
     <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-6">
       <PageHeader
@@ -253,13 +237,10 @@ export default function ToolsPage() {
         >
           {activeTab === "attribution" && (
             <AttributionTab
-              tools={sortedTools}
+              tools={tools}
               loading={attributionLoading}
               days={attributionDays}
               onDaysChange={setAttributionDays}
-              sortKey={attributionSortKey}
-              sortDir={attributionSortDir}
-              onToggleSort={toggleSort}
               onRefresh={loadAttribution}
             />
           )}
@@ -307,20 +288,32 @@ function AttributionTab({
   loading,
   days,
   onDaysChange,
-  sortKey,
-  sortDir,
-  onToggleSort,
   onRefresh,
 }: {
   tools: ToolAttribution[];
   loading: boolean;
   days: number;
   onDaysChange: (d: number) => void;
-  sortKey: "call_count" | "success_rate" | "tool_name";
-  sortDir: "asc" | "desc";
-  onToggleSort: (k: "call_count" | "success_rate" | "tool_name") => void;
   onRefresh: () => void;
 }) {
+  const columns: DataTableColumn<ToolAttribution>[] = [
+    { key: "tool_name", header: "Tool", sortable: true, cell: (r) => <span className="font-mono text-xs">{r.tool_name}</span> },
+    {
+      key: "call_count",
+      header: "Call Count",
+      sortable: true,
+      align: "right",
+      cell: (r) => <span className="tabular-nums">{r.call_count.toLocaleString()}</span>,
+    },
+    {
+      key: "success_rate",
+      header: "Success Rate",
+      sortable: true,
+      align: "right",
+      cell: (r) => <SuccessRateBadge rate={r.success_rate} />,
+    },
+  ];
+
   return (
     <div className="space-y-4">
       {/* Controls */}
@@ -344,103 +337,18 @@ function AttributionTab({
         </button>
       </div>
 
-      {loading && tools.length === 0 ? (
-        <div className="flex items-center justify-center py-20">
-          <Loader2 className="w-8 h-8 animate-spin text-[var(--accent)]" />
-        </div>
-      ) : tools.length === 0 ? (
-        <EmptyState
-          icon={Wrench}
-          title="No tool calls yet"
-          description="Tool attribution populates once your agents start invoking tools — check back after the first traces run."
-          size="lg"
-        />
-      ) : (
-        <div className="bg-[var(--bg-primary)] border border-[var(--border-default)] rounded-xl overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-[var(--border-default)] bg-[var(--bg-secondary)]">
-                  <SortableTh
-                    label="Tool"
-                    active={sortKey === "tool_name"}
-                    dir={sortDir}
-                    onClick={() => onToggleSort("tool_name")}
-                  />
-                  <SortableTh
-                    label="Call Count"
-                    active={sortKey === "call_count"}
-                    dir={sortDir}
-                    onClick={() => onToggleSort("call_count")}
-                    align="right"
-                  />
-                  <SortableTh
-                    label="Success Rate"
-                    active={sortKey === "success_rate"}
-                    dir={sortDir}
-                    onClick={() => onToggleSort("success_rate")}
-                    align="right"
-                  />
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-[var(--border-subtle)]">
-                {tools.map((tool) => (
-                  <tr key={tool.tool_name} className="hover:bg-[var(--bg-tertiary)]/50 transition-colors">
-                    <td className="px-4 py-3 font-mono text-xs text-[var(--text-primary)]">
-                      {tool.tool_name}
-                    </td>
-                    <td className="px-4 py-3 text-right text-[var(--text-secondary)] tabular-nums">
-                      {tool.call_count.toLocaleString()}
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      <SuccessRateBadge rate={tool.success_rate} />
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
+      <DataTable
+        columns={columns}
+        rows={tools}
+        rowKey={(r) => r.tool_name}
+        loading={loading && tools.length === 0}
+        defaultSort={{ key: "call_count", direction: "desc" }}
+        emptyTitle="No tool calls yet"
+        emptyDescription="Tool attribution populates once your agents start invoking tools — check back after the first traces run."
+        emptyIcon={Wrench}
+        pageSize={25}
+      />
     </div>
-  );
-}
-
-function SortableTh({
-  label,
-  active,
-  dir,
-  onClick,
-  align = "left",
-}: {
-  label: string;
-  active: boolean;
-  dir: "asc" | "desc";
-  onClick: () => void;
-  align?: "left" | "right";
-}) {
-  return (
-    <th
-      className={cn(
-        "px-4 py-3 text-xs font-medium text-[var(--text-muted)] uppercase tracking-wide",
-        align === "right" ? "text-right" : "text-left"
-      )}
-    >
-      <button
-        onClick={onClick}
-        className={cn(
-          "inline-flex items-center gap-1 hover:text-[var(--text-primary)] transition-colors",
-          align === "right" && "ml-auto"
-        )}
-      >
-        {label}
-        {active && (
-          <span className="text-[var(--accent)]">
-            {dir === "asc" ? "↑" : "↓"}
-          </span>
-        )}
-      </button>
-    </th>
   );
 }
 
@@ -581,54 +489,51 @@ function CompareTab({
       </div>
 
       {/* Results */}
-      {comparison && comparison.length > 0 && (
-        <motion.div
-          initial={{ opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="bg-[var(--bg-primary)] border border-[var(--border-default)] rounded-xl overflow-hidden"
-        >
-          <div className="p-4 border-b border-[var(--border-default)]">
-            <h3 className="text-sm font-semibold text-[var(--text-primary)]">Side-by-Side Metrics</h3>
-          </div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-[var(--border-default)] bg-[var(--bg-secondary)]">
-                  <th className="text-left px-4 py-3 text-xs font-medium text-[var(--text-muted)] uppercase tracking-wide">
-                    Metric
-                  </th>
-                  {comparison.map((c) => (
-                    <th
-                      key={c.tool_name}
-                      className="text-right px-4 py-3 text-xs font-medium text-[var(--accent)] uppercase tracking-wide font-mono"
-                    >
-                      {c.tool_name}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-[var(--border-subtle)]">
-                {metricKeys.map((key) => (
-                  <tr key={key} className="hover:bg-[var(--bg-tertiary)]/50 transition-colors">
-                    <td className="px-4 py-3 text-[var(--text-secondary)] font-mono text-xs">{key}</td>
-                    {comparison.map((c) => {
-                      const v = c.metrics[key];
-                      return (
-                        <td
-                          key={c.tool_name}
-                          className="px-4 py-3 text-right text-[var(--text-primary)] tabular-nums"
-                        >
-                          {typeof v === "number" ? v.toFixed(3) : String(v ?? "—")}
-                        </td>
-                      );
-                    })}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </motion.div>
-      )}
+      {comparison && comparison.length > 0 && (() => {
+        // Build a transposed row per metric key: { metric, [tool_name]: number }
+        const rows = metricKeys.map((key) => {
+          const row: Record<string, string | number> = { metric: key };
+          for (const c of comparison) {
+            const v = c.metrics[key];
+            row[c.tool_name] = typeof v === "number" ? Number(v.toFixed(3)) : (v ?? 0);
+          }
+          return row;
+        });
+        const columns: DataTableColumn<Record<string, string | number>>[] = [
+          {
+            key: "metric",
+            header: "Metric",
+            cell: (r) => <span className="font-mono text-xs text-[var(--text-secondary)]">{String(r.metric)}</span>,
+          },
+          ...comparison.map<DataTableColumn<Record<string, string | number>>>((c) => ({
+            key: c.tool_name,
+            header: c.tool_name,
+            align: "right",
+            headerClassName: "font-mono text-[var(--accent)]",
+            cell: (r) => {
+              const v = r[c.tool_name];
+              return <span className="tabular-nums">{typeof v === "number" ? v.toFixed(3) : String(v ?? "—")}</span>;
+            },
+          })),
+        ];
+        return (
+          <motion.div
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="bg-[var(--bg-primary)] border border-[var(--border-default)] rounded-xl overflow-hidden"
+          >
+            <div className="p-4 border-b border-[var(--border-default)]">
+              <h3 className="text-sm font-semibold text-[var(--text-primary)]">Side-by-Side Metrics</h3>
+            </div>
+            <DataTable
+              columns={columns}
+              rows={rows}
+              rowKey={(r) => String(r.metric)}
+              pageSize={100}
+            />
+          </motion.div>
+        );
+      })()}
 
       {comparison && comparison.length === 0 && (
         <EmptyState

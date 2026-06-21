@@ -7,7 +7,7 @@
 
 import { GitCompare, ChevronRight, Loader2 } from "lucide-react";
 import { motion } from "framer-motion";
-import { SeverityBadge } from "@/components/ui/severity-badge";
+import { SeverityBadge } from "@/components/ui/status-badge";
 import { cn } from "@/lib/utils";
 import type { ComparativeData } from "../_lib/types";
 

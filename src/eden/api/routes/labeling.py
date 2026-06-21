@@ -151,10 +151,13 @@ def _annotation_to_response(ann: Annotation) -> AnnotationResponse:
 
 
 def _user_skills(uid: str) -> list[str]:
-    """Default skills lookup. In production this reads from
-    the org_members table or a dedicated skills table. For
-    now we return an empty list (all annotators are generalists)."""
-    return []
+    """Default skills lookup. Reads from the org_members table
+    when a dedicated skills table is added; for now raises so
+    callers see a real 501 instead of a silent empty list
+    (which used to make every annotator look like a generalist)."""
+    raise NotImplementedError(
+        "skill lookup not yet implemented — pending skills table migration"
+    )
 
 
 # ── Routes ────────────────────────────────────────────────────────

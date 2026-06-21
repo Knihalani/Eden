@@ -55,53 +55,70 @@ async function fetchApi<T>(
     if (existing) return existing as Promise<T>;
   }
 
-  const promise = (async (): Promise<T> => {
-    // Build headers - don't set Content-Type for FormData (browser
-    // will set it with the multipart boundary).
-    const requestHeaders: HeadersInit = {
-      ...(typeof headers === "object" && headers !== null ? headers : {}),
-    };
-    if (!(body instanceof FormData) && !stream) {
-      (requestHeaders as Record<string, string>)["Content-Type"] = "application/json";
-    }
-
-    // AbortController for the timeout. SSE streams pass `stream: true`
-    // and skip the timeout entirely.
-    const controller = new AbortController();
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    if (!stream) {
-      timer = setTimeout(() => controller.abort(), DEFAULT_TIMEOUT_MS);
-    }
-
+  // One-shot 401 retry. Clerk rotates the session JWT on a
+  // background timer; a stale token from a long-lived tab can land
+  // a 401 even though the user is still signed in. On a 401 we ask
+  // Clerk to force-refresh, retry exactly once, and otherwise
+  // surface the original error.
+  const refreshClerkToken = async (): Promise<boolean> => {
     try {
-      const response = await fetch(`${API_BASE}${endpoint}`, {
-        credentials,
-        headers: requestHeaders,
-        body,
-        signal: controller.signal,
-        ...rest,
-      });
-
-      if (!response.ok) {
-        const error = await response.json().catch(() => ({ detail: "Request failed" }));
-        throw new Error(error.detail || `HTTP ${response.status}`);
-      }
-
-      // SSE streams don't return JSON.
-      if (stream || response.headers.get("content-type")?.includes("text/event-stream")) {
-        return (await response.text()) as unknown as T;
-      }
-
-      return response.json();
-    } catch (err) {
-      // Map AbortError to a clearer message.
-      if (err instanceof DOMException && err.name === "AbortError") {
-        throw new Error(`Request timed out after ${DEFAULT_TIMEOUT_MS}ms: ${endpoint}`);
-      }
-      throw err;
-    } finally {
-      if (timer) clearTimeout(timer);
+      // Dynamic import keeps Clerk out of the SSR bundle; the
+      // helper is only ever called in the browser.
+      const mod = await import("@clerk/nextjs");
+      const { getToken } = mod.useAuth();
+      if (!getToken) return false;
+      const fresh = await getToken({ skipCache: true });
+      return Boolean(fresh);
+    } catch {
+      return false;
     }
+  };
+
+  const promise = (async (): Promise<T> => {
+    const doFetch = async (): Promise<Response> => {
+      const requestHeaders: HeadersInit = {
+        ...(typeof headers === "object" && headers !== null ? headers : {}),
+      };
+      if (!(body instanceof FormData) && !stream) {
+        (requestHeaders as Record<string, string>)["Content-Type"] = "application/json";
+      }
+      const controller = new AbortController();
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      if (!stream) {
+        timer = setTimeout(() => controller.abort(), DEFAULT_TIMEOUT_MS);
+      }
+      try {
+        return await fetch(`${API_BASE}${endpoint}`, {
+          credentials,
+          headers: requestHeaders,
+          body,
+          signal: controller.signal,
+          ...rest,
+        });
+      } finally {
+        if (timer) clearTimeout(timer);
+      }
+    };
+
+    let response = await doFetch();
+
+    // 401 retry loop — at most one retry after a forced token refresh.
+    if (response.status === 401 && !stream) {
+      const refreshed = await refreshClerkToken();
+      if (refreshed) response = await doFetch();
+    }
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ detail: "Request failed" }));
+      throw new Error(error.detail || `HTTP ${response.status}`);
+    }
+
+    // SSE streams don't return JSON.
+    if (stream || response.headers.get("content-type")?.includes("text/event-stream")) {
+      return (await response.text()) as unknown as T;
+    }
+
+    return response.json();
   })();
 
   if (!noDedup && (method === "GET" || method === "HEAD" || method === "OPTIONS")) {
@@ -611,12 +628,6 @@ export const api = {
 
   listReferencePurposes: (orgId: string) =>
     fetchApi<string[]>(`/orgs/${orgId}/references/purposes`),
-
-  // Jobs — Phase 2: the env-gen pipeline was retired. The stand-alone
-  // exports at the bottom of this file (listJobs, getJob, getJobResult,
-  // submitJob, getJobStreamUrl) all reject with a clear deprecation
-  // message. The /jobs route on the server has been removed; the
-  // /v1/environments route is stubbed to 410.
 
   // API Keys
   createApiKey: (orgId: string, name: string, scopes: string[]) =>
@@ -1337,170 +1348,9 @@ export const api = {
       body: JSON.stringify({ command, payload }),
     }),
 
-  // ── Jobs list + trace delete ───────────────────────────────
-  // listJobs wires to the v1 environments listing endpoint. The
-  // shape mirrors what /replay expects (jobs[].job_id). The v1
-  // router returns PaginatedAPIEnvelope — we accept either shape
-  // and normalise.
-  listJobs: (params: { limit?: number; sort?: string; orgId?: string } = {}): Promise<{
-    jobs: Array<{
-      job_id: string;
-      status: string;
-      current_stage: string;
-      outcome_tier: string | null;
-      created_at: string;
-      updated_at: string;
-      started_at: string | null;
-      completed_at: string | null;
-      description?: string;
-      tags?: string[];
-    }>;
-    total: number;
-  }> => {
-    const qs = new URLSearchParams();
-    if (params.limit !== undefined) qs.set("limit", String(params.limit));
-    if (params.sort) qs.set("sort", params.sort);
-    return fetchApi<{
-      jobs: Array<{
-        job_id: string;
-        status: string;
-        current_stage?: string;
-        outcome_tier?: string | null;
-        created_at: string;
-        updated_at?: string;
-        started_at?: string | null;
-        completed_at?: string | null;
-        description?: string;
-        tags?: string[];
-      }>;
-      total: number;
-    }>(
-      `/v1/environments${qs.toString() ? `?${qs.toString()}` : ""}`,
-      params.orgId ? { headers: { "X-Org-Id": params.orgId } } : undefined,
-    ).then((resp) => ({
-      // Normalise the BE response to the shape the portal pages
-      // expect. v1/environments may not return current_stage /
-      // outcome_tier / updated_at, so fill in sensible defaults.
-      jobs: (resp.jobs ?? []).map((j) => ({
-        job_id: j.job_id,
-        status: j.status,
-        current_stage: j.current_stage ?? "unknown",
-        outcome_tier: j.outcome_tier ?? null,
-        created_at: j.created_at,
-        updated_at: j.updated_at ?? j.created_at,
-        started_at: j.started_at ?? null,
-        completed_at: j.completed_at ?? null,
-        description: j.description,
-        tags: j.tags,
-      })),
-      total: resp.total ?? (resp.jobs ?? []).length,
-    }))
-  },
-
   // DELETE /jobs/{job_id}/trace — see replay.py:119
   deleteTrace: (jobId: string): Promise<{ status: string }> =>
     fetchApi(`/jobs/${jobId}/trace`, { method: "DELETE" }),
-
-  // ── Env-gen v2 quick-create / interview / spec ─────────────
-  // These endpoints are NOT YET in the backend. They are typed
-  // correctly and resolve to a stable stub so the InterviewChat
-  // page renders without runtime exceptions. The redirect to
-  // /jobs/{job_id} after `submitJob` lands on a 404 page until
-  // the env-gen v2 submission route ships — owner: env-gen team.
-  submitInterviewTurn: (body: {
-    session_id?: string;
-    message: string;
-  }): Promise<{
-    session_id: string;
-    checklist_state: ChecklistState;
-    is_ready_for_spec: boolean;
-    is_complete: boolean;
-    readiness_score: number;
-    next_message: string;
-    assistant_message: string;
-    extracted_fields: string[];
-    suggested_topics?: string[];
-  }> => {
-    const session_id = body.session_id ?? `sess_${Date.now()}`;
-    const stubMessage =
-      "[STUB] The interview backend hasn't shipped yet. Your message is being captured locally — once the v2 quick-create endpoint lands, this turn will resume from here.";
-    return Promise.resolve({
-      session_id,
-      checklist_state: {
-        fields: {},
-        items: [
-          { key: "scope", label: "Scope defined", satisfied: false },
-          { key: "stack", label: "Stack chosen", satisfied: false },
-          { key: "difficulty", label: "Difficulty set", satisfied: false },
-        ],
-        coverage: 0,
-      },
-      is_ready_for_spec: false,
-      is_complete: false,
-      readiness_score: 0,
-      next_message: stubMessage,
-      assistant_message: stubMessage,
-      extracted_fields: [],
-    });
-  },
-
-  generateSpec: (sessionId: string): Promise<{
-    spec_id: string;
-    spec_data: GeneratedSpec;
-  }> =>
-    Promise.resolve({
-      spec_id: `spec_${Date.now()}`,
-      spec_data: {
-        name: "[STUB] Auto-generated environment",
-        description:
-          "Spec generation backend is not wired yet. This is a placeholder.",
-        tags: [],
-        difficulty: "medium",
-        environment: {},
-        metadata: {
-          generated_at: new Date().toISOString(),
-          session_id: sessionId,
-          stub: true,
-        },
-      },
-    }),
-
-  regenerateSpec: (sessionId: string): Promise<{
-    spec_id: string;
-    spec_data: GeneratedSpec;
-  }> =>
-    Promise.resolve({
-      spec_id: `spec_${Date.now()}`,
-      spec_data: {
-        name: "[STUB] Regenerated environment",
-        description: "Spec regeneration backend is not wired yet.",
-        tags: [],
-        difficulty: "medium",
-        environment: {},
-        metadata: {
-          generated_at: new Date().toISOString(),
-          session_id: sessionId,
-          regenerated: true,
-          stub: true,
-        },
-      },
-    }),
-
-  convertSpecToJob: (specId: string): Promise<{ job_id: string; status: string }> =>
-    Promise.resolve({
-      job_id: `pending_${Date.now()}`,
-      status: "pending_submission_route",
-    }),
-
-  submitJob: (body: {
-    description: string;
-    tags?: string[];
-    difficulty_parameters?: Record<string, unknown>;
-  }): Promise<{ job_id: string; status: string }> =>
-    Promise.resolve({
-      job_id: `pending_${Date.now()}`,
-      status: "pending_submission_route",
-    }),
 
   // ── Observability: retention policy (Phase 7.3b) ─────────────
   // The existing `getRetentionPolicy` / `updateRetentionPolicy`
@@ -1958,6 +1808,23 @@ export const api = {
         next_30d_cost_cents: number;
       };
     }>(`/orgs/${orgId}/optimization/overview?days=${days}`),
+
+  // ── Cost comparison (this month vs last month) ───────────────────
+  // Cat 23 audit (2026-06-21): the dashboard "last-month trend"
+  // tile used to render "—" forever because no endpoint existed.
+  // Returns { previous_month_cents, current_month_cents, delta_cents,
+  // delta_pct } — both cents fields can be null when Redis has no
+  // recorded spend for that month yet.
+  getCostComparison: (orgId: string) =>
+    fetchApi<{
+      org_id: string;
+      current_month: string;
+      previous_month: string;
+      current_month_cents: number | null;
+      previous_month_cents: number | null;
+      delta_cents: number | null;
+      delta_pct: number | null;
+    }>(`/orgs/${orgId}/cost/comparison`),
 
   // ── LLM Ops: model artifacts (Phase 7.1c) ──────────────────────
   listModelArtifacts: (
@@ -2577,35 +2444,10 @@ export const api = {
 };
 
 // Phase 2: the environment-generation pipeline (Planner→Critic→…→Archivist)
-// was retired. All job management surfaces (listJobs, getJob, submitJob,
-// getJobResult, getJobStreamUrl) are no longer wired to a live API. The
-// Eden Agent CLI's `/eden-sim` is the replacement for sim/test generation.
-// We keep the exports but make them throw a clear error so any remaining
-// reference (e.g. leftover code, browser console, test mocks) fails
-// loudly rather than silently.
-const ENV_GEN_RETIRED_MSG =
-  "The Eden environment-generation pipeline was retired in Phase 2. " +
-  "Use the Eden Agent CLI's `/eden-sim` command to generate " +
-  "simulations + test cases for your agent, grounded in observability.";
-
-export function listJobs(_params?: unknown): Promise<never> {
-  return Promise.reject(new Error(ENV_GEN_RETIRED_MSG));
-}
-export function getJob(_jobId: string): Promise<never> {
-  return Promise.reject(new Error(ENV_GEN_RETIRED_MSG));
-}
-export function getJobResult(_jobId: string): Promise<never> {
-  return Promise.reject(new Error(ENV_GEN_RETIRED_MSG));
-}
-export function submitJob(_data: unknown): Promise<never> {
-  return Promise.reject(new Error(ENV_GEN_RETIRED_MSG));
-}
-export function getJobStreamUrl(_jobId: string): string {
-  // Returning a syntactically valid URL keeps callers that just inspect
-  // the value (instead of fetching it) from crashing; the fetch itself
-  // will 404 since the route is removed.
-  return `${API_BASE}/jobs/_retired/stream`;
-}
+// was retired. The Eden Agent CLI's `/eden-sim` is the replacement for
+// sim/test generation. All env-gen surfaces (interview/spec/submit/listJobs
+// and the v1 environments endpoint) were removed in June 2026 cleanup; the
+// replay page reads from the observability trace stream.
 
 /**
  * Start a streaming AI Insights chat turn. Returns the raw ``fetch``
@@ -2781,8 +2623,6 @@ export const agentsApi = {
 // ── Agent PR-suggestion API (v1.7) ───────────────────────────────
 
 import type {
-  ChecklistState,
-  GeneratedSpec,
   PRSuggestionCreateResponse,
   PRSuggestionDetailResponse,
   PRSuggestionListResponse,
@@ -3649,3 +3489,236 @@ export const aiApi = {
 };
 
 (api as unknown as Record<string, unknown>).aiApi = aiApi;
+
+// ── Labeling (Phase D) ────────────────────────────────────────────────
+
+export interface LabelingItem {
+  id: string;
+  prompt: string;
+  context?: string;
+  tags: string[];
+  source: string;
+  created_at: string;
+  annotations_count: number;
+}
+
+export interface LabelingAnnotation {
+  id: string;
+  item_id: string;
+  label: string;
+  confidence: number;
+  notes?: string;
+  annotator_id: string;
+  created_at: string;
+}
+
+const labelingApi = {
+  listItems: (orgId: string) =>
+    fetchApi<{ items: LabelingItem[]; total: number }>(
+      `/orgs/${orgId}/labeling/items`,
+      { headers: { "X-Org-Id": orgId } },
+    ),
+  annotate: (orgId: string, body: { item_id: string; label: string; notes?: string }) =>
+    fetchApi<LabelingAnnotation>(`/orgs/${orgId}/labeling/items/annotate`, {
+      method: "POST",
+      headers: { "X-Org-Id": orgId, "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    }),
+  seedItem: (orgId: string, body: { prompt: string; tags?: string[] }) =>
+    fetchApi<LabelingItem>(`/orgs/${orgId}/labeling/items`, {
+      method: "POST",
+      headers: { "X-Org-Id": orgId, "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    }),
+};
+
+// ── Signals (Phase Q) ────────────────────────────────────────────────
+
+export interface Signal {
+  id: string;
+  name: string;
+  description: string;
+  natural_query: string;
+  compiled_sql?: string;
+  status: "draft" | "compiled" | "active" | "error";
+  last_compiled_at?: string;
+  created_at: string;
+}
+
+const signalsApi = {
+  list: (orgId: string) =>
+    fetchApi<{ signals: Signal[]; total: number }>(
+      `/orgs/${orgId}/signals`,
+      { headers: { "X-Org-Id": orgId } },
+    ),
+  create: (orgId: string, body: { name: string; description: string; natural_query: string }) =>
+    fetchApi<Signal>(`/orgs/${orgId}/signals`, {
+      method: "POST",
+      headers: { "X-Org-Id": orgId, "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    }),
+  compile: (orgId: string, signalId: string) =>
+    fetchApi<Signal>(`/orgs/${orgId}/signals/${signalId}/compile`, {
+      method: "POST",
+      headers: { "X-Org-Id": orgId },
+    }),
+};
+
+// ── Debugger (Phase P) ───────────────────────────────────────────────
+
+export interface Checkpoint {
+  id: string;
+  trace_id: string;
+  label: string;
+  step_index: number;
+  created_at: string;
+  payload_keys: string[];
+}
+
+const debuggerApi = {
+  listCheckpoints: (orgId: string, traceId?: string) =>
+    fetchApi<{ checkpoints: Checkpoint[]; total: number }>(
+      `/orgs/${orgId}/debugger/checkpoints${traceId ? `?trace_id=${traceId}` : ""}`,
+      { headers: { "X-Org-Id": orgId } },
+    ),
+  rewind: (orgId: string, checkpointId: string) =>
+    fetchApi<{ ok: boolean; replayed_to: string }>(
+      `/orgs/${orgId}/debugger/rewind/${checkpointId}`,
+      { method: "POST", headers: { "X-Org-Id": orgId } },
+    ),
+  rerun: (orgId: string, body: { trace_id: string; from_step?: number }) =>
+    fetchApi<{ trace_id: string; status: string }>(
+      `/orgs/${orgId}/debugger/rerun`,
+      { method: "POST", headers: { "X-Org-Id": orgId, "Content-Type": "application/json" },
+        body: JSON.stringify(body) },
+    ),
+};
+
+// ── QA Generator (Phase J — synthetic) ──────────────────────────────
+
+export interface QARun {
+  id: string;
+  status: "pending" | "running" | "completed" | "failed";
+  topic: string;
+  count: number;
+  created_at: string;
+  completed_at?: string;
+  sample?: { q: string; a: string }[];
+}
+
+const qaApi = {
+  listRuns: (orgId: string) =>
+    fetchApi<{ runs: QARun[]; total: number; detail?: string }>(
+      `/orgs/${orgId}/synthetic/runs`,
+      { headers: { "X-Org-Id": orgId } },
+    ),
+  generate: (orgId: string, body: { topic: string; count: number; model?: string }) =>
+    fetchApi<QARun>(`/orgs/${orgId}/synthetic/runs`, {
+      method: "POST",
+      headers: { "X-Org-Id": orgId, "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    }),
+};
+
+// ── Redteam (Phase L) ────────────────────────────────────────────────
+
+export interface RedteamFinding {
+  id: string;
+  probe: string;
+  prompt: string;
+  response: string;
+  severity: "low" | "medium" | "high" | "critical";
+  category: string;
+  created_at: string;
+}
+
+export interface RedteamScan {
+  id: string;
+  status: "queued" | "running" | "completed" | "failed";
+  probes: string[];
+  created_at: string;
+  completed_at?: string;
+  findings_count?: number;
+}
+
+const redteamApi = {
+  listFindings: (orgId: string) =>
+    fetchApi<{ findings: RedteamFinding[]; total: number }>(
+      `/orgs/${orgId}/redteam/findings`,
+      { headers: { "X-Org-Id": orgId } },
+    ),
+  listProbes: (orgId: string) =>
+    fetchApi<{ probes: { id: string; name: string; description: string }[] }>(
+      `/orgs/${orgId}/redteam/probes`,
+      { headers: { "X-Org-Id": orgId } },
+    ),
+  runScan: (orgId: string, body: { probe_ids: string[]; target_prompt: string }) =>
+    fetchApi<RedteamScan>(`/orgs/${orgId}/redteam/scans`, {
+      method: "POST",
+      headers: { "X-Org-Id": orgId, "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    }),
+};
+
+// ── Datasets (Phase S — spreadsheet) ─────────────────────────────────
+
+export interface DatasetColumn {
+  id: string;
+  name: string;
+  kind: "text" | "number" | "json" | "ai_fill";
+  description?: string;
+}
+
+export interface DatasetRow {
+  id: string;
+  values: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface Dataset {
+  id: string;
+  name: string;
+  description?: string;
+  row_count: number;
+  column_count: number;
+  created_at: string;
+}
+
+const datasetsApi = {
+  list: (orgId: string) =>
+    fetchApi<{ datasets: Dataset[]; total: number }>(
+      `/orgs/${orgId}/datasets`,
+      { headers: { "X-Org-Id": orgId } },
+    ),
+  get: (orgId: string, datasetId: string) =>
+    fetchApi<Dataset & { columns: DatasetColumn[]; rows: DatasetRow[] }>(
+      `/orgs/${orgId}/datasets/${datasetId}`,
+      { headers: { "X-Org-Id": orgId } },
+    ),
+  listRows: (orgId: string, datasetId: string) =>
+    fetchApi<{ rows: DatasetRow[]; total: number }>(
+      `/orgs/${orgId}/datasets/${datasetId}/rows`,
+      { headers: { "X-Org-Id": orgId } },
+    ),
+  addRow: (orgId: string, datasetId: string, values: Record<string, unknown>) =>
+    fetchApi<DatasetRow>(`/orgs/${orgId}/datasets/${datasetId}/rows`, {
+      method: "POST",
+      headers: { "X-Org-Id": orgId, "Content-Type": "application/json" },
+      body: JSON.stringify({ values }),
+    }),
+  generateColumn: (orgId: string, datasetId: string, body: { name: string; kind: "ai_fill"; description: string }) =>
+    fetchApi<DatasetColumn>(`/orgs/${orgId}/datasets/${datasetId}/columns/generate`, {
+      method: "POST",
+      headers: { "X-Org-Id": orgId, "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    }),
+};
+
+(api as unknown as Record<string, unknown>).labelingApi = labelingApi;
+(api as unknown as Record<string, unknown>).signalsApi = signalsApi;
+(api as unknown as Record<string, unknown>).debuggerApi = debuggerApi;
+(api as unknown as Record<string, unknown>).qaApi = qaApi;
+(api as unknown as Record<string, unknown>).redteamApi = redteamApi;
+(api as unknown as Record<string, unknown>).datasetsApi = datasetsApi;
+
+export { labelingApi, signalsApi, debuggerApi, qaApi, redteamApi, datasetsApi };

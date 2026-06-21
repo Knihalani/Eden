@@ -1,13 +1,13 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import dynamic from "next/dynamic";
 import { useOrganizationList } from "@clerk/nextjs";
 import { useOrg } from "@/hooks/use-org";
 import { useAuth } from "@/hooks/use-auth";
 import { usePermissions } from "@/hooks/use-permissions";
 import { api } from "@/lib/api";
-import { Loader2, Plus, Trash2, Building2, Users, Code, Copy, Check, Archive, RefreshCw, Key, FileText, Shield, CreditCard, KeyRound, Lock, BarChart2, Server, EyeOff, Database, Globe, FileArchive, Settings2, Bot } from "lucide-react";
+import { Loader2, Plus, Trash2, Building2, Users, Code, Copy, Check, Archive, RefreshCw, Key, FileText, Shield, ShieldCheck, CreditCard, KeyRound, Lock, BarChart2, Server, EyeOff, Database, Globe, FileArchive, Settings2, Bot } from "lucide-react";
 import { cn } from "@/lib/utils";
 import Link from "next/link";
 import { DeleteOrgDialog } from "./_components/delete-org-dialog";
@@ -79,108 +79,168 @@ import { OrgTab } from "./_components/org-tab";
 import { MembersTab } from "./_components/members-tab";
 import { ReferencesTab } from "./_components/references-tab";
 import { ApiKeysTab } from "./_components/api-keys-tab";
+import RolesTab from "./_components/roles-tab";
 
 import { useToast } from "@/components/ui/toast";
 import { useConfirm } from "@/hooks/use-confirm";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useSearchParams } from "next/navigation";
+import { useSearchParams, useRouter } from "next/navigation";
+import { SettingsSearch } from "@/components/settings/settings-search";
+import { SettingsCategoryGroup } from "@/components/settings/settings-category-group";
 
-type Tab = "org" | "members" | "references" | "api-keys" | "security" | "scim" | "sso" | "audit-log" | "analytics" | "billing" | "gateway" | "pii" | "retention" | "region" | "exports" | "sidebar" | "autonomous";
+type Tab = "org" | "members" | "references" | "api-keys" | "security" | "scim" | "sso" | "audit-log" | "analytics" | "billing" | "gateway" | "pii" | "retention" | "region" | "exports" | "sidebar" | "autonomous" | "roles";
 
-const TABS = [
-  { id: "org", label: "Organization", icon: Building2 },
-  { id: "members", label: "Members", icon: Users },
-  { id: "references", label: "Code References", icon: Code },
-  { id: "api-keys", label: "API Keys", icon: Key },
-  { id: "security", label: "Security", icon: Shield },
-  { id: "scim", label: "SCIM", icon: KeyRound },
-  { id: "sso", label: "SSO", icon: Lock },
-  { id: "gateway", label: "AI Gateway", icon: Server },
-  { id: "pii", label: "PII Policy", icon: EyeOff },
-  { id: "retention", label: "Retention", icon: Database },
-  { id: "region", label: "Region", icon: Globe },
-  { id: "exports", label: "Exports", icon: FileArchive },
-  { id: "audit-log", label: "Audit Log", icon: FileText },
-  { id: "analytics", label: "Analytics", icon: BarChart2 },
-  { id: "billing", label: "Billing", icon: CreditCard },
-  { id: "autonomous", label: "Autonomous", icon: Bot },
-  { id: "sidebar", label: "Sidebar", icon: Settings2 },
-] as const;
+type SettingsCategory = "Org" | "Members" | "Security" | "Compliance" | "Billing" | "Advanced";
+
+const TABS: ReadonlyArray<{ id: Tab; label: string; icon: typeof Building2; category: SettingsCategory }> = [
+  { id: "org", label: "Organization", icon: Building2, category: "Org" },
+  { id: "members", label: "Members", icon: Users, category: "Members" },
+  { id: "roles", label: "Custom Roles", icon: ShieldCheck, category: "Members" },
+  { id: "references", label: "Code References", icon: Code, category: "Members" },
+  { id: "api-keys", label: "API Keys", icon: Key, category: "Security" },
+  { id: "security", label: "Security", icon: Shield, category: "Security" },
+  { id: "scim", label: "SCIM", icon: KeyRound, category: "Security" },
+  { id: "sso", label: "SSO", icon: Lock, category: "Security" },
+  { id: "gateway", label: "AI Gateway", icon: Server, category: "Compliance" },
+  { id: "pii", label: "PII Policy", icon: EyeOff, category: "Compliance" },
+  { id: "retention", label: "Retention", icon: Database, category: "Compliance" },
+  { id: "region", label: "Region", icon: Globe, category: "Compliance" },
+  { id: "exports", label: "Exports", icon: FileArchive, category: "Compliance" },
+  { id: "audit-log", label: "Audit Log", icon: FileText, category: "Compliance" },
+  { id: "analytics", label: "Analytics", icon: BarChart2, category: "Advanced" },
+  { id: "billing", label: "Billing", icon: CreditCard, category: "Billing" },
+  { id: "autonomous", label: "Autonomous", icon: Bot, category: "Advanced" },
+  { id: "sidebar", label: "Sidebar", icon: Settings2, category: "Advanced" },
+];
+
+// Order categories for the rail. The order is fixed — Org first
+// (most used), Billing last (least used).
+const CATEGORY_ORDER: SettingsCategory[] = ["Org", "Members", "Security", "Compliance", "Billing", "Advanced"];
 
 export default function SettingsPage() {
   const { user } = useAuth();
   const { currentOrg, organizations, setCurrentOrg, refreshOrgs } = useOrg();
   const { setActive: setActiveOrg } = useOrganizationList();
+  const router = useRouter();
   const searchParams = useSearchParams();
   const initialTab = (searchParams.get("tab") as Tab) || "org";
   const [activeTab, setActiveTab] = useState<Tab>(
     TABS.some((t) => t.id === initialTab) ? initialTab : "org"
   );
-  const [indicatorStyle, setIndicatorStyle] = useState<React.CSSProperties>({});
-  const navRef = useRef<HTMLDivElement>(null);
+  const [searchQuery, setSearchQuery] = useState("");
 
-  // Update sliding indicator position
+  // Keep the URL in sync with the active tab so deep links work and
+  // refreshes don't drop the user back to the first tab. We split the
+  // effect: this one handles URL → state, the one below handles
+  // state → URL (handleTabChange) — both are explicit about deps.
   useEffect(() => {
-    const updateIndicator = () => {
-      const nav = navRef.current;
-      if (!nav) return;
-      const activeButton = nav.querySelector(`[data-tab-id="${activeTab}"]`) as HTMLButtonElement;
-      if (!activeButton) return;
-      const navRect = nav.getBoundingClientRect();
-      const buttonRect = activeButton.getBoundingClientRect();
-      const top = buttonRect.top - navRect.top + 4; // 4px padding adjustment
-      const height = buttonRect.height - 8; // 8px total padding adjustment
-      setIndicatorStyle({
-        transform: `translateY(${top}px)`,
-        height: `${height}px`,
-        width: 'calc(100% - var(--space-4))',
-        left: 'var(--space-2)',
-      });
-    };
-
-    updateIndicator();
-    // Use ResizeObserver to handle responsive layout changes
-    const resizeObserver = new ResizeObserver(updateIndicator);
-    if (navRef.current) {
-      resizeObserver.observe(navRef.current);
+    const urlTab = searchParams.get("tab");
+    if (urlTab && urlTab !== activeTab && TABS.some((t) => t.id === urlTab)) {
+      setActiveTab(urlTab as Tab);
     }
-    return () => resizeObserver.disconnect();
-  }, [activeTab]);
+  }, [searchParams, activeTab]);
+
+  const handleTabChange = (tabId: string) => {
+    setActiveTab(tabId as Tab);
+    const params = new URLSearchParams(window.location.search);
+    params.set("tab", tabId);
+    router.replace(`/settings?${params.toString()}`, { scroll: false });
+  };
+
+  // Filter tabs by search query. Substring match on label (case
+  // insensitive). When a query is set, hide empty category groups
+  // so the rail doesn't render blanks.
+  const normalisedQuery = searchQuery.trim().toLowerCase();
+  const visibleTabs = normalisedQuery
+    ? TABS.filter((t) => t.label.toLowerCase().includes(normalisedQuery))
+    : TABS;
+  const tabsByCategory: Record<SettingsCategory, typeof TABS[number][]> = {
+    Org: [],
+    Members: [],
+    Security: [],
+    Compliance: [],
+    Billing: [],
+    Advanced: [],
+  };
+  for (const tab of visibleTabs) tabsByCategory[tab.category].push(tab);
+  const visibleCategories = CATEGORY_ORDER.filter(
+    (cat) => tabsByCategory[cat].length > 0
+  );
+
+  // Cmd/Ctrl+1..6 jumps to the first tab in each visible category.
+  // Only fires when no input is focused (otherwise typing "1" in
+  // a search box would jump tabs).
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (!(e.metaKey || e.ctrlKey)) return;
+      const target = e.target as HTMLElement | null;
+      if (
+        target?.tagName === "INPUT" ||
+        target?.tagName === "TEXTAREA" ||
+        target?.isContentEditable
+      ) {
+        return;
+      }
+      const idx = Number(e.key) - 1;
+      if (idx >= 0 && idx < visibleCategories.length) {
+        const cat = visibleCategories[idx];
+        const first = tabsByCategory[cat]?.[0];
+        if (first) {
+          e.preventDefault();
+          handleTabChange(first.id);
+        }
+      }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visibleCategories.length]);
 
   if (!user) return null;
 
   return (
     <div className="flex flex-col lg:flex-row h-[calc(100vh-4rem)]">
       {/* Tab rail: horizontal scroll on mobile, vertical on lg */}
-      <div className="w-full lg:w-[200px] flex-shrink-0 bg-[var(--bg-primary)] border-b lg:border-b-0 lg:border-r border-[var(--border-default)]">
-        <div className="p-3 lg:p-4">
-          <h2 className="text-sm font-semibold text-[var(--text-primary)] mb-2 lg:mb-4 px-2">Settings</h2>
-          <nav ref={navRef} className="flex flex-row lg:flex-col gap-1 overflow-x-auto lg:overflow-visible pb-1 lg:pb-0 -mx-1 px-1 lg:mx-0 lg:px-0 relative" role="tablist" aria-label="Settings sections">
-            {/* Sliding frosted glass indicator */}
-            <div
-              className="absolute hidden lg:block rounded-lg border border-[var(--indicator-border)] bg-[var(--indicator-bg)] backdrop-blur-[var(--indicator-blur)] pointer-events-none transition-all duration-300 ease-out z-0"
-              style={indicatorStyle}
-              aria-hidden="true"
-            />
-            {TABS.map((tab) => (
-              <button
-                key={tab.id}
-                type="button"
-                role="tab"
-                data-tab-id={tab.id}
-                aria-selected={activeTab === tab.id}
-                id={`settings-tab-${tab.id}`}
-                onClick={() => setActiveTab(tab.id as Tab)}
-                className={cn(
-                  "flex-shrink-0 lg:w-full px-3 py-2 rounded-lg text-sm font-medium flex items-center gap-2 lg:gap-3 transition-colors whitespace-nowrap relative z-10",
-                  activeTab === tab.id
-                    ? "text-[var(--accent)]"
-                    : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
-                )}
+      <div className="w-full lg:w-[240px] flex-shrink-0 bg-[var(--bg-primary)] border-b lg:border-b-0 lg:border-r border-[var(--border-default)]">
+        <div className="p-3 lg:p-4 space-y-3">
+          <h2 className="text-sm font-semibold text-[var(--text-primary)] px-2">Settings</h2>
+          <SettingsSearch
+            value={searchQuery}
+            onChange={setSearchQuery}
+            totalLabel={
+              normalisedQuery
+                ? `Showing ${visibleTabs.length} of ${TABS.length} settings`
+                : undefined
+            }
+          />
+          <nav className="flex flex-row lg:flex-col gap-3 overflow-x-auto lg:overflow-visible pb-1 lg:pb-0 -mx-1 px-1 lg:mx-0 lg:px-0" role="tablist" aria-label="Settings sections">
+            {visibleCategories.map((category) => (
+              <SettingsCategoryGroup
+                key={category}
+                category={category}
+                count={tabsByCategory[category].length}
               >
-                <tab.icon className="w-4 h-4 flex-shrink-0" aria-hidden />
-                <span>{tab.label}</span>
-              </button>
+                {tabsByCategory[category].map((tab) => (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    role="tab"
+                    data-tab-id={tab.id}
+                    aria-selected={activeTab === tab.id}
+                    id={`settings-tab-${tab.id}`}
+                    onClick={() => handleTabChange(tab.id)}
+                    className={cn(
+                      "flex-shrink-0 lg:w-full px-3 py-2 rounded-lg text-sm font-medium flex items-center gap-2 lg:gap-3 transition-colors whitespace-nowrap",
+                      activeTab === tab.id
+                        ? "bg-[var(--accent-faint)] text-[var(--accent)] lg:border-l-2 lg:border-[var(--accent)]"
+                        : "text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)]"
+                    )}
+                  >
+                    <tab.icon className="w-4 h-4 flex-shrink-0" aria-hidden />
+                    <span>{tab.label}</span>
+                  </button>
+                ))}
+              </SettingsCategoryGroup>
             ))}
           </nav>
         </div>
@@ -188,7 +248,7 @@ export default function SettingsPage() {
 
       {/* Main Content */}
       <div className="flex-1 overflow-auto min-h-0">
-        <div className="p-4 sm:p-6 max-w-4xl mx-auto">
+        <div className="p-4 sm:p-6 lg:p-8 max-w-4xl mx-auto">
           {/* Org Switcher */}
           {organizations.length > 0 && (
             <div className="mb-6 p-4 bg-[var(--bg-primary)] rounded-xl border border-[var(--border-default)]">
@@ -233,6 +293,7 @@ export default function SettingsPage() {
           <div className="page-enter" role="tabpanel" aria-labelledby={`settings-tab-${activeTab}`}>
             {activeTab === "org" && <OrgTab org={currentOrg} />}
             {activeTab === "members" && <MembersTab org={currentOrg} />}
+            {activeTab === "roles" && <RolesTab />}
             {activeTab === "references" && <ReferencesTab org={currentOrg} />}
             {activeTab === "api-keys" && <ApiKeysTab org={currentOrg} />}
             {activeTab === "security" && <SecurityTab />}

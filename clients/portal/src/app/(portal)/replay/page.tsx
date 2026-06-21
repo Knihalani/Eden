@@ -48,6 +48,18 @@ interface JobItem {
   updated_at: string;
 }
 
+// Lightweight view-model for the replay-page trace picker.
+// We synthesize it from the observability trace stream (the
+// retired env-gen `listJobs` was removed in June 2026).
+interface TracePickerItem {
+  job_id: string;
+  status: string;
+  current_stage: string;
+  outcome_tier: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 interface TraceEventItem {
   event_id: string;
   event_type: string;
@@ -119,7 +131,7 @@ export default function ReplayPage() {
   // user lands directly on the right trace + can jump into HILT
   // control without re-selecting from the dropdown.
   const deepLinkJobId = searchParams.get("job_id") ?? searchParams.get("trace_id") ?? "";
-  const [jobs, setJobs] = useState<JobItem[]>([]);
+  const [traces, setTraces] = useState<TracePickerItem[]>([]);
   const [selectedJobId, setSelectedJobId] = useState<string>(deepLinkJobId);
   const [loadingJobs, setLoadingJobs] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -141,21 +153,35 @@ export default function ReplayPage() {
 
   const eventListRef = useRef<HTMLDivElement>(null);
 
-  // Fetch jobs list
+  // Fetch trace list (was the retired env-gen listJobs; replaced
+  // with the live observability trace stream in June 2026).
   const fetchJobs = useCallback(async () => {
+    if (!currentOrg?.id) {
+      setLoadingJobs(false);
+      return;
+    }
     setLoadingJobs(true);
     try {
-      const data = await api.listJobs({ limit: 100, sort: "-created_at" });
-      setJobs(data.jobs);
-      if (data.jobs.length > 0 && !selectedJobId) {
-        setSelectedJobId(data.jobs[0].job_id);
+      const data = await api.listObservabilityTraces(currentOrg.id, { limit: 100, days: 7 });
+      setTraces(
+        data.traces.map((t) => ({
+          job_id: t.trace_id,
+          status: t.outcome ?? "unknown",
+          current_stage: t.realm ?? "",
+          outcome_tier: null,
+          created_at: t.started_at ?? new Date().toISOString(),
+          updated_at: t.started_at ?? new Date().toISOString(),
+        }))
+      );
+      if (data.traces.length > 0 && !selectedJobId) {
+        setSelectedJobId(data.traces[0].trace_id);
       }
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to load jobs");
+      setError(e instanceof Error ? e.message : "Failed to load traces");
     } finally {
       setLoadingJobs(false);
     }
-  }, [selectedJobId]);
+  }, [currentOrg?.id, selectedJobId]);
 
   useEffect(() => {
     fetchJobs();
@@ -241,7 +267,7 @@ export default function ReplayPage() {
     }
   };
 
-  const selectedJob = jobs.find((j) => j.job_id === selectedJobId);
+  const selectedJob = traces.find((j) => j.job_id === selectedJobId);
 
   // Event type distribution for timeline
   const typeDistribution = traceEvents.reduce((acc, e) => {
@@ -270,11 +296,11 @@ export default function ReplayPage() {
               className="w-full pl-8 pr-3 py-2 text-sm bg-[var(--bg-primary)] border border-[var(--border-default)] rounded-lg text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--accent)]/30 focus:border-[var(--accent)] appearance-none cursor-pointer"
             >
               {loadingJobs ? (
-                <option>Loading jobs...</option>
-              ) : jobs.length === 0 ? (
-                <option>No jobs found</option>
+                <option>Loading traces...</option>
+              ) : traces.length === 0 ? (
+                <option>No traces found</option>
               ) : (
-                jobs.map((job) => (
+                traces.map((job) => (
                   <option key={job.job_id} value={job.job_id}>
                     {job.job_id.slice(0, 12)}… — {job.status} — {job.current_stage}
                   </option>

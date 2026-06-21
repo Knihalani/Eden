@@ -13,12 +13,12 @@ interface LogoProps {
   priority?: boolean;
 }
 
-const SIZES: Record<NonNullable<LogoProps["size"]>, { box: string; text: string; gap: string }> = {
-  xs: { box: "h-6 w-6",   text: "text-sm",   gap: "gap-1.5" },
-  sm: { box: "h-7 w-7",   text: "text-base", gap: "gap-2"   },
-  md: { box: "h-8 w-8",   text: "text-lg",   gap: "gap-2.5" },
-  lg: { box: "h-10 w-10", text: "text-xl",   gap: "gap-3"   },
-  xl: { box: "h-12 w-12", text: "text-2xl",  gap: "gap-3.5" },
+const SIZES: Record<NonNullable<LogoProps["size"]>, { box: string; px: number; text: string; gap: string }> = {
+  xs: { box: "h-6 w-6",   px: 24, text: "text-sm",   gap: "gap-1.5" },
+  sm: { box: "h-7 w-7",   px: 32, text: "text-base", gap: "gap-2"   },
+  md: { box: "h-8 w-8",   px: 48, text: "text-lg",   gap: "gap-2.5" },
+  lg: { box: "h-10 w-10", px: 64, text: "text-xl",   gap: "gap-3"   },
+  xl: { box: "h-12 w-12", px: 96, text: "text-2xl",  gap: "gap-3.5" },
 };
 
 export function Logo({
@@ -33,10 +33,10 @@ export function Logo({
   const inner = (
     <span className={cn("flex items-center", s.gap, className)}>
       <Image
-        src="/logo.svg"
+        src="/logo.png"
         alt={alt}
-        width={48}
-        height={48}
+        width={s.px}
+        height={s.px}
         priority={priority}
         className={cn(s.box, "shrink-0")}
       />

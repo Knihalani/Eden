@@ -16,6 +16,7 @@ from eden.api.deps import (
     require_org_member,
     require_org_owner,
     require_org_permission,
+    require_org_permission_dep,
 )
 from eden.api.routes.billing import check_limit
 from eden.config import get_settings
@@ -335,9 +336,9 @@ async def send_invite(
     email: str,
     role: str = "member",
     user: dict = Depends(get_current_user),
+        _check_members_invite: dict = Depends(require_org_permission_dep('members:invite')),
 ):
     """Send an email invitation to a user to join the organization."""
-    await require_org_permission("members:invite", org_id)
 
     # Check seat limit before inviting
     if await check_limit(org_id, "seats"):
@@ -414,9 +415,9 @@ async def send_invite(
 async def list_invitations(
     org_id: str,
     user: dict = Depends(get_current_user),
+        _check_members_invite: dict = Depends(require_org_permission_dep('members:invite')),
 ):
     """List all pending invitations for an organization."""
-    await require_org_permission("members:invite", org_id)
 
     invitations = await get_pending_invitations(org_id)
     return invitations
@@ -504,9 +505,9 @@ async def remove_member(
     org_id: str,
     user_id: str,
     user: dict = Depends(get_current_user),
+        _check_members_remove: dict = Depends(require_org_permission_dep('members:remove')),
 ):
     """Remove a member from the organization."""
-    org = await require_org_permission("members:remove", org_id)
 
     client = await get_postgres_client()
 
@@ -580,9 +581,9 @@ async def update_org_settings(
     org_id: str,
     settings: dict,
     user: dict = Depends(get_current_user),
+        _check_settings_edit: dict = Depends(require_org_permission_dep('settings:edit')),
 ):
     """Update organization settings (admin only)."""
-    await require_org_permission("settings:edit", org_id, authorization=None)
 
     client = await get_postgres_client()
 
@@ -613,9 +614,10 @@ async def update_org_settings(
 
 
 @router.post("/{org_id}/archive", response_model=dict)
-async def archive_org(org_id: str, user: dict = Depends(get_current_user)):
+async def archive_org(org_id: str, user: dict = Depends(get_current_user),
+        _check_settings_edit: dict = Depends(require_org_permission_dep('settings:edit')),
+):
     """Archive an organization (soft-delete). Admin or owner only."""
-    await require_org_permission("settings:edit", org_id)
 
     client = await get_postgres_client()
 
@@ -703,12 +705,12 @@ async def transfer_ownership(
     org_id: str,
     target_user_id: str,
     user: dict = Depends(get_current_user),
+        _check_org_transfer: dict = Depends(require_org_permission_dep('org:transfer')),
 ):
     """Transfer organization ownership to another member.
 
     The current owner becomes an admin after the transfer.
     """
-    await require_org_permission("org:transfer", org_id)
 
     client = await get_postgres_client()
     current_user_id = user["user_id"]

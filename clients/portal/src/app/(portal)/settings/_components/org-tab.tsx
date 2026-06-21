@@ -17,6 +17,8 @@ import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { SettingsCard } from "@/components/settings/settings-card";
 import { DangerZone } from "@/components/settings/danger-zone";
+import { EmptyState } from "@/components/ui/empty-state";
+import { Button } from "@/components/ui/button";
 import { DeleteOrgDialog } from "./delete-org-dialog";
 import { TransferOwnershipDialog } from "./transfer-ownership-dialog";
 import { DataExportPanel } from "./data-export-panel";
@@ -88,17 +90,17 @@ export function OrgTab({ org }: OrgTabProps) {
 
   if (!org && !showCreate) {
     return (
-      <div className="text-center py-12">
-        <Building2 className="w-12 h-12 text-[var(--text-muted)] mx-auto mb-4" />
-        <p className="text-[var(--text-secondary)] mb-4">No organization yet</p>
-        <button
-          onClick={() => setShowCreate(true)}
-          className="px-4 py-2 bg-[var(--accent)] text-[var(--accent-foreground)] rounded-lg text-sm font-medium hover:opacity-90 transition-opacity flex items-center gap-2 mx-auto"
-        >
-          <Plus className="w-4 h-4" />
-          Create Organization
-        </button>
-      </div>
+      <EmptyState
+        icon={Building2}
+        title="No organization yet"
+        description="Create an organization to start managing members, keys, and settings."
+        action={
+          <Button onClick={() => setShowCreate(true)}>
+            <Plus className="w-4 h-4" />
+            Create Organization
+          </Button>
+        }
+      />
     );
   }
 

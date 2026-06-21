@@ -6,7 +6,7 @@ import { motion, AnimatePresence } from "framer-motion";
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
+import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
 import { EmptyState } from "@/components/ui/empty-state";
 import { StatCard } from "@/components/ui/stat-card";
 import { useOrg } from "@/hooks/use-org";
@@ -91,6 +91,36 @@ function DepartmentsTab() {
     );
   }
 
+  const columns: DataTableColumn<typeof departments[number]>[] = [
+    { key: "department", header: "Department", cell: (d) => <span className="font-medium text-[var(--text-primary)]">{d.department}</span>, sortable: true },
+    { key: "total_cost", header: "Cost", align: "right", cell: (d) => formatCurrency(d.total_cost, { compact: true }), sortable: true },
+    { key: "total_revenue", header: "Revenue", align: "right", cell: (d) => formatCurrency(d.total_revenue, { compact: true }), sortable: true },
+    {
+      key: "roi",
+      header: "ROI",
+      align: "right",
+      cell: (d) => (
+        <span className={cn("inline-flex rounded-full px-2 py-0.5 text-xs font-medium", roiColor(d.roi))}>
+          {d.roi.toFixed(2)}
+        </span>
+      ),
+      sortable: true,
+    },
+    { key: "trace_count", header: "Traces", align: "right", cell: (d) => d.trace_count.toLocaleString(), sortable: true },
+    {
+      key: "anomaly",
+      header: "Anomaly",
+      cell: (d) =>
+        d.anomaly ? (
+          <span className="inline-flex items-center gap-1 rounded-full bg-[var(--error-bg)] px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-[var(--error)]">
+            <AlertTriangle className="h-3 w-3" /> {d.anomaly}
+          </span>
+        ) : (
+          <span className="text-[var(--text-muted)]">—</span>
+        ),
+    },
+  ];
+
   return (
     <Card>
       <CardHeader>
@@ -98,55 +128,15 @@ function DepartmentsTab() {
         <CardDescription>Cost, revenue, and ROI by department</CardDescription>
       </CardHeader>
       <CardContent className="px-0 pb-0">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Department</TableHead>
-              <TableHead className="text-right">Cost</TableHead>
-              <TableHead className="text-right">Revenue</TableHead>
-              <TableHead className="text-right">ROI</TableHead>
-              <TableHead className="text-right">Traces</TableHead>
-              <TableHead>Anomaly</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {departments.map((d) => (
-              <TableRow key={d.department}>
-                <TableCell className="font-medium text-[var(--text-primary)]">
-                  {d.department}
-                </TableCell>
-                <TableCell className="text-right text-[var(--text-primary)]">
-                  {formatCurrency(d.total_cost, { compact: true })}
-                </TableCell>
-                <TableCell className="text-right text-[var(--text-primary)]">
-                  {formatCurrency(d.total_revenue, { compact: true })}
-                </TableCell>
-                <TableCell className="text-right">
-                  <span
-                    className={cn(
-                      "inline-flex rounded-full px-2 py-0.5 text-xs font-medium",
-                      roiColor(d.roi)
-                    )}
-                  >
-                    {d.roi.toFixed(2)}
-                  </span>
-                </TableCell>
-                <TableCell className="text-right text-[var(--text-secondary)]">
-                  {d.trace_count.toLocaleString()}
-                </TableCell>
-                <TableCell>
-                  {d.anomaly ? (
-                    <span className="inline-flex items-center gap-1 rounded-full bg-[var(--error-bg)] px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-[var(--error)]">
-                      <AlertTriangle className="h-3 w-3" /> {d.anomaly}
-                    </span>
-                  ) : (
-                    <span className="text-[var(--text-muted)]">—</span>
-                  )}
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+        <DataTable
+          columns={columns}
+          rows={departments}
+          rowKey={(d) => d.department}
+          defaultSort={{ key: "roi", direction: "desc" }}
+          emptyIcon={Building2}
+          emptyTitle="No department data"
+          emptyDescription="Track outcomes on traces to populate department ROI."
+        />
       </CardContent>
     </Card>
   );

@@ -16,12 +16,13 @@ interface Toast {
   id: string;
   type: ToastType;
   message: string;
+  description?: string;
   exiting?: boolean;
 }
 
 interface ToastContextType {
   toasts: Toast[];
-  addToast: (type: ToastType, message: string) => void;
+  addToast: (type: ToastType, message: string, description?: string) => void;
   removeToast: (id: string) => void;
 }
 
@@ -40,10 +41,13 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const addToast = useCallback(
-    (type: ToastType, message: string) => {
+    (type: ToastType, message: string, description?: string) => {
       const id = `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
-      setToasts((prev) => [...prev, { id, type, message }]);
-      setTimeout(() => removeToast(id), 3000);
+      setToasts((prev) => [...prev, { id, type, message, description }]);
+      // Bump the auto-dismiss to 5s when a description is present —
+      // a longer message takes longer to read.
+      const dismissMs = description ? 5000 : 3000;
+      setTimeout(() => removeToast(id), dismissMs);
     },
     [removeToast]
   );
@@ -62,9 +66,12 @@ export function useToast() {
     throw new Error("useToast must be used within ToastProvider");
   }
   return {
-    success: (message: string) => context.addToast("success", message),
-    error: (message: string) => context.addToast("error", message),
-    info: (message: string) => context.addToast("info", message),
+    success: (message: string, description?: string) =>
+      context.addToast("success", message, description),
+    error: (message: string, description?: string) =>
+      context.addToast("error", message, description),
+    info: (message: string, description?: string) =>
+      context.addToast("info", message, description),
   };
 }
 
@@ -78,7 +85,7 @@ function ToastContainer({
   if (toasts.length === 0) return null;
 
   return (
-    <div className="fixed top-4 right-4 z-50 flex flex-col gap-2 pointer-events-none">
+    <div className="fixed top-20 right-4 z-50 flex flex-col gap-2 pointer-events-none max-w-[calc(100vw-2rem)]">
       {toasts.map((toast) => (
         <ToastItem key={toast.id} toast={toast} onRemove={() => removeToast(toast.id)} />
       ))}
@@ -128,7 +135,14 @@ function ToastItem({ toast, onRemove }: { toast: Toast; onRemove: () => void }) 
       )}
     >
       <Icon className={cn("w-5 h-5 flex-shrink-0", style.iconColor)} aria-hidden />
-      <p className="text-sm font-medium text-[var(--text-primary)] flex-1">{toast.message}</p>
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-medium text-[var(--text-primary)]">{toast.message}</p>
+        {toast.description && (
+          <p className="text-xs text-[var(--text-muted)] mt-0.5 leading-snug">
+            {toast.description}
+          </p>
+        )}
+      </div>
       <button
         onClick={onRemove}
         className="p-1 text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)] rounded transition-colors"

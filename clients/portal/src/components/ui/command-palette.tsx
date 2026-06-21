@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { Command as Cmnd } from "cmdk";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import {
   Search,
   Plus,
@@ -32,8 +32,17 @@ import {
   ChevronRight,
   Wrench,
   PlayCircle,
+  Gauge,
+  Database,
+  GitBranch,
+  Library,
+  History,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import {
+  COMMAND_PALETTE_RECENT_KEY,
+  COMMAND_PALETTE_RECENT_LIMIT,
+} from "@/lib/constants";
 
 interface CommandPaletteProps {
   open: boolean;
@@ -64,14 +73,14 @@ const COMMANDS: NavEntry[] = [
   { href: "/traces", label: "Trace Explorer", description: "Browse and filter traces", group: "Observe", icon: Layers },
   { href: "/replay", label: "Replay", description: "Step through a past trace", group: "Observe", icon: PlayCircle },
   { href: "/observability", label: "Observability", description: "Telemetry overview", group: "Observe", icon: Activity },
-  { href: "/observability/apm", label: "APM Tracing", group: "Observe", icon: Activity },
-  { href: "/observability/cohorts", label: "Columnar Engine", group: "Observe", icon: Activity },
-  { href: "/observability/decisions", label: "Decisions", group: "Observe", icon: Activity },
-  { href: "/observability/eval", label: "Eval", group: "Observe", icon: Activity },
-  { href: "/observability/memory", label: "Memory", group: "Observe", icon: Activity },
-  { href: "/observability/query", label: "Query", group: "Observe", icon: Activity },
-  { href: "/observability/retrieval", label: "Retrieval", group: "Observe", icon: Activity },
-  { href: "/observability/time-travel", label: "Time-Travel", group: "Observe", icon: Activity },
+  { href: "/observability/apm", label: "APM Tracing", group: "Observe", icon: Gauge },
+  { href: "/observability/cohorts", label: "Columnar Engine", group: "Observe", icon: Database },
+  { href: "/observability/decisions", label: "Decisions", group: "Observe", icon: GitBranch },
+  { href: "/observability/eval", label: "Eval", group: "Observe", icon: BarChart3 },
+  { href: "/observability/memory", label: "Memory", group: "Observe", icon: Brain },
+  { href: "/observability/query", label: "Query", group: "Observe", icon: Search },
+  { href: "/observability/retrieval", label: "Retrieval", group: "Observe", icon: Library },
+  { href: "/observability/time-travel", label: "Time-Travel", group: "Observe", icon: History },
   { href: "/tools", label: "Tools", description: "Tool attribution and recommendations", group: "Observe", icon: Wrench },
   { href: "/incidents", label: "Incidents", description: "Open RCA clusters", group: "Observe", icon: Bell },
   { href: "/insights", label: "Insights", description: "Auto-generated intelligence", group: "Observe", icon: Brain },
@@ -103,15 +112,46 @@ const ACCENT_BG: Record<NonNullable<NavEntry["accent"]>, string> = {
   muted: "bg-[var(--bg-tertiary)] text-[var(--text-secondary)]",
 };
 
+const COMMANDS_BY_HREF = new Map(COMMANDS.map((c) => [c.href, c]));
+
+function readRecent(): string[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = window.localStorage.getItem(COMMAND_PALETTE_RECENT_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed.filter((x): x is string => typeof x === "string") : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeRecent(items: string[]) {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(COMMAND_PALETTE_RECENT_KEY, JSON.stringify(items));
+  } catch {
+    // quota / disabled — fail silently, recent is a nice-to-have
+  }
+}
+
 export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
   const router = useRouter();
+  const pathname = usePathname();
   const [search, setSearch] = useState("");
+  const [recentHrefs, setRecentHrefs] = useState<string[]>([]);
 
   useEffect(() => {
     const down = (e: KeyboardEvent) => {
       if (e.key === "k" && (e.metaKey || e.ctrlKey)) {
         e.preventDefault();
         onOpenChange(!open);
+        return;
+      }
+      // Escape closes the palette from anywhere on the page.
+      if (e.key === "Escape" && open) {
+        e.preventDefault();
+        onOpenChange(false);
       }
     };
 
@@ -119,17 +159,57 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
     return () => document.removeEventListener("keydown", down);
   }, [open, onOpenChange]);
 
-  const runCommand = (path: string) => {
-    onOpenChange(false);
-    router.push(path);
-  };
+  // Re-read recent items each time the palette opens.
+  useEffect(() => {
+    if (open) setRecentHrefs(readRecent());
+  }, [open]);
+
+  // Track the current route as recently visited (only for routes the
+  // command palette knows about — random 404s shouldn't pollute the list).
+  useEffect(() => {
+    if (!pathname) return;
+    const known = COMMANDS_BY_HREF.get(pathname);
+    if (!known) return;
+    const recent = readRecent().filter((h) => h !== pathname);
+    recent.unshift(pathname);
+    const trimmed = recent.slice(0, COMMAND_PALETTE_RECENT_LIMIT);
+    writeRecent(trimmed);
+    setRecentHrefs(trimmed);
+    // pathname is the only signal we care about; the localStorage reads
+    // are idempotent.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pathname]);
+
+  const runCommand = useCallback(
+    (path: string) => {
+      onOpenChange(false);
+      router.push(path);
+    },
+    [onOpenChange, router],
+  );
 
   // Group commands by their `group` field, preserving the order
   // they were declared in (which mirrors the sidebar).
-  const grouped = COMMANDS.reduce<Record<string, NavEntry[]>>((acc, c) => {
-    (acc[c.group] = acc[c.group] || []).push(c);
-    return acc;
-  }, {});
+  const grouped = useMemo(
+    () =>
+      COMMANDS.reduce<Record<string, NavEntry[]>>((acc, c) => {
+        (acc[c.group] = acc[c.group] || []).push(c);
+        return acc;
+      }, {}),
+    [],
+  );
+
+  const recentEntries = useMemo(
+    () =>
+      recentHrefs
+        .map((href) => COMMANDS_BY_HREF.get(href))
+        .filter((entry): entry is NavEntry => Boolean(entry)),
+    [recentHrefs],
+  );
+
+  const hasResults = search.trim().length > 0;
+  const showFooter = !hasResults;
+  const showRecent = recentEntries.length > 0 && !hasResults;
 
   return (
     <div className="fixed inset-0 z-50">
@@ -141,7 +221,7 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
       )}
       <Cmnd
         className={cn(
-          "fixed left-1/2 top-[20%] -translate-x-1/2 w-full max-w-lg",
+          "fixed left-1/2 top-[20%] -translate-x-1/2 w-full max-w-[calc(100vw-2rem)] sm:max-w-lg",
           "bg-[var(--bg-primary)] rounded-2xl shadow-2xl border border-[var(--border-default)] overflow-hidden",
           "flex flex-col",
           open ? "animate-scale-in" : "hidden"
@@ -158,7 +238,8 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
           />
           <button
             onClick={() => onOpenChange(false)}
-            className="p-1 hover:bg-[var(--bg-tertiary)] rounded transition-colors"
+            aria-label="Close command palette"
+            className="p-1 hover:bg-[var(--bg-tertiary)] rounded transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--accent)]"
           >
             <X className="w-4 h-4 text-[var(--text-muted)]" />
           </button>
@@ -168,6 +249,36 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
           <Cmnd.Empty className="py-6 text-center text-sm text-[var(--text-muted)]">
             No results found.
           </Cmnd.Empty>
+
+          {showRecent && (
+            <Cmnd.Group heading="Recent" className="px-2 mt-2 first:mt-0">
+              {recentEntries.map((item) => {
+                const Icon = item.icon;
+                const accentClass = item.accent
+                  ? ACCENT_BG[item.accent]
+                  : "bg-[var(--bg-tertiary)] text-[var(--text-secondary)]";
+                return (
+                  <Cmnd.Item
+                    key={`recent-${item.href}`}
+                    value={`${item.label} ${item.href} Recent`}
+                    onSelect={() => runCommand(item.href)}
+                    className="flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-[var(--bg-secondary)] cursor-pointer transition-colors"
+                  >
+                    <div className={cn("w-8 h-8 rounded-lg flex items-center justify-center", accentClass)}>
+                      <Icon className="w-4 h-4" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-[var(--text-primary)]">{item.label}</p>
+                      {item.description && (
+                        <p className="text-xs text-[var(--text-muted)]">{item.description}</p>
+                      )}
+                    </div>
+                    <ChevronRight className="w-4 h-4 text-[var(--text-muted)]" />
+                  </Cmnd.Item>
+                );
+              })}
+            </Cmnd.Group>
+          )}
 
           {Object.entries(grouped).map(([group, items]) => (
             <Cmnd.Group key={group} heading={group} className="px-2 mt-2 first:mt-0">
@@ -199,22 +310,24 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
             </Cmnd.Group>
           ))}
 
-          <div className="px-4 py-3 border-t border-[var(--border-subtle)] mt-2">
-            <div className="flex items-center gap-4 text-xs text-[var(--text-muted)]">
-              <span className="flex items-center gap-1">
-                <kbd className="px-1.5 py-0.5 bg-[var(--bg-tertiary)] rounded text-[var(--text-muted)] font-mono">↑↓</kbd>
-                Navigate
-              </span>
-              <span className="flex items-center gap-1">
-                <kbd className="px-1.5 py-0.5 bg-[var(--bg-tertiary)] rounded text-[var(--text-muted)] font-mono">↵</kbd>
-                Select
-              </span>
-              <span className="flex items-center gap-1">
-                <kbd className="px-1.5 py-0.5 bg-[var(--bg-tertiary)] rounded text-[var(--text-muted)] font-mono">Esc</kbd>
-                Close
-              </span>
+          {showFooter && (
+            <div className="px-4 py-3 border-t border-[var(--border-subtle)] mt-2">
+              <div className="flex items-center gap-4 text-xs text-[var(--text-muted)]">
+                <span className="flex items-center gap-1">
+                  <kbd className="px-1.5 py-0.5 bg-[var(--bg-tertiary)] rounded text-[var(--text-muted)] font-mono">↑↓</kbd>
+                  Navigate
+                </span>
+                <span className="flex items-center gap-1">
+                  <kbd className="px-1.5 py-0.5 bg-[var(--bg-tertiary)] rounded text-[var(--text-muted)] font-mono">↵</kbd>
+                  Select
+                </span>
+                <span className="flex items-center gap-1">
+                  <kbd className="px-1.5 py-0.5 bg-[var(--bg-tertiary)] rounded text-[var(--text-muted)] font-mono">Esc</kbd>
+                  Close
+                </span>
+              </div>
             </div>
-          </div>
+          )}
         </Cmnd.List>
       </Cmnd>
     </div>
