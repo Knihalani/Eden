@@ -15,6 +15,14 @@ export default function SignUpPage() {
         path="/sign-up"
         routing="path"
         signInUrl="/sign-in"
+        // After a successful signup, land on the onboarding wizard
+        // instead of the dashboard. Without this, Clerk's default
+        // fallback resolves to the current URL ("/sign-up") which
+        // re-renders the auth card and feels like the site hung.
+        // New users always need the org step; routing them straight
+        // to /onboarding gets them to a productive state in one click.
+        signUpFallbackRedirectUrl="/onboarding"
+        signInForceRedirectUrl="/dashboard"
         appearance={clerkAppearance}
       />
     </AuthSplitLayout>

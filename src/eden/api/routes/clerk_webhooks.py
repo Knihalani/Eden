@@ -39,6 +39,7 @@ from typing import Any
 from fastapi import APIRouter, Header, HTTPException, Request
 
 from eden.api.utils.clerk_auth import clerk_role_to_eden_role
+from eden.api.utils.clerk_client import invalidate_user_cache
 from eden.config import get_settings
 from eden.storage.postgres import get_postgres_client
 
@@ -340,6 +341,15 @@ async def clerk_webhook(
 
     try:
         await handler(payload)
+        # Bust the per-user Clerk API cache so the next /auth/me hit
+        # picks up the freshly-synced email/name/avatar without
+        # waiting for the 5-minute TTL. Org / membership payloads
+        # don't change user profile fields, so we only invalidate
+        # on the user.* events.
+        if event_type.startswith("user."):
+            clerk_id = payload.get("id") if isinstance(payload, dict) else None
+            if clerk_id:
+                invalidate_user_cache(clerk_id)
     except Exception as exc:  # noqa: BLE001
         logger.exception("Clerk webhook handler failed for %s: %s", event_type, exc)
         raise HTTPException(status_code=500, detail=f"Handler failed: {exc}")

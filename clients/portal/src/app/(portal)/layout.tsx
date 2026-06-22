@@ -12,7 +12,7 @@ import {
 import { useClerk } from "@clerk/nextjs";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, useRef, useCallback } from "react";
-import { Pin, PanelLeftClose, PanelLeftOpen } from "lucide-react";
+import { Pin, PanelLeftClose, PanelLeftOpen, RefreshCw } from "lucide-react";
 import {
   Loader2,
   LayoutDashboard,
@@ -61,6 +61,7 @@ import { CommandPalette } from "@/components/ui/command-palette";
 import { ChatSidebar } from "@/components/ai-insights/ChatSidebar";
 import { Logo } from "@/components/brand/logo";
 import { buildBreadcrumbs } from "@/lib/breadcrumbs";
+import { ErrorBoundary } from "@/components/ui/error-boundary";
 
 const SIDEBAR_EXPANDED_WIDTH = 260;
 const SIDEBAR_COLLAPSED_WIDTH = 64;
@@ -96,10 +97,10 @@ async function handleLogout(
 // chrome and makes breadcrumb labels discoverable in one place.
 
 export default function PortalLayout({ children }: { children: React.ReactNode }) {
-  const { user, loading } = useAuth();
+  const { user, loading, refreshUserWithRetry } = useAuth();
   const { signOut } = useClerk();
   const { prefs, togglePin } = useSidebarPrefs();
-  const { authError, clearAuthError } = useOrg();
+  const { authError, clearAuthError, refreshOrgs, currentOrg } = useOrg();
   const router = useRouter();
   const pathname = usePathname();
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -197,6 +198,30 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
       router.replace("/login");
     }
   }, [user, loading, router]);
+
+  // Authed user with no org: send them through the onboarding wizard
+  // instead of letting them land on /dashboard and stare at a
+  // NoOrgState card. Only redirect on routes that REQUIRE an org —
+  // /onboarding/* and the auth-bound flows (invite, settings/profile)
+  // are valid even for org-less users. The list is intentionally
+  // small: the wizard is the productive path for a brand-new user,
+  // and adding more prefixes dilutes the safety of this gate.
+  useEffect(() => {
+    if (loading || !user || currentOrg) return;
+    const path = pathname || "";
+    const isOrglessFriendly =
+      path === "/" ||
+      path.startsWith("/onboarding") ||
+      path.startsWith("/invite") ||
+      path.startsWith("/settings/profile") ||
+      path.startsWith("/settings/account") ||
+      path.startsWith("/login") ||
+      path.startsWith("/sign-in") ||
+      path.startsWith("/sign-up");
+    if (!isOrglessFriendly) {
+      router.replace("/onboarding");
+    }
+  }, [loading, user, currentOrg, pathname, router]);
 
   if (loading) {
     // Show a chrome skeleton instead of a blank centred spinner so
@@ -666,6 +691,26 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
             `h-screen` don't push the whole flex row past the viewport.
             June 2026 UI overhaul. */}
         <div className="page-enter flex-1 min-h-0 flex flex-col">
+          {/* ErrorBoundary isolates render-time failures inside the
+              page so a single bad component doesn't crash the entire
+              portal chrome (sidebar + header stay usable, the user
+              can navigate to a working page). Without this, an
+              unhandled error in any nested component unmounts the
+              whole <main> — including the retry banner that would
+              otherwise let the user escape the broken state. */}
+          <ErrorBoundary
+            fallback={
+              <div className="flex-1 flex items-center justify-center p-8 text-center">
+                <div className="max-w-md space-y-3">
+                  <p className="text-sm text-[var(--text-secondary)]">
+                    This page hit an unexpected error. The rest of the
+                    portal is still usable — try a different section
+                    from the sidebar, or reload the page.
+                  </p>
+                </div>
+              </div>
+            }
+          >
           {showAuthBanner && (
             <div
               role="alert"
@@ -678,6 +723,24 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
                 </span>
               </div>
               <div className="flex items-center gap-1.5 shrink-0">
+                <button
+                  onClick={() => {
+                    // Re-fetch /auth/me (with retry) and the org list
+                    // in parallel. The refreshUserWithRetry path covers
+                    // the transient "User not found" race during the
+                    // auto-provision window; refreshOrgs re-reads the
+                    // user's orgs in case the webhook landed after the
+                    // first fetch.
+                    clearAuthError();
+                    void refreshUserWithRetry();
+                    void refreshOrgs();
+                  }}
+                  aria-label="Retry loading session"
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-[var(--error)]/40 text-[var(--error)] rounded-md text-xs font-medium hover:bg-[var(--error)]/10 transition-colors"
+                >
+                  <RefreshCw className="w-3 h-3" />
+                  Retry
+                </button>
                 <button
                   onClick={clearAuthError}
                   aria-label="Dismiss session error"
@@ -699,6 +762,7 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
             </div>
           )}
           {children}
+          </ErrorBoundary>
         </div>
 
         {/* Mobile bottom navigation. Centered "Observe" item is the
