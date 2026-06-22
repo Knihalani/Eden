@@ -232,7 +232,7 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
     // spinner" that left the page feeling dead and unclickable.
     return (
       <div
-        className="flex h-screen overflow-clip bg-[var(--bg-secondary)]"
+        className="min-h-screen flex bg-[var(--bg-secondary)]"
         aria-busy="true"
         aria-live="polite"
       >
@@ -289,13 +289,17 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
   const { pinnedItems, groups } = applySidebarPrefs(prefs, advancedCollapsed);
 
   return (
-    // ponytail: h-screen + overflow-clip on the row, min-h-0 on main —
-    // this is what makes the sidebar scroll internally instead of pushing
-    // the whole page past the viewport. overflow-clip (vs overflow-hidden)
-    // keeps `position: sticky` working on the top header inside <main>;
-    // overflow-hidden breaks sticky on Firefox because it creates a new
-    // containing block. June 2026 UI overhaul.
-    <div className="flex h-screen overflow-clip bg-[var(--bg-secondary)]">
+    // FIX-A: scroll the document natively instead of trapping content
+    // in an internal overflow container. The previous `h-screen +
+    // overflow-clip` row + `overflow-auto` on <main> was fragile —
+    // any flex-sizing bug surfaced as "the page is unscrollable
+    // and nothing is clickable" (the scroll wheel hit the trapped
+    // container instead of the document, and clicks on the overlay
+    // pseudo-elements were absorbed). Switching to a native
+    // document scroll with `min-h-screen` gives the user the
+    // standard browser-scroll affordance everywhere, on every
+    // viewport, with no special-casing for mobile bottom nav.
+    <div className="min-h-screen flex flex-col bg-[var(--bg-secondary)]">
       {/* Skip-to-content link — visually hidden until focused, allows keyboard users to bypass the sidebar nav */}
       <a href="#main-content" className="skip-to-content">
         Skip to main content
@@ -310,12 +314,16 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
         />
       )}
 
-      {/* Sidebar: fixed drawer on mobile, in-flow on lg */}
+      {/* Sidebar: fixed drawer on mobile, sticky in-flow on lg.
+          Sticky (instead of fixed/h-full) lets the document scroll
+          natively while the sidebar follows. The sidebar's own
+          internal scroll handles the case where there are more
+          nav items than fit in the viewport. */}
       <aside
         aria-label="Main sidebar navigation"
         className={cn(
-          "sidebar flex flex-col relative bg-[var(--bg-primary)] border-r border-[var(--border-default)] z-50 h-full",
-          "fixed inset-y-0 left-0 lg:static lg:inset-auto lg:flex-shrink-0",
+          "sidebar flex flex-col relative bg-[var(--bg-primary)] border-r border-[var(--border-default)] z-40",
+          "fixed inset-y-0 left-0 lg:sticky lg:top-0 lg:self-start lg:h-screen lg:flex-shrink-0",
           collapsed ? "collapsed" : "",
           sidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0",
           "transition-[transform,width] duration-300 ease-out lg:transition-[width]"
@@ -411,13 +419,13 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
             Users reach org controls via Settings → Organization. */}
 
         {/* Navigation — data-driven from DEFAULT_SIDEBAR + user prefs
-            (pinned / hidden / reordered). The aside scrolls internally
-            (flex-1 min-h-0 + overflow-y-auto + max-h to be doubly sure
-            the sidebar NEVER pushes the page height past the viewport).
-            The outer row is h-screen + overflow-clip so the user
-            section is pinned to the bottom of the aside via mt-auto. */}
+            (pinned / hidden / reordered). The sidebar scrolls internally
+            (flex-1 + overflow-y-auto + h-[calc(100vh-header)] to keep
+            the user section pinned at the bottom). The outer document
+            scrolls natively — the sidebar is `sticky lg:top-0 h-screen`
+            on desktop so it follows the viewport. */}
         <nav
-          className="relative flex-1 min-h-0 max-h-full p-3 space-y-5 overflow-y-auto overscroll-contain"
+          className="relative flex-1 min-h-0 p-3 space-y-5 overflow-y-auto overscroll-contain"
           aria-label="Main navigation"
         >
           {pinnedItems.length > 0 && (
@@ -584,9 +592,10 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
         </div>
       </aside>
 
-      {/* Main content — min-h-0 lets the flex item actually shrink so
-          its overflow-auto can scroll instead of pushing the row. */}
-      <main id="main-content" className="flex-1 min-w-0 min-h-0 overflow-auto pb-20 lg:pb-0 flex flex-col" tabIndex={-1}>
+      {/* Main content — flex-1 takes remaining width; document scrolls
+          natively (no internal overflow). The mobile bottom nav
+          reserves bottom padding (pb-20) on small screens. */}
+      <main id="main-content" className="flex-1 min-w-0 pb-20 lg:pb-0 flex flex-col" tabIndex={-1}>
         {/* Top bar */}
         <header className="sticky top-0 z-30 bg-[var(--bg-primary)] border-b border-[var(--border-default)]">
           <div className="flex items-center justify-between px-4 lg:px-6 py-3">
