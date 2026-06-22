@@ -110,18 +110,35 @@ export function OrgProvider({ children }: { children: ReactNode }) {
       // `currentOrg` stayed null. Now we surface the error and
       // redirect to the sign-in page so the user can re-establish
       // a fresh session. June 2026 fix.
-      const message = e instanceof Error ? e.message : "Failed to load orgs";
-      if (/401|not\s*authenticated|unauthorized/i.test(message)) {
-        setAuthError("Session expired. Please sign in again.");
+      const rawMessage = e instanceof Error ? e.message : "Failed to load orgs";
+      // Map raw API errors onto user-friendly copy. We deliberately
+      // avoid surfacing backend internals ("User not found",
+      // traceback fragments) to the end user — those leaked before
+      // and were confusing. The exception is the generic
+      // "Session expired" path for 401.
+      let message: string;
+      if (/401|not\s*authenticated|unauthorized/i.test(rawMessage)) {
+        message = "Session expired. Please sign in again.";
         if (typeof window !== "undefined") {
           window.sessionStorage.setItem("eden:auth:error", "session_expired");
         }
-        // Don't hard-redirect — let the consuming components render
-        // a "Session expired" card with a "Sign in" button. The hard
-        // redirect is reserved for pages that have no escape hatch.
+      } else if (/user\s*not\s*found/i.test(rawMessage)) {
+        // June 22 2026 fix: this used to leak raw "User not found"
+        // to the dashboard after a Clerk signup when the webhook
+        // hadn't synced yet. Now the message tells the user to wait
+        // a moment — the auto-provision path will pick up the Clerk
+        // user on the next refresh, and the redirect to onboarding
+        // lets them proceed without an org.
+        message =
+          "Setting up your account… If this takes more than a moment, refresh the page.";
+      } else if (/404|not\s*found/i.test(rawMessage)) {
+        message = "We couldn't load your workspace. Please refresh.";
+      } else if (/5\d\d|server\s*error/i.test(rawMessage)) {
+        message = "Eden is having trouble reaching the server. Please try again in a moment.";
       } else {
-        setAuthError(message);
+        message = rawMessage;
       }
+      setAuthError(message);
       setOrganizations([]);
       setCurrentOrgState(null);
     } finally {
