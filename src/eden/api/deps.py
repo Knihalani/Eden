@@ -228,7 +228,16 @@ async def get_current_org_member(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid token payload",
         )
-    org_id = x_org_id or payload.get("current_org_id")
+    # Clerk path: the active org id is in the abbreviated ``o.id``
+    # claim by default (and ``org_id`` only when a custom JWT
+    # template is configured). ``extract_org_id`` covers both.
+    # Fall back to ``X-Org-Id`` header (org switcher) and the legacy
+    # ``current_org_id`` claim (cookie-authed callers).
+    org_id = (
+        x_org_id
+        or (extract_org_id(payload) if is_clerk_payload(payload) else None)
+        or payload.get("current_org_id")
+    )
     if not org_id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
