@@ -1,46 +1,27 @@
-export const BILLING_PLANS = [
-  {
-    name: "Starter",
-    slug: "starter",
-    price: "$29",
-    period: "/month",
-    description: "For individuals and small projects",
-    features: ["5 jobs/month", "Up to 10 environments", "Community support", "Basic analytics"],
-  },
-  {
-    name: "Pro",
-    slug: "pro",
-    price: "$99",
-    period: "/month",
-    description: "For professional developers and teams",
-    features: ["50 jobs/month", "Up to 100 environments", "Priority support", "Advanced analytics", "API access"],
-    popular: true,
-  },
-  {
-    name: "Enterprise",
-    slug: "enterprise",
-    price: "Custom",
-    period: "",
-    description: "For organizations with advanced needs",
-    features: [
-      "Unlimited jobs",
-      "Unlimited environments",
-      "Dedicated support",
-      "SSO/SAML",
-      "Audit logging",
-      "Custom integrations",
-    ],
-  },
-] as const;
+// Ponytail: paid plans are off (June 2026 — early stage, free-only).
+// The BILLING_PLANS array previously drove the "Available plans" +
+// upgrade CTAs. Empty it now so any leftover consumer renders an empty
+// list rather than fetching prices that don't exist. When paid plans
+// ship, repopulate from the backend ``/billing/plans`` endpoint
+// (single source of truth = ``eden.services.plan_tiers.PLAN_TIERS``).
+export const BILLING_PLANS: readonly never[] = [];
 
 export interface BillingUsage {
   plan_name: string;
+  display_name: string;
+  // PRIMARY free-tier cap — USD cost this period.
+  cost_used_usd: number;
+  cost_soft_limit_usd: number;
+  cost_hard_limit_usd: number;
+  cost_status: "ok" | "soft_exceeded" | "hard_exceeded";
+  // Resource counts (informational — the cost cap is the enforcement lever).
   seats_limit: number;
   seats_used: number;
   references_limit: number;
   references_used: number;
-  jobs_limit: number;
-  jobs_used: number;
+  tokens_used: number;
+  storage_mb_used: number;
+  sandbox_seconds_used: number;
   active: boolean;
   stripe_subscription_id?: string;
   subscription_status?: string;
