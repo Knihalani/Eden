@@ -21,7 +21,7 @@ export default function SignUpPage() {
         // re-renders the auth card and feels like the site hung.
         // New users always need the org step; routing them straight
         // to /onboarding gets them to a productive state in one click.
-        signUpFallbackRedirectUrl="/onboarding"
+        fallbackRedirectUrl="/onboarding"
         signInForceRedirectUrl="/dashboard"
         appearance={clerkAppearance}
       />

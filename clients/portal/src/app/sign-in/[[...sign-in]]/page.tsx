@@ -26,7 +26,7 @@ export default function SignInPage() {
         // Without an explicit fallback Clerk sometimes resolves to
         // the current URL, which can leave a user who clicked "Sign
         // in" from /sign-up stuck on the auth card.
-        signInFallbackRedirectUrl="/dashboard"
+        fallbackRedirectUrl="/dashboard"
         appearance={clerkAppearance}
       />
     </AuthSplitLayout>
