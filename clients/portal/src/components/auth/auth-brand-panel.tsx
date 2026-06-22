@@ -89,7 +89,12 @@ export function AuthBrandPanel() {
     let cancelled = false;
     const load = async () => {
       try {
-        const res = await fetch("/health", {
+        // The portal doesn't expose a bare /health route — the
+        // catch-all proxy at /api/proxy forwards to FastAPI's
+        // /health. Calling the bare path returns Next's 404 page
+        // (HTML, not JSON), which would otherwise flip the badge
+        // to "Status unknown" on the auth card.
+        const res = await fetch("/api/proxy/health", {
           credentials: "include",
           headers: { Accept: "application/json" },
         });
