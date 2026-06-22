@@ -19,7 +19,8 @@ const isPublicRoute = createRouteMatcher([
   "/reset-password(.*)",
   "/invite(.*)",
   "/docs(.*)",
-  "/api/proxy(.*)",
+  "/api/proxy/(.*)",  // explicit / after proxy so the matcher sees
+                        // segments, not just a trailing string
   "/api/health",
   "/api/auth/me",
   "/api/auth/refresh",
