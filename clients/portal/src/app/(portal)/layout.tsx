@@ -199,12 +199,53 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
   }, [user, loading, router]);
 
   if (loading) {
+    // Show a chrome skeleton instead of a blank centred spinner so
+    // the user can see the portal is rendering while Clerk and the
+    // /auth/me call resolve. The skeleton has no clickable targets
+    // (no nav, no buttons) so it doesn't conflict with the eventual
+    // real chrome once Clerk loads. Replaces a prior "blank centred
+    // spinner" that left the page feeling dead and unclickable.
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="flex flex-col items-center gap-3">
-          <Loader2 className="w-8 h-8 animate-spin text-[var(--accent)]" />
-          <p className="text-sm text-[var(--text-muted)]">Loading...</p>
-        </div>
+      <div
+        className="flex h-screen overflow-clip bg-[var(--bg-secondary)]"
+        aria-busy="true"
+        aria-live="polite"
+      >
+        {/* Sidebar skeleton — visible structure while auth resolves. */}
+        <aside
+          className="sidebar flex flex-col relative bg-[var(--bg-primary)] border-r border-[var(--border-default)] z-50 h-full"
+          style={{ width: SIDEBAR_EXPANDED_WIDTH }}
+          aria-hidden="true"
+        >
+          <div className="flex items-center border-b border-[var(--border-default)] shrink-0 h-14 px-4 gap-2">
+            <div className="w-9 h-9 bg-[var(--bg-tertiary)] rounded-lg relative overflow-hidden after:absolute after:inset-0 after:-translate-x-full after:bg-gradient-to-r after:from-transparent after:via-[var(--shimmer)] after:to-transparent after:animate-[skeleton-shimmer_1.6s_infinite]" />
+            <div className="h-3 w-20 bg-[var(--bg-tertiary)] rounded-md relative overflow-hidden after:absolute after:inset-0 after:-translate-x-full after:bg-gradient-to-r after:from-transparent after:via-[var(--shimmer)] after:to-transparent after:animate-[skeleton-shimmer_1.6s_infinite]" />
+          </div>
+          <div className="flex-1 p-3 space-y-3">
+            {[0, 1, 2, 3, 4].map((i) => (
+              <div
+                key={i}
+                className="h-8 bg-[var(--bg-tertiary)] rounded-md relative overflow-hidden after:absolute after:inset-0 after:-translate-x-full after:bg-gradient-to-r after:from-transparent after:via-[var(--shimmer)] after:to-transparent after:animate-[skeleton-shimmer_1.6s_infinite]"
+                style={{ width: `${70 + (i % 3) * 10}%` }}
+              />
+            ))}
+          </div>
+        </aside>
+
+        {/* Main pane skeleton with status copy so the user knows
+            the portal is loading their session, not stuck. */}
+        <main className="flex-1 min-w-0 min-h-0 flex flex-col">
+          <header className="h-14 border-b border-[var(--border-default)] bg-[var(--bg-primary)] flex items-center justify-between px-6">
+            <div className="h-4 w-40 bg-[var(--bg-tertiary)] rounded-md relative overflow-hidden after:absolute after:inset-0 after:-translate-x-full after:bg-gradient-to-r after:from-transparent after:via-[var(--shimmer)] after:to-transparent after:animate-[skeleton-shimmer_1.6s_infinite]" />
+            <div className="h-8 w-8 bg-[var(--bg-tertiary)] rounded-lg relative overflow-hidden after:absolute after:inset-0 after:-translate-x-full after:bg-gradient-to-r after:from-transparent after:via-[var(--shimmer)] after:to-transparent after:animate-[skeleton-shimmer_1.6s_infinite]" />
+          </header>
+          <div className="flex-1 flex items-center justify-center">
+            <div className="flex flex-col items-center gap-3">
+              <Loader2 className="w-8 h-8 animate-spin text-[var(--accent)]" />
+              <p className="text-sm text-[var(--text-muted)]">Loading…</p>
+            </div>
+          </div>
+        </main>
       </div>
     );
   }
