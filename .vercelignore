@@ -1,0 +1,57 @@
+# Vercel reads this — NOT .gitignore. Anything listed here is excluded
+# from the deployment archive. Source code stays; build/IDE/runtime
+# caches go.
+
+# Git internals
+.git/
+.gitignore.*
+*.git
+
+# Node / TS / Next.js build artifacts (Vercel reinstalls + rebuilds)
+node_modules/
+.next/
+.turbo/
+.parcel-cache/
+dist/
+out/
+build/
+.npm/
+.eslintcache
+*.tsbuildinfo
+bun.lockb
+
+# Python venvs + caches (backend source still uploads, just not venvs)
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.venv/
+venv/
+ENV/
+env/
+*.egg-info/
+*.egg
+
+# Sub-projects not deployed to Vercel
+docs/
+sdk/
+eden-sandbox/
+
+# Local AI tooling caches (not source of truth)
+.aider*
+.codegraph/
+.eden/
+
+# Editor / OS / secrets
+.DS_Store
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+*.sublime-*
+*.pem
+*.log
