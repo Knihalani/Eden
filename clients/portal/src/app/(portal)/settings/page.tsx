@@ -198,8 +198,15 @@ export default function SettingsPage() {
 
   if (!user) return null;
 
+  // P3: height math was `calc(100vh - 4rem)` which excludes mobile
+  // browser chrome (URL bar) and iOS bottom safe area. On 375x667
+  // the inner tab panel overflows → user sees "double scroll" (the
+  // page scrolls AND the inner panel scrolls). `100dvh` is the
+  // dynamic viewport (resizes as chrome shows/hides) and the
+  // safe-area padding keeps the iOS home indicator from clipping
+  // tab content.
   return (
-    <div className="flex flex-col lg:flex-row h-[calc(100vh-4rem)]">
+    <div className="flex flex-col lg:flex-row h-[calc(100dvh-4rem)] pb-[env(safe-area-inset-bottom)]">
       {/* Tab rail: horizontal scroll on mobile, vertical on lg */}
       <div className="w-full lg:w-[240px] flex-shrink-0 bg-[var(--bg-primary)] border-b lg:border-b-0 lg:border-r border-[var(--border-default)]">
         <div className="p-3 lg:p-4 space-y-3">

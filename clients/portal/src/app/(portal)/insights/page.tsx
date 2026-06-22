@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useOrg } from "@/hooks/use-org";
-import { api } from "@/lib/api";
+import { api, datasetsApi } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { EmptyState } from "@/components/ui/empty-state";
 import { SeverityBadge, SeverityIcon } from "@/components/ui/status-badge";
@@ -33,6 +33,12 @@ import {
 import { motion, AnimatePresence } from "framer-motion";
 import { DataTable } from "@/components/ui/data-table";
 import { NoOrgState } from "@/components/ui/no-org-state";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 interface OverviewData {
   summary: {
@@ -289,25 +295,31 @@ export default function InsightsPage() {
         />
       )}
 
-      {/* Insight Detail Modal */}
-      <AnimatePresence>
+      {/* Insight Detail Modal — Radix Dialog (focus trap + ESC + ARIA) */}
+      <Dialog
+        open={selectedInsight !== null}
+        onOpenChange={(open) => !open && setSelectedInsight(null)}
+      >
         {selectedInsight && (
           <InsightDetailModal
             insight={selectedInsight}
             onClose={() => setSelectedInsight(null)}
           />
         )}
-      </AnimatePresence>
+      </Dialog>
 
-      {/* Report Detail Modal */}
-      <AnimatePresence>
+      {/* Report Detail Modal — Radix Dialog (focus trap + ESC + ARIA) */}
+      <Dialog
+        open={selectedReport !== null}
+        onOpenChange={(open) => !open && setSelectedReport(null)}
+      >
         {selectedReport && (
           <ReportDetailModal
             report={selectedReport}
             onClose={() => setSelectedReport(null)}
           />
         )}
-      </AnimatePresence>
+      </Dialog>
     </div>
   );
 }
@@ -723,6 +735,7 @@ function DisparityTab({
 // ──────────────────────────────────────────────────────────────────────────
 
 function DatasetsTab({ data }: { data: OverviewData["datasets"] }) {
+  const { currentOrg } = useOrg();
   const typeLabels: Record<string, string> = {
     regression_suite: "Regression Suite",
     edge_case_collection: "Edge Cases",
@@ -765,18 +778,24 @@ function DatasetsTab({ data }: { data: OverviewData["datasets"] }) {
                   </p>
                 </div>
                 <div className="flex items-center gap-2">
-                  <button
+                  <a
+                    href={datasetsApi.exportUrl(currentOrg?.id ?? "", dataset.dataset_id, `${dataset.name}.jsonl`)}
+                    download
+                    aria-label={`Export ${dataset.name} as JSONL`}
                     className="p-2 text-[var(--text-muted)] hover:text-[var(--accent)] transition-colors"
                     title="Export JSONL"
                   >
                     <FileJson className="w-4 h-4" />
-                  </button>
-                  <button
+                  </a>
+                  <a
+                    href={datasetsApi.exportUrl(currentOrg?.id ?? "", dataset.dataset_id, `${dataset.name}.jsonl`)}
+                    download
+                    aria-label={`Download ${dataset.name}`}
                     className="p-2 text-[var(--text-muted)] hover:text-[var(--accent)] transition-colors"
                     title="Download"
                   >
                     <Download className="w-4 h-4" />
-                  </button>
+                  </a>
                 </div>
               </div>
             );
@@ -807,69 +826,64 @@ function InsightDetailModal({
   insight: OverviewData["insights"]["recent"][0];
   onClose: () => void;
 }) {
+  // P6: Radix DialogContent handles focus trap, ESC, body-scroll
+  // lock, and aria-labelledby for the close button. The hand-rolled
+  // motion.div overlay wasn't keyboard-navigable and didn't lock
+  // the page scroll — opening a detail modal let the underlying
+  // list scroll behind it, which was disorienting.
   return (
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      className="fixed inset-0 bg-[var(--bg-base)]/50 z-50 flex items-center justify-center p-4"
-      onClick={onClose}
-    >
-      <motion.div
-        initial={{ scale: 0.95, opacity: 0 }}
-        animate={{ scale: 1, opacity: 1 }}
-        exit={{ scale: 0.95, opacity: 0 }}
-        onClick={(e) => e.stopPropagation()}
-        className="bg-[var(--bg-primary)] border border-[var(--border-default)] rounded-xl max-w-lg w-full max-h-[80vh] overflow-y-auto shadow-xl"
-      >
-        <div className="flex items-center justify-between p-4 border-b border-[var(--border-default)]">
-          <div className="flex items-center gap-2">
-            <SeverityIcon severity={insight.severity} />
-            <h3 className="font-semibold text-[var(--text-primary)]">Insight Detail</h3>
-          </div>
-          <button
-            onClick={onClose}
-            className="p-1 text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors"
-          >
-            <X className="w-5 h-5" />
-          </button>
+    <DialogContent className="max-w-lg" aria-describedby={undefined}>
+      <DialogHeader>
+        <div className="flex items-center gap-2">
+          <SeverityIcon severity={insight.severity} />
+          <DialogTitle>Insight Detail</DialogTitle>
         </div>
-        <div className="p-4 space-y-4">
-          <p className="text-sm text-[var(--text-primary)]">{insight.summary}</p>
-          <div className="flex flex-wrap gap-2">
-            <span className="text-xs px-2 py-0.5 rounded-full bg-[var(--accent-faint)] text-[var(--accent)]">
-              {insight.detector}
-            </span>
-            <span className="text-xs px-2 py-0.5 rounded-full bg-[var(--bg-tertiary)] text-[var(--text-muted)]">
-              {(insight.confidence * 100).toFixed(0)}% confidence
-            </span>
-            <span className="text-xs px-2 py-0.5 rounded-full bg-[var(--bg-tertiary)] text-[var(--text-muted)]">
-              {insight.affected_trace_ids.length} traces
-            </span>
-          </div>
-          {insight.recommended_action && (
-            <div className="bg-[var(--accent-faint)]/50 rounded-lg p-3">
-              <p className="text-xs font-medium text-[var(--accent)] mb-1">Recommended Action</p>
-              <p className="text-sm text-[var(--text-primary)]">{insight.recommended_action}</p>
-            </div>
-          )}
-          {insight.auto_created_dataset && (
-            <div className="flex items-center gap-2 text-sm text-[var(--terminal)]">
-              <Database className="w-4 h-4" />
-              Auto-created dataset: {insight.auto_created_dataset}
-            </div>
-          )}
-          {Object.keys(insight.pattern).length > 0 && (
-            <div>
-              <p className="text-xs font-medium text-[var(--text-muted)] mb-2">Pattern</p>
-              <pre className="text-xs bg-[var(--bg-secondary)] rounded-lg p-3 overflow-x-auto">
-                {JSON.stringify(insight.pattern, null, 2)}
-              </pre>
-            </div>
-          )}
+      </DialogHeader>
+      <div className="space-y-4">
+        <p className="text-sm text-[var(--text-primary)]">{insight.summary}</p>
+        <div className="flex flex-wrap gap-2">
+          <span className="text-xs px-2 py-0.5 rounded-full bg-[var(--accent-faint)] text-[var(--accent)]">
+            {insight.detector}
+          </span>
+          <span className="text-xs px-2 py-0.5 rounded-full bg-[var(--bg-tertiary)] text-[var(--text-muted)]">
+            {(insight.confidence * 100).toFixed(0)}% confidence
+          </span>
+          <span className="text-xs px-2 py-0.5 rounded-full bg-[var(--bg-tertiary)] text-[var(--text-muted)]">
+            {insight.affected_trace_ids.length} traces
+          </span>
         </div>
-      </motion.div>
-    </motion.div>
+        {insight.recommended_action && (
+          <div className="bg-[var(--accent-faint)]/50 rounded-lg p-3">
+            <p className="text-xs font-medium text-[var(--accent)] mb-1">Recommended Action</p>
+            <p className="text-sm text-[var(--text-primary)]">{insight.recommended_action}</p>
+          </div>
+        )}
+        {insight.auto_created_dataset && (
+          <div className="flex items-center gap-2 text-sm text-[var(--terminal)]">
+            <Database className="w-4 h-4" />
+            Auto-created dataset: {insight.auto_created_dataset}
+          </div>
+        )}
+        {Object.keys(insight.pattern).length > 0 && (
+          <div>
+            <p className="text-xs font-medium text-[var(--text-muted)] mb-2">Pattern</p>
+            <pre className="text-xs bg-[var(--bg-secondary)] rounded-lg p-3 overflow-x-auto">
+              {JSON.stringify(insight.pattern, null, 2)}
+            </pre>
+          </div>
+        )}
+        {/* Radix DialogContent renders its own close button via
+            DialogPrimitive.Close (top-right). Keeping onClose wired
+            here so callers can use it for explicit dismissal. */}
+        <button
+          type="button"
+          onClick={onClose}
+          className="text-xs text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors"
+        >
+          Close
+        </button>
+      </div>
+    </DialogContent>
   );
 }
 
@@ -880,93 +894,84 @@ function ReportDetailModal({
   report: OverviewData["disparity"]["reports"][0];
   onClose: () => void;
 }) {
+  // P6: Radix Dialog — same rationale as InsightDetailModal. Long
+  // reports with many dimensions previously overflowed past the
+  // close button; DialogContent's max-h-[90vh] + overflow guard
+  // (P7) keeps the panel inside the viewport with internal scroll.
   return (
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      className="fixed inset-0 bg-[var(--bg-base)]/50 z-50 flex items-center justify-center p-4"
-      onClick={onClose}
-    >
-      <motion.div
-        initial={{ scale: 0.95, opacity: 0 }}
-        animate={{ scale: 1, opacity: 1 }}
-        exit={{ scale: 0.95, opacity: 0 }}
-        onClick={(e) => e.stopPropagation()}
-        className="bg-[var(--bg-primary)] border border-[var(--border-default)] rounded-xl max-w-lg w-full max-h-[80vh] overflow-y-auto shadow-xl"
-      >
-        <div className="flex items-center justify-between p-4 border-b border-[var(--border-default)]">
-          <h3 className="font-semibold text-[var(--text-primary)]">Disparity Report</h3>
-          <button
-            onClick={onClose}
-            className="p-1 text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors"
+    <DialogContent className="max-w-lg" aria-describedby={undefined}>
+      <DialogHeader>
+        <DialogTitle>Disparity Report</DialogTitle>
+      </DialogHeader>
+      <div className="space-y-4">
+        <div className="flex items-center gap-3">
+          <span
+            className={cn(
+              "text-lg font-bold px-3 py-1 rounded-full",
+              report.overall_score > 0.6
+                ? "bg-[var(--error-bg)] text-[var(--error)]"
+                : report.overall_score > 0.3
+                ? "bg-[var(--warning-bg)] text-[var(--warning)]"
+                : "bg-[var(--terminal-faint)] text-[var(--terminal)]"
+            )}
           >
-            <X className="w-5 h-5" />
-          </button>
+            {(report.overall_score * 100).toFixed(0)}% divergence
+          </span>
+          <span className="text-xs text-[var(--text-muted)]">
+            {new Date(report.generated_at).toLocaleString()}
+          </span>
         </div>
-        <div className="p-4 space-y-4">
-          <div className="flex items-center gap-3">
-            <span
-              className={cn(
-                "text-lg font-bold px-3 py-1 rounded-full",
-                report.overall_score > 0.6
-                  ? "bg-[var(--error-bg)] text-[var(--error)]"
-                  : report.overall_score > 0.3
-                  ? "bg-[var(--warning-bg)] text-[var(--warning)]"
-                  : "bg-[var(--terminal-faint)] text-[var(--terminal)]"
-              )}
-            >
-              {(report.overall_score * 100).toFixed(0)}% divergence
-            </span>
-            <span className="text-xs text-[var(--text-muted)]">
-              {new Date(report.generated_at).toLocaleString()}
-            </span>
-          </div>
 
-          <div className="space-y-2">
-            <p className="text-xs font-medium text-[var(--text-muted)]">Dimensions</p>
-            {report.dimensions.map((dim) => (
-              <div key={dim.name} className="bg-[var(--bg-secondary)] rounded-lg p-3">
-                <div className="flex items-center justify-between mb-1">
-                  <span className="text-sm font-medium text-[var(--text-primary)] capitalize">
-                    {dim.name.replace(/_/g, " ")}
-                  </span>
-                  <SeverityBadge severity={dim.severity} />
-                </div>
-                <div className="h-2 bg-[var(--bg-tertiary)] rounded-full overflow-hidden mb-2">
-                  <div
-                    className={cn(
-                      "h-full rounded-full",
-                      dim.gap > 0.5
-                        ? "bg-[var(--error)]"
-                        : dim.gap > 0.2
-                        ? "bg-[var(--warning-bg)]"
-                        : "bg-[var(--terminal)]"
-                    )}
-                    style={{ width: `${dim.gap * 100}%` }}
-                  />
-                </div>
-                <p className="text-xs text-[var(--text-muted)]">{dim.explanation}</p>
+        <div className="space-y-2">
+          <p className="text-xs font-medium text-[var(--text-muted)]">Dimensions</p>
+          {report.dimensions.map((dim) => (
+            <div key={dim.name} className="bg-[var(--bg-secondary)] rounded-lg p-3">
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-sm font-medium text-[var(--text-primary)] capitalize">
+                  {dim.name.replace(/_/g, " ")}
+                </span>
+                <SeverityBadge severity={dim.severity} />
               </div>
-            ))}
-          </div>
-
-          {report.recommendations.length > 0 && (
-            <div>
-              <p className="text-xs font-medium text-[var(--text-muted)] mb-2">Recommendations</p>
-              <ul className="space-y-2">
-                {report.recommendations.map((rec, i) => (
-                  <li key={i} className="flex items-start gap-2 text-sm text-[var(--text-primary)]">
-                    <ChevronRight className="w-3 h-3 text-[var(--accent)] mt-0.5 flex-shrink-0" />
-                    {rec}
-                  </li>
-                ))}
-              </ul>
+              <div className="h-2 bg-[var(--bg-tertiary)] rounded-full overflow-hidden mb-2">
+                <div
+                  className={cn(
+                    "h-full rounded-full",
+                    dim.gap > 0.5
+                      ? "bg-[var(--error)]"
+                      : dim.gap > 0.2
+                      ? "bg-[var(--warning-bg)]"
+                      : "bg-[var(--terminal)]"
+                  )}
+                  style={{ width: `${dim.gap * 100}%` }}
+                />
+              </div>
+              <p className="text-xs text-[var(--text-muted)]">{dim.explanation}</p>
             </div>
-          )}
+          ))}
         </div>
-      </motion.div>
-    </motion.div>
+
+        {report.recommendations.length > 0 && (
+          <div>
+            <p className="text-xs font-medium text-[var(--text-muted)] mb-2">Recommendations</p>
+            <ul className="space-y-2">
+              {report.recommendations.map((rec, i) => (
+                <li key={i} className="flex items-start gap-2 text-sm text-[var(--text-primary)]">
+                  <ChevronRight className="w-3 h-3 text-[var(--accent)] mt-0.5 flex-shrink-0" />
+                  {rec}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+        <button
+          type="button"
+          onClick={onClose}
+          className="text-xs text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors"
+        >
+          Close
+        </button>
+      </div>
+    </DialogContent>
   );
 }
 

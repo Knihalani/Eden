@@ -36,7 +36,11 @@ export function SettingsSearch({ value, onChange, totalLabel, className }: Setti
           onChange={(e) => onChange(e.target.value)}
           placeholder="Search settings…"
           aria-label="Search settings"
-          className="w-full pl-9 pr-9 py-2 text-sm bg-[var(--bg-secondary)] border border-[var(--border-default)] rounded-lg text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--accent)] focus:border-[var(--accent)]"
+          // P12: hide WebKit/Chromium's native `type=search` clear
+          // affordance so we don't render two stacked X buttons.
+          // The custom X below is keyboard-reachable, focusable,
+          // and announced as "Clear search" by AT.
+          className="w-full pl-9 pr-9 py-2 text-sm bg-[var(--bg-secondary)] border border-[var(--border-default)] rounded-lg text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--accent)] focus:border-[var(--accent)] [&::-webkit-search-cancel-button]:appearance-none [&::-webkit-search-decoration]:appearance-none"
         />
         {value && (
           <button
@@ -50,7 +54,8 @@ export function SettingsSearch({ value, onChange, totalLabel, className }: Setti
         )}
       </div>
       {totalLabel && (
-        <p className="text-[11px] text-[var(--text-muted)] px-1" aria-live="polite">
+        // P25: bumped from 11px to xs (12px) for legibility.
+        <p className="text-xs text-[var(--text-muted)] px-1" aria-live="polite">
           {totalLabel}
         </p>
       )}
