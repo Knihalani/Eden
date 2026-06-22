@@ -301,9 +301,8 @@ export default function LandingPage() {
         style={{ backdropFilter: "blur(16px)" }}
       >
         <div className="max-w-6xl mx-auto px-6 h-full flex items-center justify-between">
-          <Link href="/" className="flex items-center gap-2 text-xl font-bold text-[var(--text-primary)]">
-            <Logo size="md" showWordmark priority href="/" />
-          </Link>
+          {/* Logo renders its own <Link>; do not wrap again. */}
+          <Logo size="md" showWordmark priority href="/" />
 
           <div className="hidden md:flex items-center gap-1">
             {NAV_LINKS.map((link) => (
@@ -325,7 +324,7 @@ export default function LandingPage() {
                 </span>
                 <Link
                   href="/dashboard"
-                  className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium bg-[var(--accent)] text-white rounded-lg hover:bg-[var(--accent-hover)] transition-colors"
+                  className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium bg-[var(--accent)] text-[var(--bg-base)] rounded-lg hover:bg-[var(--accent-hover)] transition-colors"
                 >
                   Open app
                   <ArrowRight className="w-4 h-4" />
@@ -341,7 +340,7 @@ export default function LandingPage() {
                 </Link>
                 <Link
                   href="/sign-up"
-                  className="px-4 py-2 text-sm font-medium bg-[var(--accent)] text-white rounded-lg hover:bg-[var(--accent-hover)] transition-colors"
+                  className="px-4 py-2 text-sm font-medium bg-[var(--accent)] text-[var(--bg-base)] rounded-lg hover:bg-[var(--accent-hover)] transition-colors"
                 >
                   Get started
                 </Link>
@@ -374,7 +373,7 @@ export default function LandingPage() {
               {signedIn ? (
                 <Link
                   href="/dashboard"
-                  className="px-4 py-2 text-sm text-center font-medium bg-[var(--accent)] text-white rounded-lg hover:bg-[var(--accent-hover)] transition-colors"
+                  className="px-4 py-2 text-sm text-center font-medium bg-[var(--accent)] text-[var(--bg-base)] rounded-lg hover:bg-[var(--accent-hover)] transition-colors"
                   onClick={() => setMobileMenuOpen(false)}
                 >
                   Open app
@@ -390,7 +389,7 @@ export default function LandingPage() {
                   </Link>
                   <Link
                     href="/sign-up"
-                    className="px-4 py-2 text-sm text-center font-medium bg-[var(--accent)] text-white rounded-lg hover:bg-[var(--accent-hover)] transition-colors"
+                    className="px-4 py-2 text-sm text-center font-medium bg-[var(--accent)] text-[var(--bg-base)] rounded-lg hover:bg-[var(--accent-hover)] transition-colors"
                     onClick={() => setMobileMenuOpen(false)}
                   >
                     Get started
@@ -434,7 +433,7 @@ export default function LandingPage() {
                 <div className="flex flex-wrap gap-3">
                   <Link
                     href={signedIn ? "/dashboard" : "/sign-up"}
-                    className="inline-flex items-center gap-2 px-6 py-3 text-sm font-medium bg-[var(--accent)] text-white rounded-xl hover:bg-[var(--accent-hover)] transition-colors"
+                    className="inline-flex items-center gap-2 px-6 py-3 text-sm font-medium bg-[var(--accent)] text-[var(--bg-base)] rounded-xl hover:bg-[var(--accent-hover)] transition-colors"
                   >
                     {signedIn ? "Open dashboard" : "Start free"}
                     <ChevronRight className="w-4 h-4" />
@@ -800,7 +799,7 @@ export default function LandingPage() {
               <div className="flex flex-wrap gap-3 shrink-0">
                 <Link
                   href={signedIn ? "/dashboard" : "/sign-up"}
-                  className="inline-flex items-center gap-2 px-6 py-3 text-sm font-medium bg-[var(--accent)] text-white rounded-xl hover:bg-[var(--accent-hover)] transition-colors"
+                  className="inline-flex items-center gap-2 px-6 py-3 text-sm font-medium bg-[var(--accent)] text-[var(--bg-base)] rounded-xl hover:bg-[var(--accent-hover)] transition-colors"
                 >
                   {signedIn ? "Open dashboard" : "Start free"}
                   <ChevronRight className="w-4 h-4" />
@@ -820,9 +819,8 @@ export default function LandingPage() {
         <footer className="border-t border-[var(--border-subtle)] py-10 px-6">
           <div className="max-w-6xl mx-auto flex flex-col md:flex-row items-start md:items-center justify-between gap-8">
             <div className="flex flex-col gap-3">
-              <Link href="/" className="flex items-center gap-2 text-lg font-bold text-[var(--text-primary)]">
-                <Logo size="sm" showWordmark href="/" />
-              </Link>
+              {/* Logo renders its own <Link>; do not wrap again. */}
+              <Logo size="sm" showWordmark href="/" />
               <p className="text-sm text-[var(--text-muted)]">
                 Observability + improvement for AI agents and LLM apps.
               </p>

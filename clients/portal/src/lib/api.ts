@@ -3732,6 +3732,18 @@ const datasetsApi = {
       headers: { "X-Org-Id": orgId, "Content-Type": "application/json" },
       body: JSON.stringify(body),
     }),
+  /**
+   * Returns a URL the browser can hit directly to download the dataset
+   * as JSONL. The same-origin catch-all proxy preserves the session
+   * cookie under SameSite=Lax, so an `<a download>` here just works.
+   * P2: was a dead `<button>` — the new anchor wires it up + adds
+   * aria-label on the caller side.
+   */
+  exportUrl: (orgId: string, datasetId: string, filename?: string) => {
+    const base = API_BASE || "/api/proxy";
+    const qs = filename ? `?filename=${encodeURIComponent(filename)}` : "";
+    return `${base}/orgs/${orgId}/datasets/${datasetId}/export${qs}`;
+  },
 };
 
 (api as unknown as Record<string, unknown>).labelingApi = labelingApi;

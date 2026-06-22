@@ -9,6 +9,16 @@ import { Card } from "@/components/ui/card";
 import { agentsApi, type AgentUpload } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
+// P5: client-side file size cap. The backend rejects uploads > 50MB
+// with a 413, but failing there means the user has already waited
+// for the whole file to upload. We bail out at the drop / pick step
+// with a clear inline error so the user knows immediately.
+const MAX_BYTES = 50 * 1024 * 1024;
+
+function formatMb(bytes: number): string {
+  return (bytes / (1024 * 1024)).toFixed(1);
+}
+
 export function AgentUploadPanel({
   orgId,
   agentId,
@@ -45,11 +55,28 @@ export function AgentUploadPanel({
     }
   }
 
+  function pickFile(f: File | undefined) {
+    if (!f) {
+      setFile(null);
+      setError(null);
+      return;
+    }
+    if (f.size > MAX_BYTES) {
+      setFile(null);
+      setError(
+        `${f.name} is ${formatMb(f.size)}MB — uploads are capped at 50MB. Compress the archive or split the agent into smaller uploads.`,
+      );
+      if (inputRef.current) inputRef.current.value = "";
+      return;
+    }
+    setError(null);
+    setFile(f);
+  }
+
   function onDrop(e: React.DragEvent) {
     e.preventDefault();
     setDragging(false);
-    const f = e.dataTransfer.files?.[0];
-    if (f) setFile(f);
+    pickFile(e.dataTransfer.files?.[0]);
   }
 
   function onDragOver(e: React.DragEvent) {
@@ -82,6 +109,7 @@ export function AgentUploadPanel({
 
       {/* Drop zone */}
       <label
+        htmlFor="agent-upload-input"
         onDrop={onDrop}
         onDragOver={onDragOver}
         onDragLeave={onDragLeave}
@@ -93,11 +121,12 @@ export function AgentUploadPanel({
         )}
       >
         <input
+          id="agent-upload-input"
           ref={inputRef}
           accept=".tar.gz,.tgz,.zip,application/gzip,application/zip,application/x-tar"
           className="sr-only"
           disabled={busy}
-          onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+          onChange={(e) => pickFile(e.target.files?.[0])}
           type="file"
         />
         {file ? (

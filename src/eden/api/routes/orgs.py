@@ -585,7 +585,7 @@ async def list_org_members(org_id: str, user: dict = Depends(get_current_user)):
 
     query = """
         SELECT om.user_id, om.role, om.joined_at, om.last_active_at,
-               u.email, u.name
+               u.email, u.name, COALESCE(u.two_factor_enabled, FALSE) AS two_factor_enabled
         FROM org_members om
         JOIN users u ON u.id = om.user_id
         WHERE om.org_id = $1
@@ -601,6 +601,9 @@ async def list_org_members(org_id: str, user: dict = Depends(get_current_user)):
             "role": r["role"],
             "joined_at": r["joined_at"].isoformat() if r.get("joined_at") else None,
             "last_active_at": r["last_active_at"].isoformat() if r.get("last_active_at") else None,
+            # P11: surface 2FA status so org admins can see who's
+            # protected when the org has ``two_factor_enforced`` set.
+            "two_factor_enabled": bool(r.get("two_factor_enabled")),
         }
         for r in rows
     ]

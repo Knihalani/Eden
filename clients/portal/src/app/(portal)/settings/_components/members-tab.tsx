@@ -6,7 +6,7 @@
  */
 
 import { useEffect, useState } from "react";
-import { Trash2, Users } from "lucide-react";
+import { Trash2, Users, Shield, ShieldOff } from "lucide-react";
 import { usePermissions } from "@/hooks/use-permissions";
 import { useToast } from "@/components/ui/toast";
 import { useConfirm } from "@/hooks/use-confirm";
@@ -32,11 +32,20 @@ export function MembersTab({ org }: MembersTabProps) {
       role: string;
       joined_at: string;
       last_active_at: string | null;
+      two_factor_enabled?: boolean;
     }>
   >([]);
   const [loading, setLoading] = useState(false);
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteRole, setInviteRole] = useState("member");
+
+  // P9: client-side email validation. The backend rejects bad
+  // addresses with a 422, but the user wouldn't see the error
+  // until after they clicked Invite and waited on the network.
+  // Cheap regex; covers the common cases (missing @, no domain,
+  // spaces) — RFC 5322 validation happens server-side.
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  const isValidEmail = emailRegex.test(inviteEmail.trim());
 
   const formatRelativeTime = (dateStr: string | null) => {
     if (!dateStr) return "Never";
@@ -133,6 +142,35 @@ export function MembersTab({ org }: MembersTabProps) {
         </span>
       ),
     },
+    // P11: 2FA status column. Shown as a shield icon + accessible
+    // label so admins can see who's protected when the org has
+    // ``two_factor_enforced`` set. The cell is sortable via the
+    // boolean coercion.
+    {
+      key: "two_factor_enabled",
+      header: "2FA",
+      sortable: true,
+      cell: (m) => (
+        <span
+          // The label is hidden visually but available to AT — the
+          // shield icon is the primary indicator.
+          aria-label={m.two_factor_enabled ? "Two-factor enabled" : "Two-factor disabled"}
+          title={m.two_factor_enabled ? "Two-factor enabled" : "Two-factor disabled"}
+          className={cn(
+            "inline-flex items-center justify-center w-6 h-6 rounded-md",
+            m.two_factor_enabled
+              ? "bg-[var(--terminal-faint)] text-[var(--terminal)]"
+              : "bg-[var(--bg-tertiary)] text-[var(--text-muted)]",
+          )}
+        >
+          {m.two_factor_enabled ? (
+            <Shield className="w-3.5 h-3.5" />
+          ) : (
+            <ShieldOff className="w-3.5 h-3.5" />
+          )}
+        </span>
+      ),
+    },
     {
       key: "joined_at",
       header: "Joined",
@@ -168,31 +206,51 @@ export function MembersTab({ org }: MembersTabProps) {
     <div className="space-y-4">
       {hasPermission("members:invite") && (
         <SettingsCard title="Invite member">
-          <div className="flex gap-3">
-            <input
-              type="email"
-              value={inviteEmail}
-              onChange={(e) => setInviteEmail(e.target.value)}
-              placeholder="user@example.com"
-              aria-label="Email address"
-              className="flex-1 px-3 py-2 rounded-lg border border-[var(--border-default)] bg-[var(--bg-secondary)] text-[var(--text-primary)]"
-            />
-            <select
-              value={inviteRole}
-              onChange={(e) => setInviteRole(e.target.value)}
-              aria-label="Role"
-              className="px-3 py-2 rounded-lg border border-[var(--border-default)] bg-[var(--bg-secondary)] text-[var(--text-primary)]"
-            >
-              <option value="viewer">Viewer</option>
-              <option value="member">Member</option>
-              <option value="admin">Admin</option>
-            </select>
-            <button
-              onClick={handleInvite}
-              className="px-4 py-2 bg-[var(--accent)] text-[var(--accent-foreground)] rounded-lg text-sm font-medium hover:opacity-90"
-            >
-              Invite
-            </button>
+          <div className="space-y-2">
+            <div className="flex gap-3">
+              <input
+                type="email"
+                value={inviteEmail}
+                onChange={(e) => setInviteEmail(e.target.value)}
+                placeholder="user@example.com"
+                aria-label="Email address"
+                aria-invalid={inviteEmail.trim() !== "" && !isValidEmail ? "true" : undefined}
+                aria-describedby="invite-email-error"
+                className={cn(
+                  "flex-1 px-3 py-2 rounded-lg border bg-[var(--bg-secondary)] text-[var(--text-primary)]",
+                  inviteEmail.trim() !== "" && !isValidEmail
+                    ? "border-[var(--error)]"
+                    : "border-[var(--border-default)]",
+                )}
+              />
+              <select
+                value={inviteRole}
+                onChange={(e) => setInviteRole(e.target.value)}
+                aria-label="Role"
+                className="px-3 py-2 rounded-lg border border-[var(--border-default)] bg-[var(--bg-secondary)] text-[var(--text-primary)]"
+              >
+                <option value="viewer">Viewer</option>
+                <option value="member">Member</option>
+                <option value="admin">Admin</option>
+              </select>
+              <button
+                onClick={handleInvite}
+                disabled={!isValidEmail}
+                aria-disabled={!isValidEmail || undefined}
+                className="px-4 py-2 bg-[var(--accent)] text-[var(--accent-foreground)] rounded-lg text-sm font-medium hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Invite
+              </button>
+            </div>
+            {inviteEmail.trim() !== "" && !isValidEmail && (
+              <p
+                id="invite-email-error"
+                role="alert"
+                className="text-xs text-[var(--error)]"
+              >
+                Enter a valid email address (e.g. user@example.com).
+              </p>
+            )}
           </div>
         </SettingsCard>
       )}

@@ -648,6 +648,13 @@ export function ChatSidebar() {
                     : "Ask about your data…"
                 }
                 disabled={streaming}
+                // P8: WCAG — textareas need an accessible name.
+                // Placeholder isn't a label, so screen readers
+                // announced the field with no name before. Also
+                // added aria-disabled so the streaming state is
+                // announced rather than just visual.
+                aria-label="Ask AI Insights a question"
+                aria-disabled={streaming || undefined}
                 className={cn(
                   "flex-1 resize-none rounded-md border border-[var(--border-default)]",
                   "bg-[var(--bg-base)] px-3 py-2 text-sm text-[var(--text-primary)]",
