@@ -110,10 +110,21 @@ async def _upsert_user(data: dict[str, Any]) -> None:
     (``org_members.user_id``, ``organizations.owner_id``,
     ``notifications.user_id``, ...) keep pointing at the same row.
 
-    ON CONFLICT (clerk_id) makes webhook re-deliveries idempotent —
-    if the portal's ``/auth/me`` auto-provision raced the webhook
-    and won, the webhook's second delivery falls into the DO UPDATE
-    branch instead of failing the unique constraint.
+    Two-step upsert:
+
+    1. ``INSERT ... ON CONFLICT (clerk_id) DO UPDATE`` — handles
+       re-deliveries for the same Clerk user (idempotent) and
+       catches the common case where ``/auth/me`` auto-provision
+       raced the webhook and won.
+    2. If the INSERT fails with ``users_email_key`` (a fresh
+       Clerk signup reusing an email that already has a row in
+       Eden under a *different* clerk_id — the user deleted and
+       re-signed up, or Clerk minted a new id for the same email
+       for some other reason), re-claim the existing row by
+       updating its clerk_id if and only if the existing row is
+       soft-deleted. Active rows with a different clerk_id are
+       left alone — that's a real conflict the operator needs to
+       resolve manually.
 
     ``password_hash`` is NULL for Clerk-managed users — they
     authenticate via Clerk, never via Eden's password flow.
@@ -132,20 +143,45 @@ async def _upsert_user(data: dict[str, Any]) -> None:
     avatar = data.get("image_url") or ""
 
     client = await get_postgres_client()
-    await client.execute(
-        """
-        INSERT INTO users (clerk_id, email, name, avatar_url, password_hash)
-        VALUES ($1, $2, $3, $4, NULL)
-        ON CONFLICT (clerk_id) DO UPDATE
-        SET email = EXCLUDED.email,
-            name = EXCLUDED.name,
-            avatar_url = EXCLUDED.avatar_url
-        """,
-        clerk_id,
-        email,
-        full,
-        avatar,
-    )
+    try:
+        await client.execute(
+            """
+            INSERT INTO users (clerk_id, email, name, avatar_url, password_hash)
+            VALUES ($1, $2, $3, $4, NULL)
+            ON CONFLICT (clerk_id) DO UPDATE
+            SET email = EXCLUDED.email,
+                name = EXCLUDED.name,
+                avatar_url = EXCLUDED.avatar_url
+            """,
+            clerk_id,
+            email,
+            full,
+            avatar,
+        )
+        return
+    except Exception as exc:
+        # Email already exists under a different clerk_id. If that
+        # row is soft-deleted, re-claim it (Clerk is the source of
+        # truth for who owns the email now). If it's active, the
+        # operator needs to resolve the conflict manually — log and
+        # bail so we don't silently overwrite a live user.
+        msg = str(exc).lower()
+        if "users_email_key" not in msg and "duplicate key" not in msg:
+            raise
+        await client.execute(
+            """
+            UPDATE users SET
+                clerk_id   = $1,
+                name       = COALESCE(NULLIF($3, ''), users.name),
+                avatar_url = COALESCE(NULLIF($4, ''), users.avatar_url),
+                deleted_at = NULL
+            WHERE email = $2 AND deleted_at IS NOT NULL
+            """,
+            clerk_id,
+            email,
+            full,
+            avatar,
+        )
 
 
 async def _deactivate_user(data: dict[str, Any]) -> None:
