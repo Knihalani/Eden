@@ -68,18 +68,49 @@ export async function forwardToBackend(
     }
   }
 
-  const response = await fetch(`${API_BASE}${path}`, {
-    method,
-    headers,
-    // ``body`` arrives from the catch-all route handler as either a
-    // raw string (already JSON, from request.text()) or undefined.
-    // Stringifying again would wrap the JSON string in extra quotes
-    // ("\"{\"email\":...}\"") and FastAPI would reject it as a string
-    // where an object is expected. Pass through as-is. (Multipart
-    // bodies still don't survive the text() read upstream; that's a
-    // separate gap.)
-    body: body as BodyInit | null | undefined,
-  });
+  let response: Response;
+  try {
+    response = await fetch(`${API_BASE}${path}`, {
+      method,
+      headers,
+      // ``body`` arrives from the catch-all route handler as either a
+      // raw string (already JSON, from request.text()) or undefined.
+      // Stringifying again would wrap the JSON string in extra quotes
+      // ("\"{\"email\":...}\"") and FastAPI would reject it as a string
+      // where an object is expected. Pass through as-is. (Multipart
+      // bodies still don't survive the text() read upstream; that's a
+      // separate gap.)
+      body: body as BodyInit | null | undefined,
+      // 25s hard timeout. SSE streams pass `stream: true` via
+      // `extraHeaders` and rely on the lower-level ``AbortController``
+      // in lib/api.ts to cancel the request — we don't want a stale
+      // fetch() to hang the worker for 5 minutes if the upstream
+      // FastAPI pod is unresponsive.
+      signal: AbortSignal.timeout(25_000),
+    });
+  } catch (error) {
+    // Network-level failure: DNS resolution, connection refused, TLS
+    // handshake, timeout, or pod restart. Surface as 502 Bad Gateway
+    // (the standard code for "upstream is down") with a clear
+    // ``detail`` so the portal can show "Backend unreachable" instead
+    // of a generic 500.
+    const message =
+      error instanceof Error ? error.message : "Unknown fetch error";
+    const isAbort =
+      error instanceof Error &&
+      (error.name === "AbortError" || /aborted|timeout/i.test(message));
+    return NextResponse.json(
+      {
+        detail: isAbort
+          ? "Backend timed out"
+          : "Backend unreachable",
+        upstream: API_BASE,
+        path,
+        cause: message,
+      },
+      { status: 502 },
+    );
+  }
 
   // Read the body once — clone before reading so the body is also available
   // for forwarding set-cookie logic.

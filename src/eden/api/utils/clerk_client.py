@@ -23,7 +23,9 @@ without a ``clerk_org_id`` so the existing fallback path keeps working.
 
 from __future__ import annotations
 
+import asyncio
 import logging
+import time
 from typing import Any
 
 from eden.config import get_settings
@@ -31,6 +33,21 @@ from eden.config import get_settings
 logger = logging.getLogger(__name__)
 
 CLERK_API_BASE = "https://api.clerk.com/v1"
+
+# In-process cache for ``get_user`` lookups. Eden's /auth/me auto-provision
+# fires on every page load for a signed-in Clerk user whose session JWT
+# doesn't carry the email claim; the default Clerk session token doesn't
+# include email, so without this cache every /auth/me hit would round-trip
+# to Clerk's Backend API. The cache is keyed on the Clerk user id, holds
+# the full payload, and expires after ``_USER_CACHE_TTL_SECONDS`` so a
+# profile change in Clerk propagates within minutes without an unbounded
+# cache.
+_USER_CACHE: dict[str, tuple[float, dict[str, Any]]] = {}
+_USER_CACHE_TTL_SECONDS = 300.0  # 5 minutes — long enough to absorb page
+                                  # navigations, short enough that a user
+                                  # updating their email in Clerk sees the
+                                  # change on their next visit.
+_USER_CACHE_LOCK = asyncio.Lock()
 
 
 class ClerkAPIError(RuntimeError):
@@ -120,14 +137,51 @@ async def get_user(clerk_id: str) -> dict[str, Any] | None:
     auto-provision path because it needs zero Clerk-dashboard config
     and works the moment ``CLERK_SECRET_KEY`` is set (which it must
     be for the portal to verify Clerk session JWTs in the first place).
+
+    Results are cached in-process for ``_USER_CACHE_TTL_SECONDS`` so the
+    auto-provision hot path doesn't round-trip to Clerk on every page
+    load. Negative results (``None``) are NOT cached — Clerk could be
+    transiently unreachable and we don't want to lock in the failure.
     """
     if not clerk_id:
         return None
-    try:
-        return await _get(f"/users/{clerk_id}")
-    except ClerkAPIError as exc:
-        logger.warning("get_user(%s) failed: %s", clerk_id, exc)
-        return None
+    # Fast path: cache hit, no lock needed.
+    cached = _USER_CACHE.get(clerk_id)
+    if cached is not None:
+        expires_at, payload = cached
+        if time.monotonic() < expires_at:
+            return payload
+    # Slow path: take the lock so concurrent first-call bursts don't
+    # stampede the Clerk API. The lock is a per-event-loop asyncio
+    # lock — multi-worker deployments each have their own cache, which
+    # is fine (the API call is cheap; the cache is a perf optimisation,
+    # not a correctness requirement).
+    async with _USER_CACHE_LOCK:
+        cached = _USER_CACHE.get(clerk_id)
+        if cached is not None:
+            expires_at, payload = cached
+            if time.monotonic() < expires_at:
+                return payload
+        try:
+            payload = await _get(f"/users/{clerk_id}")
+        except ClerkAPIError as exc:
+            logger.warning("get_user(%s) failed: %s", clerk_id, exc)
+            return None
+        if payload is not None:
+            _USER_CACHE[clerk_id] = (time.monotonic() + _USER_CACHE_TTL_SECONDS, payload)
+        return payload
+
+
+def invalidate_user_cache(clerk_id: str | None = None) -> None:
+    """Clear a single cached user (or the whole cache if ``clerk_id`` is
+    None). Useful from the webhook handler when a ``user.updated`` event
+    arrives so the next /auth/me picks up the new email/name/avatar
+    without waiting for the 5-minute TTL.
+    """
+    if clerk_id is None:
+        _USER_CACHE.clear()
+        return
+    _USER_CACHE.pop(clerk_id, None)
 
 
 def extract_user_profile(payload: dict[str, Any]) -> dict[str, str]:

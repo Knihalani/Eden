@@ -22,6 +22,11 @@ export default function SignInPage() {
         path="/sign-in"
         routing="path"
         signUpUrl="/sign-up"
+        // Send signed-in users to the dashboard, not back to "/".
+        // Without an explicit fallback Clerk sometimes resolves to
+        // the current URL, which can leave a user who clicked "Sign
+        // in" from /sign-up stuck on the auth card.
+        signInFallbackRedirectUrl="/dashboard"
         appearance={clerkAppearance}
       />
     </AuthSplitLayout>
