@@ -26,6 +26,7 @@ import { Wizard, type WizardStep } from "@/components/ui/wizard";
 import { WelcomeStep } from "./_steps/welcome";
 import { ConnectStep } from "./_steps/connect";
 import { WaitStep } from "./_steps/wait";
+import { TourStep } from "./_steps/tour";
 import { DoneStep } from "./_steps/done";
 
 const STEPS: WizardStep[] = [
@@ -34,8 +35,6 @@ const STEPS: WizardStep[] = [
     slug: "/onboarding",
     label: "Welcome",
     render: () => <WelcomeStep {...({} as Parameters<typeof WelcomeStep>[0])} />,
-    // The Welcome step's "Get started" button navigates to /onboarding/org
-    // directly, so we treat advancing as moving to the next step.
   },
   {
     id: "org",
@@ -44,34 +43,37 @@ const STEPS: WizardStep[] = [
     render: () => null,
   },
   {
-    id: "install",
-    slug: "/onboarding/install",
-    label: "Install SDK",
-    // Now NON-optional — this is the activation step (June 2026 cleanup).
-    // After install, users go straight to /onboarding/connect.
-    render: () => null,
-  },
-  {
     id: "connect",
     slug: "/onboarding/connect",
     label: "Connect repo",
-    // Step 4: link a GitHub repo via the Eden GitHub App. The shared
-    // <OnboardingConnectFlow> opens an SDK-integration PR; on success
-    // it navigates to /onboarding/wait. Members / viewers without
-    // `integrations:write` see a locked panel that explains why and
-    // lets the wizard skip to the Done step.
+    // Required step: link a GitHub repo via the Eden GitHub App. The
+    // shared <OnboardingConnectFlow> opens an SDK-integration PR;
+    // on success it navigates to /onboarding/wait. Members /
+    // viewers without `jobs:write` see a locked panel that explains
+    // why and lets the wizard skip to the Done step.
     render: () => <ConnectStep />,
   },
   {
     id: "wait",
     slug: "/onboarding/wait",
     label: "Wait for PR",
-    // Step 5: poll /pr-runs every 5s for the integration PR. The step
-    // body shows status badges, GitHub deep links, and a "Skip —
-    // finish setup" escape hatch for users who wire the repo up
-    // manually. The wizard advances to /onboarding/done on merge or
-    // skip.
+    // Poll /pr-runs every 5s for the integration PR. Status badges,
+    // GitHub deep links, and a "Skip — finish setup" escape hatch
+    // for users who wire the repo up manually.
     render: () => <WaitStep />,
+  },
+  {
+    id: "tour",
+    slug: "/onboarding/tour",
+    label: "Quick tour",
+    // Visual tour of the major portal components. Replaces the
+    // previous "Install SDK" required step — SDK install is now
+    // optional and reachable from the chat, the tour card, or
+    // Settings → Agent. The tour card itself highlights the AI
+    // Insights chat as the catch-all for "ask Eden" questions.
+    render: () => (
+      <TourStep {...({} as Parameters<typeof TourStep>[0])} />
+    ),
   },
   {
     id: "done",
