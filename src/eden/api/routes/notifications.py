@@ -2,7 +2,7 @@
 
 import logging
 
-from fastapi import APIRouter, Cookie, Query
+from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel
 
 from eden.api.deps import get_current_user
@@ -55,13 +55,20 @@ async def list_notifications(
     limit: int = Query(20, ge=1, le=100),
     offset: int = Query(0, ge=0),
     unread_only: bool = Query(False),
-    authorization: str | None = Cookie(None),
+    user: dict = Depends(get_current_user),
 ):
     """List notifications for the authenticated user.
 
     Returns paginated notifications ordered by creation time (newest first).
+
+    June 2026 fix: the prior signature took the raw cookie string
+    via ``Cookie(None)`` and called ``await get_current_user(authorization)``
+    — but ``get_current_user`` is a FastAPI dependency that takes a
+    Depends-resolved payload dict, not a cookie string. Passing the
+    cookie crashed ``payload.get("sub")`` with AttributeError → 500.
+    Now wired through ``Depends(get_current_user)`` like the rest of
+    the route layer.
     """
-    user = await get_current_user(authorization)
     user_id = user["user_id"]
 
     client = await get_postgres_client()
@@ -129,10 +136,9 @@ async def list_notifications(
 @router.post("", response_model=NotificationResponse)
 async def create_notification(
     request: CreateNotificationRequest,
-    authorization: str | None = Cookie(None),
+    user: dict = Depends(get_current_user),
 ):
     """Create a new notification for the authenticated user."""
-    user = await get_current_user(authorization)
     user_id = user["user_id"]
 
     client = await get_postgres_client()
@@ -155,10 +161,9 @@ async def create_notification(
 @router.patch("/{notification_id}/read", response_model=dict)
 async def mark_notification_read(
     notification_id: str,
-    authorization: str | None = Cookie(None),
+    user: dict = Depends(get_current_user),
 ):
     """Mark a notification as read."""
-    user = await get_current_user(authorization)
     user_id = user["user_id"]
 
     client = await get_postgres_client()
@@ -187,10 +192,9 @@ async def mark_notification_read(
 
 @router.patch("/read-all", response_model=dict)
 async def mark_all_notifications_read(
-    authorization: str | None = Cookie(None),
+    user: dict = Depends(get_current_user),
 ):
     """Mark all notifications as read for the authenticated user."""
-    user = await get_current_user(authorization)
     user_id = user["user_id"]
 
     client = await get_postgres_client()
@@ -210,10 +214,9 @@ async def mark_all_notifications_read(
 @router.delete("/{notification_id}", response_model=dict)
 async def delete_notification(
     notification_id: str,
-    authorization: str | None = Cookie(None),
+    user: dict = Depends(get_current_user),
 ):
     """Delete a notification."""
-    user = await get_current_user(authorization)
     user_id = user["user_id"]
 
     client = await get_postgres_client()
