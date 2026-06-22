@@ -291,19 +291,37 @@ class OpenRouterClient:
         prompt: str,
         slot: str = "reasoning",
         system_prompt: str | None = None,
+        model: str | None = None,
         **kwargs,
     ) -> LLMResponse:
-        """Make an LLM call with retry and circuit breaker."""
+        """Make an LLM call with retry and circuit breaker.
+
+        ``model`` is an optional override — when provided, the
+        client uses exactly that model (no slot fallback chain).
+        The model_router passes ``model`` per tier to pick a
+        specific model within a tier without losing the retry
+        + circuit breaker wrapping.
+        """
         if self.circuit_breaker.is_open(agent):
             raise CircuitOpenError(f"Circuit breaker open for agent: {agent}")
-
-        model_config = self.MODEL_SLOTS.get(slot, self.MODEL_SLOTS["reasoning"])
-        all_models = [model_config.primary] + model_config.fallback
 
         # ``_make_request`` already declares ``max_tokens`` in its
         # signature; pop it out of kwargs so the ``**kwargs`` spread
         # below doesn't pass it twice (TypeError at request time).
-        max_tokens = kwargs.pop("max_tokens", model_config.max_tokens)
+        max_tokens = kwargs.pop("max_tokens", None)
+        # Same for ``model`` — the explicit parameter above takes
+        # precedence; the kwargs spread below would double-pass it.
+        kwargs.pop("model", None)
+
+        if model is not None:
+            all_models = [model]
+        else:
+            model_config = self.MODEL_SLOTS.get(
+                slot, self.MODEL_SLOTS["reasoning"]
+            )
+            all_models = [model_config.primary] + model_config.fallback
+            if max_tokens is None:
+                max_tokens = model_config.max_tokens
 
         last_error = None
         for model in all_models:
