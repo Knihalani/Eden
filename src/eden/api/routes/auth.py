@@ -491,6 +491,16 @@ async def get_me(user: dict = Depends(get_current_user)):
     # Clerk path: the JWT ``sub`` claim is a Clerk string id
     # (``user_2abc...``), not a UUID. Look up by ``clerk_id``.
     db_user = await get_user_by_id(user["user_id"], lookup_column="clerk_id")
+    if db_user:
+        logger.info(
+            "/auth/me HIT user_id=%s clerk_id=%s email=%s",
+            user["user_id"], db_user.get("clerk_id"), db_user.get("email"),
+        )
+    else:
+        logger.warning(
+            "/auth/me MISS user_id=%s — auto-provisioning",
+            user["user_id"],
+        )
     if not db_user:
         # Self-heal: webhook hasn't synced yet. Best-effort
         # auto-provision. Generated UUID PK + ``clerk_id`` +
@@ -566,14 +576,56 @@ async def get_me(user: dict = Depends(get_current_user)):
                     continue
                 # Last attempt failed — fall through to the re-read
                 # below, which may pick up the webhook's row.
+
         if inserted is not None:
             db_user = inserted
         else:
-            # Re-read in case the webhook inserted between our last
-            # attempt and now (or our INSERT raced and lost the ON
-            # CONFLICT branch).
+            # The INSERT either failed or hit the ON CONFLICT branch.
+            # A ON CONFLICT hit means the row already exists — re-read
+            # and use it. An INSERT failure is logged above; here we
+            # try one more time with a bare-minimum INSERT (only
+            # clerk_id + synthesized email + name) in case the rich
+            # INSERT was failing on a column we don't need for the
+            # /auth/me response. The clerk_id column has a UNIQUE
+            # constraint, so a brute-force insert is safe to retry.
             db_user = await get_user_by_id(clerk_id, lookup_column="clerk_id")
+            if not db_user:
+                logger.warning(
+                    "auto-provision /auth/me re-read MISS for clerk_id=%s; "
+                    "trying bare-minimum INSERT",
+                    clerk_id,
+                )
+                try:
+                    db_user = await client.fetchrow(
+                        """
+                        INSERT INTO users (clerk_id, email, name, password_hash, created_at)
+                        VALUES ($1, $2, $3, NULL, NOW())
+                        ON CONFLICT (clerk_id) DO NOTHING
+                        RETURNING id, email, name, created_at, preferred_org_id, clerk_id
+                        """,
+                        clerk_id,
+                        email,
+                        name,
+                    )
+                    if db_user is None:
+                        db_user = await get_user_by_id(
+                            clerk_id, lookup_column="clerk_id"
+                        )
+                except Exception as exc:
+                    logger.error(
+                        "auto-provision /auth/me bare-minimum INSERT "
+                        "FAILED for clerk_id=%s: %s",
+                        clerk_id, exc,
+                    )
+
         if not db_user:
+            logger.error(
+                "/auth/me auto-provision FAILED for clerk_id=%s after 3 "
+                "attempts; returning 404. The Clerk session sub claim is "
+                "user_id=%s. The auto-provision INSERT failed and the "
+                "post-failure re-read also returned no row.",
+                clerk_id, user["user_id"],
+            )
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="User not found",
