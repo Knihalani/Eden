@@ -1,6 +1,11 @@
 """Billing and subscription management routes for Eden.
 
-Handles Stripe webhook events, subscription management, and plan limits.
+Handles plan reads (with cost-based usage surface) and Stripe-backed
+subscribe / cancel / webhook endpoints (kept dormant in free-only mode).
+
+**Free-only mode (June 2026).** All Stripe-backed endpoints return
+``503`` until paid plans ship. The ``/plans`` endpoint surfaces the org's
+running USD cost against its tier cap (the primary free-tier lever).
 """
 
 import json
@@ -17,11 +22,19 @@ from eden.api.deps import (
     require_org_permission_dep,
 )
 from eden.config import get_settings
+from eden.services.plan_tiers import get_plan_tier, list_public_plan_tiers
+from eden.services.usage_service import UsageService
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
 
 router = APIRouter(prefix="/orgs/{org_id}/billing", tags=["billing"])
+
+# Ponytail: paid plans are off. The Stripe-backed routes below return
+# 503 until this flips. The constants they reference (PLAN_DEFINITIONS,
+# handle_subscription_event) are preserved so the surface can come
+# back online by setting this flag + wiring Stripe keys.
+PAID_PLANS_ENABLED = False
 
 
 # ============================================================================
@@ -29,12 +42,28 @@ router = APIRouter(prefix="/orgs/{org_id}/billing", tags=["billing"])
 # ============================================================================
 
 class PlanLimits(BaseModel):
-    """Plan limit information."""
+    """Plan limit + current usage information returned to the portal.
+
+    The portal leads with ``cost_used_usd`` / ``cost_hard_limit_usd`` as
+    the primary free-tier meter. Token / storage / sandbox counts are
+    informational. Seat / reference counts still gate invite / create
+    flows via the org_plans rows.
+    """
     plan_name: str
+    display_name: str
+    # PRIMARY cap — USD cost this period
+    cost_used_usd: float
+    cost_soft_limit_usd: float
+    cost_hard_limit_usd: float
+    cost_status: str   # 'ok' | 'soft_exceeded' | 'hard_exceeded'
+    # Resource counts (informational)
     seats_limit: int
     seats_used: int
     references_limit: int
     references_used: int
+    tokens_used: int
+    storage_mb_used: float
+    sandbox_seconds_used: float
     active: bool
     stripe_subscription_id: str | None = None
     subscription_status: str | None = None
@@ -186,7 +215,14 @@ async def check_limit(
     """Check if org is at or over a limit. Returns True if limit exceeded."""
     plan = await get_org_plan(org_id)
     if not plan:
-        return False  # No plan = free tier (limited but untracked)
+        # No plan row = treat as org_free defaults (backfill in flight or
+        # never-queried org). Use the tier definition rather than 0/0.
+        tier = get_plan_tier("org_free")
+        if limit_type == "seats":
+            return 0 >= tier.seats_limit  # always False at zero
+        if limit_type == "references":
+            return 0 >= tier.references_limit
+        return False
 
     if limit_type == "seats":
         return plan["seats_used"] >= plan["seats_limit"]
@@ -194,6 +230,17 @@ async def check_limit(
         return plan["references_used"] >= plan["references_limit"]
 
     return False
+
+
+def _require_paid_plans_enabled() -> None:
+    """Gate paid-plan endpoints. Raises 503 until :data:`PAID_PLANS_ENABLED`
+    flips to True (and Stripe keys are wired).
+    """
+    if not PAID_PLANS_ENABLED:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Paid plans are not available yet. Eden is currently free-only.",
+        )
 
 
 # ============================================================================
@@ -204,29 +251,59 @@ async def check_limit(
 async def get_plans(org_id: str, user: dict = Depends(get_current_user),
         _check_billing_view: dict = Depends(require_org_permission_dep('billing:view')),
 ):
-    """Get current plan and usage for the organization."""
+    """Get current plan and usage for the organization.
+
+    Surfaces the org's running USD cost + tier cap as the headline
+    (the primary free-tier lever), with token / storage / sandbox as
+    informational sub-section data.
+    """
 
     # Sync usage to get accurate counts
     await sync_plan_usage(org_id)
 
     plan = await get_org_plan(org_id)
 
+    # Resolve plan name + tier + budget (cost + resources) up front.
+    plan_name = plan["plan_name"] if plan else "org_free"
+    tier = get_plan_tier(plan_name)
+    budget = await UsageService().get_budget_status(org_id)
+    cost = budget.get("cost_usd", {})
+
     if not plan:
+        # No row yet (backfill pending) — surface the org_free defaults
+        # from the single source of truth (plan_tiers.py) so the UI
+        # never sees a different answer than the quota middleware.
         return PlanLimits(
-            plan_name="free",
-            seats_limit=2,
+            plan_name=tier.name,
+            display_name=tier.display_name,
+            cost_used_usd=float(cost.get("used", 0.0)),
+            cost_soft_limit_usd=float(tier.cost_soft_limit_usd),
+            cost_hard_limit_usd=float(tier.cost_hard_limit_usd),
+            cost_status=str(cost.get("status", "ok")),
+            seats_limit=tier.seats_limit,
             seats_used=0,
-            references_limit=10,
+            references_limit=tier.references_limit,
             references_used=0,
+            tokens_used=int(budget.get("tokens", {}).get("used", 0)),
+            storage_mb_used=float(budget.get("storage_mb", {}).get("used", 0.0)),
+            sandbox_seconds_used=float(budget.get("sandbox_seconds", {}).get("used", 0.0)),
             active=True,
         )
 
     return PlanLimits(
         plan_name=plan["plan_name"],
+        display_name=tier.display_name,
+        cost_used_usd=float(cost.get("used", 0.0)),
+        cost_soft_limit_usd=float(cost.get("soft_limit", tier.cost_soft_limit_usd)),
+        cost_hard_limit_usd=float(cost.get("hard_limit", tier.cost_hard_limit_usd)),
+        cost_status=str(cost.get("status", "ok")),
         seats_limit=plan["seats_limit"],
         seats_used=plan["seats_used"],
         references_limit=plan["references_limit"],
         references_used=plan["references_used"],
+        tokens_used=int(budget.get("tokens", {}).get("used", 0)),
+        storage_mb_used=float(budget.get("storage_mb", {}).get("used", 0.0)),
+        sandbox_seconds_used=float(budget.get("sandbox_seconds", {}).get("used", 0.0)),
         active=plan["active"],
         stripe_subscription_id=plan.get("stripe_subscription_id"),
         subscription_status=plan.get("subscription_status"),
@@ -242,6 +319,7 @@ async def subscribe(
         _check_billing_edit: dict = Depends(require_org_permission_dep('billing:edit')),
 ):
     """Create a Stripe checkout session for subscription."""
+    _require_paid_plans_enabled()
 
     # Check if Stripe is configured
     stripe_api_key = getattr(settings, "stripe_secret_key", None) or ""
@@ -400,6 +478,7 @@ async def cancel_subscription(org_id: str, user: dict = Depends(get_current_user
         _check_billing_edit: dict = Depends(require_org_permission_dep('billing:edit')),
 ):
     """Cancel the current subscription."""
+    _require_paid_plans_enabled()
 
     stripe_api_key = getattr(settings, "stripe_secret_key", None) or ""
     if not stripe_api_key or stripe_api_key == "":
@@ -460,6 +539,7 @@ async def stripe_webhook(
     request: Request,
 ):
     """Handle Stripe webhook events."""
+    _require_paid_plans_enabled()
     stripe_api_key = getattr(settings, "stripe_secret_key", None) or ""
     if not stripe_api_key or stripe_api_key == "":
         raise HTTPException(

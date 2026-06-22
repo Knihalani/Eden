@@ -200,12 +200,17 @@ class UsageService:
         # Get the active resource limits row
         limits = await client.get_org_resource_limits(org_id)
         if not limits:
-            # No limits configured — create a default free-tier record
-            logger.warning(f"No resource limits found for org {org_id}; creating free tier defaults")
-            await client.set_org_resource_limits(org_id, plan_name="free")
+            # No limits configured — create a default free-tier record.
+            # Ponytail: empty limits row would deny everything via 0/0,
+            # so write the ``org_free`` row inline. The migration
+            # ``046_free_only_default_plan`` backfills old orgs at
+            # upgrade time, so this branch fires only for genuinely
+            # new orgs that race the create_org inserts.
+            logger.warning(f"No resource limits found for org {org_id}; creating org_free defaults")
+            await client.set_org_resource_limits(org_id, plan_name="org_free")
             limits = await client.get_org_resource_limits(org_id)
 
-        plan_name = limits.get("plan_name", "free") if limits else "free"
+        plan_name = limits.get("plan_name", "org_free") if limits else "org_free"
         tier = get_plan_tier(plan_name)
 
         now = datetime.now(UTC)
@@ -297,6 +302,20 @@ class UsageService:
                 "hard_limit": refs_hard,
                 "percentage": _pct(references_used, refs_hard),
                 "status": _status(references_used, refs_soft, refs_hard),
+            },
+            "cost_usd": {
+                # PRIMARY free-tier enforcement lever. The portal UI
+                # leads with this card; the quota middleware 429s when
+                # ``status == "hard_exceeded"`` on any mutating request.
+                "used": round(total_cost_usd, 4),
+                "soft_limit": round(float(limits.get("cost_soft_limit_usd") or tier.cost_soft_limit_usd), 4),
+                "hard_limit": round(float(limits.get("cost_hard_limit_usd") or tier.cost_hard_limit_usd), 4),
+                "percentage": _pct(total_cost_usd, float(limits.get("cost_hard_limit_usd") or tier.cost_hard_limit_usd)),
+                "status": _status(
+                    total_cost_usd,
+                    float(limits.get("cost_soft_limit_usd") or tier.cost_soft_limit_usd),
+                    float(limits.get("cost_hard_limit_usd") or tier.cost_hard_limit_usd),
+                ),
             },
             "total_cost_usd": round(total_cost_usd, 4),
         }

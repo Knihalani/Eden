@@ -7,6 +7,12 @@ endpoint path.  Blocks the request with HTTP 429 when a hard limit is hit
 and returns HTTP 429 with a soft-limit warning when only a soft limit is
 exceeded (still allows the request but warns).
 
+**Primary enforcement lever: ``cost_usd`` (total USD cost).** The free
+tier caps Eden's marginal COGS under $1/active-user/month. Every mutating
+request checks the org's monthly cost against its tier's
+``cost_hard_limit_usd``. Tokens / storage / sandbox remain in the headers
+for transparency but are NOT the primary blocker.
+
 Depends on:
   - org_resource_limits (soft / hard limits per org)
   - usage_events (actual usage, aggregated in real time)
@@ -29,6 +35,12 @@ logger = logging.getLogger(__name__)
 PATH_RESOURCE_MAP: dict[str, list[str]] = {
     "/orgs/": ["seats", "references"],  # org-scoped writes (members, refs, etc.)
 }
+
+# Resources checked on EVERY mutating request regardless of path —
+# these are the headline free-tier levers.
+GLOBAL_MUTATING_RESOURCES: list[str] = [
+    "cost_usd",  # PRIMARY — total USD cost vs tier cap
+]
 
 # HTTP methods considered "mutating"
 MUTATING_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
@@ -102,7 +114,9 @@ class QuotaEnforcementMiddleware(BaseHTTPMiddleware):
 
         # ── For mutating methods, enforce hard limits ──
         if request.method in MUTATING_METHODS:
-            resources = self._resources_for_path(request.url.path)
+            # Path-specific resources + global (cost_usd) checked
+            # together. Cost cap fires regardless of path.
+            resources = list(GLOBAL_MUTATING_RESOURCES) + self._resources_for_path(request.url.path)
             if resources:
                 try:
                     blocked, detail = await self._check_hard_limits(org_id, resources)
@@ -135,6 +149,7 @@ class QuotaEnforcementMiddleware(BaseHTTPMiddleware):
 
         headers: dict[str, str] = {}
 
+        # Resource counters (tokens / storage / sandbox) for transparency.
         for resource in ("tokens", "storage_mb", "sandbox_seconds"):
             res_data = budget.get(resource, {})
             used = res_data.get("used", 0)
@@ -151,8 +166,17 @@ class QuotaEnforcementMiddleware(BaseHTTPMiddleware):
             if status != "ok":
                 headers[f"X-Quota-{prefix}-Status"] = status
 
+        # PRIMARY cap — cost_usd. Floats so we don't lose precision on
+        # the cents/dollar boundary; the portal formats these as $.
+        cost = budget.get("cost_usd", {})
+        headers["X-Quota-Cost-Used"] = str(cost.get("used", 0))
+        headers["X-Quota-Cost-Soft"] = str(cost.get("soft_limit", 0))
+        headers["X-Quota-Cost-Hard"] = str(cost.get("hard_limit", 0))
+        headers["X-Quota-Cost-Pct"] = str(cost.get("percentage", 0))
+        if cost.get("status") not in (None, "ok"):
+            headers["X-Quota-Cost-Status"] = cost["status"]
+
         headers["X-Quota-Plan"] = budget.get("plan_name", "unknown")
-        headers["X-Quota-Total-Cost"] = str(budget.get("total_cost_usd", 0))
         return headers
 
     async def _check_hard_limits(
@@ -162,7 +186,9 @@ class QuotaEnforcementMiddleware(BaseHTTPMiddleware):
     ) -> tuple[bool, str]:
         """Check whether any hard limit is exceeded for the given resources.
 
-        Returns (blocked, detail_message).
+        Returns (blocked, detail_message). The cost_usd message is the
+        headline for free-tier overage; the others fall back to a generic
+        resource-specific message.
         """
         service = await self._get_usage_service()
         budget = await service.get_budget_status(org_id)
@@ -173,10 +199,29 @@ class QuotaEnforcementMiddleware(BaseHTTPMiddleware):
             if status == "hard_exceeded":
                 used = res_data.get("used", 0)
                 hard = res_data.get("hard_limit", 0)
+                if resource == "cost_usd":
+                    return (
+                        True,
+                        f"Free-tier spending cap reached this month "
+                        f"(${used:.2f} / ${hard:.2f}). "
+                        "Reach out to support to raise your cap.",
+                    )
+                if resource == "seats":
+                    return (
+                        True,
+                        f"Seat limit reached ({int(used)} / {int(hard)}). "
+                        "Remove a member or ask support to raise the cap.",
+                    )
+                if resource == "references":
+                    return (
+                        True,
+                        f"Code-reference limit reached ({int(used)} / {int(hard)}). "
+                        "Remove old references or ask support to raise the cap.",
+                    )
                 return (
                     True,
                     f"{resource} hard limit exceeded ({int(used)} / {hard}). "
-                    "Upgrade your plan to continue.",
+                    "Reach out to support to raise your cap.",
                 )
 
         return False, ""

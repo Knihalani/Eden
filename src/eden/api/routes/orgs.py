@@ -216,6 +216,32 @@ async def create_org(
         user_id,
     )
 
+    # Free-only mode: every new org starts on ``org_free`` (3 seats, $3/mo
+    # cost cap, tight tokens/storage/sandbox). ``ON CONFLICT DO NOTHING``
+    # (no target) makes the inserts idempotent against the composite
+    # UNIQUE constraints on both tables — re-runs after Clerk backfill
+    # just skip silently.
+    await client.execute(
+        """
+        INSERT INTO org_resource_limits (org_id, plan_name, effective_from)
+        VALUES ($1, 'org_free', NOW())
+        ON CONFLICT DO NOTHING
+        """,
+        org_id,
+    )
+    await client.execute(
+        """
+        INSERT INTO org_plans (
+            org_id, plan_name,
+            seats_limit, references_limit, jobs_limit,
+            active
+        )
+        VALUES ($1, 'org_free', 3, 50, 40, true)
+        ON CONFLICT DO NOTHING
+        """,
+        org_id,
+    )
+
     # Update user's preferred_org if requested
     if make_default:
         await client.execute(
