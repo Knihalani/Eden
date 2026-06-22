@@ -556,7 +556,13 @@ async def get_me(user: dict = Depends(get_current_user)):
                     """
                     INSERT INTO users (clerk_id, email, name, avatar_url, password_hash, created_at)
                     VALUES ($1, $2, $3, $4, NULL, NOW())
-                    ON CONFLICT (clerk_id) DO NOTHING
+                    ON CONFLICT (email) DO UPDATE SET
+                        clerk_id  = EXCLUDED.clerk_id,
+                        avatar_url = COALESCE(EXCLUDED.avatar_url, users.avatar_url),
+                        name      = COALESCE(NULLIF(EXCLUDED.name, ''), users.name),
+                        deleted_at = NULL
+                    WHERE users.deleted_at IS NOT NULL
+                       OR users.clerk_id = EXCLUDED.clerk_id
                     RETURNING id, email, name, created_at, preferred_org_id, clerk_id
                     """,
                     clerk_id,
@@ -581,14 +587,49 @@ async def get_me(user: dict = Depends(get_current_user)):
             db_user = inserted
         else:
             # The INSERT either failed or hit the ON CONFLICT branch.
-            # A ON CONFLICT hit means the row already exists — re-read
-            # and use it. An INSERT failure is logged above; here we
-            # try one more time with a bare-minimum INSERT (only
-            # clerk_id + synthesized email + name) in case the rich
-            # INSERT was failing on a column we don't need for the
-            # /auth/me response. The clerk_id column has a UNIQUE
-            # constraint, so a brute-force insert is safe to retry.
+            # ``ON CONFLICT (email) DO UPDATE ... WHERE deleted_at IS
+            # NOT NULL`` returns NULL when the existing row is active
+            # and owned by a different Clerk user — that's a real
+            # conflict we can't auto-resolve, so we re-read by both
+            # clerk_id and email to pick up the row that exists.
             db_user = await get_user_by_id(clerk_id, lookup_column="clerk_id")
+            if not db_user:
+                # Maybe the row exists under the email with a stale
+                # clerk_id (the webhook handler hasn't re-pointed it
+                # yet, or this is a brand-new user signing in for the
+                # first time on a brand-new Clerk account but reusing
+                # a previously-deleted email).
+                db_user = await client.fetchrow(
+                    "SELECT id, email, name, avatar_url, created_at, "
+                    "preferred_org_id, clerk_id FROM users WHERE email = $1",
+                    email,
+                )
+                if db_user and db_user.get("clerk_id") != clerk_id:
+                    # Re-claim the row: the existing email matches
+                    # but the clerk_id is stale (either from a prior
+                    # signup that got soft-deleted, or because the
+                    # webhook hasn't re-pointed yet). Update clerk_id
+                    # + clear deleted_at + refresh avatar_url.
+                    if db_user.get("deleted_at") is not None:
+                        db_user = await client.fetchrow(
+                            """
+                            UPDATE users SET
+                                clerk_id   = $1,
+                                avatar_url = COALESCE(NULLIF($2, ''), users.avatar_url),
+                                name       = COALESCE(NULLIF($3, ''), users.name),
+                                deleted_at = NULL
+                            WHERE id = $4
+                            RETURNING id, email, name, avatar_url, created_at,
+                                      preferred_org_id, clerk_id
+                            """,
+                            clerk_id, avatar_url, name, db_user["id"],
+                        )
+                        logger.info(
+                            "auto-provision re-claimed soft-deleted row %s "
+                            "for new clerk_id=%s (was %s)",
+                            db_user["id"] if db_user else "?", clerk_id,
+                            "stale",
+                        )
             if not db_user:
                 logger.warning(
                     "auto-provision /auth/me re-read MISS for clerk_id=%s; "
@@ -600,16 +641,28 @@ async def get_me(user: dict = Depends(get_current_user)):
                         """
                         INSERT INTO users (clerk_id, email, name, password_hash, created_at)
                         VALUES ($1, $2, $3, NULL, NOW())
-                        ON CONFLICT (clerk_id) DO NOTHING
-                        RETURNING id, email, name, created_at, preferred_org_id, clerk_id
+                        ON CONFLICT (email) DO UPDATE SET
+                            clerk_id   = EXCLUDED.clerk_id,
+                            deleted_at = NULL
+                        WHERE users.deleted_at IS NOT NULL
+                           OR users.clerk_id = EXCLUDED.clerk_id
+                        RETURNING id, email, name, avatar_url, created_at,
+                                  preferred_org_id, clerk_id
                         """,
                         clerk_id,
                         email,
                         name,
                     )
                     if db_user is None:
+                        # Last-resort: real conflict on email with a
+                        # different active clerk_id. Re-read whatever
+                        # exists so the user at least gets a row.
                         db_user = await get_user_by_id(
                             clerk_id, lookup_column="clerk_id"
+                        ) or await client.fetchrow(
+                            "SELECT id, email, name, avatar_url, created_at, "
+                            "preferred_org_id, clerk_id FROM users WHERE email = $1",
+                            email,
                         )
                 except Exception as exc:
                     logger.error(
