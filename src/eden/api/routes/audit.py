@@ -165,7 +165,7 @@ async def verify_audit_chain(
     try:
         rows = await client.fetch(
             "SELECT seq, id, created_at, ok, expected_hash, actual_hash "
-            "FROM verify_audit_chain(%s) ORDER BY seq",
+            "FROM verify_audit_chain($1) ORDER BY seq",
             org_id,
         )
     except Exception:

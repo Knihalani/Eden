@@ -140,9 +140,11 @@ async def signup(request: SignupRequest, response: Response):
 
     # Create user
     password_hash = hash_password(request.password)
+    # Audit 2026-06-22 B1.23 — mark email unverified; require verification
+    # before issuing a session token.
     query = """
-        INSERT INTO users (email, password_hash, name)
-        VALUES ($1, $2, $3)
+        INSERT INTO users (email, password_hash, name, email_verified)
+        VALUES ($1, $2, $3, FALSE)
         RETURNING id
     """
     row = await client.fetchrow(query, request.email, password_hash, request.name)
@@ -154,8 +156,35 @@ async def signup(request: SignupRequest, response: Response):
 
     user_id = str(row["id"])
 
-    # Create JWT and set cookie
-    access_token = create_access_token(data={"sub": user_id, "email": request.email})
+    # Audit 2026-06-22 B1.23 — mint a verification token and dispatch email.
+    # The session cookie is only issued AFTER /auth/verify-email succeeds.
+    try:
+        import secrets
+        from datetime import datetime, timedelta, timezone
+        verify_token = secrets.token_urlsafe(32)
+        expires = datetime.now(timezone.utc) + timedelta(hours=24)
+        await client.execute(
+            """
+            INSERT INTO email_verification_tokens (user_id, token, expires_at, used_at, created_at)
+            VALUES ($1, $2, $3, NULL, $3)
+            """,
+            user_id, verify_token, expires,
+        )
+        from eden.services.email_service import send_verification_email
+        await send_verification_email(to_email=request.email, token=verify_token)
+    except Exception as exc:
+        logger.warning(f"verification email dispatch failed: {exc}")
+
+    # Audit 2026-06-22 B1.23 — return 202; no session cookie until verified.
+    from fastapi.responses import JSONResponse
+    return JSONResponse(
+        status_code=status.HTTP_202_ACCEPTED,
+        content={
+            "user_id": user_id,
+            "email": request.email,
+            "message": "Account created. Check your email to verify before signing in.",
+        },
+    )
 
     response.set_cookie(
         key=COOKIE_NAME,
@@ -190,6 +219,14 @@ async def login(request: LoginRequest, response: Response):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid email or password",
+        )
+
+    # Audit 2026-06-22 B1.31 — SCIM/SSO-only users have no password.
+    # Reject password login rather than risk bcrypt.checkpw("", "") == True.
+    if not row["password_hash"]:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Use SSO or password reset",
         )
 
     if not verify_password(request.password, row["password_hash"]):
@@ -493,9 +530,9 @@ async def get_me(user: dict = Depends(get_current_user)):
     db_user = await get_user_by_id(user["user_id"], lookup_column="clerk_id")
     if db_user:
         logger.info(
-            "/auth/me HIT user_id=%s clerk_id=%s email=%s",
-            user["user_id"], db_user.get("clerk_id"), db_user.get("email"),
-        )
+            "/auth/me HIT user_id=%s clerk_id=%s",
+            user["user_id"], db_user.get("clerk_id"),
+        )    # Audit 2026-06-22 B1.7 — drop email from log (PII)
     else:
         logger.warning(
             "/auth/me MISS user_id=%s — auto-provisioning",
@@ -817,10 +854,12 @@ async def setup_2fa(user: dict = Depends(get_current_user)):
         img.save(buffer)
     qr_code_base64 = base64.b64encode(buffer.getvalue()).decode()
 
-    # Store the secret temporarily (not yet enabled)
+    # Store the secret temporarily (not yet enabled) — encrypted at rest
+    # Audit 2026-06-22 B1.15 — production systems must encrypt TOTP seeds.
+    from eden.api.utils.encryption import encrypt_value
     await client.execute(
         "UPDATE users SET two_factor_secret = $1 WHERE id = $2",
-        secret,
+        encrypt_value(secret),
         user["user_id"],
     )
 
@@ -852,6 +891,9 @@ async def verify_2fa(request: TwoFAVerifyRequest, user: dict = Depends(get_curre
         )
 
     secret = row["two_factor_secret"]
+    # Audit 2026-06-22 B1.15 — decrypt the TOTP seed before verification.
+    from eden.api.utils.encryption import decrypt_value
+    secret = decrypt_value(secret)
 
     # Verify the TOTP code
     totp = pyotp.TOTP(secret)
@@ -1336,7 +1378,37 @@ async def forgot_password(
     real implementation would look up the user, mint a one-time
     token, and email it; this stub keeps the contract without
     dispatching real email.
+
+    Audit 2026-06-22 B1.24 — implement the token mint + email send;
+    earlier stub returned 200 without dispatching anything.
     """
+    import secrets
+    from datetime import datetime, timedelta, timezone
+    try:
+        client = await get_postgres_client()
+        user = await client.fetchrow(
+            "SELECT id FROM users WHERE LOWER(email) = LOWER($1) AND deleted_at IS NULL",
+            request.email,
+        )
+        if user:
+            token = secrets.token_urlsafe(32)
+            expires = datetime.now(timezone.utc) + timedelta(hours=1)
+            await client.execute(
+                """
+                INSERT INTO password_reset_tokens (user_id, token, expires_at, used_at, created_at)
+                VALUES ($1, $2, $3, NULL, $3)
+                """,
+                user["id"], token, expires,
+            )
+            # Dispatch email (best-effort; don't fail the request on email error).
+            try:
+                from eden.services.email_service import send_password_reset_email
+                await send_password_reset_email(to_email=request.email, token=token)
+            except Exception as exc:
+                logger.warning(f"password reset email dispatch failed: {exc}")
+    except Exception as exc:
+        # Don't leak DB errors to the caller.
+        logger.warning(f"forgot-password dispatch failed: {exc}")
     return {
         "message": (
             "If an account exists for that email, a password reset "

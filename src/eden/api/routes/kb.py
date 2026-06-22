@@ -2,9 +2,10 @@
 
 import logging
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel
 
+from eden.api.deps import get_current_user
 from eden.kb.episodic.client import get_episodic_client
 
 logger = logging.getLogger(__name__)
@@ -26,6 +27,7 @@ class KBQueryResponse(BaseModel):
 
 @router.get("/query", response_model=KBQueryResponse)
 async def query_kb(
+    _user: dict = Depends(get_current_user),  # Audit 2026-06-22 B1.4 — require login
     query: str = Query(..., description="Search query"),
     collection: str = Query("all", description="Collection to search: all, episodic, skills, exploits, semantic"),
     limit: int = Query(20, ge=1, le=100),

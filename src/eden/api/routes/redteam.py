@@ -16,6 +16,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Path, Query
 from pydantic import BaseModel, Field
 
+from eden.api.routes.auth import get_current_user
 from eden.redteam.probes import (
     PROBE_CATALOGUE,
     AgentInvoker,
@@ -113,10 +114,8 @@ class FindingsListResponse(BaseModel):
 # ── Helpers ───────────────────────────────────────────────────────
 
 
-def _get_user():
-    from eden.api.routes.auth import get_current_user
-    return get_current_user
-
+def _get_user():  # pragma: no cover — B1.18 stub
+    raise NotImplementedError("Use Depends(get_current_user) directly")
 
 def _probe_to_response(p: Probe) -> ProbeResponse:
     return ProbeResponse(
@@ -199,7 +198,7 @@ def _resolve_invoker(req: Any) -> AgentInvoker:
 )
 async def list_probes_route(
     org_id: str = Path(...),
-    user: dict = Depends(_get_user()),
+    user: dict = Depends(get_current_user),
 ) -> ProbeListResponse:
     """Return the catalogue of available probes with their
     category, severity, and prompt count."""
@@ -216,7 +215,7 @@ async def list_probes_route(
 async def run_probe_route(
     body: RunProbeRequest,
     org_id: str = Path(...),
-    user: dict = Depends(_get_user()),
+    user: dict = Depends(get_current_user),
 ) -> ProbeRunResponse:
     if body.probe_name not in PROBE_CATALOGUE:
         raise HTTPException(
@@ -243,7 +242,7 @@ async def run_probe_route(
 async def run_scan_route(
     body: ScanRequest,
     org_id: str = Path(...),
-    user: dict = Depends(_get_user()),
+    user: dict = Depends(get_current_user),
 ) -> ScanResponse:
     invoker = _resolve_invoker(body)
     runner = ProbeRunner()
@@ -274,7 +273,7 @@ async def list_findings_route(
     only_failures: bool = Query(default=False),
     severity: str | None = Query(default=None, pattern="^(low|medium|high|critical)$"),
     probe_name: str | None = Query(default=None),
-    user: dict = Depends(_get_user()),
+    user: dict = Depends(get_current_user),
 ) -> FindingsListResponse:
     """Read-side helper. The 501 stub for now; the persistence
     layer is wired in ``redteam.findings_router`` (a future

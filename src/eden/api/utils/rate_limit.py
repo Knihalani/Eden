@@ -2,17 +2,24 @@
 
 Provides token-bucket-style rate limiting per IP address.
 In production, replace with Redis-backed rate limiting (e.g., slowapi).
+
+Audit 2026-06-22 B1.28 — bounded OrderedDict with TTL eviction so
+the bucket map cannot grow unbounded under attack.
 """
 
 import asyncio
 import logging
 import time
-from collections import defaultdict
+from collections import OrderedDict, defaultdict
 
 from eden.config import get_settings
 
 settings = get_settings()
 logger = logging.getLogger(__name__)
+
+# ponytail: global cap on tracked keys; under attack, oldest unpoked
+# keys get evicted. 50_000 entries × ~50 bytes each ≈ 2.5 MB cap.
+_MAX_TRACKED_KEYS = 50_000
 
 
 class RateLimitExceeded(Exception):
@@ -37,7 +44,8 @@ class SlidingWindowRateLimiter:
         """
         self.max_requests = max_requests
         self.window_seconds = window_seconds
-        self._buckets: dict[str, list[float]] = defaultdict(list)
+        # B1.28 — bounded OrderedDict; oldest unpoked keys evicted on overflow.
+        self._buckets: "OrderedDict[str, list[float]]" = OrderedDict()
         self._lock = asyncio.Lock()
 
     async def check(self, key: str) -> None:
@@ -53,17 +61,27 @@ class SlidingWindowRateLimiter:
         cutoff = now - self.window_seconds
 
         async with self._lock:
-            # Prune expired entries
-            bucket = self._buckets[key]
-            self._buckets[key] = [t for t in bucket if t > cutoff]
+            # B1.28 — OrderedDict: touch key to mark it recent.
+            bucket = self._buckets.get(key)
+            if bucket is None:
+                bucket = []
+                self._buckets[key] = bucket
+            else:
+                self._buckets.move_to_end(key)
 
-            if len(self._buckets[key]) >= self.max_requests:
-                # Calculate retry-after based on the oldest request in the window
-                oldest = min(self._buckets[key])
+            # Prune expired entries for this key.
+            bucket[:] = [t for t in bucket if t > cutoff]
+
+            if len(bucket) >= self.max_requests:
+                oldest = min(bucket)
                 retry_after = max(1.0, cutoff + self.window_seconds - oldest)
                 raise RateLimitExceeded(retry_after=retry_after)
 
-            self._buckets[key].append(now)
+            bucket.append(now)
+
+            # B1.28 — evict oldest keys when capacity exceeded.
+            while len(self._buckets) > _MAX_TRACKED_KEYS:
+                self._buckets.popitem(last=False)
 
     async def reset(self, key: str) -> None:
         """Reset the rate limit counter for a key."""

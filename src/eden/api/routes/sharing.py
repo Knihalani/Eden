@@ -21,6 +21,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Path, Query
 from pydantic import BaseModel, Field
 
+from eden.api.routes.auth import get_current_user
 from eden.observability.sharing import (
     DEFAULT_EXPIRY_DAYS,
     MAX_EXPIRY_DAYS,
@@ -204,11 +205,6 @@ async def _current_user_id(user: dict = Depends(lambda: None)) -> str:
 
 # We re-use the real auth dep. The ai_agent / incident routes do
 # the same — search for ``get_current_user`` in routes/.
-def _get_user():  # pragma: no cover — re-exported for tests
-    from eden.api.routes.auth import get_current_user
-    return get_current_user
-
-
 # ── Share routes (auth required) ─────────────────────────────────
 
 
@@ -221,7 +217,7 @@ async def create_share(
     org_id: str = Path(..., description="Organization ID"),
     trace_id: str = Path(..., description="Trace to share"),
     body: CreateShareRequest = ...,
-    user: dict = Depends(_get_user()),
+    user: dict = Depends(get_current_user),
 ) -> ShareResponse:
     """Create a share-by-link for a trace.
 
@@ -253,7 +249,7 @@ async def create_share(
 async def list_shares_for_trace(
     org_id: str = Path(...),
     trace_id: str = Path(...),
-    user: dict = Depends(_get_user()),
+    user: dict = Depends(get_current_user),
 ) -> ShareListResponse:
     pg = await get_postgres_client()
     svc = ShareService(pg)
@@ -271,7 +267,7 @@ async def list_shares_for_trace(
 async def list_shares(
     org_id: str = Path(...),
     limit: int = Query(default=50, ge=1, le=200),
-    user: dict = Depends(_get_user()),
+    user: dict = Depends(get_current_user),
 ) -> ShareListResponse:
     pg = await get_postgres_client()
     svc = ShareService(pg)
@@ -288,7 +284,7 @@ async def list_shares(
 async def revoke_share(
     org_id: str = Path(...),
     share_id: str = Path(...),
-    user: dict = Depends(_get_user()),
+    user: dict = Depends(get_current_user),
 ) -> dict[str, bool]:
     pg = await get_postgres_client()
     svc = ShareService(pg)
@@ -350,7 +346,7 @@ async def public_trace(
 async def create_saved_search(
     org_id: str = Path(...),
     body: CreateSavedSearchRequest = ...,
-    user: dict = Depends(_get_user()),
+    user: dict = Depends(get_current_user),
 ) -> SavedSearchResponse:
     user_id = str(user.get("id") or user.get("user_id") or user.get("sub"))
     if not user_id:
@@ -384,7 +380,7 @@ async def list_saved_searches(
         description="personal = my + shared, shared = team-only, recent = my recent",
     ),
     limit: int = Query(default=50, ge=1, le=200),
-    user: dict = Depends(_get_user()),
+    user: dict = Depends(get_current_user),
 ) -> SavedSearchListResponse:
     user_id = str(user.get("id") or user.get("user_id") or user.get("sub"))
     if not user_id:
@@ -411,7 +407,7 @@ async def update_saved_search(
     org_id: str = Path(...),
     search_id: str = Path(...),
     body: UpdateSavedSearchRequest = ...,
-    user: dict = Depends(_get_user()),
+    user: dict = Depends(get_current_user),
 ) -> SavedSearchResponse:
     pg = await get_postgres_client()
     svc = SavedSearchService(pg)
@@ -438,7 +434,7 @@ async def update_saved_search(
 async def delete_saved_search(
     org_id: str = Path(...),
     search_id: str = Path(...),
-    user: dict = Depends(_get_user()),
+    user: dict = Depends(get_current_user),
 ) -> dict[str, bool]:
     pg = await get_postgres_client()
     svc = SavedSearchService(pg)
@@ -455,7 +451,7 @@ async def delete_saved_search(
 async def record_saved_search_use(
     org_id: str = Path(...),
     search_id: str = Path(...),
-    user: dict = Depends(_get_user()),
+    user: dict = Depends(get_current_user),
 ) -> dict[str, bool]:
     pg = await get_postgres_client()
     svc = SavedSearchService(pg)

@@ -17,6 +17,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Path
 from pydantic import BaseModel, Field
 
+from eden.api.routes.auth import get_current_user
 from eden.services.cat2_intel.signals import (
     CompiledRule,
     NLSignal,
@@ -93,9 +94,7 @@ class ClusterResponse(BaseModel):
 # ── Helpers ───────────────────────────────────────────────────────
 
 
-def _get_user():
-    from eden.api.routes.auth import get_current_user
-    return get_current_user
+
 
 
 def _signal_to_response(s: NLSignal) -> SignalResponse:
@@ -129,7 +128,7 @@ def _signal_to_response(s: NLSignal) -> SignalResponse:
 async def create_signal(
     body: CreateSignalRequest,
     org_id: str = Path(...),
-    user: dict = Depends(_get_user()),
+    user: dict = Depends(get_current_user),
 ) -> SignalResponse:
     user_id = str(user.get("id") or user.get("user_id") or user.get("sub"))
     rule = compile_signal(body.description)
@@ -169,7 +168,7 @@ async def create_signal(
 )
 async def list_signals(
     org_id: str = Path(...),
-    user: dict = Depends(_get_user()),
+    user: dict = Depends(get_current_user),
 ) -> SignalListResponse:
     pg = await get_postgres_client()
     rows = await pg.fetch(
@@ -198,7 +197,7 @@ async def match_signal_route(
     body: MatchRequest,
     org_id: str = Path(...),
     signal_id: str = Path(...),
-    user: dict = Depends(_get_user()),
+    user: dict = Depends(get_current_user),
 ) -> MatchResponse:
     pg = await get_postgres_client()
     row = await pg.fetchrow(
@@ -235,7 +234,7 @@ async def match_signal_route(
 async def cluster_signals_route(
     body: ClusterRequest,
     org_id: str = Path(...),
-    user: dict = Depends(_get_user()),
+    user: dict = Depends(get_current_user),
 ) -> ClusterResponse:
     pg = await get_postgres_client()
     rows = await pg.fetch(

@@ -169,7 +169,8 @@ async def _upsert_user(data: dict[str, Any]) -> None:
             ON CONFLICT (clerk_id) DO UPDATE
             SET email = EXCLUDED.email,
                 name = EXCLUDED.name,
-                avatar_url = EXCLUDED.avatar_url
+                avatar_url = EXCLUDED.avatar_url,
+                deleted_at = NULL
             """,
             clerk_id,
             email,
@@ -218,7 +219,7 @@ async def _deactivate_user(data: dict[str, Any]) -> None:
         return
     client = await get_postgres_client()
     result = await client.execute(
-        "UPDATE users SET deleted_at = NOW() WHERE clerk_id = $1",
+        "UPDATE users SET deleted_at = NOW() WHERE clerk_id::text = $1",
         clerk_id,
     )
     # ``result`` is the asyncpg status string ("UPDATE N") — log
@@ -361,13 +362,13 @@ async def _upsert_membership(data: dict[str, Any]) -> None:
     # webhook can land first; Clerk will redeliver this membership
     # event and the second pass will succeed.
     eden_user = await client.fetchrow(
-        "SELECT id FROM users WHERE clerk_id = $1",
+        "SELECT id FROM users WHERE clerk_id::text = $1",
         clerk_user_id,
     )
     eden_org = await client.fetchrow(
         """
         SELECT id FROM organizations
-        WHERE clerk_org_id = $1 OR id::text = $1
+        WHERE clerk_org_id::text = $1 OR id::text = $1
         LIMIT 1
         """,
         clerk_org_id,

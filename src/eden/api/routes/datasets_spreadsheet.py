@@ -21,6 +21,7 @@ from fastapi import APIRouter, Depends, HTTPException, Path, Query
 from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel, Field
 
+from eden.api.routes.auth import get_current_user
 from eden.datasets.spreadsheet import (
     SpreadsheetColumn,
     SpreadsheetRow,
@@ -116,10 +117,8 @@ class GenerateRequest(BaseModel):
 # ─- Helpers ──────────────────────────────────────────────────────
 
 
-def _get_user():
-    from eden.api.routes.auth import get_current_user
-    return get_current_user
-
+def _get_user():  # pragma: no cover — B1.18 stub
+    raise NotImplementedError("Use Depends(get_current_user) directly")
 
 def _column_to_response(c: SpreadsheetColumn) -> ColumnResponse:
     return ColumnResponse(
@@ -148,7 +147,7 @@ def _row_to_response(r: SpreadsheetRow) -> RowResponse:
 async def list_columns_route(
     org_id: str = Path(...),
     dataset_id: str = Path(...),
-    user: dict = Depends(_get_user()),
+    user: dict = Depends(get_current_user),
 ) -> ColumnListResponse:
     pg = await get_postgres_client()
     svc = SpreadsheetService(pg)
@@ -167,7 +166,7 @@ async def add_column_route(
     body: AddColumnRequest,
     org_id: str = Path(...),
     dataset_id: str = Path(...),
-    user: dict = Depends(_get_user()),
+    user: dict = Depends(get_current_user),
 ) -> ColumnResponse:
     pg = await get_postgres_client()
     svc = SpreadsheetService(pg)
@@ -191,7 +190,7 @@ async def generate_column_route(
     org_id: str = Path(...),
     dataset_id: str = Path(...),
     col_id: str = Path(...),
-    user: dict = Depends(_get_user()),
+    user: dict = Depends(get_current_user),
 ) -> RowListResponse:
     """Run the AI handler over every row to fill the column.
 
@@ -233,7 +232,7 @@ async def list_rows_route(
     sort: str | None = Query(default=None, description="JSON-encoded list of sort specs."),
     limit: int = Query(default=200, ge=1, le=10_000),
     offset: int = Query(default=0, ge=0),
-    user: dict = Depends(_get_user()),
+    user: dict = Depends(get_current_user),
 ) -> RowListResponse:
     import json
     filter_spec = json.loads(filter) if filter else None
@@ -261,7 +260,7 @@ async def add_row_route(
     body: AddRowRequest,
     org_id: str = Path(...),
     dataset_id: str = Path(...),
-    user: dict = Depends(_get_user()),
+    user: dict = Depends(get_current_user),
 ) -> RowResponse:
     pg = await get_postgres_client()
     svc = SpreadsheetService(pg)
@@ -284,7 +283,7 @@ async def update_row_route(
     org_id: str = Path(...),
     dataset_id: str = Path(...),
     row_id: str = Path(...),
-    user: dict = Depends(_get_user()),
+    user: dict = Depends(get_current_user),
 ) -> RowResponse:
     pg = await get_postgres_client()
     svc = SpreadsheetService(pg)
@@ -308,7 +307,7 @@ async def delete_row_route(
     org_id: str = Path(...),
     dataset_id: str = Path(...),
     row_id: str = Path(...),
-    user: dict = Depends(_get_user()),
+    user: dict = Depends(get_current_user),
 ) -> dict[str, bool]:
     pg = await get_postgres_client()
     svc = SpreadsheetService(pg)
@@ -324,7 +323,7 @@ async def delete_row_route(
 async def export_route(
     org_id: str = Path(...),
     dataset_id: str = Path(...),
-    user: dict = Depends(_get_user()),
+    user: dict = Depends(get_current_user),
 ) -> str:
     pg = await get_postgres_client()
     svc = SpreadsheetService(pg)

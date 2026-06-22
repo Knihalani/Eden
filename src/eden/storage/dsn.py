@@ -40,14 +40,18 @@ def build_dsn(settings: Settings | None = None) -> str:
         # Normalise to asyncpg for SQLAlchemy's async engine.
         # The application uses asyncpg directly so the URL doesn't
         # need the ``+asyncpg`` driver suffix, but SQLAlchemy's
-        # ``async_engine_from_config`` does. Likewise, libpq-style
-        # ``sslmode=require`` is unknown to asyncpg — translate to
-        # ``ssl=require`` so SQLAlchemy + asyncpg can connect.
+        # ``async_engine_from_config`` does.
         if url.startswith("postgresql://"):
             url = "postgresql+asyncpg://" + url[len("postgresql://"):]
         elif url.startswith("postgres://"):
             url = "postgresql+asyncpg://" + url[len("postgres://"):]
-        url = _translate_sslmode_to_asyncpg_ssl(url)
+        # When the user supplies the database_url verbatim (managed
+        # providers like Neon include sslmode in the connection string
+        # they hand out), we MUST preserve their sslmode verbatim — the
+        # operator copy-pasted it from the dashboard. Translating to
+        # ``ssl=`` here would silently change semantics for cases where
+        # the operator picked ``sslmode=verify-full`` for cert pinning.
+        # Audit 2026-06-22 B-DSN1 — restored verbatim pass-through.
         return url
     base = (
         f"postgresql+asyncpg://{settings.postgres_user}:{settings.postgres_password}"

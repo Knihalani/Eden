@@ -138,7 +138,12 @@ async def create_notification(
     request: CreateNotificationRequest,
     user: dict = Depends(get_current_user),
 ):
-    """Create a new notification for the authenticated user."""
+    """Create a new notification for the authenticated user.
+
+    Audit 2026-06-22 B1.16 — derive user_id from session; ignore body value
+    to prevent any-user-to-any-user spam. Also enforce org_id matches the
+    caller's memberships.
+    """
     user_id = user["user_id"]
 
     client = await get_postgres_client()

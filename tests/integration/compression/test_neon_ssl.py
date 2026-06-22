@@ -75,6 +75,7 @@ class TestDSNBuilder:
         from eden.storage.dsn import build_dsn
 
         settings = Settings(
+            database_url="",  # don't inherit env DATABASE_URL
             postgres_host="ep-test.us-east-2.aws.neon.tech",
             postgres_user="eden",
             postgres_password="secret",
@@ -94,6 +95,7 @@ class TestDSNBuilder:
         from eden.storage.dsn import build_dsn
 
         settings = Settings(
+            database_url="",  # don't inherit env DATABASE_URL
             postgres_host="ep-test.us-east-2.aws.neon.tech",
             postgres_user="eden",
             postgres_password="secret",
@@ -113,6 +115,7 @@ class TestDSNBuilder:
         from eden.storage.dsn import build_dsn
 
         settings = Settings(
+            database_url="",  # don't inherit env DATABASE_URL
             postgres_host="localhost",
             postgres_user="eden",
             postgres_password="",

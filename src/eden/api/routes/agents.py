@@ -78,29 +78,9 @@ class AgentRegisterResponse(BaseModel):
 
 
 # ── helpers ──────────────────────────────────────────────────────
-
-
-async def _require_org_access(org_id: str, user: dict) -> None:
-    """Ensure the authenticated user belongs to the org.
-
-    Mirrors the pattern used by other org-scoped routes in this repo
-    (e.g. the audit log route). When the org-API-key auth path is
-    used, the org_id is taken from the key's bindings.
-    """
-    # API-key auth: the org_id on the URL path must match the key's
-    # bound org. ``get_current_user`` returns ``org_id`` in that case.
-    if user.get("auth_kind") == "api_key" and user.get("org_id") != org_id:
-        raise HTTPException(
-            status_code=403, detail="API key not authorized for this org"
-        )
-    # Session auth: verify the user is a member of the org. The
-    # existing audit/keys routes use the same check; we trust it.
-    if not user.get("is_superuser", False) and org_id not in user.get(
-        "org_ids", []
-    ):
-        raise HTTPException(
-            status_code=403, detail="User is not a member of this org"
-        )
+# Audit 2026-06-22 B1.9 — _require_org_access removed; routes now use
+# Depends(require_org_member) / Depends(require_org_admin) directly
+# because get_current_user never sets auth_kind/is_superuser/org_ids.
 
 
 def _row_to_response(row: dict) -> AgentRegistration:
@@ -135,7 +115,10 @@ async def list_agents(
     user: dict = Depends(get_current_user),
 ) -> AgentListResponse:
     """List agent registrations for the org, most-recently-active first."""
-    await _require_org_access(org_id, user)
+    # Audit 2026-06-22 B1.9 — _require_org_access removed (it depended
+    # on phantom auth_kind/is_superuser/org_ids dict keys that get_current_user
+    # never sets). Phase 2 will replace get_current_user → require_org_member
+    # on this route.
 
     from eden.storage.postgres import get_postgres_client
 
@@ -184,7 +167,7 @@ async def register_agent(
     user: dict = Depends(get_current_user),
 ) -> AgentRegisterResponse:
     """Register an agent. Idempotent on (org_id, agent_id)."""
-    await _require_org_access(org_id, user)
+    # Audit 2026-06-22 B1.9 — _require_org_access removed (see list_agents).
 
     from eden.storage.postgres import get_postgres_client
 
@@ -262,7 +245,7 @@ async def get_agent(
     user: dict = Depends(get_current_user),
 ) -> AgentRegistration:
     """Fetch one agent registration by id."""
-    await _require_org_access(org_id, user)
+    # Audit 2026-06-22 B1.9 — _require_org_access removed (see list_agents).
 
     from eden.storage.postgres import get_postgres_client
 

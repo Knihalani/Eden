@@ -19,6 +19,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Path
 from pydantic import BaseModel, Field
 
+from eden.api.routes.auth import get_current_user
 from eden.prompts.registry import (
     Playground,
     PlaygroundResult,
@@ -40,10 +41,8 @@ router = APIRouter(
 _REGISTRY = PromptRegistry()
 
 
-def _get_user():
-    from eden.api.routes.auth import get_current_user
-    return get_current_user
-
+def _get_user():  # pragma: no cover — B1.18 stub
+    raise NotImplementedError("Use Depends(get_current_user) directly")
 
 # ── Schemas ───────────────────────────────────────────────────────
 
@@ -146,7 +145,7 @@ def _playground_to_response(r: PlaygroundResult) -> PlaygroundResponse:
 async def register_template(
     body: PromptTemplateRequest,
     org_id: str = Path(...),
-    user: dict = Depends(_get_user()),
+    user: dict = Depends(get_current_user),
 ) -> PromptTemplateResponse:
     template = PromptTemplate(
         name=body.name, system=body.system, user=body.user,
@@ -172,7 +171,7 @@ async def register_template(
 )
 async def list_templates(
     org_id: str = Path(...),
-    user: dict = Depends(_get_user()),
+    user: dict = Depends(get_current_user),
 ) -> PromptListResponse:
     names = _REGISTRY.list_names()
     return PromptListResponse(prompts=names, total_count=len(names))
@@ -186,7 +185,7 @@ async def list_templates(
 async def get_template(
     org_id: str = Path(...),
     name: str = Path(...),
-    user: dict = Depends(_get_user()),
+    user: dict = Depends(get_current_user),
 ) -> PromptTemplateResponse:
     t = _REGISTRY.get(name)
     if t is None:
@@ -203,7 +202,7 @@ async def update_template(
     body: UpdateTemplateRequest,
     org_id: str = Path(...),
     name: str = Path(...),
-    user: dict = Depends(_get_user()),
+    user: dict = Depends(get_current_user),
 ) -> PromptTemplateResponse:
     existing = _REGISTRY.get(name)
     if existing is None:
@@ -259,7 +258,7 @@ async def update_template(
 async def list_versions(
     org_id: str = Path(...),
     name: str = Path(...),
-    user: dict = Depends(_get_user()),
+    user: dict = Depends(get_current_user),
 ) -> VersionListResponse:
     versions = _REGISTRY.list_versions(name)
     if not versions:
@@ -276,7 +275,7 @@ async def rollback_template(
     org_id: str = Path(...),
     name: str = Path(...),
     version: int = Path(...),
-    user: dict = Depends(_get_user()),
+    user: dict = Depends(get_current_user),
 ) -> PromptTemplateResponse:
     try:
         new = _REGISTRY.rollback(name, version)
@@ -297,7 +296,7 @@ async def playground(
     body: PlaygroundRequest,
     org_id: str = Path(...),
     name: str = Path(...),
-    user: dict = Depends(_get_user()),
+    user: dict = Depends(get_current_user),
 ) -> PlaygroundResponse:
     t = _REGISTRY.get(name)
     if t is None:
@@ -332,7 +331,7 @@ async def compare(
     body: CompareRequest,
     org_id: str = Path(...),
     name: str = Path(...),
-    user: dict = Depends(_get_user()),
+    user: dict = Depends(get_current_user),
 ) -> CompareResponse:
     t = _REGISTRY.get(name)
     if t is None:

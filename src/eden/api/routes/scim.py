@@ -399,8 +399,8 @@ async def list_scim_users(
             import re
             match = re.search(r"active eq (true|false)", filter, re.IGNORECASE)
             if match:
-                query += " AND su.is_active = $" + str(len(params) + 1)
                 params.append(match.group(1).lower() == "true")
+                query += f" AND su.is_active = ${len(params)}"
 
     query += " ORDER BY su.created_at ASC"
     query += f" LIMIT {min(count, 100)} OFFSET {max(startIndex - 1, 0)}"

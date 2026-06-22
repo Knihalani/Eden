@@ -19,6 +19,7 @@ from fastapi import APIRouter, Depends, HTTPException, Path, Query
 from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel, Field
 
+from eden.api.routes.auth import get_current_user
 from eden.evaluation.labeling import (
     Annotation,
     LabelingItem,
@@ -117,10 +118,8 @@ class SkipRequest(BaseModel):
 # ── Helpers ───────────────────────────────────────────────────────
 
 
-def _get_user():
-    from eden.api.routes.auth import get_current_user
-    return get_current_user
-
+def _get_user():  # pragma: no cover — B1.18 stub
+    raise NotImplementedError("Use Depends(get_current_user) directly")
 
 def _item_to_response(item: LabelingItem) -> ItemResponse:
     return ItemResponse(
@@ -171,7 +170,7 @@ def _user_skills(uid: str) -> list[str]:
 async def seed_item(
     body: SeedItemRequest,
     org_id: str = Path(...),
-    user: dict = Depends(_get_user()),
+    user: dict = Depends(get_current_user),
 ) -> SeedItemResponse:
     pg = await get_postgres_client()
     svc = LabelingService(pg, user_skills=_user_skills)
@@ -200,7 +199,7 @@ async def pop_queue(
     org_id: str = Path(...),
     user_id: str = Path(...),
     limit: int = Query(default=5, ge=1, le=50),
-    user: dict = Depends(_get_user()),
+    user: dict = Depends(get_current_user),
 ) -> QueueResponse:
     pg = await get_postgres_client()
     svc = LabelingService(pg, user_skills=_user_skills)
@@ -218,7 +217,7 @@ async def pop_queue(
 async def annotate(
     body: AnnotateRequest,
     org_id: str = Path(...),
-    user: dict = Depends(_get_user()),
+    user: dict = Depends(get_current_user),
 ) -> AnnotationResponse:
     user_id = str(user.get("id") or user.get("user_id") or user.get("sub"))
     if not user_id:
@@ -251,7 +250,7 @@ async def annotate(
 async def skip(
     body: SkipRequest,
     org_id: str = Path(...),
-    user: dict = Depends(_get_user()),
+    user: dict = Depends(get_current_user),
 ) -> dict[str, bool]:
     user_id = str(user.get("id") or user.get("user_id") or user.get("sub"))
     if not user_id:
@@ -273,7 +272,7 @@ async def skip(
 async def compute_iia(
     org_id: str = Path(...),
     item_ids: list[str] | None = Query(default=None),
-    user: dict = Depends(_get_user()),
+    user: dict = Depends(get_current_user),
 ) -> IIAResponse:
     pg = await get_postgres_client()
     svc = LabelingService(pg, user_skills=_user_skills)
@@ -291,7 +290,7 @@ async def export(
     org_id: str = Path(...),
     status: str = Query(default="completed", pattern="^(pending|in_progress|completed|skipped)$"),
     limit: int = Query(default=10_000, ge=1, le=100_000),
-    user: dict = Depends(_get_user()),
+    user: dict = Depends(get_current_user),
 ) -> str:
     pg = await get_postgres_client()
     svc = LabelingService(pg, user_skills=_user_skills)

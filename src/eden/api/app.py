@@ -268,6 +268,16 @@ async def lifespan(app: FastAPI):
         except Exception as e:
             logger.warning(f"Insights detector loop startup skipped: {e}")
 
+    # Audit 2026-06-22 B1.36 — register all closed-loop promotion hooks
+    # so on_judge_regression / on_drift_alert / etc. actually fire.
+    try:
+        from eden.llmops.promotion_hooks import register_all_hooks
+
+        register_all_hooks()
+        logger.info("Promotion hooks registered")
+    except Exception as e:
+        logger.warning(f"Promotion hook registration skipped: {e}")
+
     yield
 
     # Cleanup

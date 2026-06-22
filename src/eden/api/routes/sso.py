@@ -310,15 +310,32 @@ async def initiate_sso_login(
         client_id = config.get("client_id")
         if sso_url and client_id:
             redirect_uri = f"{settings.app_url}/auth/sso/callback"
-            auth_url = f"{sso_url}/oauth2/v1/authorize?client_id={client_id}&response_type=code&redirect_uri={redirect_uri}"
-            return {"redirect_url": auth_url, "provider": provider["name"]}
+            # Audit 2026-06-22 B1.32 — URL-encode params + add state nonce.
+            import secrets, urllib.parse
+            state = secrets.token_urlsafe(32)
+            auth_url = f"{sso_url}/oauth2/v1/authorize?" + urllib.parse.urlencode({
+                "client_id": client_id,
+                "response_type": "code",
+                "redirect_uri": redirect_uri,
+                "state": state,
+            })
+            return {"redirect_url": auth_url, "provider": provider["name"], "state": state}
 
     elif provider_type == "google":
         client_id = config.get("client_id")
         if client_id:
             redirect_uri = f"{settings.app_url}/auth/sso/callback"
-            auth_url = f"https://accounts.google.com/o/oauth2/v2/auth?client_id={client_id}&response_type=code&redirect_uri={redirect_uri}&scope=openid%20profile%20email"
-            return {"redirect_url": auth_url, "provider": provider["name"]}
+            # Audit 2026-06-22 B1.32 — URL-encode params + add state nonce.
+            import secrets, urllib.parse
+            state = secrets.token_urlsafe(32)
+            auth_url = "https://accounts.google.com/o/oauth2/v2/auth?" + urllib.parse.urlencode({
+                "client_id": client_id,
+                "response_type": "code",
+                "redirect_uri": redirect_uri,
+                "scope": "openid profile email",
+                "state": state,
+            })
+            return {"redirect_url": auth_url, "provider": provider["name"], "state": state}
 
     elif provider_type == "oidc":
         auth_endpoint = config.get("authorization_endpoint")
@@ -326,7 +343,10 @@ async def initiate_sso_login(
         if auth_endpoint and client_id:
             redirect_uri = f"{settings.app_url}/auth/sso/callback"
             scopes = config.get("scopes", ["openid", "profile", "email"])
-            scope_str = "%20".join(scopes)
+            # Audit 2026-06-22 B1.32 — URL-encode params + add state nonce.
+            import secrets, urllib.parse
+            state = secrets.token_urlsafe(32)
+            scope_str = " ".join(scopes)
             auth_url = f"{auth_endpoint}?client_id={client_id}&response_type=code&redirect_uri={redirect_uri}&scope={scope_str}"
             return {"redirect_url": auth_url, "provider": provider["name"]}
 

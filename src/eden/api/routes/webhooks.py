@@ -19,6 +19,58 @@ from eden.api.middleware.correlation_id import get_correlation_id
 from eden.api.schemas.envelope import APIEnvelope, PaginatedAPIEnvelope
 from eden.storage.postgres import get_postgres_client
 
+
+# Audit 2026-06-22 B1.17 — block SSRF via webhooks.
+# Refuses http://, userinfo tricks, and private/loopback/link-local IPs.
+import ipaddress
+from urllib.parse import urlparse
+
+
+def _validate_webhook_url(url: str) -> None:
+    """Reject URLs that point at HTTPS-unreachable or internal addresses.
+
+    Raises HTTPException 400 on any rejection. Intentionally strict —
+    webhook targets are public services, not internal IPs.
+    """
+    parsed = urlparse(url)
+    if parsed.scheme != "https":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Webhook URL must use HTTPS",
+        )
+    host = parsed.hostname
+    if not host:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Webhook URL must include a hostname",
+        )
+    # Try to resolve as IP literal first; fall back to DNS resolve.
+    try:
+        ip = ipaddress.ip_address(host)
+    except ValueError:
+        import socket
+        try:
+            infos = socket.getaddrinfo(host, None)
+            ip = ipaddress.ip_address(infos[0][4][0])
+        except (socket.gaierror, IndexError, ValueError):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Webhook URL hostname could not be resolved",
+            )
+    # Block private, loopback, link-local, multicast, reserved.
+    if (
+        ip.is_private
+        or ip.is_loopback
+        or ip.is_link_local
+        or ip.is_multicast
+        or ip.is_reserved
+        or ip.is_unspecified
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Webhook URL must point to a public IP address",
+        )
+
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/orgs/{org_id}/webhooks", tags=["webhooks"])
 
@@ -124,12 +176,9 @@ async def create_webhook(
             detail=f"Invalid events: {invalid}. Valid: {VALID_EVENTS}",
         )
 
-    # Validate URL is HTTPS
-    if not request.url.startswith("https://"):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Webhook URL must use HTTPS",
-        )
+    # Validate URL is HTTPS and not pointing at a private/internal IP.
+    # Audit 2026-06-22 B1.17 — block SSRF into cloud metadata + RFC1918.
+    _validate_webhook_url(request.url)
 
     client = await get_postgres_client()
     webhook_id = str(uuid4())

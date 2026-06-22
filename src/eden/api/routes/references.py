@@ -8,15 +8,18 @@ import hashlib
 import logging
 from uuid import uuid4
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
 
 from eden.api.deps import (
+    get_current_user,
     require_org_member,
     require_org_permission,
     require_org_permission_dep,
 )
 from eden.api.routes.billing import check_limit
 from eden.storage.postgres import get_postgres_client
+
+import os  # Audit 2026-06-22 B1.22 — for filename sanitization
 
 logger = logging.getLogger(__name__)
 
@@ -114,11 +117,12 @@ class CodeReferenceResponse:
 @router.post("", response_model=dict)
 async def upload_reference(
     org_id: str,
-    name: str = Form(...),
-    purpose: str = Form(...),
-    description: str | None = Form(None),
+    name: str = Form(..., max_length=200),
+    # Audit 2026-06-22 B1.22 — cap purpose length to prevent 5MB form fields.
+    purpose: str = Form(..., max_length=64),
+    description: str | None = Form(None, max_length=2_000),
     file: UploadFile = File(...),
-    user: dict | None = None,
+    user: dict = Depends(get_current_user),
         _check_references_upload: dict = Depends(require_org_permission_dep('references:upload')),
 ):
     """Upload a code reference to the organization's library.
@@ -138,6 +142,14 @@ async def upload_reference(
 
     client = await get_postgres_client()
     user_id = user["user_id"]
+
+    # Audit 2026-06-22 B1.22 — sanitize filename to prevent path-traversal.
+    safe_filename = os.path.basename(file.filename or "upload.txt")
+    if ".." in safe_filename or safe_filename.startswith("."):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid filename",
+        )
 
     # Read file content
     content = await file.read()
@@ -290,36 +302,34 @@ async def get_reference(org_id: str, ref_id: str, user: dict | None = None):
 
 
 @router.delete("/{ref_id}", response_model=dict)
-async def delete_reference(org_id: str, ref_id: str, user: dict | None = None,
+async def delete_reference(org_id: str, ref_id: str, user: dict = Depends(get_current_user),
         _check_references_delete: dict = Depends(require_org_permission_dep('references:delete')),
 ):
     """Delete a code reference (requires references:delete permission or be the uploader)."""
-    # First check if user has delete permission (owner/admin)
-    try:
-        can_delete = True
-    except HTTPException:
-        can_delete = False
+    # Audit 2026-06-22 B1.10 — drop dead try/except, add user dep.
+    client = await get_postgres_client()
 
-    # If no permission, check if user is the uploader
-    if not can_delete:
-        client = await get_postgres_client()
-        ref = await client.fetchrow(
-            "SELECT uploaded_by FROM code_references WHERE id = $1 AND org_id = $2",
-            ref_id,
-            org_id,
+    # Verify ownership BEFORE delete; the permission dep already passed.
+    ref = await client.fetchrow(
+        "SELECT uploaded_by, org_id FROM code_references WHERE id = $1",
+        ref_id,
+    )
+    if not ref or str(ref.get("org_id")) != org_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Reference not found",
         )
-        if not ref:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Reference not found",
-            )
-        if str(ref["uploaded_by"]) != user["user_id"]:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Only the uploader or org admin can delete this reference",
-            )
+    if str(ref["uploaded_by"]) != user["user_id"]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only the uploader or org admin can delete this reference",
+        )
 
-    await client.execute("DELETE FROM code_references WHERE id = $1", ref_id)
+    # Audit 2026-06-22 B1.10 — org_id filter on DELETE prevents cross-org writes.
+    await client.execute(
+        "DELETE FROM code_references WHERE id = $1 AND org_id = $2",
+        ref_id, org_id,
+    )
 
     return {"message": "Reference deleted"}
 
@@ -327,8 +337,9 @@ async def delete_reference(org_id: str, ref_id: str, user: dict | None = None,
 @router.get("/search/by-text", response_model=list[dict])
 async def search_references(
     org_id: str,
-    q: str,
-    user: dict | None = None,
+    # Audit 2026-06-22 B1.14 — cap query length to prevent 1MB embedding requests.
+    q: str = Query(..., max_length=2_000),
+    user: dict = Depends(get_current_user),
 ):
     """Search code references by text similarity.
 

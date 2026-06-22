@@ -10,9 +10,10 @@ from __future__ import annotations
 
 import logging
 
-from fastapi import APIRouter, Cookie
+from fastapi import APIRouter, Cookie, Depends
 from pydantic import BaseModel
 
+from eden.api.deps import get_current_user
 from eden.observability.alerts import evaluate_alerts
 
 logger = logging.getLogger(__name__)
@@ -43,13 +44,11 @@ class AckResponse(BaseModel):
 
 @router.get("", response_model=list[AlertOut])
 async def list_alerts(
+    _user: dict = Depends(get_current_user),  # Audit 2026-06-22 B1.5 — require login
     authorization: str | None = Cookie(None),
 ) -> list[AlertOut]:
     """Evaluate alert rules against current metrics and return fired
     alerts. Read-only — no DB or audit impact."""
-    # In production: require org-admin permission. For the in-memory
-    # engine this route is internal-only; skip auth to keep the
-    # alert path fast.
     fired = evaluate_alerts()
     return [AlertOut(**a.to_dict()) for a in fired]
 
@@ -58,6 +57,7 @@ async def list_alerts(
 async def ack_alert(
     rule_id: str,
     req: AckRequest,
+    _user: dict = Depends(get_current_user),  # Audit 2026-06-22 B1.5 — require login
     authorization: str | None = Cookie(None),
 ) -> AckResponse:
     """Mark an alert as acknowledged.
