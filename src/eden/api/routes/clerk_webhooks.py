@@ -149,14 +149,33 @@ async def _upsert_user(data: dict[str, Any]) -> None:
 
 
 async def _deactivate_user(data: dict[str, Any]) -> None:
+    """Mark a Clerk user as soft-deleted in Eden.
+
+    Looks up by ``clerk_id`` (the Clerk string id, e.g. ``user_2abc...``),
+    NOT by ``users.id`` (which is a generated UUID). The earlier
+    implementation queried by ``id`` — that matched no rows because the
+    Clerk id never matches the UUID PK, so every ``user.deleted``
+    webhook silently no-op'd. Soft-delete is irreversible through
+    the API (audit log requirement) but the operator can clear
+    ``deleted_at`` to restore the row if the Clerk user comes back.
+    """
     clerk_id = data.get("id")
     if not clerk_id:
         return
     client = await get_postgres_client()
-    await client.execute(
-        "UPDATE users SET deleted_at = NOW() WHERE id = $1",
+    result = await client.execute(
+        "UPDATE users SET deleted_at = NOW() WHERE clerk_id = $1",
         clerk_id,
     )
+    # ``result`` is the asyncpg status string ("UPDATE N") — log
+    # silently if no row matched so a future operator can spot a
+    # webhook delivery that targeted a clerk_id we don't have.
+    if result.endswith(" 0"):
+        logger.info(
+            "_deactivate_user: no row matched clerk_id=%s; webhook "
+            "delivery for a user that was never auto-provisioned",
+            clerk_id,
+        )
 
 
 async def _upsert_org(data: dict[str, Any]) -> None:
