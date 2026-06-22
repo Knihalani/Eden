@@ -379,6 +379,14 @@ class TestLastWriterRaceResolution:
         # return value — the webhook only writes via ``execute``.
         # We do need to assert the SQL itself contains the
         # conditional that skips the role overwrite.
+        # Audit 2026-06-22 — feed fetchrow overrides so the lookup
+        # doesn't bail early when eden_user / eden_org aren't seeded.
+        mock_postgres_client._fetchrow_overrides.append(
+            ("users WHERE clerk_id", {"id": "user-123"})
+        )
+        mock_postgres_client._fetchrow_overrides.append(
+            ("organizations", {"id": "org-abc-uuid"})
+        )
         import asyncio
         asyncio.run(_upsert_membership({
             "organization": {"id": "org_2xabc"},

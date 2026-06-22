@@ -15,6 +15,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, Path
 from pydantic import BaseModel, Field
 
+from eden.api.routes.auth import get_current_user
 from eden.debugger.checkpoints import (
     Checkpoint,
     CheckpointStore,
@@ -90,10 +91,8 @@ class DiscoverResponse(BaseModel):
 # ─- Helpers ───────────────────────────────────────────────────────
 
 
-def _get_user():
-    from eden.api.routes.auth import get_current_user
-    return get_current_user
-
+def _get_user():  # pragma: no cover — B1.18 stub
+    raise NotImplementedError("Use Depends(get_current_user) directly")
 
 def _checkpoint_to_response(c: Checkpoint) -> CheckpointResponse:
     return CheckpointResponse(
@@ -117,7 +116,7 @@ def _checkpoint_to_response(c: Checkpoint) -> CheckpointResponse:
 async def list_checkpoints(
     org_id: str = Path(...),
     trace_id: str = Path(...),
-    user: dict = Depends(_get_user()),
+    user: dict = Depends(get_current_user),
 ) -> CheckpointListResponse:
     pg = await get_postgres_client()
     store = CheckpointStore(pg)
@@ -135,7 +134,7 @@ async def list_checkpoints(
 async def rerun(
     body: RerunRequest,
     org_id: str = Path(...),
-    user: dict = Depends(_get_user()),
+    user: dict = Depends(get_current_user),
 ) -> RerunResponse:
     pg = await get_postgres_client()
     store = CheckpointStore(pg)
@@ -163,7 +162,7 @@ async def rerun(
 async def discover(
     body: DiscoverRequest,
     org_id: str = Path(...),
-    user: dict = Depends(_get_user()),
+    user: dict = Depends(get_current_user),
 ) -> DiscoverResponse:
     entrypoints = discover_entrypoint(
         body.candidates, min_confidence=body.min_confidence,

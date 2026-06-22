@@ -199,10 +199,13 @@ async def sessions_aggregate(
 async def track_goal(
     org_id: str = Path(...),
     body: GoalRequest = Body(...),
+    user: dict = Depends(get_current_user),
 ) -> dict[str, Any]:
+    # Audit 2026-06-22 B1.33 — derive user_id from session, ignore body value
+    # to prevent any-user-to-any-user writes.
     return await _goals.track(
         org_id,
-        user_id=body.user_id,
+        user_id=user["user_id"],
         goal=body.goal,
         session_id=body.session_id,
     )
@@ -224,9 +227,10 @@ async def update_goal_status(
 @router.get("/goals")
 async def list_user_goals(
     org_id: str = Path(...),
-    user_id: str = Query(..., min_length=1, max_length=128),
+    user: dict = Depends(get_current_user),
 ) -> dict[str, Any]:
-    return await _goals.list_for_user(org_id, user_id=user_id)
+    # Audit 2026-06-22 B1.33 — derive user_id from session; self-only.
+    return await _goals.list_for_user(org_id, user_id=user["user_id"])
 
 
 @router.get("/conversation/{session_id}")
@@ -257,12 +261,14 @@ async def add_conversation_message(
 async def submit_feedback(
     org_id: str = Path(...),
     body: FeedbackRequest = Body(...),
+    user: dict = Depends(get_current_user),
 ) -> dict[str, Any]:
+    # Audit 2026-06-22 B1.33 — derive user_id from session.
     return await _feedback.submit_thumbs(
         org_id,
         trace_id=body.trace_id,
         thumbs=body.thumbs,
-        user_id=body.user_id,
+        user_id=user["user_id"],
         comment=body.comment,
         rating=body.rating,
     )
@@ -312,11 +318,13 @@ async def segment(
 async def signal_regeneration(
     org_id: str = Path(...),
     body: RegenerationRequest = Body(...),
+    user: dict = Depends(get_current_user),
 ) -> dict[str, Any]:
+    # Audit 2026-06-22 B1.33 — derive user_id from session.
     return await _regen.track(
         org_id,
         trace_id=body.trace_id,
-        user_id=body.user_id,
+        user_id=user["user_id"],
         regenerated=body.regenerated,
     )
 
@@ -325,11 +333,12 @@ async def signal_regeneration(
 async def signal_edit_distance(
     org_id: str = Path(...),
     body: EditDistanceRequest = Body(...),
+    user: dict = Depends(get_current_user),
 ) -> dict[str, Any]:
     return await _edit.compute(
         org_id,
         trace_id=body.trace_id,
-        user_id=body.user_id,
+        user_id=user["user_id"],
         model_response=body.model_response,
         final_text=body.final_text,
     )
@@ -339,11 +348,12 @@ async def signal_edit_distance(
 async def signal_return(
     org_id: str = Path(...),
     body: ReturnRequest = Body(...),
+    user: dict = Depends(get_current_user),
 ) -> dict[str, Any]:
     return await _return.track(
         org_id,
         trace_id=body.trace_id,
-        user_id=body.user_id,
+        user_id=user["user_id"],
         returned=body.returned,
     )
 
@@ -352,11 +362,12 @@ async def signal_return(
 async def signal_abandonment(
     org_id: str = Path(...),
     body: AbandonmentRequest = Body(...),
+    user: dict = Depends(get_current_user),
 ) -> dict[str, Any]:
     return await _abandon.detect(
         org_id,
         trace_id=body.trace_id,
-        user_id=body.user_id,
+        user_id=user["user_id"],
         abandoned=body.abandoned,
     )
 
@@ -365,11 +376,12 @@ async def signal_abandonment(
 async def signal_copy_paste(
     org_id: str = Path(...),
     body: CopyPasteRequest = Body(...),
+    user: dict = Depends(get_current_user),
 ) -> dict[str, Any]:
     return await _copy.detect(
         org_id,
         trace_id=body.trace_id,
-        user_id=body.user_id,
+        user_id=user["user_id"],
         copied=body.copied,
         redacted_snippet=body.redacted_snippet,
     )
@@ -379,11 +391,12 @@ async def signal_copy_paste(
 async def signal_retry(
     org_id: str = Path(...),
     body: RetryRequest = Body(...),
+    user: dict = Depends(get_current_user),
 ) -> dict[str, Any]:
     return await _retry.detect(
         org_id,
         trace_id=body.trace_id,
-        user_id=body.user_id,
+        user_id=user["user_id"],
         retried=body.retried,
         similarity=body.similarity,
     )

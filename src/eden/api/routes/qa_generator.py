@@ -23,6 +23,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Path
 from pydantic import BaseModel, Field
 
+from eden.api.routes.auth import get_current_user
 from eden.data_platform.qa_generator import (
     ALL_QA_TYPES,
     QA_TYPE_EXTRACTIVE,
@@ -103,9 +104,6 @@ class GenerateResponse(BaseModel):
 # ── Helpers ───────────────────────────────────────────────────────
 
 
-def _get_user():
-    from eden.api.routes.auth import get_current_user
-    return get_current_user
 
 
 def _qa_to_response(qa: SyntheticQA) -> QAResponse:
@@ -123,7 +121,7 @@ def _qa_to_response(qa: SyntheticQA) -> QAResponse:
 async def generate_qa(
     body: GenerateRequest,
     org_id: str = Path(..., description="Organization ID"),
-    user: dict = Depends(_get_user()),
+    user: dict = Depends(get_current_user),
 ) -> GenerateResponse:
     """Run the generator and return the batch of triples.
 
@@ -183,7 +181,7 @@ async def generate_qa(
 )
 async def list_runs(
     org_id: str = Path(...),
-    user: dict = Depends(_get_user()),
+    user: dict = Depends(get_current_user),
 ) -> dict[str, Any]:
     return {"runs": [], "total": 0, "detail": "run history ships in Phase J.5"}
 
@@ -195,7 +193,7 @@ async def list_runs(
 async def get_run(
     org_id: str = Path(...),
     run_id: str = Path(...),
-    user: dict = Depends(_get_user()),
+    user: dict = Depends(get_current_user),
 ) -> dict[str, Any]:
     raise HTTPException(
         status_code=404,

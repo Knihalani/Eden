@@ -18,8 +18,8 @@ from typing import Any
 from fastapi import APIRouter, Body, Depends, HTTPException, Path, Query
 from pydantic import BaseModel, Field
 
-from eden.api.deps import get_current_user
-from eden.observability.telemetry_collector import (
+from eden.api.deps import get_current_user, require_org_member
+from eden.observability.telemetry_collector import (  # noqa: F401
     TelemetryCollector,
     TelemetryEvent,
     get_telemetry_collector,
@@ -605,6 +605,7 @@ async def suggest_spans_route(
 @router.get("/summary", response_model=dict)
 async def observability_summary(
     org_id: str,
+    _user: dict = Depends(get_current_user),  # Audit 2026-06-22 B1.6 — require login
     window_hours: int = Query(24, ge=1, le=720),
     agent_id: str | None = Query(None),
 ):
@@ -620,9 +621,10 @@ async def observability_summary(
     client = await _pg_module.get_postgres_client()
     since = datetime.utcnow() - timedelta(hours=window_hours)
     common_where = "tenant_id = $1 AND timestamp >= $2"
-    if agent_id:
-        common_where += f" AND attributes->>'agent_id' = '{agent_id}'"
     common_args = [org_id, since]
+    if agent_id:
+        common_args.append(agent_id)
+        common_where += f" AND attributes->>'agent_id' = ${len(common_args)}"
 
     # 1) Totals + error count.
     totals = await client.fetchrow(

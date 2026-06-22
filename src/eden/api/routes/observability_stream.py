@@ -28,7 +28,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, Path, Query
 from fastapi.responses import StreamingResponse
 
-from eden.api.deps import get_current_user
+from eden.api.deps import get_current_user, require_org_member
 from eden.storage.redis import get_redis_client
 
 logger = logging.getLogger(__name__)
@@ -43,7 +43,8 @@ async def stream_traces(
         None,
         description="Last-Event-ID for resume",
     ),
-    user: dict = Depends(get_current_user),
+    # Audit 2026-06-22 B1.13 — require org membership; prevents cross-org SSE subscribe.
+    member: dict = Depends(require_org_member),
 ) -> StreamingResponse:
     """Stream new trace events as SSE.
 
@@ -51,8 +52,9 @@ async def stream_traces(
     list endpoint. The ``id`` field is monotonic within a tenant's
     stream so the client can resume via Last-Event-ID.
     """
+    # Use member.org_id (validated) instead of raw path param.
     return StreamingResponse(
-        _event_stream(org_id, last_event_id),
+        _event_stream(member["org_id"], last_event_id),
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache, no-transform",

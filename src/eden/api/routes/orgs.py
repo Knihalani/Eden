@@ -385,10 +385,10 @@ async def send_invite(
 
     # Check if user already a member
     existing_member = await client.fetchrow(
-        "SELECT id FROM org_members WHERE org_id = $1 AND user_id = (SELECT id FROM users WHERE email = $2)",
+        "SELECT id FROM org_members WHERE org_id = $1 AND user_id = (SELECT id FROM users WHERE LOWER(email) = LOWER($2) LIMIT 1)",
         org_id,
         email,
-    )
+    )    # Audit 2026-06-22 B1.8 — case-insensitive email lookup
     if existing_member:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -546,7 +546,11 @@ async def remove_member(
         )
 
     # Can't remove self if not admin
-    if user_id == user["user_id"] and org["role"] != "owner":
+    om = await client.fetchrow(
+        "SELECT role FROM org_members WHERE user_id = $1 AND org_id = $2",
+        user["user_id"], org_id,
+    )
+    if user_id == user["user_id"] and (not om or om["role"] != "owner"):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Admins cannot remove themselves",
@@ -761,24 +765,32 @@ async def transfer_ownership(
         )
 
     # Atomic transaction: update owner and roles
+    # Audit 2026-06-22 B1.30 — set new owner in org_members FIRST so a
+    # crash mid-transaction doesn't leave organizations.owner_id
+    # pointing at a user who isn't owner in org_members.
     async with client.transaction():
-        # Update organization's owner_id
-        await client.execute(
-            "UPDATE organizations SET owner_id = $1 WHERE id = $2",
-            target_user_id,
+        # Verify target is still a member (race-safe via WHERE clause).
+        result = await client.execute(
+            "UPDATE org_members SET role = 'owner' WHERE org_id = $1 AND user_id = $2",
             org_id,
+            target_user_id,
         )
-        # Update old owner's role to admin
+        if result.endswith(" 0"):
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Target user is no longer a member of this organization",
+            )
+        # Demote old owner
         await client.execute(
             "UPDATE org_members SET role = 'admin' WHERE org_id = $1 AND user_id = $2",
             org_id,
             current_user_id,
         )
-        # Update new owner's role to owner
+        # Finally update organizations.owner_id
         await client.execute(
-            "UPDATE org_members SET role = 'owner' WHERE org_id = $1 AND user_id = $2",
-            org_id,
+            "UPDATE organizations SET owner_id = $1 WHERE id = $2",
             target_user_id,
+            org_id,
         )
 
     # Audit log

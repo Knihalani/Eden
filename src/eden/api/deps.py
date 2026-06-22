@@ -235,7 +235,7 @@ async def get_current_org_member(
     # ``current_org_id`` claim (cookie-authed callers).
     org_id = (
         x_org_id
-        or (extract_org_id(payload) if is_clerk_payload(payload) else None)
+        or (extract_org_id(payload) if _is_clerk_payload_public(payload) else None)
         or payload.get("current_org_id")
     )
     if not org_id:
@@ -353,7 +353,7 @@ async def get_current_org(
 
     user_id = payload.get("sub") or extract_user_id(payload)
     # Clerk path: trust the org_id + role claims from the session JWT.
-    is_clerk = is_clerk_payload(payload)
+    is_clerk = _is_clerk_payload_public(payload)
     if is_clerk:
         org_id = x_org_id or extract_org_id(payload)
         if not org_id:

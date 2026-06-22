@@ -657,6 +657,14 @@ def _extract_archive(
     if name.endswith((".tar.gz", ".tgz")) or _is_gzip(raw):
         with tarfile.open(fileobj=io.BytesIO(raw), mode="r:gz") as tf:
             for member in tf.getmembers():
+                # Audit 2026-06-22 B1.11 — reject symlinks + hard-links.
+                # Otherwise a tarball can contain ``etc/passwd`` as a
+                # symlink that escapes the extract root on read.
+                if member.issym() or member.islnk():
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"symlinks not allowed in archive: {member.name}",
+                    )
                 if not member.isfile():
                     continue
                 # Defend against zip-slip

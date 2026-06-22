@@ -352,23 +352,26 @@ async def subscribe(
             settings_data = _get_settings_data(org["settings"])
             stripe_customer_id = settings_data.get("stripe_customer_id")
 
-        if not stripe_customer_id:
-            # Create Stripe customer
-            customer = stripe.Customer.create(
-                name=org["name"],
-                metadata={"org_id": org_id},
-            )
-            stripe_customer_id = customer.id
+        # Audit 2026-06-22 B1.25 — wrap Stripe customer + UPDATE in a
+        # transaction so a failed UPDATE can't orphan a Stripe customer.
+        async with client.transaction():
+            if not stripe_customer_id:
+                # Create Stripe customer
+                customer = stripe.Customer.create(
+                    name=org["name"],
+                    metadata={"org_id": org_id},
+                )
+                stripe_customer_id = customer.id
 
-            # Save customer ID to org settings
-            settings_data = _get_settings_data(org["settings"]) if org and org.get("settings") else {}
-            settings_data["stripe_customer_id"] = stripe_customer_id
+                # Save customer ID to org settings
+                settings_data = _get_settings_data(org["settings"]) if org and org.get("settings") else {}
+                settings_data["stripe_customer_id"] = stripe_customer_id
 
-            await client.execute(
-                "UPDATE organizations SET settings = $1 WHERE id = $2",
-                settings_data,
-                org_id,
-            )
+                await client.execute(
+                    "UPDATE organizations SET settings = $1 WHERE id = $2",
+                    settings_data,
+                    org_id,
+                )
 
         # Create checkout session
         session = stripe.checkout.Session.create(

@@ -394,6 +394,7 @@ async def _chat_completions_stream(
         total_output = 0
         outcome = "success"
         error_type: str | None = None
+        stream = None
         try:
             stream = await client.chat.completions.create(
                 **upstream_kwargs,
@@ -430,6 +431,13 @@ async def _chat_completions_stream(
             error_type = type(exc).__name__
             yield sse_format({"error": {"message": str(exc), "type": error_type}})
         finally:
+            # Audit 2026-06-22 B1.26 — close upstream stream on disconnect
+            # to avoid leaking OpenRouter connections.
+            if stream is not None:
+                try:
+                    await stream.close()
+                except Exception:
+                    pass
             duration_ms = (time.monotonic() - start) * 1000
             await _emit_gateway_telemetry(
                 org_id=org_id,
@@ -493,6 +501,9 @@ async def completions(
     client = get_async_openai_client()
     if body.stream:
         async def event_source() -> AsyncIterator[bytes]:
+            # Audit 2026-06-22 B1.27 — cache chunk id once per stream;
+            # previously regenerated each chunk, breaking client-side dedup.
+            stream_id = f"cmpl-{uuid.uuid4().hex[:24]}"
             try:
                 stream = await client.completions.create(
                     **{k: v for k, v in upstream_kwargs.items() if k != "stream"},
@@ -507,7 +518,7 @@ async def completions(
                         # Build minimal wire dict from the chunk's
                         # own attributes.
                         out = {
-                            "id": getattr(chunk, "id", "") or f"cmpl-{uuid.uuid4().hex[:24]}",
+                            "id": getattr(chunk, "id", "") or stream_id,
                             "object": "text_completion",
                             "created": getattr(chunk, "created", int(time.time())),
                             "model": getattr(chunk, "model", body.model),

@@ -38,6 +38,13 @@ async def export_org_data(
 
     client = await get_postgres_client()
 
+    # Audit 2026-06-22 B1.12 — rate-limit the export endpoint. A leaked
+    # admin cookie yields the entire audit history in one response;
+    # throttle per-IP to prevent bulk exfiltration.
+    from eden.api.utils.rate_limit import SlidingWindowRateLimiter
+    _export_limiter = SlidingWindowRateLimiter(max_requests=2, window_seconds=300.0)
+    await _export_limiter.check(authorization or org_id)
+
     # Create ZIP in memory
     zip_buffer = io.BytesIO()
 

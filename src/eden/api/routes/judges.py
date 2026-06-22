@@ -63,6 +63,15 @@ def _score_to_response(score: JudgeScore) -> JudgeScoreResponse:
     )
 
 
+# Audit 2026-06-22 B1.20 — module-scope _LightEvent (was redefined each loop iteration).
+class _LightEvent:
+    __slots__ = (
+        "event_id", "trace_id", "span_id", "event_type",
+        "payload", "attributes", "tags", "source_format",
+        "tenant_id",
+    )
+
+
 async def _fetch_events_for_trace(tenant_id: str, trace_id: str) -> list:
     """Read all telemetry_events for one (tenant, trace) from Postgres.
 
@@ -80,7 +89,7 @@ async def _fetch_events_for_trace(tenant_id: str, trace_id: str) -> list:
     rows = await client.fetch(
         """
         SELECT event_id, trace_id, span_id, event_type, payload,
-               attributes, tags, source_format
+               attributes, tags, source_format, tenant_id
         FROM telemetry_events
         WHERE tenant_id = $1 AND trace_id = $2
         ORDER BY timestamp ASC
@@ -150,15 +159,8 @@ async def run_judges(
     runner = JudgeRunner(llm_client=llm_client)
     all_scores: list[JudgeScore] = []
     for event in events:
-        # Reconstruct a minimal ``_LightEvent``-shaped object from the
-        # raw row. Mirrors the pattern in
-        # ``src/eden/llmops/judges/redis_tailer.py``.
-        class _LightEvent:
-            __slots__ = (
-                "event_id", "trace_id", "span_id", "event_type",
-                "payload", "attributes", "tags", "source_format",
-                "tenant_id",
-            )
+        # Audit 2026-06-22 B1.20 — _LightEvent is module-scope; tenant_id
+        # is selected by _fetch_events_for_trace (verified via DB column).
         ev = _LightEvent()
         for f in _LightEvent.__slots__:
             setattr(ev, f, event.get(f))

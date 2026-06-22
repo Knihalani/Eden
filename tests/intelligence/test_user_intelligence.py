@@ -1196,9 +1196,11 @@ def user_test_app() -> FastAPI:
     settings.intelligence_gap_v0 = True
 
     app = FastAPI(title="eden-user-test")
+    # Audit 2026-06-22 B1.33 — mock matches real get_current_user shape
+    # ({"user_id": ..., "email": ...}).
     app.dependency_overrides[get_current_user] = lambda: {
-        "sub": "test-user",
-        "org_id": "org_test",
+        "user_id": "test-user",
+        "email": None,
     }
     mod = importlib.import_module("eden.api.routes.intelligence_user")
     app.include_router(mod.router)

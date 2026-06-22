@@ -55,8 +55,8 @@ class IdentifyRequest(BaseModel):
 
 @router.post("/sessions/start", response_model=SessionStartResponse)
 async def sessions_start(
+    body: SessionStartRequest,
     org_id: str = Path(...),
-    body: SessionStartRequest = ...,
 ) -> SessionStartResponse:
     svc = SessionIdentityService()
     result = await svc.start(
@@ -84,9 +84,9 @@ async def sessions_end(
 
 @router.post("/sessions/{session_id}/identify")
 async def sessions_identify(
+    body: SessionIdentifyRequest,
     org_id: str = Path(...),
     session_id: str = Path(..., min_length=1, max_length=64),
-    body: SessionIdentifyRequest = ...,
 ) -> dict:
     svc = SessionIdentityService()
     ok = await svc.identify(org_id, session_id, body.user_id)
@@ -109,8 +109,8 @@ async def sessions_get(
 
 @router.post("/identify")
 async def identify(
+    body: IdentifyRequest,
     org_id: str = Path(...),
-    body: IdentifyRequest = ...,
 ) -> dict:
     """Top-level identify (no session). Records the user→org
     association but does not open a session.
