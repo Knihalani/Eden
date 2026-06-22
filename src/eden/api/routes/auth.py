@@ -20,6 +20,11 @@ from eden.api.deps import (
     require_org_admin,
 )
 from eden.api.utils.auth import create_access_token, hash_password, verify_password
+from eden.api.utils.clerk_client import (
+    ClerkAPIError,
+    extract_user_profile,
+    get_user as clerk_get_user,
+)
 from eden.api.utils.validation import PasswordValidationError, validate_password_strength
 from eden.config import get_settings
 from eden.services.invitation_service import (
@@ -492,29 +497,82 @@ async def get_me(user: dict = Depends(get_current_user)):
         # ``password_hash = NULL``. ON CONFLICT (clerk_id) keeps
         # the webhook + /auth/me race safe.
         clerk_id = user["user_id"]
+
+        # The default Clerk session JWT carries ``sub`` but not
+        # ``email`` / ``name`` / ``avatar_url`` — those have to be
+        # either added to a JWT template in the Clerk dashboard or
+        # fetched from the Backend API. We try the JWT first (free,
+        # no round-trip) and fall back to the Backend API on the
+        # rare signup where the JWT is sparse — the resulting row
+        # is the same shape either way.
         email = user.get("email") or ""
-        # JWT payload may not carry the name; fall back to the local
-        # part of the email so the row isn't blank.
         name = (email.split("@", 1)[0] if email else "") or "Eden user"
-        try:
-            inserted = await client.fetchrow(
-                """
-                INSERT INTO users (clerk_id, email, name, password_hash, created_at)
-                VALUES ($1, $2, $3, NULL, NOW())
-                ON CONFLICT (clerk_id) DO NOTHING
-                RETURNING id, email, name, created_at, preferred_org_id, clerk_id
-                """,
-                clerk_id,
-                email,
-                name,
-            )
-            if inserted is not None:
-                db_user = inserted
-            else:
-                # Lost the race to the webhook — re-read.
-                db_user = await get_user_by_id(clerk_id, lookup_column="clerk_id")
-        except Exception as exc:
-            logger.warning("auto-provision /auth/me failed for clerk_id=%s: %s", clerk_id, exc)
+        avatar_url = user.get("image_url") or user.get("avatar_url") or ""
+        if not email or not avatar_url:
+            clerk_profile = await clerk_get_user(clerk_id)
+            if clerk_profile:
+                profile = extract_user_profile(clerk_profile)
+                if not email:
+                    email = profile["email"]
+                    name = (
+                        profile["name"]
+                        if profile["name"] and profile["name"] != email.split("@")[0]
+                        else name
+                    )
+                if not avatar_url:
+                    avatar_url = profile["avatar_url"]
+        # Last-resort: if the JWT AND the API both returned no email,
+        # synthesize one from the Clerk id so the row still satisfies
+        # the users.email NOT NULL constraint. The user can fix it
+        # later via /auth/users/me PATCH.
+        if not email:
+            email = f"{clerk_id}@users.eden.noreply"
+            if name == "Eden user":
+                name = f"Eden user {clerk_id[-6:]}"
+
+        # Ponytail: 2 retries for transient DB errors (connection
+        # reset, deadlocks, replication lag). The Clerk webhook
+        # delivery can land in the same window — both paths have the
+        # same ON CONFLICT (clerk_id) DO NOTHING guard so a race is
+        # safe. The ``db_user is None`` fallback at the bottom of
+        # the loop catches the case where the webhook wins the race
+        # AND clears the row (it can't actually clear — there's no
+        # DELETE in the webhook path — but the re-read picks up the
+        # webhook's row if it landed first).
+        inserted = None
+        for attempt in range(3):
+            try:
+                inserted = await client.fetchrow(
+                    """
+                    INSERT INTO users (clerk_id, email, name, avatar_url, password_hash, created_at)
+                    VALUES ($1, $2, $3, $4, NULL, NOW())
+                    ON CONFLICT (clerk_id) DO NOTHING
+                    RETURNING id, email, name, created_at, preferred_org_id, clerk_id
+                    """,
+                    clerk_id,
+                    email,
+                    name,
+                    avatar_url,
+                )
+                break
+            except Exception as exc:
+                logger.warning(
+                    "auto-provision /auth/me attempt %d failed for clerk_id=%s: %s",
+                    attempt + 1, clerk_id, exc,
+                )
+                if attempt < 2:
+                    import asyncio
+                    await asyncio.sleep(0.1 * (attempt + 1))
+                    continue
+                # Last attempt failed — fall through to the re-read
+                # below, which may pick up the webhook's row.
+        if inserted is not None:
+            db_user = inserted
+        else:
+            # Re-read in case the webhook inserted between our last
+            # attempt and now (or our INSERT raced and lost the ON
+            # CONFLICT branch).
+            db_user = await get_user_by_id(clerk_id, lookup_column="clerk_id")
         if not db_user:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,

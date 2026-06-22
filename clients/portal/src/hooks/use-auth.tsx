@@ -16,8 +16,13 @@ interface AuthContextType {
   user: User | null;
   loading: boolean;
   error: string | null;
-  /** Re-fetch the Eden-side profile (orgs + current org) from FastAPI. */
-  refreshUser: () => Promise<void>;
+  /** Re-fetch the Eden-side profile (orgs + current org) from FastAPI.
+   *  Returns ``true`` on success — the retry wrapper needs the signal. */
+  refreshUser: () => Promise<boolean>;
+  /** Same as ``refreshUser`` but with built-in retry on the transient
+   *  "User not found" race that surfaces on the first /auth/me call
+   *  after Clerk signup. */
+  refreshUserWithRetry: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -70,11 +75,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // Fetch the Eden-side profile (orgs + current org) once Clerk is ready
   // and we have a signed-in user. Failures are non-fatal — the user
   // can still see the portal shell.
-  const refreshUser = useCallback(async () => {
+  //
+  // Returns ``true`` on success, ``false`` if the call failed (so the
+  // retry wrapper can detect the transient "User not found" race that
+  // shows up on the very first /auth/me after Clerk signup, when the
+  // backend's auto-provision hasn't completed yet).
+  const refreshUser = useCallback(async (): Promise<boolean> => {
     if (!clerkUser) {
       setOrganizations([]);
       setCurrentOrgId(null);
-      return;
+      return true;
     }
     setProfileLoading(true);
     try {
@@ -82,18 +92,52 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setOrganizations(me.organizations ?? []);
       setCurrentOrgId(me.current_org_id ?? null);
       setError(null);
+      return true;
     } catch (err) {
       // Surface as a soft error — the user is signed in, they just
       // don't have an Eden org yet (typical on first signup).
       setError(err instanceof Error ? err.message : "Failed to load profile");
+      return false;
     } finally {
       setProfileLoading(false);
     }
   }, [clerkUser]);
 
+  /**
+   * Re-fetch the Eden-side profile, retrying on the transient
+   * "User not found" error that surfaces during the first /auth/me
+   * call after signup. The backend's /auth/me auto-provisions the
+   * Postgres user on the first call, but a Clerk session refresh
+   * landing a fraction of a second before that insert resolves can
+   * cause the very first /auth/me to 404. Two quick retries with a
+   * short backoff (250ms, 500ms) cover the typical race window
+   * without leaving the user staring at a stuck banner.
+   */
+  const refreshUserWithRetry = useCallback(async () => {
+    const delays = [0, 250, 500];
+    for (const ms of delays) {
+      if (ms > 0) await new Promise((r) => setTimeout(r, ms));
+      const ok = await refreshUser();
+      if (ok) return;
+      const lastError = error ?? "";
+      const isUserNotFound = /user\s*not\s*found/i.test(lastError);
+      if (!isUserNotFound) return; // non-retryable — state already set
+    }
+    // Final attempt to set the (now stuck) error state.
+    await refreshUser();
+  }, [refreshUser, error]);
+
   useEffect(() => {
-    refreshUser();
-  }, [refreshUser]);
+    // Use the retry variant on first mount so the auto-provision
+    // race window doesn't bounce the user into the "Setting up your
+    // account" banner during the first half-second after signup.
+    refreshUserWithRetry();
+    // We intentionally only run this once on mount — the refresh
+    // function is recreated every render and depending on it would
+    // trigger a refetch on every Clerk state change. The org-hook
+    // (use-org) owns the refresh-on-clerk-org-change path.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clerkUser?.id]);
 
   const user: User | null = clerkUser
     ? buildEdenUser(clerkUser, organizations, currentOrgId)
@@ -112,6 +156,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           (!!clerkUser && profileLoading && organizations.length === 0),
         error,
         refreshUser,
+        refreshUserWithRetry,
       }}
     >
       {children}

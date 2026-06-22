@@ -73,6 +73,86 @@ async def _post(path: str, body: dict[str, Any], *, timeout: float = 10.0) -> di
     return response.json()
 
 
+async def _get(path: str, *, timeout: float = 5.0) -> dict[str, Any]:
+    """GET Clerk Backend API and return the decoded body.
+
+    Used by ``get_user`` to enrich the auto-provision path when the
+    Clerk session JWT doesn't carry the email claim (the default
+    Clerk session token only includes ``sub`` / ``iat`` / ``exp``).
+    Failures raise ``ClerkAPIError`` so the caller can fall back
+    gracefully.
+    """
+    import httpx
+
+    settings = get_settings()
+    if not settings.clerk_secret_key:
+        raise ClerkAPIError("CLERK_SECRET_KEY not configured")
+
+    url = f"{CLERK_API_BASE}{path}"
+    headers = {
+        "Authorization": f"Bearer {settings.clerk_secret_key}",
+    }
+    try:
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            response = await client.get(url, headers=headers)
+    except httpx.TimeoutException as exc:
+        raise ClerkAPIError(f"Clerk timeout: {path}") from exc
+    except httpx.RequestError as exc:
+        raise ClerkAPIError(f"Clerk network error: {path}: {exc}") from exc
+
+    if response.status_code < 200 or response.status_code >= 300:
+        raise ClerkAPIError(
+            f"Clerk {response.status_code} on {path}: {response.text[:300]}"
+        )
+    return response.json()
+
+
+async def get_user(clerk_id: str) -> dict[str, Any] | None:
+    """Fetch a Clerk user by id (``user_2abc...``) and return the full
+    record. Returns ``None`` if the user no longer exists in Clerk
+    (deleted) or the API call fails — callers should treat both as
+    "best effort, fall back to JWT claims only".
+
+    The default Clerk session JWT does not include the ``email`` /
+    ``first_name`` / ``last_name`` / ``image_url`` claims — those have
+    to be either added to a JWT template in the Clerk dashboard or
+    fetched from the Backend API. We prefer the API fetch on the
+    auto-provision path because it needs zero Clerk-dashboard config
+    and works the moment ``CLERK_SECRET_KEY`` is set (which it must
+    be for the portal to verify Clerk session JWTs in the first place).
+    """
+    if not clerk_id:
+        return None
+    try:
+        return await _get(f"/users/{clerk_id}")
+    except ClerkAPIError as exc:
+        logger.warning("get_user(%s) failed: %s", clerk_id, exc)
+        return None
+
+
+def extract_user_profile(payload: dict[str, Any]) -> dict[str, str]:
+    """Best-effort extraction of (email, name, avatar_url) from a Clerk
+    user payload (the dict returned by ``get_user`` or the webhook
+    ``user.created`` event). Returns empty strings for any field that
+    isn't present so callers can pass the result straight into the
+    ``users`` table without further null handling.
+    """
+    email = ""
+    primary = payload.get("primary_email_address_id")
+    for addr in payload.get("email_addresses", []) or []:
+        if addr.get("id") == primary or not email:
+            email = addr.get("email_address", "") or email
+    first = payload.get("first_name") or ""
+    last = payload.get("last_name") or ""
+    full = (
+        payload.get("full_name")
+        or " ".join(p for p in (first, last) if p)
+        or email.split("@")[0]
+    )
+    avatar = payload.get("image_url") or ""
+    return {"email": email, "name": full, "avatar_url": avatar}
+
+
 async def create_organization(name: str, slug: str) -> dict[str, Any]:
     """Create a Clerk org; returns the full org record (with ``id``).
 
