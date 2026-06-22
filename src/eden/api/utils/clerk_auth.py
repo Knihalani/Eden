@@ -148,7 +148,9 @@ def verify_clerk_token(token: str) -> dict[str, Any] | None:
     alg = header.get("alg", "RS256")
 
     # Fast path: static PEM (dev / offline). Avoids the JWKS round-trip.
-    if _settings.clerk_jwt_key and alg.startswith("RS") or alg.startswith("ES"):
+    if _settings.clerk_jwt_key and (
+        alg.startswith("RS") or alg.startswith("ES")
+    ):
         try:
             return jwt.decode(
                 token,
@@ -202,22 +204,45 @@ def extract_user_id(payload: dict[str, Any]) -> str | None:
 def extract_org_id(payload: dict[str, Any]) -> str | None:
     """Return the active organization id from a Clerk payload.
 
-    When the session token was minted with the standard Clerk org
-    claims (``org_id`` / ``org_slug``), these are populated. Returns
-    ``None`` for sessions minted in personal-account mode (i.e. the
-    user isn't currently inside an organization).
+    Clerk's default session JWT uses the abbreviated ``o: {id, rol,
+    slg}`` shape (single-letter keys to keep the token small). The
+    long-form ``org_id`` / ``organization_id`` claims only appear
+    when the Clerk dashboard has a custom session JWT template
+    configured. We accept both shapes so the backend works against
+    the out-of-the-box Clerk session shape AND against custom
+    templates, without forcing the operator to configure a JWT
+    template just to make /orgs resolve.
+
+    Returns ``None`` for sessions minted in personal-account mode
+    (i.e. the user isn't currently inside an organization).
     """
+    # Abbreviated default: ``o.id``
+    org_claim = payload.get("o")
+    if isinstance(org_claim, dict):
+        oid = org_claim.get("id")
+        if oid:
+            return oid
+    # Custom JWT template: ``org_id`` / ``organization_id``
     return payload.get("org_id") or payload.get("organization_id")
 
 
 def extract_org_role(payload: dict[str, Any]) -> str | None:
     """Return the active organization role from a Clerk payload.
 
-    Standard Clerk claim is ``org_role`` and uses the ``org:<slug>``
-    format (``org:admin`` / ``org:member`` / any custom slug). Map
-    these onto Eden's ``owner`` / ``admin`` / ``member`` / ``viewer``
-    vocabulary at the call site (see ``src/eden/api/deps.py``).
+    Standard Clerk default is the abbreviated ``o.rol`` field. A
+    custom JWT template can surface the same value as ``org_role``
+    or ``organization_role`` (``org:admin`` / ``org:member`` / any
+    custom slug). Map these onto Eden's ``owner`` / ``admin`` /
+    ``member`` / ``viewer`` vocabulary at the call site (see
+    ``src/eden/api/deps.py``).
     """
+    # Abbreviated default: ``o.rol``
+    org_claim = payload.get("o")
+    if isinstance(org_claim, dict):
+        rol = org_claim.get("rol")
+        if rol:
+            return rol
+    # Custom JWT template: ``org_role`` / ``organization_role``
     return payload.get("org_role") or payload.get("organization_role")
 
 
