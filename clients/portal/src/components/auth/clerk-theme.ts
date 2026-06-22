@@ -56,18 +56,21 @@ const clerkAppearance = {
       maxWidth: "420px",
       margin: "0 auto",
       padding: "2rem 1.75rem 1.5rem",
-      backgroundColor: "rgba(15, 20, 25, 0.85)",
-      backdropFilter: "blur(20px)",
-      WebkitBackdropFilter: "blur(20px)",
-      // June 2026: bumped border from --border-default (was 1.5:1,
-      // invisible on the bg-secondary surface) to --border-strong
-      // (4.6:1) so the card edge is actually readable against the
-      // brand-panel background. Dropped the outer 1px accent ring
-      // (rgba 91,158,255,0.06) — it was producing the "weird line"
-      // users reported around the auth form.
-      border: "1px solid var(--border-strong)",
+      // June 22 2026 — fully opaque surface. Prior
+      // ``rgba(15, 20, 25, 0.85)`` blended with the brand-panel
+      // background and made the card edge indistinguishable from
+      // the form column behind it on bright monitors. Locked to
+      // ``--bg-secondary`` so the card is unambiguously a defined
+      // surface and every text element on it has a known contrast
+      // floor (16:1 for ``--text-primary`` against this bg).
+      backgroundColor: "var(--bg-secondary)",
+      border: "1px solid var(--border-glow)",
       borderRadius: "var(--radius-xl)",
-      boxShadow: "0 0 48px rgba(0, 0, 0, 0.4)",
+      // Inset ring + outer glow give the card a depth separator
+      // so it doesn't blend into the form column even if the
+      // brand-panel gradient behind it shares the same hue.
+      boxShadow:
+        "0 0 0 1px var(--bg-primary) inset, 0 0 48px rgba(0, 0, 0, 0.5)",
       overflow: "hidden",
     },
     cardBox: {
@@ -91,7 +94,14 @@ const clerkAppearance = {
       marginBottom: 0,
     },
     headerSubtitle: {
+      // ``display: none`` would inherit Clerk's default ``color:
+      // #212126`` (near-black) if Clerk re-renders it without the
+      // rule, which is exactly the "black on black" complaint we
+      // hit on June 21. Belt-and-suspenders: explicitly neutralise
+      // the colour so a re-render can't revert to dark text on dark
+      // surface.
       display: "none",
+      color: "var(--text-primary)",
     },
     headerBackIcon: {
       color: "var(--text-muted)",
@@ -108,7 +118,11 @@ const clerkAppearance = {
     formFieldInput: {
       backgroundColor: "var(--bg-primary)",
       borderColor: "var(--border-default)",
+      // Clerk defaults the input colour to ``#212126`` (near-black)
+      // which is invisible on our dark surface — explicitly set
+      // light text on every text-bearing element inside the card.
       color: "var(--text-primary)",
+      caretColor: "var(--accent)",
       borderRadius: "var(--radius-md)",
       transition: "border-color var(--duration-fast), box-shadow var(--duration-fast)",
       "&:hover": { borderColor: "var(--border-strong)" },
@@ -120,6 +134,14 @@ const clerkAppearance = {
       "&:disabled": {
         opacity: 0.5,
         cursor: "not-allowed",
+      },
+      // Clerk renders a ``placeholder`` attribute on the underlying
+      // <input> — force the placeholder colour too so the helper
+      // text ("Enter your email address") doesn't appear as dark
+      // grey on near-black.
+      "&::placeholder": {
+        color: "var(--text-muted)",
+        opacity: 1,
       },
     },
     formFieldInputGroup: {
@@ -156,6 +178,14 @@ const clerkAppearance = {
     // ---- Primary button (Sign in / Sign up / Continue) ----
     formButtonPrimary: {
       backgroundColor: "var(--accent)",
+      // Dark foreground (#03060A) on the light accent (#5B9EFF)
+      // gives 7.5:1 — well above WCAG AA's 4.5:1 normal-text floor
+      // and the highest-contrast combination available on this
+      // surface. The user's "black on black" report was about
+      // OTHER elements (placeholder text, Clerk defaults leaking
+      // through), not the button itself; this combination has been
+      // the dark-terminal standard since the June 2026 polish pass
+      // and we keep it.
       color: "var(--accent-foreground)",
       fontWeight: 600,
       fontSize: "0.875rem",
@@ -208,6 +238,7 @@ const clerkAppearance = {
     },
     dividerText: {
       color: "var(--text-muted)",
+      backgroundColor: "var(--bg-secondary)",
       fontSize: "0.6875rem",
       fontWeight: 500,
       textTransform: "uppercase",
@@ -362,6 +393,7 @@ const clerkAppearance = {
       borderColor: "var(--border-default)",
       borderRadius: "var(--radius-xl)",
       boxShadow: "0 20px 60px rgba(0, 0, 0, 0.5)",
+      color: "var(--text-primary)",
     },
     modalCloseButton: {
       color: "var(--text-muted)",
@@ -392,6 +424,7 @@ const clerkAppearance = {
       backgroundColor: "var(--bg-primary)",
       borderColor: "var(--border-default)",
       borderRadius: "var(--radius-md)",
+      color: "var(--text-primary)",
     },
     deviceListItem: {
       // June 2026 contrast bump: was --border-subtle (2.1:1), now

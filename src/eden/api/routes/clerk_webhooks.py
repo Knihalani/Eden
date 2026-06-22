@@ -103,9 +103,19 @@ def _verify_svix_signature(
 async def _upsert_user(data: dict[str, Any]) -> None:
     """Sync a Clerk ``user`` payload into Eden's ``users`` table.
 
-    We treat the Clerk ``id`` as the canonical ``user_id`` — it's
-    the same value that ``get_current_user`` resolves from the
-    session JWT's ``sub`` claim, so FK references line up.
+    The Clerk ``id`` (``user_2abc...``) is stored in the new
+    ``clerk_id`` column (added in migration 047); the primary key
+    ``users.id`` stays a generated UUID so all the FK references
+    (``org_members.user_id``, ``organizations.owner_id``,
+    ``notifications.user_id``, ...) keep pointing at the same row.
+
+    ON CONFLICT (clerk_id) makes webhook re-deliveries idempotent —
+    if the portal's ``/auth/me`` auto-provision raced the webhook
+    and won, the webhook's second delivery falls into the DO UPDATE
+    branch instead of failing the unique constraint.
+
+    ``password_hash`` is NULL for Clerk-managed users — they
+    authenticate via Clerk, never via Eden's password flow.
     """
     clerk_id = data.get("id")
     if not clerk_id:
@@ -123,13 +133,12 @@ async def _upsert_user(data: dict[str, Any]) -> None:
     client = await get_postgres_client()
     await client.execute(
         """
-        INSERT INTO users (id, email, name, avatar_url, updated_at)
-        VALUES ($1, $2, $3, $4, NOW())
-        ON CONFLICT (id) DO UPDATE
+        INSERT INTO users (clerk_id, email, name, avatar_url, password_hash)
+        VALUES ($1, $2, $3, $4, NULL)
+        ON CONFLICT (clerk_id) DO UPDATE
         SET email = EXCLUDED.email,
             name = EXCLUDED.name,
-            avatar_url = EXCLUDED.avatar_url,
-            updated_at = NOW()
+            avatar_url = EXCLUDED.avatar_url
         """,
         clerk_id,
         email,

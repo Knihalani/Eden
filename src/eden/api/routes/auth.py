@@ -470,33 +470,51 @@ async def get_me(user: dict = Depends(get_current_user)):
     (e.g. the user signed up before the webhook could sync, or the
     webhook is degraded), we INSERT a minimal row from the JWT
     payload so the portal can render. Idempotent — safe to re-run.
+
+    June 2026 fix: prior implementation tried ``INSERT INTO users
+    (id, email, name, ...)`` — but ``password_hash`` is ``NOT NULL``
+    (set in migration 001) and Clerk IDs are strings like
+    ``user_2abc...`` while ``users.id`` is a UUID column. Both
+    INSERTs failed silently inside the ``try/except``. Migration
+    047 drops the ``NOT NULL`` on ``password_hash`` and adds a
+    ``clerk_id TEXT UNIQUE`` column; this handler now keys its
+    INSERT on ``clerk_id`` (generated UUID PK) so Clerk-managed
+    users land cleanly.
     """
     client = await get_postgres_client()
-    db_user = await get_user_by_id(user["user_id"])
+
+    # Clerk path: the JWT ``sub`` claim is a Clerk string id
+    # (``user_2abc...``), not a UUID. Look up by ``clerk_id``.
+    db_user = await get_user_by_id(user["user_id"], lookup_column="clerk_id")
     if not db_user:
-        # Self-heal: webhook hasn't synced yet (Clerk cutover June 17
-        # had users.id as UUID so INSERTs failed; users signed up
-        # between then and the migration date 2026-06-21 are in
-        # Clerk but not in Postgres). Best-effort auto-provision.
+        # Self-heal: webhook hasn't synced yet. Best-effort
+        # auto-provision. Generated UUID PK + ``clerk_id`` +
+        # ``password_hash = NULL``. ON CONFLICT (clerk_id) keeps
+        # the webhook + /auth/me race safe.
         clerk_id = user["user_id"]
         email = user.get("email") or ""
         # JWT payload may not carry the name; fall back to the local
         # part of the email so the row isn't blank.
         name = (email.split("@", 1)[0] if email else "") or "Eden user"
         try:
-            await client.execute(
+            inserted = await client.fetchrow(
                 """
-                INSERT INTO users (id, email, name, created_at, updated_at)
-                VALUES ($1, $2, $3, NOW(), NOW())
-                ON CONFLICT (id) DO NOTHING
+                INSERT INTO users (clerk_id, email, name, password_hash, created_at)
+                VALUES ($1, $2, $3, NULL, NOW())
+                ON CONFLICT (clerk_id) DO NOTHING
+                RETURNING id, email, name, created_at, preferred_org_id, clerk_id
                 """,
                 clerk_id,
                 email,
                 name,
             )
-            db_user = await get_user_by_id(clerk_id)
+            if inserted is not None:
+                db_user = inserted
+            else:
+                # Lost the race to the webhook — re-read.
+                db_user = await get_user_by_id(clerk_id, lookup_column="clerk_id")
         except Exception as exc:
-            logger.warning("auto-provision /auth/me failed for %s: %s", clerk_id, exc)
+            logger.warning("auto-provision /auth/me failed for clerk_id=%s: %s", clerk_id, exc)
         if not db_user:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,

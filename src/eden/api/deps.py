@@ -299,10 +299,26 @@ async def get_optional_user(
     return {"user_id": user_id, "email": payload.get("email")}
 
 
-async def get_user_by_id(user_id: str) -> dict | None:
-    """Fetch a user by their ID."""
+async def get_user_by_id(user_id: str, lookup_column: str = "id") -> dict | None:
+    """Fetch a user by their ID or by their Clerk ID.
+
+    ``lookup_column`` accepts ``"id"`` (UUID PK) or ``"clerk_id"`` (the
+    string Clerk mints, e.g. ``user_2abc...``). The Clerk-auth path
+    passes the JWT ``sub`` claim, which is the Clerk id — it never
+    matches the UUID PK, so a UUID-only lookup would 404 every
+    Clerk user.
+
+    Both columns are indexed (``id`` is the PK, ``clerk_id`` has a
+    partial unique index from migration 047). The single combined
+    query keeps this trivial to call from either path.
+    """
+    if lookup_column not in ("id", "clerk_id"):
+        raise ValueError(f"lookup_column must be 'id' or 'clerk_id', got {lookup_column!r}")
     client = await get_postgres_client()
-    query = "SELECT id, email, name, created_at, preferred_org_id FROM users WHERE id = $1"
+    query = (
+        "SELECT id, email, name, created_at, preferred_org_id, clerk_id "
+        f"FROM users WHERE {lookup_column}::text = $1"
+    )
     return await client.fetchrow(query, user_id)
 
 

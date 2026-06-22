@@ -243,6 +243,25 @@ def mock_postgres_client() -> MagicMock:
                 "two_factor_secret": _test_user_2fa_secret,
                 "preferred_org_id": None,
             }
+        # June 22 2026: ``get_user_by_id`` now resolves by either
+        # ``id`` (UUID) or ``clerk_id`` (TEXT, Clerk's string id),
+        # so the WHERE clause uses ``::text`` cast for parameterised
+        # lookup. The conftest's existing ``users WHERE id`` substring
+        # match above doesn't catch this — add the explicit match
+        # for the new clause shape. The default test user still has
+        # the same synthetic row regardless of which column we look
+        # up by, so we return the same shape.
+        if "users WHERE id::text" in query or "users WHERE clerk_id::text" in query:
+            user_id = args[0] if args else ""
+            return {
+                "id": user_id if user_id else "user-123",
+                "email": "test@example.com",
+                "name": "Test User",
+                "two_factor_enabled": _test_user_2fa_enabled,
+                "two_factor_secret": _test_user_2fa_secret,
+                "preferred_org_id": None,
+                "clerk_id": user_id if "clerk_id" in query else None,
+            }
         if "org_members" in query and "role" in query:
             return {"role": "owner", "name": "Test Org", "slug": "test-org", "owner_id": "user-123", "archived_at": None}
         if "two_factor_enforced" in query:
