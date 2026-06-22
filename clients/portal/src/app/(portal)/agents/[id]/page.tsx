@@ -1,14 +1,33 @@
-/** Phase 3 — Agent detail page (server component). */
+"use client";
 
-import { redirect } from "next/navigation";
+/**
+ * Phase 3 — Agent detail page (client component).
+ *
+ * Converted from server component on 2026-06-22. The previous
+ * version imported ``@/lib/api`` (a client-only module with
+ * ``fetch``, ``AbortController``, the Clerk SDK refresh path, and
+ * module-level state) directly into a server component, which
+ * (a) bundled Clerk into the server bundle and (b) issued same-
+ * origin proxy requests server-side where the Clerk session cookie
+ * isn't attached to ``auth().getToken()`` — every data call
+ * silently returned empty.
+ *
+ * Now: this file is a client component that reads the active org
+ * from ``useOrg()`` (which already handles Clerk → Eden
+ * resolution) and fetches via the same ``agentsApi`` client the
+ * rest of the portal uses. Data is loaded in a ``useEffect`` so
+ * the page can render the chrome immediately and show a loading
+ * skeleton while the agent list comes back.
+ */
+
 import Link from "next/link";
-import { ArrowLeft, Bot, Clock, Code, ExternalLink, Package, PlayCircle, FileCode, Cpu, Calendar, Upload as UploadIcon, Beaker } from "lucide-react";
-import { getOrgId } from "@/lib/server/context";
+import { useEffect, useMemo, useState } from "react";
+import { useParams } from "next/navigation";
+import { ArrowLeft, Bot, Clock, Code, ExternalLink, Package, PlayCircle, FileCode, Cpu, Upload as UploadIcon, Beaker } from "lucide-react";
+import { useOrg } from "@/hooks/use-org";
 import { agentsApi } from "@/lib/api";
 import { Card } from "@/components/ui/card";
 import { AgentUploadPanel } from "./upload-panel";
-
-export const dynamic = "force-dynamic";
 
 function formatRelative(iso?: string | null): string {
   if (!iso) return "Never";
@@ -37,22 +56,73 @@ const FRAMEWORK_BADGE: Record<string, string> = {
   none: "bg-[var(--bg-tertiary)] text-[var(--text-secondary)]",
 };
 
-export default async function AgentDetailPage({
-  params,
-}: {
-  params: { id: string };
-}) {
-  const orgId = await getOrgId();
-  if (!orgId) redirect("/login");
-  const agentId = decodeURIComponent(params.id);
+interface AgentRecord {
+  agent_id: string;
+  name?: string;
+  framework?: string;
+  last_seen_at?: string | null;
+  repo_url?: string | null;
+}
 
-  const [agentsResp, uploads, simRuns, testRuns] = await Promise.all([
-    agentsApi.list(orgId, { limit: 200 }).catch(() => ({ agents: [] })),
-    agentsApi.listUploads(orgId, agentId, { limit: 20 }).catch(() => []),
-    agentsApi.listSimRuns(orgId, agentId, { limit: 5 }).catch(() => ({ runs: [], total: 0 })),
-    agentsApi.listTestRuns(orgId, agentId, { limit: 5 }).catch(() => ({ runs: [], total: 0 })),
-  ]);
-  const agent = agentsResp.agents.find((a) => a.agent_id === agentId);
+interface UploadRecord {
+  upload_id: string;
+  upload_version?: number;
+  framework?: string;
+  entry_point?: string;
+  file_count?: number;
+  total_bytes?: number;
+  uploaded_at?: string;
+}
+
+interface RunsEnvelope {
+  runs?: Array<unknown>;
+  total?: number;
+}
+
+export default function AgentDetailPage() {
+  const params = useParams<{ id: string }>();
+  const agentId = useMemo(
+    () => (params?.id ? decodeURIComponent(params.id) : ""),
+    [params?.id],
+  );
+  const { currentOrg } = useOrg();
+  const orgId = currentOrg?.id;
+
+  const [agent, setAgent] = useState<AgentRecord | null>(null);
+  const [uploads, setUploads] = useState<UploadRecord[]>([]);
+  const [simRuns, setSimRuns] = useState<RunsEnvelope>({ runs: [], total: 0 });
+  const [testRuns, setTestRuns] = useState<RunsEnvelope>({ runs: [], total: 0 });
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!orgId || !agentId) return;
+    let cancelled = false;
+    setLoading(true);
+    Promise.all([
+      agentsApi
+        .list(orgId, { limit: 200 })
+        .catch(() => ({ agents: [] as AgentRecord[] })),
+      agentsApi.listUploads(orgId, agentId, { limit: 20 }).catch(() => [] as UploadRecord[]),
+      agentsApi
+        .listSimRuns(orgId, agentId, { limit: 5 })
+        .catch(() => ({ runs: [], total: 0 }) as RunsEnvelope),
+      agentsApi
+        .listTestRuns(orgId, agentId, { limit: 5 })
+        .catch(() => ({ runs: [], total: 0 }) as RunsEnvelope),
+    ]).then(([agentsResp, ups, sims, tests]) => {
+      if (cancelled) return;
+      const list = (agentsResp?.agents ?? []) as AgentRecord[];
+      setAgent(list.find((a) => a.agent_id === agentId) ?? null);
+      setUploads(ups);
+      setSimRuns(sims);
+      setTestRuns(tests);
+      setLoading(false);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [orgId, agentId]);
+
   const isLive = agent?.last_seen_at
     ? Date.now() - new Date(agent.last_seen_at).getTime() < 1000 * 60 * 60 * 24
     : false;
@@ -64,6 +134,14 @@ export default async function AgentDetailPage({
       return agent.repo_url;
     }
   })();
+
+  if (!orgId) {
+    return (
+      <div className="p-8 text-sm text-[var(--text-muted)]">
+        Select an organisation to view this agent.
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6 p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto page-enter">
@@ -258,7 +336,7 @@ export default async function AgentDetailPage({
                     </span>
                     <span className="flex items-center gap-1">
                       <Cpu className="w-3 h-3" />
-                      {formatBytes(u.total_bytes)}
+                      {formatBytes(u.total_bytes ?? 0)}
                     </span>
                   </p>
                 </div>
@@ -267,6 +345,11 @@ export default async function AgentDetailPage({
           </div>
         )}
       </section>
+      {loading && (
+        <p className="text-xs text-[var(--text-muted)] text-center pt-4">
+          Loading agent data…
+        </p>
+      )}
     </div>
   );
 }

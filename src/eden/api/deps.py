@@ -13,7 +13,7 @@ from eden.api.utils.clerk_auth import (
     extract_org_id,
     extract_org_role,
     extract_user_id,
-    is_clerk_payload,
+    is_clerk_payload as _is_clerk_payload_public,  # canonical impl in clerk_auth.py
     verify_clerk_token,
 )
 from eden.config import get_settings
@@ -567,7 +567,7 @@ async def require_2fa(
         return {"user_id": None, "email": None}
 
     # Clerk-authed callers: Clerk owns MFA. Skip the Eden-side check.
-    if payload and _is_clerk_payload(payload):
+    if payload and _is_clerk_payload_public(payload):
         return org
 
     # Check if org has 2FA enforcement
@@ -594,19 +594,6 @@ async def require_2fa(
         )
 
     return org
-
-
-def _is_clerk_payload(payload: dict) -> bool:
-    """Best-effort detection of a Clerk session JWT payload.
-
-    Clerk's standard issuer is ``https://<slug>.clerk.accounts.dev$``
-    (dev) or ``https://clerk.<production-domain>.com`` (prod). We
-    accept any ``iss`` ending in ``.clerk.accounts.dev$`` or matching
-    ``clerk.`` as a prefix, which covers the common shapes without
-    coupling to a specific Clerk instance URL.
-    """
-    iss = (payload.get("iss") or "").lower()
-    return ".clerk.accounts.dev$" in iss or iss.startswith("https://clerk.")
 
 
 async def require_org_owner(

@@ -172,8 +172,31 @@ def verify_clerk_token(token: str) -> dict[str, Any] | None:
                 None,
             )
             if not matching:
-                logger.debug("No JWKS key matches Clerk JWT kid=%s", kid)
-                return None
+                # ``kid`` miss means Clerk rotated keys since we
+                # cached the JWKS. Force a fresh fetch (under the
+                # lock so we don't stampede) before giving up —
+                # otherwise a rotation produces a 1-hour auth
+                # outage even though the new public key is
+                # already published.
+                logger.info(
+                    "Clerk JWT kid=%s not in cached JWKS; "
+                    "forcing fresh fetch",
+                    kid,
+                )
+                with _JWKS_LOCK:
+                    _JWKS_CACHE["fetched_at"] = 0.0
+                jwks = _fetch_jwks()
+                matching = next(
+                    (k for k in jwks.get("keys", []) if k.get("kid") == kid),
+                    None,
+                )
+                if not matching:
+                    logger.debug(
+                        "Clerk JWT kid=%s still missing after JWKS "
+                        "refresh; rejecting",
+                        kid,
+                    )
+                    return None
             return jwt.decode(
                 token,
                 matching,

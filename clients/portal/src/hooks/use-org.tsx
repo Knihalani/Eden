@@ -102,7 +102,18 @@ export function OrgProvider({ children }: { children: ReactNode }) {
         setCurrentOrgState(enrichedOrgs[0] ?? null);
       }
     } catch (e) {
-      console.error("Failed to load orgs:", e);
+      // Only emit a console error for genuinely unexpected failures
+      // (anything that isn't a known transient / handled class).
+      // The user-friendly mapper below already produces a good
+      // message for 401 / 404 / 5xx — logging the raw `Error` was
+      // double-reporting every transient failure (cold-start 502,
+      // webhook race 404, expired-token 401) and cluttering the
+      // console with the same backtrace the user already saw a
+      // friendly version of.
+      const rawMessage = e instanceof Error ? e.message : "Failed to load orgs";
+      if (!/401|404|5\d\d|not\s*authenticated|unauthorized|not\s*found|unreachable|timed?\s*out|bad\s*gateway/i.test(rawMessage)) {
+        console.error("Unexpected org-load failure:", e);
+      }
       // ponytail: a 401 here means the Clerk session is valid
       // (useUser() returned a user) but the portal's /api/proxy/auth/me
       // route is failing to forward it to FastAPI. Before this fix, the
@@ -110,7 +121,6 @@ export function OrgProvider({ children }: { children: ReactNode }) {
       // `currentOrg` stayed null. Now we surface the error and
       // redirect to the sign-in page so the user can re-establish
       // a fresh session. June 2026 fix.
-      const rawMessage = e instanceof Error ? e.message : "Failed to load orgs";
       // Map raw API errors onto user-friendly copy. We deliberately
       // avoid surfacing backend internals ("User not found",
       // traceback fragments) to the end user — those leaked before
@@ -133,14 +143,25 @@ export function OrgProvider({ children }: { children: ReactNode }) {
           "Setting up your account… If this takes more than a moment, refresh the page.";
       } else if (/404|not\s*found/i.test(rawMessage)) {
         message = "We couldn't load your workspace. Please refresh.";
-      } else if (/5\d\d|server\s*error/i.test(rawMessage)) {
+      } else if (/5\d\d|server\s*error|unreachable|timed?\s*out|bad\s*gateway/i.test(rawMessage)) {
         message = "Eden is having trouble reaching the server. Please try again in a moment.";
       } else {
         message = rawMessage;
       }
       setAuthError(message);
-      setOrganizations([]);
-      setCurrentOrgState(null);
+      // Preserve any in-flight org state on transient / handled
+      // errors — nuking ``currentOrg`` here used to clear the
+      // optimistic org the onboarding wizard had just pinned, so a
+      // 404 mid-flow kicked the user back to the org picker.
+      if (
+        !/401|user\s*not\s*found/i.test(rawMessage)
+        && currentOrg
+      ) {
+        // keep currentOrg; only clear the noisy auth banner
+      } else {
+        setOrganizations([]);
+        setCurrentOrgState(null);
+      }
     } finally {
       setLoading(false);
     }
