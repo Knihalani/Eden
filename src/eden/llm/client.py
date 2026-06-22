@@ -300,6 +300,11 @@ class OpenRouterClient:
         model_config = self.MODEL_SLOTS.get(slot, self.MODEL_SLOTS["reasoning"])
         all_models = [model_config.primary] + model_config.fallback
 
+        # ``_make_request`` already declares ``max_tokens`` in its
+        # signature; pop it out of kwargs so the ``**kwargs`` spread
+        # below doesn't pass it twice (TypeError at request time).
+        max_tokens = kwargs.pop("max_tokens", model_config.max_tokens)
+
         last_error = None
         for model in all_models:
             for attempt in range(self.max_retries):
@@ -308,7 +313,7 @@ class OpenRouterClient:
                         model=model,
                         prompt=prompt,
                         system_prompt=system_prompt,
-                        max_tokens=kwargs.get("max_tokens", model_config.max_tokens),
+                        max_tokens=max_tokens,
                         **kwargs,
                     )
                     self.circuit_breaker.record_success(agent)
