@@ -211,20 +211,27 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
   const showFooter = !hasResults;
   const showRecent = recentEntries.length > 0 && !hasResults;
 
+  // Conditionally render the entire tree. The previous version
+  // always mounted a ``fixed inset-0 z-50`` wrapper even when
+  // ``open === false``; combined with the mobile sidebar overlay
+  // and the chat toggle (also ``z-40``/``z-50``), this added an
+  // empty full-viewport layer on every page that mounted
+  // <CommandPalette />. Returning ``null`` when closed keeps the
+  // DOM minimal and removes any chance of an invisible z-50
+  // overlay intercepting clicks on the page below.
+  if (!open) return null;
   return (
     <div className="fixed inset-0 z-50">
-      {open && (
-        <div
-          className="fixed inset-0 bg-[var(--bg-base)]/40 backdrop-blur-sm"
-          onClick={() => onOpenChange(false)}
-        />
-      )}
+      <div
+        className="fixed inset-0 bg-[var(--bg-base)]/40 backdrop-blur-sm"
+        onClick={() => onOpenChange(false)}
+      />
       <Cmnd
         className={cn(
           "fixed left-1/2 top-[20%] -translate-x-1/2 w-full max-w-[calc(100vw-2rem)] sm:max-w-lg",
           "bg-[var(--bg-primary)] rounded-2xl shadow-2xl border border-[var(--border-default)] overflow-hidden",
           "flex flex-col",
-          open ? "animate-scale-in" : "hidden"
+          "animate-scale-in"
         )}
         style={{ maxHeight: "60vh" }}
       >

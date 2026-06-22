@@ -68,8 +68,26 @@ def _verify_svix_signature(
     The signing secret is ``whsec_<base64>`` per svix's convention;
     strip the ``whsec_`` prefix and base64-decode to get the HMAC
     key. The signed payload is ``<svix_id>.<svix_timestamp>.<body>``.
+
+    Replay window: svix ships a 5-minute server-side tolerance for
+    ``svix_timestamp`` drift. We enforce the same window here so a
+    captured-and-replayed webhook payload (signature still valid,
+    timestamp frozen in the past) is rejected before the handler
+    runs. Without this, ``user.deleted`` / ``organization.deleted``
+    could be replayed indefinitely to re-soft-delete users or wipe
+    membership rows even after Clerk has rotated its signing key.
     """
     if not (svix_id and svix_timestamp and svix_signature):
+        return False
+    # Reject stale or far-future timestamps before doing the
+    # (expensive) HMAC verification. 5 minutes matches the svix
+    # default; widen via env if your NTP drift is genuinely worse.
+    try:
+        ts = int(svix_timestamp)
+    except (TypeError, ValueError):
+        return False
+    import time as _time
+    if abs(_time.time() - ts) > 300:
         return False
     if not secret.startswith("whsec_"):
         # Be lenient — some Clerk instances ship the secret without
@@ -306,6 +324,17 @@ async def _upsert_membership(data: dict[str, Any]) -> None:
     """Sync a Clerk ``organizationMembership`` payload to
     ``org_members`` with the role mapped onto Eden's vocab.
 
+    Translation: the Clerk webhook delivers ``org_id`` and
+    ``user_id`` as Clerk string ids (``org_2x...`` / ``user_2abc...``).
+    Eden's ``org_members.org_id`` / ``user_id`` columns are UUIDs
+    with FKs to ``organizations(id)`` and ``users(id)``, so we
+    translate via ``organizations.clerk_org_id`` and
+    ``users.clerk_id`` before writing. If either lookup misses,
+    the function returns silently — the ``user.created`` /
+    ``organization.created`` webhook that owns the missing side
+    will trigger a Clerk re-delivery, and the next pass finds the
+    row.
+
     Role-write conflict resolution: the initial ``organizationMembership.created``
     webhook can fire within milliseconds of Eden's local
     ``accept_invitation`` insert. If Eden wrote the row first with
@@ -317,14 +346,44 @@ async def _upsert_membership(data: dict[str, Any]) -> None:
     flips ``last_writer_source`` to ``'clerk'`` so subsequent Clerk
     role changes (admin promotions, etc.) propagate normally.
     """
-    org_id = data.get("organization", {}).get("id") or data.get("organization_id")
-    user_id = data.get("public_user_data", {}).get("user_id") or data.get("user_id")
+    clerk_org_id = data.get("organization", {}).get("id") or data.get("organization_id")
+    clerk_user_id = data.get("public_user_data", {}).get("user_id") or data.get("user_id")
     clerk_role = data.get("role") or "org:member"
     eden_role = clerk_role_to_eden_role(clerk_role)
-    if not (org_id and user_id):
+    if not (clerk_org_id and clerk_user_id):
         return
 
     client = await get_postgres_client()
+    # Translate Clerk string ids → Eden UUIDs. Both lookups are
+    # idempotent and bounded by an index on the clerk_* column.
+    # If either side misses (org or user not yet created in Eden),
+    # bail so the dependent ``user.created`` / ``organization.created``
+    # webhook can land first; Clerk will redeliver this membership
+    # event and the second pass will succeed.
+    eden_user = await client.fetchrow(
+        "SELECT id FROM users WHERE clerk_id = $1",
+        clerk_user_id,
+    )
+    eden_org = await client.fetchrow(
+        """
+        SELECT id FROM organizations
+        WHERE clerk_org_id = $1 OR id::text = $1
+        LIMIT 1
+        """,
+        clerk_org_id,
+    )
+    if not eden_user or not eden_org:
+        logger.info(
+            "_upsert_membership: missing side (user=%s org=%s) for "
+            "clerk_user=%s clerk_org=%s; skipping — Clerk will redeliver "
+            "after user.created or organization.created lands",
+            bool(eden_user), bool(eden_org), clerk_user_id, clerk_org_id,
+        )
+        return
+
+    eden_org_id = eden_org["id"]
+    eden_user_id = eden_user["id"]
+
     await client.execute(
         """
         INSERT INTO org_members (org_id, user_id, role, last_active_at, created_at)
@@ -338,22 +397,40 @@ async def _upsert_membership(data: dict[str, Any]) -> None:
             last_writer_source = 'clerk',
             last_active_at = NOW()
         """,
-        org_id,
-        user_id,
+        eden_org_id,
+        eden_user_id,
         eden_role,
     )
 
 
 async def _delete_membership(data: dict[str, Any]) -> None:
-    org_id = data.get("organization", {}).get("id") or data.get("organization_id")
-    user_id = data.get("public_user_data", {}).get("user_id") or data.get("user_id")
-    if not (org_id and user_id):
+    clerk_org_id = data.get("organization", {}).get("id") or data.get("organization_id")
+    clerk_user_id = data.get("public_user_data", {}).get("user_id") or data.get("user_id")
+    if not (clerk_org_id and clerk_user_id):
         return
     client = await get_postgres_client()
+    # Translate via the lookup tables; if either side is missing we
+    # simply have no row to delete (Clerk memberships exist only in
+    # Clerk) and the no-op delete is the correct behaviour.
+    row = await client.fetchrow(
+        """
+        SELECT om.org_id, om.user_id
+        FROM org_members om
+        JOIN organizations o ON o.id = om.org_id
+        JOIN users u ON u.id = om.user_id
+        WHERE (o.clerk_org_id = $1 OR o.id::text = $1)
+          AND u.clerk_id = $2
+        LIMIT 1
+        """,
+        clerk_org_id,
+        clerk_user_id,
+    )
+    if not row:
+        return
     await client.execute(
         "DELETE FROM org_members WHERE org_id = $1 AND user_id = $2",
-        org_id,
-        user_id,
+        row["org_id"],
+        row["user_id"],
     )
 
 

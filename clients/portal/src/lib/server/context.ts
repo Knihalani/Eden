@@ -2,31 +2,39 @@
  * Server-side context helpers for the App Router.
  *
  * Used by server components (e.g. /agents, /agents/[id]) that need
- * the active org id BEFORE rendering. Reads the session JWT cookie
- * that the login flow set, decodes its ``current_org_id`` claim,
- * and returns the org id (or ``null`` if no session is present).
+ * the active org id BEFORE rendering.
  *
- * The portal's auth flow stores the JWT in an ``authorization``
- * cookie that's also forwarded to the FastAPI backend by
- * ``lib/proxy.ts`` — same shape, two consumers.
- *
- * NOTE: this is a thin stub used to satisfy the page imports —
- * it intentionally avoids a full JWT-validation library and
- * delegates the actual session check to the BE via
- * ``/auth/me`` on every server-component render. Pages should
- * treat a ``null`` return as "redirect to /login" and let the
- * client pick up the session from there.
+ * After the June 2026 Clerk cutover the legacy ``authorization``
+ * cookie is gone for Clerk-authed callers (Clerk uses the encrypted
+ * ``__session`` HTTP-only cookie, which we cannot decode here). We
+ * delegate to Clerk's server-side ``auth()`` instead — it returns
+ * the active ``orgId`` and ``userId`` derived from the Clerk
+ * session cookie. The fallback paths still read the legacy Eden
+ * ``authorization`` cookie for the CLI / SDK / service-to-service
+ * callers that haven't migrated.
  */
 import { cookies } from "next/headers";
+import { auth } from "@clerk/nextjs/server";
 
+/**
+ * Resolve the active org id for the current request.
+ *
+ * Returns the Clerk org id when the caller is signed in via Clerk
+ * (the common path post-cutover). Falls back to the
+ * ``current_org_id`` claim on a legacy Eden ``authorization``
+ * cookie so SDK / CLI flows keep working until they migrate.
+ */
 export async function getOrgId(): Promise<string | null> {
+  try {
+    const { orgId } = await auth();
+    if (orgId) return orgId;
+  } catch {
+    // Clerk not configured / signed out — fall through to legacy path.
+  }
   try {
     const cookieStore = await cookies();
     const token = cookieStore.get("authorization")?.value;
     if (!token) return null;
-    // Decode the JWT payload without signature verification —
-    // the BE has already verified it on /auth/me. We only need
-    // the ``current_org_id`` claim for server-side routing hints.
     const parts = token.split(".");
     if (parts.length !== 3) return null;
     const payload = JSON.parse(
@@ -38,7 +46,21 @@ export async function getOrgId(): Promise<string | null> {
   }
 }
 
+/**
+ * Resolve the active user id for the current request.
+ *
+ * Clerk path returns the Clerk ``user_2abc...`` string id (the
+ * portal then passes it through ``/auth/me`` for UUID translation
+ * via the ``clerk_id`` column). Legacy path returns the UUID
+ * baked into the Eden ``authorization`` JWT.
+ */
 export async function getUserId(): Promise<string | null> {
+  try {
+    const { userId } = await auth();
+    if (userId) return userId;
+  } catch {
+    // Fall through.
+  }
   try {
     const cookieStore = await cookies();
     const token = cookieStore.get("authorization")?.value;

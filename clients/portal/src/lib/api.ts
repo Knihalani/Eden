@@ -60,14 +60,34 @@ async function fetchApi<T>(
   // a 401 even though the user is still signed in. On a 401 we ask
   // Clerk to force-refresh, retry exactly once, and otherwise
   // surface the original error.
+  //
+  // Implementation note: ``useAuth()`` is a React hook and CANNOT
+  // be called from a non-component context (it throws "Invalid hook
+  // call" when the React dispatcher isn't bound). We use the Clerk
+  // browser SDK directly via the global ``window.Clerk`` instance
+  // that ``<ClerkProvider>`` injects on mount — that's the
+  // documented imperative escape hatch for cases like ours where
+  // the call site lives inside an async helper outside the React
+  // render tree.
   const refreshClerkToken = async (): Promise<boolean> => {
     try {
-      // Dynamic import keeps Clerk out of the SSR bundle; the
-      // helper is only ever called in the browser.
-      const mod = await import("@clerk/nextjs");
-      const { getToken } = mod.useAuth();
-      if (!getToken) return false;
-      const fresh = await getToken({ skipCache: true });
+      const clerk = (
+        window as unknown as {
+          Clerk?: {
+            session?: {
+              touch?: () => Promise<unknown>;
+              getToken?: (opts?: { skipCache?: boolean }) => Promise<string | null>;
+            };
+          };
+        }
+      ).Clerk;
+      if (!clerk?.session) return false;
+      // ``touch`` forces the session JWT to rotate; ``getToken``
+      // reads the fresh value out of the SDK cache. Both are
+      // idempotent — calling on an already-fresh session is a
+      // no-op (returns immediately).
+      await clerk.session.touch?.();
+      const fresh = await clerk.session.getToken?.({ skipCache: true });
       return Boolean(fresh);
     } catch {
       return false;

@@ -87,16 +87,22 @@ async function handle(
 
   // Resolve the Clerk session token server-side and forward it as a
   // Bearer header. ``getToken()`` returns null when the caller isn't
-  // signed in via Clerk; we leave the Authorization header unset in
-  // that case so the legacy Eden cookie path can still serve the
-  // request (CLI / SDK / API-key callers).
+  // signed in via Clerk; in that case we fall back to the request's
+  // own ``Authorization`` header (CLI / SDK callers that POST
+  // ``Authorization: Bearer <api-key>`` directly to /api/proxy/*).
+  // If neither is set we leave the Authorization header unset so the
+  // legacy Eden cookie path can still serve the request.
   let authorization: string | undefined;
   try {
     const { getToken } = await auth();
     const token = await getToken();
     if (token) authorization = `Bearer ${token}`;
   } catch {
-    // Clerk not configured / signed out — fall through to cookie auth.
+    // Clerk not configured / signed out — fall through to caller-supplied auth.
+  }
+  if (!authorization) {
+    const callerAuth = request.headers.get("authorization");
+    if (callerAuth) authorization = callerAuth;
   }
 
   try {

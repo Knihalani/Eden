@@ -490,15 +490,22 @@ export function ChatSidebar() {
   // ── Render ────────────────────────────────────────────────────────
   return (
     <>
-      {/* Floating toggle button (always visible, even when collapsed). */}
+      {/* Floating toggle button (always visible, even when collapsed).
+          z-50 lifts it above the mobile sidebar overlay (z-40) and
+          the command palette wrapper (when mounted), so the click
+          never lands on a sibling overlay. When ``open`` is true we
+          still nudge it left so it sits just outside the chat
+          panel; on viewports narrower than 480px the chat panel
+          itself covers the toggle area, so we hide it entirely (the
+          chat panel has its own close button). */}
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
         className={cn(
-          "fixed bottom-4 right-4 z-40 flex h-12 w-12 items-center justify-center rounded-full",
+          "fixed bottom-4 right-4 z-50 flex h-12 w-12 items-center justify-center rounded-full",
           "bg-[var(--accent)] text-[var(--bg-base)] shadow-lg transition-transform",
           "hover:scale-105 active:scale-95",
-          open && "translate-x-[-200px]",
+          open && "translate-x-[-200px] max-[480px]:translate-x-0 max-[480px]:opacity-0 max-[480px]:pointer-events-none",
         )}
         aria-label={open ? "Close AI assistant" : "Open AI assistant"}
       >

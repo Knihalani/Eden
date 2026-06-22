@@ -80,11 +80,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // retry wrapper can detect the transient "User not found" race that
   // shows up on the very first /auth/me after Clerk signup, when the
   // backend's auto-provision hasn't completed yet).
-  const refreshUser = useCallback(async (): Promise<boolean> => {
+  const refreshUser = useCallback(async (): Promise<{ ok: boolean; error?: string }> => {
     if (!clerkUser) {
       setOrganizations([]);
       setCurrentOrgId(null);
-      return true;
+      return { ok: true };
     }
     setProfileLoading(true);
     try {
@@ -92,12 +92,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setOrganizations(me.organizations ?? []);
       setCurrentOrgId(me.current_org_id ?? null);
       setError(null);
-      return true;
+      return { ok: true };
     } catch (err) {
       // Surface as a soft error — the user is signed in, they just
       // don't have an Eden org yet (typical on first signup).
-      setError(err instanceof Error ? err.message : "Failed to load profile");
-      return false;
+      const msg = err instanceof Error ? err.message : "Failed to load profile";
+      setError(msg);
+      return { ok: false, error: msg };
     } finally {
       setProfileLoading(false);
     }
@@ -117,15 +118,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const delays = [0, 250, 500];
     for (const ms of delays) {
       if (ms > 0) await new Promise((r) => setTimeout(r, ms));
-      const ok = await refreshUser();
+      const { ok, error: errMsg } = await refreshUser();
       if (ok) return;
-      const lastError = error ?? "";
-      const isUserNotFound = /user\s*not\s*found/i.test(lastError);
+      const isUserNotFound = /user\s*not\s*found/i.test(errMsg ?? "");
       if (!isUserNotFound) return; // non-retryable — state already set
     }
-    // Final attempt to set the (now stuck) error state.
+    // Final attempt to refresh the (now stuck) error state.
     await refreshUser();
-  }, [refreshUser, error]);
+  }, [refreshUser]);
 
   useEffect(() => {
     // Use the retry variant on first mount so the auto-provision
@@ -147,13 +147,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     <AuthContext.Provider
       value={{
         user,
-        // `loading` is true until Clerk has resolved session state.
-        // Once resolved, profile loading is reported via `error` (null
-        // = loaded fine). Existing consumers treat a non-null user as
-        // "ready" and a null user as "logged out" — both still work.
-        loading:
-          !clerkLoaded ||
-          (!!clerkUser && profileLoading && organizations.length === 0),
+        // ``loading`` is true only while Clerk is resolving session
+        // state. Profile loading (the /auth/me round-trip) is reported
+        // separately via ``error`` (null = loaded fine). The previous
+        // ``profileLoading && organizations.length === 0`` guard held
+        // the chrome in its skeleton forever on the first /auth/me
+        // 404 (the auto-provision race), which is exactly the
+        // window where the user perceives "nothing is clickable".
+        loading: !clerkLoaded,
         error,
         refreshUser,
         refreshUserWithRetry,
