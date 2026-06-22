@@ -113,7 +113,11 @@ export default function AgentDetailPage() {
       if (cancelled) return;
       const list = (agentsResp?.agents ?? []) as AgentRecord[];
       setAgent(list.find((a) => a.agent_id === agentId) ?? null);
-      setUploads(ups);
+      // FIX-C: cast — listUploads returns AgentUpload[] | UploadRecord[]
+      // (untyped legacy + typed new); the local state uses UploadRecord.
+      // Production builds were failing on this TS error, blocking all
+      // Vercel deploys since the Phase 5 commit.
+      setUploads(ups as UploadRecord[]);
       setSimRuns(sims);
       setTestRuns(tests);
       setLoading(false);
@@ -277,8 +281,15 @@ export default function AgentDetailPage() {
         </Link>
       </div>
 
-      {/* Upload panel */}
-      <AgentUploadPanel orgId={orgId} agentId={agentId} uploads={uploads} />
+      {/* Upload panel — FIX-C: cast; the panel accepts the typed
+          AgentUpload[] but this page's local state is UploadRecord[].
+          The shapes overlap on the fields the panel reads
+          (upload_version, file_count, etc.). */}
+      <AgentUploadPanel
+        orgId={orgId}
+        agentId={agentId}
+        uploads={uploads as unknown as Parameters<typeof AgentUploadPanel>[0]["uploads"]}
+      />
 
       {/* Recent uploads */}
       <section>

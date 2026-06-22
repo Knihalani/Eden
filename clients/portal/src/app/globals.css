@@ -381,6 +381,47 @@ html {
   scroll-behavior: smooth;
 }
 
+/* FIX-A + FIX-B: explicit body / html scroll contract.
+ *
+ * Symptoms the user reported after signup:
+ *   - "Nothing is clickable at all"
+ *   - "Scrolling works like it would on an image" (mouse wheel
+ *     does nothing)
+ *
+ * Root cause was a `flex h-screen overflow-clip` row in the
+ * portal layout that trapped every page's content in an internal
+ * overflow container. When the inner pane failed to claim focus
+ * (or the click target was a sticky pseudo-element), the user
+ * saw a frozen page. The layout fix uses native document scroll,
+ * but we add belt-and-braces CSS here so the body is *always*
+ * scrollable even if a future component introduces an accidental
+ * viewport trap.
+ *
+ * - `html, body { overflow-y: auto }`  → mouse wheel always works
+ * - `html, body { min-height: 100% }`  → document is at least viewport
+ * - `.grain-overlay::before` already has `pointer-events: none`
+ *   (defined further down), but we re-assert it here on the
+ *   element type that the user reported as the click-killer.
+ */
+html,
+body {
+  overflow-y: auto;
+  min-height: 100%;
+}
+
+/* FIX-B: defensive rule — every high-z fixed/absolute overlay
+ * that's outside a Radix Portal must be pointer-events-none by
+ * default. Component authors can opt-in by adding
+ * `pointer-events-auto` explicitly. The grain texture and the
+ * decorative gradients are the kinds of overlays that broke
+ * "nothing is clickable" before — this rule prevents the same
+ * mistake from regressing. */
+[role="presentation"][aria-hidden="true"],
+[aria-hidden="true"].fixed,
+[aria-hidden="true"].absolute {
+  pointer-events: none;
+}
+
 /* ==================== Custom Scrollbar ==================== */
 
 ::-webkit-scrollbar {

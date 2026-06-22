@@ -17,8 +17,10 @@ interface AuthContextType {
   loading: boolean;
   error: string | null;
   /** Re-fetch the Eden-side profile (orgs + current org) from FastAPI.
-   *  Returns ``true`` on success — the retry wrapper needs the signal. */
-  refreshUser: () => Promise<boolean>;
+   *  Returns ``{ ok: boolean; error?: string }`` so the retry wrapper
+   *  can distinguish the transient "User not found" race (retryable)
+   *  from a real auth failure (terminal). */
+  refreshUser: () => Promise<{ ok: boolean; error?: string }>;
   /** Same as ``refreshUser`` but with built-in retry on the transient
    *  "User not found" race that surfaces on the first /auth/me call
    *  after Clerk signup. */
