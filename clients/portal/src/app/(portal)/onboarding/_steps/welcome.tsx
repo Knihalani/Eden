@@ -52,7 +52,13 @@ export function WelcomeStep() {
   }
 
   return (
-    <div className="space-y-5 flex-1 flex flex-col">
+    // ponytail: removed `flex-1 flex flex-col` here. The previous version
+    // pushed the "Get started" button to the bottom of the wizard's
+    // 420px-min body, so on short viewports the button was below the
+    // fold and the user couldn't see it. The wizard's bottom nav is
+    // the natural anchor for the advance CTA; the body content just
+    // stacks at its natural height.
+    <div className="space-y-5">
       <div>
         <h1 className="text-2xl font-bold tracking-tight">Welcome to Eden 🌱</h1>
         <p className="mt-1 text-sm text-[var(--text-secondary)]">

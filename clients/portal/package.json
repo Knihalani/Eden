@@ -2,6 +2,7 @@
   "name": "portal",
   "version": "0.1.0",
   "private": true,
+  "packageManager": "bun@1.1.42",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
