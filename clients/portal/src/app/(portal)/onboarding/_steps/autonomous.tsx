@@ -10,7 +10,6 @@
  * are clear. The user can opt out per-org here, or later via
  * Settings > Autonomous.
  */
-import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useState } from "react";
 import { useOrg } from "@/hooks/use-org";
@@ -25,14 +24,17 @@ import {
 } from "lucide-react";
 
 export default function OnboardingAutonomousPage() {
-  const router = useRouter();
   const { currentOrg, refreshOrg } = useOrg();
   const [optOut, setOptOut] = useState(false);
   const [busy, setBusy] = useState(false);
 
   async function persistAndNext() {
+    // FIX-S: use window.location.assign (hard nav) instead of
+    // router.push. The Next.js app-router push was observed
+    // silently no-op'ing on the onboarding route group.
+    const next = "/onboarding/connect";
     if (!currentOrg?.id) {
-      router.push("/onboarding/connect");
+      window.location.assign(next);
       return;
     }
     setBusy(true);
@@ -53,7 +55,7 @@ export default function OnboardingAutonomousPage() {
     } finally {
       setBusy(false);
     }
-    router.push("/onboarding/connect");
+    window.location.assign(next);
   }
 
   return (

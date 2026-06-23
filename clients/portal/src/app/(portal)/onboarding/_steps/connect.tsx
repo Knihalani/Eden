@@ -14,7 +14,7 @@
  */
 "use client";
 
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { NoOrgState } from "@/components/ui/no-org-state";
 import { OnboardingConnectFlow } from "@/components/onboarding/OnboardingConnectFlow";
@@ -24,7 +24,6 @@ import { useOrg } from "@/hooks/use-org";
 import { usePermissions } from "@/hooks/use-permissions";
 
 export function ConnectStep() {
-  const router = useRouter();
   const searchParams = useSearchParams();
   const { currentOrg } = useOrg();
   const { user } = useAuth();
@@ -62,7 +61,9 @@ export function ConnectStep() {
       // user from continuing to /wait (the /wait page will show
       // the latest PRs regardless).
     }
-    router.push("/onboarding/wait");
+    // FIX-S: hard nav (see welcome.tsx) — router.push silently
+    // no-ops on this route group.
+    window.location.assign("/onboarding/wait");
   }
 
   return (

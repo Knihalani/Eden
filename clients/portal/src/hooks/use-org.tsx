@@ -98,8 +98,36 @@ export function OrgProvider({ children }: { children: ReactNode }) {
       } else if (me.current_org_id) {
         const preferred = enrichedOrgs.find((o) => o.id === me.current_org_id);
         setCurrentOrgState(preferred ?? enrichedOrgs[0] ?? null);
+      } else if (enrichedOrgs.length > 0) {
+        setCurrentOrgState(enrichedOrgs[0]);
+      } else if (clerkOrg) {
+        // FIX-R: Clerk has an active org but Eden's /auth/me
+        // doesn't know about it (the Clerk webhook that creates
+        // the Eden-side ``organizations`` + ``org_members`` rows
+        // on org.created is delayed or hasn't fired). The user
+        // perceives this as "I created an org during sign-up but
+        // Eden doesn't recognise it" — they land on the
+        // onboarding wizard, click "Get started", and the wizard
+        // can't find an org to PATCH state into.
+        //
+        // Synthesise a placeholder Organization from the Clerk
+        // data so the portal chrome (sidebar, breadcrumbs, org
+        // switcher) at least renders something and the user can
+        // proceed. The Eden-side row will arrive in a few
+        // seconds via the polling loop; once it does, the
+        // refresh replaces this synthetic entry with the real
+        // one. Backend operations that need the real row (PATCH
+        // onboarding state, create agent, etc.) will keep
+        // failing until the webhook lands, but the user will see
+        // a working UI instead of a "stuck" one.
+        setCurrentOrgState({
+          id: clerkOrg.id,
+          name: clerkOrg.name,
+          slug: clerkOrg.slug,
+          role: "owner", // best guess — Clerk makes the creator the admin
+        } as Organization);
       } else {
-        setCurrentOrgState(enrichedOrgs[0] ?? null);
+        setCurrentOrgState(null);
       }
       // FIX-J: clear the sticky auth banner on success. The previous
       // implementation never reset `authError` on a successful
