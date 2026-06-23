@@ -53,14 +53,14 @@ async def _try_get_pool():
     return client
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture
 def event_loop():
     loop = asyncio.new_event_loop()
     yield loop
     loop.close()
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture
 async def pg_client():
     client = await _try_get_pool()
     if client is None:
