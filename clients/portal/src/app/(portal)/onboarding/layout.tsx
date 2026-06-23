@@ -22,6 +22,7 @@
  * leaves the client.
  */
 
+import { useEffect } from "react";
 import { Wizard, type WizardStep } from "@/components/ui/wizard";
 
 const STEPS: WizardStep[] = [
@@ -71,6 +72,26 @@ const STEPS: WizardStep[] = [
 ];
 
 export default function OnboardingLayout({ children }: { children: React.ReactNode }) {
+  // FIX-N: set data-route="onboarding" on the body so globals.css
+  // can apply the [class*="z-50"][class*="fixed"] click-blocker
+  // suppression rule. The ChatSidebar floating toggle button is
+  // already gated by usePathname() in component code, but a
+  // third-party floating overlay (or a future z-50 surface) would
+  // silently regress this. Tagging the body makes the rule
+  // declarative and future-proof.
+  useEffect(() => {
+    document.body.dataset.route = "onboarding";
+    return () => {
+      // Don't unset on unmount — the body persists across
+      // route changes inside the (portal) tree, and any later
+      // client-side navigation back to /onboarding will re-set
+      // the attribute before the next paint. Leaving it stale
+      // during the in-between is harmless (the rule only
+      // suppresses z-50 fixed, which the rest of the portal
+      // never mounts anyway).
+    };
+  }, []);
+
   return (
     <Wizard
       steps={STEPS}

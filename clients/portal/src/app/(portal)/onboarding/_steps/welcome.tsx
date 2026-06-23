@@ -35,28 +35,26 @@ export function WelcomeStep() {
   }
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-5">
       <div>
-        <h1 className="text-3xl font-bold tracking-tight">Welcome to Eden 🌱</h1>
-        <p className="mt-2 text-[var(--text-secondary)]">
-          The next ~2 minutes get you from signup to seeing your first agent trace in the
-          dashboard. You can leave at any time and resume where you left off.
+        <h1 className="text-2xl font-bold tracking-tight">Welcome to Eden 🌱</h1>
+        <p className="mt-1 text-sm text-[var(--text-secondary)]">
+          The next ~2 minutes get you from signup to seeing your first
+          agent trace in the dashboard. You can leave at any time.
         </p>
       </div>
 
-      <ul className="space-y-3 text-sm">
+      <ul className="space-y-2 text-sm">
         {[
           {
             icon: Sparkles,
             title: "Set up your organisation",
-            body:
-              "Create a new one — or join an existing one if a teammate already invited you. Both paths take the same number of steps from here.",
+            body: "Create a new one, or join an existing one if a teammate already invited you.",
           },
           {
             icon: GitBranch,
             title: "Install the SDK + connect a repo",
-            body:
-              "We'll open a pull request that auto-instruments your agent. Admins only — members and viewers can skip and ask an admin to do it later.",
+            body: "We'll open a pull request that auto-instruments your agent. Admins only — others can skip and ask an admin later.",
           },
           {
             icon: Eye,
@@ -74,34 +72,34 @@ export function WelcomeStep() {
         ].map(({ icon: Icon, title, body }) => (
           <li
             key={title}
-            className="flex items-start gap-3 rounded-lg border border-[var(--border-default)] bg-[var(--bg-secondary)] p-4"
+            className="flex items-start gap-3 rounded-lg border border-[var(--border-default)] bg-[var(--bg-secondary)] p-3"
           >
-            <Icon className="mt-0.5 h-5 w-5 shrink-0 text-[var(--accent)]" />
+            <Icon className="mt-0.5 h-4 w-4 shrink-0 text-[var(--accent)]" />
             <div>
-              <div className="font-medium">{title}</div>
-              <div className="text-[var(--text-muted)]">{body}</div>
+              <div className="text-sm font-medium">{title}</div>
+              <div className="text-xs text-[var(--text-muted)] leading-snug">{body}</div>
             </div>
           </li>
         ))}
       </ul>
 
-      <div className="rounded-lg border border-dashed border-[var(--border-default)] bg-[var(--bg-secondary)]/50 p-4">
-        <div className="mb-2 text-sm font-medium text-[var(--text-secondary)]">
+      <div className="rounded-lg border border-dashed border-[var(--border-default)] bg-[var(--bg-secondary)]/50 p-3">
+        <div className="mb-1.5 text-xs font-medium text-[var(--text-secondary)]">
           Joining a team?
         </div>
         <div className="flex flex-wrap gap-2">
           <Link
             href="/onboarding/org?intent=join"
-            className="inline-flex items-center gap-1.5 rounded border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-1.5 text-xs text-[var(--text-secondary)] hover:border-[var(--accent)] hover:text-[var(--accent)]"
+            className="inline-flex items-center gap-1.5 rounded border border-[var(--border-default)] bg-[var(--bg-primary)] px-2.5 py-1 text-xs text-[var(--text-secondary)] hover:border-[var(--accent)] hover:text-[var(--accent)]"
           >
-            <UserPlus className="h-3.5 w-3.5" />
+            <UserPlus className="h-3 w-3" />
             Use a pending invite
           </Link>
           <Link
             href="/onboarding/org?intent=join"
-            className="inline-flex items-center gap-1.5 rounded border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-1.5 text-xs text-[var(--text-secondary)] hover:border-[var(--accent)] hover:text-[var(--accent)]"
+            className="inline-flex items-center gap-1.5 rounded border border-[var(--border-default)] bg-[var(--bg-primary)] px-2.5 py-1 text-xs text-[var(--text-secondary)] hover:border-[var(--accent)] hover:text-[var(--accent)]"
           >
-            <KeyRound className="h-3.5 w-3.5" />
+            <KeyRound className="h-3 w-3" />
             Paste an invite token
           </Link>
         </div>
