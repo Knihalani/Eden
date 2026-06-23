@@ -854,19 +854,31 @@ def _pr_info_from_dict(data: dict) -> PullRequestInfo:
 def get_default_pr_provider() -> PRProvider:
     """The default :class:`PRProvider` for the platform.
 
-    Returns :class:`LocalPRProvider` pointed at
-    ``EDEN_LOCAL_REPO_PATH`` (default ``.``). When
-    ``EDEN_PR_PROVIDER=github`` is set AND both
-    ``EDEN_GITHUB_TOKEN`` + ``EDEN_GITHUB_REPO`` are populated,
-    returns a real :class:`GitHubPRProvider`. Falls back to
-    Local if those env vars are missing.
+    Auto-detection order (audit 2026-06-23, Phase 3a):
+
+    1. If ``EDEN_PR_PROVIDER=local`` is set explicitly → :class:`LocalPRProvider`.
+    2. If ``EDEN_GITHUB_TOKEN`` + ``EDEN_GITHUB_REPO`` are both populated →
+       :class:`GitHubPRProvider`. (Even without ``EDEN_PR_PROVIDER=github`` —
+       the previous strict gating meant production runs always fell back to
+       local because ops never set ``EDEN_PR_PROVIDER=github`` in NF secrets.)
+    3. Otherwise → :class:`LocalPRProvider` pointed at
+       ``EDEN_LOCAL_REPO_PATH`` (default ``.``).
+
+    The previous behaviour required ``EDEN_PR_PROVIDER=github`` AND the
+    two token env vars; that meant a configured GitHub App was ignored
+    at runtime. The new auto-detection is the right default — set
+    ``EDEN_PR_PROVIDER=local`` to force the offline path.
     """
-    provider_name = os.environ.get("EDEN_PR_PROVIDER", "local")
-    if provider_name == "github":
-        token = os.environ.get("EDEN_GITHUB_TOKEN", "")
-        repo = os.environ.get("EDEN_GITHUB_REPO", "")
-        if token and repo:
-            return GitHubPRProvider(token=token, repo=repo)
+    explicit = os.environ.get("EDEN_PR_PROVIDER", "").strip().lower()
+    if explicit == "local":
+        return LocalPRProvider(
+            repo_path=os.environ.get("EDEN_LOCAL_REPO_PATH") or None,
+        )
+    token = os.environ.get("EDEN_GITHUB_TOKEN", "").strip()
+    repo = os.environ.get("EDEN_GITHUB_REPO", "").strip()
+    if token and repo:
+        return GitHubPRProvider(token=token, repo=repo)
+    if explicit == "github":
         logger.warning(
             "EDEN_PR_PROVIDER=github but EDEN_GITHUB_TOKEN/REPO not set; "
             "falling back to LocalPRProvider.",

@@ -1,6 +1,7 @@
 """FastAPI application for Eden job submission and retrieval."""
 
 import logging
+import os
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -298,6 +299,39 @@ async def lifespan(app: FastAPI):
         logger.info("Promotion hooks registered")
     except Exception as e:
         logger.warning(f"Promotion hook registration skipped: {e}")
+
+    # Phase 3a (2026-06-23) — surface a loud startup warning when neither
+    # a GitHub App nor the legacy PR-provider env vars are configured.
+    # Without this, the agent silently falls back to ``LocalPRProvider``
+    # (writes ``.eden/prs/<n>.json`` to the local FS), so the user's
+    # "open a PR" button looks like it worked but no real GitHub PR
+    # was created. The warning makes the misconfiguration visible at
+    # deploy time, not at incident time.
+    github_app_ok = all(
+        getattr(settings, attr, "").strip()
+        for attr in (
+            "github_app_id",
+            "github_app_client_id",
+            "github_app_client_secret",
+            "github_app_private_key",
+        )
+    )
+    github_pr_ok = bool(
+        os.environ.get("EDEN_GITHUB_TOKEN", "").strip()
+        and os.environ.get("EDEN_GITHUB_REPO", "").strip()
+    )
+    if not github_app_ok and not github_pr_ok:
+        logger.warning(
+            "PR provider is in LOCAL mode — 'Open PR' actions from the "
+            "agent will write JSONL files to the local FS instead of "
+            "creating real GitHub PRs. Configure ONE of:\n"
+            "  • GitHub App: GITHUB_APP_ID + GITHUB_APP_CLIENT_ID + "
+            "GITHUB_APP_CLIENT_SECRET + GITHUB_APP_PRIVATE_KEY\n"
+            "  • Legacy PAT: EDEN_GITHUB_TOKEN + EDEN_GITHUB_REPO\n"
+            "To force local mode intentionally, set EDEN_PR_PROVIDER=local."
+        )
+    else:
+        logger.info("PR provider: GitHub configured (PRs will open remotely)")
 
     yield
 
