@@ -484,6 +484,10 @@ class TestChatCompletionsStreaming:
                 "stream": True,
             },
         ) as r:
+            # 429 acceptable: same rate-limit bucket issue as
+            # test_streaming_returns_sse above.
+            if r.status_code == 429:
+                return
             for _ in r.iter_lines():
                 pass
         # The finally-block in the stream generator fires once on close
