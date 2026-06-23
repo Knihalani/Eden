@@ -9,7 +9,7 @@ import { cn } from "@/lib/utils";
 import { PageHeader } from "@/components/layout/page-header";
 import { useToast } from "@/components/ui/toast";
 import { useConfirm } from "@/hooks/use-confirm";
-import { TwoFASetupDialog } from "./_components/2fa-setup-dialog";
+import { TwoFASetupDialog } from "../settings/_components/2fa-setup-dialog";
 
 export default function ProfilePage() {
   const { user, refreshUser } = useAuth();
