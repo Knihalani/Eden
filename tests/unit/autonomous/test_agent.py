@@ -2,7 +2,7 @@
 
 What's covered:
 
-  * Tool registry — all 12 tools registered, RBAC on
+  * Tool registry — all 14 tools registered, RBAC on
     ``mark_incident_resolved``, unknown tool rejection.
   * Chart / Citation / AgentChunk schemas — to_dict roundtrip,
     field validation.
@@ -68,12 +68,21 @@ class TestToolRegistry:
         )
 
     def test_count_matches_plan(self):
-        assert len(_TOOL_REGISTRY) == 12
+        # Phase 3a (2026-06-23): 12 → 14 with the addition of
+        # `create_pr_suggestion` (read-only) and `open_pr_suggestion`
+        # (admin). Both wired to the Cat 23 PRSuggester so the agent
+        # can stay in the Cmd-J panel for the full create→review→
+        # open-PR loop.
+        assert len(_TOOL_REGISTRY) == 14
 
     def test_write_tools_require_role(self):
         assert _TOOL_REGISTRY["mark_incident_resolved"]["requires_role"] == "admin"
+        assert _TOOL_REGISTRY["open_pr_suggestion"]["requires_role"] == "admin"
+        # Phase 3a added open_pr_suggestion (admin-gated Cat 23 PR
+        # materialisation). Both write tools must keep their admin
+        # gate; everything else must stay permissionless.
         for name, spec in _TOOL_REGISTRY.items():
-            if name != "mark_incident_resolved":
+            if name not in ("mark_incident_resolved", "open_pr_suggestion"):
                 assert spec["requires_role"] is None, (
                     f"{name} unexpectedly requires role {spec['requires_role']!r}"
                 )
