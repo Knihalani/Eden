@@ -179,7 +179,37 @@ export function OrgProvider({ children }: { children: ReactNode }) {
     if (userLoaded && clerkOrgLoaded) {
       refreshOrgs();
     }
-  }, [userLoaded, clerkOrgLoaded, refreshOrgs]);
+    // FIX-Q: poll for an org every 5s when the user is signed in but
+    // has none. The Clerk webhook that creates the Eden-side org row
+    // on first signup can take several seconds to land; without a
+    // poll, the user lands on the onboarding wizard, creates an org
+    // on /onboarding/org, and the welcome step's `currentOrg` stays
+    // null on every subsequent visit until they refresh the page
+    // (because refreshOrgs only ran on initial mount). 5s is
+    // aggressive enough to feel real-time without thrashing the
+    // /auth/me endpoint. The interval is cleared once an org is
+    // found, or when the user signs out.
+    let interval: ReturnType<typeof setInterval> | null = null;
+    if (
+      userLoaded &&
+      clerkOrgLoaded &&
+      !loading &&
+      organizations.length === 0
+    ) {
+      interval = setInterval(() => {
+        refreshOrgs();
+      }, 5_000);
+    }
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [
+    userLoaded,
+    clerkOrgLoaded,
+    loading,
+    organizations.length,
+    refreshOrgs,
+  ]);
 
   const setCurrentOrg = useCallback((org: Organization | null) => {
     // Note: in practice, switching the active org is done via Clerk's
