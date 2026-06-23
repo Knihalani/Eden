@@ -75,6 +75,9 @@ from eden.api.routes import (
 )
 from eden.api.routes import (
     github as github_routes,
+    optimization,
+    observability,
+    alerts,
 )
 from eden.config import get_settings
 from eden.kb import health_check as kb_health_check
@@ -363,6 +366,9 @@ app.include_router(analytics.router)  # /orgs/{org_id}/analytics
 app.include_router(export.router)  # /orgs/{org_id}/export
 app.include_router(export_destinations.router)  # /orgs/{org_id}/export/{destinations,schedules,run-now}
 app.include_router(ingestion.router)  # /orgs/{org_id}/ingest (multi-format observability ingestion)
+app.include_router(observability.router)  # /orgs/{org_id}/observability/{traces,summary,spans/search,...}
+app.include_router(optimization.router)  # /orgs/{org_id}/optimization/{overview,costs,savings,cache,budget,}
+app.include_router(alerts.router)  # /alerts (global alert feed + per-rule ack)
 app.include_router(app_events.router)  # /orgs/{org_id}/ingest/app (Phase A1 app/site events)
 app.include_router(scim.router)  # /orgs/{org_id}/scim/v2
 app.include_router(sso.router)  # /sso

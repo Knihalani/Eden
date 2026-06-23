@@ -15,6 +15,15 @@ import { onboardingApi } from "@/lib/api";
 export function WelcomeStep() {
   const { currentOrg } = useOrg();
 
+  // If Clerk already provisioned an org (signup flow auto-creates
+  // one, or the user arrived via an invite link) we surface that
+  // as the headline state — the user shouldn't have to "set up
+  // their organisation" if one was set up for them. The Org step
+  // already auto-skips in this case; this is the equivalent
+  // signpost for the welcome page so the user isn't surprised
+  // when the next step appears to do nothing.
+  const provisionedOrg = currentOrg?.id ? currentOrg : null;
+
   async function goNext() {
     if (currentOrg?.id) {
       try {
@@ -43,7 +52,7 @@ export function WelcomeStep() {
   }
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-5 flex-1 flex flex-col">
       <div>
         <h1 className="text-2xl font-bold tracking-tight">Welcome to Eden 🌱</h1>
         <p className="mt-1 text-sm text-[var(--text-secondary)]">
@@ -52,12 +61,31 @@ export function WelcomeStep() {
         </p>
       </div>
 
+      {provisionedOrg && (
+        <div className="rounded-lg border border-[var(--terminal)]/40 bg-[var(--terminal-faint)] p-3 text-sm">
+          <div className="text-xs font-medium text-[var(--terminal)] mb-0.5">
+            Workspace ready
+          </div>
+          <div className="text-[var(--text-secondary)]">
+            <span className="font-medium text-[var(--text-primary)]">
+              {provisionedOrg?.name ?? "Your workspace"}
+            </span>{" "}
+            is already set up &mdash; we&rsquo;ll skip the org step on the way
+            through.
+          </div>
+        </div>
+      )}
+
       <ul className="space-y-2 text-sm">
         {[
           {
             icon: Sparkles,
-            title: "Set up your organisation",
-            body: "Create a new one, or join an existing one if a teammate already invited you.",
+            title: provisionedOrg
+              ? "Confirm autonomous settings"
+              : "Set up your organisation",
+            body: provisionedOrg
+              ? "Pick how Eden's auto-suggested patches and self-healing work for this org."
+              : "Create a new one, or join an existing one if a teammate already invited you.",
           },
           {
             icon: GitBranch,
@@ -91,34 +119,36 @@ export function WelcomeStep() {
         ))}
       </ul>
 
-      <div className="rounded-lg border border-dashed border-[var(--border-default)] bg-[var(--bg-secondary)]/50 p-3">
-        <div className="mb-1.5 text-xs font-medium text-[var(--text-secondary)]">
-          Joining a team?
+      {!provisionedOrg && (
+        <div className="rounded-lg border border-dashed border-[var(--border-default)] bg-[var(--bg-secondary)]/50 p-3">
+          <div className="mb-1.5 text-xs font-medium text-[var(--text-secondary)]">
+            Joining a team?
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Link
+              href="/onboarding/org?intent=join"
+              className="inline-flex items-center gap-1.5 rounded border border-[var(--border-default)] bg-[var(--bg-primary)] px-2.5 py-1 text-xs text-[var(--text-secondary)] hover:border-[var(--accent)] hover:text-[var(--accent)]"
+            >
+              <UserPlus className="h-3 w-3" />
+              Use a pending invite
+            </Link>
+            <Link
+              href="/onboarding/org?intent=join"
+              className="inline-flex items-center gap-1.5 rounded border border-[var(--border-default)] bg-[var(--bg-primary)] px-2.5 py-1 text-xs text-[var(--text-secondary)] hover:border-[var(--accent)] hover:text-[var(--accent)]"
+            >
+              <KeyRound className="h-3 w-3" />
+              Paste an invite token
+            </Link>
+          </div>
         </div>
-        <div className="flex flex-wrap gap-2">
-          <Link
-            href="/onboarding/org?intent=join"
-            className="inline-flex items-center gap-1.5 rounded border border-[var(--border-default)] bg-[var(--bg-primary)] px-2.5 py-1 text-xs text-[var(--text-secondary)] hover:border-[var(--accent)] hover:text-[var(--accent)]"
-          >
-            <UserPlus className="h-3 w-3" />
-            Use a pending invite
-          </Link>
-          <Link
-            href="/onboarding/org?intent=join"
-            className="inline-flex items-center gap-1.5 rounded border border-[var(--border-default)] bg-[var(--bg-primary)] px-2.5 py-1 text-xs text-[var(--text-secondary)] hover:border-[var(--accent)] hover:text-[var(--accent)]"
-          >
-            <KeyRound className="h-3 w-3" />
-            Paste an invite token
-          </Link>
-        </div>
-      </div>
+      )}
 
-      <div className="flex justify-end">
+      <div className="flex justify-end pt-1">
         <button
           onClick={goNext}
           className="inline-flex items-center gap-2 rounded-lg bg-[var(--accent)] px-4 py-2 text-sm font-medium text-[var(--accent-foreground)] hover:opacity-90"
         >
-          Get started
+          {provisionedOrg ? "Continue" : "Get started"}
           <ArrowRight className="h-4 w-4" />
         </button>
       </div>
