@@ -9,17 +9,21 @@ from pydantic import BaseModel, Field
 
 from eden.api.middleware.tenant_rate_limit import TenantRateLimitMiddleware
 from eden.api.routes import (
+    agent_runs,
     ai_agent,
     ai_insights,
     analytics,
+    analytics_v2,
     api_keys,
     app_events,
     audit,
     auth,
     billing,
+    builder_graphs,
     chain,
     clerk_webhooks,
     cost,
+    data_platform,
     datasets_spreadsheet,
     debugger,
     evaluation,
@@ -28,7 +32,12 @@ from eden.api.routes import (
     export_destinations,
     feature_flags,
     ingestion,
+    insights,
     integrations_helicone,
+    integrations_langfuse,
+    integrations_langsmith,
+    integrations_runloop,
+    integrations_wandb,
     intelligence_agents,
     intelligence_apm_depth,
     intelligence_autonomous,
@@ -51,19 +60,26 @@ from eden.api.routes import (
     intelligence_time_travel,
     intelligence_tools,
     intelligence_user,
+    judges,
     kb,
     labeling,
     marketplace,
+    media,
     multi_agent,
     notifications,
+    observability_stream,
     orgs,
+    patterns,
     pii_policy,
     presigned_feedback,
     prompts,
+    prompt_canary,
     qa_generator,
+    rbac,
     redteam,
     references,
     region,
+    replay,
     retention_policy,
     sandbox,
     scim,
@@ -72,6 +88,8 @@ from eden.api.routes import (
     signals,
     sql_query,
     sso,
+    support,
+    websocket,
 )
 from eden.api.routes import (
     github as github_routes,
@@ -427,6 +445,48 @@ app.include_router(intelligence_user.router)
 app.include_router(metrics_endpoint_router)  # /metrics (Prometheus, bearer-token auth)
 app.include_router(feature_flags.router)  # /feature-flags (public)
 
+# ── Phase 2 audit (2026-06-23) — 18 routers that were defined but
+# never mounted. Co-mounting them in a single block keeps the diff
+# legible. Each module is self-gating (returns 503/404 when its
+# feature flag is off) so this is safe in any environment.
+#
+# RBAC (custom roles + permissions) — fixes the /settings?tab=roles
+# "RBAC migration may not be applied" error in the portal.
+app.include_router(rbac.router)  # /orgs/{org_id}/roles
+app.include_router(rbac.permissions_router)  # /orgs/{org_id}/permissions
+# WebSocket — /ws/jobs/{job_id}/trace + /ws/jobs/{job_id}/logs
+app.include_router(websocket.router)
+# SSE live-tail (Phase 7.2) — /orgs/{org_id}/observability/sse/stream
+# (prefix renamed in Phase 2 to avoid collision with observability.router)
+app.include_router(observability_stream.router)
+# Agent uploads + sim/test runs (Phase 3) — /orgs/{org_id}/agents/{agent_id}/...
+app.include_router(agent_runs.router)
+# Insights API (Phase 6.3) — /orgs/{org_id}/insights/...
+app.include_router(insights.router)
+# Judges (Phase 7.1b) — /orgs/{org_id}/observability/judges/...
+app.include_router(judges.router)
+# Alert replay/ack — /alerts/... (mounted at root, not under /orgs)
+app.include_router(replay.router)
+# Media blob storage (Phase 7.2a) — /orgs/{org_id}/media/{blob_id}
+app.include_router(media.router)
+# Data platform (Phase 5) — /orgs/{org_id}/data-platform/...
+app.include_router(data_platform.router)
+# Visual builder graphs (Phase 1.7) — /orgs/{org_id}/builder/graphs/...
+app.include_router(builder_graphs.router)
+# Analytics v2 (Phase 8.2) — /orgs/{org_id}/analytics/{cohorts,funnel}
+app.include_router(analytics_v2.router)
+# Prompt canary management (Phase 7.2c/d) — /orgs/{org_id}/prompts/{agent}/canary
+app.include_router(prompt_canary.router)
+# Patterns (Phase 7.2 C5) — /orgs/{org_id}/observability/patterns/...
+app.include_router(patterns.router)
+# Support tickets + Discord webhook test — /support/tickets, /integrations/discord/test
+app.include_router(support.router)
+# 3rd-party observability integrations
+app.include_router(integrations_langfuse.router)  # /integrations/langfuse
+app.include_router(integrations_langsmith.router)  # /integrations/langsmith
+app.include_router(integrations_wandb.router)  # /integrations/wandb
+app.include_router(integrations_runloop.router)  # /integrations/runloop
+
 # Onboarding wizard (June 2026) — GitHub App OAuth + per-org
 # wizard state + integration PR runs. Two routers:
 #   public: /integrations/github/{configured,authorize,callback,webhook}
@@ -453,7 +513,19 @@ app.include_router(gateway_models.router)
 
 @app.get("/health", response_model=HealthResponse)
 async def health_check():
-    """Check system health."""
+    """Check system health.
+
+    Phase 2 audit (2026-06-23) — return HTTP 503 when degraded so
+    Northflank's ``httpHealthCheck`` actually restarts the container.
+    The previous version always returned 200, which meant a broken
+    Postgres connection (Neon project deleted, bad pool, etc.) would
+    only be surfaced via the body, not the status code — Northflank
+    keeps traffic pointed at a half-dead container. The
+    ``HEALTH_PROBE_MODE`` setting lets operators force a 200 response
+    (e.g. local dev with an in-memory db).
+    """
+    from fastapi.responses import JSONResponse
+
     kb_health = await kb_health_check()
     sandbox_status = _get_sandbox_health()
 
@@ -489,13 +561,27 @@ async def health_check():
         except Exception:
             pass
 
-    return HealthResponse(
+    body = HealthResponse(
         status=overall,
         version=settings.app_version,
         postgres=pg,
         qdrant=kb_health.get("qdrant", "unknown"),
         sandbox=sandbox_status,
     )
+
+    # HEALH_PROBE_MODE controls the status code:
+    #   "auto"  — 200 if healthy, 503 if degraded (production default)
+    #   "200"   — always 200 (local dev / debug; lets you probe the body
+    #             without tripping Northflank's restart loop)
+    #   "503"   — always 503 (manual chaos testing)
+    mode = getattr(settings, "health_probe_mode", "auto")
+    if mode == "200":
+        return body
+    if mode == "503":
+        return JSONResponse(status_code=503, content=body.model_dump())
+    if overall == "healthy":
+        return body
+    return JSONResponse(status_code=503, content=body.model_dump())
 
 
 def _get_sandbox_health() -> str:

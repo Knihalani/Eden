@@ -1,12 +1,12 @@
 """SSE endpoint for live trace tail.
 
-Phase 7.2 (C3): ``GET /orgs/{org_id}/observability/stream`` is a
+Phase 7.2 (C3): ``GET /orgs/{org_id}/observability/sse/stream`` is a
 server-sent-events stream that pushes new trace events as they arrive.
 The portal's ``use-observability-stream`` hook subscribes and appends
 them to the trace list in real time.
 
 Wire shape:
-    GET /orgs/{org_id}/observability/stream?last_event_id=...
+    GET /orgs/{org_id}/observability/sse/stream?last_event_id=...
 
     Each event: ``event: trace\ndata: {<json>}\nid: <seq>\n\n``
     Keep-alive: ``event: ping\ndata: {}\n\n`` every 15s
@@ -15,6 +15,14 @@ The stream is fed from a per-tenant Redis pub/sub channel. The
 TelemetryCollector publishes to that channel after every successful
 ``_route_postgres`` write. Last-Event-ID resume is supported — when
 the client reconnects, the backend replays any missed events.
+
+Phase 2 audit (2026-06-23) — renamed the prefix from
+``/orgs/{org_id}/observability`` to ``/orgs/{org_id}/observability/sse``.
+The main observability router in ``observability.py`` already uses the
+shorter prefix; co-mounting both routers under the same prefix was
+prone to silent route shadowing (e.g. any future ``/summary`` SSE
+endpoint would 404 the observability summary list). The
+``/observability/sse/`` subtree is now exclusively for streaming.
 """
 
 from __future__ import annotations
@@ -33,7 +41,7 @@ from eden.storage.redis import get_redis_client
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/orgs/{org_id}/observability", tags=["observability"])
+router = APIRouter(prefix="/orgs/{org_id}/observability/sse", tags=["observability"])
 
 
 @router.get("/stream")
