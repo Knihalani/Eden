@@ -307,12 +307,14 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
       <a href="#main-content" className="skip-to-content">
         Skip to main content
       </a>
-      {/* Mobile sidebar overlay */}
+      {/* Mobile sidebar overlay — div (not button) so keyboard tab
+       * skips it. aria-hidden + the existing CSS rule at globals.css:419-423
+       * kill pointer-events for non-interactive overlays. */}
       {sidebarOpen && (
-        <button
-          type="button"
-          className="fixed inset-0 bg-[var(--bg-base)]/50 z-40 lg:hidden cursor-default border-0 p-0"
-          aria-label="Close menu"
+        <div
+          role="presentation"
+          aria-hidden="true"
+          className="fixed inset-0 bg-[var(--bg-base)]/50 z-40 lg:hidden cursor-default"
           onClick={() => setSidebarOpen(false)}
         />
       )}
@@ -326,7 +328,7 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
         aria-label="Main sidebar navigation"
         className={cn(
           "sidebar flex flex-col relative bg-[var(--bg-primary)] border-r border-[var(--border-default)] z-40",
-          "fixed inset-y-0 left-0 lg:sticky lg:top-0 lg:self-start lg:h-screen lg:flex-shrink-0",
+          "fixed inset-y-0 left-0 lg:sticky lg:top-0 lg:self-start lg:h-dvh lg:flex-shrink-0",
           collapsed ? "collapsed" : "",
           sidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0",
           "transition-[transform,width] duration-300 ease-out lg:transition-[width]"

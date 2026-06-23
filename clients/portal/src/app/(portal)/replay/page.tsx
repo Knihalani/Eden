@@ -723,7 +723,7 @@ export default function ReplayPage() {
                       {hiltMessage}
                       <button
                         onClick={() => setHiltMessage("")}
-                        className="ml-auto text-[10px] underline opacity-70 hover:opacity-100"
+                        className="ml-auto text-xs underline text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
                       >
                         Dismiss
                       </button>
