@@ -23,14 +23,20 @@ import pytest
 
 # ── Migration 041 syntax ─────────────────────────────────────────────
 
+# Audit 2026-06-23: the original path was a hardcoded absolute
+# macOS path (``/Users/kaiavnihalani/Downloads/Eden/...``) that
+# failed on the CI runner (Ubuntu) with FileNotFoundError.
+# Resolve relative to this test file so the test runs anywhere.
+_MIGRATIONS_DIR = (
+    Path(__file__).resolve().parents[3]
+    / "src" / "eden" / "db_migrations" / "versions"
+)
+
 
 class TestMigration041Syntax:
     @staticmethod
     def _load_migration():
-        path = Path(
-            "/Users/kaiavnihalani/Downloads/Eden/src/eden/db_migrations/versions/"
-            "041_trace_messages.py"
-        )
+        path = _MIGRATIONS_DIR / "041_trace_messages.py"
         spec = importlib.util.spec_from_file_location("trace_messages", path)
         mod = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(mod)
@@ -46,26 +52,17 @@ class TestMigration041Syntax:
         on databases that already have the table from the legacy
         raw-SQL file."""
         m = self._load_migration()
-        body = Path(
-            "/Users/kaiavnihalani/Downloads/Eden/src/eden/db_migrations/versions/"
-            "041_trace_messages.py"
-        ).read_text()
+        body = (_MIGRATIONS_DIR / "041_trace_messages.py").read_text()
         assert "CREATE TABLE IF NOT EXISTS trace_messages" in body
 
     def test_indexes_created(self):
         m = self._load_migration()
-        body = Path(
-            "/Users/kaiavnihalani/Downloads/Eden/src/eden/db_migrations/versions/"
-            "041_trace_messages.py"
-        ).read_text()
+        body = (_MIGRATIONS_DIR / "041_trace_messages.py").read_text()
         assert "idx_trace_messages_trace_id" in body
         assert "idx_trace_messages_content_gin" in body
 
     def test_primary_key(self):
-        body = Path(
-            "/Users/kaiavnihalani/Downloads/Eden/src/eden/db_migrations/versions/"
-            "041_trace_messages.py"
-        ).read_text()
+        body = (_MIGRATIONS_DIR / "041_trace_messages.py").read_text()
         # The PK is on (trace_id, msg_hash) — trace-scoped dedup.
         assert "PRIMARY KEY (trace_id, msg_hash)" in body
 
