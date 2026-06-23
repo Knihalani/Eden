@@ -187,29 +187,19 @@ export function Wizard({
   };
 
   return (
-    // ``min-h-full`` lets the chrome stretch to fill the viewport on
-    // short pages, but doesn't push the page taller than its
-    // content. The previous ``-mt-4`` on the bottom nav (and the
-    // tall top-bar + progress strip + 2.5rem of internal padding
-    // on the body) was making short pages like the welcome card
-    // overflow the viewport and look "expanded too far down" — the
-    // body filled past 100vh, the bottom nav floated over the
-    // content, and the user had to scroll past it to see the
-    // primary CTA.
-    <div
-      className="flex min-h-full flex-col bg-[var(--bg-primary)] text-[var(--text-primary)]"
-      // TEMP DIAG: capture-phase click logger. Removed once the
-      // user confirms the click handler runs.
-      onClickCapture={(e) => {
-        // eslint-disable-next-line no-console
-        console.log(
-          "[wizard] click captured:",
-          (e.target as HTMLElement)?.tagName,
-          "|",
-          ((e.target as HTMLElement)?.textContent ?? "").slice(0, 40),
-        );
-      }}
-    >
+    // FIX-Q: drop ``min-h-full`` from the wizard outer. The previous
+    // ``min-h-full`` forced the wizard chrome (top bar + progress
+    // strip + body + bottom nav) to be at LEAST the parent
+    // flex-1 column's height. On a viewport where the welcome
+    // content + chrome summed to more than the parent column
+    // could hold, the wizard grew past the viewport, the bottom
+    // nav was pushed off-screen, and the user had to scroll the
+    // document to see the Back/Next buttons. Switching to a plain
+    // flex column lets the wizard size to its content; the
+    // (portal) layout's existing document-scroll handles overflow
+    // (FIX-A / FIX-B). The body keeps `flex-1` so on short pages
+    // the body still takes any leftover vertical space.
+    <div className="flex flex-col bg-[var(--bg-primary)] text-[var(--text-primary)]">
       {/* Top bar — compact: single line, h-12 */}
       <div className="flex h-12 items-center border-b border-[var(--border-default)] bg-[var(--bg-secondary)] px-6">
         <div className="mx-auto flex w-full max-w-3xl items-center justify-between">
