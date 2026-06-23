@@ -19,7 +19,12 @@ import { NextResponse } from "next/server";
 
 import { auth } from "@clerk/nextjs/server";
 
-const FASTAPI_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+// Server-side only — must NEVER be NEXT_PUBLIC_* (which is bundled
+// into the browser and is a relative path `/api/proxy` in production,
+// which Node's fetch cannot resolve to an absolute URL).
+// In Vercel prod: API_INTERNAL_URL=https://eden-api--<id>.northflank.app
+// In dev: falls back to localhost:8000.
+const FASTAPI_URL = process.env.API_INTERNAL_URL || "http://localhost:8000";
 
 export async function POST(request: Request) {
   const url = new URL(request.url);
@@ -99,8 +104,21 @@ export async function POST(request: Request) {
           }
           controller.enqueue(value);
         }
-      } catch {
-        controller.close();
+      } catch (err) {
+        // ponytail: controller.error(err) — closes the stream AND signals
+        // an error to the reader. The previous controller.close() left
+        // the client in a stuck "Streaming…" state because no `done`
+        // event was emitted. Emitting an explicit SSE `event: error`
+        // frame first so the client UI can show a toast and recover.
+        const msg = (err as Error)?.message || "stream interrupted";
+        try {
+          controller.enqueue(
+            new TextEncoder().encode(`event: error\ndata: ${JSON.stringify({ detail: msg })}\n\n`),
+          );
+        } catch {
+          /* controller already closed by the runtime */
+        }
+        controller.error(err);
       }
     },
   });

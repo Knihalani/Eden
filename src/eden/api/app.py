@@ -8,8 +8,10 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
+from eden.api.middleware.quota_enforcement import QuotaEnforcementMiddleware
 from eden.api.middleware.tenant_rate_limit import TenantRateLimitMiddleware
 from eden.api.routes import (
+    agent_pr_suggestions,
     agent_runs,
     ai_agent,
     ai_insights,
@@ -90,6 +92,7 @@ from eden.api.routes import (
     sql_query,
     sso,
     support,
+    webhooks,
     websocket,
 )
 from eden.api.routes import (
@@ -393,6 +396,13 @@ app.add_middleware(
     max_age=600,
 )
 
+# Per-org resource budget enforcement (§6.3 cost guardrails).
+# Registered BEFORE TenantRateLimitMiddleware so quota (per-org resource
+# budget) fires first, rate-limit (per-second burst) fires second. Disable
+# in dev with QUOTA_ENFORCEMENT_ENABLED=false.
+if getattr(settings, "quota_enforcement_enabled", True):
+    app.add_middleware(QuotaEnforcementMiddleware)
+
 # Per-tenant sliding-window rate limiter. Registered AFTER CORS so
 # preflight OPTIONS requests are never rate-limited. Falls back to
 # in-memory TokenBucket when REDIS_URL is unset. Disable in dev with
@@ -529,6 +539,14 @@ app.include_router(integrations_runloop.router)  # /integrations/runloop
 # (the wizard's "Connect GitHub" step renders a "Skip" fallback).
 app.include_router(github_routes.public_router)
 app.include_router(github_routes.org_router)
+
+# Outbound webhooks (customer-facing CRUD + delivery + replay). Prefix
+# /orgs/{org_id}/webhooks — no collision with the inbound clerk_webhooks
+# router mounted above at /webhooks/clerk.
+app.include_router(webhooks.router)  # /orgs/{org_id}/webhooks
+# Cat 23 agent PR suggestions — UI surface for in-portal code-change
+# review. Prefix /orgs/{org_id}/agent/pr-suggestions — unique.
+app.include_router(agent_pr_suggestions.router)  # /orgs/{org_id}/agent/pr-suggestions
 
 # A2 — Per-org AI Gateway model registry. CRUD over the
 # org_gateway_models table; the gateway in A1 calls /resolve to
