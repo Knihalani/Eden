@@ -427,6 +427,51 @@ def patch_invite_service():
 # FastAPI TestClient
 # ─────────────────────────────────────────────────────────────────────────────
 
+@pytest.fixture(autouse=True)
+def reset_rate_limit():
+    """Reset the :class:`TenantRateLimitMiddleware` buckets per test.
+
+    The middleware stores per-tenant token buckets in a
+    process-global dict; without this reset, the Nth integration
+    test in a session gets 429'd even though its own request count
+    is well below the 60 req / 60s limit (every previous test
+    consumed from the same bucket).
+
+    Audit 2026-06-23: this fixture unblocks the gateway streaming
+    + completion tests that were silently failing on CI with
+    ``429 Too Many Requests``. The ``reset_buckets`` hook was added
+    to the middleware in the same audit.
+
+    Implementation: FastAPI stores middleware specs in
+    ``app.user_middleware`` but the live instance is only built
+    lazily when ``app.middleware_stack`` is constructed. We poke
+    ``middleware_stack`` once to force the build, then walk it to
+    find the live :class:`TenantRateLimitMiddleware` and reset it.
+    """
+    from eden.api.app import app
+    try:
+        # Force middleware_stack to build (lazy).
+        _ = app.middleware_stack
+        stack = app.middleware_stack
+        # middleware_stack is a chain of ``ServerErrorMiddleware``,
+        # ``[_Middleware]``, ``ExceptionMiddleware``, ``Router``.
+        # Walk it and reset every TenantRateLimitMiddleware found.
+        node = stack
+        seen: set[int] = set()
+        while node is not None and id(node) not in seen:
+            seen.add(id(node))
+            if (
+                hasattr(node, "reset_buckets")
+                and node.__class__.__name__ == "TenantRateLimitMiddleware"
+            ):
+                node.reset_buckets()
+            # ASGI middleware chains via .app
+            node = getattr(node, "app", None)
+    except Exception:
+        pass
+    yield
+
+
 @pytest.fixture
 def api_client(patch_postgres, patch_settings) -> TestClient:
     """Return a FastAPI TestClient with mocked dependencies.
