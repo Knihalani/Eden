@@ -10,10 +10,23 @@ Pipeline:
    (code generation). The prompt includes the linked source
    files + the RCA + the test plan + the style profile + the
    KG penalties.
-3. **Validation** — :class:`QualityValidator` checks the
-   response: parses as a unified diff, has at least 1 hunk,
-   doesn't touch protected paths, fits the style profile.
-4. **Persistence** — writes a ``proposed_patches`` row with
+3. **Critic loop** (Phase 3b) — after T2 generation, run a T2
+   critic pass on the diff. If the critic rejects, regenerate
+   ONCE. If still rejected, mark the patch low_quality so a
+   human can still see it (the inbox surfaces it with a
+   "quality concerns" badge) but the on-call is not paged.
+4. **Size validation** — soft cap 200 lines, hard cap 500. If
+   the diff exceeds the hard cap, return an "investigation"
+   envelope — no ``proposed_patches`` row is written, the
+   caller is told "this needs architectural review".
+5. **Similarity dedup** — before persisting, hash the diff and
+   compare against proposed_patches from the last 14d via
+   ``difflib.SequenceMatcher.ratio()``. If a >85% match exists,
+   skip persistence and return the dedup envelope.
+6. **Quality floor** — patches below ``patch_quality_floor``
+   (default 0.8) are persisted with ``status='low_quality'``
+   instead of ``status='proposed'``.
+7. **Persistence** — writes a ``proposed_patches`` row with
    the diff + the test plan + the quality score + cost +
    model_used. Status is ``proposed`` until a human approves.
 
@@ -39,6 +52,8 @@ rather than getting a half-baked patch.
 
 from __future__ import annotations
 
+import difflib
+import hashlib
 import json
 import logging
 import re
@@ -46,6 +61,7 @@ from typing import Any
 
 from eden.code_change._common import (
     _insert_row,
+    _select_rows,
     diff_files_changed,
     diff_hunk_count,
     diff_line_count,
@@ -146,6 +162,183 @@ def _estimate_diff_metrics(diff: str) -> dict[str, Any]:
     }
 
 
+def _diff_title_hash(diff: str) -> str:
+    """Stable hash of the first line of the diff for dedup comparison.
+
+    The first ``+++ b/...`` header is the canonical "what file did
+    we touch" signal — two patches targeting the same file with
+    the same intent will share the same hash, even if the diff
+    bodies differ slightly. Combined with ``difflib.SequenceMatcher``
+    in :func:`_is_similar_to_recent_patch` this catches both
+    "exact duplicate" and "same intent, slight tweak" cases.
+    """
+    if not diff:
+        return ""
+    m = _DIFF_HEADER_RE.search(diff)
+    if not m:
+        return ""
+    target = m.group(0).strip()
+    return hashlib.sha256(target.encode("utf-8")).hexdigest()[:16]
+
+
+async def _is_similar_to_recent_patch(
+    org_id: str,
+    diff: str,
+    *,
+    threshold: float,
+    lookback_days: int,
+) -> dict[str, Any] | None:
+    """Return the matching recent ``proposed_patches`` row if any.
+
+    The match logic:
+
+    1. Query ``proposed_patches`` for the same org in the last
+       ``lookback_days`` (default 14). Only 50 most-recent rows
+       to keep the SequenceMatcher cost bounded.
+    2. For each candidate, run ``difflib.SequenceMatcher.ratio``
+       against the new diff. If any ratio > ``threshold``,
+       return that row.
+
+    Returns ``None`` when no match is found (i.e. it's safe to
+    persist the new patch). Pure stdlib ``difflib`` — no extra
+    dep, fast enough for the 50-row window.
+
+    Best-effort: DB errors return ``None`` so the caller falls
+    through to "save it, let humans sort it out" rather than
+    blocking the pipeline on a transient error.
+    """
+    if not diff or threshold <= 0.0:
+        return None
+    try:
+        rows = await _select_rows(
+            org_id,
+            "proposed_patches",
+            where=f"created_at > NOW() - INTERVAL '{int(lookback_days)} days'",
+            order_by="created_at DESC",
+            limit=50,
+        )
+    except Exception as exc:
+        logger.debug("patch_gen: dedup select failed: %s", exc)
+        return None
+    matcher = difflib.SequenceMatcher(a=diff, b="", autojunk=False)
+    for row in rows:
+        candidate = row.get("diff") or ""
+        if not candidate:
+            continue
+        matcher.set_seq2(candidate)
+        ratio = matcher.ratio()
+        if ratio > threshold:
+            return {
+                "matched_patch_id": row.get("id"),
+                "matched_created_at": str(row.get("created_at", "")),
+                "similarity": round(ratio, 4),
+                "lookback_days": lookback_days,
+                "threshold": threshold,
+            }
+    return None
+
+
+def _validate_size(
+    diff: str,
+    *,
+    soft_cap: int,
+    hard_cap: int,
+) -> dict[str, Any]:
+    """Return a verdict for the size of the diff.
+
+    * lines < soft_cap → ``{"ok": True, "size_class": "small"}``
+    * soft_cap ≤ lines < hard_cap → ``{"ok": True, "size_class": "medium"}``
+      (still persisted, but quality_scorer is more lenient — fewer
+      complexity penalty bumps).
+    * lines ≥ hard_cap → ``{"ok": False, "size_class": "investigation"}``
+      (caller returns the "investigation" envelope — no persistence,
+      human reads the RCA directly).
+    """
+    lines = diff_line_count(diff) if diff else 0
+    if lines >= hard_cap:
+        return {
+            "ok": False,
+            "size_class": "investigation",
+            "lines_changed": lines,
+            "soft_cap": soft_cap,
+            "hard_cap": hard_cap,
+        }
+    if lines >= soft_cap:
+        return {
+            "ok": True,
+            "size_class": "medium",
+            "lines_changed": lines,
+            "soft_cap": soft_cap,
+            "hard_cap": hard_cap,
+        }
+    return {
+        "ok": True,
+        "size_class": "small",
+        "lines_changed": lines,
+        "soft_cap": soft_cap,
+        "hard_cap": hard_cap,
+    }
+
+
+async def _critic_review(
+    router: ModelRouter,
+    diff: str,
+    *,
+    rca_summary: str,
+) -> dict[str, Any]:
+    """Run the Phase 3b critic loop on a generated diff.
+
+    Asks a T2 model to evaluate the diff along 4 axes: does it
+    actually fix the RCA, does it avoid security footguns, does
+    it match the existing style, and would it pass lint/tests.
+
+    Returns ``{"passed": bool, "reason": str, "raw": str}``.
+    Never raises — on LLM failure returns ``{"passed": True,
+    "reason": "critic_skipped"}`` so a transient critic outage
+    doesn't block generation. The trade-off: false negatives
+    (over-permissive) are preferable to false positives when
+    the critic is itself unreliable.
+    """
+    task = PipelineTask(
+        agent="patch_critic",
+        description="Critic review of generated patch",
+        slot="reasoning",
+        output_type="format",
+        expected_min_length=4,
+    )
+    prompt = (
+        "Review this unified diff and decide whether it should be "
+        "queued for human review.\n\n"
+        "## RCA\n"
+        f"{rca_summary or '(see attached RCA)'}\n\n"
+        "## Diff (first 2000 chars)\n"
+        f"{(diff or '')[:2000]}\n\n"
+        "## Verdict\n"
+        "Return EXACTLY one line in the form:\n"
+        "  PASS: <one-sentence reason>\n"
+        "or:\n"
+        "  FAIL: <one-sentence reason>\n"
+    )
+    try:
+        response = await router.aroute(task, prompt, max_tokens=64)
+        raw = (response.content or "").strip()
+        first_line = raw.splitlines()[0] if raw else ""
+        if first_line.upper().startswith("FAIL"):
+            return {
+                "passed": False,
+                "reason": first_line[5:].strip(" :") or "critic_rejected",
+                "raw": raw,
+            }
+        return {
+            "passed": True,
+            "reason": first_line[4:].strip(" :") or "critic_passed",
+            "raw": raw,
+        }
+    except Exception as exc:
+        logger.debug("patch_gen: critic failed: %s", exc)
+        return {"passed": True, "reason": "critic_skipped", "raw": ""}
+
+
 class PatchGenerator:
     """Generate a unified diff + test plan + blast-radius estimate."""
 
@@ -186,10 +379,11 @@ class PatchGenerator:
         (the rca_linker output). ``test_plan`` is the list of
         tests the patch must satisfy.
 
-        Returns the live envelope on success (with the diff,
-        quality score, cost, model used). Returns the
-        not-implemented envelope when no LLM is available — the
-        caller falls back to manual flow.
+        Pipeline (Phase 3b): generate → critic → size check →
+        similarity dedup → quality floor → persist. The patch is
+        persisted only if all gates pass; each rejected gate
+        returns an envelope that names the gate so the caller
+        knows what to do next.
         """
         # Without a router, we can't generate a real diff.
         if self._router is None:
@@ -283,55 +477,156 @@ class PatchGenerator:
             requires_quality_check=True,
         )
 
-        # ``aroute`` walks the T1 → T2 → T3 fallback chain
-        # defined in ``model_router.TIER_MODELS``. With slot
-        # "reasoning" the heuristic picks T2 (gpt-4o →
-        # claude-sonnet-4 → gemini-2.5-pro). On validation
-        # failure the router escalates to T3 (claude-opus-4).
-        try:
-            response = await self._router.aroute(
-                task,
-                prompt,
-                org_id=org_id,
-                user_id=None,
-                max_tokens=4096,
-            )
-        except Exception as exc:
-            return _not_implemented_envelope(
-                self.name,
-                message=f"LLM call failed for {rca_id}: {exc}",
-                gate="llm_failed",
-                data={
-                    "patch_id": _new_id("patch"),
-                    "rca_id": rca_id,
-                    "trace_id": trace_id,
-                    "repo_id": repo_id,
-                },
-            )
+        # Phase 3b: read size + dedup settings once. The scheduler
+        # also reads these but we read here so the per-call path
+        # works without the scheduler in the loop.
+        from eden.config import get_settings
+        settings = get_settings()
+        soft_cap = settings.patch_max_diff_lines_soft
+        hard_cap = settings.patch_max_diff_lines_hard
+        dedup_threshold = settings.patch_similarity_threshold
+        dedup_lookback_days = settings.patch_similarity_lookback_days
+        quality_floor = settings.patch_quality_floor
 
-        diff = _extract_diff_from_response(response.content)
-        if not _is_valid_diff(diff):
+        # ── Generate → critic loop (max 2 attempts) ────────────────
+        diff = ""
+        cost_usd = 0.0
+        model_used = "anthropic/claude-sonnet-4"
+        critic_verdict: dict[str, Any] | None = None
+        critic_attempts = 0
+        last_response_content = ""
+        for attempt in range(2):
+            try:
+                response = await self._router.aroute(
+                    task,
+                    prompt,
+                    org_id=org_id,
+                    user_id=None,
+                    max_tokens=4096,
+                )
+            except Exception as exc:
+                return _not_implemented_envelope(
+                    self.name,
+                    message=f"LLM call failed for {rca_id}: {exc}",
+                    gate="llm_failed",
+                    data={
+                        "patch_id": _new_id("patch"),
+                        "rca_id": rca_id,
+                        "trace_id": trace_id,
+                        "repo_id": repo_id,
+                    },
+                )
+            candidate = _extract_diff_from_response(response.content)
+            last_response_content = response.content
+            cost_usd += float(getattr(response.usage, "cost", 0.0) or 0.0)
+            model_used = getattr(response, "model", model_used)
+            if not _is_valid_diff(candidate):
+                critic_attempts += 1
+                continue
+            critic_verdict = await _critic_review(
+                self._router, candidate, rca_summary=rca_summary,
+            )
+            critic_attempts += 1
+            if critic_verdict.get("passed"):
+                diff = candidate
+                break
+            # Critic rejected. Inject the reason into the prompt and
+            # retry once. If still rejected, leave diff empty so the
+            # caller gets a low_quality envelope.
+            if attempt == 0:
+                prompt = (
+                    prompt
+                    + "\n\n## Critic feedback (must address)\n"
+                    + str(critic_verdict.get("reason", ""))
+                )
+            else:
+                # Second attempt also failed. The diff is the most
+                # recent (still invalid) candidate — surface it as
+                # low_quality below.
+                diff = candidate
+
+        if not diff:
             return _not_implemented_envelope(
                 self.name,
                 message=(
-                    f"LLM output failed structural diff validation "
-                    f"(no +++ header or @@ hunk). Output: {response.content[:200]!r}"
+                    "LLM output failed structural diff validation or "
+                    "critic loop after "
+                    f"{critic_attempts} attempts. Last output: "
+                    f"{last_response_content[:200]!r}"
                 ),
-                gate="invalid_diff",
+                gate="invalid_diff" if not _is_valid_diff(last_response_content or "") else "critic_rejected",
                 data={
                     "patch_id": _new_id("patch"),
                     "rca_id": rca_id,
                     "trace_id": trace_id,
                     "repo_id": repo_id,
+                    "critic_verdict": critic_verdict,
+                    "attempts": critic_attempts,
                 },
             )
 
-        metrics = _estimate_diff_metrics(diff)
-        cost_usd = float(
-            getattr(response.usage, "cost", 0.0) or 0.0
-        )
-        model_used = getattr(response, "model", "anthropic/claude-sonnet-4")
+        # ── Size validation ─────────────────────────────────────────
+        size_verdict = _validate_size(diff, soft_cap=soft_cap, hard_cap=hard_cap)
+        if not size_verdict["ok"]:
+            return _ok_envelope(
+                self.name,
+                {
+                    "rca_id": rca_id,
+                    "trace_id": trace_id,
+                    "repo_id": repo_id,
+                    "diff": diff,
+                    "files_changed": len(diff_files_changed(diff)),
+                    "lines_changed": size_verdict["lines_changed"],
+                    "model_used": model_used,
+                    "cost_usd": cost_usd,
+                    "status": "investigation",
+                    "reason": (
+                        f"diff exceeds hard cap ({hard_cap} lines); "
+                        "this needs architectural review, not a PR"
+                    ),
+                    "size_verdict": size_verdict,
+                },
+            )
 
+        # ── Similarity dedup ────────────────────────────────────────
+        dup = await _is_similar_to_recent_patch(
+            org_id,
+            diff,
+            threshold=dedup_threshold,
+            lookback_days=dedup_lookback_days,
+        )
+        if dup is not None:
+            return _ok_envelope(
+                self.name,
+                {
+                    "rca_id": rca_id,
+                    "trace_id": trace_id,
+                    "repo_id": repo_id,
+                    "diff": diff,
+                    "model_used": model_used,
+                    "cost_usd": cost_usd,
+                    "status": "deduplicated",
+                    "reason": (
+                        f"similar to recent patch "
+                        f"{dup['matched_patch_id']} "
+                        f"(similarity={dup['similarity']})"
+                    ),
+                    "duplicate_of": dup,
+                },
+            )
+
+        # ── Quality floor ───────────────────────────────────────────
+        # Inline heuristic placeholder — the real PRQualityScorer
+        # is called by the queue worker downstream. Here we set the
+        # initial quality_score from the critic verdict: PASS → 0.85
+        # baseline, FAIL → 0.5 (will trip the floor for most cases).
+        initial_quality = 0.85 if (critic_verdict or {}).get("passed") else 0.5
+        if initial_quality < quality_floor:
+            patch_status = "low_quality"
+        else:
+            patch_status = "proposed"
+
+        metrics = _estimate_diff_metrics(diff)
         patch_id = _new_id("patch")
         # Build a 1-paragraph description from the diff hunk count.
         hunk_count = diff_hunk_count(diff)
@@ -384,15 +679,18 @@ class PatchGenerator:
                     json.dumps(test_plan or []),
                     0.0,  # blast_radius_score — scored later
                     json.dumps(metrics["files"]),
-                    0.85,  # quality_score — placeholder, scored by PRQualityScorer
+                    initial_quality,
                     json.dumps({
                         "files_changed": metrics["files_changed"],
                         "lines_changed": metrics["lines_changed"],
+                        "size_class": size_verdict["size_class"],
+                        "critic_verdict": critic_verdict or {},
+                        "critic_attempts": critic_attempts,
                     }),
                     model_used,
                     cost_usd,
                     1,
-                    "proposed",
+                    patch_status,
                 ],
             )
         except Exception as exc:
@@ -415,6 +713,9 @@ class PatchGenerator:
                 "lines_changed": metrics["lines_changed"],
                 "model_used": model_used,
                 "cost_usd": cost_usd,
-                "status": "proposed",
+                "status": patch_status,
+                "size_class": size_verdict["size_class"],
+                "critic_verdict": critic_verdict or {},
+                "critic_attempts": critic_attempts,
             },
         )

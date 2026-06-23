@@ -356,4 +356,30 @@ CREATE TABLE IF NOT EXISTS pr_patterns (
 );
 CREATE INDEX IF NOT EXISTS idx_pr_patterns_org ON pr_patterns (org_id, created_at DESC);
 
+-- 21. pr_rejection_memory (Phase 3b, 2026-06-23) — not-now memory.
+-- When a human reviews a proposed_patch and rejects it (wontfix /
+-- outdated / user_fixed), the rejection is persisted here with a TTL
+-- so the Cat 23 scheduler doesn't regenerate the same patch during
+-- the cooldown window. Different rejection types have different TTLs:
+-- wontfix = 30d (the codebase intentionally doesn't want this),
+-- outdated = 30d (the upstream issue is no longer relevant),
+-- user_fixed = 90d (the user already merged their own fix, don't
+-- re-suggest). The scheduler reads this table before generating a
+-- new patch on the same (file_path, title_hash) pair.
+CREATE TABLE IF NOT EXISTS pr_rejection_memory (
+    id                       VARCHAR(64) PRIMARY KEY,
+    org_id                   VARCHAR(128) NOT NULL,
+    file_path                TEXT NOT NULL,
+    signal_type              VARCHAR(32) NOT NULL,
+    title_hash               VARCHAR(64) NOT NULL,
+    rejection_type           VARCHAR(32) NOT NULL,
+    rejected_by_user_id      VARCHAR(128),
+    reason                   TEXT NOT NULL DEFAULT '',
+    expires_at               TIMESTAMPTZ NOT NULL,
+    created_at               TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_pr_rejection_memory_org ON pr_rejection_memory (org_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_pr_rejection_memory_active ON pr_rejection_memory (org_id, file_path, title_hash) WHERE expires_at > NOW();
+CREATE INDEX IF NOT EXISTS idx_pr_rejection_memory_expires ON pr_rejection_memory (expires_at);
+
 COMMIT;
