@@ -24,6 +24,7 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { usePathname } from "next/navigation";
 import {
   MessageSquare,
   Plus,
@@ -486,18 +487,29 @@ export function ChatSidebar() {
   }, [activeSessionId, input, orgId, streaming, toast]);
 
   const hasOrg = !!orgId;
+  const pathname = usePathname();
+  // Hide the floating chat toggle on the onboarding wizard —
+  // it's a z-50 fixed button in the bottom-right that overlaps the
+  // wizard's primary CTAs ("Get started", "Continue", "Create
+  // org"), and clicking those CTAs was being absorbed by the chat
+  // toggle. The user reported "clicks don't do anything on
+  // onboarding" — this was the cause. The chat toggle returns
+  // after the user finishes onboarding and has an active org.
+  const hideChatOnRoute =
+    pathname === "/onboarding" || pathname.startsWith("/onboarding/");
 
   // ── Render ────────────────────────────────────────────────────────
   return (
     <>
-      {/* Floating toggle button (always visible, even when collapsed).
-          z-50 lifts it above the mobile sidebar overlay (z-40) and
-          the command palette wrapper (when mounted), so the click
-          never lands on a sibling overlay. When ``open`` is true we
-          still nudge it left so it sits just outside the chat
-          panel; on viewports narrower than 480px the chat panel
-          itself covers the toggle area, so we hide it entirely (the
-          chat panel has its own close button). */}
+      {!hideChatOnRoute && (
+      // Floating toggle button (always visible, even when collapsed).
+      //   z-50 lifts it above the mobile sidebar overlay (z-40) and
+      //   the command palette wrapper (when mounted), so the click
+      //   never lands on a sibling overlay. When ``open`` is true we
+      //   still nudge it left so it sits just outside the chat
+      //   panel; on viewports narrower than 480px the chat panel
+      //   itself covers the toggle area, so we hide it entirely (the
+      //   chat panel has its own close button).
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
@@ -511,6 +523,7 @@ export function ChatSidebar() {
       >
         {open ? <PanelRightClose className="h-5 w-5" /> : <MessageSquare className="h-5 w-5" />}
       </button>
+      )}
 
       {open && hasOrg && (
         <aside

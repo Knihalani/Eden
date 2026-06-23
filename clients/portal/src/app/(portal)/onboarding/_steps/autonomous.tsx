@@ -172,7 +172,7 @@ export default function OnboardingAutonomousPage() {
 
       <div className="flex items-center justify-between pt-2">
         <Link
-          href="/onboarding/welcome"
+          href="/onboarding/org"
           className="text-sm text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
         >
           &larr; Back

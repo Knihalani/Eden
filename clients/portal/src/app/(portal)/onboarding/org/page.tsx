@@ -134,14 +134,14 @@ export default function OnboardingOrgPage() {
       await refreshUser();
       await refreshOrgs();
       await onboardingApi.patchState(res.org_id, {
-        step: "install_sdk",
+        step: "autonomous",
         org_setup_choice: "created",
       });
       if (typeof window !== "undefined") {
         window.localStorage.removeItem("eden:onboarding:skipRepo");
       }
       toast.success(`Created ${res.name} — you're the owner`);
-      router.push("/onboarding/install");
+      router.push("/onboarding/autonomous");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to create org");
     } finally {
@@ -169,7 +169,7 @@ export default function OnboardingOrgPage() {
       await refreshUser();
       await refreshOrgs();
       await onboardingApi.patchState(inv.org_id, {
-        step: "install_sdk",
+        step: "autonomous",
         org_setup_choice: "joined",
       });
       // Joined users without integrations:write skip the repo step.
@@ -182,7 +182,7 @@ export default function OnboardingOrgPage() {
         }
       }
       toast.success(`Joined ${inv.org_name} as ${inv.role}`);
-      router.push("/onboarding/install");
+      router.push("/onboarding/autonomous");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to accept invite");
     } finally {
@@ -217,7 +217,7 @@ export default function OnboardingOrgPage() {
       await refreshUser();
       await refreshOrgs();
       await onboardingApi.patchState(res.org_id, {
-        step: "install_sdk",
+        step: "autonomous",
         org_setup_choice: "joined",
       });
       const canIntegrate = res.role === "owner" || res.role === "admin";
@@ -229,7 +229,7 @@ export default function OnboardingOrgPage() {
         }
       }
       toast.success(`Joined ${res.org_name} as ${res.role}`);
-      router.push("/onboarding/install");
+      router.push("/onboarding/autonomous");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Invalid or expired invite");
     } finally {

@@ -33,7 +33,6 @@ import {
   Terminal,
   Wand2,
 } from "lucide-react";
-import type { WizardContext } from "@/components/ui/wizard";
 
 interface TourCard {
   href: string;
@@ -116,7 +115,7 @@ const CARDS: TourCard[] = [
   },
 ];
 
-export function TourStep(_ctx: WizardContext) {
+export function TourStep() {
   return (
     <div className="space-y-6">
       <div>

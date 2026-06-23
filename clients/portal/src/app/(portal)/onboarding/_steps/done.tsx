@@ -11,9 +11,8 @@ import Link from "next/link";
 import { ArrowRight, CheckCircle2, Eye, GitBranch, Settings } from "lucide-react";
 import { useOrg } from "@/hooks/use-org";
 import { onboardingApi } from "@/lib/api";
-import type { WizardContext } from "@/components/ui/wizard";
 
-export function DoneStep(_ctx: WizardContext) {
+export function DoneStep() {
   const { currentOrg } = useOrg();
 
   useEffect(() => {
