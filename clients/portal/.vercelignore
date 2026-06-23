@@ -1,0 +1,22 @@
+# Build output (Vercel builds fresh)
+.next
+out
+build
+dist
+
+# Dependencies
+node_modules
+
+# Env / secrets
+.env*
+!.env.example
+
+# TypeScript / cache
+*.tsbuildinfo
+.eslintcache
+
+# Misc
+.DS_Store
+*.log
+coverage
+.vercel
