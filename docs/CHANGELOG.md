@@ -4,6 +4,19 @@ All notable changes to the Eden docs site (docs.edenobservability.com).
 
 ## [Unreleased]
 
+### Product — 2026-06-23 (Production-Ready Beta)
+- **Backend**: mounted previously-defined `webhooks.router` (outbound CRUD) and `agent_pr_suggestions.router` (Cat 23 UI surface); registered `QuotaEnforcementMiddleware` before `TenantRateLimitMiddleware` (§6.3 cost guardrails now active)
+- **Portal chat pipeline**: fixed `chat/route.ts` URL bug (was using `NEXT_PUBLIC_API_URL` = relative `/api/proxy`; now `API_INTERNAL_URL` for server-side Node fetch); SSE error handler now calls `controller.error(err)` + explicit `event: error` frame (was leaving client in stuck "Streaming…" state)
+- **Portal layout**: `100dvh` instead of `100vh` (mobile Safari address-bar jump), `min-h-full` standardized across pages, z-50 floating-overlay guard extended to all wizard routes, 8 missing `loading.tsx` files added
+- **Portal polish**: mobile sidebar backdrop `<button>` → `<div role="presentation" aria-hidden>` (no longer keyboard-focusable but invisible to AT); contrast fixes on replay/sidebar/alerts; hardcoded `border-zinc-500/30` → design token; 3 missing `aria-label`s; removed unused `next-themes` dep
+- **2FA setup dialog**: profile page now imports real wizard (was importing STUB); STUB file deleted
+- **Closed-loop hook bus** (per upgradespec §E): new `src/eden/llmops/hooks_bus.py` (HookBus.emit with 5-min dedup + severity precedence + cascade dedup) + `hook_proposal.py` (PromotionProposal BaseModel per §E.4) + migration `051_hook_events.py` (per §E.5). `_record_action` now routes through HookBus. 5 new hook classes added: BudgetHook, IncidentHook, UserSatisfactionHook, DriftAlertHook, RoiHook
+- **Deploy**: Clerk webhook signing secret updated in NF staging (`whsec_nPSBY+mvpTcCBzIMacT4OfH79lLIdDOS`); eden-api service deployed (last build SUCCESS); 4 Vercel env vars confirmed set; `.deploy-sha` capture + rollback procedure documented
+
+### Docs
+- `README.md`: dropped Helicone/Langfuse comparison copy; replaced placeholder URLs with env-var references; added Deploy section linking to `docs/deploy/cutover-checklist.md`
+- `docs/spec/upgradespec-v2.md` published (delta-only status snapshot); original `upgradespec.md` archived at `docs/spec/upgradespec-original-2026-06.md`
+
 ### Added
 - 404 page (`/404`) with terminal-style design and helpful navigation
 - Last-updated timestamp + author on every page (`showLastUpdateTime: true`)

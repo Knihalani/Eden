@@ -1,6 +1,6 @@
 # Eden
 
-**Eden is the observability + improvement platform for AI agents and LLM apps.** Comparable to Helicone or Langfuse for the observability layer, with a closed-loop improvement layer they don't have. Delivered as two pillars:
+**Eden is the observability + improvement platform for AI agents and LLM apps.** Delivered as two pillars:
 
 1. **Observability** — drop-in SDKs (Python, TypeScript) and an **OpenAI-compatible HTTP gateway** that proxies every request to whichever upstream model you configure (OpenAI, Anthropic, Bedrock, self-hosted).
 2. **Web platform** — org management, trace/eval visualisations, data export, and a persistent AI assistant sidebar in every view.
@@ -20,7 +20,7 @@ export EDEN_API_KEY="..."
 from openai import OpenAI
 
 client = OpenAI(
-    base_url="https://gateway.eden.example/v1",  # <-- the only line that changes
+    base_url=os.environ["EDEN_BASE_URL"],  # <-- the only line that changes
     api_key=os.environ["EDEN_API_KEY"],
 )
 
@@ -131,11 +131,20 @@ eden/
 │   │   └── regression/          # Regression / exploit probes
 │   ├── storage/                 # PostgreSQL + Qdrant clients
 │   └── llm/                     # OpenRouter client
-├── web/portal/                  # Next.js web platform (Pillar 2)
-├── migrations/                  # Database schema
-├── docker/                      # docker-compose for infrastructure
-└── tests/
+├── web/portal/                  # Next.js web platform (Pillar 2) → clients/portal/
+├── migrations/                  # Raw-SQL migrations (legacy parallel set)
+├── src/eden/db_migrations/      # Alembic migrations (current; head = 051)
+├── docs/
+│   ├── deploy/                  # NF + Vercel deploy runbooks (cutover-checklist.md)
+│   └── spec/                    # upgradespec-v2.md + archived original
+└── tests/                       # 815+ tests across unit + integration + intelligence
 ```
+
+## Deploy
+
+- **Backend** (FastAPI on Northflank): see [`docs/deploy/cutover-checklist.md`](docs/deploy/cutover-checklist.md) and [`docs/deploy/northflank-free-tier.md`](docs/deploy/northflank-free-tier.md). Manifest: [`northflank.yml`](northflank.yml).
+- **Portal** (Next.js on Vercel): `cd clients/portal && vercel --prod`. Env vars: `NEXT_PUBLIC_API_URL=/api/proxy`, `API_INTERNAL_URL=<NF backend URL>`, Clerk keys.
+- **Spec status**: see [`docs/spec/upgradespec-v2.md`](docs/spec/upgradespec-v2.md) for what shipped vs what's deferred from the original 22-week spec.
 
 ## Configuration
 
