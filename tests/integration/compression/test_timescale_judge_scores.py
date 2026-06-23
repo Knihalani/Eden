@@ -33,6 +33,15 @@ async def _try_get_pool():
 
 @pytest.fixture(scope="module")
 def event_loop():
+    """Module-scoped event loop so the module-scoped pg_client
+    fixture and the per-test async tests share the same loop.
+
+    Pre-existing pytest-asyncio bug pattern: pytest-asyncio's
+    default event_loop is function-scoped, which means a
+    module-scoped async fixture binds to a loop that's already
+    closed by the time the first test runs. Raised
+    ``attached to a different loop`` on CI.
+    """
     loop = asyncio.new_event_loop()
     yield loop
     loop.close()
