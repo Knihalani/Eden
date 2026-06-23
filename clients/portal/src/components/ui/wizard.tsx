@@ -197,12 +197,12 @@ export function Wizard({
     // content, and the user had to scroll past it to see the
     // primary CTA.
     <div className="flex min-h-full flex-col bg-[var(--bg-primary)] text-[var(--text-primary)]">
-      {/* Top bar */}
-      <div className="border-b border-[var(--border-default)] bg-[var(--bg-secondary)] px-6 py-3">
-        <div className="mx-auto flex max-w-3xl items-center justify-between">
+      {/* Top bar — compact: single line, h-12 */}
+      <div className="flex h-12 items-center border-b border-[var(--border-default)] bg-[var(--bg-secondary)] px-6">
+        <div className="mx-auto flex w-full max-w-3xl items-center justify-between">
           <div className="flex items-center gap-3">
             {brand?.name && (
-              <span className="font-semibold tracking-tight">{brand.name}</span>
+              <span className="text-sm font-semibold tracking-tight">{brand.name}</span>
             )}
             {brand?.tagline && (
               <span className="text-xs text-[var(--text-muted)]">— {brand.tagline}</span>
@@ -224,55 +224,29 @@ export function Wizard({
         </div>
       </div>
 
-      {/* Progress strip */}
-      <div className="border-b border-[var(--border-default)] bg-[var(--bg-secondary)] px-6 py-2">
+      {/* Progress strip — compact: just a thin progress bar + step
+          counter. The previous version showed every step label as a
+          chevron list (3+rem of vertical space), which combined with
+          the top bar + bottom nav pushed the welcome page past the
+          viewport on a 1080p screen ("expands too far down"). The
+          label list is available via the bottom-nav aria-label if a
+          screen reader user needs to know their position; sighted
+          users see the bar fill as they advance. */}
+      <div className="border-b border-[var(--border-default)] bg-[var(--bg-secondary)] px-6 py-1.5">
         <div className="mx-auto max-w-3xl">
           {progressBar ?? (
             <>
-              <div className="mb-2 flex items-center justify-between text-xs text-[var(--text-muted)]">
-                <span>Step {Math.max(activeIdx + 1, 1)} of {visibleSteps.length}</span>
-                <span>{activeStep?.label ?? ""}</span>
+              <div className="mb-1 flex items-center justify-between text-[11px] text-[var(--text-muted)]">
+                <span>
+                  Step {Math.max(activeIdx + 1, 1)} of {visibleSteps.length}
+                  {activeStep?.label ? ` · ${activeStep.label}` : ""}
+                </span>
               </div>
-              <div className="h-1 w-full overflow-hidden rounded-full bg-[var(--bg-tertiary)]">
+              <div className="h-0.5 w-full overflow-hidden rounded-full bg-[var(--bg-tertiary)]">
                 <div
                   className="h-full bg-[var(--accent)] transition-all duration-300"
                   style={{ width: `${progress}%` }}
                 />
-              </div>
-              <div className="mt-3 flex items-center gap-1 overflow-x-auto">
-                {visibleSteps.map((s, i) => {
-                  const done = i < activeIdx || pathname === completeSlug;
-                  const active = i === activeIdx;
-                  return (
-                    <div key={s.slug} className="flex items-center gap-1 text-xs">
-                      <span
-                        className={cn(
-                          "flex h-5 w-5 items-center justify-center rounded-full border",
-                          done
-                            ? "border-[var(--accent)] bg-[var(--accent)] text-[var(--bg-primary)]"
-                            : active
-                            ? "border-[var(--accent)] text-[var(--accent)]"
-                            : "border-[var(--border-default)] text-[var(--text-muted)]"
-                        )}
-                      >
-                        {done ? <Check className="h-3 w-3" /> : i + 1}
-                      </span>
-                      <span
-                        className={cn(
-                          "whitespace-nowrap",
-                          active
-                            ? "font-medium text-[var(--text-primary)]"
-                            : "text-[var(--text-muted)]"
-                        )}
-                      >
-                        {s.label}
-                      </span>
-                      {i < visibleSteps.length - 1 && (
-                        <ArrowRight className="mx-1 h-3 w-3 text-[var(--text-muted)]" />
-                      )}
-                    </div>
-                  );
-                })}
               </div>
             </>
           )}
@@ -288,13 +262,13 @@ export function Wizard({
           content only — the onboarding page files already import
           the step component, so the URL is the single source of
           truth. */}
-      <div className="mx-auto w-full max-w-3xl flex-1 px-6 py-8 sm:py-10">{children}</div>
+      <div className="mx-auto w-full max-w-3xl flex-1 px-6 py-6 sm:py-8">{children}</div>
 
       {/* Bottom navigation (only on non-complete steps). Sits below
           the body (no -mt-4) so it never overlaps the page content. */}
       {!isComplete && activeStep && (
-        <div className="mx-auto w-full max-w-3xl px-6 pb-10">
-          <div className="flex items-center justify-between border-t border-[var(--border-default)] pt-6">
+        <div className="mx-auto w-full max-w-3xl px-6 pb-6">
+          <div className="flex items-center justify-between border-t border-[var(--border-default)] pt-4">
             <button
               onClick={onBack}
               disabled={activeIdx === 0}
