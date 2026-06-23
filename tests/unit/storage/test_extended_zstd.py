@@ -134,9 +134,7 @@ class TestBackfillScriptTargets:
         SQL DDL is an f-string (``{col}`` interpolated at runtime)
         so we can't regex against the rendered SQL.
         """
-        m038 = Path(
-            "/Users/kaiavnihalani/Downloads/Eden/src/eden/db_migrations/versions/038_zstd_extended_payloads.py"
-        )
+        m038 = _MIGRATIONS_DIR / "038_zstd_extended_payloads.py"
         text = m038.read_text()
         # Extract the new_columns list literal.
         m = re.search(r"new_columns\s*=\s*\[(.*?)\]", text, re.DOTALL)
@@ -161,6 +159,13 @@ class TestBackfillScriptTargets:
             )
 
 
+# Audit 2026-06-23: original hardcoded macOS path failed on CI.
+_MIGRATIONS_DIR = (
+    Path(__file__).resolve().parents[3]
+    / "src" / "eden" / "db_migrations" / "versions"
+)
+
+
 class TestMigrationSQLSyntax:
     """Light syntax checks on migration 038/039 — no DB connection."""
 
@@ -168,12 +173,10 @@ class TestMigrationSQLSyntax:
         """Load a migration module by filename (the alembic versions
         dir doesn't auto-import every file)."""
         import importlib.util
+
         from pathlib import Path
 
-        path = Path(
-            "/Users/kaiavnihalani/Downloads/Eden/src/eden/db_migrations/versions/"
-            + filename
-        )
+        path = _MIGRATIONS_DIR / filename
         spec = importlib.util.spec_from_file_location(filename[:-3], path)
         mod = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(mod)
@@ -207,8 +210,9 @@ class TestMigrationSQLSyntax:
 
     def test_drop_sql_covers_all_six_columns(self):
         """The drop SQL must reference all 6 columns."""
-        sql_path = Path(
-            "/Users/kaiavnihalani/Downloads/Eden/scripts/drop_extended_original_columns.sql"
+        sql_path = (
+            Path(__file__).resolve().parents[3]
+            / "scripts" / "drop_extended_original_columns.sql"
         )
         sql = sql_path.read_text()
         for col in (
@@ -230,8 +234,9 @@ class TestTelemetryCollectorWiring:
 
     @pytest.fixture
     def write_source(self):
-        return Path(
-            "/Users/kaiavnihalani/Downloads/Eden/src/eden/observability/telemetry_collector.py"
+        return (
+            Path(__file__).resolve().parents[3]
+            / "src" / "eden" / "observability" / "telemetry_collector.py"
         ).read_text()
 
     def test_write_path_compresses_all_six(self, write_source):

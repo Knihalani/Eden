@@ -26,13 +26,17 @@ from eden.services.data_platform import (
 # ── Migration 042 syntax ─────────────────────────────────────────────
 
 
+# Audit 2026-06-23: original hardcoded macOS path failed on CI.
+_MIGRATIONS_DIR = (
+    Path(__file__).resolve().parents[4]
+    / "src" / "eden" / "db_migrations" / "versions"
+)
+
+
 class TestMigration042Syntax:
     @staticmethod
     def _load_migration():
-        path = Path(
-            "/Users/kaiavnihalani/Downloads/Eden/src/eden/db_migrations/versions/"
-            "042_usage_events_partitions.py"
-        )
+        path = _MIGRATIONS_DIR / "042_usage_events_partitions.py"
         spec = importlib.util.spec_from_file_location(
             "usage_events_partitions", path
         )
@@ -49,18 +53,12 @@ class TestMigration042Syntax:
         """The migration converts usage_events to a TimescaleDB
         hypertable partitioned by ``created_at``. Mirrors the
         pattern from migration 034 (telemetry_events)."""
-        body = Path(
-            "/Users/kaiavnihalani/Downloads/Eden/src/eden/db_migrations/versions/"
-            "042_usage_events_partitions.py"
-        ).read_text()
+        body = (_MIGRATIONS_DIR / "042_usage_events_partitions.py").read_text()
         assert "create_hypertable" in body
         assert "'created_at'" in body
 
     def test_monthly_chunks(self):
-        body = Path(
-            "/Users/kaiavnihalani/Downloads/Eden/src/eden/db_migrations/versions/"
-            "042_usage_events_partitions.py"
-        ).read_text()
+        body = (_MIGRATIONS_DIR / "042_usage_events_partitions.py").read_text()
         # Monthly chunks match the original Phase B5 plan.
         assert "1 month" in body
 
@@ -68,10 +66,7 @@ class TestMigration042Syntax:
         """The migration drops the dead weight (misplaced trigger,
         RLS policy) that blocked the original native-PG
         partition approach."""
-        body = Path(
-            "/Users/kaiavnihalani/Downloads/Eden/src/eden/db_migrations/versions/"
-            "042_usage_events_partitions.py"
-        ).read_text()
+        body = (_MIGRATIONS_DIR / "042_usage_events_partitions.py").read_text()
         assert "usage_events_updated_at" in body
         assert "tenant_isolation_usage_events" in body
 

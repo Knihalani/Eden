@@ -31,14 +31,19 @@ def test_default_cold_age_is_90_days():
 
 # ── Migration 040 syntax ─────────────────────────────────────────────
 
+# Audit 2026-06-23: original hardcoded macOS path
+# (``/Users/kaiavnihalani/Downloads/Eden/...``) failed on the CI
+# runner (Ubuntu). Resolve relative to this test file.
+_MIGRATIONS_DIR = (
+    Path(__file__).resolve().parents[4]
+    / "src" / "eden" / "db_migrations" / "versions"
+)
+
 
 class TestMigration040Syntax:
     @staticmethod
     def _load_migration():
-        path = Path(
-            "/Users/kaiavnihalani/Downloads/Eden/src/eden/db_migrations/versions/"
-            "040_trace_archive_index.py"
-        )
+        path = _MIGRATIONS_DIR / "040_trace_archive_index.py"
         spec = importlib.util.spec_from_file_location(
             "trace_archive_index", path
         )
@@ -53,11 +58,7 @@ class TestMigration040Syntax:
 
     def test_index_columns(self):
         """The trace_archive_index table has the 5 expected columns."""
-        path = Path(
-            "/Users/kaiavnihalani/Downloads/Eden/src/eden/db_migrations/versions/"
-            "040_trace_archive_index.py"
-        )
-        text = path.read_text()
+        text = (_MIGRATIONS_DIR / "040_trace_archive_index.py").read_text()
         for col in (
             "trace_id",
             "org_id",
@@ -68,11 +69,7 @@ class TestMigration040Syntax:
             assert col in text, f"trace_archive_index missing column {col}"
 
     def test_indexes_created(self):
-        path = Path(
-            "/Users/kaiavnihalani/Downloads/Eden/src/eden/db_migrations/versions/"
-            "040_trace_archive_index.py"
-        )
-        text = path.read_text()
+        text = (_MIGRATIONS_DIR / "040_trace_archive_index.py").read_text()
         assert "idx_trace_archive_org_archived" in text
         assert "idx_trace_archive_archived_brin" in text
 
