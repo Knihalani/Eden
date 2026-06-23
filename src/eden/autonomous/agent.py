@@ -3,9 +3,11 @@
 The headline surface of the new portal: one agent, accessible from
 any page via Cmd-J, capable of answering questions about traces,
 incidents, costs, judges, drift, satisfaction, and guardrails via
-12 registered tools. Uses the ModelRouter T3 tier
-(``claude-opus-4``, ``gpt-4.5``, ``deepseek-v4`` — the "super
-super capable" tier per the user's spec).
+14 registered tools. Uses the ModelRouter T3 tier
+(``minimax/minimax-m3`` primary, with ``deepseek/deepseek-v4-pro``
+and ``xiaomi/mimo-v2.5-pro`` fallback — per
+``src/eden/optimization/model_router.py``; this is the only model
+chain Eden uses. Claude / GPT models are NOT in the stack).
 
 Architecture
 ─────────────
@@ -17,9 +19,9 @@ Architecture
   │     ▼                                                           │
   │  ChatService                                                     │
   │     ├─ System prompt + page context + tool list                 │
-  │     ├─ OpenRouterClient (T3 tier)                               │
+  │     ├─ OpenRouterClient (T3 tier: minimax-m3)                   │
   │     ├─ ReAct loop (max 10 turns)                                │
-  │     ├─ Tool registry → 12 tools                                 │
+  │     ├─ Tool registry → 14 tools                                 │
   │     ├─ Chart spec emitter (line/bar/pie/scatter/                │
   │     │                     table/heatmap/sankey)                │
   │     └─ Citation emitter (span / trace / incident / agent)      │
@@ -45,6 +47,9 @@ Tools (see ``_TOOL_SPECS`` below for full JSON schemas):
    11. ``get_outcomes``         — Cat 11 outcome / ROI rollup
   Actions (admin-gated)
    12. ``mark_incident_resolved`` — Cat 2 status mutation
+  Cat 23 (PR creation)
+   13. ``create_pr_suggestion`` — trigger → diff proposal (read-only)
+   14. ``open_pr_suggestion``   — materialise suggestion as PR (admin)
 
 Chart specs are emitted as structured JSON the portal renders with
 Recharts. The agent picks the chart type that best conveys the
@@ -329,6 +334,53 @@ _TOOL_SPECS: list[dict[str, Any]] = [
             "cluster_id": {"type": "string", "required": True},
             "note": {"type": "string", "required": False,
                       "description": "Resolution note for the audit log."},
+        },
+    },
+    {
+        "name": "create_pr_suggestion",
+        "summary": (
+            "Create a PR suggestion by analysing an observability trigger "
+            "(Cat 23). Returns the suggestion_id the human reviews before "
+            "the agent can call open_pr_suggestion to materialise it."
+        ),
+        "args": {
+            "trigger": {
+                "type": "string", "required": True,
+                "enum": ["rca_cluster", "drift_alert", "retrieval_gap", "judge_regression"],
+                "description": "The observability event kind driving the suggestion.",
+            },
+            "trigger_id": {
+                "type": "string", "required": True,
+                "description": "The source event id (cluster id, alert id, etc.).",
+            },
+            "description": {
+                "type": "string", "required": False,
+                "description": "Plain-English context for the agent — affected files, recent regressions, etc.",
+            },
+            "affected_files": {
+                "type": "array", "required": False,
+                "description": "List of file paths the suggestion should touch.",
+            },
+        },
+    },
+    {
+        "name": "open_pr_suggestion",
+        "summary": (
+            "Materialise a previously-created PR suggestion as a real GitHub PR. "
+            "ADMIN ONLY — this calls the PR provider and mutates the remote repo."
+        ),
+        "args": {
+            "suggestion_id": {
+                "type": "string", "required": True,
+                "description": "The suggestion_id returned by create_pr_suggestion.",
+            },
+            "pr_title": {"type": "string", "required": False},
+            "pr_body": {"type": "string", "required": False},
+            "branch": {"type": "string", "required": False,
+                        "description": "Override branch name (default: eden/auto-<id>)."},
+            "base": {"type": "string", "required": False, "default": "main"},
+            "labels": {"type": "array", "required": False},
+            "draft": {"type": "boolean", "required": False, "default": False},
         },
     },
 ]
@@ -803,6 +855,161 @@ async def _tool_mark_incident_resolved(tenant_id: str, args: dict[str, Any],
         return {"error": str(exc)}
 
 
+# ── Phase 3a (2026-06-23) — Cat 23 PR-suggestion tools ─────────────
+#
+# These bridge the agent to :class:`eden.agent.PRSuggester` so the
+# user can stay in the Cmd-J panel for the full create → review →
+# open-PR loop instead of dropping into a separate UI. The suggest
+# step is read-only + safe for any role; the open-PR step is gated
+# to admin because it mutates the remote repo via the configured
+# :class:`eden.providers.pr.PRProvider`.
+
+
+async def _tool_create_pr_suggestion(tenant_id: str, args: dict[str, Any]) -> dict[str, Any]:
+    """Read-only: build a PR suggestion from an observability trigger."""
+    try:
+        from eden.agent import PRSuggester
+    except Exception as exc:
+        return {"error": f"PRSuggester unavailable: {exc}"}
+
+    trigger = str(args.get("trigger") or "")
+    trigger_id = str(args.get("trigger_id") or "")
+    if not trigger or not trigger_id:
+        return {"error": "trigger and trigger_id are required"}
+    if trigger not in ("rca_cluster", "drift_alert", "retrieval_gap", "judge_regression"):
+        return {
+            "error": (
+                f"unknown trigger {trigger!r}; expected one of: "
+                "rca_cluster, drift_alert, retrieval_gap, judge_regression"
+            )
+        }
+
+    payload: dict[str, Any] = {}
+    if args.get("description"):
+        payload["description"] = args["description"]
+    if args.get("affected_files"):
+        payload["affected_files"] = list(args["affected_files"])
+
+    try:
+        suggester = PRSuggester()
+        suggestion = await suggester.suggest(
+            tenant_id,
+            trigger=trigger,
+            trigger_id=trigger_id,
+            trigger_payload=payload,
+        )
+    except Exception as exc:
+        return {"error": f"create_pr_suggestion failed: {exc}"}
+
+    return {
+        "suggestion_id": suggestion.id,
+        "status": suggestion.status,
+        "trigger": suggestion.trigger,
+        "pr_title": suggestion.pr_title,
+        "pr_body_excerpt": (suggestion.pr_body or "")[:500],
+        "files": [f.path for f in suggestion.files],
+        "blast_radius": suggestion.blast_radius,
+        "confidence": suggestion.confidence,
+        "created_at": (
+            suggestion.created_at.isoformat()
+            if hasattr(suggestion.created_at, "isoformat")
+            else str(suggestion.created_at)
+        ),
+        "next_step": (
+            "Review the suggestion in /pr-suggestions. When ready, "
+            "call open_pr_suggestion(suggestion_id=...) — admin only."
+        ),
+    }
+
+
+async def _tool_open_pr_suggestion(tenant_id: str, args: dict[str, Any],
+                                     *, user_role: str) -> dict[str, Any]:
+    """Destructive: materialise a suggestion as a real PR. Admin only."""
+    if user_role not in ("owner", "admin", "org_admin"):
+        return {"error": "permission_denied: open_pr_suggestion requires admin role"}
+
+    suggestion_id = str(args.get("suggestion_id") or "")
+    if not suggestion_id:
+        return {"error": "suggestion_id is required"}
+
+    try:
+        from eden.agent import PRSuggester
+        from eden.providers import (
+            PRCreateRequest,
+            FileEntry,
+            get_default_pr_provider,
+        )
+        from eden.providers.repo import FileEntry as _FileEntry  # alias for clarity
+    except Exception as exc:
+        return {"error": f"PR tooling unavailable: {exc}"}
+
+    try:
+        suggester = PRSuggester()
+        suggestion = await suggester.get_suggestion(tenant_id, suggestion_id)
+    except Exception as exc:
+        return {"error": f"get_suggestion failed: {exc}"}
+
+    if suggestion is None:
+        return {"error": f"suggestion {suggestion_id!r} not found"}
+    if suggestion.status not in ("pending", "regenerated"):
+        return {
+            "error": (
+                f"suggestion {suggestion_id!r} status is "
+                f"{suggestion.status!r}; only 'pending'/'regenerated' "
+                "suggestions can be opened"
+            )
+        }
+
+    try:
+        pr_provider = get_default_pr_provider()
+        pr_req = PRCreateRequest(
+            title=args.get("pr_title") or suggestion.pr_title,
+            body=args.get("pr_body") or suggestion.pr_body,
+            branch=args.get("branch") or f"eden/auto-{suggestion_id}",
+            base=args.get("base") or "main",
+            labels=list(args.get("labels") or []),
+            reviewers=[],
+            draft=bool(args.get("draft") or False),
+            files=[
+                FileEntry(path=f.path, size=f.size, content=f.content)
+                for f in suggestion.files
+            ],
+            commit_message=(
+                f"[Eden Agent] {suggestion.pr_title}\n\n"
+                f"Trigger: {suggestion.trigger} {suggestion.trigger_id}\n"
+                f"Suggestion: {suggestion.id}"
+            ),
+        )
+        pr_info = await pr_provider.create_pr(pr_req)
+    except NotImplementedError as exc:
+        return {
+            "error": (
+                f"PR provider not configured for this org: {exc}. "
+                "Set EDEN_PR_PROVIDER=local + EDEN_LOCAL_REPO_PATH, or "
+                "configure the GitHub App env vars."
+            )
+        }
+    except Exception as exc:
+        return {"error": f"open_pr failed: {exc}"}
+
+    try:
+        await suggester.mark_opened(tenant_id, suggestion_id, pr_info.number)
+    except Exception as exc:
+        # Marking is best-effort; the PR was created so don't fail the call.
+        logger.debug("mark_opened failed (PR still opened): %s", exc)
+
+    return {
+        "suggestion_id": suggestion_id,
+        "pr_number": pr_info.number,
+        "pr_title": pr_info.title,
+        "pr_url": pr_info.url,
+        "branch": pr_info.branch,
+        "base": pr_info.base,
+        "state": pr_info.state,
+        "provider": type(pr_provider).__name__,
+    }
+
+
 # ────────────────────────────────────────────────────────────────────
 # Tool dispatcher
 # ────────────────────────────────────────────────────────────────────
@@ -824,6 +1031,14 @@ _TOOL_REGISTRY: dict[str, dict[str, Any]] = {
     "get_outcomes": {"fn": _tool_get_outcomes, "requires_role": None},
     "mark_incident_resolved": {"fn": _tool_mark_incident_resolved,
                                 "requires_role": "admin"},
+    # Phase 3a (2026-06-23) — Cat 23 PR-suggestion tools. The agent
+    # can now create + open PR suggestions without leaving the Cmd-J
+    # panel. open_pr_suggestion is admin-gated because it mutates
+    # the remote repo via the configured PRProvider.
+    "create_pr_suggestion": {"fn": _tool_create_pr_suggestion,
+                               "requires_role": None},
+    "open_pr_suggestion": {"fn": _tool_open_pr_suggestion,
+                            "requires_role": "admin"},
 }
 
 

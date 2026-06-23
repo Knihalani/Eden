@@ -535,14 +535,26 @@ class SelfHealer:
         action_id: str,
         approved_by_user_id: str,
     ) -> dict[str, Any]:
-        """Approve a pending heal action and execute it.
+        """Approve a pending heal action — does NOT execute it.
 
-        Flips status ``pending_approval → approved`` and calls
-        :meth:`execute_heal` which captures the ``after_state``
-        and flips status to ``executed``. Fires
-        :class:`PromotionHook.on_drift_alert` on the state
-        transition so the portal surfaces the queue → approval
-        → executed timeline.
+        Phase 3a (2026-06-23): the old behaviour flipped status
+        ``pending_approval → approved`` and immediately called
+        :meth:`execute_heal` in the same request. That coupled the
+        "sign off on a destructive action" click to the destructive
+        action itself, with no human-in-the-loop window between
+        approve and execute. The Cat 14 docs have always said
+        the lifecycle is ``queue → approve → execute`` with
+        approve and execute as separate steps; this restores that.
+
+        New flow::
+
+            POST /heal/{id}/approve   →  status="approved"  (queued)
+            POST /heal/{id}/execute   →  status="executed"|"failed"
+
+        Fires :class:`PromotionHook.on_drift_alert` on the
+        ``pending_approval → approved`` transition so the portal
+        surfaces the queue → approval timeline; the execute step
+        fires its own hook.
         """
         before_state = await _load_self_heal_action(
             org_id, action_id,
@@ -566,7 +578,8 @@ class SelfHealer:
                 },
             )
 
-        # Flip to approved (audit trail).
+        # Flip to approved (audit trail). NO execute call — the
+        # operator must POST /heal/{id}/execute as a separate step.
         await _upsert_self_heal(
             org_id, action_id,
             action_type=before_state["action_type"],
@@ -575,32 +588,44 @@ class SelfHealer:
             after_state_json=None,
         )
 
-        # Execute the action (capture after_state).
-        result = await self.execute_heal(
-            org_id, action_id, before_state,
-            approved_by_user_id=approved_by_user_id,
-        )
-
-        # Fire the drift-alert hook so the portal surfaces the
-        # approve → execute timeline. Best-effort — never raises.
+        # Fire the drift-alert hook for the approve transition.
+        # Best-effort — never raises.
         try:
             from eden.llmops.promotion_hooks import PromotionHook
             await PromotionHook().on_drift_alert(
                 org_id=org_id,
-                drift_type="self_heal_executed",
+                drift_type="self_heal_approved",
                 severity="info",
                 context={
                     "action_id": action_id,
                     "action_type": before_state["action_type"],
                     "approved_by": approved_by_user_id,
                     "before_state": before_state.get("before_state"),
-                    "after_state": result.get("data", {}).get("after_state"),
+                    "next_step": (
+                        "POST /heal/{action_id}/execute to actually "
+                        "run the remediation."
+                    ),
                 },
             )
         except Exception as exc:
             logger.debug("self_healer: drift alert hook failed: %s", exc)
 
-        return result
+        return _ok_envelope(
+            self.name,
+            {
+                "action_id": action_id,
+                "action_type": before_state["action_type"],
+                "status": "approved",
+                "approved_by": approved_by_user_id,
+                "before_state": before_state.get("before_state"),
+                "after_state": None,
+                "message": (
+                    "self-heal action approved and queued for "
+                    "execution. POST /heal/{action_id}/execute to "
+                    "actually run it."
+                ),
+            },
+        )
 
     async def deny(
         self,
@@ -649,11 +674,18 @@ class SelfHealer:
         self,
         org_id: str,
         action_id: str,
-        before_state: dict[str, Any],
+        before_state: dict[str, Any] | None = None,
         *,
         approved_by_user_id: str,
     ) -> dict[str, Any]:
         """Execute the approved heal action.
+
+        Phase 3a (2026-06-23): now callable as a standalone step
+        via ``POST /heal/{action_id}/execute``. When ``before_state``
+        is not provided (the standalone route case), the row is
+        reloaded from ``self_heal_actions`` and the action's status
+        is checked to be ``"approved"`` (or ``"executed"`` — idempotent
+        re-execution).
 
         The actual remediation per ``action_type``:
         * ``rollback`` — flip the active canary's status to
@@ -665,6 +697,37 @@ class SelfHealer:
         After execution, flips status to ``executed`` with the
         ``after_state_json`` populated.
         """
+        if before_state is None:
+            before_state = await _load_self_heal_action(org_id, action_id)
+            if before_state is None:
+                return _not_implemented_envelope(
+                    self.name,
+                    f"action {action_id!r} not found",
+                )
+            # Allow execute only from "approved". Already-executed
+            # is a no-op (idempotent). Anything else (pending_approval,
+            # denied) is refused.
+            current_status = before_state.get("status")
+            if current_status == "executed":
+                return _ok_envelope(
+                    self.name,
+                    {
+                        "action_id": action_id,
+                        "action_type": before_state.get("action_type"),
+                        "status": "executed",
+                        "before_state": before_state.get("before_state"),
+                        "after_state": before_state.get("after_state"),
+                        "message": "action already executed; no state change",
+                    },
+                )
+            if current_status != "approved":
+                return _not_implemented_envelope(
+                    self.name,
+                    f"action {action_id!r} status is {current_status!r}; "
+                    "must be 'approved' before execute. POST "
+                    "/heal/{action_id}/approve first.",
+                )
+
         action_type = before_state.get("action_type")
         after_state: dict[str, Any] = {
             "action_type": action_type,

@@ -83,6 +83,10 @@ class HealDenyRequest(BaseModel):
     reason: str = ""
 
 
+class HealExecuteRequest(BaseModel):
+    approved_by_user_id: str
+
+
 class NLQueryRequest(BaseModel):
     question: str
 
@@ -171,6 +175,30 @@ async def heal_deny(
         org_id, action_id,
         denied_by_user_id=body.denied_by_user_id,
         reason=body.reason,
+    )
+
+
+@router.post(
+    # Phase 3a (2026-06-23) — separate the approve click from the
+    # execute click. The previous ``/heal/{id}/approve`` immediately
+    # ran the destructive action; now approve flips status to
+    # ``approved`` and the operator must POST to this endpoint as a
+    # second confirmation. Same gating (admin + destructive flag)
+    # as the approve route.
+    "/heal/{action_id}/execute",
+    dependencies=[
+        Depends(require_feature_flag(_UMBRELLA_FLAG)),
+        Depends(require_org_admin),
+    ],
+)
+async def heal_execute(
+    org_id: str = Path(...),
+    action_id: str = Path(...),
+    body: HealExecuteRequest = Body(...),
+) -> dict[str, Any]:
+    return await _healer.execute_heal(
+        org_id, action_id,
+        approved_by_user_id=body.approved_by_user_id,
     )
 
 
