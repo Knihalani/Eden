@@ -132,7 +132,21 @@ export function Wizard({
   const setState = (key: string, value: unknown) =>
     setStateRecord((prev) => ({ ...prev, [key]: value }));
 
-  const goTo = (slug: string) => router.push(slug);
+  // FIX-S: hard-navigation helper. window.location.assign is more
+  // reliable than Next.js's app-router push on the (portal) route
+  // group during the Clerk hydration window — the SPA push has
+  // been observed silently no-op'ing there. The wizard is in-flow
+  // navigation, so a hard reload is acceptable. Declared early so
+  // goTo + the advance handlers below can reference it.
+  const navigateTo = (slug: string) => {
+    if (typeof window !== "undefined") {
+      window.location.assign(slug);
+    } else {
+      router.push(slug);
+    }
+  };
+
+  const goTo = (slug: string) => navigateTo(slug);
 
   // Build a query object from the current URL.
   const query: Record<string, string> = useMemo(() => {
@@ -149,7 +163,9 @@ export function Wizard({
 
   const ctx: WizardContext = { state, setState, query, busy, setBusy, goTo };
 
-  // Advance logic
+  // Advance logic. See navigateTo above for the hard-nav rationale.
+  // (The FIX-S comment lives on the navigateTo declaration so it
+  // applies to every call site without being repeated.)
   const onNext = async () => {
     if (!activeStep) return;
     if (activeStep.canAdvance) {
@@ -158,20 +174,20 @@ export function Wizard({
     }
     const nextSlug = (await activeStep.onNext?.(ctx)) as string | undefined;
     if (typeof nextSlug === "string" && nextSlug) {
-      router.push(nextSlug);
+      navigateTo(nextSlug);
       return;
     }
     const nextIdx = activeIdx + 1;
     if (nextIdx < visibleSteps.length) {
-      router.push(visibleSteps[nextIdx].slug);
+      navigateTo(visibleSteps[nextIdx].slug);
     } else {
-      router.push(completeSlug);
+      navigateTo(completeSlug);
     }
   };
 
   const onBack = () => {
     const prevIdx = activeIdx - 1;
-    if (prevIdx >= 0) router.push(visibleSteps[prevIdx].slug);
+    if (prevIdx >= 0) navigateTo(visibleSteps[prevIdx].slug);
   };
 
   const onSkipStep = () => {
@@ -180,9 +196,9 @@ export function Wizard({
     // Advance after marking skipped
     const nextIdx = activeIdx + 1;
     if (nextIdx < visibleSteps.length) {
-      router.push(visibleSteps[nextIdx].slug);
+      navigateTo(visibleSteps[nextIdx].slug);
     } else {
-      router.push(completeSlug);
+      navigateTo(completeSlug);
     }
   };
 
@@ -218,7 +234,7 @@ export function Wizard({
               } catch {
                 // tolerate
               }
-              router.push(skipHref);
+              navigateTo(skipHref);
             }}
             className="text-xs text-[var(--text-muted)] hover:text-[var(--text-primary)]"
           >

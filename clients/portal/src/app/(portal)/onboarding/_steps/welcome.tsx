@@ -7,14 +7,12 @@
  * who already have a pending invite (skips the org create path).
  */
 
-import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { ArrowRight, Eye, GitBranch, KeyRound, Sparkles, UserPlus } from "lucide-react";
 import { useOrg } from "@/hooks/use-org";
 import { onboardingApi } from "@/lib/api";
 
 export function WelcomeStep() {
-  const router = useRouter();
   const { currentOrg } = useOrg();
 
   async function goNext() {
@@ -31,22 +29,17 @@ export function WelcomeStep() {
         // best-effort
       }
     }
-    // FIX-Q: Next.js's app-router ``router.push`` has been observed
-    // silently no-op'ing on the onboarding route group when the
-    // layout's effect re-renders during the navigation (the
-    // (portal) layout's orgless-redirect useEffect re-fires and
-    // aborts the push in some Clerk hydration windows). The wizard
-    // is in-flow navigation, so a hard reload is acceptable here.
-    // Try the SPA navigation first; fall back to a full page
-    // navigation if pathname hasn't changed within 1s.
-    const before = window.location.pathname;
-    router.push("/onboarding/org");
-    setTimeout(() => {
-      if (window.location.pathname === before) {
-        // SPA push silently no-op'd — force a hard navigation.
-        window.location.assign("/onboarding/org");
-      }
-    }, 1000);
+    // FIX-S: replace ``router.push`` with a plain ``window.location``
+    // navigation. The Next.js app-router push was observed
+    // silently no-op'ing on the onboarding route group (the
+    // (portal) layout's orgless-redirect useEffect re-fires
+    // during the navigation window and aborts the push in some
+    // Clerk hydration windows). The wizard is in-flow
+    // navigation, so a hard reload is acceptable here and
+    // 100% reliable. The state PATCH above already landed in
+    // the backend, so a hard reload resumes from the right
+    // step (or ``/onboarding/org`` if the PATCH failed).
+    window.location.assign("/onboarding/org");
   }
 
   return (

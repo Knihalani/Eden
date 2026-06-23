@@ -29,7 +29,6 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
 import { useOrganizationList } from "@clerk/nextjs";
 import { api, onboardingApi, type PendingInvite } from "@/lib/api";
 import { useAuth } from "@/hooks/use-auth";
@@ -40,7 +39,6 @@ import { ArrowRight, Building2, KeyRound, Loader2, Mail, Plus, UserPlus } from "
 type Branch = "menu" | "create" | "join";
 
 export default function OnboardingOrgPage() {
-  const router = useRouter();
   const toast = useToast();
   const { refreshUser } = useAuth();
   const { refreshOrgs } = useOrg();
@@ -141,7 +139,9 @@ export default function OnboardingOrgPage() {
         window.localStorage.removeItem("eden:onboarding:skipRepo");
       }
       toast.success(`Created ${res.name} — you're the owner`);
-      router.push("/onboarding/autonomous");
+      // FIX-S: hard nav (see welcome.tsx) — router.push silently
+      // no-ops on this route group.
+      window.location.assign("/onboarding/autonomous");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to create org");
     } finally {
@@ -182,7 +182,9 @@ export default function OnboardingOrgPage() {
         }
       }
       toast.success(`Joined ${inv.org_name} as ${inv.role}`);
-      router.push("/onboarding/autonomous");
+      // FIX-S: hard nav (see welcome.tsx) — router.push silently
+      // no-ops on this route group.
+      window.location.assign("/onboarding/autonomous");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to accept invite");
     } finally {
@@ -229,7 +231,9 @@ export default function OnboardingOrgPage() {
         }
       }
       toast.success(`Joined ${res.org_name} as ${res.role}`);
-      router.push("/onboarding/autonomous");
+      // FIX-S: hard nav (see welcome.tsx) — router.push silently
+      // no-ops on this route group.
+      window.location.assign("/onboarding/autonomous");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Invalid or expired invite");
     } finally {

@@ -11,7 +11,6 @@
  */
 "use client";
 
-import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useOrg } from "@/hooks/use-org";
@@ -22,7 +21,6 @@ import { ArrowRight, CheckCircle2, ExternalLink, Loader2, RefreshCw, SkipForward
 const POLL_INTERVAL_MS = 5_000;
 
 export function WaitStep() {
-  const router = useRouter();
   const toast = useToast();
   const { currentOrg } = useOrg();
   const [runs, setRuns] = useState<OnboardingPRRun[]>([]);
@@ -59,7 +57,9 @@ export function WaitStep() {
     setAdvancing(true);
     try {
       await onboardingApi.patchState(currentOrg.id, { step: "done" });
-      router.push("/onboarding/done");
+      // FIX-S: hard nav (see welcome.tsx) — router.push silently
+      // no-ops on this route group.
+      window.location.assign("/onboarding/done");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Could not advance");
     } finally {
