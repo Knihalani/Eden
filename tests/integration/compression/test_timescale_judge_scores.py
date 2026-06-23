@@ -31,23 +31,20 @@ async def _try_get_pool():
     return client
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture
 def event_loop():
-    """Module-scoped event loop so the module-scoped pg_client
-    fixture and the per-test async tests share the same loop.
-
-    Pre-existing pytest-asyncio bug pattern: pytest-asyncio's
-    default event_loop is function-scoped, which means a
-    module-scoped async fixture binds to a loop that's already
-    closed by the time the first test runs. Raised
-    ``attached to a different loop`` on CI.
+    """Function-scoped event loop to match pytest-asyncio's default
+    test loop scope. The previous module-scoped version caused
+    ``attached to a different loop`` errors on CI because the
+    module-scoped pg_client bound to a different loop than the
+    per-test async test functions.
     """
     loop = asyncio.new_event_loop()
     yield loop
     loop.close()
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture
 async def pg_client():
     client = await _try_get_pool()
     if client is None:
