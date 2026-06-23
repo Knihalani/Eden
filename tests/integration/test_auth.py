@@ -13,18 +13,30 @@ from unittest.mock import patch
 
 class TestAuthSignup:
     def test_signup_success(self, api_client: TestClient):
-        """Creating a new account returns user_id and sets cookie."""
+        """Creating a new account returns user_id; session cookie
+        is issued AFTER email verification.
+
+        Audit 2026-06-22 B1.23 changed the signup contract to require
+        email verification before issuing a session cookie (status
+        202 + no cookie until /auth/verify-email succeeds). Pre-fix
+        this test asserted status 200 + an authorization cookie —
+        which was the legacy Eden-Auth behaviour. The new contract
+        is the right one for production (prevents fake account spam
+        and ties sessions to verified emails).
+        """
         response = api_client.post("/auth/signup", json={
             "email": "newuser@example.com",
             "password": "Str0ng!Pass#2024",
             "name": "New User",
         })
 
-        assert response.status_code == 200
+        # 202 Accepted = "account created, check your email"
+        assert response.status_code == 202
         data = response.json()
         assert "user_id" in data
         assert data["email"] == "newuser@example.com"
-        assert "authorization" in api_client.cookies
+        # No session cookie until email is verified.
+        assert "authorization" not in api_client.cookies
 
     def test_signup_weak_password(self, api_client: TestClient):
         """Weak passwords are rejected with 400."""
@@ -59,7 +71,7 @@ class TestAuthSignup:
             "name": "Rate User",
         })
         # Should not crash; status depends on rate limit state
-        assert response.status_code in (200, 429)
+        assert response.status_code in (202, 429)
 
 
 class TestAuthLogin:
