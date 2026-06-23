@@ -164,7 +164,13 @@ class PostgresClient:
             ssl: bool | str = self._ssl_override
         else:
             ssl = False
-            sslmode = getattr(settings, "postgres_sslmode", "")
+            # Audit 2026-06-23: was `getattr(settings, "postgres_sslmode", "")`
+            # but `settings` was never bound in this scope (only
+            # `get_settings` is imported per the module docstring). Caused
+            # NameError on real `client.initialize()` calls. Resolve
+            # via get_settings() to match the rest of the module.
+            _ssl_settings = get_settings()
+            sslmode = getattr(_ssl_settings, "postgres_sslmode", "")
             if sslmode and sslmode.lower() not in {"disable", "allow", "prefer", ""}:
                 ssl = True
 
