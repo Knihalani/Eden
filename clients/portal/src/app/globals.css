@@ -428,8 +428,16 @@ body {
  * "Get started" / "Continue" / "Create org" before this rule
  * existed. ChatSidebar itself is gated by usePathname(), but this
  * is a belt-and-braces CSS backstop in case any other floating
- * overlay slips in. Allow explicit opt-in via .z-allow-click. */
-body:has([data-route="onboarding"]) [class*="z-50"][class*="fixed"]:not(.z-allow-click) {
+ * overlay slips in. Allow explicit opt-in via .z-allow-click.
+ *
+ * ponytail: scoped to the wizard subtree via the data-route attribute
+ * the onboarding layout sets on the WIZARD ROOT, not on document.body.
+ * The previous body:has(...) selector leaked across all portal routes
+ * because the layout never cleared the attribute on unmount — every
+ * z-50 fixed element in the rest of the portal became unclickable
+ * (user dropdown, notifications, Radix Select/Dropdown, etc.) once
+ * the user had visited /onboarding. */
+[data-route="onboarding"] [class*="z-50"][class*="fixed"]:not(.z-allow-click) {
   pointer-events: none;
 }
 

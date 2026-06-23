@@ -22,7 +22,6 @@
  * leaves the client.
  */
 
-import { useEffect } from "react";
 import { Wizard, type WizardStep } from "@/components/ui/wizard";
 
 const STEPS: WizardStep[] = [
@@ -72,34 +71,27 @@ const STEPS: WizardStep[] = [
 ];
 
 export default function OnboardingLayout({ children }: { children: React.ReactNode }) {
-  // FIX-N: set data-route="onboarding" on the body so globals.css
-  // can apply the [class*="z-50"][class*="fixed"] click-blocker
-  // suppression rule. The ChatSidebar floating toggle button is
-  // already gated by usePathname() in component code, but a
-  // third-party floating overlay (or a future z-50 surface) would
-  // silently regress this. Tagging the body makes the rule
-  // declarative and future-proof.
-  useEffect(() => {
-    document.body.dataset.route = "onboarding";
-    return () => {
-      // Don't unset on unmount — the body persists across
-      // route changes inside the (portal) tree, and any later
-      // client-side navigation back to /onboarding will re-set
-      // the attribute before the next paint. Leaving it stale
-      // during the in-between is harmless (the rule only
-      // suppresses z-50 fixed, which the rest of the portal
-      // never mounts anyway).
-    };
-  }, []);
-
+  // FIX-N: tag the wizard ROOT (not document.body) with
+  // data-route="onboarding" so globals.css can scope the
+  // [class*="z-50"][class*="fixed"] click-blocker suppression rule
+  // to the onboarding subtree only. The previous version tagged
+  // document.body and never cleaned up on unmount — once a user
+  // visited /onboarding, every z-50 fixed element in the rest of
+  // the portal (user dropdown, notifications, Radix Select/Dropdown,
+  // etc.) became unclickable because the body:has([data-route])
+  // selector stayed matched. Mounting the rule on the wizard root
+  // means the suppression auto-clears on unmount, and a CSS reset
+  // is impossible to forget.
   return (
-    <Wizard
-      steps={STEPS}
-      storageKey="eden:onboarding"
-      completeSlug="/onboarding/done"
-      brand={{ name: "Eden", tagline: "setup" }}
-    >
-      {children}
-    </Wizard>
+    <div data-route="onboarding" className="contents">
+      <Wizard
+        steps={STEPS}
+        storageKey="eden:onboarding"
+        completeSlug="/onboarding/done"
+        brand={{ name: "Eden", tagline: "setup" }}
+      >
+        {children}
+      </Wizard>
+    </div>
   );
 }

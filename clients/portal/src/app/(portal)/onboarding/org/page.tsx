@@ -78,27 +78,34 @@ export default function OnboardingOrgPage() {
   //   3. The user is brand-new and has no org yet — show the
   //      create/join menu as before.
   //
-  // The previous implementation rendered the "Set up your
-  // organisation" screen for everyone who hit the welcome step,
-  // even if Clerk had already provisioned the workspace. June
-  // 2026 polish: skip when there's nothing to do.
+  // ponytail: the auto-skip used to fire `window.location.assign`
+  // from a useEffect with no user-visible escape. If the effect
+  // didn't fire (hydration mismatch, React 19 strict-mode double-
+  // mount, or a thrown error inside the PATCH chain) the user was
+  // stranded on a "Setting up your account" spinner with no
+  // clickable UI. We now: (1) navigate via router.replace after a
+  // short delay so React 19's effect ordering can't drop it,
+  // (2) set `autoSkipped=true` to render a manual "Continue →"
+  // button as a fallback, (3) clear the timeout on unmount.
+  const [autoSkipped, setAutoSkipped] = useState(false);
   useEffect(() => {
     if (!currentOrg?.id) return;
-    // Persist the wizard state so a refresh stays on the right
-    // step. Best-effort — a failed PATCH shouldn't trap the
-    // user on the org page. The org_setup_choice field is a
-    // two-value enum (created / joined); for the auto-skip case
-    // we infer from the Clerk metadata instead of inventing a
-    // third value. Leaving the field undefined keeps the
-    // existing choice intact if the user had one.
-    onboardingApi
-      .patchState(currentOrg.id, { step: "autonomous" })
-      .catch(() => undefined);
-    // Hard nav — same reason as the other "advance" calls: the
-    // (portal) layout's orgless-redirect useEffect can race
-    // with a SPA push and silently no-op during the Clerk
-    // hydration window.
-    window.location.assign("/onboarding/autonomous");
+    setAutoSkipped(true);
+    // Best-effort state PATCH — a failure here shouldn't trap
+    // the user on the org page.
+    const timer = window.setTimeout(() => {
+      onboardingApi
+        .patchState(currentOrg.id, { step: "autonomous" })
+        .catch(() => undefined);
+      // Hard nav — same reason as the other "advance" calls: the
+      // (portal) layout's orgless-redirect useEffect can race
+      // with a SPA push and silently no-op during the Clerk
+      // hydration window. The 200ms delay lets React paint the
+      // "Continue" button first so the user has something to
+      // click if the redirect still doesn't fire.
+      window.location.assign("/onboarding/autonomous");
+    }, 200);
+    return () => window.clearTimeout(timer);
   }, [currentOrg?.id]);
 
   const loadInvites = useCallback(async () => {
@@ -293,8 +300,8 @@ export default function OnboardingOrgPage() {
   // jumping while this spins.
   if (currentOrg?.id) {
     return (
-      <div className="flex-1 flex flex-col items-center justify-center text-center py-12 space-y-3">
-        <div className="h-10 w-10 rounded-full border-2 border-[var(--accent)] border-t-transparent animate-spin" />
+      <div className="flex-1 flex flex-col items-center justify-center text-center py-12 space-y-4">
+        <div className="h-10 w-10 rounded-full border-2 border-[var(--accent)] border-t-transparent animate-spin" aria-label="Loading" />
         <div>
           <p className="text-sm font-medium text-[var(--text-primary)]">
             Setting up your account
@@ -307,6 +314,27 @@ export default function OnboardingOrgPage() {
             is already provisioned — skipping the org step.
           </p>
         </div>
+        {/* ponytail: manual escape — if the auto-skip redirect
+            doesn't fire for any reason (hydration race, network
+            error, etc.) the user can click "Continue" and land on
+            the next step. This is the fix for the
+            "infinite spinner with no clickable UI" bug. */}
+        {autoSkipped && (
+          <button
+            onClick={() => {
+              if (currentOrg?.id) {
+                onboardingApi
+                  .patchState(currentOrg.id, { step: "autonomous" })
+                  .catch(() => undefined);
+              }
+              window.location.assign("/onboarding/autonomous");
+            }}
+            className="inline-flex items-center gap-2 rounded-lg bg-[var(--accent)] px-4 py-2 text-sm font-medium text-[var(--accent-foreground)] hover:opacity-90 mt-2"
+          >
+            Continue
+            <ArrowRight className="h-4 w-4" />
+          </button>
+        )}
       </div>
     );
   }

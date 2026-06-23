@@ -229,7 +229,7 @@ export function Wizard({
     // (portal) layout's existing document-scroll handles overflow
     // (FIX-A / FIX-B). The body keeps `flex-1` so on short pages
     // the body still takes any leftover vertical space.
-    <div className="flex flex-col bg-[var(--bg-primary)] text-[var(--text-primary)] min-h-[calc(100vh-3.5rem)]">
+    <div className="flex flex-col bg-[var(--bg-primary)] text-[var(--text-primary)] min-h-[calc(100dvh-3.5rem)]">
       {/* Top bar — compact: single line, h-12 */}
       <div className="flex h-12 items-center border-b border-[var(--border-default)] bg-[var(--bg-secondary)] px-6">
         <div className="mx-auto flex w-full max-w-3xl items-center justify-between">
@@ -308,10 +308,15 @@ export function Wizard({
       <div className="mx-auto w-full max-w-3xl flex-1 px-6 py-6 sm:py-8 min-h-[420px] flex flex-col">{children}</div>
 
       {/* Bottom navigation (only on non-complete steps). Sits below
-          the body (no -mt-4) so it never overlaps the page content. */}
+          the body (no -mt-4) so it never overlaps the page content.
+          ponytail: `sticky bottom-0` keeps the Back/Next row visible
+          on short viewports (13" laptops, iOS keyboards) — the body
+          above can scroll but the nav is anchored to the viewport's
+          bottom edge. The translucent bg matches the body so the
+          scroll content doesn't bleed through. */}
       {!isComplete && activeStep && (
-        <div className="mx-auto w-full max-w-3xl px-6 pb-6">
-          <div className="flex items-center justify-between border-t border-[var(--border-default)] pt-4">
+        <div className="sticky bottom-0 z-10 mx-auto w-full max-w-3xl bg-[var(--bg-primary)]/95 backdrop-blur-sm border-t border-[var(--border-default)] px-6 py-3">
+          <div className="flex items-center justify-between">
             <button
               onClick={onBack}
               disabled={activeIdx === 0}
