@@ -145,7 +145,7 @@ class TestGetUserById:
         async def run():
             return await get_user_by_id("user-123", lookup_column="id")
 
-        asyncio.get_event_loop().run_until_complete(run())
+        asyncio.run(run())
 
         # Find the most recent fetchrow call with WHERE id::text
         calls = [
@@ -178,7 +178,7 @@ class TestGetUserById:
                 "user_2abc...", lookup_column="clerk_id"
             )
 
-        asyncio.get_event_loop().run_until_complete(run())
+        asyncio.run(run())
 
         calls = [
             c for c in mock_postgres_client.fetchrow.call_args_list
@@ -194,7 +194,7 @@ class TestGetUserById:
             return await get_user_by_id("user-123", lookup_column="email")
 
         with pytest.raises(ValueError, match="lookup_column"):
-            asyncio.get_event_loop().run_until_complete(run())
+            asyncio.run(run())
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -317,7 +317,7 @@ class TestClerkWebhookUserUpsert:
             "image_url": "https://example.com/avatar.png",
         }
 
-        asyncio.get_event_loop().run_until_complete(_upsert_user(payload))
+        asyncio.run(_upsert_user(payload))
 
         mock_postgres_client.execute.assert_called()
         last_sql = mock_postgres_client.execute.call_args.args[0]
