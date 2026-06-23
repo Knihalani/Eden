@@ -1705,7 +1705,7 @@ export const api = {
   // same {alerts, total, unread_count} envelope so the consumer
   // can use either.
 
-  listAlerts: ((orgId?: string, params?: { severity?: string; acknowledged?: boolean; limit?: number; offset?: number }): Promise<{
+  listAlerts: (async (orgId?: string, params?: { severity?: string; acknowledged?: boolean; limit?: number; offset?: number }): Promise<{
     alerts: Array<{
       alert_id: string;
       severity: string;
@@ -1721,16 +1721,58 @@ export const api = {
     total: number;
     unread_count: number;
   }> => {
-    if (orgId === undefined) {
-      return fetchApi("/alerts");
-    }
+    // The org-scoped endpoint /orgs/{org_id}/alerts doesn't exist on the
+    // backend (the mounted alerts router is the global /alerts surface,
+    // which evaluates rules against current metrics and returns fired
+    // alerts across the user's reachable orgs). The dashboard only needs
+    // a count by severity, so we call the global endpoint, wrap the
+    // list in the {alerts, total, unread_count} envelope the rest of
+    // the app already speaks, and adapt field names. ``orgId`` is
+    // accepted for callers that still pass it; the filter is a
+    // best-effort client-side match on the alerts.router's `labels`
+    // bag, which carries the org id when an alert is org-scoped.
     const q = new URLSearchParams();
-    if (params?.severity) q.set("severity", params.severity);
-    if (params?.acknowledged !== undefined) q.set("acknowledged", String(params.acknowledged));
     if (params?.limit) q.set("limit", String(params.limit));
-    if (params?.offset !== undefined) q.set("offset", String(params.offset));
     const qs = q.toString();
-    return fetchApi(`/orgs/${orgId}/alerts${qs ? `?${qs}` : ""}`);
+    const raw = await fetchApi<
+      Array<{
+        rule_id: string;
+        severity: string;
+        title: string;
+        message: string;
+        value: number;
+        threshold: number;
+        fired_at: string;
+        labels: Record<string, string>;
+      }>
+    >(`/alerts${qs ? `?${qs}` : ""}`);
+
+    // Filter by orgId if given — the global feed includes alerts
+    // for every org the user can see, and the dashboard wants its
+    // own slice. ``labels["org_id"]`` is set by the alert rules
+    // engine when an alert is org-scoped; we fall back to "all"
+    // for system-level alerts (e.g. budget breached) which carry
+    // no org label.
+    const filtered = orgId
+      ? raw.filter((a) => a.labels?.org_id === orgId || !a.labels?.org_id)
+      : raw;
+
+    return {
+      alerts: filtered.map((a) => ({
+        alert_id: a.rule_id,
+        severity: a.severity,
+        title: a.title,
+        description: a.message,
+        source: "rule_engine",
+        triggered_at: a.fired_at,
+        acknowledged: false,
+        acknowledged_at: null,
+        acknowledged_by: null,
+        metadata: { value: a.value, threshold: a.threshold, labels: a.labels },
+      })),
+      total: filtered.length,
+      unread_count: filtered.length,
+    };
   }) as {
     (orgId: string, params?: { severity?: string; acknowledged?: boolean; limit?: number; offset?: number }): Promise<{
       alerts: Array<{

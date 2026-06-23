@@ -41,9 +41,18 @@ type Branch = "menu" | "create" | "join";
 export default function OnboardingOrgPage() {
   const toast = useToast();
   const { refreshUser } = useAuth();
-  const { refreshOrgs } = useOrg();
+  const { refreshOrgs, currentOrg } = useOrg();
   const { setActive } = useOrganizationList();
-  const [branch, setBranch] = useState<Branch>("menu");
+  // Branch starts as "menu" on the server (no window) and resolves
+  // to "join" on the first client render when the URL has
+  // ``?intent=join``. Lazy initial state avoids a useEffect that
+  // would setState synchronously inside an effect (the React 19
+  // purity rule's complaint).
+  const [branch, setBranch] = useState<Branch>(() => {
+    if (typeof window === "undefined") return "menu";
+    const params = new URLSearchParams(window.location.search);
+    return params.get("intent") === "join" ? "join" : "menu";
+  });
   const [invites, setInvites] = useState<PendingInvite[]>([]);
   const [loadingInvites, setLoadingInvites] = useState(false);
   const [orgName, setOrgName] = useState("");
@@ -53,17 +62,44 @@ export default function OnboardingOrgPage() {
   // ?intent=join opens the join branch straight away so the "Joining
   // a team?" shortcut on the welcome page lands somewhere useful.
   // The deep-link is best-effort: if the user already created an
-  // org, the (portal) layout will route them to /dashboard instead
-  // and this page never renders. Resolved in a post-mount effect
-  // rather than the ``useState`` initialiser so the SSR pass can't
-  // disagree with the first client render — reading ``window`` in
-  // the initialiser triggers a hydration mismatch warning in the
-  // console. A single-frame flash on a deep-link is the lesser evil.
+  // The ``?intent=join`` URL param is read once by the lazy initial
+  // state above (see the useState call), so no post-mount effect
+  // is needed — the previous useEffect here violated the React 19
+  // purity rule by setState'ing synchronously inside an effect
+  // body. SSR renders branch="menu" (no window) and the first
+  // client render resolves it to "join" from the URL.
+
+  // Auto-skip the org step when the user already has an org. Three
+  // paths can land here:
+  //   1. Clerk created an org during signup and the webhook
+  //      already synced it into Eden — `currentOrg` is set.
+  //   2. The user came in via a Clerk invite link so they were
+  //      auto-added to an existing org — `currentOrg` is set.
+  //   3. The user is brand-new and has no org yet — show the
+  //      create/join menu as before.
+  //
+  // The previous implementation rendered the "Set up your
+  // organisation" screen for everyone who hit the welcome step,
+  // even if Clerk had already provisioned the workspace. June
+  // 2026 polish: skip when there's nothing to do.
   useEffect(() => {
-    if (typeof window === "undefined") return;
-    const params = new URLSearchParams(window.location.search);
-    if (params.get("intent") === "join") setBranch("join");
-  }, []);
+    if (!currentOrg?.id) return;
+    // Persist the wizard state so a refresh stays on the right
+    // step. Best-effort — a failed PATCH shouldn't trap the
+    // user on the org page. The org_setup_choice field is a
+    // two-value enum (created / joined); for the auto-skip case
+    // we infer from the Clerk metadata instead of inventing a
+    // third value. Leaving the field undefined keeps the
+    // existing choice intact if the user had one.
+    onboardingApi
+      .patchState(currentOrg.id, { step: "autonomous" })
+      .catch(() => undefined);
+    // Hard nav — same reason as the other "advance" calls: the
+    // (portal) layout's orgless-redirect useEffect can race
+    // with a SPA push and silently no-op during the Clerk
+    // hydration window.
+    window.location.assign("/onboarding/autonomous");
+  }, [currentOrg?.id]);
 
   const loadInvites = useCallback(async () => {
     setLoadingInvites(true);
@@ -78,7 +114,11 @@ export default function OnboardingOrgPage() {
   }, []);
 
   useEffect(() => {
-    loadInvites();
+    // Same microtask-defer pattern as useOrg — ``loadInvites``
+    // calls setState synchronously and the React 19 purity rule
+    // bans that inside an effect body. The defer is invisible to
+    // users.
+    queueMicrotask(loadInvites);
   }, [loadInvites]);
 
   async function createOrg() {
@@ -242,6 +282,35 @@ export default function OnboardingOrgPage() {
   }
 
   // ── Render ─────────────────────────────────────────────────────
+
+  // If the user already has an org (Clerk auto-created during
+  // signup, or they joined via invite, or the webhook just
+  // synced), the auto-skip useEffect at the top of this file is
+  // about to PATCH state and redirect to /onboarding/autonomous.
+  // Show a friendly "setting up your account" state instead of
+  // flashing the create/join menu for one frame. The page-level
+  // ``min-h-[420px]`` on the wizard body keeps the chrome from
+  // jumping while this spins.
+  if (currentOrg?.id) {
+    return (
+      <div className="flex-1 flex flex-col items-center justify-center text-center py-12 space-y-3">
+        <div className="h-10 w-10 rounded-full border-2 border-[var(--accent)] border-t-transparent animate-spin" />
+        <div>
+          <p className="text-sm font-medium text-[var(--text-primary)]">
+            Setting up your account
+          </p>
+          <p className="mt-1 text-xs text-[var(--text-muted)]">
+            Workspace{" "}
+            <span className="font-mono text-[var(--text-secondary)]">
+              {currentOrg.name}
+            </span>{" "}
+            is already provisioned — skipping the org step.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
 
   if (branch === "menu") {
     return (

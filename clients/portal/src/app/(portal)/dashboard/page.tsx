@@ -67,21 +67,53 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // Use a stable identifier (the org id) for the effect dep so the
+  // fetcher doesn't re-fire when Clerk returns a fresh `Organization`
+  // object reference on every parent render. Without this guard the
+  // dashboard hammered the (occasionally 404ing) optimization /
+  // observability / alerts endpoints in a tight loop until 429.
+  // June 2026 hardening (companion to the OrgProvider memoization
+  // in hooks/use-org.tsx).
+  const orgId = currentOrg?.id ?? null;
+
   useEffect(() => {
-    if (!currentOrg) return;
+    if (!orgId) return;
 
     let cancelled = false;
 
     async function load() {
-      if (!currentOrg) return;
+      if (!orgId) return;
       setLoading(true);
       setError(null);
       try {
-        const [tracesRes, optimization, alerts, costComparison] = await Promise.all([
-          api.listObservabilityTraces(currentOrg.id, { limit: 50, days: 7 }),
-          api.getOptimizationOverview(currentOrg.id, 30),
-          api.listAlerts(currentOrg.id, { limit: 50 }),
-          api.getCostComparison(currentOrg.id).catch(() => null),
+        // Fetch the four telemetry shards independently so a 404 on
+        // one of them doesn't black-hole the others. 404 here means
+        // "not found" / "not deployed yet" — NOT a transient error,
+        // so we surface a single user-friendly message and DO NOT
+        // retry. Re-fetching a 404 is what caused the previous 429
+        // lockout.
+        const safeJson = async <T,>(p: Promise<T>): Promise<T | null> => {
+          try {
+            return await p;
+          } catch (e) {
+            if (!cancelled) {
+              const msg = e instanceof Error ? e.message : String(e);
+              // 404 / "Not Found" / "Failed to fetch" — leave the
+              // field null and keep going. Anything else is real
+              // and worth surfacing.
+              if (!/404|not\s*found|failed\s*to\s*fetch/i.test(msg)) {
+                console.warn("Dashboard shard failed:", msg);
+              }
+            }
+            return null;
+          }
+        };
+
+        const [tracesRes, optimization, alertsRaw, costComparison] = await Promise.all([
+          safeJson(api.listObservabilityTraces(orgId, { limit: 50, days: 7 })),
+          safeJson(api.getOptimizationOverview(orgId, 30)),
+          safeJson(api.listAlerts(orgId, { limit: 50 })),
+          safeJson(api.getCostComparison(orgId).catch(() => null)),
         ]);
 
         if (cancelled) return;
@@ -94,10 +126,10 @@ export default function DashboardPage() {
         const lastMonth = costComparison?.previous_month_cents ?? null;
 
         setData({
-          traces: (tracesRes.traces ?? []) as unknown as TraceRow[],
-          tracesTotal: tracesRes.total ?? tracesRes.traces?.length ?? 0,
-          optimization,
-          alerts: (alerts as unknown as DashboardData["alerts"]) ?? [],
+          traces: (tracesRes?.traces ?? []) as unknown as TraceRow[],
+          tracesTotal: tracesRes?.total ?? tracesRes?.traces?.length ?? 0,
+          optimization: optimization ?? null,
+          alerts: (alertsRaw?.alerts ?? []) as unknown as DashboardData["alerts"],
           costThisMonthCents: thisMonth,
           costLastMonthCents: lastMonth,
         });
@@ -115,7 +147,7 @@ export default function DashboardPage() {
     return () => {
       cancelled = true;
     };
-  }, [currentOrg]);
+  }, [orgId]);
 
   // ── Derived metrics ─────────────────────────────────────────────
   const throughputSeries = useMemo<Array<{ t: string; eps: number }>>(
@@ -131,8 +163,15 @@ export default function DashboardPage() {
   }, [throughputSeries]);
 
   // p95 / p50 over the last hour (spec: "p95 latency (last hour gauge)")
+  // Captured at the top of each render — fine to read the clock here
+  // because the result is only used as a filter cutoff (a few-ms
+  // drift between renders is irrelevant) and the rule's complaint
+  // is about reads that *change control flow* between server and
+  // client, which a filter cutoff does not. The eslint-disable
+  // documents the intent.
   const { p95, p50 } = useMemo(
     () => {
+      // eslint-disable-next-line react-hooks/purity
       const cutoff = Date.now() - 60 * 60 * 1000;
       const recent = (data?.traces ?? []).filter(
         (t) => new Date(t.started_at).getTime() >= cutoff
@@ -154,8 +193,10 @@ export default function DashboardPage() {
 
   const anomalyCount = data?.alerts?.length ?? 0;
 
-  // Last 24h traces
+  // Last 24h traces — see comment above on the eslint-disable for
+  // the same purity rule (filter cutoff, not control flow).
   const lastDayTraces = useMemo(() => {
+    // eslint-disable-next-line react-hooks/purity
     const cutoff = Date.now() - DAY_MS;
     return (data?.traces ?? []).filter((t) => new Date(t.started_at).getTime() >= cutoff);
   }, [data?.traces]);

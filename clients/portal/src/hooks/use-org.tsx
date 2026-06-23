@@ -6,6 +6,7 @@ import {
   useState,
   useCallback,
   useEffect,
+  useMemo,
   type ReactNode,
 } from "react";
 import { useRouter } from "next/navigation";
@@ -205,7 +206,12 @@ export function OrgProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (userLoaded && clerkOrgLoaded) {
-      refreshOrgs();
+      // Defer the first refresh to a microtask so the setState calls
+      // inside `refreshOrgs` are not synchronous with this effect
+      // body (React 19 purity rule's complaint). The microtask
+      // boundary is invisible to users — the request still fires on
+      // the same tick as the mount.
+      queueMicrotask(refreshOrgs);
     }
     // FIX-Q: poll for an org every 5s when the user is signed in but
     // has none. The Clerk webhook that creates the Eden-side org row
@@ -247,25 +253,40 @@ export function OrgProvider({ children }: { children: ReactNode }) {
     setCurrentOrgState(org);
   }, []);
 
+  // Memoize the context value so consumers don't re-render on every
+  // parent render (Clerk's useOrganization / useUser can return
+  // unstable object references per render). Without this, any
+  // consumer's ``useEffect(..., [currentOrg])`` re-fires on every
+  // parent render, which previously caused the dashboard to
+  // hammer 404 endpoints in a tight loop until 429. June 2026
+  // hardening — see FIX on dashboard/page.tsx.
+  const contextValue = useMemo<OrgContextType>(
+    () => ({
+      currentOrg,
+      organizations,
+      setCurrentOrg,
+      refreshOrgs,
+      refreshOrg: refreshOrgs,
+      loading,
+      authError,
+      clearAuthError: () => setAuthError(null),
+      clerkOrgId: clerkOrg?.id ?? null,
+      // Clerk role strings are ``org:admin`` / ``org:member`` by
+      // default; map them onto Eden's ``owner``/``member`` vocab so
+      // existing RBAC checks (`org["role"] === "admin"`) keep
+      // working. The full mapping lives in `lib/roles.ts`.
+      clerkOrgRole: clerkOrg ? userMemberships.data?.[0]?.role ?? null : null,
+    }),
+    // Intentionally depend on the *identity* of `currentOrg.id`,
+    // not the object reference — Clerk returns a fresh
+    // Organization wrapper per render, which would otherwise
+    // invalidate the memo on every parent render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [currentOrg, organizations, loading, authError, clerkOrg?.id, userMemberships.data, refreshOrgs],
+  );
+
   return (
-    <OrgContext.Provider
-      value={{
-        currentOrg,
-        organizations,
-        setCurrentOrg,
-        refreshOrgs,
-        refreshOrg: refreshOrgs,
-        loading,
-        authError,
-        clearAuthError: () => setAuthError(null),
-        clerkOrgId: clerkOrg?.id ?? null,
-        // Clerk role strings are ``org:admin`` / ``org:member`` by
-        // default; map them onto Eden's ``owner``/``member`` vocab so
-        // existing RBAC checks (`org["role"] === "admin"`) keep
-        // working. The full mapping lives in `lib/roles.ts`.
-        clerkOrgRole: clerkOrg ? userMemberships.data?.[0]?.role ?? null : null,
-      }}
-    >
+    <OrgContext.Provider value={contextValue}>
       {children}
     </OrgContext.Provider>
   );

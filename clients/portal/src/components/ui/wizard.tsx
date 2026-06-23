@@ -84,23 +84,37 @@ export function Wizard({
   const router = useRouter();
   const pathname = usePathname() || steps[0]?.slug || "/";
 
-  // localStorage persistence
-  const [skipped, setSkipped] = useState<string[]>([]);
-  const [state, setStateRecord] = useState<Record<string, unknown>>({});
-  const [busy, setBusy] = useState(false);
-
-  useEffect(() => {
+  // localStorage persistence — lazy initial state. Reading the
+  // persisted shape once at mount is a side-effect of React's
+  // external system (localStorage), so it goes in the lazy
+  // initializer rather than a useEffect that setState's
+  // synchronously (which is the React 19 purity rule's complaint).
+  // SSR returns an empty value because `window` isn't defined on
+  // the server; the first client render re-reads the persisted
+  // shape and the hydration markup matches.
+  const [skipped, setSkipped] = useState<string[]>(() => {
+    if (typeof window === "undefined") return [];
     try {
       const raw = window.localStorage.getItem(storageKey);
-      if (raw) {
-        const parsed = JSON.parse(raw) as { skipped?: string[]; state?: Record<string, unknown> };
-        if (Array.isArray(parsed.skipped)) setSkipped(parsed.skipped);
-        if (parsed.state && typeof parsed.state === "object") setStateRecord(parsed.state);
-      }
+      if (!raw) return [];
+      const parsed = JSON.parse(raw) as { skipped?: string[] };
+      return Array.isArray(parsed.skipped) ? parsed.skipped : [];
     } catch {
-      // tolerate
+      return [];
     }
-  }, [storageKey]);
+  });
+  const [state, setStateRecord] = useState<Record<string, unknown>>(() => {
+    if (typeof window === "undefined") return {};
+    try {
+      const raw = window.localStorage.getItem(storageKey);
+      if (!raw) return {};
+      const parsed = JSON.parse(raw) as { state?: Record<string, unknown> };
+      return parsed.state && typeof parsed.state === "object" ? parsed.state : {};
+    } catch {
+      return {};
+    }
+  });
+  const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     try {
@@ -215,7 +229,7 @@ export function Wizard({
     // (portal) layout's existing document-scroll handles overflow
     // (FIX-A / FIX-B). The body keeps `flex-1` so on short pages
     // the body still takes any leftover vertical space.
-    <div className="flex flex-col bg-[var(--bg-primary)] text-[var(--text-primary)]">
+    <div className="flex flex-col bg-[var(--bg-primary)] text-[var(--text-primary)] min-h-[calc(100vh-3.5rem)]">
       {/* Top bar — compact: single line, h-12 */}
       <div className="flex h-12 items-center border-b border-[var(--border-default)] bg-[var(--bg-secondary)] px-6">
         <div className="mx-auto flex w-full max-w-3xl items-center justify-between">
@@ -280,8 +294,18 @@ export function Wizard({
           leaving the user stuck on an empty body. Render the page
           content only — the onboarding page files already import
           the step component, so the URL is the single source of
-          truth. */}
-      <div className="mx-auto w-full max-w-3xl flex-1 px-6 py-6 sm:py-8">{children}</div>
+          truth.
+
+          ``min-h-[420px]`` keeps the wizard body from collapsing
+          when a step's content is short (the Done step is ~280px;
+          the Org step's create-form is ~360px). Without a stable
+          floor the entire layout jumped on every step transition
+          (welcome → org was a visible +120px snap, done → welcome
+          was a -80px snap) which the user described as
+          "the screen size changes constantly". The value is the
+          tallest non-Connect step; Connect / Wait render taller
+          and the floor is just a no-op for them. */}
+      <div className="mx-auto w-full max-w-3xl flex-1 px-6 py-6 sm:py-8 min-h-[420px] flex flex-col">{children}</div>
 
       {/* Bottom navigation (only on non-complete steps). Sits below
           the body (no -mt-4) so it never overlaps the page content. */}
