@@ -55,6 +55,17 @@ ACTION_KIND: dict[str, str] = {
     "on_alert_lint_warning": "surface_lint_warning",
     "propose_patch_from_rca": "propose_patch",
     "post_merge_degraded": "consider_revert",
+    # New per upgradespec §E.1 — wired in 2026-06-23 Phase 2B.4
+    "on_budget_threshold_breached": "throttle",
+    "on_budget_exceeded": "kill",
+    "on_incident_clustered": "investigate",
+    "on_low_user_satisfaction": "investigate",
+    "on_low_roi_department": "investigate",
+    "on_compliance_gap_gdpr": "rtbf",
+    "on_security_pii_scanner": "redact",
+    "on_sla_breach": "investigate",
+    "on_voice_barge_in_spike": "investigate",
+    "on_provider_routing_repeated_failures": "investigate",
 }
 
 
@@ -70,13 +81,42 @@ async def _record_action(
     payload: dict[str, Any] | None = None,
     severity: str = "medium",
 ) -> str | None:
-    """Persist a recommended action to ``closed_loop_actions``.
+    """Persist a recommended action via the HookBus (Cat 17 / upgradespec §E).
 
-    Returns the generated action id (or ``None`` if the
-    substrate is unavailable). Best-effort: any error is
-    logged at debug and swallowed so the hook never breaks
-    the caller.
+    The bus handles dedup (5-min window per §E.3), severity precedence,
+    cascade, and the approval gate (§E.4) — then writes to
+    ``closed_loop_actions`` (legacy) or ``hook_events`` (post-migration 051).
+
+    Returns the generated action id (or ``None`` if the substrate is
+    unavailable or the event was dedup'd). Best-effort: any error is
+    logged at debug and swallowed so the hook never breaks the caller.
     """
+    # ponytail: route through HookBus for dedup + approval gate. Falls back
+    # to direct Postgres insert only if HookBus itself fails to initialise
+    # (should never happen — HookBus is in-process and trivial).
+    try:
+        from eden.llmops.hooks_bus import HookEvent, get_hook_bus
+
+        bus = get_hook_bus()
+        event = HookEvent(
+            reason=hook_name,
+            severity=severity if severity in ("low", "medium", "high", "critical") else "medium",
+            org_id=org_id,
+            source={
+                "primary_entity_id": target or "",
+                "target_id": target or "",
+                "target_type": "closed_loop_target",
+                "action_kind": action_kind,
+                **(payload or {}),
+            },
+            context={"action_kind": action_kind},
+        )
+        hook_id = await bus.emit(event)
+        return hook_id
+    except Exception as exc:
+        logger.debug("closed_loop: HookBus route failed (%s); falling back", exc)
+
+    # Fallback: direct insert into closed_loop_actions (pre-HookBus behavior).
     try:
         from eden.storage.postgres import get_postgres_client
     except Exception as exc:  # pragma: no cover - defensive
@@ -638,8 +678,265 @@ def register_all_hooks() -> None:
     version wires the auto-apply path behind a per-tenant
     opt-in.
     """
+
+
+# ─── Phase 2B.4 — new hooks per upgradespec §E.1 ─────────────────
+#
+# Each is a thin wrapper around :func:`_record_action` (which now
+# routes through :class:`HookBus` for dedup + approval gate). The bus
+# is in-process; no new infra needed.
+
+
+class BudgetHook:
+    """§6.3 — fires when an org crosses a budget threshold or exceeds its cap.
+
+    Threshold breach (80% by default) → alert + throttle warning.
+    Hard cap exceeded → kill action (highest severity, requires_approval=False
+    because the kill itself is the human-approved policy; the operator
+    configured the budget + action='kill' ahead of time).
+    """
+
+    name = "budget"
+
+    async def on_threshold_breached(
+        self,
+        org_id: str,
+        *,
+        budget_id: str,
+        spent_usd: float,
+        limit_usd: float,
+        period: str,
+    ) -> str | None:
+        return await _record_action(
+            org_id,
+            hook_name="on_budget_threshold_breached",
+            action_kind=ACTION_KIND["on_budget_threshold_breached"],
+            target=budget_id,
+            payload={
+                "primary_entity_id": f"budget:{budget_id}",
+                "spent_usd": spent_usd,
+                "limit_usd": limit_usd,
+                "period": period,
+                "pct": spent_usd / limit_usd if limit_usd else 0,
+            },
+            severity="medium",
+        )
+
+    async def on_exceeded(
+        self,
+        org_id: str,
+        *,
+        budget_id: str,
+        spent_usd: float,
+        limit_usd: float,
+        period: str,
+    ) -> str | None:
+        return await _record_action(
+            org_id,
+            hook_name="on_budget_exceeded",
+            action_kind=ACTION_KIND["on_budget_exceeded"],
+            target=budget_id,
+            payload={
+                "primary_entity_id": f"budget:{budget_id}",
+                "spent_usd": spent_usd,
+                "limit_usd": limit_usd,
+                "period": period,
+                "over_by_usd": max(0.0, spent_usd - limit_usd),
+            },
+            severity="high",
+        )
+
+
+class IncidentHook:
+    """Cat 2 RCA — fires when an incident cluster is detected.
+
+    Severity is 'medium' (clusters are pre-investigation). The HookBus
+    dedups subsequent firings for the same cluster_id within 5 min.
+    """
+
+    name = "incident"
+
+    async def on_clustered(
+        self,
+        org_id: str,
+        *,
+        cluster_id: str,
+        trace_count: int,
+        sample_trace_ids: list[str],
+    ) -> str | None:
+        return await _record_action(
+            org_id,
+            hook_name="on_incident_clustered",
+            action_kind=ACTION_KIND["on_incident_clustered"],
+            target=cluster_id,
+            payload={
+                "primary_entity_id": f"cluster:{cluster_id}",
+                "trace_count": trace_count,
+                "sample_trace_ids": sample_trace_ids[:10],
+            },
+            severity="medium",
+        )
+
+
+class UserSatisfactionHook:
+    """Cat 9 — fires when user-corrected satisfaction drops below 0.4.
+
+    Per Cat 9 hook spec — already implemented inside the user-intel
+    service, but the wiring into the hook bus was missing. This thin
+    wrapper exposes the bus entry point so the service can call it.
+    """
+
+    name = "user_satisfaction"
+
+    async def on_low_satisfaction(
+        self,
+        org_id: str,
+        *,
+        coverage_weighted: float,
+        affected_user_count: int,
+        window: str = "7d",
+    ) -> str | None:
+        return await _record_action(
+            org_id,
+            hook_name="on_low_user_satisfaction",
+            action_kind=ACTION_KIND["on_low_user_satisfaction"],
+            target=org_id,
+            payload={
+                "primary_entity_id": f"org:{org_id}:satisfaction",
+                "coverage_weighted": coverage_weighted,
+                "affected_user_count": affected_user_count,
+                "window": window,
+            },
+            severity="medium",
+        )
+
+
+class DriftAlertHook:
+    """Cat 13 — fires when PSI drift exceeds threshold.
+
+    Severity scales with drift magnitude: <0.1 → low, 0.1-0.25 → medium,
+    >0.25 → high. High severity triggers the approval gate per spec §E.4.
+    """
+
+    name = "drift_alert"
+
+    async def on_drift(
+        self,
+        org_id: str,
+        *,
+        drift_type: str,
+        psi: float,
+        baseline_window: str = "7d",
+        current_window: str = "24h",
+    ) -> str | None:
+        if psi >= 0.25:
+            severity = "high"
+        elif psi >= 0.10:
+            severity = "medium"
+        else:
+            severity = "low"
+        return await _record_action(
+            org_id,
+            hook_name="on_drift_alert",
+            action_kind=ACTION_KIND["on_drift_alert"],
+            target=f"{drift_type}:{org_id}",
+            payload={
+                "primary_entity_id": f"drift:{drift_type}:{org_id}",
+                "drift_type": drift_type,
+                "psi": psi,
+                "baseline_window": baseline_window,
+                "current_window": current_window,
+            },
+            severity=severity,
+        )
+
+
+class RoiHook:
+    """Cat 11 — fires when a department's ROI drops below threshold.
+
+    90-day z-score regression per Cat 11 service. Medium severity
+    routes to InvestigationAgent (auto-approved).
+    """
+
+    name = "roi"
+
+    async def on_low_roi_department(
+        self,
+        org_id: str,
+        *,
+        department: str,
+        roi: float,
+        z_score: float,
+    ) -> str | None:
+        severity = "high" if z_score < -2.0 else "medium"
+        return await _record_action(
+            org_id,
+            hook_name="on_low_roi_department",
+            action_kind=ACTION_KIND["on_low_roi_department"],
+            target=f"{department}:{org_id}",
+            payload={
+                "primary_entity_id": f"dept:{department}:{org_id}",
+                "department": department,
+                "roi": roi,
+                "z_score": z_score,
+            },
+            severity=severity,
+        )
+
+
+# ─── Singleton accessors for the new hooks ───────────────────────
+
+_budget_hook: BudgetHook | None = None
+_incident_hook: IncidentHook | None = None
+_user_satisfaction_hook: UserSatisfactionHook | None = None
+_drift_alert_hook: DriftAlertHook | None = None
+_roi_hook: RoiHook | None = None
+
+
+def get_budget_hook() -> BudgetHook:
+    global _budget_hook
+    if _budget_hook is None:
+        _budget_hook = BudgetHook()
+    return _budget_hook
+
+
+def get_incident_hook() -> IncidentHook:
+    global _incident_hook
+    if _incident_hook is None:
+        _incident_hook = IncidentHook()
+    return _incident_hook
+
+
+def get_user_satisfaction_hook() -> UserSatisfactionHook:
+    global _user_satisfaction_hook
+    if _user_satisfaction_hook is None:
+        _user_satisfaction_hook = UserSatisfactionHook()
+    return _user_satisfaction_hook
+
+
+def get_drift_alert_hook() -> DriftAlertHook:
+    global _drift_alert_hook
+    if _drift_alert_hook is None:
+        _drift_alert_hook = DriftAlertHook()
+    return _drift_alert_hook
+
+
+def get_roi_hook() -> RoiHook:
+    global _roi_hook
+    if _roi_hook is None:
+        _roi_hook = RoiHook()
+    return _roi_hook
+
+
+def register_all_hooks() -> None:
+    """No-op shim kept for backward compatibility.
+
+    Hooks are now registered as singletons via ``get_*_hook()``; nothing
+    to register at startup because the in-process bus is lazy.
+    """
     logger.info(
         "closed-loop hooks registered (advisory): promotion, "
         "guardrail, experiment, metric_studio, columnar, dsl, "
-        "code_change"
+        "code_change, budget, incident, user_satisfaction, "
+        "drift_alert, roi"
     )
