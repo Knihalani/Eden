@@ -32,14 +32,18 @@ async def _try_get_pool():
     return client
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture
 def event_loop():
+    """Function-scoped event loop to match pytest-asyncio's default
+    test loop scope. Module-scoped caused 'attached to a different
+    loop' errors on CI — see test_timescale_judge_scores for the
+    same fix."""
     loop = asyncio.new_event_loop()
     yield loop
     loop.close()
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture
 async def pg_client():
     client = await _try_get_pool()
     if client is None:
