@@ -230,9 +230,19 @@ def test_migration_021_defines_required_objects():
     canonical_json helper, the trigger itself, and the
     verify_audit_chain function. Locking these in here is a guard
     against accidental removal when refactoring the audit log."""
-    with open(
-        "/Users/kaiavnihalani/Downloads/Eden/migrations/021_audit_tamper_evidence.sql"
-    ) as _f:
+    # Audit 2026-06-23: the original path was a hardcoded absolute
+    # macOS path (``/Users/kaiavnihalani/Downloads/Eden/...``) that
+    # worked on the author's Mac but failed on CI (Ubuntu,
+    # ``/home/runner/work/Eden/Eden/...``) with FileNotFoundError.
+    # Resolve relative to this test file so the test runs anywhere.
+    import os
+
+    _here = os.path.dirname(os.path.abspath(__file__))
+    _repo = os.path.abspath(os.path.join(_here, "..", "..", ".."))
+    _migration_path = os.path.join(
+        _repo, "migrations", "021_audit_tamper_evidence.sql",
+    )
+    with open(_migration_path) as _f:
         migration = _f.read()
     assert "prev_hash" in migration
     assert "entry_hash" in migration
