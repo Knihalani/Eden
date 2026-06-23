@@ -134,6 +134,20 @@ class TenantRateLimitMiddleware(BaseHTTPMiddleware):
                 self._buckets[key] = TokenBucket(capacity, refill_rate)
             return self._buckets[key]
 
+    def reset_buckets(self) -> None:
+        """Clear ALL per-tenant rate-limit buckets.
+
+        Called from the test conftest's ``reset_rate_limit`` autouse
+        fixture so each integration test starts with a fresh bucket.
+        Without this, tests share the process-global bucket and the
+        Nth test in a session gets 429'd even though its own request
+        count is well below the limit.
+
+        Not for production use — there's no auth or rate limit on
+        this method.
+        """
+        self._buckets.clear()
+
     async def _resolve_org_from_request(self, request: Request) -> str | None:
         """Parse JWT cookie or API key header to extract org_id.
 
