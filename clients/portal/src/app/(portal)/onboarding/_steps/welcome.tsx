@@ -18,20 +18,29 @@ export function WelcomeStep() {
   const { currentOrg } = useOrg();
 
   async function goNext() {
+    // TEMP DIAG: log every step of the handler so we can see if
+    // it's running and where it's failing. Removed once the
+    // user confirms the navigation works.
+    // eslint-disable-next-line no-console
+    console.log("[welcome] goNext start, currentOrg =", currentOrg?.id ?? null);
     if (currentOrg?.id) {
       try {
-        // The org-setup step is the next page in the flow.
-        // ``step`` is set to "org_setup" so a refresh resumes
-        // at the right place. Best-effort: the user might
-        // not have a Clerk-synced org yet (the page is also
-        // reachable while orgless, in which case we skip the
-        // PATCH and just navigate).
         await onboardingApi.patchState(currentOrg.id, { step: "org_setup" });
-      } catch {
-        // best-effort
+        // eslint-disable-next-line no-console
+        console.log("[welcome] patchState ok");
+      } catch (err) {
+        // eslint-disable-next-line no-console
+        console.log("[welcome] patchState FAILED:", err);
       }
+    } else {
+      // eslint-disable-next-line no-console
+      console.log("[welcome] no currentOrg, skipping PATCH");
     }
+    // eslint-disable-next-line no-console
+    console.log("[welcome] calling router.push('/onboarding/org')");
     router.push("/onboarding/org");
+    // eslint-disable-next-line no-console
+    console.log("[welcome] router.push returned, pathname =", window.location.pathname);
   }
 
   return (
