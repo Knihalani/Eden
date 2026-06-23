@@ -359,8 +359,12 @@ kind: Job
 metadata:
   name: eden-worker
 spec:
+  # Phase 2 audit (2026-06-23) — bumped from nf-compute-20 (0.2 vCPU /
+  # 512 MB) to nf-compute-50 (0.5 vCPU / 1 GB) for Cat 14 autonomous
+  # jobs + Cat 9 user-intel batch processing. Sandbox plan caps at
+  # nf-compute-20; bump to nf-compute-100-2 for production.
   compute:
-    name: nf-compute-20
+    name: nf-compute-50
   deployment:
     instances: 1
   build:
@@ -445,6 +449,17 @@ spec:
       valueFrom: { secretKeyRef: { group: eden-required, key: TINYBIRD_ADMIN_TOKEN } }
     - name: SENTRY_DSN
       valueFrom: { secretKeyRef: { group: eden-required, key: SENTRY_DSN } }
+    # ── Clerk (Phase 2 audit — workers need it for Cat 14 autonomous
+    # actions + future webhook verification in jobs). Without these
+    # the worker would have no way to call Clerk on behalf of the
+    # user when e.g. posting a Slack notification via Clerk's user
+    # lookup, or when re-verifying a webhook signature mid-job.
+    - name: CLERK_SECRET_KEY
+      valueFrom: { secretKeyRef: { group: eden-required, key: CLERK_SECRET_KEY } }
+    - name: CLERK_PUBLISHABLE_KEY
+      valueFrom: { secretKeyRef: { group: eden-required, key: CLERK_PUBLISHABLE_KEY } }
+    - name: CLERK_WEBHOOK_SIGNING_SECRET
+      valueFrom: { secretKeyRef: { group: eden-required, key: CLERK_WEBHOOK_SIGNING_SECRET } }
 
 # ─────────────────────────────────────────────────────────────────────
 # Job 2/2: eden-cron (scheduled tasks)
@@ -455,8 +470,13 @@ kind: Job
 metadata:
   name: eden-cron
 spec:
+  # Phase 2 audit (2026-06-23) — bumped from nf-compute-10 (0.1 vCPU
+  # / 256 MB) to nf-compute-50 (0.5 vCPU / 1 GB) for parity with the
+  # worker. The cron runs the full event-scheduler loop (drift
+  # detection, retention sweeps, KPI rollups) every 5 minutes and
+  # the smallest compute tier is no longer sufficient.
   compute:
-    name: nf-compute-10       # 0.1 vCPU / 256 MB — enough for cron
+    name: nf-compute-50
   build:
     type: dockerfile
     dockerfilePath: ./Dockerfile
@@ -515,6 +535,16 @@ spec:
       valueFrom: { secretKeyRef: { group: eden-required, key: SESSION_SECRET } }
     - name: OPENROUTER_API_KEY
       valueFrom: { secretKeyRef: { group: eden-required, key: OPENROUTER_API_KEY } }
+    # ── Clerk (Phase 2 audit — cron needs it for periodic user/org
+    # sync + autonomous scheduler notifications). Same trio as the
+    # worker; the cron doesn't accept webhooks so CLERK_WEBHOOK_*
+    # is purely for cross-tenant Clerk API calls in scheduled jobs.
+    - name: CLERK_SECRET_KEY
+      valueFrom: { secretKeyRef: { group: eden-required, key: CLERK_SECRET_KEY } }
+    - name: CLERK_PUBLISHABLE_KEY
+      valueFrom: { secretKeyRef: { group: eden-required, key: CLERK_PUBLISHABLE_KEY } }
+    - name: CLERK_WEBHOOK_SIGNING_SECRET
+      valueFrom: { secretKeyRef: { group: eden-required, key: CLERK_WEBHOOK_SIGNING_SECRET } }
 
 # ─────────────────────────────────────────────────────────────────────
 # No Postgres addon — the database lives on Neon Scale

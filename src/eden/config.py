@@ -30,6 +30,20 @@ class Settings(BaseSettings):
     host: str = "0.0.0.0"
     port: int = 8000
 
+    # CORS — read by ``api/app.py::_cors_origins_list`` (Phase 2 audit).
+    # Phase 1 left the field undeclared on Settings; the app fell back to
+    # ``getattr(settings, "cors_origins_raw", "")`` which silently produced
+    # an empty allow-list in prod. Set ``CORS_ORIGINS_RAW`` to a CSV
+    # list of allowed portal origins (e.g. ``https://edenobservability.com``)
+    # in the Northflank env block.
+    cors_origins_raw: str = ""
+
+    # /health probe override — when set, /health returns this status code
+    # (200 healthy / 503 degraded). Defaults to "auto" which derives the
+    # code from the postgres + qdrant + sandbox probes. Set to "200" in
+    # environments where Northflank restarts aren't safe (e.g. local dev).
+    health_probe_mode: str = "auto"
+
     # PostgreSQL
     postgres_host: str = "localhost"
     postgres_port: int = 5432
