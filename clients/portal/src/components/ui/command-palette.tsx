@@ -228,7 +228,11 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
       />
       <Cmnd
         className={cn(
-          "fixed left-1/2 top-[20%] -translate-x-1/2 w-full max-w-[calc(100vw-2rem)] sm:max-w-lg",
+          // FIX-G: center vertically. The previous `top-[20%]`
+          // anchored the menu 20% from the top of the viewport,
+          // which on a 1080p screen put it visibly above center.
+          // `top-1/2 -translate-y-1/2` puts it dead-center.
+          "fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-[calc(100vw-2rem)] sm:max-w-lg",
           "bg-[var(--bg-primary)] rounded-2xl shadow-2xl border border-[var(--border-default)] overflow-hidden",
           "flex flex-col",
           "animate-scale-in"
