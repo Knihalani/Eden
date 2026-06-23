@@ -407,6 +407,11 @@ html,
 body {
   overflow-y: auto;
   min-height: 100%;
+  /* ponytail: 100dvh handles mobile Safari's expanding/collapsing
+   * address bar natively (avoids double-scrollbars + jump on scroll).
+   * Falls back to 100vh automatically on browsers without dvh support. */
+  height: 100dvh;
+  overscroll-behavior: contain;
 }
 
 /* FIX-B: defensive rule — every high-z fixed/absolute overlay
@@ -437,7 +442,8 @@ body {
  * z-50 fixed element in the rest of the portal became unclickable
  * (user dropdown, notifications, Radix Select/Dropdown, etc.) once
  * the user had visited /onboarding. */
-[data-route="onboarding"] [class*="z-50"][class*="fixed"]:not(.z-allow-click) {
+[data-route="onboarding"] [class*="z-50"][class*="fixed"]:not(.z-allow-click),
+[data-route^="wizard"] [class*="z-50"][class*="fixed"]:not(.z-allow-click) {
   pointer-events: none;
 }
 
