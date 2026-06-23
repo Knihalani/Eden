@@ -266,13 +266,25 @@ class TestChatRoute:
         self, fake_stream: Any, monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """Smoke test the SSE envelope: events are framed as
-        ``event: <type>\\ndata: <json>\\n\\n`` and the JSON parses."""
-        ai_mod = _load_ai_insights_module()
-        tools = ai_mod._anthropic_tools()
+        ``event: <type>\\ndata: <json>\\n\\n`` and the JSON parses.
+
+        Phase 3a (2026-06-23): Eden migrated from the Anthropic SDK
+        to OpenRouter (per the model policy in
+        ``src/eden/optimization/model_router.py`` — minimax-m3 via
+        the T3 fallback chain). The Anthropic-era ``_anthropic_tools``
+        function was removed; the equivalent tool catalog now lives
+        on :func:`eden.autonomous.agent.tool_specs` and is consumed
+        by the Cmd-J ``ChatService``. Verify the canonical tool
+        catalog has the expected shape: each entry has a name,
+        description, and an args dict of typed properties.
+        """
+        from eden.autonomous.agent import tool_specs
+
+        tools = tool_specs()
         # Each entry has the right shape.
         for t in tools:
-            assert {"name", "description", "input_schema"} <= set(t)
-            assert t["input_schema"]["type"] == "object"
+            assert {"name", "summary", "args"} <= set(t)
+            assert isinstance(t["args"], dict)
 
 
 class FakeEvent:
