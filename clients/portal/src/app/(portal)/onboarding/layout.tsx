@@ -23,63 +23,50 @@
  */
 
 import { Wizard, type WizardStep } from "@/components/ui/wizard";
-import { WelcomeStep } from "./_steps/welcome";
-import { ConnectStep } from "./_steps/connect";
-import { WaitStep } from "./_steps/wait";
-import { TourStep } from "./_steps/tour";
-import { DoneStep } from "./_steps/done";
 
 const STEPS: WizardStep[] = [
   {
     id: "welcome",
     slug: "/onboarding",
     label: "Welcome",
-    render: () => <WelcomeStep {...({} as Parameters<typeof WelcomeStep>[0])} />,
+    // The "Next" button in the wizard's bottom nav moves forward
+    // to the org-setup step on the same flow.
+    onNext: () => "/onboarding/org",
   },
   {
     id: "org",
     slug: "/onboarding/org",
     label: "Organisation",
-    render: () => null,
+    onNext: () => "/onboarding/autonomous",
+  },
+  {
+    id: "autonomous",
+    slug: "/onboarding/autonomous",
+    label: "Autonomous",
+    onNext: () => "/onboarding/connect",
   },
   {
     id: "connect",
     slug: "/onboarding/connect",
     label: "Connect repo",
-    // Required step: link a GitHub repo via the Eden GitHub App. The
-    // shared <OnboardingConnectFlow> opens an SDK-integration PR;
-    // on success it navigates to /onboarding/wait. Members /
-    // viewers without `jobs:write` see a locked panel that explains
-    // why and lets the wizard skip to the Done step.
-    render: () => <ConnectStep />,
+    onNext: () => "/onboarding/wait",
   },
   {
     id: "wait",
     slug: "/onboarding/wait",
     label: "Wait for PR",
-    // Poll /pr-runs every 5s for the integration PR. Status badges,
-    // GitHub deep links, and a "Skip — finish setup" escape hatch
-    // for users who wire the repo up manually.
-    render: () => <WaitStep />,
+    onNext: () => "/onboarding/tour",
   },
   {
     id: "tour",
     slug: "/onboarding/tour",
     label: "Quick tour",
-    // Visual tour of the major portal components. Replaces the
-    // previous "Install SDK" required step — SDK install is now
-    // optional and reachable from the chat, the tour card, or
-    // Settings → Agent. The tour card itself highlights the AI
-    // Insights chat as the catch-all for "ask Eden" questions.
-    render: () => (
-      <TourStep {...({} as Parameters<typeof TourStep>[0])} />
-    ),
+    onNext: () => "/onboarding/done",
   },
   {
     id: "done",
     slug: "/onboarding/done",
     label: "Done",
-    render: () => <DoneStep {...({} as Parameters<typeof DoneStep>[0])} />,
   },
 ];
 

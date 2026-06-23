@@ -12,24 +12,26 @@ import Link from "next/link";
 import { ArrowRight, Eye, GitBranch, KeyRound, Sparkles, UserPlus } from "lucide-react";
 import { useOrg } from "@/hooks/use-org";
 import { onboardingApi } from "@/lib/api";
-import type { WizardContext } from "@/components/ui/wizard";
 
-export function WelcomeStep(_ctx: WizardContext) {
+export function WelcomeStep() {
   const router = useRouter();
   const { currentOrg } = useOrg();
 
   async function goNext() {
     if (currentOrg?.id) {
       try {
-        // The autonomous-disclosure step is the next page in
-        // the flow. ``step`` is set to "autonomous" so a
-        // refresh resumes at the right place.
-        await onboardingApi.patchState(currentOrg.id, { step: "autonomous" });
+        // The org-setup step is the next page in the flow.
+        // ``step`` is set to "org_setup" so a refresh resumes
+        // at the right place. Best-effort: the user might
+        // not have a Clerk-synced org yet (the page is also
+        // reachable while orgless, in which case we skip the
+        // PATCH and just navigate).
+        await onboardingApi.patchState(currentOrg.id, { step: "org_setup" });
       } catch {
         // best-effort
       }
     }
-    router.push("/onboarding/autonomous");
+    router.push("/onboarding/org");
   }
 
   return (

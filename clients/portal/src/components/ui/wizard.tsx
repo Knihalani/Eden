@@ -45,7 +45,12 @@ export interface WizardStep {
   slug: string;
   label: string;
   optional?: boolean;
-  render: (ctx: WizardContext) => React.ReactNode;
+  /** Optional body renderer. The route page (e.g.
+   *  ``(portal)/onboarding/[step]/page.tsx``) is the canonical
+   *  source of body content; ``render`` is only needed if the
+   *  wizard should mount the body for a slug with no page file
+   *  (e.g. an embedded surface). */
+  render?: (ctx: WizardContext) => React.ReactNode;
   canAdvance?: (ctx: WizardContext) => boolean | Promise<boolean>;
   /** Return value is the next slug. If omitted, the wizard advances to
    *  the next non-skipped step in the array. */
@@ -182,7 +187,16 @@ export function Wizard({
   };
 
   return (
-    <div className="min-h-full bg-[var(--bg-primary)] text-[var(--text-primary)]">
+    // ``min-h-full`` lets the chrome stretch to fill the viewport on
+    // short pages, but doesn't push the page taller than its
+    // content. The previous ``-mt-4`` on the bottom nav (and the
+    // tall top-bar + progress strip + 2.5rem of internal padding
+    // on the body) was making short pages like the welcome card
+    // overflow the viewport and look "expanded too far down" — the
+    // body filled past 100vh, the bottom nav floated over the
+    // content, and the user had to scroll past it to see the
+    // primary CTA.
+    <div className="flex min-h-full flex-col bg-[var(--bg-primary)] text-[var(--text-primary)]">
       {/* Top bar */}
       <div className="border-b border-[var(--border-default)] bg-[var(--bg-secondary)] px-6 py-3">
         <div className="mx-auto flex max-w-3xl items-center justify-between">
@@ -265,14 +279,21 @@ export function Wizard({
         </div>
       </div>
 
-      {/* Page body */}
-      <div className="mx-auto max-w-3xl px-6 py-10">
-        {children ?? (activeStep ? activeStep.render(ctx) : null)}
-      </div>
+      {/* Page body — driven by the route page. The Wizard's STEPS
+          array is just metadata: slug + label + onNext. The previous
+          `children ?? activeStep.render(ctx)` showed BOTH the page
+          and the step component (or the step when the page returned
+          null) and the two sources disagreed on what comes next,
+          leaving the user stuck on an empty body. Render the page
+          content only — the onboarding page files already import
+          the step component, so the URL is the single source of
+          truth. */}
+      <div className="mx-auto w-full max-w-3xl flex-1 px-6 py-8 sm:py-10">{children}</div>
 
-      {/* Bottom navigation (only on non-complete steps) */}
+      {/* Bottom navigation (only on non-complete steps). Sits below
+          the body (no -mt-4) so it never overlaps the page content. */}
       {!isComplete && activeStep && (
-        <div className="mx-auto max-w-3xl px-6 pb-10 -mt-4">
+        <div className="mx-auto w-full max-w-3xl px-6 pb-10">
           <div className="flex items-center justify-between border-t border-[var(--border-default)] pt-6">
             <button
               onClick={onBack}
