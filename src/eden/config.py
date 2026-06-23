@@ -124,6 +124,63 @@ class Settings(BaseSettings):
     auto_pr_enabled: bool = False
     auto_revert_enabled: bool = False
 
+    # ── Cat 23 Phase 3b: quality gates (scheduler, critic, cost cap) ─
+    # These knobs are read by ``eden.code_change.scheduler`` (the 15-min
+    # cron tick that pulls low-judge-score clusters + generates patches)
+    # and by ``PatchGenerator.generate`` (critic loop + size validation).
+    # The per-org overrides live on
+    # ``organizations.features->'code_change_policy'``; these env-level
+    # values are the global defaults that the policy service falls back
+    # to when an org hasn't set its own. Defaults are conservative
+    # — a fresh deploy should not be able to fan out 1000 patches in a
+    # flood even if every other gate is open.
+    #
+    # ``max_cost_per_user_per_day`` — hard cap on total LLM spend the
+    # autonomous PR pipeline can rack up per org per day. The scheduler
+    # circuit-breaks when the SUM(cost_usd) of generated proposed_patches
+    # in the last 24h exceeds this. $50/day covers ~150 T2 patches at
+    # $0.30 each (per the Phase 3b cost table in the plan).
+    max_cost_per_user_per_day: float = 50.0
+    # Minimum number of traces that must cluster together on the same
+    # RCA signature before the scheduler will generate a patch. Prevents
+    # one-off flukes from triggering an autonomous PR. ``IncidentClusterer``
+    # already defaults to 3; this knob just exposes it to env-level config.
+    patch_cluster_min_size: int = 3
+    # Soft + hard caps on lines changed per diff. 200 lines is the
+    # soft cap — patches this size generate normally. 500 lines is the
+    # hard cap — anything bigger returns an "investigation" envelope and
+    # never writes a proposed_patches row. The hard cap prevents the
+    # agent from auto-opening architectural-scale PRs.
+    patch_max_diff_lines_soft: int = 200
+    patch_max_diff_lines_hard: int = 500
+    # ``patch_quality_floor`` — minimum overall quality_score (0-1)
+    # required for a generated patch to be queued for human review.
+    # Patches below this threshold are inserted into proposed_patches
+    # with status='low_quality' so a human can still see them, but
+    # the inbox does not notify the on-call.
+    patch_quality_floor: float = 0.8
+    # Daily + weekly ceilings on the total number of proposed_patches
+    # rows generated per org. The scheduler returns early when either
+    # is hit. Distinct from the auto-approval rate limiter (which is
+    # post-generation); these caps stop generation itself.
+    patch_max_per_day: int = 10
+    patch_max_per_week: int = 30
+    # ``patch_similarity_threshold`` (0.0-1.0) — when a freshly-generated
+    # diff has ``difflib.SequenceMatcher.ratio() > threshold`` against
+    # any proposed_patches row from the last 14 days, the new patch is
+    # dropped as a duplicate. 0.85 catches structural duplicates
+    # (same fix) while allowing evolved variants (different fix).
+    patch_similarity_threshold: float = 0.85
+    # Lookback windows (overridable per-deploy; the default 14d is
+    # what the dedup check uses).
+    patch_similarity_lookback_days: int = 14
+    patch_rejection_memory_wontfix_days: int = 30
+    patch_rejection_memory_user_fixed_days: int = 90
+    # Cron scheduler cadence — the eden-cron Northflank job ticks
+    # every 5 min but the heavy Cat 23 evaluator runs at this cadence.
+    # Default 15 min matches the Phase 3b plan ("15-min cron tick").
+    scheduler_tick_seconds: int = 900
+
     # Phase C — unified AI agent (Cat 14 real + global panel).
     # The agent uses the ModelRouter T3 tier (premium: claude-opus-4,
     # gpt-4.5, deepseek-v4) per the user's "super super capable"
