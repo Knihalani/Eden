@@ -70,3 +70,4 @@ docs/.docusaurus/
 # Local skill state
 .claude/skills/
 .vercel
+.deploy-sha
