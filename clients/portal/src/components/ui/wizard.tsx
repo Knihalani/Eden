@@ -196,7 +196,20 @@ export function Wizard({
     // body filled past 100vh, the bottom nav floated over the
     // content, and the user had to scroll past it to see the
     // primary CTA.
-    <div className="flex min-h-full flex-col bg-[var(--bg-primary)] text-[var(--text-primary)]">
+    <div
+      className="flex min-h-full flex-col bg-[var(--bg-primary)] text-[var(--text-primary)]"
+      // TEMP DIAG: capture-phase click logger. Removed once the
+      // user confirms the click handler runs.
+      onClickCapture={(e) => {
+        // eslint-disable-next-line no-console
+        console.log(
+          "[wizard] click captured:",
+          (e.target as HTMLElement)?.tagName,
+          "|",
+          ((e.target as HTMLElement)?.textContent ?? "").slice(0, 40),
+        );
+      }}
+    >
       {/* Top bar — compact: single line, h-12 */}
       <div className="flex h-12 items-center border-b border-[var(--border-default)] bg-[var(--bg-secondary)] px-6">
         <div className="mx-auto flex w-full max-w-3xl items-center justify-between">
