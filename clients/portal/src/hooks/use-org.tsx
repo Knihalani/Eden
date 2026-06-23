@@ -101,6 +101,14 @@ export function OrgProvider({ children }: { children: ReactNode }) {
       } else {
         setCurrentOrgState(enrichedOrgs[0] ?? null);
       }
+      // FIX-J: clear the sticky auth banner on success. The previous
+      // implementation never reset `authError` on a successful
+      // /auth/me, so a transient 401 during onboarding left the
+      // "Session expired" banner permanently on screen even after
+      // the session was healthy. The user's live test showed
+      // /auth/me returning 200 with valid user data but the banner
+      // still visible — this is the cause.
+      setAuthError(null);
     } catch (e) {
       // Only emit a console error for genuinely unexpected failures
       // (anything that isn't a known transient / handled class).

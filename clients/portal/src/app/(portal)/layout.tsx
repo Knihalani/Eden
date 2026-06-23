@@ -338,11 +338,13 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
         {/* Gradient overlay */}
         <div className="absolute inset-0 sidebar-gradient pointer-events-none" />
 
-        {/* Brand header: real Eden logo + wordmark + a discoverable
-            collapse toggle when expanded. The collapsed state hides
-            the wordmark and shows just the logo, with an always-
-            visible expand affordance in the same header row so the
-            user never has to hunt for how to bring it back. */}
+        {/* Brand header: real Eden logo + wordmark. FIX-H: collapse
+            toggle is now a single, consistent icon button in the
+            header row — same color, same position regardless of
+            collapsed/expanded state. The previous version had THREE
+            different collapse affordances (bottom-right "Collapse"
+            text + gutter chevron + corner pill) with different colors
+            and positions, which the user reported as confusing. */}
         <div
           className={cn(
             "relative flex items-center border-b border-[var(--border-default)] shrink-0 h-14",
@@ -356,20 +358,29 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
           >
             <Logo size="md" showWordmark={!collapsed} priority className="min-w-0" />
           </Link>
-          {/* Expand toggle — visible only when collapsed, lives in the
-              same header row so it's always at the same x position as
-              the logo. The expanded-state toggle sits below as a row
-              of icon buttons (collapse + hint). */}
-          {collapsed && (
-            <button
-              onClick={handleCollapse}
-              className="absolute -right-3 top-1/2 -translate-y-1/2 w-6 h-6 bg-[var(--bg-primary)] border border-[var(--border-default)] rounded-full items-center justify-center shadow-sm hover:shadow-md hover:border-[var(--accent)] transition-all z-10 hidden md:flex"
-              aria-label="Expand sidebar (⌘B)"
-              title="Expand sidebar (⌘B)"
-            >
-              <PanelLeftOpen className="w-3.5 h-3.5 text-[var(--accent)]" />
-            </button>
-          )}
+          {/* Single, consistent collapse/expand toggle. Always rendered
+              on lg+; visible icon + ⌘B hint keeps the affordance
+              discoverable without conflicting copy. */}
+          <button
+            onClick={handleCollapse}
+            className={cn(
+              "hidden md:flex items-center gap-1.5 px-2 py-1 rounded-md text-xs",
+              "text-[var(--text-muted)] hover:text-[var(--accent)] hover:bg-[var(--bg-tertiary)]",
+              "transition-colors",
+            )}
+            aria-label={collapsed ? "Expand sidebar (⌘B)" : "Collapse sidebar (⌘B)"}
+            title={collapsed ? "Expand sidebar (⌘B)" : "Collapse sidebar (⌘B)"}
+          >
+            {collapsed ? (
+              <PanelLeftOpen className="w-3.5 h-3.5" />
+            ) : (
+              <PanelLeftClose className="w-3.5 h-3.5" />
+            )}
+            {!collapsed && <span>Collapse</span>}
+            <kbd className="ml-1 px-1 py-0.5 bg-[var(--bg-base)] border border-[var(--border-default)] rounded text-[10px] font-mono text-[var(--text-muted)]">
+              ⌘B
+            </kbd>
+          </button>
           <button
             onClick={() => setSidebarOpen(false)}
             className="lg:hidden p-1.5 text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)] rounded-md transition-colors"
@@ -379,42 +390,6 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
           </button>
         </div>
 
-        {/* Collapse button (desktop, expanded only).
-            The button is a labelled icon in the bottom-right of the
-            sidebar — visible at all times, with a keyboard hint so the
-            user learns the shortcut. The collapsed-state expand lives
-            in the header above; the floating chevron at the edge is
-            kept for users who mouse to the gutter. */}
-        {!collapsed && (
-          <div className="relative hidden md:flex items-center justify-end px-3 pt-2 shrink-0">
-            <button
-              onClick={handleCollapse}
-              className="flex items-center gap-1.5 text-[11px] text-[var(--text-muted)] hover:text-[var(--accent)] hover:bg-[var(--bg-tertiary)] px-2 py-1 rounded-md transition-colors"
-              aria-label="Collapse sidebar (⌘B)"
-              title="Collapse sidebar (⌘B)"
-            >
-              <PanelLeftClose className="w-3.5 h-3.5" />
-              <span>Collapse</span>
-              <kbd className="ml-1 px-1 py-0.5 bg-[var(--bg-base)] border border-[var(--border-default)] rounded text-[10px] font-mono text-[var(--text-muted)]">
-                ⌘B
-              </kbd>
-            </button>
-          </div>
-        )}
-
-        {/* Floating chevron at the sidebar gutter — preserved so users
-            who mouse to the very edge still find an affordance. */}
-        {!collapsed && (
-          <button
-            onClick={handleCollapse}
-            className="hidden md:flex absolute -right-3 top-[120px] w-6 h-6 bg-[var(--bg-primary)] border border-[var(--border-default)] rounded-full items-center justify-center shadow-sm hover:shadow-md hover:border-[var(--accent)] transition-all sidebar-collapse-btn z-10"
-            aria-label="Collapse sidebar (⌘B)"
-            title="Collapse sidebar (⌘B)"
-          >
-            <ChevronLeft className="w-3.5 h-3.5 text-[var(--text-secondary)]" />
-          </button>
-        )}
-
         {/* Organization switcher REMOVED — June 2026 UI overhaul.
             The active org still flows through Clerk + useOrg(), but
             the sidebar no longer surfaces an org logo/avatar (which
@@ -422,17 +397,17 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
             Users reach org controls via Settings → Organization. */}
 
         {/* Navigation — data-driven from DEFAULT_SIDEBAR + user prefs
-            (pinned / hidden / reordered). FIX-F: removed the internal
-            overflow-y-auto. With the new sticky `lg:h-screen` sidebar,
-            internal scroll + document scroll competed and caused
-            the scrollbar to lag/jitter when the user moved the mouse
-            over the sidebar. Letting the sidebar grow to its content
-            height and the document scroll handle navigation is
-            simpler and matches the user's expectation (the whole
-            page scrolls together). On mobile the sidebar is a fixed
-            drawer so this only affects lg+. */}
+            (pinned / hidden / reordered). FIX-I: bounded max-height
+            + internal scroll. The sidebar is `lg:sticky lg:h-screen`,
+            so this nav gets `flex-1 min-h-0 overflow-y-auto` to take
+            exactly the remaining viewport height (header + user
+            section) and scroll internally. Without `min-h-0` the
+            flex child refuses to shrink and the sidebar expands
+            past the viewport. `overscroll-contain` keeps the
+            wheel-chained scroll inside the sidebar from scrolling
+            the document under it. */}
         <nav
-          className="relative flex-1 p-3 space-y-5"
+          className="relative flex-1 min-h-0 p-3 space-y-5 overflow-y-auto overscroll-contain"
           aria-label="Main navigation"
         >
           {pinnedItems.length > 0 && (
