@@ -3903,6 +3903,151 @@ export const fineTuneApi = {
 
 (api as unknown as Record<string, unknown>).fineTuneApi = fineTuneApi;
 
+// ── Provider routing (D.12.6) ────────────────────────────────────────────
+//
+// ``providerRoutingApi`` is the frontend surface for the
+// Cat 2.12 real backend. The 4-decision state machine
+// (success / fallback / retry / abort) is recorded per
+// (trace_id, sequence_index) and the per-(org, provider)
+// failure rate drives the on_provider_routing_repeated_failures
+// hook.
+
+export type ProviderRoutingDecision =
+  | "success"
+  | "fallback"
+  | "retry"
+  | "abort";
+
+export interface ProviderRoutingAttempt {
+  id: string;
+  org_id: string;
+  trace_id: string;
+  span_id: string;
+  attempted_provider: string;
+  attempted_model: string;
+  failure_reason: string | null;
+  latency_ms: number | null;
+  decision: ProviderRoutingDecision;
+  sequence_index: number;
+  created_at: string;
+}
+
+export interface ProviderRoutingFailureRate {
+  org_id: string;
+  attempted_provider: string;
+  window_minutes: number;
+  total_attempts: number;
+  non_success_count: number;
+  success_count: number;
+  failure_rate: number;
+}
+
+export interface ProviderRoutingSpikeSummary {
+  org_id: string;
+  attempted_provider: string;
+  window_minutes: number;
+  threshold: number;
+  non_success_count: number;
+  total_attempts: number;
+  failure_rate: number;
+  spike: true;
+  trace_ids: string[];
+}
+
+export const providerRoutingApi = {
+  recordAttempt: (
+    orgId: string,
+    body: {
+      trace_id: string;
+      span_id: string;
+      attempted_provider: string;
+      attempted_model: string;
+      sequence_index: number;
+      decision: ProviderRoutingDecision;
+      failure_reason?: string;
+      latency_ms?: number;
+    },
+  ) =>
+    fetchApi<{ data: { id: string | null } }>(
+      `/v1/provider_routing/${orgId}/attempts`,
+      {
+        method: "POST",
+        headers: { "X-Org-Id": orgId, "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      },
+    ),
+  getTraceAttempts: (traceId: string) =>
+    fetchApi<{ data: ProviderRoutingAttempt[]; count: number }>(
+      `/v1/traces/${traceId}/provider_routing`,
+      { headers: { "X-Org-Id": "self" } },
+    ),
+  listAttempts: (
+    orgId: string,
+    params: {
+      attempted_provider?: string;
+      decision?: ProviderRoutingDecision;
+      since_minutes?: number;
+      limit?: number;
+    } = {},
+  ) => {
+    const qs = new URLSearchParams();
+    if (params.attempted_provider)
+      qs.set("attempted_provider", params.attempted_provider);
+    if (params.decision) qs.set("decision", params.decision);
+    if (params.since_minutes !== undefined)
+      qs.set("since_minutes", String(params.since_minutes));
+    if (params.limit !== undefined) qs.set("limit", String(params.limit));
+    return fetchApi<{ data: ProviderRoutingAttempt[]; count: number }>(
+      `/v1/provider_routing/${orgId}/attempts?${qs.toString()}`,
+      { headers: { "X-Org-Id": orgId } },
+    );
+  },
+  getFailureRate: (
+    orgId: string,
+    attemptedProvider: string,
+    windowMinutes = 15,
+  ) =>
+    fetchApi<{ data: ProviderRoutingFailureRate }>(
+      `/v1/provider_routing/${orgId}/failure_rate`
+        + `?attempted_provider=${encodeURIComponent(attemptedProvider)}`
+        + `&window_minutes=${windowMinutes}`,
+      { headers: { "X-Org-Id": orgId } },
+    ),
+  detectRepeatedFailures: (
+    orgId: string,
+    params: {
+      attempted_provider: string;
+      window_minutes?: number;
+      threshold?: number;
+      fire_hook?: boolean;
+    },
+  ) => {
+    const qs = new URLSearchParams();
+    qs.set("attempted_provider", params.attempted_provider);
+    if (params.window_minutes !== undefined)
+      qs.set("window_minutes", String(params.window_minutes));
+    if (params.threshold !== undefined)
+      qs.set("threshold", String(params.threshold));
+    if (params.fire_hook !== undefined)
+      qs.set("fire_hook", String(params.fire_hook));
+    return fetchApi<{
+      data:
+        | ProviderRoutingSpikeSummary
+        | {
+            org_id: string;
+            attempted_provider: string;
+            spike: false;
+            trace_ids: never[];
+          };
+    }>(
+      `/v1/provider_routing/${orgId}/repeated_failures?${qs.toString()}`,
+      { headers: { "X-Org-Id": orgId } },
+    );
+  },
+};
+
+(api as unknown as Record<string, unknown>).providerRoutingApi = providerRoutingApi;
+
 // ── AI Agent (Phase C — unified panel) ───────────────────────────────────
 //
 // ``aiApi`` is the frontend surface for the Cat 14 real backend.
