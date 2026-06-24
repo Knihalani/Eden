@@ -3772,6 +3772,137 @@ export const voiceApi = {
 
 (api as unknown as Record<string, unknown>).voiceApi = voiceApi;
 
+// ── Fine-tune lineage (D.12.5) ───────────────────────────────────────────
+//
+// ``fineTuneApi`` is the frontend surface for the Cat 8.7 real
+// backend. The lineage graph goes both ways: backward
+// (dataset → traces) and forward (run → traces that used the
+// fine-tuned model). The data-drift detector is admin-gated
+// and may fire the on_fine_tune_data_drift hook.
+
+export interface FineTuneRun {
+  id: string;
+  org_id: string;
+  provider: string;
+  provider_fine_tune_id: string | null;
+  base_model: string;
+  fine_tuned_model: string;
+  dataset_id: string;
+  training_params: Record<string, unknown>;
+  status: "pending" | "running" | "succeeded" | "failed";
+  eval_results: Record<string, unknown> | null;
+  created_at: string;
+  completed_at: string | null;
+}
+
+export interface FineTuneLineage {
+  run: FineTuneRun;
+  backward: { dataset_id: string; trace_ids: string[] };
+  forward: {
+    fine_tuning_run_id: string;
+    fine_tuned_model: string;
+    trace_ids: string[];
+  };
+}
+
+export interface FineTuneDriftSummary {
+  run_id: string;
+  org_id: string;
+  base_model: string;
+  current_score: number;
+  prior_mean: number;
+  prior_stdev: number;
+  window: number;
+  z_threshold: number;
+  z_score: number;
+  direction: "regression" | "improvement";
+  drift: true;
+}
+
+export const fineTuneApi = {
+  list: (
+    orgId: string,
+    params: { status?: string; provider?: string; limit?: number } = {},
+  ) => {
+    const qs = new URLSearchParams();
+    qs.set("org_id", orgId);
+    if (params.status) qs.set("status", params.status);
+    if (params.provider) qs.set("provider", params.provider);
+    if (params.limit !== undefined) qs.set("limit", String(params.limit));
+    return fetchApi<{ data: FineTuneRun[]; count: number }>(
+      `/v1/fine_tuning_runs?${qs.toString()}`,
+      { headers: { "X-Org-Id": orgId } },
+    );
+  },
+  register: (
+    orgId: string,
+    body: {
+      provider: string;
+      base_model: string;
+      fine_tuned_model: string;
+      dataset_id: string;
+      training_params?: Record<string, unknown>;
+      provider_fine_tune_id?: string;
+      status?: FineTuneRun["status"];
+      eval_results?: Record<string, unknown>;
+    },
+  ) =>
+    fetchApi<{ data: { id: string | null } }>(
+      `/v1/fine_tuning_runs`,
+      {
+        method: "POST",
+        headers: { "X-Org-Id": orgId, "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      },
+    ),
+  get: (runId: string) =>
+    fetchApi<{ data: FineTuneRun }>(
+      `/v1/fine_tuning_runs/${runId}`,
+      { headers: { "X-Org-Id": "self" } },
+    ),
+  getLineage: (runId: string) =>
+    fetchApi<{ data: FineTuneLineage }>(
+      `/v1/fine_tuning_runs/${runId}/lineage`,
+      { headers: { "X-Org-Id": "self" } },
+    ),
+  linkDatasetTraces: (
+    runId: string,
+    body: { trace_ids: string[]; span_id_by_trace?: Record<string, string> },
+  ) =>
+    fetchApi<{
+      data: { run_id: string; dataset_id: string; linked: number; requested: number };
+    }>(`/v1/fine_tuning_runs/${runId}/dataset_traces`, {
+      method: "POST",
+      headers: { "X-Org-Id": "self", "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    }),
+  recordTraceUsage: (runId: string, body: { trace_id: string }) =>
+    fetchApi<{
+      data: { run_id: string; trace_id: string; recorded: boolean };
+    }>(`/v1/fine_tuning_runs/${runId}/trace_usage`, {
+      method: "POST",
+      headers: { "X-Org-Id": "self", "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    }),
+  runDriftCheck: (
+    runId: string,
+    params: { window?: number; z_threshold?: number; fire_hook?: boolean } = {},
+  ) => {
+    const qs = new URLSearchParams();
+    if (params.window !== undefined) qs.set("window", String(params.window));
+    if (params.z_threshold !== undefined)
+      qs.set("z_threshold", String(params.z_threshold));
+    if (params.fire_hook !== undefined)
+      qs.set("fire_hook", String(params.fire_hook));
+    return fetchApi<{ data: FineTuneDriftSummary | { drift: false; run_id: string } }>(
+      `/v1/fine_tuning_runs/${runId}/drift_check?${qs.toString()}`,
+      { headers: { "X-Org-Id": "self" } },
+    );
+  },
+};
+
+(api as unknown as Record<string, unknown>).fineTuneApi = fineTuneApi;
+
 // ── AI Agent (Phase C — unified panel) ───────────────────────────────────
 //
 // ``aiApi`` is the frontend surface for the Cat 14 real backend.
