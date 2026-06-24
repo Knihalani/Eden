@@ -4,9 +4,9 @@
 
 | Status | Count | Items |
 |---|---|---|
-| ✅ **IMPLEMENTED** | 17 cats + 8 spec items + **D.1–D.7 Phase 0 cuts** + **D.8–D.10 + D.13 Phase 1 spine** | Cat 1, 2, 3, 4, 5, 6, 8, 9, 10, 11, 12, 13, 14, 18, 19, 20, 22 + D.10 cost guardrails (middleware registered 2026-06-23, schema + portal 2026-06-24) + D.13 webhooks (HMAC + DLQ + replay 2026-06-24) + §E closed-loop hook bus (HookBus + 16 hooks wired 2026-06-23) + §E.5 hook_events migration 051 + **D.1 APM cut** + **D.2 Flat Beta-Binomial + 3 trackers** + **D.3 Predictive 2-service trim** + **D.4 Autonomous 2-service trim** + **D.5 SOC2+GDPR-only** + **D.6 daily/weekly rollups only** + **D.7 Cat 23 4-table defer** + **D.8 streaming tokens (PG schema + SDK + sparkline UI)** + **D.9 prompt versioning (3 tables + service + @prompt() SDK + portal timeline)** + **D.10 budgets/consumption/actions tables + BudgetService + portal admin + ticker** + **D.13 webhook_dlq + X-Eden-Signature v1 + replay UI** |
+| ✅ **IMPLEMENTED** | 17 cats + 8 spec items + **D.1–D.7 Phase 0 cuts** + **D.8–D.10 + D.13 Phase 1 spine** + **D.14 Phase 2** | Cat 1, 2, 3, 4, 5, 6, 8, 9, 10, 11, 12, 13, 14, 18, 19, 20, 22 + D.10 cost guardrails (middleware registered 2026-06-23, schema + portal 2026-06-24) + D.13 webhooks (HMAC + DLQ + replay 2026-06-24) + §E closed-loop hook bus (HookBus + 16 hooks wired 2026-06-23) + §E.5 hook_events migration 051 + **D.1 APM cut** + **D.2 Flat Beta-Binomial + 3 trackers** + **D.3 Predictive 2-service trim** + **D.4 Autonomous 2-service trim** + **D.5 SOC2+GDPR-only** + **D.6 daily/weekly rollups only** + **D.7 Cat 23 4-table defer** + **D.8 streaming tokens (PG schema + SDK + sparkline UI)** + **D.9 prompt versioning (3 tables + service + @prompt() SDK + portal timeline)** + **D.10 budgets/consumption/actions tables + BudgetService + portal admin + ticker** + **D.13 webhook_dlq + X-Eden-Signature v1 + replay UI** + **D.14 onboarding_state + 7-step state machine + OnboardingMilestoneHook + OnboardingBanner + OnboardingChecklist + 13 tests** |
 | 🟡 **STUB surface** | 1 cat | Cat 23 — Autonomous Code Modification (15 tables; 4 inbox/persona/style tables deferred per D.7; real end-to-end ship is 8-week gated initiative) |
-| ❌ **NOT STARTED** | 4 spec items | D.11 RTBF cross-store, D.12 (MCP/A2A/Computer Use/Voice/Fine-tune/Provider routing), D.14 cold-start UX, Multi-region |
+| ❌ **NOT STARTED** | 3 spec items | D.11 RTBF cross-store, D.12 (MCP/A2A/Computer Use/Voice/Fine-tune/Provider routing), Multi-region |
 
 **Net shipped vs spec**: 22 of 26 spec'd hooks wired (16 existing + 5 new this session + 1 budget-hook existing). 11 remaining hooks need infra not yet built (RTBF cross-store, voice, fine-tune lineage, provider routing, MCP/A2A).
 
@@ -122,6 +122,7 @@ All 5 features **deferred** — each is a major new capability requiring new SDK
 ## Decisions for the next session
 
 1. **When to enable Stripe**: customer request for paid plans, then wire `STRIPE_SECRET_KEY` + paid plan routes.
-2. **When to ship D.8 / D.9 / D.10 full**: customer demand for streaming tokens / prompt versioning / cost guardrail UI.
+2. **When to ship D.8 / D.9 / D.10 / D.14 full**: customer demand for streaming tokens / prompt versioning / cost guardrail UI / cold-start onboarding. D.14 is now shipped but the banner defaults to "off" for pre-cutover orgs; flip the per-org override when a new enterprise customer comes in.
 3. **Cat 23 real ship**: gated on SLM Initiative + 4 hard gates (read-only → attribution → sandbox → end-to-end) over 8 weeks per memory `eden_cat23_stub_surface_shipped_2026_06.md`.
 4. **Re-enable deferred Phase 0 surfaces**: each cut has a clear re-add path (see "How shipped" column). For example, D.1 re-adds the 3 deleted modules; D.2 re-adds the 3 dropped signal columns via a follow-up migration.
+5. **Phase 2 coverage next (sessions 2-5)**: D.12.1 MCP, D.12.2 A2A, D.12.3 Computer Use, D.12.4 Voice, D.12.5 Fine-tune, D.12.6 Provider routing, D.11 RTBF. Multi-session plan at `~/.claude/plans/based-on-ugradespec-md-fully-serialized-volcano.md` (D.14 = 056, D.12.1-6 = 057-062, D.11 = 063).

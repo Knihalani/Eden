@@ -3326,6 +3326,96 @@ export const onboardingApi = {
     fetchApi<PendingInvite[]>(`/auth/me/pending-invites`),
 };
 
+// ── D.14 Cold-start UX (onboarding state machine v2) ──────────────────
+//
+// This is the NEW state machine backing the 7-step guided
+// checklist (per upgradespec §10.1):
+//
+//   install → org → connect → wait → done → tour → autonomous
+//
+// It's a sibling to the Cat 23 ``onboardingApi`` above (which
+// backs the github-app PR auto-instrumentation flow). The
+// state machine is what the banner + checklist components
+// render; the Cat 23 onboarding is the deeper wizard.
+//
+// Endpoints (per routes/onboarding.py):
+//   GET   /v1/internal/onboarding/{org_id}/state
+//   POST  /v1/internal/onboarding/{org_id}/advance
+//   POST  /v1/internal/onboarding/{org_id}/milestone
+//   POST  /v1/internal/onboarding/{org_id}/enable_cat
+//
+// The state has a ``source`` field; ``"legacy"`` means the org
+// was created before the v2 cutover (2026-07-01) and the banner
+// should NOT render. ``onboarding_v2_enabled`` is the explicit
+// toggle surfaced for the same check.
+
+export type OnboardingV2Step =
+  | "install"
+  | "org"
+  | "connect"
+  | "wait"
+  | "done"
+  | "tour"
+  | "autonomous";
+
+export interface OnboardingV2State {
+  org_id: string;
+  current_step: OnboardingV2Step;
+  completed_steps: OnboardingV2Step[];
+  cat_enablements: Record<string, { enabled_at: string; config: Record<string, unknown> }>;
+  first_trace_at: string | null;
+  milestones_reached: string[];
+  created_at: string;
+  updated_at: string;
+  source: "db" | "defaults" | "legacy";
+  onboarding_v2_enabled: boolean;
+  last_audit: Record<string, unknown> | null;
+}
+
+export const onboardingV2Api = {
+  getState: (orgId: string) =>
+    fetchApi<{ data: OnboardingV2State; steps: OnboardingV2Step[] }>(
+      `/v1/internal/onboarding/${orgId}/state`,
+      { headers: { "X-Org-Id": orgId } },
+    ),
+  advance: (
+    orgId: string,
+    body: { target_step: OnboardingV2Step; force?: boolean },
+  ) =>
+    fetchApi<{ data: OnboardingV2State }>(
+      `/v1/internal/onboarding/${orgId}/advance`,
+      {
+        method: "POST",
+        headers: { "X-Org-Id": orgId, "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      },
+    ),
+  recordMilestone: (orgId: string, milestone: string) =>
+    fetchApi<{ data: OnboardingV2State }>(
+      `/v1/internal/onboarding/${orgId}/milestone`,
+      {
+        method: "POST",
+        headers: { "X-Org-Id": orgId, "Content-Type": "application/json" },
+        body: JSON.stringify({ milestone }),
+      },
+    ),
+  enableCat: (
+    orgId: string,
+    catId: string,
+    config: Record<string, unknown> = {},
+  ) =>
+    fetchApi<{ data: OnboardingV2State }>(
+      `/v1/internal/onboarding/${orgId}/enable_cat`,
+      {
+        method: "POST",
+        headers: { "X-Org-Id": orgId, "Content-Type": "application/json" },
+        body: JSON.stringify({ cat_id: catId, config }),
+      },
+    ),
+};
+
+(api as unknown as Record<string, unknown>).onboardingV2Api = onboardingV2Api;
+
 (api as unknown as Record<string, unknown>).githubApi = githubApi;
 (api as unknown as Record<string, unknown>).onboardingApi = onboardingApi;
 
