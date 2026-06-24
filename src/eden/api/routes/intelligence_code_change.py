@@ -268,6 +268,36 @@ async def disconnect_repo(
     return await _repo_connector.disconnect(org_id, repo_id)
 
 
+# ─── CODEOWNERS (Gate 1) ─────────────────────────────────────
+@router.get("/repos/codeowners")
+async def read_repo_codeowners(
+    org_id: str = Path(...),
+) -> dict[str, Any]:
+    """Read + parse the connected repo's CODEOWNERS file.
+
+    Probes the three GitHub-standard locations in order
+    (``.github/CODEOWNERS``, ``CODEOWNERS``,
+    ``docs/CODEOWNERS``) and returns the parsed entries.
+    Side-effect free. Cat 23 Gate-1 audit entrypoint.
+    """
+    return await _repo_connector.read_codeowners()
+
+
+@router.post("/repos/codeowners/owners")
+async def resolve_codeowners_for_files(
+    org_id: str = Path(...),
+    file_paths: list[str] = Body(..., embed=True),
+) -> dict[str, Any]:
+    """Resolve the CODEOWNERS owner for each file path.
+
+    Last-match-wins per GitHub semantics. Empty owner list
+    when no pattern matches or when no CODEOWNERS file
+    exists — the caller is responsible for the manual-
+    reviewer fallback.
+    """
+    return await _repo_connector.owners_for_files(file_paths)
+
+
 # ─── Policy ───────────────────────────────────────────────────────
 @router.post("/policy")
 async def update_policy(

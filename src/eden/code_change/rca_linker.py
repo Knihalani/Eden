@@ -58,10 +58,10 @@ _SOURCE_WEIGHTS: dict[str, float] = {
 # (Python) and ``at <fn> (...:N:N)`` (Node) — the two most common
 # stack-trace formats.
 _PY_STACK_RE = re.compile(
-    r'File\s+"([^"]+)",\s*line\s+\d+,\s*in\s+\w+',
+    r'File\s+"([^"]+)",\s*line\s+\d+,\s*in\s+(\w+)',
 )
 _NODE_STACK_RE = re.compile(
-    r"at\s+\S+\s+\(([^:]+):\d+:\d+\)",
+    r"at\s+(\S+)\s+\(([^:]+):\d+:\d+\)",
 )
 
 
@@ -71,18 +71,70 @@ def _content_derived_id(*parts: str) -> str:
     return f"crcl_{h}"
 
 
+_LANGUAGE_BY_EXT: dict[str, str] = {
+    ".py": "python",
+    ".js": "javascript",
+    ".jsx": "javascript",
+    ".ts": "typescript",
+    ".tsx": "typescript",
+    ".mjs": "javascript",
+    ".cjs": "javascript",
+}
+
+
+def _detect_language(file_path: str) -> str:
+    """Return the parser language key for ``file_path``.
+
+    Falls back to ``"python"`` because that's the only
+    language the stdlib parser handles today; JS/TS
+    return their key but the parser currently no-ops
+    with a debug log.
+    """
+    import os
+
+    _, ext = os.path.splitext(file_path)
+    return _LANGUAGE_BY_EXT.get(ext.lower(), "python")
+
+
 def _stack_trace_files(stack_trace: str | None) -> list[tuple[str, float]]:
-    """Source 1: extract file paths from a stack trace."""
+    """Source 1: extract file paths from a stack trace.
+
+    The regex captures (file_path, function_name). We use
+    only the file path here; the function name is read
+    separately by :func:`_stack_trace_function` so the
+    helper stays a single-purpose file-path extractor.
+    """
     if not stack_trace:
         return []
     out: list[tuple[str, float]] = []
-    for match in _PY_STACK_RE.findall(stack_trace):
-        if match and not match.startswith("<"):
-            out.append((match, 1.0))
-    for match in _NODE_STACK_RE.findall(stack_trace):
-        if match and not match.startswith("node:"):
-            out.append((match, 1.0))
+    for file_path, _fn in _PY_STACK_RE.findall(stack_trace):
+        if file_path and not file_path.startswith("<"):
+            out.append((file_path, 1.0))
+    for _fn, file_path in _NODE_STACK_RE.findall(stack_trace):
+        if file_path and not file_path.startswith("node:"):
+            out.append((file_path, 1.0))
     return out
+
+
+def _stack_trace_function(stack_trace: str | None) -> str:
+    """Return the innermost function name in ``stack_trace``.
+
+    Used by the linker to look up the line range via
+    :mod:`eden.code_change.code_parser`. Returns ``""``
+    when the trace is empty or unparseable.
+
+    "Innermost" = the LAST frame in the trace (the deepest
+    call site) — that's where the bug usually lives.
+    """
+    if not stack_trace:
+        return ""
+    py_frames = _PY_STACK_RE.findall(stack_trace)
+    if py_frames:
+        return py_frames[-1][1]
+    node_frames = _NODE_STACK_RE.findall(stack_trace)
+    if node_frames:
+        return node_frames[-1][0]
+    return ""
 
 
 def _request_path_files(
@@ -197,8 +249,60 @@ class CodeRootCauseLinker:
 
     name = "code_root_cause_linker"
 
-    def __init__(self, router: ModelRouter | None = None) -> None:
+    def __init__(
+        self,
+        router: ModelRouter | None = None,
+        repo_connector: Any | None = None,
+    ) -> None:
         self._router = router
+        # Optional :class:`RepoConnector` (or anything with a
+        # ``read_file`` method) used by Gate 2 to read the
+        # candidate file for line-range extraction. When
+        # ``None``, the linker skips line-range extraction
+        # and persists an empty ``line_range`` — the same
+        # behaviour as the pre-Gate-2 ship.
+        self._repo_connector = repo_connector
+
+    async def _extract_line_range(
+        self, file_path: str, function_name: str,
+    ) -> str:
+        """Read ``file_path`` and return the ``start-end`` string.
+
+        Best-effort: returns ``""`` on any failure (no
+        connector, file unreadable, function not found,
+        language not yet supported). The caller treats
+        empty as "no data" and persists an empty column.
+        """
+        from .code_parser import extract_function_range
+
+        if self._repo_connector is None:
+            return ""
+        try:
+            content = await self._repo_connector.read_file(file_path)
+        except Exception as exc:
+            logger.debug(
+                "rca_linker._extract_line_range: read failed: %s", exc,
+            )
+            return ""
+        if not content:
+            return ""
+        # Ponytail: the parser auto-detects Python via
+        # ``language='python'``. JS/TS would need the
+        # file extension hint; for now we default to
+        # Python and rely on the parser's graceful miss.
+        language = _detect_language(file_path)
+        try:
+            start, end = extract_function_range(
+                content, language, function_name,
+            )
+        except Exception as exc:
+            logger.debug(
+                "rca_linker._extract_line_range: parse failed: %s", exc,
+            )
+            return ""
+        if start == 0 and end == 0:
+            return ""
+        return f"{start}-{end}"
 
     async def link(
         self,
@@ -251,6 +355,19 @@ class CodeRootCauseLinker:
         # Persist the top candidate as the primary link.
         top_path, top_conf = combined[0]
         link_id = _content_derived_id(org_id, rca_id, top_path)
+        # Gate 2: extract the function name from the stack
+        # trace and look up the line range via
+        # :mod:`eden.code_change.code_parser`. The read is
+        # best-effort — if the file is unavailable or the
+        # parser can't find the function, we leave both
+        # columns empty (the same behaviour as the
+        # pre-Gate-2 ship).
+        function_name = _stack_trace_function(stack_trace)
+        line_range_str = ""
+        if function_name and self._repo_connector is not None:
+            line_range_str = await self._extract_line_range(
+                top_path, function_name,
+            )
         try:
             await _delete_then_insert(
                 org_id,
@@ -271,8 +388,8 @@ class CodeRootCauseLinker:
                     link_id,
                     rca_id,
                     top_path,
-                    "",  # line_range — extracted by tree-sitter (Gate 2)
-                    "",  # function_name
+                    line_range_str,
+                    function_name,
                     json.dumps([
                         {"source": k, "path": p, "confidence": c}
                         for k, paths, _ in [
