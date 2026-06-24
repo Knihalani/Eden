@@ -142,6 +142,29 @@ class TestA2AService:
         assert graph["nodes"][_PARENT_TID]["is_root"] is True
         assert len(graph["edges"]) == 1
 
+    async def test_get_invocation_graph_args_have_max_depth(
+        self, mock_postgres_client: MagicMock,
+    ):
+        """Regression for the $3/$4 placeholder bug — max_depth
+        must be bound to the 3rd + 4th positional args (the
+        recursion bounds), not to a trace_id. Captured args
+        are ``(query, trace_id, trace_id, max_depth, max_depth, org_id)``.
+        """
+        from eden.services.observability import get_a2a_service
+        svc = get_a2a_service()
+        mock_postgres_client.fetch = AsyncMock(return_value=[])
+        await svc.get_invocation_graph(
+            _PARENT_TID, org_id="org-1", max_depth=7,
+        )
+        # Inspect what the service actually bound to $3 + $4.
+        # call_args.args[0] is the SQL query; the params follow.
+        params = mock_postgres_client.fetch.call_args.args[1:]
+        assert params[0] == _PARENT_TID, f"$1 should be trace_id, got {params[0]!r}"
+        assert params[1] == _PARENT_TID, f"$2 should be trace_id, got {params[1]!r}"
+        assert params[2] == 7, f"$3 should be max_depth (7), got {params[2]!r}"
+        assert params[3] == 7, f"$4 should be max_depth (7), got {params[3]!r}"
+        assert params[4] == "org-1", f"$5 should be org_id, got {params[4]!r}"
+
     async def test_mark_failed_updates_and_fires_hook(
         self, mock_postgres_client: MagicMock,
     ):

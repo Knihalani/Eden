@@ -70,10 +70,10 @@ async def wrap_a2a_invocation(
         yield ctx
         if ctx.response_status is None:
             ctx.set_status("ok")
-        # Best-effort update if the response_status was changed
-        # mid-call.
-        if ctx.response_status and ctx.response_status != "ok":
-            await ctx._update_status(ctx.response_status)
+        # Non-ok / non-failed statuses (e.g. "blocked",
+        # "cancelled") are not persisted in v0 — only the
+        # ok + failed transitions are tracked. The DB row
+        # stays at NULL if neither is reached.
     except Exception as exc:
         kind = _classify_error(exc)
         ctx.set_status("failed")
@@ -143,17 +143,6 @@ class _A2ACallCtx:
             )
         except Exception as exc:
             logger.debug("a2a SDK: register failed: %s", exc)
-
-    async def _update_status(self, status: str) -> None:
-        # Lightweight: we don't have a dedicated update method,
-        # so we mark-failed which updates both columns.
-        if status == "failed":
-            return
-        # For non-failed updates (rare) we just leave the
-        # response_status to the mark_failed path; the spec
-        # only requires the failed transition to fire the
-        # hook.
-        return
 
     async def _mark_failed(self, error_kind: str) -> None:
         if not self._link_id:

@@ -61,17 +61,6 @@ class ComputerUseAction:
     error: str | None = None
     duration_ms: int | None = None
 
-    def to_payload(self) -> dict[str, Any]:
-        return {
-            "action_type": self.action_type,
-            "action_payload": self.action_payload,
-            "target_app": self.target_app,
-            "target_coords": self.target_coords,
-            "success": self.success,
-            "error": self.error,
-            "duration_ms": self.duration_ms,
-        }
-
 
 # ── The 6 spec-defined convenience constructors ─────────────────────
 

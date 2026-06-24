@@ -1,4 +1,4 @@
-# Eden Upgradespec v2 — 2026-06-24 (Phase 1 spine shipped)
+# Eden Upgradespec v2 — 2026-06-24 (Phase 1 spine + D.12.1-3 + D.14 shipped)
 
 ## Status snapshot
 

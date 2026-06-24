@@ -20,7 +20,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from fastapi import APIRouter, Body, Depends, Path
+from fastapi import APIRouter, Body, Depends, Path, Query
 from pydantic import BaseModel
 
 from eden.api.deps import (
@@ -112,7 +112,7 @@ async def register_link(
 async def get_invocation_graph(
     org_id: str = Path(...),
     trace_id: str = Path(...),
-    max_depth: int = 4,
+    max_depth: int = Query(4, ge=1, le=16),
     _member: dict = Depends(require_org_member),
 ) -> dict[str, Any]:
     """Return the BFS invocation graph (nodes + edges) for a trace."""

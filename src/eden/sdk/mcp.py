@@ -199,7 +199,7 @@ def _classify_failure(exc: BaseException) -> str | None:
     msg = (str(exc) or "").lower()
     cls = type(exc).__name__.lower()
     haystack = f"{cls} {msg}"
-    if "unauthorized" in haystack or "401" in msg or "auth" in haystack and "fail" in msg:
+    if "unauthorized" in haystack or "401" in msg:
         return "unauthorized"
     if "expired" in haystack and ("token" in haystack or "jwt" in haystack):
         return "expired_token"
