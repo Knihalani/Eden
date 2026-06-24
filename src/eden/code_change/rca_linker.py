@@ -13,13 +13,22 @@
    description to the most likely file/function.
 
 Each source emits a candidate ``(file_path, confidence)`` pair.
-The final list is the union weighted by source reliability
-(stack-trace > request-path > telemetry > LLM).
 
-Persists to ``code_root_cause_links`` with a content-derived
-``crcl_<sha256[:16]>`` id so re-runs with the same
-``(org, rca_id, file_path)`` are idempotent.
+Examples:
+    >>> from eden.code_change.rca_linker import _SOURCE_WEIGHTS
+    >>> set(_SOURCE_WEIGHTS.keys()) == {
+    ...     "stack_trace", "request_path", "telemetry", "llm_inference",
+    ... }
+    True
+    >>> sum(_SOURCE_WEIGHTS.values())  # weights should normalise to 1.0
+    0.9999...
+    >>> _SOURCE_WEIGHTS["stack_trace"] > _SOURCE_WEIGHTS["llm_inference"]
+    True
 """
+
+from __future__ import annotations
+
+from __future__ import annotations
 
 from __future__ import annotations
 
