@@ -92,7 +92,13 @@ def upgrade() -> None:
         "ON user_sessions (org_id, abandoned) WHERE abandoned"
     )
 
-    # ─── 2. user_behavioural_signals (the 7 implicit signals) ──────
+    # ─── 2. user_behavioural_signals (the 3 implicit signals) ──────
+    # ponytail: per upgradespec §D.2 (Phase 1 cut), the 4 flat
+    # signals (regenerated / abandoned_after_one / edit_distance
+    # / time_to_first_action_ms) survive. The 3 dropped signals
+    # (copy_pasted / retried_within_60s / return_7d) were
+    # re-runnable from derived metrics and aren't worth the
+    # storage + write-path cost for beta.
     _table(
         "user_behavioural_signals",
         """
@@ -103,9 +109,6 @@ def upgrade() -> None:
         regenerated             BOOLEAN NOT NULL DEFAULT FALSE,
         abandoned_after_one     BOOLEAN NOT NULL DEFAULT FALSE,
         edit_distance           DOUBLE PRECISION,
-        copy_pasted             BOOLEAN NOT NULL DEFAULT FALSE,
-        retried_within_60s      BOOLEAN NOT NULL DEFAULT FALSE,
-        return_7d               BOOLEAN,
         time_to_first_action_ms INTEGER,
         created_at              TIMESTAMPTZ NOT NULL DEFAULT NOW()
         """,
@@ -117,7 +120,12 @@ def upgrade() -> None:
         "ON user_behavioural_signals (org_id, user_id, created_at DESC)"
     )
 
-    # ─── 3. user_satisfaction_corrected (the Bayesian posterior) ───
+    # ─── 3. user_satisfaction_corrected (the Flat Bayesian posterior) ───
+    # ponytail: per upgradespec §D.2, replaced Hierarchical Beta-Binomial
+    # with Flat Beta-Binomial (Beta(1,1) prior at feature level). The
+    # 4 org_prior_alpha / org_prior_beta / feature_prior_alpha /
+    # feature_prior_beta columns were never created in this codebase —
+    # the migration ships the flat schema from day 1.
     _table(
         "user_satisfaction_corrected",
         """
@@ -130,7 +138,7 @@ def upgrade() -> None:
         credible_interval_low_95    DOUBLE PRECISION,
         credible_interval_high_95   DOUBLE PRECISION,
         method                      VARCHAR(32) NOT NULL
-                                      DEFAULT 'hierarchicalbeta_binomial',
+                                      DEFAULT 'flat_beta_binomial',
         created_at                  TIMESTAMPTZ NOT NULL DEFAULT NOW()
         """,
         "CREATE INDEX IF NOT EXISTS idx_user_satisfaction_corrected_trace "

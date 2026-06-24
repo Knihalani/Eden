@@ -1,13 +1,18 @@
 """User Intelligence services (Cat 9) — real implementations.
 
-This package ships the v0 (8 services) + v2 (7
+ponytail: per upgradespec §D.2 (Phase 1 cut), the 6
+behavioural trackers were reduced to 3 (Regeneration,
+Edit, Abandonment). The 3 dropped (Return / CopyPaste /
+Retry) were re-runnable from derived metrics.
+
+This package ships the v0 (8 services) + v2 (3
 behavioural-signal services + 1 dashboard) surface for
-the 23-category intelligence gap roadmap. The 15 services
+the 23-category intelligence gap roadmap. The 11 services
 cover the user-side of the observability story —
 sessions, goals, conversations, explicit feedback,
-satisfaction, segmentation, the 7 implicit behavioural
-signals, the Bayesian selection-bias correction, and the
-cohort dashboard.
+satisfaction, segmentation, the 3 implicit behavioural
+signals, the Flat Bayesian selection-bias correction, and
+the cohort dashboard.
 
 Service modules
 ----------------
@@ -22,12 +27,12 @@ Service modules
   :class:`UserSegmentationService`.
 * :mod:`eden.services.user_intel.satisfaction` —
   :class:`SatisfactionSignalService` +
-  :class:`SelectionBiasCorrector` (the v2 Bayesian
-  correction per arXiv 2605.12177).
-* :mod:`eden.services.user_intel.behavioural` — the 6
-  write-path trackers (Regeneration / Edit / Return /
-  Abandonment / CopyPaste / Retry) + the
-  :class:`BehaviouralDashboard` cohort aggregator.
+  :class:`SelectionBiasCorrector` (the v2 Flat Bayesian
+  correction; hierarchical was removed per §D.2).
+* :mod:`eden.services.user_intel.behavioural` — the 3
+  write-path trackers (Regeneration / Edit /
+  Abandonment) + the :class:`BehaviouralDashboard`
+  cohort aggregator.
 
 The package degrades gracefully — every fetcher and
 persistence helper is best-effort, so an empty
@@ -43,11 +48,8 @@ from __future__ import annotations
 from .behavioural import (
     AbandonmentTracker,
     BehaviouralDashboard,
-    CopyPasteTracker,
     EditDistanceTracker,
     RegenerationRateTracker,
-    RetryRephraseTracker,
-    ReturnToFeatureTracker,
 )
 from .conversations import ConversationService
 from .feedback import UserFeedbackService
@@ -66,13 +68,10 @@ __all__ = [
     "ConversationService",
     "UserFeedbackService",
     "UserSegmentationService",
-    # v2 behavioural services
+    # v2 behavioural services (kept per §D.2)
     "RegenerationRateTracker",
     "EditDistanceTracker",
-    "ReturnToFeatureTracker",
     "AbandonmentTracker",
-    "CopyPasteTracker",
-    "RetryRephraseTracker",
     "SelectionBiasCorrector",
     "BehaviouralDashboard",
 ]

@@ -1,51 +1,29 @@
 """Intelligence Gap — APM Depth + Tracing Depth (Cat 22, v1.4) routes.
 
-Six core routes (the v1.4 ship) plus 5 v1.4.1 routes
-(tail-sampling, K8s enrichment, Pyroscope) — total 11:
+The v1.4 surface (OtelV141Enricher, StepJudgeStamper,
+AgentMetricsCollector) is real and continues to work — see
+:mod:`eden.apm_depth.otel_v141`, :mod:`eden.apm_depth.step_judges`,
+:mod:`eden.apm_depth.metrics`.
 
-* ``POST /enrich``              — run the OTel v1.41 dual-emit
-  enricher on a single span (returns the v1.36 + v1.41
-  attribute set).
-* ``POST /enrich-batch``        — same, for a batch of spans.
-* ``POST /steps/stamp``         — stamp ``step_index`` +
-  ``step_judges`` onto a span's attributes.
-* ``GET  /steps/{trace_id}``    — list every step in a trace
-  (in step-index order) with the judge scores.
-* ``GET  /steps/{trace_id}/{step_index}`` — read the step
-  judges for a specific step.
-* ``GET  /metrics/agents``      — the 3-agent-metric dashboard
-  (decision_path_depth, tool_call_success_rate, cost_per_step).
+ponytail: per upgradespec §D.1 (Phase 1 cut), the v1.4.1
+add-on routes (tail-sampling, K8s enrichment, Pyroscope) are
+removed and return 501 with a pointer to the OTel Collector
+config. The OTel Collector ``tail_sampling`` +
+``k8sattributes`` processors are the replacement; see
+``deploy/otel-collector-config.yaml`` for the config.
 
-v1.4.1 add-ons (the 3 features that close out the v1.4 ship):
-
-* ``POST /sampling/evaluate``   — preview the tail-sampling
-  decision for a single trace (returns the verdict + rule).
-* ``GET  /sampling/stats``      — the dropped/kept/evicted
-  counters + memory estimate.
-* ``POST /k8s/enrich``          — run the K8s enricher on a
-  single span (returns the merged attributes + the K8s
-  set + the sources used).
-* ``POST /k8s/enrich-batch``    — same, for a batch of spans.
-* ``GET  /k8s/detect``          — detect whether this process
-  is running in K8s (returns the source list + missing
-  attrs).
-* ``GET  /profiles/{trace_id}/{step_index}`` — read the
-  Pyroscope link for a (trace, step) tuple.
-* ``GET  /profiles/{trace_id}`` — list every profile link
-  for a trace.
+Mounted at ``/orgs/{org_id}/intelligence/apm-depth`` — same
+prefix the previous v1.4 surface used so any deep-linked
+portal pages continue to resolve to a 501 rather than a 404.
 
 Gates:
-* ``intelligence_gap_v0`` umbrella flag
+* ``intelligence_gap_v0`` umbrella flag (still required)
 * Org scoping via ``{org_id}`` path param
 * ``get_current_user`` for auth
-
-See ``docs/eden-observability-gap-roadmap.md`` (Cat 22) and
-``docs/observability-gap/22-apm-tracing-depth.md``.
 """
 
 from __future__ import annotations
 
-import logging
 from typing import Any
 
 from fastapi import APIRouter, Body, Depends, Path, Query
@@ -57,8 +35,6 @@ from eden.apm_depth import (
     OtelV141Enricher,
     StepJudgeStamper,
 )
-
-logger = logging.getLogger(__name__)
 
 router = APIRouter(
     prefix="/orgs/{org_id}/intelligence/apm-depth",
@@ -79,8 +55,6 @@ _metrics = AgentMetricsCollector()
 
 class EnrichRequest(BaseModel):
     attributes: dict[str, Any]
-    resource_attributes: dict[str, Any] | None = None
-    env: dict[str, str] | None = None
 
 
 class EnrichBatchRequest(BaseModel):
@@ -93,22 +67,7 @@ class StepStampRequest(BaseModel):
     step_judges: dict[str, float] | None = None
 
 
-class SamplingEvaluateRequest(BaseModel):
-    trace_id: str
-    spans: list[dict[str, Any]]
-
-
-class K8sEnrichRequest(BaseModel):
-    attributes: dict[str, Any]
-    resource_attributes: dict[str, Any] | None = None
-    env: dict[str, str] | None = None
-
-
-class K8sEnrichBatchRequest(BaseModel):
-    spans: list[dict[str, Any]]
-
-
-# ─── Routes (v1.4 — 6 core) ──────────────────────────────────────
+# ─── Routes (v1.4 — 4 core, retained) ────────────────────────────
 
 
 @router.post("/enrich")
@@ -116,32 +75,8 @@ async def enrich(
     org_id: str = Path(...),
     body: EnrichRequest = Body(...),
 ) -> dict[str, Any]:
-    """Run the v1.41 dual-emit enricher on a single span.
-
-    The optional ``resource_attributes`` + ``env`` fields
-    drive the v1.4.1 K8s path — when supplied, the
-    enricher ALSO runs the K8s enricher (chained) and
-    stamps the K8s attributes onto the returned span.
-    """
-    r = _enricher.enrich(org_id, attributes=body.attributes)
-    if body.resource_attributes is not None or body.env is not None:
-        # Chain through the K8s enricher
-        from eden.apm_depth import K8sEnricher
-
-        k8s_r = K8sEnricher().enrich(
-            org_id,
-            attributes=(r.get("data") or {}).get("attributes") or body.attributes,
-            resource_attributes=body.resource_attributes,
-            env=body.env,
-        )
-        k8s_data = k8s_r.get("data") or {}
-        r.setdefault("data", {})
-        r["data"]["attributes"] = k8s_data.get("attributes") or r["data"].get(
-            "attributes"
-        )
-        r["data"]["k8s"] = k8s_data.get("k8s") or {}
-        r["data"]["k8s_sources"] = k8s_data.get("sources") or []
-    return r
+    """Run the OTel v1.41 dual-emit enricher on a single span."""
+    return _enricher.enrich(org_id, attributes=body.attributes)
 
 
 @router.post("/enrich-batch")
@@ -149,7 +84,7 @@ async def enrich_batch(
     org_id: str = Path(...),
     body: EnrichBatchRequest = Body(...),
 ) -> dict[str, Any]:
-    """Run the v1.41 dual-emit enricher on a batch of spans."""
+    """Run the OTel v1.41 dual-emit enricher on a batch of spans."""
     return _enricher.enrich_batch(org_id, spans=body.spans)
 
 
@@ -197,110 +132,70 @@ async def agent_metrics(
     return await _metrics.aggregate(org_id, window_hours=window_hours)
 
 
-# ─── Routes (v1.4.1 — tail-sampling + K8s + Pyroscope) ───────────
+# ─── Routes (v1.4.1 — removed per §D.1) ──────────────────────────
+
+
+def _deferred(message: str) -> dict[str, Any]:
+    """Stable 501-shape envelope for endpoints cut per upgradespec §D.1.
+
+    Mirrors the ``_not_implemented_envelope`` pattern used by the
+    Cat 23 STUB surface so the portal renders a uniform "deferred"
+    badge. The ``config_hint`` field names the OTel Collector
+    config the customer should install.
+    """
+    return {
+        "status": "not_implemented",
+        "feature": "apm_depth_v141",
+        "live": False,
+        "message": message,
+        "data": {
+            "config_hint": (
+                "Deploy the OTel Collector with the tail_sampling + "
+                "k8sattributes processors (see "
+                "deploy/otel-collector-config.yaml). The in-process "
+                "sampling/k8s/profiling stack was removed per "
+                "upgradespec §D.1."
+            ),
+        },
+    }
 
 
 @router.post("/sampling/evaluate")
-async def sampling_evaluate(
-    org_id: str = Path(...),
-    body: SamplingEvaluateRequest = Body(...),
-) -> dict[str, Any]:
-    """Preview the tail-sampling decision for a single trace.
-
-    Returns the live ``ok`` envelope with the verdict
-    (keep / drop) + the rule that fired (keep_if_error,
-    keep_if_slow, keep_if_loop, keep_if_force_trace,
-    probabilistic). The buffer is NOT touched.
-    """
-    from eden.apm_depth import get_tail_sampler
-
-    sampler = get_tail_sampler()
-    return sampler.evaluate_single(
-        org_id, trace_id=body.trace_id, spans=body.spans
-    )
+async def sampling_evaluate(org_id: str = Path(...)) -> dict[str, Any]:
+    """Removed per §D.1 — see OTel Collector ``tail_sampling`` processor."""
+    return _deferred("Tail-sampling preview removed; use OTel Collector.")
 
 
 @router.get("/sampling/stats")
 async def sampling_stats() -> dict[str, Any]:
-    """Return the dropped / kept / evicted counters + the
-    memory estimate + the drop rate.
-
-    The ``drop_rate`` is what the Cat 9 alert pipeline
-    watches (> 1% means the buffer is undersized per
-    the Drozd 2025 post-mortem).
-    """
-    from eden.apm_depth import get_sampling_stats
-
-    return get_sampling_stats()
+    """Removed per §D.1 — read drop-rate from the OTel Collector metrics."""
+    return _deferred("Sampling stats removed; OTel Collector exports these.")
 
 
 @router.post("/k8s/enrich")
-async def k8s_enrich(
-    org_id: str = Path(...),
-    body: K8sEnrichRequest = Body(...),
-) -> dict[str, Any]:
-    """Run the K8s enricher on a single span's attributes.
-
-    The ``resource_attributes`` field is the OTel
-    Resource.attributes dict (authoritative — the
-    gateway collector's OTel SDK stamps it). The
-    ``env`` field is the process env (the Downward
-    API fallback). The enricher merges all three
-    sources and stamps the resolved K8s attributes
-    onto ``attributes``.
-    """
-    from eden.apm_depth import K8sEnricher
-
-    return K8sEnricher().enrich(
-        org_id,
-        attributes=body.attributes,
-        resource_attributes=body.resource_attributes,
-        env=body.env,
-    )
+async def k8s_enrich(org_id: str = Path(...)) -> dict[str, Any]:
+    """Removed per §D.1 — see OTel Collector ``k8sattributes`` processor."""
+    return _deferred("In-process K8s enricher removed; use OTel Collector.")
 
 
 @router.post("/k8s/enrich-batch")
-async def k8s_enrich_batch(
-    org_id: str = Path(...),
-    body: K8sEnrichBatchRequest = Body(...),
-) -> dict[str, Any]:
-    """Run the K8s enricher on a batch of spans."""
-    from eden.apm_depth import K8sEnricher
-
-    return K8sEnricher().enrich_batch(org_id, spans=body.spans)
+async def k8s_enrich_batch(org_id: str = Path(...)) -> dict[str, Any]:
+    """Removed per §D.1."""
+    return _deferred("In-process K8s enricher removed; use OTel Collector.")
 
 
 @router.get("/k8s/detect")
 async def k8s_detect() -> dict[str, Any]:
-    """Detect whether this process is running in K8s.
-
-    Returns the live ``ok`` envelope with
-    ``data.is_k8s`` (bool) + the list of K8s attrs the
-    process has access to (``sources_present``) + the
-    ones it doesn't (``missing_attrs``). The portal
-    uses this to surface "K8s enrichment not active —
-    install the OTel collector with the k8sattributes
-    processor" hints.
-    """
-    from eden.apm_depth import K8sEnricher
-
-    return K8sEnricher().detect()
+    """Removed per §D.1 — OTel Collector handles K8s detection natively."""
+    return _deferred("K8s detect removed; OTel Collector handles this.")
 
 
 @router.get("/profiles/{trace_id}")
 async def list_profile_links(
-    org_id: str = Path(...),
-    trace_id: str = Path(...),
+    org_id: str = Path(...), trace_id: str = Path(...)
 ) -> dict[str, Any]:
-    """List every persisted Pyroscope link for a trace.
-
-    Returns the live ``ok`` envelope with the
-    ``data.links`` list (one entry per step that was
-    sampled + persisted).
-    """
-    from eden.apm_depth import ProfilingClient
-
-    return await ProfilingClient().list_trace_links(org_id, trace_id=trace_id)
+    """Removed per §D.1 — use Grafana Phlare directly."""
+    return _deferred("Pyroscope link list removed; use Grafana Phlare.")
 
 
 @router.get("/profiles/{trace_id}/{step_index}")
@@ -309,17 +204,5 @@ async def get_profile_link(
     trace_id: str = Path(...),
     step_index: int = Path(...),
 ) -> dict[str, Any]:
-    """Read (and lazily create) the Pyroscope link for a
-    (trace, step) tuple.
-
-    The first call persists the link (sampled at 1%);
-    subsequent calls return the persisted row. The
-    portal renders the ``pyroscope_url`` as a "Click
-    for flame graph" link.
-    """
-    from eden.apm_depth import ProfilingClient
-
-    client = ProfilingClient()
-    return await client.link_step(
-        org_id, trace_id=trace_id, step_index=step_index
-    )
+    """Removed per §D.1 — use Grafana Phlare directly."""
+    return _deferred("Pyroscope link removed; use Grafana Phlare.")

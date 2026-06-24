@@ -52,12 +52,9 @@ from eden.services.user_intel import (
     AbandonmentTracker,
     BehaviouralDashboard,
     ConversationService,
-    CopyPasteTracker,
     EditDistanceTracker,
     GoalTracker,
     RegenerationRateTracker,
-    RetryRephraseTracker,
-    ReturnToFeatureTracker,
     SatisfactionSignalService,
     SelectionBiasCorrector,
     SessionAnalytics,
@@ -90,10 +87,11 @@ _dashboard = BehaviouralDashboard()
 
 _regen = RegenerationRateTracker()
 _edit = EditDistanceTracker()
-_return = ReturnToFeatureTracker()
+# ponytail: ReturnToFeatureTracker / CopyPasteTracker /
+# RetryRephraseTracker removed per upgradespec §D.2
+# (Phase 1 cut). Routes that previously called them now
+# return 501 via _deferred().
 _abandon = AbandonmentTracker()
-_copy = CopyPasteTracker()
-_retry = RetryRephraseTracker()
 
 
 # ── v0 request bodies ────────────────────────────────────────────────
@@ -350,12 +348,13 @@ async def signal_return(
     body: ReturnRequest = Body(...),
     user: dict = Depends(get_current_user),
 ) -> dict[str, Any]:
-    return await _return.track(
-        org_id,
-        trace_id=body.trace_id,
-        user_id=user["user_id"],
-        returned=body.returned,
-    )
+    # ponytail: ReturnToFeatureTracker removed per upgradespec §D.2
+    return {
+        "status": "not_implemented",
+        "feature": "user_signal_return",
+        "live": False,
+        "message": "ReturnToFeatureTracker removed per upgradespec §D.2.",
+    }
 
 
 @router.post("/signals/abandonment")
@@ -378,13 +377,13 @@ async def signal_copy_paste(
     body: CopyPasteRequest = Body(...),
     user: dict = Depends(get_current_user),
 ) -> dict[str, Any]:
-    return await _copy.detect(
-        org_id,
-        trace_id=body.trace_id,
-        user_id=user["user_id"],
-        copied=body.copied,
-        redacted_snippet=body.redacted_snippet,
-    )
+    # ponytail: CopyPasteTracker removed per upgradespec §D.2
+    return {
+        "status": "not_implemented",
+        "feature": "user_signal_copy_paste",
+        "live": False,
+        "message": "CopyPasteTracker removed per upgradespec §D.2.",
+    }
 
 
 @router.post("/signals/retry")
@@ -393,13 +392,13 @@ async def signal_retry(
     body: RetryRequest = Body(...),
     user: dict = Depends(get_current_user),
 ) -> dict[str, Any]:
-    return await _retry.detect(
-        org_id,
-        trace_id=body.trace_id,
-        user_id=user["user_id"],
-        retried=body.retried,
-        similarity=body.similarity,
-    )
+    # ponytail: RetryRephraseTracker removed per upgradespec §D.2
+    return {
+        "status": "not_implemented",
+        "feature": "user_signal_retry",
+        "live": False,
+        "message": "RetryRephraseTracker removed per upgradespec §D.2.",
+    }
 
 
 # ── v2 dashboard / corrector routes (read paths) ─────────────────────

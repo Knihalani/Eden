@@ -1,12 +1,12 @@
-# Eden Upgradespec v2 — 2026-06-23
+# Eden Upgradespec v2 — 2026-06-24 (Phase 1 spine shipped)
 
 ## Status snapshot
 
 | Status | Count | Items |
 |---|---|---|
-| ✅ **IMPLEMENTED** | 17 cats + 4 spec items | Cat 1, 2, 3, 4, 5, 6, 8, 9, 10, 11, 12, 13, 14, 18, 19, 20, 22 + D.10 cost guardrails (middleware registered 2026-06-23) + D.13 webhooks (routers mounted 2026-06-23) + §E closed-loop hook bus (HookBus + 16 hooks wired 2026-06-23) + §E.5 hook_events migration 051 |
-| 🟡 **STUB surface** | 1 cat | Cat 23 — Autonomous Code Modification (21 services, 19 tables, 73 STUB tests; real ship is 8-week gated initiative) |
-| ❌ **NOT STARTED** | 4 spec items + 11 cats/services | D.1–D.7 Phase 0 cuts, D.8 streaming tokens, D.9 prompt versioning, D.11 RTBF cross-store, D.12 (MCP/A2A/Computer Use/Voice/Fine-tune/Provider routing), D.14 cold-start UX, Multi-region, Stripe billing, axe-core CI scan, WebSocket + SSE tests, outbound webhook delivery tests |
+| ✅ **IMPLEMENTED** | 17 cats + 8 spec items + **D.1–D.7 Phase 0 cuts** + **D.8–D.10 + D.13 Phase 1 spine** | Cat 1, 2, 3, 4, 5, 6, 8, 9, 10, 11, 12, 13, 14, 18, 19, 20, 22 + D.10 cost guardrails (middleware registered 2026-06-23, schema + portal 2026-06-24) + D.13 webhooks (HMAC + DLQ + replay 2026-06-24) + §E closed-loop hook bus (HookBus + 16 hooks wired 2026-06-23) + §E.5 hook_events migration 051 + **D.1 APM cut** + **D.2 Flat Beta-Binomial + 3 trackers** + **D.3 Predictive 2-service trim** + **D.4 Autonomous 2-service trim** + **D.5 SOC2+GDPR-only** + **D.6 daily/weekly rollups only** + **D.7 Cat 23 4-table defer** + **D.8 streaming tokens (PG schema + SDK + sparkline UI)** + **D.9 prompt versioning (3 tables + service + @prompt() SDK + portal timeline)** + **D.10 budgets/consumption/actions tables + BudgetService + portal admin + ticker** + **D.13 webhook_dlq + X-Eden-Signature v1 + replay UI** |
+| 🟡 **STUB surface** | 1 cat | Cat 23 — Autonomous Code Modification (15 tables; 4 inbox/persona/style tables deferred per D.7; real end-to-end ship is 8-week gated initiative) |
+| ❌ **NOT STARTED** | 4 spec items | D.11 RTBF cross-store, D.12 (MCP/A2A/Computer Use/Voice/Fine-tune/Provider routing), D.14 cold-start UX, Multi-region |
 
 **Net shipped vs spec**: 22 of 26 spec'd hooks wired (16 existing + 5 new this session + 1 budget-hook existing). 11 remaining hooks need infra not yet built (RTBF cross-store, voice, fine-tune lineage, provider routing, MCP/A2A).
 
@@ -38,15 +38,15 @@
 | 20 | Time-Travel Debugging | `intelligence_time_travel.py`, 4 services + 4 routes |
 | 22 | APM Depth (sampling/K8s/pyroscope) | `apm/{sampling,k8s,profiling}.py`, 72 tests |
 
-### Spec items shipped this session (2026-06-23)
+### Spec items shipped this session (2026-06-23 + 2026-06-24)
 
 | Item | Status | What shipped |
 |---|---|---|
 | **§E** Closed-loop hook bus | ✅ | `src/eden/llmops/hooks_bus.py` (HookBus.emit + dedup + severity precedence + cascade) + `hook_proposal.py` (PromotionProposal BaseModel per §E.4) + migration `051_hook_events.py` (per §E.5) + `promotion_hooks.py._record_action` routed through bus + 5 new hook classes (BudgetHook, IncidentHook, UserSatisfactionHook, DriftAlertHook, RoiHook) |
-| **§6.3** Cost guardrails (D.10) | ✅ (middleware activated) | `QuotaEnforcementMiddleware` registered in `src/eden/api/app.py` before `TenantRateLimitMiddleware`; 48 tests in `tests/unit/billing/test_free_only.py` cover spec §G.1 acceptance |
-| **§2.17** Webhooks reliability (D.13) | ✅ (CRUD mounted) | `routes/webhooks.py` mounted in `src/eden/api/app.py` at `/orgs/{org_id}/webhooks`; HMAC signing + backoff + DLQ to be implemented in v1.3 follow-up |
-| **§B.1** Streaming tokens (D.8) | ❌ deferred | Schema + ClickHouse mirror + SDK + UI all pending — see "NOT STARTED" below |
-| **§B.2** Prompt versioning (D.9) | ❌ deferred | Schema + SDK + auto-eval + UI all pending |
+| **§6.3** Cost guardrails (D.10) | ✅ full | `QuotaEnforcementMiddleware` registered in `src/eden/api/app.py` before `TenantRateLimitMiddleware`; 48 tests in `tests/unit/billing/test_free_only.py`; migration 052 (budgets + budget_consumption + budget_actions tables); `BudgetService` + portal `/optimization/budget` admin + `BudgetTicker` sidebar component (5s polling). |
+| **§2.17** Webhooks reliability (D.13) | ✅ full | `routes/webhooks.py` mounted in `src/eden/api/app.py` at `/orgs/{org_id}/webhooks`; migration 053 (webhook_dlq + signature_v1 + webhook_endpoints view); `WebhookDeliveryService.sign_v1()` adds Stripe-style `X-Eden-Signature: t=<ts>,v1=<sig>`; 7-step backoff (1s/5s/25s/2m/10m/1h → DLQ); `_move_to_dlq` + `replay_dlq`; portal `/settings/(tabs)/webhooks-dlq` page with Replay buttons. |
+| **§B.1** Streaming tokens (D.8) | ✅ full | Migration 054 (streaming_tokens PG table); SDK helper `capture_byte_count()` + PII pre-mask in `eden/sdk/streaming.py`; `StreamingTokenCapture` service with batched writes; portal `/orgs/{org_id}/traces/{trace_id}/tokens` route + `StreamingSparkline` component (per-token delta_ms bar chart with stall highlighting). ClickHouse mirror deferred (worker hookup). |
+| **§B.2** Prompt versioning (D.9) | ✅ full | Migration 055 (prompts + prompt_versions + prompt_eval_runs tables + nullable FK on telemetry_events); `PromptService` + `run_auto_eval` (single-shot LLM); Python `@prompt()` decorator; API routes under `/prompts/{name}/versions/*`; portal `/prompts` page (registry + version timeline + auto-eval-on-save toggle). |
 
 ### Hook bus taxonomy: 16/26 hooks wired
 
@@ -72,33 +72,30 @@
 
 ## ❌ NOT STARTED (Phase 0 + Phase 1 from original §F)
 
-### Phase 0 — cut the bloat (per upgradespec §F.2, 3 weeks)
+### Phase 0 — cut the bloat (per upgradespec §F.2) ✅ DONE 2026-06-24
 
-All 7 cuts **deferred** to a future session — cutting services that exist + have tests + are in production use is too risky to ship without:
-- Active deploy validation
-- 30-day `legacy_compat` flag transition window
-- Closed-loop hook dependency check (per spec §I risk register)
+All 7 cuts shipped 2026-06-24 per user authorization ("don't worry about customers"). Ponytail mode: each cut replaced the in-process surface with either a vendor solution (D.1, D.5) or a flat-schema / in-memory equivalent (D.2, D.3, D.4, D.6, D.7). Per-cut detail:
 
-| Cut | What | Why deferred |
+| Cut | What | How shipped |
 |---|---|---|
-| **D.1** Cat 13 APM → OTel Collector | Delete `eden/apm/{sampling,k8s,profiling}.py` + 026 tables; rely on OTel Collector `tail_sampling` + `k8sattributes` | Customers may depend on the surface; needs deprecation window |
-| **D.2** Cat 9 → Flat Beta-Binomial | Migration `065_cat9_flatten.sql` drops copy_paste/retry/return signals; replace HierarchicalBetaBinomialCorrector with FlatBetaBinomialCorrector | Same — needs deprecation window |
-| **D.3** Cat 11 → 2 services (keep QualityPredictor + DriftDetector) | Delete cost_predictor/capacity_predictor/risk_scorer/embedding_drift + 4 tables | Cat 11 has 53 tests + Cat 8 reads from it; deletion would regress Cat 8 |
-| **D.4** Cat 12 → 2 services (InvestigationAgent + NLReportGenerator) | Fold ReportGenerator + RecommendationEngine into InvestigationAgent; delete self_healer_ui/auto_dashboard_builder/nl_query_engine | Self-healer UI has documented v1.6 ship path |
-| **D.5** Cat 10 → SOC2 + GDPR only | Defer HIPAA + ISO27001 controls to `docs/eden-governance-roadmap.md` | Sales materials already mention all 4 frameworks; cut is marketing-driven |
-| **D.6** Cat 18 → daily/weekly rollups only | Drop `columnar_hourly_rollups` table + hourly selector | Daily is the UI default anyway; cut is low-value |
-| **D.7** Cat 23 STUB → defer 7 tables | Remove inbox_*/persona_*/style_* tables from migration 027 | STUB surface is already gated; cut adds risk without value |
+| **D.1** ✅ | Cat 22 APM Depth → OTel Collector | Deleted `apm_depth/{sampling,k8s,profiling}.py` + 3 test files + 3 audit tables from migration 026. v1.4 surface (OtelV141Enricher, StepJudgeStamper, AgentMetricsCollector) retained. Tail-sampling/K8s/Pyroscope routes return 501 with `deploy/otel-collector-config.yaml` pointer. |
+| **D.2** ✅ | Cat 9 → Flat Beta-Binomial + 3 trackers | Migration 024: dropped `copy_pasted` / `retried_within_60s` / `return_7d` columns; default `method` now `'flat_beta_binomial'`. Deleted `ReturnToFeatureTracker` / `CopyPasteTracker` / `RetryRephraseTracker` + their tests. `HierarchicalBetaBinomial` → `FlatBetaBinomial` (Beta(1,1) prior). 4 signals survive. |
+| **D.3** ✅ | Cat 13 Predictive → 2 services | Deleted `capacity.py` / `cost.py` / `risk.py` (median projection moved to Cat 7). Kept `QualityPredictor` + `DriftDetector`. 3 removed routes return 501. |
+| **D.4** ✅ | Cat 14 Autonomous → 2 services | Folded `ReportGenerator` → `InvestigationAgent.report()`. Folded `RecommendationEngine` → `InvestigationAgent.recommend()` + `_recommend_via_ladder` helper. Deleted `NLQueryEngine` + `AutoDashboardBuilder`. Kept `InvestigationAgent` + `NLReportGenerator` + `SelfHealer`. Dropped `nl_query_log` table. 2 removed routes return 501. |
+| **D.5** ✅ | Cat 10 Governance → SOC2 + GDPR only | `SUPPORTED_FRAMEWORKS` reduced from 4 to 2. HIPAA + ISO27001 routes return 501. PHI/IBAN/passport severities removed. Deferred roadmap at `docs/eden-governance-roadmap.md`. |
+| **D.6** ✅ | Cat 18 Columnar → daily/weekly only | `_VALID_GRANULARITIES` reduced from 3 to 2; asking for `hour` returns `_not_implemented_envelope`. New test `test_hourly_granularity_rejected` asserts the contract. |
+| **D.7** ✅ | Cat 23 STUB → defer 4 inbox/persona/style tables | Migration 027 commented out the 4 `_table()` calls. Services marked `pending=True` (Persona, ActivityFeed, StyleLearner). Best-effort writers swallow the missing tables. 15 of 19 tables survive. |
 
-### Phase 1 — ship the spine gaps (per upgradespec §F.3, 7 weeks)
+### Phase 1 — ship the spine gaps (per upgradespec §F.3) ✅ DONE 2026-06-24
 
-All 4 features **deferred** to a future session — each is a multi-week effort requiring new SDKs + migrations + UI:
+All 4 features shipped 2026-06-24. Per-feature detail:
 
-| Feature | Effort | Notes |
+| Feature | Status | What shipped |
 |---|---|---|
-| **D.8** Streaming tokens (§6.1) | 2 weeks | Migration 051 + ClickHouse mirror + SDK auto-instrument + portal sparkline UI |
-| **D.9** Prompt versioning (§6.2) | 3 weeks | Migration 052 + `@prompt()` decorator + auto-eval runner + version timeline UI |
-| **D.10** Cost guardrails full (D.10.3 portal UI) | 2 weeks | Middleware registered this session; budget admin UI + real-time ticker pending |
-| **D.13** Webhooks reliability full (D.13.6 portal UI) | 2 weeks | CRUD mounted this session; HMAC signing + backoff scheduler + DLQ + replay UI pending |
+| **D.8** Streaming tokens (§6.1) | ✅ | Migration 054: `streaming_tokens` PG table. SDK helper `capture_byte_count()` + PII pre-mask in `eden/sdk/streaming.py`. `StreamingTokenCapture` service with batched writes + per-trace token list. Portal `/orgs/{org_id}/traces/{trace_id}/tokens` route + `StreamingSparkline` component (per-token delta_ms bar chart with stall highlighting). ClickHouse mirror deferred (the existing `ClickHouseSink` can be wired in a follow-up). |
+| **D.9** Prompt versioning (§6.2) | ✅ | Migration 055: `prompts` + `prompt_versions` + `prompt_eval_runs` tables; nullable FK on `telemetry_events.prompt_version_id`. `PromptService` + `run_auto_eval` in `eden/services/prompt_versioning.py`. Python `@prompt()` decorator in `eden/sdk/prompt_decorator.py`. API routes under `/orgs/{org_id}/prompts/{name}/versions/*`. Portal `/prompts` page with per-org registry + version timeline + auto-eval-on-save toggle. |
+| **D.10** Cost guardrails (§6.3) | ✅ | Migration 052: `budgets` + `budget_consumption` + `budget_actions` tables. `BudgetService` with `get_budget` / `get_consumption` / `record_usage` / `list_actions` / `record_action` / `upsert_budget`. API: `/orgs/{org_id}/budget` (GET + POST), `/budget/ticker`, `/budget/actions`. Portal `/optimization/budget` page (config + live ticker + action history). `BudgetTicker` component for sidebar/dashboard. The existing `QuotaEnforcementMiddleware` already enforced hard limits; this session adds the read surface + admin UI. |
+| **D.13** Webhooks reliability (§2.17) | ✅ | Migration 053: `webhook_dlq` table + `signature_v1` column on `webhook_deliveries` + `webhook_endpoints` view. `WebhookDeliveryService.sign_v1()` adds Stripe-style `X-Eden-Signature: t=<ts>,v1=<sig>` header (alongside the existing `X-Webhook-Signature: sha256=...`). Backoff schedule updated to spec-aligned 7-step ladder (1s, 5s, 25s, 2m, 10m, 1h, then DLQ). `_move_to_dlq` fires on max-retry-exceeded. `replay_dlq` re-fires via the same path. Portal `/settings/(tabs)/webhooks-dlq` page with DLQ list + Replay buttons. API: `GET /webhooks/dlq`, `POST /webhooks/dlq/{id}/replay`. |
 
 ### Phase 3 — coverage completeness (per upgradespec §F.4, 7 weeks)
 
@@ -124,7 +121,7 @@ All 5 features **deferred** — each is a major new capability requiring new SDK
 
 ## Decisions for the next session
 
-1. **When to ship Phase 0 cuts**: each cut should be gated on a customer-usage query showing zero hits on the legacy surface for 30 days, then a 14-day `legacy_compat=true` window with warning logs, then drop.
-2. **When to enable Stripe**: customer request for paid plans, then wire `STRIPE_SECRET_KEY` + paid plan routes.
-3. **When to ship D.8 / D.9 / D.10 full**: customer demand for streaming tokens / prompt versioning / cost guardrail UI.
-4. **Cat 23 real ship**: gated on SLM Initiative + 4 hard gates (read-only → attribution → sandbox → end-to-end) over 8 weeks per memory `eden_cat23_stub_surface_shipped_2026_06.md`.
+1. **When to enable Stripe**: customer request for paid plans, then wire `STRIPE_SECRET_KEY` + paid plan routes.
+2. **When to ship D.8 / D.9 / D.10 full**: customer demand for streaming tokens / prompt versioning / cost guardrail UI.
+3. **Cat 23 real ship**: gated on SLM Initiative + 4 hard gates (read-only → attribution → sandbox → end-to-end) over 8 weeks per memory `eden_cat23_stub_surface_shipped_2026_06.md`.
+4. **Re-enable deferred Phase 0 surfaces**: each cut has a clear re-add path (see "How shipped" column). For example, D.1 re-adds the 3 deleted modules; D.2 re-adds the 3 dropped signal columns via a follow-up migration.

@@ -184,47 +184,23 @@ class InvestigationAgent:
             },
         )
 
-
-# ── 2. ReportGenerator ──────────────────────────────────────────────
-
-# The 3 supported periods. The watchdog / cron ships all 3
-# in v1.3; a 4th ("incident") is the v1.4 addition.
-_VALID_REPORT_PERIODS: frozenset[str] = frozenset(
-    {"weekly", "monthly", "incident"}
-)
-
-_REPORT_SYSTEM_PROMPT = (
-    "You are an analytics assistant for an LLM-observability "
-    "platform. Given the JSON below of recent signals, produce "
-    "a short exec summary (2-3 sentences) of the state of the "
-    "system. Return ONLY a JSON object: {\"summary\": \"...\"}."
-)
-
-
-def _window_for_period(period: str) -> timedelta:
-    if period == "monthly":
-        return timedelta(days=30)
-    return timedelta(days=7)
-
-
-class ReportGenerator:
-    """Generate a weekly / monthly / incident report.
-
-    The v1.3 ship aggregates trends, drift alerts, incidents,
-    and open recommendations from the existing tables and
-    (best-effort) calls the LLM to write a 2-3 sentence exec
-    summary. A v2 ship can add per-section LLM summaries +
-    a markdown renderer.
-    """
-
-    name = "report_generator"
-
-    async def generate(
+    async def report(
         self,
         org_id: str,
         *,
         period: str = "weekly",
     ) -> dict[str, Any]:
+        """Folded ReportGenerator per upgradespec §D.4 (Phase 1 cut).
+
+        Generates a weekly / monthly / incident report by
+        aggregating trends, drift alerts, incidents, and open
+        recommendations from the existing tables. The exec
+        summary is best-effort LLM; falls back to a
+        deterministic headline when the LLM is unavailable.
+
+        Persists to ``autonomous_reports`` (kept per §D.4;
+        the spec calls this table ``investigation_reports``).
+        """
         if period not in _VALID_REPORT_PERIODS:
             return _not_implemented_envelope(
                 self.name,
@@ -323,143 +299,118 @@ class ReportGenerator:
             },
         )
 
+    async def recommend(self, org_id: str) -> dict[str, Any]:
+        """Folded RecommendationEngine per upgradespec §D.4.
 
-# ── 3. RecommendationEngine ────────────────────────────────────────
+        Returns the deterministic impact ladder for the org.
+        The standalone ``RecommendationEngine`` class was
+        removed; the recommendation surface is now a method
+        on the agent. Persisted to ``autonomous_recommendations``
+        which was kept (the spec only dropped ``nl_query_log``).
+        """
+        return await _recommend_via_ladder(org_id)
 
-# The deterministic impact ladder. Used when the LLM is
-# unavailable and as a sanity check on the LLM's output
-# (the LLM's ``estimated_impact`` must be one of these).
-_VALID_IMPACT_LEVELS: frozenset[str] = frozenset(
-    {"critical", "high", "medium", "low"}
+
+async def _recommend_via_ladder(org_id: str) -> dict[str, Any]:
+    """The deterministic impact ladder (ex-RecommendationEngine).
+
+    Reads the Cat 8 / Cat 9 / Cat 10 signals and emits a
+    ranked list of remediations, sorted by ``blast_radius``
+    ascending + ``estimated_recovery_time_minutes`` ascending.
+    """
+    signals = await _load_top_signals(org_id, window_days=7)
+    recs: list[dict[str, Any]] = []
+
+    for inc in signals.get("incidents_recent", []):
+        recs.append(
+            {
+                "id": _new_id("rec"),
+                "title": f"Address incident {inc.get('cluster_id', '?')}",
+                "rationale": inc.get("title", ""),
+                "blast_radius": "small",
+                "estimated_recovery_time_minutes": 30,
+                "source": "incidents",
+            }
+        )
+    for drift in signals.get("drift_alerts_recent", []):
+        recs.append(
+            {
+                "id": _new_id("rec"),
+                "title": (
+                    f"Review drift alert "
+                    f"{drift.get('drift_id', '?')}"
+                ),
+                "rationale": drift.get("summary", ""),
+                "blast_radius": "medium",
+                "estimated_recovery_time_minutes": 60,
+                "source": "drift_alerts",
+            }
+        )
+    for judge in signals.get("judge_score_trends", []):
+        if judge.get("avg_score", 1.0) < 0.7:
+            recs.append(
+                {
+                    "id": _new_id("rec"),
+                    "title": (
+                        f"Investigate low judge score on "
+                        f"{judge.get('judge_name', '?')}"
+                    ),
+                    "rationale": (
+                        f"7d avg = {round(judge.get('avg_score', 0), 3)}"
+                    ),
+                    "blast_radius": "small",
+                    "estimated_recovery_time_minutes": 45,
+                    "source": "judge_score_trends",
+                }
+            )
+
+    recs.sort(key=lambda r: (r["blast_radius"], r["estimated_recovery_time_minutes"]))
+    return _ok_envelope(
+        "investigation_agent",
+        {"recommendations": recs, "n": len(recs)},
+    )
+
+
+# ── 2. ReportGenerator ──────────────────────────────────────────────
+
+# The 3 supported periods. The watchdog / cron ships all 3
+# in v1.3; a 4th ("incident") is the v1.4 addition.
+_VALID_REPORT_PERIODS: frozenset[str] = frozenset(
+    {"weekly", "monthly", "incident"}
+)
+
+_REPORT_SYSTEM_PROMPT = (
+    "You are an analytics assistant for an LLM-observability "
+    "platform. Given the JSON below of recent signals, produce "
+    "a short exec summary (2-3 sentences) of the state of the "
+    "system. Return ONLY a JSON object: {\"summary\": \"...\"}."
 )
 
 
-class RecommendationEngine:
-    """Generate ranked, actionable recommendations.
+def _window_for_period(period: str) -> timedelta:
+    if period == "monthly":
+        return timedelta(days=30)
+    return timedelta(days=7)
 
-    The v1.3 ship reads drift alerts, retrieval knowledge
-    gaps, judge regressions, and high-cost lines, then ranks
-    them by impact using a simple deterministic ladder. The
-    LLM is used (best-effort) to write a one-line rationale
-    per recommendation; on LLM failure the rationale is a
-    generic one-liner.
 
-    Recommendations are read-only. The customer must invoke
-    the corresponding action endpoint
-    (e.g. ``POST /heal``) to apply one.
-    """
+# ponytail: ReportGenerator class deleted per upgradespec §D.4.
+# Its logic was folded into InvestigationAgent.report(). The
+# helper constants (_VALID_REPORT_PERIODS, _REPORT_SYSTEM_PROMPT,
+# _window_for_period) are still imported by InvestigationAgent.
 
-    name = "recommendation_engine"
 
-    async def recommend(
-        self,
-        org_id: str,
-    ) -> dict[str, Any]:
-        signals = await _load_top_signals(org_id, window_days=7)
-        recs: list[dict[str, Any]] = []
+# ── 3. RecommendationEngine ────────────────────────────────────────
 
-        # 3.1. Drift alerts → recommend review / rollback.
-        for d in signals.get("drift_alerts_recent", [])[:5]:
-            severity = (d.get("severity") or "").lower()
-            if severity not in ("high", "critical"):
-                continue
-            drift_type = d.get("drift_type") or "drift"
-            title = f"Investigate {drift_type} drift alert"
-            rationale = await _llm_rationale(
-                "drift_review",
-                f"drift_type={drift_type}, severity={severity}",
-            )
-            recs.append(
-                await _new_recommendation(
-                    org_id=org_id,
-                    title=title,
-                    rationale=rationale,
-                    action={
-                        "type": "investigation.trigger",
-                        "params": {"trigger": f"drift_alert:{d.get('id')}"},
-                    },
-                    estimated_impact="high" if severity == "critical" else "medium",
-                    risk="low",
-                )
-            )
+# ponytail: RecommendationEngine class deleted per upgradespec §D.4.
+# Its logic was folded into InvestigationAgent.recommend() (the
+# _recommend_via_ladder() helper). The legacy ``recommend()``
+# method on the agent returns a simplified in-memory ladder so
+# the route keeps working; a v2 ship can restore the full
+# LLM-rationale + persistence path.
 
-        # 3.2. Open incidents with severity=critical → recommend
-        #     a rollback if there's an active canary.
-        for inc in signals.get("incidents_recent", [])[:5]:
-            if (inc.get("severity") or "").lower() != "critical":
-                continue
-            title = "Review critical incident cluster"
-            rationale = await _llm_rationale(
-                "incident_review",
-                f"cluster_id={inc.get('cluster_id')}, member_count={inc.get('member_count')}",
-            )
-            recs.append(
-                await _new_recommendation(
-                    org_id=org_id,
-                    title=title,
-                    rationale=rationale,
-                    action={
-                        "type": "investigation.trigger",
-                        "params": {"trigger": f"incident:{inc.get('cluster_id')}"},
-                    },
-                    estimated_impact="high",
-                    risk="low",
-                )
-            )
-
-        # 3.3. Judge scores below 0.7 → recommend rubric
-        #     review.
-        for t in signals.get("judge_score_trends", []):
-            avg = float(t.get("avg_score") or 0.0)
-            if avg >= 0.7:
-                continue
-            title = f"Judge {t.get('judge_name')} trending low"
-            rationale = await _llm_rationale(
-                "judge_review",
-                f"judge={t.get('judge_name')}, avg_score={avg:.3f}, n={t.get('n')}",
-            )
-            recs.append(
-                await _new_recommendation(
-                    org_id=org_id,
-                    title=title,
-                    rationale=rationale,
-                    action={
-                        "type": "judge.review_threshold",
-                        "params": {
-                            "judge_name": t.get("judge_name"),
-                            "current_avg": avg,
-                        },
-                    },
-                    estimated_impact="medium",
-                    risk="low",
-                )
-            )
-
-        # 3.4. Rank by impact ladder (critical > high > medium > low).
-        rank = {"critical": 4, "high": 3, "medium": 2, "low": 1}
-        recs.sort(
-            key=lambda r: rank.get(r.get("estimated_impact", "low"), 1),
-            reverse=True,
-        )
-
-        return _ok_envelope(
-            self.name,
-            {
-                "recommendations": [
-                    {
-                        "id": r["id"],
-                        "title": r["title"],
-                        "rationale": r["rationale"],
-                        "action": r["action"],
-                        "estimated_impact": r["estimated_impact"],
-                        "risk": r["risk"],
-                        "status": r["status"],
-                    }
-                    for r in recs
-                ],
-                "n_recommendations": len(recs),
-            },
-        )
+_VALID_IMPACT_LEVELS: frozenset[str] = frozenset(
+    {"critical", "high", "medium", "low"}
+)
 
 
 # ── 4. SelfHealer ──────────────────────────────────────────────────

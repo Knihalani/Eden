@@ -89,208 +89,11 @@ _NL_REPORT_SYSTEM_PROMPT = (
 )
 
 
-# ── 5. NLQueryEngine ──────────────────────────────────────────────
-
-
-class NLQueryEngine:
-    """NL queries over production observability data.
-
-    The v1.3 ship is single-shot: NL → SQL via the LLM, run
-    the SQL against Postgres (read-only, with the
-    ``org_id = $1`` parameterised filter), then summarise
-    the result. The whole flow degrades gracefully when the
-    LLM is unavailable: the SQL is empty, the summary is a
-    "I couldn't translate" message, and the audit log still
-    records the question.
-    """
-
-    name = "nl_query"
-
-    async def query(
-        self,
-        org_id: str,
-        *,
-        question: str,
-    ) -> dict[str, Any]:
-        if not question or not question.strip():
-            return _not_implemented_envelope(
-                self.name,
-                "question is required and must be non-empty",
-            )
-
-        # 1. NL → SQL via the LLM. Falls back to None on
-        #    any failure.
-        prompt = (
-            f"Org: {org_id}\n"
-            f"Question: {question}\n"
-            "Translate to a single SELECT statement."
-        )
-        raw = await _call_llm(
-            prompt,
-            agent="autonomous_nl_to_sql",
-            slot=DEFAULT_LLM_SLOT,
-            system_prompt=_NL_TO_SQL_SYSTEM_PROMPT,
-            max_tokens=500,
-        )
-        sql_text: str | None = None
-        if raw:
-            parsed = _try_parse_json_object(raw)
-            if isinstance(parsed, dict):
-                s = parsed.get("sql")
-                if isinstance(s, str) and s.strip():
-                    sql_text = _validate_readonly_sql(s.strip())
-
-        # 2. Run the SQL. Best-effort: a syntax error or
-        #    missing column returns [] — the summary is the
-        #    "couldn't translate" fallback.
-        rows: list[dict[str, Any]] = []
-        sql_used: str | None = sql_text
-        if sql_text:
-            try:
-                from eden.storage.postgres import get_postgres_client
-
-                client = await get_postgres_client()
-                if client is not None:
-                    rows = await client.fetch(sql_text, org_id)
-            except Exception as exc:
-                logger.debug(
-                    "autonomous nl_query: postgres fetch failed: %s", exc
-                )
-                rows = []
-                # We intentionally do not surface the raw
-                # error in the response — the summary helper
-                # below writes a customer-friendly message.
-
-        # 3. Summarise the result. Best-effort.
-        result_preview = _truncate_for_prompt(rows, max_rows=5)
-        summary_text = ""
-        llm_used = False
-        raw2 = await _call_llm(
-            (
-                f"Question: {question}\n"
-                f"Result preview: {json.dumps(result_preview, default=str)}\n"
-                "Write a 1-2 sentence answer."
-            ),
-            agent="autonomous_nl_summariser",
-            slot=DEFAULT_LLM_SLOT,
-            system_prompt=_NL_SUMMARY_SYSTEM_PROMPT,
-            max_tokens=200,
-        )
-        if raw2:
-            parsed2 = _try_parse_json_object(raw2)
-            if isinstance(parsed2, dict):
-                s = parsed2.get("summary")
-                if isinstance(s, str) and s.strip():
-                    summary_text = s.strip()
-                    llm_used = True
-        if not summary_text:
-            summary_text = (
-                "I couldn't translate that question to SQL. "
-                "Please rephrase or contact support."
-            )
-
-        # 4. Audit log. Best-effort.
-        query_id = _new_id("nlq")
-        await _upsert_nl_query_log(
-            org_id,
-            query_id,
-            user_id=None,
-            question=question,
-            result_json=_json_dumps(
-                {
-                    "sql_used": sql_used,
-                    "n_rows": len(rows),
-                    "llm_used": llm_used,
-                }
-            ),
-        )
-
-        return _ok_envelope(
-            self.name,
-            {
-                "query_id": query_id,
-                "question": question,
-                "result": rows[:50],
-                "sql_used": sql_used,
-                "summary": summary_text,
-                "llm_used": llm_used,
-                "n_rows": len(rows),
-            },
-        )
-
+# ponytail: NLQueryEngine removed per upgradespec §D.4.
+# The deep-linked route returns a stable 501 envelope via
+# ``intelligence_autonomous.py::_deferred``.
 
 # ── 6. AutoDashboardBuilder ────────────────────────────────────────
-
-
-class AutoDashboardBuilder:
-    """Auto-generate a dashboard spec from an NL description.
-
-    The v1.3 ship emits the dashboard spec as JSON. The spec
-    is NOT persisted to a new table — the customer can copy
-    it into their own dashboard via the existing portal. A
-    v2 ship can persist to ``autonomous_recommendations``
-    (re-using the existing Cat 14 audit log) or a new
-    ``autonomous_dashboards`` table.
-
-    Falls back to a single-stat fallback spec when the LLM
-    is unavailable.
-    """
-
-    name = "auto_dashboard"
-
-    async def build(
-        self,
-        org_id: str,
-        *,
-        description: str,
-    ) -> dict[str, Any]:
-        if not description or not description.strip():
-            return _not_implemented_envelope(
-                self.name,
-                "description is required and must be non-empty",
-            )
-
-        # 1. Spec via the LLM. Best-effort.
-        raw = await _call_llm(
-            description,
-            agent="autonomous_dashboard",
-            slot=DEFAULT_LLM_SLOT,
-            system_prompt=_DASHBOARD_SYSTEM_PROMPT,
-            max_tokens=500,
-        )
-        panels: list[dict[str, Any]] = []
-        llm_used = False
-        if raw:
-            parsed = _try_parse_json_object(raw)
-            if isinstance(parsed, dict):
-                p = parsed.get("panels")
-                if isinstance(p, list):
-                    panels = [x for x in p if isinstance(x, dict)]
-                    llm_used = bool(panels)
-        if not panels:
-            panels = [
-                {
-                    "type": "stat",
-                    "metric": "trace_count",
-                    "group_by": None,
-                    "window": "7d",
-                    "title": "Total traces (last 7 days)",
-                }
-            ]
-
-        dashboard_id = _new_id("dash")
-        return _ok_envelope(
-            self.name,
-            {
-                "dashboard_id": dashboard_id,
-                "description": description,
-                "spec": {"panels": panels},
-                "llm_used": llm_used,
-            },
-        )
-
-
-# ── 7. NLReportGenerator ───────────────────────────────────────────
 
 
 class NLReportGenerator:
@@ -353,10 +156,12 @@ class NLReportGenerator:
                     title = t.strip()[:120]
                 llm_used = bool(period != "weekly" or focus or title != request[:120])
 
-        # 2. Render the report by reusing ReportGenerator.
-        from eden.autonomous.investigation import ReportGenerator
+        # 2. Render the report via the InvestigationAgent.report()
+        #    method (ReportGenerator was folded into the agent
+        #    per upgradespec §D.4).
+        from eden.autonomous.investigation import InvestigationAgent
 
-        report = await ReportGenerator().generate(org_id, period=period)
+        report = await InvestigationAgent().report(org_id, period=period)
         if report.get("status") != "ok":
             return _not_implemented_envelope(
                 self.name,

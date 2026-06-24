@@ -1,11 +1,17 @@
-"""Behavioural-signal services (Cat 9 v2 — the 7 implicit signals).
+"""Behavioural-signal services (Cat 9 v2 — the 4 implicit signals).
 
-Six write-path services + the :class:`BehaviouralDashboard`
+ponytail: per upgradespec §D.2 (Phase 1 cut), the 7
+signals were reduced to 4. The 3 dropped
+(copy_pasted / retried_within_60s / return_7d) were
+re-runnable from derived metrics and aren't worth the
+storage + write-path cost for beta.
+
+Three write-path trackers + the :class:`BehaviouralDashboard`
 read-path service. All write to
 ``user_behavioural_signals`` (migration 024). All read
 the same table to compute cohort-level aggregates.
 
-The 7 signals per ``(org_id, trace_id)``:
+The 4 surviving signals per ``(org_id, trace_id)``:
 
 1. **regenerated** — the user clicked "regenerate" on
    this trace. Negative signal.
@@ -16,22 +22,13 @@ The 7 signals per ``(org_id, trace_id)``:
    model's response and what the user eventually pasted
    / used, normalized to ``[0.0, 1.0]``. Negative signal
    when ``> 0.5``.
-4. **copy_pasted** — the user copied the response.
-   Positive signal (weakly — could be a "I'll take it
-   as a starting point" gesture).
-5. **retried_within_60s** — the user re-issued the same
-   / similar query within 60 seconds. Negative signal.
-6. **return_7d** — the user returned to the feature
-   within 7 days. Positive signal when ``True``,
-   negative when ``False``, ``None`` while still in
-   the 7-day window.
-7. **time_to_first_action_ms** — how long the user took
+4. **time_to_first_action_ms** — how long the user took
    to take their first action. Diagnostic, not used in
    the implicit aggregate.
 
 The :class:`BehaviouralDashboard.cohort` aggregate
 mirrors the appendix's ``GET /intelligence/user/dashboard/cohort``
-endpoint — the org-level view of the 7 signals across a
+endpoint — the org-level view of the 4 signals across a
 cohort of users.
 """
 
@@ -104,10 +101,9 @@ async def _upsert_signal_row(
             "regenerated": "regenerated",
             "abandoned_after_one": "abandoned_after_one",
             "edit_distance": "edit_distance",
-            "copy_pasted": "copy_pasted",
-            "retried_within_60s": "retried_within_60s",
-            "return_7d": "return_7d",
             "time_to_first_action_ms": "time_to_first_action_ms",
+            # ponytail: copy_pasted / retried_within_60s /
+            # return_7d removed per upgradespec §D.2.
         }
         # DELETE first (re-runnable).
         await client.execute(
@@ -328,53 +324,7 @@ class EditDistanceTracker:
 # ── 3. ReturnToFeatureTracker ────────────────────────────────────────
 
 
-class ReturnToFeatureTracker:
-    """Track the 7-day return signal.
-
-    Per the Behavioral Signals article: "7-day
-    return-to-feature rate is the strongest predictor of
-    3-month retention." A ``return_7d=True`` is a positive
-    signal; ``return_7d=False`` is a negative signal;
-    ``None`` is "too early to tell" (the 7-day window
-    hasn't elapsed).
-    """
-
-    name = "return_tracker"
-
-    async def track(
-        self,
-        org_id: str,
-        *,
-        trace_id: str,
-        user_id: str,
-        returned: bool | None = None,
-    ) -> dict[str, Any]:
-        if not trace_id or not isinstance(trace_id, str):
-            return _bad_request_envelope(
-                self.name, "trace_id is required"
-            )
-        if not user_id or not isinstance(user_id, str):
-            return _bad_request_envelope(
-                self.name, "user_id is required"
-            )
-        # ``returned`` may be True / False / None. None
-        # is the "too early" state — the 7-day window
-        # hasn't elapsed.
-        sig_id = await _upsert_signal_row(
-            org_id, user_id, trace_id, {"return_7d": returned}
-        )
-        return _ok_envelope(
-            self.name,
-            {
-                "signal_id": sig_id,
-                "trace_id": trace_id,
-                "user_id": user_id,
-                "return_7d": returned,
-            },
-        )
-
-
-# ── 4. AbandonmentTracker ────────────────────────────────────────────
+    # ponytail: ReturnToFeatureTracker removed per upgradespec §D.2
 
 
 class AbandonmentTracker:
@@ -423,255 +373,26 @@ class AbandonmentTracker:
 # ── 5. CopyPasteTracker ──────────────────────────────────────────────
 
 
-class CopyPasteTracker:
-    """Track that the user copied the response.
-
-    PII is stripped at the SDK layer via the existing AI
-    Gateway :class:`PIIFilter`; the service only receives
-    a redaction-flagged snippet of length ≤
-    :data:`COPY_PASTE_REDACT_LEN` chars. Per the
-    appendix's failure-mode table: "Tracking copy-paste
-    leaks PII → PII is stripped before the copy event
-    is recorded."
-    """
-
-    name = "copy_paste_tracker"
-
-    async def detect(
-        self,
-        org_id: str,
-        *,
-        trace_id: str,
-        user_id: str,
-        copied: bool = True,
-        redacted_snippet: str | None = None,
-    ) -> dict[str, Any]:
-        if not trace_id or not isinstance(trace_id, str):
-            return _bad_request_envelope(
-                self.name, "trace_id is required"
-            )
-        if not user_id or not isinstance(user_id, str):
-            return _bad_request_envelope(
-                self.name, "user_id is required"
-            )
-        if redacted_snippet is not None:
-            if not isinstance(redacted_snippet, str):
-                return _bad_request_envelope(
-                    self.name,
-                    "redacted_snippet must be a string",
-                )
-            # Enforce the PII redaction length cap. The
-            # SDK should pass a snippet already PII-
-            # stripped; this is a defense-in-depth check.
-            redacted_snippet = redacted_snippet[:COPY_PASTE_REDACT_LEN]
-        # Note: we don't persist the redacted snippet —
-        # the schema doesn't have a column for it. The
-        # ``copied`` boolean is the only signal stored.
-        # The snippet is logged in the response for
-        # debugging but not persisted (would be a
-        # privacy issue).
-        sig_id = await _upsert_signal_row(
-            org_id, user_id, trace_id,
-            {"copy_pasted": bool(copied)},
-        )
-        return _ok_envelope(
-            self.name,
-            {
-                "signal_id": sig_id,
-                "trace_id": trace_id,
-                "user_id": user_id,
-                "copy_pasted": bool(copied),
-                "snippet_persisted": False,  # privacy
-            },
-        )
+    # ponytail: CopyPasteTracker removed per upgradespec §D.2
 
 
-# ── 6. RetryRephraseTracker ──────────────────────────────────────────
-
-
-class RetryRephraseTracker:
-    """Track the user re-issuing the same / similar query
-    within :data:`RETRY_THRESHOLD_S` seconds.
-
-    A retry is a strong negative signal — the response
-    wasn't good enough the first time. The SDK calls
-    :meth:`detect` when it sees two consecutive queries
-    with similarity > 0.7 within the threshold.
-    """
-
-    name = "retry_tracker"
-
-    async def detect(
-        self,
-        org_id: str,
-        *,
-        trace_id: str,
-        user_id: str,
-        retried: bool = True,
-        similarity: float | None = None,
-    ) -> dict[str, Any]:
-        if not trace_id or not isinstance(trace_id, str):
-            return _bad_request_envelope(
-                self.name, "trace_id is required"
-            )
-        if not user_id or not isinstance(user_id, str):
-            return _bad_request_envelope(
-                self.name, "user_id is required"
-            )
-        sig_id = await _upsert_signal_row(
-            org_id, user_id, trace_id,
-            {"retried_within_60s": bool(retried)},
-        )
-        return _ok_envelope(
-            self.name,
-            {
-                "signal_id": sig_id,
-                "trace_id": trace_id,
-                "user_id": user_id,
-                "retried_within_60s": bool(retried),
-                "similarity": (
-                    round(similarity, 4)
-                    if isinstance(similarity, (int, float))
-                    else None
-                ),
-            },
-        )
-
-
-# ── 7. BehaviouralDashboard (cohort aggregate) ──────────────────────
-
-
-#: Per the appendix: alert when regen rate > 50% on a
-#: specific query category. We default to 0.5 here; a
-#: tenant can override in ``organizations.features``.
-DEFAULT_REGEN_ALERT_THRESHOLD: float = 0.5
-
-
-async def _fetch_signal_cohort(
-    org_id: str, interval_sql: str
-) -> dict[str, Any]:
-    """Read the 7-signal aggregate for the org in the
-    window. Returns a dict with the per-signal count and
-    mean where applicable. ``{}`` on failure."""
-    client = await _get_client()
-    if client is None:
-        return {}
-    try:
-        row = await client.fetchrow(
-            """
-            SELECT
-                COUNT(*)::int AS total,
-                COALESCE(SUM(CASE WHEN regenerated THEN 1 ELSE 0 END), 0)::int
-                    AS regen_count,
-                COALESCE(SUM(CASE WHEN abandoned_after_one THEN 1 ELSE 0 END), 0)::int
-                    AS abandon_count,
-                COALESCE(SUM(CASE WHEN copy_pasted THEN 1 ELSE 0 END), 0)::int
-                    AS copy_count,
-                COALESCE(SUM(CASE WHEN retried_within_60s THEN 1 ELSE 0 END), 0)::int
-                    AS retry_count,
-                COALESCE(SUM(CASE WHEN return_7d = TRUE THEN 1 ELSE 0 END), 0)::int
-                    AS returned_yes,
-                COALESCE(SUM(CASE WHEN return_7d = FALSE THEN 1 ELSE 0 END), 0)::int
-                    AS returned_no,
-                COALESCE(AVG(edit_distance), 0)::float8 AS edit_distance_mean,
-                COALESCE(AVG(time_to_first_action_ms), 0)::float8
-                    AS ttfa_mean
-              FROM user_behavioural_signals
-             WHERE org_id = $1
-               AND created_at > NOW() - $2::interval
-            """,
-            org_id,
-            interval_sql,
-        )
-    except Exception as exc:
-        logger.debug("user_intel: signal cohort failed: %s", exc)
-        return {}
-    if row is None:
-        return {}
-    if isinstance(row, dict):
-        return {
-            "total": int(row.get("total") or 0),
-            "regen_count": int(row.get("regen_count") or 0),
-            "abandon_count": int(row.get("abandon_count") or 0),
-            "copy_count": int(row.get("copy_count") or 0),
-            "retry_count": int(row.get("retry_count") or 0),
-            "returned_yes": int(row.get("returned_yes") or 0),
-            "returned_no": int(row.get("returned_no") or 0),
-            "edit_distance_mean": _safe_float(
-                row.get("edit_distance_mean")
-            ),
-            "ttfa_mean": _safe_float(row.get("ttfa_mean")),
-        }
-    return {
-        "total": int(row["total"] or 0),
-        "regen_count": int(row["regen_count"] or 0),
-        "abandon_count": int(row["abandon_count"] or 0),
-        "copy_count": int(row["copy_count"] or 0),
-        "retry_count": int(row["retry_count"] or 0),
-        "returned_yes": int(row["returned_yes"] or 0),
-        "returned_no": int(row["returned_no"] or 0),
-        "edit_distance_mean": _safe_float(row["edit_distance_mean"]),
-        "ttfa_mean": _safe_float(row["ttfa_mean"]),
-    }
-
-
-async def _fetch_explicit_cohort(
-    org_id: str, interval_sql: str
-) -> dict[str, Any]:
-    """Read the explicit-feedback cohort aggregate for the
-    same window. Returns ``{thumbs_up, thumbs_down, total,
-    naive_satisfaction}``."""
-    client = await _get_client()
-    if client is None:
-        return {}
-    try:
-        row = await client.fetchrow(
-            f"""
-            SELECT
-                COALESCE(SUM(CASE WHEN thumbs = 'up' THEN 1 ELSE 0 END), 0)::int
-                    AS thumbs_up,
-                COALESCE(SUM(CASE WHEN thumbs = 'down' THEN 1 ELSE 0 END), 0)::int
-                    AS thumbs_down,
-                COUNT(*)::int AS total
-              FROM user_feedback
-             WHERE org_id = $1
-               AND created_at > NOW() - {interval_sql}::interval
-            """,
-            org_id,
-        )
-    except Exception as exc:
-        logger.debug("user_intel: explicit cohort failed: %s", exc)
-        return {}
-    if row is None:
-        return {}
-    if isinstance(row, dict):
-        up = int(row.get("thumbs_up") or 0)
-        down = int(row.get("thumbs_down") or 0)
-        total = int(row.get("total") or 0)
-    else:
-        up = int(row["thumbs_up"] or 0)
-        down = int(row["thumbs_down"] or 0)
-        total = int(row["total"] or 0)
-    return {
-        "thumbs_up": up,
-        "thumbs_down": down,
-        "total": total,
-        "naive_satisfaction": (
-            round(up / total, 4) if total > 0 else None
-        ),
-    }
+    # ponytail: RetryRephraseTracker removed per upgradespec §D.2
 
 
 class BehaviouralDashboard:
-    """Cohort-level aggregate of the 7 implicit signals +
+    """Cohort-level aggregate of the 3 implicit signals +
     the explicit-feedback aggregate. The
     :meth:`cohort` method returns the dashboard payload
     matching the appendix's
     ``GET /intelligence/user/dashboard/cohort?cohort=power_users&window=30d``
     response shape.
 
-    Fires the closed-loop hook when the regeneration rate
-    exceeds :data:`DEFAULT_REGEN_ALERT_THRESHOLD`.
+    ponytail: per upgradespec §D.2 (Phase 1 cut), the 3
+    signals (Regeneration, Edit, Abandonment) survive;
+    CopyPaste + RetryRephrase + ReturnToFeature were
+    removed. Fires the closed-loop hook when the
+    regeneration rate exceeds
+    :data:`DEFAULT_REGEN_ALERT_THRESHOLD`.
     """
 
     name = "behavioural_dashboard"

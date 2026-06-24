@@ -440,3 +440,42 @@ async def test_webhook(
         api_version=CURRENT_VERSION,
         request_id=get_correlation_id(),
     )
+
+
+# ─── DLQ + Replay (D.13) ──────────────────────────────────────────────
+
+
+@router.get("/dlq", response_model=APIEnvelope)
+async def list_dlq(
+    org_id: str,
+    limit: int = 50,
+    _user: dict = Depends(get_current_user),
+):
+    """List DLQ entries (terminal-state webhook deliveries)."""
+    from eden.services.webhook_delivery import WebhookDeliveryService
+
+    entries = await WebhookDeliveryService().list_dlq(
+        org_id, limit=max(1, min(limit, 500))
+    )
+    return APIEnvelope.wrap(
+        data={"entries": entries, "count": len(entries)},
+        api_version=CURRENT_VERSION,
+        request_id=get_correlation_id(),
+    )
+
+
+@router.post("/dlq/{dlq_id}/replay", response_model=APIEnvelope)
+async def replay_dlq(
+    org_id: str,
+    dlq_id: str,
+    _user: dict = Depends(require_org_admin),
+):
+    """Re-fire a DLQ delivery (D.13)."""
+    from eden.services.webhook_delivery import WebhookDeliveryService
+
+    result = await WebhookDeliveryService().replay_dlq(dlq_id)
+    return APIEnvelope.wrap(
+        data=result,
+        api_version=CURRENT_VERSION,
+        request_id=get_correlation_id(),
+    )

@@ -4,6 +4,24 @@ All notable changes to the Eden docs site (docs.edenobservability.com).
 
 ## [Unreleased]
 
+### Product — 2026-06-24 (Phase 1 spine shipped)
+- **D.8** Streaming tokens: migration 054 (`streaming_tokens` PG table); SDK helper `capture_byte_count()` + PII pre-mask; `StreamingTokenCapture` service with batched writes; portal `/traces/{trace_id}/tokens` route + `StreamingSparkline` component (per-token delta_ms bar chart with stall highlighting)
+- **D.9** Prompt versioning: migration 055 (`prompts` + `prompt_versions` + `prompt_eval_runs` tables + nullable FK on `telemetry_events`); `PromptService` + `run_auto_eval`; Python `@prompt()` SDK decorator; API routes under `/prompts/{name}/versions/*`; portal `/prompts` page with version timeline + auto-eval-on-save toggle
+- **D.10** Cost guardrails polish: migration 052 (`budgets` + `budget_consumption` + `budget_actions`); `BudgetService` with `get_budget`/`get_consumption`/`record_usage`/`list_actions`/`record_action`/`upsert_budget`; API `/budget` + `/budget/ticker` + `/budget/actions`; portal `/optimization/budget` page + `BudgetTicker` sidebar component (real-time polling)
+- **D.13** Webhooks reliability: migration 053 (`webhook_dlq` table + `signature_v1` column + `webhook_endpoints` view); `WebhookDeliveryService.sign_v1()` adds Stripe-style `X-Eden-Signature: t=<ts>,v1=<sig>` header; backoff updated to spec-aligned 7-step ladder (1s/5s/25s/2m/10m/1h → DLQ); `_move_to_dlq` + `replay_dlq` + `list_dlq`; portal `/settings/(tabs)/webhooks-dlq` page with DLQ list + Replay buttons
+- 4 new migrations (052-055), 6 new backend modules (budget_service, sdk/streaming, sdk/prompt_decorator, services/prompt_versioning, api/routes/budgets, api/routes/streaming_tokens, api/routes/prompts_v2), 4 new portal pages (optimization/budget, prompts, settings/(tabs)/webhooks-dlq) + 3 new components (BudgetTicker, StreamingSparkline)
+
+### Product — 2026-06-24 (Phase 0 cuts shipped)
+- **D.1** Cat 22 APM Depth → OTel Collector: deleted `apm_depth/{sampling,k8s,profiling}.py` + 3 tests + 3 audit tables from migration 026; v1.4 surface (OtelV141Enricher, StepJudgeStamper, AgentMetricsCollector) retained. Tail-sampling/K8s/Pyroscope routes return 501 with `deploy/otel-collector-config.yaml` pointer
+- **D.2** Cat 9 → Flat Beta-Binomial + 3 trackers: migration 024 dropped `copy_pasted` / `retried_within_60s` / `return_7d` columns; default `method` = `'flat_beta_binomial'`. Deleted `ReturnToFeatureTracker` / `CopyPasteTracker` / `RetryRephraseTracker` + tests. `HierarchicalBetaBinomial` → `FlatBetaBinomial` (Beta(1,1) prior). 4 signals survive
+- **D.3** Cat 13 Predictive → 2 services: deleted `capacity.py` / `cost.py` / `risk.py` (median projection moved to Cat 7). Kept `QualityPredictor` + `DriftDetector`. 3 removed routes return 501
+- **D.4** Cat 14 Autonomous → 2 services: folded `ReportGenerator` → `InvestigationAgent.report()`. Folded `RecommendationEngine` → `InvestigationAgent.recommend()`. Deleted `NLQueryEngine` + `AutoDashboardBuilder`. Dropped `nl_query_log` table. 2 removed routes return 501
+- **D.5** Cat 10 Governance → SOC2 + GDPR only: `SUPPORTED_FRAMEWORKS` reduced from 4 to 2. HIPAA + ISO27001 routes return 501. PHI/IBAN/passport severities removed. Deferred roadmap at `docs/eden-governance-roadmap.md`
+- **D.6** Cat 18 Columnar → daily/weekly only: `_VALID_GRANULARITIES` reduced from 3 to 2; asking for `hour` returns `_not_implemented_envelope`. New test `test_hourly_granularity_rejected` asserts the contract
+- **D.7** Cat 23 STUB → defer 4 inbox/persona/style tables: migration 027 commented out the 4 `_table()` calls. Services marked `pending=True`. Best-effort writers swallow the missing tables. 15 of 19 tables survive
+- New deploy artifact: `deploy/otel-collector-config.yaml` (replacement for D.1's tail_sampling + k8sattributes processors)
+- New doc: `docs/eden-governance-roadmap.md` (D.5 deferred-roadmap for HIPAA + ISO27001)
+
 ### Product — 2026-06-23 (Production-Ready Beta)
 - **Backend**: mounted previously-defined `webhooks.router` (outbound CRUD) and `agent_pr_suggestions.router` (Cat 23 UI surface); registered `QuotaEnforcementMiddleware` before `TenantRateLimitMiddleware` (§6.3 cost guardrails now active)
 - **Portal chat pipeline**: fixed `chat/route.ts` URL bug (was using `NEXT_PUBLIC_API_URL` = relative `/api/proxy`; now `API_INTERNAL_URL` for server-side Node fetch); SSE error handler now calls `controller.error(err)` + explicit `event: error` frame (was leaving client in stuck "Streaming…" state)

@@ -4,11 +4,11 @@ Revision ID: 027
 Revises: 026
 Create Date: 2026-06-12
 
-Adds the 8 core tables Cat 23 v1.6 needs on top of the existing
-``telemetry_events`` + ``telemetry_events`` schema (the v1.6
-surface reads from the Cat 2 RCA tables + the Cat 16 decision
-tables + the customer's source code via the
-:class:`eden.code_change.repo_connector.RepoConnector`):
+Adds the 15 core Cat 23 tables (the 4 inbox/persona/style/quality tables
+are deferred per upgradespec §D.7 — they're stubbed at the service layer
+and re-added when Gate-2/Gate-4 land):
+
+* ``repo_connections`` — the per-repo connection metadata.
 
 * ``repo_connections`` — the per-repo connection metadata.
   :class:`RepoConnector` writes one row per repo registration.
@@ -418,85 +418,27 @@ def upgrade() -> None:
     )
 
     # ── 4 inbox + persona + style + quality tables ────────────────
-
-    _table(
-        "agent_persona_config",
-        """
-        id                       VARCHAR(64) PRIMARY KEY,
-        org_id                   VARCHAR(128) NOT NULL,
-        display_name             VARCHAR(128) NOT NULL DEFAULT 'Eden Agent',
-        avatar                   VARCHAR(256) NOT NULL DEFAULT 'eden-mark',
-        voice                    VARCHAR(64) NOT NULL DEFAULT 'concise',
-        track_record_visible_to  JSONB,
-        commit_message_style     VARCHAR(64) NOT NULL DEFAULT 'conventional-commits',
-        pr_body_template         VARCHAR(64) NOT NULL DEFAULT 'default',
-        created_at               TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-        updated_at               TIMESTAMPTZ NOT NULL DEFAULT NOW()
-        """,
-        "CREATE UNIQUE INDEX IF NOT EXISTS idx_agent_persona_config_pk "
-        "ON agent_persona_config (org_id)",
-    )
-
-    _table(
-        "agent_activity_events",
-        """
-        id                       VARCHAR(64) PRIMARY KEY,
-        org_id                   VARCHAR(128) NOT NULL,
-        agent_id                 VARCHAR(64) NOT NULL,
-        event_type               VARCHAR(64) NOT NULL,
-        patch_id                 VARCHAR(64),
-        summary                  TEXT NOT NULL DEFAULT '',
-        deep_link                TEXT NOT NULL DEFAULT '',
-        actor_user_id            VARCHAR(128),
-        metadata                 JSONB,
-        created_at               TIMESTAMPTZ NOT NULL DEFAULT NOW()
-        """,
-        "CREATE INDEX IF NOT EXISTS idx_agent_activity_events_type "
-        "ON agent_activity_events (org_id, event_type, created_at DESC)",
-    )
-
-    _table(
-        "repo_style_profiles",
-        """
-        id                       VARCHAR(64) PRIMARY KEY,
-        org_id                   VARCHAR(128) NOT NULL,
-        repo_id                  VARCHAR(64) NOT NULL,
-        indentation              JSONB,
-        type_hints_style         VARCHAR(32) NOT NULL DEFAULT 'pep484',
-        naming_convention        JSONB,
-        import_style             VARCHAR(32) NOT NULL DEFAULT 'absolute',
-        error_handling           VARCHAR(32) NOT NULL DEFAULT 'exceptions',
-        logging_style            VARCHAR(32) NOT NULL DEFAULT 'stdlib-logging',
-        docstring_style          VARCHAR(32) NOT NULL DEFAULT 'google',
-        test_framework           VARCHAR(32) NOT NULL DEFAULT 'pytest',
-        lint_config              JSONB,
-        complexity_median        INT NOT NULL DEFAULT 5,
-        architecture_patterns    JSONB,
-        last_learned_at          TIMESTAMPTZ,
-        last_learned_from_pr_id  VARCHAR(64),
-        created_at             TIMESTAMPTZ NOT NULL DEFAULT NOW()
-        """,
-        "CREATE UNIQUE INDEX IF NOT EXISTS idx_repo_style_profiles_pk "
-        "ON repo_style_profiles (org_id, repo_id)",
-    )
-
-    _table(
-        "patch_review_actions",
-        """
-        id                       VARCHAR(64) PRIMARY KEY,
-        org_id                   VARCHAR(128) NOT NULL,
-        patch_id                 VARCHAR(64) NOT NULL,
-        action                   VARCHAR(32) NOT NULL,
-        actor_user_id            VARCHAR(128) NOT NULL,
-        comment                  TEXT NOT NULL DEFAULT '',
-        reason                   TEXT NOT NULL DEFAULT '',
-        edited_diff              TEXT,
-        version_after            INT,
-        created_at               TIMESTAMPTZ NOT NULL DEFAULT NOW()
-        """,
-        "CREATE INDEX IF NOT EXISTS idx_patch_review_actions_patch "
-        "ON patch_review_actions (org_id, patch_id)",
-    )
+    # ponytail: tables deferred per upgradespec §D.7 (Phase 1 cut).
+    # The persona/style/inbox surfaces are gated by Cat 23's Gate-2 (attribution)
+    # and Gate-4 (end-to-end ship). Migration keeps 19 → 15 tables for v1.6;
+    # these 4 land via a future migration when the services have real
+    # backing stores (not in-memory stubs).
+    # _table(
+    #     "agent_persona_config",
+    #     ...
+    # )
+    # _table(
+    #     "agent_activity_events",
+    #     ...
+    # )
+    # _table(
+    #     "repo_style_profiles",
+    #     ...
+    # )
+    # _table(
+    #     "patch_review_actions",
+    #     ...
+    # )
 
 
 def downgrade() -> None:
@@ -512,7 +454,7 @@ def downgrade() -> None:
         "patch_approval_status",
         "patch_approvals",
         "approval_grants",
-        # Inbox / persona / style / quality
+        # Inbox / persona / style / quality — deferred per §D.7
         "patch_review_actions",
         "repo_style_profiles",
         "agent_activity_events",

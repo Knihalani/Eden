@@ -12,6 +12,9 @@ STUB mode exposes a ``GET /activity`` list endpoint that returns
 an empty feed (no events have been emitted yet because no real
 patches exist). The ``emit`` method is exposed for tests + future
 services to call.
+
+STATUS: pending=True (upgradespec §D.7 — table deferred; events stay
+in-memory until Gate-4 lands).
 """
 
 from __future__ import annotations
