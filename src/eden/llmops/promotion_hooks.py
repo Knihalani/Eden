@@ -70,6 +70,8 @@ ACTION_KIND: dict[str, str] = {
     "on_mcp_server_auth_failure": "investigate",
     # D.12.2 (A2A) — added 2026-06-24 per upgradespec §E.1
     "on_a2a_invocation_failed": "investigate",
+    # D.12.3 (Computer Use) — added 2026-06-24 per upgradespec §E.1 row 23
+    "on_computer_use_blocked": "pause_session",
 }
 
 
@@ -323,6 +325,45 @@ class PromotionHook:
             "promotion_hook.on_a2a_invocation_failed org=%s parent=%s "
             "kind=%s action_id=%s",
             org_id, parent_trace_id, error_kind, action_id,
+        )
+        return action_id
+
+    async def on_computer_use_blocked(
+        self,
+        org_id: str,
+        *,
+        trace_id: str,
+        span_id: str,
+        step_index: int,
+        action_type: str,
+        error: str | None = None,
+    ) -> str | None:
+        """A Computer Use step was blocked (safety policy hit).
+
+        Fires per upgradespec §E.1 row 23. Per spec the
+        default action is "Pause session"; the v0 ship is
+        advisory (records the recommended action for the
+        executor; the per-tenant pause is gated by the
+        ``computer_use_auto_pause`` flag in a follow-up).
+        """
+        action_id = await _record_action(
+            org_id,
+            hook_name=self.name,
+            action_kind=ACTION_KIND["on_computer_use_blocked"],
+            target=trace_id,
+            payload={
+                "trace_id": trace_id,
+                "span_id": span_id,
+                "step_index": int(step_index),
+                "action_type": action_type,
+                "error": error,
+            },
+            severity="high",
+        )
+        logger.debug(
+            "promotion_hook.on_computer_use_blocked org=%s trace=%s "
+            "step=%s type=%s action_id=%s",
+            org_id, trace_id, step_index, action_type, action_id,
         )
         return action_id
 
