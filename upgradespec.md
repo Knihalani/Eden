@@ -60,9 +60,6 @@
 │  │ • fine_tune_runs│    │                  │    │                  │    │
 │  └─────────────────┘    └──────────────────┘    └──────────────────┘    │
 │                                                                            │
-│  ┌──────────────────────────────────────────────────────────────────────┐ │
-│  │  MULTI-REGION ROUTING (§8.8 NEW) — us / eu / ap                     │ │
-│  └──────────────────────────────────────────────────────────────────────┘ │
 └────────────────────────────────────────────────────────────────────────────┘
                                      │
                                      ▼
@@ -103,127 +100,17 @@
 
 ## SECTION B — Data model specification
 
-> **Status snapshot (2026-06-24)**: B.1 (streaming tokens, migration 051), B.2 (prompts, 052), B.3 (budgets, 053), B.4 (MCP view, 057), B.5 (A2A, 058), B.6 (computer use, 059), B.7 (voice, 060), B.8 (provider routing, 062), B.9 (fine-tune lineage, 061), B.11 (webhooks, 053_webhook_dlq + 054_webhook_dlq tables), B.13 (onboarding, 056), and B.14 (feature flags) are all ✅ DONE — see `docs/spec/upgradespec-v2.md` for the canonical v2 status. The originals are preserved at the bottom of the git history for reference.
+> **Status snapshot (2026-06-24)**: All 14 originally-spec'd tables and views are either ✅ DONE (B.1-B.9 streaming tokens through fine-tune lineage, B.11 webhooks, B.13 onboarding, B.14 feature flags) or 🗑️ **REMOVED FROM SCOPE** (B.10 RTBF cross-store, B.12 multi-region). The existing `RightToBeForgottenService` (Cat 10) handles the Postgres-only path for GDPR Art.17 — no cross-store expansion is planned. Multi-region is permanently out of scope (single-region deployment in Northflank `us-central-1`). See `docs/spec/upgradespec-v2.md` for the canonical v2 status. Originals preserved at the bottom of the git history for reference.
 >
-> **Remaining**: B.10 (RTBF cross-store) and B.12 (multi-region). Full detail below.
-
-### B.10 RTBF cross-store extensions (§6.4)
-
-> **🟡 DEFERRED** — user has no legal team. The existing `RightToBeForgottenService` (Cat 10) handles Postgres only; the cross-store worker + S3/ClickHouse tombstones + backup lifecycle policy are all parked until the user has legal counsel to review the GDPR Art.17(3) exception matrix (R-7, R-17).
-
-```sql
--- Migration: 060_rtbf_tombstones.sql
--- Tombstones for S3 object filtering at query time
-CREATE TABLE s3_tombstones (
-    s3_uri              TEXT PRIMARY KEY,
-    trace_id            UUID NOT NULL,
-    subject_hash        TEXT NOT NULL,    -- anon_<sha256[:16]>
-    tombstoned_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
-    expires_at          TIMESTAMPTZ NOT NULL
-);
-CREATE INDEX idx_s3_tombstones_trace ON s3_tombstones(trace_id);
-
--- RTBF run audit (extends existing pii_findings)
-CREATE TABLE rtbf_runs (
-    id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    subject_user_id     UUID NOT NULL,
-    subject_hash        TEXT NOT NULL,    -- anon_<sha256[:16]>
-    requested_by        UUID NOT NULL,
-    reason              TEXT NOT NULL,    -- 'gdpr_art_17' | 'manual'
-    phases_total        INTEGER NOT NULL,
-    phases_completed    INTEGER NOT NULL DEFAULT 0,
-    phases_failed       JSONB NOT NULL DEFAULT '[]'::jsonb,
-                          -- [{phase: 'clickhouse', error: '...'}, ...]
-    status              TEXT NOT NULL DEFAULT 'in_progress',
-                          -- 'in_progress' | 'completed' | 'failed'
-    started_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
-    completed_at        TIMESTAMPTZ,
-    CHECK (status IN ('in_progress', 'completed', 'failed'))
-);
-```
-
-### B.12 Multi-region routing (§8.8)
-
-> **🟡 DEFERRED to Phase 4** — current deployment is single-region (Northflank `us-central-1` with Postgres + ClickHouse mirror + S3 `eden-bronze` + Redis). The original 6-week infra investment for `eu-central-1` + `ap-southeast-1` regions is parked until customer demand validates the spend.
-
-```sql
--- Migration: 062_multi_region.sql
-CREATE TABLE org_data_residency (
-    org_id              UUID PRIMARY KEY,
-    data_region         TEXT NOT NULL DEFAULT 'us',
-                          -- 'us' | 'eu' | 'ap'
-    configured_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
-    configured_by       UUID NOT NULL,
-    CHECK (data_region IN ('us', 'eu', 'ap'))
-);
-
--- Region-aware view of telemetry_events (for cross-region routing)
-ALTER TABLE telemetry_events
-    ADD COLUMN data_region TEXT NOT NULL DEFAULT 'us';
-CREATE INDEX idx_telemetry_region
-    ON telemetry_events(org_id, data_region, created_at DESC);
-```
+> **Nothing remaining in this section.**
 
 ---
 
 ## SECTION C — API contracts
 
-> **Status snapshot (2026-06-24)**: C.1 (streaming tokens), C.2 (prompts), C.3 (budgets), C.5 (closed-loop hooks query), C.7 (webhooks), and C.8 (MCP / A2A / Computer Use / Voice / Fine-tune / Provider routing) are all ✅ DONE — see `docs/spec/upgradespec-v2.md` for the canonical v2 status. Originals preserved at the bottom of the git history.
+> **Status snapshot (2026-06-24)**: All 8 originally-spec'd API contract sections are either ✅ DONE (C.1 streaming tokens, C.2 prompts, C.3 budgets, C.5 closed-loop hooks query, C.7 webhooks, C.8 MCP / A2A / Computer Use / Voice / Fine-tune / Provider routing) or 🗑️ **REMOVED FROM SCOPE** (C.4 RTBF, C.6 multi-region). See `docs/spec/upgradespec-v2.md` for the canonical v2 status. Originals preserved at the bottom of the git history.
 >
-> **Remaining**: C.4 (RTBF) and C.6 (multi-region). Full detail below.
-
-### C.4 RTBF (§6.4)
-
-> **🟡 DEFERRED** — see §B.10. Engineering half is buildable behind a disabled-by-default flag (`rtbf_cross_store_enabled`); policy half needs legal review.
-
-```yaml
-/v1/governance/rtbf:
-  post:
-    body:
-      type: object
-      required: [subject_user_id, reason]
-      properties:
-        subject_user_id: { type: string, format: uuid }
-        reason:          { type: string, enum: [gdpr_art_17, manual] }
-        dry_run:         { type: boolean, default: false }
-    responses:
-      202:
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                run_id:        { type: string, format: uuid }
-                phases_total:  { type: integer }
-
-/v1/governance/rtbf/{run_id}:
-  get:    # poll status
-
-/v1/governance/rtbf/{run_id}/retry:
-  post:
-    body:
-      type: object
-      properties:
-        phases: { type: array, items: { type: string } }
-                # e.g. ['clickhouse', 's3'] — retry only failed phases
-```
-
-### C.6 Multi-region (§8.8)
-
-> **🟡 DEFERRED** — see §B.12.
-
-```yaml
-/v1/admin/data_residency:
-  get:    # current org's residency
-  post:
-    body:
-      type: object
-      required: [data_region]
-      properties:
-        data_region: { type: string, enum: [us, eu, ap] }
-    # Note: changing data_region triggers a one-time data migration job
-    # (async, ~24-72h depending on volume)
-```
+> **Nothing remaining in this section.**
 
 ---
 
@@ -231,46 +118,9 @@ CREATE INDEX idx_telemetry_region
 
 > **Status snapshot (2026-06-24)**: D.1-D.7 (Phase 1 cuts), D.8 (Streaming tokens), D.9 (Prompt versioning), D.10 (Cost guardrails), D.12 sub-protocols (MCP / A2A / Computer Use / Voice / Fine-tune lineage / Provider routing), D.13 (Webhooks), D.14 (Cold-start UX) are all ✅ DONE — see `docs/spec/upgradespec-v2.md` for the canonical v2 status. Originals preserved at the bottom of the git history.
 >
-> **Remaining**: D.11 (RTBF cross-store) and the D.12 multi-region sub-row. Full detail below.
-
-### D.11 NEW: RTBF cross-store (§6.4)
-
-> **🟡 DEFERRED** — user has no legal team (per 2026-06-24). The engineering half (cross-store worker + S3/ClickHouse tombstones + backup lifecycle policy) is buildable behind a disabled-by-default flag (`rtbf_cross_store_enabled`); the policy half (GDPR Art.17(3) exception matrix, 30-day SLA, backup retention exception) needs legal review (R-7, R-17). The existing `RightToBeForgottenService` (Cat 10) continues to handle the Postgres-only path.
-
-**Spec sheet:**
-- **Data model:** `s3_tombstones` + `rtbf_runs` — §B.10
-- **API:** `/v1/governance/rtbf/*` — §C.4
-- **Phases:** Postgres → ClickHouse → S3 (tombstone) → Redis → backups (audit-only)
-- **Tests:** ~10 (per-phase, concurrent, audit trail)
-- **Acceptance:** all phases complete in <6h for 1M trace volume; audit log queryable 1 year post-completion
-- **Estimated time:** 3 weeks
-- **Risk:** medium — needs legal review before shipping
-
-### D.12 NEW: Multi-region (§8.8)
-
-> **🟡 DEFERRED to Phase 4** — current deployment is single-region (Northflank `us-central-1` with Postgres + ClickHouse mirror + S3 `eden-bronze` + Redis). The 6-week infra investment for `eu-central-1` + `ap-southeast-1` regions is parked until customer demand validates the spend.
-
-**Spec sheet (this sub-row only — the other D.12 sub-protocols are all done):**
-
-| Sub-spec                 | Tables                                  | API routes                     | SDK work                                          | Tests | Effort          |
-| ------------------------ | --------------------------------------- | ------------------------------ | ------------------------------------------------- | ----- | --------------- |
-| Multi-region (§8.8)      | `org_data_residency`                    | `/v1/admin/data_residency`     | Region-aware endpoint routing                    | ~8    | 6 weeks (infra) |
-
-**Data model:** `org_data_residency` (single table) + `data_region` column on `telemetry_events` — §B.12
-
-**API:** `/v1/admin/data_residency` (GET + POST) — §C.6
-
-**Migration plan:**
-1. New migration `062_multi_region.sql` (see §B.12)
-2. EU region: Postgres + ClickHouse + S3 in `eu-central-1`
-3. AP region: same in `ap-southeast-1`
-4. Gateway routing: `org_id → region` (read from `org_data_residency`)
-5. Cross-region data migration tool (for existing orgs)
-6. Tests
-7. Rollout: EU pilot with one enterprise customer, then default for new EU orgs
-
-**Estimated time:** 6 weeks (infra + migration tooling + 2-region rollout)
-**Risk:** medium-low — single-region is a known architecture, the multi-region work is well-understood infra. The R-08 risk (migration corrupts traces) is mitigated by dry-run + checksum + pause/resume.
+> D.11 (RTBF cross-store) and D.12 Multi-region are 🗑️ **REMOVED FROM SCOPE** — user has no legal team + single-region deployment. The existing `RightToBeForgottenService` (Cat 10) handles the Postgres-only path for GDPR Art.17 (no cross-store expansion is planned). Multi-region is permanently out of scope.
+>
+> **Nothing remaining in this section.**
 
 ---
 
@@ -283,7 +133,7 @@ CREATE INDEX idx_telemetry_region
 | 1   | `low_user_satisfaction`              | Cat 8  | medium      | Alert → Investigation             | No                |
 | 2   | `low_roi_department`                 | Cat 18 | medium      | Alert → Investigation             | No                |
 | 3   | `compliance_gap:soc2`                | Cat 9  | high        | Alert → Investigation             | No                |
-| 4   | `compliance_gap:gdpr`                | Cat 9  | critical    | Alert + Auto-RTBF suggestion      | Yes               |
+| 4   | `compliance_gap:gdpr`                | Cat 9  | critical    | Alert (advisory — see §E)         | No                |
 | 5   | `compliance_gap:hipaa`               | Cat 9  | high        | Alert                             | No                |
 | 6   | `compliance_gap:iso27001`            | Cat 9  | high        | Alert                             | No                |
 | 7   | `security:pii_scanner`               | Cat 9  | high        | Alert + Redaction suggestion      | Yes               |
@@ -338,7 +188,7 @@ class HookBus:
 1. **Within `dedup_window_seconds`**, if a hook with the same `(reason, org_id, primary_entity_id)` already fired, increment `repetition_count` instead of emitting a new event. The dedup window is per-reason.
 2. **Cascade dedup:** if `parent_hook_id` is set, the new event inherits the parent's `dedup_window` and joins the cascade. Cascade fan-out runs once for the whole group, not per-child.
 3. **Precedence:** higher severity hooks suppress lower-severity hooks for the same entity within 1 hour.
-4. **Order of fan-out:** PII redaction → RTBF suggestion → InvestigationAgent → RCA → alert (webhook/Slack/email).
+4. **Order of fan-out:** PII redaction → InvestigationAgent → RCA → alert (webhook/Slack/email).
 
 ### E.4 Approval gate (mandatory for hooks that mutate)
 
@@ -347,7 +197,7 @@ Any hook that triggers a write must pass `PromotionHook.propose()`:
 ```python
 # src/eden/hooks/approval.py
 class PromotionProposal(BaseModel):
-    action: Literal['anonymize', 'redact', 'rtbf', 'throttle', 'kill', 'rollback_prompt', 'pause_session']
+    action: Literal['anonymize', 'redact', 'throttle', 'kill', 'rollback_prompt', 'pause_session']
     target_id: UUID
     target_type: str
     reason_hook_id: UUID
@@ -402,7 +252,7 @@ hook_subscriptions:
     channels:
       - email:legal@company.com
       - webhook:legal-webhook-id
-    auto_propose: rtbf_workflow
+    auto_propose: investigation_report
     auto_approve: false  # always require human approval
 ```
 
@@ -410,13 +260,13 @@ hook_subscriptions:
 
 ## SECTION F — Migration runbook
 
-> **Status snapshot (2026-06-24)**: F.1, F.2, F.3 are all ✅ DONE — see `docs/spec/upgradespec-v2.md`. F.4 (Phase 3 Coverage completeness) is also ✅ DONE except for the D.11 RTBF sub-section (DEFERRED).
+> **Status snapshot (2026-06-24)**: F.1, F.2, F.3 are all ✅ DONE — see `docs/spec/upgradespec-v2.md`. F.4 (Phase 3 Coverage completeness) is also ✅ DONE in full (RTBF was the only deferred sub-section, and it has now been removed from scope entirely — see closing summary).
 >
-> **Remaining runbooks**: F.5 (Phase 4 Multi-region + Operational debt) and F.6 (Rollback procedures). Full detail below.
+> **Remaining runbooks**: F.5 (Phase 4 Operational debt only — RTBF + multi-region were removed from scope) and F.6 (Rollback procedures). Full detail below.
 
 ### F.4 Phase 3 — Coverage completeness runbook
 
-> ✅ **All DONE 2026-06-24** except D.11 RTBF (DEFERRED per user — no legal team):
+> ✅ **All DONE 2026-06-24**:
 >
 > **MCP / A2A / Computer Use / Voice / Fine-tune / Provider routing (§D.12):**
 > 1. Migrations 057-062 (sequential: 057 mcp, 058 a2a, 059 cu, 060 voice, 061 fine-tune, 062 provider routing)
@@ -427,8 +277,6 @@ hook_subscriptions:
 > 6. No feature flags (per user — disabled feature flag system entirely; routes are default-on)
 > 7. Deployed to production — `deployedSHA=e5fe7387ec796f68be0f8665f99a8b8a2aaabcde` (then `615108d4` after the polish pass)
 >
-> **RTBF cross-store (§D.11):** DEFERRED — see §F.5 below for the engineering half + the policy half gate.
->
 > **Cold-start UX (§D.14):**
 > 1. Migration 056
 > 2. 7-step state machine
@@ -438,16 +286,7 @@ hook_subscriptions:
 
 ### F.5 Phase 4 — Infrastructure runbook
 
-> 🟡 **NOT STARTED** — both sub-sections parked until customer demand + (for D.11) legal counsel.
-
-**Multi-region (§8.8):**
-1. Migration 062 (§B.12)
-2. EU region: Postgres + ClickHouse + S3 in `eu-central-1`
-3. AP region: same in `ap-southeast-1`
-4. Gateway routing: org_id → region
-5. Cross-region data migration tool (for existing orgs)
-6. Tests
-7. Rollout: EU pilot with one enterprise customer, then default for new EU orgs
+> 🟡 **NOT STARTED** — RTBF and multi-region were both removed from scope (see closing summary). Only **Operational debt (§9)** remains for Phase 4.
 
 **Operational debt (§9):**
 1. Migration compatibility matrix doc
@@ -456,13 +295,6 @@ hook_subscriptions:
 4. Chaos test suite
 5. Load test for ClickHouse partition scale
 6. Internal `/internal/health` dashboard
-
-**D.11 RTBF cross-store (engineering half, parked behind `rtbf_cross_store_enabled=false`):**
-1. Migration 063 (proposed: `s3_tombstones` + `rtbf_runs` — §B.10)
-2. Worker job: `rtbf_run_worker` (handles each phase: Postgres → ClickHouse → S3 → Redis → backups audit)
-3. Tests (especially concurrency + audit trail)
-4. Portal: RTBF admin (org_admin role only)
-5. Rollout: GDPR-mandated customers first, then default-on — *but blocked on legal review per F.6 + R-17*
 
 ### F.6 Rollback procedures
 
@@ -476,10 +308,8 @@ hook_subscriptions:
 | Prompt versioning | <1h           | Disable endpoint (no feature flag — default-on)  |
 | Cost guardrails   | <30min        | Disable endpoint (no feature flag — default-on)  |
 | Webhooks          | <30min        | Re-enable legacy inline webhooks                 |
-| RTBF              | <1h           | Disable new endpoint, fall back to Postgres-only |
 | MCP / A2A / etc.  | <30min        | Disable endpoint (no feature flag — default-on)  |
 | Cold-start UX     | <30min        | Disable banner + checklist (no feature flag)     |
-| Multi-region      | <2h           | Disable region routing, force all to `us`        |
 
 ---
 
@@ -487,7 +317,7 @@ hook_subscriptions:
 
 > **Status snapshot (2026-06-24)**: G.1 per-feature test plans — all done. Actual test counts: 13 (D.14 cold-start) + 8 (D.12.1 MCP) + 10 (D.12.2 A2A, +1 regression for the A2A $3/$4 placeholder bug) + 12 (D.12.3 Computer Use) + 18 (D.12.4 Voice) + 20 (D.12.5 Fine-tune) + 16 (D.12.6 Provider routing) + 5 (cross-cutting §E.1 hooks) = **102 passing tests** in `tests/observability/` + `tests/onboarding/` + `tests/unit/llmops/test_promotion_hooks_e1.py` (103 with the 1 skipped). See `tests/observability/{mcp,a2a,computer_use,voice,fine_tune,provider_routing}/` for the new test directories.
 >
-> **Remaining**: G.1's RTBF test plan (10 tests, blocked on D.11). All other sections below (G.2 coverage targets, G.3 pyramid, G.4 E2E) still apply.
+> **Remaining**: nothing in this section. G.1's RTBF test plan was removed when D.11 was dropped from scope. All sections below (G.2 coverage targets, G.3 pyramid, G.4 E2E) still apply to any future work.
 
 ### G.2 Coverage targets
 
@@ -501,7 +331,6 @@ hook_subscriptions:
 | Streaming tokens  | 85%      | 80%        | 100%              |
 | Prompts           | 85%      | 80%        | 100%              |
 | Budgets           | 90%      | 85%        | 100%              |
-| RTBF              | 90%      | 85%        | 100%              |
 | Webhooks          | 85%      | 80%        | 100%              |
 
 ### G.3 Test pyramid distribution
@@ -542,7 +371,7 @@ tests/e2e/test_cost_runaway.py
 > - **Phase 3 (coverage, weeks 11-17):** ✅ shipped 2026-06-24 in commits `8b7c97b8` (D.12.1+2) + `8bf51308` (D.12.3) + `1cefa144` (D.12.4) + `7dec934a` (D.12.5) + `ce590fe8` (D.12.6) + `082a14c1` (audit) + `e5fe7387` (cross-cutting) + `615108d4` (polish)
 > - **No pilot phase** — per user, "no need for feature flags, just redeploy". All routes default-on, no per-org override.
 >
-> **Remaining**: Phase 4 (Multi-region + Operational debt). Not scheduled.
+> **Remaining**: Phase 4 Operational debt (§9) only. Multi-region was removed from scope (per user 2026-06-24). RTBF cross-store was also removed from scope (per user 2026-06-24).
 
 ---
 
@@ -558,8 +387,6 @@ tests/e2e/test_cost_runaway.py
 | R-04 | Streaming tokens inflates ClickHouse cost             | Medium      | High     | TTL 90d; partition by org; cardinality cap (max 100k tokens/trace)         | Data             | ✅ DONE         |
 | R-05 | Prompt versioning triggers runaway evals              | Medium      | High     | Rate-limit auto-eval (max 10 runs/day per prompt); require opt-in          | Eval             | ✅ DONE         |
 | R-06 | Cost guardrails false-positive kills                  | Medium      | Critical | Default-off for existing customers; "shadow mode" (alert only) for 30 days | Platform         | ✅ DONE (NB: user skipped the feature flag pilot) |
-| R-07 | RTBF Phase 3 (S3) leaves orphan objects               | Low         | High     | Tombstone + 24h lifecycle policy; daily janitor verifies                   | Data             | 🟡 DEFERRED (D.11 — see §B.10) |
-| R-08 | Multi-region data migration corrupts traces           | Low         | Critical | Dry-run migration; checksum verification; pause + resume support           | Data             | 🟡 DEFERRED (Phase 4) |
 | R-09 | Webhook signing secret leaks                          | Low         | High     | Per-endpoint secret; rotation endpoint; audit log of secret views          | Platform         | ✅ DONE         |
 | R-10 | Cold-start UX hides critical Cat 11                   | Low         | Medium   | Admin override to enable all cats; clear "why this is greyed out" copy     | Portal           | ✅ DONE         |
 | R-11 | MCP/A2A/Computer Use SDKs lag spec                    | Medium      | Medium   | Auto-instrument via OTel semantic conventions; manual fallback             | SDK              | ✅ DONE         |
@@ -568,7 +395,6 @@ tests/e2e/test_cost_runaway.py
 | R-14 | Feature flag explosion (§9.4)                         | High        | Low      | Quarterly cleanup; lint rule against unregistered flags                    | Platform         | 🟡 DEFERRED (user explicitly opted out of feature flags) |
 | R-15 | Schema migration tax (§9.1) blocks new customers      | Medium      | High     | Compat mode; on-write create; compat matrix doc                            | Data             | 🟡 DEFERRED (Phase 4) |
 | R-16 | Closed-loop hook cascade (§3.1) thrashes              | Medium      | High     | Dedup window 5min; cascade dedup; severity precedence                      | Platform         | ✅ DONE         |
-| R-17 | Legal review delays RTBF                              | High        | Medium   | Start legal review in parallel with engineering                            | Legal            | 🗑️ BLOCKED (user has no legal team) |
 | R-18 | Cat 23 STUB → real ship slips                         | High        | Low      | Cat 23 not on critical path; defer OK                                      | Product          | 🟡 DEFERRED (v1.6 STUB surface shipped; real ship is 8-week gated initiative) |
 | R-19 | Operational debt compounds faster than fix rate       | High        | Medium   | 20% of every quarter reserved for debt; explicit tracking                  | Eng leadership   | 🟡 DEFERRED (Phase 4) |
 | R-20 | Pilot customers churn during rollout                  | Medium      | High     | Feature flag everything; opt-in for cut features; clear comms              | Customer success | 🟡 N/A (no pilot phase — per user, "no need for feature flags, just redeploy") |
@@ -668,25 +494,26 @@ Before merge to `main`:
 
 **This document now covers what's REMAINING:**
 
-- **D.11 RTBF cross-store** — engineering half buildable behind a disabled-by-default flag; policy half (GDPR Art.17(3) exception matrix, 30-day SLA, backup retention exception) needs legal review. Blocked on user acquiring legal counsel.
-- **D.12 Multi-region** — 6-week infra investment for `eu-central-1` + `ap-southeast-1`. Parked until customer demand validates the spend.
-- **Phase 4 Operational debt** — migration compatibility matrix doc, doc-test harness, feature flag inventory, chaos test suite, load test for ClickHouse partition scale, `/internal/health` dashboard. The flag-inventory item is moot (user opted out of feature flags).
+- **Phase 4 Operational debt (§9)** — migration compatibility matrix doc, doc-test harness, feature flag inventory (moot per user — flags are out), chaos test suite, load test for ClickHouse partition scale, `/internal/health` dashboard. Estimated: ~4 weeks.
+- **Cat 23 real ship** — v1.6 STUB surface shipped; the real end-to-end implementation is an 8-week gated initiative (per the v1.6 plan).
+
+**🗑️ REMOVED FROM SCOPE (per user 2026-06-24 — not happening in the foreseeable future):**
+- **D.11 RTBF cross-store** — engineering work unblocked but policy half (GDPR Art.17(3) exception matrix, 30-day SLA, backup retention exception) needs legal counsel. The existing `RightToBeForgottenService` (Cat 10) handles the Postgres-only path; no cross-store expansion will be built. RTBF is treated as a Postgres-only path from now on — single-region, single-store. Any GDPR expansion requires a separate legal-review project.
+- **D.12 Multi-region** — single-region deployment in Northflank `us-central-1` is permanent. No `eu-central-1` or `ap-southeast-1` investment.
 
 **The 5 things not to compromise (closed):**
 1. Streaming tokens (§6.1) — ✅ DONE 2026-06-24 (commit `a22124d5`)
 2. Prompt versioning (§6.2) — ✅ DONE 2026-06-24 (commit `a22124d5`)
 3. Cost guardrails (§6.3) — ✅ DONE 2026-06-24 (commit `a22124d5`)
 4. Cold-start UX (§10) — ✅ DONE 2026-06-24 (commit `68fe65bb`)
-5. RTBF cross-store (§6.4) — 🟡 DEFERRED (no legal team)
+5. ~~RTBF cross-store (§6.4)~~ — 🗑️ REMOVED FROM SCOPE (single-region single-store; no cross-store expansion)
 
 **The 5 things to defer (current state):**
 1. Cat 23 real ship — 🟡 v1.6 STUB surface shipped; real ship is 8-week gated initiative
-2. Multi-region AP — 🟡 not started; needs customer demand
+2. ~~Multi-region AP~~ — 🗑️ REMOVED FROM SCOPE (single-region is permanent)
 3. ~~Voice/audio (partner with LiveKit instead)~~ — ✅ SHIPPED (D.12.4, commit `1cefa144`) — partner approach not needed
 4. ~~MCP server (every LLM vendor builds one)~~ — ✅ SHIPPED (D.12.1, commit `8b7c97b8`) — auto-instrument approach used
 5. ~~Edge inference observability~~ — not in scope; deferred by original spec
-6. **NEW:** D.11 RTBF cross-store — 🟡 DEFERRED (no legal team)
+6. ~~D.11 RTBF cross-store~~ — 🗑️ REMOVED FROM SCOPE
 
-**Single biggest remaining leverage:** D.11 RTBF engineering work is buildable now behind a flag. The 30-day SLA + 4-phase worker (Postgres → ClickHouse → S3 → backups audit) is the largest GDPR-completeness gap. When legal review is available, this becomes the next work item.
-
-**Net shipped vs spec:** 17 of 22 spec'd cats + 11 spec items + D.1-D.7 cuts + D.8-D.10/D.13 spine + D.12.1-6 sub-protocols + D.14 cold-start + 10/10 §E.1 hooks = ~95% of the original spec shipped. Remaining: D.11 RTBF, D.12 multi-region, Phase 4 op debt.
+**Net shipped vs spec:** 17 of 22 spec'd cats + 11 spec items + D.1-D.7 cuts + D.8-D.10/D.13 spine + D.12.1-6 sub-protocols + D.14 cold-start + 10/10 §E.1 hooks = **~95% of the original spec shipped**. Removed from scope: D.11 RTBF cross-store + D.12 multi-region (~5% of original spec). Remaining: Phase 4 op debt + Cat 23 real ship (~5% of original spec).
