@@ -4,34 +4,36 @@
   "candidate_version": "v1.1.0",
   "strategy": "ab_test",
   "result": {
-    "status": "passed",
-    "failed_checks": [],
-    "action": "promote",
-    "confidence": 1.0,
+    "status": "failed",
+    "failed_checks": [
+      "latency_p99"
+    ],
+    "action": "rollback",
+    "confidence": 0.8,
     "metrics": {
       "error_rate": {
-        "baseline": 0.0161,
-        "candidate": 0.0148,
-        "regression_pct": -8.58,
+        "baseline": 0.0145,
+        "candidate": 0.0073,
+        "regression_pct": -49.59,
         "threshold_pct": 5.0,
         "failed": false
       },
       "latency_p99": {
-        "baseline": 373.4896,
-        "candidate": 376.5183,
-        "regression_pct": 0.81,
+        "baseline": 261.7322,
+        "candidate": 451.5993,
+        "regression_pct": 72.54,
         "threshold_pct": 50.0,
-        "failed": false
+        "failed": true
       },
       "success_rate": {
-        "baseline": 0.9615,
-        "candidate": 0.9726,
-        "regression_pct": -1.16,
+        "baseline": 0.9837,
+        "candidate": 0.9698,
+        "regression_pct": 1.41,
         "threshold_pct": 5.0,
         "failed": false
       }
     },
-    "duration_ms": 3001.2,
-    "timestamp": "2026-06-22T19:29:39.213692+00:00"
+    "duration_ms": 3001.27,
+    "timestamp": "2026-06-24T11:44:07.653005+00:00"
   }
 }
