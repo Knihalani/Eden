@@ -1,4 +1,4 @@
-# Eden Upgradespec v2 — 2026-06-24 (Phase 1 spine + D.12.1-6 + D.14 shipped)
+# Eden Upgradespec v2 — 2026-06-24 (Phase 1 spine + D.12.1-6 + D.14 shipped, RTBF + multi-region removed from scope)
 
 ## Status snapshot
 
@@ -6,11 +6,11 @@
 |---|---|---|
 | ✅ **IMPLEMENTED** | 17 cats + 11 spec items + **D.1–D.7 Phase 0 cuts** + **D.8–D.10 + D.13 Phase 1 spine** + **D.12.1 + D.12.2 + D.12.3 + D.12.4 + D.12.5 + D.12.6 + D.14 Phase 2** | Cat 1, 2, 3, 4, 5, 6, 8, 9, 10, 11, 12, 13, 14, 18, 19, 20, 22 + D.10 cost guardrails (middleware registered 2026-06-23, schema + portal 2026-06-24) + D.13 webhooks (HMAC + DLQ + replay 2026-06-24) + §E closed-loop hook bus (HookBus + 16 hooks wired 2026-06-23) + §E.5 hook_events migration 051 + **D.1 APM cut** + **D.2 Flat Beta-Binomial + 3 trackers** + **D.3 Predictive 2-service trim** + **D.4 Autonomous 2-service trim** + **D.5 SOC2+GDPR-only** + **D.6 daily/weekly rollups only** + **D.7 Cat 23 4-table defer** + **D.8 streaming tokens (PG schema + SDK + sparkline UI)** + **D.9 prompt versioning (3 tables + service + @prompt() SDK + portal timeline)** + **D.10 budgets/consumption/actions tables + BudgetService + portal admin + ticker** + **D.13 webhook_dlq + X-Eden-Signature v1 + replay UI** + **D.14 onboarding_state + 7-step state machine + OnboardingMilestoneHook + OnboardingBanner + OnboardingChecklist + 13 tests** + **D.12.1 MCP traces (mcp_traces_v view + auth-failures audit + SDK wrap_mcp_call + on_mcp_server_auth_failure hook + 8 tests)** + **D.12.2 A2A protocol (a2a_links + 2 telemetry_events cols + SDK wrap_a2a_invocation + on_a2a_invocation_failed hook + 10 tests)** + **D.12.3 Computer Use (computer_use_steps + screenshots_tombstoned + 6-action-type SDK + on_computer_use_blocked hook + 12 tests)** + **D.12.4 Voice (voice_sessions + VoiceSessionService + barge-in spike detector + wrap_voice_session SDK + on_voice_barge_in_spike hook + 18 tests)** + **D.12.5 Fine-tune (3 tables + OpenAI webhook HMAC ingest + drift detector + register_run SDK + on_fine_tune_data_drift hook + 20 tests)** + **D.12.6 Provider routing (provider_routing_attempts + 4-decision state machine + retry_with_fallback SDK + failure-rate detector + on_provider_routing_repeated_failures hook + 16 tests)** |
 | 🟡 **STUB surface** | 1 cat | Cat 23 — Autonomous Code Modification (15 tables; 4 inbox/persona/style tables deferred per D.7; real end-to-end ship is 8-week gated initiative) |
-| ❌ **NOT STARTED** | 1 spec item | D.11 RTBF cross-store, Multi-region |
+| 🗑️ **REMOVED FROM SCOPE** | 2 spec items | D.11 RTBF cross-store, D.12 Multi-region (per user 2026-06-24 — no legal team + single-region deployment is permanent). The existing `RightToBeForgottenService` (Cat 10) handles the Postgres-only path; no cross-store expansion will be built. Multi-region is permanently out of scope. |
 
-**Net shipped vs spec**: 10 of 10 spec'd §E.1 hooks wired (5 from D.12 sessions 1-6 + 5 from this cross-cutting pass: `on_compliance_gap_soc2` + `on_compliance_gap_gdpr` + `on_compliance_gap_hipaa` + `on_compliance_gap_iso27001` + `on_sla_breach`). The 2 `security:*` hooks (pii_scanner + secret_detector, action_kind `redact`) stay STUB until D.11 ships because they need the redaction infrastructure.
+**Net shipped vs spec**: 10 of 10 spec'd §E.1 hooks wired (5 from D.12 sessions 1-6 + 5 from the cross-cutting pass: `on_compliance_gap_soc2` + `on_compliance_gap_gdpr` + `on_compliance_gap_hipaa` + `on_compliance_gap_iso27001` + `on_sla_breach`). The 2 `security:*` hooks (pii_scanner + secret_detector, action_kind `redact`) stay STUB as advisory-only — the D.11 redaction infrastructure is permanently out of scope, so these 2 hooks stay recorded-but-noop for the operator dashboard. They don't fire any side-effects.
 
-**Source-of-truth**: original `upgradespec.md` (90KB) → archived at `docs/spec/upgradespec-original-2026-06.md`; this file is the delta.
+**Source-of-truth**: original `upgradespec.md` (90KB) → trimmed to 518 lines on 2026-06-24 to reflect only what's left (Phase 4 op debt + Cat 23 real ship). Archived at git history; current version is the trimmed one. This file (v2) is the canonical "what shipped" doc.
 
 ---
 
@@ -99,16 +99,34 @@ All 4 features shipped 2026-06-24. Per-feature detail:
 
 ### Phase 3 — coverage completeness (per upgradespec §F.4, 7 weeks)
 
-All 5 features **deferred** — each is a major new capability requiring new SDK plugins + schemas + UI:
+7 of 8 features ✅ DONE:
 
-- **D.11** RTBF cross-store (Postgres → ClickHouse → S3 → Redis → backups audit)
-- **D.12** MCP / A2A / Computer Use / Voice / Fine-tune lineage / Provider routing
-- **D.14** Cold-start UX (7-day guided onboarding + progressive disclosure)
+- **D.12.1** MCP traces (mcp_traces_v view + auth-failures audit + SDK wrap_mcp_call + on_mcp_server_auth_failure hook + 8 tests)
+- **D.12.2** A2A protocol (a2a_links + 2 telemetry_events cols + SDK wrap_a2a_invocation + on_a2a_invocation_failed hook + 10 tests)
+- **D.12.3** Computer Use (computer_use_steps + screenshots_tombstoned + 6-action-type SDK + on_computer_use_blocked hook + 12 tests)
+- **D.12.4** Voice (voice_sessions + VoiceSessionService + barge-in spike detector + wrap_voice_session SDK + on_voice_barge_in_spike hook + 18 tests)
+- **D.12.5** Fine-tune lineage (3 tables + OpenAI webhook HMAC ingest + drift detector + register_run SDK + on_fine_tune_data_drift hook + 20 tests)
+- **D.12.6** Provider routing (provider_routing_attempts + 4-decision state machine + retry_with_fallback SDK + failure-rate detector + on_provider_routing_repeated_failures hook + 16 tests)
+- **D.14** Cold-start UX (onboarding_state + 7-step state machine + OnboardingMilestoneHook + OnboardingBanner + OnboardingChecklist + 13 tests)
+
+1 feature 🗑️ REMOVED FROM SCOPE (per user 2026-06-24 — no legal team):
+
+- **D.11** RTBF cross-store — the existing `RightToBeForgottenService` (Cat 10) handles the Postgres-only path; no cross-store expansion will be built
 
 ### Phase 4 — infrastructure (per upgradespec §F.5, 4 weeks)
 
-- Multi-region EU/AP (currently US-only on Neon us-east-2)
-- Operational debt (migration matrix, doc-test harness, flag consolidation, chaos tests, load tests for ClickHouse scale)
+🗑️ REMOVED FROM SCOPE (per user 2026-06-24 — single-region deployment is permanent):
+
+- Multi-region EU/AP — Northflank `us-central-1` is the only deployment. No `eu-central-1` or `ap-southeast-1` investment.
+
+🟡 NOT STARTED — operational debt only:
+
+- Migration compatibility matrix doc
+- Doc-test harness
+- Feature flag inventory (moot per user — feature flags are out)
+- Chaos test suite
+- Load test for ClickHouse partition scale
+- Internal `/internal/health` dashboard
 
 ### Operational / billing
 
@@ -125,4 +143,4 @@ All 5 features **deferred** — each is a major new capability requiring new SDK
 2. **When to ship D.8 / D.9 / D.10 / D.14 full**: customer demand for streaming tokens / prompt versioning / cost guardrail UI / cold-start onboarding. D.14 is now shipped but the banner defaults to "off" for pre-cutover orgs; flip the per-org override when a new enterprise customer comes in.
 3. **Cat 23 real ship**: gated on SLM Initiative + 4 hard gates (read-only → attribution → sandbox → end-to-end) over 8 weeks per memory `eden_cat23_stub_surface_shipped_2026_06.md`.
 4. **Re-enable deferred Phase 0 surfaces**: each cut has a clear re-add path (see "How shipped" column). For example, D.1 re-adds the 3 deleted modules; D.2 re-adds the 3 dropped signal columns via a follow-up migration.
-5. **Phase 2 coverage next (sessions 5+)**: Northflank redeploy + feature flag pilot doc. D.11 RTBF deferred (no legal team). Multi-session plan at `~/.claude/plans/based-on-ugradespec-md-fully-serialized-volcano.md` (D.14 = 056, D.12.1 = 057 ✅, D.12.2 = 058 ✅, D.12.3 = 059 ✅, D.12.4 = 060 ✅, D.12.5 = 061 ✅, D.12.6 = 062 ✅).
+5. **Done**: All Phase 2 + cross-cutting work shipped 2026-06-24 (commits `a22124d5` through `c1708cad` + polish `615108d4` + spec trim `c1708cad` + RTBF/multi-region removal `111bb2c8`). 33 Phase 2 routes live in production, 103/103 tests pass, deployedSHA matches local. Remaining: Phase 4 op debt + Cat 23 real ship.
