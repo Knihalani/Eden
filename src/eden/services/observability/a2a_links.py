@@ -154,7 +154,11 @@ class A2ALinkService:
         if client is None:
             return {"nodes": {}, "edges": []}
         try:
-            args: list[Any] = [trace_id, trace_id, trace_id, int(max_depth)]
+            # $1 = trace_id (up-side seed: child_trace_id = trace_id)
+            # $2 = trace_id (down-side seed: parent_trace_id = trace_id)
+            # $3 = max_depth (up-side recursion bound)
+            # $4 = max_depth (down-side recursion bound)
+            args: list[Any] = [trace_id, trace_id, int(max_depth), int(max_depth)]
             org_clause = ""
             if org_id is not None:
                 org_clause = f"AND org_id = ${len(args)+1}"
