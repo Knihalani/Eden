@@ -7,7 +7,7 @@ import { useOrg } from "@/hooks/use-org";
 import { useAuth } from "@/hooks/use-auth";
 import { usePermissions } from "@/hooks/use-permissions";
 import { api } from "@/lib/api";
-import { Loader2, Plus, Trash2, Building2, Users, Code, Copy, Check, Archive, RefreshCw, Key, FileText, Shield, ShieldCheck, CreditCard, KeyRound, Lock, BarChart2, Server, EyeOff, Database, Globe, FileArchive, Settings2, Bot } from "lucide-react";
+import { Loader2, Plus, Trash2, Building2, Users, Code, Copy, Check, Archive, RefreshCw, Key, FileText, Shield, ShieldCheck, CreditCard, KeyRound, Lock, BarChart2, Server, EyeOff, Database, FileArchive, Settings2, Bot } from "lucide-react";
 import { cn } from "@/lib/utils";
 import Link from "next/link";
 import { DeleteOrgDialog } from "./_components/delete-org-dialog";
@@ -44,10 +44,6 @@ const GatewayTab = dynamic(
 );
 const PiiPolicyTab = dynamic(
   () => import("./_components/pii-policy-tab").then((m) => ({ default: m.PiiPolicyTab })),
-  { ssr: false, loading: () => <Skeleton className="h-64 w-full" /> }
-);
-const RegionTab = dynamic(
-  () => import("./_components/region-tab").then((m) => ({ default: m.RegionTab })),
   { ssr: false, loading: () => <Skeleton className="h-64 w-full" /> }
 );
 const RetentionPolicyTab = dynamic(
@@ -88,7 +84,7 @@ import { useSearchParams, useRouter } from "next/navigation";
 import { SettingsSearch } from "@/components/settings/settings-search";
 import { SettingsCategoryGroup } from "@/components/settings/settings-category-group";
 
-type Tab = "org" | "members" | "references" | "api-keys" | "security" | "scim" | "sso" | "audit-log" | "analytics" | "billing" | "gateway" | "pii" | "retention" | "region" | "exports" | "sidebar" | "autonomous" | "roles";
+type Tab = "org" | "members" | "references" | "api-keys" | "security" | "scim" | "sso" | "audit-log" | "analytics" | "billing" | "gateway" | "pii" | "retention" | "exports" | "sidebar" | "autonomous" | "roles";
 
 type SettingsCategory = "Org" | "Members" | "Security" | "Compliance" | "Billing" | "Advanced";
 
@@ -104,7 +100,6 @@ const TABS: ReadonlyArray<{ id: Tab; label: string; icon: typeof Building2; cate
   { id: "gateway", label: "AI Gateway", icon: Server, category: "Compliance" },
   { id: "pii", label: "PII Policy", icon: EyeOff, category: "Compliance" },
   { id: "retention", label: "Retention", icon: Database, category: "Compliance" },
-  { id: "region", label: "Region", icon: Globe, category: "Compliance" },
   { id: "exports", label: "Exports", icon: FileArchive, category: "Compliance" },
   { id: "audit-log", label: "Audit Log", icon: FileText, category: "Compliance" },
   { id: "analytics", label: "Analytics", icon: BarChart2, category: "Advanced" },
@@ -308,7 +303,6 @@ export default function SettingsPage() {
             {activeTab === "gateway" && <GatewayTab org={currentOrg} />}
             {activeTab === "pii" && <PiiPolicyTab />}
             {activeTab === "retention" && <RetentionPolicyTab />}
-            {activeTab === "region" && <RegionTab />}
             {activeTab === "audit-log" && <AuditLogTab org={currentOrg} />}
             {activeTab === "analytics" && <AnalyticsTab />}
             {activeTab === "billing" && <BillingTab />}
