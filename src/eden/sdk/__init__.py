@@ -11,13 +11,53 @@ from eden.sdk.streaming import (
     mask_pii,
 )
 
-# A2A SDK is added in the D.12.2 step.
+# A2A + Computer Use SDKs are added in the D.12.2 / D.12.3 steps.
 try:  # pragma: no cover - graceful when A2A not yet shipped
     from eden.sdk.a2a import (  # type: ignore
         build_a2a_attributes,
         wrap_a2a_invocation,
     )
-    __all__ = [  # noqa: F811
+    _A2A_AVAILABLE = True
+except ImportError:
+    _A2A_AVAILABLE = False
+
+try:  # pragma: no cover - graceful when Computer Use not yet shipped
+    from eden.sdk.computer_use import (  # type: ignore
+        ComputerUseAction,
+        click,
+        drag,
+        key,
+        record_step,
+        scroll,
+        type_text,
+        wait,
+    )
+    _CU_AVAILABLE = True
+except ImportError:
+    _CU_AVAILABLE = False
+
+if _A2A_AVAILABLE and _CU_AVAILABLE:
+    __all__ = [
+        "ComputerUseAction",
+        "build_a2a_attributes",
+        "build_mcp_attributes",
+        "capture_byte_count",
+        "click",
+        "drag",
+        "key",
+        "mask_pii",
+        "prompt",
+        "record_step",
+        "scroll",
+        "StreamingTokenCapture",
+        "TokenStreamStats",
+        "type_text",
+        "wait",
+        "wrap_a2a_invocation",
+        "wrap_mcp_call",
+    ]
+elif _A2A_AVAILABLE:
+    __all__ = [
         "build_a2a_attributes",
         "build_mcp_attributes",
         "capture_byte_count",
@@ -28,7 +68,25 @@ try:  # pragma: no cover - graceful when A2A not yet shipped
         "wrap_a2a_invocation",
         "wrap_mcp_call",
     ]
-except ImportError:
+elif _CU_AVAILABLE:
+    __all__ = [
+        "ComputerUseAction",
+        "build_mcp_attributes",
+        "capture_byte_count",
+        "click",
+        "drag",
+        "key",
+        "mask_pii",
+        "prompt",
+        "record_step",
+        "scroll",
+        "StreamingTokenCapture",
+        "TokenStreamStats",
+        "type_text",
+        "wait",
+        "wrap_mcp_call",
+    ]
+else:
     __all__ = [
         "build_mcp_attributes",
         "capture_byte_count",

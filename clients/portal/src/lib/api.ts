@@ -3564,6 +3564,92 @@ export const a2aApi = {
 
 (api as unknown as Record<string, unknown>).a2aApi = a2aApi;
 
+// ── Computer Use (D.12.3) ───────────────────────────────────────────
+
+export interface ComputerUseStep {
+  id: string;
+  org_id: string;
+  trace_id: string;
+  span_id: string;
+  step_index: number;
+  action_type: "click" | "type" | "scroll" | "drag" | "key" | "wait";
+  action_payload: Record<string, unknown>;
+  screenshot_before: string | null;
+  screenshot_after: string | null;
+  target_app: string | null;
+  target_coords: Record<string, unknown> | null;
+  success: boolean | null;
+  error: string | null;
+  duration_ms: number | null;
+  blocked: boolean;
+  created_at: string;
+}
+
+export interface ComputerUseScreenshotTombstone {
+  s3_uri: string;
+  org_id: string;
+  trace_id: string;
+  tombstoned_at: string;
+  tombstoned_by: string | null;
+  reason: string | null;
+}
+
+export const computerUseApi = {
+  getTraceSteps: (traceId: string) =>
+    fetchApi<{ data: ComputerUseStep[]; count: number }>(
+      `/v1/traces/${traceId}/computer_use`,
+      { headers: { "X-Org-Id": "self" } },
+    ),
+  recordStep: (
+    orgId: string,
+    body: {
+      trace_id: string;
+      span_id: string;
+      step_index: number;
+      action_type: ComputerUseStep["action_type"];
+      action_payload?: Record<string, unknown>;
+      screenshot_before?: string;
+      screenshot_after?: string;
+      target_app?: string;
+      target_coords?: Record<string, unknown>;
+      success?: boolean;
+      error?: string;
+      duration_ms?: number;
+      blocked?: boolean;
+    },
+  ) =>
+    fetchApi<{ data: { id: string | null } }>(
+      `/v1/computer_use/${orgId}/steps`,
+      {
+        method: "POST",
+        headers: { "X-Org-Id": orgId, "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      },
+    ),
+  tombstoneScreenshot: (
+    orgId: string,
+    body: { s3_uri: string; trace_id: string; reason?: string },
+  ) =>
+    fetchApi<{ data: { s3_uri: string; tombstoned: boolean } }>(
+      `/v1/computer_use/${orgId}/screenshots/tombstone`,
+      {
+        method: "POST",
+        headers: { "X-Org-Id": orgId, "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      },
+    ),
+  listTombstoned: (orgId: string, traceId: string) =>
+    fetchApi<{
+      data: ComputerUseScreenshotTombstone[];
+      count: number;
+    }>(
+      `/v1/computer_use/${orgId}/screenshots/tombstoned/${traceId}`,
+      { headers: { "X-Org-Id": orgId } },
+    ),
+};
+
+(api as unknown as Record<string, unknown>).computerUseApi = computerUseApi;
+
 // ── AI Agent (Phase C — unified panel) ───────────────────────────────────
 //
 // ``aiApi`` is the frontend surface for the Cat 14 real backend.

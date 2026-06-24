@@ -4,6 +4,13 @@ All notable changes to the Eden docs site (docs.edenobservability.com).
 
 ## [Unreleased]
 
+### Product — 2026-06-24 (Phase 2 — D.12.3 Computer Use shipped)
+
+- **D.12.3** Computer Use (per spec §8.3): migration 059 (`computer_use_steps` table with the 6-action-type CHECK constraint + UNIQUE(span_id, step_index) + partial indices; `computer_use_screenshots_tombstoned` for RTBF-purge of S3 screenshot URIs); `ComputerUseService` (`record_step` with idempotent upsert + best-effort `mark_screenshot_tombstoned` / `list_tombstoned_for_trace`; fires `on_computer_use_blocked` hook when step is recorded with `blocked=True`); routes `GET /v1/traces/{trace_id}/computer_use` (steps with screenshot URIs) + `POST /v1/computer_use/{org_id}/steps` (SDK record path, validates action_type against the 6 spec kinds) + `POST /v1/computer_use/{org_id}/screenshots/tombstone` (RTBF) + `GET /v1/computer_use/{org_id}/screenshots/tombstoned/{trace_id}`; SDK `eden.sdk.computer_use` with 6 spec-aligned action constructors (`click`/`type_text`/`scroll`/`drag`/`key`/`wait`) + `record_step` async helper that accepts either an `ComputerUseAction` dataclass OR raw fields; new hook `on_computer_use_blocked` on `PromotionHook` (severity `high`, action_kind `pause_session`); portal client `computerUseApi` (4 methods)
+- 1 new migration (059), 1 new backend module (`services/observability/computer_use.py`), 1 new route file (`api/routes/observability_computer_use.py`), 1 new SDK module (`sdk/computer_use.py`), 12 new tests across `tests/observability/computer_use/`
+- Total D.12 hooks now wired: 3 of 10 (MCP + A2A + Computer Use); 7 still pending (compliance_gap × 3, security × 2, sla_breach, voice_barge_in_spike, fine_tune_data_drift, provider_routing_repeated_failures)
+- Pre-existing test failures: 27 failures + 6 errors in `tests/intelligence/test_*.py` (Phase 0 cut tests, unrelated — confirmed via stash + re-run on `8b7c97b8`); 0 regressions in my touched surface
+
 ### Product — 2026-06-24 (Phase 2 — D.12.1 MCP + D.12.2 A2A shipped)
 
 - **D.12.1** MCP traces (per spec §8.1): migration 057 (`mcp_traces_v` view over `telemetry_events.attributes->'mcp'` + `mcp_server_auth_failures` audit table + JSONB index on `(attributes->'mcp'->>'server_name')`); `McpTraceService` (best-effort read-side + `record_auth_failure`); routes `/v1/traces/{trace_id}/mcp` (GET) + `/v1/mcp/{org_id}/auth_failures` (GET + POST); SDK `eden.sdk.mcp.wrap_mcp_call` (sync context manager that builds the `mcp.*` attribute block + classifies auth/transport failures into the 5 spec kinds); new hook `on_mcp_server_auth_failure` on `PromotionHook` (severity `high` for `unauthorized`/`expired_token`, `medium` otherwise); portal client `mcpApi` (sibling to `onboardingV2Api`)
