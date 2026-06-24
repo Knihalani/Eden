@@ -1140,31 +1140,6 @@ export const api = {
       body: JSON.stringify(data),
     }),
 
-  // Compliance: Region / Data Residency
-  getRegion: (orgId: string) =>
-    fetchApi<{
-      org_id: string;
-      region: "us" | "eu" | "ap";
-      pinned: boolean;
-      created_at: string | null;
-      updated_at: string | null;
-    }>(`/orgs/${orgId}/region`),
-
-  updateRegion: (
-    orgId: string,
-    data: { region: "us" | "eu" | "ap"; pinned?: boolean }
-  ) =>
-    fetchApi<{
-      org_id: string;
-      region: "us" | "eu" | "ap";
-      pinned: boolean;
-      created_at: string | null;
-      updated_at: string | null;
-    }>(`/orgs/${orgId}/region`, {
-      method: "PUT",
-      body: JSON.stringify(data),
-    }),
-
   // ── Observability: judges (Phase 7.2b) ────────────────────────
   // These power the live "Scores" tab in /observability.
 
