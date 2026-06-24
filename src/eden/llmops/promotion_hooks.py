@@ -747,6 +747,85 @@ class BudgetHook:
         )
 
 
+# ─── D.14 Cold-start onboarding hook ─────────────────────────────────
+#
+# Per upgradespec §10.1 + §E.1 row 4: the 7-step onboarding checklist
+# is auto-advanced when a milestone is reached:
+#   - first_10_traces  → advance to "wait"
+#   - first_judge_score → advance to "done"
+#   - first_prompt_version → advance to "tour"
+#
+# The hook is a thin wrapper around OnboardingStateMachine.
+# Milestones are inherently idempotent (the state machine ignores
+# duplicates), so we don't route through HookBus dedup. The hook
+# just records + advances — the state machine is the source of
+# truth. The call sites are:
+#   - first_10_traces:  cat 1 trace counter (the trace ingest
+#     hot path checks the per-org count and calls the hook when
+#     the count crosses 10)
+#   - first_judge_score: cat 3 judge runner (after the first
+#     judge_score row is written for the org)
+#   - first_prompt_version: D.9 prompt versioning service
+#     (after the first prompt_version row is created)
+
+
+class OnboardingMilestoneHook:
+    """§10.1 — fires when an org reaches a cold-start UX milestone.
+
+    Each method is idempotent (the state machine dedup's by
+    org_id + milestone), so duplicate calls within the
+    same org are a no-op. Returns the new StateRow as a dict
+    so call sites can log + advance.
+    """
+
+    name = "onboarding"
+
+    async def _record(
+        self,
+        org_id: str,
+        milestone: str,
+    ) -> dict[str, Any] | None:
+        try:
+            from eden.services.onboarding import get_state_machine
+        except Exception as exc:  # pragma: no cover - defensive
+            logger.debug(
+                "onboarding_hook: import failed: %s", exc
+            )
+            return None
+        sm = get_state_machine()
+        try:
+            state = await sm.record_milestone(org_id, milestone)
+        except Exception as exc:
+            logger.debug(
+                "onboarding_hook: record_milestone failed: %s", exc
+            )
+            return None
+        return {
+            "org_id": state.org_id,
+            "current_step": state.current_step,
+            "milestones_reached": list(state.milestones_reached),
+            "last_audit": state.last_audit,
+        }
+
+    async def on_first_10_traces(
+        self, org_id: str, *, trace_count: int
+    ) -> dict[str, Any] | None:
+        """Cat 1 trace counter → advance to 'wait'."""
+        return await self._record(org_id, "first_10_traces")
+
+    async def on_first_judge_score(
+        self, org_id: str, *, judge_name: str, score: float
+    ) -> dict[str, Any] | None:
+        """Cat 3 judge runner → advance to 'done'."""
+        return await self._record(org_id, "first_judge_score")
+
+    async def on_first_prompt_version(
+        self, org_id: str, *, prompt_name: str, version: int
+    ) -> dict[str, Any] | None:
+        """D.9 prompt versioning service → advance to 'tour'."""
+        return await self._record(org_id, "first_prompt_version")
+
+
 class IncidentHook:
     """Cat 2 RCA — fires when an incident cluster is detected.
 

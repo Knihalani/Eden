@@ -62,6 +62,7 @@ import { ChatSidebar } from "@/components/ai-insights/ChatSidebar";
 import { Logo } from "@/components/brand/logo";
 import { buildBreadcrumbs } from "@/lib/breadcrumbs";
 import { ErrorBoundary } from "@/components/ui/error-boundary";
+import { OnboardingBanner } from "@/components/onboarding-banner";
 
 const SIDEBAR_EXPANDED_WIDTH = 260;
 const SIDEBAR_COLLAPSED_WIDTH = 64;
@@ -684,6 +685,10 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
             `h-screen` don't push the whole flex row past the viewport.
             June 2026 UI overhaul. */}
         <div className="page-enter flex-1 min-h-0 flex flex-col">
+          {/* D.14 cold-start UX banner — renders nothing for legacy
+              orgs (created before 2026-07-01) or once onboarding is
+              complete. Best-effort: an API failure just hides it. */}
+          <OnboardingBanner />
           {/* ErrorBoundary isolates render-time failures inside the
               page so a single bad component doesn't crash the entire
               portal chrome (sidebar + header stay usable, the user
