@@ -66,6 +66,10 @@ ACTION_KIND: dict[str, str] = {
     "on_sla_breach": "investigate",
     "on_voice_barge_in_spike": "investigate",
     "on_provider_routing_repeated_failures": "investigate",
+    # D.12.1 (MCP) — added 2026-06-24 per upgradespec §E.1
+    "on_mcp_server_auth_failure": "investigate",
+    # D.12.2 (A2A) — added 2026-06-24 per upgradespec §E.1
+    "on_a2a_invocation_failed": "investigate",
 }
 
 
@@ -249,6 +253,76 @@ class PromotionHook:
             "promotion_hook.on_drift_alert org=%s drift=%s severity=%s "
             "action_id=%s",
             org_id, drift_type, severity, action_id,
+        )
+        return action_id
+
+    # ─── D.12.1 MCP + D.12.2 A2A (added 2026-06-24) ─────
+
+    async def on_mcp_server_auth_failure(
+        self,
+        org_id: str,
+        *,
+        server_name: str,
+        failure_kind: str,
+        failure_id: str | None = None,
+    ) -> str | None:
+        """MCP server returned a 401/403 or DNS/TLS error.
+
+        Fires per upgradespec §E.1 row for ``mcp_server_auth_failure``.
+        The action kind is ``investigate`` (closed-loop executor
+        surfaces to the operator per the v0 pattern).
+        """
+        severity = "high" if failure_kind in {"unauthorized", "expired_token"} else "medium"
+        action_id = await _record_action(
+            org_id,
+            hook_name=self.name,
+            action_kind=ACTION_KIND["on_mcp_server_auth_failure"],
+            target=server_name,
+            payload={
+                "server_name": server_name,
+                "failure_kind": failure_kind,
+                "failure_id": failure_id,
+            },
+            severity=severity,
+        )
+        logger.debug(
+            "promotion_hook.on_mcp_server_auth_failure org=%s server=%s "
+            "kind=%s action_id=%s",
+            org_id, server_name, failure_kind, action_id,
+        )
+        return action_id
+
+    async def on_a2a_invocation_failed(
+        self,
+        org_id: str,
+        *,
+        parent_trace_id: str,
+        child_trace_id: str | None,
+        invocation_type: str,
+        error_kind: str,
+    ) -> str | None:
+        """An A2A invocation (agent-to-agent hand-off) failed.
+
+        Fires per upgradespec §E.1 row for ``a2a_invocation_failed``.
+        The action kind is ``investigate`` (same v0 pattern).
+        """
+        action_id = await _record_action(
+            org_id,
+            hook_name=self.name,
+            action_kind=ACTION_KIND["on_a2a_invocation_failed"],
+            target=parent_trace_id,
+            payload={
+                "parent_trace_id": parent_trace_id,
+                "child_trace_id": child_trace_id,
+                "invocation_type": invocation_type,
+                "error_kind": error_kind,
+            },
+            severity="high",
+        )
+        logger.debug(
+            "promotion_hook.on_a2a_invocation_failed org=%s parent=%s "
+            "kind=%s action_id=%s",
+            org_id, parent_trace_id, error_kind, action_id,
         )
         return action_id
 

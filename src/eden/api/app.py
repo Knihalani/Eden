@@ -101,6 +101,8 @@ from eden.api.routes import (
 )
 from eden.api.routes import (
     github as github_routes,
+    observability_a2a,
+    observability_mcp,
     optimization,
     observability,
     alerts,
@@ -434,6 +436,8 @@ app.include_router(export.router)  # /orgs/{org_id}/export
 app.include_router(export_destinations.router)  # /orgs/{org_id}/export/{destinations,schedules,run-now}
 app.include_router(ingestion.router)  # /orgs/{org_id}/ingest (multi-format observability ingestion)
 app.include_router(observability.router)  # /orgs/{org_id}/observability/{traces,summary,spans/search,...}
+app.include_router(observability_mcp.router)  # /v1/traces/{id}/mcp + /v1/mcp/{org}/auth_failures (D.12.1)
+app.include_router(observability_a2a.router)  # /v1/traces/{id}/a2a + /v1/a2a/{org}/links + invocation graph (D.12.2)
 app.include_router(optimization.router)  # /orgs/{org_id}/optimization/{overview,costs,savings,cache,budget,}
 app.include_router(alerts.router)  # /alerts (global alert feed + per-rule ack)
 app.include_router(app_events.router)  # /orgs/{org_id}/ingest/app (Phase A1 app/site events)

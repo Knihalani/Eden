@@ -3419,6 +3419,151 @@ export const onboardingV2Api = {
 (api as unknown as Record<string, unknown>).githubApi = githubApi;
 (api as unknown as Record<string, unknown>).onboardingApi = onboardingApi;
 
+// ── MCP traces (D.12.1) ──────────────────────────────────────────────
+//
+// Typed clients for ``/v1/traces/{id}/mcp`` + the auth-failure
+// surface. The trace detail page can use ``getTraceMcp`` to render
+// the MCP servers called by an agent; the org-admin auth-failure
+// table is wired through ``listAuthFailures`` / ``recordAuthFailure``.
+
+export interface McpTraceRow {
+  trace_id: string;
+  org_id: string;
+  mcp_server_name: string | null;
+  mcp_tool_name: string | null;
+  mcp_resource_uri: string | null;
+  mcp_prompt_name: string | null;
+  mcp_sampling: boolean | null;
+  mcp_transport: string | null;
+  created_at: string;
+}
+
+export interface McpAuthFailureRow {
+  id: string;
+  org_id: string;
+  server_name: string;
+  transport: string | null;
+  failure_kind: string;
+  error_message: string | null;
+  trace_id: string | null;
+  span_id: string | null;
+  occurred_at: string;
+  resolved_at: string | null;
+  resolved_by: string | null;
+}
+
+export const mcpApi = {
+  getTraceMcp: (traceId: string) =>
+    fetchApi<{ data: McpTraceRow[]; count: number }>(
+      `/v1/traces/${traceId}/mcp`,
+      { headers: { "X-Org-Id": "self" } },
+    ),
+  listAuthFailures: (
+    orgId: string,
+    params: { server_name?: string; resolved?: boolean; limit?: number } = {},
+  ) => {
+    const q = new URLSearchParams();
+    if (params.server_name) q.set("server_name", params.server_name);
+    if (params.resolved !== undefined) q.set("resolved", String(params.resolved));
+    if (params.limit) q.set("limit", String(params.limit));
+    const qs = q.toString();
+    return fetchApi<{ data: McpAuthFailureRow[]; count: number }>(
+      `/v1/mcp/${orgId}/auth_failures${qs ? `?${qs}` : ""}`,
+      { headers: { "X-Org-Id": orgId } },
+    );
+  },
+  recordAuthFailure: (
+    orgId: string,
+    body: {
+      server_name: string;
+      failure_kind: string;
+      transport?: string;
+      error_message?: string;
+      trace_id?: string;
+      span_id?: string;
+    },
+  ) =>
+    fetchApi<{ data: { id: string | null } }>(
+      `/v1/mcp/${orgId}/auth_failures`,
+      {
+        method: "POST",
+        headers: { "X-Org-Id": orgId, "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      },
+    ),
+};
+
+(api as unknown as Record<string, unknown>).mcpApi = mcpApi;
+
+// ── A2A links (D.12.2) ───────────────────────────────────────────────
+
+export interface A2ALinkRow {
+  id: string;
+  org_id: string;
+  parent_trace_id: string;
+  child_trace_id: string;
+  parent_agent_id: string;
+  child_agent_id: string;
+  parent_span_id: string;
+  invocation_type: string;
+  response_status: string | null;
+  error_kind: string | null;
+  created_at: string;
+}
+
+export interface A2AGraph {
+  nodes: Record<string, { trace_id: string; is_root: boolean; depth: number }>;
+  edges: Array<A2ALinkRow & { depth: number }>;
+}
+
+export const a2aApi = {
+  getTraceA2a: (traceId: string) =>
+    fetchApi<{
+      data: { parent: A2ALinkRow[]; children: A2ALinkRow[] };
+      count: number;
+    }>(`/v1/traces/${traceId}/a2a`, { headers: { "X-Org-Id": "self" } }),
+  registerLink: (
+    orgId: string,
+    body: {
+      parent_trace_id: string;
+      child_trace_id: string;
+      parent_agent_id: string;
+      child_agent_id: string;
+      parent_span_id: string;
+      invocation_type: string;
+      response_status?: string;
+    },
+  ) =>
+    fetchApi<{ data: { id: string | null } }>(
+      `/v1/a2a/${orgId}/links`,
+      {
+        method: "POST",
+        headers: { "X-Org-Id": orgId, "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      },
+    ),
+  getInvocationGraph: (orgId: string, traceId: string, maxDepth = 4) =>
+    fetchApi<{ data: A2AGraph; node_count: number; edge_count: number }>(
+      `/v1/a2a/${orgId}/invocations/${traceId}?max_depth=${maxDepth}`,
+      { headers: { "X-Org-Id": orgId } },
+    ),
+  markLinkFailed: (
+    orgId: string,
+    linkId: string,
+    errorKind: string,
+  ) =>
+    fetchApi<{ data: { id: string; marked_failed: boolean } }>(
+      `/v1/a2a/${orgId}/links/${linkId}/fail`,
+      {
+        method: "POST",
+        headers: { "X-Org-Id": orgId, "Content-Type": "application/json" },
+        body: JSON.stringify({ error_kind: errorKind }),
+      },
+    ),
+};
+
+(api as unknown as Record<string, unknown>).a2aApi = a2aApi;
+
 // ── AI Agent (Phase C — unified panel) ───────────────────────────────────
 //
 // ``aiApi`` is the frontend surface for the Cat 14 real backend.
