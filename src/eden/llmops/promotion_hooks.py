@@ -457,6 +457,53 @@ class PromotionHook:
         )
         return action_id
 
+    async def on_provider_routing_repeated_failures(
+        self,
+        org_id: str,
+        *,
+        attempted_provider: str,
+        window_minutes: int,
+        threshold: int,
+        non_success_count: int,
+        failure_rate: float,
+    ) -> str | None:
+        """A provider is throwing repeated non-success
+        decisions (per spec §2.12 + §E.1 row 26).
+
+        Fired by
+        :meth:`ProviderRoutingService.detect_repeated_failures`
+        when the rolling ``window_minutes`` count of
+        ``fallback``/``abort``/``retry`` decisions for
+        ``(org_id, attempted_provider)`` crosses
+        ``threshold``. Per spec the default action is
+        "Alert" with severity ``medium``; the v0 ship
+        is advisory (records the recommended action for
+        the executor; the per-tenant circuit-breaker /
+        fallback policy is a follow-up that extends the
+        ClosedLoopExecutor to walk the new ``action_kind``).
+        """
+        action_id = await _record_action(
+            org_id,
+            hook_name=self.name,
+            action_kind=ACTION_KIND["on_provider_routing_repeated_failures"],
+            target=attempted_provider,
+            payload={
+                "primary_entity_id": f"provider:{attempted_provider}",
+                "attempted_provider": attempted_provider,
+                "window_minutes": int(window_minutes),
+                "threshold": int(threshold),
+                "non_success_count": int(non_success_count),
+                "failure_rate": float(failure_rate),
+            },
+            severity="medium",
+        )
+        logger.debug(
+            "promotion_hook.on_provider_routing_repeated_failures org=%s "
+            "provider=%s count=%s rate=%.3f action_id=%s",
+            org_id, attempted_provider, non_success_count, failure_rate, action_id,
+        )
+        return action_id
+
 
 class GuardrailHook:
     """judge→guardrail lifecycle events.

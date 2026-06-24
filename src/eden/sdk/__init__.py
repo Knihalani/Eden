@@ -110,6 +110,24 @@ except ImportError:
         "register_fine_tune_run",
     ]))
 
+try:  # pragma: no cover - graceful when Provider Routing not yet shipped
+    from eden.sdk.provider_routing import (  # type: ignore
+        build_provider_routing_attributes,
+        record_attempt as record_provider_routing_attempt,
+        retry_with_fallback,
+    )
+    _OPTIONAL_FEATURES.append((True, [
+        "build_provider_routing_attributes",
+        "record_provider_routing_attempt",
+        "retry_with_fallback",
+    ]))
+except ImportError:
+    _OPTIONAL_FEATURES.append((False, [
+        "build_provider_routing_attributes",
+        "record_provider_routing_attempt",
+        "retry_with_fallback",
+    ]))
+
 # Build the public __all__ dynamically. The always-available
 # names are always present; the optional ones are appended
 # when their module imported successfully.
