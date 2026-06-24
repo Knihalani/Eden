@@ -15,7 +15,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: ZAP baseline scan against staging
-        uses: zaproxy/action-baseline@v0.13.0
+        uses: zaproxy/action-baseline@v0.15.0
         with:
           target: ${{ secrets.STAGING_URL || 'https://staging.eden.example.com' }}
           rules_file_name: '.zap/rules.tsv'
