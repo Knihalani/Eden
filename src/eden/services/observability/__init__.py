@@ -11,6 +11,14 @@ from eden.services.observability.computer_use import (
     ComputerUseService,
     get_computer_use_service,
 )
+from eden.services.observability.fine_tune_lineage import (
+    DEFAULT_DRIFT_WINDOW,
+    DEFAULT_DRIFT_Z_THRESHOLD,
+    FineTuneLineageService,
+    PROVIDERS,
+    STATUSES,
+    get_fine_tune_service,
+)
 from eden.services.observability.mcp_traces import (
     McpTraceService,
     get_mcp_service,
@@ -30,14 +38,20 @@ __all__ = [
     "ASR_PROVIDERS",
     "A2ALinkService",
     "ComputerUseService",
+    "DEFAULT_DRIFT_WINDOW",
+    "DEFAULT_DRIFT_Z_THRESHOLD",
     "DEFAULT_SPIKE_THRESHOLD",
     "DEFAULT_SPIKE_WINDOW_MINUTES",
+    "FineTuneLineageService",
     "McpTraceService",
+    "PROVIDERS",
+    "STATUSES",
     "TRANSPORTS",
     "TTS_PROVIDERS",
     "VoiceSessionService",
     "get_a2a_service",
     "get_computer_use_service",
+    "get_fine_tune_service",
     "get_mcp_service",
     "get_voice_service",
 ]

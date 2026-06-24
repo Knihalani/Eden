@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+# Always-available surface
 from eden.sdk.mcp import build_mcp_attributes, wrap_mcp_call
 from eden.sdk.prompt_decorator import prompt
 from eden.sdk.streaming import (
@@ -11,15 +12,31 @@ from eden.sdk.streaming import (
     mask_pii,
 )
 
-# A2A + Computer Use SDKs are added in the D.12.2 / D.12.3 steps.
+# Optional surfaces (each gated by a try/except so the SDK
+# remains importable when an individual feature is missing).
+#
+# Ponytail: a 2x2x2x2 feature matrix was building up
+# (A2A / Computer Use / Voice / Fine-Tune) and the
+# cascading if/elif pattern became unreadable. The new
+# approach collects the per-feature exports into a list
+# and adds them to __all__ dynamically.
+
+_OPTIONAL_FEATURES: list[tuple[bool, list[str]]] = []
+
 try:  # pragma: no cover - graceful when A2A not yet shipped
     from eden.sdk.a2a import (  # type: ignore
         build_a2a_attributes,
         wrap_a2a_invocation,
     )
-    _A2A_AVAILABLE = True
+    _OPTIONAL_FEATURES.append((True, [
+        "build_a2a_attributes",
+        "wrap_a2a_invocation",
+    ]))
 except ImportError:
-    _A2A_AVAILABLE = False
+    _OPTIONAL_FEATURES.append((False, [
+        "build_a2a_attributes",
+        "wrap_a2a_invocation",
+    ]))
 
 try:  # pragma: no cover - graceful when Computer Use not yet shipped
     from eden.sdk.computer_use import (  # type: ignore
@@ -32,9 +49,27 @@ try:  # pragma: no cover - graceful when Computer Use not yet shipped
         type_text,
         wait,
     )
-    _CU_AVAILABLE = True
+    _OPTIONAL_FEATURES.append((True, [
+        "ComputerUseAction",
+        "click",
+        "drag",
+        "key",
+        "record_step",
+        "scroll",
+        "type_text",
+        "wait",
+    ]))
 except ImportError:
-    _CU_AVAILABLE = False
+    _OPTIONAL_FEATURES.append((False, [
+        "ComputerUseAction",
+        "click",
+        "drag",
+        "key",
+        "record_step",
+        "scroll",
+        "type_text",
+        "wait",
+    ]))
 
 try:  # pragma: no cover - graceful when Voice not yet shipped
     from eden.sdk.voice import (  # type: ignore
@@ -43,143 +78,52 @@ try:  # pragma: no cover - graceful when Voice not yet shipped
         mark_barge_in,
         wrap_voice_session,
     )
-    _VOICE_AVAILABLE = True
+    _OPTIONAL_FEATURES.append((True, [
+        "build_voice_attributes",
+        "detect_spike",
+        "mark_barge_in",
+        "wrap_voice_session",
+    ]))
 except ImportError:
-    _VOICE_AVAILABLE = False
+    _OPTIONAL_FEATURES.append((False, [
+        "build_voice_attributes",
+        "detect_spike",
+        "mark_barge_in",
+        "wrap_voice_session",
+    ]))
 
-if _A2A_AVAILABLE and _CU_AVAILABLE and _VOICE_AVAILABLE:
-    __all__ = [
-        "ComputerUseAction",
-        "build_a2a_attributes",
-        "build_mcp_attributes",
-        "build_voice_attributes",
-        "capture_byte_count",
-        "click",
-        "detect_spike",
-        "drag",
-        "key",
-        "mark_barge_in",
-        "mask_pii",
-        "prompt",
-        "record_step",
-        "scroll",
-        "StreamingTokenCapture",
-        "TokenStreamStats",
-        "type_text",
-        "wait",
-        "wrap_a2a_invocation",
-        "wrap_mcp_call",
-        "wrap_voice_session",
-    ]
-elif _A2A_AVAILABLE and _VOICE_AVAILABLE:
-    __all__ = [
-        "build_a2a_attributes",
-        "build_mcp_attributes",
-        "build_voice_attributes",
-        "capture_byte_count",
-        "detect_spike",
-        "mark_barge_in",
-        "mask_pii",
-        "prompt",
-        "StreamingTokenCapture",
-        "TokenStreamStats",
-        "wrap_a2a_invocation",
-        "wrap_mcp_call",
-        "wrap_voice_session",
-    ]
-elif _A2A_AVAILABLE and _CU_AVAILABLE:
-    __all__ = [
-        "ComputerUseAction",
-        "build_a2a_attributes",
-        "build_mcp_attributes",
-        "capture_byte_count",
-        "click",
-        "drag",
-        "key",
-        "mask_pii",
-        "prompt",
-        "record_step",
-        "scroll",
-        "StreamingTokenCapture",
-        "TokenStreamStats",
-        "type_text",
-        "wait",
-        "wrap_a2a_invocation",
-        "wrap_mcp_call",
-    ]
-elif _A2A_AVAILABLE:
-    __all__ = [
-        "build_a2a_attributes",
-        "build_mcp_attributes",
-        "capture_byte_count",
-        "mask_pii",
-        "prompt",
-        "StreamingTokenCapture",
-        "TokenStreamStats",
-        "wrap_a2a_invocation",
-        "wrap_mcp_call",
-    ]
-elif _CU_AVAILABLE and _VOICE_AVAILABLE:
-    __all__ = [
-        "ComputerUseAction",
-        "build_mcp_attributes",
-        "build_voice_attributes",
-        "capture_byte_count",
-        "click",
-        "detect_spike",
-        "drag",
-        "key",
-        "mark_barge_in",
-        "mask_pii",
-        "prompt",
-        "record_step",
-        "scroll",
-        "StreamingTokenCapture",
-        "TokenStreamStats",
-        "type_text",
-        "wait",
-        "wrap_mcp_call",
-        "wrap_voice_session",
-    ]
-elif _CU_AVAILABLE:
-    __all__ = [
-        "ComputerUseAction",
-        "build_mcp_attributes",
-        "capture_byte_count",
-        "click",
-        "drag",
-        "key",
-        "mask_pii",
-        "prompt",
-        "record_step",
-        "scroll",
-        "StreamingTokenCapture",
-        "TokenStreamStats",
-        "type_text",
-        "wait",
-        "wrap_mcp_call",
-    ]
-elif _VOICE_AVAILABLE:
-    __all__ = [
-        "build_mcp_attributes",
-        "build_voice_attributes",
-        "capture_byte_count",
-        "detect_spike",
-        "mark_barge_in",
-        "mask_pii",
-        "prompt",
-        "StreamingTokenCapture",
-        "TokenStreamStats",
-        "wrap_mcp_call",
-        "wrap_voice_session",
-    ]
-else:
-    __all__ = [
-        "build_mcp_attributes",
-        "capture_byte_count",
-        "mask_pii",
-        "prompt",
-        "StreamingTokenCapture",
-        "TokenStreamStats",
-        "wrap_mcp_call",
-    ]
+try:  # pragma: no cover - graceful when Fine-Tune not yet shipped
+    from eden.sdk.fine_tune import (  # type: ignore
+        build_fine_tune_attributes,
+        parse_openai_webhook_payload,
+        register_run as register_fine_tune_run,
+    )
+    _OPTIONAL_FEATURES.append((True, [
+        "build_fine_tune_attributes",
+        "parse_openai_webhook_payload",
+        "register_fine_tune_run",
+    ]))
+except ImportError:
+    _OPTIONAL_FEATURES.append((False, [
+        "build_fine_tune_attributes",
+        "parse_openai_webhook_payload",
+        "register_fine_tune_run",
+    ]))
+
+# Build the public __all__ dynamically. The always-available
+# names are always present; the optional ones are appended
+# when their module imported successfully.
+_BASE_EXPORTS: list[str] = [
+    "StreamingTokenCapture",
+    "TokenStreamStats",
+    "build_mcp_attributes",
+    "capture_byte_count",
+    "mask_pii",
+    "prompt",
+    "wrap_mcp_call",
+]
+
+__all__ = list(_BASE_EXPORTS)
+for available, names in _OPTIONAL_FEATURES:
+    if available:
+        __all__ = [*__all__, *names]

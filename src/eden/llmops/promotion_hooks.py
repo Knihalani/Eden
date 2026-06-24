@@ -65,6 +65,7 @@ ACTION_KIND: dict[str, str] = {
     "on_security_pii_scanner": "redact",
     "on_sla_breach": "investigate",
     "on_voice_barge_in_spike": "investigate",
+    "on_fine_tune_data_drift": "investigate",
     "on_provider_routing_repeated_failures": "investigate",
     # D.12.1 (MCP) — added 2026-06-24 per upgradespec §E.1
     "on_mcp_server_auth_failure": "investigate",
@@ -406,6 +407,53 @@ class PromotionHook:
             "promotion_hook.on_voice_barge_in_spike org=%s count=%s "
             "window=%s threshold=%s action_id=%s",
             org_id, count, window_minutes, threshold, action_id,
+        )
+        return action_id
+
+    async def on_fine_tune_data_drift(
+        self,
+        org_id: str,
+        *,
+        run_id: str,
+        base_model: str,
+        current_score: float,
+        prior_mean: float,
+        prior_stdev: float,
+        z_score: float,
+        direction: str,
+    ) -> str | None:
+        """A fine-tuning run's eval score regressed or
+        improved materially (per spec §8.7 + §E.1 row 25).
+
+        Fired by :meth:`FineTuneLineageService.detect_data_drift`
+        when the rolling z-score against the previous
+        ``window`` runs sharing the same ``base_model``
+        exceeds the configured threshold. The default
+        action per spec is "Alert → Investigation" with
+        severity ``medium``; the v0 ship is advisory
+        (records the recommended action for the executor).
+        """
+        action_id = await _record_action(
+            org_id,
+            hook_name=self.name,
+            action_kind=ACTION_KIND["on_fine_tune_data_drift"],
+            target=run_id,
+            payload={
+                "primary_entity_id": f"fine_tune_run:{run_id}",
+                "run_id": run_id,
+                "base_model": base_model,
+                "current_score": float(current_score),
+                "prior_mean": float(prior_mean),
+                "prior_stdev": float(prior_stdev),
+                "z_score": float(z_score),
+                "direction": direction,
+            },
+            severity="medium",
+        )
+        logger.debug(
+            "promotion_hook.on_fine_tune_data_drift org=%s run=%s "
+            "z=%.3f direction=%s action_id=%s",
+            org_id, run_id, z_score, direction, action_id,
         )
         return action_id
 
