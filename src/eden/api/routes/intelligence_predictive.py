@@ -1,25 +1,28 @@
 """Intelligence Gap — Predictive + Drift (Cat 13) routes.
 
-The route surface matches the v1.5 doc API contracts
-(``docs/observability-gap/13-predictive-intelligence.md``
-§ API contracts):
+ponytail: per upgradespec §D.3 (Phase 1 cut), Cat 13 ships
+only :class:`QualityPredictor` and :class:`DriftDetector`.
+The ``cost`` / ``capacity`` / ``risk`` / embedding-drift
+routes were removed; the deep-link endpoints return a
+stable 501 envelope pointing at the deferred-roadmap doc.
 
-* ``POST /intelligence/predict/quality`` — per-day judge-
-  score forecast with CUSUM anomalies and trend
-  classification.
-* ``POST /intelligence/predict/cost`` — per-day cost
-  forecast with per-agent breakdown + WoW growth alert.
-* ``POST /intelligence/predict/capacity`` — multi-
-  scenario GPU-hour projection (baseline | 2x | 3x | 5x)
-  with headroom map + recommendation.
-* ``POST /intelligence/predict/risk`` — composite 5-
-  component risk score with alerts and recommendation.
-* ``POST /intelligence/predict/drift`` — single drift
-  route that supports ``method=psi|cusum|ks_test|
-  wasserstein`` and a ``type=output|embedding`` selector.
+The Cat 8 Cost Intelligence already covers the per-day
+median projection (the trailing-median logic from
+``CostPredictor`` was folded into Cat 7 — see
+``docs/eden-cost-intel-plan.md``).
 
-All routes are gated by the ``intelligence_gap_v0``
-umbrella feature flag and require a valid current user.
+The embedding-drift detector was removed; the output-drift
+detector (PSI on judge-score distribution) remains the
+single ship-ready drift surface.
+
+Mounted at ``/orgs/{org_id}/intelligence/predict`` so the
+prefix is preserved and deep-linked portal pages resolve
+to 501 rather than 404.
+
+Gates:
+* ``intelligence_gap_v0`` umbrella flag
+* Org scoping via ``{org_id}`` path param
+* ``get_current_user`` for auth
 """
 
 from __future__ import annotations
@@ -31,13 +34,7 @@ from fastapi import APIRouter, Body, Depends, Path
 from pydantic import BaseModel, Field
 
 from eden.api.deps import get_current_user, require_feature_flag
-from eden.predictive import (
-    CapacityPredictor,
-    CostPredictor,
-    DriftDetector,
-    QualityPredictor,
-    RiskScorer,
-)
+from eden.predictive import DriftDetector, QualityPredictor
 
 logger = logging.getLogger(__name__)
 
@@ -51,13 +48,10 @@ router = APIRouter(
 )
 
 _quality = QualityPredictor()
-_cost = CostPredictor()
-_capacity = CapacityPredictor()
-_risk = RiskScorer()
 _drift = DriftDetector()
 
 
-# ── Pydantic bodies (per doc § API contracts) ────────────────────────
+# ── Pydantic bodies ──────────────────────────────────────────────────
 
 
 class QualityRequest(BaseModel):
@@ -67,47 +61,17 @@ class QualityRequest(BaseModel):
     history_window: str = Field(default="7d", description="e.g. 7d, 30d, 90d")
 
 
-class CostRequest(BaseModel):
-    request_id: str
-    forecast_horizon: str = Field(default="30d", description="e.g. 7d, 30d, 90d")
-    history_window: str = Field(default="30d", description="e.g. 7d, 30d, 90d")
-    group_by: str = Field(
-        default="agent", description="agent (default) or org",
-    )
-
-
-class CapacityRequest(BaseModel):
-    horizon_days: int = Field(default=7, ge=1, le=90)
-    forecast_horizon: str | None = Field(
-        default=None, description="optional, e.g. 30d, 90d",
-    )
-    scenario: str = Field(
-        default="baseline", description="baseline | 2x | 3x | 5x",
-    )
-    current_fleet_size: int = Field(
-        default=8, ge=1, description="current GPU fleet size",
-    )
-
-
-class RiskRequest(BaseModel):
-    request_id: str
-    window: str = Field(default="24h", description="e.g. 24h, 12h, 7d")
-
-
 class DriftRequest(BaseModel):
     window: str = Field(default="24h", description="e.g. 24h, 7d")
     method: str = Field(
         default="psi", description="psi | cusum | ks_test | wasserstein",
-    )
-    drift_type: str = Field(
-        default="output", description="output | embedding",
     )
     baseline_window: str = Field(
         default="7d", description="baseline window for PSI",
     )
 
 
-# ── Routes ────────────────────────────────────────────────────────────
+# ── Routes (kept) ────────────────────────────────────────────────────
 
 
 @router.post("/quality")
@@ -115,6 +79,7 @@ async def predict_quality(
     org_id: str = Path(...),
     body: QualityRequest = Body(...),
 ) -> dict[str, Any]:
+    """Per-day judge-score forecast with CUSUM anomalies."""
     return await _quality.predict(
         org_id,
         request_id=body.request_id,
@@ -124,61 +89,12 @@ async def predict_quality(
     )
 
 
-@router.post("/cost")
-async def predict_cost(
-    org_id: str = Path(...),
-    body: CostRequest = Body(...),
-) -> dict[str, Any]:
-    return await _cost.predict(
-        org_id,
-        request_id=body.request_id,
-        forecast_horizon=body.forecast_horizon,
-        history_window=body.history_window,
-        group_by=body.group_by,
-    )
-
-
-@router.post("/capacity")
-async def predict_capacity(
-    org_id: str = Path(...),
-    body: CapacityRequest = Body(...),
-) -> dict[str, Any]:
-    return await _capacity.predict(
-        org_id,
-        horizon_days=body.horizon_days,
-        forecast_horizon=body.forecast_horizon,
-        scenario=body.scenario,
-        current_fleet_size=body.current_fleet_size,
-    )
-
-
-@router.post("/risk")
-async def score_risk(
-    org_id: str = Path(...),
-    body: RiskRequest = Body(...),
-) -> dict[str, Any]:
-    return await _risk.score(
-        org_id, request_id=body.request_id, window=body.window,
-    )
-
-
-# Single drift route — consolidates the v1
-# ``drift/output`` and ``drift/embedding`` shapes per the
-# doc's ``POST /intelligence/predict/detect-drift`` spec.
-# The ``method`` and ``drift_type`` parameters control the
-# algorithm and the substrate.
 @router.post("/drift")
 async def detect_drift(
     org_id: str = Path(...),
     body: DriftRequest = Body(...),
 ) -> dict[str, Any]:
-    if body.drift_type == "embedding":
-        return await _drift.detect_embedding_drift(
-            org_id, window=body.window,
-        )
-    # ``output`` (the default) — the PSI detector. The
-    # ``method`` param is preserved in the response so the
-    # caller can audit which algorithm ran.
+    """PSI-based output drift detector on judge-score distribution."""
     result = await _drift.detect_output_drift(
         org_id, window=body.window,
     )
@@ -187,25 +103,43 @@ async def detect_drift(
     return result
 
 
-# Back-compat routes for the v1 callers that hit
-# ``/drift/output`` and ``/drift/embedding`` directly.
-# The v1.5 doc's primary route is ``/drift``; these two
-# are kept so existing integrations don't break.
-@router.post("/drift/output")
-async def drift_output_legacy(
-    org_id: str = Path(...),
-    body: DriftRequest = Body(...),
-) -> dict[str, Any]:
-    return await _drift.detect_output_drift(
-        org_id, window=body.window,
-    )
+# ── Routes (removed per §D.3) ────────────────────────────────────────
+
+
+def _deferred(message: str) -> dict[str, Any]:
+    """Stable 501-shape envelope for endpoints cut per upgradespec §D.3."""
+    return {
+        "status": "not_implemented",
+        "feature": "predictive_v15",
+        "live": False,
+        "message": message,
+        "data": {
+            "deferred_roadmap": "docs/eden-predictive-roadmap.md",
+        },
+    }
+
+
+@router.post("/cost")
+async def predict_cost(org_id: str = Path(...)) -> dict[str, Any]:
+    """Removed per §D.3 — per-day median projection now lives in Cat 7
+    (Cost Intelligence) as ``CostForecast.median_projection``."""
+    return _deferred("CostPredictor removed; median projection in Cat 7.")
+
+
+@router.post("/capacity")
+async def predict_capacity(org_id: str = Path(...)) -> dict[str, Any]:
+    """Removed per §D.3."""
+    return _deferred("CapacityPredictor removed per upgradespec §D.3.")
+
+
+@router.post("/risk")
+async def score_risk(org_id: str = Path(...)) -> dict[str, Any]:
+    """Removed per §D.3."""
+    return _deferred("RiskScorer removed per upgradespec §D.3.")
 
 
 @router.post("/drift/embedding")
-async def drift_embedding_legacy(
-    org_id: str = Path(...),
-    body: DriftRequest = Body(...),
-) -> dict[str, Any]:
-    return await _drift.detect_embedding_drift(
-        org_id, window=body.window,
-    )
+async def drift_embedding_legacy(org_id: str = Path(...)) -> dict[str, Any]:
+    """Removed per §D.3 — embedding drift detector was experimental;
+    re-add when a learned embedding model ships (v1.4 swap-in)."""
+    return _deferred("Embedding drift removed per upgradespec §D.3.")

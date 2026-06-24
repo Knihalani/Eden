@@ -23,6 +23,7 @@ import hmac
 import json
 import logging
 from datetime import UTC, datetime
+from typing import Any
 from uuid import uuid4
 
 from pydantic import BaseModel
@@ -33,8 +34,10 @@ from eden.storage.postgres import get_postgres_client
 logger = logging.getLogger(__name__)
 settings = get_settings()
 
-# Retry schedule: attempt 1 → immediate, then exponential backoff
-_RETRY_DELAYS = [0, 5, 15, 30, 60, 120, 300, 600, 1800, 3600]  # seconds
+# Retry schedule per upgradespec §D.13: 1s, 5s, 25s, 2m, 10m, 1h, then DLQ.
+# 7 attempts total — once the 7th attempt fails, the delivery is moved to
+# ``webhook_dlq`` for replay via the portal.
+_RETRY_DELAYS = [0, 1, 5, 25, 120, 600, 3600]  # seconds
 
 # HTTP client import (lazy to avoid startup overhead)
 _httpx: type | None = None
@@ -82,6 +85,75 @@ class WebhookDeliveryService:
             hashlib.sha256,
         ).hexdigest()
         return f"sha256={sig}"
+
+    @staticmethod
+    def sign_v1(
+        secret: str,
+        payload: str,
+        *,
+        timestamp: int | None = None,
+    ) -> str:
+        """Generate the spec-aligned signature header value.
+
+        ponytail: per upgradespec §D.13, webhooks use the
+        ``X-Eden-Signature: t=<unix_ts>,v1=<sig>`` format
+        (Stripe-style signed payloads). The v1 signature is
+        ``HMAC-SHA256(secret, "<ts>.<payload>")`` so the
+        timestamp binds the signature to a specific moment
+        and lets consumers reject replays older than
+        ``tolerance_seconds``.
+
+        Returns the full header value
+        (``t=<ts>,v1=<hex>``).
+        """
+        ts = int(timestamp if timestamp is not None else datetime.now(UTC).timestamp())
+        signed_payload = f"{ts}.{payload}".encode("utf-8")
+        sig = hmac.new(
+            secret.encode("utf-8"),
+            signed_payload,
+            hashlib.sha256,
+        ).hexdigest()
+        return f"t={ts},v1={sig}"
+
+    @staticmethod
+    def verify_v1(
+        secret: str,
+        payload: str,
+        header_value: str,
+        *,
+        tolerance_seconds: int = 300,
+    ) -> bool:
+        """Verify an incoming ``X-Eden-Signature`` header.
+
+        Used by customer-side code that wants to validate
+        a payload before trusting it. Constant-time
+        comparison via ``hmac.compare_digest``.
+        """
+        try:
+            parts = dict(
+                kv.split("=", 1) for kv in header_value.split(",") if "=" in kv
+            )
+        except ValueError:
+            return False
+        ts = parts.get("t")
+        sig = parts.get("v1")
+        if not ts or not sig:
+            return False
+        try:
+            ts_int = int(ts)
+        except ValueError:
+            return False
+        # Reject stale timestamps (replay protection).
+        now = int(datetime.now(UTC).timestamp())
+        if abs(now - ts_int) > tolerance_seconds:
+            return False
+        signed_payload = f"{ts_int}.{payload}".encode("utf-8")
+        expected = hmac.new(
+            secret.encode("utf-8"),
+            signed_payload,
+            hashlib.sha256,
+        ).hexdigest()
+        return hmac.compare_digest(expected, sig)
 
     async def deliver_event(
         self,
@@ -131,9 +203,10 @@ class WebhookDeliveryService:
             await client.execute(
                 """
                 INSERT INTO webhook_deliveries (id, webhook_id, event_type, payload, status, max_attempts, next_attempt_at, created_at)
-                VALUES ($1, $2, $3, $4, 'pending', 10, NOW(), NOW())
+                VALUES ($1, $2, $3, $4, 'pending', $5, NOW(), NOW())
                 """,
                 delivery_id, row["id"], event_type, json.dumps(event_payload),
+                len(_RETRY_DELAYS),
             )
 
             delivery_ids.append(delivery_id)
@@ -173,12 +246,21 @@ class WebhookDeliveryService:
                 "UPDATE webhook_deliveries SET status = 'failed', error_message = 'Max retry attempts exceeded' WHERE id = $1",
                 delivery_id,
             )
-            logger.warning(f"Webhook delivery {delivery_id} failed after {max_attempts} attempts")
+            # ponytail: per upgradespec §D.13, terminal-state
+            # deliveries land in webhook_dlq so the portal's
+            # DLQ + replay UI can re-fire them.
+            await self._move_to_dlq(delivery_id, webhook_id=str(row.get("webhook_id") or ""))
+            logger.warning(f"Webhook delivery {delivery_id} failed after {max_attempts} attempts; moved to DLQ")
             return
 
         # Serialize payload
         payload_json = json.dumps(payload, separators=(",", ":"))
         signature = self._sign_payload(secret, payload_json)
+        # ponytail: also sign per upgradespec §D.13 v1 format
+        # (Stripe-style ``t=<ts>,v1=<sig>``) so consumers can
+        # use either header. Both signatures cover the same
+        # payload bytes.
+        signature_v1 = self.sign_v1(secret, payload_json)
 
         # Attempt delivery
         try:
@@ -189,6 +271,7 @@ class WebhookDeliveryService:
                     headers={
                         "Content-Type": "application/json",
                         "X-Webhook-Signature": signature,
+                        "X-Eden-Signature": signature_v1,
                         "X-Webhook-ID": delivery_id,
                         "X-Event-Type": payload["event"],
                         "User-Agent": "Eden-Webhook/1.0",
@@ -321,3 +404,185 @@ class WebhookDeliveryService:
                 response_body=None,
                 error=str(exc)[:500],
             )
+
+    # ─── DLQ (per upgradespec §D.13) ──────────────────────────────────
+
+    async def _move_to_dlq(
+        self,
+        delivery_id: str,
+        *,
+        webhook_id: str = "",
+    ) -> None:
+        """Move a terminal-state delivery to the webhook_dlq table.
+
+        ponytail: per upgradespec §D.13, terminal-state
+        deliveries (exceeded the retry budget) are copied
+        to ``webhook_dlq`` so the portal's DLQ + replay
+        UI can re-fire them. The original ``webhook_deliveries``
+        row stays in ``status='failed'`` for the audit log;
+        the DLQ row is the replay surface.
+        """
+        try:
+            client = await get_postgres_client()
+            # JOIN to webhooks to resolve org_id (webhook_deliveries
+            # doesn't store it directly; webhook_dlq has it NOT NULL).
+            row = await client.fetchrow(
+                """
+                SELECT wd.id, wd.webhook_id, wd.event_type, wd.payload,
+                       wd.response_status, wd.error_message,
+                       wd.attempt_count, wd.max_attempts,
+                       wd.created_at, wd.signature_v1,
+                       w.org_id AS webhook_org_id
+                  FROM webhook_deliveries wd
+                  JOIN webhooks w ON w.id = wd.webhook_id
+                 WHERE wd.id = $1
+                """,
+                delivery_id,
+            )
+            if row is None:
+                return
+            await client.execute(
+                """
+                INSERT INTO webhook_dlq (
+                    id, org_id, webhook_id, event_type, payload,
+                    last_response_status, last_error,
+                    attempt_count, max_attempts,
+                    first_attempt_at, last_attempt_at,
+                    signature_v1, created_at
+                ) VALUES (
+                    $1, $2, $3, $4, $5,
+                    $6, $7,
+                    $8, $9,
+                    $10, NOW(),
+                    $11, NOW()
+                )
+                """,
+                row["id"],
+                str(row["webhook_org_id"]),
+                str(row["webhook_id"]),
+                row["event_type"],
+                row["payload"],
+                row["response_status"],
+                row["error_message"],
+                int(row["attempt_count"]),
+                int(row["max_attempts"]),
+                row["created_at"],
+                row["signature_v1"],
+            )
+        except Exception as exc:
+            logger.debug(
+                "webhook_delivery: _move_to_dlq failed: %s", exc
+            )
+
+    async def replay_dlq(self, dlq_id: str) -> dict[str, Any]:
+        """Replay a DLQ delivery.
+
+        Increments ``replay_count`` on the DLQ row and
+        re-schedules a fresh delivery attempt via the same
+        path the initial ingest used. Returns a summary
+        dict the portal can render.
+        """
+        try:
+            client = await get_postgres_client()
+            row = await client.fetchrow(
+                """
+                SELECT id, webhook_id, event_type, payload,
+                       replay_count, signature_v1
+                  FROM webhook_dlq
+                 WHERE id = $1
+                """,
+                dlq_id,
+            )
+            if row is None:
+                return {"status": "not_found", "dlq_id": dlq_id}
+            # Find the webhook URL + secret for re-delivery.
+            wh = await client.fetchrow(
+                "SELECT url, secret FROM webhooks WHERE id = $1",
+                row["webhook_id"],
+            )
+            if wh is None:
+                return {
+                    "status": "not_found",
+                    "dlq_id": dlq_id,
+                    "error": "webhook endpoint deleted",
+                }
+            await client.execute(
+                """
+                UPDATE webhook_dlq
+                SET replay_count = replay_count + 1,
+                    last_replayed_at = NOW()
+                WHERE id = $1
+                """,
+                dlq_id,
+            )
+            payload = json.loads(row["payload"]) if isinstance(row["payload"], str) else row["payload"]
+            delivery_id = str(uuid4())
+            await client.execute(
+                """
+                INSERT INTO webhook_deliveries
+                    (id, webhook_id, event_type, payload,
+                     status, max_attempts, next_attempt_at,
+                     signature_v1, created_at)
+                VALUES ($1, $2, $3, $4, 'pending', $5, NOW(), $6, NOW())
+                """,
+                delivery_id,
+                row["webhook_id"],
+                row["event_type"],
+                json.dumps(payload),
+                len(_RETRY_DELAYS),
+                row["signature_v1"],
+            )
+            asyncio.create_task(
+                self._attempt_delivery(
+                    delivery_id,
+                    wh["url"],
+                    wh["secret"],
+                    payload,
+                )
+            )
+            return {
+                "status": "ok",
+                "dlq_id": dlq_id,
+                "delivery_id": delivery_id,
+                "replay_count": int(row["replay_count"]) + 1,
+            }
+        except Exception as exc:
+            logger.debug("webhook_delivery: replay_dlq failed: %s", exc)
+            return {"status": "error", "dlq_id": dlq_id, "error": str(exc)}
+
+    async def list_dlq(
+        self,
+        org_id: str,
+        *,
+        limit: int = 50,
+    ) -> list[dict[str, Any]]:
+        """List DLQ entries for the org, newest first."""
+        try:
+            client = await get_postgres_client()
+            rows = await client.fetch(
+                """
+                SELECT id, org_id, webhook_id, event_type, payload,
+                       last_response_status, last_error,
+                       attempt_count, max_attempts,
+                       first_attempt_at, last_attempt_at,
+                       replay_count, last_replayed_at,
+                       signature_v1, created_at
+                  FROM webhook_dlq
+                 WHERE org_id = $1
+                 ORDER BY created_at DESC
+                 LIMIT $2
+                """,
+                org_id,
+                int(limit),
+            )
+            out: list[dict[str, Any]] = []
+            for row in rows:
+                d = dict(row)
+                for k, v in list(d.items()):
+                    if hasattr(v, "isoformat"):
+                        d[k] = v.isoformat()
+                out.append(d)
+            return out
+        except Exception as exc:
+            logger.debug("webhook_delivery: list_dlq failed: %s", exc)
+            return []

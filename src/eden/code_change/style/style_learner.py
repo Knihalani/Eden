@@ -15,6 +15,10 @@ The profile is persisted to ``repo_style_profiles`` (one row
 per ``(org_id, repo_id)``). Re-running :meth:`learn` upserts.
 :meth:`get_profile` reads the persisted row.
 
+STATUS: pending=True (upgradespec §D.7 — table deferred; learn() and
+get_profile() fall back to ``DEFAULT_STYLE_PROFILE`` until Gate-4 lands
+and the table is re-added via a follow-up migration).
+
 T1 model choice: classification + extraction task, not code
 generation. T1 keeps cost ~10x cheaper than T2 and runs
 synchronously inside the connect flow without blocking.

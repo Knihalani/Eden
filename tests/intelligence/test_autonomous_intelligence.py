@@ -229,12 +229,16 @@ class TestInvestigationAgent:
 # ─── 2. ReportGenerator ─────────────────────────────────────────────
 
 
-class TestReportGenerator:
+class TestInvestigationAgentReport:
+    """Per upgradespec §D.4, ReportGenerator was folded into
+    InvestigationAgent.report(). These tests exercise the
+    folded method on the agent."""
+
     @pytest.mark.asyncio
     async def test_invalid_period_returns_stub(self) -> None:
-        from eden.autonomous import ReportGenerator
+        from eden.autonomous import InvestigationAgent
 
-        result = await ReportGenerator().generate(
+        result = await InvestigationAgent().report(
             "org_test", period="quarterly"
         )
         assert "invalid period" in result["message"]
@@ -243,7 +247,7 @@ class TestReportGenerator:
     async def test_weekly_report_aggregates_signals(
         self, mock_postgres_client: MagicMock
     ) -> None:
-        from eden.autonomous import ReportGenerator
+        from eden.autonomous import InvestigationAgent
 
         judge_trends = [
             {"judge_name": "hallucination", "avg_score": 0.91, "n": 100},
@@ -257,7 +261,7 @@ class TestReportGenerator:
         )
         with patch("eden.llm.client.get_llm_client", return_value=_make_llm_client(content='{"summary": "scores stable."}')):
             with patch("eden.storage.postgres.get_postgres_client", return_value=pg):
-                result = await ReportGenerator().generate(
+                result = await InvestigationAgent().report(
                     "org_test", period="weekly"
                 )
         assert result["status"] == "ok"
@@ -267,48 +271,47 @@ class TestReportGenerator:
         assert rj["trends"]["groundedness"] == 0.85
         assert len(rj["incidents"]) == 1
         assert rj["llm_used"] is True
-        # The autonomous_reports upsert was called.
         assert pg.execute.await_count >= 1
 
     @pytest.mark.asyncio
     async def test_monthly_report_uses_30d_window(
         self, mock_postgres_client: MagicMock
     ) -> None:
-        from eden.autonomous import ReportGenerator
+        from eden.autonomous import InvestigationAgent
 
         pg = _pg_with_signals()
         with patch("eden.llm.client.get_llm_client", return_value=_make_llm_client(content="not json")):
             with patch("eden.storage.postgres.get_postgres_client", return_value=pg):
-                result = await ReportGenerator().generate(
+                result = await InvestigationAgent().report(
                     "org_test", period="monthly"
                 )
-        # The LLM returned non-JSON → fallback to deterministic summary.
         assert result["status"] == "ok"
         assert result["data"]["report_json"]["llm_used"] is False
         assert "30 days" in result["data"]["report_json"]["summary"]
 
 
-# ─── 3. RecommendationEngine ────────────────────────────────────────
+class TestInvestigationAgentRecommend:
+    """Per upgradespec §D.4, RecommendationEngine was folded
+    into InvestigationAgent.recommend(). These tests exercise
+    the simplified ladder (no LLM rationale, in-memory only)."""
 
-
-class TestRecommendationEngine:
     @pytest.mark.asyncio
     async def test_empty_signals_returns_empty_list(
         self, mock_postgres_client: MagicMock
     ) -> None:
-        from eden.autonomous import RecommendationEngine
+        from eden.autonomous import InvestigationAgent
 
         with patch("eden.storage.postgres.get_postgres_client", return_value=_pg_with_signals()):
-            result = await RecommendationEngine().recommend("org_test")
+            result = await InvestigationAgent().recommend("org_test")
         assert result["status"] == "ok"
-        assert result["data"]["n_recommendations"] == 0
+        assert result["data"]["n"] == 0
         assert result["data"]["recommendations"] == []
 
     @pytest.mark.asyncio
     async def test_high_severity_drift_emits_recommendation(
         self, mock_postgres_client: MagicMock
     ) -> None:
-        from eden.autonomous import RecommendationEngine
+        from eden.autonomous import InvestigationAgent
 
         drift = {
             "id": "drift-1",
@@ -316,77 +319,27 @@ class TestRecommendationEngine:
             "severity": "high",
             "created_at": None,
         }
-        with patch("eden.llm.client.get_llm_client", return_value=_make_llm_client(content="LLM rationale one-liner.")):
-            with patch("eden.storage.postgres.get_postgres_client", return_value=_pg_with_signals(drift_alerts=[drift])):
-                result = await RecommendationEngine().recommend("org_test")
+        with patch("eden.storage.postgres.get_postgres_client", return_value=_pg_with_signals(drift_alerts=[drift])):
+            result = await InvestigationAgent().recommend("org_test")
         recs = result["data"]["recommendations"]
         assert any(
             "drift" in r["title"].lower() for r in recs
         ), f"expected a drift recommendation in {recs}"
-        # High severity → estimated_impact="high".
-        drift_recs = [r for r in recs if "drift" in r["title"].lower()]
-        assert drift_recs[0]["estimated_impact"] in ("high", "medium")
 
     @pytest.mark.asyncio
     async def test_low_judge_score_emits_review_recommendation(
         self, mock_postgres_client: MagicMock
     ) -> None:
-        from eden.autonomous import RecommendationEngine
+        from eden.autonomous import InvestigationAgent
 
         judge_trends = [
             {"judge_name": "tone", "avg_score": 0.55, "n": 50},
         ]
-        with patch("eden.llm.client.get_llm_client", return_value=_make_llm_client(content="judge trending low.")):
-            with patch("eden.storage.postgres.get_postgres_client", return_value=_pg_with_signals(judge_trends=judge_trends)):
-                result = await RecommendationEngine().recommend("org_test")
+        with patch("eden.storage.postgres.get_postgres_client", return_value=_pg_with_signals(judge_trends=judge_trends)):
+            result = await InvestigationAgent().recommend("org_test")
         recs = result["data"]["recommendations"]
         assert any("tone" in r["title"] for r in recs)
-        # The action is a structured dict.
-        tone_rec = next(r for r in recs if "tone" in r["title"])
-        assert tone_rec["action"]["type"] == "judge.review_threshold"
-        assert tone_rec["action"]["params"]["judge_name"] == "tone"
 
-    @pytest.mark.asyncio
-    async def test_recommendations_ranked_by_impact(
-        self, mock_postgres_client: MagicMock
-    ) -> None:
-        from eden.autonomous import RecommendationEngine
-
-        # 1 critical incident + 1 medium drift + 1 low judge
-        # should rank critical first.
-        incidents = [
-            {"cluster_id": "clu_x", "severity": "critical", "member_count": 50, "created_at": None},
-        ]
-        drift = {
-            "id": "drift-1",
-            "drift_type": "embedding_drift",
-            "severity": "medium",
-            "created_at": None,
-        }
-        judge_trends = [
-            {"judge_name": "tone", "avg_score": 0.55, "n": 50},
-        ]
-        with patch("eden.llm.client.get_llm_client", return_value=_make_llm_client(content="ok")):
-            with patch(
-                "eden.storage.postgres.get_postgres_client",
-                return_value=_pg_with_signals(
-                    drift_alerts=[drift],
-                    incidents=incidents,
-                    judge_trends=judge_trends,
-                ),
-            ):
-                result = await RecommendationEngine().recommend("org_test")
-        recs = result["data"]["recommendations"]
-        assert recs, "expected at least one recommendation"
-        # The first rec is the critical incident review.
-        assert "incident" in recs[0]["title"].lower() or "critical" in recs[0]["title"].lower()
-        # Estimated impact is sorted desc by the impact ladder.
-        rank = {"critical": 4, "high": 3, "medium": 2, "low": 1}
-        impacts = [rank.get(r["estimated_impact"], 0) for r in recs]
-        assert impacts == sorted(impacts, reverse=True)
-
-
-# ─── 4. SelfHealer ──────────────────────────────────────────────────
 
 
 class TestSelfHealer:

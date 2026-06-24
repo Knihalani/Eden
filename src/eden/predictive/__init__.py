@@ -1,40 +1,31 @@
 """Predictive Intelligence (Cat 13) — new top-level package.
 
-Six services:
+ponytail: per upgradespec §D.3 (Phase 1 cut), Cat 13 ships
+only :class:`QualityPredictor` and :class:`DriftDetector`.
+The :class:`CostPredictor` (median projection) was folded
+into Cat 7 (Cost Intelligence) — see
+``docs/eden-cost-intel-plan.md``. The :class:`CapacityPredictor`,
+:class:`RiskScorer`, and embedding drift were removed.
+
+Two surviving services:
 
 * :class:`QualityPredictor` — per-request judge-score
   forecast (trailing-window mean over recent
   ``judge_scores``).
-* :class:`CostPredictor` — per-request cost forecast
-  (median of recent per-request ``cost_usd`` from
-  ``usage_events``). Extends the Cat 8 ``CostForecast``
-  with a per-request dimension.
-* :class:`CapacityPredictor` — N-day GPU-hour projection
-  (linear regression on daily call + token series).
-* :class:`RiskScorer` — composite per-request risk from
-  judge-score / cost-CV / latency-p95.
-* :class:`DriftDetector` — output (judge-score) +
-  embedding (response-text) drift detection via the
-  Population Stability Index (PSI).
+* :class:`DriftDetector` — output (judge-score) drift
+  detection via the Population Stability Index (PSI).
 
-All services read from the production-grade
+Both services read from the production-grade
 ``telemetry_events``, ``usage_events``, and
-``judge_scores`` tables and persist to the 5 Cat 13
-tables declared in migration 020
-(``quality_predictions``, ``cost_predictions``,
-``capacity_forecasts``, ``risk_scores``,
-``drift_alerts``). All dependencies degrade gracefully —
-an empty table gives an ``ok`` envelope with a clear
-``message`` and a ``null`` prediction.
+``judge_scores`` tables and persist to the 2 surviving
+Cat 13 tables (``quality_predictions`` + ``drift_alerts``).
+The ``cost_predictions`` / ``capacity_forecasts`` /
+``risk_scores`` tables were dropped per §D.3.
 
 The package uses **lazy re-exports** so that
 ``from eden.predictive import QualityPredictor`` does not
 eagerly import the heavy transitive deps (Postgres
-client, the shared helpers). Routes that need a specific
-service can rely on the lazy re-export or import the
-service module directly:
-
-    from eden.predictive.quality import QualityPredictor
+client, the shared helpers).
 
 See ``docs/observability-gap/13-predictive-intelligence.md``.
 """
@@ -44,11 +35,8 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 __all__ = [
-    "CapacityPredictor",
-    "CostPredictor",
     "DriftDetector",
     "QualityPredictor",
-    "RiskScorer",
     "annotate_change_points",
     "cusum_classify_trend",
     "cusum_detect",
@@ -60,12 +48,9 @@ __all__ = [
 # pyright) happy without importing the implementations at
 # runtime.
 if TYPE_CHECKING:  # pragma: no cover - import only
-    from .capacity import CapacityPredictor
-    from .cost import CostPredictor
     from .cusum import annotate_change_points, cusum_classify_trend, cusum_detect
     from .drift import DriftDetector
     from .quality import QualityPredictor
-    from .risk import RiskScorer
 
 
 # Map public name -> (module, attribute) for the lazy
@@ -73,11 +58,8 @@ if TYPE_CHECKING:  # pragma: no cover - import only
 # import spec stay in sync. Adding a new service means adding
 # two lines, not three.
 _LAZY_IMPORTS: dict[str, tuple[str, str]] = {
-    "CapacityPredictor": (".capacity", "CapacityPredictor"),
-    "CostPredictor": (".cost", "CostPredictor"),
     "DriftDetector": (".drift", "DriftDetector"),
     "QualityPredictor": (".quality", "QualityPredictor"),
-    "RiskScorer": (".risk", "RiskScorer"),
     "cusum_detect": (".cusum", "cusum_detect"),
     "cusum_classify_trend": (".cusum", "cusum_classify_trend"),
     "annotate_change_points": (".cusum", "annotate_change_points"),

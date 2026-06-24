@@ -29,6 +29,7 @@ from eden.api.routes import (
     data_platform,
     datasets_spreadsheet,
     debugger,
+    budgets,
     evaluation,
     experiments,
     export,
@@ -77,6 +78,7 @@ from eden.api.routes import (
     presigned_feedback,
     prompts,
     prompt_canary,
+    prompts_v2,
     qa_generator,
     rbac,
     redteam,
@@ -91,6 +93,7 @@ from eden.api.routes import (
     signals,
     sql_query,
     sso,
+    streaming_tokens,
     support,
     webhooks,
     websocket,
@@ -423,6 +426,7 @@ app.include_router(orgs.router)
 app.include_router(references.router)
 app.include_router(api_keys.router)
 app.include_router(billing.router)  # /orgs/{org_id}/billing
+app.include_router(budgets.router)  # /orgs/{org_id}/budget + /budget/ticker + /budget/actions (D.10 cost guardrails)
 app.include_router(cost.router)  # /orgs/{org_id}/cost/comparison (Cat 23 audit)
 app.include_router(analytics.router)  # /orgs/{org_id}/analytics
 app.include_router(export.router)  # /orgs/{org_id}/export
@@ -451,6 +455,7 @@ app.include_router(signals.router)  # /orgs/{org_id}/signals (Phase Q plain-Engl
 app.include_router(debugger.router)  # /orgs/{org_id}/debugger (Phase P agent debugger)
 app.include_router(datasets_spreadsheet.router)  # /orgs/{org_id}/datasets/{dataset_id} (Phase S spreadsheet)
 app.include_router(prompts.router)  # /orgs/{org_id}/prompts (Phase I prompt management + playground)
+app.include_router(prompts_v2.router)  # /orgs/{org_id}/prompts/* (D.9 versioning: /{name}/versions + /eval-runs)
 app.include_router(pii_policy.router)  # /orgs/{org_id}/pii-policy
 app.include_router(retention_policy.router)  # /orgs/{org_id}/retention-policy
 app.include_router(region.router)  # /orgs/{org_id}/region
@@ -544,6 +549,8 @@ app.include_router(github_routes.org_router)
 # /orgs/{org_id}/webhooks — no collision with the inbound clerk_webhooks
 # router mounted above at /webhooks/clerk.
 app.include_router(webhooks.router)  # /orgs/{org_id}/webhooks
+# D.8 streaming tokens (per upgradespec §C.1)
+app.include_router(streaming_tokens.router)  # /orgs/{org_id}/traces/{trace_id}/tokens
 # Cat 23 agent PR suggestions — UI surface for in-portal code-change
 # review. Prefix /orgs/{org_id}/agent/pr-suggestions — unique.
 app.include_router(agent_pr_suggestions.router)  # /orgs/{org_id}/agent/pr-suggestions

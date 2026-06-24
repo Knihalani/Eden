@@ -1,0 +1,52 @@
+# OTel Collector config — replacement for the in-process sampling +
+# K8s enrichment + Pyroscope stack (removed per upgradespec §D.1).
+#
+# Install: helm install opentelemetry-collector open-telemetry/opentelemetry-collector
+#          -f deploy/otel-collector-config.yaml
+#
+# Pipeline: tail_sampling (errors / slow / force_trace / probabilistic)
+#           → k8sattributes (metadata + Downward API env vars)
+#           → batch → otlp/eden → eden-gateway:4317
+
+processors:
+  tail_sampling:
+    decision_wait: 10s
+    num_traces: 20000
+    expected_new_traces_per_sec: 5000
+    policies:
+      - name: errors
+        type: status_code
+        status_code: { status_codes: [ERROR] }
+      - name: slow
+        type: latency
+        latency: { threshold_ms: 5000 }
+      - name: force_trace
+        type: string_attribute
+        string_attribute: { key: eden.force_trace, values: ["true"] }
+      - name: probabilistic
+        type: probabilistic
+        probabilistic: { sampling_percentage: 1 }
+
+  k8sattributes:
+    passthrough: false
+    auth_type: serviceAccount
+    extract:
+      metadata: [k8s.pod.name, k8s.namespace.name, k8s.deployment.name]
+    # Fall back to Downward API env vars if SA JWT isn't mounted.
+    extract_from_env:
+      - K8S_POD_NAME
+      - K8S_NAMESPACE
+      - K8S_DEPLOYMENT_NAME
+
+exporters:
+  otlp/eden:
+    endpoint: eden-gateway:4317
+    tls:
+      insecure: true
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [tail_sampling, k8sattributes, batch]
+      exporters: [otlp/eden]

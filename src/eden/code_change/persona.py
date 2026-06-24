@@ -12,6 +12,9 @@ and reads the current persona. The real implementation (Gate 4a)
 will additionally post to the GitHub App bot identity, render the
 track record in the portal, and sign commits with the persona's
 voice.
+
+STATUS: pending=True (upgradespec §D.7 — table deferred; service stays
+read-only until Gate-4 lands).
 """
 
 from __future__ import annotations

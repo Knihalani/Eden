@@ -54,7 +54,9 @@ Categories
     risk_scores, drift_alerts
 14. Autonomous intelligence (incl. NL Interface):
     investigations, autonomous_reports, autonomous_recommendations,
-    self_heal_actions, nl_query_log
+    self_heal_actions
+    ponytail: nl_query_log dropped per upgradespec §D.4 (Phase 1 cut).
+    The NLQueryEngine service was removed; re-add when NL → SQL ships.
 15. Runtime protection & guardrails: guardrail_policies, guardrail_evaluations,
     intervention_log
 16. Decision intelligence:          decision_paths, decision_alternatives,
@@ -830,19 +832,15 @@ def upgrade() -> None:
         created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
         """,
     )
-    _table(
-        "nl_query_log",
-        """
-        id              UUID PRIMARY KEY,
-        org_id          VARCHAR(128) NOT NULL,
-        user_id         VARCHAR(128),
-        question        TEXT NOT NULL,
-        result_json     TEXT,
-        created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
-        """,
-    )
+    # ─── 15. Runtime Protection & Guardrails ──────────────────────
+    # ponytail: nl_query_log dropped per upgradespec §D.4 (Phase 1 cut).
+    # The NLQueryEngine service was removed; the table was the only
+    # writer and is no longer needed. Re-add when NL → SQL ships in v2.
 
     # ─── 15. Runtime Protection & Guardrails ──────────────────────
+    # ponytail: nl_query_log dropped per upgradespec §D.4 (Phase 1 cut).
+    # The NLQueryEngine service was removed; the table was the only
+    # writer and is no longer needed. Re-add when NL → SQL ships in v2.
     _table(
         "guardrail_policies",
         """

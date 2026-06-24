@@ -1,9 +1,14 @@
 """Cat 22 — APM Depth + Tracing Depth (v1.4).
 
-Public surface (lazy re-exports so that
-``from eden.apm_depth import OtelV141Enricher`` does not
-eagerly import the metrics service which pulls in
-postgres):
+ponytail: per upgradespec §D.1 (Phase 1 cut), the bespoke
+in-process tail-sampling / K8s-enrichment / Pyroscope
+correlation code was deleted and replaced by the OTel
+Collector + K8s Downward API path. See
+``deploy/otel-collector-config.yaml`` for the OTel Collector
+``tail_sampling`` + ``k8sattributes`` processor config.
+
+The surviving surface is the protocol-level + per-step
+enrichment + metrics layer (not the bespoke sampler/k8s/profiler):
 
 * :class:`OtelV141Enricher` (in :mod:`eden.apm_depth.otel_v141`)
 * :class:`StepJudgeStamper` (in :mod:`eden.apm_depth.step_judges`)
@@ -11,15 +16,13 @@ postgres):
   :class:`ToolCallSuccessRateMetric`,
   :class:`CostPerStepMetric` (in :mod:`eden.apm_depth.metrics`)
 * :class:`AgentMetricsCollector` (in :mod:`eden.apm_depth.metrics`)
-* :class:`TailSampler`, :class:`SamplingPolicy`,
-  :class:`TailSamplingBuffer`, :func:`get_tail_sampler`,
-  :func:`get_sampling_stats`, :func:`compute_num_traces`,
-  :func:`estimate_memory_gb` (in :mod:`eden.apm_depth.sampling`)
-* :class:`K8sEnricher`, :class:`ServiceAccountClaims`,
-  :func:`parse_service_account_jwt` (in :mod:`eden.apm_depth.k8s`)
-* :class:`ProfilingClient`, :class:`ProfileLink`,
-  :func:`make_profile_id`, :func:`build_pyroscope_url`,
-  :func:`profile_sample_decision` (in :mod:`eden.apm_depth.profiling`)
+
+Removed (per §D.1):
+* ``eden.apm_depth.sampling`` — replaced by OTel Collector
+  ``tail_sampling`` processor
+* ``eden.apm_depth.k8s`` — replaced by OTel Collector
+  ``k8sattributes`` processor + K8s Downward API env vars
+* ``eden.apm_depth.profiling`` — replaced by Grafana Phlare
 
 The :mod:`eden.apm_depth._common` module is imported eagerly
 because the v1.41 / v1.36 mapping + the per-step envelope
@@ -53,30 +56,6 @@ __all__ = [
     "ToolCallSuccessRateMetric",
     "CostPerStepMetric",
     "AgentMetricsCollector",
-    # Tail-based sampling (v1.4.1 add-on)
-    "TailSampler",
-    "SamplingPolicy",
-    "TailSamplingBuffer",
-    "SamplingDecision",
-    "get_tail_sampler",
-    "get_sampling_stats",
-    "compute_num_traces",
-    "estimate_memory_gb",
-    "probabilistic_verdict",
-    "reset_tail_sampler",
-    # K8s attribute enrichment (v1.4.1 add-on)
-    "K8sEnricher",
-    "ServiceAccountClaims",
-    "parse_service_account_jwt",
-    # Pyroscope continuous profiling (v1.4.1 add-on)
-    "ProfilingClient",
-    "ProfileLink",
-    "make_profile_id",
-    "build_pyroscope_url",
-    "profile_sample_decision",
-    "DEFAULT_SAMPLE_RATE",
-    "DEFAULT_PYROSCOPE_HOST",
-    "PROFILE_ID_PREFIX",
     # Shared helpers (eager)
     "dual_emit_attributes",
     "enrich_step_attributes",
@@ -94,28 +73,6 @@ _LAZY_IMPORTS: dict[str, tuple[str, str]] = {
     "ToolCallSuccessRateMetric": (".metrics", "ToolCallSuccessRateMetric"),
     "CostPerStepMetric": (".metrics", "CostPerStepMetric"),
     "AgentMetricsCollector": (".metrics", "AgentMetricsCollector"),
-    # v1.4.1
-    "TailSampler": (".sampling", "TailSampler"),
-    "SamplingPolicy": (".sampling", "SamplingPolicy"),
-    "TailSamplingBuffer": (".sampling", "TailSamplingBuffer"),
-    "SamplingDecision": (".sampling", "SamplingDecision"),
-    "get_tail_sampler": (".sampling", "get_tail_sampler"),
-    "get_sampling_stats": (".sampling", "get_sampling_stats"),
-    "compute_num_traces": (".sampling", "compute_num_traces"),
-    "estimate_memory_gb": (".sampling", "estimate_memory_gb"),
-    "probabilistic_verdict": (".sampling", "probabilistic_verdict"),
-    "reset_tail_sampler": (".sampling", "reset_tail_sampler"),
-    "K8sEnricher": (".k8s", "K8sEnricher"),
-    "ServiceAccountClaims": (".k8s", "ServiceAccountClaims"),
-    "parse_service_account_jwt": (".k8s", "parse_service_account_jwt"),
-    "ProfilingClient": (".profiling", "ProfilingClient"),
-    "ProfileLink": (".profiling", "ProfileLink"),
-    "make_profile_id": (".profiling", "make_profile_id"),
-    "build_pyroscope_url": (".profiling", "build_pyroscope_url"),
-    "profile_sample_decision": (".profiling", "profile_sample_decision"),
-    "DEFAULT_SAMPLE_RATE": (".profiling", "DEFAULT_SAMPLE_RATE"),
-    "DEFAULT_PYROSCOPE_HOST": (".profiling", "DEFAULT_PYROSCOPE_HOST"),
-    "PROFILE_ID_PREFIX": (".profiling", "PROFILE_ID_PREFIX"),
 }
 
 

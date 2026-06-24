@@ -41,25 +41,26 @@ logger = logging.getLogger(__name__)
 # ── Public constants ─────────────────────────────────────────────────
 
 
-#: The four compliance frameworks the
+#: The two compliance frameworks the
 #: :class:`ComplianceEvidenceGenerator` understands.
+#:
+#: ponytail: per upgradespec §D.5 (Phase 1 cut), HIPAA +
+#: ISO27001 were removed. See ``docs/eden-governance-roadmap.md``
+#: for the deferred roadmap (HIPAA + ISO27001 ship when an
+#: enterprise customer asks).
 SUPPORTED_FRAMEWORKS: frozenset[str] = frozenset(
-    {"soc2_type_ii", "hipaa", "gdpr", "iso27001"}
+    {"soc2_type_ii", "gdpr"}
 )
 
 #: Aliases that map to canonical framework ids. Accepts the
 #: short form (``"soc2"``) and the case-insensitive form
-#: (``"SOC2"``, ``"HIPAA"``) the API spec encourages.
+#: (``"SOC2"``, ``"GDPR"``) the API spec encourages.
 FRAMEWORK_ALIASES: dict[str, str] = {
     "soc2": "soc2_type_ii",
     "soc2_type_2": "soc2_type_ii",
     "soc2_type2": "soc2_type_ii",
     "soc2_type_ii": "soc2_type_ii",
-    "hipaa": "hipaa",
     "gdpr": "gdpr",
-    "iso27001": "iso27001",
-    "iso_27001": "iso27001",
-    "iso-27001": "iso27001",
 }
 
 #: Per-scanner severity. The API spec calls out ``ssn`` /
@@ -76,9 +77,9 @@ SCANNER_SEVERITY: dict[str, str] = {
     "phone": "medium",
     "ip_address": "low",
     "mac_address": "low",
-    "phi": "high",
-    "passport": "high",
-    "iban": "high",
+    # "phi" / "passport" / "iban" are HIPAA / EU-specific and
+    # were removed per upgradespec §D.5; ship them when the
+    # deferred frameworks come back online.
 }
 
 #: Default scanner set when the caller doesn't specify one.

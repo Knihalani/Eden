@@ -271,21 +271,27 @@ def _beta_cf_series(
     return h * front
 
 
-def _hierarchical_beta_binomial(
+def _flat_beta_binomial(
     thumbs_up: int,
     thumbs_down: int,
-    prior_alpha: float,
-    prior_beta: float,
 ) -> dict[str, float]:
-    """Compute the Hierarchical Beta-Binomial posterior.
+    """Compute the Flat Beta-Binomial posterior.
 
-    ``posterior ~ Beta(prior_alpha + thumbs_up, prior_beta + thumbs_down)``
+    ponytail: per upgradespec §D.2 (Phase 1 cut), the
+    Hierarchical Beta-Binomial (org → feature → user) was
+    replaced by a flat Beta(1,1) prior at the trace level.
+    The prior is small (1,1) so the posterior is dominated
+    by the observed feedback once n >= 5; the 95 % credible
+    interval is wide for n < 5 (which is the desired
+    behaviour — we don't want overconfident early estimates).
+
+    ``posterior ~ Beta(1 + thumbs_up, 1 + thumbs_down)``
 
     Returns ``mean``, ``ci_low``, ``ci_high`` (the
     95 % credible interval from the posterior).
     """
-    a = prior_alpha + thumbs_up
-    b = prior_beta + thumbs_down
+    a = 1 + thumbs_up
+    b = 1 + thumbs_down
     mean = a / (a + b)
     ci_low = _beta_quantile(CREDIBLE_INTERVAL_LOW, a, b)
     ci_high = _beta_quantile(CREDIBLE_INTERVAL_HIGH, a, b)
@@ -473,7 +479,7 @@ async def _persist_correction(
             posterior["mean"],
             posterior["ci_low"],
             posterior["ci_high"],
-            "hierarchicalbeta_binomial",
+            "flat_beta_binomial",
         )
     except Exception as exc:
         logger.debug(
@@ -525,14 +531,10 @@ class SelectionBiasCorrector:
             round(thumbs_up / total, 4) if total > 0 else None
         )
 
-        # 30-day prior window.
-        prior_interval = f"{BAYESIAN_PRIOR_WINDOW_DAYS} days"
-        prior_alpha, prior_beta = await _fetch_per_channel_prior(
-            org_id, prior_interval
-        )
-        posterior = _hierarchical_beta_binomial(
-            thumbs_up, thumbs_down, prior_alpha, prior_beta
-        )
+        # ponytail: per upgradespec §D.2, the Flat Beta-Binomial
+        # uses Beta(1,1) prior at the trace level. No
+        # per-channel prior lookup needed.
+        posterior = _flat_beta_binomial(thumbs_up, thumbs_down)
 
         # Persist.
         await _persist_correction(
@@ -563,7 +565,7 @@ class SelectionBiasCorrector:
                         round(posterior["ci_high"], 4),
                     ],
                 },
-                "method": "hierarchicalbeta_binomial",
+                "method": "flat_beta_binomial",
             },
         )
 
@@ -617,14 +619,8 @@ class SatisfactionSignalService:
         implicit_row = await _fetch_implicit_signals(org_id, trace_id)
         implicit_score = _compute_implicit_signal(implicit_row)
 
-        # Selection-bias correction.
-        prior_interval = f"{BAYESIAN_PRIOR_WINDOW_DAYS} days"
-        prior_alpha, prior_beta = await _fetch_per_channel_prior(
-            org_id, prior_interval
-        )
-        posterior = _hierarchical_beta_binomial(
-            thumbs_up, thumbs_down, prior_alpha, prior_beta
-        )
+        # Selection-bias correction (flat prior per §D.2).
+        posterior = _flat_beta_binomial(thumbs_up, thumbs_down)
         bias_corrected = round(posterior["mean"], 4)
 
         # Persist the correction (the standalone
@@ -704,7 +700,7 @@ class SatisfactionSignalService:
                     round(posterior["ci_low"], 4),
                     round(posterior["ci_high"], 4),
                 ],
-                "method": "hierarchicalbeta_binomial",
+                "method": "flat_beta_binomial",
                 "weights": {
                     "explicit": DEFAULT_EXPLICIT_WEIGHT,
                     "implicit": DEFAULT_IMPLICIT_WEIGHT,

@@ -138,7 +138,7 @@ class TestColumnarPartitionManager:
         ):
             result = await ColumnarPartitionManager().ensure(
                 "org_test",
-                granularity="hour",
+                granularity="day",
                 source_table="telemetry_events",
             )
         assert result["status"] == "ok"
@@ -146,6 +146,24 @@ class TestColumnarPartitionManager:
         assert result["data"]["rows_estimate"] == 10000
         assert result["data"]["bytes_estimate"] == 2560000
         assert "fallback" not in result.get("message", "")
+
+    async def test_hourly_granularity_rejected(self) -> None:
+        """Hourly granularity was cut per upgradespec §D.6.
+
+        Asking for hourly must return the stable not_implemented
+        envelope so the UI renders the missing-granularity card
+        instead of silently falling back to daily.
+        """
+        from eden.columnar import ColumnarPartitionManager
+
+        result = await ColumnarPartitionManager().ensure(
+            "org_test",
+            granularity="hour",
+            source_table="telemetry_events",
+        )
+        assert result["status"] == "not_implemented"
+        assert result["live"] is False
+        assert "hour" in result["message"]
 
     async def test_clickhouse_exception_falls_back(
         self, mock_postgres_client: MagicMock

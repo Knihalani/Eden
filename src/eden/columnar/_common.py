@@ -245,7 +245,11 @@ def _clickhouse_partition_name(*, org_id: str) -> str:
 # ─── Granularity validation ──────────────────────────────────
 
 
-_VALID_GRANULARITIES: frozenset[str] = frozenset({"hour", "day", "week"})
+# ponytail: hourly granularity removed per upgradespec §D.6 (Phase 1 cut).
+# Daily is the UI default; weekly covers long-range rollups. v2 can re-enable
+# hourly by adding it back here + a ClickHouse sub-aggregation in
+# aggregations.py (the "hour" → "toStartOfHour" mapping is preserved there).
+_VALID_GRANULARITIES: frozenset[str] = frozenset({"day", "week"})
 _VALID_SOURCE_TABLES: frozenset[str] = frozenset(
     {"telemetry_events", "usage_events", "judge_scores"}
 )
@@ -255,9 +259,9 @@ def _validate_granularity(granularity: str) -> str | None:
     """Return the granularity if valid, else ``None``.
 
     A simple ``frozenset`` lookup — the v1.3 ship supports
-    only the three ClickHouse-friendly granularities.
-    Returns ``None`` on miss so the caller can return a
-    stable ``_not_implemented_envelope`` shape.
+    only daily + weekly (per upgradespec §D.6). Returns
+    ``None`` on miss so the caller can return a stable
+    ``_not_implemented_envelope`` shape.
     """
     if granularity in _VALID_GRANULARITIES:
         return granularity

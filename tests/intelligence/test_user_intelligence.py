@@ -881,40 +881,7 @@ class TestEditDistanceTracker:
         assert result["data"]["edit_distance"] is None
 
 
-class TestReturnToFeatureTracker:
-    @pytest.mark.asyncio
-    async def test_track_true(
-        self, mock_postgres_client: MagicMock
-    ) -> None:
-        from eden.services.user_intel.behavioural import (
-            ReturnToFeatureTracker,
-        )
-
-        pg = _pg_router()
-        with patch(
-            "eden.storage.postgres.get_postgres_client", return_value=pg
-        ):
-            result = await ReturnToFeatureTracker().track(
-                "org_test", trace_id="t", user_id="u1", returned=True
-            )
-        assert result["data"]["return_7d"] is True
-
-    @pytest.mark.asyncio
-    async def test_track_none_for_cold_start(
-        self, mock_postgres_client: MagicMock
-    ) -> None:
-        from eden.services.user_intel.behavioural import (
-            ReturnToFeatureTracker,
-        )
-
-        pg = _pg_router()
-        with patch(
-            "eden.storage.postgres.get_postgres_client", return_value=pg
-        ):
-            result = await ReturnToFeatureTracker().track(
-                "org_test", trace_id="t", user_id="u1"
-            )
-        assert result["data"]["return_7d"] is None
+    # ponytail: removed per upgradespec §D.2 (Phase 1 cut)
 
 
 class TestAbandonmentTracker:
@@ -936,84 +903,10 @@ class TestAbandonmentTracker:
         assert result["data"]["abandoned_after_one"] is True
 
 
-class TestCopyPasteTracker:
-    @pytest.mark.asyncio
-    async def test_detect_snippet_not_persisted(
-        self, mock_postgres_client: MagicMock
-    ) -> None:
-        from eden.services.user_intel.behavioural import (
-            CopyPasteTracker,
-        )
-
-        pg = _pg_router()
-        with patch(
-            "eden.storage.postgres.get_postgres_client", return_value=pg
-        ):
-            result = await CopyPasteTracker().detect(
-                "org_test",
-                trace_id="t",
-                user_id="u1",
-                copied=True,
-                redacted_snippet="[redacted copy]",
-            )
-        assert result["data"]["copy_pasted"] is True
-        # Privacy: the snippet is never persisted.
-        assert result["data"]["snippet_persisted"] is False
-
-    @pytest.mark.asyncio
-    async def test_long_snippet_truncated(
-        self, mock_postgres_client: MagicMock
-    ) -> None:
-        from eden.services.user_intel.behavioural import (
-            COPY_PASTE_REDACT_LEN,
-            CopyPasteTracker,
-        )
-
-        long_snippet = "x" * 1000
-        pg = _pg_router()
-        with patch(
-            "eden.storage.postgres.get_postgres_client", return_value=pg
-        ):
-            result = await CopyPasteTracker().detect(
-                "org_test",
-                trace_id="t",
-                user_id="u1",
-                redacted_snippet=long_snippet,
-            )
-        # The 200-char cap is enforced. The snippet is
-        # not in the response, but the cap is asserted
-        # by the bad_request envelope for an over-cap
-        # input — let's confirm it didn't error.
-        assert result["status"] == "ok"
-        # Defensive check on the cap constant.
-        assert COPY_PASTE_REDACT_LEN == 200
+    # ponytail: removed per upgradespec §D.2 (Phase 1 cut)
 
 
-class TestRetryRephraseTracker:
-    @pytest.mark.asyncio
-    async def test_detect_with_similarity(
-        self, mock_postgres_client: MagicMock
-    ) -> None:
-        from eden.services.user_intel.behavioural import (
-            RetryRephraseTracker,
-        )
-
-        pg = _pg_router()
-        with patch(
-            "eden.storage.postgres.get_postgres_client", return_value=pg
-        ):
-            result = await RetryRephraseTracker().detect(
-                "org_test",
-                trace_id="t",
-                user_id="u1",
-                retried=True,
-                similarity=0.85,
-            )
-        assert result["data"]["retried_within_60s"] is True
-        assert result["data"]["similarity"] == 0.85
-
-
-# ─── 9. BehaviouralDashboard ────────────────────────────────────────
+    # ponytail: removed per upgradespec §D.2 (Phase 1 cut)
 
 
 class TestBehaviouralDashboard:
