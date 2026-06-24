@@ -1,5 +1,7 @@
 """Public SDK re-exports."""
 
+# ruff: noqa: I001  (intentional import order — always-available
+# surface first, then optional features in chronological ship order)
 from __future__ import annotations
 
 # Always-available surface
@@ -71,27 +73,6 @@ except ImportError:
         "wait",
     ]))
 
-try:  # pragma: no cover - graceful when Voice not yet shipped
-    from eden.sdk.voice import (  # type: ignore
-        build_voice_attributes,
-        detect_spike,
-        mark_barge_in,
-        wrap_voice_session,
-    )
-    _OPTIONAL_FEATURES.append((True, [
-        "build_voice_attributes",
-        "detect_spike",
-        "mark_barge_in",
-        "wrap_voice_session",
-    ]))
-except ImportError:
-    _OPTIONAL_FEATURES.append((False, [
-        "build_voice_attributes",
-        "detect_spike",
-        "mark_barge_in",
-        "wrap_voice_session",
-    ]))
-
 try:  # pragma: no cover - graceful when Fine-Tune not yet shipped
     from eden.sdk.fine_tune import (  # type: ignore
         build_fine_tune_attributes,
@@ -126,6 +107,27 @@ except ImportError:
         "build_provider_routing_attributes",
         "record_provider_routing_attempt",
         "retry_with_fallback",
+    ]))
+
+try:  # pragma: no cover - graceful when Voice not yet shipped
+    from eden.sdk.voice import (  # type: ignore
+        build_voice_attributes,
+        detect_spike,
+        mark_barge_in,
+        wrap_voice_session,
+    )
+    _OPTIONAL_FEATURES.append((True, [
+        "build_voice_attributes",
+        "detect_spike",
+        "mark_barge_in",
+        "wrap_voice_session",
+    ]))
+except ImportError:
+    _OPTIONAL_FEATURES.append((False, [
+        "build_voice_attributes",
+        "detect_spike",
+        "mark_barge_in",
+        "wrap_voice_session",
     ]))
 
 # Build the public __all__ dynamically. The always-available

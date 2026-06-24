@@ -41,8 +41,9 @@ Usage::
 from __future__ import annotations
 
 import logging
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from typing import Any, AsyncIterator
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -57,7 +58,7 @@ async def wrap_voice_session(
     transport: str | None = None,
     asr_provider: str | None = None,
     tts_provider: str | None = None,
-) -> AsyncIterator["_VoiceSessionCtx"]:
+) -> AsyncIterator[_VoiceSessionCtx]:
     """Wrap a voice turn. Persists a row to ``voice_sessions``
     and yields a context with ``set_*`` helpers for the
     ASR/TTS latency numbers (the customer's pipeline fills

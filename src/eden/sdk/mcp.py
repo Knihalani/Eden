@@ -34,11 +34,10 @@ Usage::
 
 from __future__ import annotations
 
-import json
 import logging
-import uuid
+from collections.abc import Iterator
 from contextlib import contextmanager
-from typing import Any, Iterator
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -55,7 +54,7 @@ def wrap_mcp_call(
     prompt_name: str | None = None,
     sampling_requested: bool = False,
     transport: str | None = None,
-) -> Iterator["_McpCallCtx"]:
+) -> Iterator[_McpCallCtx]:
     """Wrap an MCP call. Yields a context with ``set_*`` helpers.
 
     On exit, the SDK:
