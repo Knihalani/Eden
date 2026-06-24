@@ -53,7 +53,8 @@ Usage::
 from __future__ import annotations
 
 import logging
-from typing import Any, Awaitable, Callable
+from collections.abc import Awaitable, Callable
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -127,7 +128,6 @@ async def retry_with_fallback(
     """
     fallback_providers = list(fallback_providers or [])
     chain = [primary, *fallback_providers]
-    last_exc: BaseException | None = None
     for idx, (provider, model) in enumerate(chain):
         is_primary = idx == 0
         is_last = idx == len(chain) - 1
@@ -144,7 +144,6 @@ async def retry_with_fallback(
             )
             return result
         except Exception as exc:
-            last_exc = exc
             if is_primary:
                 # The primary attempt failed — move to fallback
                 # (per spec R-13, we record as 'fallback' when

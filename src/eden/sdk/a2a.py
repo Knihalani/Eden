@@ -33,8 +33,9 @@ Usage::
 from __future__ import annotations
 
 import logging
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from typing import Any, AsyncIterator
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -49,7 +50,7 @@ async def wrap_a2a_invocation(
     parent_agent_id: str,
     child_agent_id: str,
     invocation_type: str = "a2a.send_message",
-) -> AsyncIterator["_A2ACallCtx"]:
+) -> AsyncIterator[_A2ACallCtx]:
     """Wrap an A2A call. Registers the link + sets span attrs.
 
     On exception, marks the link as ``failed`` with a

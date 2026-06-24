@@ -350,7 +350,7 @@ def _verify_openai_webhook(
         return False
     expected = hmac.new(
         secret.encode("utf-8"),
-        f"{ts}.".encode("utf-8") + body,
+        f"{ts}.".encode() + body,
         hashlib.sha256,
     ).hexdigest()
     return hmac.compare_digest(expected, sig)
@@ -385,7 +385,7 @@ async def openai_fine_tuning_webhook(
     try:
         payload = json.loads(body) if body else {}
     except json.JSONDecodeError as exc:
-        raise HTTPException(status_code=400, detail=f"Invalid JSON: {exc}")
+        raise HTTPException(status_code=400, detail=f"Invalid JSON: {exc}") from exc
     event_type = payload.get("type") or ""
     data = payload.get("data") or {}
     fine_tune_id = data.get("id")
@@ -427,13 +427,16 @@ async def openai_fine_tuning_webhook(
     # eval_results is the optional metrics block on a succeeded
     # event. We surface ``mean_score`` for the drift detector.
     eval_results = data.get("eval_results")
-    if isinstance(eval_results, dict) and "mean_score" not in eval_results:
+    if (
+        isinstance(eval_results, dict)
+        and "mean_score" not in eval_results
+        and "trained_tokens" in data
+    ):
         # If a ``trained_tokens`` is present, surface it.
-        if "trained_tokens" in data:
-            eval_results = {
-                **eval_results,
-                "trained_tokens": data["trained_tokens"],
-            }
+        eval_results = {
+            **eval_results,
+            "trained_tokens": data["trained_tokens"],
+        }
     run_id = await svc.register_run(
         org_id,
         provider="openai",

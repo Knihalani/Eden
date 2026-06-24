@@ -1,5 +1,10 @@
 """Observability services — re-exports."""
 
+# ruff: noqa: I001  (the auto-fix moves names within tuples to
+# alphabetical order — but A2ALinkService / ComputerUseService
+# share the same suffix-less prefix as their get_* counterpart, so
+# the sorted-by-name order would shuffle a module's service+getter
+# pair apart. Keep the (Service, getter) tuple order for readability.)
 from __future__ import annotations
 
 from eden.services.observability.a2a_links import (
@@ -42,9 +47,9 @@ from eden.services.observability.voice_sessions import (
 )
 
 __all__ = [
+    "A2ALinkService",
     "ACTION_TYPES",
     "ASR_PROVIDERS",
-    "A2ALinkService",
     "ComputerUseService",
     "DECISIONS",
     "DEFAULT_DRIFT_WINDOW",

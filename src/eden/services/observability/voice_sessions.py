@@ -264,7 +264,7 @@ class VoiceSessionService:
         if client is None:
             return False
         try:
-            result = await client.execute(
+            await client.execute(
                 """
                 UPDATE voice_sessions
                    SET barge_in_detected = TRUE

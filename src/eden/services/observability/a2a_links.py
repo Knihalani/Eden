@@ -13,7 +13,6 @@ only thing that talks to ``a2a_links``; routes are thin.
 from __future__ import annotations
 
 import logging
-import uuid
 from typing import Any
 
 logger = logging.getLogger(__name__)
