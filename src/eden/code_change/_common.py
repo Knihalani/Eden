@@ -108,6 +108,19 @@ def _not_implemented_envelope(
     the real implementation can ship". The marker is surfaced in
     the response data so the front-end can show a clear
     "requires Gate N" badge.
+
+    Example:
+        >>> env = _not_implemented_envelope(
+        ...     "code_change", gate="3_blocked"
+        ... )
+        >>> env["status"]
+        'not_implemented'
+        >>> env["live"]
+        False
+        >>> env["data"]["gate"]
+        '3_blocked'
+        >>> env["feature"]
+        'code_change'
     """
     msg = message or "Stub registered; implementation pending Gate 3 (sandbox safety)"
     payload: dict[str, Any] = {"feature": feature, "message": msg}
@@ -189,6 +202,36 @@ def _check_two_stage_optin(
     "every STUB endpoint reads ``code_change_enabled`` from
     ``organizations.features.code_change_policy`` BEFORE the
     auto-mode gates").
+
+    Examples:
+        Default policy → all actions blocked:
+
+        >>> from eden.code_change._common import DEFAULT_POLICY
+        >>> result = _check_two_stage_optin(
+        ...     "code_change", dict(DEFAULT_POLICY), "open_pr"
+        ... )
+        >>> result is not None and result["status"] == "not_implemented"
+        True
+        >>> result["data"]["gate"]
+        'optin_blocked'
+
+        code_change_enabled=True but no auto-mode opt-in →
+        manual actions allowed, auto-mode actions blocked:
+
+        >>> p = dict(DEFAULT_POLICY, code_change_enabled=True)
+        >>> _check_two_stage_optin("code_change", p, "create_patch") is None
+        True
+        >>> blocked = _check_two_stage_optin("code_change", p, "open_pr")
+        >>> blocked["data"]["gate"]
+        'auto_mode_blocked'
+
+        Full opt-in (both stages) → all actions allowed:
+
+        >>> p = dict(p, auto_pr_enabled=True, auto_revert_enabled=True)
+        >>> _check_two_stage_optin("code_change", p, "open_pr") is None
+        True
+        >>> _check_two_stage_optin("code_change", p, "revert_pr") is None
+        True
     """
     if not bool(policy.get("code_change_enabled", False)):
         return _not_implemented_envelope(
