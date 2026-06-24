@@ -10,6 +10,7 @@ from pydantic import BaseModel, Field
 
 from eden.api.middleware.quota_enforcement import QuotaEnforcementMiddleware
 from eden.api.middleware.tenant_rate_limit import TenantRateLimitMiddleware
+from eden.api.middleware.internal_only import InternalOnlyMiddleware
 from eden.api.routes import (
     agent_pr_suggestions,
     agent_runs,
@@ -101,6 +102,7 @@ from eden.api.routes import (
 )
 from eden.api.routes import (
     github as github_routes,
+    internal_health,
     observability_a2a,
     observability_computer_use,
     observability_fine_tune,
@@ -413,6 +415,12 @@ app.add_middleware(
 if getattr(settings, "quota_enforcement_enabled", True):
     app.add_middleware(QuotaEnforcementMiddleware)
 
+# Internal-only middleware gates the ``/v1/internal/*`` namespace to
+# the IP allow-list (default: loopback). Operators set
+# ``INTERNAL_ALLOWED_IPS`` to a comma-separated list when deploying
+# behind Northflank + Vercel.
+app.add_middleware(InternalOnlyMiddleware)
+
 # Per-tenant sliding-window rate limiter. Registered AFTER CORS so
 # preflight OPTIONS requests are never rate-limited. Falls back to
 # in-memory TokenBucket when REDIS_URL is unset. Disable in dev with
@@ -446,6 +454,7 @@ app.include_router(observability_computer_use.router)  # /v1/traces/{id}/compute
 app.include_router(observability_voice.router)  # /v1/voice_sessions/* + /v1/traces/{id}/voice_sessions + barge_in spike (D.12.4)
 app.include_router(observability_fine_tune.router)  # /v1/fine_tuning_runs/* + /v1/webhooks/openai/fine_tuning (D.12.5)
 app.include_router(observability_provider_routing.router)  # /v1/provider_routing/* + /v1/traces/{id}/provider_routing (D.12.6)
+app.include_router(internal_health.router)  # /v1/internal/health/* — ops dashboard (Phase 4 B3 §9.6)
 app.include_router(optimization.router)  # /orgs/{org_id}/optimization/{overview,costs,savings,cache,budget,}
 app.include_router(alerts.router)  # /alerts (global alert feed + per-rule ack)
 app.include_router(app_events.router)  # /orgs/{org_id}/ingest/app (Phase A1 app/site events)
