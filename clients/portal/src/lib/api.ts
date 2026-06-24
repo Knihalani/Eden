@@ -3650,6 +3650,128 @@ export const computerUseApi = {
 
 (api as unknown as Record<string, unknown>).computerUseApi = computerUseApi;
 
+// ── Voice / audio sessions (D.12.4) ─────────────────────────────────────
+//
+// ``voiceApi`` is the frontend surface for the Cat 8.4 real backend.
+// One record per voice turn (idempotent on trace_id+span_id).
+// The barge-in spike detector is admin-gated.
+
+export interface VoiceSession {
+  id: string;
+  org_id: string;
+  trace_id: string;
+  span_id: string;
+  session_id: string;
+  transport: string | null;
+  asr_provider: string | null;
+  asr_latency_ms: number | null;
+  asr_confidence: number | null;
+  asr_input_audio_ms: number | null;
+  llm_first_audio_ms: number | null;
+  tts_provider: string | null;
+  tts_first_byte_ms: number | null;
+  tts_total_ms: number | null;
+  barge_in_detected: boolean;
+  created_at: string;
+}
+
+export interface BargeInSpikeSummary {
+  org_id: string;
+  window_minutes: number;
+  threshold: number;
+  count: number;
+  spike: boolean;
+  session_ids: string[];
+  first_at: string | null;
+  last_at: string | null;
+}
+
+export const voiceApi = {
+  list: (
+    orgId: string,
+    params: {
+      provider?: string;
+      had_barge_in?: boolean;
+      asr_p95_ms_gt?: number;
+      limit?: number;
+    } = {},
+  ) => {
+    const qs = new URLSearchParams();
+    qs.set("org_id", orgId);
+    if (params.provider) qs.set("provider", params.provider);
+    if (params.had_barge_in !== undefined)
+      qs.set("had_barge_in", String(params.had_barge_in));
+    if (params.asr_p95_ms_gt !== undefined)
+      qs.set("asr_p95_ms_gt", String(params.asr_p95_ms_gt));
+    if (params.limit !== undefined) qs.set("limit", String(params.limit));
+    return fetchApi<{ data: VoiceSession[]; count: number }>(
+      `/v1/voice_sessions?${qs.toString()}`,
+      { headers: { "X-Org-Id": orgId } },
+    );
+  },
+  record: (
+    orgId: string,
+    body: {
+      trace_id: string;
+      span_id: string;
+      session_id: string;
+      transport?: string;
+      asr_provider?: string;
+      asr_latency_ms?: number;
+      asr_confidence?: number;
+      asr_input_audio_ms?: number;
+      llm_first_audio_ms?: number;
+      tts_provider?: string;
+      tts_first_byte_ms?: number;
+      tts_total_ms?: number;
+      barge_in_detected?: boolean;
+    },
+  ) =>
+    fetchApi<{ data: { id: string | null } }>(
+      `/v1/voice_sessions/${orgId}`,
+      {
+        method: "POST",
+        headers: { "X-Org-Id": orgId, "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      },
+    ),
+  getTraceSessions: (traceId: string) =>
+    fetchApi<{ data: VoiceSession[]; count: number }>(
+      `/v1/traces/${traceId}/voice_sessions`,
+      { headers: { "X-Org-Id": "self" } },
+    ),
+  markBargeIn: (
+    orgId: string,
+    body: { session_id: string; trace_id: string },
+  ) =>
+    fetchApi<{
+      data: { session_id: string; trace_id: string; barge_in_detected: boolean };
+    }>(`/v1/voice_sessions/${orgId}/barge_in`, {
+      method: "POST",
+      headers: { "X-Org-Id": orgId, "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    }),
+  detectSpike: (
+    orgId: string,
+    params: { window_minutes?: number; threshold?: number; fire_hook?: boolean } = {},
+  ) => {
+    const qs = new URLSearchParams();
+    qs.set("org_id", orgId);
+    if (params.window_minutes !== undefined)
+      qs.set("window_minutes", String(params.window_minutes));
+    if (params.threshold !== undefined)
+      qs.set("threshold", String(params.threshold));
+    if (params.fire_hook !== undefined)
+      qs.set("fire_hook", String(params.fire_hook));
+    return fetchApi<{ data: BargeInSpikeSummary }>(
+      `/v1/voice_sessions/barge_in_spike?${qs.toString()}`,
+      { headers: { "X-Org-Id": orgId } },
+    );
+  },
+};
+
+(api as unknown as Record<string, unknown>).voiceApi = voiceApi;
+
 // ── AI Agent (Phase C — unified panel) ───────────────────────────────────
 //
 // ``aiApi`` is the frontend surface for the Cat 14 real backend.

@@ -367,6 +367,48 @@ class PromotionHook:
         )
         return action_id
 
+    async def on_voice_barge_in_spike(
+        self,
+        org_id: str,
+        *,
+        window_minutes: int,
+        threshold: int,
+        count: int,
+        session_ids: list[str],
+    ) -> str | None:
+        """A voice session cluster had a barge-in spike
+        (per spec §8.4 + §E.1 row 24).
+
+        Fired by :meth:`VoiceSessionService.detect_barge_in_spike`
+        when the rolling ``window_minutes`` count crosses
+        ``threshold`` for the org. Per spec the default
+        action is "Alert" with severity ``low``; the v0
+        ship is advisory (records the recommended action
+        for the executor; the per-tenant alert subscription
+        is a follow-up that extends the ClosedLoopExecutor
+        to walk the new ``action_kind``).
+        """
+        action_id = await _record_action(
+            org_id,
+            hook_name=self.name,
+            action_kind=ACTION_KIND["on_voice_barge_in_spike"],
+            target=org_id,
+            payload={
+                "primary_entity_id": f"org:{org_id}:voice_barge_in",
+                "window_minutes": int(window_minutes),
+                "threshold": int(threshold),
+                "count": int(count),
+                "session_ids": list(session_ids or []),
+            },
+            severity="low",
+        )
+        logger.debug(
+            "promotion_hook.on_voice_barge_in_spike org=%s count=%s "
+            "window=%s threshold=%s action_id=%s",
+            org_id, count, window_minutes, threshold, action_id,
+        )
+        return action_id
+
 
 class GuardrailHook:
     """judge→guardrail lifecycle events.

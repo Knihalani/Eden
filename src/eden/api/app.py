@@ -104,6 +104,7 @@ from eden.api.routes import (
     observability_a2a,
     observability_computer_use,
     observability_mcp,
+    observability_voice,
     optimization,
     observability,
     alerts,
@@ -440,6 +441,7 @@ app.include_router(observability.router)  # /orgs/{org_id}/observability/{traces
 app.include_router(observability_mcp.router)  # /v1/traces/{id}/mcp + /v1/mcp/{org}/auth_failures (D.12.1)
 app.include_router(observability_a2a.router)  # /v1/traces/{id}/a2a + /v1/a2a/{org}/links + invocation graph (D.12.2)
 app.include_router(observability_computer_use.router)  # /v1/traces/{id}/computer_use + step + screenshot tombstone (D.12.3)
+app.include_router(observability_voice.router)  # /v1/voice_sessions/* + /v1/traces/{id}/voice_sessions + barge_in spike (D.12.4)
 app.include_router(optimization.router)  # /orgs/{org_id}/optimization/{overview,costs,savings,cache,budget,}
 app.include_router(alerts.router)  # /alerts (global alert feed + per-rule ack)
 app.include_router(app_events.router)  # /orgs/{org_id}/ingest/app (Phase A1 app/site events)

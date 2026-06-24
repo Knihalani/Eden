@@ -36,7 +36,58 @@ try:  # pragma: no cover - graceful when Computer Use not yet shipped
 except ImportError:
     _CU_AVAILABLE = False
 
-if _A2A_AVAILABLE and _CU_AVAILABLE:
+try:  # pragma: no cover - graceful when Voice not yet shipped
+    from eden.sdk.voice import (  # type: ignore
+        build_voice_attributes,
+        detect_spike,
+        mark_barge_in,
+        wrap_voice_session,
+    )
+    _VOICE_AVAILABLE = True
+except ImportError:
+    _VOICE_AVAILABLE = False
+
+if _A2A_AVAILABLE and _CU_AVAILABLE and _VOICE_AVAILABLE:
+    __all__ = [
+        "ComputerUseAction",
+        "build_a2a_attributes",
+        "build_mcp_attributes",
+        "build_voice_attributes",
+        "capture_byte_count",
+        "click",
+        "detect_spike",
+        "drag",
+        "key",
+        "mark_barge_in",
+        "mask_pii",
+        "prompt",
+        "record_step",
+        "scroll",
+        "StreamingTokenCapture",
+        "TokenStreamStats",
+        "type_text",
+        "wait",
+        "wrap_a2a_invocation",
+        "wrap_mcp_call",
+        "wrap_voice_session",
+    ]
+elif _A2A_AVAILABLE and _VOICE_AVAILABLE:
+    __all__ = [
+        "build_a2a_attributes",
+        "build_mcp_attributes",
+        "build_voice_attributes",
+        "capture_byte_count",
+        "detect_spike",
+        "mark_barge_in",
+        "mask_pii",
+        "prompt",
+        "StreamingTokenCapture",
+        "TokenStreamStats",
+        "wrap_a2a_invocation",
+        "wrap_mcp_call",
+        "wrap_voice_session",
+    ]
+elif _A2A_AVAILABLE and _CU_AVAILABLE:
     __all__ = [
         "ComputerUseAction",
         "build_a2a_attributes",
@@ -68,6 +119,28 @@ elif _A2A_AVAILABLE:
         "wrap_a2a_invocation",
         "wrap_mcp_call",
     ]
+elif _CU_AVAILABLE and _VOICE_AVAILABLE:
+    __all__ = [
+        "ComputerUseAction",
+        "build_mcp_attributes",
+        "build_voice_attributes",
+        "capture_byte_count",
+        "click",
+        "detect_spike",
+        "drag",
+        "key",
+        "mark_barge_in",
+        "mask_pii",
+        "prompt",
+        "record_step",
+        "scroll",
+        "StreamingTokenCapture",
+        "TokenStreamStats",
+        "type_text",
+        "wait",
+        "wrap_mcp_call",
+        "wrap_voice_session",
+    ]
 elif _CU_AVAILABLE:
     __all__ = [
         "ComputerUseAction",
@@ -85,6 +158,20 @@ elif _CU_AVAILABLE:
         "type_text",
         "wait",
         "wrap_mcp_call",
+    ]
+elif _VOICE_AVAILABLE:
+    __all__ = [
+        "build_mcp_attributes",
+        "build_voice_attributes",
+        "capture_byte_count",
+        "detect_spike",
+        "mark_barge_in",
+        "mask_pii",
+        "prompt",
+        "StreamingTokenCapture",
+        "TokenStreamStats",
+        "wrap_mcp_call",
+        "wrap_voice_session",
     ]
 else:
     __all__ = [
