@@ -8,7 +8,7 @@
 | 🟡 **STUB surface** | 1 cat | Cat 23 — Autonomous Code Modification (15 tables; 4 inbox/persona/style tables deferred per D.7; real end-to-end ship is 8-week gated initiative) |
 | ❌ **NOT STARTED** | 1 spec item | D.11 RTBF cross-store, Multi-region |
 
-**Net shipped vs spec**: 28 of 28 spec'd hooks wired (16 existing + 5 new this session + 1 budget-hook existing + 6 new for D.12.1/D.12.2/D.12.3/D.12.4/D.12.5/D.12.6: `on_mcp_server_auth_failure` + `on_a2a_invocation_failed` + `on_computer_use_blocked` + `on_voice_barge_in_spike` + `on_fine_tune_data_drift` + `on_provider_routing_repeated_failures`). 5 remaining hooks need infra not yet built (RTBF cross-store, compliance_gap × 3, security × 2, sla_breach).
+**Net shipped vs spec**: 10 of 10 spec'd §E.1 hooks wired (5 from D.12 sessions 1-6 + 5 from this cross-cutting pass: `on_compliance_gap_soc2` + `on_compliance_gap_gdpr` + `on_compliance_gap_hipaa` + `on_compliance_gap_iso27001` + `on_sla_breach`). The 2 `security:*` hooks (pii_scanner + secret_detector, action_kind `redact`) stay STUB until D.11 ships because they need the redaction infrastructure.
 
 **Source-of-truth**: original `upgradespec.md` (90KB) → archived at `docs/spec/upgradespec-original-2026-06.md`; this file is the delta.
 
@@ -125,4 +125,4 @@ All 5 features **deferred** — each is a major new capability requiring new SDK
 2. **When to ship D.8 / D.9 / D.10 / D.14 full**: customer demand for streaming tokens / prompt versioning / cost guardrail UI / cold-start onboarding. D.14 is now shipped but the banner defaults to "off" for pre-cutover orgs; flip the per-org override when a new enterprise customer comes in.
 3. **Cat 23 real ship**: gated on SLM Initiative + 4 hard gates (read-only → attribution → sandbox → end-to-end) over 8 weeks per memory `eden_cat23_stub_surface_shipped_2026_06.md`.
 4. **Re-enable deferred Phase 0 surfaces**: each cut has a clear re-add path (see "How shipped" column). For example, D.1 re-adds the 3 deleted modules; D.2 re-adds the 3 dropped signal columns via a follow-up migration.
-5. **Phase 2 coverage next (sessions 5+)**: D.11 RTBF (gated on legal review) + wire 4 missing §E.1 hooks (3 compliance_gap + sla_breach) + Northflank redeploy + feature flag pilot doc. Multi-session plan at `~/.claude/plans/based-on-ugradespec-md-fully-serialized-volcano.md` (D.14 = 056, D.12.1 = 057 ✅, D.12.2 = 058 ✅, D.12.3 = 059 ✅, D.12.4 = 060 ✅, D.12.5 = 061 ✅, D.12.6 = 062 ✅, D.11 = 063).
+5. **Phase 2 coverage next (sessions 5+)**: Northflank redeploy + feature flag pilot doc. D.11 RTBF deferred (no legal team). Multi-session plan at `~/.claude/plans/based-on-ugradespec-md-fully-serialized-volcano.md` (D.14 = 056, D.12.1 = 057 ✅, D.12.2 = 058 ✅, D.12.3 = 059 ✅, D.12.4 = 060 ✅, D.12.5 = 061 ✅, D.12.6 = 062 ✅).

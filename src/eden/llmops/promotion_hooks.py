@@ -62,6 +62,9 @@ ACTION_KIND: dict[str, str] = {
     "on_low_user_satisfaction": "investigate",
     "on_low_roi_department": "investigate",
     "on_compliance_gap_gdpr": "rtbf",
+    "on_compliance_gap_soc2": "investigate",
+    "on_compliance_gap_hipaa": "investigate",
+    "on_compliance_gap_iso27001": "investigate",
     "on_security_pii_scanner": "redact",
     "on_sla_breach": "investigate",
     "on_voice_barge_in_spike": "investigate",
@@ -501,6 +504,181 @@ class PromotionHook:
             "promotion_hook.on_provider_routing_repeated_failures org=%s "
             "provider=%s count=%s rate=%.3f action_id=%s",
             org_id, attempted_provider, non_success_count, failure_rate, action_id,
+        )
+        return action_id
+
+    # ─── §E.1 row 3-6 (compliance_gap) + row 9 (sla_breach) ─────
+
+    async def on_compliance_gap_gdpr(
+        self,
+        org_id: str,
+        *,
+        finding_id: str,
+        framework_control: str,
+        details: dict[str, Any] | None = None,
+    ) -> str | None:
+        """A GDPR compliance gap was detected (per spec
+        §E.1 row 4). The default action per spec is
+        "Alert + Auto-RTBF suggestion" with severity
+        ``critical`` (the most severe of the 26 §E.1
+        hooks; it auto-suggests the RTBF workflow).
+
+        Note: the actual RTBF execution requires D.11
+        cross-store infrastructure. D.11 is deferred
+        (no legal team), so the ``action_kind=rtbf`` is
+        a no-op in v0 — the operator sees the event in
+        the closed-loop dashboard and can choose to
+        invoke the existing Cat 10 Postgres-only
+        ``RightToBeForgottenService`` manually.
+        """
+        action_id = await _record_action(
+            org_id,
+            hook_name=self.name,
+            action_kind=ACTION_KIND["on_compliance_gap_gdpr"],
+            target=finding_id,
+            payload={
+                "primary_entity_id": f"gdpr_finding:{finding_id}",
+                "finding_id": finding_id,
+                "framework_control": framework_control,
+                "details": dict(details or {}),
+            },
+            severity="critical",
+        )
+        logger.debug(
+            "promotion_hook.on_compliance_gap_gdpr org=%s finding=%s "
+            "control=%s action_id=%s",
+            org_id, finding_id, framework_control, action_id,
+        )
+        return action_id
+
+    async def on_compliance_gap_soc2(
+        self,
+        org_id: str,
+        *,
+        finding_id: str,
+        framework_control: str,
+        details: dict[str, Any] | None = None,
+    ) -> str | None:
+        """A SOC2 compliance gap was detected (per spec
+        §E.1 row 3). Severity ``high``, action
+        "Alert → Investigation".
+        """
+        action_id = await _record_action(
+            org_id,
+            hook_name=self.name,
+            action_kind=ACTION_KIND["on_compliance_gap_soc2"],
+            target=finding_id,
+            payload={
+                "primary_entity_id": f"soc2_finding:{finding_id}",
+                "finding_id": finding_id,
+                "framework_control": framework_control,
+                "details": dict(details or {}),
+            },
+            severity="high",
+        )
+        logger.debug(
+            "promotion_hook.on_compliance_gap_soc2 org=%s finding=%s "
+            "control=%s action_id=%s",
+            org_id, finding_id, framework_control, action_id,
+        )
+        return action_id
+
+    async def on_compliance_gap_hipaa(
+        self,
+        org_id: str,
+        *,
+        finding_id: str,
+        framework_control: str,
+        details: dict[str, Any] | None = None,
+    ) -> str | None:
+        """A HIPAA compliance gap was detected (per spec
+        §E.1 row 5). Severity ``high``, action "Alert".
+        """
+        action_id = await _record_action(
+            org_id,
+            hook_name=self.name,
+            action_kind=ACTION_KIND["on_compliance_gap_hipaa"],
+            target=finding_id,
+            payload={
+                "primary_entity_id": f"hipaa_finding:{finding_id}",
+                "finding_id": finding_id,
+                "framework_control": framework_control,
+                "details": dict(details or {}),
+            },
+            severity="high",
+        )
+        logger.debug(
+            "promotion_hook.on_compliance_gap_hipaa org=%s finding=%s "
+            "control=%s action_id=%s",
+            org_id, finding_id, framework_control, action_id,
+        )
+        return action_id
+
+    async def on_compliance_gap_iso27001(
+        self,
+        org_id: str,
+        *,
+        finding_id: str,
+        framework_control: str,
+        details: dict[str, Any] | None = None,
+    ) -> str | None:
+        """An ISO 27001 compliance gap was detected (per
+        spec §E.1 row 6). Severity ``high``, action
+        "Alert".
+        """
+        action_id = await _record_action(
+            org_id,
+            hook_name=self.name,
+            action_kind=ACTION_KIND["on_compliance_gap_iso27001"],
+            target=finding_id,
+            payload={
+                "primary_entity_id": f"iso27001_finding:{finding_id}",
+                "finding_id": finding_id,
+                "framework_control": framework_control,
+                "details": dict(details or {}),
+            },
+            severity="high",
+        )
+        logger.debug(
+            "promotion_hook.on_compliance_gap_iso27001 org=%s finding=%s "
+            "control=%s action_id=%s",
+            org_id, finding_id, framework_control, action_id,
+        )
+        return action_id
+
+    async def on_sla_breach(
+        self,
+        org_id: str,
+        *,
+        sla_id: str,
+        sla_name: str,
+        target_ms: int,
+        actual_ms: int,
+        breach_pct: float,
+    ) -> str | None:
+        """An SLA breach was detected (per spec §E.1
+        row 9, source Cat 16). The default action is
+        "Alert → Investigation" with severity ``high``.
+        """
+        action_id = await _record_action(
+            org_id,
+            hook_name=self.name,
+            action_kind=ACTION_KIND["on_sla_breach"],
+            target=sla_id,
+            payload={
+                "primary_entity_id": f"sla:{sla_id}",
+                "sla_id": sla_id,
+                "sla_name": sla_name,
+                "target_ms": int(target_ms),
+                "actual_ms": int(actual_ms),
+                "breach_pct": float(breach_pct),
+            },
+            severity="high",
+        )
+        logger.debug(
+            "promotion_hook.on_sla_breach org=%s sla=%s "
+            "target=%s actual=%s breach=%.3f action_id=%s",
+            org_id, sla_id, target_ms, actual_ms, breach_pct, action_id,
         )
         return action_id
 
