@@ -33,8 +33,10 @@ yourself. Common causes:
 ## Rotation
 
 * One-week rotations, Monday 10:00 local time.
-* Hand-off doc lives in `docs/runbooks/oncall-handoff.md` (to
-  be created by the team on the first rotation).
+* Hand-off doc: to be created at `docs/runbooks/oncall-handoff.md`
+  (tracked under Phase D2 of the 14-phase plan; the `docs/runbooks/`
+  directory was retired in the 2026-06-23 cleanup and is being
+  re-created topic-by-topic).
 * PTO: arrange a swap at least 48 hours in advance.
 
 ## Tools

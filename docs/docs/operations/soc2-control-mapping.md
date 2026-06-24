@@ -1,7 +1,7 @@
 # SOC 2 Trust Services Criteria — Eden control mapping
 
 > **Owner:** Security & Compliance
-> **Review cadence:** monthly (see `docs/runbooks/security-training.md`)
+> **Review cadence:** monthly (see `docs/docs/operations/security-training.md`)
 > **Status:** partial — see [§9.1.2 of the roadmap](/observability/roadmap) for the live status.
 > **Source:** SOC 2 Type II — Trust Services Criteria (2017, updated 2022).
 
@@ -16,10 +16,10 @@ for during a Type II engagement.
 | CC1.4 | Background checks | HR onboarding | Background check completed before access to prod | HRIS records (out of Eden scope) |
 | CC2.1 | Information & communication | Org-scoped RBAC + audit log | All cross-org data is blocked at the API layer | `src/eden/api/deps.py:get_current_org` + `migrations/020_rbac_custom_roles.sql` |
 | CC2.2 | Internal communication | Status page + on-call rotation | Incident updates posted to status page within 15 min | Status page log |
-| CC2.3 | External communication | Customer support + privacy@ inbox | Customer-impacting incidents emailed to all affected orgs | Email log + `docs/runbooks/security-training.md` |
+| CC2.3 | External communication | Customer support + privacy@ inbox | Customer-impacting incidents emailed to all affected orgs | Email log + `docs/docs/operations/security-training.md` |
 | CC3.1 | Risk assessment | Risk register (`docs/`) | Quarterly risk review meeting | `/observability/roadmap` §11 |
 | CC3.2 | Fraud risk | AI gateway cost controls + anomaly alerts | `cost_tracking` alarms when daily spend > 3x 30-day median | `src/eden/optimization/cost_tracker.py` + `src/eden/observability/alerts.py` |
-| CC4.1 | Monitoring activities | Telemetry + observability | All jobs emit `telemetry_events` rows; an anomaly detector runs nightly | `src/eden/observability/telemetry_collector.py` + `docs/runbooks/kb-audit.md` |
+| CC4.1 | Monitoring activities | Telemetry + observability | All jobs emit `telemetry_events` rows; an anomaly detector runs nightly | `src/eden/observability/telemetry_collector.py` + `docs/docs/operations/kb-audit.md` |
 | CC5.1 | Control activities — selection & development | Code review + CI | Every PR requires 2 approvals + green CI | `docs/BRANCH_PROTECTION.md` |
 | CC5.2 | Technology controls | DB migration runner + structured logging | Alembic tracks migrations; logs are JSON with correlation IDs | `src/eden/db_migrations/` + `src/eden/api/middleware/correlation_id.py` |
 | CC5.3 | Deploy controls | Canary + auto-rollback | Production deploys are canary; auto-rollback on error-rate spike | `.eden/canary/` |
@@ -31,8 +31,8 @@ for during a Type II engagement.
 | CC6.8 | Data at rest — prevention of unauthorized access | Encrypted secrets | All secrets encrypted at rest with Fernet (ENCRYPTION_KEY) | `src/eden/api/utils/encryption.py` |
 | CC7.1 | System operations — vulnerability management | `safety` + `dependabot` | Weekly CVE scan; dependabot weekly | `.github/workflows/main.yml` security-scan job + `.github/dependabot.yml` |
 | CC7.2 | Anomaly detection | Alerts engine | API p95 > 500ms / LLM error rate > 0.5% / pipeline timeout > 5% | `src/eden/observability/alerts.py` |
-| CC7.3 | Incident response | Runbook | Documented IR runbook with severity tiers | `docs/runbooks/disaster-recovery-drill.md` |
-| CC7.4 | Incident recovery | DR drill | Quarterly restore-from-backup drill | `docs/runbooks/disaster-recovery-drill.md` + `docker/postgres/restore.sh` |
+| CC7.3 | Incident response | Runbook | Documented IR runbook with severity tiers | `docs/docs/operations/disaster-recovery-drill.md` |
+| CC7.4 | Incident recovery | DR drill | Quarterly restore-from-backup drill | `docs/docs/operations/disaster-recovery-drill.md` + `docker/postgres/restore.sh` |
 | CC7.5 | Recovery testing | DR drill | See CC7.4 | Same |
 | CC8.1 | Change management | PR review + 2 approvals | Branch protection enforces 2 reviewers + green CI | `docs/BRANCH_PROTECTION.md` + `.github/CODEOWNERS` |
 | CC9.1 | Risk mitigation | Monitoring + alerts + DR | The §11 risk register is reviewed quarterly | `/observability/roadmap` §11 |

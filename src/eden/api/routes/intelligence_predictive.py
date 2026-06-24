@@ -138,6 +138,18 @@ async def score_risk(org_id: str = Path(...)) -> dict[str, Any]:
     return _deferred("RiskScorer removed per upgradespec §D.3.")
 
 
+@router.post("/drift/output")
+async def drift_output_legacy(
+    org_id: str = Path(...),
+    body: DriftRequest = Body(default_factory=DriftRequest),
+) -> dict[str, Any]:
+    """v1 back-compat alias for ``/drift`` — the PSI output-drift
+    detector is the single ship-ready drift surface per
+    upgradespec §D.3. Delegates to the same service so old
+    clients keep working."""
+    return await detect_drift(org_id, body)
+
+
 @router.post("/drift/embedding")
 async def drift_embedding_legacy(org_id: str = Path(...)) -> dict[str, Any]:
     """Removed per §D.3 — embedding drift detector was experimental;

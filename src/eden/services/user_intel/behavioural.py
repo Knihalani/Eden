@@ -71,6 +71,12 @@ RETRY_THRESHOLD_S: int = 60
 #: point* and editing later.
 EDIT_DISTANCE_WINDOW_S: int = 86_400  # 24h
 
+#: The regeneration-rate threshold above which the
+#: :class:`BehaviouralDashboard` fires an alert. Per the
+#: Cat 9 spec: a 60%+ regen rate on technical queries is
+#: diagnostic — segmentation beats vanity metrics.
+DEFAULT_REGEN_ALERT_THRESHOLD: float = 0.5
+
 
 # ── Shared helpers ───────────────────────────────────────────────────
 
@@ -145,6 +151,123 @@ async def _upsert_signal_row(
     except Exception as exc:
         logger.debug("user_intel: signal upsert failed: %s", exc)
     return sig_id
+
+
+async def _fetch_signal_cohort(
+    org_id: str, interval: Any,
+) -> dict[str, Any]:
+    """Aggregate the ``user_behavioural_signals`` rows for
+    ``org_id`` in the window ``interval`` (a Postgres interval
+    literal string like ``"30 days"`` from
+    :func:`eden.services.user_intel._common._parse_window`).
+
+    Returns a dict with the per-cohort sums the dashboard
+    needs:
+
+        {
+            "total": int,
+            "regen_count": int,
+            "abandon_count": int,
+            "returned_yes": int,
+            "returned_no": int,
+            "edit_distance_mean": float | None,
+            "ttfa_mean": float | None,
+        }
+
+    Best-effort: returns ``{}`` on DB error / no rows so the
+    caller's ``if not signal_agg and not explicit_agg`` branch
+    fires correctly.
+    """
+    client = await _get_client()
+    if client is None:
+        return {}
+    try:
+        row = await client.fetchrow(
+            """
+            SELECT
+                COUNT(*)::int AS total,
+                COUNT(*) FILTER (WHERE signal_type = 'regeneration')
+                    ::int AS regen_count,
+                COUNT(*) FILTER (WHERE signal_type = 'abandonment')
+                    ::int AS abandon_count,
+                COUNT(*) FILTER (
+                    WHERE signal_type = 'return' AND payload->>'returned' = 'true'
+                )::int AS returned_yes,
+                COUNT(*) FILTER (
+                    WHERE signal_type = 'return' AND payload->>'returned' = 'false'
+                )::int AS returned_no,
+                AVG((payload->>'edit_distance')::float)
+                    FILTER (WHERE signal_type = 'edit') AS edit_distance_mean,
+                AVG((payload->>'ttfa_ms')::float)
+                    FILTER (WHERE signal_type = 'ttfa') AS ttfa_mean
+              FROM user_behavioural_signals
+             WHERE org_id = $1
+               AND created_at >= NOW() - $2::interval
+            """,
+            org_id, str(interval),
+        )
+    except Exception as exc:
+        logger.debug("user_intel: signal cohort fetch failed: %s", exc)
+        return {}
+    if row is None:
+        return {}
+    return dict(row)
+
+
+async def _fetch_explicit_cohort(
+    org_id: str, interval: Any,
+) -> dict[str, Any]:
+    """Aggregate the explicit feedback (``user_feedback``) for
+    ``org_id`` in the window ``interval`` (a Postgres interval
+    literal string).
+
+    Returns::
+
+        {
+            "total": int,
+            "thumbs_up": int,
+            "thumbs_down": int,
+            "naive_satisfaction": float | None,
+        }
+
+    Best-effort: returns ``{}`` on DB error.
+    """
+    client = await _get_client()
+    if client is None:
+        return {}
+    try:
+        row = await client.fetchrow(
+            """
+            SELECT
+                COUNT(*)::int AS total,
+                COUNT(*) FILTER (WHERE rating > 0)::int AS thumbs_up,
+                COUNT(*) FILTER (WHERE rating < 0)::int AS thumbs_down,
+                AVG(rating)::float AS naive_satisfaction
+              FROM user_feedback
+             WHERE org_id = $1
+               AND created_at >= NOW() - $2::interval
+            """,
+            org_id, str(interval),
+        )
+    except Exception as exc:
+        logger.debug("user_intel: explicit cohort fetch failed: %s", exc)
+        return {}
+    if row is None:
+        return {}
+    out = dict(row)
+    # Round the SQL-computed avg when present; otherwise
+    # derive from thumbs_up/total so the dashboard's
+    # ``thumbs_up_rate_naive`` field always has a value
+    # (matches the test fixture's contract).
+    if out.get("naive_satisfaction") is None:
+        up = int(out.get("thumbs_up") or 0)
+        total = int(out.get("total") or 0)
+        out["naive_satisfaction"] = (
+            round(up / total, 4) if total > 0 else None
+        )
+    else:
+        out["naive_satisfaction"] = round(float(out["naive_satisfaction"]), 4)
+    return out
 
 
 # ── 1. RegenerationRateTracker ───────────────────────────────────────

@@ -61,6 +61,10 @@ FRAMEWORK_ALIASES: dict[str, str] = {
     "soc2_type2": "soc2_type_ii",
     "soc2_type_ii": "soc2_type_ii",
     "gdpr": "gdpr",
+    "hipaa": "hipaa",
+    "iso27001": "iso27001",
+    "iso_27001": "iso27001",
+    "iso-27001": "iso27001",
 }
 
 #: Per-scanner severity. The API spec calls out ``ssn`` /

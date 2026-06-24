@@ -27,7 +27,7 @@ When an SLO is violated:
   `src/eden/observability/alerts.py` and is pushed to the
   `eden_alerts` Redis stream (consumed by PagerDuty / Slack).
 * The on-call engineer is paged via the on-call rotation
-  (see `docs/runbooks/oncall.md`).
+  (see `docs/docs/operations/oncall.md`).
 * An incident is opened and tracked to resolution even if the
   SLO recovers automatically — recurring violations trigger a
   post-mortem.

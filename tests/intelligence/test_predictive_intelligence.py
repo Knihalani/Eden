@@ -739,50 +739,30 @@ class TestPredictiveRoutes:
         assert "anomalies" in body["data"]
 
     def test_cost_route_returns_envelope(self, client: TestClient) -> None:
-        pg = _pg_router(cost_rows=[_cost_row(cost_usd=0.01) for _ in range(10)])
-        with patch(
-            "eden.storage.postgres.get_postgres_client", return_value=pg,
-        ):
-            resp = client.post(
-                "/orgs/org_x/intelligence/predict/cost",
-                json={"request_id": "req-1"},
-            )
+        # CostPredictor removed per upgradespec §D.3; median
+        # projection moved to Cat 7 ``CostForecast.median_projection``.
+        # The route stays mounted for deep-link resolution but
+        # returns a stable 501 envelope.
+        resp = client.post(
+            "/orgs/org_x/intelligence/predict/cost",
+            json={"request_id": "req-1"},
+        )
         assert resp.status_code == 200
         body = resp.json()
-        assert body["status"] == "ok"
-        assert body["data"]["predicted_cost_usd"] == pytest.approx(0.01)
-        # New contract: predictions[] with dates + by_agent
-        # map.
-        assert "predictions" in body["data"]
-        assert "by_agent" in body["data"]
-        assert "forecast_horizon" in body["data"]
+        assert body["status"] == "not_implemented"
+        assert body["live"] is False
 
     def test_capacity_route_returns_envelope(self, client: TestClient) -> None:
-        base_day = datetime(2026, 5, 1)
-        calls = [
-            _daily_calls_row(
-                day=base_day + timedelta(days=i), calls=1000,
-            )
-            for i in range(20)
-        ]
-        pg = _pg_router(daily_calls=calls, daily_tokens=[])
-        with patch(
-            "eden.storage.postgres.get_postgres_client", return_value=pg,
-        ):
-            resp = client.post(
-                "/orgs/org_x/intelligence/predict/capacity",
-                json={"horizon_days": 3},
-            )
+        # CapacityPredictor removed per upgradespec §D.3.
+        # Route returns stable 501 envelope.
+        resp = client.post(
+            "/orgs/org_x/intelligence/predict/capacity",
+            json={"horizon_days": 3},
+        )
         assert resp.status_code == 200
         body = resp.json()
-        assert body["status"] == "ok"
-        assert body["data"]["horizon_days"] == 3
-        assert len(body["data"]["gpu_hours_per_day"]) == 3
-        # New contract: scenarios{} + headroom_days{} +
-        # recommendation.
-        assert "scenarios" in body["data"]
-        assert "headroom_days" in body["data"]
-        assert "recommendation" in body["data"]
+        assert body["status"] == "not_implemented"
+        assert body["live"] is False
 
     def test_risk_route_returns_envelope(self, client: TestClient) -> None:
         pg = _pg_router(judge_rows=[_judge_row(score=0.95) for _ in range(20)])
@@ -795,13 +775,10 @@ class TestPredictiveRoutes:
             )
         assert resp.status_code == 200
         body = resp.json()
-        assert body["status"] == "ok"
-        # New contract: composite_risk_score + risk_breakdown
-        # + alerts + recommendation.
-        assert "composite_risk_score" in body["data"]
-        assert "risk_breakdown" in body["data"]
-        assert "alerts" in body["data"]
-        assert "recommendation" in body["data"]
+        # RiskScorer removed per upgradespec §D.3; route
+        # returns stable 501 envelope.
+        assert body["status"] == "not_implemented"
+        assert body["live"] is False
 
     def test_drift_output_route_returns_envelope(
         self, client: TestClient
@@ -821,22 +798,16 @@ class TestPredictiveRoutes:
     def test_drift_embedding_route_returns_envelope(
         self, client: TestClient
     ) -> None:
-        pg = _pg_router(
-            response_bodies=[
-                _response_body_row(response_body=f"text {i}")
-                for i in range(20)
-            ],
+        # Embedding-drift detector removed per upgradespec
+        # §D.3; route returns stable 501 envelope.
+        resp = client.post(
+            "/orgs/org_x/intelligence/predict/drift/embedding",
+            json={"window": "24h"},
         )
-        with patch(
-            "eden.storage.postgres.get_postgres_client", return_value=pg,
-        ):
-            resp = client.post(
-                "/orgs/org_x/intelligence/predict/drift/embedding",
-                json={"window": "24h"},
-            )
         assert resp.status_code == 200
         body = resp.json()
-        assert body["data"]["drift_type"] == "embedding"
+        assert body["status"] == "not_implemented"
+        assert body["live"] is False
 
 
 # ─── 7. CUSUM detector (v0.2 spec) ──────────────────────────────────
@@ -1071,12 +1042,13 @@ class TestDriftRoute:
     def test_drift_route_dispatches_to_embedding(
         self, client: TestClient,
     ) -> None:
-        pg = _pg_router(
-            response_bodies=[
-                _response_body_row(response_body=f"text {i}")
-                for i in range(20)
-            ],
-        )
+        # Per upgradespec §D.3 the v2 ``/drift`` route only
+        # computes PSI on judge-score distribution — it does
+        # NOT dispatch to the embedding detector (which is
+        # permanently removed). The ``drift_type`` param is
+        # preserved in the response envelope but only
+        # ``output`` is supported.
+        pg = _pg_router(judge_rows=[_judge_row(score=0.85) for _ in range(20)])
         with patch(
             "eden.storage.postgres.get_postgres_client", return_value=pg,
         ):
@@ -1086,4 +1058,7 @@ class TestDriftRoute:
             )
         assert resp.status_code == 200
         body = resp.json()
-        assert body["data"]["drift_type"] == "embedding"
+        # v2 only supports output drift; embedding is
+        # returned via the dedicated /drift/embedding route
+        # which itself returns not_implemented.
+        assert body["data"]["drift_type"] == "output"

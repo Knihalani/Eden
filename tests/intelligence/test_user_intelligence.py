@@ -515,9 +515,10 @@ class TestSelectionBiasCorrector:
             SelectionBiasCorrector,
         )
 
-        # Prior: 40 up / 60 down → mean 0.4 (large prior).
-        # Trace: 0 up / 5 down → naive 0.0.
-        # Posterior: Beta(40, 65) → mean ~0.381.
+        # Per upgradespec §D.2 the corrector uses Flat
+        # Beta-Binomial (Beta(1,1) prior at the trace level)
+        # — no per-channel prior lookup. So the posterior
+        # is Beta(1+0, 1+5) = Beta(1, 6) → mean 1/7 ≈ 0.143.
         pg = _pg_router(
             feedback_summary={
                 "thumbs_up": 0,
@@ -537,9 +538,11 @@ class TestSelectionBiasCorrector:
             )
         d = result["data"]
         assert d["naive_mean"] == 0.0
-        # The correction pulls the naive 0.0 toward the
-        # 0.4 prior.
-        assert 0.3 < d["posterior"]["mean"] < 0.5
+        # Flat prior → posterior mean ≈ 0.143 (no pulling
+        # toward the per-channel explicit aggregate).
+        assert d["posterior"]["mean"] == pytest.approx(1 / 7, abs=1e-3)
+        assert d["prior"]["alpha"] == 1.0
+        assert d["prior"]["beta"] == 1.0
 
     def test_beta_quantile_basic(self) -> None:
         from eden.services.user_intel.satisfaction import _beta_quantile

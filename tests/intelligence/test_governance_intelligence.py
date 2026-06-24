@@ -1331,19 +1331,21 @@ class TestGovernanceRoutes:
     def test_legacy_compliance_iso27001_route(
         self, gov_client: TestClient,
     ) -> None:
-        pg = _pg_router(audit_log_count=10)
-        with patch(
-            "eden.storage.postgres.get_postgres_client", return_value=pg
-        ):
-            r = gov_client.post(
-                "/orgs/org_test/intelligence/governance/compliance/iso27001",
-                json={
-                    "period_start": "2026-04-01",
-                    "period_end": "2026-06-30",
-                },
-            )
+        # ISO27001 evidence removed per upgradespec §D.5;
+        # route stays mounted for deep-link resolution but
+        # returns a stable 501 envelope.
+        r = gov_client.post(
+            "/orgs/org_test/intelligence/governance/compliance/iso27001",
+            json={
+                "period_start": "2026-04-01",
+                "period_end": "2026-06-30",
+            },
+        )
+        body = r.json()
         assert r.status_code == 200, r.text
-        assert r.json()["data"]["framework"] == "iso27001"
+        assert body["status"] == "not_implemented"
+        assert body["live"] is False
+        assert "iso27001" in body["feature"]
 
     def test_get_list_packs(self, gov_client: TestClient) -> None:
         pg = _pg_router()
