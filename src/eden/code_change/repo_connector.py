@@ -40,6 +40,7 @@ from typing import Any
 from eden.providers import RepoProvider, get_default_repo_provider
 
 from ._common import _insert_row, _new_id, _ok_envelope, _select_one, _select_rows, _update_row
+from .codeowners import CodeOwnersEntry, parse_codeowners
 
 logger = logging.getLogger(__name__)
 
@@ -262,3 +263,118 @@ class RepoConnector:
     def provider_name(self) -> str:
         """The provider name (``"local"``, ``"github"``)."""
         return self._provider.name
+
+    # ── CODEOWNERS (Gate 1) ────────────────────────────────────
+
+    # GitHub's documented lookup order for CODEOWNERS:
+    # 1. ``.github/CODEOWNERS``
+    # 2. ``CODEOWNERS`` (repo root)
+    # 3. ``docs/CODEOWNERS``
+    # We probe each in order and return the first non-empty match.
+    _CODEOWNERS_PATHS: tuple[str, ...] = (
+        ".github/CODEOWNERS",
+        "CODEOWNERS",
+        "docs/CODEOWNERS",
+    )
+
+    async def read_codeowners(self) -> dict[str, Any]:
+        """Read + parse the repo's CODEOWNERS file.
+
+        Per GitHub's lookup order, we probe three locations
+        and use the first non-empty match. The response
+        carries:
+
+        * ``entries`` — the parsed ``[(pattern, owners)]`` list
+        * ``source_path`` — which of the three locations was
+          used (so the UI can show "this repo uses the
+          root CODEOWNERS" rather than just the entries)
+        * ``raw`` — the file body (capped at 256 KiB so a
+          pathological CODEOWNERS file can't blow up the
+          response)
+
+        The method is read-only and side-effect free — no
+        DB writes. Cat 23 Gate-1 audit: this is the only
+        Gate-1 read path on the connector.
+
+        Examples:
+            >>> import asyncio
+            >>> from eden.code_change.repo_connector import RepoConnector
+            >>> connector = RepoConnector()
+            >>> result = asyncio.run(connector.read_codeowners())
+            >>> result["status"]
+            'ok'
+        """
+        entries: list[CodeOwnersEntry] = []
+        source_path = ""
+        raw = ""
+        for candidate in self._CODEOWNERS_PATHS:
+            try:
+                content = await self._provider.read_file(candidate)
+            except Exception as exc:
+                logger.debug(
+                    "RepoConnector.read_codeowners(%s): %s",
+                    candidate, exc,
+                )
+                content = ""
+            if content:
+                entries = parse_codeowners(content)
+                source_path = candidate
+                # Cap the raw body — CODEOWNERS files are
+                # typically <2 KiB; 256 KiB is the catastrophic
+                # ceiling.
+                raw = content[: 256 * 1024]
+                break
+        return _ok_envelope(
+            self.name,
+            {
+                "entries": [
+                    {"pattern": e.pattern, "owners": e.owners}
+                    for e in entries
+                ],
+                "entry_count": len(entries),
+                "source_path": source_path,
+                "raw": raw,
+                "found": bool(source_path),
+                "message": (
+                    "No CODEOWNERS file found at the standard "
+                    "locations. The repo can still be connected, "
+                    "but no reviewers will be auto-assigned."
+                    if not source_path
+                    else f"Loaded CODEOWNERS from {source_path!r}."
+                ),
+            },
+        )
+
+    async def owners_for_files(
+        self, file_paths: list[str],
+    ) -> dict[str, Any]:
+        """Resolve the CODEOWNERS owner for each file path.
+
+        Last-match-wins per GitHub semantics — when multiple
+        patterns match a file, the LATER one in CODEOWNERS
+        order wins. The result is a ``{path: [owners]}`` map
+        suitable for reviewer assignment on a PR.
+
+        Best-effort: if the repo has no CODEOWNERS, every
+        file maps to an empty owner list and the caller is
+        responsible for the fallback (manual reviewer
+        assignment).
+        """
+        codeowners_resp = await self.read_codeowners()
+        entries_raw = codeowners_resp.get("data", {}).get(
+            "entries", [],
+        )
+        entries = [
+            CodeOwnersEntry(pattern=e["pattern"], owners=e["owners"])
+            for e in entries_raw
+        ]
+        from .codeowners import match_owner as _match_owner
+        return _ok_envelope(
+            self.name,
+            {
+                "owners": {
+                    path: _match_owner(entries, path)
+                    for path in file_paths
+                },
+            },
+        )
