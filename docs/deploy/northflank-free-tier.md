@@ -4,7 +4,9 @@
 
 **Status:** Day 1 deploy. Free-tier allocations are tight; this doc shows what fits and what's left for paid-tier upgrades.
 
-**Related:** `docs/runbooks/deploy-paas.md`, `docs/runbooks/secrets-management.md`, `docs/runbooks/upgrade-procedure.md`, `docs/runbooks/rollback-procedure.md`.
+**Related:** `docs/deploy/cutover-checklist.md`, `docs/docs/operations/oncall.md`, `docs/docs/operations/disaster-recovery-drill.md`, `docs/docs/operations/clerk-eden-org-sync.md`.
+
+> Note (2026-06-24): the prior runbooks at `docs/runbooks/` were retired in the 2026-06-23 cleanup. The 4 procedure docs above (postgres-restore + ClickHouse-failover + migration-rollback + secrets-management) are tracked for re-creation under Phase D2 of the 14-phase plan.
 
 ---
 
@@ -184,7 +186,7 @@ In the browser, open the Vercel portal URL and:
    fly apps destroy eden-staging --yes
    fly volumes destroy --app eden-staging --yes   # stops the volume-snapshot billing
    ```
-5. **Update `docs/DEPLOYMENT.md` and `docs/runbooks/deploy-paas.md`** to point at Northflank as the canonical PaaS, with Fly.io as legacy.
+5. **Update `docs/DEPLOYMENT.md` and `docs/deploy/northflank-free-tier.md`** to point at Northflank as the canonical PaaS, with Fly.io as legacy.
 
 ---
 

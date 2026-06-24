@@ -65,7 +65,7 @@ to set up; see §9.1.3) or a system cron.
 
 `scripts/dr_drill.sh` restores the latest backup into a fresh
 DB, runs a smoke query, and writes a JSON report. Run quarterly
-per `docs/runbooks/disaster-recovery-drill.md`.
+per `docs/docs/operations/disaster-recovery-drill.md`.
 
 ## Observability
 

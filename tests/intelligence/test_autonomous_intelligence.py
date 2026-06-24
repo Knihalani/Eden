@@ -407,171 +407,6 @@ class TestSelfHealer:
         assert result["data"]["status"] == "pending_approval"
 
 
-# ─── 5. NLQueryEngine ──────────────────────────────────────────────
-
-
-class TestNLQueryEngine:
-    @pytest.mark.asyncio
-    async def test_empty_question_returns_stub(self) -> None:
-        from eden.autonomous import NLQueryEngine
-
-        result = await NLQueryEngine().query("org_test", question="")
-        assert "question is required" in result["message"]
-
-    @pytest.mark.asyncio
-    async def test_valid_llm_sql_runs_and_summarises(
-        self, mock_postgres_client: MagicMock
-    ) -> None:
-        from eden.autonomous import NLQueryEngine
-
-        async def _fetch(sql, *args):
-            return [{"day": "2026-06-09", "p95_latency_ms": 1230}]
-
-        pg = MagicMock()
-        pg.fetch = AsyncMock(side_effect=_fetch)
-        pg.execute = AsyncMock(return_value="OK")
-
-        nl_json = (
-            '{"sql": "SELECT date_trunc(\'day\', timestamp) AS day, '
-            'AVG(latency_ms) AS p95_latency_ms FROM telemetry_events '
-            'WHERE org_id = $1 GROUP BY 1 ORDER BY 1", "notes": "ok"}'
-        )
-        summary_json = '{"summary": "Latency was 1230ms on 2026-06-09."}'
-        # First call returns the SQL, second call returns the summary.
-        llm_responses = [
-            MagicMock(content=nl_json),
-            MagicMock(content=summary_json),
-        ]
-        llm = MagicMock()
-        llm.acall = AsyncMock(side_effect=llm_responses)
-
-        with patch("eden.llm.client.get_llm_client", return_value=llm):
-            with patch("eden.storage.postgres.get_postgres_client", return_value=pg):
-                result = await NLQueryEngine().query(
-                    "org_test",
-                    question="p95 latency last 24h?",
-                )
-        assert result["status"] == "ok"
-        assert result["data"]["n_rows"] == 1
-        assert "1230" in result["data"]["summary"]
-        # The nl_query_log insert was called.
-        assert pg.execute.await_count >= 1
-
-    @pytest.mark.asyncio
-    async def test_dangerous_sql_rejected(
-        self, mock_postgres_client: MagicMock
-    ) -> None:
-        from eden.autonomous import NLQueryEngine
-
-        # The LLM emits a DROP statement — the v1.3 ship
-        # rejects it via the read-only allowlist and the
-        # service falls back to "couldn't translate".
-        nl_json = '{"sql": "DROP TABLE telemetry_events", "notes": "evil"}'
-        llm = _make_llm_client(content=nl_json)
-        pg = MagicMock()
-        pg.fetch = AsyncMock(return_value=[])
-        pg.execute = AsyncMock(return_value="OK")
-
-        with patch("eden.llm.client.get_llm_client", return_value=llm):
-            with patch("eden.storage.postgres.get_postgres_client", return_value=pg):
-                result = await NLQueryEngine().query(
-                    "org_test", question="do something bad"
-                )
-        # The DROP was rejected — no SQL was run, the
-        # summary is the "couldn't translate" fallback.
-        assert result["data"]["sql_used"] is None
-        assert "couldn't translate" in result["data"]["summary"]
-        # The fetch was never called (no SQL to run).
-        assert pg.fetch.await_count == 0
-
-    @pytest.mark.asyncio
-    async def test_sql_missing_org_filter_rejected(
-        self, mock_postgres_client: MagicMock
-    ) -> None:
-        from eden.autonomous import NLQueryEngine
-
-        # The LLM emits SQL that omits ``org_id = $1`` — the
-        # validator rejects it.
-        nl_json = '{"sql": "SELECT 1", "notes": "missing org filter"}'
-        llm = _make_llm_client(content=nl_json)
-        pg = MagicMock()
-        pg.fetch = AsyncMock(return_value=[])
-        pg.execute = AsyncMock(return_value="OK")
-
-        with patch("eden.llm.client.get_llm_client", return_value=llm):
-            with patch("eden.storage.postgres.get_postgres_client", return_value=pg):
-                result = await NLQueryEngine().query(
-                    "org_test", question="trivial question"
-                )
-        assert result["data"]["sql_used"] is None
-
-    @pytest.mark.asyncio
-    async def test_llm_failure_returns_fallback_summary(
-        self, mock_postgres_client: MagicMock
-    ) -> None:
-        from eden.autonomous import NLQueryEngine
-
-        llm = _make_llm_client(raises=RuntimeError("LLM offline"))
-        pg = MagicMock()
-        pg.fetch = AsyncMock(return_value=[])
-        pg.execute = AsyncMock(return_value="OK")
-
-        with patch("eden.llm.client.get_llm_client", return_value=llm):
-            with patch("eden.storage.postgres.get_postgres_client", return_value=pg):
-                result = await NLQueryEngine().query(
-                    "org_test", question="anything"
-                )
-        # The envelope is still live=True with a graceful
-        # fallback summary.
-        assert result["status"] == "ok"
-        assert "couldn't translate" in result["data"]["summary"]
-
-
-# ─── 6. AutoDashboardBuilder ────────────────────────────────────────
-
-
-class TestAutoDashboardBuilder:
-    @pytest.mark.asyncio
-    async def test_empty_description_returns_stub(self) -> None:
-        from eden.autonomous import AutoDashboardBuilder
-
-        result = await AutoDashboardBuilder().build("org_test", description="")
-        assert "description is required" in result["message"]
-
-    @pytest.mark.asyncio
-    async def test_llm_emits_panels(self) -> None:
-        from eden.autonomous import AutoDashboardBuilder
-
-        dash_json = (
-            '{"panels": [{"type": "line_chart", "metric": "judge_score", '
-            '"group_by": "judge_name", "window": "7d", "title": "Judge scores"}]}'
-        )
-        with patch("eden.llm.client.get_llm_client", return_value=_make_llm_client(content=dash_json)):
-            result = await AutoDashboardBuilder().build(
-                "org_test", description="Dashboard of judge scores per agent, last 7 days"
-            )
-        assert result["status"] == "ok"
-        panels = result["data"]["spec"]["panels"]
-        assert len(panels) == 1
-        assert panels[0]["metric"] == "judge_score"
-        assert result["data"]["llm_used"] is True
-
-    @pytest.mark.asyncio
-    async def test_llm_failure_emits_fallback_panel(self) -> None:
-        from eden.autonomous import AutoDashboardBuilder
-
-        with patch(
-            "eden.llm.client.get_llm_client",
-            return_value=_make_llm_client(raises=RuntimeError("offline")),
-        ):
-            result = await AutoDashboardBuilder().build(
-                "org_test", description="anything"
-            )
-        assert result["status"] == "ok"
-        # The fallback panel is a single stat.
-        assert result["data"]["spec"]["panels"][0]["type"] == "stat"
-        assert result["data"]["llm_used"] is False
-
 
 # ─── 7. NLReportGenerator ───────────────────────────────────────────
 
@@ -706,11 +541,7 @@ class TestRoutes:
             return _ok_envelope("stub", {"ok": True})
 
         mod._investigator.investigate = _stub  # type: ignore[assignment]
-        mod._reporter.generate = _stub  # type: ignore[assignment]
-        mod._rec_engine.recommend = _stub  # type: ignore[assignment]
         mod._healer.heal = _stub  # type: ignore[assignment]
-        mod._nl.query = _stub  # type: ignore[assignment]
-        mod._dash.build = _stub  # type: ignore[assignment]
         mod._nl_report.generate = _stub  # type: ignore[assignment]
         app.include_router(mod.router)
         return TestClient(app)
@@ -780,20 +611,33 @@ class TestRoutes:
         assert r.status_code in (200, 403)
 
     def test_nl_query_route(self, client: TestClient) -> None:
+        # NLQueryEngine removed per upgradespec §D.4; the
+        # route stays mounted for deep-link resolution but
+        # returns a stable 501 envelope pointing at the
+        # EQL DSL replacement.
         r = client.post(
             "/orgs/org_test/intelligence/autonomous/nl/query",
             json={"question": "anything?"},
         )
+        body = r.json()
         assert r.status_code == 200
-        assert r.json()["live"] is True
+        assert body["status"] == "not_implemented"
+        assert body["live"] is False
+        assert "EQL" in body["message"]
 
     def test_nl_dashboard_route(self, client: TestClient) -> None:
+        # AutoDashboardBuilder removed per upgradespec §D.4;
+        # the route returns a stable 501 envelope pointing
+        # at the dashboards surface.
         r = client.post(
             "/orgs/org_test/intelligence/autonomous/nl/dashboard",
             json={"description": "judge quality last 7 days"},
         )
+        body = r.json()
         assert r.status_code == 200
-        assert r.json()["live"] is True
+        assert body["status"] == "not_implemented"
+        assert body["live"] is False
+        assert "dashboard" in body["message"].lower()
 
     def test_nl_report_route(self, client: TestClient) -> None:
         r = client.post(
@@ -809,19 +653,20 @@ class TestRoutes:
 
 class TestPackageReexports:
     def test_top_level_imports(self) -> None:
+        # Per the package docstring, the Cat 9/12 cut kept only
+        # ``InvestigationAgent`` + ``SelfHealer`` from
+        # ``investigation`` + ``NLReportGenerator`` from
+        # ``nl_interface``. The deleted classes
+        # (``NLQueryEngine``, ``AutoDashboardBuilder``,
+        # ``RecommendationEngine``, ``ReportGenerator``) were
+        # folded into the surviving services.
         from eden.autonomous import (  # noqa: F401
-            AutoDashboardBuilder,
             InvestigationAgent,
-            NLQueryEngine,
             NLReportGenerator,
-            RecommendationEngine,
-            ReportGenerator,
             SelfHealer,
         )
 
     def test_nl_subpackage_imports(self) -> None:
         from eden.autonomous.nl_interface import (  # noqa: F401
-            AutoDashboardBuilder,
-            NLQueryEngine,
             NLReportGenerator,
         )

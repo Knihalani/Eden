@@ -6,9 +6,10 @@
 
 **Reference docs:**
 - `docs/deploy/northflank-free-tier.md` — the full Northflank + Vercel setup walkthrough
-- `docs/runbooks/deploy-paas.md` — original PaaS-agnostic runbook
-- `docs/runbooks/rollback-procedure.md` — how to roll back to Fly.io if anything breaks
-- `docs/runbooks/secrets-management.md` — secret generation
+- `docs/deploy/cutover-checklist.md` — the production cutover checklist
+- `docs/docs/operations/oncall.md` — the on-call paging protocol
+- `docs/docs/operations/disaster-recovery-drill.md` — the quarterly DR drill (postgres-restore + ClickHouse-failover + migration-rollback procedures live here)
+- `docs/docs/operations/clerk-eden-org-sync.md` — the Clerk ↔ Eden org-sync ops guide
 
 ---
 
@@ -134,7 +135,7 @@ fly postgres detach --app eden-staging          # if using managed Fly Postgres
 
 Then update:
 - `docs/DEPLOYMENT.md` — point at Northflank as the canonical PaaS
-- `docs/runbooks/deploy-paas.md` — same
+- `docs/deploy/northflank-free-tier.md` — same
 - `CLAUDE.md` / project memory — note the new platform
 
 ## Rollback (if anything goes wrong)

@@ -534,6 +534,8 @@ class SelectionBiasCorrector:
         # ponytail: per upgradespec §D.2, the Flat Beta-Binomial
         # uses Beta(1,1) prior at the trace level. No
         # per-channel prior lookup needed.
+        prior_alpha = 1.0
+        prior_beta = 1.0
         posterior = _flat_beta_binomial(thumbs_up, thumbs_down)
 
         # Persist.
