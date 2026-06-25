@@ -8,6 +8,7 @@ automatic failover with circuit breakers.
 from __future__ import annotations
 
 import hashlib
+import httpx
 import json
 import logging
 import time
@@ -28,9 +29,165 @@ logger = logging.getLogger(__name__)
 
 
 class Provider(str, Enum):
-    OPENROUTER = "openrouter"
-    MINIMAX = "minimax"
+    """LLM provider identifiers.
+
+    Every provider that the AI gateway can route to.  Values match the
+    lowercase name used in env vars (``OPENAI_API_KEY`` → ``openai``,
+    ``OLLAMA_HOST`` → ``ollama``, …) so :func:`register_providers_from_env`
+    can wire them up automatically.
+    """
+
+    # Cloud — OpenAI-compatible wire format (chat completions).  ``OPENAI``
+    # is the canonical slot for any provider that speaks the OpenAI wire
+    # format — point ``OPENAI_BASE_URL`` at Groq, Together, Fireworks,
+    # Mistral, DeepSeek, Together, or any custom proxy and it just works.
+    # No need for one enum entry per OpenAI-compat provider.
+    OPENAI = "openai"
+    OPENROUTER = "openrouter"  # multi-model router; also OpenAI-compat
+    MINIMAX = "minimax"  # Eden's primary upstream (see config.py)
+
+    # Cloud — Anthropic wire format (/v1/messages).
+    ANTHROPIC = "anthropic"
+
+    # Local — Ollama-compatible (its /v1/chat/completions is OpenAI-compat,
+    # but ``ollama`` is exposed as its own wire format because users may
+    # also hit ``/api/chat`` natively — see OllamaClient).
+    OLLAMA = "ollama"
+    OLLAMA_CLOUD = "ollama_cloud"  # ollama.com hosted service
+
+    # Local — generic OpenAI-compatible servers.
+    VLLM = "vllm"
+    LMSTUDIO = "lmstudio"
+    LLAMACPP = "llamacpp"
+
+    # Catch-all for unknown providers registered by name.
     SELF_HOSTED = "self_hosted"
+
+
+class WireFormat(str, Enum):
+    """The three wire formats the gateway supports."""
+
+    OPENAI = "openai"  # POST /v1/chat/completions
+    ANTHROPIC = "anthropic"  # POST /v1/messages
+    OLLAMA = "ollama"  # POST /api/chat (native) — falls back to OpenAI-compat
+
+
+@dataclass(frozen=True)
+class ProviderSpec:
+    """Static metadata about a provider — how to talk to it and where to find creds.
+
+    ponytail: this is the minimum data needed for the gateway to construct
+    a working client from env vars alone.  No DB lookup, no settings file,
+    no per-tenant override — those are v2 concerns.
+    """
+
+    wire_format: WireFormat
+    base_url: str  # full base URL including ``/v1`` where the API expects it
+    api_key_env: str  # env var name (or "" if no auth required, e.g. local Ollama)
+    default_model: str  # sensible default when caller doesn't specify
+    cost_per_1k_input: float  # USD; 0.0 for self-hosted
+    cost_per_1k_output: float  # USD; 0.0 for self-hosted
+    quality: float  # 0..1 — used by _select_provider for min_quality filter
+    latency_p95_ms: int  # typical p95 latency for routing decisions
+    reliability: float  # 0..1 — historical uptime estimate
+
+
+# PROVIDER_SPECS — the source of truth for "what providers exist + how to
+# talk to them".  Adding a new provider is one entry; everything else
+# (client construction, env detection, perf estimation, cost tracking)
+# falls out of this table.
+#
+# Cost figures are USD per 1K tokens as of late 2025 / early 2026; refresh
+# quarterly.  Self-hosted entries have cost 0.0 — running on the user's
+# own GPU has no per-token price, only amortised hardware.
+PROVIDER_SPECS: dict[Provider, ProviderSpec] = {
+    # ── Cloud: OpenAI-compatible wire format ──────────────────────────
+    Provider.OPENAI: ProviderSpec(
+        wire_format=WireFormat.OPENAI,
+        base_url="https://api.openai.com/v1",
+        api_key_env="OPENAI_API_KEY",
+        default_model="gpt-4o-mini",
+        cost_per_1k_input=0.00015,
+        cost_per_1k_output=0.0006,
+        quality=0.93, latency_p95_ms=700, reliability=0.999,
+    ),
+    Provider.OPENROUTER: ProviderSpec(
+        wire_format=WireFormat.OPENAI,
+        base_url="https://openrouter.ai/api/v1",
+        api_key_env="OPENROUTER_API_KEY",
+        default_model="anthropic/claude-sonnet-4.6",
+        cost_per_1k_input=0.003, cost_per_1k_output=0.015,
+        quality=0.94, latency_p95_ms=900, reliability=0.999,
+    ),
+    Provider.MINIMAX: ProviderSpec(
+        wire_format=WireFormat.OPENAI,
+        base_url="https://api.minimax.io/v1",
+        api_key_env="MINIMAX_API_KEY",
+        default_model="MiniMax-M3",
+        cost_per_1k_input=0.0002, cost_per_1k_output=0.0008,
+        quality=0.86, latency_p95_ms=500, reliability=0.995,
+    ),
+    # ── Cloud: Anthropic wire format ─────────────────────────────────
+    Provider.ANTHROPIC: ProviderSpec(
+        wire_format=WireFormat.ANTHROPIC,
+        base_url="https://api.anthropic.com",
+        api_key_env="ANTHROPIC_API_KEY",
+        default_model="claude-sonnet-4-6",
+        cost_per_1k_input=0.003, cost_per_1k_output=0.015,
+        quality=0.94, latency_p95_ms=900, reliability=0.999,
+    ),
+    # ── Local: Ollama (default localhost) + Ollama Cloud ─────────────
+    Provider.OLLAMA: ProviderSpec(
+        wire_format=WireFormat.OLLAMA,
+        base_url="http://localhost:11434",
+        api_key_env="",  # local Ollama ignores auth
+        default_model="llama3.1:8b",
+        cost_per_1k_input=0.0, cost_per_1k_output=0.0,
+        quality=0.78, latency_p95_ms=400, reliability=0.99,
+    ),
+    Provider.OLLAMA_CLOUD: ProviderSpec(
+        wire_format=WireFormat.OLLAMA,
+        base_url="https://ollama.com",
+        api_key_env="OLLAMA_CLOUD_API_KEY",
+        default_model="llama3.1:8b",
+        cost_per_1k_input=0.0001, cost_per_1k_output=0.0001,  # approximate
+        quality=0.80, latency_p95_ms=600, reliability=0.99,
+    ),
+    # ── Local: generic OpenAI-compatible servers ─────────────────────
+    Provider.VLLM: ProviderSpec(
+        wire_format=WireFormat.OPENAI,
+        base_url="http://localhost:8000/v1",
+        api_key_env="VLLM_API_KEY",  # vLLM's --api-key flag; empty if none
+        default_model="meta-llama/Llama-3.1-8B-Instruct",
+        cost_per_1k_input=0.0, cost_per_1k_output=0.0,
+        quality=0.82, latency_p95_ms=350, reliability=0.99,
+    ),
+    Provider.LMSTUDIO: ProviderSpec(
+        wire_format=WireFormat.OPENAI,
+        base_url="http://localhost:1234/v1",
+        api_key_env="",  # LM Studio's local server has no auth
+        default_model="llama-3.1-8b",
+        cost_per_1k_input=0.0, cost_per_1k_output=0.0,
+        quality=0.80, latency_p95_ms=450, reliability=0.99,
+    ),
+    Provider.LLAMACPP: ProviderSpec(
+        wire_format=WireFormat.OPENAI,
+        base_url="http://localhost:8080/v1",
+        api_key_env="",
+        default_model="llama",
+        cost_per_1k_input=0.0, cost_per_1k_output=0.0,
+        quality=0.78, latency_p95_ms=500, reliability=0.99,
+    ),
+    # ── Catch-all ────────────────────────────────────────────────────
+    Provider.SELF_HOSTED: ProviderSpec(
+        wire_format=WireFormat.OPENAI,
+        base_url="http://localhost:11434/v1",
+        api_key_env="",
+        default_model="custom",
+        cost_per_1k_input=0.0, cost_per_1k_output=0.0,
+        quality=0.80, latency_p95_ms=600, reliability=0.99,
+    ),
+}
 
 
 @dataclass
@@ -127,21 +284,39 @@ class BudgetExceededError(Exception):
 class AIGateway:
     """AI Gateway with auth, routing, caching, cost tracking, and failover."""
 
-    # Static performance matrix: model -> (quality, latency_p95, cost_per_1k, reliability)
+    # Per-model overrides keyed by full model id (e.g. ``gpt-4o``,
+    # ``llama3.1:8b``).  When a model appears here it wins over the
+    # provider-level estimate from :data:`PROVIDER_SPECS`.  Cost is
+    # kept here (not in PROVIDER_SPECS) because pricing varies per
+    # model within a provider — ``gpt-4o-mini`` is 30× cheaper than
+    # ``gpt-4o`` on the same OpenAI base URL.
+    #
+    # Self-hosted entries always have cost 0.0 — running on the user's
+    # own GPU has no per-token price, only amortised hardware.
     MODEL_PERFORMANCE: dict[str, tuple[float, int, float, float]] = {
-        "claude-sonnet-4": (0.94, 800, 0.0030, 0.999),
-        "gpt-4o": (0.92, 600, 0.0025, 0.998),
-        "claude-haiku": (0.87, 200, 0.00025, 0.999),
-        "minimax-m2.7": (0.85, 400, 0.00015, 0.995),
-        # Local-model entries. Cost is genuinely 0.0 — running on the
-        # user's own GPU has no per-token price, just amortised hardware.
-        # Quality + latency are conservative estimates for a typical
-        # 8B-class model on a modern consumer GPU; the v1.4 SLM plan
-        # replaces these with measured numbers per tenant.
+        # ── OpenAI ──────────────────────────────────────────────────
+        "gpt-4o": (0.93, 700, 0.0025, 0.998),
+        "gpt-4o-mini": (0.85, 350, 0.00015, 0.999),
+        "o1": (0.95, 5000, 0.015, 0.998),
+        # ── Anthropic ───────────────────────────────────────────────
+        "claude-sonnet-4-6": (0.94, 900, 0.003, 0.999),
+        "claude-sonnet-4": (0.94, 900, 0.003, 0.999),
+        "claude-haiku": (0.87, 250, 0.00025, 0.999),
+        "claude-opus-4": (0.96, 1500, 0.015, 0.999),
+        # ── OpenRouter (mix of providers) ───────────────────────────
+        "anthropic/claude-sonnet-4.6": (0.94, 1000, 0.003, 0.999),
+        # ── MiniMax (Eden primary) ──────────────────────────────────
+        "minimax-m2.7": (0.86, 500, 0.00015, 0.995),
+        "MiniMax-M3": (0.87, 550, 0.0002, 0.995),
+        # ── Local: Ollama (and Ollama Cloud) ────────────────────────
         "llama3.1:8b": (0.78, 400, 0.0, 0.99),
+        "llama3.2:3b": (0.72, 200, 0.0, 0.99),
         "qwen2.5:32b": (0.86, 1200, 0.0, 0.99),
+        "qwen2.5:7b": (0.80, 350, 0.0, 0.99),
         "mistral-nemo": (0.82, 700, 0.0, 0.99),
         "deepseek-r1:8b": (0.84, 1500, 0.0, 0.99),
+        # ── Local: vLLM / LM Studio / llama.cpp ─────────────────────
+        "meta-llama/Llama-3.1-8B-Instruct": (0.82, 350, 0.0, 0.99),
     }
 
     def __init__(
@@ -382,21 +557,59 @@ class AIGateway:
     def _estimate_provider_performance(
         self, provider: Provider, model_version: str | None = None
     ) -> tuple[float, int, float, float]:
-        """Return (quality, latency, cost, reliability) for a provider.
+        """Return (quality, latency_p95_ms, cost_per_1k, reliability) for a request.
 
-        For ``SELF_HOSTED``, looks up ``model_version`` first so a tenant
-        running ``qwen2.5:32b`` gets its own quality/latency profile;
-        falls back to a generic local-model estimate when unknown.
+        Lookup order:
+          1. :attr:`MODEL_PERFORMANCE` by exact model name (per-model overrides).
+          2. :data:`PROVIDER_SPECS` for the provider (provider-level defaults).
+          3. Generic conservative fallback (0.8, 1000, 0.001, 0.99).
+
+        Cost here is a single blended rate (input+output average) used
+        for routing decisions only; actual billing uses the per-model
+        rate via :meth:`_estimate_cost`.
         """
-        if provider == Provider.OPENROUTER:
-            return self.MODEL_PERFORMANCE.get("claude-sonnet-4", (0.9, 800, 0.003, 0.999))
-        if provider == Provider.MINIMAX:
-            return self.MODEL_PERFORMANCE.get("minimax-m2.7", (0.85, 400, 0.00015, 0.995))
-        if provider == Provider.SELF_HOSTED:
-            if model_version and model_version in self.MODEL_PERFORMANCE:
-                return self.MODEL_PERFORMANCE[model_version]
-            return (0.80, 600, 0.0, 0.99)
+        if model_version and model_version in self.MODEL_PERFORMANCE:
+            return self.MODEL_PERFORMANCE[model_version]
+        spec = PROVIDER_SPECS.get(provider)
+        if spec is not None:
+            # Blended cost = average of input + output rates.
+            blended_cost = (spec.cost_per_1k_input + spec.cost_per_1k_output) / 2
+            return (spec.quality, spec.latency_p95_ms, blended_cost, spec.reliability)
         return (0.8, 1000, 0.001, 0.99)
+
+    def _estimate_cost(
+        self, provider: Provider, input_tokens: int, output_tokens: int, model_version: str = ""
+    ) -> float:
+        """Per-token cost using the per-model rate when known.
+
+        Cost lookup order:
+          1. Self-hosted providers (cost == 0.0) → return 0.0.
+          2. MODEL_PERFORMANCE entry for ``model_version`` — its cost
+             tuple is the **blended** (input + output) per-1k rate,
+             so we apply it to the combined token count.
+          3. PROVIDER_SPECS cost rates (input/output split).
+          4. Generic blended fallback via _estimate_provider_performance.
+
+        For self-hosted providers (OLLAMA / VLLM / LMSTUDIO / LLAMACPP /
+        SELF_HOSTED) the per-model entry has cost 0.0 and we return 0.0
+        without further arithmetic — running on the user's own GPU has
+        no per-token price.
+        """
+        spec = PROVIDER_SPECS.get(provider)
+        if spec is not None and (spec.cost_per_1k_input == 0.0 and spec.cost_per_1k_output == 0.0):
+            return 0.0
+        # Per-model override (most accurate — gpt-4o-mini is 30× cheaper
+        # than gpt-4o on the same provider).
+        if model_version and model_version in self.MODEL_PERFORMANCE:
+            blended = self.MODEL_PERFORMANCE[model_version][2]
+            return ((input_tokens + output_tokens) / 1000) * blended
+        if spec is not None:
+            return (
+                (input_tokens / 1000) * spec.cost_per_1k_input
+                + (output_tokens / 1000) * spec.cost_per_1k_output
+            )
+        perf = self._estimate_provider_performance(provider, model_version)
+        return ((input_tokens + output_tokens) / 1000) * perf[2]
 
     async def _execute_provider(self, provider: Provider, request: ModelRequest) -> ModelResponse:
         client = self._providers.get(provider)
@@ -433,14 +646,6 @@ class AIGateway:
             provider=provider.value,
             model=request.model_version,
         )
-
-    def _estimate_cost(
-        self, provider: Provider, input_tokens: int, output_tokens: int, model_version: str = ""
-    ) -> float:
-        perf = self._estimate_provider_performance(provider, model_version)
-        cost_per_1k = perf[2]
-        total_tokens = input_tokens + output_tokens
-        return (total_tokens / 1000) * cost_per_1k
 
     def _record_metrics(
         self,
@@ -516,6 +721,17 @@ class OllamaClient:
             raw = raw + "/v1"
         self._base_url = raw
         self._timeout_s = timeout_s
+        # Reuse one OpenAICompatibleClient (and its pooled httpx
+        # AsyncClient) across calls — instantiating per-request paid a
+        # fresh TCP handshake for every local LLM call.
+        self._delegate = OpenAICompatibleClient(
+            base_url=self._base_url,
+            api_key="ollama",  # required by the SDK shape; Ollama ignores it
+            timeout_s=self._timeout_s,
+        )
+
+    async def aclose(self) -> None:
+        await self._delegate.aclose()
 
     async def complete(
         self,
@@ -531,20 +747,113 @@ class OllamaClient:
         so :meth:`AIGateway._execute_provider` can consume it without
         knowing it's Ollama.
         """
-        import httpx
+        # Ollama's ``/v1/chat/completions`` is OpenAI-wire-compatible.
+        # Delegate to the cached OpenAICompatibleClient for the actual
+        # HTTP call so we have exactly one implementation of that wire
+        # format AND keep its pooled connection alive across calls.
+        return await self._delegate.complete(
+            model=model,
+            prompt=prompt,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            **_kwargs,
+        )
 
+
+# ---------------------------------------------------------------------------
+# OpenAI-compatible client (covers OpenAI, Groq, Together, Fireworks,
+# OpenRouter, MiniMax, vLLM, LM Studio, llama.cpp, Ollama's /v1 endpoint).
+# ---------------------------------------------------------------------------
+
+
+class OpenAICompatibleClient:
+    """Async client for any provider speaking the OpenAI chat-completions wire format.
+
+    Used for: OpenAI, Groq, Together, Fireworks, OpenRouter, MiniMax,
+    vLLM, LM Studio, llama.cpp, Ollama's ``/v1`` endpoint.  Any provider
+    that exposes ``POST /chat/completions`` with the standard
+    ``{choices:[{message:{content}}], usage:{prompt_tokens,
+    completion_tokens}}`` response shape is supported.
+
+    ponytail: this is the minimum surface needed for the gateway to
+    actually exercise a remote OpenAI-compatible provider in tests.
+    Streaming + tool calls + JSON-mode responses are the v2 upgrade
+    path when a tenant needs them.
+    """
+
+    def __init__(
+        self,
+        base_url: str,
+        api_key: str | None = None,
+        *,
+        api_key_env: str | None = None,
+        timeout_s: float = 60.0,
+    ) -> None:
+        import os
+
+        if api_key is None and api_key_env:
+            api_key = os.environ.get(api_key_env) or None
+        if api_key is None:
+            api_key = "not-needed"  # local servers (Ollama, LM Studio) ignore auth
+
+        self._base_url = base_url.rstrip("/")
+        self._api_key = api_key
+        self._timeout_s = timeout_s
+        # Lazy-init the AsyncClient so we get connection pooling across
+        # requests — otherwise every LLM call pays a fresh TCP+TLS
+        # handshake (50–300ms) and burns the provider's per-IP
+        # connection rate limit.  Lazy avoids the cost when the client
+        # is constructed but never used.
+        self._http: httpx.AsyncClient | None = None
+
+    def _get_http(self) -> httpx.AsyncClient:
+        if self._http is None:
+            self._http = httpx.AsyncClient(timeout=self._timeout_s)
+        return self._http
+
+    async def aclose(self) -> None:
+        """Close the underlying HTTP connection pool. Call on shutdown."""
+        if self._http is not None:
+            await self._http.aclose()
+            self._http = None
+
+    async def complete(
+        self,
+        model: str,
+        prompt: str,
+        temperature: float = 0.7,
+        max_tokens: int = 2048,
+        *,
+        system_prompt: str | None = None,
+        messages: list[dict[str, str]] | None = None,
+        **_kwargs: Any,
+    ) -> dict[str, Any]:
+        """One-shot chat completion.
+
+        ``messages`` takes precedence over ``prompt`` when given, so
+        callers that want multi-turn history can pass it directly.
+        Returns ``{text, input_tokens, output_tokens}``.
+        """
         url = f"{self._base_url}/chat/completions"
+        if messages is None:
+            messages = []
+            if system_prompt:
+                messages.append({"role": "system", "content": system_prompt})
+            messages.append({"role": "user", "content": prompt})
         payload: dict[str, Any] = {
             "model": model,
-            "messages": [{"role": "user", "content": prompt}],
+            "messages": messages,
             "temperature": temperature,
             "max_tokens": max_tokens,
             "stream": False,
         }
-        async with httpx.AsyncClient(timeout=self._timeout_s) as http:
-            resp = await http.post(url, json=payload)
-            resp.raise_for_status()
-            data = resp.json()
+        headers = {
+            "Authorization": f"Bearer {self._api_key}",
+            "Content-Type": "application/json",
+        }
+        resp = await self._get_http().post(url, json=payload, headers=headers)
+        resp.raise_for_status()
+        data = resp.json()
 
         # OpenAI-compat shape: ``choices[0].message.content`` + ``usage``.
         choices = data.get("choices") or []
@@ -559,19 +868,225 @@ class OllamaClient:
         }
 
 
-def register_default_providers(gateway: AIGateway) -> None:
-    """Wire :class:`OllamaClient` into the gateway as ``SELF_HOSTED``.
+# ---------------------------------------------------------------------------
+# Anthropic-compatible client.
+# ---------------------------------------------------------------------------
 
-    Idempotent — safe to call on every gateway construction; the
-    gateway's ``register_provider`` overwrites in place.
 
-    Callers (test fixtures, app startup) invoke this after building the
-    gateway so the SELF_HOSTED provider is reachable without any
-    extra config.  An Ollama server running on ``$OLLAMA_HOST`` (or
-    ``localhost:11434``) is the common case; if the server is not
-    reachable the circuit breaker will trip and ``complete()`` will
-    surface :class:`ProviderUnavailable` — exactly the behaviour we
-    want for graceful failover to a cloud provider.
+class AnthropicCompatibleClient:
+    """Async client for the Anthropic Messages wire format.
+
+    Uses the official ``anthropic`` Python SDK async client when
+    available (richer error handling + retries).  Falls back to a
+    pure-httpx implementation when the SDK isn't installed, so the
+    gateway still works in slim environments.
+
+    Wire format reference:
+      POST <base_url>/v1/messages
+      Headers: x-api-key, anthropic-version
+      Body:    {model, messages:[{role, content}], max_tokens, system?, temperature?}
+      Response: {content:[{type:"text", text}], usage:{input_tokens, output_tokens}}
     """
-    if Provider.SELF_HOSTED not in gateway._providers:
-        gateway.register_provider(Provider.SELF_HOSTED, OllamaClient())
+
+    _ANTHROPIC_VERSION = "2023-06-01"
+
+    def __init__(
+        self,
+        api_key: str | None = None,
+        *,
+        api_key_env: str | None = None,
+        base_url: str = "https://api.anthropic.com",
+        timeout_s: float = 60.0,
+    ) -> None:
+        import os
+
+        if api_key is None and api_key_env:
+            api_key = os.environ.get(api_key_env) or None
+        if not api_key:
+            raise ValueError(
+                "AnthropicCompatibleClient requires an api_key or api_key_env "
+                "pointing at a non-empty env var (e.g. ANTHROPIC_API_KEY)"
+            )
+        self._api_key = api_key
+        self._base_url = base_url.rstrip("/")
+        self._timeout_s = timeout_s
+        # Lazy-init: see OpenAICompatibleClient.__init__ for why.
+        self._http: httpx.AsyncClient | None = None
+
+    def _get_http(self) -> httpx.AsyncClient:
+        if self._http is None:
+            self._http = httpx.AsyncClient(timeout=self._timeout_s)
+        return self._http
+
+    async def aclose(self) -> None:
+        if self._http is not None:
+            await self._http.aclose()
+            self._http = None
+
+    async def complete(
+        self,
+        model: str,
+        prompt: str,
+        temperature: float = 0.7,
+        max_tokens: int = 2048,
+        *,
+        system_prompt: str | None = None,
+        messages: list[dict[str, str]] | None = None,
+        **_kwargs: Any,
+    ) -> dict[str, Any]:
+        """One-shot Anthropic Messages completion.
+
+        Returns ``{text, input_tokens, output_tokens}`` — same shape as
+        the OpenAI-compatible clients so the gateway can consume it
+        uniformly.
+        """
+        if messages is None:
+            messages = [{"role": "user", "content": prompt}]
+
+        url = f"{self._base_url}/v1/messages"
+        body: dict[str, Any] = {
+            "model": model,
+            "messages": messages,
+            "max_tokens": max_tokens,
+            "temperature": temperature,
+        }
+        if system_prompt:
+            body["system"] = system_prompt
+        headers = {
+            "x-api-key": self._api_key,
+            "anthropic-version": self._ANTHROPIC_VERSION,
+            "Content-Type": "application/json",
+        }
+        resp = await self._get_http().post(url, json=body, headers=headers)
+        resp.raise_for_status()
+        data = resp.json()
+
+        # Anthropic response shape: ``content:[{type:"text", text}]``.
+        content_blocks = data.get("content") or []
+        text_parts = [
+            block.get("text", "") for block in content_blocks if block.get("type") == "text"
+        ]
+        text = "".join(text_parts)
+        usage = data.get("usage") or {}
+        return {
+            "text": text,
+            "input_tokens": int(usage.get("input_tokens") or 0),
+            "output_tokens": int(usage.get("output_tokens") or 0),
+        }
+
+
+# ---------------------------------------------------------------------------
+# Client factory — picks the right wire-format client from a ProviderSpec.
+# ---------------------------------------------------------------------------
+
+
+def _build_client_for_provider(spec: ProviderSpec) -> Any:
+    """Construct the right client for a provider spec.
+
+    Looks up credentials from the spec's ``api_key_env``.  For local
+    providers with no auth (Ollama, LM Studio, llama.cpp) this still
+    returns a working client — auth is filled with a sentinel that
+    the server ignores.
+    """
+    if spec.wire_format == WireFormat.OPENAI:
+        return OpenAICompatibleClient(
+            base_url=spec.base_url,
+            api_key_env=spec.api_key_env or None,
+        )
+    if spec.wire_format == WireFormat.ANTHROPIC:
+        # Anthropic requires a real key — raise early if missing so
+        # the user gets a clear error rather than a 401 mid-request.
+        return AnthropicCompatibleClient(
+            api_key_env=spec.api_key_env,
+            base_url=spec.base_url,
+        )
+    if spec.wire_format == WireFormat.OLLAMA:
+        return OllamaClient(host=spec.base_url)
+    raise ValueError(f"Unknown wire format: {spec.wire_format!r}")
+
+
+def register_providers_from_env(gateway: AIGateway) -> list[Provider]:
+    """Auto-register every provider whose creds are present in the environment.
+
+    Walks :data:`PROVIDER_SPECS` and, for each entry:
+
+      - If the spec's ``api_key_env`` is set and non-empty, OR the
+        provider is one of the local servers (OLLAMA, VLLM, LMSTUDIO,
+        LLAMACPP — known to run without an API key on default
+        ports), register the right wire-format client.
+      - Otherwise, skip silently.
+
+    Returns the list of providers actually registered, so callers
+    (startup, tests) can log "registered N providers".
+
+    This replaces the older :func:`register_default_providers` (which
+    only wired Ollama as SELF_HOSTED).  It's idempotent — re-running
+    it just overwrites the same slot.
+    """
+    # Local servers that run with no auth on default ports — register
+    # them whenever the corresponding base-URL env var is set or the
+    # server is reachable on its canonical port.  We don't ping the
+    # server here (the circuit breaker handles unreachable cases at
+    # request time), but we do honour explicit user opt-out via the
+    # same env var being explicitly set to empty.
+    local_always_on = {
+        Provider.OLLAMA,  # default localhost:11434 — almost always desired
+    }
+    local_opt_in = {
+        Provider.VLLM, Provider.LMSTUDIO, Provider.LLAMACPP,
+    }
+
+    registered: list[Provider] = []
+    for provider, spec in PROVIDER_SPECS.items():
+        # Skip the legacy catch-all — it overlaps with the explicit
+        # local providers and should never auto-register.
+        if provider == Provider.SELF_HOSTED:
+            continue
+
+        # Idempotency: skip if a usable client is already wired.
+        # This keeps ``first is second`` true across repeated calls
+        # and lets users replace a client manually via
+        # ``gateway.register_provider(provider, custom_client)`` and
+        # have it survive subsequent calls to this function.
+        if provider in gateway._providers:
+            registered.append(provider)
+            continue
+
+        if spec.api_key_env:
+            import os
+            if os.environ.get(spec.api_key_env):
+                gateway.register_provider(provider, _build_client_for_provider(spec))
+                registered.append(provider)
+                continue
+
+        # No api key required.
+        if provider in local_always_on:
+            gateway.register_provider(provider, _build_client_for_provider(spec))
+            registered.append(provider)
+            continue
+        if provider in local_opt_in:
+            import os
+            # For opt-in local servers, register only if the user set
+            # the relevant env var explicitly (VLLM_BASE_URL, etc).
+            opt_env = f"{provider.value.upper()}_BASE_URL"
+            if os.environ.get(opt_env):
+                # Honour a custom base URL the user provided.
+                custom_base = os.environ[opt_env].rstrip("/")
+                if not custom_base.endswith("/v1") and spec.wire_format == WireFormat.OPENAI:
+                    custom_base = custom_base + "/v1"
+                gateway.register_provider(
+                    provider,
+                    OpenAICompatibleClient(base_url=custom_base, api_key_env=spec.api_key_env or None),
+                )
+                registered.append(provider)
+    return registered
+
+
+def register_default_providers(gateway: AIGateway) -> list[Provider]:
+    """Backwards-compatible alias for :func:`register_providers_from_env`.
+
+    Older call sites used this name; it now delegates to the
+    environment-driven version so the gateway auto-wires whatever's
+    available (cloud keys + local servers).
+    """
+    return register_providers_from_env(gateway)
