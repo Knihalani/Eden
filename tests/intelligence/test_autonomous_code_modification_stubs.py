@@ -597,26 +597,29 @@ class TestCodeChangeHook:
         assert ACTION_KIND["post_merge_degraded"] == "consider_revert"
 
     @pytest.mark.asyncio
-    async def test_propose_patch_from_rca_is_no_op_in_stub(self) -> None:
+    async def test_propose_patch_from_rca_advisory_when_disabled(self) -> None:
         from eden.llmops.promotion_hooks import get_code_change_hook
 
         hook = get_code_change_hook()
-        # The STUB surface doesn't actually call the PatchGenerator
-        # — it just records the recommendation. The method should
-        # complete without raising even when Postgres is down.
+        # Without ``code_change_enabled=true``, the hook is
+        # advisory only — no patch is minted, but the
+        # action_id is still recorded.
         result = await hook.propose_patch_from_rca(
             "org_test",
             rca_id="rca_x",
             trace_id="trace_x",
             confidence=0.85,
+            policy={"code_change_enabled": False},
         )
-        # Returns None or an action_id (depending on whether the
-        # closed_loop_actions table exists); either is acceptable
-        # for the no-op STUB path.
-        assert result is None or isinstance(result, str)
+        # Gate 4a wiring: returns a dict carrying the action
+        # + a skipped_reason (the advisory path).
+        assert isinstance(result, dict)
+        assert "action_id" in result
+        assert result["executed"] is False
+        assert "skipped_reason" in result
 
     @pytest.mark.asyncio
-    async def test_post_merge_degraded_is_no_op_in_stub(self) -> None:
+    async def test_post_merge_degraded_advisory_when_disabled(self) -> None:
         from eden.llmops.promotion_hooks import get_code_change_hook
 
         hook = get_code_change_hook()
@@ -625,8 +628,12 @@ class TestCodeChangeHook:
             pr_id="pr_x",
             regression_evidence={"success_rate_drop": 0.15},
             window_hours=24,
+            policy={"auto_revert_enabled": False},
         )
-        assert result is None or isinstance(result, str)
+        assert isinstance(result, dict)
+        assert "action_id" in result
+        assert result["executed"] is False
+        assert "skipped_reason" in result
 
 
 # ─── 8. Route surface — Router mount + smoke tests ────────────────

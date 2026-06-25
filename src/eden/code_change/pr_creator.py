@@ -149,6 +149,16 @@ class PRCreator:
                     },
                 },
             }
+        # Agent-suggest path: ``req`` provided by the caller.
+        # CODEOWNERS lookup is meaningful only when the
+        # request carries files (the touched paths).
+        if req.files:
+            file_paths = [f.path for f in req.files if f.path]
+            codeowners = await self.resolve_codeowners_reviewers(
+                file_paths,
+            )
+            if codeowners:
+                req = self.attach_codeowners_reviewers(req, codeowners)
         try:
             info = await self._provider.create_pr(req)
         except NotImplementedError as exc:
@@ -229,6 +239,74 @@ class PRCreator:
     def provider_name(self) -> str:
         """The provider name (``"local"``, ``"github"``)."""
         return self._provider.name
+
+    # ── CODEOWNERS reviewer resolution (Gate 4a) ─────────────
+
+    async def resolve_codeowners_reviewers(
+        self,
+        file_paths: list[str],
+    ) -> list[str]:
+        """Return the CODEOWNERS owners for ``file_paths``.
+
+        Best-effort: when the connector fails to read
+        CODEOWNERS (no repo connected, no CODEOWNERS file,
+        etc.), returns an empty list. The caller is
+        responsible for the fallback (the human or the
+        ``required_reviewers`` policy field).
+        """
+        try:
+            from .repo_connector import RepoConnector
+            connector = RepoConnector()
+            owners_resp = await connector.owners_for_files(file_paths)
+            owners_map = (owners_resp.get("data") or {}).get("owners") or {}
+        except Exception as exc:
+            logger.debug(
+                "pr_creator: CODEOWNERS resolve failed: %s", exc,
+            )
+            return []
+        # Flatten + dedupe. ``owners_for_files`` returns
+        # ``{path: [owner1, owner2, ...]}``; we take the
+        # union across all files so every required
+        # reviewer is on the PR.
+        seen: set[str] = set()
+        flat: list[str] = []
+        for owners in owners_map.values():
+            for owner in owners:
+                if owner and owner not in seen:
+                    seen.add(owner)
+                    flat.append(owner)
+        return flat
+
+    def attach_codeowners_reviewers(
+        self,
+        req: PRCreateRequest,
+        codeowners: list[str],
+    ) -> PRCreateRequest:
+        """Return a new request with CODEOWNERS merged into reviewers.
+
+        The provider's ``create_pr`` takes the ``reviewers``
+        list verbatim; we want the union of any
+        human-supplied reviewers + the CODEOWNERS. Duplicate
+        owners are de-duped; the policy-required reviewers
+        come first so they appear at the top of GitHub's
+        reviewer list.
+        """
+        if not codeowners:
+            return req
+        merged = list(req.reviewers) + [
+            o for o in codeowners if o not in req.reviewers
+        ]
+        return PRCreateRequest(
+            title=req.title,
+            body=req.body,
+            branch=req.branch,
+            base=req.base,
+            labels=req.labels,
+            reviewers=merged,
+            draft=req.draft,
+            files=req.files,
+            commit_message=req.commit_message,
+        )
 
     # ── Read side (real, queries ``pull_requests`` table) ──────────
 
