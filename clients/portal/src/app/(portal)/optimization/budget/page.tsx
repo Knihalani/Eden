@@ -49,7 +49,7 @@ interface ActionLog {
 
 export default function BudgetPage() {
   const { currentOrg } = useOrg();
-  const { toast } = useToast();
+  const toast = useToast();
   const [budget, setBudget] = useState<Budget | null>(null);
   const [consumption, setConsumption] = useState<Consumption | null>(null);
   const [rollup, setRollup] = useState<Rollup | null>(null);

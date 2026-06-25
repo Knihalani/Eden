@@ -51,7 +51,7 @@ interface VersionEntry {
  */
 export default function PromptsPage() {
   const { currentOrg } = useOrg();
-  const { toast } = useToast();
+  const toast = useToast();
   const [prompts, setPrompts] = useState<PromptEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [expanded, setExpanded] = useState<string | null>(null);

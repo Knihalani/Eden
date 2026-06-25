@@ -40,7 +40,7 @@ interface DlqEntry {
  */
 export default function WebhooksDlqPage() {
   const { currentOrg } = useOrg();
-  const { toast } = useToast();
+  const toast = useToast();
   const [entries, setEntries] = useState<DlqEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [replaying, setReplaying] = useState<string | null>(null);
