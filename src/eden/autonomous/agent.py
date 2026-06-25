@@ -1178,7 +1178,11 @@ class ChatService:
             from eden.optimization.model_router import TIER_MODELS, ModelTier
             return TIER_MODELS[ModelTier.T3][0]
         except Exception:
-            return "anthropic/claude-opus-4"
+            # Fall back to the configured reasoning model (cheap Sonnet
+            # by default). Previously returned ``claude-opus-4`` which
+            # silently billed every global chat at Opus rates on the
+            # rare import-failure path.
+            return self._settings.model_reasoning
 
     async def _call_llm(
         self,

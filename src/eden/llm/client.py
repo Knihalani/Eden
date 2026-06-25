@@ -2,7 +2,7 @@
 
 import logging
 import time
-from collections import defaultdict
+from collections import defaultdict, deque
 from dataclasses import dataclass, field
 from enum import Enum
 from functools import lru_cache
@@ -149,7 +149,11 @@ class OpenRouterClient:
             recovery_timeout=circuit_breaker_timeout,
         )
         self.max_retries = max_retries
-        self._usage_log: list[UsageStats] = []
+        # Bounded ring buffer — was an unbounded ``list`` that grew
+        # for the process lifetime, every LLM call forever adding
+        # memory pressure. 10k entries is ~6h at the v1 steady-state
+        # call rate and is plenty for cost dashboards.
+        self._usage_log: deque[UsageStats] = deque(maxlen=10_000)
         # §11.4 — per-provider error counters split by openai vs anthropic
         # so the observability dashboard can break them out by provider.
         self._provider_errors: dict[str, int] = {}
@@ -171,7 +175,10 @@ class OpenRouterClient:
                 max_tokens=self.settings.max_tokens_critic,
             ),
             "extraction": ModelSlot(
-                primary=self.settings.model_reasoning,
+                # ``extraction`` runs fact-checking + structured output
+                # over already-fetched content — the cheap, fast model
+                # is sufficient and 10× cheaper than Sonnet.
+                primary=self.settings.model_fast,
                 fallback=[self.settings.model_fallback],
                 max_tokens=self.settings.max_tokens_fact_checker,
             ),
@@ -262,7 +269,9 @@ class OpenRouterClient:
                 self.circuit_breaker.record_failure(agent)
                 if attempt < self.max_retries:
                     import asyncio
-                    await asyncio.sleep(2 ** attempt)
+                    # Cap backoff at 4s so rate-limit storms don't
+                    # stall the event loop for minutes on end.
+                    await asyncio.sleep(min(2 ** attempt, 4))
                     continue
                 raise
             except RateLimitError as exc:
@@ -270,14 +279,14 @@ class OpenRouterClient:
                 self.circuit_breaker.record_failure(agent)
                 if attempt < self.max_retries:
                     import asyncio
-                    await asyncio.sleep(2 ** attempt)
+                    await asyncio.sleep(min(2 ** attempt, 4))
                     continue
                 raise
             except APIError as exc:
                 last_exc = exc
                 if attempt < self.max_retries:
                     import asyncio
-                    await asyncio.sleep(2 ** attempt)
+                    await asyncio.sleep(min(2 ** attempt, 4))
                     continue
                 raise
         # Should never reach here, but for type-checker happiness:

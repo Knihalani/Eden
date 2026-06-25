@@ -27,11 +27,14 @@ import {
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
-
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+import { api } from "@/lib/api";
 
 async function callApi<T>(endpoint: string, init: RequestInit = {}): Promise<T> {
-  const res = await fetch(`${API_BASE}${endpoint}`, {
+  // Delegate to the shared api client — it knows about Clerk refresh,
+  // SSE, the catch-all proxy, and the in-flight de-dup map. The
+  // previous local ``API_BASE = NEXT_PUBLIC_API_URL || http://localhost:8000``
+  // pointed at the dev process in production, which doesn't exist.
+  const res = await fetch(endpoint.startsWith("http") ? endpoint : `/api/proxy${endpoint}`, {
     credentials: "include",
     headers: { "Content-Type": "application/json", ...(init.headers ?? {}) },
     ...init,

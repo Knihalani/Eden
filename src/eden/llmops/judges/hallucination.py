@@ -44,18 +44,30 @@ class HallucinationJudge(Judge):
     model_slot = "fast"
 
     def matches(self, event: TelemetryEvent) -> bool:
-        """Only fire on events that carry generated text in the payload."""
+        """Only fire on events that carry generated text in the payload.
+
+        The judge is also sample-gated at 1% (deterministic by
+        ``trace_id``) so flipping the global LLM-judge toggle on
+        doesn't bill every telemetry event.
+        """
         if not super().matches(event):
             return False
         payload = event.payload or {}
-        # Skip events that have no actual content (e.g. raw usage records).
-        return any(
+        if not any(
             key in payload
             for key in (
                 "openai", "anthropic", "bedrock", "gemini", "langfuse",
                 "helicone", "otel",
             )
-        )
+        ):
+            return False
+        # Deterministic 1% sampling — every trace_id hashes to the
+        # same bucket so a single trace's judge scores stay
+        # consistent across re-evaluations.
+        trace_id = event.trace_id or ""
+        if not trace_id:
+            return False
+        return (int(trace_id[:8], 16) % 100) < 1
 
     async def score(
         self, event: TelemetryEvent, ctx: JudgeContext

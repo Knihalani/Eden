@@ -19,6 +19,19 @@ Auth
 Pass an Eden API key via ``--api-key`` or ``EDEN_API_KEY``. The
 base URL defaults to ``http://localhost:8000``; override with
 ``--api-url`` or ``EDEN_API_URL``.
+
+Phase 5 TODO (deferred)
+-----------------------
+This module is the **ops-only** CLI. The developer-facing
+``eden`` CLI (chat, login, config-show, discover-agents,
+agent-push, sim-run, sim-runs, sim-results, test-run,
+pattern-mine, kb) is PLAN-only per
+``docs/docs/reference/eden-agent-cli-spec.md`` (36 KB) +
+``eden-agent-cli-roadmap.md`` (41 KB). It is currently the
+Aider-fork Python CLI installed at ``/tmp/eden-venv/bin/eden``
++ a planned Codebuff SDK (TypeScript) migration. Both are
+deferred per the Phase 5 table in
+``docs/spec/upgradespec-v2.md`` — separate product, no customers yet.
 """
 
 import argparse

@@ -67,21 +67,21 @@ spec:
         - name: GITHUB_APP_CLIENT_SECRET
         - name: GITHUB_APP_PRIVATE_KEY
         - name: GITHUB_APP_WEBHOOK_SECRET
+        - name: GITHUB_APP_CALLBACK_URL
         - name: REDIS_URL
         - name: QDRANT_API_KEY
         # ── Clerk (auth + webhooks) ────────────────────────────────
         # CLERK_SECRET_KEY verifies Clerk session JWTs forwarded by
         # the portal's /api/proxy. CLERK_PUBLISHABLE_KEY is public-
-        # by-design but kept as a secret so the operator can rotate
-        # via the NF store if Clerk issues a new frontend key without
-        # an API deploy. CLERK_WEBHOOK_SIGNING_SECRET verifies Svix
-        # webhook signatures — missing means Clerk webhooks (user
-        # create, org membership change) silently fail at the API.
+        # by-design and intentionally NOT in this secret group — see
+        # the eden-api env block where it's a plain value (rotation
+        # is a no-op since it's already public). CLERK_WEBHOOK_SIGNING_SECRET
+        # verifies Svix webhook signatures — missing means Clerk webhooks
+        # (user create, org membership change) silently fail at the API.
         # METRICS_BEARER_TOKEN gates the /metrics endpoint — empty
         # means scrapers get 503 (intentional, see
         # src/eden/observability/metrics_endpoint.py).
         - name: CLERK_SECRET_KEY
-        - name: CLERK_PUBLISHABLE_KEY
         - name: CLERK_WEBHOOK_SIGNING_SECRET
         - name: METRICS_BEARER_TOKEN
         # ── Postgres (Neon cutover, Phase 7) ────────────────────────
@@ -221,6 +221,14 @@ spec:
       value: "5"
     - name: SANDBOX_MAX_CONCURRENT
       value: "10"
+    # ── Typesense (full-text search) — required by the live-tail
+    # query DSL (Cat 19) and the retrieval service (Cat 4) ──────
+    - name: TYPESENSE_HOST
+      value: localhost
+    - name: TYPESENSE_PORT
+      value: "8108"
+    - name: TYPESENSE_API_KEY
+      valueFrom: { secretKeyRef: { group: eden-required, key: TYPESENSE_API_KEY } }
     # ── Pipeline / observability defaults ───────────────────────
     - name: PIPELINE_TIMEOUT_SECONDS
       value: "300"
@@ -349,6 +357,11 @@ spec:
         secretKeyRef:
           group: eden-required
           key: GITHUB_APP_WEBHOOK_SECRET
+    - name: GITHUB_APP_CALLBACK_URL
+      valueFrom:
+        secretKeyRef:
+          group: eden-required
+          key: GITHUB_APP_CALLBACK_URL
 
 # ─────────────────────────────────────────────────────────────────────
 # Job 1/2: eden-worker (long-running background work)
@@ -539,12 +552,19 @@ spec:
     # sync + autonomous scheduler notifications). Same trio as the
     # worker; the cron doesn't accept webhooks so CLERK_WEBHOOK_*
     # is purely for cross-tenant Clerk API calls in scheduled jobs.
+    # CLERK_PUBLISHABLE_KEY is a plain value here (see api block
+    # comment — it's a public-by-design key, no rotation needed).
     - name: CLERK_SECRET_KEY
       valueFrom: { secretKeyRef: { group: eden-required, key: CLERK_SECRET_KEY } }
     - name: CLERK_PUBLISHABLE_KEY
       valueFrom: { secretKeyRef: { group: eden-required, key: CLERK_PUBLISHABLE_KEY } }
     - name: CLERK_WEBHOOK_SIGNING_SECRET
       valueFrom: { secretKeyRef: { group: eden-required, key: CLERK_WEBHOOK_SIGNING_SECRET } }
+    # OPENROUTER_* — cron calls evaluate_pending_clusters → drift
+    # hooks → may invoke OpenRouter via the promotion hook chain.
+    # Without these the cron logs ImportError on every tick.
+    - name: OPENROUTER_BASE_URL
+      value: https://openrouter.ai/api/v1
 
 # ─────────────────────────────────────────────────────────────────────
 # No Postgres addon — the database lives on Neon Scale

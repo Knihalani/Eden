@@ -740,7 +740,7 @@ class PatchGenerator:
                         org_id=org_id,
                         repo_id=repo_id,
                         code_path=path,
-                        outcome="merged",  # the patch is proposed
+                        outcome="proposed",  # patch is proposed, not merged
                         rca_category=rca_category,
                         telemetry_signature=trace_id,
                     )

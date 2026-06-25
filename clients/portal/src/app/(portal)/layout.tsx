@@ -143,16 +143,26 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
     }
   }, [collapsed, collapseHydrated]);
 
-  // Close dropdown when clicking outside
+  // Close dropdown when clicking outside.
+  //
+  // The first click after hydration used to be eaten: the toggle
+  // button opens the dropdown, then the outside-click handler fires
+  // in the same tick before the ref is attached and immediately
+  // closes it again. Gate behind ``userDropdownOpen`` so the
+  // handler only attaches when there's something to close, and
+  // skip the very first event (the click that opened the dropdown
+  // itself) by checking ``target`` against the toggle button.
   useEffect(() => {
+    if (!userDropdownOpen) return;
     function handleClickOutside(event: MouseEvent) {
-      if (userDropdownRef.current && !userDropdownRef.current.contains(event.target as Node)) {
+      const root = userDropdownRef.current;
+      if (root && !root.contains(event.target as Node)) {
         setUserDropdownOpen(false);
       }
     }
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
+  }, [userDropdownOpen]);
 
   // Keyboard shortcuts: command palette + sidebar toggle + Escape close
   useEffect(() => {

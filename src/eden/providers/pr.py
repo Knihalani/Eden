@@ -1,12 +1,19 @@
 """PR provider — write-side of the source-control abstraction.
 
 This module defines the :class:`PRProvider` protocol plus
-a :class:`LocalPRProvider` implementation (uses the local
-``git`` CLI on a checkout, persists PRs as JSON files in
-``.eden/prs/``) and a :class:`GitHubPRProvider` placeholder
-that raises :class:`NotImplementedError` — the real impl
-is gated on the GitHub App auth flow per the Cat 23 v1.6
-ship plan.
+two real implementations:
+
+* :class:`LocalPRProvider` — uses the local ``git`` CLI on a
+  checkout. Persists PRs as JSON files in ``.eden/prs/``.
+  No remote; this is the dev / CI / on-prem path.
+* :class:`GitHubPRProvider` — talks to the GitHub REST API
+  with a GitHub App installation token. Production path.
+
+The provider is the **write side** of the abstraction. The
+read side is :mod:`eden.providers.repo` (:class:`RepoProvider`).
+They are separate so the agent-suggest flow can read the
+repo (always allowed) without a write capability until the
+human clicks "open PR".
 
 The provider is the **write side** of the abstraction. The
 read side is :mod:`eden.providers.repo` (:class:`RepoProvider`).
@@ -69,6 +76,8 @@ class PRCreateRequest:
             tree, commits, and pushes.
         commit_message: The commit message. Defaults to
             the PR title when empty.
+        repo_id: The Eden-internal repo id (used to filter
+            ``list_prs(repo_id=...)`` queries).
     """
 
     title: str
@@ -80,6 +89,7 @@ class PRCreateRequest:
     draft: bool = False
     files: list[FileEntry] = field(default_factory=list)
     commit_message: str = ""
+    repo_id: str = ""
 
 
 @dataclass

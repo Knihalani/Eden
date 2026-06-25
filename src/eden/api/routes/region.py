@@ -22,10 +22,13 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/orgs/{org_id}/region", tags=["region"])
 
 
-# Allowed values: NULL (unset), 'us', 'eu', 'ap'.
+# Allowed values: NULL (unset), 'us', 'eu'.
 # Adding a new region requires a corresponding deployment of the
-# backend — the metadata is the easy part.
-ALLOWED_REGIONS = {None, "us", "eu", "ap"}
+# backend — the metadata is the easy part. Multi-region is
+# permanently out per commit 23f0605c; 'ap' was removed from
+# the allowed set so the API surfaces a clean 422 instead of
+# silently accepting a region with no infra behind it.
+ALLOWED_REGIONS = {None, "us", "eu"}
 
 
 class RegionIn(BaseModel):

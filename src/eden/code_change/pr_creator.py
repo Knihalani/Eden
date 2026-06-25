@@ -102,11 +102,11 @@ class PRCreator:
             req = PRCreateRequest(
                 title=pr_patterns.get("title_format") or "[Eden Agent] Fix",
                 body=pr_patterns.get("body_template") or "",
-                head=pr_patterns.get("common_branch_prefix") or "eden/auto-fix",
+                branch=pr_patterns.get("common_branch_prefix") or "eden/auto-fix",
                 base="main",
                 draft=True,
-                patch_id=patch_id,
-                org_id=org_id,
+                repo_id="",
+                files=[],
             )
             try:
                 info = await self._provider.create_pr(req)
@@ -226,14 +226,20 @@ class PRCreator:
                     getattr(info, "url", "") or "",
                     getattr(info, "number", None),
                     getattr(info, "base", "main") or "main",
-                    getattr(info, "branch", req.head) or "",
+                    getattr(info, "branch", req.branch) or "",
                     getattr(info, "state", "open") or "open",
                     json.dumps(getattr(req, "labels", []) or []),
                     json.dumps(getattr(req, "reviewers", []) or []),
                 ],
             )
         except Exception as exc:
-            logger.debug("pr_creator: persistence failed: %s", exc)
+            # Surface the persistence failure — previously debug-only,
+            # which let the API claim success while the row was dropped.
+            # Audit trail must match operator-visible status.
+            logger.warning(
+                "pr_creator: persistence failed for patch_id=%s pr_id=%s: %s",
+                patch_id, pr_id, exc,
+            )
 
     @property
     def provider_name(self) -> str:
@@ -306,6 +312,7 @@ class PRCreator:
             draft=req.draft,
             files=req.files,
             commit_message=req.commit_message,
+            repo_id=req.repo_id,
         )
 
     # ── Read side (real, queries ``pull_requests`` table) ──────────

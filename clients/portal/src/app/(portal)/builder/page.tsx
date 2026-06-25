@@ -557,7 +557,7 @@ function BuilderPageInner() {
             aria-label="Reload from localStorage"
             title="Reload saved graph"
           >
-            <Save className="w-3.5 h-3.5" />
+            <RotateCcw className="w-3.5 h-3.5" />
           </Button>
           <Button
             type="button"

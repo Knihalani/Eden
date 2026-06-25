@@ -43,7 +43,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from eden.providers import PRProvider, PRRevertRequest, get_default_pr_provider
+from eden.providers import PRProvider, PRRevertRequest
 
 from ._common import _check_two_stage_optin, _insert_row, _new_id, _ok_envelope
 
@@ -179,9 +179,28 @@ class AutoRevertEngine:
                 merge_sha=merge_sha,
             ))
         except Exception as exc:
-            logger.warning(
-                "AutoRevertEngine: provider.revert failed: %s", exc,
-            )
+            # Push to HookBus DLQ so the next cron tick (or operator)
+            # can retry the revert instead of letting it fall on the
+            # floor — a regression must not silently persist.
+            try:
+                from eden.llmops.promotion_hooks import _record_action
+                await _record_action(
+                    org_id,
+                    hook_name="auto_revert_dlq",
+                    action_kind="consider_revert",
+                    target=pr_id,
+                    payload={
+                        "pr_id": pr_id,
+                        "strategy": strategy,
+                        "revert_id": revert_id,
+                        "error": str(exc),
+                    },
+                    severity="high",
+                )
+            except Exception as dlq_exc:
+                logger.warning(
+                    "AutoRevertEngine: DLQ enqueue failed: %s", dlq_exc,
+                )
             return _ok_envelope(
                 self.name,
                 {
@@ -190,10 +209,11 @@ class AutoRevertEngine:
                     "strategy": strategy,
                     "revert_id": revert_id,
                     "executed": False,
+                    "queued": True,
                     "error": str(exc),
                     "message": (
                         f"Strategy {strategy!r} selected but the "
-                        f"provider failed: {exc}"
+                        f"provider failed: {exc}. Queued on HookBus DLQ."
                     ),
                 },
             )

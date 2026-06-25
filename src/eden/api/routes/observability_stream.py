@@ -216,7 +216,11 @@ async def publish_trace_event(org_id: str, payload: dict[str, Any]) -> None:
     try:
         # Monotonic per-tenant sequence (Redis INCR for atomicity).
         seq = await redis.incr(f"observability:seq:{org_id}")
-        body = json.dumps(payload, default=str)
+        # Cap the per-event payload — a 5MB trace would otherwise
+        # blow the bounded replay list past Upstash's free-tier
+        # command budget. 16 KB is plenty for the live-tail summary
+        # (the full trace lives in telemetry_events).
+        body = json.dumps(payload, default=str)[:16 * 1024]
         await redis.publish(channel, body)
         # Push onto the bounded replay list. Trim from the left to
         # keep at most 1000 entries.

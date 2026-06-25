@@ -68,7 +68,7 @@ from typing import Any
 from fastapi import APIRouter, Body, Depends, Path
 from pydantic import BaseModel, Field
 
-from eden.api.deps import get_current_user, require_feature_flag
+from eden.api.deps import get_current_user, require_feature_flag, require_org_admin, require_org_permission
 from eden.code_change import (
     AgentActivityFeed,
     AgentPersonaService,
@@ -237,6 +237,7 @@ class PostMergeWatchRequest(BaseModel):
 async def connect_repo(
     org_id: str = Path(...),
     body: ConnectRepoRequest = Body(...),
+    _admin: dict = Depends(require_org_permission("settings:edit")),
 ) -> dict[str, Any]:
     return await _repo_connector.connect(
         org_id,
@@ -264,6 +265,7 @@ async def get_repo(
 async def disconnect_repo(
     org_id: str = Path(...),
     repo_id: str = Path(...),
+    _admin: dict = Depends(require_org_admin),
 ) -> dict[str, Any]:
     return await _repo_connector.disconnect(org_id, repo_id)
 
@@ -280,7 +282,7 @@ async def read_repo_codeowners(
     ``docs/CODEOWNERS``) and returns the parsed entries.
     Side-effect free. Cat 23 Gate-1 audit entrypoint.
     """
-    return await _repo_connector.read_codeowners()
+    return await _repo_connector.read_codeowners(org_id)
 
 
 @router.post("/repos/codeowners/owners")
@@ -295,7 +297,7 @@ async def resolve_codeowners_for_files(
     exists — the caller is responsible for the manual-
     reviewer fallback.
     """
-    return await _repo_connector.owners_for_files(file_paths)
+    return await _repo_connector.owners_for_files(org_id, file_paths)
 
 
 # ─── Policy ───────────────────────────────────────────────────────
@@ -303,6 +305,7 @@ async def resolve_codeowners_for_files(
 async def update_policy(
     org_id: str = Path(...),
     body: UpdatePolicyRequest = Body(...),
+    _admin: dict = Depends(require_org_admin),
 ) -> dict[str, Any]:
     return await _policy.update(org_id, body.policy)
 
@@ -348,6 +351,7 @@ async def open_pr(
     org_id: str = Path(...),
     patch_id: str = Path(...),
     body: OpenPRRequest = Body(...),
+    _admin: dict = Depends(require_org_admin),
 ) -> dict[str, Any]:
     return await _pr_creator.create(
         org_id, patch_id=patch_id, policy=body.policy
@@ -557,6 +561,7 @@ async def revert_pr(
     org_id: str = Path(...),
     pr_id: str = Path(...),
     body: RevertRequest = Body(...),
+    _admin: dict = Depends(require_org_admin),
 ) -> dict[str, Any]:
     return await _revert.revert(
         org_id,

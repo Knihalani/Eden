@@ -3,6 +3,7 @@
 import asyncio
 import json
 from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from unittest.mock import AsyncMock, MagicMock, patch
 
 # Pre-existing passlib 1.7.4 + bcrypt 5.x incompatibility: passlib's
@@ -293,6 +294,24 @@ def mock_postgres_client() -> MagicMock:
 
     client.fetch = AsyncMock(side_effect=_fetch)
 
+    # ``async with client.acquire() as conn`` — PostgresClient.acquire
+    # is an async generator in production. Tests use it via the
+    # ``conn`` reference for fetchrow/execute/transaction. Provide a
+    # real async-CM so the test fixtures don't surface
+    # "coroutine never awaited" warnings when consumers do
+    # ``async with client.acquire()``.
+    @asynccontextmanager
+    async def _acquire():
+        conn = AsyncMock()
+        conn.transaction = _noop_acm
+        yield conn
+
+    @asynccontextmanager
+    async def _noop_acm():
+        yield None
+
+    client.acquire = _acquire
+
     return client
 
 
@@ -383,7 +402,10 @@ def patch_postgres(mock_postgres_client: MagicMock):
             # the real failure mode.
             continue
         stack.enter_context(
-            patch(f"{mod_name}.get_postgres_client", return_value=mock_postgres_client)
+            patch(
+                f"{mod_name}.get_postgres_client",
+                AsyncMock(return_value=mock_postgres_client),
+            )
         )
     try:
         yield mock_postgres_client

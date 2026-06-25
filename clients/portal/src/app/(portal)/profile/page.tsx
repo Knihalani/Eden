@@ -41,11 +41,13 @@ export default function ProfilePage() {
   // Avatar upload
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
 
   useEffect(() => {
     if (user) {
       setName(user.name);
       setEmail(user.email);
+      setAvatarUrl(user.avatar_url ?? null);
     }
   }, [user]);
 
@@ -127,7 +129,10 @@ export default function ProfilePage() {
 
     setUploadingAvatar(true);
     try {
-      await api.uploadAvatar(file);
+      const result = await api.uploadAvatar(file);
+      // Render the new avatar URL immediately so the UI doesn't
+      // wait for the refreshUser() round-trip to settle.
+      if (result?.avatar_url) setAvatarUrl(result.avatar_url);
       await refreshUser();
     } catch (e: any) {
       toast.error(e.message || "Failed to upload avatar");
@@ -180,12 +185,22 @@ export default function ProfilePage() {
         {/* Avatar Upload */}
         <div className="flex items-center gap-4 mb-6">
           <div className="relative">
-            <div className="user-avatar w-20 h-20 rounded-full flex items-center justify-center text-2xl">
-              {name.charAt(0).toUpperCase()}
+            <div className="user-avatar w-20 h-20 rounded-full flex items-center justify-center text-2xl overflow-hidden bg-[var(--bg-tertiary)]">
+              {avatarUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={avatarUrl}
+                  alt="Your profile photo"
+                  className="w-full h-full object-cover"
+                />
+              ) : (
+                name.charAt(0).toUpperCase()
+              )}
             </div>
             <button
               onClick={() => fileInputRef.current?.click()}
               disabled={uploadingAvatar}
+              aria-label="Upload avatar"
               className="absolute bottom-0 right-0 w-8 h-8 bg-[var(--bg-primary)] border border-[var(--border)] rounded-full flex items-center justify-center hover:bg-[var(--bg-muted)] transition-colors"
             >
               {uploadingAvatar ? (

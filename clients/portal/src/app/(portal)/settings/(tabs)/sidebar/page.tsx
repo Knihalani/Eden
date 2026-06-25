@@ -181,6 +181,7 @@ export default function SidebarSettingsPage() {
                     <button
                       onClick={() => moveGroup(idx, idx - 1)}
                       disabled={idx === 0}
+                      aria-disabled={idx === 0}
                       className="px-2 py-1 text-xs text-[var(--text-muted)] hover:text-[var(--text-primary)] disabled:opacity-30"
                       aria-label={`Move ${group.label} up`}
                     >
@@ -189,6 +190,7 @@ export default function SidebarSettingsPage() {
                     <button
                       onClick={() => moveGroup(idx, idx + 1)}
                       disabled={idx === draftOrder.length - 1}
+                      aria-disabled={idx === draftOrder.length - 1}
                       className="px-2 py-1 text-xs text-[var(--text-muted)] hover:text-[var(--text-primary)] disabled:opacity-30"
                       aria-label={`Move ${group.label} down`}
                     >

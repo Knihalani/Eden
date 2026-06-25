@@ -216,7 +216,8 @@ class Settings(BaseSettings):
     # when the MiniMax key is missing/disabled.
     use_minimax: bool = False
     minimax_api_key: str = ""
-    minimax_base_url: str = "https://api.minimax.chat/v1"
+    minimax_base_url: str = "https://api.minimax.io/v1"
+    minimax_model: str = "MiniMax-M3"
 
     # Model configuration
     model_reasoning: str = "anthropic/claude-sonnet-4.6"

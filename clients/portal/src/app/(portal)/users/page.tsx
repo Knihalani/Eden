@@ -72,16 +72,6 @@ interface Segment {
   criteria: Record<string, unknown>;
 }
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "/api/proxy";
-
-async function postJson<T>(endpoint: string, body?: unknown): Promise<T> {
-  return api.post<T>(endpoint, body ?? {});
-}
-
-async function getJson<T>(endpoint: string): Promise<T> {
-  return api.get<T>(endpoint);
-}
-
 export default function UsersPage() {
   const { currentOrg } = useOrg();
   const [activeTab, setActiveTab] = useState<Tab>("sessions");
@@ -123,7 +113,7 @@ export default function UsersPage() {
     setSessionsLoading(true);
     setError("");
     try {
-      const data = await postJson<{ sessions: SessionRow[] }>(
+      const data = await api.post<{ sessions: SessionRow[] }>(
         `/orgs/${currentOrg.id}/intelligence/user/sessions/aggregate`,
         { days: sessionsDays }
       );
@@ -139,7 +129,7 @@ export default function UsersPage() {
     if (!currentOrg) return;
     setGoalsLoading(true);
     try {
-      const data = await getJson<{ goals: Goal[] }>(
+      const data = await api.get<{ goals: Goal[] }>(
         `/orgs/${currentOrg.id}/intelligence/user/goals`
       );
       setGoals(data.goals || []);
@@ -154,7 +144,7 @@ export default function UsersPage() {
     if (!currentOrg) return;
     setCohortsLoading(true);
     try {
-      const data = await getJson<{ cohorts: Cohort[] }>(
+      const data = await api.get<{ cohorts: Cohort[] }>(
         `/orgs/${currentOrg.id}/intelligence/user/dashboard/cohort`
       );
       setCohorts(data.cohorts || []);
@@ -169,7 +159,7 @@ export default function UsersPage() {
     if (!currentOrg) return;
     setSegmentsLoading(true);
     try {
-      const data = await getJson<{ segments: Segment[] }>(
+      const data = await api.get<{ segments: Segment[] }>(
         `/orgs/${currentOrg.id}/intelligence/user/segment`
       );
       setSegments(data.segments || []);
@@ -194,7 +184,7 @@ export default function UsersPage() {
     setCreatingGoal(true);
     setError("");
     try {
-      await postJson(`/orgs/${currentOrg.id}/intelligence/user/goals`, {
+      await api.post(`/orgs/${currentOrg.id}/intelligence/user/goals`, {
         name: newGoalName.trim(),
         description: newGoalDescription.trim() || undefined,
         target: newGoalTarget,
@@ -219,10 +209,10 @@ export default function UsersPage() {
     setCorrection(null);
     try {
       const [sat, cor] = await Promise.allSettled([
-        getJson<SatisfactionData>(
+        api.get<SatisfactionData>(
           `/orgs/${currentOrg.id}/intelligence/user/satisfaction/${satisfactionTraceId.trim()}`
         ),
-        getJson<CorrectionData>(
+        api.get<CorrectionData>(
           `/orgs/${currentOrg.id}/intelligence/user/correction/${satisfactionTraceId.trim()}`
         ),
       ]);

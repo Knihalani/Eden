@@ -144,3 +144,30 @@ All 4 features shipped 2026-06-24. Per-feature detail:
 3. **Cat 23 real ship**: gated on SLM Initiative + 4 hard gates (read-only → attribution → sandbox → end-to-end) over 8 weeks per memory `eden_cat23_stub_surface_shipped_2026_06.md`.
 4. **Re-enable deferred Phase 0 surfaces**: each cut has a clear re-add path (see "How shipped" column). For example, D.1 re-adds the 3 deleted modules; D.2 re-adds the 3 dropped signal columns via a follow-up migration.
 5. **Done**: All Phase 2 + cross-cutting work shipped 2026-06-24 (commits `a22124d5` through `c1708cad` + polish `615108d4` + spec trim `c1708cad` + RTBF/multi-region removal `111bb2c8`). 33 Phase 2 routes live in production, 3268 tests pass + 53 skipped + 4 xfailed (1 pre-existing zstd integration failure documented; the 27 failures + 6 errors that the Phase 2 CHANGELOG called "Phase 0 cut tests, unrelated" were real Cat 9/12/13 test fixtures broken by the Flat-Beta-Binomial + service-cut migrations — fixed 2026-06-24 by the foundation-cleanup commit, see CHANGELOG), deployedSHA matches local. Remaining: Phase 4 op debt + Cat 23 real ship.
+
+---
+
+## Phase 5 — Deferred items (NOT in any current plan)
+
+The 14-phase plan (`based-on-ugradespec-md-fully-serialized-volcano.md`) shipped 2026-06-25. Items below are **explicitly parked** per user direction and require their own trigger to schedule (customer demand, compliance review, SLM Initiative, etc.). They are NOT blocking any current work.
+
+| Item | Trigger to unblock | Where it lives |
+|---|---|---|
+| **Cat 23 external red-team re-review** | Before Gate 4 ships to production. Self-administered probe covered 16 vectors; external conventions expect 50+/class. Lead time: 2-4 weeks for a security consultant | `docs/docs/observability/cat23-redteam-report.md` |
+| **Cat 23 100-trace golden set** | Once Cat 23 has production traces to mine (currently 9 hand-curated) | `tests/intelligence/test_rca_accuracy.py` |
+| **Cat 23 JS/TS tree-sitter** | When a JS/TS trace lands on the golden set. Currently stdlib ast covers Python only; tree-sitter × 4 deps was rejected as over-scoped | `src/eden/code_change/code_parser.py` |
+| **Cat 23 10-repo CI parity test** | Needs Linux worker with `EDEN_SANDBOX_PROVIDER=isolated`. Harness not yet written | `tests/integration/test_sandbox_parity.py` (TBD) |
+| **Cat 23 worker-side read-only mount** | Defense-in-depth follow-up for Gate 3. The class docstring mentions read-only but actual enforcement is at the worker boundary | `src/eden/providers/sandbox_isolated.py` (Future Work) |
+| **Cat 23 post-merge monitor cron** | The 1h/6h/24h/7d windows are spec'd but the cron worker is not yet wired. Test `test_auto_mode_e2e.py` collapses timing | `src/eden/code_change/post_merge_monitor.py` (TBD) |
+| **Cat 23 GitHub App OAuth registration** | **Fully live as of 2026-06-25.** GitHub App created on github.com per user handoff (memory `eden_pagination_fly_github_handoff_2026_06.md`). All 6 secrets bound in `northflank.yml` (secrets group `eden-required`); `GITHUB_APP_CALLBACK_URL` = `https://edenobservability.com/onboarding/connect`. Code surface: 330-line `GitHubPRProvider` + 383-line `GitHubOAuthClient` + 792-line routes + 16 tests. `get_default_pr_provider()` auto-detects GitHub via `EDEN_GITHUB_TOKEN` + `EDEN_GITHUB_REPO` (runtime vars populated by OAuth callback). Status: **ready for first org install on next NF deploy** | `src/eden/providers/pr.py` + `src/eden/integrations/github/oauth.py` + `northflank.yml` (6 secret bindings) |
+| **Cat 23 SLM Initiative (Judge v2)** | Qwen 3.5 4B + 10 LoRA heads + vLLM + AWQ-4bit, 8-week rollout. Auto-mode quality gate | `docs/docs/observability/judge-v2-plan.md` |
+| **Agent CLI (Aider-fork → Codebuff-style)** | Separate product. The current `eden-ops` has 6 ops subcommands; the developer-facing `eden` CLI is PLAN-only | `docs/docs/reference/eden-agent-cli-spec.md` + `eden-agent-cli-roadmap.md` |
+| **Cat 21 Custom Metric Studio SLM** | Gated on Judge v2 SLM Initiative (weeks 9-12 of SLM plan) | `docs/docs/observability/judge-v2-plan.md` |
+| **2 STUB security hooks** (`security:pii_scanner`, `security:secret_detector`) | Gated on D.11 RTBF cross-store, which is permanently out of scope. Hooks stay recorded-but-noop | `src/eden/llmops/promotion_hooks.py` |
+| **D.11 RTBF cross-store** | Permanently out of scope (no legal team). The existing Cat 10 Postgres-only `RightToBeForgottenService` is sufficient | (no plan) |
+| **D.12 Multi-region (EU/AP)** | Permanently out of scope (single-region deployment). Northflank `us-central-1` is the only deployment | (no plan) |
+| **§9.3 Feature flag inventory** | Moot — feature flags are explicitly out of scope | (no plan) |
+| **Stripe billing** | Customer demand for paid plans, then wire `STRIPE_SECRET_KEY` + paid plan routes | `src/eden/api/routes/billing.py` |
+| **TS SDK for D.12 protocols** | Python SDK first; ship TS when a customer asks | (no plan) |
+| **External monitoring (Sentry/Datadog/uptime)** | Acceptable for <50 beta users; revisit at 50+ | (no plan) |
+| **axe-core CI scan** | CUT per YAGNI 2026-06-24 (manual WCAG per Phase 2B.2 suffices for beta) | (no plan) |

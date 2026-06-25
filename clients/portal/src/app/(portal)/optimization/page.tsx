@@ -17,8 +17,22 @@ import { cn } from "@/lib/utils";
 
 /* ----------------------- Sub-pages (lazy) ----------------------------- */
 
-const OutcomesPage = dynamic(() => import("./outcomes/page"), { ssr: false });
-const PredictPage = dynamic(() => import("./predict/page"), { ssr: false });
+const OutcomesPage = dynamic(() => import("./outcomes/page"), {
+  ssr: false,
+  loading: () => (
+    <div className="flex h-64 items-center justify-center">
+      <Loader2 className="h-5 w-5 animate-spin text-[var(--text-muted)]" />
+    </div>
+  ),
+});
+const PredictPage = dynamic(() => import("./predict/page"), {
+  ssr: false,
+  loading: () => (
+    <div className="flex h-64 items-center justify-center">
+      <Loader2 className="h-5 w-5 animate-spin text-[var(--text-muted)]" />
+    </div>
+  ),
+});
 
 /* ----------------------- Inline SVG forecast chart -------------------- */
 

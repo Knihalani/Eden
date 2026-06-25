@@ -12,28 +12,28 @@
     "confidence": 0.8,
     "metrics": {
       "error_rate": {
-        "baseline": 0.0145,
-        "candidate": 0.0073,
-        "regression_pct": -49.59,
+        "baseline": 0.0152,
+        "candidate": 0.0133,
+        "regression_pct": -12.44,
         "threshold_pct": 5.0,
         "failed": false
       },
       "latency_p99": {
-        "baseline": 261.7322,
-        "candidate": 451.5993,
-        "regression_pct": 72.54,
+        "baseline": 232.0888,
+        "candidate": 413.8976,
+        "regression_pct": 78.34,
         "threshold_pct": 50.0,
         "failed": true
       },
       "success_rate": {
-        "baseline": 0.9837,
-        "candidate": 0.9698,
-        "regression_pct": 1.41,
+        "baseline": 0.9841,
+        "candidate": 0.9858,
+        "regression_pct": -0.17,
         "threshold_pct": 5.0,
         "failed": false
       }
     },
-    "duration_ms": 3001.27,
-    "timestamp": "2026-06-24T11:44:07.653005+00:00"
+    "duration_ms": 3001.44,
+    "timestamp": "2026-06-25T16:10:48.578923+00:00"
   }
 }
