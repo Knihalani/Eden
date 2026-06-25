@@ -377,15 +377,24 @@ def get_default_sandbox_provider() -> SandboxProvider:
 
     Returns :class:`LocalSandboxProvider` when ``eden.sandbox``
     is unconfigured, :class:`NullSandboxProvider` when the
-    ``EDEN_SANDBOX_PROVIDER=null`` env var is set. The
+    ``EDEN_SANDBOX_PROVIDER=null`` env var is set, and
+    :class:`IsolatedSandboxProvider` (lazy-imported from
+    :mod:`eden.providers.sandbox_isolated`) when
+    ``EDEN_SANDBOX_PROVIDER=isolated`` is set. The
     Firecracker / Docker providers are wired here when they
     ship.
 
     Used by the route bootstrap and by the agent-suggest
     flow's default.
     """
-    if os.environ.get("EDEN_SANDBOX_PROVIDER") == "null":
+    provider = os.environ.get("EDEN_SANDBOX_PROVIDER", "local")
+    if provider == "null":
         return NullSandboxProvider()
+    if provider == "isolated":
+        # Lazy import to avoid pulling the unshare path
+        # into the LocalSandboxProvider's import chain.
+        from .sandbox_isolated import IsolatedSandboxProvider
+        return IsolatedSandboxProvider()
     return LocalSandboxProvider()
 
 
