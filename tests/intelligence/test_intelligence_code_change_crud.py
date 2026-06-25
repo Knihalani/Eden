@@ -23,11 +23,16 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from eden.api.deps import get_current_user
+from eden.api.deps import get_current_user, require_org_admin, require_org_permission_dep
 
 
 def _fake_user() -> dict:
     return {"sub": "user-test", "org_id": "org-test", "email": "t@e.com"}
+
+
+def _fake_admin() -> dict:
+    """Fake admin org dict — Cat 23 destructive routes pass this through."""
+    return {"user_id": "user-test", "org_id": "org-test", "role": "owner"}
 
 
 @pytest.fixture(scope="module")
@@ -37,7 +42,35 @@ def test_app() -> FastAPI:
     settings.intelligence_gap_v0 = True
     app = FastAPI(title="eden-cat23-crud-test")
     app.dependency_overrides[get_current_user] = _fake_user
+    # Cat 23 destructive routes are gated by ``require_org_admin`` /
+    # ``require_org_permission_dep`` (June 2026 hardening). The CRUD
+    # tests don't exercise auth — fake both as admin so the
+    # destructive gates let the request through.
+    #
+    # ``require_org_permission_dep`` is a FACTORY: ``Dep = factory("x")``
+    # returns a closure, and the route uses ``Depends(closure)``.
+    # FastAPI's ``dependency_overrides`` matches by the closure
+    # reference, so we override each closure instance — one per
+    # route that called the factory. The admin dep (no factory) is
+    # overridden directly.
+    app.dependency_overrides[require_org_admin] = _fake_admin
+    # Re-import the route module so the factory calls happen here
+    # (we capture the closure references for the override map).
     mod = importlib.import_module("eden.api.routes.intelligence_code_change")
+    # Walk every route's dependency list and override any
+    # ``require_org_permission_dep`` closure we find. The
+    # closure's ``__qualname__`` carries the originating factory
+    # name (FastAPI's introspect picks it up).
+    for route in mod.router.routes:
+        if not hasattr(route, "dependant"):
+            continue
+        for dep in route.dependant.dependencies:
+            call = getattr(dep, "call", None)
+            if call is None:
+                continue
+            qname = getattr(call, "__qualname__", "") or ""
+            if "require_org_permission_dep" in qname:
+                app.dependency_overrides[call] = _fake_admin
     app.include_router(mod.router)
     return app
 

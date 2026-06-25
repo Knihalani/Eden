@@ -75,13 +75,18 @@ async def test_evaluate_hallucination_heuristic_only_when_toggle_off(monkeypatch
 
     pm = ProductionMonitor()
     out = await pm.evaluate_hallucination(
-        generated_code="import os; print('hi')",
+        generated_code="import fake_module; print('hi')",
         spec="print hello",
     )
+    # ``fake_module`` triggers the heuristic → hallucination_detected=True
     assert out["hallucination_detected"] is True
     assert "issues" in out
+    assert any("fake_module" in i for i in out["issues"])
     # No judge_model field — confirms we did not hit the LLM path.
     assert "judge_model" not in out
+    # Sample gate: only ~1.2% of inputs land in the judge bucket.
+    # We don't assert on ``sampled_out`` (it's deterministic by
+    # generated_code hash, so a different input would flip the flag).
 
 
 @pytest.mark.asyncio

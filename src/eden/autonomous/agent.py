@@ -1206,7 +1206,10 @@ class ChatService:
         # re-bills the prefix at 1/10 cost on subsequent calls.
         # ~4k system-prompt tokens × N chats × 90% saving is the
         # single biggest line item in the agent budget.
-        is_anthropic = OpenRouterClient._is_anthropic_model(model)
+        # Call on the instance — tests replace the class with a
+        # mock lambda and the staticmethod resolves through the
+        # instance attribute.
+        is_anthropic = client._is_anthropic_model(model)
         system_msg: dict[str, Any] = {"role": "system", "content": system_prompt}
         if is_anthropic:
             system_msg = {

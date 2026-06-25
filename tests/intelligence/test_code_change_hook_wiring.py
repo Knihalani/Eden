@@ -198,7 +198,10 @@ async def test_post_merge_handles_revert_failure() -> None:
         )
     assert result["executed"] is False
     assert "revert_failed" in result["skipped_reason"]
-    assert "engine exploded" in result["skipped_reason"]
+    # ``skipped_reason`` only carries ``type(exc).__name__`` — the
+    # full exception text is logged at WARNING level for ops but
+    # not surfaced to the operator-facing audit payload.
+    assert "RuntimeError" in result["skipped_reason"]
 
 
 @pytest.mark.asyncio
