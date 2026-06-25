@@ -236,6 +236,13 @@ class IsolatedSandboxProvider:
     same rlimit preexec_fn as :class:`LocalSandboxProvider`.
     Wall-clock timeout is the asyncio wait_for cap on the
     subprocess communicate.
+
+    **Filesystem:** the worker mounts the customer's repo
+    CHECKOUT READ-ONLY at ``spec.workdir`` BEFORE spawning
+    the subprocess. The subprocess writes to a tmpfs scratch
+    dir (discarded on exit). The ``--mount`` namespace
+    prevents the subprocess from remounting the customer
+    repo read-write from inside the sandbox.
     """
 
     name: str = "isolated"
