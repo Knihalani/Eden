@@ -56,7 +56,7 @@ from __future__ import annotations
 
 import json
 import logging
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from typing import Any
 
 from eden.code_change._common import DEFAULT_POLICY, _select_rows

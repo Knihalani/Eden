@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useOrg } from "@/hooks/use-org";
+import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/components/ui/toast";
 import { NoOrgState } from "@/components/ui/no-org-state";
@@ -17,8 +18,6 @@ import {
   Bell,
 } from "lucide-react";
 import { motion } from "framer-motion";
-
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 const EXAMPLE_EQL = `root.span.duration_ms > 1000 AND any.judge.score < 0.5`;
 
@@ -51,36 +50,14 @@ interface CompileAlertResult {
   severity: string;
 }
 
-async function fetchJson<T>(path: string, init: RequestInit = {}): Promise<T> {
-  const res = await fetch(`${API_BASE}${path}`, {
-    credentials: "include",
-    headers: { "Content-Type": "application/json" },
-    ...init,
-  });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({ detail: "Request failed" }));
-    throw new Error(err.detail || `HTTP ${res.status}`);
-  }
-  return res.json() as Promise<T>;
-}
-
 function parseQuery(orgId: string, query: string): Promise<ParseResult> {
-  return fetchJson<ParseResult>(`/orgs/${orgId}/intelligence/dsl/parse`, {
-    method: "POST",
-    body: JSON.stringify({ query }),
-  });
+  return api.post<ParseResult>(`/orgs/${orgId}/intelligence/dsl/parse`, { query });
 }
 function lintQuery(orgId: string, query: string): Promise<{ warnings: LintWarning[] }> {
-  return fetchJson<{ warnings: LintWarning[] }>(`/orgs/${orgId}/intelligence/dsl/lint`, {
-    method: "POST",
-    body: JSON.stringify({ query }),
-  });
+  return api.post<{ warnings: LintWarning[] }>(`/orgs/${orgId}/intelligence/dsl/lint`, { query });
 }
 function resolveQuery(orgId: string, query: string): Promise<ResolveResult> {
-  return fetchJson<ResolveResult>(`/orgs/${orgId}/intelligence/dsl/resolve`, {
-    method: "POST",
-    body: JSON.stringify({ query }),
-  });
+  return api.post<ResolveResult>(`/orgs/${orgId}/intelligence/dsl/resolve`, { query });
 }
 function compileAlert(
   orgId: string,
@@ -88,13 +65,10 @@ function compileAlert(
   name: string,
   severity: string
 ): Promise<CompileAlertResult> {
-  return fetchJson<CompileAlertResult>(`/orgs/${orgId}/intelligence/dsl/alerts/compile`, {
-    method: "POST",
-    body: JSON.stringify({ query, name, severity }),
-  });
+  return api.post<CompileAlertResult>(`/orgs/${orgId}/intelligence/dsl/alerts/compile`, { query, name, severity });
 }
 function listAlerts(orgId: string): Promise<{ alerts: AlertSummary[] }> {
-  return fetchJson<{ alerts: AlertSummary[] }>(`/orgs/${orgId}/intelligence/dsl/alerts`);
+  return api.get<{ alerts: AlertSummary[] }>(`/orgs/${orgId}/intelligence/dsl/alerts`);
 }
 
 export default function QueryDslPage() {

@@ -450,19 +450,36 @@ class SqlExecutor:
 
         We accept string / int / float / bool / None params. The
         binding is positional because the Postgres client uses
-        ``$1, $2, ...`` placeholders.
+        ``$1, $2, ...`` placeholders. We skip ``:name`` matches
+        that fall inside single-quoted string literals so a query
+        like ``SELECT ':foo' FROM t`` is left untouched.
         """
         if not params:
             return sql, []
-        # Walk the SQL, replacing ``:name`` with ``$N``. We
-        # avoid replacing inside string literals (single-quoted
-        # strings) — the regex below only matches ``:`` followed
-        # by an identifier character.
+        # Walk the SQL statefully — tracks ``in_string`` so we
+        # skip :name matches inside single-quoted string literals.
+        # ``''`` (escaped quote inside a string) does not toggle the
+        # state, matching Postgres' own parser.
         pat = re.compile(r":([A-Za-z_][A-Za-z0-9_]*)")
         args: list[Any] = []
         out_parts: list[str] = []
         last = 0
+        in_string = False
+        i = 0
         for m in pat.finditer(sql):
+            # Advance the string-state cursor to ``m.start()``,
+            # toggling ``in_string`` on each unescaped ``'``.
+            while i < m.start():
+                ch = sql[i]
+                if ch == "'":
+                    if in_string and i + 1 < len(sql) and sql[i + 1] == "'":
+                        # Escaped quote inside string — skip both.
+                        i += 2
+                        continue
+                    in_string = not in_string
+                i += 1
+            if in_string:
+                continue
             name = m.group(1)
             if name not in params:
                 # Leave it untouched — Postgres will raise a

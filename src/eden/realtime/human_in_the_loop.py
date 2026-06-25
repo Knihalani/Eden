@@ -287,16 +287,22 @@ class HILTController:
         """Approve a pending pipeline decision."""
         decision_id = payload.get("decision_id", "default")
 
-        # Store approval in Redis for pipeline to pick up
+        # Store approval in Redis for pipeline to pick up.
+        # Per-decision key (with its own 1h TTL) — the previous
+        # single-hash-per-job pattern reset the parent TTL on every
+        # approve, pinning the hash in Redis until job cleanup.
         redis = await self._get_redis()
         if redis:
-            approve_key = f"hilt:{job_id}:approvals"
-            await redis.hset(approve_key, decision_id, json.dumps({
-                "approved": True,
-                "timestamp": datetime.now(UTC).isoformat(),
-                "notes": payload.get("notes", ""),
-            }))
-            await redis.expire(approve_key, 3600)
+            approve_key = f"hilt:{job_id}:decision:{decision_id}"
+            await redis.set(
+                approve_key,
+                json.dumps({
+                    "approved": True,
+                    "timestamp": datetime.now(UTC).isoformat(),
+                    "notes": payload.get("notes", ""),
+                }),
+                ex=3600,
+            )
 
         state.state = HILTState.RUNNING
         state.waiting_for = None
@@ -320,13 +326,16 @@ class HILTController:
 
         redis = await self._get_redis()
         if redis:
-            reject_key = f"hilt:{job_id}:approvals"
-            await redis.hset(reject_key, decision_id, json.dumps({
-                "approved": False,
-                "timestamp": datetime.now(UTC).isoformat(),
-                "reason": reason,
-            }))
-            await redis.expire(reject_key, 3600)
+            reject_key = f"hilt:{job_id}:decision:{decision_id}"
+            await redis.set(
+                reject_key,
+                json.dumps({
+                    "approved": False,
+                    "timestamp": datetime.now(UTC).isoformat(),
+                    "reason": reason,
+                }),
+                ex=3600,
+            )
 
         state.state = HILTState.RUNNING
         state.waiting_for = None

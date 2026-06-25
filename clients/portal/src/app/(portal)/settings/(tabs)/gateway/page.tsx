@@ -18,12 +18,12 @@ export default function GatewaySettingsRedirect() {
   const searchParams = useSearchParams();
 
   useEffect(() => {
-    // Preserve any query params (e.g. flash messages) while
-    // forwarding to the unified page with ``tab=gateway``.
+    // Always force ``?tab=gateway`` — a stale deep link with
+    // ``?tab=foo`` should still land on the gateway tab, not
+    // whatever was last visited. Other query params are preserved
+    // so flash messages survive the redirect.
     const params = new URLSearchParams(searchParams.toString());
-    if (!params.has("tab")) {
-      params.set("tab", "gateway");
-    }
+    params.set("tab", "gateway");
     const qs = params.toString();
     router.replace(`/settings${qs ? `?${qs}` : ""}`);
   }, [router, searchParams]);

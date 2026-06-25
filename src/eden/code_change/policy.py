@@ -25,6 +25,8 @@ import json
 import logging
 from typing import Any
 
+from eden.storage.postgres import get_postgres_client
+
 from ._common import DEFAULT_POLICY, _new_id, _ok_envelope
 
 logger = logging.getLogger(__name__)
@@ -41,7 +43,6 @@ _VALID_PCT_FIELDS = (
 async def _read_policy_jsonb(org_id: str) -> dict[str, Any]:
     """Read ``organizations.features->'code_change_policy'`` for this org."""
     try:
-        from eden.storage.postgres import get_postgres_client
         client = await get_postgres_client()
         if client is None:
             return {}
@@ -76,7 +77,6 @@ async def _write_policy_jsonb(
     column (e.g. ``autonomous_actions_v0``) are preserved.
     """
     try:
-        from eden.storage.postgres import get_postgres_client
         client = await get_postgres_client()
         if client is None:
             return False

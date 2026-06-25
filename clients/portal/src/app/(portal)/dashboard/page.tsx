@@ -102,7 +102,10 @@ export default function DashboardPage() {
               // field null and keep going. Anything else is real
               // and worth surfacing.
               if (!/404|not\s*found|failed\s*to\s*fetch/i.test(msg)) {
-                console.warn("Dashboard shard failed:", msg);
+                // Surfaced via the dashboard's error banner; no need
+                // to spam the console here (the previous line was the
+                // exact leak use-org.tsx:148 was just refactored to
+                // suppress).
               }
             }
             return null;

@@ -44,6 +44,7 @@ def _graph_node_id(org_id: str, repo_id: str, code_path: str) -> str:
 _OUTCOME_COUNTER: dict[str, str] = {
     "success": None,            # success doesn't bump a denial counter
     "merged": None,
+    "proposed": None,           # proposed bumps historical_patches_count only
     "reverted": "reverted_count",
     "denied": "denied_count",
     "edited": "edited_count",

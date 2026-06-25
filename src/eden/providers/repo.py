@@ -1,17 +1,21 @@
 """Repo provider — read-only access to a source-control repo.
 
 This module defines the :class:`RepoProvider` protocol plus
-a :class:`LocalRepoProvider` implementation (uses the local
-``git`` CLI on a checkout) and a :class:`GitHubRepoProvider`
-(placeholder that raises :class:`NotImplementedError` — the
-real impl is gated on the GitHub App auth flow per the
-Cat 23 v1.6 ship plan).
+two real implementations:
+
+* :class:`LocalRepoProvider` — uses the local ``git`` CLI on a
+  checkout. No remote; this is the dev / CI / on-prem path.
+* :class:`GitHubRepoProvider` — talks to the GitHub REST API
+  with a GitHub App installation token. Production path; the
+  Cat 23 v1.7 ship plan extends it to GitLab + Bitbucket.
 
 The provider is read-only by design. The write side lives
 in :mod:`eden.providers.pr` (:class:`PRProvider`).
 :func:`get_default_repo_provider` returns a
 :class:`LocalRepoProvider` pointed at the directory in
-``EDEN_LOCAL_REPO_PATH`` (default ``.``).
+``EDEN_LOCAL_REPO_PATH`` (default ``.``); the GitHub
+provider is selected when ``EDEN_GITHUB_TOKEN`` +
+``EDEN_GITHUB_REPO`` are both populated.
 
 Example
 -------

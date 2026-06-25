@@ -45,6 +45,8 @@ import uuid
 from datetime import UTC, datetime
 from typing import Any
 
+from eden.storage.postgres import get_postgres_client
+
 logger = logging.getLogger(__name__)
 
 
@@ -282,12 +284,6 @@ async def _delete_then_insert(
     caller can still return the live envelope with the in-memory
     data. Persistence is a side-effect, not the contract.
     """
-    try:
-        from eden.storage.postgres import get_postgres_client
-    except Exception as exc:  # pragma: no cover - defensive
-        logger.debug("code_change._common: postgres import failed: %s", exc)
-        return
-
     client = await get_postgres_client()
     if client is None:
         return

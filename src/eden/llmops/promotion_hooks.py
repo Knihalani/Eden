@@ -38,6 +38,15 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
+# Module-level truncation caps. Postgres column sizes per the migration
+# that introduced ``closed_loop_actions`` / ``hook_events`` —
+# keep these in sync with the schema or the DB will reject the write.
+MAX_HOOK_NAME_LEN = 64
+MAX_ACTION_KIND_LEN = 64
+MAX_TARGET_LEN = 256
+MAX_PAYLOAD_LEN = 4000
+MAX_SEVERITY_LEN = 16
+
 
 # ─── Action kinds (canonical strings) ────────────────────────────
 
@@ -149,11 +158,11 @@ async def _record_action(
             """,
             action_id,
             org_id,
-            hook_name[:64],
-            action_kind[:64],
-            (target or "")[:256] or None,
-            json.dumps(payload or {}, default=str)[:4000],
-            severity[:16],
+            hook_name[:MAX_HOOK_NAME_LEN],
+            action_kind[:MAX_ACTION_KIND_LEN],
+            (target or "")[:MAX_TARGET_LEN] or None,
+            json.dumps(payload or {}, default=str)[:MAX_PAYLOAD_LEN],
+            severity[:MAX_SEVERITY_LEN],
         )
     except Exception as exc:
         logger.debug("closed_loop: action insert failed: %s", exc)
@@ -1071,10 +1080,10 @@ class CodeChangeHook:
             from eden.code_change.repo_connector import RepoConnector
             from eden.optimization.model_router import ModelRouter
         except Exception as exc:
-            logger.debug(
+            logger.warning(
                 "code_change_hook: imports failed: %s", exc,
             )
-            result["skipped_reason"] = f"imports_failed: {exc}"
+            result["skipped_reason"] = f"imports_failed:{type(exc).__name__}"
             return result
 
         try:
@@ -1113,11 +1122,11 @@ class CodeChangeHook:
             result["patch_gate"] = (patch_result.get("data") or {}).get("gate")
             return result
         except Exception as exc:
-            logger.debug(
+            logger.warning(
                 "code_change_hook.propose_patch_from_rca: mint failed: %s",
                 exc,
             )
-            result["skipped_reason"] = f"mint_failed: {exc}"
+            result["skipped_reason"] = f"mint_failed:{type(exc).__name__}"
             return result
 
     async def post_merge_degraded(
@@ -1166,7 +1175,7 @@ class CodeChangeHook:
             },
             severity="high",
         )
-        logger.debug(
+        logger.warning(
             "code_change_hook.post_merge_degraded org=%s pr=%s "
             "window_hours=%s action_id=%s",
             org_id, pr_id, window_hours, action_id,
@@ -1215,11 +1224,11 @@ class CodeChangeHook:
             result["engine_status"] = revert_result.get("status")
             return result
         except Exception as exc:
-            logger.debug(
+            logger.warning(
                 "code_change_hook.post_merge_degraded: revert failed: %s",
                 exc,
             )
-            result["skipped_reason"] = f"revert_failed: {exc}"
+            result["skipped_reason"] = f"revert_failed:{type(exc).__name__}"
             return result
 
 
@@ -1386,7 +1395,7 @@ class OnboardingMilestoneHook:
         try:
             from eden.services.onboarding import get_state_machine
         except Exception as exc:  # pragma: no cover - defensive
-            logger.debug(
+            logger.warning(
                 "onboarding_hook: import failed: %s", exc
             )
             return None
@@ -1394,7 +1403,7 @@ class OnboardingMilestoneHook:
         try:
             state = await sm.record_milestone(org_id, milestone)
         except Exception as exc:
-            logger.debug(
+            logger.warning(
                 "onboarding_hook: record_milestone failed: %s", exc
             )
             return None

@@ -41,12 +41,9 @@ interface SubPage {
 }
 
 const SUBPAGES: SubPage[] = [
-  {
-    href: "/observability/apm",
-    title: "APM Tracing",
-    description: "Service-level latency, error rates, and trace drilldowns",
-    icon: GitBranch,
-  },
+  // APM Tracing moved to OTel Collector (June 2026); the /observability/apm
+  // route renders a static notice rather than a live surface, so it is
+  // intentionally absent from the hub cards.
   {
     href: "/observability/cohorts",
     title: "Columnar Engine",

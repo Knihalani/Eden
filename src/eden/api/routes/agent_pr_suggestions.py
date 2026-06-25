@@ -128,6 +128,10 @@ class OpenPRRequest(BaseModel):
     labels: list[str] = Field(default_factory=list)
     reviewers: list[str] = Field(default_factory=list)
     draft: bool = False
+    repo_id: str = Field(
+        default="",
+        description="The connected repo_id to persist on the PR row.",
+    )
 
 
 # ── Routes ──────────────────────────────────────────────────────
@@ -264,6 +268,7 @@ async def open_pr(
             f"Trigger: {suggestion.trigger} {suggestion.trigger_id}\n"
             f"Suggestion: {suggestion.id}"
         ),
+        repo_id=body.repo_id,
     )
     try:
         pr_info = await pr_provider.create_pr(pr_req)

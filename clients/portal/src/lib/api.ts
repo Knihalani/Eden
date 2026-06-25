@@ -129,7 +129,9 @@ async function fetchApi<T>(
     }
 
     if (!response.ok) {
-      const error = await response.json().catch(() => ({ detail: "Request failed" }));
+      const error = await response.json().catch(
+        () => ({ detail: `Request failed (${response.status})` }),
+      );
       throw new Error(error.detail || `HTTP ${response.status}`);
     }
 

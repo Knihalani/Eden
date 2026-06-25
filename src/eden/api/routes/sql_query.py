@@ -227,8 +227,9 @@ async def get_sql_limits(
     """Surface the current org's caps. Admins can override
     these via Settings (``sql_max_rows`` / ``sql_max_seconds``)
     — when they do, this endpoint returns the override."""
-    # TODO: when we wire per-org Settings overrides, look up
-    # the value here. For now we return the defaults.
+    # pre-release: per-org Settings overrides are not yet wired;
+    # the response always reflects the platform defaults until
+    # the per-org override store ships.
     return SqlLimitsResponse(
         max_rows=DEFAULT_MAX_ROWS,
         max_seconds=DEFAULT_MAX_SECONDS,

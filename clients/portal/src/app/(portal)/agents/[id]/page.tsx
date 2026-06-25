@@ -23,7 +23,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
-import { ArrowLeft, Bot, Clock, Code, ExternalLink, Package, PlayCircle, FileCode, Cpu, Upload as UploadIcon, Beaker } from "lucide-react";
+import { ArrowLeft, Bot, Clock, Code, ExternalLink, Package, PlayCircle, FileCode, Cpu, Upload as UploadIcon, Beaker, Loader2 } from "lucide-react";
 import { useOrg } from "@/hooks/use-org";
 import { agentsApi } from "@/lib/api";
 import { Card } from "@/components/ui/card";
@@ -113,11 +113,20 @@ export default function AgentDetailPage() {
       if (cancelled) return;
       const list = (agentsResp?.agents ?? []) as AgentRecord[];
       setAgent(list.find((a) => a.agent_id === agentId) ?? null);
-      // FIX-C: cast — listUploads returns AgentUpload[] | UploadRecord[]
-      // (untyped legacy + typed new); the local state uses UploadRecord.
-      // Production builds were failing on this TS error, blocking all
-      // Vercel deploys since the Phase 5 commit.
-      setUploads(ups as UploadRecord[]);
+      // Narrow the BE list into our local UploadRecord shape rather than
+      // casting through ``unknown`` (which suppresses the type system).
+      // Defensive — fields missing from the wire shape fall back to
+      // ``undefined`` rather than crashing the upload panel.
+      const narrowed: UploadRecord[] = (ups ?? []).map((u) => ({
+        upload_id: (u as { upload_id?: string }).upload_id ?? "",
+        upload_version: (u as { upload_version?: number }).upload_version,
+        framework: (u as { framework?: string }).framework,
+        entry_point: (u as { entry_point?: string }).entry_point,
+        file_count: (u as { file_count?: number }).file_count,
+        total_bytes: (u as { total_bytes?: number }).total_bytes,
+        uploaded_at: (u as { uploaded_at?: string }).uploaded_at,
+      }));
+      setUploads(narrowed);
       setSimRuns(sims);
       setTestRuns(tests);
       setLoading(false);
@@ -143,6 +152,15 @@ export default function AgentDetailPage() {
     return (
       <div className="p-8 text-sm text-[var(--text-muted)]">
         Select an organisation to view this agent.
+      </div>
+    );
+  }
+
+  if (loading && !agent) {
+    return (
+      <div className="p-8 text-sm text-[var(--text-muted)] flex items-center gap-2">
+        <Loader2 className="w-4 h-4 animate-spin" />
+        Loading agent…
       </div>
     );
   }
@@ -281,14 +299,13 @@ export default function AgentDetailPage() {
         </Link>
       </div>
 
-      {/* Upload panel — FIX-C: cast; the panel accepts the typed
-          AgentUpload[] but this page's local state is UploadRecord[].
-          The shapes overlap on the fields the panel reads
-          (upload_version, file_count, etc.). */}
+      {/* Upload panel — the panel accepts the typed
+          AgentUpload[] shape; our local state narrows the BE response
+          into UploadRecord[] at the fetch boundary above. */}
       <AgentUploadPanel
         orgId={orgId}
         agentId={agentId}
-        uploads={uploads as unknown as Parameters<typeof AgentUploadPanel>[0]["uploads"]}
+        uploads={uploads as Parameters<typeof AgentUploadPanel>[0]["uploads"]}
       />
 
       {/* Recent uploads */}

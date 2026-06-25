@@ -277,7 +277,7 @@ class RepoConnector:
         "docs/CODEOWNERS",
     )
 
-    async def read_codeowners(self) -> dict[str, Any]:
+    async def read_codeowners(self, org_id: str) -> dict[str, Any]:
         """Read + parse the repo's CODEOWNERS file.
 
         Per GitHub's lookup order, we probe three locations
@@ -296,20 +296,26 @@ class RepoConnector:
         DB writes. Cat 23 Gate-1 audit: this is the only
         Gate-1 read path on the connector.
 
+        ``org_id`` is required: the connector looks up the
+        org's active ``repo_connections`` row to pick the
+        correct source-control repo (a multi-repo org would
+        otherwise get the platform-default repo's CODEOWNERS).
+
         Examples:
             >>> import asyncio
             >>> from eden.code_change.repo_connector import RepoConnector
             >>> connector = RepoConnector()
-            >>> result = asyncio.run(connector.read_codeowners())
+            >>> result = asyncio.run(connector.read_codeowners(org_id="demo"))
             >>> result["status"]
             'ok'
         """
         entries: list[CodeOwnersEntry] = []
         source_path = ""
         raw = ""
+        provider = await self._provider_for_org(org_id)
         for candidate in self._CODEOWNERS_PATHS:
             try:
-                content = await self._provider.read_file(candidate)
+                content = await provider.read_file(candidate)
             except Exception as exc:
                 logger.debug(
                     "RepoConnector.read_codeowners(%s): %s",
@@ -346,7 +352,7 @@ class RepoConnector:
         )
 
     async def owners_for_files(
-        self, file_paths: list[str],
+        self, org_id: str, file_paths: list[str],
     ) -> dict[str, Any]:
         """Resolve the CODEOWNERS owner for each file path.
 
@@ -359,8 +365,11 @@ class RepoConnector:
         file maps to an empty owner list and the caller is
         responsible for the fallback (manual reviewer
         assignment).
+
+        ``org_id`` is required so the connector routes to
+        the org's connected repo (multi-tenant isolation).
         """
-        codeowners_resp = await self.read_codeowners()
+        codeowners_resp = await self.read_codeowners(org_id)
         entries_raw = codeowners_resp.get("data", {}).get(
             "entries", [],
         )
@@ -378,3 +387,42 @@ class RepoConnector:
                 },
             },
         )
+
+    async def _provider_for_org(self, org_id: str):
+        """Return a :class:`RepoProvider` scoped to ``org_id``'s active repo.
+
+        Falls back to the default provider when the org has no
+        ``repo_connections`` rows (the pre-multi-repo-isolation
+        behaviour). The lookup is best-effort: a DB error logs
+        at debug and falls back so a transient Postgres outage
+        doesn't break read paths.
+        """
+        from ._common import _select_rows
+        try:
+            rows = await _select_rows(
+                org_id,
+                "repo_connections",
+                where="status = 'active'",
+                order_by="created_at DESC",
+                limit=1,
+            )
+        except Exception as exc:
+            logger.debug(
+                "RepoConnector._provider_for_org(%s): %s", org_id, exc,
+            )
+            return self._provider
+        if not rows:
+            return self._provider
+        repo = rows[0]
+        # Local provider: build a fresh one with the repo's
+        # working directory. GitHub provider: rebuild with
+        # the token + repo from env (the env-driven factory
+        # already targets the configured EDEN_GITHUB_REPO).
+        from eden.providers import get_default_repo_provider
+        from eden.providers.repo import LocalRepoProvider
+        provider = get_default_repo_provider()
+        if isinstance(provider, LocalRepoProvider):
+            return LocalRepoProvider(
+                repo_path=repo.get("repo_full_name") or provider.repo_path,
+            )
+        return provider

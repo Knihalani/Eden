@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useOrg } from "@/hooks/use-org";
+import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { EmptyState } from "@/components/ui/empty-state";
 import { NoOrgState } from "@/components/ui/no-org-state";
@@ -45,34 +46,6 @@ interface ToolCategory {
   tools: string[];
 }
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-
-async function postJson<T>(endpoint: string, body: unknown): Promise<T> {
-  const res = await fetch(`${API_BASE}${endpoint}`, {
-    method: "POST",
-    credentials: "include",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({ detail: "Request failed" }));
-    throw new Error(err.detail || `HTTP ${res.status}`);
-  }
-  return res.json();
-}
-
-async function getJson<T>(endpoint: string): Promise<T> {
-  const res = await fetch(`${API_BASE}${endpoint}`, {
-    credentials: "include",
-    headers: { "Content-Type": "application/json" },
-  });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({ detail: "Request failed" }));
-    throw new Error(err.detail || `HTTP ${res.status}`);
-  }
-  return res.json();
-}
-
 export default function ToolsPage() {
   const { currentOrg } = useOrg();
   const [activeTab, setActiveTab] = useState<Tab>("attribution");
@@ -105,7 +78,7 @@ export default function ToolsPage() {
     setAttributionLoading(true);
     setError("");
     try {
-      const data = await postJson<{ tools: ToolAttribution[] }>(
+      const data = await api.post<{ tools: ToolAttribution[] }>(
         `/orgs/${currentOrg.id}/intelligence/tools/attribution`,
         { days: attributionDays }
       );
@@ -121,7 +94,7 @@ export default function ToolsPage() {
     if (!currentOrg) return;
     setTaxonomyLoading(true);
     try {
-      const data = await getJson<{ categories: ToolCategory[] }>(
+      const data = await api.get<{ categories: ToolCategory[] }>(
         `/orgs/${currentOrg.id}/intelligence/tools/taxonomy`
       );
       setTaxonomy(data.categories || []);
@@ -147,7 +120,7 @@ export default function ToolsPage() {
     setCompareLoading(true);
     setError("");
     try {
-      const data = await postJson<{ comparison: ToolComparison[] }>(
+      const data = await api.post<{ comparison: ToolComparison[] }>(
         `/orgs/${currentOrg.id}/intelligence/tools/compare`,
         { tool_names: selectedTools }
       );
@@ -164,7 +137,7 @@ export default function ToolsPage() {
     setRecommendLoading(true);
     setError("");
     try {
-      const data = await postJson<{ recommendations: ToolRecommendation[] }>(
+      const data = await api.post<{ recommendations: ToolRecommendation[] }>(
         `/orgs/${currentOrg.id}/intelligence/tools/recommend`,
         { task: task.trim() }
       );

@@ -86,8 +86,13 @@ async def _tick(*, dry_run: bool) -> dict[str, object]:
             dry_run=dry_run,
         )
     except Exception as exc:
+        # Emit a structured marker so the NF log scraper
+        # / alert rule can grep for it. ``logger.exception``
+        # already logs the traceback at ERROR; the marker
+        # is the operator-facing signal.
         logger.exception("[cron_tick] evaluate_pending_clusters failed: %s", exc)
-        out["cat23_scheduler"] = {"errors": [str(exc)]}
+        logger.error("CRON_TICK_FAILURE evaluate_pending_clusters %s", type(exc).__name__)
+        out["cat23_scheduler"] = {"errors": [str(exc)], "failure_marker": True}
 
     # 2. Daily @ 03:00 UTC: stale_pending_sweep + retention_cron.
     if now.hour == 3 and now.minute < 10:

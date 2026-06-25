@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useOrg } from "@/hooks/use-org";
+import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { EmptyState } from "@/components/ui/empty-state";
 import { NoOrgState } from "@/components/ui/no-org-state";
@@ -25,28 +26,13 @@ import {
 import { motion, AnimatePresence } from "framer-motion";
 import { DataTable } from "@/components/ui/data-table";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-
-async function callApi<T>(endpoint: string, init: RequestInit = {}): Promise<T> {
-  const res = await fetch(`${API_BASE}${endpoint}`, {
-    credentials: "include",
-    headers: { "Content-Type": "application/json", ...(init.headers ?? {}) },
-    ...init,
-  });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({ detail: "Request failed" }));
-    throw new Error(err.detail || `HTTP ${res.status}`);
-  }
-  return res.json() as Promise<T>;
-}
-
 const memoryApi = {
   attribute: (orgId: string, traceId: string) =>
-    callApi<{ trace_id: string; memories: Array<{ memory_id: string; influence: number }>; }>(`/orgs/${orgId}/intelligence/memory/${traceId}/attribute`, { method: "POST" }),
+    api.post<{ trace_id: string; memories: Array<{ memory_id: string; influence: number }>; }>(`/orgs/${orgId}/intelligence/memory/${traceId}/attribute`),
   impact: (orgId: string, traceId: string) =>
-    callApi<{ trace_id: string; impact_score: number; components: Record<string, number>; }>(`/orgs/${orgId}/intelligence/memory/${traceId}/impact`, { method: "POST" }),
+    api.post<{ trace_id: string; impact_score: number; components: Record<string, number>; }>(`/orgs/${orgId}/intelligence/memory/${traceId}/impact`),
   reaverSuggest: (orgId: string) =>
-    callApi<{ suggestions: Array<{ memory_id: string; action: "merge" | "archive" | "demote"; reason: string }>; }>(`/orgs/${orgId}/intelligence/memory/reaver/suggest`, { method: "POST" }),
+    api.post<{ suggestions: Array<{ memory_id: string; action: "merge" | "archive" | "demote"; reason: string }>; }>(`/orgs/${orgId}/intelligence/memory/reaver/suggest`),
 };
 
 type SubTab = "attribution" | "impact" | "reaver";

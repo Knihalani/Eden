@@ -54,14 +54,10 @@ import asyncio
 import contextlib
 import logging
 import os
-import platform
 import shutil
 import sys
-import tempfile
 import time
-from collections.abc import Callable, Sequence
-from dataclasses import dataclass, field
-from typing import Protocol
+from collections.abc import Callable
 
 from .sandbox import (
     LocalSandboxProvider,
