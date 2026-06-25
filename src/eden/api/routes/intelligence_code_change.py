@@ -68,7 +68,7 @@ from typing import Any
 from fastapi import APIRouter, Body, Depends, Path
 from pydantic import BaseModel, Field
 
-from eden.api.deps import get_current_user, require_feature_flag, require_org_admin, require_org_permission
+from eden.api.deps import get_current_user, require_feature_flag, require_org_admin, require_org_permission_dep
 from eden.code_change import (
     AgentActivityFeed,
     AgentPersonaService,
@@ -237,7 +237,7 @@ class PostMergeWatchRequest(BaseModel):
 async def connect_repo(
     org_id: str = Path(...),
     body: ConnectRepoRequest = Body(...),
-    _admin: dict = Depends(require_org_permission("settings:edit")),
+    _admin: dict = Depends(require_org_permission_dep("settings:edit")),
 ) -> dict[str, Any]:
     return await _repo_connector.connect(
         org_id,
