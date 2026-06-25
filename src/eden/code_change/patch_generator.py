@@ -698,7 +698,7 @@ class PatchGenerator:
             # We still return the live envelope — the caller can
             # retry persistence, or the GC job will pick it up.
 
-        return _ok_envelope(
+        response = _ok_envelope(
             self.name,
             {
                 "patch_id": patch_id,
@@ -719,3 +719,35 @@ class PatchGenerator:
                 "critic_attempts": critic_attempts,
             },
         )
+
+        # Gate 5 wiring: record the patch outcome in the
+        # CodebaseKnowledgeGraph so future PatchGenerator
+        # calls + the post-merge monitor can read the
+        # history. Best-effort — a graph write failure
+        # doesn't fail the patch generation.
+        if patch_status == "proposed" and metrics["files"]:
+            try:
+                from .knowledge_graph import CodebaseKnowledgeGraph
+                kg = CodebaseKnowledgeGraph()
+                # Record against each touched file. The
+                # graph node id is per (org, repo, path)
+                # so we get one row per file.
+                rca_category = (
+                    rca_id.split("_")[0] if "_" in rca_id else ""
+                )
+                for path in metrics["files"][:5]:
+                    await kg.record_outcome(
+                        org_id=org_id,
+                        repo_id=repo_id,
+                        code_path=path,
+                        outcome="merged",  # the patch is proposed
+                        rca_category=rca_category,
+                        telemetry_signature=trace_id,
+                    )
+            except Exception as exc:
+                logger.debug(
+                    "patch_generator: KG record_outcome failed: %s",
+                    exc,
+                )
+
+        return response
