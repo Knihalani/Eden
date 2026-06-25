@@ -133,6 +133,15 @@ class AIGateway:
         "gpt-4o": (0.92, 600, 0.0025, 0.998),
         "claude-haiku": (0.87, 200, 0.00025, 0.999),
         "minimax-m2.7": (0.85, 400, 0.00015, 0.995),
+        # Local-model entries. Cost is genuinely 0.0 — running on the
+        # user's own GPU has no per-token price, just amortised hardware.
+        # Quality + latency are conservative estimates for a typical
+        # 8B-class model on a modern consumer GPU; the v1.4 SLM plan
+        # replaces these with measured numbers per tenant.
+        "llama3.1:8b": (0.78, 400, 0.0, 0.99),
+        "qwen2.5:32b": (0.86, 1200, 0.0, 0.99),
+        "mistral-nemo": (0.82, 700, 0.0, 0.99),
+        "deepseek-r1:8b": (0.84, 1500, 0.0, 0.99),
     }
 
     def __init__(
@@ -336,8 +345,10 @@ class AIGateway:
             if health and not health.healthy:
                 continue
 
-            # Map provider to model performance
-            perf = self._estimate_provider_performance(provider)
+            # Map provider to model performance — SELF_HOSTED entries
+            # are model-keyed so a Qwen-32B tenant doesn't get charged
+            # with an 8B-class latency estimate.
+            perf = self._estimate_provider_performance(provider, request.model_version)
             if perf[0] < request.min_quality:
                 continue
             if perf[1] > request.max_latency_ms:
@@ -359,7 +370,7 @@ class AIGateway:
             cb = self._circuit_breakers.get(provider)
             if cb and cb.state == "open":
                 continue
-            perf = self._estimate_provider_performance(provider)
+            perf = self._estimate_provider_performance(provider, request.model_version)
             if perf[0] < request.min_quality:
                 continue
             candidates.append((provider, perf[2]))
@@ -368,14 +379,23 @@ class AIGateway:
         candidates.sort(key=lambda x: x[1])
         return candidates[0][0]
 
-    def _estimate_provider_performance(self, provider: Provider) -> tuple[float, int, float, float]:
-        """Return (quality, latency, cost, reliability) for a provider."""
+    def _estimate_provider_performance(
+        self, provider: Provider, model_version: str | None = None
+    ) -> tuple[float, int, float, float]:
+        """Return (quality, latency, cost, reliability) for a provider.
+
+        For ``SELF_HOSTED``, looks up ``model_version`` first so a tenant
+        running ``qwen2.5:32b`` gets its own quality/latency profile;
+        falls back to a generic local-model estimate when unknown.
+        """
         if provider == Provider.OPENROUTER:
             return self.MODEL_PERFORMANCE.get("claude-sonnet-4", (0.9, 800, 0.003, 0.999))
         if provider == Provider.MINIMAX:
             return self.MODEL_PERFORMANCE.get("minimax-m2.7", (0.85, 400, 0.00015, 0.995))
         if provider == Provider.SELF_HOSTED:
-            return (0.80, 600, 0.00005, 0.99)
+            if model_version and model_version in self.MODEL_PERFORMANCE:
+                return self.MODEL_PERFORMANCE[model_version]
+            return (0.80, 600, 0.0, 0.99)
         return (0.8, 1000, 0.001, 0.99)
 
     async def _execute_provider(self, provider: Provider, request: ModelRequest) -> ModelResponse:
@@ -397,7 +417,12 @@ class AIGateway:
             raw = {"text": f"[mock response from {provider.value}]", "input_tokens": 100, "output_tokens": 50}
 
         latency_ms = int((time.perf_counter() - start) * 1000)
-        cost = self._estimate_cost(provider, raw.get("input_tokens", 0), raw.get("output_tokens", 0))
+        cost = self._estimate_cost(
+            provider,
+            raw.get("input_tokens", 0),
+            raw.get("output_tokens", 0),
+            model_version=request.model_version,
+        )
 
         return ModelResponse(
             text=raw.get("text", ""),
@@ -409,8 +434,10 @@ class AIGateway:
             model=request.model_version,
         )
 
-    def _estimate_cost(self, provider: Provider, input_tokens: int, output_tokens: int) -> float:
-        perf = self._estimate_provider_performance(provider)
+    def _estimate_cost(
+        self, provider: Provider, input_tokens: int, output_tokens: int, model_version: str = ""
+    ) -> float:
+        perf = self._estimate_provider_performance(provider, model_version)
         cost_per_1k = perf[2]
         total_tokens = input_tokens + output_tokens
         return (total_tokens / 1000) * cost_per_1k
@@ -454,3 +481,97 @@ class AIGateway:
             "errors": self._filters.errors,
             "filter_names": self._filters.names(),
         }
+
+
+# ---------------------------------------------------------------------------
+# Self-hosted provider (Ollama / vLLM / llama.cpp / LM Studio)
+# ---------------------------------------------------------------------------
+
+
+class OllamaClient:
+    """Async client for an Ollama server's OpenAI-compatible endpoint.
+
+    Talks to ``<host>/v1/chat/completions`` — same wire format the
+    OpenAI Python SDK uses, so the request/response shape matches what
+    :class:`AIGateway._execute_provider` expects (``text``, ``input_tokens``,
+    ``output_tokens``).
+
+    The host comes from ``OLLAMA_HOST`` env (default
+    ``http://localhost:11434``).  When ``OLLAMA_HOST`` ends without
+    ``/v1``, we append it so the URL is well-formed.
+
+    ponytail: this is the minimum client needed for the gateway to
+    actually exercise a local Ollama server in tests.  Production
+    tenants will eventually want streaming + per-request timeouts;
+    add when a tenant needs it.
+    """
+
+    def __init__(self, host: str | None = None, *, timeout_s: float = 60.0) -> None:
+        import os
+
+        raw = (host or os.environ.get("OLLAMA_HOST") or "http://localhost:11434").rstrip("/")
+        # Normalise: if the host already includes ``/v1`` keep it,
+        # otherwise append so ``/chat/completions`` resolves.
+        if not raw.endswith("/v1"):
+            raw = raw + "/v1"
+        self._base_url = raw
+        self._timeout_s = timeout_s
+
+    async def complete(
+        self,
+        model: str,
+        prompt: str,
+        temperature: float = 0.7,
+        max_tokens: int = 2048,
+        **_kwargs: Any,
+    ) -> dict[str, Any]:
+        """One-shot chat completion against the local Ollama server.
+
+        Returns ``{"text": ..., "input_tokens": ..., "output_tokens": ...}``
+        so :meth:`AIGateway._execute_provider` can consume it without
+        knowing it's Ollama.
+        """
+        import httpx
+
+        url = f"{self._base_url}/chat/completions"
+        payload: dict[str, Any] = {
+            "model": model,
+            "messages": [{"role": "user", "content": prompt}],
+            "temperature": temperature,
+            "max_tokens": max_tokens,
+            "stream": False,
+        }
+        async with httpx.AsyncClient(timeout=self._timeout_s) as http:
+            resp = await http.post(url, json=payload)
+            resp.raise_for_status()
+            data = resp.json()
+
+        # OpenAI-compat shape: ``choices[0].message.content`` + ``usage``.
+        choices = data.get("choices") or []
+        text = ""
+        if choices:
+            text = (choices[0].get("message") or {}).get("content", "") or ""
+        usage = data.get("usage") or {}
+        return {
+            "text": text,
+            "input_tokens": int(usage.get("prompt_tokens") or 0),
+            "output_tokens": int(usage.get("completion_tokens") or 0),
+        }
+
+
+def register_default_providers(gateway: AIGateway) -> None:
+    """Wire :class:`OllamaClient` into the gateway as ``SELF_HOSTED``.
+
+    Idempotent — safe to call on every gateway construction; the
+    gateway's ``register_provider`` overwrites in place.
+
+    Callers (test fixtures, app startup) invoke this after building the
+    gateway so the SELF_HOSTED provider is reachable without any
+    extra config.  An Ollama server running on ``$OLLAMA_HOST`` (or
+    ``localhost:11434``) is the common case; if the server is not
+    reachable the circuit breaker will trip and ``complete()`` will
+    surface :class:`ProviderUnavailable` — exactly the behaviour we
+    want for graceful failover to a cloud provider.
+    """
+    if Provider.SELF_HOSTED not in gateway._providers:
+        gateway.register_provider(Provider.SELF_HOSTED, OllamaClient())

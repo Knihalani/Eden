@@ -48,6 +48,11 @@ export interface User {
   user_id: string;
   email: string;
   name: string;
+  /** Optional — populated by ``PATCH /auth/users/me`` after an
+   *  avatar upload (the BE endpoint returns the URL). The Clerk
+   *  primary value (``imageUrl``) is mirrored here so consumers
+   *  don't need to reach into the Clerk SDK. */
+  avatar_url?: string;
   organizations: Organization[];
   current_org_id: string | null;
 }

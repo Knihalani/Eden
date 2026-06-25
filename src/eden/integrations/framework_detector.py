@@ -88,6 +88,24 @@ FRAMEWORK_MARKERS: dict[str, dict[str, Any]] = {
         ],
         "instrumentation": "AnthropicInstrumentor",
     },
+    # Ollama is its own provider *and* the most common way to run local
+    # models. It also exposes an OpenAI-compatible endpoint at
+    # ``<host>/v1/chat/completions``, so the OpenAI instrumentor catches
+    # it too — but we still want a first-class ``ollama`` framework so
+    # the SDK integrator writes the right bootstrap (sets
+    # ``OPENAI_BASE_URL`` to ``http://localhost:11434/v1`` etc.) and
+    # the dashboard attributes the trace to ``provider=ollama``.
+    "ollama": {
+        "pip": ["ollama"],
+        "npm": ["ollama", "@ollama/ollama"],
+        "imports": [
+            r"from\s+ollama\s+import",
+            r"import\s+ollama",
+            r"Ollama\s*\(",
+            r"ollama\.chat\s*\(",
+        ],
+        "instrumentation": "OpenAIInstrumentor",  # Ollama's OpenAI-compat path
+    },
 }
 
 
@@ -251,6 +269,30 @@ def _detect_existing_instrumentation(source_files: Iterable[Path]) -> list[str]:
     return list(seen.keys())
 
 
+def _detect_ollama_env() -> str | None:
+    """Return which env signal indicates Ollama, or ``None``.
+
+    Detection order:
+      1. ``OLLAMA_HOST`` set (non-empty).
+      2. ``OPENAI_BASE_URL`` pointing at the Ollama default
+         ``http://localhost:11434`` / ``127.0.0.1:11434`` (with or
+         without ``/v1`` suffix).
+    """
+    import os
+    if os.environ.get("OLLAMA_HOST"):
+        return "OLLAMA_HOST"
+    base = (os.environ.get("OPENAI_BASE_URL") or "").lower().rstrip("/")
+    # Strip optional ``/v1`` and optional trailing path so e.g.
+    # ``http://localhost:11434/v1`` matches ``http://localhost:11434``.
+    for suffix in ("/v1",):
+        if base.endswith(suffix):
+            base = base[: -len(suffix)]
+            break
+    if base in ("http://localhost:11434", "http://127.0.0.1:11434"):
+        return "OPENAI_BASE_URL"
+    return None
+
+
 def _score_framework(
     framework: str,
     declared_deps: list[str],
@@ -345,6 +387,16 @@ def detect_framework(target: str | Path) -> FrameworkDetection:
             best_confidence = conf
             best_framework = fw
             best_markers = markers
+
+    # Env-var detection for Ollama. ``OLLAMA_HOST`` set, or
+    # ``OPENAI_BASE_URL`` pointed at the Ollama OpenAI-compat endpoint,
+    # is a 0.7-confidence signal — same weight as a pip dep hit, higher
+    # than the openai/anthropic fallback below.
+    ollama_env = _detect_ollama_env()
+    if ollama_env and best_confidence < 0.7:
+        best_framework = "ollama"
+        best_confidence = max(best_confidence, 0.7)
+        best_markers = [f"env:{ollama_env}"]
 
     if best_framework is None or best_confidence < 0.5:
         # Fall back: distinguish openai-direct vs anthropic-direct vs custom

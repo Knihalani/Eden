@@ -103,19 +103,37 @@ pr:
 integrate:
   use_server_pipeline: false
   framework: __EDEN_FRAMEWORK__
+
+# Optional — set when the agent runs against a local model (Ollama,
+# vLLM, llama.cpp, LM Studio). Eden's OpenAI-compatible instrumentor
+# catches calls pointed at ``$ollama_base_url/v1/chat/completions``;
+# this block lets the generated bootstrap wire it up automatically.
+# Leave ``llm_provider`` blank for cloud agents (OpenAI / Anthropic).
+llm_provider: __EDEN_LLM_PROVIDER__
+ollama_base_url: __EDEN_OLLAMA_BASE_URL__
 """
 
 
-def _render_eden_config(framework: str) -> str:
-    """Render ``DEFAULT_EDEN_CONFIG_PY`` with the framework slot filled.
+def _render_eden_config(framework: str, llm_provider: str = "") -> str:
+    """Render ``DEFAULT_EDEN_CONFIG_PY`` with the framework + provider slots filled.
 
     Two-pass render:
-      1. Replace the ``__EDEN_FRAMEWORK__`` sentinel with the actual
-         framework name.
-      2. Leave the ``${VAR}`` env-var placeholders alone (the loader
+      1. Replace ``__EDEN_FRAMEWORK__`` with the actual framework name.
+      2. Replace ``__EDEN_LLM_PROVIDER__`` and ``__EDEN_OLLAMA_BASE_URL__``
+         — empty string means "not set" (renders as a blank YAML value,
+         which YAML parsers treat as ``null``). Cloud-model agents get
+         ``llm_provider: null`` and the bootstrap leaves the OpenAI
+         client pointed at api.openai.com by default.
+      3. Leave the ``${VAR}`` env-var placeholders alone (the loader
          in :mod:`eden.config` expands those at config-load time).
     """
-    return DEFAULT_EDEN_CONFIG_PY.replace("__EDEN_FRAMEWORK__", framework)
+    ollama_base_url = (
+        "http://localhost:11434" if llm_provider == "ollama" else ""
+    )
+    out = DEFAULT_EDEN_CONFIG_PY.replace("__EDEN_FRAMEWORK__", framework)
+    out = out.replace("__EDEN_LLM_PROVIDER__", llm_provider)
+    out = out.replace("__EDEN_OLLAMA_BASE_URL__", ollama_base_url)
+    return out
 
 
 PYTHON_INSTRUMENT_TEMPLATE = '''\
@@ -148,6 +166,54 @@ init({{
 """
 
 
+# Ollama-specific bootstrap: same as PYTHON_INSTRUMENT_TEMPLATE but
+# points the OpenAI-compatible SDK at the local Ollama server before
+# ``eden.init()`` so the auto-instrumentor intercepts local-model calls.
+# ``setdefault`` so an explicit user-set ``OPENAI_BASE_URL`` wins.
+PYTHON_INSTRUMENT_OLLAMA_TEMPLATE = '''\
+# Added by Eden onboarding — Eden auto-instrumentation for Ollama.
+import os
+
+# Point the OpenAI SDK at Ollama's OpenAI-compat endpoint. Ollama
+# ignores the key but the openai package refuses to send without one.
+os.environ.setdefault("OPENAI_BASE_URL", "http://localhost:11434/v1")
+os.environ.setdefault("OPENAI_API_KEY", "ollama")
+os.environ.setdefault("OLLAMA_HOST", "http://localhost:11434")
+
+import eden  # type: ignore  # noqa: F401
+
+eden.init(
+    api_key=os.environ.get("EDEN_API_KEY", ""),
+    org_id=os.environ.get("EDEN_DEFAULT_ORG", ""),
+    base_url=os.environ.get("EDEN_BASE_URL", "http://localhost:8000"),
+    framework={framework_repr},
+    auto_instrument=True,
+    llm_provider="ollama",
+    ollama_base_url=os.environ["OLLAMA_HOST"],
+)
+'''
+
+
+TS_INSTRUMENT_OLLAMA_TEMPLATE = """\
+// Added by Eden onboarding — Eden auto-instrumentation for Ollama.
+process.env.OPENAI_BASE_URL ??= "http://localhost:11434/v1";
+process.env.OPENAI_API_KEY ??= "ollama";
+process.env.OLLAMA_HOST ??= "http://localhost:11434";
+
+import {{ init }} from "@eden-ai/sdk";
+
+init({{
+  apiKey: process.env.EDEN_API_KEY ?? "",
+  orgId: process.env.EDEN_DEFAULT_ORG ?? "",
+  baseUrl: process.env.EDEN_BASE_URL ?? "http://localhost:8000",
+  framework: {framework_repr},
+  autoInstrument: true,
+  llmProvider: "ollama",
+  ollamaBaseUrl: process.env.OLLAMA_HOST,
+}});
+"""
+
+
 # Framework-specific import snippets that are prepended to the
 # generated instrumentation file.
 PYTHON_IMPORT_SNIPPETS: dict[str, str] = {
@@ -157,6 +223,12 @@ PYTHON_IMPORT_SNIPPETS: dict[str, str] = {
     "llama_index": "from eden.integrations.llama_index import LlamaIndexInstrumentor\n",
     "openai": "from eden.integrations.openai import OpenAIInstrumentor\n",
     "anthropic": "from eden.integrations.anthropic import AnthropicInstrumentor\n",
+    # Ollama: users typically call the OpenAI-compat endpoint at
+    # ``$OLLAMA_HOST/v1/chat/completions``, which the OpenAI instrumentor
+    # already patches. The import here is a hint to the LLM (and to the
+    # user reading the diff) — the actual interception is via the env
+    # vars set below in the ollama bootstrap variant.
+    "ollama": "from openai import OpenAI  # Ollama's OpenAI-compat endpoint\n",
 }
 
 TS_IMPORT_SNIPPETS: dict[str, str] = {
@@ -166,6 +238,7 @@ TS_IMPORT_SNIPPETS: dict[str, str] = {
     "llama_index": "import { LlamaIndexInstrumentor } from \"@eden-ai/sdk/integrations/llama-index\";\n",
     "openai": "import { OpenAIInstrumentor } from \"@eden-ai/sdk/integrations/openai\";\n",
     "anthropic": "import { AnthropicInstrumentor } from \"@eden-ai/sdk/integrations/anthropic\";\n",
+    "ollama": "import { OpenAIInstrumentor } from \"@eden-ai/sdk/integrations/openai\";  // Ollama's OpenAI-compat endpoint\n",
 }
 
 
@@ -259,7 +332,14 @@ def _maybe_update_package_json(repo_root: Path, additions: list[str]) -> FileCha
 def _build_python_instrument_file(detection: FrameworkDetection) -> str:
     fw = detection.framework
     imports = PYTHON_IMPORT_SNIPPETS.get(fw, "")
-    body = PYTHON_INSTRUMENT_TEMPLATE.format(framework_repr=repr(fw))
+    # Ollama gets a dedicated template that sets ``OPENAI_BASE_URL``
+    # before ``eden.init()`` so the OpenAI-compatible instrumentor
+    # intercepts calls to the local Ollama server.
+    if fw == "ollama":
+        template = PYTHON_INSTRUMENT_OLLAMA_TEMPLATE
+    else:
+        template = PYTHON_INSTRUMENT_TEMPLATE
+    body = template.format(framework_repr=repr(fw))
     return (
         "# Auto-generated by Eden onboarding — safe to delete if you\n"
         "# prefer to instrument manually.\n"
@@ -270,7 +350,11 @@ def _build_python_instrument_file(detection: FrameworkDetection) -> str:
 def _build_ts_instrument_file(detection: FrameworkDetection) -> str:
     fw = detection.framework
     imports = TS_IMPORT_SNIPPETS.get(fw, "")
-    body = TS_INSTRUMENT_TEMPLATE.format(framework_repr=f'"{fw}"')
+    if fw == "ollama":
+        template = TS_INSTRUMENT_OLLAMA_TEMPLATE
+    else:
+        template = TS_INSTRUMENT_TEMPLATE
+    body = template.format(framework_repr=f'"{fw}"')
     return (
         "// Auto-generated by Eden onboarding — safe to delete if you\n"
         "// prefer to instrument manually.\n"
@@ -340,12 +424,16 @@ def build_integration_plan(
         )
 
     # --- Config ------------------------------------------------------------
+    # Ollama is the local-model case — flip ``llm_provider`` so the
+    # generated config records the user's runtime choice and the
+    # dashboard can group local vs cloud agents.
+    llm_provider = "ollama" if detection.framework == "ollama" else ""
     if not (root / ".eden" / "config.yaml").exists() or force:
         plan.changes.append(
             FileChange(
                 path=".eden/config.yaml",
                 operation="create",
-                content=_render_eden_config(detection.framework),
+                content=_render_eden_config(detection.framework, llm_provider=llm_provider),
                 description="Create .eden/config.yaml",
             )
         )
@@ -433,13 +521,14 @@ def build_integration_plan_from_files(
         )
 
     # --- Config -----------------------------------------------------------
+    llm_provider = "ollama" if detection.framework == "ollama" else ""
     eden_cfg = files.get(".eden/config.yaml")
     if eden_cfg is None or force:
         plan.changes.append(
             FileChange(
                 path=".eden/config.yaml",
                 operation="create",
-                content=_render_eden_config(detection.framework),
+                content=_render_eden_config(detection.framework, llm_provider=llm_provider),
                 description="Create .eden/config.yaml",
             )
         )

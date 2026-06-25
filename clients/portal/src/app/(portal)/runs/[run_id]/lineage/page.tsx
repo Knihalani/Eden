@@ -54,7 +54,7 @@ export default function FineTuneLineagePage() {
     setError(null);
     try {
       const data = await fineTuneApi.getLineage(runId);
-      setLineage(data);
+      setLineage(data.data ?? null);
     } catch (e) {
       setError(
         e instanceof Error ? e.message : "Failed to load fine-tune lineage"

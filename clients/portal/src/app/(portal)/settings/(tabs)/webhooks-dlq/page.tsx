@@ -77,24 +77,13 @@ export default function WebhooksDlqPage() {
           { method: "POST", credentials: "include" }
         );
         if (res.ok) {
-          toast({
-            title: "Replay queued",
-            description: "Delivery re-scheduled.",
-          });
+          toast.success("Replay queued", "Delivery re-scheduled.");
           await fetchData();
         } else {
-          toast({
-            title: "Replay failed",
-            description: `HTTP ${res.status}`,
-            variant: "destructive",
-          });
+          toast.error("Replay failed", `HTTP ${res.status}`);
         }
       } catch (err) {
-        toast({
-          title: "Replay failed",
-          description: String(err),
-          variant: "destructive",
-        });
+        toast.error("Replay failed", String(err));
       } finally {
         setReplaying(null);
       }
@@ -102,12 +91,12 @@ export default function WebhooksDlqPage() {
     [currentOrg?.id, toast, fetchData]
   );
 
-  if (!currentOrg) return <NoOrgState />;
+  if (!currentOrg) return <NoOrgState feature="Webhook DLQ" />;
 
   return (
     <div className="space-y-6">
       <PageHeader
-        icon={<Webhook className="h-5 w-5" />}
+        icon={Webhook}
         title="Webhook Dead-Letter Queue"
         subtitle="D.13 — Terminal-state deliveries awaiting replay"
       />

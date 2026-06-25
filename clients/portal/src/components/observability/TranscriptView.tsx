@@ -534,7 +534,7 @@ function ImagesPanel({ images, orgId }: { images: NonNullable<TR["images"]>; org
               // eslint-disable-next-line @next/next/no-img-element
               <img
                 src={img.url}
-                alt={img.description || img.content_type?.startsWith("image/") ? "transcript image" : img.content_type || "transcript image"}
+                alt={img.content_type?.startsWith("image/") ? "transcript image" : img.content_type || "transcript image"}
                 className="max-h-32 max-w-32 rounded"
               />
             ) : (
