@@ -991,14 +991,35 @@ class CodeChangeHook:
         rca_id: str,
         trace_id: str,
         confidence: float,
-    ) -> str | None:
+        policy: dict[str, Any] | None = None,
+        repo_id: str | None = None,
+        stack_trace: str | None = None,
+        candidate_files: list[str] | None = None,
+        rca_description: str = "",
+    ) -> dict[str, Any]:
         """A Cat 2 RCA fired and the agent should propose a patch.
 
-        STUB: records the recommendation. The real Gate-1
-        implementation will additionally check
-        ``code_change_enabled`` + ``min_rca_confidence`` and
-        call into the :class:`CodeRootCauseLinker` +
-        :class:`PatchGenerator` to mint a patch.
+        Gate 4a wiring (this method):
+
+        1. Record the recommendation (``propose_patch``
+           action kind).
+        2. If ``policy.code_change_enabled`` is true AND
+           ``confidence >= policy.min_rca_confidence``,
+           additionally call
+           :class:`CodeRootCauseLinker.link` →
+           :class:`PatchGenerator.generate` to mint a real
+           patch (a row in ``proposed_patches``).
+        3. Persist the patch_id in the action payload so
+           the operator can pick it up.
+
+        Without ``policy`` or when the opt-in isn't
+        granted, the action is advisory-only — no patch is
+        minted. The :class:`ClosedLoopExecutor` surfaces
+        the recommendation either way.
+
+        Returns:
+            A dict carrying the action_id, the policy-check
+            result, and (when minted) the patch_id + diff.
         """
         action_id = await _record_action(
             org_id,
@@ -1017,7 +1038,87 @@ class CodeChangeHook:
             "trace=%s confidence=%s action_id=%s",
             org_id, rca_id, trace_id, confidence, action_id,
         )
-        return action_id
+
+        result: dict[str, Any] = {
+            "action_id": action_id,
+            "executed": False,
+        }
+
+        # Opt-in gate. The policy carries both
+        # ``code_change_enabled`` + ``min_rca_confidence``
+        # per the v1.6 cat spec.
+        policy = policy or {}
+        if not policy.get("code_change_enabled", False):
+            result["skipped_reason"] = "code_change_disabled"
+            return result
+        min_conf = float(policy.get("min_rca_confidence", 0.8))
+        if confidence < min_conf:
+            result["skipped_reason"] = (
+                f"confidence {confidence} < min_rca_confidence {min_conf}"
+            )
+            return result
+        if not repo_id:
+            result["skipped_reason"] = "repo_id_required"
+            return result
+
+        # Mint a real patch. We import lazily so the import
+        # chain doesn't pull in the model-router + repo-
+        # connector (and their package init side-effects)
+        # when the hook fires for an advisory-only call.
+        try:
+            from eden.code_change.rca_linker import CodeRootCauseLinker
+            from eden.code_change.patch_generator import PatchGenerator
+            from eden.code_change.repo_connector import RepoConnector
+            from eden.optimization.model_router import ModelRouter
+        except Exception as exc:
+            logger.debug(
+                "code_change_hook: imports failed: %s", exc,
+            )
+            result["skipped_reason"] = f"imports_failed: {exc}"
+            return result
+
+        try:
+            connector = RepoConnector()
+            router: ModelRouter | None = None  # type: ignore[assignment]
+            linker = CodeRootCauseLinker(
+                router=router, repo_connector=connector,
+            )
+            link_result = await linker.link(
+                org_id=org_id,
+                rca_id=rca_id,
+                repo_id=repo_id,
+                stack_trace=stack_trace,
+                trace_id=trace_id,
+                candidate_files=candidate_files,
+                rca_description=rca_description,
+            )
+            primary_path = (link_result.get("data") or {}).get("primary_path")
+            linked_files = []
+            if primary_path:
+                linked_files.append({"path": primary_path})
+            generator = PatchGenerator(router=router)
+            patch_result = await generator.generate(
+                org_id=org_id,
+                rca_id=rca_id,
+                trace_id=trace_id,
+                repo_id=repo_id,
+                linked_files=linked_files,
+                rca_summary=rca_description,
+            )
+            patch_id = (patch_result.get("data") or {}).get("patch_id")
+            result["executed"] = True
+            result["patch_id"] = patch_id
+            result["link_result"] = link_result.get("data") or {}
+            result["patch_status"] = patch_result.get("status")
+            result["patch_gate"] = (patch_result.get("data") or {}).get("gate")
+            return result
+        except Exception as exc:
+            logger.debug(
+                "code_change_hook.propose_patch_from_rca: mint failed: %s",
+                exc,
+            )
+            result["skipped_reason"] = f"mint_failed: {exc}"
+            return result
 
     async def post_merge_degraded(
         self,
@@ -1026,14 +1127,32 @@ class CodeChangeHook:
         pr_id: str,
         regression_evidence: dict[str, Any],
         window_hours: int,
-    ) -> str | None:
+        policy: dict[str, Any] | None = None,
+        pr_state: str = "merged",
+        history_is_linear: bool = True,
+        merge_sha: str | None = None,
+    ) -> dict[str, Any]:
         """A post-merge window detected a regression.
 
-        STUB: records the recommendation. The real Gate-4b
-        implementation will additionally check
-        ``auto_revert_enabled`` + the
-        ``min_post_merge_window_hours`` floor and call into
-        :class:`AutoRevertEngine` to choose a strategy.
+        Gate 4b wiring (this method):
+
+        1. Record the recommendation (``consider_revert``
+           action kind).
+        2. If ``policy.auto_revert_enabled`` is true AND
+           ``window_hours >= policy.min_post_merge_window_hours``
+           AND the configured :class:`AutoRevertEngine`
+           has a provider, additionally call
+           ``engine.revert`` to dispatch the revert.
+
+        Without ``auto_revert_enabled``, the action is
+        advisory-only — the operator gets a notification
+        and can dispatch the revert manually (the manual-
+        trigger path).
+
+        Returns:
+            A dict carrying the action_id, the policy-check
+            result, and (when executed) the revert strategy
+            + revert_pr_url.
         """
         action_id = await _record_action(
             org_id,
@@ -1052,7 +1171,56 @@ class CodeChangeHook:
             "window_hours=%s action_id=%s",
             org_id, pr_id, window_hours, action_id,
         )
-        return action_id
+
+        result: dict[str, Any] = {
+            "action_id": action_id,
+            "executed": False,
+        }
+
+        policy = policy or {}
+        if not policy.get("auto_revert_enabled", False):
+            result["skipped_reason"] = "auto_revert_disabled"
+            return result
+        min_window = int(policy.get("min_post_merge_window_hours", 24))
+        if window_hours < min_window:
+            result["skipped_reason"] = (
+                f"window_hours {window_hours} < min {min_window}"
+            )
+            return result
+
+        # Dispatch the revert via the engine. The engine
+        # decides the strategy; the hook is just the
+        # signal carrier.
+        try:
+            from eden.code_change.revert_engine import AutoRevertEngine
+            from eden.providers import get_default_pr_provider
+            engine = AutoRevertEngine(provider=get_default_pr_provider())
+            revert_result = await engine.revert(
+                org_id=org_id,
+                pr_id=pr_id,
+                policy={
+                    "code_change_enabled": True,
+                    "auto_revert_enabled": True,
+                },
+                pr_state=pr_state,
+                history_is_linear=history_is_linear,
+                regression_evidence=dict(regression_evidence or {}),
+                merge_sha=merge_sha,
+            )
+            data = revert_result.get("data") or {}
+            result["executed"] = bool(data.get("executed", False))
+            result["strategy"] = data.get("strategy")
+            result["revert_pr_url"] = data.get("revert_pr_url")
+            result["revert_id"] = data.get("revert_id")
+            result["engine_status"] = revert_result.get("status")
+            return result
+        except Exception as exc:
+            logger.debug(
+                "code_change_hook.post_merge_degraded: revert failed: %s",
+                exc,
+            )
+            result["skipped_reason"] = f"revert_failed: {exc}"
+            return result
 
 
 # ─── Process-wide singletons ─────────────────────────────────────
