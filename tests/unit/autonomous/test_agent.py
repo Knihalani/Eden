@@ -345,15 +345,29 @@ class _FakeSettings:
 
 
 class _FakeChatCompletions:
-    """Stub of the openai ChatCompletion streaming response."""
+    """Stub of the openai ChatCompletion streaming response.
+
+    The real OpenAI async client (``client.chat.completions.create(...)``)
+    is an ``async def`` that returns an async-iterable stream when
+    ``stream=True`` and a single response when ``stream=False``.
+    Mirror that shape so ``_call_llm``'s ``await … create()`` +
+    ``async for chunk in response`` works.
+    """
 
     def __init__(self, chunks: list[str]) -> None:
         self._chunks = chunks
 
-    def create(self, **kwargs):
-        return self._iter_chunks()
+    async def create(self, **kwargs):
+        return self._iter_chunks(stream=kwargs.get("stream", True))
 
-    def _iter_chunks(self):
+    async def _iter_chunks(self, stream: bool = True):
+        if not stream:
+            chunk = MagicMock()
+            chunk.choices = [MagicMock()]
+            chunk.choices[0].message.content = "".join(self._chunks)
+            chunk.usage = MagicMock(prompt_tokens=0, completion_tokens=0)
+            yield chunk
+            return
         for piece in self._chunks:
             chunk = MagicMock()
             chunk.choices = [MagicMock()]
@@ -430,7 +444,14 @@ def _wrap_openai(fake: _FakeOpenAIClient) -> Any:
     """Wrap the fake client to look like an OpenRouterClient."""
     wrapper = MagicMock()
     wrapper.client = fake
+    # ``_call_llm`` switched to ``async_client`` in June 2026 — mirror
+    # the same fake here so the streaming path can ``await`` it.
+    wrapper.async_client = fake
     wrapper.MODEL_SLOTS = {}
+    # Mirror the class-level staticmethod so ``OpenRouterClient._is_anthropic_model``
+    # resolves when the test fixture replaces the whole class with a lambda.
+    # Default to non-Anthropic; per-test mocks can override.
+    wrapper._is_anthropic_model = staticmethod(lambda m: False)
     return wrapper
 
 
@@ -526,14 +547,18 @@ class TestChatServiceStream:
         call_count = {"n": 0}
 
         class _FakeCompletions:
-            def create(self, **kwargs):
+            async def create(self, **kwargs):
                 text = responses[min(call_count["n"], len(responses) - 1)]
                 call_count["n"] += 1
                 chunk = MagicMock()
                 chunk.choices = [MagicMock()]
                 chunk.choices[0].delta = MagicMock(content=text)
                 chunk.usage = None
-                return iter([chunk])
+                return self._async_iter([chunk])
+
+            async def _async_iter(self, items):
+                for item in items:
+                    yield item
 
         fake.chat.completions = _FakeCompletions()
 

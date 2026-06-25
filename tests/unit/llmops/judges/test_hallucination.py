@@ -1,9 +1,15 @@
 """Tests for the HallucinationJudge."""
 
 import json
+import os
 from unittest.mock import MagicMock
 
 import pytest
+
+# Disable the 1% production sample gate so the test's deterministic
+# ``tr_1`` trace_id always matches. The toggle is a code-level escape
+# hatch — production never sets it.
+os.environ.setdefault("EDEN_DISABLE_PRODUCTION_SAMPLING", "1")
 
 from eden.llmops.judges.base import JudgeContext
 from eden.llmops.judges.hallucination import (

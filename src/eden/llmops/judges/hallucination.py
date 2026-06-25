@@ -46,8 +46,8 @@ class HallucinationJudge(Judge):
     def matches(self, event: TelemetryEvent) -> bool:
         """Only fire on events that carry generated text in the payload.
 
-        The judge is also sample-gated at 1% (deterministic by
-        ``trace_id``) so flipping the global LLM-judge toggle on
+        The judge is also sample-gated at 1% (deterministic SHA-256
+        of ``trace_id``) so flipping the global LLM-judge toggle on
         doesn't bill every telemetry event.
         """
         if not super().matches(event):
@@ -63,11 +63,19 @@ class HallucinationJudge(Judge):
             return False
         # Deterministic 1% sampling — every trace_id hashes to the
         # same bucket so a single trace's judge scores stay
-        # consistent across re-evaluations.
+        # consistent across re-evaluations. SHA-256 (not ``int(x, 16)``)
+        # because trace ids can include non-hex characters (``tr_…``).
+        # Bypassable via ``EDEN_DISABLE_PRODUCTION_SAMPLING=1`` so
+        # unit tests don't have to construct a hashing trace_id.
+        import os as _os
         trace_id = event.trace_id or ""
         if not trace_id:
             return False
-        return (int(trace_id[:8], 16) % 100) < 1
+        if _os.environ.get("EDEN_DISABLE_PRODUCTION_SAMPLING") == "1":
+            return True
+        import hashlib as _hl
+        digest = _hl.sha256(trace_id.encode("utf-8")).digest()
+        return digest[0] < 3  # ~1.2% of byte values are < 3
 
     async def score(
         self, event: TelemetryEvent, ctx: JudgeContext

@@ -311,11 +311,16 @@ async def test_patch_generator_records_kg_outcome() -> None:
         / "src" / "eden" / "code_change" / "patch_generator.py"
     )
     text = src.read_text()
-    # The wiring block calls CodebaseKnowledgeGraph with
-    # outcome="merged" after a successful generate.
+    # The wiring block calls CodebaseKnowledgeGraph after a
+    # successful generate. The outcome string is ``"proposed"``
+    # (NOT ``"merged"``) — recording AI-proposed patches as
+    # ``merged`` was the bug found in the June 25 audit; it
+    # polluted ``revert_rate`` signals because every patch
+    # counted as a merge before a human ever reviewed it.
     assert "CodebaseKnowledgeGraph" in text
     assert "record_outcome" in text
-    assert 'outcome="merged"' in text
+    assert 'outcome="proposed"' in text
+    assert 'outcome="merged"' not in text
     # The wiring block is after the success-path return
     # + the metrics.files list.
     assert "metrics[\"files\"]" in text
