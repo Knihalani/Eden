@@ -25,7 +25,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import { ArrowLeft, Bot, Clock, Code, ExternalLink, Package, PlayCircle, FileCode, Cpu, Upload as UploadIcon, Beaker, Loader2 } from "lucide-react";
 import { useOrg } from "@/hooks/use-org";
-import { agentsApi } from "@/lib/api";
+import { agentsApi, type AgentUpload } from "@/lib/api";
 import { Card } from "@/components/ui/card";
 import { AgentUploadPanel } from "./upload-panel";
 
@@ -64,16 +64,6 @@ interface AgentRecord {
   repo_url?: string | null;
 }
 
-interface UploadRecord {
-  upload_id: string;
-  upload_version?: number;
-  framework?: string;
-  entry_point?: string;
-  file_count?: number;
-  total_bytes?: number;
-  uploaded_at?: string;
-}
-
 interface RunsEnvelope {
   runs?: Array<unknown>;
   total?: number;
@@ -89,7 +79,7 @@ export default function AgentDetailPage() {
   const orgId = currentOrg?.id;
 
   const [agent, setAgent] = useState<AgentRecord | null>(null);
-  const [uploads, setUploads] = useState<UploadRecord[]>([]);
+  const [uploads, setUploads] = useState<AgentUpload[]>([]);
   const [simRuns, setSimRuns] = useState<RunsEnvelope>({ runs: [], total: 0 });
   const [testRuns, setTestRuns] = useState<RunsEnvelope>({ runs: [], total: 0 });
   const [loading, setLoading] = useState(true);
@@ -102,7 +92,7 @@ export default function AgentDetailPage() {
       agentsApi
         .list(orgId, { limit: 200 })
         .catch(() => ({ agents: [] as AgentRecord[] })),
-      agentsApi.listUploads(orgId, agentId, { limit: 20 }).catch(() => [] as UploadRecord[]),
+      agentsApi.listUploads(orgId, agentId, { limit: 20 }).catch(() => [] as AgentUpload[]),
       agentsApi
         .listSimRuns(orgId, agentId, { limit: 5 })
         .catch(() => ({ runs: [], total: 0 }) as RunsEnvelope),
@@ -113,20 +103,10 @@ export default function AgentDetailPage() {
       if (cancelled) return;
       const list = (agentsResp?.agents ?? []) as AgentRecord[];
       setAgent(list.find((a) => a.agent_id === agentId) ?? null);
-      // Narrow the BE list into our local UploadRecord shape rather than
-      // casting through ``unknown`` (which suppresses the type system).
-      // Defensive — fields missing from the wire shape fall back to
-      // ``undefined`` rather than crashing the upload panel.
-      const narrowed: UploadRecord[] = (ups ?? []).map((u) => ({
-        upload_id: (u as { upload_id?: string }).upload_id ?? "",
-        upload_version: (u as { upload_version?: number }).upload_version,
-        framework: (u as { framework?: string }).framework,
-        entry_point: (u as { entry_point?: string }).entry_point,
-        file_count: (u as { file_count?: number }).file_count,
-        total_bytes: (u as { total_bytes?: number }).total_bytes,
-        uploaded_at: (u as { uploaded_at?: string }).uploaded_at,
-      }));
-      setUploads(narrowed);
+      // ``listUploads`` already returns ``AgentUpload[]`` from the
+      // shared api client — no shape narrowing required. Defensive
+      // nullish fallback in case the catch above swallowed a 4xx.
+      setUploads(ups ?? []);
       setSimRuns(sims);
       setTestRuns(tests);
       setLoading(false);
@@ -299,13 +279,11 @@ export default function AgentDetailPage() {
         </Link>
       </div>
 
-      {/* Upload panel — the panel accepts the typed
-          AgentUpload[] shape; our local state narrows the BE response
-          into UploadRecord[] at the fetch boundary above. */}
+      {/* Upload panel — typed AgentUpload[] directly. */}
       <AgentUploadPanel
         orgId={orgId}
         agentId={agentId}
-        uploads={uploads as Parameters<typeof AgentUploadPanel>[0]["uploads"]}
+        uploads={uploads}
       />
 
       {/* Recent uploads */}
