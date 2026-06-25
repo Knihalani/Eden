@@ -22,7 +22,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from eden.integrations.framework_detector import FrameworkDetection
+from eden.integrations.framework_detector import FrameworkDetection, detect_framework
 
 
 @dataclass
@@ -166,20 +166,120 @@ init({{
 """
 
 
-# Ollama-specific bootstrap: same as PYTHON_INSTRUMENT_TEMPLATE but
-# points the OpenAI-compatible SDK at the local Ollama server before
-# ``eden.init()`` so the auto-instrumentor intercepts local-model calls.
-# ``setdefault`` so an explicit user-set ``OPENAI_BASE_URL`` wins.
-PYTHON_INSTRUMENT_OLLAMA_TEMPLATE = '''\
-# Added by Eden onboarding — Eden auto-instrumentation for Ollama.
-import os
+# Provider-specific bootstrap env vars.  Each entry maps a detected
+# framework to the env vars that should be set before ``eden.init()``
+# so the OpenAI-compatible / Anthropic-compatible auto-instrumentors
+# route calls to the right provider.
+#
+# ``"openai"`` is the canonical OpenAI-compat slot.  Users running
+# Groq / Together / Fireworks / Mistral / DeepSeek / any OpenAI-compat
+# provider set ``OPENAI_BASE_URL`` themselves and use this same
+# bootstrap — no separate per-provider entry needed.
+#
+# ``"anthropic"`` needs no env override; the Anthropic SDK reads
+# ``ANTHROPIC_API_KEY`` natively.
+PROVIDER_BOOTSTRAP_ENVS: dict[str, dict[str, str]] = {
+    "openai": {},  # default OpenAI — uses api.openai.com
+    "anthropic": {},  # SDK reads ANTHROPIC_API_KEY natively
+    "ollama": {
+        "OPENAI_BASE_URL": "http://localhost:11434/v1",
+        "OPENAI_API_KEY": "ollama",  # sentinel — Ollama ignores the key
+        "OLLAMA_HOST": "http://localhost:11434",
+    },
+    "ollama_cloud": {
+        "OPENAI_BASE_URL": "https://ollama.com/v1",
+        "OPENAI_API_KEY": "${OLLAMA_CLOUD_API_KEY:-}",
+    },
+    "vllm": {
+        "OPENAI_BASE_URL": "${VLLM_BASE_URL:-http://localhost:8000/v1}",
+        "OPENAI_API_KEY": "${VLLM_API_KEY:-not-needed}",
+    },
+    "lmstudio": {
+        "OPENAI_BASE_URL": "http://localhost:1234/v1",
+        "OPENAI_API_KEY": "lmstudio",  # sentinel — LM Studio ignores auth
+    },
+    "llamacpp": {
+        "OPENAI_BASE_URL": "http://localhost:8080/v1",
+        "OPENAI_API_KEY": "not-needed",
+    },
+}
 
-# Point the OpenAI SDK at Ollama's OpenAI-compat endpoint. Ollama
-# ignores the key but the openai package refuses to send without one.
-os.environ.setdefault("OPENAI_BASE_URL", "http://localhost:11434/v1")
-os.environ.setdefault("OPENAI_API_KEY", "ollama")
-os.environ.setdefault("OLLAMA_HOST", "http://localhost:11434")
 
+# Display names for the onboarding wizard / logs.  Order matters —
+# this is the order users see when picking a provider.  Anything
+# speaking OpenAI's wire format is listed under "OpenAI-compatible"
+# and the user just sets ``OPENAI_BASE_URL``.
+PROVIDER_DISPLAY_NAMES: dict[str, str] = {
+    "openai": "OpenAI",
+    "anthropic": "Anthropic",
+    "openrouter": "OpenRouter",
+    "minimax": "MiniMax (Eden primary)",
+    "ollama": "Ollama (local)",
+    "ollama_cloud": "Ollama Cloud",
+    "vllm": "vLLM (local)",
+    "lmstudio": "LM Studio (local)",
+    "llamacpp": "llama.cpp (local)",
+}
+
+
+def _render_python_env_setup(framework: str) -> str:
+    """Return the ``os.environ.setdefault(...)`` block for ``framework``.
+
+    Empty string when the provider needs no bootstrap (e.g. plain
+    openai or anthropic — the SDK picks up its key from the standard
+    env var natively).
+    """
+    envs = PROVIDER_BOOTSTRAP_ENVS.get(framework)
+    if not envs:
+        return ""
+    lines = ["# Added by Eden onboarding — route the SDK at this provider."]
+    lines.append("import os")
+    lines.append("")
+    for k, v in envs.items():
+        # Expand ${VAR} placeholders to os.environ lookups so the
+        # user's secret key isn't baked into the generated file.
+        if v.startswith("${") and v.endswith(":-}"):
+            env_name = v[2:-3]  # strip "${" and ":-}"
+            lines.append(
+                f'os.environ.setdefault("{k}", os.environ.get("{env_name}", ""))'
+            )
+        elif v.startswith("${") and v.endswith("}"):
+            env_name = v[2:-1]
+            lines.append(
+                f'os.environ.setdefault("{k}", os.environ.get("{env_name}", ""))'
+            )
+        else:
+            # Literal default (e.g. "ollama" sentinel for local Ollama).
+            lines.append(f'os.environ.setdefault("{k}", "{v}")')
+    lines.append("")
+    return "\n".join(lines)
+
+
+def _render_ts_env_setup(framework: str) -> str:
+    """Return the ``process.env.X ??= ...`` block for ``framework``."""
+    envs = PROVIDER_BOOTSTRAP_ENVS.get(framework)
+    if not envs:
+        return ""
+    lines = ["// Added by Eden onboarding — route the SDK at this provider."]
+    for k, v in envs.items():
+        if v.startswith("${") and v.endswith(":-}"):
+            env_name = v[2:-3]
+            lines.append(f'process.env.{k} ??= process.env.{env_name} ?? "";')
+        elif v.startswith("${") and v.endswith("}"):
+            env_name = v[2:-1]
+            lines.append(f'process.env.{k} ??= process.env.{env_name} ?? "";')
+        else:
+            lines.append(f'process.env.{k} ??= "{v}";')
+    lines.append("")
+    return "\n".join(lines)
+
+
+# Provider-aware bootstrap: same shape as PYTHON_INSTRUMENT_TEMPLATE
+# but interpolates a per-provider env-setup block before ``eden.init()``.
+# Used for any framework in PROVIDER_BOOTSTRAP_ENVS.
+PYTHON_INSTRUMENT_PROVIDER_TEMPLATE = '''\
+# Added by Eden onboarding — Eden auto-instrumentation.
+{env_setup}
 import eden  # type: ignore  # noqa: F401
 
 eden.init(
@@ -188,18 +288,13 @@ eden.init(
     base_url=os.environ.get("EDEN_BASE_URL", "http://localhost:8000"),
     framework={framework_repr},
     auto_instrument=True,
-    llm_provider="ollama",
-    ollama_base_url=os.environ["OLLAMA_HOST"],
 )
 '''
 
 
-TS_INSTRUMENT_OLLAMA_TEMPLATE = """\
-// Added by Eden onboarding — Eden auto-instrumentation for Ollama.
-process.env.OPENAI_BASE_URL ??= "http://localhost:11434/v1";
-process.env.OPENAI_API_KEY ??= "ollama";
-process.env.OLLAMA_HOST ??= "http://localhost:11434";
-
+TS_INSTRUMENT_PROVIDER_TEMPLATE = """\
+// Added by Eden onboarding — Eden auto-instrumentation.
+{env_setup}
 import {{ init }} from "@eden-ai/sdk";
 
 init({{
@@ -208,8 +303,6 @@ init({{
   baseUrl: process.env.EDEN_BASE_URL ?? "http://localhost:8000",
   framework: {framework_repr},
   autoInstrument: true,
-  llmProvider: "ollama",
-  ollamaBaseUrl: process.env.OLLAMA_HOST,
 }});
 """
 
@@ -332,14 +425,16 @@ def _maybe_update_package_json(repo_root: Path, additions: list[str]) -> FileCha
 def _build_python_instrument_file(detection: FrameworkDetection) -> str:
     fw = detection.framework
     imports = PYTHON_IMPORT_SNIPPETS.get(fw, "")
-    # Ollama gets a dedicated template that sets ``OPENAI_BASE_URL``
-    # before ``eden.init()`` so the OpenAI-compatible instrumentor
-    # intercepts calls to the local Ollama server.
-    if fw == "ollama":
-        template = PYTHON_INSTRUMENT_OLLAMA_TEMPLATE
+    # Providers in PROVIDER_BOOTSTRAP_ENVS get the env-aware template
+    # so the OpenAI-compatible instrumentor routes calls to the right
+    # endpoint (Ollama, Groq, Together, vLLM, LM Studio, etc).
+    if fw in PROVIDER_BOOTSTRAP_ENVS:
+        env_setup = _render_python_env_setup(fw)
+        body = PYTHON_INSTRUMENT_PROVIDER_TEMPLATE.format(
+            env_setup=env_setup, framework_repr=repr(fw)
+        )
     else:
-        template = PYTHON_INSTRUMENT_TEMPLATE
-    body = template.format(framework_repr=repr(fw))
+        body = PYTHON_INSTRUMENT_TEMPLATE.format(framework_repr=repr(fw))
     return (
         "# Auto-generated by Eden onboarding — safe to delete if you\n"
         "# prefer to instrument manually.\n"
@@ -350,11 +445,13 @@ def _build_python_instrument_file(detection: FrameworkDetection) -> str:
 def _build_ts_instrument_file(detection: FrameworkDetection) -> str:
     fw = detection.framework
     imports = TS_IMPORT_SNIPPETS.get(fw, "")
-    if fw == "ollama":
-        template = TS_INSTRUMENT_OLLAMA_TEMPLATE
+    if fw in PROVIDER_BOOTSTRAP_ENVS:
+        env_setup = _render_ts_env_setup(fw)
+        body = TS_INSTRUMENT_PROVIDER_TEMPLATE.format(
+            env_setup=env_setup, framework_repr=f'"{fw}"'
+        )
     else:
-        template = TS_INSTRUMENT_TEMPLATE
-    body = template.format(framework_repr=f'"{fw}"')
+        body = TS_INSTRUMENT_TEMPLATE.format(framework_repr=f'"{fw}"')
     return (
         "// Auto-generated by Eden onboarding — safe to delete if you\n"
         "// prefer to instrument manually.\n"
@@ -618,10 +715,278 @@ def apply_plan(
     return written
 
 
+# ---------------------------------------------------------------------------
+# One-command onboarding: auto_onboard + verify_setup
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class AutoOnboardResult:
+    """Outcome of a single :func:`auto_onboard` call."""
+
+    framework: str
+    language: str
+    llm_provider: str  # "ollama", "openai", "anthropic", "" (unset)
+    confidence: float
+    files_written: list[str]  # repo-relative paths that were created/modified
+    notes: list[str]  # human-readable caveats + next steps
+    plan: IntegrationPlan  # the underlying plan, for callers that need detail
+
+
+@dataclass
+class VerifyResult:
+    """Outcome of :func:`verify_setup`."""
+
+    ok: bool  # overall — True if no errors (warnings allowed)
+    checks: list["CheckResult"]  # field(default_factory=list)
+
+
+@dataclass
+class CheckResult:
+    name: str
+    status: str  # "ok" | "warning" | "error"
+    message: str
+
+
+def auto_onboard(
+    repo_root: str | Path,
+    *,
+    force: bool = False,
+) -> AutoOnboardResult:
+    """End-to-end onboarding in a single call.
+
+    Detects the user's framework + LLM provider from the repo +
+    environment, builds an :class:`IntegrationPlan`, and applies it to
+    disk.  This is what the CLI / wizard / portal all funnel into.
+
+    Usage::
+
+        from eden.integrations.sdk_integrator import auto_onboard
+        result = auto_onboard("/path/to/user/repo")
+        for path in result.files_written:
+            print(f"  wrote {path}")
+        for note in result.notes:
+            print(f"  ! {note}")
+
+    The function never opens a PR or pushes — that's a separate step
+    owned by the portal's GitHub integration.  Onboarding here is
+    local-disk only.
+
+    Args:
+        repo_root: Path to the user's repo (must exist).
+        force: Overwrite ``.eden/config.yaml`` even if it already exists.
+
+    Returns:
+        :class:`AutoOnboardResult` summarising what was done.
+    """
+    import os
+
+    root = Path(repo_root).expanduser().resolve()
+    if not root.exists():
+        raise FileNotFoundError(f"repo_root does not exist: {root}")
+
+    detection = detect_framework(root)
+    plan = build_integration_plan(root, detection, force=force)
+    files_written = apply_plan(root, plan)
+
+    # Provider detection — what backend is the user actually calling?
+    llm_provider = _infer_llm_provider(detection.framework)
+
+    notes = list(plan.notes)
+    if llm_provider:
+        notes.append(
+            f"Detected LLM provider: {PROVIDER_DISPLAY_NAMES.get(llm_provider, llm_provider)}. "
+            "Set the required API key env var (see .eden/config.yaml) and restart your app."
+        )
+    else:
+        notes.append(
+            "No specific LLM provider detected — using whatever ``openai`` / ``anthropic`` "
+            "imports are already in the repo. Set ``OPENAI_API_KEY`` or ``ANTHROPIC_API_KEY`` "
+            "before running."
+        )
+
+    return AutoOnboardResult(
+        framework=detection.framework,
+        language=detection.language,
+        llm_provider=llm_provider,
+        confidence=detection.confidence,
+        files_written=files_written,
+        notes=notes,
+        plan=plan,
+    )
+
+
+def verify_setup(
+    repo_root: str | Path | None = None,
+    *,
+    require_provider_reachable: bool = False,
+) -> VerifyResult:
+    """Pre-flight check: is the user's environment ready to use Eden?
+
+    Checks (in order):
+      1. ``.eden/config.yaml`` exists (if ``repo_root`` provided).
+      2. ``EDEN_API_KEY`` env var is set.
+      3. ``EDEN_DEFAULT_ORG`` env var is set.
+      4. The user's framework has a matching provider key:
+         - ``openai`` → ``OPENAI_API_KEY``
+         - ``anthropic`` → ``ANTHROPIC_API_KEY``
+         - ``ollama`` → ``$OLLAMA_HOST`` reachable (optional, see flag)
+      5. ``OPENAI_BASE_URL`` is unset OR points at a recognised provider.
+
+    Args:
+        repo_root: If given, also checks ``.eden/config.yaml`` is present.
+        require_provider_reachable: If True, ping the chosen provider's
+            base URL and fail if unreachable.  Default False (we don't
+            block onboarding on a flaky network).
+
+    Returns:
+        :class:`VerifyResult` — ``ok`` is True iff no checks have status
+        ``"error"``.  Warnings are non-fatal.
+    """
+    import os
+
+    checks: list[CheckResult] = []
+
+    if repo_root is not None:
+        root = Path(repo_root).expanduser().resolve()
+        cfg = root / ".eden" / "config.yaml"
+        if cfg.exists():
+            checks.append(CheckResult(
+                name=".eden/config.yaml",
+                status="ok",
+                message=f"present at {cfg}",
+            ))
+        else:
+            checks.append(CheckResult(
+                name=".eden/config.yaml",
+                status="error",
+                message=f"missing — run `eden onboard` (or auto_onboard()) at {root}",
+            ))
+
+    if os.environ.get("EDEN_API_KEY"):
+        checks.append(CheckResult(
+            name="EDEN_API_KEY", status="ok", message="set"))
+    else:
+        checks.append(CheckResult(
+            name="EDEN_API_KEY", status="error",
+            message="not set — get one from the Eden portal",
+        ))
+
+    if os.environ.get("EDEN_DEFAULT_ORG"):
+        checks.append(CheckResult(
+            name="EDEN_DEFAULT_ORG", status="ok", message="set"))
+    else:
+        checks.append(CheckResult(
+            name="EDEN_DEFAULT_ORG", status="warning",
+            message="not set — Eden will use the user's first org as fallback",
+        ))
+
+    # Provider-key check.  Order matters: a local Ollama setup
+    # doesn't need OPENAI_API_KEY.
+    framework = ""
+    if repo_root is not None:
+        cfg = root / ".eden" / "config.yaml"
+        if cfg.exists():
+            try:
+                import yaml  # type: ignore
+                framework = str(yaml.safe_load(cfg.read_text()).get("integrate", {}).get("framework", ""))
+            except Exception:
+                pass
+
+    if framework == "ollama":
+        host = os.environ.get("OLLAMA_HOST", "http://localhost:11434")
+        if _is_url_reachable(host):
+            checks.append(CheckResult(
+                name="Ollama",
+                status="ok",
+                message=f"reachable at {host}",
+            ))
+        else:
+            checks.append(CheckResult(
+                name="Ollama",
+                status="warning",
+                message=f"not reachable at {host} — start `ollama serve` to fix",
+            ))
+    elif framework == "anthropic":
+        if os.environ.get("ANTHROPIC_API_KEY"):
+            checks.append(CheckResult(
+                name="ANTHROPIC_API_KEY", status="ok", message="set"))
+        else:
+            checks.append(CheckResult(
+                name="ANTHROPIC_API_KEY", status="error",
+                message="not set — required for Anthropic",
+            ))
+    elif framework == "openai":
+        if os.environ.get("OPENAI_API_KEY"):
+            checks.append(CheckResult(
+                name="OPENAI_API_KEY", status="ok", message="set"))
+        else:
+            checks.append(CheckResult(
+                name="OPENAI_API_KEY", status="error",
+                message="not set — required for OpenAI (or set OPENAI_BASE_URL for another OpenAI-compat provider)",
+            ))
+    else:
+        # Generic / unknown framework — don't fail.
+        checks.append(CheckResult(
+            name="Provider key",
+            status="warning",
+            message=f"framework={framework!r}; ensure the relevant API key env var is set",
+        ))
+
+    # Optional reachability check — gated by flag because network calls
+    # during onboarding are flaky.
+    if require_provider_reachable and framework in ("openai", "anthropic"):
+        base = os.environ.get("OPENAI_BASE_URL", "https://api.openai.com")
+        if not _is_url_reachable(base):
+            checks.append(CheckResult(
+                name=f"{framework} reachable",
+                status="warning",
+                message=f"{base} not reachable — check network / firewall",
+            ))
+
+    has_error = any(c.status == "error" for c in checks)
+    return VerifyResult(ok=not has_error, checks=checks)
+
+
+def _infer_llm_provider(framework: str) -> str:
+    """Map detected framework → the LLM provider string used in config."""
+    if framework == "ollama":
+        return "ollama"
+    if framework == "anthropic":
+        return "anthropic"
+    if framework in ("openai", "langchain", "crewai", "autogen", "llama_index"):
+        return "openai"
+    return ""
+
+
+def _is_url_reachable(url: str, timeout_s: float = 2.0) -> bool:
+    """Cheap HEAD/GET probe — never raises."""
+    try:
+        import httpx
+        with httpx.Client(timeout=timeout_s) as http:
+            r = http.get(url, follow_redirects=True)
+            return r.status_code < 500
+    except Exception:
+        return False
+
+
 __all__ = [
+    "AutoOnboardResult",
+    "CheckResult",
     "FileChange",
     "IntegrationPlan",
+    "PROVIDER_BOOTSTRAP_ENVS",
+    "PROVIDER_DISPLAY_NAMES",
+    "PYTHON_IMPORT_SNIPPETS",
+    "PYTHON_INSTRUMENT_PROVIDER_TEMPLATE",
+    "TS_IMPORT_SNIPPETS",
+    "TS_INSTRUMENT_PROVIDER_TEMPLATE",
+    "VerifyResult",
+    "_render_python_env_setup",
+    "_render_ts_env_setup",
+    "apply_plan",
+    "auto_onboard",
     "build_integration_plan",
     "build_integration_plan_from_files",
-    "apply_plan",
+    "verify_setup",
 ]

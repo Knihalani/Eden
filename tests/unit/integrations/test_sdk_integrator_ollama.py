@@ -17,9 +17,11 @@ from pathlib import Path
 
 from eden.integrations.framework_detector import FrameworkDetection
 from eden.integrations.sdk_integrator import (
+    PROVIDER_BOOTSTRAP_ENVS,
     PYTHON_IMPORT_SNIPPETS,
-    PYTHON_INSTRUMENT_OLLAMA_TEMPLATE,
+    PYTHON_INSTRUMENT_PROVIDER_TEMPLATE,
     TS_IMPORT_SNIPPETS,
+    _render_python_env_setup,
     build_integration_plan,
     build_integration_plan_from_files,
 )
@@ -102,7 +104,10 @@ def test_ollama_plan_ts_uses_ollama_template(tmp_path: Path, monkeypatch):
     bootstrap = next(c for c in plan.changes if c.path.startswith("eden_bootstrap"))
     assert "OPENAI_BASE_URL" in bootstrap.content
     assert "http://localhost:11434/v1" in bootstrap.content
-    assert "llmProvider" in bootstrap.content
+    assert "OLLAMA_HOST" in bootstrap.content
+    # The new generic template uses env-driven init; the framework slot
+    # is the only provider-specific knob in the init() call.
+    assert '"ollama"' in bootstrap.content
 
 
 # ────────────────────────────────────────────────────────────────────────
@@ -126,9 +131,46 @@ def test_ollama_plan_from_files_sets_provider():
 
 
 def test_python_ollama_template_format_renders_cleanly():
-    rendered = PYTHON_INSTRUMENT_OLLAMA_TEMPLATE.format(framework_repr="'ollama'")
-    # The format should not raise, and the framework slot should land.
+    env_setup = _render_python_env_setup("ollama")
+    rendered = PYTHON_INSTRUMENT_PROVIDER_TEMPLATE.format(
+        env_setup=env_setup, framework_repr="'ollama'"
+    )
+    # The format should not raise, and the framework slot + env-setup should land.
     assert "'ollama'" in rendered
     assert "OPENAI_BASE_URL" in rendered
     assert "OPENAI_API_KEY" in rendered
     assert "OLLAMA_HOST" in rendered
+
+
+def test_provider_bootstrap_envs_includes_all_documented_providers():
+    # The matrix of providers the onboarding flow supports. Adding a
+    # new provider = one entry here + one marker in framework_detector.
+    expected = {
+        "openai", "anthropic", "ollama", "ollama_cloud",
+        "vllm", "lmstudio", "llamacpp",
+    }
+    assert expected.issubset(PROVIDER_BOOTSTRAP_ENVS.keys()), (
+        f"missing providers: {expected - PROVIDER_BOOTSTRAP_ENVS.keys()}"
+    )
+
+
+def test_render_python_env_setup_ollama_cloud_uses_env_var_for_key():
+    rendered = _render_python_env_setup("ollama_cloud")
+    assert "OPENAI_BASE_URL" in rendered
+    assert "https://ollama.com/v1" in rendered
+    # Key should be read from env var, not baked in.
+    assert "OLLAMA_CLOUD_API_KEY" in rendered
+    assert "sk-" not in rendered  # no literal secret
+
+
+def test_render_python_env_setup_openai_is_empty():
+    """The canonical OpenAI entry has no overrides — uses api.openai.com by default
+    and reads OPENAI_API_KEY from the SDK natively."""
+    rendered = _render_python_env_setup("openai")
+    assert rendered == ""
+
+
+def test_render_python_env_setup_anthropic_is_empty():
+    """Anthropic SDK reads ANTHROPIC_API_KEY natively — no overrides needed."""
+    rendered = _render_python_env_setup("anthropic")
+    assert rendered == ""

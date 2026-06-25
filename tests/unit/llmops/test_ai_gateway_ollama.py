@@ -56,9 +56,10 @@ async def test_complete_posts_to_v1_chat_completions(monkeypatch: pytest.MonkeyP
         async def __aexit__(self, *a):
             return False
 
-        async def post(self, url, json):
+        async def post(self, url, json, headers=None):
             captured["url"] = url
             captured["payload"] = json
+            captured["headers"] = headers or {}
             return _mock_response(
                 {
                     "choices": [{"message": {"content": "hello"}}],
@@ -74,6 +75,9 @@ async def test_complete_posts_to_v1_chat_completions(monkeypatch: pytest.MonkeyP
     assert captured["payload"]["model"] == "llama3.1:8b"
     assert captured["payload"]["stream"] is False
     assert captured["payload"]["messages"] == [{"role": "user", "content": "hi"}]
+    # Ollama's auth header is a sentinel — server ignores it, but the
+    # client still sends the standard Bearer shape.
+    assert "Authorization" in captured["headers"]
     assert result == {"text": "hello", "input_tokens": 11, "output_tokens": 5}
 
 
@@ -91,7 +95,7 @@ async def test_complete_handles_missing_usage_block(monkeypatch: pytest.MonkeyPa
         async def __aexit__(self, *a):
             return False
 
-        async def post(self, url, json):
+        async def post(self, url, json, headers=None):
             # Some Ollama versions omit ``usage`` unless ``stream=false``
             # is paired with the right options.  Graceful fallback.
             return _mock_response({"choices": [{"message": {"content": "ok"}}]})
@@ -141,17 +145,19 @@ def test_register_default_providers_wires_ollama_client(monkeypatch: pytest.Monk
     monkeypatch.delenv("OLLAMA_HOST", raising=False)
     gw = AIGateway()
     register_default_providers(gw)
-    assert Provider.SELF_HOSTED in gw._providers
-    assert isinstance(gw._providers[Provider.SELF_HOSTED], OllamaClient)
+    # After the env-driven refactor, local Ollama registers as
+    # Provider.OLLAMA (not the catch-all SELF_HOSTED).
+    assert Provider.OLLAMA in gw._providers
+    assert isinstance(gw._providers[Provider.OLLAMA], OllamaClient)
 
 
 def test_register_default_providers_is_idempotent(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.delenv("OLLAMA_HOST", raising=False)
     gw = AIGateway()
     register_default_providers(gw)
-    first = gw._providers[Provider.SELF_HOSTED]
+    first = gw._providers[Provider.OLLAMA]
     register_default_providers(gw)
-    second = gw._providers[Provider.SELF_HOSTED]
+    second = gw._providers[Provider.OLLAMA]
     assert first is second  # same instance — register_provider overwrites
 
 
@@ -162,7 +168,7 @@ def test_register_default_providers_is_idempotent(monkeypatch: pytest.MonkeyPatc
 
 def test_estimate_performance_for_known_ollama_model():
     gw = AIGateway()
-    q = gw._estimate_provider_performance(Provider.SELF_HOSTED, "qwen2.5:32b")
+    q = gw._estimate_provider_performance(Provider.OLLAMA, "qwen2.5:32b")
     # Cost is genuinely 0.0 for self-hosted.
     assert q[2] == 0.0
     # Quality is in the matrix range (0..1) — not the generic fallback.
@@ -171,14 +177,14 @@ def test_estimate_performance_for_known_ollama_model():
 
 def test_estimate_performance_for_unknown_ollama_model_falls_back():
     gw = AIGateway()
-    q = gw._estimate_provider_performance(Provider.SELF_HOSTED, "future-model-99b")
+    q = gw._estimate_provider_performance(Provider.OLLAMA, "future-model-99b")
     # Generic fallback is also cost 0.0.
     assert q[2] == 0.0
 
 
 def test_estimate_performance_keeps_cloud_costs_unchanged():
     gw = AIGateway()
-    cloud = gw._estimate_provider_performance(Provider.OPENROUTER, "claude-sonnet-4")
+    cloud = gw._estimate_provider_performance(Provider.OPENROUTER, "claude-sonnet-4-6")
     assert cloud[2] > 0  # cloud models still cost money
 
 
@@ -190,7 +196,7 @@ def test_estimate_performance_keeps_cloud_costs_unchanged():
 def test_estimate_cost_is_zero_for_self_hosted():
     gw = AIGateway()
     cost = gw._estimate_cost(
-        Provider.SELF_HOSTED,
+        Provider.OLLAMA,
         input_tokens=10_000,
         output_tokens=5_000,
         model_version="qwen2.5:32b",
