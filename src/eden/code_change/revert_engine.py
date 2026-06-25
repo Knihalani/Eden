@@ -226,6 +226,32 @@ class AutoRevertEngine:
                 "AutoRevertEngine: revert_events persist failed: %s", exc,
             )
 
+        # Gate 5 wiring: record the revert outcome in the
+        # CodebaseKnowledgeGraph. Best-effort — a graph
+        # write failure doesn't fail the revert. The
+        # evidence's "code_path" key (set by the post-merge
+        # monitor) is the file we record against; falls
+        # back to an empty path if not present.
+        try:
+            from .knowledge_graph import CodebaseKnowledgeGraph
+            kg = CodebaseKnowledgeGraph()
+            affected = (evidence or {}).get("code_path") or ""
+            if affected:
+                await kg.record_outcome(
+                    org_id=org_id,
+                    repo_id=(evidence or {}).get("repo_id") or "",
+                    code_path=affected,
+                    outcome="reverted",
+                    rca_category=(evidence or {}).get("rca_category", ""),
+                    telemetry_signature=(evidence or {}).get(
+                        "telemetry_signature", "",
+                    ),
+                )
+        except Exception as exc:
+            logger.debug(
+                "AutoRevertEngine: KG record_outcome failed: %s", exc,
+            )
+
         return _ok_envelope(
             self.name,
             {
