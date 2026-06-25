@@ -1201,28 +1201,39 @@ class ChatService:
         from eden.llm.client import OpenRouterClient
 
         client = OpenRouterClient()
-        # OpenRouter Chat Completions supports streaming. We use the
-        # OpenAI-compatible chat.completions.create with stream=True
-        # and accumulate chunks. We deliberately do NOT pass
-        # tool_calls=... — the agent emits JSON blocks inside text
-        # (```tool/```chart/```cite) so we don't need strict tool
-        # calling support from every T3 provider.
+        # Anthropic prompt-cache: tag the system message with an
+        # ephemeral ``cache_control`` breakpoint so Sonnet/Opus
+        # re-bills the prefix at 1/10 cost on subsequent calls.
+        # ~4k system-prompt tokens × N chats × 90% saving is the
+        # single biggest line item in the agent budget.
+        is_anthropic = OpenRouterClient._is_anthropic_model(model)
+        system_msg: dict[str, Any] = {"role": "system", "content": system_prompt}
+        if is_anthropic:
+            system_msg = {
+                "role": "system",
+                "content": [
+                    {
+                        "type": "text",
+                        "text": system_prompt,
+                        "cache_control": {"type": "ephemeral"},
+                    }
+                ],
+            }
         full_text = ""
         prompt_tokens = 0
         completion_tokens = 0
         try:
-            # Streaming path
-            response = client.client.chat.completions.create(
+            # Streaming path — use the async client so the event
+            # loop isn't blocked while a 60s Opus stream trickles
+            # chunks back.
+            response = await client.async_client.chat.completions.create(
                 model=model,
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    *messages,
-                ],
+                messages=[system_msg, *messages],
                 max_tokens=4096,
                 temperature=0.2,
                 stream=True,
             )
-            for chunk in response:
+            async for chunk in response:
                 if not chunk.choices:
                     continue
                 delta = chunk.choices[0].delta
@@ -1236,13 +1247,10 @@ class ChatService:
                     completion_tokens = getattr(usage, "completion_tokens", 0) or 0
         except Exception as exc:
             logger.warning(f"Streaming LLM call failed: {exc}; falling back to non-stream")
-            # Non-streaming fallback
-            resp = client.client.chat.completions.create(
+            # Non-streaming fallback — also async.
+            resp = await client.async_client.chat.completions.create(
                 model=model,
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    *messages,
-                ],
+                messages=[system_msg, *messages],
                 max_tokens=4096,
                 temperature=0.2,
                 stream=False,

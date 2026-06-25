@@ -110,6 +110,8 @@ export default function EvalPage() {
               <button
                 key={key}
                 onClick={() => setActiveTab(key)}
+                role="tab"
+                aria-selected={activeTab === key}
                 className={cn(
                   "px-4 py-2 rounded-lg text-sm font-medium transition-all flex items-center gap-2",
                   activeTab === key
