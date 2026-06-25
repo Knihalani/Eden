@@ -119,11 +119,7 @@ export default function PromptsPage() {
 
   const handleCreate = useCallback(async () => {
     if (!currentOrg?.id || !newPromptName.trim()) {
-      toast({
-        title: "Name required",
-        description: "Prompt name cannot be empty.",
-        variant: "destructive",
-      });
+      toast.error("Name required", "Prompt name cannot be empty.");
       return;
     }
     try {
@@ -142,7 +138,7 @@ export default function PromptsPage() {
         }
       );
       if (res.ok) {
-        toast({ title: "Prompt created" });
+        toast.success("Prompt created");
         setShowNewPrompt(false);
         setNewPromptName("");
         setNewPromptDesc("");
@@ -150,18 +146,10 @@ export default function PromptsPage() {
         await fetchData();
       } else {
         const err = await res.json().catch(() => null);
-        toast({
-          title: "Create failed",
-          description: err?.message || `HTTP ${res.status}`,
-          variant: "destructive",
-        });
+        toast.error("Create failed", err?.message || `HTTP ${res.status}`);
       }
     } catch (err) {
-      toast({
-        title: "Create failed",
-        description: String(err),
-        variant: "destructive",
-      });
+      toast.error("Create failed", String(err));
     }
   }, [
     currentOrg?.id,
@@ -172,12 +160,12 @@ export default function PromptsPage() {
     fetchData,
   ]);
 
-  if (!currentOrg) return <NoOrgState />;
+  if (!currentOrg) return <NoOrgState feature="Prompt Versions" />;
 
   return (
     <div className="space-y-6">
       <PageHeader
-        icon={<FileText className="h-5 w-5" />}
+        icon={FileText}
         title="Prompt Versions"
         subtitle="D.9 — Per-org prompt registry with version timeline + auto-eval"
       />

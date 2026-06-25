@@ -110,30 +110,19 @@ export default function BudgetPage() {
         }),
       });
       if (res.ok) {
-        toast({
-          title: "Budget saved",
-          description: "Cost guardrails updated.",
-        });
+        toast.success("Budget saved", "Cost guardrails updated.");
         await fetchData();
       } else {
-        toast({
-          title: "Save failed",
-          description: `HTTP ${res.status}. Org owner required.`,
-          variant: "destructive",
-        });
+        toast.error("Save failed", `HTTP ${res.status}. Org owner required.`);
       }
     } catch (err) {
-      toast({
-        title: "Save failed",
-        description: String(err),
-        variant: "destructive",
-      });
+      toast.error("Save failed", String(err));
     } finally {
       setSaving(false);
     }
   }, [currentOrg?.id, budget, toast, fetchData]);
 
-  if (!currentOrg) return <NoOrgState />;
+  if (!currentOrg) return <NoOrgState feature="Budgets" />;
   if (loading) {
     return (
       <div className="flex items-center justify-center p-12">
@@ -151,7 +140,7 @@ export default function BudgetPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        icon={<Wallet className="h-5 w-5" />}
+        icon={Wallet}
         title="Cost Guardrails"
         subtitle="Per-org budget caps with closed-loop enforcement (D.10)"
       />
