@@ -35,6 +35,7 @@ __all__ = [
     "FileEntry",
     "GitHubPRProvider",
     "GitHubRepoProvider",
+    "IsolatedSandboxProvider",
     "LocalPRProvider",
     "LocalRepoProvider",
     "LocalSandboxProvider",
@@ -79,6 +80,7 @@ if TYPE_CHECKING:  # pragma: no cover - import only
         SandboxSpec,
         get_default_sandbox_provider,
     )
+    from .sandbox_isolated import IsolatedSandboxProvider
 
 
 _LAZY_IMPORTS: dict[str, tuple[str, str]] = {
@@ -95,6 +97,9 @@ _LAZY_IMPORTS: dict[str, tuple[str, str]] = {
     "PullRequestInfo": (".repo", "PullRequestInfo"),
     "RepoProvider": (".repo", "RepoProvider"),
     "get_default_repo_provider": (".repo", "get_default_repo_provider"),
+    "IsolatedSandboxProvider": (
+        ".sandbox_isolated", "IsolatedSandboxProvider",
+    ),
     "LocalSandboxProvider": (".sandbox", "LocalSandboxProvider"),
     "NullSandboxProvider": (".sandbox", "NullSandboxProvider"),
     "SandboxProvider": (".sandbox", "SandboxProvider"),
