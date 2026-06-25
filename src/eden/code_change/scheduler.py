@@ -270,7 +270,18 @@ async def _emit_drift(
     severity: str = "low",
     payload: dict[str, Any] | None = None,
 ) -> None:
-    """Fire a PromotionHook.on_drift_alert (best-effort)."""
+    """Fire a PromotionHook.on_drift_alert (best-effort).
+
+    Per-tick budget: ``_tick_drift_count`` caps the number of
+    drift emissions per ``evaluate_pending_clusters`` call. Without
+    this, an incident storm (100+ clusters) fires 100+ hooks, each
+    pushing through the HookBus dedup window — wasted budget on
+    the same logical event. The cap is reset by :func:`evaluate_pending_clusters`.
+    """
+    global _tick_drift_count
+    if _tick_drift_count >= _MAX_DRIFTS_PER_TICK:
+        return
+    _tick_drift_count += 1
     try:
         from eden.llmops.promotion_hooks import PromotionHook
         await PromotionHook.on_drift_alert(
@@ -281,6 +292,14 @@ async def _emit_drift(
         )
     except Exception as exc:
         logger.debug("scheduler: on_drift_alert(%s) failed: %s", drift_type, exc)
+
+
+# Per-tick coalesce — see ``_emit_drift``. 25 is enough for any
+# realistic single-tick incident storm (a 100-cluster flood caps at
+# 25 emissions; the rest are dropped silently with no behaviour
+# change to downstream hook handlers).
+_MAX_DRIFTS_PER_TICK = 25
+_tick_drift_count: int = 0
 
 
 # ── Per-cluster pre-filter ──────────────────────────────────────────
@@ -368,6 +387,10 @@ async def evaluate_pending_clusters(
     operators can preview the run.
     """
     settings = get_settings()
+    # Reset per-tick drift budget — see ``_emit_drift`` and
+    # ``_MAX_DRIFTS_PER_TICK``.
+    global _tick_drift_count
+    _tick_drift_count = 0
     summary: dict[str, Any] = {
         "orgs_scanned": 0,
         "orgs_opted_in": 0,
