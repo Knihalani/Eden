@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useSearchParams } from "next/navigation";
 import { useOrg } from "@/hooks/use-org";
+import { usePolling } from "@/hooks/use-polling";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { formatRelativeTime } from "@/lib/format";
@@ -232,12 +233,15 @@ export default function ReplayPage() {
     }
   }, [activeTab, fetchHiltState]);
 
-  // Poll HILT state when on HILT tab
-  useEffect(() => {
-    if (activeTab !== "hilt" || !selectedJobId) return;
-    const interval = setInterval(fetchHiltState, 3000);
-    return () => clearInterval(interval);
-  }, [activeTab, selectedJobId, fetchHiltState]);
+  // Poll HILT state when on HILT tab. Cost-safe polling via shared
+  // hook — pauses on tab-hidden, backs off on errors, bails on auth
+  // failures. June 2026 cost-pass.
+  usePolling({
+    fetch: fetchHiltState,
+    intervalMs: 3_000,
+    enabled: activeTab === "hilt" && Boolean(selectedJobId),
+    deps: [activeTab, selectedJobId, fetchHiltState],
+  });
 
   const sendHILTCommand = async (command: string, payload?: Record<string, unknown>) => {
     if (!selectedJobId) return;

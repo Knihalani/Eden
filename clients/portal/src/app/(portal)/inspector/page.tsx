@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useOrg } from "@/hooks/use-org";
+import { usePolling } from "@/hooks/use-polling";
 import { api } from "@/lib/api";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
@@ -131,7 +132,6 @@ export default function TraceInspectorPage() {
   const [filter, setFilter] = useState<Filter>("all");
   const [query, setQuery] = useState("");
   const [autoRefresh, setAutoRefresh] = useState(false);
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const loadTrace = useCallback(
     async (id: string) => {
@@ -172,15 +172,14 @@ export default function TraceInspectorPage() {
     [currentOrg, toast]
   );
 
-  // Auto-refresh polling
-  useEffect(() => {
-    if (autoRefresh && traceId) {
-      pollRef.current = setInterval(() => loadTrace(traceId), 3000);
-    }
-    return () => {
-      if (pollRef.current) clearInterval(pollRef.current);
-    };
-  }, [autoRefresh, traceId, loadTrace]);
+  // Auto-refresh polling — cost-safe via shared hook (pauses on
+  // tab-hidden, backs off on errors, bails on auth failures).
+  usePolling({
+    fetch: () => loadTrace(traceId),
+    intervalMs: 3_000,
+    enabled: Boolean(autoRefresh && traceId),
+    deps: [autoRefresh, traceId, loadTrace],
+  });
 
   // Filter spans
   const filteredSpans = spans.filter((s) => {
