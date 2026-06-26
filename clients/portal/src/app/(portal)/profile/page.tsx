@@ -171,7 +171,7 @@ export default function ProfilePage() {
   if (!user) return null;
 
   return (
-    <div className="p-6 max-w-2xl">
+    <div className="p-4 sm:p-6 lg:p-8 max-w-2xl mx-auto space-y-6 page-enter">
       <PageHeader
         title="Profile"
         subtitle="Manage your account settings"

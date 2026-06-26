@@ -77,12 +77,17 @@ export function OnboardingBanner() {
   }
 
   return (
+    // `sticky top-{topbar-height} z-20` so the banner stays visible
+    // while scrolling, sitting just below the topbar (z-30). Without
+    // the z-index, the sticky topbar (z-30) covers it on scroll.
+    // `top-14` = 56px (matches the topbar's effective height with
+    // its `py-3` + ~40px content). June 2026 layout-pass fix.
     <div
       role="region"
       aria-label="Onboarding progress"
-      className="border-b border-[var(--accent)]/30 bg-[var(--accent)]/5"
+      className="sticky top-14 z-20 border-b border-[var(--accent)]/30 bg-[var(--accent)]/5 backdrop-blur"
     >
-      <div className="mx-auto flex max-w-7xl items-center gap-3 px-4 py-2 text-sm">
+      <div className="mx-auto flex max-w-7xl flex-wrap items-center gap-3 px-4 py-2 text-sm">
         <Sparkles className="h-4 w-4 shrink-0 text-[var(--accent)]" />
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">

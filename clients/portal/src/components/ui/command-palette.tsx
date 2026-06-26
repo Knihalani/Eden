@@ -237,7 +237,9 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
           "flex flex-col",
           "animate-scale-in"
         )}
-        style={{ maxHeight: "60vh" }}
+        // Smaller on phones (60vh leaves the keyboard covering most
+        // results), taller on desktop. June 2026 layout-pass fix.
+        style={{ maxHeight: "min(60vh, 480px)" }}
       >
         <div className="flex items-center gap-3 px-4 border-b border-[var(--border-subtle)]">
           <Search className="w-5 h-5 text-[var(--text-muted)] flex-shrink-0" />

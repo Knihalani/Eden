@@ -24,7 +24,10 @@ export function PageHeader({
   greeting,
 }: PageHeaderProps) {
   return (
-    <div className={cn("flex items-start justify-between gap-4 mb-8", className)}>
+    // `flex-col sm:flex-row sm:items-start` so the actions slot
+    // wraps below the title on narrow viewports instead of
+    // overflowing horizontally. June 2026 layout-pass fix.
+    <div className={cn("flex flex-col sm:flex-row sm:items-start justify-between gap-4 mb-8", className)}>
       <div className="min-w-0 flex items-start gap-3">
         {Icon && (
           <div className="w-10 h-10 rounded-xl bg-[var(--accent-faint)] border border-[var(--accent)]/20 flex items-center justify-center shrink-0">
@@ -40,7 +43,10 @@ export function PageHeader({
               {eyebrow}
             </p>
           )}
-          <h1 className="text-2xl font-bold text-[var(--text-primary)] tracking-tight">
+          {/* Title scales from `text-2xl` (mobile) to `text-3xl`
+              (lg+) so a long page name doesn't dominate small
+              screens. June 2026 layout-pass fix. */}
+          <h1 className="text-2xl lg:text-3xl font-bold text-[var(--text-primary)] tracking-tight">
             {title}
           </h1>
           {subtitle && (
@@ -48,7 +54,7 @@ export function PageHeader({
           )}
         </div>
       </div>
-      {actions && <div className="flex items-center gap-2 shrink-0">{actions}</div>}
+      {actions && <div className="flex flex-wrap items-center gap-2 shrink-0">{actions}</div>}
     </div>
   );
 }

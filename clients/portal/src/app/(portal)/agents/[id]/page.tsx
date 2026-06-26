@@ -138,7 +138,8 @@ export default function AgentDetailPage() {
 
   if (loading && !agent) {
     return (
-      <div className="p-8 text-sm text-[var(--text-muted)] flex items-center gap-2">
+      // Match the page wrapper so the loader isn't flush-left.
+      <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto text-sm text-[var(--text-muted)] flex items-center gap-2">
         <Loader2 className="w-4 h-4 animate-spin" />
         Loading agent…
       </div>
