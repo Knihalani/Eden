@@ -313,7 +313,7 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
     // FIX-D: must be flex-row on lg+ so the sidebar sits beside
     // <main>, not stacked above it. flex-col on mobile so the
     // sidebar becomes the mobile drawer.
-    <div className="min-h-screen flex flex-col lg:flex-row bg-[var(--bg-secondary)]">
+    <div className="min-h-dvh flex flex-col lg:flex-row bg-[var(--bg-secondary)]">
       {/* Skip-to-content link — visually hidden until focused, allows keyboard users to bypass the sidebar nav */}
       <a href="#main-content" className="skip-to-content">
         Skip to main content
