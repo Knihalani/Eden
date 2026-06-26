@@ -28,6 +28,15 @@ const isPublicRoute = createRouteMatcher([
   "/api/auth/login",
   "/api/auth/signup",
   "/api/auth/logout",
+  // ai-insights routes are pass-through proxies that forward the
+  // request cookie + Clerk Bearer to FastAPI, which does its own
+  // auth (returns 401 on bad/missing token). Letting Clerk's
+  // middleware 404 them meant the upstream never got a chance to
+  // authenticate — every chat/sessions call returned 404 from the
+  // dashboard. Same for the SSE observability stream — its long-
+  // lived response can't tolerate Clerk's redirect-on-401 behavior.
+  "/api/ai-insights/(.*)",
+  "/api/orgs/(.*)/observability/stream",
   "/__clerk(.*)",
   "/sign-in(.*)",
   "/sign-up(.*)",
