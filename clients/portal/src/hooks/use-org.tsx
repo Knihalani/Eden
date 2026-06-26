@@ -3,6 +3,7 @@
 import {
   createContext,
   useContext,
+  useRef,
   useState,
   useCallback,
   useEffect,
@@ -63,6 +64,17 @@ export function OrgProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
 
+  // Use a ref to mirror `authError` so the 5s polling interval can
+  // bail immediately on failure without waiting for the React state
+  // to propagate. Without this, the interval closure captures
+  // `authError` at setup time and the next tick (or two) still calls
+  // `refreshOrgs` after authError becomes truthy, hammering /me
+  // until the 429 limit trips. June 2026 fix.
+  const authErrorRef = useRef<string | null>(null);
+  useEffect(() => {
+    authErrorRef.current = authError;
+  }, [authError]);
+
   // Whenever the Clerk active org changes, refetch the Eden-side
   // enrichment for that org. Failures are non-fatal — the user can
   // still navigate the portal shell.
@@ -72,6 +84,9 @@ export function OrgProvider({ children }: { children: ReactNode }) {
       setCurrentOrgState(null);
       return;
     }
+    // Synchronous bail when the last attempt failed — prevents the
+    // 5s polling loop from re-firing before the effect cleanup runs.
+    if (authErrorRef.current) return;
     setLoading(true);
     try {
       const me = await api.getMe();

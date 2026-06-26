@@ -22,7 +22,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, Path
 from pydantic import BaseModel, Field
 
-from eden.api.deps import require_org_member
+from eden.api.deps import get_current_user, require_org_member
 from eden.storage.postgres import get_postgres_client
 
 logger = logging.getLogger(__name__)
@@ -43,10 +43,11 @@ class SidebarPrefs(BaseModel):
 @router.get("", response_model=SidebarPrefs | None)
 async def get_sidebar_prefs(
     org_id: str = Path(...),
-    member: dict = Depends(require_org_member),
+    user: dict = Depends(get_current_user),
+    _member: dict = Depends(require_org_member),
 ) -> SidebarPrefs | None:
     """Return the calling user's saved prefs, or ``null`` if unset."""
-    user_id = member.get("user_id")
+    user_id = user.get("user_id")
     if not user_id:
         return None
 
@@ -74,14 +75,15 @@ async def get_sidebar_prefs(
 async def set_sidebar_prefs(
     prefs: SidebarPrefs,
     org_id: str = Path(...),
-    member: dict = Depends(require_org_member),
+    user: dict = Depends(get_current_user),
+    _member: dict = Depends(require_org_member),
 ) -> dict[str, Any]:
     """Upsert the calling user's sidebar prefs row."""
-    user_id = member.get("user_id")
+    user_id = user.get("user_id")
     if not user_id:
         from fastapi import HTTPException
 
-        raise HTTPException(status_code=401, detail="No user_id on member payload")
+        raise HTTPException(status_code=401, detail="Invalid token payload")
 
     client = await get_postgres_client()
     if client is None:
