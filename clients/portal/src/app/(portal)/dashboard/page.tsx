@@ -4,19 +4,14 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
-  Loader2,
   DollarSign,
   AlertTriangle,
-  ExternalLink,
-  Layers,
   LayoutDashboard,
   GitBranch,
-  Bell,
-  ArrowRight,
-  Eye,
 } from "lucide-react";
 import { api } from "@/lib/api";
 import { useOrg } from "@/hooks/use-org";
+import { usePermissions } from "@/hooks/use-permissions";
 import { PageHeader } from "@/components/layout/page-header";
 import { StatCard } from "@/components/ui/stat-card";
 import { ThroughputCard } from "./_components/throughput-card";
@@ -62,10 +57,16 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 
 export default function DashboardPage() {
   const { currentOrg, authError, clearAuthError } = useOrg();
+  const { hasPermission } = usePermissions();
   const router = useRouter();
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // Gate the primary "Connect a repo" CTA on the actual permission
+  // the connect flow enforces (owner/admin only). Without this,
+  // non-admins in a multi-tenant org were being sent to a page
+  // that immediately told them they needed admin. June 2026 fix.
+  const canConnect = hasPermission("integrations:write");
 
   // Use a stable identifier (the org id) for the effect dep so the
   // fetcher doesn't re-fire when Clerk returns a fresh `Organization`
@@ -228,11 +229,15 @@ export default function DashboardPage() {
     <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto page-enter">
       <PageHeader
         title="Telemetry Overview"
-        subtitle="Live signals from your agents and pipelines."
+        subtitle={
+          isFirstRun && canConnect
+            ? "Live signals from your agents — connect a repo to start seeing traces here."
+            : "Live signals from your agents and pipelines."
+        }
         icon={LayoutDashboard}
         greeting={currentOrg ? `Welcome back · ${currentOrg.name}` : undefined}
         actions={
-          <div className="flex items-center gap-2">
+          canConnect ? (
             <Link
               href="/agents/connect"
               className="inline-flex items-center gap-1.5 px-3 py-2 bg-[var(--accent)] text-[var(--accent-foreground)] rounded-lg text-sm font-medium hover:bg-[var(--accent-hover)] transition-colors"
@@ -240,50 +245,13 @@ export default function DashboardPage() {
               <GitBranch className="w-3.5 h-3.5" />
               Connect a repo
             </Link>
-            <Link
-              href="/observability"
-              className="inline-flex items-center gap-1.5 text-sm font-medium text-[var(--text-muted)] hover:text-[var(--accent)] transition-colors"
-            >
-              Full observability
-              <ExternalLink className="w-3.5 h-3.5" />
-            </Link>
-          </div>
+          ) : (
+            <span className="text-xs text-[var(--text-muted)] px-3 py-2">
+              Ask an admin to connect a repo
+            </span>
+          )
         }
       />
-
-      {isFirstRun && (
-        <div className="mb-6 p-5 rounded-xl border border-[var(--border-default)] bg-gradient-to-br from-[var(--accent-faint)] to-[var(--bg-primary)] flex flex-col sm:flex-row items-start gap-4">
-          <div className="flex-shrink-0 w-10 h-10 rounded-lg bg-[var(--accent)] text-[var(--accent-foreground)] flex items-center justify-center">
-            <GitBranch className="w-5 h-5" />
-          </div>
-          <div className="flex-1 min-w-0">
-            <h2 className="text-sm font-semibold text-[var(--text-primary)]">
-              Link your first agent
-            </h2>
-            <p className="mt-1 text-sm text-[var(--text-secondary)] max-w-2xl">
-              Eden captures every LLM call from your agents and surfaces
-              them as traces here. Link a GitHub repo to auto-instrument
-              it, or install the SDK and call{" "}
-              <code className="font-mono text-xs px-1 py-0.5 rounded bg-[var(--bg-tertiary)] text-[var(--text-primary)]">
-                eden.init()
-              </code>{" "}
-              in your existing agent code.
-            </p>
-            <div className="mt-3 flex flex-wrap items-center gap-2">
-              <Link
-                href="/agents/connect"
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[var(--accent)] text-[var(--accent-foreground)] rounded-md text-xs font-medium hover:bg-[var(--accent-hover)] transition-colors"
-              >
-                <GitBranch className="w-3.5 h-3.5" />
-                Link a GitHub repo
-              </Link>
-              <code className="px-2 py-1 rounded bg-[var(--bg-secondary)] font-mono text-xs text-[var(--text-secondary)] border border-[var(--border-subtle)]">
-                pip install eden-ai
-              </code>
-            </div>
-          </div>
-        </div>
-      )}
 
       {error && (
         <div className="mb-6 p-4 rounded-lg border border-[var(--error)] bg-[var(--error-bg)] text-[var(--error-strong)] text-sm">
@@ -362,7 +330,11 @@ export default function DashboardPage() {
       {/* Row 2: recent traces + quick links. (Judge Scores used to
           live as a standalone widget here; demoted to a Quick Link
           in June 2026 cleanup since the eval dashboard is a
-          subdomain, not a top-level signal.) */}
+          subdomain, not a top-level signal.) The old "Jump in"
+          section above the trace count footer was removed in June
+          2026 — every link it contained duplicated QuickLinks or
+          the PageHeader actions, and the footer trace count is
+          already covered by Anomalies / Throughput sublines. */}
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-4 sm:gap-6">
         <div className="xl:col-span-2">
           <RecentTracesCard loading={loading} traces={lastDayTraces.slice(0, 10)} />
@@ -370,82 +342,6 @@ export default function DashboardPage() {
         <div className="xl:col-span-1">
           <QuickLinks />
         </div>
-      </div>
-
-      {/* Row 3: Quick actions — the user's main navigation surface.
-          Replaces the old 22-card IntelligenceGrid (overwhelming + slow
-          to load + the user can navigate to the categories via the sidebar
-          anyway). Focused on the 4 actions that matter most for a
-          returning user. */}
-      <section className="mt-8">
-        <h2 className="text-base font-semibold text-[var(--text-primary)] tracking-tight mb-3">
-          Jump in
-        </h2>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-          {[
-            {
-              href: "/agents/connect",
-              icon: GitBranch,
-              title: "Connect a repo",
-              body: "Link a GitHub repo to auto-instrument your agent",
-              accent: "bg-[var(--accent-faint)] text-[var(--accent)]",
-            },
-            {
-              href: "/traces",
-              icon: Eye,
-              title: "Browse traces",
-              body: "Search and inspect every trace in your system",
-              accent: "bg-[var(--terminal-faint)] text-[var(--terminal)]",
-            },
-            {
-              href: "/optimization",
-              icon: DollarSign,
-              title: "Track cost",
-              body: "Token + cost overview across models and agents",
-              accent: "bg-[var(--warning-bg)] text-[var(--warning)]",
-            },
-            {
-              href: "/alerts",
-              icon: Bell,
-              title: "Set up alerts",
-              body: "Get notified when cost spikes or quality drops",
-              accent: "bg-[var(--error-bg)] text-[var(--error)]",
-            },
-          ].map((a) => (
-            <Link
-              key={a.href}
-              href={a.href}
-              className="group block p-4 bg-[var(--bg-primary)] border border-[var(--border-default)] rounded-xl transition-all hover:border-[var(--accent)]/50 hover:shadow-sm"
-            >
-              <div className={`w-9 h-9 rounded-lg flex items-center justify-center mb-3 ${a.accent}`}>
-                <a.icon className="w-5 h-5" />
-              </div>
-              <p className="text-sm font-semibold text-[var(--text-primary)] group-hover:text-[var(--accent)] transition-colors">
-                {a.title}
-              </p>
-              <p className="mt-1 text-xs text-[var(--text-muted)] leading-relaxed">
-                {a.body}
-              </p>
-              <ArrowRight className="w-3.5 h-3.5 text-[var(--text-muted)] mt-3 group-hover:text-[var(--accent)] group-hover:translate-x-0.5 transition-all" />
-            </Link>
-          ))}
-        </div>
-      </section>
-
-      {/* Footer trace count summary */}
-      <div className="mt-8 pt-6 border-t border-[var(--border-subtle)] text-xs text-[var(--text-muted)] flex items-center gap-2">
-        <Layers className="w-3.5 h-3.5" />
-        {loading ? (
-          <span className="inline-flex items-center gap-1.5">
-            <Loader2 className="w-3 h-3 animate-spin" />
-            Loading telemetry…
-          </span>
-        ) : (
-          <span>
-            {data?.tracesTotal ?? 0} traces indexed in the last 7 days · {lastDayTraces.length} in
-            the last 24h
-          </span>
-        )}
       </div>
     </div>
   );

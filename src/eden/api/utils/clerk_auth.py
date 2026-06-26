@@ -292,11 +292,21 @@ def clerk_role_to_eden_role(clerk_role: str | None) -> str:
     the migration is lossless. Eden-specific callers that need
     ``owner`` vs ``admin`` distinction should add a custom Clerk role
     (e.g. ``org:owner``) and a corresponding branch here.
+
+    June 2026 fix: Clerk's ``org:admin`` is the *highest* role Clerk
+    ships out of the box — there is no ``org:owner``. The org creator
+    always gets ``org:admin`` in Clerk, so collapsing it to Eden's
+    ``admin`` silently stripped ``owner``-only permissions
+    (``org:transfer``, ``billing:edit``, ``gdpr:execute``,
+    ``retention:override``) from every solo dev. Map it to
+    ``owner`` so the create-org path stays authoritative; the
+    ``create_org`` INSERT sets ``last_writer_source='local'`` so the
+    Clerk webhook race-resolution doesn't overwrite us back.
     """
     if not clerk_role:
         return "viewer"
     if clerk_role == "org:admin":
-        return "admin"
+        return "owner"
     if clerk_role == "org:member":
         return "member"
     # Any custom role defaults to admin so we don't accidentally

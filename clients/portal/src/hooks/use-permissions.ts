@@ -15,6 +15,7 @@ export type Permission =
   | "audit:view"
   | "jobs:read"
   | "jobs:write"
+  | "integrations:write"
   | "org:transfer";
 
 const PERMISSION_MAP: Record<string, Permission[]> = {
@@ -30,6 +31,7 @@ const PERMISSION_MAP: Record<string, Permission[]> = {
     "audit:view",
     "jobs:read",
     "jobs:write",
+    "integrations:write",
     "org:transfer",
   ],
   admin: [
@@ -43,6 +45,7 @@ const PERMISSION_MAP: Record<string, Permission[]> = {
     "audit:view",
     "jobs:read",
     "jobs:write",
+    "integrations:write",
   ],
   member: ["references:read", "jobs:read", "jobs:write"],
   viewer: ["references:read", "jobs:read"],

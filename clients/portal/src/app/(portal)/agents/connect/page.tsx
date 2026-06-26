@@ -20,11 +20,18 @@ export default function ConnectAgentPage() {
   const [lastRun, setLastRun] = useState<OnboardingPRRun | null>(null);
   const { hasPermission } = usePermissions();
 
-  if (!hasPermission("jobs:write")) {
+  // Gate on the permission the inner ``OnboardingConnectFlow`` actually
+  // enforces (owner/admin only) — not the generic ``jobs:write`` which
+  // is granted to plain ``member``. Previously a member passed this
+  // gate then hit a ``PanelLocked`` wall inside the flow, while an
+  // ``owner`` demoted by the Clerk webhook race got the same wall.
+  // June 2026 fix aligns the page gate with the inner flow's
+  // ``canIntegrate = role === "owner" || role === "admin"`` check.
+  if (!hasPermission("integrations:write")) {
     return (
       <NoOrgState
         feature="Admins only"
-        description="Connecting a new agent requires the `jobs:write` permission. Ask an org owner to perform this step."
+        description="Connecting a new agent requires the `integrations:write` permission. Ask an org owner or admin to perform this step."
       />
     );
   }

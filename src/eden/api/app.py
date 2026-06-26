@@ -92,6 +92,7 @@ from eden.api.routes import (
     scim,
     sessions,
     sharing,
+    sidebar_prefs,
     signals,
     sql_query,
     sso,
@@ -462,6 +463,7 @@ app.include_router(scim.router)  # /orgs/{org_id}/scim/v2
 app.include_router(sso.router)  # /sso
 app.include_router(chain.router)  # /chain
 app.include_router(ai_insights.router)  # /orgs/{org_id}/ai-insights
+app.include_router(sidebar_prefs.router)  # /orgs/{org_id}/sidebar-prefs (per-user UI prefs)
 app.include_router(ai_agent.router)  # /orgs/{org_id}/ai (Phase C unified agent)
 app.include_router(sharing.sharing_router)  # /orgs/{org_id}/traces/{trace_id}/share + saved-searches (Phase N)
 app.include_router(sharing.public_router)  # /public/traces/{token} (no auth, token-gated)
