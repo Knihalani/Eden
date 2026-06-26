@@ -148,7 +148,7 @@ export function OrgProvider({ children }: { children: ReactNode }) {
       // console with the same backtrace the user already saw a
       // friendly version of.
       const rawMessage = e instanceof Error ? e.message : "Failed to load orgs";
-      if (!/401|404|5\d\d|not\s*authenticated|unauthorized|not\s*found|unreachable|timed?\s*out|bad\s*gateway/i.test(rawMessage)) {
+      if (!/401|404|429|5\d\d|not\s*authenticated|unauthorized|not\s*found|unreachable|timed?\s*out|bad\s*gateway|rate.?limit/i.test(rawMessage)) {
         console.error("Unexpected org-load failure:", e);
       }
       // ponytail: a 401 here means the Clerk session is valid
@@ -180,6 +180,8 @@ export function OrgProvider({ children }: { children: ReactNode }) {
           "Setting up your account… If this takes more than a moment, refresh the page.";
       } else if (/404|not\s*found/i.test(rawMessage)) {
         message = "We couldn't load your workspace. Please refresh.";
+      } else if (/429|rate.?limit/i.test(rawMessage)) {
+        message = "Too many requests — pausing briefly. Reload in a moment.";
       } else if (/5\d\d|server\s*error|unreachable|timed?\s*out|bad\s*gateway/i.test(rawMessage)) {
         message = "Eden is having trouble reaching the server. Please try again in a moment.";
       } else {
@@ -228,6 +230,10 @@ export function OrgProvider({ children }: { children: ReactNode }) {
       userLoaded &&
       clerkOrgLoaded &&
       !loading &&
+      // Don't poll when /me is failing — the authError path already
+      // surfaces a friendly message, and polling just hammers the
+      // endpoint until we hit 429 rate limits (June 2026 fix).
+      !authError &&
       organizations.length === 0
     ) {
       interval = setInterval(() => {
@@ -242,6 +248,7 @@ export function OrgProvider({ children }: { children: ReactNode }) {
     clerkOrgLoaded,
     loading,
     organizations.length,
+    authError,
     refreshOrgs,
   ]);
 
