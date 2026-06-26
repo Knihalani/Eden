@@ -46,28 +46,48 @@ async def get_sidebar_prefs(
     user: dict = Depends(get_current_user),
     _member: dict = Depends(require_org_member),
 ) -> SidebarPrefs | None:
-    """Return the calling user's saved prefs, or ``null`` if unset."""
+    """Return the calling user's saved prefs, or ``null`` if unset.
+
+    Defensive: the migration creates the table with ``IF NOT
+    EXISTS`` but if the live DB is one migration behind, the
+    SELECT would 500 the whole route. Return ``None`` (which the
+    client treats as "no prefs yet, use defaults") on any DB
+    failure so the user still sees a working sidebar. June 2026
+    hardening.
+    """
     user_id = user.get("user_id")
     if not user_id:
         return None
 
-    client = await get_postgres_client()
+    try:
+        client = await get_postgres_client()
+    except Exception as exc:
+        logger.warning("sidebar_prefs: postgres unavailable: %s", exc)
+        return None
     if client is None:
         return None
 
-    row = await client.fetchrow(
-        """
-        SELECT prefs FROM sidebar_prefs
-        WHERE user_id = $1 AND org_id = $2
-        """,
-        user_id,
-        org_id,
-    )
+    try:
+        row = await client.fetchrow(
+            """
+            SELECT prefs FROM sidebar_prefs
+            WHERE user_id = $1 AND org_id = $2
+            """,
+            user_id,
+            org_id,
+        )
+    except Exception as exc:
+        logger.warning("sidebar_prefs: fetchrow failed for user=%s org=%s: %s", user_id, org_id, exc)
+        return None
     if row is None:
         return None
     raw = row["prefs"]
     if isinstance(raw, dict):
-        return SidebarPrefs(**raw)
+        try:
+            return SidebarPrefs(**raw)
+        except Exception as exc:
+            logger.warning("sidebar_prefs: invalid prefs shape, ignoring: %s", exc)
+            return None
     return None
 
 
@@ -94,15 +114,25 @@ async def set_sidebar_prefs(
     import json
 
     payload = prefs.model_dump()
-    await client.execute(
-        """
-        INSERT INTO sidebar_prefs (user_id, org_id, prefs, updated_at)
-        VALUES ($1, $2, $3::jsonb, NOW())
-        ON CONFLICT (user_id, org_id)
-        DO UPDATE SET prefs = EXCLUDED.prefs, updated_at = NOW()
-        """,
-        user_id,
-        org_id,
-        json.dumps(payload),
-    )
+    try:
+        await client.execute(
+            """
+            INSERT INTO sidebar_prefs (user_id, org_id, prefs, updated_at)
+            VALUES ($1, $2, $3::jsonb, NOW())
+            ON CONFLICT (user_id, org_id)
+            DO UPDATE SET prefs = EXCLUDED.prefs, updated_at = NOW()
+            """,
+            user_id,
+            org_id,
+            json.dumps(payload),
+        )
+    except Exception as exc:
+        # Migration may not be applied yet on the live DB — surface
+        # as 503 (the same code as "Postgres unavailable" above) so
+        # the client treats it as transient and retries on the
+        # next save tick. June 2026 hardening.
+        logger.warning("sidebar_prefs: upsert failed for user=%s org=%s: %s", user_id, org_id, exc)
+        from fastapi import HTTPException
+
+        raise HTTPException(status_code=503, detail="Sidebar prefs storage unavailable")
     return {"ok": True}

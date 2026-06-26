@@ -184,7 +184,32 @@ async def get_optimization_overview(
 
     Returns routing stats, cache performance, cost breakdown, budget status,
     and token savings in a single call.
+
+    Defensive: a Redis blip or transient Postgres failure on any
+    sub-call should not 500 the entire overview tile — the user
+    would see a red "Failed to load" banner on the dashboard for
+    one missing sub-component. The previous version had a partial
+    try/except on the Redis hget only; everything else could still
+    raise. June 2026 fix wraps the whole function in a fall-through
+    that returns a structurally-valid response with all counters
+    zeroed so the dashboard renders cleanly.
     """
+    try:
+        return await _build_optimization_overview(org_id, days)
+    except Exception as exc:
+        # Last-resort fallback. Log the error for ops but return a
+        # well-formed empty response so the dashboard doesn't go red.
+        import logging
+        logging.getLogger(__name__).warning(
+            "optimization overview fallback for org=%s days=%s: %s", org_id, days, exc
+        )
+        return _empty_optimization_overview(org_id, days)
+
+
+async def _build_optimization_overview(org_id: str, days: int):
+    """Body of the overview route — split out so the outer
+    function can wrap it in a try/except without losing the
+    docstring on the public endpoint."""
 
     router_inst = _get_model_router()
     exact = _get_exact_cache()
@@ -310,6 +335,59 @@ async def get_optimization_overview(
         costs=costs,
         budget=budget,
         savings=savings,
+    )
+
+
+def _empty_optimization_overview(org_id: str, days: int) -> OptimizationOverviewResponse:
+    """Return a well-formed empty overview for the fallback path.
+
+    All counters zeroed; costs/budget/utilization blank. The
+    dashboard renders "—" / "0" for empty stats, which is the
+    right user experience when the optimization pipeline is
+    down. June 2026 hardening.
+    """
+    return OptimizationOverviewResponse(
+        routing=RoutingStatsResponse(
+            calls_by_tier={},
+            total_calls=0,
+            fallbacks=0,
+            validation_failures=0,
+            tokens_saved=0,
+            fallback_rate=0.0,
+            heuristic_hits=0,
+            llm_classifications=0,
+            heuristic_rate=0.0,
+        ),
+        cache=CacheStatsResponse(
+            l1_hits=0, l1_misses=0, l1_hit_rate=0.0, l1_ttl_seconds=3600,
+            l2_hits=0, l2_misses=0, l2_hit_rate=0.0, l2_threshold=0.95,
+        ),
+        costs=CostBreakdownResponse(
+            period_days=days,
+            period_start="",
+            period_end="",
+            total_cost_cents=0.0,
+            total_cost_usd=0.0,
+            total_tokens=0,
+            events_count=0,
+            avg_cost_per_call_cents=0.0,
+            by_tier={}, by_node={}, by_model={},
+        ),
+        budget=BudgetStatusResponse(
+            org_id=org_id,
+            plan_name="free",
+            status="ok",
+            current_month_spend_cents=0.0,
+            soft_limit_cents=-1,
+            hard_limit_cents=-1,
+            utilization_pct=0.0,
+        ),
+        savings=TokenSavingsResponse(
+            tokens_saved=0,
+            estimated_cost_saved_cents=0.0,
+            compression_ratio=1.0,
+            coalesced_requests=0,
+        ),
     )
 
 

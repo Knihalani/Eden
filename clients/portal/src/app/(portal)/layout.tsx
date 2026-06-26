@@ -589,8 +589,13 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
 
       {/* Main content — flex-1 takes remaining width; document scrolls
           natively (no internal overflow). The mobile bottom nav
-          reserves bottom padding (pb-20) on small screens. */}
-      <main id="main-content" className="flex-1 min-w-0 pb-20 lg:pb-0 flex flex-col" tabIndex={-1}>
+          reserves bottom padding (pb-20) on small screens. ``min-h-0``
+          is required on a flex-col child so the flex algorithm lets
+          it shrink below its content height — without it the child
+          grows to fit the page content and pushes the body past
+          100dvh, breaking the document-scroll affordance. June 2026
+          scroll-pass fix. */}
+      <main id="main-content" className="flex-1 min-w-0 min-h-0 pb-20 lg:pb-0 flex flex-col" tabIndex={-1}>
         {/* Top bar */}
         <header className="sticky top-0 z-30 bg-[var(--bg-primary)] border-b border-[var(--border-default)]">
           <div className="flex items-center justify-between px-4 lg:px-6 py-3">
