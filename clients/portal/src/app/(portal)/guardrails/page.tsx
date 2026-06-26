@@ -279,7 +279,7 @@ export default function GuardrailsPage() {
   const blockRate = "—";
 
   return (
-    <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-6">
+    <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-6 page-enter">
       <PageHeader
         title="Guardrails"
         eyebrow="Security"
@@ -871,7 +871,7 @@ function PoliciesTab({
                       </div>
                       <div>
                         <p className="text-sm font-medium text-[var(--text-primary)]">{policy.name}</p>
-                        <p className="text-[10px] font-mono text-[var(--text-muted)]">{policy.policy_id.slice(0, 16)}</p>
+                        <p className="text-xs font-mono text-[var(--text-muted)]">{policy.policy_id.slice(0, 16)}</p>
                       </div>
                     </div>
                   );

@@ -122,19 +122,23 @@ export default function MarketplacePage() {
 
   if (!currentOrg) {
     return (
-      <EmptyState
-        icon={Sparkles}
-        title="Marketplace"
-        description="Create an organization to discover, fork, and contribute environments."
-        action={
-          <Link
-            href="/settings"
-            className="inline-flex items-center gap-1.5 text-sm font-semibold bg-[var(--accent)] text-[var(--bg-base)] px-4 py-2 rounded-lg hover:opacity-90"
-          >
-            Create Organization
-          </Link>
-        }
-      />
+      // Wrap in the standard page container so the no-org empty state
+      // isn't flush against the sidebar/header edges. June 2026 fix.
+      <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto">
+        <EmptyState
+          icon={Sparkles}
+          title="Marketplace"
+          description="Create an organization to discover, fork, and contribute environments."
+          action={
+            <Link
+              href="/settings"
+              className="inline-flex items-center gap-1.5 text-sm font-semibold bg-[var(--accent)] text-[var(--bg-base)] px-4 py-2 rounded-lg hover:opacity-90"
+            >
+              Create Organization
+            </Link>
+          }
+        />
+      </div>
     );
   }
 

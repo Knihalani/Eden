@@ -528,7 +528,10 @@ export function ChatSidebar() {
       {open && hasOrg && (
         <aside
           className={cn(
-            "fixed right-0 top-0 z-30 flex h-screen flex-col",
+            // h-dvh (not h-screen) so the panel respects the mobile
+            // Safari URL-bar collapse. Without this the composer
+            // sits ~80px below the visible viewport on phones.
+            "fixed right-0 top-0 z-30 flex h-dvh flex-col",
             "border-l border-[var(--border-default)] bg-[var(--bg-primary)]",
             "shadow-2xl",
           )}

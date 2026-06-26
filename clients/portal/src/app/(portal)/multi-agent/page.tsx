@@ -119,7 +119,7 @@ export default function MultiAgentPage() {
   }, [activeTab]);
 
   return (
-    <div className="p-6 max-w-7xl mx-auto" onKeyDown={handleKeyDown}>
+    <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-6 page-enter" onKeyDown={handleKeyDown}>
       <PageHeader
         title="Multi-Agent Environments"
         subtitle="Orchestrate, observe, and evaluate multi-agent systems"
