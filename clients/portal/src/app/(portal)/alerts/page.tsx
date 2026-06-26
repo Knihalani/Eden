@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useOrg } from "@/hooks/use-org";
+import { usePolling } from "@/hooks/use-polling";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { formatRelativeTime } from "@/lib/format";
@@ -125,11 +126,16 @@ export default function AlertsPage() {
     }
   }, [currentOrg, severityFilter, acknowledgedFilter, offset, limit]);
 
-  useEffect(() => {
-    fetchAlerts();
-    const interval = setInterval(fetchAlerts, 15000);
-    return () => clearInterval(interval);
-  }, [fetchAlerts]);
+  // Polling via the shared usePolling hook — pauses on tab-hidden,
+  // exponential backoff on errors, permanent bail on 401/403. Replaces
+  // a raw setInterval that would have kept firing through all three
+  // failure modes. June 2026 cost-pass.
+  usePolling({
+    fetch: fetchAlerts,
+    intervalMs: 15_000,
+    enabled: Boolean(currentOrg),
+    deps: [currentOrg, severityFilter, acknowledgedFilter, offset, limit],
+  });
 
   const handleAcknowledge = async (alertId: string) => {
     try {

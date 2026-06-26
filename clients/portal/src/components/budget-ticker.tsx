@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { useOrg } from "@/hooks/use-org";
+import { usePolling } from "@/hooks/use-polling";
 import { cn } from "@/lib/utils";
 import { Wallet, AlertTriangle, CheckCircle2, Loader2 } from "lucide-react";
 
@@ -56,9 +57,19 @@ export function BudgetTicker() {
   useEffect(() => {
     if (!currentOrg?.id) return;
     fetchData();
-    const interval = setInterval(fetchData, 5000);
-    return () => clearInterval(interval);
   }, [currentOrg?.id, fetchData]);
+
+  // Cost-safe polling — pauses on tab-hidden, backs off on errors,
+  // permanent bail on 401/403. Replaces the raw setInterval that
+  // would have kept firing through all three failure modes. The
+  // hook's ``tick`` fires once on mount + every ``intervalMs`` after
+  // success. June 2026 cost-pass.
+  usePolling({
+    fetch: fetchData,
+    intervalMs: 5_000,
+    enabled: Boolean(currentOrg?.id),
+    deps: [currentOrg?.id],
+  });
 
   if (!currentOrg) return null;
   if (loading || !data) {

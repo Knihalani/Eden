@@ -128,6 +128,18 @@ export async function forwardToBackend(
     status: response.status,
   });
 
+  // Safe-by-default cache headers. Every proxy response is
+  // auth-scoped — caching it on a shared edge / CDN would risk
+  // serving user A's data to user B. ``Vary: Cookie, Authorization``
+  // tells intermediates to key their cache on the auth headers, and
+  // ``Cache-Control: private, no-store`` tells them not to store it
+  // at all (browsers will still cache briefly for back/forward nav
+  // via the per-user history stack, which is what we want).
+  // June 2026 cost-pass — without this, a misconfigured upstream
+  // ``Cache-Control: public, max-age=300`` would silently leak.
+  nextResponse.headers.set("Vary", "Cookie, Authorization");
+  nextResponse.headers.set("Cache-Control", "private, no-store");
+
   // Forward every Set-Cookie header from FastAPI. Next.js's
   // NextResponse.cookies is the supported path — using `headers.append`
   // directly would emit duplicate Set-Cookie headers with the same name.

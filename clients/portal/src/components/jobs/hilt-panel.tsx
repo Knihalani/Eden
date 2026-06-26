@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { usePolling } from "@/hooks/use-polling";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
@@ -79,11 +80,15 @@ export function HILTPanel({ jobId, jobStatus }: HILTPanelProps) {
     }
   }, [jobId, canControl]);
 
-  useEffect(() => {
-    fetchState();
-    const interval = setInterval(fetchState, 3000);
-    return () => clearInterval(interval);
-  }, [fetchState]);
+  // Cost-safe polling — pauses when the tab is hidden, backs off on
+  // errors, bails on 401/403. Replaces a raw setInterval that would
+  // have kept firing through all three failure modes. June 2026
+  // cost-pass.
+  usePolling({
+    fetch: fetchState,
+    intervalMs: 3_000,
+    deps: [fetchState],
+  });
 
   const sendCommand = async (command: CommandType, payload?: Record<string, unknown>) => {
     setCommandLoading(command);
