@@ -7,7 +7,9 @@ import { NextResponse } from "next/server";
  * server-side) so the conversation can be re-shown later if needed.
  */
 
-const FASTAPI_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+// Same server-side URL choice as the sibling sessions routes — see
+// app/api/ai-insights/sessions/route.ts for the rationale.
+const FASTAPI_URL = process.env.API_INTERNAL_URL || "http://localhost:8000";
 
 interface RouteParams {
   params: Promise<{ session_id: string }>;
