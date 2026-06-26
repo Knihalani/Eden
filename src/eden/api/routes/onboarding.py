@@ -89,16 +89,48 @@ async def get_state(
     org_id: str = Path(...),
     _user: dict = Depends(require_org_member),
 ) -> dict[str, Any]:
-    """Read the current onboarding state. Org-member gated."""
-    sm = get_state_machine()
-    state = await sm.get_state(org_id)
-    return {
-        "status": "ok",
-        "feature": "onboarding",
-        "live": True,
-        "data": _state_to_dict(state),
-        "steps": [s.value for s in ONBOARDING_STEPS],
-    }
+    """Read the current onboarding state. Org-member gated.
+
+    Defensive: the state machine already returns a synthetic
+    StateRow when the DB is unreachable, so this should never
+    raise. The outer try/except is a last-resort safety net for
+    serialization failures (e.g. a non-JSONB value in the
+    ``cat_enablements`` column from a manual DB write). On any
+    unexpected error we return a default state so the portal
+    /agents/connect flow can still render — a 500 here would
+    prevent the user from connecting a repo at all. June 2026 fix.
+    """
+    try:
+        sm = get_state_machine()
+        state = await sm.get_state(org_id)
+        return {
+            "status": "ok",
+            "feature": "onboarding",
+            "live": True,
+            "data": _state_to_dict(state),
+            "steps": [s.value for s in ONBOARDING_STEPS],
+        }
+    except Exception as exc:
+        logger.warning("onboarding: get_state fallback for org=%s: %s", org_id, exc)
+        return {
+            "status": "ok",
+            "feature": "onboarding",
+            "live": False,
+            "data": {
+                "org_id": org_id,
+                "current_step": "install",
+                "completed_steps": [],
+                "cat_enablements": {},
+                "first_trace_at": None,
+                "milestones_reached": [],
+                "created_at": "",
+                "updated_at": "",
+                "source": "fallback",
+                "onboarding_v2_enabled": True,
+                "last_audit": None,
+            },
+            "steps": [s.value for s in ONBOARDING_STEPS],
+        }
 
 
 @router.post("/advance")

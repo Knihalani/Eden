@@ -28,6 +28,14 @@ const FORWARDED_REQUEST_HEADERS = [
   "if-none-match",
   "x-request-id",
   "x-correlation-id",
+  // X-Org-Id is the header FastAPI uses to identify the active
+  // org context (see ``get_current_org`` in deps.py). Without
+  // forwarding it, the backend falls back to ``extract_org_id``
+  // from the Clerk JWT — which often yields ``None`` because the
+  // session JWT only carries the user's *personal* claims, not
+  // the active org. Result: ``require_org_member`` raises 403
+  // on every org-scoped endpoint. June 2026 fix.
+  "x-org-id",
 ];
 
 /** Max body size the proxy will accept before rejecting with 413.
