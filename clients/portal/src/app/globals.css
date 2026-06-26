@@ -406,11 +406,22 @@ html {
 html,
 body {
   overflow-y: auto;
+  overflow-x: hidden;
   min-height: 100%;
-  /* ponytail: 100dvh handles mobile Safari's expanding/collapsing
-   * address bar natively (avoids double-scrollbars + jump on scroll).
-   * Falls back to 100vh automatically on browsers without dvh support. */
-  height: 100dvh;
+  /* ponytail: ``min-height: 100dvh`` (not ``height: 100dvh``) so
+   * the body grows with content — the document itself scrolls via
+   * the html element. The previous fixed ``height: 100dvh`` made
+   * the body a scroll container, which interacted badly with the
+   * body's ``flex flex-col`` className and could leave the html
+   * element unscrolled while the body silently grew past viewport
+   * on tall pages (the "expanding too far" symptom). Letting the
+   * body grow + scrolling the document is the standard browser
+   * pattern and is the only reliable way to ensure (portal) pages
+   * with long content (e.g. the agent list, traces, alerts) scroll
+   * cleanly. ``overflow-y: auto`` on body is belt-and-braces so a
+   * future component that accidentally sets ``height: 100vh`` on
+   * an ancestor can't trap the scroll — the body still scrolls. */
+  min-height: 100dvh;
   overscroll-behavior: contain;
 }
 
