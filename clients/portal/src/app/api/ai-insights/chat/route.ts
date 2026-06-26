@@ -92,19 +92,43 @@ export async function POST(request: Request) {
     });
   }
 
+  // 30s SSE heartbeat. Chat tokens usually arrive within ms of each
+  // other, but a long-running model "thinking" phase can have 10s+
+  // gaps — without a heartbeat, corporate proxies / Vercel function
+  // timeouts would silently kill the stream mid-response and the
+  // portal would reconnect, losing context. June 2026 cost-pass.
+  const HEARTBEAT_MS = 30_000;
+  const HEARTBEAT_BYTES = new TextEncoder().encode(": keepalive\n\n");
+
   const stream = new ReadableStream({
     async start(controller) {
       const reader = upstream.body!.getReader();
+      let heartbeat: ReturnType<typeof setInterval> | null = null;
+      const stopHeartbeat = () => {
+        if (heartbeat) {
+          clearInterval(heartbeat);
+          heartbeat = null;
+        }
+      };
+      heartbeat = setInterval(() => {
+        try {
+          controller.enqueue(HEARTBEAT_BYTES);
+        } catch {
+          stopHeartbeat();
+        }
+      }, HEARTBEAT_MS);
       try {
         while (true) {
           const { done, value } = await reader.read();
           if (done) {
+            stopHeartbeat();
             controller.close();
             break;
           }
           controller.enqueue(value);
         }
       } catch (err) {
+        stopHeartbeat();
         // ponytail: controller.error(err) — closes the stream AND signals
         // an error to the reader. The previous controller.close() left
         // the client in a stuck "Streaming…" state because no `done`
