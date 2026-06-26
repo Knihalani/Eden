@@ -206,10 +206,20 @@ async def create_org(
     # row idempotently (see ``clerk_webhooks.py:_upsert_membership``);
     # ``ON CONFLICT DO NOTHING`` keeps the local insert safe even if
     # the webhook lands first.
+    #
+    # ``last_writer_source = 'local'`` is critical: the webhook's
+    # ``ON CONFLICT DO UPDATE`` (clerk_webhooks.py:393) only overwrites
+    # the role when the existing row's ``last_writer_source`` is
+    # also ``'clerk'``. Without this, the webhook fires ~1s later
+    # with Clerk's ``org:admin`` role, ``clerk_role_to_eden_role``
+    # maps it to ``admin``, and the creator's role silently gets
+    # demoted from ``owner`` → ``admin`` — losing ``org:transfer``,
+    # ``billing:edit``, ``gdpr:execute``, ``retention:override``.
+    # June 2026 fix for solo devs being blocked from their own org.
     await client.execute(
         """
-        INSERT INTO org_members (org_id, user_id, role, invited_by)
-        VALUES ($1, $2, 'owner', $2)
+        INSERT INTO org_members (org_id, user_id, role, invited_by, last_writer_source)
+        VALUES ($1, $2, 'owner', $2, 'local')
         ON CONFLICT (org_id, user_id) DO NOTHING
         """,
         org_id,

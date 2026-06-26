@@ -268,8 +268,15 @@ async def get_optimization_overview(
     current_spend = 0.0
     if redis:
         month_key = now.strftime("%Y-%m")
-        raw = await redis.hget(f"eden:cost:{org_id}:month:{month_key}", "total_cents")
-        current_spend = float(raw or 0.0)
+        try:
+            raw = await redis.hget(f"eden:cost:{org_id}:month:{month_key}", "total_cents")
+            current_spend = float(raw or 0.0)
+        except Exception as exc:
+            # Redis blip shouldn't 500 the entire overview tile —
+            # Postgres fallback will pick up the spend, and the
+            # utilization % just renders blank. June 2026 hardening.
+            logger.warning("redis hget failed for org=%s month=%s: %s", org_id, month_key, exc)
+            current_spend = 0.0
 
     utilization = round((current_spend / hard_limit) * 100, 2) if hard_limit != float("inf") and hard_limit > 0 else 0.0
 
