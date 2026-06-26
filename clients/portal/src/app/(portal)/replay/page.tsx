@@ -278,7 +278,7 @@ export default function ReplayPage() {
   const totalEvents = traceEvents.length;
 
   return (
-    <div className="p-4 sm:p-6 lg:p-8 max-w-6xl mx-auto">
+    <div className="p-4 sm:p-6 lg:p-8 max-w-6xl mx-auto space-y-6 page-enter">
       <PageHeader
         title="Trace Replay"
         subtitle="Inspect pipeline traces and control execution via HILT"
@@ -488,7 +488,9 @@ export default function ReplayPage() {
           ) : traceEvents.length === 0 ? (
             <EmptyState icon={Layers} title="No events" description="Select a job with trace data to view its events." />
           ) : (
-            <>
+            // Bounded scroll so a trace with thousands of events
+            // doesn't push the page past the viewport. June 2026 fix.
+            <div className="max-h-[60vh] overflow-y-auto pr-1">
               {traceEvents.map((event) => {
                 const colors = getEventTypeColor(event.event_type);
                 const isExpanded = expandedEvent === event.event_id;
@@ -563,7 +565,7 @@ export default function ReplayPage() {
                   </motion.div>
                 );
               })}
-            </>
+            </div>
           )}
         </motion.div>
       )}

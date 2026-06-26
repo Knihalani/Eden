@@ -171,7 +171,8 @@ export default function BillingPage() {
 
   if (loading) {
     return (
-      <div className="p-8 flex items-center justify-center gap-2 text-sm text-[var(--text-muted)]">
+      // Match the page wrapper so the loader isn't flush-left on mobile.
+      <div className="p-4 sm:p-6 lg:p-8 max-w-6xl mx-auto flex items-center justify-center gap-2 text-sm text-[var(--text-muted)]">
         <Loader2 className="w-4 h-4 animate-spin" />
         Loading billing…
       </div>

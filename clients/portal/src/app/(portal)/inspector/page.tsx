@@ -214,18 +214,19 @@ export default function TraceInspectorPage() {
   }
 
   return (
-    // ponytail: min-h-full (was min-h-screen) — the (portal) layout
-    // constrains the row to h-screen + overflow-clip, so a child page
-    // using min-h-screen forces a second scroll bar. Use min-h-full
-    // inside the page wrapper instead. June 2026 fix.
-    <div className="page-enter min-h-full bg-[var(--bg-base)]">
-      <div className="mx-auto max-w-6xl px-6 py-8">
-        <PageHeader
-          eyebrow="Observe"
-          title="Trace Inspector"
-          subtitle="Drill into one trace: span tree, tool calls, model thoughts, env steps."
-          icon={Compass}
-        />
+    // Matches the canonical page wrapper used by every other portal
+    // page (``p-4 sm:p-6 lg:p-8 max-w-6xl mx-auto space-y-6
+    // page-enter``). The previous ``min-h-full`` here was a leftover
+    // from the old ``h-screen + overflow-clip`` (portal) contract
+    // that was retired in June 2026; with the new flex layout it
+    // collapsed the page. June 2026 layout-pass fix.
+    <div className="page-enter p-4 sm:p-6 lg:p-8 max-w-6xl mx-auto space-y-6 bg-[var(--bg-base)]">
+      <PageHeader
+        eyebrow="Observe"
+        title="Trace Inspector"
+        subtitle="Drill into one trace: span tree, tool calls, model thoughts, env steps."
+        icon={Compass}
+      />
 
         {/* Toolbar */}
         <div className="mb-4 flex flex-wrap items-center gap-2">
@@ -329,7 +330,6 @@ export default function TraceInspectorPage() {
             <Clock className="ml-auto h-3 w-3" />
           </footer>
         )}
-      </div>
     </div>
   );
 }
