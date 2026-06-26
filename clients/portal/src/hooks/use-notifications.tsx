@@ -4,11 +4,11 @@ import {
   createContext,
   useContext,
   useState,
-  useEffect,
   useCallback,
   type ReactNode,
 } from "react";
 import { api } from "@/lib/api";
+import { usePolling } from "@/hooks/use-polling";
 
 export interface Notification {
   id: string;
@@ -25,9 +25,7 @@ export interface Notification {
 interface NotificationsContextType {
   notifications: Notification[];
   unreadCount: number;
-  loading: boolean;
   error: string | null;
-  refresh: () => Promise<void>;
   markAsRead: (notificationId: string) => Promise<void>;
   markAllAsRead: () => Promise<void>;
   deleteNotification: (notificationId: string) => Promise<void>;
@@ -35,14 +33,17 @@ interface NotificationsContextType {
 
 const NotificationsContext = createContext<NotificationsContextType | null>(null);
 
-const POLL_INTERVAL = 30000; // 30 seconds
+const POLL_INTERVAL_MS = 30_000;
 
 export function NotificationsProvider({ children }: { children: ReactNode }) {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
-  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // The shared ``usePolling`` hook owns the interval, visibility-pause,
+  // exponential backoff on errors, and auth-error bail. June 2026
+  // cost-pass — was previously a hand-rolled useEffect that lacked
+  // the backoff + auth-bail safety nets.
   const refresh = useCallback(async () => {
     try {
       const data = await api.listNotifications({ limit: 20 });
@@ -50,50 +51,30 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
       setUnreadCount(data.unread_count);
       setError(null);
     } catch (e) {
-      // ponytail: the /notifications endpoint isn't deployed on
-      // the production FastAPI yet (returns 404). Silently fail —
-      // the bell icon just shows no badge. Without this, the user
-      // sees a "Failed to load notifications" error in the console
-      // for every page load. June 2026 fix.
-      if (e instanceof Error && !/404|not\s*found/i.test(e.message)) {
-        console.error("Failed to load notifications:", e);
+      const msg = e instanceof Error ? e.message : String(e);
+      // 404 = endpoint not deployed yet (pre-launch). Silently
+      // swallow and keep polling at the steady-state interval so
+      // the bell comes back automatically once the route ships.
+      if (/404|not\s*found/i.test(msg)) {
+        setNotifications([]);
+        setUnreadCount(0);
+        return;
       }
+      // For other errors, log + clear state + re-throw so
+      // ``usePolling`` can apply backoff / permanent auth-bail.
+      console.error("Failed to load notifications:", e);
       setNotifications([]);
       setUnreadCount(0);
       setError("Failed to load notifications");
+      throw e;
     }
   }, []);
 
-  // Initial fetch and polling. Pause polling when the tab is hidden
-  // so we don't burn API calls in background tabs; resume on return.
-  useEffect(() => {
-    refresh().finally(() => setLoading(false));
-
-    let interval: ReturnType<typeof setInterval> | null = null;
-    const start = () => {
-      if (interval) return;
-      interval = setInterval(refresh, POLL_INTERVAL);
-    };
-    const stop = () => {
-      if (!interval) return;
-      clearInterval(interval);
-      interval = null;
-    };
-    const onVisibility = () => {
-      if (typeof document === "undefined") return;
-      if (document.hidden) stop();
-      else {
-        refresh();
-        start();
-      }
-    };
-    start();
-    document.addEventListener("visibilitychange", onVisibility);
-    return () => {
-      stop();
-      document.removeEventListener("visibilitychange", onVisibility);
-    };
-  }, [refresh]);
+  usePolling({
+    fetch: refresh,
+    intervalMs: POLL_INTERVAL_MS,
+    deps: [],
+  });
 
   const markAsRead = useCallback(async (notificationId: string) => {
     try {
@@ -141,9 +122,7 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
       value={{
         notifications,
         unreadCount,
-        loading,
         error,
-        refresh,
         markAsRead,
         markAllAsRead,
         deleteNotification,
