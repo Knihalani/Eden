@@ -392,35 +392,35 @@ html {
  * portal layout that trapped every page's content in an internal
  * overflow container. When the inner pane failed to claim focus
  * (or the click target was a sticky pseudo-element), the user
- * saw a frozen page. The layout fix uses native document scroll,
- * but we add belt-and-braces CSS here so the body is *always*
- * scrollable even if a future component introduces an accidental
- * viewport trap.
+ * saw a frozen page. The layout fix is native document scroll:
+ * the html element is the single scroll container, and the body
+ * flows naturally with content.
  *
- * - `html, body { overflow-y: auto }`  → mouse wheel always works
- * - `html, body { min-height: 100% }`  → document is at least viewport
+ * - `html { overflow-y: auto }`  → mouse wheel always works
+ * - `body { min-height: 100dvh }`  → body fills viewport when
+ *   content is short, grows with content when long
+ * - `body { overflow-x: hidden }`  → no horizontal scrollbar
+ *   from a wide table or code block
  * - `.grain-overlay::before` already has `pointer-events: none`
  *   (defined further down), but we re-assert it here on the
  *   element type that the user reported as the click-killer.
  */
-html,
-body {
+html {
   overflow-y: auto;
+  overscroll-behavior: contain;
+}
+body {
   overflow-x: hidden;
-  min-height: 100%;
   /* ponytail: ``min-height: 100dvh`` (not ``height: 100dvh``) so
-   * the body grows with content — the document itself scrolls via
-   * the html element. The previous fixed ``height: 100dvh`` made
-   * the body a scroll container, which interacted badly with the
-   * body's ``flex flex-col`` className and could leave the html
-   * element unscrolled while the body silently grew past viewport
-   * on tall pages (the "expanding too far" symptom). Letting the
-   * body grow + scrolling the document is the standard browser
+   * the body grows with content — the html element scrolls the
+   * document. The previous fixed ``height: 100dvh`` made the body
+   * a scroll container, which interacted badly with the body's
+   * ``flex flex-col`` className and could leave the html element
+   * unscrolled while the body silently grew past viewport on tall
+   * pages (the "expanding too far" symptom). Letting the body
+   * grow + scrolling the html element is the standard browser
    * pattern and is the only reliable way to ensure (portal) pages
-   * with long content (e.g. the agent list, traces, alerts) scroll
-   * cleanly. ``overflow-y: auto`` on body is belt-and-braces so a
-   * future component that accidentally sets ``height: 100vh`` on
-   * an ancestor can't trap the scroll — the body still scrolls. */
+   * with long content (agent list, traces, alerts) scroll cleanly. */
   min-height: 100dvh;
   overscroll-behavior: contain;
 }
