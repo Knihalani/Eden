@@ -44,6 +44,18 @@ export async function GET(request: Request, { params }: RouteParams) {
       );
     }
 
+    // 15s SSE heartbeat — sends an SSE comment (lines starting with
+    // ``:`` are ignored by the EventSource client) so the connection
+    // doesn't idle out behind corporate proxies / Vercel function
+    // timeouts when the upstream goes quiet. Also lets the upstream
+    // detect a dead client quickly (its read() will throw on a
+    // closed pipe) and free the backend worker. Without this the
+    // stream dies silently after ~30s of upstream silence and the
+    // portal reconnects, wasting one SSE handshake per minute of
+    // idle. June 2026 cost-pass.
+    const HEARTBEAT_MS = 15_000;
+    const HEARTBEAT_BYTES = new TextEncoder().encode(": keepalive\n\n");
+
     const stream = new ReadableStream({
       async start(controller) {
         const reader = response.body?.getReader();
@@ -51,16 +63,32 @@ export async function GET(request: Request, { params }: RouteParams) {
           controller.close();
           return;
         }
+        let heartbeat: ReturnType<typeof setInterval> | null = null;
+        const stopHeartbeat = () => {
+          if (heartbeat) {
+            clearInterval(heartbeat);
+            heartbeat = null;
+          }
+        };
+        heartbeat = setInterval(() => {
+          try {
+            controller.enqueue(HEARTBEAT_BYTES);
+          } catch {
+            stopHeartbeat();
+          }
+        }, HEARTBEAT_MS);
         try {
           while (true) {
             const { done, value } = await reader.read();
             if (done) {
+              stopHeartbeat();
               controller.close();
               break;
             }
             controller.enqueue(value);
           }
         } catch {
+          stopHeartbeat();
           controller.close();
         }
       },

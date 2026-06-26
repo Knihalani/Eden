@@ -22,6 +22,12 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Eden — AI Environment Generation",
   description: "AI-native environment generation system for reinforcement learning and agent evaluation",
+  // Tell crawlers (Google, Bing, etc.) not to index the portal — the
+  // app is auth-gated and indexed pages would be empty/error frames
+  // to anyone following a search-result link. Public marketing pages
+  // (docs/, marketing/) override this with their own metadata.
+  // June 2026 polish.
+  robots: { index: false, follow: false, nocache: true },
 };
 
 /**
