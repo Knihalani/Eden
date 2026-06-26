@@ -5,7 +5,10 @@ import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "@/lib/utils";
 
 const cardVariants = cva(
-  "rounded-xl border border-[var(--border-default)] bg-[var(--bg-primary)] text-[var(--text-primary)] shadow-sm",
+  // `overflow-hidden` so long content (esp. with `rounded-xl`) can't
+  // bleed past the corners; matches StatCard's contract so a grid
+  // mixing Card and StatCard produces even rows. June 2026 fix.
+  "rounded-xl border border-[var(--border-default)] bg-[var(--bg-primary)] text-[var(--text-primary)] shadow-sm overflow-hidden",
   {
     variants: {
       variant: {

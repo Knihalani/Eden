@@ -534,8 +534,17 @@ export function ChatSidebar() {
             "fixed right-0 top-0 z-30 flex h-dvh flex-col",
             "border-l border-[var(--border-default)] bg-[var(--bg-primary)]",
             "shadow-2xl",
+            // Full-width on phones so the 360px panel doesn't bleed
+            // off-screen. June 2026 layout-pass fix.
+            "max-[480px]:!w-screen max-[480px]:!max-w-screen",
           )}
-          style={{ width: SIDEBAR_WIDTH }}
+          style={{
+            width: SIDEBAR_WIDTH,
+            // Inline-style fallback mirrors the className so SSR
+            // renders the right size even before the responsive
+            // classes apply (prevents a flash of 360px on mobile).
+            maxWidth: typeof window !== "undefined" && window.innerWidth <= 480 ? "100vw" : SIDEBAR_WIDTH,
+          }}
           role="complementary"
           aria-label="AI Insights assistant"
         >

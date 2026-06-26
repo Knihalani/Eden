@@ -855,7 +855,7 @@ export default function PRSuggestionDetailPage({
   const isOpened = suggestion.status === "opened";
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-6 page-enter">
       {/* Back button */}
       <Button
         variant="ghost"
