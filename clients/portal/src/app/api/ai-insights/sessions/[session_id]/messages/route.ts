@@ -8,7 +8,11 @@ import { NextResponse } from "next/server";
  * sidebar.
  */
 
-const FASTAPI_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+// Same server-side URL choice as app/api/ai-insights/sessions/
+// route.ts — NEXT_PUBLIC_API_URL is the client proxy path, which
+// Node's fetch can't resolve and would create a loop. Use
+// API_INTERNAL_URL (the direct FastAPI URL) for server-to-server.
+const FASTAPI_URL = process.env.API_INTERNAL_URL || "http://localhost:8000";
 
 interface RouteParams {
   params: Promise<{ session_id: string }>;

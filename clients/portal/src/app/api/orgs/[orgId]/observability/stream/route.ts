@@ -13,7 +13,12 @@ interface RouteParams {
 
 export async function GET(request: Request, { params }: RouteParams) {
   const { orgId } = await params;
-  const FASTAPI_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+  // Server-side route — must use API_INTERNAL_URL (the direct
+  // FastAPI URL), not NEXT_PUBLIC_API_URL (the client-side proxy
+  // path "/api/proxy"). The latter creates a fetch-from-itself loop
+  // since Node's native fetch needs an absolute URL. Same pattern as
+  // app/api/ai-insights/sessions/route.ts.
+  const FASTAPI_URL = process.env.API_INTERNAL_URL || "http://localhost:8000";
   const cookieHeader = request.headers.get("cookie") || "";
   const lastEventId = request.headers.get("last-event-id") || "";
 
