@@ -8,7 +8,7 @@ Branch: vibecoder/ui
 - [x] 4. Create an Elevation Shadow System (n/a) — --shadow-xs/sm/md/lg/xl defined in globals.css, each a tight+diffuse layered combination.
 - [x] 5. Standardize the Border Radius Scale (n/a) — 5-tier scale --radius-sm/md/lg/xl/full (6/8/12/16/9999px). Usage breakdown: 680× rounded-lg (default for cards/buttons), 271× rounded-xl, 235× rounded (=md), 189× rounded-full (pills/avatars), 127× rounded-md, 7× rounded-sm. All on-scale.
 - [x] 6. Strengthen Overall Visual Hierarchy (n/a) — h1 2.25rem → h4 1.25rem scale (1.8× ratio); button primary/secondary/ghost/destructive/outline/link variants create visual tiers; status badge has 6 semantic tiers (success/warning/error/info/pending/default); --accent reserved for primary actions only.
-- [ ] 7. Polish All Button Interaction States
+- [x] 7. Polish All Button Interaction States (n/a) — 8 variants (default/destructive/outline/ghost/secondary/emerald/danger/link) each with hover (per-variant bg) + focus-visible (per-variant ring color) + disabled (pointer-events-none opacity-50); global button:active scale(0.97) for press; loading prop shows Loader2 spinner. Native <button> = keyboard-reachable.
 - [ ] 8. Design Helpful Empty States
 - [ ] 9. Unify the App's Iconography
 - [ ] 10. Run a Full Consistency Audit
