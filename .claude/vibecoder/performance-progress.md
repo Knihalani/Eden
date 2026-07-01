@@ -34,6 +34,7 @@ Branch: vibecoder/performance
 - [x] 30. Subset and preload web fonts (n/a — `next/font/google` self-hosts Geist + Geist Mono at build, subsets=["latin"], auto-injects <link rel="preload" as="font"> in head. No non-Latin chars in user-rendered text.)
 - [x] 31. Use swap to avoid invisible text (n/a — `next/font/google` defaults `display` to "swap". Verified in next/font docs + the layout doesn't override.)
 - [x] 32. Lazy-load and poster-optimize video (n/a — no <video> elements anywhere in the portal)
+- [x] 33. Self-host critical third-party assets (n/a — Geist + Geist Mono self-hosted via next/font at build; no external CDN scripts/styles in the document)
 - [ ] 2. Memoize expensive computed values
 - [ ] 3. Stabilize callbacks passed to children
 - [ ] 4. Split bloated global state
