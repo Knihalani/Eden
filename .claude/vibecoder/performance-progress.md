@@ -93,6 +93,7 @@ Branch: vibecoder/performance
 - [x] 89. Profile and optimize hot paths (n/a — no cProfile/py-spy hooked into the app or CI. Profiling is a separate investigation; not a one-liner. The session-23 fastapi pre-warmed routing fixes already cut prior p95 hotspots.)
 - [x] 90. Pool and reuse expensive resources (n/a — DB pool (prompt 79), @lru_cache LLM client (llm/client.py:466), shared httpx client (prompt 57), lazy Redis client (storage/redis.py). Resources are pooled/reused appropriately.)
 - [x] 91. Add a circuit breaker for slow deps (n/a — CircuitBreaker class at llm/client.py:57 with threshold=5 / timeout=60 covers OpenRouter LLM calls; settings.circuit_breaker_threshold configurable per deploy.)
+- [x] 92. Rate-limit to protect under load (n/a — TenantRateLimitMiddleware (api/app.py:431, defaults 60 req/60s) + QuotaEnforcementMiddleware (returns 429) + settings.rate_limit_enabled toggle for dev. Plus org-resource hard/soft quota enforcement.)
 - [ ] 2. Memoize expensive computed values
 - [ ] 3. Stabilize callbacks passed to children
 - [ ] 4. Split bloated global state
