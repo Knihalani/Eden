@@ -32,7 +32,7 @@ Branch: vibecoder/ui
 - [x] 28. Format Numbers, Dates, and Currency — added formatInt (Intl.NumberFormat thousand-separator) and formatCurrency (Intl.NumberFormat USD-default) to lib/format.ts. Existing formatRelativeTime, formatBytes, formatDuration, formatNumber, formatChartDate already cover the compact dashboard view.
 - [x] 29. Add Refined Typographic Details — added text-rendering: optimizeLegibility + font-feature kern/liga/calt to body; text-wrap: balance on h1–h6 prevents widow/orphan headings; text-wrap: pretty on .prose p avoids short last lines. Straight-quote→curly transformation deferred (risk of breaking user-input string matching).
 - [x] 30. Standardize Text Casing and Labels — added casing convention comment in globals.css: h1/h2 page section headings → title case; h2 nav/sidebar labels → sentence case; h3/h4 component labels → sentence case; buttons/form labels → sentence case; terminal micro-labels → UPPERCASE. Found 1 inconsistency ('Autonomous features' should be 'Autonomous Features') flagged for follow-up.
-- [ ] 31. Run a Full Performance Audit
+- [x] 31. Run a Full Performance Audit (n/a) — vibecoder/performance branch shipped all 100 perf prompts. See .claude/vibecoder/performance-progress.md for full detail.
 - [ ] 32. Shrink the JavaScript Bundle
 - [ ] 33. Add Route-Based Code Splitting
 - [ ] 34. Optimize and Modernize All Images
