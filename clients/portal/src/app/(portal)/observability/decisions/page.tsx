@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { memo, useState } from "react";
 import { useOrg } from "@/hooks/use-org";
 import { replayApi } from "@/lib/api";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -300,7 +300,7 @@ export default function DecisionsPage() {
 // Decision Step (with alternatives accordion)
 // ──────────────────────────────────────────────────────────────────────────
 
-function DecisionStep({ decision }: { decision: Decision }) {
+const DecisionStep = memo(function DecisionStep({ decision }: { decision: Decision }) {
   const [altOpen, setAltOpen] = useState(false);
   return (
     <li className="relative pl-8">
@@ -345,4 +345,4 @@ function DecisionStep({ decision }: { decision: Decision }) {
       </div>
     </li>
   );
-}
+});
