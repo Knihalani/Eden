@@ -16,7 +16,7 @@
 - [x] 12. Throttle password reset and verification emails — already covered by signup_limiter (5/min) + password_reset_limiter (3/5min per IP + per-email); /forgot-password returns enumeration-neutral message
 - [x] 13. Set secure session cookie flags — 3 set_cookie call sites consolidated into _set_session_cookie() helper with HttpOnly + Secure + SameSite=lax + Path=/; flag policy documented in one place; 87 tests passing
 - [x] 14. Add idle and absolute session timeouts — jwt_exp_days 7→1; get_current_user enforces 30min idle via last_seen_at vs iat; migration 076 adds last_seen_at column; best-effort slide on every auth
-- [ ] 15. Fully invalidate sessions on logout
+- [x] 15. Fully invalidate sessions on logout — /auth/logout now requires auth + bumps token_version (so captured JWTs fail next check) + clears cookie with matching flags; new /auth/logout-all endpoint for "log out everywhere"
 - [ ] 16. Validate every JWT claim properly
 - [ ] 17. Block JWT algorithm confusion attacks
 - [ ] 18. Strengthen and rotate signing secrets

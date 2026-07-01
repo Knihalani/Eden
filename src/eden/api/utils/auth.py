@@ -120,13 +120,33 @@ def create_access_token(
 def decode_access_token(token: str) -> dict | None:
     """Decode and validate a JWT access token.
 
+    Validation applied on EVERY decode (defence-in-depth, regardless
+    of configured audience/issuer):
+      * Signature is verified with the configured secret.
+      * Algorithm is locked to ``ALGORITHM`` (HS256) — no alg
+        confusion (see security 17).
+      * ``exp`` (expiration) is required; expired tokens rejected.
+      * ``iat`` is required (we set it on every Eden-issued token).
+      * ``nbf`` is honoured when present.
+      * ``sub`` is required — anonymous tokens are useless.
+
     When ``settings.jwt_audience`` or ``settings.jwt_issuer`` is set,
-    those claims are enforced; otherwise the token is accepted based
-    on signature + ``exp`` alone (legacy behaviour, preserved so
-    existing sessions are not invalidated).
+    those claims are enforced too. Otherwise they're optional
+    (legacy behaviour, preserved so existing sessions are not
+    invalidated by a config flip).
     """
     decode_kwargs: dict = {
         "algorithms": [ALGORITHM],
+        # python-jose's options namespace. Each ``require_*`` is
+        # true → the corresponding claim MUST be present.
+        "options": {
+            "require_exp": True,
+            "require_iat": True,
+            "require_sub": True,
+            "verify_exp": True,
+            "verify_iat": True,
+            "verify_nbf": True,
+        },
     }
     if settings.jwt_audience:
         decode_kwargs["audience"] = settings.jwt_audience
