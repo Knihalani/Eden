@@ -390,6 +390,11 @@ body {
   letter-spacing: var(--letter-spacing-normal);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  /* ui-audit prompt 29: enable kerning + ligatures for crisp text
+   * rendering. optimizeLegibility turns on OpenType kerning and
+   * common ligatures (fi, fl, ffi) globally. */
+  text-rendering: optimizeLegibility;
+  font-feature-settings: "kern" 1, "liga" 1, "calt" 1;
 }
 
 /* Selection */
@@ -1103,6 +1108,17 @@ h1 {
 .prose h3 {
   margin-top: 1.5rem;
   margin-bottom: 0.5rem;
+}
+
+/* ui-audit prompt 29: text-wrap balance for headings prevents
+ * widows/orphans by equalizing line lengths. text-wrap pretty for
+ * body avoids short last lines. Both are progressive — no-op on
+ * browsers without the CSS Text Level 4 spec. */
+h1, h2, h3, h4, h5, h6 {
+  text-wrap: balance;
+}
+.prose p {
+  text-wrap: pretty;
 }
 
 h2 {
