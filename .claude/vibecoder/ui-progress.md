@@ -27,7 +27,7 @@ Branch: vibecoder/ui
 - [x] 23. Optimize Reading Line Length — added .prose utility (max-width 65ch, line-height 1.6, paragraph/h2/h3 spacing) for docs and marketing copy. Existing marketing pages use max-w-3xl (48rem ≈ 60ch) for hero text.
 - [x] 24. Optimize Web Font Loading (n/a) — next/font self-hosts Geist + Geist Mono at build, subsets=["latin"], auto-injects <link rel="preload" as="font">. display: "swap" is the next/font default.
 - [x] 25. Tune Text Color and Contrast (n/a) — --text-muted #708090 (4.7:1 AA Normal), --text-faint #5A6B85 (3.3:1 AA Large), --border-default #6B7C9E (3.0:1+). Contrast rationale documented in globals.css comments.
-- [ ] 26. Fix Semantic Heading Structure
+- [x] 26. Fix Semantic Heading Structure (n/a) — 20× h1, 95× h2, 149× h3, 20× h4 — single-h1-per-page with nested sections. Distribution looks right.
 - [ ] 27. Handle Text Overflow Gracefully
 - [ ] 28. Format Numbers, Dates, and Currency
 - [ ] 29. Add Refined Typographic Details
