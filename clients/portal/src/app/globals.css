@@ -1270,6 +1270,39 @@ input::placeholder, textarea::placeholder {
   color: var(--text-secondary);
 }
 
+/* ==================== Touch Targets (ui-audit prompt 14) ====================
+ * WCAG 2.5.5 / Apple HIG 44pt minimum. The portal's button defaults
+ * are h-10 (40px) for "default" + h-8 (32px) for "sm" — both below
+ * the 44px touch target on phones. On max-md (≤767px) we extend the
+ * hit area using a pseudo-element so the visual size stays compact
+ * while the touchable region meets WCAG. The element itself keeps
+ * its existing padding so layouts don't shift. */
+@media (max-width: 767px) {
+  /* Invisible padding via ::before on the interactive element.
+   * Negative-inset trick keeps the visible button compact while
+   * expanding the hit area to the full 44×44 box. Components can
+   * opt-out with .no-bump (e.g. dense toolbar icon buttons). */
+  button:not(.no-bump)::before,
+  [role="button"]:not(.no-bump)::before,
+  a[href]:not(.no-bump)::before,
+  label:not(.no-bump)::before {
+    content: "";
+    position: absolute;
+    inset: max(-4px, calc((44px - 100%) / -2));
+    /* visual remains inside the original button box; only the
+     * hit region expands. No layout shift, no visual change. */
+    z-index: 0;
+    border-radius: inherit;
+  }
+  /* Required for the pseudo-element to size against the parent */
+  button:not(.no-bump),
+  [role="button"]:not(.no-bump),
+  a[href]:not(.no-bump),
+  label:not(.no-bump) {
+    position: relative;
+  }
+}
+
 /* Respect reduced motion preferences */
 @media (prefers-reduced-motion: reduce) {
   html {
