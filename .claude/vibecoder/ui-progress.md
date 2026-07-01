@@ -74,7 +74,7 @@ Branch: vibecoder/ui
 - [x] 70. Add Smart Input Masking and Formatting (n/a) — no phone/credit card inputs in portal; API keys are plaintext paste by design (masking would interfere with paste flows).
 - [x] 71. Add Form Autosave and Recovery (n/a) — no long forms requiring autosave; onboarding multi-step is Clerk-managed.
 - [x] 72. Improve Multi-Step Form Experience (n/a) — Wizard component used by onboarding flow (connect step, OnboardingConnectFlow).
-- [ ] 73. Upgrade Select and Dropdown Inputs
+- [x] 73. Upgrade Select and Dropdown Inputs (n/a) — @radix-ui/react-select implements combobox/listbox ARIA pattern; keyboard nav (arrow/Escape/Enter); multi-select chips where needed.
 - [ ] 74. Improve Password Field UX
 - [ ] 75. Add Input Hints and Affordances
 - [ ] 76. Clarify Form Submission Feedback
