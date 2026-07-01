@@ -50,6 +50,7 @@ Branch: vibecoder/performance
 - [x] 46. Eliminate render-blocking CSS on load (n/a — globals.css only @imports "tailwindcss"; Next.js + PostCSS pipeline inlines critical CSS for above-the-fold and loads the rest async)
 - [x] 47. Compress API responses in transit (added fastapi.middleware.gzip.GZipMiddleware minimum_size=500 to app.py so JSON responses over 500B gzip in transit. Skips small responses. Reverse-proxies skip it correctly when they already compress.)
 - [x] 48. Trim oversized API payloads (n/a — most endpoints already declare tight response_model Pydantic schemas. TraceListItem constrains the heavy fields; portal's listObservabilityTraces calls limit=50 etc. Re-audit if a specific endpoint reports >50KB on a known call shape.)
+- [x] 49. Parallelize independent async requests (n/a — codebase uses Promise.all/await Promise.allSettled at all heavy fan-out points (observability landing, agents/[id], closed-loop, marketplace, multi-agent). No inline sequential awaits found that hit independent endpoints.)
 - [ ] 2. Memoize expensive computed values
 - [ ] 3. Stabilize callbacks passed to children
 - [ ] 4. Split bloated global state
