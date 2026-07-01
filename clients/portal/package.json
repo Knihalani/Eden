@@ -2,6 +2,7 @@
   "name": "portal",
   "version": "0.1.0",
   "private": true,
+  "sideEffects": false,
   "packageManager": "bun@1.1.42",
   "scripts": {
     "dev": "next dev",
@@ -12,6 +13,7 @@
     "test": "echo 'No unit tests yet — add a test runner (e.g. vitest) before relying on this.' && exit 0",
     "lint:portal-layout": "node scripts/lint-portal-layout.cjs",
     "lint:portal-classes": "node scripts/lint-portal-classes.cjs",
+    "check:bundle": "bash scripts/check-bundle-size.sh",
     "analyze": "ANALYZE=true next build",
     "polish:check": "bash scripts/polish-check.sh"
   },
@@ -27,7 +29,6 @@
     "@radix-ui/react-tabs": "^1.1.13",
     "@radix-ui/react-tooltip": "^1.2.8",
     "@tanstack/react-query": "^5.100.14",
-    "@types/react-syntax-highlighter": "^15.5.13",
     "@xyflow/react": "^12.11.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
@@ -38,7 +39,6 @@
     "next": "16.2.6",
     "react": "19.2.4",
     "react-dom": "19.2.4",
-    "react-syntax-highlighter": "^16.1.1",
     "recharts": "^2.15.0",
     "tailwind-merge": "^3.6.0"
   },

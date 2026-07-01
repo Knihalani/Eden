@@ -33,7 +33,7 @@ export function Logo({
   const inner = (
     <span className={cn("flex items-center", s.gap, className)}>
       <Image
-        src="/logo.png"
+        src="/logo.webp"
         alt={alt}
         width={s.px}
         height={s.px}

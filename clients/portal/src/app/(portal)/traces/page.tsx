@@ -46,6 +46,35 @@ export default function TracesPage() {
   const [annotateOpen, setAnnotateOpen] = useState(false);
   const [annotateTraceId, setAnnotateTraceId] = useState<string>("");
 
+  const handleSelectTrace = useCallback(
+    (id: string) => {
+      setSelectedTraceId(id);
+      // Open the observability landing page with the trace
+      // right-rail active (Pattern 4.4). The landing reads
+      // ?trace_id=… and renders <SelectedTraceRail>.
+      router.push(`/observability?trace_id=${encodeURIComponent(id)}`);
+    },
+    [router],
+  );
+
+  const handleViewTimeline = useCallback(
+    (id: string) => {
+      setSelectedTraceId(id);
+      router.push(`/replay?trace=${encodeURIComponent(id)}`);
+    },
+    [router],
+  );
+
+  const handleExport = useCallback((id: string) => {
+    setExportTraceId(id);
+    setExportOpen(true);
+  }, []);
+
+  const handleAnnotate = useCallback((id: string) => {
+    setAnnotateTraceId(id);
+    setAnnotateOpen(true);
+  }, []);
+
   const loadTraces = useCallback(async () => {
     if (!currentOrg) return;
     setLoading(true);
@@ -92,25 +121,10 @@ export default function TracesPage() {
           loading={loading}
           filter={filter}
           onFilterChange={setFilter}
-          onSelectTrace={(id) => {
-            setSelectedTraceId(id);
-            // Open the observability landing page with the trace
-            // right-rail active (Pattern 4.4). The landing reads
-            // ?trace_id=… and renders <SelectedTraceRail>.
-            router.push(`/observability?trace_id=${encodeURIComponent(id)}`);
-          }}
-          onViewTimeline={(id) => {
-            setSelectedTraceId(id);
-            router.push(`/replay?trace=${encodeURIComponent(id)}`);
-          }}
-          onExport={(id) => {
-            setExportTraceId(id);
-            setExportOpen(true);
-          }}
-          onAnnotate={(id) => {
-            setAnnotateTraceId(id);
-            setAnnotateOpen(true);
-          }}
+          onSelectTrace={handleSelectTrace}
+          onViewTimeline={handleViewTimeline}
+          onExport={handleExport}
+          onAnnotate={handleAnnotate}
           initialTraceId={initialTraceId}
         />
       </div>

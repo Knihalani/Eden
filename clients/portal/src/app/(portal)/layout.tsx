@@ -149,6 +149,57 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [userDropdownOpen]);
 
+  // ponytail: built-in PerformanceObserver for the three Core Web
+  // Vitals (LCP, INP, CLS) — no new dep, real-user data without
+  // shipping web-vitals. Production builds could forward these via
+  // the existing observability/sse ingest.
+  useEffect(() => {
+    if (typeof window === "undefined" || !("PerformanceObserver" in window)) {
+      return;
+    }
+    const log = (metric: string, value: number) => {
+      // ponytail: console.debug instead of console.log so it doesn't
+      // pollute prod output unless explicitly enabled.
+      // eslint-disable-next-line no-console
+      if (typeof console !== "undefined") console.debug(`[web-vitals] ${metric}=${value.toFixed(0)}`);
+    };
+    try {
+      const lcp = new PerformanceObserver((list) => {
+        const entries = list.getEntries();
+        const last = entries[entries.length - 1];
+        if (last) log("LCP", last.startTime);
+      });
+      lcp.observe({ type: "largest-contentful-paint", buffered: true });
+
+      const cls = new PerformanceObserver((list) => {
+        let total = 0;
+        for (const e of list.getEntries()) {
+          const entry = e as PerformanceEntry & { value?: number; hadRecentInput?: boolean };
+          if (!entry.hadRecentInput) total += entry.value ?? 0;
+        }
+        log("CLS", total * 1000);
+      });
+      cls.observe({ type: "layout-shift", buffered: true });
+
+      const inp = new PerformanceObserver((list) => {
+        for (const e of list.getEntries()) {
+          const entry = e as PerformanceEntry & { duration?: number };
+          log("INP", entry.duration ?? 0);
+        }
+      });
+      inp.observe({ type: "event", durationThreshold: 16, buffered: true });
+
+      return () => {
+        lcp.disconnect();
+        cls.disconnect();
+        inp.disconnect();
+      };
+    } catch {
+      // Some browsers throw on unsupported observer types — non-fatal.
+      return;
+    }
+  }, []);
+
   // Keyboard shortcuts: command palette + sidebar toggle + Escape close
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {

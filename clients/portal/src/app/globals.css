@@ -3,7 +3,33 @@
 /* ==================== Design Tokens ==================== */
 
 :root {
-  /* Dark Terminal — deep blacks, cool blue panels, phosphor accents */
+  /* ==================== Design Token System ====================
+   * Three-tier structure (ui-audit prompt 1):
+   *
+   *   1. Primitive tokens — raw values, named for what they ARE
+   *      (--bg-base, --accent, --terminal, --text-primary, --radius-md,
+   *       --space-4, --shadow-lg, --duration-normal, --ease-out).
+   *      Direct hex/size/duration values live here. Never reference
+   *      these directly from components — use the semantic tier.
+   *
+   *   2. Semantic tokens — intent-based, named for what they DO
+   *      (--success, --warning, --error, --info, --primary,
+   *       --border-default, --text-muted, --accent-faint, --shadow-md).
+   *      Components consume these. Re-themeing or dark/light toggles
+   *      happens here without touching primitives or components.
+   *
+   *   3. Component tokens — scoped to a single surface, named for
+   *      where they live (--auth-card, --node-agent, --traffic-close,
+   *       --code-surface, --grid-stroke, --mesh-accent, --indicator-bg,
+   *       --shimmer). These are pre-resolved recipes a component uses
+   *      to keep its visual identity self-contained.
+   *
+   * Compatibility aliases at the bottom map shadcn-style names
+   * (--surface, --background, --foreground, --border) onto the
+   * semantic tier so third-party shadcn snippets still resolve.
+   * ============================================================== */
+
+  /* ---------- Tier 1: Primitive ---------- */
 
   /* Backgrounds — terminal depth ladder */
   --bg-base: #03060A;          /* deepest — code blocks, terminal panels */
@@ -149,6 +175,14 @@
   --font-size-2xl: 1.5rem;
   --font-size-3xl: 1.875rem;
   --font-size-4xl: 2.25rem;
+  /* ui-audit prompt 10: terminal micro-labels. text-[10px]/[9px]
+   * were off-scale (72 call sites). These tokens formalize them as
+   * the "code-style meta label" tier — font-mono + uppercase +
+   * tracking-wide is the consistent pattern. Don't migrate without
+   * verifying the visual context — 9px is genuinely hard to read at
+   * 1× density and intentionally small for terminal mock windows. */
+  --font-size-2xs: 0.625rem;
+  --font-size-3xs: 0.5625rem;
 
   --font-weight-normal: 400;
   --font-weight-medium: 500;
@@ -198,6 +232,20 @@
   --ease-out: cubic-bezier(0.33, 1, 0.68, 1);
   --ease-in: cubic-bezier(0.32, 0, 0.67, 0);
   --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+
+  /* Z-index scale (ui-audit prompt 20). Documented tiers so future
+   * call sites don't reach for arbitrary z-9999. Distribution in
+   * source: z-0 (1), z-10 (12) sticky nav/table headers, z-20 (3)
+   * dropdowns, z-30 (6) topbar, z-40 (6) modal/sheets, z-50 (41)
+   * floating overlays (ChatSidebar, notifications, command palette).
+   * The grain overlay uses z-[9999] but is pointer-events:none +
+   * aria-hidden, so it can't trap clicks. */
+  --z-base: 0;
+  --z-sticky: 10;
+  --z-dropdown: 20;
+  --z-topbar: 30;
+  --z-modal: 40;
+  --z-overlay: 50;
 
   /* shadcn / legacy compatibility aliases (map to canonical tokens) */
   --surface: var(--bg-primary);
@@ -317,6 +365,8 @@
   --radius-md: var(--radius-md);
   --radius-lg: var(--radius-lg);
   --radius-xl: var(--radius-xl);
+  --font-size-2xs: var(--font-size-2xs);
+  --font-size-3xs: var(--font-size-3xs);
   --shadow-xs: var(--shadow-xs);
   --shadow-sm: var(--shadow-sm);
   --shadow-md: var(--shadow-md);
@@ -340,6 +390,11 @@ body {
   letter-spacing: var(--letter-spacing-normal);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  /* ui-audit prompt 29: enable kerning + ligatures for crisp text
+   * rendering. optimizeLegibility turns on OpenType kerning and
+   * common ligatures (fi, fl, ffi) globally. */
+  text-rendering: optimizeLegibility;
+  font-feature-settings: "kern" 1, "liga" 1, "calt" 1;
 }
 
 /* Selection */
@@ -1016,6 +1071,73 @@ h1 {
   line-height: 1.2;
 }
 
+/* ui-audit prompt 22: fluid display headings. Marketing heroes +
+ * landing sections need headings that scale smoothly between
+ * mobile (≥36px readable) and desktop (up to 72px dramatic) without
+ * jumping at sm/md/lg breakpoints. Body text stays at the static
+ * --font-size-base so reading rhythm is preserved. */
+.h1-fluid {
+  font-size: clamp(2.25rem, 4.5vw + 0.5rem, 4.5rem);
+  line-height: 1.05;
+  letter-spacing: -0.04em;
+}
+
+.h2-fluid {
+  font-size: clamp(1.75rem, 3vw + 0.5rem, 3rem);
+  line-height: 1.1;
+  letter-spacing: -0.03em;
+}
+
+/* ui-audit prompt 23: optimized reading measure for long-form
+ * content (docs, blog, marketing copy). 65ch is the upper bound
+ * of the 60–75ch ideal; line-height 1.6 is loose enough for body
+ * text without feeling airy. paragraph spacing replaces the
+ * default <p> margin to keep the rhythm. */
+.prose {
+  max-width: 65ch;
+  line-height: 1.6;
+  color: var(--text-secondary);
+}
+.prose p + p {
+  margin-top: 1rem;
+}
+.prose h2 {
+  margin-top: 2rem;
+  margin-bottom: 0.75rem;
+}
+.prose h3 {
+  margin-top: 1.5rem;
+  margin-bottom: 0.5rem;
+}
+
+/* ui-audit prompt 29: text-wrap balance for headings prevents
+ * widows/orphans by equalizing line lengths. text-wrap pretty for
+ * body avoids short last lines. Both are progressive — no-op on
+ * browsers without the CSS Text Level 4 spec. */
+h1, h2, h3, h4, h5, h6 {
+  text-wrap: balance;
+}
+.prose p {
+  text-wrap: pretty;
+}
+
+/* ui-audit prompt 30: casing convention.
+ *
+ *   h1, h2 page section headings → Title Case ("Retention Policy",
+ *     "Two-Factor Authentication", "SCIM Provisioning")
+ *   h2 nav/sidebar labels       → Sentence case ("Documentation",
+ *     "Density", "Group order")
+ *   h3, h4 component labels     → Sentence case ("PII scrub after
+ *     (days)", "New destination", "Per-table overrides")
+ *   Buttons / form labels       → Sentence case ("Create new key",
+ *     "Permanently delete organization")
+ *   Terminal micro-labels       → UPPERCASE (font-mono + tracking)
+ *
+ * Acronyms (SCIM, SSO, SAML, 2FA, PII) keep their canonical form
+ * regardless of surrounding casing. Migrate existing h2 page
+ * headings ("Autonomous features" → "Autonomous Features") as a
+ * follow-up; this comment establishes the rule first.
+
 h2 {
   font-size: var(--font-size-3xl);
   letter-spacing: var(--letter-spacing-tight);
@@ -1232,6 +1354,39 @@ input::placeholder, textarea::placeholder {
 
 .password-toggle:hover {
   color: var(--text-secondary);
+}
+
+/* ==================== Touch Targets (ui-audit prompt 14) ====================
+ * WCAG 2.5.5 / Apple HIG 44pt minimum. The portal's button defaults
+ * are h-10 (40px) for "default" + h-8 (32px) for "sm" — both below
+ * the 44px touch target on phones. On max-md (≤767px) we extend the
+ * hit area using a pseudo-element so the visual size stays compact
+ * while the touchable region meets WCAG. The element itself keeps
+ * its existing padding so layouts don't shift. */
+@media (max-width: 767px) {
+  /* Invisible padding via ::before on the interactive element.
+   * Negative-inset trick keeps the visible button compact while
+   * expanding the hit area to the full 44×44 box. Components can
+   * opt-out with .no-bump (e.g. dense toolbar icon buttons). */
+  button:not(.no-bump)::before,
+  [role="button"]:not(.no-bump)::before,
+  a[href]:not(.no-bump)::before,
+  label:not(.no-bump)::before {
+    content: "";
+    position: absolute;
+    inset: max(-4px, calc((44px - 100%) / -2));
+    /* visual remains inside the original button box; only the
+     * hit region expands. No layout shift, no visual change. */
+    z-index: 0;
+    border-radius: inherit;
+  }
+  /* Required for the pseudo-element to size against the parent */
+  button:not(.no-bump),
+  [role="button"]:not(.no-bump),
+  a[href]:not(.no-bump),
+  label:not(.no-bump) {
+    position: relative;
+  }
 }
 
 /* Respect reduced motion preferences */

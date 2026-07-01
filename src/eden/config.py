@@ -193,6 +193,10 @@ class Settings(BaseSettings):
     ai_agent_t3_model: str = ""  # blank → use ModelTier.T3 default
     ai_agent_stream_chunk_ms: int = 50  # SSE chunk flush cadence
     ai_agent_retention_days: int = 90
+    # DL-15: when True, the ChatService uses the OpenRouter
+    # ``usage.cost`` field for budget tracking instead of the
+    # per-token estimate. Off by default per C-5 rollout guidance.
+    ai_agent_real_cost: bool = False
 
     # Phase R — stdlib ``logging`` shim (Logfire-style 5-min
     # time-to-first-log). When the user calls ``eden.install()`` (or

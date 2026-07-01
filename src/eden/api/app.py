@@ -6,6 +6,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from pydantic import BaseModel, Field
 
 from eden.api.middleware.quota_enforcement import QuotaEnforcementMiddleware
@@ -432,6 +433,13 @@ if getattr(settings, "rate_limit_enabled", True):
         default_limit=getattr(settings, "rate_limit_default_per_window", 60),
         default_window=getattr(settings, "rate_limit_window_seconds", 60),
     )
+
+# ponytail: GZipMiddleware for transit compression when the reverse
+# proxy doesn't do it itself. Production deployments behind Vercel
+# or Northflank usually already gzip, in which case this middleware
+# sees the request with Content-Encoding set and skips; harmless.
+# minimum_size=500 skips compressing tiny JSON like {"ok": true}.
+app.add_middleware(GZipMiddleware, minimum_size=500)
 
 # Include route modules
 app.include_router(kb.router)
