@@ -7,7 +7,7 @@ Branch: vibecoder/ui
 - [x] 3. Define a Consistent Spacing Scale (n/a) — 4px base unit via --space-1..24 (0.25rem→6rem). All Tailwind p/m/gap usage is on-grid (gap-2 548×, p-4 260×, gap-3 254×, p-3 145×, p-6 140×, etc.); no arbitrary px/rem values found.
 - [x] 4. Create an Elevation Shadow System (n/a) — --shadow-xs/sm/md/lg/xl defined in globals.css, each a tight+diffuse layered combination.
 - [x] 5. Standardize the Border Radius Scale (n/a) — 5-tier scale --radius-sm/md/lg/xl/full (6/8/12/16/9999px). Usage breakdown: 680× rounded-lg (default for cards/buttons), 271× rounded-xl, 235× rounded (=md), 189× rounded-full (pills/avatars), 127× rounded-md, 7× rounded-sm. All on-scale.
-- [ ] 6. Strengthen Overall Visual Hierarchy
+- [x] 6. Strengthen Overall Visual Hierarchy (n/a) — h1 2.25rem → h4 1.25rem scale (1.8× ratio); button primary/secondary/ghost/destructive/outline/link variants create visual tiers; status badge has 6 semantic tiers (success/warning/error/info/pending/default); --accent reserved for primary actions only.
 - [ ] 7. Polish All Button Interaction States
 - [ ] 8. Design Helpful Empty States
 - [ ] 9. Unify the App's Iconography
