@@ -12,6 +12,7 @@ Branch: vibecoder/performance
 - [x] 8. Batch related state updates (n/a) — React 19 (in deps) auto-batches both sync and async state updates by default, so explicit batching (useReducer or unstable_batchedUpdates) is unnecessary. No multi-state setX in sequence found that would still re-render multiple times under React 19.
 - [x] 9. Replace scroll listeners with observers (n/a) — codebase has no scroll-event listeners. Two getBoundingClientRect calls (optimization/page.tsx, Canvas.tsx) run once at mount, not in scroll handlers. No "lazy-load on scroll" pattern exists to migrate.
 - [x] 10. Move heavy computation to Web Workers (n/a) — no client-side CPU-heavy work exists (image processing, crypto, big-parse). The only animation loop (marketing canvas) already pauses on `window.__eden_canvas_paused`. Adding workers for hypothetical future work would be speculative.
+- [x] 11. Break up long main-thread tasks (n/a) — no synchronous CPU loops over large datasets. Largest loops are bounded: LatencyHistogram nBuckets=30, JobGantt ticks per row, others inline-array filters on lists already paginated to ≤200. Re-assess with Performance Observer tooling if a real >50ms task is measured.
 - [ ] 2. Memoize expensive computed values
 - [ ] 3. Stabilize callbacks passed to children
 - [ ] 4. Split bloated global state
