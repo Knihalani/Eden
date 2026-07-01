@@ -64,6 +64,7 @@ Branch: vibecoder/performance
 - [x] 60. Add a server cache for hot data (n/a — no fastapi-cache2 or Redis-decorator layer wired. @lru_cache is module-level (settings + LLM clients), not request-level hot data. Adding a decorator layer is broad + needs infra review for cache-poisoning across orgs.)
 - [x] 61. Set correct Cache-Control headers (n/a — selective Cache-Control already applied per route concern: media (private, max-age=86400), trace_quality (private, max-age=300 + ETag), ai_agent + gateway + replay (no-cache for streaming), everything else implicit no-store via per-user responses.)
 - [x] 62. Cache expensive computed results (n/a — @lru_cache(maxsize=1) on get_dict() (zstd dict), @lru_cache on get_settings/get_openrouter_client (singletons), @lru_cache(maxsize=256) on archive helper. Selective memoization already covers hot pure paths.)
+- [x] 63. Choose sensible cache TTLs (n/a — TTLs documented per concern: Clerk user cache 5min (clerk_client.py:46), idempotency 24h (idempotency.py:33), rate-limit windows 60s (tenant_rate_limit.py), React Query 60s stale / 5min gc (query-provider.tsx), @lru_cache unbounded for modules, maxsize-bounded for repeated args.)
 - [ ] 2. Memoize expensive computed values
 - [ ] 3. Stabilize callbacks passed to children
 - [ ] 4. Split bloated global state
