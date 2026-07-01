@@ -41,7 +41,7 @@ Branch: vibecoder/ui
 - [x] 37. Eliminate Unnecessary Component Re-renders (n/a) — perf audit applied memo to RewardBarRow/MessageCard/ToolCallBadge/DecisionStep; useMemo on hot paths (TranscriptView.visibleRows, LatencyHistogram.buckets, JobGantt.tStart/tEnd, dashboard.throughputSeries); useCallback on TracesTab handlers.
 - [x] 38. Cache and Dedupe Data Fetching (n/a) — @tanstack/react-query staleTime: 60s, refetchOnWindowFocus: false; built-in in-flight request dedup covers simultaneous identical queries.
 - [x] 39. Add Optimistic UI Updates (n/a) — use-notifications markAsRead/markAllAsRead/deleteNotification optimistic with rollback on server error (perf audit).
-- [ ] 40. Prefetch Data on User Intent
+- [x] 40. Prefetch Data on User Intent (n/a) — Next.js <Link> defaults to prefetch={true} (auto-prefetches routes on viewport/hover per perf audit).
 - [ ] 41. Debounce and Throttle Costly Handlers
 - [ ] 42. Optimize the Critical Rendering Path
 - [ ] 43. Audit Third-Party Script Performance
