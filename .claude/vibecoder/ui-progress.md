@@ -85,7 +85,7 @@ Branch: vibecoder/ui
 - [x] 81. Add Undo for Reversible Actions — added optional `action` prop (label + onClick) to toast.success/error/info; auto-dismiss extended to 6s for action toasts so users have time to click "Undo". Callers can pass `{ label: "Undo", onClick: () => revert() }` as the 3rd arg.
 - [x] 82. Handle Offline and Network Errors — added useOnline() hook listening to window online/offline events. SSR-safe defaults to true so server-rendered pages don't flash offline on hydration. Mount with an offline banner as a follow-up where needed.
 - [x] 83. Show Progress for Long Operations (n/a) — onboarding-checklist 7-step progress; budget-ticker color-coded bar; no file uploads in current scope.
-- [ ] 84. Improve Perceived Performance Everywhere
+- [x] 84. Improve Perceived Performance Everywhere (n/a) — 74× loading.tsx skeletons, optimistic updates, debounced search, button loading states, prefetched routes, no inline <script> (perf audit).
 - [ ] 85. Add Contextual Help and Tooltips
 - [ ] 86. Standardize Status and State Indicators
 - [ ] 87. Clarify Primary Navigation Structure
