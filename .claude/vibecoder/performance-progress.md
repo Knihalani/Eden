@@ -37,6 +37,7 @@ Branch: vibecoder/performance
 - [x] 33. Self-host critical third-party assets (n/a — Geist + Geist Mono self-hosted via next/font at build; no external CDN scripts/styles in the document)
 - [x] 34. Inline tiny critical SVGs and icons (removed orphan Next scaffold SVGs from /public: file/globe/next/vercel/window.svg — never referenced. Icons via lucide-react are bundled + tree-shaken so each icon's SVG is inlined in the JS chunk automatically.)
 - [x] 35. Serve all static media via CDN (n/a — Vercel auto-CDNs /public + /_next/static. Other dev environments would route through their own infra layer.)
+- [x] 36. Code-split the app by route (n/a — Next.js App Router splits per page.tsx automatically. 5 explicit next/dynamic imports on top: settings tabs, React Flow Canvas, optimization subpages.)
 - [ ] 2. Memoize expensive computed values
 - [ ] 3. Stabilize callbacks passed to children
 - [ ] 4. Split bloated global state
