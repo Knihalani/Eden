@@ -38,6 +38,7 @@ Branch: vibecoder/performance
 - [x] 34. Inline tiny critical SVGs and icons (removed orphan Next scaffold SVGs from /public: file/globe/next/vercel/window.svg — never referenced. Icons via lucide-react are bundled + tree-shaken so each icon's SVG is inlined in the JS chunk automatically.)
 - [x] 35. Serve all static media via CDN (n/a — Vercel auto-CDNs /public + /_next/static. Other dev environments would route through their own infra layer.)
 - [x] 36. Code-split the app by route (n/a — Next.js App Router splits per page.tsx automatically. 5 explicit next/dynamic imports on top: settings tabs, React Flow Canvas, optimization subpages.)
+- [x] 37. Remove unused dependencies and dead code (dropped dead chat/code-highlighter.tsx; removed `react-syntax-highlighter` + `@types/react-syntax-highlighter` from package.json — not referenced anywhere now. Worth ~30KB uncompressed from the bundle.)
 - [ ] 2. Memoize expensive computed values
 - [ ] 3. Stabilize callbacks passed to children
 - [ ] 4. Split bloated global state
