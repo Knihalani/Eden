@@ -34,7 +34,7 @@ Branch: vibecoder/ui
 - [x] 30. Standardize Text Casing and Labels — added casing convention comment in globals.css: h1/h2 page section headings → title case; h2 nav/sidebar labels → sentence case; h3/h4 component labels → sentence case; buttons/form labels → sentence case; terminal micro-labels → UPPERCASE. Found 1 inconsistency ('Autonomous features' should be 'Autonomous Features') flagged for follow-up.
 - [x] 31. Run a Full Performance Audit (n/a) — vibecoder/performance branch shipped all 100 perf prompts. See .claude/vibecoder/performance-progress.md for full detail.
 - [x] 32. Shrink the JavaScript Bundle (n/a) — perf audit dropped react-syntax-highlighter (~30KB), set `"sideEffects": false` in package.json, Turbopack/webpack dedup.
-- [ ] 33. Add Route-Based Code Splitting
+- [x] 33. Add Route-Based Code Splitting (n/a) — App Router auto-splits per page.tsx; 5 explicit next/dynamic imports for settings tabs, React Flow Canvas, optimization subpages.
 - [ ] 34. Optimize and Modernize All Images
 - [ ] 35. Implement Content-Aware Loading Skeletons
 - [ ] 36. Virtualize Long Scrolling Lists
