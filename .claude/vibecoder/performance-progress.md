@@ -72,6 +72,8 @@ Branch: vibecoder/performance
 - [x] 68. Add a service worker asset cache (n/a — public/service-worker.js already pre-caches "/", "/dashboard", "/jobs", "/settings", "/login" + API routes under "eden-portal-v1" + "eden-api-v1". skipWaiting + clients.claim idioms are correct.)
 - [x] 69. Index frequently queried columns (n/a — 253 CREATE INDEX statements across 41 migrations. Indexing is mature.)
 - [x] 70. Fix N+1 query patterns (n/a — no obvious fetchrow-in-for-loop patterns found. SQLAlchemy / asyncpg code uses eager-load + batched queries; detectors fetch one canonical row each. Re-assess if a slow-query log flags a single dominant pattern.)
+- [x] 71. Select only needed columns (kb/exploit/client.py list_exploits: dropped large `probe_code TEXT` from the SELECT list — the list view doesn't need it, the detail get() does. Saves ~1KB row × N rows per request.)
+- [x] 72. Add composite indexes for filters (n/a — composite indexes already plentiful (e.g. idx_agent_uploads_org_agent (org_id, agent_id), idx_org_scim_config_enabled (org_id, scim_enabled), idx_env_card_versions_card (card_id, version DESC)).)
 - [ ] 2. Memoize expensive computed values
 - [ ] 3. Stabilize callbacks passed to children
 - [ ] 4. Split bloated global state
