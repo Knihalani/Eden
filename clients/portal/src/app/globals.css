@@ -3,7 +3,33 @@
 /* ==================== Design Tokens ==================== */
 
 :root {
-  /* Dark Terminal — deep blacks, cool blue panels, phosphor accents */
+  /* ==================== Design Token System ====================
+   * Three-tier structure (ui-audit prompt 1):
+   *
+   *   1. Primitive tokens — raw values, named for what they ARE
+   *      (--bg-base, --accent, --terminal, --text-primary, --radius-md,
+   *       --space-4, --shadow-lg, --duration-normal, --ease-out).
+   *      Direct hex/size/duration values live here. Never reference
+   *      these directly from components — use the semantic tier.
+   *
+   *   2. Semantic tokens — intent-based, named for what they DO
+   *      (--success, --warning, --error, --info, --primary,
+   *       --border-default, --text-muted, --accent-faint, --shadow-md).
+   *      Components consume these. Re-themeing or dark/light toggles
+   *      happens here without touching primitives or components.
+   *
+   *   3. Component tokens — scoped to a single surface, named for
+   *      where they live (--auth-card, --node-agent, --traffic-close,
+   *       --code-surface, --grid-stroke, --mesh-accent, --indicator-bg,
+   *       --shimmer). These are pre-resolved recipes a component uses
+   *      to keep its visual identity self-contained.
+   *
+   * Compatibility aliases at the bottom map shadcn-style names
+   * (--surface, --background, --foreground, --border) onto the
+   * semantic tier so third-party shadcn snippets still resolve.
+   * ============================================================== */
+
+  /* ---------- Tier 1: Primitive ---------- */
 
   /* Backgrounds — terminal depth ladder */
   --bg-base: #03060A;          /* deepest — code blocks, terminal panels */

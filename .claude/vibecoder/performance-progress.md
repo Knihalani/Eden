@@ -101,6 +101,7 @@ Branch: vibecoder/performance
 - [x] 97. Reduce Largest Contentful Paint (n/a — needs Lighthouse to identify the LCP element first. Marketing canvas has __eden_canvas_paused gate. Next.js + Vercel CDN handle the rest. Re-evaluate after real-world metrics land via the prompt 95 observer.)
 - [x] 98. Reduce Cumulative Layout Shift (n/a — no layout-shifting inserts (every createElement('a') is a download trigger, attached/clicked/removed synchronously). Images have explicit dimensions (prompt 23). No third-party ads or late banners.)
 - [x] 99. Improve Interaction to Next Paint (n/a — heaviest interaction path (TracesTab) already stable per prompt 3. Prompt 95 ships real INP measurement; use it to find new hotspots instead of speculatively useCallback-ing 500+ handlers.)
+- [x] 100. Set a performance budget in CI (added scripts/check-bundle-size.sh — fails if any chunk >500KB or total >6MB; exposed as `bun run check:bundle` in clients/portal/package.json. Wire into CI as a post-build step.)
 - [ ] 2. Memoize expensive computed values
 - [ ] 3. Stabilize callbacks passed to children
 - [ ] 4. Split bloated global state

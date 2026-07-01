@@ -19,12 +19,17 @@ const __CHART_COLORS_SSR = [
   "var(--chart-pie-4)",
   "var(--chart-pie-5)",
 ] as const;
+// ponytail: SSR fallback mirrors the actual --chart-pie-* token values
+// in globals.css. Mismatches used to be (#ef4444 / #8b5cf6) which
+// produced a red+violet chart on first server render and a
+// purple+pink chart after hydration — visually jarring on the
+// initial paint even though recharts re-renders client-side.
 const CHART_COLORS_FALLBACK = [
-  "#3b82f6",
-  "#10b981",
-  "#f59e0b",
-  "#ef4444",
-  "#8b5cf6",
+  "#5B9EFF",
+  "#5FE5A8",
+  "#FFB547",
+  "#C084FC",
+  "#E879F9",
 ] as const;
 
 function readChartColors(): string[] {
