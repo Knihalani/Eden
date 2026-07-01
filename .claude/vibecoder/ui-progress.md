@@ -23,7 +23,7 @@ Branch: vibecoder/ui
 - [x] 19. Use Container Queries for Components (n/a) — fixed sidebar+main layout means components have predictable context; viewport-based responsive (sm/md/lg) is sufficient. Re-evaluate when components get reused inside sidebars or modals where the parent container is genuinely variable.
 - [x] 20. Untangle Z-Index Stacking Issues — current usage already follows 0/10/20/30/40/50 (1/12/3/6/6/41 call sites). Added --z-base/sticky/dropdown/topbar/modal/overlay tokens to globals.css to document the scale; grain overlay's z-[9999] is pointer-events-none + aria-hidden so it can't trap clicks.
 - [x] 21. Establish a Modular Type Scale (n/a) — --font-size-2xs/3xs/xs/sm/base/lg/xl/2xl/3xl/4xl (0.5625rem→2.25rem). h1/h2/h3/h4 → 4xl/3xl/2xl/xl per globals.css. Base body = 1rem (16px).
-- [ ] 22. Add Fluid Responsive Typography
+- [x] 22. Add Fluid Responsive Typography — added .h1-fluid (`clamp(2.25rem, 4.5vw + 0.5rem, 4.5rem)` = 36px→72px) and .h2-fluid (`clamp(1.75rem, 3vw + 0.5rem, 3rem)` = 28px→48px) for marketing heroes; body text stays at static --font-size-base to preserve reading rhythm. Existing .auth-hero-line already uses clamp(36px, 4.5vw, 54px).
 - [ ] 23. Optimize Reading Line Length
 - [ ] 24. Optimize Web Font Loading
 - [ ] 25. Tune Text Color and Contrast

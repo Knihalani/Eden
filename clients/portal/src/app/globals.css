@@ -1083,6 +1083,28 @@ h1 {
   letter-spacing: -0.03em;
 }
 
+/* ui-audit prompt 23: optimized reading measure for long-form
+ * content (docs, blog, marketing copy). 65ch is the upper bound
+ * of the 60–75ch ideal; line-height 1.6 is loose enough for body
+ * text without feeling airy. paragraph spacing replaces the
+ * default <p> margin to keep the rhythm. */
+.prose {
+  max-width: 65ch;
+  line-height: 1.6;
+  color: var(--text-secondary);
+}
+.prose p + p {
+  margin-top: 1rem;
+}
+.prose h2 {
+  margin-top: 2rem;
+  margin-bottom: 0.75rem;
+}
+.prose h3 {
+  margin-top: 1.5rem;
+  margin-bottom: 0.5rem;
+}
+
 h2 {
   font-size: var(--font-size-3xl);
   letter-spacing: var(--letter-spacing-tight);
