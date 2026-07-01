@@ -197,6 +197,12 @@ class Settings(BaseSettings):
     # ``usage.cost`` field for budget tracking instead of the
     # per-token estimate. Off by default per C-5 rollout guidance.
     ai_agent_real_cost: bool = False
+    # DL-10: hard cap on the ChatService gateway's request
+    # ``max_tokens`` parameter. The OpenRouter upstream caps at
+    # 4096 by default; set to 0 to disable the cap. The test
+    # suite asserts the default is 4096 (Phase C-7 rollback
+    # preserves the original OpenRouter limit).
+    gateway_max_tokens_cap: int = 4096
 
     # Phase R — stdlib ``logging`` shim (Logfire-style 5-min
     # time-to-first-log). When the user calls ``eden.install()`` (or
@@ -488,6 +494,11 @@ class Settings(BaseSettings):
     # back to in-memory TokenBucket for single-node dev. The middleware
     # also sets standard X-RateLimit-* headers on every response.
     rate_limit_enabled: bool = True
+    # Default-deny auth middleware (security 26). Every request must
+    # carry an auth context; the middleware short-circuits to 401
+    # before the route runs unless the path is on the public allow-
+    # list. Disable only for debugging — production must be on.
+    default_deny_enabled: bool = True
     rate_limit_default_per_window: int = 60
     rate_limit_window_seconds: int = 60
 
