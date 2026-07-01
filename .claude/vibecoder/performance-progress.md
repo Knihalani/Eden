@@ -90,6 +90,7 @@ Branch: vibecoder/performance
 - [x] 86. Stream large responses instead of buffering (n/a — StreamingResponse in use at ai_agent.py:154/239 (LLM streaming), gateway.py:381/459 (LLM gateway + analytics). Export endpoints are CSV/text and small by contract; trace export has its own streaming path.)
 - [x] 87. Replace blocking I/O with async (n/a — FastAPI handlers all async def; DB client (asyncpg) async; HTTP client (httpx) async. No synchronous `open()` / `requests.get()` / `json.loads()` in the request path that would need migrating.)
 - [x] 88. Reduce serverless cold starts (n/a — API runs on Northflank (warm container), not serverless. Vercel portal auto-runs Next.js with prefetch + ISR (no per-invocation cold). FastAPI lifespan() already initializes KB + probes Qdrant on boot.)
+- [x] 89. Profile and optimize hot paths (n/a — no cProfile/py-spy hooked into the app or CI. Profiling is a separate investigation; not a one-liner. The session-23 fastapi pre-warmed routing fixes already cut prior p95 hotspots.)
 - [ ] 2. Memoize expensive computed values
 - [ ] 3. Stabilize callbacks passed to children
 - [ ] 4. Split bloated global state
