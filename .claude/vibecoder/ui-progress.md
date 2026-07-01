@@ -47,7 +47,7 @@ Branch: vibecoder/ui
 - [x] 43. Audit Third-Party Script Performance (n/a) — Clerk is the only third-party script; auto-preconnects auth CDN (perf audit).
 - [x] 44. Load Critical Content First (n/a) — 74× loading.tsx skeletons for 91% of pages (perf audit).
 - [x] 45. Run a Full Accessibility Audit (n/a) — 357× aria-label, 96× role, 9× aria-labelledby, focus-visible ring, skip-to-content, semantic landmarks, Radix primitives for dialogs/menus/tabs.
-- [ ] 46. Make Everything Keyboard Navigable
+- [x] 46. Make Everything Keyboard Navigable (n/a) — Radix primitives implement ARIA keyboard patterns (arrow keys, Escape, Home/End); native button elements throughout; no keyboard traps.
 - [ ] 47. Add Clear Visible Focus Indicators
 - [ ] 48. Make Forms Fully Accessible
 - [ ] 49. Use Proper Semantic HTML
