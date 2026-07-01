@@ -30,6 +30,17 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false, nocache: true },
 };
 
+// ui-audit prompt 16: viewportFit: "cover" is required for the
+// `env(safe-area-inset-*)` CSS values to resolve on iOS / Android.
+// Without it, the safe-area values are always 0 and the home
+// indicator / notch can overlap fixed bottom navigation bars and
+// the ChatSidebar floating toggle.
+export const viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover" as const,
+};
+
 /**
  * Clerk redirects back to our origin after OAuth + email-link flows.
  * We whitelist localhost + the production site so user-supplied
