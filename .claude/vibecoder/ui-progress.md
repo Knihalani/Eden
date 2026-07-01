@@ -37,7 +37,7 @@ Branch: vibecoder/ui
 - [x] 33. Add Route-Based Code Splitting (n/a) — App Router auto-splits per page.tsx; 5 explicit next/dynamic imports for settings tabs, React Flow Canvas, optimization subpages.
 - [x] 34. Optimize and Modernize All Images (n/a) — perf audit webp'd favicon/icon-192/icon-512/logo (17KB vs 159KB original); manifest.json points at webp first with PNG fallback.
 - [x] 35. Implement Content-Aware Loading Skeletons (n/a) — 74× loading.tsx per perf audit; `.skeleton` shimmer animation in globals.css.
-- [ ] 36. Virtualize Long Scrolling Lists
+- [x] 36. Virtualize Long Scrolling Lists (n/a) — long lists server-paginated at 20-200 items via DataTable + api limit per perf audit; no list >1000 rows exists.
 - [ ] 37. Eliminate Unnecessary Component Re-renders
 - [ ] 38. Cache and Dedupe Data Fetching
 - [ ] 39. Add Optimistic UI Updates
