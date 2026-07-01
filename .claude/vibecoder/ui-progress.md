@@ -25,7 +25,7 @@ Branch: vibecoder/ui
 - [x] 21. Establish a Modular Type Scale (n/a) — --font-size-2xs/3xs/xs/sm/base/lg/xl/2xl/3xl/4xl (0.5625rem→2.25rem). h1/h2/h3/h4 → 4xl/3xl/2xl/xl per globals.css. Base body = 1rem (16px).
 - [x] 22. Add Fluid Responsive Typography — added .h1-fluid (`clamp(2.25rem, 4.5vw + 0.5rem, 4.5rem)` = 36px→72px) and .h2-fluid (`clamp(1.75rem, 3vw + 0.5rem, 3rem)` = 28px→48px) for marketing heroes; body text stays at static --font-size-base to preserve reading rhythm. Existing .auth-hero-line already uses clamp(36px, 4.5vw, 54px).
 - [x] 23. Optimize Reading Line Length — added .prose utility (max-width 65ch, line-height 1.6, paragraph/h2/h3 spacing) for docs and marketing copy. Existing marketing pages use max-w-3xl (48rem ≈ 60ch) for hero text.
-- [ ] 24. Optimize Web Font Loading
+- [x] 24. Optimize Web Font Loading (n/a) — next/font self-hosts Geist + Geist Mono at build, subsets=["latin"], auto-injects <link rel="preload" as="font">. display: "swap" is the next/font default.
 - [ ] 25. Tune Text Color and Contrast
 - [ ] 26. Fix Semantic Heading Structure
 - [ ] 27. Handle Text Overflow Gracefully
