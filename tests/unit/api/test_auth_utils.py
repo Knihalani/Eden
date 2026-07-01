@@ -11,9 +11,11 @@ from jose import jwt
 
 from eden.api.utils.auth import (
     ALGORITHM,
+    _BCRYPT_ROUNDS,
     create_access_token,
     decode_access_token,
     hash_password,
+    needs_rehash,
     verify_password,
 )
 from eden.api.utils.validation import (
@@ -50,6 +52,34 @@ class TestPasswordHashing:
         h1 = hash_password("password-one")
         h2 = hash_password("password-two")
         assert h1 != h2
+
+    def test_hash_uses_configured_rounds(self):
+        """New hashes use the configured work factor."""
+        hashed = hash_password("work-factor-check")
+        # bcrypt format: $2b$<rounds>$...
+        assert f"$2b${_BCRYPT_ROUNDS}$" in hashed
+
+    def test_needs_rehash_for_current_hash_is_false(self):
+        """A freshly hashed password does not need re-hashing."""
+        assert needs_rehash(hash_password("fresh-hash")) is False
+
+    def test_needs_rehash_for_legacy_sha256_is_true(self):
+        """Legacy non-bcrypt hashes are flagged for upgrade."""
+        # Pretend legacy SHA256 digest made it into the users table.
+        legacy_sha = "sha256$abcd" + "f" * 64
+        assert needs_rehash(legacy_sha) is True
+
+    def test_needs_rehash_for_low_rounds_is_true(self):
+        """bcrypt hashes below the configured rounds are upgraded."""
+        import bcrypt
+
+        weak = bcrypt.hashpw(b"old-but-known", bcrypt.gensalt(rounds=4)).decode()
+        assert needs_rehash(weak) is True
+
+    def test_needs_rehash_for_empty_hash_is_false(self):
+        """NULL/empty hashes (Clerk users) are not flagged for rehash."""
+        assert needs_rehash("") is False
+        assert needs_rehash(None) is False
 
 
 # ─────────────────────────────────────────────────────────────────────────────

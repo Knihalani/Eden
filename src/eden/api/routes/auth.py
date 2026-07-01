@@ -19,7 +19,12 @@ from eden.api.deps import (
     log_audit_event,
     require_org_admin,
 )
-from eden.api.utils.auth import create_access_token, hash_password, verify_password
+from eden.api.utils.auth import (
+    create_access_token,
+    hash_password,
+    needs_rehash,
+    verify_password,
+)
 from eden.api.utils.clerk_client import (
     ClerkAPIError,
     extract_user_profile,
@@ -242,6 +247,20 @@ async def login(request: LoginRequest, response: Response):
         "UPDATE users SET last_login_at = NOW() WHERE id = $1",
         user_id,
     )
+
+    # Transparent upgrade: re-hash on next successful login if the
+    # stored hash is using an older algorithm or a weaker cost factor.
+    # Best-effort — a failure here must not block the user from logging in.
+    if needs_rehash(row["password_hash"]):
+        try:
+            new_hash = hash_password(request.password)
+            await client.execute(
+                "UPDATE users SET password_hash = $1 WHERE id = $2",
+                new_hash,
+                user_id,
+            )
+        except Exception:  # noqa: BLE001 — best-effort, never block login
+            logger.warning("Password rehash failed for user %s", user_id, exc_info=True)
 
     # Create JWT and set cookie
     access_token = create_access_token(data={"sub": user_id, "email": row["email"]})
