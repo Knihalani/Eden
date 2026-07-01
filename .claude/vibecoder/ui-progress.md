@@ -101,4 +101,4 @@ Branch: vibecoder/ui
 - [x] 97. Add Pagination or Infinite Scroll (n/a) — server-paginated at 20-200 items via DataTable + api limit (perf audit).
 - [x] 98. Polish Charts and Data Visualization (n/a) — recharts with --chart-pie-1..6 token palette; chart-card wrapper; SSR fallback now matches the runtime tokens (prompt 1 fix).
 - [x] 99. Add Bulk Selection and Actions (n/a) — DataTable has DataTableBulkAction<T> interface; checkboxes + select-all + contextual action bar.
-- [ ] 100. Add Data Export and Sharing
+- [x] 100. Add Data Export and Sharing (n/a) — lib/export.ts 109 lines with toCsv, toJsonl, downloadCsv, downloadJsonl, downloadFile.
