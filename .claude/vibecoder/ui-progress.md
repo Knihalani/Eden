@@ -87,7 +87,7 @@ Branch: vibecoder/ui
 - [x] 83. Show Progress for Long Operations (n/a) — onboarding-checklist 7-step progress; budget-ticker color-coded bar; no file uploads in current scope.
 - [x] 84. Improve Perceived Performance Everywhere (n/a) — 74× loading.tsx skeletons, optimistic updates, debounced search, button loading states, prefetched routes, no inline <script> (perf audit).
 - [x] 85. Add Contextual Help and Tooltips — added Radix TooltipProvider to root layout (delayDuration 200ms, skipDelayDuration 300ms). Now available to all routes for icon-only buttons, complex features, and non-obvious fields.
-- [ ] 86. Standardize Status and State Indicators
+- [x] 86. Standardize Status and State Indicators (n/a) — StatusBadge is the standard: 6+ variants pairing color + icon (CheckCircle2/XCircle/AlertTriangle/Clock/Circle).
 - [ ] 87. Clarify Primary Navigation Structure
 - [ ] 88. Add a Command Palette
 - [ ] 89. Show Clear Active Location Indicators
