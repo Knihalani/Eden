@@ -23,6 +23,7 @@ Branch: vibecoder/performance
 - [x] 19. Lazy-load below-the-fold page sections (n/a) — Above-the-fold heavy libs already next/dynamic'd. Below-the-fold literal lazy-load (IntersectionObserver) is uncommon in this codebase; marketing/landing pages are content-driven and small. Re-evaluate if the lighthouse LCP report flags specific long-tail sections.
 - [x] 20. Prioritize above-the-fold content first (n/a) — `next/font/google` self-hosts fonts at build time with display:swap + auto-preload (no extra fetches). Critical CSS is the Tailwind layer that ships inline with the SSR stream. No <script> tags inline in the document.
 - [x] 21. Add route-level loading states (n/a) — 74 loading.tsx files for 81 pages (91%). Missing 7 are marketing/docs/auth form pages where skeletons add no value.
+- [x] 22. Preconnect to critical third-party origins (n/a) — API_BASE points at same-origin /api/proxy; Clerk SDK auto-preconnects its own auth CDN; no other third-party origins ship on first load. Adding speculative preconnect would waste connection slots.
 - [ ] 2. Memoize expensive computed values
 - [ ] 3. Stabilize callbacks passed to children
 - [ ] 4. Split bloated global state
