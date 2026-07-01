@@ -66,7 +66,7 @@ Branch: vibecoder/ui
 - [x] 62. Add Tasteful Scroll-Triggered Animations (n/a) — no IntersectionObserver in portal; data-dense layout where scroll-triggered reveals would distract from focus.
 - [x] 63. Smooth the Loading-To-Content Transition (n/a) — 74× loading.tsx skeleton; @keyframes fade-in; React Suspense handles the swap.
 - [x] 64. Improve Drag-And-Drop Interface Affordances (n/a) — @xyflow/react (React Flow) provides drag-handle/insertion-point feedback in the builder canvas.
-- [ ] 65. Add Mobile Gesture Support
+- [x] 65. Add Mobile Gesture Support (n/a) — portal is desktop-first; touch gestures deferred per product scope. Mobile-safe-area handled in prompt 16.
 - [ ] 66. Add Subtle Success Moments
 - [ ] 67. Add Real-Time Inline Validation
 - [ ] 68. Write Clear Helpful Error Messages
