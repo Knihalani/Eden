@@ -160,7 +160,6 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
     const log = (metric: string, value: number) => {
       // ponytail: console.debug instead of console.log so it doesn't
       // pollute prod output unless explicitly enabled.
-      // eslint-disable-next-line no-console
       if (typeof console !== "undefined") console.debug(`[web-vitals] ${metric}=${value.toFixed(0)}`);
     };
     try {
