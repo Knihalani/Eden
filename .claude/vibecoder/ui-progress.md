@@ -26,7 +26,7 @@ Branch: vibecoder/ui
 - [x] 22. Add Fluid Responsive Typography — added .h1-fluid (`clamp(2.25rem, 4.5vw + 0.5rem, 4.5rem)` = 36px→72px) and .h2-fluid (`clamp(1.75rem, 3vw + 0.5rem, 3rem)` = 28px→48px) for marketing heroes; body text stays at static --font-size-base to preserve reading rhythm. Existing .auth-hero-line already uses clamp(36px, 4.5vw, 54px).
 - [x] 23. Optimize Reading Line Length — added .prose utility (max-width 65ch, line-height 1.6, paragraph/h2/h3 spacing) for docs and marketing copy. Existing marketing pages use max-w-3xl (48rem ≈ 60ch) for hero text.
 - [x] 24. Optimize Web Font Loading (n/a) — next/font self-hosts Geist + Geist Mono at build, subsets=["latin"], auto-injects <link rel="preload" as="font">. display: "swap" is the next/font default.
-- [ ] 25. Tune Text Color and Contrast
+- [x] 25. Tune Text Color and Contrast (n/a) — --text-muted #708090 (4.7:1 AA Normal), --text-faint #5A6B85 (3.3:1 AA Large), --border-default #6B7C9E (3.0:1+). Contrast rationale documented in globals.css comments.
 - [ ] 26. Fix Semantic Heading Structure
 - [ ] 27. Handle Text Overflow Gracefully
 - [ ] 28. Format Numbers, Dates, and Currency
