@@ -29,6 +29,8 @@ Branch: vibecoder/performance
 - [x] 25. Convert images to modern formats (Logo component now uses /logo.webp, 17KB vs original 159KB logo.png. PNG kept as fallback. Apple's apple-touch-icon / favicon / icon-192 / icon-512 stay PNG since browser icon manifests require raster.)
 - [x] 26. Serve responsive image sizes (n/a) — Logo uses next/image with constrained width/height props and is small (17KB). Other imgs are inline data URLs (QR) or user-controlled (avatars, transcript refs). No real user-data image grid that would benefit from srcset.
 - [x] 27. Lazy-load images below the fold (added explicit loading=lazy + decoding=async to plain <img> in TranscriptView ImagesPanel, profile avatar; QR code unchanged since data: URLs decode instantly. next/image handles the Logo automatically.)
+- [x] 28. Compress and right-size large images (webp variants of favicon/icon-192/icon-512/logo — 768B/5.3K/19K/17K vs original 2.1K/34K/171K/159K PNG; manifest.json now points at webp first with PNG fallback)
+- [x] 29. Set image dimensions to stop shift (n/a — addressed in prompts 23+27: transcript img width=128 height=128, QR width=192 height=192, avatar w-full h-full inside w-20 h-20 wrapper, Logo via next/image with explicit width/height props)
 - [ ] 2. Memoize expensive computed values
 - [ ] 3. Stabilize callbacks passed to children
 - [ ] 4. Split bloated global state
