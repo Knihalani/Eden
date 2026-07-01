@@ -1,0 +1,10 @@
+{
+  "trace_id": "trace_output_truncation_02",
+  "archetype_id": "output-truncation",
+  "expected_TAS": 59,
+  "expected_intervention": "warn",
+  "expected_loop_detected": false,
+  "expected_hallucination_detected": false,
+  "expected_redundancy_pct": 0.0,
+  "notes": "Response cut off mid-word ('Availabil'). finish_reason=length. Outcome=partial. Intervention: retry with larger max_tokens OR summarise the partial response and let the user decide."
+}

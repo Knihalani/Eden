@@ -18,7 +18,7 @@
  * messages. We do NOT make LLM calls from this component.
  */
 
-import * as React from "react";
+import * as _React from "react";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
 
@@ -53,8 +53,7 @@ const ROLE_META: Record<TranscriptMessage["role"], { label: string; color: strin
   system: { label: "System", color: "var(--text-muted)", icon: "⚙" },
   user: { label: "User", color: "var(--info)", icon: "▶" },
   assistant: { label: "Assistant", color: "var(--accent)", icon: "◆" },
-  tool: { label: "Tool", color: "var(--warning)", icon: "🔧" },
-};
+  tool: { label: "Tool", color: "var(--warning)", icon: "🔧" } };
 
 export function TranscriptView({ messages, className, collapseAtChars = 1000 }: TranscriptViewProps) {
   if (messages.length === 0) {

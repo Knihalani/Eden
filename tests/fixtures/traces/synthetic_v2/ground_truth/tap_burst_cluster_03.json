@@ -1,0 +1,8 @@
+{
+  "trace_id": "trace_tap_burst_03",
+  "archetype_id": "tap-burst-cluster",
+  "agent_id": "agent_tap-burst-cluster_13",
+  "expected_TAS": 85,
+  "expected_intervention": "warn",
+  "notes": "TAP burst cluster: 5 varied user messages with low Jaccard between adjacent pairs. The Phase 7 tap_branch_burst detector should classify these."
+}

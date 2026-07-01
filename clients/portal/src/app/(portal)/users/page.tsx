@@ -7,6 +7,7 @@ import { api } from "@/lib/api";
 import { EmptyState } from "@/components/ui/empty-state";
 import { NoOrgState } from "@/components/ui/no-org-state";
 import { PageHeader } from "@/components/layout/page-header";
+import { Button } from "@/components/ui/button";
 import {
   Users,
   Target,
@@ -17,9 +18,9 @@ import {
   Loader2,
   AlertTriangle,
   Activity,
-  ChevronRight,
   TrendingUp,
   Search,
+  RefreshCw,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { DataTable } from "@/components/ui/data-table";
@@ -245,22 +246,45 @@ export default function UsersPage() {
   }
 
   return (
-    <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-6">
+    <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-6 page-enter">
       <PageHeader
+        eyebrow="Intelligence"
         title="User Intelligence"
         subtitle="The 97% problem: behaviour-driven satisfaction, behavioural cohorts, and goal tracking"
         icon={Users}
       />
 
       {error && (
-        <div className="bg-[var(--error-bg)] text-[var(--error)] text-sm px-4 py-3 rounded-xl flex items-center gap-2.5 border border-[var(--error)]/20">
-          <AlertTriangle className="w-4 h-4 flex-shrink-0" />
-          {error}
+        <div
+          role="alert"
+          className="bg-[var(--error-bg)] text-[var(--error)] text-sm px-4 py-3 rounded-xl flex items-center gap-2.5 border border-[var(--error)]/20"
+        >
+          <AlertTriangle className="w-4 h-4 flex-shrink-0" aria-hidden />
+          <span className="flex-1">{error}</span>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => {
+              setError("");
+              loadSessions();
+              loadGoals();
+              loadCohorts();
+              loadSegments();
+            }}
+            aria-label="Retry loading all tabs"
+          >
+            <RefreshCw className="w-3.5 h-3.5" aria-hidden />
+            Retry
+          </Button>
         </div>
       )}
 
       {/* Tabs */}
-      <div className="flex items-center gap-1 p-1 bg-[var(--bg-tertiary)] rounded-xl w-fit flex-wrap">
+      <div
+        role="tablist"
+        aria-label="User intelligence sections"
+        className="flex items-center gap-1 p-1 bg-[var(--bg-tertiary)] rounded-xl w-fit flex-wrap"
+      >
         {([
           { key: "sessions" as Tab, label: "Sessions", icon: Activity },
           { key: "goals" as Tab, label: "Goals", icon: Target },
@@ -270,6 +294,11 @@ export default function UsersPage() {
         ]).map(({ key, label, icon: Icon }) => (
           <button
             key={key}
+            type="button"
+            role="tab"
+            aria-selected={activeTab === key}
+            aria-controls={`users-tab-panel-${key}`}
+            id={`users-tab-${key}`}
             onClick={() => setActiveTab(key)}
             className={cn(
               "px-4 py-2 rounded-lg text-sm font-medium transition-all flex items-center gap-2",
@@ -278,7 +307,7 @@ export default function UsersPage() {
                 : "text-[var(--text-muted)] hover:text-[var(--text-secondary)]"
             )}
           >
-            <Icon className="w-4 h-4" />
+            <Icon className="w-4 h-4" aria-hidden />
             {label}
           </button>
         ))}
@@ -288,6 +317,9 @@ export default function UsersPage() {
       <AnimatePresence mode="wait">
         <motion.div
           key={activeTab}
+          id={`users-tab-panel-${activeTab}`}
+          role="tabpanel"
+          aria-labelledby={`users-tab-${activeTab}`}
           initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: -6 }}
@@ -361,9 +393,14 @@ function SessionsTab({
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-3 bg-[var(--bg-primary)] border border-[var(--border-default)] rounded-xl p-3">
+        <label htmlFor="sessions-days" className="sr-only">
+          Time range
+        </label>
         <select
+          id="sessions-days"
           value={days}
           onChange={(e) => onDaysChange(Number(e.target.value))}
+          aria-label="Sessions time range"
           className="px-3 py-1.5 bg-[var(--bg-secondary)] border border-[var(--border-default)] rounded-lg text-sm text-[var(--text-primary)]"
         >
           <option value={7}>Last 7 days</option>
@@ -371,18 +408,20 @@ function SessionsTab({
           <option value={90}>Last 90 days</option>
         </select>
         <button
+          type="button"
           onClick={onRefresh}
           disabled={loading}
+          aria-label="Refresh sessions"
           className="inline-flex items-center gap-2 px-3 py-1.5 bg-[var(--bg-tertiary)] text-[var(--text-primary)] rounded-lg text-xs font-medium hover:bg-[var(--border-default)] disabled:opacity-50 transition-colors ml-auto"
         >
-          {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Activity className="w-3.5 h-3.5" />}
+          {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" aria-hidden /> : <Activity className="w-3.5 h-3.5" aria-hidden />}
           Refresh
         </button>
       </div>
 
       {loading && sessions.length === 0 ? (
-        <div className="flex items-center justify-center py-20">
-          <Loader2 className="w-8 h-8 animate-spin text-[var(--accent)]" />
+        <div className="flex items-center justify-center py-20" role="status" aria-live="polite">
+          <Loader2 className="w-8 h-8 animate-spin text-[var(--accent)]" aria-hidden />
         </div>
       ) : sessions.length === 0 ? (
         <EmptyState
@@ -474,10 +513,13 @@ function GoalsTab({
     <div className="space-y-4">
       <div className="flex justify-end">
         <button
+          type="button"
           onClick={() => onShowAddChange(!showAdd)}
+          aria-expanded={showAdd}
+          aria-controls="new-goal-form"
           className="inline-flex items-center gap-2 px-4 py-2 bg-[var(--accent)] text-[var(--bg-base)] rounded-lg text-sm font-medium hover:bg-[var(--accent-hover)] transition-colors"
         >
-          <Plus className="w-4 h-4" />
+          <Plus className="w-4 h-4" aria-hidden />
           {showAdd ? "Cancel" : "Add Goal"}
         </button>
       </div>
@@ -485,6 +527,7 @@ function GoalsTab({
       <AnimatePresence>
         {showAdd && (
           <motion.div
+            id="new-goal-form"
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: "auto" }}
             exit={{ opacity: 0, height: 0 }}
@@ -494,10 +537,11 @@ function GoalsTab({
               <h3 className="text-sm font-semibold text-[var(--text-primary)]">New Goal</h3>
               <div className="grid sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="text-xs font-medium text-[var(--text-muted)] mb-1.5 block">
+                  <label htmlFor="new-goal-name" className="text-xs font-medium text-[var(--text-muted)] mb-1.5 block">
                     Name
                   </label>
                   <input
+                    id="new-goal-name"
                     type="text"
                     value={newName}
                     onChange={(e) => onNewNameChange(e.target.value)}
@@ -506,10 +550,11 @@ function GoalsTab({
                   />
                 </div>
                 <div>
-                  <label className="text-xs font-medium text-[var(--text-muted)] mb-1.5 block">
+                  <label htmlFor="new-goal-target" className="text-xs font-medium text-[var(--text-muted)] mb-1.5 block">
                     Target
                   </label>
                   <input
+                    id="new-goal-target"
                     type="number"
                     value={newTarget}
                     onChange={(e) => onNewTargetChange(Number(e.target.value))}
@@ -519,10 +564,11 @@ function GoalsTab({
                 </div>
               </div>
               <div>
-                <label className="text-xs font-medium text-[var(--text-muted)] mb-1.5 block">
+                <label htmlFor="new-goal-description" className="text-xs font-medium text-[var(--text-muted)] mb-1.5 block">
                   Description (optional)
                 </label>
                 <textarea
+                  id="new-goal-description"
                   value={newDescription}
                   onChange={(e) => onNewDescriptionChange(e.target.value)}
                   rows={2}
@@ -531,11 +577,13 @@ function GoalsTab({
                 />
               </div>
               <button
+                type="button"
                 onClick={onCreate}
                 disabled={creating || !newName.trim()}
+                aria-label="Create goal"
                 className="inline-flex items-center gap-2 px-4 py-2 bg-[var(--accent)] text-[var(--bg-base)] rounded-lg text-sm font-medium hover:bg-[var(--accent-hover)] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
-                {creating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Target className="w-4 h-4" />}
+                {creating ? <Loader2 className="w-4 h-4 animate-spin" aria-hidden /> : <Target className="w-4 h-4" aria-hidden />}
                 Create Goal
               </button>
             </div>
@@ -544,8 +592,8 @@ function GoalsTab({
       </AnimatePresence>
 
       {loading && goals.length === 0 ? (
-        <div className="flex items-center justify-center py-20">
-          <Loader2 className="w-8 h-8 animate-spin text-[var(--accent)]" />
+        <div className="flex items-center justify-center py-20" role="status" aria-live="polite">
+          <Loader2 className="w-8 h-8 animate-spin text-[var(--accent)]" aria-hidden />
         </div>
       ) : goals.length === 0 ? (
         <EmptyState
@@ -629,11 +677,15 @@ function SatisfactionTab({
       {/* Input */}
       <div className="bg-[var(--bg-primary)] border border-[var(--border-default)] rounded-xl p-5">
         <h3 className="text-sm font-semibold text-[var(--text-primary)] mb-4 flex items-center gap-2">
-          <Smile className="w-4 h-4 text-[var(--accent)]" />
+          <Smile className="w-4 h-4 text-[var(--accent)]" aria-hidden />
           Analyze Trace Satisfaction
         </h3>
         <div className="flex flex-col sm:flex-row gap-3">
+          <label htmlFor="satisfaction-trace-id" className="sr-only">
+            Trace ID
+          </label>
           <input
+            id="satisfaction-trace-id"
             type="text"
             value={traceId}
             onChange={(e) => onTraceIdChange(e.target.value)}
@@ -644,11 +696,13 @@ function SatisfactionTab({
             className="flex-1 px-3 py-2 bg-[var(--bg-secondary)] border border-[var(--border-default)] rounded-lg text-sm text-[var(--text-primary)] font-mono placeholder:text-[var(--text-muted)]"
           />
           <button
+            type="button"
             onClick={onAnalyze}
             disabled={loading || !traceId.trim()}
+            aria-label="Analyze satisfaction"
             className="inline-flex items-center gap-2 px-4 py-2 bg-[var(--accent)] text-[var(--bg-base)] rounded-lg text-sm font-medium hover:bg-[var(--accent-hover)] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
-            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
+            {loading ? <Loader2 className="w-4 h-4 animate-spin" aria-hidden /> : <Search className="w-4 h-4" aria-hidden />}
             Analyze
           </button>
         </div>
@@ -656,8 +710,8 @@ function SatisfactionTab({
 
       {/* Result */}
       {loading ? (
-        <div className="flex items-center justify-center py-20">
-          <Loader2 className="w-8 h-8 animate-spin text-[var(--accent)]" />
+        <div className="flex items-center justify-center py-20" role="status" aria-live="polite">
+          <Loader2 className="w-8 h-8 animate-spin text-[var(--accent)]" aria-hidden />
         </div>
       ) : satisfaction ? (
         <motion.div
@@ -698,7 +752,7 @@ function SatisfactionTab({
           {correction && (
             <div className="bg-[var(--bg-primary)] border border-[var(--border-default)] rounded-xl p-5">
               <h3 className="text-sm font-semibold text-[var(--text-primary)] mb-4 flex items-center gap-2">
-                <TrendingUp className="w-4 h-4 text-[var(--accent)]" />
+                <TrendingUp className="w-4 h-4 text-[var(--accent)]" aria-hidden />
                 Beta-Binomial Correction
               </h3>
               <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
@@ -776,18 +830,20 @@ function CohortsTab({
     <div className="space-y-4">
       <div className="flex justify-end">
         <button
+          type="button"
           onClick={onRefresh}
           disabled={loading}
+          aria-label="Refresh cohorts"
           className="inline-flex items-center gap-2 px-3 py-1.5 bg-[var(--bg-tertiary)] text-[var(--text-primary)] rounded-lg text-xs font-medium hover:bg-[var(--border-default)] disabled:opacity-50 transition-colors"
         >
-          {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Activity className="w-3.5 h-3.5" />}
+          {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" aria-hidden /> : <Activity className="w-3.5 h-3.5" aria-hidden />}
           Refresh
         </button>
       </div>
 
       {loading && cohorts.length === 0 ? (
-        <div className="flex items-center justify-center py-20">
-          <Loader2 className="w-8 h-8 animate-spin text-[var(--accent)]" />
+        <div className="flex items-center justify-center py-20" role="status" aria-live="polite">
+          <Loader2 className="w-8 h-8 animate-spin text-[var(--accent)]" aria-hidden />
         </div>
       ) : cohorts.length === 0 ? (
         <EmptyState
@@ -867,18 +923,20 @@ function SegmentsTab({
     <div className="space-y-4">
       <div className="flex justify-end">
         <button
+          type="button"
           onClick={onRefresh}
           disabled={loading}
+          aria-label="Refresh segments"
           className="inline-flex items-center gap-2 px-3 py-1.5 bg-[var(--bg-tertiary)] text-[var(--text-primary)] rounded-lg text-xs font-medium hover:bg-[var(--border-default)] disabled:opacity-50 transition-colors"
         >
-          {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Activity className="w-3.5 h-3.5" />}
+          {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" aria-hidden /> : <Activity className="w-3.5 h-3.5" aria-hidden />}
           Refresh
         </button>
       </div>
 
       {loading && segments.length === 0 ? (
-        <div className="flex items-center justify-center py-20">
-          <Loader2 className="w-8 h-8 animate-spin text-[var(--accent)]" />
+        <div className="flex items-center justify-center py-20" role="status" aria-live="polite">
+          <Loader2 className="w-8 h-8 animate-spin text-[var(--accent)]" aria-hidden />
         </div>
       ) : segments.length === 0 ? (
         <EmptyState

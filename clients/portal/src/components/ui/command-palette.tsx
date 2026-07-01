@@ -3,46 +3,11 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { Command as Cmnd } from "cmdk";
 import { useRouter, usePathname } from "next/navigation";
-import {
-  Search,
-  Plus,
-  Bot,
-  Wand2,
-  Box,
-  Network,
-  Server,
-  Activity,
-  Layers,
-  Brain,
-  Compass,
-  Bell,
-  Cog,
-  Sparkles,
-  FlaskConical,
-  Shield,
-  Inbox,
-  GitPullRequestArrow,
-  BarChart3,
-  Settings,
-  CreditCard,
-  FileText,
-  User,
-  Users,
-  X,
-  ChevronRight,
-  Wrench,
-  PlayCircle,
-  Gauge,
-  Database,
-  GitBranch,
-  Library,
-  History,
-} from "lucide-react";
+import { Search, Bot, Wand2, Box, Network, Server, Activity, Layers, Brain, Compass, Bell, Cog, Sparkles, FlaskConical, Shield, Inbox, GitPullRequestArrow, BarChart3, Settings, CreditCard, FileText, User, Users, X, ChevronRight, Wrench, PlayCircle, Gauge, Database, GitBranch, Library, History } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   COMMAND_PALETTE_RECENT_KEY,
-  COMMAND_PALETTE_RECENT_LIMIT,
-} from "@/lib/constants";
+  COMMAND_PALETTE_RECENT_LIMIT } from "@/lib/constants";
 
 interface CommandPaletteProps {
   open: boolean;
@@ -109,8 +74,7 @@ const COMMANDS: NavEntry[] = [
 const ACCENT_BG: Record<NonNullable<NavEntry["accent"]>, string> = {
   accent: "bg-[var(--accent-faint)] text-[var(--accent)]",
   terminal: "bg-[var(--terminal-faint)] text-[var(--terminal)]",
-  muted: "bg-[var(--bg-tertiary)] text-[var(--text-secondary)]",
-};
+  muted: "bg-[var(--bg-tertiary)] text-[var(--text-secondary)]" };
 
 const COMMANDS_BY_HREF = new Map(COMMANDS.map((c) => [c.href, c]));
 
@@ -177,7 +141,7 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
     setRecentHrefs(trimmed);
     // pathname is the only signal we care about; the localStorage reads
     // are idempotent.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [pathname]);
 
   const runCommand = useCallback(

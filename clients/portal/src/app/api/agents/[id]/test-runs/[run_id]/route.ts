@@ -1,6 +1,6 @@
 /** Phase 3 — Proxy GET /api/agents/[id]/test/runs/[run_id]. */
 
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { forwardToBackend } from "@/lib/proxy";
 
 export async function GET(

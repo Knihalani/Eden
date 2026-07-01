@@ -1,0 +1,19 @@
+{
+  "trace_id": "trace_memory_conflict_03",
+  "archetype_id": "memory-conflict",
+  "agent_id": "agent_memory-conflict_03",
+  "expected_TAS": 53,
+  "expected_intervention": "warn",
+  "expected_metrics": {
+    "conflict_keys": [
+      "user_preference:meal"
+    ]
+  },
+  "expected_detector_fires": [
+    "memory_conflict"
+  ],
+  "expected_loop_detected": false,
+  "expected_hallucination_detected": false,
+  "expected_redundancy_pct": 0.0,
+  "notes": "2 observations of the same key disagree (vegetarian vs pescatarian). Phase 10 MemoryConflictDetector MUST fire on negation mismatch + Jaccard > 0.5."
+}

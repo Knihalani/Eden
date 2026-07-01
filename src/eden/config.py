@@ -226,9 +226,6 @@ class Settings(BaseSettings):
     model_fallback: str = "meta-llama/llama-3.3-70b-instruct"
 
     # Sandboxing
-    firecracker_jailer_path: str = "/usr/local/bin/jailer"
-    firecracker_kernel_path: str = "./vmlinux"
-    firecracker_rootfs_path: str = "./rootfs.ext4"
     sandbox_memory_mb: int = 512
     sandbox_cpu_count: int = 2
     sandbox_snapshot_pool_size: int = 10

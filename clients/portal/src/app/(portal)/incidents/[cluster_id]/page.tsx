@@ -9,6 +9,7 @@ import { cn } from "@/lib/utils";
 import { SeverityBadge } from "@/components/ui/status-badge";
 import { NoOrgState } from "@/components/ui/no-org-state";
 import { useToast } from "@/components/ui/toast";
+import { PageHeader } from "@/components/layout/page-header";
 import {
   AlertOctagon,
   AlertTriangle,
@@ -134,38 +135,56 @@ export default function IncidentDetailPage() {
           className="inline-flex items-center gap-1.5 text-xs text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors"
         >
           <ArrowLeft className="w-3.5 h-3.5" />
-          Back to Incidents
+          Back to incidents
         </Link>
       </div>
 
-      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-[var(--text-primary)] flex items-center gap-2">
-            <AlertOctagon className="w-6 h-6 text-[var(--accent)]" />
-            Incident Cluster
-          </h1>
-          <p className="text-sm text-[var(--text-muted)] mt-1 font-mono break-all">
-            {cluster_id}
-          </p>
-        </div>
-        <button
-          onClick={handleResolve}
-          className="inline-flex items-center gap-2 px-4 py-2 bg-[var(--terminal)] text-[var(--bg-base)] rounded-lg text-sm font-medium hover:opacity-90 transition-opacity"
-        >
-          <CheckCircle2 className="w-4 h-4" />
-          Mark resolved
-        </button>
-      </div>
+      <PageHeader
+        eyebrow="Observe"
+        title="Incident cluster"
+        subtitle={`Root-cause summary, contributing factors, and the traces that make up this cluster.`}
+        icon={AlertOctagon}
+        actions={
+          <button
+            onClick={handleResolve}
+            aria-label="Mark this incident cluster resolved"
+            className="inline-flex items-center gap-2 px-4 py-2 bg-[var(--terminal)] text-[var(--bg-base)] rounded-lg text-sm font-medium hover:opacity-90 transition-opacity"
+          >
+            <CheckCircle2 className="w-4 h-4" />
+            Mark resolved
+          </button>
+        }
+      />
+      <p className="text-xs font-mono text-[var(--text-muted)] -mt-4 mb-6 break-all">
+        {cluster_id}
+      </p>
 
       {error && (
-        <div className="bg-[var(--error-bg)] text-[var(--error)] text-sm px-4 py-3 rounded-xl flex items-center gap-2.5 border border-[var(--error)]/20">
-          <AlertTriangle className="w-4 h-4 flex-shrink-0" />
-          {error}
+        <div
+          role="alert"
+          className="bg-[var(--error-bg)] text-[var(--error)] text-sm px-4 py-3 rounded-xl flex items-center justify-between gap-2.5 border border-[var(--error)]/20"
+        >
+          <span className="flex items-center gap-2.5">
+            <AlertTriangle className="w-4 h-4 flex-shrink-0" />
+            {error}
+          </span>
+          <button
+            onClick={load}
+            disabled={loading}
+            className="text-xs font-medium underline underline-offset-2 hover:opacity-80 disabled:opacity-50"
+          >
+            Retry
+          </button>
         </div>
       )}
 
       {loading && !summary ? (
-        <div className="flex items-center justify-center py-20">
+        <div
+          role="status"
+          aria-live="polite"
+          aria-busy="true"
+          className="flex items-center justify-center py-20"
+        >
           <Loader2 className="w-8 h-8 animate-spin text-[var(--accent)]" />
         </div>
       ) : summary ? (

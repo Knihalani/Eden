@@ -1,0 +1,20 @@
+{
+  "trace_id": "trace_multi_fabricated_01",
+  "archetype_id": "multi-fabricated-stats",
+  "agent_id": "agent_multi-fabricated-stats_01",
+  "expected_TAS": 36,
+  "expected_intervention": "block",
+  "expected_metrics": {
+    "LHP": 0.92,
+    "numeric_mismatch_count": 3
+  },
+  "expected_detector_fires": [
+    "numeric_guard",
+    "DistilBERT-MNLI",
+    "MiniCheck"
+  ],
+  "expected_loop_detected": false,
+  "expected_hallucination_detected": true,
+  "expected_redundancy_pct": 0.0,
+  "notes": "Three independent number swaps (each small, plausible). Phase 5 numeric guard must catch all three; DistilBERT-MNLI contradiction \u2248 0.99 on each fabricated line."
+}

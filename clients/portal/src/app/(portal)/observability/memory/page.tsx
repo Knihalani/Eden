@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useOrg } from "@/hooks/use-org";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { Alert } from "@/components/ui/alert";
 import { EmptyState } from "@/components/ui/empty-state";
 import { NoOrgState } from "@/components/ui/no-org-state";
 import { PageHeader } from "@/components/layout/page-header";
@@ -14,7 +15,6 @@ import {
   TabsContent,
 } from "@/components/ui/tabs";
 import {
-  AlertTriangle,
   Archive,
   Brain,
   Combine,
@@ -79,10 +79,12 @@ export default function MemoryIntelligencePage() {
       />
 
       {error && (
-        <div className="bg-[var(--error-bg)] text-[var(--error)] text-sm px-4 py-3 rounded-xl flex items-center gap-2.5 border border-[var(--error)]/20">
-          <AlertTriangle className="w-4 h-4 flex-shrink-0" />
-          {error}
-        </div>
+        <Alert
+          variant="error"
+          title="Request failed"
+          description={error}
+          onDismiss={() => setError("")}
+        />
       )}
 
       <Tabs

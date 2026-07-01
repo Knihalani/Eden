@@ -7,7 +7,6 @@ import {
   BarChart3,
   Clock,
   Coins,
-  Loader2,
   Zap,
 } from "lucide-react";
 import {
@@ -28,6 +27,8 @@ import { ChartCard } from "@/components/ui/chart-card";
 import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
 import { PageHeader } from "@/components/layout/page-header";
 import { NoOrgState } from "@/components/ui/no-org-state";
+import { Skeleton } from "@/components/ui/skeleton";
+import { useToast } from "@/components/ui/toast";
 import { useOrg } from "@/hooks/use-org";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
@@ -64,24 +65,27 @@ interface KpiProps {
 
 function Kpi({ label, value, sublabel, icon: Icon, iconColor, trend, trendDir }: KpiProps) {
   return (
-    <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-primary)] p-4 shadow-sm transition-all duration-200 hover:shadow-md">
+    <div
+      className="rounded-xl border border-[var(--border-default)] bg-[var(--bg-primary)] p-4 shadow-sm transition-all duration-200 hover:shadow-md"
+      aria-label={`${label}: ${value}`}
+    >
       <div className="mb-2 flex items-start justify-between">
         <div className={cn("rounded-lg p-2", iconColor)}>
-          <Icon className="h-4 w-4" />
+          <Icon className="h-4 w-4" aria-hidden />
         </div>
         {trend && (
           <span
             className={cn(
               "flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[10px] font-medium",
-              trendDir === "up" && "text-[var(--success)] bg-[var(--success-bg)]",
-              trendDir === "down" && "text-[var(--error)] bg-[var(--error-bg)]",
+              trendDir === "up" && "text-[var(--terminal)] bg-[var(--terminal-faint)]",
+              trendDir === "down" && "text-[var(--error)] bg-[var(--error-dim)]",
               trendDir === "neutral" && "text-[var(--text-muted)] bg-[var(--bg-tertiary)]"
             )}
           >
             {trendDir === "up" ? (
-              <ArrowUpRight className="h-3 w-3" />
+              <ArrowUpRight className="h-3 w-3" aria-hidden />
             ) : trendDir === "down" ? (
-              <ArrowDownRight className="h-3 w-3" />
+              <ArrowDownRight className="h-3 w-3" aria-hidden />
             ) : null}
             {trend}
           </span>
@@ -321,6 +325,7 @@ function ThroughputHeatmap({
                       className="h-5 min-w-[18px] rounded-sm transition-all hover:ring-1 hover:ring-[var(--accent)]"
                       style={{ backgroundColor: `var(--accent)`, opacity: intensity }}
                       title={`${r.weekday} ${formatHour(h)} · ${v} req`}
+                      aria-label={`${r.weekday} ${formatHour(h)}: ${v} requests`}
                     />
                   );
                 },
@@ -423,6 +428,7 @@ const DAY_OPTIONS = [
 
 export default function AnalyticsPage() {
   const { currentOrg } = useOrg();
+  const toast = useToast();
   const [days, setDays] = useState<number>(30);
   const [loading, setLoading] = useState(true);
 
@@ -463,21 +469,23 @@ export default function AnalyticsPage() {
       setThroughput(tp?.by_hour ?? []);
       setTopAgents(ag?.agents ?? []);
       setLoading(false);
-    }).catch(() => {
+    }).catch((e) => {
       if (cancelled) return;
       // On error, surface as empty data so the user sees the real
       // empty state (with the existing empty-state UI) rather than
-      // a broken chart.
+      // a broken chart. Notify the user via toast.
+      const message = e instanceof Error ? e.message : "Failed to load analytics";
       setTokenByDay([]);
       setLatencyByDay([]);
       setThroughput([]);
       setTopAgents([]);
       setLoading(false);
+      toast.error("Couldn't load analytics", message);
     });
     return () => {
       cancelled = true;
     };
-  }, [currentOrg, days]);
+  }, [currentOrg, days, toast]);
 
   const totals = useMemo(() => {
     const totalIn = tokenByDay.reduce((s, d) => s + d.input_tokens, 0);
@@ -514,15 +522,21 @@ export default function AnalyticsPage() {
         subtitle="Token throughput, latency, traffic patterns, and per-agent cost."
         icon={BarChart3}
         actions={
-          <div className="inline-flex rounded-lg border border-[var(--border-default)] bg-[var(--bg-primary)] p-0.5 shadow-sm">
+          <div
+            role="group"
+            aria-label="Date range"
+            className="inline-flex rounded-lg border border-[var(--border-default)] bg-[var(--bg-primary)] p-0.5 shadow-sm"
+          >
             {DAY_OPTIONS.map((opt) => (
               <button
                 key={opt.value}
                 onClick={() => setDays(opt.value)}
+                aria-pressed={days === opt.value}
+                aria-label={`Last ${opt.label}`}
                 className={cn(
                   "rounded-md px-3 py-1.5 text-xs font-medium transition-all",
                   days === opt.value
-                    ? "bg-[var(--accent)] text-[var(--bg-primary)] shadow-sm"
+                    ? "bg-[var(--accent)] text-[var(--bg-base)] shadow-sm"
                     : "text-[var(--text-muted)] hover:text-[var(--text-primary)]"
                 )}
               >
@@ -543,7 +557,7 @@ export default function AnalyticsPage() {
             0
           )} input`}
           icon={Coins}
-          iconColor="bg-[var(--primary-light)] text-[var(--primary)]"
+          iconColor="bg-[var(--accent-faint)] text-[var(--accent)]"
         />
         <Kpi
           label="p95 latency"
@@ -557,27 +571,45 @@ export default function AnalyticsPage() {
           value={formatLatency(totals.latP99)}
           sublabel="Tail latency"
           icon={Zap}
-          iconColor="bg-[var(--error-bg)] text-[var(--error)]"
+          iconColor="bg-[var(--error-dim)] text-[var(--error)]"
         />
         <Kpi
           label="Total requests"
           value={formatCompact(totals.req)}
           sublabel="Tokens in + out"
           icon={BarChart3}
-          iconColor="bg-[var(--accent-light)] text-[var(--accent)]"
+          iconColor="bg-[var(--terminal-faint)] text-[var(--terminal)]"
         />
       </div>
 
       {/* Row 1: token usage + latency */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        {loading ? <ChartSkeleton /> : <TokenUsageChart data={tokenByDay} />}
-        {loading ? <ChartSkeleton /> : <LatencyChart data={latencyByDay} />}
+        {loading ? (
+          <>
+            <ChartSkeleton />
+            <ChartSkeleton />
+          </>
+        ) : (
+          <>
+            <TokenUsageChart data={tokenByDay} />
+            <LatencyChart data={latencyByDay} />
+          </>
+        )}
       </div>
 
       {/* Row 2: throughput heatmap + top agents */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        {loading ? <ChartSkeleton /> : <ThroughputHeatmap data={throughput} />}
-        {loading ? <ChartSkeleton /> : <TopAgentsChart data={topAgents} />}
+        {loading ? (
+          <>
+            <ChartSkeleton />
+            <ChartSkeleton />
+          </>
+        ) : (
+          <>
+            <ThroughputHeatmap data={throughput} />
+            <TopAgentsChart data={topAgents} />
+          </>
+        )}
       </div>
     </div>
   );
@@ -585,8 +617,25 @@ export default function AnalyticsPage() {
 
 function ChartSkeleton() {
   return (
-    <div className="flex h-[300px] items-center justify-center rounded-xl border border-[var(--border)] bg-[var(--bg-primary)]">
-      <Loader2 className="h-5 w-5 animate-spin text-[var(--text-muted)]" />
+    <div
+      className="rounded-xl border border-[var(--border-default)] bg-[var(--bg-primary)] p-5 space-y-3"
+      aria-busy="true"
+      aria-live="polite"
+    >
+      <div className="flex items-center justify-between">
+        <Skeleton className="h-4 w-32" />
+        <Skeleton className="h-3 w-16" />
+      </div>
+      <Skeleton className="h-3 w-48" />
+      <div className="flex h-[200px] items-end gap-2 pt-2">
+        {Array.from({ length: 8 }).map((_, i) => (
+          <Skeleton
+            key={i}
+            className="flex-1"
+            style={{ height: `${30 + ((i * 13) % 70)}%` }}
+          />
+        ))}
+      </div>
     </div>
   );
 }

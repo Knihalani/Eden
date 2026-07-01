@@ -1,0 +1,10 @@
+{
+  "trace_id": "trace_efficient_good_01",
+  "archetype_id": "efficient-good",
+  "expected_TAS": 89,
+  "expected_intervention": "allow",
+  "expected_loop_detected": false,
+  "expected_hallucination_detected": false,
+  "expected_redundancy_pct": 0.0,
+  "notes": "Optimal path: 1 LLM call, 3 tool lookups, low tokens, fast."
+}

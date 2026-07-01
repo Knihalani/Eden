@@ -4,19 +4,10 @@ import { useState } from "react";
 import { useOrg } from "@/hooks/use-org";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/components/ui/toast";
+import { Alert } from "@/components/ui/alert";
 import { NoOrgState } from "@/components/ui/no-org-state";
 import { PageHeader } from "@/components/layout/page-header";
-import {
-  History,
-  Loader2,
-  Play,
-  GitBranch,
-  RotateCcw,
-  Info,
-  Circle,
-  CheckCircle2,
-  Code2,
-} from "lucide-react";
+import { History, Loader2, Play, GitBranch, RotateCcw, Info, Circle, CheckCircle2, Code2 } from "lucide-react";
 import { motion } from "framer-motion";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
@@ -48,8 +39,7 @@ async function fetchJson<T>(path: string, init: RequestInit = {}): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, {
     credentials: "include",
     headers: { "Content-Type": "application/json" },
-    ...init,
-  });
+    ...init });
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: "Request failed" }));
     throw new Error(err.detail || `HTTP ${res.status}`);
@@ -60,8 +50,7 @@ async function fetchJson<T>(path: string, init: RequestInit = {}): Promise<T> {
 function ttRecord(orgId: string, trace_id: string): Promise<RecordResult> {
   return fetchJson<RecordResult>(`/orgs/${orgId}/intelligence/time-travel/record`, {
     method: "POST",
-    body: JSON.stringify({ trace_id }),
-  });
+    body: JSON.stringify({ trace_id }) });
 }
 function ttFork(
   orgId: string,
@@ -71,14 +60,12 @@ function ttFork(
 ): Promise<ForkResult> {
   return fetchJson<ForkResult>(`/orgs/${orgId}/intelligence/time-travel/fork`, {
     method: "POST",
-    body: JSON.stringify({ recording_id, at_step, edited_state }),
-  });
+    body: JSON.stringify({ recording_id, at_step, edited_state }) });
 }
 function ttReplay(orgId: string, fork_id: string): Promise<ReplayResult> {
   return fetchJson<ReplayResult>(`/orgs/${orgId}/intelligence/time-travel/replay`, {
     method: "POST",
-    body: JSON.stringify({ fork_id }),
-  });
+    body: JSON.stringify({ fork_id }) });
 }
 
 export default function TimeTravelPage() {
@@ -136,7 +123,7 @@ export default function TimeTravelPage() {
     let parsed: Record<string, unknown>;
     try {
       parsed = JSON.parse(editedState);
-    } catch (e) {
+    } catch (_e) {
       toast.error("edited_state is not valid JSON");
       return;
     }
@@ -197,22 +184,25 @@ export default function TimeTravelPage() {
   }
 
   return (
-    <div className="p-4 sm:p-6 lg:p-8 max-w-5xl mx-auto space-y-6">
+    <div className="p-4 sm:p-6 lg:p-8 max-w-5xl mx-auto space-y-6 page-enter">
       <PageHeader
         title="Time-Travel"
         subtitle="Replay traces with point-in-time state restoration"
         icon={History}
         eyebrow="Observe"
+        actions={
+          recordingId ? (
+            <button
+              onClick={resetAll}
+              aria-label="Reset all time-travel state"
+              className="inline-flex items-center gap-2 px-3 py-2 bg-[var(--bg-tertiary)] text-[var(--text-primary)] rounded-lg text-sm font-medium hover:bg-[var(--border-default)] transition-colors"
+            >
+              <RotateCcw className="w-4 h-4" />
+              Reset
+            </button>
+          ) : undefined
+        }
       />
-        {recordingId && (
-          <button
-            onClick={resetAll}
-            className="inline-flex items-center gap-2 px-3 py-2 bg-[var(--bg-tertiary)] text-[var(--text-primary)] rounded-lg text-sm font-medium hover:bg-[var(--border-default)] transition-colors"
-          >
-            <RotateCcw className="w-4 h-4" />
-            Reset
-          </button>
-        )}
 
       <div className="bg-[var(--accent-faint)]/50 border border-[var(--accent)]/20 rounded-xl px-4 py-2.5 flex items-center gap-2 text-xs text-[var(--text-secondary)]">
         <Info className="w-3.5 h-3.5 text-[var(--accent)] flex-shrink-0" />
@@ -220,9 +210,12 @@ export default function TimeTravelPage() {
       </div>
 
       {error && (
-        <div className="bg-[var(--error-bg)] text-[var(--error)] text-sm px-4 py-3 rounded-xl flex items-center gap-2.5 border border-[var(--error)]/20">
-          {error}
-        </div>
+        <Alert
+          variant="error"
+          title="Request failed"
+          description={error}
+          onDismiss={() => setError("")}
+        />
       )}
 
       {/* Stepper indicator */}
@@ -271,6 +264,7 @@ export default function TimeTravelPage() {
               value={traceId}
               onChange={(e) => setTraceId(e.target.value)}
               placeholder="trace_abc123…"
+              aria-label="Trace ID to record"
               className="w-full px-3 py-2 bg-[var(--bg-secondary)] border border-[var(--border-default)] rounded-lg text-sm font-mono text-[var(--text-primary)] placeholder:text-[var(--text-muted)]"
             />
           </div>
@@ -317,6 +311,7 @@ export default function TimeTravelPage() {
               min={0}
               value={atStep}
               onChange={(e) => setAtStep(Number(e.target.value))}
+              aria-label="Step index to fork at"
               className="w-full px-3 py-2 bg-[var(--bg-secondary)] border border-[var(--border-default)] rounded-lg text-sm text-[var(--text-primary)]"
             />
           </div>
@@ -328,6 +323,7 @@ export default function TimeTravelPage() {
               value={editedState}
               onChange={(e) => setEditedState(e.target.value)}
               spellCheck={false}
+              aria-label="Edited state JSON"
               className="w-full min-h-[120px] px-3 py-2 bg-[var(--bg-secondary)] border border-[var(--border-default)] rounded-lg font-mono text-xs text-[var(--text-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--accent)]"
             />
           </div>
@@ -427,8 +423,7 @@ function Panel({
   active,
   done,
   disabled,
-  children,
-}: {
+  children }: {
   step: number;
   title: string;
   icon: React.ComponentType<{ className?: string }>;

@@ -1,0 +1,1430 @@
+{
+  "trace_id": "trace_multi_agent_handoff_01",
+  "archetype_id": "efficient-multi-agent-handoff",
+  "agent_id": "agent_efficient-multi-agent-handoff_01",
+  "event_count": 16,
+  "events": [
+    {
+      "event_id": "evt_tmulti_agent_handoff_01_0000",
+      "tenant_id": "org_eden_synth",
+      "project_id": "proj_synthetic_eval_v1",
+      "trace_id": "trace_multi_agent_handoff_01",
+      "realm": "production",
+      "agent_id": "agent_efficient-multi-agent-handoff_01",
+      "agent_version": "synth-v1.0.0",
+      "environment_id": "env_prod_main",
+      "tags": [],
+      "source_format": "eden_native",
+      "images": [],
+      "audio": [],
+      "citations": [],
+      "stop_sequence": null,
+      "system_fingerprint": "fp_synth-v1.0.0",
+      "event_type": "span.start",
+      "timestamp": "2026-06-28T12:00:00+00:00",
+      "parent_span_id": null,
+      "span_id": "spn_trace_multi_agent_handoff_01_0000",
+      "name": "trace",
+      "duration_ms": 0.0,
+      "payload": {},
+      "metrics": {},
+      "attributes": {
+        "environment": "production"
+      },
+      "outcome": null,
+      "request_body": null,
+      "response_body": null,
+      "reasoning": null,
+      "tool_calls_full": [],
+      "tool_results": [],
+      "logprobs": null,
+      "finish_reason": null,
+      "cache_hit": false,
+      "prompt_cache_savings_usd": 0.0,
+      "model_version": null,
+      "service_tier": null
+    },
+    {
+      "event_id": "evt_tmulti_agent_handoff_01_0001",
+      "tenant_id": "org_eden_synth",
+      "project_id": "proj_synthetic_eval_v1",
+      "trace_id": "trace_multi_agent_handoff_01",
+      "realm": "production",
+      "agent_id": "agent_efficient-multi-agent-handoff_01",
+      "agent_version": "synth-v1.0.0",
+      "environment_id": "env_prod_main",
+      "tags": [],
+      "source_format": "eden_native",
+      "images": [],
+      "audio": [],
+      "citations": [],
+      "stop_sequence": null,
+      "system_fingerprint": "fp_synth-v1.0.0",
+      "event_type": "llm.completion",
+      "timestamp": "2026-06-28T12:00:00.800000+00:00",
+      "parent_span_id": "spn_trace_multi_agent_handoff_01_0000",
+      "span_id": "spn_trace_multi_agent_handoff_01_0001",
+      "name": "llm.fast",
+      "duration_ms": 800.0,
+      "payload": {},
+      "metrics": {
+        "prompt_tokens": 50,
+        "completion_tokens": 20,
+        "total_tokens": 70,
+        "cost_usd": 1.9e-05,
+        "latency_ms": 800.0
+      },
+      "attributes": {
+        "model": "gpt-4o-mini",
+        "environment": "production",
+        "user_id": "user_synth_42",
+        "session_id": "sess_synth_42"
+      },
+      "outcome": "success",
+      "request_body": {
+        "model": "gpt-4o-mini",
+        "messages": [
+          {
+            "role": "user",
+            "content": "My invoice #2210 has the wrong VAT number."
+          }
+        ],
+        "temperature": 0.0
+      },
+      "response_body": {
+        "id": "cmpl-evt_cmpl_40817",
+        "model": "gpt-4o-mini",
+        "choices": [
+          {
+            "index": 0,
+            "finish_reason": "stop",
+            "message": {
+              "role": "assistant",
+              "content": "Routing to the billing agent.",
+              "tool_calls": [
+                {
+                  "id": "call_h_0001",
+                  "type": "function",
+                  "function": {
+                    "name": "agent.handoff",
+                    "arguments": "{\"to\": \"billing\"}"
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "usage": {
+          "prompt_tokens": 50,
+          "completion_tokens": 20,
+          "total_tokens": 70
+        }
+      },
+      "reasoning": null,
+      "tool_calls_full": [
+        {
+          "id": "call_h_0001",
+          "type": "function",
+          "function": {
+            "name": "agent.handoff",
+            "arguments": "{\"to\": \"billing\"}"
+          }
+        }
+      ],
+      "tool_results": [],
+      "logprobs": {
+        "content": [
+          [
+            {
+              "token": "Routing",
+              "logprob": -0.1,
+              "top_logprobs": []
+            }
+          ],
+          [
+            {
+              "token": "to",
+              "logprob": -0.1,
+              "top_logprobs": []
+            }
+          ],
+          [
+            {
+              "token": "the",
+              "logprob": -0.1,
+              "top_logprobs": []
+            }
+          ],
+          [
+            {
+              "token": "billing",
+              "logprob": -0.1,
+              "top_logprobs": []
+            }
+          ],
+          [
+            {
+              "token": "agent.",
+              "logprob": -0.1,
+              "top_logprobs": []
+            }
+          ]
+        ]
+      },
+      "finish_reason": "stop",
+      "cache_hit": false,
+      "prompt_cache_savings_usd": 0.0,
+      "model_version": "gpt-4o-mini",
+      "service_tier": "standard"
+    },
+    {
+      "event_id": "evt_tmulti_agent_handoff_01_0002",
+      "tenant_id": "org_eden_synth",
+      "project_id": "proj_synthetic_eval_v1",
+      "trace_id": "trace_multi_agent_handoff_01",
+      "realm": "production",
+      "agent_id": "agent_efficient-multi-agent-handoff_01",
+      "agent_version": "synth-v1.0.0",
+      "environment_id": "env_prod_main",
+      "tags": [],
+      "source_format": "eden_native",
+      "images": [],
+      "audio": [],
+      "citations": [],
+      "stop_sequence": null,
+      "system_fingerprint": "fp_synth-v1.0.0",
+      "event_type": "env.step",
+      "timestamp": "2026-06-28T12:00:00.840000+00:00",
+      "parent_span_id": "spn_trace_multi_agent_handoff_01_0000",
+      "span_id": "spn_trace_multi_agent_handoff_01_0002",
+      "name": "agent.handoff",
+      "duration_ms": 40.0,
+      "payload": {
+        "observation": "handed off billing -> billing context: invoice_id=2210"
+      },
+      "metrics": {
+        "latency_ms": 40.0
+      },
+      "attributes": {
+        "environment": "production"
+      },
+      "outcome": "success",
+      "request_body": null,
+      "response_body": null,
+      "reasoning": null,
+      "tool_calls_full": [],
+      "tool_results": [],
+      "logprobs": null,
+      "finish_reason": null,
+      "cache_hit": false,
+      "prompt_cache_savings_usd": 0.0,
+      "model_version": null,
+      "service_tier": null
+    },
+    {
+      "event_id": "evt_tmulti_agent_handoff_01_0003",
+      "tenant_id": "org_eden_synth",
+      "project_id": "proj_synthetic_eval_v1",
+      "trace_id": "trace_multi_agent_handoff_01",
+      "realm": "production",
+      "agent_id": "agent_efficient-multi-agent-handoff_01",
+      "agent_version": "synth-v1.0.0",
+      "environment_id": "env_prod_main",
+      "tags": [],
+      "source_format": "eden_native",
+      "images": [],
+      "audio": [],
+      "citations": [],
+      "stop_sequence": null,
+      "system_fingerprint": "fp_synth-v1.0.0",
+      "event_type": "llm.completion",
+      "timestamp": "2026-06-28T12:00:01.640000+00:00",
+      "parent_span_id": "spn_trace_multi_agent_handoff_01_0000",
+      "span_id": "spn_trace_multi_agent_handoff_01_0003",
+      "name": "llm.standard",
+      "duration_ms": 800.0,
+      "payload": {},
+      "metrics": {
+        "prompt_tokens": 50,
+        "completion_tokens": 20,
+        "total_tokens": 70,
+        "cost_usd": 0.000325,
+        "latency_ms": 800.0
+      },
+      "attributes": {
+        "model": "gpt-4o",
+        "environment": "production",
+        "user_id": "user_synth_42",
+        "session_id": "sess_synth_42"
+      },
+      "outcome": "success",
+      "request_body": {
+        "model": "gpt-4o",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Invoice 2210 \u2014 fix the VAT number."
+          }
+        ],
+        "temperature": 0.0
+      },
+      "response_body": {
+        "id": "cmpl-evt_cmpl_48773",
+        "model": "gpt-4o",
+        "choices": [
+          {
+            "index": 0,
+            "finish_reason": "stop",
+            "message": {
+              "role": "assistant",
+              "content": "Pulling the invoice.",
+              "tool_calls": [
+                {
+                  "id": "call_b_0002",
+                  "type": "function",
+                  "function": {
+                    "name": "billing.invoice_get",
+                    "arguments": "{\"id\": 2210}"
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "usage": {
+          "prompt_tokens": 50,
+          "completion_tokens": 20,
+          "total_tokens": 70
+        }
+      },
+      "reasoning": null,
+      "tool_calls_full": [
+        {
+          "id": "call_b_0002",
+          "type": "function",
+          "function": {
+            "name": "billing.invoice_get",
+            "arguments": "{\"id\": 2210}"
+          }
+        }
+      ],
+      "tool_results": [],
+      "logprobs": {
+        "content": [
+          [
+            {
+              "token": "Pulling",
+              "logprob": -0.1,
+              "top_logprobs": []
+            }
+          ],
+          [
+            {
+              "token": "the",
+              "logprob": -0.1,
+              "top_logprobs": []
+            }
+          ],
+          [
+            {
+              "token": "invoice.",
+              "logprob": -0.1,
+              "top_logprobs": []
+            }
+          ]
+        ]
+      },
+      "finish_reason": "stop",
+      "cache_hit": false,
+      "prompt_cache_savings_usd": 0.0,
+      "model_version": "gpt-4o",
+      "service_tier": "standard"
+    },
+    {
+      "event_id": "evt_tmulti_agent_handoff_01_0004",
+      "tenant_id": "org_eden_synth",
+      "project_id": "proj_synthetic_eval_v1",
+      "trace_id": "trace_multi_agent_handoff_01",
+      "realm": "production",
+      "agent_id": "agent_efficient-multi-agent-handoff_01",
+      "agent_version": "synth-v1.0.0",
+      "environment_id": "env_prod_main",
+      "tags": [],
+      "source_format": "eden_native",
+      "images": [],
+      "audio": [],
+      "citations": [],
+      "stop_sequence": null,
+      "system_fingerprint": "fp_synth-v1.0.0",
+      "event_type": "tool.call",
+      "timestamp": "2026-06-28T12:00:01.830000+00:00",
+      "parent_span_id": "spn_trace_multi_agent_handoff_01_0000",
+      "span_id": "spn_trace_multi_agent_handoff_01_0004",
+      "name": "billing.invoice_get",
+      "duration_ms": 190.0,
+      "payload": {},
+      "metrics": {
+        "latency_ms": 190.0,
+        "cost_usd": 0.0
+      },
+      "attributes": {
+        "environment": "production"
+      },
+      "outcome": "success",
+      "request_body": {
+        "tool": "billing.invoice_get",
+        "arguments": {
+          "id": 2210
+        }
+      },
+      "response_body": {
+        "result": {
+          "id": 2210,
+          "vat": "GB123",
+          "currency": "GBP",
+          "amount_cents": 49900
+        }
+      },
+      "reasoning": null,
+      "tool_calls_full": [
+        {
+          "tool_call_id": "call_billing.invoice_get_22671",
+          "type": "function",
+          "function": {
+            "name": "billing.invoice_get",
+            "arguments": "{\"id\": 2210}"
+          }
+        }
+      ],
+      "tool_results": [
+        {
+          "tool_call_id": "call_billing.invoice_get_22671",
+          "role": "tool",
+          "content": "{\"id\": 2210, \"vat\": \"GB123\", \"currency\": \"GBP\", \"amount_cents\": 49900}"
+        }
+      ],
+      "logprobs": null,
+      "finish_reason": null,
+      "cache_hit": false,
+      "prompt_cache_savings_usd": 0.0,
+      "model_version": null,
+      "service_tier": null
+    },
+    {
+      "event_id": "evt_tmulti_agent_handoff_01_0005",
+      "tenant_id": "org_eden_synth",
+      "project_id": "proj_synthetic_eval_v1",
+      "trace_id": "trace_multi_agent_handoff_01",
+      "realm": "production",
+      "agent_id": "agent_efficient-multi-agent-handoff_01",
+      "agent_version": "synth-v1.0.0",
+      "environment_id": "env_prod_main",
+      "tags": [],
+      "source_format": "eden_native",
+      "images": [],
+      "audio": [],
+      "citations": [],
+      "stop_sequence": null,
+      "system_fingerprint": "fp_synth-v1.0.0",
+      "event_type": "llm.completion",
+      "timestamp": "2026-06-28T12:00:02.630000+00:00",
+      "parent_span_id": "spn_trace_multi_agent_handoff_01_0000",
+      "span_id": "spn_trace_multi_agent_handoff_01_0005",
+      "name": "llm.standard",
+      "duration_ms": 800.0,
+      "payload": {},
+      "metrics": {
+        "prompt_tokens": 50,
+        "completion_tokens": 20,
+        "total_tokens": 70,
+        "cost_usd": 0.000325,
+        "latency_ms": 800.0
+      },
+      "attributes": {
+        "model": "gpt-4o",
+        "environment": "production",
+        "user_id": "user_synth_42",
+        "session_id": "sess_synth_42"
+      },
+      "outcome": "success",
+      "request_body": {
+        "model": "gpt-4o",
+        "messages": [
+          {
+            "role": "tool",
+            "tool_call_id": "call_b_0002",
+            "content": "vat=GB123, amount=49900"
+          }
+        ],
+        "temperature": 0.0
+      },
+      "response_body": {
+        "id": "cmpl-evt_cmpl_76718",
+        "model": "gpt-4o",
+        "choices": [
+          {
+            "index": 0,
+            "finish_reason": "stop",
+            "message": {
+              "role": "assistant",
+              "content": "What should the new VAT number be?",
+              "tool_calls": [
+                {
+                  "id": "call_a_0003",
+                  "type": "function",
+                  "function": {
+                    "name": "user.ask",
+                    "arguments": "{}"
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "usage": {
+          "prompt_tokens": 50,
+          "completion_tokens": 20,
+          "total_tokens": 70
+        }
+      },
+      "reasoning": null,
+      "tool_calls_full": [
+        {
+          "id": "call_a_0003",
+          "type": "function",
+          "function": {
+            "name": "user.ask",
+            "arguments": "{}"
+          }
+        }
+      ],
+      "tool_results": [],
+      "logprobs": {
+        "content": [
+          [
+            {
+              "token": "What",
+              "logprob": -0.1,
+              "top_logprobs": []
+            }
+          ],
+          [
+            {
+              "token": "should",
+              "logprob": -0.1,
+              "top_logprobs": []
+            }
+          ],
+          [
+            {
+              "token": "the",
+              "logprob": -0.1,
+              "top_logprobs": []
+            }
+          ],
+          [
+            {
+              "token": "new",
+              "logprob": -0.1,
+              "top_logprobs": []
+            }
+          ],
+          [
+            {
+              "token": "VAT",
+              "logprob": -0.1,
+              "top_logprobs": []
+            }
+          ],
+          [
+            {
+              "token": "number",
+              "logprob": -0.1,
+              "top_logprobs": []
+            }
+          ],
+          [
+            {
+              "token": "be?",
+              "logprob": -0.1,
+              "top_logprobs": []
+            }
+          ]
+        ]
+      },
+      "finish_reason": "stop",
+      "cache_hit": false,
+      "prompt_cache_savings_usd": 0.0,
+      "model_version": "gpt-4o",
+      "service_tier": "standard"
+    },
+    {
+      "event_id": "evt_tmulti_agent_handoff_01_0006",
+      "tenant_id": "org_eden_synth",
+      "project_id": "proj_synthetic_eval_v1",
+      "trace_id": "trace_multi_agent_handoff_01",
+      "realm": "production",
+      "agent_id": "agent_efficient-multi-agent-handoff_01",
+      "agent_version": "synth-v1.0.0",
+      "environment_id": "env_prod_main",
+      "tags": [],
+      "source_format": "eden_native",
+      "images": [],
+      "audio": [],
+      "citations": [],
+      "stop_sequence": null,
+      "system_fingerprint": "fp_synth-v1.0.0",
+      "event_type": "env.step",
+      "timestamp": "2026-06-28T12:00:02.670000+00:00",
+      "parent_span_id": "spn_trace_multi_agent_handoff_01_0000",
+      "span_id": "spn_trace_multi_agent_handoff_01_0006",
+      "name": "user.ask",
+      "duration_ms": 40.0,
+      "payload": {
+        "observation": "user: GB987654321"
+      },
+      "metrics": {
+        "latency_ms": 40.0
+      },
+      "attributes": {
+        "environment": "production"
+      },
+      "outcome": "success",
+      "request_body": null,
+      "response_body": null,
+      "reasoning": null,
+      "tool_calls_full": [],
+      "tool_results": [],
+      "logprobs": null,
+      "finish_reason": null,
+      "cache_hit": false,
+      "prompt_cache_savings_usd": 0.0,
+      "model_version": null,
+      "service_tier": null
+    },
+    {
+      "event_id": "evt_tmulti_agent_handoff_01_0007",
+      "tenant_id": "org_eden_synth",
+      "project_id": "proj_synthetic_eval_v1",
+      "trace_id": "trace_multi_agent_handoff_01",
+      "realm": "production",
+      "agent_id": "agent_efficient-multi-agent-handoff_01",
+      "agent_version": "synth-v1.0.0",
+      "environment_id": "env_prod_main",
+      "tags": [],
+      "source_format": "eden_native",
+      "images": [],
+      "audio": [],
+      "citations": [],
+      "stop_sequence": null,
+      "system_fingerprint": "fp_synth-v1.0.0",
+      "event_type": "llm.completion",
+      "timestamp": "2026-06-28T12:00:03.470000+00:00",
+      "parent_span_id": "spn_trace_multi_agent_handoff_01_0000",
+      "span_id": "spn_trace_multi_agent_handoff_01_0007",
+      "name": "llm.standard",
+      "duration_ms": 800.0,
+      "payload": {},
+      "metrics": {
+        "prompt_tokens": 50,
+        "completion_tokens": 20,
+        "total_tokens": 70,
+        "cost_usd": 0.000325,
+        "latency_ms": 800.0
+      },
+      "attributes": {
+        "model": "gpt-4o",
+        "environment": "production",
+        "user_id": "user_synth_42",
+        "session_id": "sess_synth_42"
+      },
+      "outcome": "success",
+      "request_body": {
+        "model": "gpt-4o",
+        "messages": [
+          {
+            "role": "user",
+            "content": "GB987654321"
+          }
+        ],
+        "temperature": 0.0
+      },
+      "response_body": {
+        "id": "cmpl-evt_cmpl_99174",
+        "model": "gpt-4o",
+        "choices": [
+          {
+            "index": 0,
+            "finish_reason": "stop",
+            "message": {
+              "role": "assistant",
+              "content": "Updating and reissuing.",
+              "tool_calls": [
+                {
+                  "id": "call_b_0004",
+                  "type": "function",
+                  "function": {
+                    "name": "billing.invoice_update",
+                    "arguments": "{\"id\": 2210, \"vat\": \"GB987654321\"}"
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "usage": {
+          "prompt_tokens": 50,
+          "completion_tokens": 20,
+          "total_tokens": 70
+        }
+      },
+      "reasoning": null,
+      "tool_calls_full": [
+        {
+          "id": "call_b_0004",
+          "type": "function",
+          "function": {
+            "name": "billing.invoice_update",
+            "arguments": "{\"id\": 2210, \"vat\": \"GB987654321\"}"
+          }
+        }
+      ],
+      "tool_results": [],
+      "logprobs": {
+        "content": [
+          [
+            {
+              "token": "Updating",
+              "logprob": -0.1,
+              "top_logprobs": []
+            }
+          ],
+          [
+            {
+              "token": "and",
+              "logprob": -0.1,
+              "top_logprobs": []
+            }
+          ],
+          [
+            {
+              "token": "reissuing.",
+              "logprob": -0.1,
+              "top_logprobs": []
+            }
+          ]
+        ]
+      },
+      "finish_reason": "stop",
+      "cache_hit": false,
+      "prompt_cache_savings_usd": 0.0,
+      "model_version": "gpt-4o",
+      "service_tier": "standard"
+    },
+    {
+      "event_id": "evt_tmulti_agent_handoff_01_0008",
+      "tenant_id": "org_eden_synth",
+      "project_id": "proj_synthetic_eval_v1",
+      "trace_id": "trace_multi_agent_handoff_01",
+      "realm": "production",
+      "agent_id": "agent_efficient-multi-agent-handoff_01",
+      "agent_version": "synth-v1.0.0",
+      "environment_id": "env_prod_main",
+      "tags": [],
+      "source_format": "eden_native",
+      "images": [],
+      "audio": [],
+      "citations": [],
+      "stop_sequence": null,
+      "system_fingerprint": "fp_synth-v1.0.0",
+      "event_type": "tool.call",
+      "timestamp": "2026-06-28T12:00:03.710000+00:00",
+      "parent_span_id": "spn_trace_multi_agent_handoff_01_0000",
+      "span_id": "spn_trace_multi_agent_handoff_01_0008",
+      "name": "billing.invoice_update",
+      "duration_ms": 240.0,
+      "payload": {},
+      "metrics": {
+        "latency_ms": 240.0,
+        "cost_usd": 0.0
+      },
+      "attributes": {
+        "environment": "production"
+      },
+      "outcome": "success",
+      "request_body": {
+        "tool": "billing.invoice_update",
+        "arguments": {
+          "id": 2210,
+          "vat": "GB987654321"
+        }
+      },
+      "response_body": {
+        "result": {
+          "id": 2210,
+          "status": "updated"
+        }
+      },
+      "reasoning": null,
+      "tool_calls_full": [
+        {
+          "tool_call_id": "call_billing.invoice_update_14564",
+          "type": "function",
+          "function": {
+            "name": "billing.invoice_update",
+            "arguments": "{\"id\": 2210, \"vat\": \"GB987654321\"}"
+          }
+        }
+      ],
+      "tool_results": [
+        {
+          "tool_call_id": "call_billing.invoice_update_14564",
+          "role": "tool",
+          "content": "{\"id\": 2210, \"status\": \"updated\"}"
+        }
+      ],
+      "logprobs": null,
+      "finish_reason": null,
+      "cache_hit": false,
+      "prompt_cache_savings_usd": 0.0,
+      "model_version": null,
+      "service_tier": null
+    },
+    {
+      "event_id": "evt_tmulti_agent_handoff_01_0009",
+      "tenant_id": "org_eden_synth",
+      "project_id": "proj_synthetic_eval_v1",
+      "trace_id": "trace_multi_agent_handoff_01",
+      "realm": "production",
+      "agent_id": "agent_efficient-multi-agent-handoff_01",
+      "agent_version": "synth-v1.0.0",
+      "environment_id": "env_prod_main",
+      "tags": [],
+      "source_format": "eden_native",
+      "images": [],
+      "audio": [],
+      "citations": [],
+      "stop_sequence": null,
+      "system_fingerprint": "fp_synth-v1.0.0",
+      "event_type": "llm.completion",
+      "timestamp": "2026-06-28T12:00:04.510000+00:00",
+      "parent_span_id": "spn_trace_multi_agent_handoff_01_0000",
+      "span_id": "spn_trace_multi_agent_handoff_01_0009",
+      "name": "llm.standard",
+      "duration_ms": 800.0,
+      "payload": {},
+      "metrics": {
+        "prompt_tokens": 50,
+        "completion_tokens": 20,
+        "total_tokens": 70,
+        "cost_usd": 0.000325,
+        "latency_ms": 800.0
+      },
+      "attributes": {
+        "model": "gpt-4o",
+        "environment": "production",
+        "user_id": "user_synth_42",
+        "session_id": "sess_synth_42"
+      },
+      "outcome": "success",
+      "request_body": {
+        "model": "gpt-4o",
+        "messages": [
+          {
+            "role": "tool",
+            "tool_call_id": "call_b_0004",
+            "content": "updated"
+          }
+        ],
+        "temperature": 0.0
+      },
+      "response_body": {
+        "id": "cmpl-evt_cmpl_59100",
+        "model": "gpt-4o",
+        "choices": [
+          {
+            "index": 0,
+            "finish_reason": "stop",
+            "message": {
+              "role": "assistant",
+              "content": "Now sending the corrected PDF via the documents agent.",
+              "tool_calls": [
+                {
+                  "id": "call_h_0005",
+                  "type": "function",
+                  "function": {
+                    "name": "agent.handoff",
+                    "arguments": "{\"to\": \"documents\"}"
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "usage": {
+          "prompt_tokens": 50,
+          "completion_tokens": 20,
+          "total_tokens": 70
+        }
+      },
+      "reasoning": null,
+      "tool_calls_full": [
+        {
+          "id": "call_h_0005",
+          "type": "function",
+          "function": {
+            "name": "agent.handoff",
+            "arguments": "{\"to\": \"documents\"}"
+          }
+        }
+      ],
+      "tool_results": [],
+      "logprobs": {
+        "content": [
+          [
+            {
+              "token": "Now",
+              "logprob": -0.1,
+              "top_logprobs": []
+            }
+          ],
+          [
+            {
+              "token": "sending",
+              "logprob": -0.1,
+              "top_logprobs": []
+            }
+          ],
+          [
+            {
+              "token": "the",
+              "logprob": -0.1,
+              "top_logprobs": []
+            }
+          ],
+          [
+            {
+              "token": "corrected",
+              "logprob": -0.1,
+              "top_logprobs": []
+            }
+          ],
+          [
+            {
+              "token": "PDF",
+              "logprob": -0.1,
+              "top_logprobs": []
+            }
+          ],
+          [
+            {
+              "token": "via",
+              "logprob": -0.1,
+              "top_logprobs": []
+            }
+          ],
+          [
+            {
+              "token": "the",
+              "logprob": -0.1,
+              "top_logprobs": []
+            }
+          ],
+          [
+            {
+              "token": "documents",
+              "logprob": -0.1,
+              "top_logprobs": []
+            }
+          ],
+          [
+            {
+              "token": "agent.",
+              "logprob": -0.1,
+              "top_logprobs": []
+            }
+          ]
+        ]
+      },
+      "finish_reason": "stop",
+      "cache_hit": false,
+      "prompt_cache_savings_usd": 0.0,
+      "model_version": "gpt-4o",
+      "service_tier": "standard"
+    },
+    {
+      "event_id": "evt_tmulti_agent_handoff_01_0010",
+      "tenant_id": "org_eden_synth",
+      "project_id": "proj_synthetic_eval_v1",
+      "trace_id": "trace_multi_agent_handoff_01",
+      "realm": "production",
+      "agent_id": "agent_efficient-multi-agent-handoff_01",
+      "agent_version": "synth-v1.0.0",
+      "environment_id": "env_prod_main",
+      "tags": [],
+      "source_format": "eden_native",
+      "images": [],
+      "audio": [],
+      "citations": [],
+      "stop_sequence": null,
+      "system_fingerprint": "fp_synth-v1.0.0",
+      "event_type": "env.step",
+      "timestamp": "2026-06-28T12:00:04.550000+00:00",
+      "parent_span_id": "spn_trace_multi_agent_handoff_01_0000",
+      "span_id": "spn_trace_multi_agent_handoff_01_0010",
+      "name": "agent.handoff",
+      "duration_ms": 40.0,
+      "payload": {
+        "observation": "handed off documents -> context: invoice_id=2210"
+      },
+      "metrics": {
+        "latency_ms": 40.0
+      },
+      "attributes": {
+        "environment": "production"
+      },
+      "outcome": "success",
+      "request_body": null,
+      "response_body": null,
+      "reasoning": null,
+      "tool_calls_full": [],
+      "tool_results": [],
+      "logprobs": null,
+      "finish_reason": null,
+      "cache_hit": false,
+      "prompt_cache_savings_usd": 0.0,
+      "model_version": null,
+      "service_tier": null
+    },
+    {
+      "event_id": "evt_tmulti_agent_handoff_01_0011",
+      "tenant_id": "org_eden_synth",
+      "project_id": "proj_synthetic_eval_v1",
+      "trace_id": "trace_multi_agent_handoff_01",
+      "realm": "production",
+      "agent_id": "agent_efficient-multi-agent-handoff_01",
+      "agent_version": "synth-v1.0.0",
+      "environment_id": "env_prod_main",
+      "tags": [],
+      "source_format": "eden_native",
+      "images": [],
+      "audio": [],
+      "citations": [],
+      "stop_sequence": null,
+      "system_fingerprint": "fp_synth-v1.0.0",
+      "event_type": "llm.completion",
+      "timestamp": "2026-06-28T12:00:05.350000+00:00",
+      "parent_span_id": "spn_trace_multi_agent_handoff_01_0000",
+      "span_id": "spn_trace_multi_agent_handoff_01_0011",
+      "name": "llm.standard",
+      "duration_ms": 800.0,
+      "payload": {},
+      "metrics": {
+        "prompt_tokens": 50,
+        "completion_tokens": 20,
+        "total_tokens": 70,
+        "cost_usd": 0.000325,
+        "latency_ms": 800.0
+      },
+      "attributes": {
+        "model": "gpt-4o",
+        "environment": "production",
+        "user_id": "user_synth_42",
+        "session_id": "sess_synth_42"
+      },
+      "outcome": "success",
+      "request_body": {
+        "model": "gpt-4o",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Reissue invoice 2210 with VAT GB987654321."
+          }
+        ],
+        "temperature": 0.0
+      },
+      "response_body": {
+        "id": "cmpl-evt_cmpl_74237",
+        "model": "gpt-4o",
+        "choices": [
+          {
+            "index": 0,
+            "finish_reason": "stop",
+            "message": {
+              "role": "assistant",
+              "content": "Rendering.",
+              "tool_calls": [
+                {
+                  "id": "call_d_0006",
+                  "type": "function",
+                  "function": {
+                    "name": "docs.invoice_render",
+                    "arguments": "{\"id\": 2210}"
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "usage": {
+          "prompt_tokens": 50,
+          "completion_tokens": 20,
+          "total_tokens": 70
+        }
+      },
+      "reasoning": null,
+      "tool_calls_full": [
+        {
+          "id": "call_d_0006",
+          "type": "function",
+          "function": {
+            "name": "docs.invoice_render",
+            "arguments": "{\"id\": 2210}"
+          }
+        }
+      ],
+      "tool_results": [],
+      "logprobs": {
+        "content": [
+          [
+            {
+              "token": "Rendering.",
+              "logprob": -0.1,
+              "top_logprobs": []
+            }
+          ]
+        ]
+      },
+      "finish_reason": "stop",
+      "cache_hit": false,
+      "prompt_cache_savings_usd": 0.0,
+      "model_version": "gpt-4o",
+      "service_tier": "standard"
+    },
+    {
+      "event_id": "evt_tmulti_agent_handoff_01_0012",
+      "tenant_id": "org_eden_synth",
+      "project_id": "proj_synthetic_eval_v1",
+      "trace_id": "trace_multi_agent_handoff_01",
+      "realm": "production",
+      "agent_id": "agent_efficient-multi-agent-handoff_01",
+      "agent_version": "synth-v1.0.0",
+      "environment_id": "env_prod_main",
+      "tags": [],
+      "source_format": "eden_native",
+      "images": [],
+      "audio": [],
+      "citations": [],
+      "stop_sequence": null,
+      "system_fingerprint": "fp_synth-v1.0.0",
+      "event_type": "tool.call",
+      "timestamp": "2026-06-28T12:00:05.770000+00:00",
+      "parent_span_id": "spn_trace_multi_agent_handoff_01_0000",
+      "span_id": "spn_trace_multi_agent_handoff_01_0012",
+      "name": "docs.invoice_render",
+      "duration_ms": 420.0,
+      "payload": {},
+      "metrics": {
+        "latency_ms": 420.0,
+        "cost_usd": 0.0
+      },
+      "attributes": {
+        "environment": "production"
+      },
+      "outcome": "success",
+      "request_body": {
+        "tool": "docs.invoice_render",
+        "arguments": {
+          "id": 2210
+        }
+      },
+      "response_body": {
+        "result": {
+          "pdf_url": "https://cdn.eden/inv_2210_v2.pdf",
+          "sha256": "5b4e..."
+        }
+      },
+      "reasoning": null,
+      "tool_calls_full": [
+        {
+          "tool_call_id": "call_docs.invoice_render_76312",
+          "type": "function",
+          "function": {
+            "name": "docs.invoice_render",
+            "arguments": "{\"id\": 2210}"
+          }
+        }
+      ],
+      "tool_results": [
+        {
+          "tool_call_id": "call_docs.invoice_render_76312",
+          "role": "tool",
+          "content": "{\"pdf_url\": \"https://cdn.eden/inv_2210_v2.pdf\", \"sha256\": \"5b4e...\"}"
+        }
+      ],
+      "logprobs": null,
+      "finish_reason": null,
+      "cache_hit": false,
+      "prompt_cache_savings_usd": 0.0,
+      "model_version": null,
+      "service_tier": null
+    },
+    {
+      "event_id": "evt_tmulti_agent_handoff_01_0013",
+      "tenant_id": "org_eden_synth",
+      "project_id": "proj_synthetic_eval_v1",
+      "trace_id": "trace_multi_agent_handoff_01",
+      "realm": "production",
+      "agent_id": "agent_efficient-multi-agent-handoff_01",
+      "agent_version": "synth-v1.0.0",
+      "environment_id": "env_prod_main",
+      "tags": [],
+      "source_format": "eden_native",
+      "images": [],
+      "audio": [],
+      "citations": [],
+      "stop_sequence": null,
+      "system_fingerprint": "fp_synth-v1.0.0",
+      "event_type": "llm.completion",
+      "timestamp": "2026-06-28T12:00:06.570000+00:00",
+      "parent_span_id": "spn_trace_multi_agent_handoff_01_0000",
+      "span_id": "spn_trace_multi_agent_handoff_01_0013",
+      "name": "llm.standard",
+      "duration_ms": 800.0,
+      "payload": {},
+      "metrics": {
+        "prompt_tokens": 50,
+        "completion_tokens": 20,
+        "total_tokens": 70,
+        "cost_usd": 0.000325,
+        "latency_ms": 800.0
+      },
+      "attributes": {
+        "model": "gpt-4o",
+        "environment": "production",
+        "user_id": "user_synth_42",
+        "session_id": "sess_synth_42"
+      },
+      "outcome": "success",
+      "request_body": {
+        "model": "gpt-4o",
+        "messages": [
+          {
+            "role": "tool",
+            "tool_call_id": "call_d_0006",
+            "content": "pdf_url=https://cdn.eden/inv_2210_v2.pdf"
+          }
+        ],
+        "temperature": 0.0
+      },
+      "response_body": {
+        "id": "cmpl-evt_cmpl_46562",
+        "model": "gpt-4o",
+        "choices": [
+          {
+            "index": 0,
+            "finish_reason": "stop",
+            "message": {
+              "role": "assistant",
+              "content": "Emailing the new invoice to you now.",
+              "tool_calls": [
+                {
+                  "id": "call_d_0007",
+                  "type": "function",
+                  "function": {
+                    "name": "mail.send",
+                    "arguments": "{\"to\": \"user@example.com\", \"attachment\": \"inv_2210_v2.pdf\"}"
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "usage": {
+          "prompt_tokens": 50,
+          "completion_tokens": 20,
+          "total_tokens": 70
+        }
+      },
+      "reasoning": null,
+      "tool_calls_full": [
+        {
+          "id": "call_d_0007",
+          "type": "function",
+          "function": {
+            "name": "mail.send",
+            "arguments": "{\"to\": \"user@example.com\", \"attachment\": \"inv_2210_v2.pdf\"}"
+          }
+        }
+      ],
+      "tool_results": [],
+      "logprobs": {
+        "content": [
+          [
+            {
+              "token": "Emailing",
+              "logprob": -0.1,
+              "top_logprobs": []
+            }
+          ],
+          [
+            {
+              "token": "the",
+              "logprob": -0.1,
+              "top_logprobs": []
+            }
+          ],
+          [
+            {
+              "token": "new",
+              "logprob": -0.1,
+              "top_logprobs": []
+            }
+          ],
+          [
+            {
+              "token": "invoice",
+              "logprob": -0.1,
+              "top_logprobs": []
+            }
+          ],
+          [
+            {
+              "token": "to",
+              "logprob": -0.1,
+              "top_logprobs": []
+            }
+          ],
+          [
+            {
+              "token": "you",
+              "logprob": -0.1,
+              "top_logprobs": []
+            }
+          ],
+          [
+            {
+              "token": "now.",
+              "logprob": -0.1,
+              "top_logprobs": []
+            }
+          ]
+        ]
+      },
+      "finish_reason": "stop",
+      "cache_hit": false,
+      "prompt_cache_savings_usd": 0.0,
+      "model_version": "gpt-4o",
+      "service_tier": "standard"
+    },
+    {
+      "event_id": "evt_tmulti_agent_handoff_01_0014",
+      "tenant_id": "org_eden_synth",
+      "project_id": "proj_synthetic_eval_v1",
+      "trace_id": "trace_multi_agent_handoff_01",
+      "realm": "production",
+      "agent_id": "agent_efficient-multi-agent-handoff_01",
+      "agent_version": "synth-v1.0.0",
+      "environment_id": "env_prod_main",
+      "tags": [],
+      "source_format": "eden_native",
+      "images": [],
+      "audio": [],
+      "citations": [],
+      "stop_sequence": null,
+      "system_fingerprint": "fp_synth-v1.0.0",
+      "event_type": "tool.call",
+      "timestamp": "2026-06-28T12:00:06.750000+00:00",
+      "parent_span_id": "spn_trace_multi_agent_handoff_01_0000",
+      "span_id": "spn_trace_multi_agent_handoff_01_0014",
+      "name": "mail.send",
+      "duration_ms": 180.0,
+      "payload": {},
+      "metrics": {
+        "latency_ms": 180.0,
+        "cost_usd": 0.0
+      },
+      "attributes": {
+        "environment": "production"
+      },
+      "outcome": "success",
+      "request_body": {
+        "tool": "mail.send",
+        "arguments": {
+          "to": "user@example.com",
+          "attachment": "inv_2210_v2.pdf"
+        }
+      },
+      "response_body": {
+        "result": {
+          "sent": true,
+          "message_id": "msg_8821"
+        }
+      },
+      "reasoning": null,
+      "tool_calls_full": [
+        {
+          "tool_call_id": "call_mail.send_10398",
+          "type": "function",
+          "function": {
+            "name": "mail.send",
+            "arguments": "{\"to\": \"user@example.com\", \"attachment\": \"inv_2210_v2.pdf\"}"
+          }
+        }
+      ],
+      "tool_results": [
+        {
+          "tool_call_id": "call_mail.send_10398",
+          "role": "tool",
+          "content": "{\"sent\": true, \"message_id\": \"msg_8821\"}"
+        }
+      ],
+      "logprobs": null,
+      "finish_reason": null,
+      "cache_hit": false,
+      "prompt_cache_savings_usd": 0.0,
+      "model_version": null,
+      "service_tier": null
+    },
+    {
+      "event_id": "evt_tmulti_agent_handoff_01_0015",
+      "tenant_id": "org_eden_synth",
+      "project_id": "proj_synthetic_eval_v1",
+      "trace_id": "trace_multi_agent_handoff_01",
+      "realm": "production",
+      "agent_id": "agent_efficient-multi-agent-handoff_01",
+      "agent_version": "synth-v1.0.0",
+      "environment_id": "env_prod_main",
+      "tags": [],
+      "source_format": "eden_native",
+      "images": [],
+      "audio": [],
+      "citations": [],
+      "stop_sequence": null,
+      "system_fingerprint": "fp_synth-v1.0.0",
+      "event_type": "span.end",
+      "timestamp": "2026-06-28T12:00:06.750000+00:00",
+      "parent_span_id": null,
+      "span_id": "spn_trace_multi_agent_handoff_01_0000",
+      "name": "trace",
+      "duration_ms": 6750.0,
+      "payload": {},
+      "metrics": {},
+      "attributes": {
+        "environment": "production"
+      },
+      "outcome": "success",
+      "request_body": null,
+      "response_body": null,
+      "reasoning": null,
+      "tool_calls_full": [],
+      "tool_results": [],
+      "logprobs": null,
+      "finish_reason": null,
+      "cache_hit": false,
+      "prompt_cache_savings_usd": 0.0,
+      "model_version": null,
+      "service_tier": null
+    }
+  ]
+}

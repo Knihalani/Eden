@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { api } from "@/lib/api";
-import { Loader2, Mail, AlertCircle, CheckCircle, ArrowLeft } from "lucide-react";
+import { Mail, AlertCircle, CheckCircle, ArrowLeft } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -35,6 +35,9 @@ export default function ForgotPasswordPage() {
       await api.forgotPassword({ email });
       setSubmitted(true);
     } catch (err) {
+      // Strongly-typed catch: instanceof Error guard, fallback to a
+      // friendly string for non-Error throws (e.g. API client
+      // surface that stringifies the network error).
       setError(err instanceof Error ? err.message : "Request failed");
     } finally {
       setLoading(false);
@@ -51,8 +54,12 @@ export default function ForgotPasswordPage() {
       >
         {submitted ? (
           <div className="space-y-5">
-            <div className="bg-[var(--success-bg)] text-[var(--success)] text-sm px-4 py-3 rounded-xl flex items-center gap-2.5 border border-[var(--success)]/20">
-              <CheckCircle className="w-4 h-4 flex-shrink-0" />
+            <div
+              role="status"
+              aria-live="polite"
+              className="bg-[var(--terminal-faint)] text-[var(--terminal)] text-sm px-4 py-3 rounded-xl flex items-center gap-2.5 border border-[var(--terminal)]/20"
+            >
+              <CheckCircle className="w-4 h-4 flex-shrink-0" aria-hidden="true" />
               <span>
                 If an account exists with this email, you will receive a password reset link shortly.
               </span>
@@ -64,15 +71,18 @@ export default function ForgotPasswordPage() {
               href="/sign-in"
               className="inline-flex items-center gap-2 text-sm text-[var(--accent)] hover:underline font-medium"
             >
-              <ArrowLeft className="w-4 h-4" />
+              <ArrowLeft className="w-4 h-4" aria-hidden="true" />
               Back to login
             </Link>
           </div>
         ) : (
-          <form onSubmit={handleSubmit} className="space-y-5">
+          <form onSubmit={handleSubmit} className="space-y-5" noValidate>
             {error && (
-              <div className="bg-[var(--error-bg)] text-[var(--error)] text-sm px-4 py-3 rounded-xl flex items-center gap-2.5 border border-[var(--error)]/20">
-                <AlertCircle className="w-4 h-4 flex-shrink-0" />
+              <div
+                role="alert"
+                className="bg-[var(--error-dim)] text-[var(--error)] text-sm px-4 py-3 rounded-xl flex items-center gap-2.5 border border-[var(--error)]/20"
+              >
+                <AlertCircle className="w-4 h-4 flex-shrink-0" aria-hidden="true" />
                 {error}
               </div>
             )}
@@ -82,7 +92,10 @@ export default function ForgotPasswordPage() {
                 Email
               </label>
               <div className="relative">
-                <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-muted)] z-10" />
+                <Mail
+                  className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-muted)] z-10"
+                  aria-hidden="true"
+                />
                 <Input
                   type="email"
                   value={email}
@@ -90,6 +103,13 @@ export default function ForgotPasswordPage() {
                   onBlur={() => setTouched(true)}
                   required
                   id="email"
+                  name="email"
+                  autoComplete="email"
+                  inputMode="email"
+                  aria-invalid={touched && emailValidation === "invalid" ? "true" : "false"}
+                  aria-describedby={
+                    touched && emailValidation === "invalid" ? "email-error" : undefined
+                  }
                   className={cn(
                     "pl-11 pr-10 h-11",
                     touched && emailValidation === "invalid" && "border-[var(--error)] focus:ring-[var(--error)]"
@@ -97,11 +117,16 @@ export default function ForgotPasswordPage() {
                   placeholder="you@example.com"
                 />
                 {touched && emailValidation === "valid" && (
-                  <CheckCircle className="absolute right-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--success)]" />
+                  <CheckCircle
+                    aria-hidden="true"
+                    className="absolute right-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--terminal)]"
+                  />
                 )}
               </div>
               {touched && emailValidation === "invalid" && (
-                <p className="text-xs text-[var(--error)]">Enter a valid email address</p>
+                <p id="email-error" className="text-xs text-[var(--error)]">
+                  Enter a valid email address
+                </p>
               )}
             </div>
 
@@ -109,8 +134,10 @@ export default function ForgotPasswordPage() {
               type="submit"
               className="w-full h-11 text-sm font-semibold"
               disabled={loading || (touched && emailValidation === "invalid")}
+              loading={loading}
+              aria-label="Send password reset link"
             >
-              {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : "Send reset link"}
+              {loading ? "Sending reset link…" : "Send reset link"}
             </Button>
 
             <p className="text-center text-sm text-[var(--text-secondary)]">

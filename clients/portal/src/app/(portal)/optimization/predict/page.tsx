@@ -1,23 +1,22 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import {
-  Loader2,
-  AlertTriangle,
-  Sparkles,
-  ShieldAlert,
-  Activity,
-} from "lucide-react";
+import { Loader2, Sparkles, ShieldAlert, Activity, TrendingUp } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
-import { EmptyState } from "@/components/ui/empty-state";
+import { DataTable } from "@/components/ui/data-table";
+;
+import { ErrorState } from "@/components/ui/error-state";
 import { StatCard } from "@/components/ui/stat-card";
+import { PageHeader } from "@/components/layout/page-header";
+;
 import { useOrg } from "@/hooks/use-org";
 import { predictiveApi } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { EmptyState } from "@/components/ui/empty-state";
+import { NoOrgState } from "@/components/ui/no-org-state";
 
 /* ----------------------- Helpers -------------------------------------- */
 
@@ -40,8 +39,7 @@ function ForecastLine({
   data,
   unit = "value",
   height = 220,
-  color = "var(--accent)",
-}: {
+  color = "var(--accent)" }: {
   data: Array<{ date: string; median: number; ci_95_low: number; ci_95_high: number }>;
   unit?: "value" | "usd";
   height?: number;
@@ -165,13 +163,13 @@ function QualityTab() {
 
   if (loading) {
     return (
-      <div className="flex h-48 items-center justify-center">
+      <div className="flex h-48 items-center justify-center" role="status" aria-live="polite">
         <Loader2 className="h-5 w-5 animate-spin text-[var(--text-muted)]" />
       </div>
     );
   }
   if (error) {
-    return <EmptyState icon={AlertTriangle} title="Could not load quality forecast" description={error} size="md" />;
+    return <ErrorState title="Could not load quality forecast" message={error} />;
   }
   return (
     <Card>
@@ -226,7 +224,7 @@ function CostTab() {
     );
   }
   if (error) {
-    return <EmptyState icon={AlertTriangle} title="Could not load cost forecast" description={error} size="md" />;
+    return <ErrorState title="Could not load cost forecast" message={error} />;
   }
   return (
     <Card>
@@ -268,8 +266,7 @@ function CapacityTab() {
         const baseScenarios = res.scenarios ?? {};
         setScenarios({
           ...baseScenarios,
-          [`growth_${growth}pct`]: scaleScenario(baseScenarios, growth / 100),
-        });
+          [`growth_${growth}pct`]: scaleScenario(baseScenarios, growth / 100) });
       })
       .catch((e: unknown) => {
         if (cancelled) return;
@@ -297,6 +294,9 @@ function CapacityTab() {
               type="number"
               value={growth}
               onChange={(e) => setGrowth(Math.max(0, Math.min(500, Number(e.target.value) || 0)))}
+              aria-label="Growth percentage"
+              min={0}
+              max={500}
               className="w-20 rounded-md border border-[var(--border-default)] bg-[var(--bg-tertiary)] px-2 py-1 text-sm text-[var(--text-primary)] focus:border-[var(--accent)] focus:outline-none"
             />
           </label>
@@ -308,7 +308,7 @@ function CapacityTab() {
             <Loader2 className="h-5 w-5 animate-spin text-[var(--text-muted)]" />
           </div>
         ) : error ? (
-          <EmptyState icon={AlertTriangle} title="Could not load capacity" description={error} size="md" />
+          <ErrorState title="Could not load capacity" message={error} />
         ) : (
           <>
             <DataTable
@@ -331,8 +331,7 @@ function CapacityTab() {
                     date: p.date,
                     median: p.gpu_hours,
                     ci_95_low: p.gpu_hours * 0.9,
-                    ci_95_high: p.gpu_hours * 1.1,
-                  }))}
+                    ci_95_high: p.gpu_hours * 1.1 }))}
                   color="var(--terminal)"
                 />
               </div>
@@ -420,7 +419,7 @@ function DriftTab() {
     );
   }
   if (error) {
-    return <EmptyState icon={AlertTriangle} title="Could not load drift" description={error} size="md" />;
+    return <ErrorState title="Could not load drift" message={error} />;
   }
 
   return (
@@ -464,8 +463,7 @@ function DriftTab() {
                   <span className="font-mono text-xs text-[var(--text-secondary)]">
                     {String((s as { key?: string; field?: string }).key ?? (s as { field?: string }).field ?? "shift")}
                   </span>
-                ),
-              },
+                ) },
               {
                 key: "delta",
                 header: "Δ",
@@ -477,8 +475,7 @@ function DriftTab() {
                       (s as { value?: number }).value ??
                       0) as number
                   ),
-                sortable: true,
-              },
+                sortable: true },
             ]}
             rows={judgeDrift?.top_shifts ?? []}
             rowKey={(_, i) => `shift_${i}`}
@@ -517,8 +514,7 @@ function RiskTab() {
         if (cancelled) return;
         setRisk({
           risk_score: res.risk_score ?? 0,
-          breakdown: res.breakdown ?? [],
-        });
+          breakdown: res.breakdown ?? [] });
       })
       .catch((e: unknown) => {
         if (cancelled) return;
@@ -540,7 +536,7 @@ function RiskTab() {
     );
   }
   if (error) {
-    return <EmptyState icon={AlertTriangle} title="Could not load risk" description={error} size="md" />;
+    return <ErrorState title="Could not load risk" message={error} />;
   }
 
   const riskScore = risk?.risk_score ?? 0;
@@ -625,15 +621,17 @@ export default function PredictPage() {
   const [tab, setTab] = useState<Tab>("quality");
 
   if (!currentOrg) {
-    return (
-      <div className="rounded-lg border border-[var(--border-subtle)] p-8 text-center text-sm text-[var(--text-muted)]">
-        Select an organization to view predictions.
-      </div>
-    );
+    return <NoOrgState feature="Predictions" />;
   }
 
   return (
     <div className="space-y-4">
+      <PageHeader
+        eyebrow="Predict"
+        title="Quality, cost, capacity & risk forecasts"
+        subtitle="Projections with 95% confidence bands and drift detection across the stack."
+        icon={TrendingUp}
+      />
       <Tabs value={tab} onValueChange={(v) => setTab(v as Tab)}>
         <TabsList variant="underline" className="w-full overflow-x-auto">
           <TabsTrigger value="quality" variant="underline">

@@ -18,7 +18,7 @@
  * Lower is better.
  */
 
-import * as React from "react";
+import * as _React from "react";
 
 interface StreamingMetrics {
   ttft_ms: number | null;
@@ -34,8 +34,7 @@ interface StreamingMetricsCardProps {
 
 function Sparkline({
   values,
-  color = "var(--terminal)",
-}: {
+  color = "var(--terminal)" }: {
   values: number[];
   color?: string;
 }) {
@@ -77,8 +76,7 @@ function formatMs(value: number | null | undefined): string {
 export function StreamingMetricsCard({
   metrics,
   samples24h = [],
-  className = "",
-}: StreamingMetricsCardProps) {
+  className = "" }: StreamingMetricsCardProps) {
   const ttftSeries = samples24h.map((s) => s.ttft_ms ?? 0).filter((v) => v > 0);
   const itlSeries = samples24h.map((s) => s.itl_ms ?? 0).filter((v) => v > 0);
   const tpotSeries = samples24h.map((s) => s.tpot_ms ?? 0).filter((v) => v > 0);
@@ -119,8 +117,7 @@ function Stat({
   unit,
   sub,
   sparkline,
-  color,
-}: {
+  color }: {
   label: string;
   value: string;
   unit: string;
@@ -133,8 +130,7 @@ function Stat({
       className="rounded-md border p-3 transition-colors"
       style={{
         background: "var(--bg-secondary)",
-        borderColor: "var(--border-default)",
-      }}
+        borderColor: "var(--border-default)" }}
     >
       <div className="flex items-baseline justify-between">
         <span className="text-[10px] font-mono uppercase tracking-wider text-[var(--text-muted)]">

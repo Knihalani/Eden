@@ -87,6 +87,7 @@ export function SecurityTab() {
     try {
       await api.enforceOrg2FA(currentOrg.id, newEnforce);
       setEnforcementStatus(newEnforce);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (e: any) {
       toast.error(e.message || "Failed to update 2FA enforcement");
     }
@@ -295,6 +296,7 @@ function Disable2FADialog({
     try {
       await api.disable2FA(code);
       onSuccess();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (e: any) {
       setError(e.message || "Failed to disable 2FA");
     } finally {

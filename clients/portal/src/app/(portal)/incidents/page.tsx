@@ -142,7 +142,7 @@ export default function IncidentsPage() {
   ];
 
   return (
-    <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-6">
+    <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-6 page-enter">
       <PageHeader
         title="Incidents"
         subtitle="Cluster-level RCA summaries of recurring failures — catch the same bug biting 50 users before it bites 5,000"
@@ -152,14 +152,16 @@ export default function IncidentsPage() {
             <button
               onClick={loadIncidents}
               disabled={loading}
+              aria-label="Refresh incidents"
               className="inline-flex items-center gap-2 px-3 py-2 bg-[var(--bg-tertiary)] text-[var(--text-primary)] rounded-lg text-sm font-medium hover:bg-[var(--border-default)] disabled:opacity-50 transition-colors"
             >
-              <RefreshCw className="w-4 h-4" />
+              <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
               Refresh
             </button>
             <button
               onClick={handleCluster}
               disabled={clustering}
+              aria-label="Run clustering now"
               className="inline-flex items-center gap-2 px-4 py-2 bg-[var(--accent)] text-[var(--bg-base)] rounded-lg text-sm font-medium hover:bg-[var(--accent-hover)] disabled:opacity-50 transition-colors"
             >
               {clustering ? <Loader2 className="w-4 h-4 animate-spin" /> : <Zap className="w-4 h-4" />}
@@ -170,9 +172,21 @@ export default function IncidentsPage() {
       />
 
       {error && (
-        <div className="bg-[var(--error-bg)] text-[var(--error)] text-sm px-4 py-3 rounded-xl flex items-center gap-2.5 border border-[var(--error)]/20">
-          <AlertTriangle className="w-4 h-4 flex-shrink-0" />
-          {error}
+        <div
+          role="alert"
+          className="bg-[var(--error-bg)] text-[var(--error)] text-sm px-4 py-3 rounded-xl flex items-center justify-between gap-2.5 border border-[var(--error)]/20"
+        >
+          <span className="flex items-center gap-2.5">
+            <AlertTriangle className="w-4 h-4 flex-shrink-0" />
+            {error}
+          </span>
+          <button
+            onClick={loadIncidents}
+            disabled={loading}
+            className="text-xs font-medium underline underline-offset-2 hover:opacity-80 disabled:opacity-50"
+          >
+            Retry
+          </button>
         </div>
       )}
 

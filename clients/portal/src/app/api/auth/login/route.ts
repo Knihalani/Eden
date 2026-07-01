@@ -1,4 +1,4 @@
-import { cookies } from "next/headers";
+
 import { forwardToBackend, proxyError } from "@/lib/proxy";
 
 export async function POST(request: Request) {
@@ -10,8 +10,7 @@ export async function POST(request: Request) {
     return await forwardToBackend("/auth/login", {
       method: "POST",
       body,
-      cookieHeader,
-    });
+      cookieHeader });
   } catch (error) {
     return proxyError(error, "Login failed");
   }

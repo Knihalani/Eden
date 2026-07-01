@@ -1,0 +1,18 @@
+{
+  "trace_id": "trace_loop_cross_tool_03",
+  "archetype_id": "loop-cross-tool",
+  "agent_id": "agent_loop-cross-tool_03",
+  "expected_TAS": 27,
+  "expected_intervention": "block",
+  "expected_metrics": {
+    "SRR": 0.85,
+    "semantic_cosine_max": 0.92
+  },
+  "expected_detector_fires": [
+    "hash_ring_or_semantic_cosine"
+  ],
+  "expected_loop_detected": true,
+  "expected_hallucination_detected": false,
+  "expected_redundancy_pct": 0.0,
+  "notes": "5 calls with 4 different tool names + 5 different arg-key spellings all delivering the same email. Phase 3 semantic-cosine detector MUST fire."
+}

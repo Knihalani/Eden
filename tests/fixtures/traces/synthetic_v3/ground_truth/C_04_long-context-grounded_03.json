@@ -1,0 +1,16 @@
+{
+  "trace_id": "trace_long_context_grounded_03",
+  "archetype_id": "long-context-grounded",
+  "agent_id": "agent_long-context-grounded_03",
+  "expected_TAS": 85,
+  "expected_intervention": "allow",
+  "expected_metrics": {
+    "LHP": 0.05,
+    "context_window_pct": 0.92
+  },
+  "expected_detector_fires": [],
+  "expected_loop_detected": false,
+  "expected_hallucination_detected": false,
+  "expected_redundancy_pct": 0.0,
+  "notes": "Very long response but content exactly matches source. MiniCheck \u2248 1.0 supported; distilBERT-MNLI contradiction \u2248 0. Negative control for length-vs-quality debate."
+}

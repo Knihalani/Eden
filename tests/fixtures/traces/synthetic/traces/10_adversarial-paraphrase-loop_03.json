@@ -1,0 +1,1138 @@
+{
+  "trace_id": "trace_adversarial_paraphrase_03",
+  "archetype_id": "adversarial-paraphrase-loop",
+  "agent_id": "agent_adversarial-paraphrase-loop_03",
+  "event_count": 14,
+  "events": [
+    {
+      "event_id": "evt_tadversarial_paraphrase_03_0000",
+      "tenant_id": "org_eden_synth",
+      "project_id": "proj_synthetic_eval_v1",
+      "trace_id": "trace_adversarial_paraphrase_03",
+      "realm": "production",
+      "agent_id": "agent_adversarial-paraphrase-loop_03",
+      "agent_version": "synth-v1.0.0",
+      "environment_id": "env_prod_main",
+      "tags": [],
+      "source_format": "eden_native",
+      "images": [],
+      "audio": [],
+      "citations": [],
+      "stop_sequence": null,
+      "system_fingerprint": "fp_synth-v1.0.0",
+      "event_type": "span.start",
+      "timestamp": "2026-06-28T12:00:00+00:00",
+      "parent_span_id": null,
+      "span_id": "spn_trace_adversarial_paraphrase_03_0000",
+      "name": "trace",
+      "duration_ms": 0.0,
+      "payload": {},
+      "metrics": {},
+      "attributes": {
+        "environment": "production"
+      },
+      "outcome": null,
+      "request_body": null,
+      "response_body": null,
+      "reasoning": null,
+      "tool_calls_full": [],
+      "tool_results": [],
+      "logprobs": null,
+      "finish_reason": null,
+      "cache_hit": false,
+      "prompt_cache_savings_usd": 0.0,
+      "model_version": null,
+      "service_tier": null
+    },
+    {
+      "event_id": "evt_tadversarial_paraphrase_03_0001",
+      "tenant_id": "org_eden_synth",
+      "project_id": "proj_synthetic_eval_v1",
+      "trace_id": "trace_adversarial_paraphrase_03",
+      "realm": "production",
+      "agent_id": "agent_adversarial-paraphrase-loop_03",
+      "agent_version": "synth-v1.0.0",
+      "environment_id": "env_prod_main",
+      "tags": [],
+      "source_format": "eden_native",
+      "images": [],
+      "audio": [],
+      "citations": [],
+      "stop_sequence": null,
+      "system_fingerprint": "fp_synth-v1.0.0",
+      "event_type": "llm.completion",
+      "timestamp": "2026-06-28T12:00:00.800000+00:00",
+      "parent_span_id": "spn_trace_adversarial_paraphrase_03_0000",
+      "span_id": "spn_trace_adversarial_paraphrase_03_0001",
+      "name": "llm.fast",
+      "duration_ms": 800.0,
+      "payload": {},
+      "metrics": {
+        "prompt_tokens": 50,
+        "completion_tokens": 20,
+        "total_tokens": 70,
+        "cost_usd": 1.9e-05,
+        "latency_ms": 800.0
+      },
+      "attributes": {
+        "model": "gpt-4o-mini",
+        "environment": "production",
+        "user_id": "user_synth_42",
+        "session_id": "sess_synth_42"
+      },
+      "outcome": "success",
+      "request_body": {
+        "model": "gpt-4o-mini",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Email alice@eden.co saying hi."
+          }
+        ],
+        "temperature": 0.0
+      },
+      "response_body": {
+        "id": "cmpl-evt_cmpl_97726",
+        "model": "gpt-4o-mini",
+        "choices": [
+          {
+            "index": 0,
+            "finish_reason": "stop",
+            "message": {
+              "role": "assistant",
+              "content": "Sending.",
+              "tool_calls": [
+                {
+                  "id": "call_p_0000",
+                  "type": "function",
+                  "function": {
+                    "name": "send_email",
+                    "arguments": "{\"to\": \"alice@eden.co\", \"subject\": \"hello\", \"body\": \"hi\"}"
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "usage": {
+          "prompt_tokens": 50,
+          "completion_tokens": 20,
+          "total_tokens": 70
+        }
+      },
+      "reasoning": null,
+      "tool_calls_full": [
+        {
+          "id": "call_p_0000",
+          "type": "function",
+          "function": {
+            "name": "send_email",
+            "arguments": "{\"to\": \"alice@eden.co\", \"subject\": \"hello\", \"body\": \"hi\"}"
+          }
+        }
+      ],
+      "tool_results": [],
+      "logprobs": {
+        "content": [
+          [
+            {
+              "token": "Sending.",
+              "logprob": -0.1,
+              "top_logprobs": []
+            }
+          ]
+        ]
+      },
+      "finish_reason": "stop",
+      "cache_hit": false,
+      "prompt_cache_savings_usd": 0.0,
+      "model_version": "gpt-4o-mini",
+      "service_tier": "standard"
+    },
+    {
+      "event_id": "evt_tadversarial_paraphrase_03_0002",
+      "tenant_id": "org_eden_synth",
+      "project_id": "proj_synthetic_eval_v1",
+      "trace_id": "trace_adversarial_paraphrase_03",
+      "realm": "production",
+      "agent_id": "agent_adversarial-paraphrase-loop_03",
+      "agent_version": "synth-v1.0.0",
+      "environment_id": "env_prod_main",
+      "tags": [],
+      "source_format": "eden_native",
+      "images": [],
+      "audio": [],
+      "citations": [],
+      "stop_sequence": null,
+      "system_fingerprint": "fp_synth-v1.0.0",
+      "event_type": "tool.call",
+      "timestamp": "2026-06-28T12:00:00.910000+00:00",
+      "parent_span_id": "spn_trace_adversarial_paraphrase_03_0000",
+      "span_id": "spn_trace_adversarial_paraphrase_03_0002",
+      "name": "send_email",
+      "duration_ms": 110.0,
+      "payload": {},
+      "metrics": {
+        "latency_ms": 110.0,
+        "cost_usd": 0.0
+      },
+      "attributes": {
+        "environment": "production"
+      },
+      "outcome": "success",
+      "request_body": {
+        "tool": "send_email",
+        "arguments": {
+          "to": "alice@eden.co",
+          "subject": "hello",
+          "body": "hi"
+        }
+      },
+      "response_body": {
+        "result": {
+          "sent": true,
+          "message_id": "msg_4163"
+        }
+      },
+      "reasoning": null,
+      "tool_calls_full": [
+        {
+          "tool_call_id": "call_send_email_95351",
+          "type": "function",
+          "function": {
+            "name": "send_email",
+            "arguments": "{\"to\": \"alice@eden.co\", \"subject\": \"hello\", \"body\": \"hi\"}"
+          }
+        }
+      ],
+      "tool_results": [
+        {
+          "tool_call_id": "call_send_email_95351",
+          "role": "tool",
+          "content": "{\"sent\": true, \"message_id\": \"msg_4163\"}"
+        }
+      ],
+      "logprobs": null,
+      "finish_reason": null,
+      "cache_hit": false,
+      "prompt_cache_savings_usd": 0.0,
+      "model_version": null,
+      "service_tier": null
+    },
+    {
+      "event_id": "evt_tadversarial_paraphrase_03_0003",
+      "tenant_id": "org_eden_synth",
+      "project_id": "proj_synthetic_eval_v1",
+      "trace_id": "trace_adversarial_paraphrase_03",
+      "realm": "production",
+      "agent_id": "agent_adversarial-paraphrase-loop_03",
+      "agent_version": "synth-v1.0.0",
+      "environment_id": "env_prod_main",
+      "tags": [],
+      "source_format": "eden_native",
+      "images": [],
+      "audio": [],
+      "citations": [],
+      "stop_sequence": null,
+      "system_fingerprint": "fp_synth-v1.0.0",
+      "event_type": "llm.completion",
+      "timestamp": "2026-06-28T12:00:01.710000+00:00",
+      "parent_span_id": "spn_trace_adversarial_paraphrase_03_0000",
+      "span_id": "spn_trace_adversarial_paraphrase_03_0003",
+      "name": "llm.fast",
+      "duration_ms": 800.0,
+      "payload": {},
+      "metrics": {
+        "prompt_tokens": 50,
+        "completion_tokens": 20,
+        "total_tokens": 70,
+        "cost_usd": 1.9e-05,
+        "latency_ms": 800.0
+      },
+      "attributes": {
+        "model": "gpt-4o-mini",
+        "environment": "production",
+        "user_id": "user_synth_42",
+        "session_id": "sess_synth_42"
+      },
+      "outcome": "success",
+      "request_body": {
+        "model": "gpt-4o-mini",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Email alice@eden.co saying hi."
+          }
+        ],
+        "temperature": 0.0
+      },
+      "response_body": {
+        "id": "cmpl-evt_cmpl_25063",
+        "model": "gpt-4o-mini",
+        "choices": [
+          {
+            "index": 0,
+            "finish_reason": "stop",
+            "message": {
+              "role": "assistant",
+              "content": "Sending.",
+              "tool_calls": [
+                {
+                  "id": "call_p_0001",
+                  "type": "function",
+                  "function": {
+                    "name": "dispatch_mail",
+                    "arguments": "{\"recipient\": \"alice@eden.co\", \"title\": \"hello\", \"message\": \"hi\"}"
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "usage": {
+          "prompt_tokens": 50,
+          "completion_tokens": 20,
+          "total_tokens": 70
+        }
+      },
+      "reasoning": null,
+      "tool_calls_full": [
+        {
+          "id": "call_p_0001",
+          "type": "function",
+          "function": {
+            "name": "dispatch_mail",
+            "arguments": "{\"recipient\": \"alice@eden.co\", \"title\": \"hello\", \"message\": \"hi\"}"
+          }
+        }
+      ],
+      "tool_results": [],
+      "logprobs": {
+        "content": [
+          [
+            {
+              "token": "Sending.",
+              "logprob": -0.1,
+              "top_logprobs": []
+            }
+          ]
+        ]
+      },
+      "finish_reason": "stop",
+      "cache_hit": false,
+      "prompt_cache_savings_usd": 0.0,
+      "model_version": "gpt-4o-mini",
+      "service_tier": "standard"
+    },
+    {
+      "event_id": "evt_tadversarial_paraphrase_03_0004",
+      "tenant_id": "org_eden_synth",
+      "project_id": "proj_synthetic_eval_v1",
+      "trace_id": "trace_adversarial_paraphrase_03",
+      "realm": "production",
+      "agent_id": "agent_adversarial-paraphrase-loop_03",
+      "agent_version": "synth-v1.0.0",
+      "environment_id": "env_prod_main",
+      "tags": [],
+      "source_format": "eden_native",
+      "images": [],
+      "audio": [],
+      "citations": [],
+      "stop_sequence": null,
+      "system_fingerprint": "fp_synth-v1.0.0",
+      "event_type": "tool.call",
+      "timestamp": "2026-06-28T12:00:01.825000+00:00",
+      "parent_span_id": "spn_trace_adversarial_paraphrase_03_0000",
+      "span_id": "spn_trace_adversarial_paraphrase_03_0004",
+      "name": "dispatch_mail",
+      "duration_ms": 115.0,
+      "payload": {},
+      "metrics": {
+        "latency_ms": 115.0,
+        "cost_usd": 0.0
+      },
+      "attributes": {
+        "environment": "production"
+      },
+      "outcome": "success",
+      "request_body": {
+        "tool": "dispatch_mail",
+        "arguments": {
+          "recipient": "alice@eden.co",
+          "title": "hello",
+          "message": "hi"
+        }
+      },
+      "response_body": {
+        "result": {
+          "sent": true,
+          "message_id": "msg_6368"
+        }
+      },
+      "reasoning": null,
+      "tool_calls_full": [
+        {
+          "tool_call_id": "call_dispatch_mail_26176",
+          "type": "function",
+          "function": {
+            "name": "dispatch_mail",
+            "arguments": "{\"recipient\": \"alice@eden.co\", \"title\": \"hello\", \"message\": \"hi\"}"
+          }
+        }
+      ],
+      "tool_results": [
+        {
+          "tool_call_id": "call_dispatch_mail_26176",
+          "role": "tool",
+          "content": "{\"sent\": true, \"message_id\": \"msg_6368\"}"
+        }
+      ],
+      "logprobs": null,
+      "finish_reason": null,
+      "cache_hit": false,
+      "prompt_cache_savings_usd": 0.0,
+      "model_version": null,
+      "service_tier": null
+    },
+    {
+      "event_id": "evt_tadversarial_paraphrase_03_0005",
+      "tenant_id": "org_eden_synth",
+      "project_id": "proj_synthetic_eval_v1",
+      "trace_id": "trace_adversarial_paraphrase_03",
+      "realm": "production",
+      "agent_id": "agent_adversarial-paraphrase-loop_03",
+      "agent_version": "synth-v1.0.0",
+      "environment_id": "env_prod_main",
+      "tags": [],
+      "source_format": "eden_native",
+      "images": [],
+      "audio": [],
+      "citations": [],
+      "stop_sequence": null,
+      "system_fingerprint": "fp_synth-v1.0.0",
+      "event_type": "llm.completion",
+      "timestamp": "2026-06-28T12:00:02.625000+00:00",
+      "parent_span_id": "spn_trace_adversarial_paraphrase_03_0000",
+      "span_id": "spn_trace_adversarial_paraphrase_03_0005",
+      "name": "llm.fast",
+      "duration_ms": 800.0,
+      "payload": {},
+      "metrics": {
+        "prompt_tokens": 50,
+        "completion_tokens": 20,
+        "total_tokens": 70,
+        "cost_usd": 1.9e-05,
+        "latency_ms": 800.0
+      },
+      "attributes": {
+        "model": "gpt-4o-mini",
+        "environment": "production",
+        "user_id": "user_synth_42",
+        "session_id": "sess_synth_42"
+      },
+      "outcome": "success",
+      "request_body": {
+        "model": "gpt-4o-mini",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Email alice@eden.co saying hi."
+          }
+        ],
+        "temperature": 0.0
+      },
+      "response_body": {
+        "id": "cmpl-evt_cmpl_31599",
+        "model": "gpt-4o-mini",
+        "choices": [
+          {
+            "index": 0,
+            "finish_reason": "stop",
+            "message": {
+              "role": "assistant",
+              "content": "Sending.",
+              "tool_calls": [
+                {
+                  "id": "call_p_0002",
+                  "type": "function",
+                  "function": {
+                    "name": "mail.send",
+                    "arguments": "{\"to\": \"alice@eden.co\", \"subject\": \"hello\", \"text\": \"hi\"}"
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "usage": {
+          "prompt_tokens": 50,
+          "completion_tokens": 20,
+          "total_tokens": 70
+        }
+      },
+      "reasoning": null,
+      "tool_calls_full": [
+        {
+          "id": "call_p_0002",
+          "type": "function",
+          "function": {
+            "name": "mail.send",
+            "arguments": "{\"to\": \"alice@eden.co\", \"subject\": \"hello\", \"text\": \"hi\"}"
+          }
+        }
+      ],
+      "tool_results": [],
+      "logprobs": {
+        "content": [
+          [
+            {
+              "token": "Sending.",
+              "logprob": -0.1,
+              "top_logprobs": []
+            }
+          ]
+        ]
+      },
+      "finish_reason": "stop",
+      "cache_hit": false,
+      "prompt_cache_savings_usd": 0.0,
+      "model_version": "gpt-4o-mini",
+      "service_tier": "standard"
+    },
+    {
+      "event_id": "evt_tadversarial_paraphrase_03_0006",
+      "tenant_id": "org_eden_synth",
+      "project_id": "proj_synthetic_eval_v1",
+      "trace_id": "trace_adversarial_paraphrase_03",
+      "realm": "production",
+      "agent_id": "agent_adversarial-paraphrase-loop_03",
+      "agent_version": "synth-v1.0.0",
+      "environment_id": "env_prod_main",
+      "tags": [],
+      "source_format": "eden_native",
+      "images": [],
+      "audio": [],
+      "citations": [],
+      "stop_sequence": null,
+      "system_fingerprint": "fp_synth-v1.0.0",
+      "event_type": "tool.call",
+      "timestamp": "2026-06-28T12:00:02.745000+00:00",
+      "parent_span_id": "spn_trace_adversarial_paraphrase_03_0000",
+      "span_id": "spn_trace_adversarial_paraphrase_03_0006",
+      "name": "mail.send",
+      "duration_ms": 120.0,
+      "payload": {},
+      "metrics": {
+        "latency_ms": 120.0,
+        "cost_usd": 0.0
+      },
+      "attributes": {
+        "environment": "production"
+      },
+      "outcome": "success",
+      "request_body": {
+        "tool": "mail.send",
+        "arguments": {
+          "to": "alice@eden.co",
+          "subject": "hello",
+          "text": "hi"
+        }
+      },
+      "response_body": {
+        "result": {
+          "sent": true,
+          "message_id": "msg_2751"
+        }
+      },
+      "reasoning": null,
+      "tool_calls_full": [
+        {
+          "tool_call_id": "call_mail.send_65569",
+          "type": "function",
+          "function": {
+            "name": "mail.send",
+            "arguments": "{\"to\": \"alice@eden.co\", \"subject\": \"hello\", \"text\": \"hi\"}"
+          }
+        }
+      ],
+      "tool_results": [
+        {
+          "tool_call_id": "call_mail.send_65569",
+          "role": "tool",
+          "content": "{\"sent\": true, \"message_id\": \"msg_2751\"}"
+        }
+      ],
+      "logprobs": null,
+      "finish_reason": null,
+      "cache_hit": false,
+      "prompt_cache_savings_usd": 0.0,
+      "model_version": null,
+      "service_tier": null
+    },
+    {
+      "event_id": "evt_tadversarial_paraphrase_03_0007",
+      "tenant_id": "org_eden_synth",
+      "project_id": "proj_synthetic_eval_v1",
+      "trace_id": "trace_adversarial_paraphrase_03",
+      "realm": "production",
+      "agent_id": "agent_adversarial-paraphrase-loop_03",
+      "agent_version": "synth-v1.0.0",
+      "environment_id": "env_prod_main",
+      "tags": [],
+      "source_format": "eden_native",
+      "images": [],
+      "audio": [],
+      "citations": [],
+      "stop_sequence": null,
+      "system_fingerprint": "fp_synth-v1.0.0",
+      "event_type": "llm.completion",
+      "timestamp": "2026-06-28T12:00:03.545000+00:00",
+      "parent_span_id": "spn_trace_adversarial_paraphrase_03_0000",
+      "span_id": "spn_trace_adversarial_paraphrase_03_0007",
+      "name": "llm.fast",
+      "duration_ms": 800.0,
+      "payload": {},
+      "metrics": {
+        "prompt_tokens": 50,
+        "completion_tokens": 20,
+        "total_tokens": 70,
+        "cost_usd": 1.9e-05,
+        "latency_ms": 800.0
+      },
+      "attributes": {
+        "model": "gpt-4o-mini",
+        "environment": "production",
+        "user_id": "user_synth_42",
+        "session_id": "sess_synth_42"
+      },
+      "outcome": "success",
+      "request_body": {
+        "model": "gpt-4o-mini",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Email alice@eden.co saying hi."
+          }
+        ],
+        "temperature": 0.0
+      },
+      "response_body": {
+        "id": "cmpl-evt_cmpl_43608",
+        "model": "gpt-4o-mini",
+        "choices": [
+          {
+            "index": 0,
+            "finish_reason": "stop",
+            "message": {
+              "role": "assistant",
+              "content": "Sending.",
+              "tool_calls": [
+                {
+                  "id": "call_p_0003",
+                  "type": "function",
+                  "function": {
+                    "name": "outbound.email",
+                    "arguments": "{\"address\": \"alice@eden.co\", \"header\": \"hello\", \"content\": \"hi\"}"
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "usage": {
+          "prompt_tokens": 50,
+          "completion_tokens": 20,
+          "total_tokens": 70
+        }
+      },
+      "reasoning": null,
+      "tool_calls_full": [
+        {
+          "id": "call_p_0003",
+          "type": "function",
+          "function": {
+            "name": "outbound.email",
+            "arguments": "{\"address\": \"alice@eden.co\", \"header\": \"hello\", \"content\": \"hi\"}"
+          }
+        }
+      ],
+      "tool_results": [],
+      "logprobs": {
+        "content": [
+          [
+            {
+              "token": "Sending.",
+              "logprob": -0.1,
+              "top_logprobs": []
+            }
+          ]
+        ]
+      },
+      "finish_reason": "stop",
+      "cache_hit": false,
+      "prompt_cache_savings_usd": 0.0,
+      "model_version": "gpt-4o-mini",
+      "service_tier": "standard"
+    },
+    {
+      "event_id": "evt_tadversarial_paraphrase_03_0008",
+      "tenant_id": "org_eden_synth",
+      "project_id": "proj_synthetic_eval_v1",
+      "trace_id": "trace_adversarial_paraphrase_03",
+      "realm": "production",
+      "agent_id": "agent_adversarial-paraphrase-loop_03",
+      "agent_version": "synth-v1.0.0",
+      "environment_id": "env_prod_main",
+      "tags": [],
+      "source_format": "eden_native",
+      "images": [],
+      "audio": [],
+      "citations": [],
+      "stop_sequence": null,
+      "system_fingerprint": "fp_synth-v1.0.0",
+      "event_type": "tool.call",
+      "timestamp": "2026-06-28T12:00:03.670000+00:00",
+      "parent_span_id": "spn_trace_adversarial_paraphrase_03_0000",
+      "span_id": "spn_trace_adversarial_paraphrase_03_0008",
+      "name": "outbound.email",
+      "duration_ms": 125.0,
+      "payload": {},
+      "metrics": {
+        "latency_ms": 125.0,
+        "cost_usd": 0.0
+      },
+      "attributes": {
+        "environment": "production"
+      },
+      "outcome": "success",
+      "request_body": {
+        "tool": "outbound.email",
+        "arguments": {
+          "address": "alice@eden.co",
+          "header": "hello",
+          "content": "hi"
+        }
+      },
+      "response_body": {
+        "result": {
+          "sent": true,
+          "message_id": "msg_9051"
+        }
+      },
+      "reasoning": null,
+      "tool_calls_full": [
+        {
+          "tool_call_id": "call_outbound.email_19740",
+          "type": "function",
+          "function": {
+            "name": "outbound.email",
+            "arguments": "{\"address\": \"alice@eden.co\", \"header\": \"hello\", \"content\": \"hi\"}"
+          }
+        }
+      ],
+      "tool_results": [
+        {
+          "tool_call_id": "call_outbound.email_19740",
+          "role": "tool",
+          "content": "{\"sent\": true, \"message_id\": \"msg_9051\"}"
+        }
+      ],
+      "logprobs": null,
+      "finish_reason": null,
+      "cache_hit": false,
+      "prompt_cache_savings_usd": 0.0,
+      "model_version": null,
+      "service_tier": null
+    },
+    {
+      "event_id": "evt_tadversarial_paraphrase_03_0009",
+      "tenant_id": "org_eden_synth",
+      "project_id": "proj_synthetic_eval_v1",
+      "trace_id": "trace_adversarial_paraphrase_03",
+      "realm": "production",
+      "agent_id": "agent_adversarial-paraphrase-loop_03",
+      "agent_version": "synth-v1.0.0",
+      "environment_id": "env_prod_main",
+      "tags": [],
+      "source_format": "eden_native",
+      "images": [],
+      "audio": [],
+      "citations": [],
+      "stop_sequence": null,
+      "system_fingerprint": "fp_synth-v1.0.0",
+      "event_type": "llm.completion",
+      "timestamp": "2026-06-28T12:00:04.470000+00:00",
+      "parent_span_id": "spn_trace_adversarial_paraphrase_03_0000",
+      "span_id": "spn_trace_adversarial_paraphrase_03_0009",
+      "name": "llm.fast",
+      "duration_ms": 800.0,
+      "payload": {},
+      "metrics": {
+        "prompt_tokens": 50,
+        "completion_tokens": 20,
+        "total_tokens": 70,
+        "cost_usd": 1.9e-05,
+        "latency_ms": 800.0
+      },
+      "attributes": {
+        "model": "gpt-4o-mini",
+        "environment": "production",
+        "user_id": "user_synth_42",
+        "session_id": "sess_synth_42"
+      },
+      "outcome": "success",
+      "request_body": {
+        "model": "gpt-4o-mini",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Email alice@eden.co saying hi."
+          }
+        ],
+        "temperature": 0.0
+      },
+      "response_body": {
+        "id": "cmpl-evt_cmpl_71787",
+        "model": "gpt-4o-mini",
+        "choices": [
+          {
+            "index": 0,
+            "finish_reason": "stop",
+            "message": {
+              "role": "assistant",
+              "content": "Sending.",
+              "tool_calls": [
+                {
+                  "id": "call_p_0004",
+                  "type": "function",
+                  "function": {
+                    "name": "send_email",
+                    "arguments": "{\"to\": \"alice@eden.co\", \"subject\": \"hello\", \"body\": \"hi\"}"
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "usage": {
+          "prompt_tokens": 50,
+          "completion_tokens": 20,
+          "total_tokens": 70
+        }
+      },
+      "reasoning": null,
+      "tool_calls_full": [
+        {
+          "id": "call_p_0004",
+          "type": "function",
+          "function": {
+            "name": "send_email",
+            "arguments": "{\"to\": \"alice@eden.co\", \"subject\": \"hello\", \"body\": \"hi\"}"
+          }
+        }
+      ],
+      "tool_results": [],
+      "logprobs": {
+        "content": [
+          [
+            {
+              "token": "Sending.",
+              "logprob": -0.1,
+              "top_logprobs": []
+            }
+          ]
+        ]
+      },
+      "finish_reason": "stop",
+      "cache_hit": false,
+      "prompt_cache_savings_usd": 0.0,
+      "model_version": "gpt-4o-mini",
+      "service_tier": "standard"
+    },
+    {
+      "event_id": "evt_tadversarial_paraphrase_03_0010",
+      "tenant_id": "org_eden_synth",
+      "project_id": "proj_synthetic_eval_v1",
+      "trace_id": "trace_adversarial_paraphrase_03",
+      "realm": "production",
+      "agent_id": "agent_adversarial-paraphrase-loop_03",
+      "agent_version": "synth-v1.0.0",
+      "environment_id": "env_prod_main",
+      "tags": [],
+      "source_format": "eden_native",
+      "images": [],
+      "audio": [],
+      "citations": [],
+      "stop_sequence": null,
+      "system_fingerprint": "fp_synth-v1.0.0",
+      "event_type": "tool.call",
+      "timestamp": "2026-06-28T12:00:04.600000+00:00",
+      "parent_span_id": "spn_trace_adversarial_paraphrase_03_0000",
+      "span_id": "spn_trace_adversarial_paraphrase_03_0010",
+      "name": "send_email",
+      "duration_ms": 130.0,
+      "payload": {},
+      "metrics": {
+        "latency_ms": 130.0,
+        "cost_usd": 0.0
+      },
+      "attributes": {
+        "environment": "production"
+      },
+      "outcome": "success",
+      "request_body": {
+        "tool": "send_email",
+        "arguments": {
+          "to": "alice@eden.co",
+          "subject": "hello",
+          "body": "hi"
+        }
+      },
+      "response_body": {
+        "result": {
+          "sent": true,
+          "message_id": "msg_8625"
+        }
+      },
+      "reasoning": null,
+      "tool_calls_full": [
+        {
+          "tool_call_id": "call_send_email_32861",
+          "type": "function",
+          "function": {
+            "name": "send_email",
+            "arguments": "{\"to\": \"alice@eden.co\", \"subject\": \"hello\", \"body\": \"hi\"}"
+          }
+        }
+      ],
+      "tool_results": [
+        {
+          "tool_call_id": "call_send_email_32861",
+          "role": "tool",
+          "content": "{\"sent\": true, \"message_id\": \"msg_8625\"}"
+        }
+      ],
+      "logprobs": null,
+      "finish_reason": null,
+      "cache_hit": false,
+      "prompt_cache_savings_usd": 0.0,
+      "model_version": null,
+      "service_tier": null
+    },
+    {
+      "event_id": "evt_tadversarial_paraphrase_03_0011",
+      "tenant_id": "org_eden_synth",
+      "project_id": "proj_synthetic_eval_v1",
+      "trace_id": "trace_adversarial_paraphrase_03",
+      "realm": "production",
+      "agent_id": "agent_adversarial-paraphrase-loop_03",
+      "agent_version": "synth-v1.0.0",
+      "environment_id": "env_prod_main",
+      "tags": [],
+      "source_format": "eden_native",
+      "images": [],
+      "audio": [],
+      "citations": [],
+      "stop_sequence": null,
+      "system_fingerprint": "fp_synth-v1.0.0",
+      "event_type": "llm.completion",
+      "timestamp": "2026-06-28T12:00:05.400000+00:00",
+      "parent_span_id": "spn_trace_adversarial_paraphrase_03_0000",
+      "span_id": "spn_trace_adversarial_paraphrase_03_0011",
+      "name": "llm.fast",
+      "duration_ms": 800.0,
+      "payload": {},
+      "metrics": {
+        "prompt_tokens": 50,
+        "completion_tokens": 20,
+        "total_tokens": 70,
+        "cost_usd": 1.9e-05,
+        "latency_ms": 800.0
+      },
+      "attributes": {
+        "model": "gpt-4o-mini",
+        "environment": "production",
+        "user_id": "user_synth_42",
+        "session_id": "sess_synth_42"
+      },
+      "outcome": "success",
+      "request_body": {
+        "model": "gpt-4o-mini",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Email alice@eden.co saying hi."
+          }
+        ],
+        "temperature": 0.0
+      },
+      "response_body": {
+        "id": "cmpl-evt_cmpl_44294",
+        "model": "gpt-4o-mini",
+        "choices": [
+          {
+            "index": 0,
+            "finish_reason": "stop",
+            "message": {
+              "role": "assistant",
+              "content": "Sending.",
+              "tool_calls": [
+                {
+                  "id": "call_p_0005",
+                  "type": "function",
+                  "function": {
+                    "name": "smtp.deliver",
+                    "arguments": "{\"rcpt\": \"alice@eden.co\", \"subject_line\": \"hello\", \"body_text\": \"hi\"}"
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "usage": {
+          "prompt_tokens": 50,
+          "completion_tokens": 20,
+          "total_tokens": 70
+        }
+      },
+      "reasoning": null,
+      "tool_calls_full": [
+        {
+          "id": "call_p_0005",
+          "type": "function",
+          "function": {
+            "name": "smtp.deliver",
+            "arguments": "{\"rcpt\": \"alice@eden.co\", \"subject_line\": \"hello\", \"body_text\": \"hi\"}"
+          }
+        }
+      ],
+      "tool_results": [],
+      "logprobs": {
+        "content": [
+          [
+            {
+              "token": "Sending.",
+              "logprob": -0.1,
+              "top_logprobs": []
+            }
+          ]
+        ]
+      },
+      "finish_reason": "stop",
+      "cache_hit": false,
+      "prompt_cache_savings_usd": 0.0,
+      "model_version": "gpt-4o-mini",
+      "service_tier": "standard"
+    },
+    {
+      "event_id": "evt_tadversarial_paraphrase_03_0012",
+      "tenant_id": "org_eden_synth",
+      "project_id": "proj_synthetic_eval_v1",
+      "trace_id": "trace_adversarial_paraphrase_03",
+      "realm": "production",
+      "agent_id": "agent_adversarial-paraphrase-loop_03",
+      "agent_version": "synth-v1.0.0",
+      "environment_id": "env_prod_main",
+      "tags": [],
+      "source_format": "eden_native",
+      "images": [],
+      "audio": [],
+      "citations": [],
+      "stop_sequence": null,
+      "system_fingerprint": "fp_synth-v1.0.0",
+      "event_type": "tool.call",
+      "timestamp": "2026-06-28T12:00:05.535000+00:00",
+      "parent_span_id": "spn_trace_adversarial_paraphrase_03_0000",
+      "span_id": "spn_trace_adversarial_paraphrase_03_0012",
+      "name": "smtp.deliver",
+      "duration_ms": 135.0,
+      "payload": {},
+      "metrics": {
+        "latency_ms": 135.0,
+        "cost_usd": 0.0
+      },
+      "attributes": {
+        "environment": "production"
+      },
+      "outcome": "success",
+      "request_body": {
+        "tool": "smtp.deliver",
+        "arguments": {
+          "rcpt": "alice@eden.co",
+          "subject_line": "hello",
+          "body_text": "hi"
+        }
+      },
+      "response_body": {
+        "result": {
+          "sent": true,
+          "message_id": "msg_5253"
+        }
+      },
+      "reasoning": null,
+      "tool_calls_full": [
+        {
+          "tool_call_id": "call_smtp.deliver_13439",
+          "type": "function",
+          "function": {
+            "name": "smtp.deliver",
+            "arguments": "{\"rcpt\": \"alice@eden.co\", \"subject_line\": \"hello\", \"body_text\": \"hi\"}"
+          }
+        }
+      ],
+      "tool_results": [
+        {
+          "tool_call_id": "call_smtp.deliver_13439",
+          "role": "tool",
+          "content": "{\"sent\": true, \"message_id\": \"msg_5253\"}"
+        }
+      ],
+      "logprobs": null,
+      "finish_reason": null,
+      "cache_hit": false,
+      "prompt_cache_savings_usd": 0.0,
+      "model_version": null,
+      "service_tier": null
+    },
+    {
+      "event_id": "evt_tadversarial_paraphrase_03_0013",
+      "tenant_id": "org_eden_synth",
+      "project_id": "proj_synthetic_eval_v1",
+      "trace_id": "trace_adversarial_paraphrase_03",
+      "realm": "production",
+      "agent_id": "agent_adversarial-paraphrase-loop_03",
+      "agent_version": "synth-v1.0.0",
+      "environment_id": "env_prod_main",
+      "tags": [],
+      "source_format": "eden_native",
+      "images": [],
+      "audio": [],
+      "citations": [],
+      "stop_sequence": null,
+      "system_fingerprint": "fp_synth-v1.0.0",
+      "event_type": "span.end",
+      "timestamp": "2026-06-28T12:00:05.535000+00:00",
+      "parent_span_id": null,
+      "span_id": "spn_trace_adversarial_paraphrase_03_0000",
+      "name": "trace",
+      "duration_ms": 5535.0,
+      "payload": {},
+      "metrics": {},
+      "attributes": {
+        "environment": "production"
+      },
+      "outcome": "success",
+      "request_body": null,
+      "response_body": null,
+      "reasoning": null,
+      "tool_calls_full": [],
+      "tool_results": [],
+      "logprobs": null,
+      "finish_reason": null,
+      "cache_hit": false,
+      "prompt_cache_savings_usd": 0.0,
+      "model_version": null,
+      "service_tier": null
+    }
+  ]
+}

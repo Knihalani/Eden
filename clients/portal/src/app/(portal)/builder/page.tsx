@@ -31,23 +31,7 @@
 
 import dynamic from "next/dynamic";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import {
-  ChevronDown,
-  Clipboard,
-  Copy,
-  Download,
-  History,
-  Loader2,
-  Play,
-  Redo2,
-  RotateCcw,
-  Save,
-  Sparkles,
-  Trash2,
-  Undo2,
-  Upload,
-  Wand2,
-} from "lucide-react";
+import { ChevronDown, Clipboard, Copy, Download, History, Loader2, Play, Redo2, RotateCcw, Sparkles, Trash2, Undo2, Upload, Wand2 } from "lucide-react";
 import { ReactFlowProvider, useReactFlow } from "@xyflow/react";
 
 import { Button } from "@/components/ui/button";
@@ -58,15 +42,12 @@ import { agentsApi, builderApi } from "@/lib/api";
 
 import { Inspector } from "./_components/Inspector";
 import { Palette } from "./_components/Palette";
-import { RunHistory } from "./_components/RunHistory";
+;
 import { RunResultsDialog } from "./_components/RunResultsDialog";
 import { TemplatesMenu } from "./_components/TemplatesMenu";
 import { useBuilderState } from "./_hooks/useBuilderState";
 import { deleteSaved, flushGraph, listRecent, loadSavedByName } from "./_lib/storage";
-import {
-  downloadPortable,
-  importPortable,
-} from "./_lib/portableGraph";
+import { downloadPortable, importPortable } from "./_lib/portableGraph";
 import type { BuilderTemplate } from "./_lib/templates";
 
 import type { SavedGraphMeta } from "@/lib/types";
@@ -154,8 +135,7 @@ function BuilderPageInner() {
           title: `Replace current graph with "${template.name}"?`,
           description: "Your unsaved changes will be lost.",
           confirmLabel: "Replace",
-          variant: "destructive",
-        });
+          variant: "destructive" });
         if (!ok) return;
       }
       const built = template.build();
@@ -201,8 +181,7 @@ function BuilderPageInner() {
           title: `Replace current graph with "${result.graph.graphName}"?`,
           description: "Your unsaved changes will be lost.",
           confirmLabel: "Replace",
-          variant: "destructive",
-        });
+          variant: "destructive" });
         if (!ok) return;
       }
       s.replaceGraph(
@@ -226,10 +205,8 @@ function BuilderPageInner() {
         name: s.graphName,
         graph: {
           nodes: s.nodes as unknown[],
-          edges: s.edges as unknown[],
-        },
-        yaml: s.yamlPreview,
-      });
+          edges: s.edges as unknown[] },
+        yaml: s.yamlPreview });
       toast.success(
         result.created
           ? `Saved "${s.graphName}" to server.`
@@ -257,8 +234,7 @@ function BuilderPageInner() {
       try {
         const fresh = await agentsApi.triggerSimRun(orgId, agentId, {
           upload_id: run.upload_id,
-          runner_kind: "subprocess",
-        });
+          runner_kind: "subprocess" });
         toast.info(`Rerun started: ${fresh.id}`);
         s.closeRunDialog();
         void s.resumeRunDialog(orgId, fresh, agentId);
@@ -567,8 +543,7 @@ function BuilderPageInner() {
               title: "Reset the builder?",
               description: "All nodes and edges will be discarded. This cannot be undone.",
               confirmLabel: "Reset",
-              variant: "destructive",
-            }))}
+              variant: "destructive" }))}
             aria-label="Reset to defaults"
           >
             <RotateCcw className="w-3.5 h-3.5" />

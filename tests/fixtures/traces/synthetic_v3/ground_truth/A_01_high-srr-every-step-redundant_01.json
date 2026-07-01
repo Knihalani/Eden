@@ -1,0 +1,17 @@
+{
+  "trace_id": "trace_high_srr_01",
+  "archetype_id": "high-srr",
+  "agent_id": "agent_high-srr_01",
+  "expected_TAS": 16,
+  "expected_intervention": "block",
+  "expected_metrics": {
+    "SRR": 1.0
+  },
+  "expected_detector_fires": [
+    "SRR_max"
+  ],
+  "expected_loop_detected": false,
+  "expected_hallucination_detected": false,
+  "expected_redundancy_pct": 0.0,
+  "notes": "8 identical LLM emissions back-to-back \u2192 SRR=1.0. Agent is stuck outputting the same response. Block."
+}

@@ -4,8 +4,21 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { api } from "@/lib/api";
-import { Loader2, Building2, User, Mail, Clock, AlertCircle } from "lucide-react";
+import {
+  Loader2,
+  Building2,
+  User,
+  Mail,
+  Clock,
+  AlertCircle,
+  ArrowLeft,
+  RefreshCw,
+  Shield,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { AuthSplitLayout, AuthBrandPanel, AuthFormCard } from "@/components/auth";
 
 export default function InvitePage() {
   const params = useParams();
@@ -28,22 +41,29 @@ export default function InvitePage() {
   const [signupLoading, setSignupLoading] = useState(false);
   const [signupError, setSignupError] = useState<string | null>(null);
 
-  useEffect(() => {
-    const verifyToken = async () => {
-      try {
-        const data = await api.verifyInviteToken(token);
-        setInviteData(data);
-      } catch (err: unknown) {
-        const message = err instanceof Error ? err.message : "Invalid or expired invitation";
-        setError(message);
-      } finally {
-        setLoading(false);
-      }
-    };
+  const verifyToken = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const data = await api.verifyInviteToken(token);
+      setInviteData(data);
+    } catch (err) {
+      // Strongly-typed catch: instanceof Error guard, fallback for
+      // non-Error throws (e.g. network errors that stringified).
+      const message = err instanceof Error ? err.message : "Invalid or expired invitation";
+      setError(message);
+    } finally {
+      setLoading(false);
+    }
+  };
 
+  useEffect(() => {
     if (token) {
       verifyToken();
     }
+    // verifyToken captures token from the closure; we explicitly
+    // re-create on `token` change so a route change re-validates.
+     
   }, [token]);
 
   const handleSignup = async (e: React.FormEvent) => {
@@ -61,7 +81,8 @@ export default function InvitePage() {
       });
 
       router.push(`/dashboard?org=${result.org_id}`);
-    } catch (err: unknown) {
+    } catch (err) {
+      // Same strongly-typed guard as verifyToken above.
       const message = err instanceof Error ? err.message : "Failed to create account";
       setSignupError(message);
     } finally {
@@ -69,68 +90,107 @@ export default function InvitePage() {
     }
   };
 
+  // Loading state — render inside the same split-layout chrome so
+  // the layout doesn't shift when the token resolves.
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-[var(--bg-secondary)]">
-        <div className="text-center">
-          <Loader2 className="w-8 h-8 animate-spin mx-auto mb-4 text-[var(--accent)]" />
-          <p className="text-[var(--text-secondary)]">Verifying invitation…</p>
-        </div>
-      </div>
+      <AuthSplitLayout brandPanel={<AuthBrandPanel />}>
+        <AuthFormCard title="Verifying invitation" subtitle="One moment…">
+          <div
+            className="flex items-center justify-center py-8"
+            aria-busy="true"
+            aria-live="polite"
+          >
+            <Loader2 className="w-6 h-6 animate-spin text-[var(--accent)]" />
+          </div>
+        </AuthFormCard>
+      </AuthSplitLayout>
     );
   }
 
+  // Error / invalid state — offer a retry so a transient network
+  // blip doesn't strand the user.
   if (error || !inviteData?.valid) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-[var(--bg-secondary)]">
-        <div className="max-w-md w-full mx-4 p-8 bg-[var(--bg-primary)] rounded-2xl border border-[var(--border-default)] text-center">
-          <div className="w-12 h-12 bg-[var(--error-bg)] rounded-full flex items-center justify-center mx-auto mb-4">
-            <AlertCircle className="w-6 h-6 text-[var(--error)]" />
+      <AuthSplitLayout brandPanel={<AuthBrandPanel />}>
+        <AuthFormCard
+          title="Invalid invitation"
+          subtitle="This invitation link couldn't be verified"
+        >
+          <div className="space-y-5 text-center">
+            <div
+              role="alert"
+              className="bg-[var(--error-dim)] text-[var(--error)] text-sm px-4 py-3 rounded-xl flex items-center gap-2.5 border border-[var(--error)]/20 text-left"
+            >
+              <AlertCircle className="w-4 h-4 flex-shrink-0" aria-hidden="true" />
+              <span>
+                {error || "This invitation link is invalid or has expired."}
+              </span>
+            </div>
+            <div className="flex flex-col sm:flex-row items-center justify-center gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="default"
+                onClick={verifyToken}
+                disabled={loading}
+                loading={loading}
+                aria-label="Retry invitation verification"
+              >
+                <RefreshCw className="w-4 h-4" />
+                Try again
+              </Button>
+              <Link
+                href="/sign-in"
+                className="inline-flex items-center justify-center gap-2 px-4 h-10 rounded-lg bg-[var(--accent)] text-[var(--accent-foreground)] text-sm font-medium hover:bg-[var(--accent-hover)] transition-colors"
+              >
+                Go to login
+              </Link>
+            </div>
           </div>
-          <h1 className="text-xl font-bold mb-2 text-[var(--text-primary)]">Invalid invitation</h1>
-          <p className="text-[var(--text-secondary)] mb-6">
-            {error || "This invitation link is invalid or has expired."}
-          </p>
-          <Link
-            href="/sign-in"
-            className="inline-block px-6 py-2 bg-[var(--accent)] text-[var(--bg-base)] rounded-lg font-medium hover:bg-[var(--accent-hover)]"
-          >
-            Go to login
-          </Link>
-        </div>
-      </div>
+        </AuthFormCard>
+      </AuthSplitLayout>
     );
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-[var(--bg-secondary)] p-4">
-      <div className="max-w-md w-full">
-        <div className="p-6 bg-[var(--bg-primary)] rounded-2xl border border-[var(--border-default)] mb-6">
-          <div className="flex items-center gap-3 mb-4">
-            <div className="w-10 h-10 bg-[var(--accent-faint)] rounded-lg flex items-center justify-center">
-              <Building2 className="w-5 h-5 text-[var(--accent)]" />
+    <AuthSplitLayout brandPanel={<AuthBrandPanel />}>
+      <div className="w-full max-w-md space-y-4">
+        {/* Org invitation summary card */}
+        <div className="rounded-2xl border border-[var(--border-default)] bg-[var(--bg-primary)] p-5">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-[var(--accent-faint)] rounded-lg flex items-center justify-center shrink-0">
+              <Building2 className="w-5 h-5 text-[var(--accent)]" aria-hidden="true" />
             </div>
-            <div>
-              <h2 className="font-semibold text-lg text-[var(--text-primary)]">{inviteData.org_name}</h2>
-              <p className="text-sm text-[var(--text-muted)]">has invited you to join</p>
+            <div className="min-w-0">
+              <p className="text-[10px] font-mono font-semibold uppercase tracking-[0.18em] text-[var(--accent)]">
+                Organization invitation
+              </p>
+              <h2 className="font-semibold text-lg text-[var(--text-primary)] truncate">
+                {inviteData.org_name}
+              </h2>
             </div>
           </div>
 
-          <div className="space-y-2 text-sm">
+          <div className="mt-4 space-y-2 text-sm">
             <div className="flex items-center gap-2 text-[var(--text-secondary)]">
-              <User className="w-4 h-4 shrink-0" />
+              <User className="w-4 h-4 shrink-0" aria-hidden="true" />
               <span>
-                Invited by <strong className="text-[var(--text-primary)]">{inviteData.inviter_name}</strong>
+                Invited by{" "}
+                <strong className="text-[var(--text-primary)]">
+                  {inviteData.inviter_name}
+                </strong>
               </span>
             </div>
             <div className="flex items-center gap-2 text-[var(--text-secondary)]">
-              <Mail className="w-4 h-4 shrink-0" />
+              <Mail className="w-4 h-4 shrink-0" aria-hidden="true" />
               <span>
-                You will use: <strong className="text-[var(--text-primary)]">{inviteData.email}</strong>
+                You will use:{" "}
+                <strong className="text-[var(--text-primary)]">{inviteData.email}</strong>
               </span>
             </div>
             <div className="flex items-center gap-2 text-[var(--text-secondary)]">
-              <Clock className="w-4 h-4 shrink-0" />
+              <Clock className="w-4 h-4 shrink-0" aria-hidden="true" />
               <span>
                 Expires:{" "}
                 <strong className="text-[var(--text-primary)]">
@@ -140,32 +200,34 @@ export default function InvitePage() {
             </div>
           </div>
 
-          <div className="mt-4 pt-4 border-t border-[var(--border-default)]">
+          <div className="mt-4 pt-4 border-t border-[var(--border-subtle)]">
             <span
               className={cn(
-                "px-3 py-1 rounded-lg text-sm font-medium",
+                "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium",
                 inviteData.role === "admin"
-                  ? "bg-[var(--primary-light)] text-[var(--primary)]"
-                  : "bg-[var(--bg-tertiary)] text-[var(--text-secondary)]"
+                  ? "bg-[var(--accent-faint)] text-[var(--accent)] border border-[var(--accent)]/20"
+                  : "bg-[var(--bg-tertiary)] text-[var(--text-secondary)] border border-[var(--border-subtle)]"
               )}
             >
+              <Shield className="w-3 h-3" aria-hidden="true" />
               {inviteData.role}
             </span>
           </div>
         </div>
 
-        <div className="p-6 bg-[var(--bg-primary)] rounded-2xl border border-[var(--border-default)]">
-          <h1 className="text-xl font-bold mb-1 text-[var(--text-primary)]">Create your account</h1>
-          <p className="text-sm text-[var(--text-secondary)] mb-6">
-            Join {inviteData.org_name} by creating your account
-          </p>
-
-          <form onSubmit={handleSignup} className="space-y-4">
-            <div>
-              <label htmlFor="invite-name" className="block text-sm font-medium mb-1.5 text-[var(--text-primary)]">
+        <AuthFormCard
+          title="Create your account"
+          subtitle={`Join ${inviteData.org_name} by setting your name and password`}
+        >
+          <form onSubmit={handleSignup} className="space-y-4" noValidate>
+            <div className="space-y-2">
+              <label
+                htmlFor="invite-name"
+                className="text-sm font-medium text-[var(--text-primary)]"
+              >
                 Full name
               </label>
-              <input
+              <Input
                 id="invite-name"
                 type="text"
                 value={name}
@@ -174,15 +236,19 @@ export default function InvitePage() {
                 required
                 minLength={1}
                 maxLength={100}
-                className="w-full px-3 py-2 rounded-lg border border-[var(--border-default)] bg-[var(--bg-secondary)] text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--accent)]"
+                autoComplete="name"
+                aria-label="Full name"
               />
             </div>
 
-            <div>
-              <label htmlFor="invite-password" className="block text-sm font-medium mb-1.5 text-[var(--text-primary)]">
+            <div className="space-y-2">
+              <label
+                htmlFor="invite-password"
+                className="text-sm font-medium text-[var(--text-primary)]"
+              >
                 Password
               </label>
-              <input
+              <Input
                 id="invite-password"
                 type="password"
                 value={password}
@@ -190,22 +256,30 @@ export default function InvitePage() {
                 placeholder="Minimum 8 characters"
                 required
                 minLength={8}
-                className="w-full px-3 py-2 rounded-lg border border-[var(--border-default)] bg-[var(--bg-secondary)] text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--accent)]"
+                autoComplete="new-password"
+                aria-label="Password"
               />
             </div>
 
             {signupError && (
-              <div className="p-3 bg-[var(--error-bg)] text-[var(--error)] rounded-lg text-sm">{signupError}</div>
+              <div
+                role="alert"
+                className="bg-[var(--error-dim)] text-[var(--error)] text-sm px-4 py-3 rounded-xl flex items-center gap-2.5 border border-[var(--error)]/20"
+              >
+                <AlertCircle className="w-4 h-4 flex-shrink-0" aria-hidden="true" />
+                {signupError}
+              </div>
             )}
 
-            <button
+            <Button
               type="submit"
+              className="w-full h-11 text-sm font-semibold"
               disabled={signupLoading || !name.trim() || !password.trim()}
-              className="w-full py-2.5 bg-[var(--accent)] text-[var(--bg-base)] rounded-lg font-medium hover:bg-[var(--accent-hover)] disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              loading={signupLoading}
+              aria-label="Join organization"
             >
-              {signupLoading && <Loader2 className="w-4 h-4 animate-spin" />}
               {signupLoading ? "Creating account…" : "Join organization"}
-            </button>
+            </Button>
           </form>
 
           <p className="text-xs text-center text-[var(--text-muted)] mt-4">
@@ -214,8 +288,18 @@ export default function InvitePage() {
               Sign in
             </Link>
           </p>
-        </div>
+
+          <p className="text-xs text-center text-[var(--text-faint)] mt-2">
+            <Link
+              href="/"
+              className="inline-flex items-center gap-1 hover:text-[var(--text-muted)] transition-colors"
+            >
+              <ArrowLeft className="w-3 h-3" aria-hidden="true" />
+              Back to home
+            </Link>
+          </p>
+        </AuthFormCard>
       </div>
-    </div>
+    </AuthSplitLayout>
   );
 }

@@ -1,0 +1,975 @@
+{
+  "trace_id": "trace_loop_cross_tool_01",
+  "archetype_id": "loop-cross-tool",
+  "agent_id": "agent_B_01_loop-cross-tool_01",
+  "event_count": 12,
+  "events": [
+    {
+      "event_id": "evt_tloop_cross_tool_01_0000",
+      "tenant_id": "org_eden_synth",
+      "project_id": "proj_synthetic_eval_v3",
+      "trace_id": "trace_loop_cross_tool_01",
+      "realm": "production",
+      "agent_id": "agent_B_01_loop-cross-tool_01",
+      "agent_version": "synth-v3.0.0",
+      "environment_id": "env_prod_main",
+      "tags": [],
+      "source_format": "eden_native",
+      "images": [],
+      "audio": [],
+      "citations": [],
+      "stop_sequence": null,
+      "system_fingerprint": "fp_synth-v3.0.0",
+      "conversation_id": "conv_ool_01",
+      "event_type": "span.start",
+      "timestamp": "2026-06-30T12:00:00+00:00",
+      "parent_span_id": null,
+      "span_id": "spn_trace_loop_cross_tool_01_0000",
+      "name": "trace",
+      "duration_ms": 0.0,
+      "payload": {},
+      "metrics": {},
+      "attributes": {
+        "environment": "production"
+      },
+      "outcome": null,
+      "request_body": null,
+      "response_body": null,
+      "reasoning": null,
+      "tool_calls_full": [],
+      "tool_results": [],
+      "logprobs": null,
+      "finish_reason": null,
+      "cache_hit": false,
+      "prompt_cache_savings_usd": 0.0,
+      "model_version": null,
+      "service_tier": null
+    },
+    {
+      "event_id": "evt_tloop_cross_tool_01_0001",
+      "tenant_id": "org_eden_synth",
+      "project_id": "proj_synthetic_eval_v3",
+      "trace_id": "trace_loop_cross_tool_01",
+      "realm": "production",
+      "agent_id": "agent_B_01_loop-cross-tool_01",
+      "agent_version": "synth-v3.0.0",
+      "environment_id": "env_prod_main",
+      "tags": [],
+      "source_format": "eden_native",
+      "images": [],
+      "audio": [],
+      "citations": [],
+      "stop_sequence": null,
+      "system_fingerprint": "fp_synth-v3.0.0",
+      "conversation_id": "conv_ool_01",
+      "event_type": "llm.completion",
+      "timestamp": "2026-06-30T12:00:00.800000+00:00",
+      "parent_span_id": "spn_trace_loop_cross_tool_01_0000",
+      "span_id": "spn_trace_loop_cross_tool_01_0001",
+      "name": "llm.fast",
+      "duration_ms": 800.0,
+      "payload": {},
+      "metrics": {
+        "prompt_tokens": 50,
+        "completion_tokens": 20,
+        "total_tokens": 70,
+        "cost_usd": 1.9e-05,
+        "latency_ms": 800.0
+      },
+      "attributes": {
+        "model": "gpt-4o-mini",
+        "environment": "production",
+        "user_id": "user_synth_31",
+        "session_id": "sess_synth_28"
+      },
+      "outcome": "success",
+      "request_body": {
+        "model": "gpt-4o-mini",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Email alice iteration 0."
+          }
+        ],
+        "temperature": 0.0
+      },
+      "response_body": {
+        "id": "cmpl-evt_cmpl_75125",
+        "model": "gpt-4o-mini",
+        "choices": [
+          {
+            "index": 0,
+            "finish_reason": "stop",
+            "message": {
+              "role": "assistant",
+              "content": "Sending.",
+              "tool_calls": [
+                {
+                  "id": "call_c_0000",
+                  "type": "function",
+                  "function": {
+                    "name": "send_email",
+                    "arguments": "{\"to\": \"alice@eden.co\", \"subject\": \"hello\", \"body\": \"hi\"}"
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "usage": {
+          "prompt_tokens": 50,
+          "completion_tokens": 20,
+          "total_tokens": 70
+        }
+      },
+      "reasoning": null,
+      "tool_calls_full": [
+        {
+          "id": "call_c_0000",
+          "type": "function",
+          "function": {
+            "name": "send_email",
+            "arguments": "{\"to\": \"alice@eden.co\", \"subject\": \"hello\", \"body\": \"hi\"}"
+          }
+        }
+      ],
+      "tool_results": [],
+      "logprobs": {
+        "content": [
+          [
+            {
+              "token": "Sending.",
+              "logprob": -0.1,
+              "top_logprobs": []
+            }
+          ]
+        ]
+      },
+      "finish_reason": "stop",
+      "cache_hit": false,
+      "prompt_cache_savings_usd": 0.0,
+      "model_version": "gpt-4o-mini",
+      "service_tier": "standard"
+    },
+    {
+      "event_id": "evt_tloop_cross_tool_01_0002",
+      "tenant_id": "org_eden_synth",
+      "project_id": "proj_synthetic_eval_v3",
+      "trace_id": "trace_loop_cross_tool_01",
+      "realm": "production",
+      "agent_id": "agent_B_01_loop-cross-tool_01",
+      "agent_version": "synth-v3.0.0",
+      "environment_id": "env_prod_main",
+      "tags": [],
+      "source_format": "eden_native",
+      "images": [],
+      "audio": [],
+      "citations": [],
+      "stop_sequence": null,
+      "system_fingerprint": "fp_synth-v3.0.0",
+      "conversation_id": "conv_ool_01",
+      "event_type": "tool.call",
+      "timestamp": "2026-06-30T12:00:00.920000+00:00",
+      "parent_span_id": "spn_trace_loop_cross_tool_01_0000",
+      "span_id": "spn_trace_loop_cross_tool_01_0002",
+      "name": "send_email",
+      "duration_ms": 120.0,
+      "payload": {},
+      "metrics": {
+        "latency_ms": 120.0,
+        "cost_usd": 0.008586
+      },
+      "attributes": {
+        "environment": "production"
+      },
+      "outcome": "success",
+      "request_body": {
+        "tool": "send_email",
+        "arguments": {
+          "to": "alice@eden.co",
+          "subject": "hello",
+          "body": "hi"
+        }
+      },
+      "response_body": {
+        "result": {
+          "sent": true,
+          "message_id": "msg_5439"
+        }
+      },
+      "reasoning": null,
+      "tool_calls_full": [
+        {
+          "tool_call_id": "call_send_email_46851",
+          "type": "function",
+          "function": {
+            "name": "send_email",
+            "arguments": "{\"to\": \"alice@eden.co\", \"subject\": \"hello\", \"body\": \"hi\"}"
+          }
+        }
+      ],
+      "tool_results": [
+        {
+          "tool_call_id": "call_send_email_46851",
+          "role": "tool",
+          "content": "{\"sent\": true, \"message_id\": \"msg_5439\"}"
+        }
+      ],
+      "logprobs": null,
+      "finish_reason": null,
+      "cache_hit": false,
+      "prompt_cache_savings_usd": 0.0,
+      "model_version": null,
+      "service_tier": null
+    },
+    {
+      "event_id": "evt_tloop_cross_tool_01_0003",
+      "tenant_id": "org_eden_synth",
+      "project_id": "proj_synthetic_eval_v3",
+      "trace_id": "trace_loop_cross_tool_01",
+      "realm": "production",
+      "agent_id": "agent_B_01_loop-cross-tool_01",
+      "agent_version": "synth-v3.0.0",
+      "environment_id": "env_prod_main",
+      "tags": [],
+      "source_format": "eden_native",
+      "images": [],
+      "audio": [],
+      "citations": [],
+      "stop_sequence": null,
+      "system_fingerprint": "fp_synth-v3.0.0",
+      "conversation_id": "conv_ool_01",
+      "event_type": "llm.completion",
+      "timestamp": "2026-06-30T12:00:01.720000+00:00",
+      "parent_span_id": "spn_trace_loop_cross_tool_01_0000",
+      "span_id": "spn_trace_loop_cross_tool_01_0003",
+      "name": "llm.fast",
+      "duration_ms": 800.0,
+      "payload": {},
+      "metrics": {
+        "prompt_tokens": 50,
+        "completion_tokens": 20,
+        "total_tokens": 70,
+        "cost_usd": 1.9e-05,
+        "latency_ms": 800.0
+      },
+      "attributes": {
+        "model": "gpt-4o-mini",
+        "environment": "production",
+        "user_id": "user_synth_59",
+        "session_id": "sess_synth_42"
+      },
+      "outcome": "success",
+      "request_body": {
+        "model": "gpt-4o-mini",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Email alice iteration 1."
+          }
+        ],
+        "temperature": 0.0
+      },
+      "response_body": {
+        "id": "cmpl-evt_cmpl_64124",
+        "model": "gpt-4o-mini",
+        "choices": [
+          {
+            "index": 0,
+            "finish_reason": "stop",
+            "message": {
+              "role": "assistant",
+              "content": "Sending.",
+              "tool_calls": [
+                {
+                  "id": "call_c_0001",
+                  "type": "function",
+                  "function": {
+                    "name": "outbound.mail",
+                    "arguments": "{\"recipient\": \"alice@eden.co\", \"title\": \"hello\", \"message\": \"hi\"}"
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "usage": {
+          "prompt_tokens": 50,
+          "completion_tokens": 20,
+          "total_tokens": 70
+        }
+      },
+      "reasoning": null,
+      "tool_calls_full": [
+        {
+          "id": "call_c_0001",
+          "type": "function",
+          "function": {
+            "name": "outbound.mail",
+            "arguments": "{\"recipient\": \"alice@eden.co\", \"title\": \"hello\", \"message\": \"hi\"}"
+          }
+        }
+      ],
+      "tool_results": [],
+      "logprobs": {
+        "content": [
+          [
+            {
+              "token": "Sending.",
+              "logprob": -0.1,
+              "top_logprobs": []
+            }
+          ]
+        ]
+      },
+      "finish_reason": "stop",
+      "cache_hit": false,
+      "prompt_cache_savings_usd": 0.0,
+      "model_version": "gpt-4o-mini",
+      "service_tier": "standard"
+    },
+    {
+      "event_id": "evt_tloop_cross_tool_01_0004",
+      "tenant_id": "org_eden_synth",
+      "project_id": "proj_synthetic_eval_v3",
+      "trace_id": "trace_loop_cross_tool_01",
+      "realm": "production",
+      "agent_id": "agent_B_01_loop-cross-tool_01",
+      "agent_version": "synth-v3.0.0",
+      "environment_id": "env_prod_main",
+      "tags": [],
+      "source_format": "eden_native",
+      "images": [],
+      "audio": [],
+      "citations": [],
+      "stop_sequence": null,
+      "system_fingerprint": "fp_synth-v3.0.0",
+      "conversation_id": "conv_ool_01",
+      "event_type": "tool.call",
+      "timestamp": "2026-06-30T12:00:01.845000+00:00",
+      "parent_span_id": "spn_trace_loop_cross_tool_01_0000",
+      "span_id": "spn_trace_loop_cross_tool_01_0004",
+      "name": "outbound.mail",
+      "duration_ms": 125.0,
+      "payload": {},
+      "metrics": {
+        "latency_ms": 125.0,
+        "cost_usd": 0.006652
+      },
+      "attributes": {
+        "environment": "production"
+      },
+      "outcome": "success",
+      "request_body": {
+        "tool": "outbound.mail",
+        "arguments": {
+          "recipient": "alice@eden.co",
+          "title": "hello",
+          "message": "hi"
+        }
+      },
+      "response_body": {
+        "result": {
+          "sent": true,
+          "message_id": "msg_5906"
+        }
+      },
+      "reasoning": null,
+      "tool_calls_full": [
+        {
+          "tool_call_id": "call_outbound.mail_38151",
+          "type": "function",
+          "function": {
+            "name": "outbound.mail",
+            "arguments": "{\"recipient\": \"alice@eden.co\", \"title\": \"hello\", \"message\": \"hi\"}"
+          }
+        }
+      ],
+      "tool_results": [
+        {
+          "tool_call_id": "call_outbound.mail_38151",
+          "role": "tool",
+          "content": "{\"sent\": true, \"message_id\": \"msg_5906\"}"
+        }
+      ],
+      "logprobs": null,
+      "finish_reason": null,
+      "cache_hit": false,
+      "prompt_cache_savings_usd": 0.0,
+      "model_version": null,
+      "service_tier": null
+    },
+    {
+      "event_id": "evt_tloop_cross_tool_01_0005",
+      "tenant_id": "org_eden_synth",
+      "project_id": "proj_synthetic_eval_v3",
+      "trace_id": "trace_loop_cross_tool_01",
+      "realm": "production",
+      "agent_id": "agent_B_01_loop-cross-tool_01",
+      "agent_version": "synth-v3.0.0",
+      "environment_id": "env_prod_main",
+      "tags": [],
+      "source_format": "eden_native",
+      "images": [],
+      "audio": [],
+      "citations": [],
+      "stop_sequence": null,
+      "system_fingerprint": "fp_synth-v3.0.0",
+      "conversation_id": "conv_ool_01",
+      "event_type": "llm.completion",
+      "timestamp": "2026-06-30T12:00:02.645000+00:00",
+      "parent_span_id": "spn_trace_loop_cross_tool_01_0000",
+      "span_id": "spn_trace_loop_cross_tool_01_0005",
+      "name": "llm.fast",
+      "duration_ms": 800.0,
+      "payload": {},
+      "metrics": {
+        "prompt_tokens": 50,
+        "completion_tokens": 20,
+        "total_tokens": 70,
+        "cost_usd": 1.9e-05,
+        "latency_ms": 800.0
+      },
+      "attributes": {
+        "model": "gpt-4o-mini",
+        "environment": "production",
+        "user_id": "user_synth_41",
+        "session_id": "sess_synth_60"
+      },
+      "outcome": "success",
+      "request_body": {
+        "model": "gpt-4o-mini",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Email alice iteration 2."
+          }
+        ],
+        "temperature": 0.0
+      },
+      "response_body": {
+        "id": "cmpl-evt_cmpl_88932",
+        "model": "gpt-4o-mini",
+        "choices": [
+          {
+            "index": 0,
+            "finish_reason": "stop",
+            "message": {
+              "role": "assistant",
+              "content": "Sending.",
+              "tool_calls": [
+                {
+                  "id": "call_c_0002",
+                  "type": "function",
+                  "function": {
+                    "name": "mail.deliver",
+                    "arguments": "{\"rcpt\": \"alice@eden.co\", \"subject_line\": \"hello\", \"body_text\": \"hi\"}"
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "usage": {
+          "prompt_tokens": 50,
+          "completion_tokens": 20,
+          "total_tokens": 70
+        }
+      },
+      "reasoning": null,
+      "tool_calls_full": [
+        {
+          "id": "call_c_0002",
+          "type": "function",
+          "function": {
+            "name": "mail.deliver",
+            "arguments": "{\"rcpt\": \"alice@eden.co\", \"subject_line\": \"hello\", \"body_text\": \"hi\"}"
+          }
+        }
+      ],
+      "tool_results": [],
+      "logprobs": {
+        "content": [
+          [
+            {
+              "token": "Sending.",
+              "logprob": -0.1,
+              "top_logprobs": []
+            }
+          ]
+        ]
+      },
+      "finish_reason": "stop",
+      "cache_hit": false,
+      "prompt_cache_savings_usd": 0.0,
+      "model_version": "gpt-4o-mini",
+      "service_tier": "standard"
+    },
+    {
+      "event_id": "evt_tloop_cross_tool_01_0006",
+      "tenant_id": "org_eden_synth",
+      "project_id": "proj_synthetic_eval_v3",
+      "trace_id": "trace_loop_cross_tool_01",
+      "realm": "production",
+      "agent_id": "agent_B_01_loop-cross-tool_01",
+      "agent_version": "synth-v3.0.0",
+      "environment_id": "env_prod_main",
+      "tags": [],
+      "source_format": "eden_native",
+      "images": [],
+      "audio": [],
+      "citations": [],
+      "stop_sequence": null,
+      "system_fingerprint": "fp_synth-v3.0.0",
+      "conversation_id": "conv_ool_01",
+      "event_type": "tool.call",
+      "timestamp": "2026-06-30T12:00:02.775000+00:00",
+      "parent_span_id": "spn_trace_loop_cross_tool_01_0000",
+      "span_id": "spn_trace_loop_cross_tool_01_0006",
+      "name": "mail.deliver",
+      "duration_ms": 130.0,
+      "payload": {},
+      "metrics": {
+        "latency_ms": 130.0,
+        "cost_usd": 0.005977
+      },
+      "attributes": {
+        "environment": "production"
+      },
+      "outcome": "success",
+      "request_body": {
+        "tool": "mail.deliver",
+        "arguments": {
+          "rcpt": "alice@eden.co",
+          "subject_line": "hello",
+          "body_text": "hi"
+        }
+      },
+      "response_body": {
+        "result": {
+          "sent": true,
+          "message_id": "msg_1704"
+        }
+      },
+      "reasoning": null,
+      "tool_calls_full": [
+        {
+          "tool_call_id": "call_mail.deliver_89342",
+          "type": "function",
+          "function": {
+            "name": "mail.deliver",
+            "arguments": "{\"rcpt\": \"alice@eden.co\", \"subject_line\": \"hello\", \"body_text\": \"hi\"}"
+          }
+        }
+      ],
+      "tool_results": [
+        {
+          "tool_call_id": "call_mail.deliver_89342",
+          "role": "tool",
+          "content": "{\"sent\": true, \"message_id\": \"msg_1704\"}"
+        }
+      ],
+      "logprobs": null,
+      "finish_reason": null,
+      "cache_hit": false,
+      "prompt_cache_savings_usd": 0.0,
+      "model_version": null,
+      "service_tier": null
+    },
+    {
+      "event_id": "evt_tloop_cross_tool_01_0007",
+      "tenant_id": "org_eden_synth",
+      "project_id": "proj_synthetic_eval_v3",
+      "trace_id": "trace_loop_cross_tool_01",
+      "realm": "production",
+      "agent_id": "agent_B_01_loop-cross-tool_01",
+      "agent_version": "synth-v3.0.0",
+      "environment_id": "env_prod_main",
+      "tags": [],
+      "source_format": "eden_native",
+      "images": [],
+      "audio": [],
+      "citations": [],
+      "stop_sequence": null,
+      "system_fingerprint": "fp_synth-v3.0.0",
+      "conversation_id": "conv_ool_01",
+      "event_type": "llm.completion",
+      "timestamp": "2026-06-30T12:00:03.575000+00:00",
+      "parent_span_id": "spn_trace_loop_cross_tool_01_0000",
+      "span_id": "spn_trace_loop_cross_tool_01_0007",
+      "name": "llm.fast",
+      "duration_ms": 800.0,
+      "payload": {},
+      "metrics": {
+        "prompt_tokens": 50,
+        "completion_tokens": 20,
+        "total_tokens": 70,
+        "cost_usd": 1.9e-05,
+        "latency_ms": 800.0
+      },
+      "attributes": {
+        "model": "gpt-4o-mini",
+        "environment": "production",
+        "user_id": "user_synth_53",
+        "session_id": "sess_synth_68"
+      },
+      "outcome": "success",
+      "request_body": {
+        "model": "gpt-4o-mini",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Email alice iteration 3."
+          }
+        ],
+        "temperature": 0.0
+      },
+      "response_body": {
+        "id": "cmpl-evt_cmpl_93431",
+        "model": "gpt-4o-mini",
+        "choices": [
+          {
+            "index": 0,
+            "finish_reason": "stop",
+            "message": {
+              "role": "assistant",
+              "content": "Sending.",
+              "tool_calls": [
+                {
+                  "id": "call_c_0003",
+                  "type": "function",
+                  "function": {
+                    "name": "dispatch_mail",
+                    "arguments": "{\"address\": \"alice@eden.co\", \"header\": \"hello\", \"content\": \"hi\"}"
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "usage": {
+          "prompt_tokens": 50,
+          "completion_tokens": 20,
+          "total_tokens": 70
+        }
+      },
+      "reasoning": null,
+      "tool_calls_full": [
+        {
+          "id": "call_c_0003",
+          "type": "function",
+          "function": {
+            "name": "dispatch_mail",
+            "arguments": "{\"address\": \"alice@eden.co\", \"header\": \"hello\", \"content\": \"hi\"}"
+          }
+        }
+      ],
+      "tool_results": [],
+      "logprobs": {
+        "content": [
+          [
+            {
+              "token": "Sending.",
+              "logprob": -0.1,
+              "top_logprobs": []
+            }
+          ]
+        ]
+      },
+      "finish_reason": "stop",
+      "cache_hit": false,
+      "prompt_cache_savings_usd": 0.0,
+      "model_version": "gpt-4o-mini",
+      "service_tier": "standard"
+    },
+    {
+      "event_id": "evt_tloop_cross_tool_01_0008",
+      "tenant_id": "org_eden_synth",
+      "project_id": "proj_synthetic_eval_v3",
+      "trace_id": "trace_loop_cross_tool_01",
+      "realm": "production",
+      "agent_id": "agent_B_01_loop-cross-tool_01",
+      "agent_version": "synth-v3.0.0",
+      "environment_id": "env_prod_main",
+      "tags": [],
+      "source_format": "eden_native",
+      "images": [],
+      "audio": [],
+      "citations": [],
+      "stop_sequence": null,
+      "system_fingerprint": "fp_synth-v3.0.0",
+      "conversation_id": "conv_ool_01",
+      "event_type": "tool.call",
+      "timestamp": "2026-06-30T12:00:03.710000+00:00",
+      "parent_span_id": "spn_trace_loop_cross_tool_01_0000",
+      "span_id": "spn_trace_loop_cross_tool_01_0008",
+      "name": "dispatch_mail",
+      "duration_ms": 135.0,
+      "payload": {},
+      "metrics": {
+        "latency_ms": 135.0,
+        "cost_usd": 0.000656
+      },
+      "attributes": {
+        "environment": "production"
+      },
+      "outcome": "success",
+      "request_body": {
+        "tool": "dispatch_mail",
+        "arguments": {
+          "address": "alice@eden.co",
+          "header": "hello",
+          "content": "hi"
+        }
+      },
+      "response_body": {
+        "result": {
+          "sent": true,
+          "message_id": "msg_4061"
+        }
+      },
+      "reasoning": null,
+      "tool_calls_full": [
+        {
+          "tool_call_id": "call_dispatch_mail_61149",
+          "type": "function",
+          "function": {
+            "name": "dispatch_mail",
+            "arguments": "{\"address\": \"alice@eden.co\", \"header\": \"hello\", \"content\": \"hi\"}"
+          }
+        }
+      ],
+      "tool_results": [
+        {
+          "tool_call_id": "call_dispatch_mail_61149",
+          "role": "tool",
+          "content": "{\"sent\": true, \"message_id\": \"msg_4061\"}"
+        }
+      ],
+      "logprobs": null,
+      "finish_reason": null,
+      "cache_hit": false,
+      "prompt_cache_savings_usd": 0.0,
+      "model_version": null,
+      "service_tier": null
+    },
+    {
+      "event_id": "evt_tloop_cross_tool_01_0009",
+      "tenant_id": "org_eden_synth",
+      "project_id": "proj_synthetic_eval_v3",
+      "trace_id": "trace_loop_cross_tool_01",
+      "realm": "production",
+      "agent_id": "agent_B_01_loop-cross-tool_01",
+      "agent_version": "synth-v3.0.0",
+      "environment_id": "env_prod_main",
+      "tags": [],
+      "source_format": "eden_native",
+      "images": [],
+      "audio": [],
+      "citations": [],
+      "stop_sequence": null,
+      "system_fingerprint": "fp_synth-v3.0.0",
+      "conversation_id": "conv_ool_01",
+      "event_type": "llm.completion",
+      "timestamp": "2026-06-30T12:00:04.510000+00:00",
+      "parent_span_id": "spn_trace_loop_cross_tool_01_0000",
+      "span_id": "spn_trace_loop_cross_tool_01_0009",
+      "name": "llm.fast",
+      "duration_ms": 800.0,
+      "payload": {},
+      "metrics": {
+        "prompt_tokens": 50,
+        "completion_tokens": 20,
+        "total_tokens": 70,
+        "cost_usd": 1.9e-05,
+        "latency_ms": 800.0
+      },
+      "attributes": {
+        "model": "gpt-4o-mini",
+        "environment": "production",
+        "user_id": "user_synth_32",
+        "session_id": "sess_synth_97"
+      },
+      "outcome": "success",
+      "request_body": {
+        "model": "gpt-4o-mini",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Email alice iteration 4."
+          }
+        ],
+        "temperature": 0.0
+      },
+      "response_body": {
+        "id": "cmpl-evt_cmpl_42571",
+        "model": "gpt-4o-mini",
+        "choices": [
+          {
+            "index": 0,
+            "finish_reason": "stop",
+            "message": {
+              "role": "assistant",
+              "content": "Sending.",
+              "tool_calls": [
+                {
+                  "id": "call_c_0004",
+                  "type": "function",
+                  "function": {
+                    "name": "send_email",
+                    "arguments": "{\"to\": \"alice@eden.co\", \"subject\": \"hello\", \"body\": \"hi\"}"
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "usage": {
+          "prompt_tokens": 50,
+          "completion_tokens": 20,
+          "total_tokens": 70
+        }
+      },
+      "reasoning": null,
+      "tool_calls_full": [
+        {
+          "id": "call_c_0004",
+          "type": "function",
+          "function": {
+            "name": "send_email",
+            "arguments": "{\"to\": \"alice@eden.co\", \"subject\": \"hello\", \"body\": \"hi\"}"
+          }
+        }
+      ],
+      "tool_results": [],
+      "logprobs": {
+        "content": [
+          [
+            {
+              "token": "Sending.",
+              "logprob": -0.1,
+              "top_logprobs": []
+            }
+          ]
+        ]
+      },
+      "finish_reason": "stop",
+      "cache_hit": false,
+      "prompt_cache_savings_usd": 0.0,
+      "model_version": "gpt-4o-mini",
+      "service_tier": "standard"
+    },
+    {
+      "event_id": "evt_tloop_cross_tool_01_0010",
+      "tenant_id": "org_eden_synth",
+      "project_id": "proj_synthetic_eval_v3",
+      "trace_id": "trace_loop_cross_tool_01",
+      "realm": "production",
+      "agent_id": "agent_B_01_loop-cross-tool_01",
+      "agent_version": "synth-v3.0.0",
+      "environment_id": "env_prod_main",
+      "tags": [],
+      "source_format": "eden_native",
+      "images": [],
+      "audio": [],
+      "citations": [],
+      "stop_sequence": null,
+      "system_fingerprint": "fp_synth-v3.0.0",
+      "conversation_id": "conv_ool_01",
+      "event_type": "tool.call",
+      "timestamp": "2026-06-30T12:00:04.650000+00:00",
+      "parent_span_id": "spn_trace_loop_cross_tool_01_0000",
+      "span_id": "spn_trace_loop_cross_tool_01_0010",
+      "name": "send_email",
+      "duration_ms": 140.0,
+      "payload": {},
+      "metrics": {
+        "latency_ms": 140.0,
+        "cost_usd": 0.009379
+      },
+      "attributes": {
+        "environment": "production"
+      },
+      "outcome": "success",
+      "request_body": {
+        "tool": "send_email",
+        "arguments": {
+          "to": "alice@eden.co",
+          "subject": "hello",
+          "body": "hi"
+        }
+      },
+      "response_body": {
+        "result": {
+          "sent": true,
+          "message_id": "msg_4745"
+        }
+      },
+      "reasoning": null,
+      "tool_calls_full": [
+        {
+          "tool_call_id": "call_send_email_11220",
+          "type": "function",
+          "function": {
+            "name": "send_email",
+            "arguments": "{\"to\": \"alice@eden.co\", \"subject\": \"hello\", \"body\": \"hi\"}"
+          }
+        }
+      ],
+      "tool_results": [
+        {
+          "tool_call_id": "call_send_email_11220",
+          "role": "tool",
+          "content": "{\"sent\": true, \"message_id\": \"msg_4745\"}"
+        }
+      ],
+      "logprobs": null,
+      "finish_reason": null,
+      "cache_hit": false,
+      "prompt_cache_savings_usd": 0.0,
+      "model_version": null,
+      "service_tier": null
+    },
+    {
+      "event_id": "evt_tloop_cross_tool_01_0011",
+      "tenant_id": "org_eden_synth",
+      "project_id": "proj_synthetic_eval_v3",
+      "trace_id": "trace_loop_cross_tool_01",
+      "realm": "production",
+      "agent_id": "agent_B_01_loop-cross-tool_01",
+      "agent_version": "synth-v3.0.0",
+      "environment_id": "env_prod_main",
+      "tags": [],
+      "source_format": "eden_native",
+      "images": [],
+      "audio": [],
+      "citations": [],
+      "stop_sequence": null,
+      "system_fingerprint": "fp_synth-v3.0.0",
+      "conversation_id": "conv_ool_01",
+      "event_type": "span.end",
+      "timestamp": "2026-06-30T12:00:04.650000+00:00",
+      "parent_span_id": null,
+      "span_id": "spn_trace_loop_cross_tool_01_0000",
+      "name": "trace",
+      "duration_ms": 4650.0,
+      "payload": {},
+      "metrics": {},
+      "attributes": {
+        "environment": "production"
+      },
+      "outcome": "success",
+      "request_body": null,
+      "response_body": null,
+      "reasoning": null,
+      "tool_calls_full": [],
+      "tool_results": [],
+      "logprobs": null,
+      "finish_reason": null,
+      "cache_hit": false,
+      "prompt_cache_savings_usd": 0.0,
+      "model_version": null,
+      "service_tier": null
+    }
+  ]
+}

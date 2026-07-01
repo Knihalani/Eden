@@ -1,0 +1,18 @@
+{
+  "trace_id": "trace_swarm_centralized_02",
+  "archetype_id": "swarm-centralized",
+  "agent_id": "agent_swarm-centralized_02",
+  "expected_TAS": 48,
+  "expected_intervention": "warn",
+  "expected_metrics": {
+    "swarm_entropy": 0.4,
+    "threshold": 1.5
+  },
+  "expected_detector_fires": [
+    "topology_centralized"
+  ],
+  "expected_loop_detected": false,
+  "expected_hallucination_detected": false,
+  "expected_redundancy_pct": 0.0,
+  "notes": "All 10 handoffs go to 'billing' \u2192 topology entropy \u2248 0.0 (all mass on one node). Phase 10 SwarmTopologyDetector (centralized) MUST fire on entropy < 1.5."
+}

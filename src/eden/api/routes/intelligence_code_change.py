@@ -68,7 +68,7 @@ from typing import Any
 from fastapi import APIRouter, Body, Depends, Path
 from pydantic import BaseModel, Field
 
-from eden.api.deps import get_current_user, require_feature_flag, require_org_admin, require_org_permission_dep
+from eden.api.deps import get_current_user, require_feature_flag, require_org_admin, require_org_permission_dep, require_org_member
 from eden.code_change import (
     AgentActivityFeed,
     AgentPersonaService,
@@ -107,6 +107,7 @@ router = APIRouter(
     dependencies=[
         Depends(require_feature_flag("intelligence_gap_v0")),
         Depends(get_current_user),
+        Depends(require_org_member),
     ],
 )
 

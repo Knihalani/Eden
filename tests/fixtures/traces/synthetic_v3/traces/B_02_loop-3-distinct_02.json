@@ -1,0 +1,2210 @@
+{
+  "trace_id": "trace_loop_3_distinct_02",
+  "archetype_id": "loop-3-distinct",
+  "agent_id": "agent_B_02_loop-3-distinct_02",
+  "event_count": 26,
+  "events": [
+    {
+      "event_id": "evt_tloop_3_distinct_02_0000",
+      "tenant_id": "org_eden_synth",
+      "project_id": "proj_synthetic_eval_v3",
+      "trace_id": "trace_loop_3_distinct_02",
+      "realm": "production",
+      "agent_id": "agent_B_02_loop-3-distinct_02",
+      "agent_version": "synth-v3.0.0",
+      "environment_id": "env_prod_main",
+      "tags": [],
+      "source_format": "eden_native",
+      "images": [],
+      "audio": [],
+      "citations": [],
+      "stop_sequence": null,
+      "system_fingerprint": "fp_synth-v3.0.0",
+      "conversation_id": "conv_nct_02",
+      "event_type": "span.start",
+      "timestamp": "2026-06-30T12:00:00+00:00",
+      "parent_span_id": null,
+      "span_id": "spn_trace_loop_3_distinct_02_0000",
+      "name": "trace",
+      "duration_ms": 0.0,
+      "payload": {},
+      "metrics": {},
+      "attributes": {
+        "environment": "production"
+      },
+      "outcome": null,
+      "request_body": null,
+      "response_body": null,
+      "reasoning": null,
+      "tool_calls_full": [],
+      "tool_results": [],
+      "logprobs": null,
+      "finish_reason": null,
+      "cache_hit": false,
+      "prompt_cache_savings_usd": 0.0,
+      "model_version": null,
+      "service_tier": null
+    },
+    {
+      "event_id": "evt_tloop_3_distinct_02_0001",
+      "tenant_id": "org_eden_synth",
+      "project_id": "proj_synthetic_eval_v3",
+      "trace_id": "trace_loop_3_distinct_02",
+      "realm": "production",
+      "agent_id": "agent_B_02_loop-3-distinct_02",
+      "agent_version": "synth-v3.0.0",
+      "environment_id": "env_prod_main",
+      "tags": [],
+      "source_format": "eden_native",
+      "images": [],
+      "audio": [],
+      "citations": [],
+      "stop_sequence": null,
+      "system_fingerprint": "fp_synth-v3.0.0",
+      "conversation_id": "conv_nct_02",
+      "event_type": "llm.completion",
+      "timestamp": "2026-06-30T12:00:00.800000+00:00",
+      "parent_span_id": "spn_trace_loop_3_distinct_02_0000",
+      "span_id": "spn_trace_loop_3_distinct_02_0001",
+      "name": "llm.fast",
+      "duration_ms": 800.0,
+      "payload": {},
+      "metrics": {
+        "prompt_tokens": 50,
+        "completion_tokens": 20,
+        "total_tokens": 70,
+        "cost_usd": 1.9e-05,
+        "latency_ms": 800.0
+      },
+      "attributes": {
+        "model": "gpt-4o-mini",
+        "environment": "production",
+        "user_id": "user_synth_52",
+        "session_id": "sess_synth_28"
+      },
+      "outcome": "success",
+      "request_body": {
+        "model": "gpt-4o-mini",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Weather?"
+          }
+        ],
+        "temperature": 0.0
+      },
+      "response_body": {
+        "id": "cmpl-evt_cmpl_73561",
+        "model": "gpt-4o-mini",
+        "choices": [
+          {
+            "index": 0,
+            "finish_reason": "stop",
+            "message": {
+              "role": "assistant",
+              "content": "Looking up.",
+              "tool_calls": [
+                {
+                  "id": "call_w_0001",
+                  "type": "function",
+                  "function": {
+                    "name": "weather.lookup",
+                    "arguments": "{\"q\": \"weather Tokyo\"}"
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "usage": {
+          "prompt_tokens": 50,
+          "completion_tokens": 20,
+          "total_tokens": 70
+        }
+      },
+      "reasoning": null,
+      "tool_calls_full": [
+        {
+          "id": "call_w_0001",
+          "type": "function",
+          "function": {
+            "name": "weather.lookup",
+            "arguments": "{\"q\": \"weather Tokyo\"}"
+          }
+        }
+      ],
+      "tool_results": [],
+      "logprobs": {
+        "content": [
+          [
+            {
+              "token": "Looking",
+              "logprob": -0.1,
+              "top_logprobs": []
+            }
+          ],
+          [
+            {
+              "token": "up.",
+              "logprob": -0.1,
+              "top_logprobs": []
+            }
+          ]
+        ]
+      },
+      "finish_reason": "stop",
+      "cache_hit": false,
+      "prompt_cache_savings_usd": 0.0,
+      "model_version": "gpt-4o-mini",
+      "service_tier": "standard"
+    },
+    {
+      "event_id": "evt_tloop_3_distinct_02_0002",
+      "tenant_id": "org_eden_synth",
+      "project_id": "proj_synthetic_eval_v3",
+      "trace_id": "trace_loop_3_distinct_02",
+      "realm": "production",
+      "agent_id": "agent_B_02_loop-3-distinct_02",
+      "agent_version": "synth-v3.0.0",
+      "environment_id": "env_prod_main",
+      "tags": [],
+      "source_format": "eden_native",
+      "images": [],
+      "audio": [],
+      "citations": [],
+      "stop_sequence": null,
+      "system_fingerprint": "fp_synth-v3.0.0",
+      "conversation_id": "conv_nct_02",
+      "event_type": "tool.call",
+      "timestamp": "2026-06-30T12:00:10.800000+00:00",
+      "parent_span_id": "spn_trace_loop_3_distinct_02_0000",
+      "span_id": "spn_trace_loop_3_distinct_02_0002",
+      "name": "weather.lookup",
+      "duration_ms": 10000.0,
+      "payload": {},
+      "metrics": {
+        "latency_ms": 10000.0,
+        "cost_usd": 0.002656
+      },
+      "attributes": {
+        "environment": "production"
+      },
+      "outcome": "failure",
+      "request_body": {
+        "tool": "weather.lookup",
+        "arguments": {
+          "q": "weather Tokyo"
+        }
+      },
+      "response_body": {
+        "error": "upstream_timeout"
+      },
+      "reasoning": null,
+      "tool_calls_full": [
+        {
+          "tool_call_id": "call_weather.lookup_39077",
+          "type": "function",
+          "function": {
+            "name": "weather.lookup",
+            "arguments": "{\"q\": \"weather Tokyo\"}"
+          }
+        }
+      ],
+      "tool_results": [
+        {
+          "tool_call_id": "call_weather.lookup_39077",
+          "role": "tool",
+          "content": "{\"error\": \"timeout\"}",
+          "error": "upstream_timeout"
+        }
+      ],
+      "logprobs": null,
+      "finish_reason": null,
+      "cache_hit": false,
+      "prompt_cache_savings_usd": 0.0,
+      "model_version": null,
+      "service_tier": null
+    },
+    {
+      "event_id": "evt_tloop_3_distinct_02_0003",
+      "tenant_id": "org_eden_synth",
+      "project_id": "proj_synthetic_eval_v3",
+      "trace_id": "trace_loop_3_distinct_02",
+      "realm": "production",
+      "agent_id": "agent_B_02_loop-3-distinct_02",
+      "agent_version": "synth-v3.0.0",
+      "environment_id": "env_prod_main",
+      "tags": [],
+      "source_format": "eden_native",
+      "images": [],
+      "audio": [],
+      "citations": [],
+      "stop_sequence": null,
+      "system_fingerprint": "fp_synth-v3.0.0",
+      "conversation_id": "conv_nct_02",
+      "event_type": "llm.completion",
+      "timestamp": "2026-06-30T12:00:11.600000+00:00",
+      "parent_span_id": "spn_trace_loop_3_distinct_02_0000",
+      "span_id": "spn_trace_loop_3_distinct_02_0003",
+      "name": "llm.fast",
+      "duration_ms": 800.0,
+      "payload": {},
+      "metrics": {
+        "prompt_tokens": 50,
+        "completion_tokens": 20,
+        "total_tokens": 70,
+        "cost_usd": 1.9e-05,
+        "latency_ms": 800.0
+      },
+      "attributes": {
+        "model": "gpt-4o-mini",
+        "environment": "production",
+        "user_id": "user_synth_11",
+        "session_id": "sess_synth_63"
+      },
+      "outcome": "success",
+      "request_body": {
+        "model": "gpt-4o-mini",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Weather?"
+          }
+        ],
+        "temperature": 0.0
+      },
+      "response_body": {
+        "id": "cmpl-evt_cmpl_76496",
+        "model": "gpt-4o-mini",
+        "choices": [
+          {
+            "index": 0,
+            "finish_reason": "stop",
+            "message": {
+              "role": "assistant",
+              "content": "Looking up.",
+              "tool_calls": [
+                {
+                  "id": "call_w_0001",
+                  "type": "function",
+                  "function": {
+                    "name": "weather.lookup",
+                    "arguments": "{\"q\": \"weather Tokyo\"}"
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "usage": {
+          "prompt_tokens": 50,
+          "completion_tokens": 20,
+          "total_tokens": 70
+        }
+      },
+      "reasoning": null,
+      "tool_calls_full": [
+        {
+          "id": "call_w_0001",
+          "type": "function",
+          "function": {
+            "name": "weather.lookup",
+            "arguments": "{\"q\": \"weather Tokyo\"}"
+          }
+        }
+      ],
+      "tool_results": [],
+      "logprobs": {
+        "content": [
+          [
+            {
+              "token": "Looking",
+              "logprob": -0.1,
+              "top_logprobs": []
+            }
+          ],
+          [
+            {
+              "token": "up.",
+              "logprob": -0.1,
+              "top_logprobs": []
+            }
+          ]
+        ]
+      },
+      "finish_reason": "stop",
+      "cache_hit": false,
+      "prompt_cache_savings_usd": 0.0,
+      "model_version": "gpt-4o-mini",
+      "service_tier": "standard"
+    },
+    {
+      "event_id": "evt_tloop_3_distinct_02_0004",
+      "tenant_id": "org_eden_synth",
+      "project_id": "proj_synthetic_eval_v3",
+      "trace_id": "trace_loop_3_distinct_02",
+      "realm": "production",
+      "agent_id": "agent_B_02_loop-3-distinct_02",
+      "agent_version": "synth-v3.0.0",
+      "environment_id": "env_prod_main",
+      "tags": [],
+      "source_format": "eden_native",
+      "images": [],
+      "audio": [],
+      "citations": [],
+      "stop_sequence": null,
+      "system_fingerprint": "fp_synth-v3.0.0",
+      "conversation_id": "conv_nct_02",
+      "event_type": "tool.call",
+      "timestamp": "2026-06-30T12:00:21.600000+00:00",
+      "parent_span_id": "spn_trace_loop_3_distinct_02_0000",
+      "span_id": "spn_trace_loop_3_distinct_02_0004",
+      "name": "weather.lookup",
+      "duration_ms": 10000.0,
+      "payload": {},
+      "metrics": {
+        "latency_ms": 10000.0,
+        "cost_usd": 0.002782
+      },
+      "attributes": {
+        "environment": "production"
+      },
+      "outcome": "failure",
+      "request_body": {
+        "tool": "weather.lookup",
+        "arguments": {
+          "q": "weather Tokyo"
+        }
+      },
+      "response_body": {
+        "error": "upstream_timeout"
+      },
+      "reasoning": null,
+      "tool_calls_full": [
+        {
+          "tool_call_id": "call_weather.lookup_65413",
+          "type": "function",
+          "function": {
+            "name": "weather.lookup",
+            "arguments": "{\"q\": \"weather Tokyo\"}"
+          }
+        }
+      ],
+      "tool_results": [
+        {
+          "tool_call_id": "call_weather.lookup_65413",
+          "role": "tool",
+          "content": "{\"error\": \"timeout\"}",
+          "error": "upstream_timeout"
+        }
+      ],
+      "logprobs": null,
+      "finish_reason": null,
+      "cache_hit": false,
+      "prompt_cache_savings_usd": 0.0,
+      "model_version": null,
+      "service_tier": null
+    },
+    {
+      "event_id": "evt_tloop_3_distinct_02_0005",
+      "tenant_id": "org_eden_synth",
+      "project_id": "proj_synthetic_eval_v3",
+      "trace_id": "trace_loop_3_distinct_02",
+      "realm": "production",
+      "agent_id": "agent_B_02_loop-3-distinct_02",
+      "agent_version": "synth-v3.0.0",
+      "environment_id": "env_prod_main",
+      "tags": [],
+      "source_format": "eden_native",
+      "images": [],
+      "audio": [],
+      "citations": [],
+      "stop_sequence": null,
+      "system_fingerprint": "fp_synth-v3.0.0",
+      "conversation_id": "conv_nct_02",
+      "event_type": "llm.completion",
+      "timestamp": "2026-06-30T12:00:22.400000+00:00",
+      "parent_span_id": "spn_trace_loop_3_distinct_02_0000",
+      "span_id": "spn_trace_loop_3_distinct_02_0005",
+      "name": "llm.fast",
+      "duration_ms": 800.0,
+      "payload": {},
+      "metrics": {
+        "prompt_tokens": 50,
+        "completion_tokens": 20,
+        "total_tokens": 70,
+        "cost_usd": 1.9e-05,
+        "latency_ms": 800.0
+      },
+      "attributes": {
+        "model": "gpt-4o-mini",
+        "environment": "production",
+        "user_id": "user_synth_39",
+        "session_id": "sess_synth_67"
+      },
+      "outcome": "success",
+      "request_body": {
+        "model": "gpt-4o-mini",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Weather?"
+          }
+        ],
+        "temperature": 0.0
+      },
+      "response_body": {
+        "id": "cmpl-evt_cmpl_65258",
+        "model": "gpt-4o-mini",
+        "choices": [
+          {
+            "index": 0,
+            "finish_reason": "stop",
+            "message": {
+              "role": "assistant",
+              "content": "Looking up.",
+              "tool_calls": [
+                {
+                  "id": "call_w_0001",
+                  "type": "function",
+                  "function": {
+                    "name": "weather.lookup",
+                    "arguments": "{\"q\": \"weather Tokyo\"}"
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "usage": {
+          "prompt_tokens": 50,
+          "completion_tokens": 20,
+          "total_tokens": 70
+        }
+      },
+      "reasoning": null,
+      "tool_calls_full": [
+        {
+          "id": "call_w_0001",
+          "type": "function",
+          "function": {
+            "name": "weather.lookup",
+            "arguments": "{\"q\": \"weather Tokyo\"}"
+          }
+        }
+      ],
+      "tool_results": [],
+      "logprobs": {
+        "content": [
+          [
+            {
+              "token": "Looking",
+              "logprob": -0.1,
+              "top_logprobs": []
+            }
+          ],
+          [
+            {
+              "token": "up.",
+              "logprob": -0.1,
+              "top_logprobs": []
+            }
+          ]
+        ]
+      },
+      "finish_reason": "stop",
+      "cache_hit": false,
+      "prompt_cache_savings_usd": 0.0,
+      "model_version": "gpt-4o-mini",
+      "service_tier": "standard"
+    },
+    {
+      "event_id": "evt_tloop_3_distinct_02_0006",
+      "tenant_id": "org_eden_synth",
+      "project_id": "proj_synthetic_eval_v3",
+      "trace_id": "trace_loop_3_distinct_02",
+      "realm": "production",
+      "agent_id": "agent_B_02_loop-3-distinct_02",
+      "agent_version": "synth-v3.0.0",
+      "environment_id": "env_prod_main",
+      "tags": [],
+      "source_format": "eden_native",
+      "images": [],
+      "audio": [],
+      "citations": [],
+      "stop_sequence": null,
+      "system_fingerprint": "fp_synth-v3.0.0",
+      "conversation_id": "conv_nct_02",
+      "event_type": "tool.call",
+      "timestamp": "2026-06-30T12:00:32.400000+00:00",
+      "parent_span_id": "spn_trace_loop_3_distinct_02_0000",
+      "span_id": "spn_trace_loop_3_distinct_02_0006",
+      "name": "weather.lookup",
+      "duration_ms": 10000.0,
+      "payload": {},
+      "metrics": {
+        "latency_ms": 10000.0,
+        "cost_usd": 0.001803
+      },
+      "attributes": {
+        "environment": "production"
+      },
+      "outcome": "failure",
+      "request_body": {
+        "tool": "weather.lookup",
+        "arguments": {
+          "q": "weather Tokyo"
+        }
+      },
+      "response_body": {
+        "error": "upstream_timeout"
+      },
+      "reasoning": null,
+      "tool_calls_full": [
+        {
+          "tool_call_id": "call_weather.lookup_8074",
+          "type": "function",
+          "function": {
+            "name": "weather.lookup",
+            "arguments": "{\"q\": \"weather Tokyo\"}"
+          }
+        }
+      ],
+      "tool_results": [
+        {
+          "tool_call_id": "call_weather.lookup_8074",
+          "role": "tool",
+          "content": "{\"error\": \"timeout\"}",
+          "error": "upstream_timeout"
+        }
+      ],
+      "logprobs": null,
+      "finish_reason": null,
+      "cache_hit": false,
+      "prompt_cache_savings_usd": 0.0,
+      "model_version": null,
+      "service_tier": null
+    },
+    {
+      "event_id": "evt_tloop_3_distinct_02_0007",
+      "tenant_id": "org_eden_synth",
+      "project_id": "proj_synthetic_eval_v3",
+      "trace_id": "trace_loop_3_distinct_02",
+      "realm": "production",
+      "agent_id": "agent_B_02_loop-3-distinct_02",
+      "agent_version": "synth-v3.0.0",
+      "environment_id": "env_prod_main",
+      "tags": [],
+      "source_format": "eden_native",
+      "images": [],
+      "audio": [],
+      "citations": [],
+      "stop_sequence": null,
+      "system_fingerprint": "fp_synth-v3.0.0",
+      "conversation_id": "conv_nct_02",
+      "event_type": "llm.completion",
+      "timestamp": "2026-06-30T12:00:33.200000+00:00",
+      "parent_span_id": "spn_trace_loop_3_distinct_02_0000",
+      "span_id": "spn_trace_loop_3_distinct_02_0007",
+      "name": "llm.fast",
+      "duration_ms": 800.0,
+      "payload": {},
+      "metrics": {
+        "prompt_tokens": 50,
+        "completion_tokens": 20,
+        "total_tokens": 70,
+        "cost_usd": 1.9e-05,
+        "latency_ms": 800.0
+      },
+      "attributes": {
+        "model": "gpt-4o-mini",
+        "environment": "production",
+        "user_id": "user_synth_66",
+        "session_id": "sess_synth_88"
+      },
+      "outcome": "success",
+      "request_body": {
+        "model": "gpt-4o-mini",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Weather?"
+          }
+        ],
+        "temperature": 0.0
+      },
+      "response_body": {
+        "id": "cmpl-evt_cmpl_43546",
+        "model": "gpt-4o-mini",
+        "choices": [
+          {
+            "index": 0,
+            "finish_reason": "stop",
+            "message": {
+              "role": "assistant",
+              "content": "Looking up.",
+              "tool_calls": [
+                {
+                  "id": "call_w_0001",
+                  "type": "function",
+                  "function": {
+                    "name": "weather.lookup",
+                    "arguments": "{\"q\": \"weather Tokyo\"}"
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "usage": {
+          "prompt_tokens": 50,
+          "completion_tokens": 20,
+          "total_tokens": 70
+        }
+      },
+      "reasoning": null,
+      "tool_calls_full": [
+        {
+          "id": "call_w_0001",
+          "type": "function",
+          "function": {
+            "name": "weather.lookup",
+            "arguments": "{\"q\": \"weather Tokyo\"}"
+          }
+        }
+      ],
+      "tool_results": [],
+      "logprobs": {
+        "content": [
+          [
+            {
+              "token": "Looking",
+              "logprob": -0.1,
+              "top_logprobs": []
+            }
+          ],
+          [
+            {
+              "token": "up.",
+              "logprob": -0.1,
+              "top_logprobs": []
+            }
+          ]
+        ]
+      },
+      "finish_reason": "stop",
+      "cache_hit": false,
+      "prompt_cache_savings_usd": 0.0,
+      "model_version": "gpt-4o-mini",
+      "service_tier": "standard"
+    },
+    {
+      "event_id": "evt_tloop_3_distinct_02_0008",
+      "tenant_id": "org_eden_synth",
+      "project_id": "proj_synthetic_eval_v3",
+      "trace_id": "trace_loop_3_distinct_02",
+      "realm": "production",
+      "agent_id": "agent_B_02_loop-3-distinct_02",
+      "agent_version": "synth-v3.0.0",
+      "environment_id": "env_prod_main",
+      "tags": [],
+      "source_format": "eden_native",
+      "images": [],
+      "audio": [],
+      "citations": [],
+      "stop_sequence": null,
+      "system_fingerprint": "fp_synth-v3.0.0",
+      "conversation_id": "conv_nct_02",
+      "event_type": "tool.call",
+      "timestamp": "2026-06-30T12:00:43.200000+00:00",
+      "parent_span_id": "spn_trace_loop_3_distinct_02_0000",
+      "span_id": "spn_trace_loop_3_distinct_02_0008",
+      "name": "weather.lookup",
+      "duration_ms": 10000.0,
+      "payload": {},
+      "metrics": {
+        "latency_ms": 10000.0,
+        "cost_usd": 0.006173
+      },
+      "attributes": {
+        "environment": "production"
+      },
+      "outcome": "failure",
+      "request_body": {
+        "tool": "weather.lookup",
+        "arguments": {
+          "q": "weather Tokyo"
+        }
+      },
+      "response_body": {
+        "error": "upstream_timeout"
+      },
+      "reasoning": null,
+      "tool_calls_full": [
+        {
+          "tool_call_id": "call_weather.lookup_28235",
+          "type": "function",
+          "function": {
+            "name": "weather.lookup",
+            "arguments": "{\"q\": \"weather Tokyo\"}"
+          }
+        }
+      ],
+      "tool_results": [
+        {
+          "tool_call_id": "call_weather.lookup_28235",
+          "role": "tool",
+          "content": "{\"error\": \"timeout\"}",
+          "error": "upstream_timeout"
+        }
+      ],
+      "logprobs": null,
+      "finish_reason": null,
+      "cache_hit": false,
+      "prompt_cache_savings_usd": 0.0,
+      "model_version": null,
+      "service_tier": null
+    },
+    {
+      "event_id": "evt_tloop_3_distinct_02_0009",
+      "tenant_id": "org_eden_synth",
+      "project_id": "proj_synthetic_eval_v3",
+      "trace_id": "trace_loop_3_distinct_02",
+      "realm": "production",
+      "agent_id": "agent_B_02_loop-3-distinct_02",
+      "agent_version": "synth-v3.0.0",
+      "environment_id": "env_prod_main",
+      "tags": [],
+      "source_format": "eden_native",
+      "images": [],
+      "audio": [],
+      "citations": [],
+      "stop_sequence": null,
+      "system_fingerprint": "fp_synth-v3.0.0",
+      "conversation_id": "conv_nct_02",
+      "event_type": "llm.completion",
+      "timestamp": "2026-06-30T12:00:44+00:00",
+      "parent_span_id": "spn_trace_loop_3_distinct_02_0000",
+      "span_id": "spn_trace_loop_3_distinct_02_0009",
+      "name": "llm.standard",
+      "duration_ms": 800.0,
+      "payload": {},
+      "metrics": {
+        "prompt_tokens": 50,
+        "completion_tokens": 20,
+        "total_tokens": 70,
+        "cost_usd": 0.000325,
+        "latency_ms": 800.0
+      },
+      "attributes": {
+        "model": "gpt-4o",
+        "environment": "production",
+        "user_id": "user_synth_59",
+        "session_id": "sess_synth_16"
+      },
+      "outcome": "success",
+      "request_body": {
+        "model": "gpt-4o",
+        "messages": [
+          {
+            "role": "user",
+            "content": "KB?"
+          }
+        ],
+        "temperature": 0.0
+      },
+      "response_body": {
+        "id": "cmpl-evt_cmpl_79347",
+        "model": "gpt-4o",
+        "choices": [
+          {
+            "index": 0,
+            "finish_reason": "stop",
+            "message": {
+              "role": "assistant",
+              "content": "Searching.",
+              "tool_calls": [
+                {
+                  "id": "call_k_0001",
+                  "type": "function",
+                  "function": {
+                    "name": "kb.search",
+                    "arguments": "{\"q\": \"same exact query\"}"
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "usage": {
+          "prompt_tokens": 50,
+          "completion_tokens": 20,
+          "total_tokens": 70
+        }
+      },
+      "reasoning": null,
+      "tool_calls_full": [
+        {
+          "id": "call_k_0001",
+          "type": "function",
+          "function": {
+            "name": "kb.search",
+            "arguments": "{\"q\": \"same exact query\"}"
+          }
+        }
+      ],
+      "tool_results": [],
+      "logprobs": {
+        "content": [
+          [
+            {
+              "token": "Searching.",
+              "logprob": -0.1,
+              "top_logprobs": []
+            }
+          ]
+        ]
+      },
+      "finish_reason": "stop",
+      "cache_hit": false,
+      "prompt_cache_savings_usd": 0.0,
+      "model_version": "gpt-4o",
+      "service_tier": "standard"
+    },
+    {
+      "event_id": "evt_tloop_3_distinct_02_0010",
+      "tenant_id": "org_eden_synth",
+      "project_id": "proj_synthetic_eval_v3",
+      "trace_id": "trace_loop_3_distinct_02",
+      "realm": "production",
+      "agent_id": "agent_B_02_loop-3-distinct_02",
+      "agent_version": "synth-v3.0.0",
+      "environment_id": "env_prod_main",
+      "tags": [],
+      "source_format": "eden_native",
+      "images": [],
+      "audio": [],
+      "citations": [],
+      "stop_sequence": null,
+      "system_fingerprint": "fp_synth-v3.0.0",
+      "conversation_id": "conv_nct_02",
+      "event_type": "tool.call",
+      "timestamp": "2026-06-30T12:00:44.130000+00:00",
+      "parent_span_id": "spn_trace_loop_3_distinct_02_0000",
+      "span_id": "spn_trace_loop_3_distinct_02_0010",
+      "name": "kb.search",
+      "duration_ms": 130.0,
+      "payload": {},
+      "metrics": {
+        "latency_ms": 130.0,
+        "cost_usd": 0.006423
+      },
+      "attributes": {
+        "environment": "production"
+      },
+      "outcome": "success",
+      "request_body": {
+        "tool": "kb.search",
+        "arguments": {
+          "q": "same exact query"
+        }
+      },
+      "response_body": {
+        "result": {
+          "hit_id": "kb_9999",
+          "text": "the same answer"
+        }
+      },
+      "reasoning": null,
+      "tool_calls_full": [
+        {
+          "tool_call_id": "call_kb.search_74940",
+          "type": "function",
+          "function": {
+            "name": "kb.search",
+            "arguments": "{\"q\": \"same exact query\"}"
+          }
+        }
+      ],
+      "tool_results": [
+        {
+          "tool_call_id": "call_kb.search_74940",
+          "role": "tool",
+          "content": "{\"hit_id\": \"kb_9999\", \"text\": \"the same answer\"}"
+        }
+      ],
+      "logprobs": null,
+      "finish_reason": null,
+      "cache_hit": false,
+      "prompt_cache_savings_usd": 0.0,
+      "model_version": null,
+      "service_tier": null
+    },
+    {
+      "event_id": "evt_tloop_3_distinct_02_0011",
+      "tenant_id": "org_eden_synth",
+      "project_id": "proj_synthetic_eval_v3",
+      "trace_id": "trace_loop_3_distinct_02",
+      "realm": "production",
+      "agent_id": "agent_B_02_loop-3-distinct_02",
+      "agent_version": "synth-v3.0.0",
+      "environment_id": "env_prod_main",
+      "tags": [],
+      "source_format": "eden_native",
+      "images": [],
+      "audio": [],
+      "citations": [],
+      "stop_sequence": null,
+      "system_fingerprint": "fp_synth-v3.0.0",
+      "conversation_id": "conv_nct_02",
+      "event_type": "llm.completion",
+      "timestamp": "2026-06-30T12:00:44.930000+00:00",
+      "parent_span_id": "spn_trace_loop_3_distinct_02_0000",
+      "span_id": "spn_trace_loop_3_distinct_02_0011",
+      "name": "llm.standard",
+      "duration_ms": 800.0,
+      "payload": {},
+      "metrics": {
+        "prompt_tokens": 50,
+        "completion_tokens": 20,
+        "total_tokens": 70,
+        "cost_usd": 0.000325,
+        "latency_ms": 800.0
+      },
+      "attributes": {
+        "model": "gpt-4o",
+        "environment": "production",
+        "user_id": "user_synth_66",
+        "session_id": "sess_synth_24"
+      },
+      "outcome": "success",
+      "request_body": {
+        "model": "gpt-4o",
+        "messages": [
+          {
+            "role": "user",
+            "content": "KB?"
+          }
+        ],
+        "temperature": 0.0
+      },
+      "response_body": {
+        "id": "cmpl-evt_cmpl_14898",
+        "model": "gpt-4o",
+        "choices": [
+          {
+            "index": 0,
+            "finish_reason": "stop",
+            "message": {
+              "role": "assistant",
+              "content": "Searching.",
+              "tool_calls": [
+                {
+                  "id": "call_k_0001",
+                  "type": "function",
+                  "function": {
+                    "name": "kb.search",
+                    "arguments": "{\"q\": \"same exact query\"}"
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "usage": {
+          "prompt_tokens": 50,
+          "completion_tokens": 20,
+          "total_tokens": 70
+        }
+      },
+      "reasoning": null,
+      "tool_calls_full": [
+        {
+          "id": "call_k_0001",
+          "type": "function",
+          "function": {
+            "name": "kb.search",
+            "arguments": "{\"q\": \"same exact query\"}"
+          }
+        }
+      ],
+      "tool_results": [],
+      "logprobs": {
+        "content": [
+          [
+            {
+              "token": "Searching.",
+              "logprob": -0.1,
+              "top_logprobs": []
+            }
+          ]
+        ]
+      },
+      "finish_reason": "stop",
+      "cache_hit": false,
+      "prompt_cache_savings_usd": 0.0,
+      "model_version": "gpt-4o",
+      "service_tier": "standard"
+    },
+    {
+      "event_id": "evt_tloop_3_distinct_02_0012",
+      "tenant_id": "org_eden_synth",
+      "project_id": "proj_synthetic_eval_v3",
+      "trace_id": "trace_loop_3_distinct_02",
+      "realm": "production",
+      "agent_id": "agent_B_02_loop-3-distinct_02",
+      "agent_version": "synth-v3.0.0",
+      "environment_id": "env_prod_main",
+      "tags": [],
+      "source_format": "eden_native",
+      "images": [],
+      "audio": [],
+      "citations": [],
+      "stop_sequence": null,
+      "system_fingerprint": "fp_synth-v3.0.0",
+      "conversation_id": "conv_nct_02",
+      "event_type": "tool.call",
+      "timestamp": "2026-06-30T12:00:45.060000+00:00",
+      "parent_span_id": "spn_trace_loop_3_distinct_02_0000",
+      "span_id": "spn_trace_loop_3_distinct_02_0012",
+      "name": "kb.search",
+      "duration_ms": 130.0,
+      "payload": {},
+      "metrics": {
+        "latency_ms": 130.0,
+        "cost_usd": 0.000184
+      },
+      "attributes": {
+        "environment": "production"
+      },
+      "outcome": "success",
+      "request_body": {
+        "tool": "kb.search",
+        "arguments": {
+          "q": "same exact query"
+        }
+      },
+      "response_body": {
+        "result": {
+          "hit_id": "kb_9999",
+          "text": "the same answer"
+        }
+      },
+      "reasoning": null,
+      "tool_calls_full": [
+        {
+          "tool_call_id": "call_kb.search_89667",
+          "type": "function",
+          "function": {
+            "name": "kb.search",
+            "arguments": "{\"q\": \"same exact query\"}"
+          }
+        }
+      ],
+      "tool_results": [
+        {
+          "tool_call_id": "call_kb.search_89667",
+          "role": "tool",
+          "content": "{\"hit_id\": \"kb_9999\", \"text\": \"the same answer\"}"
+        }
+      ],
+      "logprobs": null,
+      "finish_reason": null,
+      "cache_hit": false,
+      "prompt_cache_savings_usd": 0.0,
+      "model_version": null,
+      "service_tier": null
+    },
+    {
+      "event_id": "evt_tloop_3_distinct_02_0013",
+      "tenant_id": "org_eden_synth",
+      "project_id": "proj_synthetic_eval_v3",
+      "trace_id": "trace_loop_3_distinct_02",
+      "realm": "production",
+      "agent_id": "agent_B_02_loop-3-distinct_02",
+      "agent_version": "synth-v3.0.0",
+      "environment_id": "env_prod_main",
+      "tags": [],
+      "source_format": "eden_native",
+      "images": [],
+      "audio": [],
+      "citations": [],
+      "stop_sequence": null,
+      "system_fingerprint": "fp_synth-v3.0.0",
+      "conversation_id": "conv_nct_02",
+      "event_type": "llm.completion",
+      "timestamp": "2026-06-30T12:00:45.860000+00:00",
+      "parent_span_id": "spn_trace_loop_3_distinct_02_0000",
+      "span_id": "spn_trace_loop_3_distinct_02_0013",
+      "name": "llm.standard",
+      "duration_ms": 800.0,
+      "payload": {},
+      "metrics": {
+        "prompt_tokens": 50,
+        "completion_tokens": 20,
+        "total_tokens": 70,
+        "cost_usd": 0.000325,
+        "latency_ms": 800.0
+      },
+      "attributes": {
+        "model": "gpt-4o",
+        "environment": "production",
+        "user_id": "user_synth_94",
+        "session_id": "sess_synth_57"
+      },
+      "outcome": "success",
+      "request_body": {
+        "model": "gpt-4o",
+        "messages": [
+          {
+            "role": "user",
+            "content": "KB?"
+          }
+        ],
+        "temperature": 0.0
+      },
+      "response_body": {
+        "id": "cmpl-evt_cmpl_28863",
+        "model": "gpt-4o",
+        "choices": [
+          {
+            "index": 0,
+            "finish_reason": "stop",
+            "message": {
+              "role": "assistant",
+              "content": "Searching.",
+              "tool_calls": [
+                {
+                  "id": "call_k_0001",
+                  "type": "function",
+                  "function": {
+                    "name": "kb.search",
+                    "arguments": "{\"q\": \"same exact query\"}"
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "usage": {
+          "prompt_tokens": 50,
+          "completion_tokens": 20,
+          "total_tokens": 70
+        }
+      },
+      "reasoning": null,
+      "tool_calls_full": [
+        {
+          "id": "call_k_0001",
+          "type": "function",
+          "function": {
+            "name": "kb.search",
+            "arguments": "{\"q\": \"same exact query\"}"
+          }
+        }
+      ],
+      "tool_results": [],
+      "logprobs": {
+        "content": [
+          [
+            {
+              "token": "Searching.",
+              "logprob": -0.1,
+              "top_logprobs": []
+            }
+          ]
+        ]
+      },
+      "finish_reason": "stop",
+      "cache_hit": false,
+      "prompt_cache_savings_usd": 0.0,
+      "model_version": "gpt-4o",
+      "service_tier": "standard"
+    },
+    {
+      "event_id": "evt_tloop_3_distinct_02_0014",
+      "tenant_id": "org_eden_synth",
+      "project_id": "proj_synthetic_eval_v3",
+      "trace_id": "trace_loop_3_distinct_02",
+      "realm": "production",
+      "agent_id": "agent_B_02_loop-3-distinct_02",
+      "agent_version": "synth-v3.0.0",
+      "environment_id": "env_prod_main",
+      "tags": [],
+      "source_format": "eden_native",
+      "images": [],
+      "audio": [],
+      "citations": [],
+      "stop_sequence": null,
+      "system_fingerprint": "fp_synth-v3.0.0",
+      "conversation_id": "conv_nct_02",
+      "event_type": "tool.call",
+      "timestamp": "2026-06-30T12:00:45.990000+00:00",
+      "parent_span_id": "spn_trace_loop_3_distinct_02_0000",
+      "span_id": "spn_trace_loop_3_distinct_02_0014",
+      "name": "kb.search",
+      "duration_ms": 130.0,
+      "payload": {},
+      "metrics": {
+        "latency_ms": 130.0,
+        "cost_usd": 0.00501
+      },
+      "attributes": {
+        "environment": "production"
+      },
+      "outcome": "success",
+      "request_body": {
+        "tool": "kb.search",
+        "arguments": {
+          "q": "same exact query"
+        }
+      },
+      "response_body": {
+        "result": {
+          "hit_id": "kb_9999",
+          "text": "the same answer"
+        }
+      },
+      "reasoning": null,
+      "tool_calls_full": [
+        {
+          "tool_call_id": "call_kb.search_95352",
+          "type": "function",
+          "function": {
+            "name": "kb.search",
+            "arguments": "{\"q\": \"same exact query\"}"
+          }
+        }
+      ],
+      "tool_results": [
+        {
+          "tool_call_id": "call_kb.search_95352",
+          "role": "tool",
+          "content": "{\"hit_id\": \"kb_9999\", \"text\": \"the same answer\"}"
+        }
+      ],
+      "logprobs": null,
+      "finish_reason": null,
+      "cache_hit": false,
+      "prompt_cache_savings_usd": 0.0,
+      "model_version": null,
+      "service_tier": null
+    },
+    {
+      "event_id": "evt_tloop_3_distinct_02_0015",
+      "tenant_id": "org_eden_synth",
+      "project_id": "proj_synthetic_eval_v3",
+      "trace_id": "trace_loop_3_distinct_02",
+      "realm": "production",
+      "agent_id": "agent_B_02_loop-3-distinct_02",
+      "agent_version": "synth-v3.0.0",
+      "environment_id": "env_prod_main",
+      "tags": [],
+      "source_format": "eden_native",
+      "images": [],
+      "audio": [],
+      "citations": [],
+      "stop_sequence": null,
+      "system_fingerprint": "fp_synth-v3.0.0",
+      "conversation_id": "conv_nct_02",
+      "event_type": "llm.completion",
+      "timestamp": "2026-06-30T12:00:46.790000+00:00",
+      "parent_span_id": "spn_trace_loop_3_distinct_02_0000",
+      "span_id": "spn_trace_loop_3_distinct_02_0015",
+      "name": "llm.standard",
+      "duration_ms": 800.0,
+      "payload": {},
+      "metrics": {
+        "prompt_tokens": 50,
+        "completion_tokens": 20,
+        "total_tokens": 70,
+        "cost_usd": 0.000325,
+        "latency_ms": 800.0
+      },
+      "attributes": {
+        "model": "gpt-4o",
+        "environment": "production",
+        "user_id": "user_synth_50",
+        "session_id": "sess_synth_16"
+      },
+      "outcome": "success",
+      "request_body": {
+        "model": "gpt-4o",
+        "messages": [
+          {
+            "role": "user",
+            "content": "KB?"
+          }
+        ],
+        "temperature": 0.0
+      },
+      "response_body": {
+        "id": "cmpl-evt_cmpl_76845",
+        "model": "gpt-4o",
+        "choices": [
+          {
+            "index": 0,
+            "finish_reason": "stop",
+            "message": {
+              "role": "assistant",
+              "content": "Searching.",
+              "tool_calls": [
+                {
+                  "id": "call_k_0001",
+                  "type": "function",
+                  "function": {
+                    "name": "kb.search",
+                    "arguments": "{\"q\": \"same exact query\"}"
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "usage": {
+          "prompt_tokens": 50,
+          "completion_tokens": 20,
+          "total_tokens": 70
+        }
+      },
+      "reasoning": null,
+      "tool_calls_full": [
+        {
+          "id": "call_k_0001",
+          "type": "function",
+          "function": {
+            "name": "kb.search",
+            "arguments": "{\"q\": \"same exact query\"}"
+          }
+        }
+      ],
+      "tool_results": [],
+      "logprobs": {
+        "content": [
+          [
+            {
+              "token": "Searching.",
+              "logprob": -0.1,
+              "top_logprobs": []
+            }
+          ]
+        ]
+      },
+      "finish_reason": "stop",
+      "cache_hit": false,
+      "prompt_cache_savings_usd": 0.0,
+      "model_version": "gpt-4o",
+      "service_tier": "standard"
+    },
+    {
+      "event_id": "evt_tloop_3_distinct_02_0016",
+      "tenant_id": "org_eden_synth",
+      "project_id": "proj_synthetic_eval_v3",
+      "trace_id": "trace_loop_3_distinct_02",
+      "realm": "production",
+      "agent_id": "agent_B_02_loop-3-distinct_02",
+      "agent_version": "synth-v3.0.0",
+      "environment_id": "env_prod_main",
+      "tags": [],
+      "source_format": "eden_native",
+      "images": [],
+      "audio": [],
+      "citations": [],
+      "stop_sequence": null,
+      "system_fingerprint": "fp_synth-v3.0.0",
+      "conversation_id": "conv_nct_02",
+      "event_type": "tool.call",
+      "timestamp": "2026-06-30T12:00:46.920000+00:00",
+      "parent_span_id": "spn_trace_loop_3_distinct_02_0000",
+      "span_id": "spn_trace_loop_3_distinct_02_0016",
+      "name": "kb.search",
+      "duration_ms": 130.0,
+      "payload": {},
+      "metrics": {
+        "latency_ms": 130.0,
+        "cost_usd": 0.007034
+      },
+      "attributes": {
+        "environment": "production"
+      },
+      "outcome": "success",
+      "request_body": {
+        "tool": "kb.search",
+        "arguments": {
+          "q": "same exact query"
+        }
+      },
+      "response_body": {
+        "result": {
+          "hit_id": "kb_9999",
+          "text": "the same answer"
+        }
+      },
+      "reasoning": null,
+      "tool_calls_full": [
+        {
+          "tool_call_id": "call_kb.search_66508",
+          "type": "function",
+          "function": {
+            "name": "kb.search",
+            "arguments": "{\"q\": \"same exact query\"}"
+          }
+        }
+      ],
+      "tool_results": [
+        {
+          "tool_call_id": "call_kb.search_66508",
+          "role": "tool",
+          "content": "{\"hit_id\": \"kb_9999\", \"text\": \"the same answer\"}"
+        }
+      ],
+      "logprobs": null,
+      "finish_reason": null,
+      "cache_hit": false,
+      "prompt_cache_savings_usd": 0.0,
+      "model_version": null,
+      "service_tier": null
+    },
+    {
+      "event_id": "evt_tloop_3_distinct_02_0017",
+      "tenant_id": "org_eden_synth",
+      "project_id": "proj_synthetic_eval_v3",
+      "trace_id": "trace_loop_3_distinct_02",
+      "realm": "production",
+      "agent_id": "agent_B_02_loop-3-distinct_02",
+      "agent_version": "synth-v3.0.0",
+      "environment_id": "env_prod_main",
+      "tags": [],
+      "source_format": "eden_native",
+      "images": [],
+      "audio": [],
+      "citations": [],
+      "stop_sequence": null,
+      "system_fingerprint": "fp_synth-v3.0.0",
+      "conversation_id": "conv_nct_02",
+      "event_type": "llm.completion",
+      "timestamp": "2026-06-30T12:00:47.720000+00:00",
+      "parent_span_id": "spn_trace_loop_3_distinct_02_0000",
+      "span_id": "spn_trace_loop_3_distinct_02_0017",
+      "name": "llm.fast",
+      "duration_ms": 800.0,
+      "payload": {},
+      "metrics": {
+        "prompt_tokens": 50,
+        "completion_tokens": 20,
+        "total_tokens": 70,
+        "cost_usd": 1.9e-05,
+        "latency_ms": 800.0
+      },
+      "attributes": {
+        "model": "gpt-4o-mini",
+        "environment": "production",
+        "user_id": "user_synth_82",
+        "session_id": "sess_synth_18"
+      },
+      "outcome": "success",
+      "request_body": {
+        "model": "gpt-4o-mini",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Pay?"
+          }
+        ],
+        "temperature": 0.0
+      },
+      "response_body": {
+        "id": "cmpl-evt_cmpl_60462",
+        "model": "gpt-4o-mini",
+        "choices": [
+          {
+            "index": 0,
+            "finish_reason": "stop",
+            "message": {
+              "role": "assistant",
+              "content": "Paying.",
+              "tool_calls": [
+                {
+                  "id": "call_p_0001",
+                  "type": "function",
+                  "function": {
+                    "name": "payments.send",
+                    "arguments": "{\"recipient_id\": 4711, \"amount_cents\": 5000}"
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "usage": {
+          "prompt_tokens": 50,
+          "completion_tokens": 20,
+          "total_tokens": 70
+        }
+      },
+      "reasoning": null,
+      "tool_calls_full": [
+        {
+          "id": "call_p_0001",
+          "type": "function",
+          "function": {
+            "name": "payments.send",
+            "arguments": "{\"recipient_id\": 4711, \"amount_cents\": 5000}"
+          }
+        }
+      ],
+      "tool_results": [],
+      "logprobs": {
+        "content": [
+          [
+            {
+              "token": "Paying.",
+              "logprob": -0.1,
+              "top_logprobs": []
+            }
+          ]
+        ]
+      },
+      "finish_reason": "stop",
+      "cache_hit": false,
+      "prompt_cache_savings_usd": 0.0,
+      "model_version": "gpt-4o-mini",
+      "service_tier": "standard"
+    },
+    {
+      "event_id": "evt_tloop_3_distinct_02_0018",
+      "tenant_id": "org_eden_synth",
+      "project_id": "proj_synthetic_eval_v3",
+      "trace_id": "trace_loop_3_distinct_02",
+      "realm": "production",
+      "agent_id": "agent_B_02_loop-3-distinct_02",
+      "agent_version": "synth-v3.0.0",
+      "environment_id": "env_prod_main",
+      "tags": [],
+      "source_format": "eden_native",
+      "images": [],
+      "audio": [],
+      "citations": [],
+      "stop_sequence": null,
+      "system_fingerprint": "fp_synth-v3.0.0",
+      "conversation_id": "conv_nct_02",
+      "event_type": "tool.call",
+      "timestamp": "2026-06-30T12:00:47.900000+00:00",
+      "parent_span_id": "spn_trace_loop_3_distinct_02_0000",
+      "span_id": "spn_trace_loop_3_distinct_02_0018",
+      "name": "payments.send",
+      "duration_ms": 180.0,
+      "payload": {},
+      "metrics": {
+        "latency_ms": 180.0,
+        "cost_usd": 0.007277
+      },
+      "attributes": {
+        "environment": "production"
+      },
+      "outcome": "success",
+      "request_body": {
+        "tool": "payments.send",
+        "arguments": {
+          "recipient_id": 4711,
+          "amount_cents": 5000
+        }
+      },
+      "response_body": {
+        "result": {
+          "transaction_id": "tx_x"
+        }
+      },
+      "reasoning": null,
+      "tool_calls_full": [
+        {
+          "tool_call_id": "call_payments.send_53425",
+          "type": "function",
+          "function": {
+            "name": "payments.send",
+            "arguments": "{\"recipient_id\": 4711, \"amount_cents\": 5000}"
+          }
+        }
+      ],
+      "tool_results": [
+        {
+          "tool_call_id": "call_payments.send_53425",
+          "role": "tool",
+          "content": "{\"transaction_id\": \"tx_x\"}"
+        }
+      ],
+      "logprobs": null,
+      "finish_reason": null,
+      "cache_hit": false,
+      "prompt_cache_savings_usd": 0.0,
+      "model_version": null,
+      "service_tier": null
+    },
+    {
+      "event_id": "evt_tloop_3_distinct_02_0019",
+      "tenant_id": "org_eden_synth",
+      "project_id": "proj_synthetic_eval_v3",
+      "trace_id": "trace_loop_3_distinct_02",
+      "realm": "production",
+      "agent_id": "agent_B_02_loop-3-distinct_02",
+      "agent_version": "synth-v3.0.0",
+      "environment_id": "env_prod_main",
+      "tags": [],
+      "source_format": "eden_native",
+      "images": [],
+      "audio": [],
+      "citations": [],
+      "stop_sequence": null,
+      "system_fingerprint": "fp_synth-v3.0.0",
+      "conversation_id": "conv_nct_02",
+      "event_type": "llm.completion",
+      "timestamp": "2026-06-30T12:00:48.700000+00:00",
+      "parent_span_id": "spn_trace_loop_3_distinct_02_0000",
+      "span_id": "spn_trace_loop_3_distinct_02_0019",
+      "name": "llm.fast",
+      "duration_ms": 800.0,
+      "payload": {},
+      "metrics": {
+        "prompt_tokens": 50,
+        "completion_tokens": 20,
+        "total_tokens": 70,
+        "cost_usd": 1.9e-05,
+        "latency_ms": 800.0
+      },
+      "attributes": {
+        "model": "gpt-4o-mini",
+        "environment": "production",
+        "user_id": "user_synth_64",
+        "session_id": "sess_synth_1"
+      },
+      "outcome": "success",
+      "request_body": {
+        "model": "gpt-4o-mini",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Pay?"
+          }
+        ],
+        "temperature": 0.0
+      },
+      "response_body": {
+        "id": "cmpl-evt_cmpl_90813",
+        "model": "gpt-4o-mini",
+        "choices": [
+          {
+            "index": 0,
+            "finish_reason": "stop",
+            "message": {
+              "role": "assistant",
+              "content": "Paying.",
+              "tool_calls": [
+                {
+                  "id": "call_p_0001",
+                  "type": "function",
+                  "function": {
+                    "name": "payments.send",
+                    "arguments": "{\"recipient_id\": 4711, \"amount_cents\": 5000}"
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "usage": {
+          "prompt_tokens": 50,
+          "completion_tokens": 20,
+          "total_tokens": 70
+        }
+      },
+      "reasoning": null,
+      "tool_calls_full": [
+        {
+          "id": "call_p_0001",
+          "type": "function",
+          "function": {
+            "name": "payments.send",
+            "arguments": "{\"recipient_id\": 4711, \"amount_cents\": 5000}"
+          }
+        }
+      ],
+      "tool_results": [],
+      "logprobs": {
+        "content": [
+          [
+            {
+              "token": "Paying.",
+              "logprob": -0.1,
+              "top_logprobs": []
+            }
+          ]
+        ]
+      },
+      "finish_reason": "stop",
+      "cache_hit": false,
+      "prompt_cache_savings_usd": 0.0,
+      "model_version": "gpt-4o-mini",
+      "service_tier": "standard"
+    },
+    {
+      "event_id": "evt_tloop_3_distinct_02_0020",
+      "tenant_id": "org_eden_synth",
+      "project_id": "proj_synthetic_eval_v3",
+      "trace_id": "trace_loop_3_distinct_02",
+      "realm": "production",
+      "agent_id": "agent_B_02_loop-3-distinct_02",
+      "agent_version": "synth-v3.0.0",
+      "environment_id": "env_prod_main",
+      "tags": [],
+      "source_format": "eden_native",
+      "images": [],
+      "audio": [],
+      "citations": [],
+      "stop_sequence": null,
+      "system_fingerprint": "fp_synth-v3.0.0",
+      "conversation_id": "conv_nct_02",
+      "event_type": "tool.call",
+      "timestamp": "2026-06-30T12:00:48.880000+00:00",
+      "parent_span_id": "spn_trace_loop_3_distinct_02_0000",
+      "span_id": "spn_trace_loop_3_distinct_02_0020",
+      "name": "payments.send",
+      "duration_ms": 180.0,
+      "payload": {},
+      "metrics": {
+        "latency_ms": 180.0,
+        "cost_usd": 0.001911
+      },
+      "attributes": {
+        "environment": "production"
+      },
+      "outcome": "success",
+      "request_body": {
+        "tool": "payments.send",
+        "arguments": {
+          "recipient_id": 4711,
+          "amount_cents": 5000
+        }
+      },
+      "response_body": {
+        "result": {
+          "transaction_id": "tx_x"
+        }
+      },
+      "reasoning": null,
+      "tool_calls_full": [
+        {
+          "tool_call_id": "call_payments.send_88902",
+          "type": "function",
+          "function": {
+            "name": "payments.send",
+            "arguments": "{\"recipient_id\": 4711, \"amount_cents\": 5000}"
+          }
+        }
+      ],
+      "tool_results": [
+        {
+          "tool_call_id": "call_payments.send_88902",
+          "role": "tool",
+          "content": "{\"transaction_id\": \"tx_x\"}"
+        }
+      ],
+      "logprobs": null,
+      "finish_reason": null,
+      "cache_hit": false,
+      "prompt_cache_savings_usd": 0.0,
+      "model_version": null,
+      "service_tier": null
+    },
+    {
+      "event_id": "evt_tloop_3_distinct_02_0021",
+      "tenant_id": "org_eden_synth",
+      "project_id": "proj_synthetic_eval_v3",
+      "trace_id": "trace_loop_3_distinct_02",
+      "realm": "production",
+      "agent_id": "agent_B_02_loop-3-distinct_02",
+      "agent_version": "synth-v3.0.0",
+      "environment_id": "env_prod_main",
+      "tags": [],
+      "source_format": "eden_native",
+      "images": [],
+      "audio": [],
+      "citations": [],
+      "stop_sequence": null,
+      "system_fingerprint": "fp_synth-v3.0.0",
+      "conversation_id": "conv_nct_02",
+      "event_type": "llm.completion",
+      "timestamp": "2026-06-30T12:00:49.680000+00:00",
+      "parent_span_id": "spn_trace_loop_3_distinct_02_0000",
+      "span_id": "spn_trace_loop_3_distinct_02_0021",
+      "name": "llm.fast",
+      "duration_ms": 800.0,
+      "payload": {},
+      "metrics": {
+        "prompt_tokens": 50,
+        "completion_tokens": 20,
+        "total_tokens": 70,
+        "cost_usd": 1.9e-05,
+        "latency_ms": 800.0
+      },
+      "attributes": {
+        "model": "gpt-4o-mini",
+        "environment": "production",
+        "user_id": "user_synth_75",
+        "session_id": "sess_synth_28"
+      },
+      "outcome": "success",
+      "request_body": {
+        "model": "gpt-4o-mini",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Pay?"
+          }
+        ],
+        "temperature": 0.0
+      },
+      "response_body": {
+        "id": "cmpl-evt_cmpl_33898",
+        "model": "gpt-4o-mini",
+        "choices": [
+          {
+            "index": 0,
+            "finish_reason": "stop",
+            "message": {
+              "role": "assistant",
+              "content": "Paying.",
+              "tool_calls": [
+                {
+                  "id": "call_p_0001",
+                  "type": "function",
+                  "function": {
+                    "name": "payments.send",
+                    "arguments": "{\"recipient_id\": 4711, \"amount_cents\": 5000}"
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "usage": {
+          "prompt_tokens": 50,
+          "completion_tokens": 20,
+          "total_tokens": 70
+        }
+      },
+      "reasoning": null,
+      "tool_calls_full": [
+        {
+          "id": "call_p_0001",
+          "type": "function",
+          "function": {
+            "name": "payments.send",
+            "arguments": "{\"recipient_id\": 4711, \"amount_cents\": 5000}"
+          }
+        }
+      ],
+      "tool_results": [],
+      "logprobs": {
+        "content": [
+          [
+            {
+              "token": "Paying.",
+              "logprob": -0.1,
+              "top_logprobs": []
+            }
+          ]
+        ]
+      },
+      "finish_reason": "stop",
+      "cache_hit": false,
+      "prompt_cache_savings_usd": 0.0,
+      "model_version": "gpt-4o-mini",
+      "service_tier": "standard"
+    },
+    {
+      "event_id": "evt_tloop_3_distinct_02_0022",
+      "tenant_id": "org_eden_synth",
+      "project_id": "proj_synthetic_eval_v3",
+      "trace_id": "trace_loop_3_distinct_02",
+      "realm": "production",
+      "agent_id": "agent_B_02_loop-3-distinct_02",
+      "agent_version": "synth-v3.0.0",
+      "environment_id": "env_prod_main",
+      "tags": [],
+      "source_format": "eden_native",
+      "images": [],
+      "audio": [],
+      "citations": [],
+      "stop_sequence": null,
+      "system_fingerprint": "fp_synth-v3.0.0",
+      "conversation_id": "conv_nct_02",
+      "event_type": "tool.call",
+      "timestamp": "2026-06-30T12:00:49.860000+00:00",
+      "parent_span_id": "spn_trace_loop_3_distinct_02_0000",
+      "span_id": "spn_trace_loop_3_distinct_02_0022",
+      "name": "payments.send",
+      "duration_ms": 180.0,
+      "payload": {},
+      "metrics": {
+        "latency_ms": 180.0,
+        "cost_usd": 0.00659
+      },
+      "attributes": {
+        "environment": "production"
+      },
+      "outcome": "success",
+      "request_body": {
+        "tool": "payments.send",
+        "arguments": {
+          "recipient_id": 4711,
+          "amount_cents": 5000
+        }
+      },
+      "response_body": {
+        "result": {
+          "transaction_id": "tx_x"
+        }
+      },
+      "reasoning": null,
+      "tool_calls_full": [
+        {
+          "tool_call_id": "call_payments.send_62266",
+          "type": "function",
+          "function": {
+            "name": "payments.send",
+            "arguments": "{\"recipient_id\": 4711, \"amount_cents\": 5000}"
+          }
+        }
+      ],
+      "tool_results": [
+        {
+          "tool_call_id": "call_payments.send_62266",
+          "role": "tool",
+          "content": "{\"transaction_id\": \"tx_x\"}"
+        }
+      ],
+      "logprobs": null,
+      "finish_reason": null,
+      "cache_hit": false,
+      "prompt_cache_savings_usd": 0.0,
+      "model_version": null,
+      "service_tier": null
+    },
+    {
+      "event_id": "evt_tloop_3_distinct_02_0023",
+      "tenant_id": "org_eden_synth",
+      "project_id": "proj_synthetic_eval_v3",
+      "trace_id": "trace_loop_3_distinct_02",
+      "realm": "production",
+      "agent_id": "agent_B_02_loop-3-distinct_02",
+      "agent_version": "synth-v3.0.0",
+      "environment_id": "env_prod_main",
+      "tags": [],
+      "source_format": "eden_native",
+      "images": [],
+      "audio": [],
+      "citations": [],
+      "stop_sequence": null,
+      "system_fingerprint": "fp_synth-v3.0.0",
+      "conversation_id": "conv_nct_02",
+      "event_type": "llm.completion",
+      "timestamp": "2026-06-30T12:00:50.660000+00:00",
+      "parent_span_id": "spn_trace_loop_3_distinct_02_0000",
+      "span_id": "spn_trace_loop_3_distinct_02_0023",
+      "name": "llm.fast",
+      "duration_ms": 800.0,
+      "payload": {},
+      "metrics": {
+        "prompt_tokens": 50,
+        "completion_tokens": 20,
+        "total_tokens": 70,
+        "cost_usd": 1.9e-05,
+        "latency_ms": 800.0
+      },
+      "attributes": {
+        "model": "gpt-4o-mini",
+        "environment": "production",
+        "user_id": "user_synth_48",
+        "session_id": "sess_synth_33"
+      },
+      "outcome": "success",
+      "request_body": {
+        "model": "gpt-4o-mini",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Pay?"
+          }
+        ],
+        "temperature": 0.0
+      },
+      "response_body": {
+        "id": "cmpl-evt_cmpl_73548",
+        "model": "gpt-4o-mini",
+        "choices": [
+          {
+            "index": 0,
+            "finish_reason": "stop",
+            "message": {
+              "role": "assistant",
+              "content": "Paying.",
+              "tool_calls": [
+                {
+                  "id": "call_p_0001",
+                  "type": "function",
+                  "function": {
+                    "name": "payments.send",
+                    "arguments": "{\"recipient_id\": 4711, \"amount_cents\": 5000}"
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "usage": {
+          "prompt_tokens": 50,
+          "completion_tokens": 20,
+          "total_tokens": 70
+        }
+      },
+      "reasoning": null,
+      "tool_calls_full": [
+        {
+          "id": "call_p_0001",
+          "type": "function",
+          "function": {
+            "name": "payments.send",
+            "arguments": "{\"recipient_id\": 4711, \"amount_cents\": 5000}"
+          }
+        }
+      ],
+      "tool_results": [],
+      "logprobs": {
+        "content": [
+          [
+            {
+              "token": "Paying.",
+              "logprob": -0.1,
+              "top_logprobs": []
+            }
+          ]
+        ]
+      },
+      "finish_reason": "stop",
+      "cache_hit": false,
+      "prompt_cache_savings_usd": 0.0,
+      "model_version": "gpt-4o-mini",
+      "service_tier": "standard"
+    },
+    {
+      "event_id": "evt_tloop_3_distinct_02_0024",
+      "tenant_id": "org_eden_synth",
+      "project_id": "proj_synthetic_eval_v3",
+      "trace_id": "trace_loop_3_distinct_02",
+      "realm": "production",
+      "agent_id": "agent_B_02_loop-3-distinct_02",
+      "agent_version": "synth-v3.0.0",
+      "environment_id": "env_prod_main",
+      "tags": [],
+      "source_format": "eden_native",
+      "images": [],
+      "audio": [],
+      "citations": [],
+      "stop_sequence": null,
+      "system_fingerprint": "fp_synth-v3.0.0",
+      "conversation_id": "conv_nct_02",
+      "event_type": "tool.call",
+      "timestamp": "2026-06-30T12:00:50.840000+00:00",
+      "parent_span_id": "spn_trace_loop_3_distinct_02_0000",
+      "span_id": "spn_trace_loop_3_distinct_02_0024",
+      "name": "payments.send",
+      "duration_ms": 180.0,
+      "payload": {},
+      "metrics": {
+        "latency_ms": 180.0,
+        "cost_usd": 0.003479
+      },
+      "attributes": {
+        "environment": "production"
+      },
+      "outcome": "success",
+      "request_body": {
+        "tool": "payments.send",
+        "arguments": {
+          "recipient_id": 4711,
+          "amount_cents": 5000
+        }
+      },
+      "response_body": {
+        "result": {
+          "transaction_id": "tx_x"
+        }
+      },
+      "reasoning": null,
+      "tool_calls_full": [
+        {
+          "tool_call_id": "call_payments.send_43919",
+          "type": "function",
+          "function": {
+            "name": "payments.send",
+            "arguments": "{\"recipient_id\": 4711, \"amount_cents\": 5000}"
+          }
+        }
+      ],
+      "tool_results": [
+        {
+          "tool_call_id": "call_payments.send_43919",
+          "role": "tool",
+          "content": "{\"transaction_id\": \"tx_x\"}"
+        }
+      ],
+      "logprobs": null,
+      "finish_reason": null,
+      "cache_hit": false,
+      "prompt_cache_savings_usd": 0.0,
+      "model_version": null,
+      "service_tier": null
+    },
+    {
+      "event_id": "evt_tloop_3_distinct_02_0025",
+      "tenant_id": "org_eden_synth",
+      "project_id": "proj_synthetic_eval_v3",
+      "trace_id": "trace_loop_3_distinct_02",
+      "realm": "production",
+      "agent_id": "agent_B_02_loop-3-distinct_02",
+      "agent_version": "synth-v3.0.0",
+      "environment_id": "env_prod_main",
+      "tags": [],
+      "source_format": "eden_native",
+      "images": [],
+      "audio": [],
+      "citations": [],
+      "stop_sequence": null,
+      "system_fingerprint": "fp_synth-v3.0.0",
+      "conversation_id": "conv_nct_02",
+      "event_type": "span.end",
+      "timestamp": "2026-06-30T12:00:50.840000+00:00",
+      "parent_span_id": null,
+      "span_id": "spn_trace_loop_3_distinct_02_0000",
+      "name": "trace",
+      "duration_ms": 50840.0,
+      "payload": {},
+      "metrics": {},
+      "attributes": {
+        "environment": "production"
+      },
+      "outcome": "success",
+      "request_body": null,
+      "response_body": null,
+      "reasoning": null,
+      "tool_calls_full": [],
+      "tool_results": [],
+      "logprobs": null,
+      "finish_reason": null,
+      "cache_hit": false,
+      "prompt_cache_savings_usd": 0.0,
+      "model_version": null,
+      "service_tier": null
+    }
+  ]
+}

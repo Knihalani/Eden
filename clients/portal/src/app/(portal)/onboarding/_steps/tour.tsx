@@ -19,20 +19,19 @@
 
 import Link from "next/link";
 import {
-  Activity,
+  
   AlertOctagon,
   Bot,
   Gauge,
   GitBranch,
   History,
-  Layers,
+  
   LineChart,
   Search,
   Settings,
   Sparkles,
   Terminal,
-  Wand2,
-} from "lucide-react";
+  Wand2 } from "lucide-react";
 
 interface TourCard {
   href: string;
@@ -48,71 +47,60 @@ const CARDS: TourCard[] = [
     href: "/dashboard",
     icon: Gauge,
     title: "Dashboard",
-    body: "Live signals from your agents: traces per minute, success rate, and recent alerts. Lands here by default after sign-in.",
-  },
+    body: "Live signals from your agents: traces per minute, success rate, and recent alerts. Lands here by default after sign-in." },
   {
     href: "/traces",
     icon: Search,
     title: "Trace Explorer",
     body: "Search every trace in the system. Filter by agent, model, status, duration, or free-text. Click any row for the full timeline + tree.",
-    hotkey: "/",
-  },
+    hotkey: "/" },
   {
     href: "/observability",
     icon: LineChart,
     title: "Observability",
-    body: "Run a judge, replay a trace, or compare environments side-by-side. The cat-1 + cat-2 surfaces live here.",
-  },
+    body: "Run a judge, replay a trace, or compare environments side-by-side. The cat-1 + cat-2 surfaces live here." },
   {
     href: "/alerts",
     icon: AlertOctagon,
     title: "Alerts",
-    body: "Active alerts + the rules that fired them. Click any rule to see why it triggered and which traces are affected.",
-  },
+    body: "Active alerts + the rules that fired them. Click any rule to see why it triggered and which traces are affected." },
   {
     href: "/incidents",
     icon: History,
     title: "Incidents",
-    body: "Open RCA clusters. Each one is a group of similar failures with a likely cause + suggested fix.",
-  },
+    body: "Open RCA clusters. Each one is a group of similar failures with a likely cause + suggested fix." },
   {
     href: "/agents",
     icon: Bot,
     title: "Agents",
-    body: "Your agent fleet. Push a new agent (eden agent-push), run a sim, or upload an existing one (eden agent-upload).",
-  },
+    body: "Your agent fleet. Push a new agent (eden agent-push), run a sim, or upload an existing one (eden agent-upload)." },
   {
     href: "/agents/connect",
     icon: GitBranch,
     title: "Connect a repo",
-    body: "Link a GitHub repo via the Eden GitHub App. Eden opens an SDK-integration PR; once merged, traces flow automatically.",
-  },
+    body: "Link a GitHub repo via the Eden GitHub App. Eden opens an SDK-integration PR; once merged, traces flow automatically." },
   {
     href: "/optimization",
     icon: Sparkles,
     title: "Optimization",
-    body: "Token + cost overview, cache hit rate, and projections. Drill into any model to see spend per request.",
-  },
+    body: "Token + cost overview, cache hit rate, and projections. Drill into any model to see spend per request." },
   {
     href: "/settings",
     icon: Settings,
     title: "Settings",
-    body: "Org, members, billing, SSO, API keys, and the SDK install snippet (also reachable from the chat).",
-  },
+    body: "Org, members, billing, SSO, API keys, and the SDK install snippet (also reachable from the chat)." },
   {
     href: "/onboarding/install",
     icon: Terminal,
     title: "Install the SDK",
-    body: "Optional — only if you want to instrument code by hand. If you connected a GitHub repo above, Eden handled this for you.",
-  },
+    body: "Optional — only if you want to instrument code by hand. If you connected a GitHub repo above, Eden handled this for you." },
   {
     href: "/",
     icon: Wand2,
     title: "Chat with Eden (AI Insights)",
     body: "The fastest way to get unstuck. Ask anything about your data: traces, costs, recent failures. The agent reads from the same DB you're looking at — answers are cited, never hallucinated.",
     highlight: true,
-    hotkey: "⌘K",
-  },
+    hotkey: "⌘K" },
 ];
 
 export function TourStep() {

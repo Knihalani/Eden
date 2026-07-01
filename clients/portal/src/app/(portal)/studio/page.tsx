@@ -76,6 +76,7 @@ export default function StudioPage() {
   return (
     <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-6 page-enter">
       <PageHeader
+        eyebrow="Eval"
         title="Custom-Metric Studio"
         subtitle="Design, generate, and version custom evaluation rubrics from templates or examples."
         icon={Sparkles}
@@ -96,7 +97,11 @@ export default function StudioPage() {
         />
       ) : (
         <>
-          <div className="flex items-center gap-1 p-1 bg-[var(--bg-tertiary)] rounded-xl w-fit flex-wrap">
+          <div
+            role="tablist"
+            aria-label="Custom-Metric Studio sections"
+            className="flex items-center gap-1 p-1 bg-[var(--bg-tertiary)] rounded-xl w-fit flex-wrap"
+          >
             {([
               { key: "templates" as Tab, label: "Templates", icon: FileText },
               { key: "examples" as Tab, label: "From examples", icon: Wand2 },
@@ -104,6 +109,9 @@ export default function StudioPage() {
             ]).map(({ key, label, icon: Icon }) => (
               <button
                 key={key}
+                role="tab"
+                aria-selected={activeTab === key}
+                aria-label={label}
                 onClick={() => setActiveTab(key)}
                 className={cn(
                   "px-4 py-2 rounded-lg text-sm font-medium transition-all flex items-center gap-2",
@@ -112,7 +120,7 @@ export default function StudioPage() {
                     : "text-[var(--text-muted)] hover:text-[var(--text-secondary)]"
                 )}
               >
-                <Icon className="w-4 h-4" />
+                <Icon className="w-4 h-4" aria-hidden="true" />
                 {label}
               </button>
             ))}
@@ -199,9 +207,10 @@ function TemplatesTab({ orgId, onError }: { orgId: string; onError: (s: string) 
                 cell: (tpl) => (
                   <button
                     onClick={() => setOpenTemplate(tpl)}
+                    aria-label={`Use template ${tpl.name}`}
                     className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[var(--accent)] text-[var(--bg-base)] rounded-lg text-xs font-medium hover:bg-[var(--accent-hover)] transition-colors"
                   >
-                    <Wand2 className="w-3.5 h-3.5" />
+                    <Wand2 className="w-3.5 h-3.5" aria-hidden="true" />
                     Use template
                   </button>
                 ),
@@ -221,7 +230,7 @@ function TemplatesTab({ orgId, onError }: { orgId: string; onError: (s: string) 
         <DialogContent className="max-w-2xl">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <FileText className="w-4 h-4 text-[var(--accent)]" />
+              <FileText className="w-4 h-4 text-[var(--accent)]" aria-hidden="true" />
               {openTemplate?.name}
             </DialogTitle>
             <DialogDescription>
@@ -234,6 +243,7 @@ function TemplatesTab({ orgId, onError }: { orgId: string; onError: (s: string) 
           <DialogFooter>
             <button
               onClick={() => setOpenTemplate(null)}
+              aria-label="Close template preview"
               className="px-3 py-1.5 bg-[var(--bg-tertiary)] text-[var(--text-primary)] rounded-lg text-xs font-medium hover:bg-[var(--border-default)] transition-colors"
             >
               Close
@@ -322,13 +332,21 @@ function FromExamplesTab({ orgId, onError }: { orgId: string; onError: (s: strin
           Generate a rubric from examples
         </h3>
         <div>
-          <label className="text-xs font-medium text-[var(--text-muted)] mb-1.5 block">Metric name</label>
+          <label
+            htmlFor="metric-name"
+            className="text-xs font-medium text-[var(--text-muted)] mb-1.5 block"
+          >
+            Metric name
+          </label>
           <input
+            id="metric-name"
             type="text"
             value={name}
             onChange={(e) => setName(e.target.value)}
             placeholder="e.g. Tone consistency, code clarity, etc."
-            className="w-full px-3 py-2 bg-[var(--bg-secondary)] border border-[var(--border-default)] rounded-lg text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)]"
+            aria-label="Metric name"
+            disabled={generating || saving}
+            className="w-full px-3 py-2 bg-[var(--bg-secondary)] border border-[var(--border-default)] rounded-lg text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)] disabled:opacity-50"
           />
         </div>
 
@@ -340,10 +358,12 @@ function FromExamplesTab({ orgId, onError }: { orgId: string; onError: (s: strin
                 {examples.length > 2 && (
                   <button
                     onClick={() => removeExample(i)}
-                    className="p-1 text-[var(--text-muted)] hover:text-[var(--error)] transition-colors"
+                    aria-label={`Remove example ${i + 1}`}
+                    disabled={generating || saving}
+                    className="p-1 text-[var(--text-muted)] hover:text-[var(--error)] transition-colors disabled:opacity-50"
                     title="Remove example"
                   >
-                    <Trash2 className="w-3.5 h-3.5" />
+                    <Trash2 className="w-3.5 h-3.5" aria-hidden="true" />
                   </button>
                 )}
               </div>
@@ -352,36 +372,56 @@ function FromExamplesTab({ orgId, onError }: { orgId: string; onError: (s: strin
                 value={ex.input}
                 onChange={(e) => updateExample(i, "input", e.target.value)}
                 placeholder="Input"
-                className="w-full px-3 py-2 bg-[var(--bg-secondary)] border border-[var(--border-default)] rounded-lg text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)]"
+                aria-label={`Example ${i + 1} input`}
+                disabled={generating || saving}
+                className="w-full px-3 py-2 bg-[var(--bg-secondary)] border border-[var(--border-default)] rounded-lg text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)] disabled:opacity-50"
               />
               <input
                 type="text"
                 value={ex.output}
                 onChange={(e) => updateExample(i, "output", e.target.value)}
                 placeholder="Output"
-                className="w-full px-3 py-2 bg-[var(--bg-secondary)] border border-[var(--border-default)] rounded-lg text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)]"
+                aria-label={`Example ${i + 1} output`}
+                disabled={generating || saving}
+                className="w-full px-3 py-2 bg-[var(--bg-secondary)] border border-[var(--border-default)] rounded-lg text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)] disabled:opacity-50"
               />
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <label className="text-[10px] font-medium text-[var(--text-muted)] mb-1 block">Score (0-1)</label>
+                  <label
+                    htmlFor={`score-${i}`}
+                    className="text-[10px] font-medium text-[var(--text-muted)] mb-1 block"
+                  >
+                    Score (0-1)
+                  </label>
                   <input
+                    id={`score-${i}`}
                     type="number"
                     min={0}
                     max={1}
                     step={0.1}
                     value={ex.score}
                     onChange={(e) => updateExample(i, "score", Number(e.target.value))}
-                    className="w-full px-3 py-1.5 bg-[var(--bg-secondary)] border border-[var(--border-default)] rounded-lg text-sm text-[var(--text-primary)]"
+                    aria-label={`Example ${i + 1} score`}
+                    disabled={generating || saving}
+                    className="w-full px-3 py-1.5 bg-[var(--bg-secondary)] border border-[var(--border-default)] rounded-lg text-sm text-[var(--text-primary)] disabled:opacity-50"
                   />
                 </div>
                 <div>
-                  <label className="text-[10px] font-medium text-[var(--text-muted)] mb-1 block">Rationale</label>
+                  <label
+                    htmlFor={`rationale-${i}`}
+                    className="text-[10px] font-medium text-[var(--text-muted)] mb-1 block"
+                  >
+                    Rationale
+                  </label>
                   <input
+                    id={`rationale-${i}`}
                     type="text"
                     value={ex.rationale}
                     onChange={(e) => updateExample(i, "rationale", e.target.value)}
                     placeholder="Why this score?"
-                    className="w-full px-3 py-1.5 bg-[var(--bg-secondary)] border border-[var(--border-default)] rounded-lg text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)]"
+                    aria-label={`Example ${i + 1} rationale`}
+                    disabled={generating || saving}
+                    className="w-full px-3 py-1.5 bg-[var(--bg-secondary)] border border-[var(--border-default)] rounded-lg text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)] disabled:opacity-50"
                   />
                 </div>
               </div>
@@ -393,18 +433,21 @@ function FromExamplesTab({ orgId, onError }: { orgId: string; onError: (s: strin
           {examples.length < 5 && (
             <button
               onClick={addExample}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[var(--bg-tertiary)] text-[var(--text-primary)] rounded-lg text-xs font-medium hover:bg-[var(--border-default)] transition-colors"
+              aria-label="Add another example"
+              disabled={generating || saving}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[var(--bg-tertiary)] text-[var(--text-primary)] rounded-lg text-xs font-medium hover:bg-[var(--border-default)] transition-colors disabled:opacity-50"
             >
-              <Plus className="w-3.5 h-3.5" />
+              <Plus className="w-3.5 h-3.5" aria-hidden="true" />
               Add example
             </button>
           )}
           <button
             onClick={handleGenerate}
             disabled={generating}
+            aria-label="Generate rubric from examples"
             className="ml-auto inline-flex items-center gap-2 px-4 py-2 bg-[var(--accent)] text-[var(--bg-base)] rounded-lg text-sm font-medium hover:bg-[var(--accent-hover)] disabled:opacity-50 transition-colors"
           >
-            {generating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Wand2 className="w-4 h-4" />}
+            {generating ? <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" /> : <Wand2 className="w-4 h-4" aria-hidden="true" />}
             Generate rubric
           </button>
         </div>
@@ -431,16 +474,19 @@ function FromExamplesTab({ orgId, onError }: { orgId: string; onError: (s: strin
           <div className="flex justify-end gap-2">
             <button
               onClick={() => setGenerated(null)}
-              className="px-3 py-1.5 bg-[var(--bg-tertiary)] text-[var(--text-primary)] rounded-lg text-xs font-medium hover:bg-[var(--border-default)] transition-colors"
+              disabled={saving}
+              aria-label="Discard generated rubric"
+              className="px-3 py-1.5 bg-[var(--bg-tertiary)] text-[var(--text-primary)] rounded-lg text-xs font-medium hover:bg-[var(--border-default)] transition-colors disabled:opacity-50"
             >
               Discard
             </button>
             <button
               onClick={handleSave}
               disabled={saving}
+              aria-label="Save generated rubric as a metric"
               className="inline-flex items-center gap-1.5 px-4 py-1.5 bg-[var(--accent)] text-[var(--bg-base)] rounded-lg text-xs font-medium hover:bg-[var(--accent-hover)] disabled:opacity-50 transition-colors"
             >
-              {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+              {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" aria-hidden="true" /> : <Save className="w-3.5 h-3.5" aria-hidden="true" />}
               Save as metric
             </button>
           </div>
@@ -552,9 +598,10 @@ function MyMetricsTab({ orgId, onError }: { orgId: string; onError: (s: string) 
                 cell: (m) => (
                   <button
                     onClick={() => openMetric(m.metric_id)}
+                    aria-label={`View metric ${m.name}`}
                     className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[var(--bg-tertiary)] text-[var(--text-primary)] rounded-lg text-xs font-medium hover:bg-[var(--border-default)] transition-colors"
                   >
-                    <Eye className="w-3.5 h-3.5" />
+                    <Eye className="w-3.5 h-3.5" aria-hidden="true" />
                     View
                   </button>
                 ),
@@ -575,7 +622,7 @@ function MyMetricsTab({ orgId, onError }: { orgId: string; onError: (s: string) 
         <DialogContent className="max-w-2xl">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <ListChecks className="w-4 h-4 text-[var(--accent)]" />
+              <ListChecks className="w-4 h-4 text-[var(--accent)]" aria-hidden="true" />
               {openDetail?.name}
             </DialogTitle>
             <DialogDescription>
@@ -594,7 +641,7 @@ function MyMetricsTab({ orgId, onError }: { orgId: string; onError: (s: string) 
             {openDetail?.history && openDetail.history.length > 0 && (
               <div>
                 <h4 className="text-xs font-semibold text-[var(--text-muted)] mb-1.5 uppercase tracking-wide flex items-center gap-1.5">
-                  <History className="w-3.5 h-3.5" />
+                  <History className="w-3.5 h-3.5" aria-hidden="true" />
                   Version history
                 </h4>
                 <ul className="space-y-1 text-xs text-[var(--text-secondary)]">
@@ -612,16 +659,19 @@ function MyMetricsTab({ orgId, onError }: { orgId: string; onError: (s: string) 
           <DialogFooter>
             <button
               onClick={() => setOpenDetail(null)}
-              className="px-3 py-1.5 bg-[var(--bg-tertiary)] text-[var(--text-primary)] rounded-lg text-xs font-medium hover:bg-[var(--border-default)] transition-colors"
+              disabled={approving}
+              aria-label="Close metric detail"
+              className="px-3 py-1.5 bg-[var(--bg-tertiary)] text-[var(--text-primary)] rounded-lg text-xs font-medium hover:bg-[var(--border-default)] transition-colors disabled:opacity-50"
             >
               Close
             </button>
             <button
               onClick={handleApprove}
               disabled={approving}
+              aria-label={`Approve metric ${openDetail?.name}`}
               className="inline-flex items-center gap-1.5 px-4 py-1.5 bg-[var(--accent)] text-[var(--bg-base)] rounded-lg text-xs font-medium hover:bg-[var(--accent-hover)] disabled:opacity-50 transition-colors"
             >
-              {approving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle2 className="w-3.5 h-3.5" />}
+              {approving ? <Loader2 className="w-3.5 h-3.5 animate-spin" aria-hidden="true" /> : <CheckCircle2 className="w-3.5 h-3.5" aria-hidden="true" />}
               Approve
             </button>
           </DialogFooter>

@@ -19,7 +19,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Check, ChevronRight, Sparkles, X } from "lucide-react";
+import { ChevronRight, Sparkles, X } from "lucide-react";
 import { useOrg } from "@/hooks/use-org";
 import { onboardingV2Api, type OnboardingV2State } from "@/lib/api";
 import { cn } from "@/lib/utils";

@@ -2,7 +2,6 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { useOrg } from "@/hooks/use-org";
-import { cn } from "@/lib/utils";
 import { PageHeader } from "@/components/layout/page-header";
 import { NoOrgState } from "@/components/ui/no-org-state";
 import { useToast } from "@/components/ui/toast";
@@ -13,8 +12,7 @@ import {
   Plus,
   History,
   ChevronDown,
-  ChevronRight,
-} from "lucide-react";
+  ChevronRight } from "lucide-react";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
@@ -133,9 +131,7 @@ export default function PromptsPage() {
             name: newPromptName.trim(),
             description: newPromptDesc || null,
             tags: [],
-            auto_eval_on_save: newPromptAutoEval,
-          }),
-        }
+            auto_eval_on_save: newPromptAutoEval }) }
       );
       if (res.ok) {
         toast.success("Prompt created");
@@ -174,7 +170,7 @@ export default function PromptsPage() {
         <button
           type="button"
           onClick={() => setShowNewPrompt(!showNewPrompt)}
-          className="inline-flex items-center gap-2 rounded-md bg-[var(--accent)] px-3 py-2 text-sm font-medium text-white hover:opacity-90"
+          className="inline-flex items-center gap-2 rounded-md bg-[var(--accent)] px-3 py-2 text-sm font-medium text-[var(--accent-foreground)] hover:opacity-90"
         >
           <Plus className="h-4 w-4" />
           New prompt
@@ -221,7 +217,7 @@ export default function PromptsPage() {
               <button
                 type="button"
                 onClick={handleCreate}
-                className="inline-flex items-center gap-2 rounded-md bg-[var(--accent)] px-3 py-1.5 text-xs font-medium text-white hover:opacity-90"
+                className="inline-flex items-center gap-2 rounded-md bg-[var(--accent)] px-3 py-1.5 text-xs font-medium text-[var(--accent-foreground)] hover:opacity-90"
               >
                 Create
               </button>

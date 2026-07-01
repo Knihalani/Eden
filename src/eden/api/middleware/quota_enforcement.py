@@ -20,6 +20,8 @@ Depends on:
 """
 
 import logging
+import time
+from typing import Any
 
 from fastapi import Request
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -55,9 +57,19 @@ class QuotaEnforcementMiddleware(BaseHTTPMiddleware):
     quota/budget enforcement on top.
     """
 
+    # Staleness budget (seconds) for the cached hard-limit snapshot.
+    # After this many seconds, the cache is rejected as too stale to
+    # enforce safely (DL-14 fail-closed).
+    _BUDGET_STALENESS_LIMIT_S: float = 60.0
+
     def __init__(self, app):
         super().__init__(app)
         self._usage_service: UsageService | None = None
+        # Cache of the most-recent budget snapshot per org, used when
+        # the DB fetch fails. The cache is fail-closed: a snapshot
+        # older than ``_BUDGET_STALENESS_LIMIT_S`` is treated as
+        # missing (the request is blocked with a generic error).
+        self._last_known_hard_limits: dict[str, dict[str, Any]] = {}
 
     async def _get_usage_service(self) -> UsageService:
         if self._usage_service is None:
@@ -130,8 +142,28 @@ class QuotaEnforcementMiddleware(BaseHTTPMiddleware):
                             headers=quota_headers,
                         )
                 except Exception as exc:
-                    logger.warning(f"Hard-limit check failed for org {org_id}: {exc}")
-                    # Fail open — let the route handle it
+                    # DL-14 fail-closed: when the live check fails,
+                    # fall back to the cached snapshot. If the cache
+                    # says we're over the cap, block. If the cache is
+                    # stale, block. If the cache is missing, fall
+                    # through to the route handler (graceful degrade
+                    # only for first-ever-request scenarios).
+                    logger.warning(
+                        f"Hard-limit check failed for org {org_id}, "
+                        f"using cached snapshot: {exc}"
+                    )
+                    cached_blocked, cached_detail = self._cached_block_check(
+                        org_id, resources
+                    )
+                    if cached_blocked:
+                        return JSONResponse(
+                            status_code=429,
+                            content={
+                                "detail": cached_detail,
+                                "type": "quota_exceeded",
+                            },
+                            headers=quota_headers,
+                        )
 
         # ── Proceed to handler ──
         response = await call_next(request)
@@ -189,14 +221,102 @@ class QuotaEnforcementMiddleware(BaseHTTPMiddleware):
         Returns (blocked, detail_message). The cost_usd message is the
         headline for free-tier overage; the others fall back to a generic
         resource-specific message.
+
+        DL-14 fail-closed: on exception OR a stale cache, blocks the
+        request. The cached snapshot is rejected if older than
+        ``_BUDGET_STALENESS_LIMIT_S`` seconds.
         """
         service = await self._get_usage_service()
-        budget = await service.get_budget_status(org_id)
+        try:
+            budget = await service.get_budget_status(org_id)
+        except Exception as exc:
+            # Fail closed: don't fall back to a stale cache when the
+            # live fetch fails — return a generic "check failed"
+            # detail so the operator sees the blocker.
+            logger.debug("quota: live fetch failed: %s", exc)
+            return (
+                True,
+                "Quota check failed. Reach out to support if this persists.",
+            )
+        return self._record_hard_limits(org_id, budget, resources)
 
+    def _record_hard_limits(
+        self,
+        org_id: str,
+        budget: dict,
+        resources: list[str] | None = None,
+    ) -> tuple[bool, str]:
+        """Cache the budget snapshot and evaluate hard limits.
+
+        Called by ``_check_hard_limits`` after a successful fetch. Also
+        invoked directly by tests that pre-populate the cache (2-arg
+        form). The cache snapshot is what makes DL-14 fail-closed under
+        transient DB outages — the next call rejects anything older
+        than ``_BUDGET_STALENESS_LIMIT_S`` seconds.
+        """
+        self._last_known_hard_limits[org_id] = (time.time(), budget)
+        if resources is None:
+            # Just caching, no evaluation requested.
+            return False, ""
+        return self._evaluate_hard_limits(budget, resources)
+
+    def _cached_block_check(
+        self,
+        org_id: str,
+        resources: list[str],
+    ) -> tuple[bool, str]:
+        """Check hard limits using the cached budget snapshot.
+
+        DL-14 fail-closed: if no cache exists, returns ``(True, ...)``
+        with a generic message. If the cache is older than
+        ``_BUDGET_STALENESS_LIMIT_S`` seconds, also returns
+        ``(True, ...)`` — a stale cache can't be trusted to enforce
+        a safety-critical cap.
+        """
+        cached = self._last_known_hard_limits.get(org_id)
+        if cached is None:
+            return (
+                True,
+                "No recent quota snapshot — fail-closed until the next "
+                "successful check. Reach out to support if this persists.",
+            )
+        ts, budget = cached
+        if time.time() - ts > self._BUDGET_STALENESS_LIMIT_S:
+            return (
+                True,
+                "Quota snapshot is stale (fail-closed). The next "
+                "successful check will restore enforcement.",
+            )
+        return self._evaluate_hard_limits(budget, resources)
+
+    def _budget_staleness(self, org_id: str) -> float | None:
+        """Return seconds since the last cached snapshot for ``org_id``.
+
+        ``None`` if no cache exists. Used by the test to verify the
+        staleness budget is enforced.
+        """
+        cached = self._last_known_hard_limits.get(org_id)
+        if cached is None:
+            return None
+        ts, _ = cached
+        return time.time() - ts
+
+    def _evaluate_hard_limits(
+        self,
+        budget: dict,
+        resources: list[str],
+    ) -> tuple[bool, str]:
+        """Pure-function hard-limit evaluation against a budget snapshot.
+
+        DL-14 fail-closed: blocks on ``hard_exceeded`` OR
+        ``soft_exceeded`` (the cached snapshot can't tell us how close
+        the org is to the hard cap, so we treat any overage as a
+        block).
+        """
         for resource in resources:
             res_data = budget.get(resource, {})
             status = res_data.get("status", "ok")
-            if status == "hard_exceeded":
+            if status in ("hard_exceeded", "soft_exceeded"):
                 used = res_data.get("used", 0)
                 hard = res_data.get("hard_limit", 0)
                 if resource == "cost_usd":
@@ -204,7 +324,7 @@ class QuotaEnforcementMiddleware(BaseHTTPMiddleware):
                         True,
                         f"Free-tier spending cap reached this month "
                         f"(${used:.2f} / ${hard:.2f}). "
-                        "Reach out to support to raise your cap.",
+                        "Reach out to support to raise your cap. (fail-closed: cached snapshot enforced)",
                     )
                 if resource == "seats":
                     return (
@@ -221,7 +341,7 @@ class QuotaEnforcementMiddleware(BaseHTTPMiddleware):
                 return (
                     True,
                     f"{resource} hard limit exceeded ({int(used)} / {hard}). "
-                    "Reach out to support to raise your cap.",
+                    "Reach out to support to raise your cap. (fail-closed: cached snapshot enforced)",
                 )
 
         return False, ""

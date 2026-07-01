@@ -3,31 +3,17 @@
 import { useState, useEffect, useCallback } from "react";
 import { useOrg } from "@/hooks/use-org";
 import { cn } from "@/lib/utils";
+import { Alert } from "@/components/ui/alert";
+;
+;
+import { PageHeader } from "@/components/layout/page-header";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { CheckCircle2, Database, Lightbulb, Loader2, Network, Search, Shuffle, Sparkles, XCircle, Zap } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
+import { DataTable } from "@/components/ui/data-table";
+;
 import { EmptyState } from "@/components/ui/empty-state";
 import { NoOrgState } from "@/components/ui/no-org-state";
-import { PageHeader } from "@/components/layout/page-header";
-import {
-  Tabs,
-  TabsList,
-  TabsTrigger,
-  TabsContent,
-} from "@/components/ui/tabs";
-import {
-  AlertTriangle,
-  CheckCircle2,
-  Database,
-  Lightbulb,
-  Loader2,
-  Network,
-  Search,
-  Shuffle,
-  Sparkles,
-  XCircle,
-  Zap,
-} from "lucide-react";
-import { motion, AnimatePresence } from "framer-motion";
-import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
-import { api } from "@/lib/api";
 
 async function callApi<T>(endpoint: string, init: RequestInit = {}): Promise<T> {
   // Delegate to the shared api client — it knows about Clerk refresh,
@@ -37,8 +23,7 @@ async function callApi<T>(endpoint: string, init: RequestInit = {}): Promise<T> 
   const res = await fetch(endpoint.startsWith("http") ? endpoint : `/api/proxy${endpoint}`, {
     credentials: "include",
     headers: { "Content-Type": "application/json", ...(init.headers ?? {}) },
-    ...init,
-  });
+    ...init });
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: "Request failed" }));
     throw new Error(err.detail || `HTTP ${res.status}`);
@@ -52,8 +37,7 @@ const retrievalApi = {
   utilization: (orgId: string, traceId: string) =>
     callApi<{ trace_id: string; utilization: number; used_chunks: string[]; unused_chunks: string[]; }>(`/orgs/${orgId}/intelligence/retrieval/${traceId}/utilization`, { method: "POST" }),
   reorder: (orgId: string) =>
-    callApi<{ reordering: Array<{ chunk_id: string; new_position: number; reason: string }>; }>(`/orgs/${orgId}/intelligence/retrieval/reorder`, { method: "POST" }),
-};
+    callApi<{ reordering: Array<{ chunk_id: string; new_position: number; reason: string }>; }>(`/orgs/${orgId}/intelligence/retrieval/reorder`, { method: "POST" }) };
 
 type SubTab = "gaps" | "utilization" | "reorder";
 
@@ -101,10 +85,12 @@ export default function RetrievalIntelligencePage() {
       />
 
       {error && (
-        <div className="bg-[var(--error-bg)] text-[var(--error)] text-sm px-4 py-3 rounded-xl flex items-center gap-2.5 border border-[var(--error)]/20">
-          <AlertTriangle className="w-4 h-4 flex-shrink-0" />
-          {error}
-        </div>
+        <Alert
+          variant="error"
+          title="Request failed"
+          description={error}
+          onDismiss={() => setError("")}
+        />
       )}
 
       <Tabs
@@ -226,8 +212,7 @@ function GapsTab({ orgId, setError }: { orgId: string; setError: (e: string) => 
                   >
                     {(g.gap_score * 100).toFixed(0)}%
                   </span>
-                ),
-              },
+                ) },
               {
                 key: "example_trace_id",
                 header: "Example trace",
@@ -235,8 +220,7 @@ function GapsTab({ orgId, setError }: { orgId: string; setError: (e: string) => 
                   <span className="font-mono text-xs text-[var(--text-muted)]">
                     {g.example_trace_id?.slice(0, 20) ?? "—"}…
                   </span>
-                ),
-              },
+                ) },
             ]}
             rows={gaps}
             rowKey={(_g, i) => String(i)}
@@ -384,8 +368,7 @@ function ChunkList({
   icon: Icon,
   iconClass,
   chunks,
-  tone,
-}: {
+  tone }: {
   title: string;
   icon: typeof CheckCircle2;
   iconClass: string;
@@ -483,8 +466,7 @@ function ReorderTab({ orgId, setError }: { orgId: string; setError: (e: string) 
                 header: "New position",
                 sortable: true,
                 align: "right",
-                cell: (e) => <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-[var(--accent-faint)] text-[var(--accent)]">#{e.new_position}</span>,
-              },
+                cell: (e) => <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-[var(--accent-faint)] text-[var(--accent)]">#{e.new_position}</span> },
               { key: "reason", header: "Reason", cell: (e) => <span className="text-[var(--text-secondary)] text-xs">{e.reason}</span> },
             ]}
             rows={entries}

@@ -1,0 +1,475 @@
+{
+  "trace_id": "trace_high_tca_03",
+  "archetype_id": "high-tca",
+  "agent_id": "agent_A_03_high-tca-tool-bug_03",
+  "event_count": 6,
+  "events": [
+    {
+      "event_id": "evt_thigh_tca_03_0000",
+      "tenant_id": "org_eden_synth",
+      "project_id": "proj_synthetic_eval_v3",
+      "trace_id": "trace_high_tca_03",
+      "realm": "production",
+      "agent_id": "agent_A_03_high-tca-tool-bug_03",
+      "agent_version": "synth-v3.0.0",
+      "environment_id": "env_prod_main",
+      "tags": [],
+      "source_format": "eden_native",
+      "images": [],
+      "audio": [],
+      "citations": [],
+      "stop_sequence": null,
+      "system_fingerprint": "fp_synth-v3.0.0",
+      "conversation_id": "conv_tca_03",
+      "event_type": "span.start",
+      "timestamp": "2026-06-30T12:00:00+00:00",
+      "parent_span_id": null,
+      "span_id": "spn_trace_high_tca_03_0000",
+      "name": "trace",
+      "duration_ms": 0.0,
+      "payload": {},
+      "metrics": {},
+      "attributes": {
+        "environment": "production"
+      },
+      "outcome": null,
+      "request_body": null,
+      "response_body": null,
+      "reasoning": null,
+      "tool_calls_full": [],
+      "tool_results": [],
+      "logprobs": null,
+      "finish_reason": null,
+      "cache_hit": false,
+      "prompt_cache_savings_usd": 0.0,
+      "model_version": null,
+      "service_tier": null
+    },
+    {
+      "event_id": "evt_thigh_tca_03_0001",
+      "tenant_id": "org_eden_synth",
+      "project_id": "proj_synthetic_eval_v3",
+      "trace_id": "trace_high_tca_03",
+      "realm": "production",
+      "agent_id": "agent_A_03_high-tca-tool-bug_03",
+      "agent_version": "synth-v3.0.0",
+      "environment_id": "env_prod_main",
+      "tags": [],
+      "source_format": "eden_native",
+      "images": [],
+      "audio": [],
+      "citations": [],
+      "stop_sequence": null,
+      "system_fingerprint": "fp_synth-v3.0.0",
+      "conversation_id": "conv_tca_03",
+      "event_type": "llm.completion",
+      "timestamp": "2026-06-30T12:00:00.800000+00:00",
+      "parent_span_id": "spn_trace_high_tca_03_0000",
+      "span_id": "spn_trace_high_tca_03_0001",
+      "name": "llm.fast",
+      "duration_ms": 800.0,
+      "payload": {},
+      "metrics": {
+        "prompt_tokens": 50,
+        "completion_tokens": 20,
+        "total_tokens": 70,
+        "cost_usd": 1.9e-05,
+        "latency_ms": 800.0
+      },
+      "attributes": {
+        "model": "gpt-4o-mini",
+        "environment": "production",
+        "user_id": "user_synth_57",
+        "session_id": "sess_synth_75"
+      },
+      "outcome": "success",
+      "request_body": {
+        "model": "gpt-4o-mini",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Pay $50 to vendor 4711."
+          }
+        ],
+        "temperature": 0.0
+      },
+      "response_body": {
+        "id": "cmpl-evt_cmpl_52107",
+        "model": "gpt-4o-mini",
+        "choices": [
+          {
+            "index": 0,
+            "finish_reason": "stop",
+            "message": {
+              "role": "assistant",
+              "content": "Calling payments api.",
+              "tool_calls": [
+                {
+                  "id": "call_p_0001",
+                  "type": "function",
+                  "function": {
+                    "name": "payments.send",
+                    "arguments": "{\"recipiant\": 4711, \"amount\": \"$50\"}"
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "usage": {
+          "prompt_tokens": 50,
+          "completion_tokens": 20,
+          "total_tokens": 70
+        }
+      },
+      "reasoning": null,
+      "tool_calls_full": [
+        {
+          "id": "call_p_0001",
+          "type": "function",
+          "function": {
+            "name": "payments.send",
+            "arguments": "{\"recipiant\": 4711, \"amount\": \"$50\"}"
+          }
+        }
+      ],
+      "tool_results": [],
+      "logprobs": {
+        "content": [
+          [
+            {
+              "token": "Calling",
+              "logprob": -0.1,
+              "top_logprobs": []
+            }
+          ],
+          [
+            {
+              "token": "payments",
+              "logprob": -0.1,
+              "top_logprobs": []
+            }
+          ],
+          [
+            {
+              "token": "api.",
+              "logprob": -0.1,
+              "top_logprobs": []
+            }
+          ]
+        ]
+      },
+      "finish_reason": "stop",
+      "cache_hit": false,
+      "prompt_cache_savings_usd": 0.0,
+      "model_version": "gpt-4o-mini",
+      "service_tier": "standard"
+    },
+    {
+      "event_id": "evt_thigh_tca_03_0002",
+      "tenant_id": "org_eden_synth",
+      "project_id": "proj_synthetic_eval_v3",
+      "trace_id": "trace_high_tca_03",
+      "realm": "production",
+      "agent_id": "agent_A_03_high-tca-tool-bug_03",
+      "agent_version": "synth-v3.0.0",
+      "environment_id": "env_prod_main",
+      "tags": [],
+      "source_format": "eden_native",
+      "images": [],
+      "audio": [],
+      "citations": [],
+      "stop_sequence": null,
+      "system_fingerprint": "fp_synth-v3.0.0",
+      "conversation_id": "conv_tca_03",
+      "event_type": "tool.call",
+      "timestamp": "2026-06-30T12:00:01.010000+00:00",
+      "parent_span_id": "spn_trace_high_tca_03_0000",
+      "span_id": "spn_trace_high_tca_03_0002",
+      "name": "payments.send",
+      "duration_ms": 210.0,
+      "payload": {},
+      "metrics": {
+        "latency_ms": 210.0,
+        "cost_usd": 0.007482
+      },
+      "attributes": {
+        "environment": "production"
+      },
+      "outcome": "failure",
+      "request_body": {
+        "tool": "payments.send",
+        "arguments": {
+          "recipiant": 4711,
+          "amount": "$50"
+        }
+      },
+      "response_body": {
+        "error": "schema_violation"
+      },
+      "reasoning": null,
+      "tool_calls_full": [
+        {
+          "tool_call_id": "call_payments.send_7312",
+          "type": "function",
+          "function": {
+            "name": "payments.send",
+            "arguments": "{\"recipiant\": 4711, \"amount\": \"$50\"}"
+          }
+        }
+      ],
+      "tool_results": [
+        {
+          "tool_call_id": "call_payments.send_7312",
+          "role": "tool",
+          "content": "{\"error\": \"schema_violation: recipiant is not a valid field; expected recipient_id\"}",
+          "error": "schema_violation"
+        }
+      ],
+      "logprobs": null,
+      "finish_reason": null,
+      "cache_hit": false,
+      "prompt_cache_savings_usd": 0.0,
+      "model_version": null,
+      "service_tier": null
+    },
+    {
+      "event_id": "evt_thigh_tca_03_0003",
+      "tenant_id": "org_eden_synth",
+      "project_id": "proj_synthetic_eval_v3",
+      "trace_id": "trace_high_tca_03",
+      "realm": "production",
+      "agent_id": "agent_A_03_high-tca-tool-bug_03",
+      "agent_version": "synth-v3.0.0",
+      "environment_id": "env_prod_main",
+      "tags": [],
+      "source_format": "eden_native",
+      "images": [],
+      "audio": [],
+      "citations": [],
+      "stop_sequence": null,
+      "system_fingerprint": "fp_synth-v3.0.0",
+      "conversation_id": "conv_tca_03",
+      "event_type": "llm.completion",
+      "timestamp": "2026-06-30T12:00:01.810000+00:00",
+      "parent_span_id": "spn_trace_high_tca_03_0000",
+      "span_id": "spn_trace_high_tca_03_0003",
+      "name": "llm.fast",
+      "duration_ms": 800.0,
+      "payload": {},
+      "metrics": {
+        "prompt_tokens": 50,
+        "completion_tokens": 20,
+        "total_tokens": 70,
+        "cost_usd": 1.9e-05,
+        "latency_ms": 800.0
+      },
+      "attributes": {
+        "model": "gpt-4o-mini",
+        "environment": "production",
+        "user_id": "user_synth_26",
+        "session_id": "sess_synth_55"
+      },
+      "outcome": "success",
+      "request_body": {
+        "model": "gpt-4o-mini",
+        "messages": [
+          {
+            "role": "tool",
+            "tool_call_id": "call_p_0001",
+            "content": "schema_violation"
+          }
+        ],
+        "temperature": 0.0
+      },
+      "response_body": {
+        "id": "cmpl-evt_cmpl_76493",
+        "model": "gpt-4o-mini",
+        "choices": [
+          {
+            "index": 0,
+            "finish_reason": "stop",
+            "message": {
+              "role": "assistant",
+              "content": "Retrying with corrected schema.",
+              "tool_calls": [
+                {
+                  "id": "call_p_0002",
+                  "type": "function",
+                  "function": {
+                    "name": "payments.send",
+                    "arguments": "{\"recipient_id\": 4711, \"amount_cents\": 5000}"
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "usage": {
+          "prompt_tokens": 50,
+          "completion_tokens": 20,
+          "total_tokens": 70
+        }
+      },
+      "reasoning": null,
+      "tool_calls_full": [
+        {
+          "id": "call_p_0002",
+          "type": "function",
+          "function": {
+            "name": "payments.send",
+            "arguments": "{\"recipient_id\": 4711, \"amount_cents\": 5000}"
+          }
+        }
+      ],
+      "tool_results": [],
+      "logprobs": {
+        "content": [
+          [
+            {
+              "token": "Retrying",
+              "logprob": -0.1,
+              "top_logprobs": []
+            }
+          ],
+          [
+            {
+              "token": "with",
+              "logprob": -0.1,
+              "top_logprobs": []
+            }
+          ],
+          [
+            {
+              "token": "corrected",
+              "logprob": -0.1,
+              "top_logprobs": []
+            }
+          ],
+          [
+            {
+              "token": "schema.",
+              "logprob": -0.1,
+              "top_logprobs": []
+            }
+          ]
+        ]
+      },
+      "finish_reason": "stop",
+      "cache_hit": false,
+      "prompt_cache_savings_usd": 0.0,
+      "model_version": "gpt-4o-mini",
+      "service_tier": "standard"
+    },
+    {
+      "event_id": "evt_thigh_tca_03_0004",
+      "tenant_id": "org_eden_synth",
+      "project_id": "proj_synthetic_eval_v3",
+      "trace_id": "trace_high_tca_03",
+      "realm": "production",
+      "agent_id": "agent_A_03_high-tca-tool-bug_03",
+      "agent_version": "synth-v3.0.0",
+      "environment_id": "env_prod_main",
+      "tags": [],
+      "source_format": "eden_native",
+      "images": [],
+      "audio": [],
+      "citations": [],
+      "stop_sequence": null,
+      "system_fingerprint": "fp_synth-v3.0.0",
+      "conversation_id": "conv_tca_03",
+      "event_type": "tool.call",
+      "timestamp": "2026-06-30T12:00:01.990000+00:00",
+      "parent_span_id": "spn_trace_high_tca_03_0000",
+      "span_id": "spn_trace_high_tca_03_0004",
+      "name": "payments.send",
+      "duration_ms": 180.0,
+      "payload": {},
+      "metrics": {
+        "latency_ms": 180.0,
+        "cost_usd": 0.000858
+      },
+      "attributes": {
+        "environment": "production"
+      },
+      "outcome": "success",
+      "request_body": {
+        "tool": "payments.send",
+        "arguments": {
+          "recipient_id": 4711,
+          "amount_cents": 5000
+        }
+      },
+      "response_body": {
+        "result": {
+          "transaction_id": "tx_8821"
+        }
+      },
+      "reasoning": null,
+      "tool_calls_full": [
+        {
+          "tool_call_id": "call_payments.send_3398",
+          "type": "function",
+          "function": {
+            "name": "payments.send",
+            "arguments": "{\"recipient_id\": 4711, \"amount_cents\": 5000}"
+          }
+        }
+      ],
+      "tool_results": [
+        {
+          "tool_call_id": "call_payments.send_3398",
+          "role": "tool",
+          "content": "{\"transaction_id\": \"tx_8821\"}"
+        }
+      ],
+      "logprobs": null,
+      "finish_reason": null,
+      "cache_hit": false,
+      "prompt_cache_savings_usd": 0.0,
+      "model_version": null,
+      "service_tier": null
+    },
+    {
+      "event_id": "evt_thigh_tca_03_0005",
+      "tenant_id": "org_eden_synth",
+      "project_id": "proj_synthetic_eval_v3",
+      "trace_id": "trace_high_tca_03",
+      "realm": "production",
+      "agent_id": "agent_A_03_high-tca-tool-bug_03",
+      "agent_version": "synth-v3.0.0",
+      "environment_id": "env_prod_main",
+      "tags": [],
+      "source_format": "eden_native",
+      "images": [],
+      "audio": [],
+      "citations": [],
+      "stop_sequence": null,
+      "system_fingerprint": "fp_synth-v3.0.0",
+      "conversation_id": "conv_tca_03",
+      "event_type": "span.end",
+      "timestamp": "2026-06-30T12:00:01.990000+00:00",
+      "parent_span_id": null,
+      "span_id": "spn_trace_high_tca_03_0000",
+      "name": "trace",
+      "duration_ms": 1990.0,
+      "payload": {},
+      "metrics": {},
+      "attributes": {
+        "environment": "production"
+      },
+      "outcome": "success",
+      "request_body": null,
+      "response_body": null,
+      "reasoning": null,
+      "tool_calls_full": [],
+      "tool_results": [],
+      "logprobs": null,
+      "finish_reason": null,
+      "cache_hit": false,
+      "prompt_cache_savings_usd": 0.0,
+      "model_version": null,
+      "service_tier": null
+    }
+  ]
+}

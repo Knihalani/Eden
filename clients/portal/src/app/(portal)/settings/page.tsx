@@ -5,14 +5,8 @@ import dynamic from "next/dynamic";
 import { useOrganizationList } from "@clerk/nextjs";
 import { useOrg } from "@/hooks/use-org";
 import { useAuth } from "@/hooks/use-auth";
-import { usePermissions } from "@/hooks/use-permissions";
-import { api } from "@/lib/api";
-import { Loader2, Plus, Trash2, Building2, Users, Code, Copy, Check, Archive, RefreshCw, Key, FileText, Shield, ShieldCheck, CreditCard, KeyRound, Lock, BarChart2, Server, EyeOff, Database, FileArchive, Settings2, Bot } from "lucide-react";
+import { Building2, Users, Code, Key, FileText, Shield, ShieldCheck, CreditCard, KeyRound, Lock, BarChart2, Server, EyeOff, Database, FileArchive, Settings2, Bot } from "lucide-react";
 import { cn } from "@/lib/utils";
-import Link from "next/link";
-import { DeleteOrgDialog } from "./_components/delete-org-dialog";
-import { TransferOwnershipDialog } from "./_components/transfer-ownership-dialog";
-import { InvitePanel } from "./_components/invite-panel";
 
 // Heavy tabs — code-split via next/dynamic so the initial settings bundle
 // doesn't ship recharts / @xyflow / 2FA crypto / SCIM flows. Each lazy
@@ -67,7 +61,7 @@ const SidebarSettingsTab = dynamic(
   { ssr: false, loading: () => <Skeleton className="h-64 w-full" /> }
 );
 
-import { DataExportPanel } from "./_components/data-export-panel";
+;
 
 // Phase 5 (June 2026) — extracted from the inlined functions below
 // so each tab can be developed / tested / lazy-loaded independently.
@@ -77,8 +71,6 @@ import { ReferencesTab } from "./_components/references-tab";
 import { ApiKeysTab } from "./_components/api-keys-tab";
 import RolesTab from "./_components/roles-tab";
 
-import { useToast } from "@/components/ui/toast";
-import { useConfirm } from "@/hooks/use-confirm";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useSearchParams, useRouter } from "next/navigation";
 import { SettingsSearch } from "@/components/settings/settings-search";
@@ -114,7 +106,7 @@ const CATEGORY_ORDER: SettingsCategory[] = ["Org", "Members", "Security", "Compl
 
 export default function SettingsPage() {
   const { user } = useAuth();
-  const { currentOrg, organizations, setCurrentOrg, refreshOrgs } = useOrg();
+  const { currentOrg, organizations, setCurrentOrg } = useOrg();
   const { setActive: setActiveOrg } = useOrganizationList();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -155,8 +147,7 @@ export default function SettingsPage() {
     Security: [],
     Compliance: [],
     Billing: [],
-    Advanced: [],
-  };
+    Advanced: [] };
   for (const tab of visibleTabs) tabsByCategory[tab.category].push(tab);
   const visibleCategories = CATEGORY_ORDER.filter(
     (cat) => tabsByCategory[cat].length > 0
@@ -188,7 +179,7 @@ export default function SettingsPage() {
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [visibleCategories.length]);
 
   if (!user) return null;

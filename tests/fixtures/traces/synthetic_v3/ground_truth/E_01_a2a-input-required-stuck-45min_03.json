@@ -1,0 +1,18 @@
+{
+  "trace_id": "trace_a2a_input_stuck_03",
+  "archetype_id": "a2a-input-required-stuck",
+  "agent_id": "agent_a2a-input-required-stuck_03",
+  "expected_TAS": 43,
+  "expected_intervention": "escalate",
+  "expected_metrics": {
+    "task_state": "input-required",
+    "duration_min": 45
+  },
+  "expected_detector_fires": [
+    "a2a_task_stuck"
+  ],
+  "expected_loop_detected": false,
+  "expected_hallucination_detected": false,
+  "expected_redundancy_pct": 0.0,
+  "notes": "A2A task stuck in input-required for 45 minutes (> 30min threshold). Phase 10 a2a_task_stuck MUST fire."
+}

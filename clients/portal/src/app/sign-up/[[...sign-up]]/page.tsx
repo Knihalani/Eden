@@ -11,20 +11,37 @@ import { clerkAppearance } from "@/components/auth/clerk-theme";
 export default function SignUpPage() {
   return (
     <AuthSplitLayout brandPanel={<AuthBrandPanel />}>
-      <SignUp
-        path="/sign-up"
-        routing="path"
-        signInUrl="/sign-in"
-        // After a successful signup, land on the onboarding wizard
-        // instead of the dashboard. Without this, Clerk's default
-        // fallback resolves to the current URL ("/sign-up") which
-        // re-renders the auth card and feels like the site hung.
-        // New users always need the org step; routing them straight
-        // to /onboarding gets them to a productive state in one click.
-        fallbackRedirectUrl="/onboarding"
-        signInForceRedirectUrl="/dashboard"
-        appearance={clerkAppearance}
-      />
+      <div className="w-full max-w-md space-y-6">
+        {/* Branded eyebrow above the Clerk card so the screen reads
+            as "Eden auth" rather than a generic Clerk form. The
+            <SignUp /> component hides its own headerSubtitle via
+            the appearance config in clerk-theme.ts. */}
+        <div className="text-center space-y-1.5">
+          <p className="text-[10px] font-mono font-semibold uppercase tracking-[0.18em] text-[var(--accent)]">
+            Get started
+          </p>
+          <h1 className="text-xl font-semibold text-[var(--text-primary)] tracking-tight">
+            Create your account
+          </h1>
+          <p className="text-sm text-[var(--text-muted)]">
+            Spin up an Eden workspace in under a minute
+          </p>
+        </div>
+        <SignUp
+          path="/sign-up"
+          routing="path"
+          signInUrl="/sign-in"
+          // After a successful signup, land on the onboarding wizard
+          // instead of the dashboard. Without this, Clerk's default
+          // fallback resolves to the current URL ("/sign-up") which
+          // re-renders the auth card and feels like the site hung.
+          // New users always need the org step; routing them straight
+          // to /onboarding gets them to a productive state in one click.
+          fallbackRedirectUrl="/onboarding"
+          signInForceRedirectUrl="/dashboard"
+          appearance={clerkAppearance}
+        />
+      </div>
     </AuthSplitLayout>
   );
 }

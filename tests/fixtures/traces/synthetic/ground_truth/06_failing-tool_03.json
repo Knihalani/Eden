@@ -1,0 +1,10 @@
+{
+  "trace_id": "trace_failing_tool_03",
+  "archetype_id": "failing-tool",
+  "expected_TAS": 19,
+  "expected_intervention": "escalate",
+  "expected_loop_detected": false,
+  "expected_hallucination_detected": false,
+  "expected_redundancy_pct": 0.0,
+  "notes": "3 consecutive HTTP 500s with no backoff, no fallback, no human handoff. Outcome=failure. Escalate to a human operator."
+}

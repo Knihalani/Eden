@@ -12,7 +12,7 @@ import {
   X,
   AlertCircle,
   Clock,
-  XCircle,
+  
   FileCode,
   Sparkles,
   TrendingUp,
@@ -22,8 +22,7 @@ import {
   RotateCcw,
   CheckSquare,
   Square,
-  Zap,
-} from "lucide-react";
+  Zap } from "lucide-react";
 import { useOrg } from "@/hooks/use-org";
 import { prSuggestionApi } from "@/lib/api";
 import { cn } from "@/lib/utils";
@@ -39,8 +38,7 @@ import { PageHeader } from "@/components/layout/page-header";
 import type {
   PRSuggestion,
   PRSuggestionStatus,
-  PRSuggestionTrigger,
-} from "@/lib/types";
+  PRSuggestionTrigger } from "@/lib/types";
 
 // ── Trigger / status mapping ────────────────────────────────────
 
@@ -48,15 +46,13 @@ const TRIGGER_LABELS: Record<PRSuggestionTrigger, string> = {
   rca_cluster: "RCA cluster",
   drift_alert: "Drift alert",
   retrieval_gap: "Retrieval gap",
-  judge_regression: "Judge regression",
-};
+  judge_regression: "Judge regression" };
 
 const TRIGGER_COLORS: Record<PRSuggestionTrigger, string> = {
   rca_cluster: "bg-[var(--error)]/10 text-[var(--error)] border-[var(--error)]/20",
   drift_alert: "bg-[var(--warning)]/10 text-[var(--warning)] border-[var(--warning)]/20",
   retrieval_gap: "bg-[var(--accent)]/10 text-[var(--accent)] border-[var(--accent)]/20",
-  judge_regression: "bg-[var(--accent)]/10 text-[var(--accent)] border-[var(--accent)]/20",
-};
+  judge_regression: "bg-[var(--accent)]/10 text-[var(--accent)] border-[var(--accent)]/20" };
 
 function relativeTime(iso: string): string {
   try {
@@ -105,8 +101,7 @@ function SuggestionCard({
   suggestion,
   selected,
   onSelectToggle,
-  onClick,
-}: {
+  onClick }: {
   suggestion: PRSuggestion;
   selected: boolean;
   onSelectToggle: () => void;
@@ -211,8 +206,7 @@ function SuggestionCard({
 function CreateSuggestionForm({
   onCreated,
   onCancel,
-  recentFiles: parentRecentFiles = [],
-}: {
+  recentFiles: parentRecentFiles = [] }: {
   onCreated: (id: string) => void;
   onCancel: () => void;
   recentFiles?: string[];
@@ -233,24 +227,19 @@ function CreateSuggestionForm({
     rca_cluster: {
       id: "clu_demo_001",
       summary: "Hallucination score dropped 4% in customer_service_v1 over the last 7d",
-      files: ["src/eden/services/customer_service.py"],
-    },
+      files: ["src/eden/services/customer_service.py"] },
     drift_alert: {
       id: "alert_drift_demo",
       summary: "Drift detected: judge-score distribution shifted (PSI 0.28)",
-      files: ["src/eden/predictive/drift.py"],
-    },
+      files: ["src/eden/predictive/drift.py"] },
     retrieval_gap: {
       id: "gap_demo_001",
       summary: "Top-5 retrieval utilization is 0.42 (below the 0.7 target)",
-      files: ["src/eden/kb/retrieval_intel/reorderer.py"],
-    },
+      files: ["src/eden/kb/retrieval_intel/reorderer.py"] },
     judge_regression: {
       id: "judge_demo_001",
       summary: "Correctness judge dropped 0.06 over 24h",
-      files: ["src/eden/evaluation/eval_intel/judges.py"],
-    },
-  };
+      files: ["src/eden/evaluation/eval_intel/judges.py"] } };
 
   function applySample() {
     const s = samples[trigger];
@@ -284,8 +273,7 @@ function CreateSuggestionForm({
       } = {
         trigger,
         trigger_id: triggerId.trim(),
-        trigger_payload: {},
-      };
+        trigger_payload: {} };
       if (summary.trim()) {
         payload.trigger_payload.description = summary.trim();
       }
@@ -297,6 +285,7 @@ function CreateSuggestionForm({
       toast.success("Suggestion generated");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to create");
+      toast.error(err instanceof Error ? err.message : "Failed to create suggestion");
     } finally {
       setBusy(false);
     }
@@ -326,7 +315,7 @@ function CreateSuggestionForm({
                 <Zap className="h-3 w-3 mr-1" />
                 Use sample
               </Button>
-              <Button variant="ghost" size="sm" onClick={onCancel} type="button">
+              <Button variant="ghost" size="sm" onClick={onCancel} type="button" aria-label="Close new suggestion form">
                 <X className="h-4 w-4" />
               </Button>
             </div>
@@ -340,6 +329,7 @@ function CreateSuggestionForm({
                 onChange={(e) =>
                   setTrigger(e.target.value as PRSuggestionTrigger)
                 }
+                aria-label="Suggestion trigger type"
                 className="w-full bg-[var(--bg-base)] border border-[var(--border-default)] rounded px-3 py-2 text-sm text-[var(--text-primary)]"
               >
                 <option value="rca_cluster">RCA cluster</option>
@@ -356,6 +346,7 @@ function CreateSuggestionForm({
                 value={triggerId}
                 onChange={(e) => setTriggerId(e.target.value)}
                 placeholder="e.g. clu_abc123"
+                aria-label="Trigger identifier"
                 className="w-full bg-[var(--bg-base)] border border-[var(--border-default)] rounded px-3 py-2 text-sm text-[var(--text-primary)] font-mono"
               />
             </div>
@@ -367,6 +358,7 @@ function CreateSuggestionForm({
               value={summary}
               onChange={(e) => setSummary(e.target.value)}
               placeholder="What happened? (1 sentence)"
+              aria-label="Suggestion summary"
               className="w-full bg-[var(--bg-base)] border border-[var(--border-default)] rounded px-3 py-2 text-sm text-[var(--text-primary)]"
             />
           </div>
@@ -380,6 +372,8 @@ function CreateSuggestionForm({
                 <button
                   type="button"
                   onClick={() => setShowSuggestions((v) => !v)}
+                  aria-label="Show recent file suggestions"
+                  aria-expanded={showSuggestions}
                   className="text-xs text-[var(--accent)] hover:text-[var(--accent)] flex items-center gap-1"
                 >
                   Recent <ChevronDown className="h-3 w-3" />
@@ -419,6 +413,7 @@ function CreateSuggestionForm({
               onChange={(e) => setFiles(e.target.value)}
               onFocus={() => setShowSuggestions(false)}
               placeholder={"src/eden/foo.py\nsrc/eden/bar.py"}
+              aria-label="Affected files (one per line)"
               className="w-full h-24 bg-[var(--bg-base)] border border-[var(--border-default)] rounded px-3 py-2 text-sm text-[var(--text-primary)] font-mono"
             />
           </div>
@@ -455,8 +450,7 @@ function BulkActionBar({
   selected,
   onRegenerate,
   onClear,
-  busy,
-}: {
+  busy }: {
   selected: string[];
   onRegenerate: () => void;
   onClear: () => void;
@@ -547,7 +541,7 @@ export default function PRSuggestionsPage() {
   }, [currentOrg, statusFilter, triggerFilter, search]);
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
+     
     loadSuggestions();
   }, [loadSuggestions]);
 
@@ -577,7 +571,7 @@ export default function PRSuggestionsPage() {
     merged30d: suggestions.filter(
       (s) =>
         s.status === "merged" &&
-        // eslint-disable-next-line react-hooks/purity
+         
         Date.now() - new Date(s.created_at).getTime() < 30 * 86400 * 1000,
     ).length,
     totalConfidence:
@@ -587,8 +581,7 @@ export default function PRSuggestionsPage() {
               suggestions.length) *
               100,
           )
-        : 0,
-  };
+        : 0 };
 
   // All-visible selected? Used for the "select all" toggle.
   const visibleIds = useMemo(
@@ -721,12 +714,14 @@ export default function PRSuggestionsPage() {
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search by title or summary…"
+              aria-label="Search PR suggestions"
               className="w-full bg-[var(--bg-base)] border border-[var(--border-default)] rounded px-3 py-1.5 text-sm text-[var(--text-primary)]"
             />
           </div>
           {suggestions.length > 0 && (
             <button
               onClick={toggleSelectAll}
+              aria-label={allSelected ? "Deselect all suggestions" : "Select all visible suggestions"}
               className="text-xs text-[var(--text-muted)] hover:text-[var(--text-primary)] flex items-center gap-1.5"
             >
               {allSelected ? (
@@ -746,6 +741,7 @@ export default function PRSuggestionsPage() {
                   e.target.value as PRSuggestionTrigger | "all",
                 )
               }
+              aria-label="Filter by trigger type"
               className="bg-[var(--bg-base)] border border-[var(--border-default)] rounded px-3 py-1.5 text-sm text-[var(--text-primary)]"
             >
               <option value="all">All triggers</option>
@@ -761,6 +757,7 @@ export default function PRSuggestionsPage() {
                   e.target.value as PRSuggestionStatus | "all",
                 )
               }
+              aria-label="Filter by status"
               className="bg-[var(--bg-base)] border border-[var(--border-default)] rounded px-3 py-1.5 text-sm text-[var(--text-primary)]"
             >
               <option value="all">All statuses</option>
@@ -776,16 +773,33 @@ export default function PRSuggestionsPage() {
       {/* Error */}
       {error && (
         <Card className="border-[var(--error)]/20 bg-[var(--error)]/5">
-          <div className="p-3 text-sm text-[var(--error)] flex items-center gap-2">
-            <AlertCircle className="h-4 w-4" />
-            {error}
+          <div
+            role="alert"
+            className="p-3 text-sm text-[var(--error)] flex items-center justify-between gap-2"
+          >
+            <span className="flex items-center gap-2">
+              <AlertCircle className="h-4 w-4" />
+              {error}
+            </span>
+            <button
+              onClick={loadSuggestions}
+              disabled={loading}
+              className="text-xs font-medium underline underline-offset-2 hover:opacity-80 disabled:opacity-50"
+            >
+              Retry
+            </button>
           </div>
         </Card>
       )}
 
       {/* Suggestion list — skeleton on first load */}
       {loading && suggestions.length === 0 ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <div
+          role="status"
+          aria-live="polite"
+          aria-busy="true"
+          className="grid grid-cols-1 md:grid-cols-2 gap-3"
+        >
           {Array.from({ length: 6 }).map((_, i) => (
             <SkeletonCard key={i} />
           ))}

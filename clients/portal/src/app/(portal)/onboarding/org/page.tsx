@@ -34,6 +34,8 @@ import { api, onboardingApi, type PendingInvite } from "@/lib/api";
 import { useAuth } from "@/hooks/use-auth";
 import { useOrg } from "@/hooks/use-org";
 import { useToast } from "@/components/ui/toast";
+import { PageHeader } from "@/components/layout/page-header";
+import { EmptyState } from "@/components/ui/empty-state";
 import { ArrowRight, Building2, KeyRound, Loader2, Mail, Plus, UserPlus } from "lucide-react";
 
 type Branch = "menu" | "create" | "join";
@@ -329,10 +331,11 @@ export default function OnboardingOrgPage() {
               }
               window.location.assign("/onboarding/autonomous");
             }}
+            aria-label="Continue to autonomous setup"
             className="inline-flex items-center gap-2 rounded-lg bg-[var(--accent)] px-4 py-2 text-sm font-medium text-[var(--accent-foreground)] hover:opacity-90 mt-2"
           >
             Continue
-            <ArrowRight className="h-4 w-4" />
+            <ArrowRight className="h-4 w-4" aria-hidden="true" />
           </button>
         )}
       </div>
@@ -343,13 +346,12 @@ export default function OnboardingOrgPage() {
   if (branch === "menu") {
     return (
       <div className="space-y-8">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Set up your organisation</h1>
-          <p className="mt-2 text-[var(--text-secondary)]">
-            Eden groups traces, agents, and integrations by org. You
-            can be in many at once and switch from the sidebar.
-          </p>
-        </div>
+        <PageHeader
+          eyebrow="Onboarding"
+          title="Set up your organisation"
+          icon={Building2}
+          subtitle="Eden groups traces, agents, and integrations by org. You can be in many at once and switch from the sidebar."
+        />
 
         {invites.length > 0 && (
           <div className="rounded-lg border border-[var(--accent)]/40 bg-[var(--accent-faint)] p-4">
@@ -359,6 +361,7 @@ export default function OnboardingOrgPage() {
             </div>
             <button
               onClick={() => setBranch("join")}
+              aria-label={`Review ${invites.length} pending invite${invites.length === 1 ? "" : "s"}`}
               className="text-sm underline hover:text-[var(--accent)]"
             >
               Review &amp; join →
@@ -369,6 +372,7 @@ export default function OnboardingOrgPage() {
         <div className="grid gap-4 md:grid-cols-2">
           <button
             onClick={() => setBranch("create")}
+            aria-label="Create a new organisation"
             className="rounded-xl border border-[var(--border-default)] bg-[var(--bg-secondary)] p-6 text-left transition-colors hover:border-[var(--accent)] hover:bg-[var(--bg-tertiary)]"
           >
             <Plus className="mb-3 h-6 w-6 text-[var(--accent)]" />
@@ -380,6 +384,7 @@ export default function OnboardingOrgPage() {
           </button>
           <button
             onClick={() => setBranch("join")}
+            aria-label="Join an existing organisation"
             className="rounded-xl border border-[var(--border-default)] bg-[var(--bg-secondary)] p-6 text-left transition-colors hover:border-[var(--accent)] hover:bg-[var(--bg-tertiary)]"
           >
             <UserPlus className="mb-3 h-6 w-6 text-[var(--accent)]" />
@@ -403,30 +408,42 @@ export default function OnboardingOrgPage() {
   if (branch === "create") {
     return (
       <div className="space-y-6">
+        <PageHeader
+          eyebrow="Onboarding"
+          title="Create your organisation"
+          icon={Building2}
+          subtitle="Pick something you’ll recognise on the sidebar. You can rename it later from Settings."
+        />
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Create your organisation</h1>
-          <p className="mt-2 text-[var(--text-secondary)]">
-            Pick something you&apos;ll recognise on the sidebar. You can
-            rename it later from Settings.
-          </p>
-        </div>
-        <div>
-          <label className="mb-1 block text-sm text-[var(--text-secondary)]">
+          <label
+            htmlFor="org-name"
+            className="mb-1 block text-sm text-[var(--text-secondary)]"
+          >
             Organisation name
           </label>
           <input
+            id="org-name"
             type="text"
             value={orgName}
             onChange={(e) => setOrgName(e.target.value)}
             placeholder="Acme AI Labs"
             maxLength={100}
-            className="w-full rounded-lg border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-2 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)]"
+            aria-label="Organisation name"
+            aria-describedby="org-name-hint"
+            className="w-full rounded-lg border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-2 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--accent)] focus:border-[var(--accent)]"
             autoFocus
           />
+          <p
+            id="org-name-hint"
+            className="mt-1 text-xs text-[var(--text-muted)]"
+          >
+            Used in URLs and the sidebar. {100 - orgName.length} characters left.
+          </p>
         </div>
         <div className="flex items-center justify-between">
           <button
             onClick={() => setBranch("menu")}
+            aria-label="Back to menu"
             className="text-sm text-[var(--text-muted)] hover:text-[var(--text-primary)]"
           >
             ← Back
@@ -434,11 +451,16 @@ export default function OnboardingOrgPage() {
           <button
             onClick={createOrg}
             disabled={submitting || orgName.trim().length < 2}
-            className="inline-flex items-center gap-2 rounded-lg bg-[var(--accent)] px-4 py-2 text-sm font-medium text-[var(--bg-primary)] hover:opacity-90 disabled:opacity-50"
+            aria-busy={submitting}
+            className="inline-flex items-center gap-2 rounded-lg bg-[var(--accent)] px-4 py-2 text-sm font-medium text-[var(--accent-foreground)] hover:opacity-90 disabled:opacity-50"
           >
-            {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Building2 className="h-4 w-4" />}
+            {submitting ? (
+              <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+            ) : (
+              <Building2 className="h-4 w-4" aria-hidden="true" />
+            )}
             Create &amp; continue
-            <ArrowRight className="h-4 w-4" />
+            <ArrowRight className="h-4 w-4" aria-hidden="true" />
           </button>
         </div>
       </div>
@@ -448,13 +470,12 @@ export default function OnboardingOrgPage() {
   // branch === "join"
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">Join an organisation</h1>
-        <p className="mt-2 text-[var(--text-secondary)]">
-          Three ways in: pick a pending invite, paste a token, or ask
-          an admin to send one to your account email.
-        </p>
-      </div>
+      <PageHeader
+        eyebrow="Onboarding"
+        title="Join an organisation"
+        icon={UserPlus}
+        subtitle="Three ways in: pick a pending invite, paste a token, or ask an admin to send one to your account email."
+      />
 
       {/* Pending invites — surfaced from /auth/me/pending-invites. */}
       <section className="space-y-2">
@@ -463,7 +484,7 @@ export default function OnboardingOrgPage() {
         </h2>
         {loadingInvites ? (
           <div className="flex items-center gap-2 rounded-lg border border-[var(--border-default)] bg-[var(--bg-secondary)] p-4 text-sm text-[var(--text-muted)]">
-            <Loader2 className="h-4 w-4 animate-spin" />
+            <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
             Looking for pending invites…
           </div>
         ) : invites.length > 0 ? (
@@ -473,6 +494,8 @@ export default function OnboardingOrgPage() {
                 key={inv.invitation_id}
                 onClick={() => acceptInvite(inv)}
                 disabled={submitting}
+                aria-busy={submitting}
+                aria-label={`Accept invite to ${inv.org_name} as ${inv.role}`}
                 className="flex w-full items-start justify-between rounded-lg border border-[var(--border-default)] bg-[var(--bg-secondary)] p-4 text-left transition-colors hover:border-[var(--accent)] hover:bg-[var(--bg-tertiary)] disabled:opacity-50"
               >
                 <div>
@@ -486,16 +509,17 @@ export default function OnboardingOrgPage() {
                       : ""}
                   </div>
                 </div>
-                <ArrowRight className="mt-1 h-5 w-5 text-[var(--text-muted)]" />
+                <ArrowRight className="mt-1 h-5 w-5 text-[var(--text-muted)]" aria-hidden="true" />
               </button>
             ))}
           </div>
         ) : (
-          <div className="rounded-lg border border-dashed border-[var(--border-default)] bg-[var(--bg-secondary)] p-4 text-sm text-[var(--text-muted)]">
-            No pending invites on file. If a teammate sent you one,
-            check the email address on your account, or paste the
-            token below.
-          </div>
+          <EmptyState
+            icon={Mail}
+            title="No pending invites on file"
+            description="If a teammate sent you one, check the email address on your account — or paste the token below."
+            size="sm"
+          />
         )}
       </section>
 
@@ -503,27 +527,41 @@ export default function OnboardingOrgPage() {
           your email (e.g. you signed up with a different address) or
           the invite predates the account. Always visible. */}
       <section className="rounded-lg border border-[var(--border-default)] bg-[var(--bg-secondary)] p-4">
-        <label className="mb-2 flex items-center gap-2 text-sm text-[var(--text-secondary)]">
-          <KeyRound className="h-4 w-4 text-[var(--accent)]" />
+        <label
+          htmlFor="invite-token"
+          className="mb-2 flex items-center gap-2 text-sm text-[var(--text-secondary)]"
+        >
+          <KeyRound className="h-4 w-4 text-[var(--accent)]" aria-hidden="true" />
           Have a token from email?
         </label>
         <div className="flex items-center gap-2">
           <input
+            id="invite-token"
             type="text"
             value={pasteToken}
             onChange={(e) => setPasteToken(e.target.value)}
             placeholder="paste-your-invite-token-here"
-            className="flex-1 rounded-lg border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-2 font-mono text-xs text-[var(--text-primary)] placeholder:text-[var(--text-muted)]"
+            aria-label="Invitation token"
+            aria-describedby="invite-token-hint"
+            className="flex-1 rounded-lg border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-2 font-mono text-xs text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--accent)] focus:border-[var(--accent)]"
           />
           <button
             onClick={acceptByToken}
             disabled={submitting || !pasteToken.trim()}
-            className="rounded-lg bg-[var(--accent)] px-3 py-2 text-sm font-medium text-[var(--bg-primary)] hover:opacity-90 disabled:opacity-50"
+            aria-busy={submitting}
+            aria-label="Join with this token"
+            className="inline-flex items-center gap-2 rounded-lg bg-[var(--accent)] px-3 py-2 text-sm font-medium text-[var(--accent-foreground)] hover:opacity-90 disabled:opacity-50"
           >
-            {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : "Join"}
+            {submitting ? (
+              <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+            ) : null}
+            Join
           </button>
         </div>
-        <p className="mt-2 text-xs text-[var(--text-muted)]">
+        <p
+          id="invite-token-hint"
+          className="mt-2 text-xs text-[var(--text-muted)]"
+        >
           Tokens look like <span className="font-mono">aB12-cdEf…</span>.
           They expire after 7 days; ask your admin for a fresh one if
           yours is stale.
@@ -533,6 +571,7 @@ export default function OnboardingOrgPage() {
       <div>
         <button
           onClick={() => setBranch("menu")}
+          aria-label="Back to menu"
           className="text-sm text-[var(--text-muted)] hover:text-[var(--text-primary)]"
         >
           ← Back

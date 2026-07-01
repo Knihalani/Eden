@@ -1,0 +1,10 @@
+{
+  "trace_id": "trace_slow_cost_overrun_01",
+  "archetype_id": "slow-cost-overrun",
+  "expected_TAS": 80,
+  "expected_intervention": "summarize",
+  "expected_loop_detected": false,
+  "expected_hallucination_detected": false,
+  "expected_redundancy_pct": 0.0,
+  "notes": "Total wall time ~28s due to a single 11.8s reasoning call. Structure is otherwise optimal. Cost-optimisation intervention: downgrade the final summary to slot=standard."
+}

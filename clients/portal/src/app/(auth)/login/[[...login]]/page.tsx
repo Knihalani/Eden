@@ -15,12 +15,33 @@ import { clerkAppearance } from "@/components/auth/clerk-theme";
 export default function LoginPage() {
   return (
     <AuthSplitLayout brandPanel={<AuthBrandPanel />}>
-      <SignIn
-        path="/login"
-        routing="path"
-        signUpUrl="/signup"
-        appearance={clerkAppearance}
-      />
+      <div className="w-full max-w-md space-y-6">
+        {/* Eyebrow above the Clerk card so users land in a
+            branded context instead of Clerk's default heading. */}
+        <div className="text-center space-y-1.5">
+          <p className="text-[10px] font-mono font-semibold uppercase tracking-[0.18em] text-[var(--accent)]">
+            Account access
+          </p>
+          <h1 className="text-xl font-semibold text-[var(--text-primary)] tracking-tight">
+            Welcome back
+          </h1>
+          <p className="text-sm text-[var(--text-muted)]">
+            Sign in to your Eden workspace
+          </p>
+        </div>
+        <SignIn
+          path="/login"
+          routing="path"
+          signUpUrl="/signup"
+          // Send signed-in users to the dashboard, not back to "/".
+          // Without an explicit fallback Clerk sometimes resolves to
+          // the current URL, which can leave a user who clicked
+          // "Sign in" from /signup stuck on the auth card. Mirrors
+          // the /sign-in route so both paths behave identically.
+          fallbackRedirectUrl="/dashboard"
+          appearance={clerkAppearance}
+        />
+      </div>
     </AuthSplitLayout>
   );
 }

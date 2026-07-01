@@ -27,7 +27,7 @@ export function BillingTab() {
     if (currentOrg) {
       loadBillingData();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [currentOrg?.id]);
 
   const loadBillingData = async () => {
@@ -37,6 +37,7 @@ export function BillingTab() {
     try {
       const planData = await api.getPlans(currentOrg.id);
       setPlan(planData as Partial<BillingUsage>);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (e: any) {
       console.error("Failed to load billing data", e);
       setError(e.message || "Failed to load billing data");
@@ -221,6 +222,7 @@ function UsageMeter({
   label: string;
   used: number;
   limit: number;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   icon: any;
   unit?: string;
 }) {

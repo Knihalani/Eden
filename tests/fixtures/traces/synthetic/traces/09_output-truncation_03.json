@@ -1,0 +1,513 @@
+{
+  "trace_id": "trace_output_truncation_03",
+  "archetype_id": "output-truncation",
+  "agent_id": "agent_output-truncation_03",
+  "event_count": 5,
+  "events": [
+    {
+      "event_id": "evt_toutput_truncation_03_0000",
+      "tenant_id": "org_eden_synth",
+      "project_id": "proj_synthetic_eval_v1",
+      "trace_id": "trace_output_truncation_03",
+      "realm": "production",
+      "agent_id": "agent_output-truncation_03",
+      "agent_version": "synth-v1.0.0",
+      "environment_id": "env_prod_main",
+      "tags": [],
+      "source_format": "eden_native",
+      "images": [],
+      "audio": [],
+      "citations": [],
+      "stop_sequence": null,
+      "system_fingerprint": "fp_synth-v1.0.0",
+      "event_type": "span.start",
+      "timestamp": "2026-06-28T12:00:00+00:00",
+      "parent_span_id": null,
+      "span_id": "spn_trace_output_truncation_03_0000",
+      "name": "trace",
+      "duration_ms": 0.0,
+      "payload": {},
+      "metrics": {},
+      "attributes": {
+        "environment": "production"
+      },
+      "outcome": null,
+      "request_body": null,
+      "response_body": null,
+      "reasoning": null,
+      "tool_calls_full": [],
+      "tool_results": [],
+      "logprobs": null,
+      "finish_reason": null,
+      "cache_hit": false,
+      "prompt_cache_savings_usd": 0.0,
+      "model_version": null,
+      "service_tier": null
+    },
+    {
+      "event_id": "evt_toutput_truncation_03_0001",
+      "tenant_id": "org_eden_synth",
+      "project_id": "proj_synthetic_eval_v1",
+      "trace_id": "trace_output_truncation_03",
+      "realm": "production",
+      "agent_id": "agent_output-truncation_03",
+      "agent_version": "synth-v1.0.0",
+      "environment_id": "env_prod_main",
+      "tags": [],
+      "source_format": "eden_native",
+      "images": [],
+      "audio": [],
+      "citations": [],
+      "stop_sequence": null,
+      "system_fingerprint": "fp_synth-v1.0.0",
+      "event_type": "llm.completion",
+      "timestamp": "2026-06-28T12:00:00.800000+00:00",
+      "parent_span_id": "spn_trace_output_truncation_03_0000",
+      "span_id": "spn_trace_output_truncation_03_0001",
+      "name": "llm.reasoning",
+      "duration_ms": 800.0,
+      "payload": {},
+      "metrics": {
+        "prompt_tokens": 50,
+        "completion_tokens": 20,
+        "total_tokens": 70,
+        "cost_usd": 0.00045,
+        "latency_ms": 800.0
+      },
+      "attributes": {
+        "model": "claude-3-5-sonnet",
+        "environment": "production",
+        "user_id": "user_synth_42",
+        "session_id": "sess_synth_42"
+      },
+      "outcome": "success",
+      "request_body": {
+        "model": "claude-3-5-sonnet",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Explain the Cap theorem."
+          }
+        ],
+        "temperature": 0.0
+      },
+      "response_body": {
+        "id": "cmpl-evt_cmpl_61821",
+        "model": "claude-3-5-sonnet",
+        "choices": [
+          {
+            "index": 0,
+            "finish_reason": "stop",
+            "message": {
+              "role": "assistant",
+              "content": "I'll write a full primer.",
+              "tool_calls": [
+                {
+                  "id": "call_k_0001",
+                  "type": "function",
+                  "function": {
+                    "name": "kb.search",
+                    "arguments": "{\"q\": \"CAP theorem\"}"
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "usage": {
+          "prompt_tokens": 50,
+          "completion_tokens": 20,
+          "total_tokens": 70
+        }
+      },
+      "reasoning": null,
+      "tool_calls_full": [
+        {
+          "id": "call_k_0001",
+          "type": "function",
+          "function": {
+            "name": "kb.search",
+            "arguments": "{\"q\": \"CAP theorem\"}"
+          }
+        }
+      ],
+      "tool_results": [],
+      "logprobs": {
+        "content": [
+          [
+            {
+              "token": "I'll",
+              "logprob": -0.1,
+              "top_logprobs": []
+            }
+          ],
+          [
+            {
+              "token": "write",
+              "logprob": -0.1,
+              "top_logprobs": []
+            }
+          ],
+          [
+            {
+              "token": "a",
+              "logprob": -0.1,
+              "top_logprobs": []
+            }
+          ],
+          [
+            {
+              "token": "full",
+              "logprob": -0.1,
+              "top_logprobs": []
+            }
+          ],
+          [
+            {
+              "token": "primer.",
+              "logprob": -0.1,
+              "top_logprobs": []
+            }
+          ]
+        ]
+      },
+      "finish_reason": "stop",
+      "cache_hit": false,
+      "prompt_cache_savings_usd": 0.0,
+      "model_version": "claude-3-5-sonnet",
+      "service_tier": "standard"
+    },
+    {
+      "event_id": "evt_toutput_truncation_03_0002",
+      "tenant_id": "org_eden_synth",
+      "project_id": "proj_synthetic_eval_v1",
+      "trace_id": "trace_output_truncation_03",
+      "realm": "production",
+      "agent_id": "agent_output-truncation_03",
+      "agent_version": "synth-v1.0.0",
+      "environment_id": "env_prod_main",
+      "tags": [],
+      "source_format": "eden_native",
+      "images": [],
+      "audio": [],
+      "citations": [],
+      "stop_sequence": null,
+      "system_fingerprint": "fp_synth-v1.0.0",
+      "event_type": "tool.call",
+      "timestamp": "2026-06-28T12:00:00.960000+00:00",
+      "parent_span_id": "spn_trace_output_truncation_03_0000",
+      "span_id": "spn_trace_output_truncation_03_0002",
+      "name": "kb.search",
+      "duration_ms": 160.0,
+      "payload": {},
+      "metrics": {
+        "latency_ms": 160.0,
+        "cost_usd": 0.0
+      },
+      "attributes": {
+        "environment": "production"
+      },
+      "outcome": "success",
+      "request_body": {
+        "tool": "kb.search",
+        "arguments": {
+          "q": "CAP theorem"
+        }
+      },
+      "response_body": {
+        "result": {
+          "hit_id": "kb_9931",
+          "text": "CAP: Consistency, Availability, Partition tolerance."
+        }
+      },
+      "reasoning": null,
+      "tool_calls_full": [
+        {
+          "tool_call_id": "call_kb.search_96958",
+          "type": "function",
+          "function": {
+            "name": "kb.search",
+            "arguments": "{\"q\": \"CAP theorem\"}"
+          }
+        }
+      ],
+      "tool_results": [
+        {
+          "tool_call_id": "call_kb.search_96958",
+          "role": "tool",
+          "content": "{\"hit_id\": \"kb_9931\", \"text\": \"CAP: Consistency, Availability, Partition tolerance.\"}"
+        }
+      ],
+      "logprobs": null,
+      "finish_reason": null,
+      "cache_hit": false,
+      "prompt_cache_savings_usd": 0.0,
+      "model_version": null,
+      "service_tier": null
+    },
+    {
+      "event_id": "evt_toutput_truncation_03_0003",
+      "tenant_id": "org_eden_synth",
+      "project_id": "proj_synthetic_eval_v1",
+      "trace_id": "trace_output_truncation_03",
+      "realm": "production",
+      "agent_id": "agent_output-truncation_03",
+      "agent_version": "synth-v1.0.0",
+      "environment_id": "env_prod_main",
+      "tags": [],
+      "source_format": "eden_native",
+      "images": [],
+      "audio": [],
+      "citations": [],
+      "stop_sequence": null,
+      "system_fingerprint": "fp_synth-v1.0.0",
+      "event_type": "llm.completion",
+      "timestamp": "2026-06-28T12:00:12.360000+00:00",
+      "parent_span_id": "spn_trace_output_truncation_03_0000",
+      "span_id": "spn_trace_output_truncation_03_0003",
+      "name": "llm.standard",
+      "duration_ms": 11400.0,
+      "payload": {},
+      "metrics": {
+        "prompt_tokens": 412,
+        "completion_tokens": 4096,
+        "total_tokens": 4508,
+        "cost_usd": 0.04199,
+        "latency_ms": 11400.0
+      },
+      "attributes": {
+        "model": "gpt-4o",
+        "environment": "production",
+        "user_id": "user_synth_42",
+        "session_id": "sess_synth_42"
+      },
+      "outcome": "success",
+      "request_body": {
+        "model": "gpt-4o",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Explain the Cap theorem."
+          },
+          {
+            "role": "tool",
+            "tool_call_id": "call_k_0001",
+            "content": "CAP: Consistency, Availability, Partition tolerance."
+          }
+        ],
+        "temperature": 0.0
+      },
+      "response_body": {
+        "id": "cmpl-evt_cmpl_53477",
+        "model": "gpt-4o",
+        "choices": [
+          {
+            "index": 0,
+            "finish_reason": "length",
+            "message": {
+              "role": "assistant",
+              "content": "The CAP theorem, formulated by Eric Brewer in 2000, states that any distributed data store can offer at most two of the following three guarantees simultaneously. First, Consistency \u2014 meaning every read receives the most recent write or an error. Second, Availability \u2014 meaning every request receives a response, without guarantee that it contains the most recent write. Third, Partition tolerance \u2014 meaning the system continues to operate despite arbitrary message loss between nodes. In practice, partitions are inevitable in distributed systems, so the real trade-off is between Consistency and Availabil"
+            }
+          }
+        ],
+        "usage": {
+          "prompt_tokens": 412,
+          "completion_tokens": 4096,
+          "total_tokens": 4508
+        }
+      },
+      "reasoning": null,
+      "tool_calls_full": [],
+      "tool_results": [],
+      "logprobs": {
+        "content": [
+          [
+            {
+              "token": "The",
+              "logprob": -0.1,
+              "top_logprobs": []
+            }
+          ],
+          [
+            {
+              "token": "CAP",
+              "logprob": -0.1,
+              "top_logprobs": []
+            }
+          ],
+          [
+            {
+              "token": "theorem,",
+              "logprob": -0.1,
+              "top_logprobs": []
+            }
+          ],
+          [
+            {
+              "token": "formulated",
+              "logprob": -0.1,
+              "top_logprobs": []
+            }
+          ],
+          [
+            {
+              "token": "by",
+              "logprob": -0.1,
+              "top_logprobs": []
+            }
+          ],
+          [
+            {
+              "token": "Eric",
+              "logprob": -0.1,
+              "top_logprobs": []
+            }
+          ],
+          [
+            {
+              "token": "Brewer",
+              "logprob": -0.1,
+              "top_logprobs": []
+            }
+          ],
+          [
+            {
+              "token": "in",
+              "logprob": -0.1,
+              "top_logprobs": []
+            }
+          ],
+          [
+            {
+              "token": "2000,",
+              "logprob": -0.1,
+              "top_logprobs": []
+            }
+          ],
+          [
+            {
+              "token": "states",
+              "logprob": -0.1,
+              "top_logprobs": []
+            }
+          ],
+          [
+            {
+              "token": "that",
+              "logprob": -0.1,
+              "top_logprobs": []
+            }
+          ],
+          [
+            {
+              "token": "any",
+              "logprob": -0.1,
+              "top_logprobs": []
+            }
+          ],
+          [
+            {
+              "token": "distributed",
+              "logprob": -0.1,
+              "top_logprobs": []
+            }
+          ],
+          [
+            {
+              "token": "data",
+              "logprob": -0.1,
+              "top_logprobs": []
+            }
+          ],
+          [
+            {
+              "token": "store",
+              "logprob": -0.1,
+              "top_logprobs": []
+            }
+          ],
+          [
+            {
+              "token": "can",
+              "logprob": -0.1,
+              "top_logprobs": []
+            }
+          ],
+          [
+            {
+              "token": "offer",
+              "logprob": -0.1,
+              "top_logprobs": []
+            }
+          ],
+          [
+            {
+              "token": "at",
+              "logprob": -0.1,
+              "top_logprobs": []
+            }
+          ],
+          [
+            {
+              "token": "most",
+              "logprob": -0.1,
+              "top_logprobs": []
+            }
+          ],
+          [
+            {
+              "token": "two",
+              "logprob": -0.1,
+              "top_logprobs": []
+            }
+          ]
+        ]
+      },
+      "finish_reason": "length",
+      "cache_hit": false,
+      "prompt_cache_savings_usd": 0.0,
+      "model_version": "gpt-4o",
+      "service_tier": "standard"
+    },
+    {
+      "event_id": "evt_toutput_truncation_03_0004",
+      "tenant_id": "org_eden_synth",
+      "project_id": "proj_synthetic_eval_v1",
+      "trace_id": "trace_output_truncation_03",
+      "realm": "production",
+      "agent_id": "agent_output-truncation_03",
+      "agent_version": "synth-v1.0.0",
+      "environment_id": "env_prod_main",
+      "tags": [],
+      "source_format": "eden_native",
+      "images": [],
+      "audio": [],
+      "citations": [],
+      "stop_sequence": null,
+      "system_fingerprint": "fp_synth-v1.0.0",
+      "event_type": "span.end",
+      "timestamp": "2026-06-28T12:00:12.360000+00:00",
+      "parent_span_id": null,
+      "span_id": "spn_trace_output_truncation_03_0000",
+      "name": "trace",
+      "duration_ms": 12360.0,
+      "payload": {},
+      "metrics": {},
+      "attributes": {
+        "environment": "production"
+      },
+      "outcome": "success",
+      "request_body": null,
+      "response_body": null,
+      "reasoning": null,
+      "tool_calls_full": [],
+      "tool_results": [],
+      "logprobs": null,
+      "finish_reason": null,
+      "cache_hit": false,
+      "prompt_cache_savings_usd": 0.0,
+      "model_version": null,
+      "service_tier": null
+    }
+  ]
+}

@@ -55,7 +55,7 @@ export function ApiKeysSettings({ org }: ApiKeysSettingsProps) {
     }
   };
 
-  // eslint-disable-next-line react-hooks/set-state-in-effect -- legitimate pattern: refetch on org change
+   
   useEffect(() => {
     loadKeys();
   }, [org?.id]);

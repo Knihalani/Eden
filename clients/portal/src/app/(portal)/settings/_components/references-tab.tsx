@@ -51,7 +51,7 @@ export function ReferencesTab({ org }: ReferencesTabProps) {
 
   useEffect(() => {
     loadReferences();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [org?.id, filter.purpose, filter.language]);
 
   const handleUpload = async (e: React.FormEvent<HTMLFormElement>) => {

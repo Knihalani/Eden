@@ -25,7 +25,8 @@ export default function DebuggerPage() {
       const res = await debuggerApi.listCheckpoints(currentOrg.id);
       setCheckpoints(res.checkpoints || []);
     } catch (e) {
-      toast.error((e as Error).message || "Failed to load checkpoints");
+      const msg = e instanceof Error ? e.message : "Failed to load checkpoints";
+      toast.error(msg);
     } finally {
       setLoading(false);
     }
@@ -81,7 +82,7 @@ export default function DebuggerPage() {
                       await debuggerApi.rewind(currentOrg.id, r.id);
                       toast.success(`Rewound to step ${r.step_index}`);
                     } catch (e) {
-                      toast.error((e as Error).message);
+                      toast.error(e instanceof Error ? e.message : "Rewind failed");
                     }
                   }}
                 >

@@ -26,8 +26,7 @@ import {
   type Connection,
   type EdgeChange,
   type NodeChange,
-  type OnSelectionChangeParams,
-} from "@xyflow/react";
+  type OnSelectionChangeParams } from "@xyflow/react";
 
 import { agentsApi } from "@/lib/api";
 import type { SimRun } from "@/lib/api";
@@ -44,8 +43,7 @@ import {
   lookupAgentId,
   persistGraph,
   rememberAgentId,
-  saveGraphDebounced,
-} from "../_lib/storage";
+  saveGraphDebounced } from "../_lib/storage";
 import { makeBlockNode, type EdenEdge, type EdenNode } from "../_lib/types";
 
 import type { RunDialogState } from "../_components/RunResultsDialog";
@@ -115,10 +113,8 @@ function defaultGraph(): { nodes: EdenNode[]; edges: EdenEdge[] } {
         target: scenario.id,
         sourceHandle: "out:agent",
         targetHandle: "in:agent",
-        data: { kind: "data" },
-      } as EdenEdge,
-    ],
-  };
+        data: { kind: "data" } } as EdenEdge,
+    ] };
 }
 
 type Snapshot = { nodes: EdenNode[]; edges: EdenEdge[] };
@@ -131,15 +127,13 @@ export function useBuilderState(): UseBuilderState {
       return {
         nodes: saved.nodes as EdenNode[],
         edges: saved.edges as EdenEdge[],
-        graphName: saved.graphName,
-      };
+        graphName: saved.graphName };
     }
     const d = defaultGraph();
     return {
       nodes: d.nodes,
       edges: d.edges,
-      graphName: DEFAULT_GRAPH_NAME,
-    };
+      graphName: DEFAULT_GRAPH_NAME };
   })();
 
   const [nodes, setNodes] = useState<EdenNode[]>(initial.nodes);
@@ -160,9 +154,8 @@ export function useBuilderState(): UseBuilderState {
     cursor: number; // index of the *current* state in the stack
   }>({
     stack: [{ nodes: initial.nodes, edges: initial.edges }],
-    cursor: 0,
-  });
-  const [historyTick, setHistoryTick] = useState(0);
+    cursor: 0 });
+  const [_historyTick, setHistoryTick] = useState(0);
   // Suppress pushing a new snapshot while we're applying undo/redo
   // or while a continuous drag is in progress.
   const applyingHistoryRef = useRef(false);
@@ -184,8 +177,7 @@ export function useBuilderState(): UseBuilderState {
       graphName,
       nodes: nodes as unknown as SavedGraph["nodes"],
       edges: edges as unknown as SavedGraph["edges"],
-      updatedAt: Date.now(),
-    };
+      updatedAt: Date.now() };
     saveGraphDebounced(g);
     setLastSavedAt(Date.now());
   }, [nodes, edges, graphName]);
@@ -231,8 +223,7 @@ export function useBuilderState(): UseBuilderState {
         id: `${orig.data.kind}_${Math.random().toString(36).slice(2, 9)}`,
         position: { x: orig.position.x + 40, y: orig.position.y + 40 },
         data: { ...orig.data },
-        selected: false,
-      };
+        selected: false };
       const nextNodes = [...nodes, dup];
       setNodes(nextNodes);
       setSelectedNodeId(dup.id);
@@ -503,16 +494,14 @@ export function useBuilderState(): UseBuilderState {
         try {
           const reg = await agentsApi.register(orgId, {
             name: slugify(graphName),
-            framework: framework === "none" ? undefined : framework,
-          });
+            framework: framework === "none" ? undefined : framework });
           agentId = reg.agent.agent_id;
           rememberAgentId(graphName, agentId);
           toast.info(`Registered new agent "${reg.agent.name}".`);
         } catch (err) {
           setRunState({
             kind: "error",
-            message: `Failed to register agent: ${(err as Error).message}`,
-          });
+            message: `Failed to register agent: ${(err as Error).message}` });
           return;
         }
       }
@@ -524,8 +513,7 @@ export function useBuilderState(): UseBuilderState {
       } catch (err) {
         setRunState({
           kind: "error",
-          message: `Upload failed: ${(err as Error).message}`,
-        });
+          message: `Upload failed: ${(err as Error).message}` });
         return;
       }
 
@@ -534,13 +522,11 @@ export function useBuilderState(): UseBuilderState {
       try {
         run = await agentsApi.triggerSimRun(orgId, agentId, {
           upload_id: upload.upload_id,
-          runner_kind: "subprocess",
-        });
+          runner_kind: "subprocess" });
       } catch (err) {
         setRunState({
           kind: "error",
-          message: `Failed to start sim: ${(err as Error).message}`,
-        });
+          message: `Failed to start sim: ${(err as Error).message}` });
         return;
       }
 
@@ -551,8 +537,7 @@ export function useBuilderState(): UseBuilderState {
         graphName,
         nodes: nodes as unknown as SavedGraph["nodes"],
         edges: edges as unknown as SavedGraph["edges"],
-        updatedAt: Date.now(),
-      });
+        updatedAt: Date.now() });
 
       // 7. Poll until terminal status.
       const terminal = new Set(["passed", "failed", "error"]);
@@ -570,8 +555,7 @@ export function useBuilderState(): UseBuilderState {
         } catch (err) {
           setRunState({
             kind: "error",
-            message: `Polling failed: ${(err as Error).message}`,
-          });
+            message: `Polling failed: ${(err as Error).message}` });
           return;
         }
       }
@@ -615,6 +599,5 @@ export function useBuilderState(): UseBuilderState {
     pushAndRun,
     closeRunDialog,
     showHistoricalRun,
-    resumeRunDialog,
-  };
+    resumeRunDialog };
 }

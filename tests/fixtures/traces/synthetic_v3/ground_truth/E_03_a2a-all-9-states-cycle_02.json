@@ -1,0 +1,15 @@
+{
+  "trace_id": "trace_a2a_all_9_states_02",
+  "archetype_id": "a2a-all-9-states-cycle",
+  "agent_id": "agent_a2a-all-9-states-cycle_02",
+  "expected_TAS": 72,
+  "expected_intervention": "allow",
+  "expected_metrics": {
+    "distinct_states": 9
+  },
+  "expected_detector_fires": [],
+  "expected_loop_detected": false,
+  "expected_hallucination_detected": false,
+  "expected_redundancy_pct": 0.0,
+  "notes": "Sequential walk through all 9 A2A states \u2014 parser must accept all. No stuck detector (each state < 30min)."
+}

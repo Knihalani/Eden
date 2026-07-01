@@ -524,7 +524,7 @@ export default function LandingPage() {
             </h2>
             <p className="text-[var(--text-secondary)] mb-12 max-w-2xl leading-relaxed">
               Comparable to Helicone or Langfuse for the observability layer, with a
-              closed-loop improvement layer they don't have. Adopt any pillar independently;
+              closed-loop improvement layer they don&apos;t have. Adopt any pillar independently;
               the loop closes when you use all three.
             </p>
 
@@ -583,7 +583,7 @@ export default function LandingPage() {
               One line. Your models. Full observability.
             </h2>
             <p className="text-[var(--text-secondary)] mb-8 max-w-2xl leading-relaxed">
-              Point your existing OpenAI SDK at Eden's gateway. Every call is captured and
+              Point your existing OpenAI SDK at Eden&apos;s gateway. Every call is captured and
               queryable in the portal — no other code changes.
             </p>
 
@@ -633,7 +633,7 @@ export default function LandingPage() {
                   className="text-3xl md:text-4xl font-bold text-[var(--text-primary)] tracking-tight mb-4"
                   style={{ letterSpacing: "-0.025em" }}
                 >
-                  From "this regression" to "this PR"
+                  From &ldquo;this regression&rdquo; to &ldquo;this PR&rdquo;
                 </h2>
                 <p className="text-[var(--text-secondary)] mb-4 leading-relaxed">
                   Helicone and Langfuse show you traces. Eden ships the fix. The

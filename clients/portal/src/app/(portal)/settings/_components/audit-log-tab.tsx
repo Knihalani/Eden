@@ -23,6 +23,7 @@ const ACTION_LABELS: Record<string, string> = {
   "invitation.declined": "Invitation declined",
 };
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function AuditLogTab({ org }: { org: any }) {
   const { hasPermission } = usePermissions();
   const [events, setEvents] = useState<AuditEvent[]>([]);

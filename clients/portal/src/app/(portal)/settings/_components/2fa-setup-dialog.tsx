@@ -8,10 +8,9 @@ import {
   DialogHeader,
   DialogTitle,
   DialogDescription,
-  DialogFooter,
-} from "@/components/ui/dialog";
+  DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Loader2, Copy, Check, X, ShieldCheck, AlertTriangle, KeyRound } from "lucide-react";
+import { Loader2, Copy, Check, ShieldCheck, AlertTriangle, KeyRound } from "lucide-react";
 
 interface TwoFASetupDialogProps {
   onClose: () => void;
@@ -44,6 +43,7 @@ export function TwoFASetupDialog({ onClose, onSuccess }: TwoFASetupDialogProps) 
       const data = await api.setup2FA();
       setQrData(data);
       setStep("qr");
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (e: any) {
       setError(e.message || "Failed to setup 2FA");
     } finally {
@@ -62,6 +62,7 @@ export function TwoFASetupDialog({ onClose, onSuccess }: TwoFASetupDialogProps) 
       setStep("success");
       // Close after a brief delay so the user sees the success state
       setTimeout(() => onSuccess(), 1200);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (e: any) {
       setError(e.message || "Invalid code. Please try again.");
       // Clear digits so the user can re-enter
@@ -157,6 +158,8 @@ export function TwoFASetupDialog({ onClose, onSuccess }: TwoFASetupDialogProps) 
           <div className="space-y-4">
             <div className="flex flex-col items-center space-y-3">
               <div className="p-3 bg-[var(--bg-base)] border border-[var(--border-default)] rounded-xl">
+                {/* next/image doesn't support data: URLs — use plain <img> for the inline QR */}
+                {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   src={`data:image/png;base64,${qrData.qr_code_base64}`}
                   alt="2FA QR code — scan with your authenticator app"
@@ -171,7 +174,7 @@ export function TwoFASetupDialog({ onClose, onSuccess }: TwoFASetupDialogProps) 
             <div className="p-3 bg-[var(--bg-base)] border border-[var(--border-default)] rounded-lg">
               <div className="flex items-center gap-2 mb-1.5">
                 <KeyRound className="w-3.5 h-3.5 text-[var(--text-muted)]" aria-hidden />
-                <p className="text-xs text-[var(--text-muted)] font-medium">Can't scan? Enter manually:</p>
+                <p className="text-xs text-[var(--text-muted)] font-medium">Can&apos;t scan? Enter manually:</p>
               </div>
               <div className="flex items-center gap-2">
                 <code className="flex-1 text-sm font-mono break-all text-[var(--terminal)]">{qrData.secret}</code>

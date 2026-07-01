@@ -68,7 +68,7 @@ from eden.code_change._common import (
 )
 from eden.optimization.model_router import ModelRouter, PipelineTask
 
-from ._common import _new_id, _not_implemented_envelope, _ok_envelope
+from ._common import _new_id, _error_envelope, _ok_envelope
 
 logger = logging.getLogger(__name__)
 
@@ -385,22 +385,29 @@ class PatchGenerator:
         returns an envelope that names the gate so the caller
         knows what to do next.
         """
-        # Without a router, we can't generate a real diff.
+        # Fall back to the platform's default router if none was
+        # injected. The endpoint always runs the full pipeline; only
+        # catastrophic config errors (no router at all) return an
+        # error envelope.
         if self._router is None:
-            return _not_implemented_envelope(
-                self.name,
-                message=(
-                    "Patch generation requires a ModelRouter. "
-                    "No router was injected into PatchGenerator."
-                ),
-                gate="router_missing",
-                data={
-                    "patch_id": _new_id("patch"),
-                    "rca_id": rca_id,
-                    "trace_id": trace_id,
-                    "repo_id": repo_id,
-                },
-            )
+            try:
+                self._router = ModelRouter()
+            except Exception as exc:
+                return _error_envelope(
+                    self.name,
+                    message=(
+                        f"Patch generation requires a ModelRouter. "
+                        f"No router was injected and the default "
+                        f"router failed to initialise: {exc}"
+                    ),
+                    error_code="router_missing",
+                    data={
+                        "patch_id": _new_id("patch"),
+                        "rca_id": rca_id,
+                        "trace_id": trace_id,
+                        "repo_id": repo_id,
+                    },
+                )
 
         # Load context.
         style_profile: dict[str, Any] = {}
@@ -505,10 +512,10 @@ class PatchGenerator:
                     max_tokens=4096,
                 )
             except Exception as exc:
-                return _not_implemented_envelope(
+                return _error_envelope(
                     self.name,
                     message=f"LLM call failed for {rca_id}: {exc}",
-                    gate="llm_failed",
+                    error_code="llm_failed",
                     data={
                         "patch_id": _new_id("patch"),
                         "rca_id": rca_id,
@@ -546,7 +553,12 @@ class PatchGenerator:
                 diff = candidate
 
         if not diff:
-            return _not_implemented_envelope(
+            error_code = (
+                "invalid_diff"
+                if not _is_valid_diff(last_response_content or "")
+                else "critic_rejected"
+            )
+            return _error_envelope(
                 self.name,
                 message=(
                     "LLM output failed structural diff validation or "
@@ -554,7 +566,7 @@ class PatchGenerator:
                     f"{critic_attempts} attempts. Last output: "
                     f"{last_response_content[:200]!r}"
                 ),
-                gate="invalid_diff" if not _is_valid_diff(last_response_content or "") else "critic_rejected",
+                error_code=error_code,
                 data={
                     "patch_id": _new_id("patch"),
                     "rca_id": rca_id,

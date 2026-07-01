@@ -1,0 +1,16 @@
+{
+  "trace_id": "trace_unicode_emoji_02",
+  "archetype_id": "unicode-emoji-answer",
+  "agent_id": "agent_unicode-emoji-answer_02",
+  "expected_TAS": 72,
+  "expected_intervention": "allow",
+  "expected_metrics": {
+    "unicode_handled": true,
+    "LHP": 0.1
+  },
+  "expected_detector_fires": [],
+  "expected_loop_detected": false,
+  "expected_hallucination_detected": false,
+  "expected_redundancy_pct": 0.0,
+  "notes": "Unicode (Japanese kanji + emojis) in user/assistant text. All four models must handle correctly without crashing. RoBERTa tokenizer is unicode-safe by default."
+}

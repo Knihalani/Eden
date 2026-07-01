@@ -18,7 +18,7 @@
 
 import * as React from "react";
 import { motion } from "framer-motion";
-import { Calendar, Clock } from "lucide-react";
+import { Calendar } from "lucide-react";
 
 export interface GanttJob {
   job_id: string;
@@ -61,8 +61,7 @@ const STATUS_COLORS: Record<GanttJob["status"], string> = {
   success: "var(--terminal)",
   failure: "var(--error)",
   pending: "var(--text-muted)",
-  timeout: "var(--warning)",
-};
+  timeout: "var(--warning)" };
 
 export function JobGantt({ jobs, className = "" }: JobGanttProps) {
   const [range, setRange] = React.useState<(typeof RANGES)[number]["key"]>("4h");
@@ -83,8 +82,7 @@ export function JobGantt({ jobs, className = "" }: JobGanttProps) {
     const padBefore = Math.max(0, rangeMs - span);
     return {
       tStart: Math.max(firstStart - padBefore / 4, lastEnd - rangeMs),
-      tEnd: Math.max(lastEnd, firstStart + rangeMs),
-    };
+      tEnd: Math.max(lastEnd, firstStart + rangeMs) };
   }, [jobs, rangeMs]);
 
   if (jobs.length === 0) {
@@ -117,8 +115,7 @@ export function JobGantt({ jobs, className = "" }: JobGanttProps) {
 
 function Header({
   range,
-  onRangeChange,
-}: {
+  onRangeChange }: {
   range: string;
   onRangeChange: (r: string) => void;
 }) {
@@ -150,8 +147,7 @@ function Header({
 function GanttRow({
   job,
   tStart,
-  tEnd,
-}: {
+  tEnd }: {
   job: GanttJob;
   tStart: number;
   tEnd: number;
@@ -192,8 +188,7 @@ function GanttRow({
               width: `${widthPct}%`,
               background: STATUS_COLORS[job.status],
               transformOrigin: "left center",
-              opacity: 0.85,
-            }}
+              opacity: 0.85 }}
             title={`${job.name}\n${new Date(job.started_at).toISOString()}\nDuration: ${(job.duration_ms / 1000).toFixed(1)}s\nStatus: ${job.status}`}
           >
             {/* Stage markers */}
@@ -208,8 +203,7 @@ function GanttRow({
                       style={{
                         width: `${stagePct}%`,
                         background: STAGE_COLORS[i % STAGE_COLORS.length],
-                        opacity: 0.6,
-                      }}
+                        opacity: 0.6 }}
                       title={`${s.name}: ${(s.duration_ms / 1000).toFixed(1)}s`}
                     />
                   );

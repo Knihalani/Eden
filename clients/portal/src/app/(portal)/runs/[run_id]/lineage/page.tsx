@@ -7,7 +7,8 @@ import { useOrg } from "@/hooks/use-org";
 import { fineTuneApi, type FineTuneLineage } from "@/lib/api";
 import { Card } from "@/components/ui/card";
 import { NoOrgState } from "@/components/ui/no-org-state";
-import { EmptyState } from "@/components/ui/empty-state";
+import { ErrorState } from "@/components/ui/error-state";
+import { PageHeader } from "@/components/layout/page-header";
 import {
   ArrowLeft,
   Network,
@@ -15,10 +16,9 @@ import {
   Clock,
   Loader2,
   XCircle,
-  AlertCircle,
+  
   Database,
-  ArrowRight,
-} from "lucide-react";
+  ArrowRight } from "lucide-react";
 import { LineageGraph } from "./_components/LineageGraph";
 
 const STATUS_BADGE: Record<
@@ -28,8 +28,7 @@ const STATUS_BADGE: Record<
   pending: { bg: "bg-[var(--bg-tertiary)] text-[var(--text-secondary)]", icon: Clock },
   running: { bg: "bg-[var(--accent-faint)] text-[var(--accent)]", icon: Loader2 },
   succeeded: { bg: "bg-[var(--terminal-faint)] text-[var(--terminal)]", icon: CheckCircle2 },
-  failed: { bg: "bg-[var(--error-bg)] text-[var(--error)]", icon: XCircle },
-};
+  failed: { bg: "bg-[var(--error-bg)] text-[var(--error)]", icon: XCircle } };
 
 function formatTime(iso?: string | null): string {
   if (!iso) return "—";
@@ -65,7 +64,7 @@ export default function FineTuneLineagePage() {
   }, [currentOrg, runId]);
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
+     
     if (currentOrg) load();
   }, [currentOrg, load]);
 
@@ -97,10 +96,21 @@ export default function FineTuneLineagePage() {
           <ArrowLeft className="w-4 h-4" />
           Back to observability
         </Link>
-        <EmptyState
-          icon={AlertCircle}
+        <ErrorState
           title="Could not load lineage"
-          description={error || `No lineage found for run ${runId}.`}
+          message={error || `No lineage found for run ${runId}.`}
+          size="md"
+          action={
+            <button
+              type="button"
+              onClick={() => void load()}
+              disabled={loading}
+              className="inline-flex items-center gap-2 px-3 py-1.5 bg-[var(--accent)] text-[var(--bg-base)] rounded-lg text-xs font-medium hover:bg-[var(--accent-hover)] disabled:opacity-50 transition-colors"
+            >
+              {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
+              Try again
+            </button>
+          }
         />
       </div>
     );
@@ -122,16 +132,17 @@ export default function FineTuneLineagePage() {
         Back to observability
       </Link>
 
-      <header className="space-y-2">
-        <h1 className="text-2xl font-bold text-[var(--text-primary)]">
-          Fine-tune lineage
-        </h1>
-        <p className="text-sm text-[var(--text-secondary)]">
-          Run <code className="text-xs">{lineage.run.id}</code> ·
-          Provider{" "}
-          <span className="font-mono">{lineage.run.provider}</span>
-        </p>
-      </header>
+      <PageHeader
+        eyebrow="Fine-tune"
+        title="Lineage"
+        icon={Network}
+        subtitle={
+          <>
+            Run <code className="text-xs">{lineage.run.id}</code> ·
+            Provider <span className="font-mono">{lineage.run.provider}</span>
+          </>
+        }
+      />
 
       {/* Run summary */}
       <Card className="p-4 space-y-3">

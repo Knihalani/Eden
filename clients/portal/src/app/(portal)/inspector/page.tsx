@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useCallback } from "react";
+import Link from "next/link";
 import { useOrg } from "@/hooks/use-org";
 import { usePolling } from "@/hooks/use-polling";
 import { api } from "@/lib/api";
@@ -8,6 +9,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/components/ui/toast";
+import { EmptyState } from "@/components/ui/empty-state";
+import { ErrorState } from "@/components/ui/error-state";
 import { NoOrgState } from "@/components/ui/no-org-state";
 import { PageHeader } from "@/components/layout/page-header";
 import {
@@ -20,9 +23,8 @@ import {
   Eye,
   EyeOff,
   Clock,
-  XCircle,
   Compass,
-} from "lucide-react";
+  ArrowLeft } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 /**
@@ -57,8 +59,7 @@ const FILTER_LABELS: Record<Filter, string> = {
   llm: "Model",
   tool: "Tools",
   env: "Env",
-  reasoning: "Reasoning",
-};
+  reasoning: "Reasoning" };
 
 const SPAN_ICONS: Record<Span["span_type"], typeof Brain> = {
   llm_completion: Brain,
@@ -66,8 +67,7 @@ const SPAN_ICONS: Record<Span["span_type"], typeof Brain> = {
   env_step: Box,
   reasoning: Brain,
   user_interaction: Brain,
-  system: Box,
-};
+  system: Box };
 
 function formatDuration(ms: number): string {
   if (ms < 1000) return `${ms}ms`;
@@ -153,8 +153,7 @@ export default function TraceInspectorPage() {
               span_type: (child.span_type as Span["span_type"]) ?? "system",
               duration_ms: Number(child.duration_ms ?? 0),
               start_offset_ms: Number(child.start_offset_ms ?? 0),
-              payload: (child.payload as Record<string, unknown>) ?? {},
-            });
+              payload: (child.payload as Record<string, unknown>) ?? {} });
             visit(child);
           }
         };
@@ -178,8 +177,7 @@ export default function TraceInspectorPage() {
     fetch: () => loadTrace(traceId),
     intervalMs: 3_000,
     enabled: Boolean(autoRefresh && traceId),
-    deps: [autoRefresh, traceId, loadTrace],
-  });
+    deps: [autoRefresh, traceId, loadTrace] });
 
   // Filter spans
   const filteredSpans = spans.filter((s) => {
@@ -231,6 +229,7 @@ export default function TraceInspectorPage() {
         <div className="mb-4 flex flex-wrap items-center gap-2">
           <Input
             placeholder="Trace or job ID…"
+            aria-label="Trace or job ID"
             value={traceId}
             onChange={(e) => setTraceId(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && loadTrace(traceId)}
@@ -242,26 +241,30 @@ export default function TraceInspectorPage() {
           >
             Load
           </Button>
-          <div className="mx-3 h-5 w-px bg-[var(--border-subtle)]" />
-          {(["all", "llm", "tool", "env", "reasoning"] as Filter[]).map((f) => (
-            <button
-              key={f}
-              onClick={() => setFilter(f)}
-              className={cn(
-                "rounded px-2 py-1 text-xs font-medium transition-colors",
-                filter === f
-                  ? "bg-[var(--accent)] text-[var(--accent-foreground)]"
-                  : "text-[var(--text-secondary)] hover:bg-[var(--bg-tertiary)]"
-              )}
-            >
-              {FILTER_LABELS[f]}
-            </button>
-          ))}
-          <div className="mx-3 h-5 w-px bg-[var(--border-subtle)]" />
+          <div className="mx-3 h-5 w-px bg-[var(--border-subtle)]" aria-hidden />
+          <div role="group" aria-label="Filter spans by type" className="flex items-center gap-1">
+            {(["all", "llm", "tool", "env", "reasoning"] as Filter[]).map((f) => (
+              <button
+                key={f}
+                onClick={() => setFilter(f)}
+                aria-pressed={filter === f}
+                className={cn(
+                  "rounded px-2 py-1 text-xs font-medium transition-colors",
+                  filter === f
+                    ? "bg-[var(--accent)] text-[var(--accent-foreground)]"
+                    : "text-[var(--text-secondary)] hover:bg-[var(--bg-tertiary)]"
+                )}
+              >
+                {FILTER_LABELS[f]}
+              </button>
+            ))}
+          </div>
+          <div className="mx-3 h-5 w-px bg-[var(--border-subtle)]" aria-hidden />
           <Button
             variant="ghost"
             size="sm"
             onClick={() => setAutoRefresh((v) => !v)}
+            aria-pressed={autoRefresh}
             className="gap-1"
           >
             {autoRefresh ? (
@@ -275,9 +278,10 @@ export default function TraceInspectorPage() {
 
         {/* Search */}
         <div className="relative mb-4">
-          <Search className="absolute left-3 top-1/2 h-3 w-3 -translate-y-1/2 text-[var(--text-muted)]" />
+          <Search className="absolute left-3 top-1/2 h-3 w-3 -translate-y-1/2 text-[var(--text-muted)]" aria-hidden />
           <Input
             placeholder="Search spans by name or content…"
+            aria-label="Search spans"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             className="pl-8"
@@ -287,7 +291,12 @@ export default function TraceInspectorPage() {
         {/* Body */}
         <div className="rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-tertiary)] p-4">
           {!traceId ? (
-            <EmptyState />
+            <EmptyState
+              icon={Search}
+              title="Enter a trace ID"
+              description="Trace IDs are visible in the replay page URL or via the observability dashboard."
+              size="sm"
+            />
           ) : loading ? (
             <div className="space-y-2">
               <Skeleton className="h-8 w-full" />
@@ -295,14 +304,23 @@ export default function TraceInspectorPage() {
               <Skeleton className="h-8 w-4/6" />
             </div>
           ) : error ? (
-            <div className="flex items-center gap-2 text-sm text-[var(--error)]">
-              <XCircle className="h-4 w-4" />
-              {error}
-            </div>
+            <ErrorState
+              title="Couldn't load trace"
+              message={error}
+              size="sm"
+              action={
+                <Button size="sm" variant="outline" onClick={() => loadTrace(traceId)}>
+                  Try again
+                </Button>
+              }
+            />
           ) : orderedSpans.length === 0 ? (
-            <div className="text-center text-sm text-[var(--text-muted)]">
-              No spans match the current filter.
-            </div>
+            <EmptyState
+              icon={Search}
+              title="No matching spans"
+              description="No spans match the current filter. Try widening the filter or clearing the search."
+              size="sm"
+            />
           ) : (
             <div className="space-y-0.5">
               {orderedSpans.map((span) => (
@@ -315,6 +333,17 @@ export default function TraceInspectorPage() {
               ))}
             </div>
           )}
+        </div>
+
+        {/* Back link */}
+        <div className="mt-6 flex items-center gap-2 text-xs text-[var(--text-muted)]">
+          <Link
+            href="/traces"
+            className="inline-flex items-center gap-1 hover:text-[var(--text-secondary)] transition-colors"
+          >
+            <ArrowLeft className="h-3 w-3" />
+            Back to Trace Explorer
+          </Link>
         </div>
 
         {/* Footer summary */}
@@ -343,18 +372,4 @@ function depthOf(span: Span, all: Span[]): number {
     parent = p.parent_span_id;
   }
   return d;
-}
-
-function EmptyState() {
-  return (
-    <div className="flex flex-col items-center justify-center py-12 text-center">
-      <Search className="mb-3 h-8 w-8 text-[var(--text-muted)]" />
-      <p className="text-sm text-[var(--text-secondary)]">
-        Enter a trace ID to inspect its span tree.
-      </p>
-      <p className="mt-1 text-xs text-[var(--text-muted)]">
-        Tip: trace IDs are visible in the replay page URL or via the observability dashboard.
-      </p>
-    </div>
-  );
 }

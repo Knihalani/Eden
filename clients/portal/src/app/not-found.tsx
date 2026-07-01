@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Home, Search, Compass, ArrowRight, Activity, Bot, Sparkles, Bell } from "lucide-react";
+import { Home, Compass, ArrowRight, Activity, Bot, Sparkles, Bell } from "lucide-react";
 
 /**
  * Global 404 — ponytail: matches the dark-terminal design system so
@@ -20,22 +20,19 @@ const POPULAR: Array<{
     items: [
       { href: "/dashboard", icon: Home, label: "Dashboard", description: "Live signals from your agents" },
       { href: "/agents", icon: Bot, label: "Agents", description: "Manage your agent fleet" },
-    ],
-  },
+    ] },
   {
     group: "Observe",
     items: [
       { href: "/traces", icon: Activity, label: "Trace Explorer", description: "Search every trace in your system" },
       { href: "/incidents", icon: Bell, label: "Incidents", description: "Open RCA clusters" },
-    ],
-  },
+    ] },
   {
     group: "Optimize",
     items: [
       { href: "/optimization", icon: Sparkles, label: "Cost", description: "Token + cost overview" },
       { href: "/alerts", icon: Bell, label: "Alerts", description: "Active alerts and rules" },
-    ],
-  },
+    ] },
 ];
 
 export default function GlobalNotFound() {

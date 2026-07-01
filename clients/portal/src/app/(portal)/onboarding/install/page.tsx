@@ -13,7 +13,8 @@ import { useRouter } from "next/navigation";
 import { useOrg } from "@/hooks/use-org";
 import { onboardingApi, githubApi } from "@/lib/api";
 import { useToast } from "@/components/ui/toast";
-import { ArrowRight, Check, Copy, Loader2, Terminal } from "lucide-react";
+import { PageHeader } from "@/components/layout/page-header";
+import { ArrowRight, Check, Copy, Loader2, Package, Terminal } from "lucide-react";
 
 type Lang = "python" | "typescript";
 
@@ -110,21 +111,30 @@ export default function OnboardingInstallPage() {
 
   return (
     <div className="space-y-8">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">Install the Eden SDK</h1>
-        <p className="mt-2 text-[var(--text-secondary)]">
-          Drop these two snippets into your agent. Your first trace
-          will land in <code className="font-mono text-[var(--accent)]">/traces</code> a
-          second after the call completes.
-        </p>
-      </div>
+      <PageHeader
+        eyebrow="Onboarding"
+        title="Install the Eden SDK"
+        icon={Package}
+        subtitle={
+          <>
+            Drop these two snippets into your agent. Your first trace
+            will land in <code className="font-mono text-[var(--accent)]">/traces</code> a
+            second after the call completes.
+          </>
+        }
+      />
 
       {/* Lang switch */}
-      <div className="inline-flex rounded-lg border border-[var(--border-default)] bg-[var(--bg-secondary)] p-1">
+      <div
+        role="group"
+        aria-label="Choose your SDK language"
+        className="inline-flex rounded-lg border border-[var(--border-default)] bg-[var(--bg-secondary)] p-1"
+      >
         {(["python", "typescript"] as Lang[]).map((l) => (
           <button
             key={l}
             onClick={() => setLang(l)}
+            aria-pressed={lang === l}
             className={`rounded-md px-3 py-1.5 text-sm transition-colors ${
               lang === l
                 ? "bg-[var(--bg-primary)] font-medium text-[var(--text-primary)]"

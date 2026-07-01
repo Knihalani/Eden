@@ -1,0 +1,19 @@
+{
+  "trace_id": "trace_loop_3_distinct_02",
+  "archetype_id": "loop-3-distinct",
+  "agent_id": "agent_loop-3-distinct_02",
+  "expected_TAS": 20,
+  "expected_intervention": "block",
+  "expected_metrics": {
+    "loop_count": 3
+  },
+  "expected_detector_fires": [
+    "hash_ring",
+    "jaccard_shingles",
+    "semantic_cosine"
+  ],
+  "expected_loop_detected": true,
+  "expected_hallucination_detected": false,
+  "expected_redundancy_pct": 0.0,
+  "notes": "3 distinct loops in one trace (weather/kb/payments). Each must be independently caught by the Phase 3 detector ensemble; Phase 4 must surface 3 separate blocks."
+}

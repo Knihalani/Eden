@@ -1,0 +1,15 @@
+{
+  "trace_id": "trace_low_isr_01",
+  "archetype_id": "low-isr",
+  "agent_id": "agent_low-isr_01",
+  "expected_TAS": 31,
+  "expected_intervention": "warn",
+  "expected_metrics": {
+    "ISR": 0.0
+  },
+  "expected_detector_fires": [],
+  "expected_loop_detected": false,
+  "expected_hallucination_detected": false,
+  "expected_redundancy_pct": 0.0,
+  "notes": "Tool returned refund_state=queued, eta=3d \u2014 never cited in either LLM response. ISR = 0. Agent re-searched instead of using the prior result."
+}

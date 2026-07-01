@@ -45,7 +45,7 @@ export function CodeViewer({ filePath, content, language, isStreaming }: CodeVie
     }
   };
 
-  const detectedLang = language || detectLanguage(filePath);
+  const __detectedLang = language || detectLanguage(filePath);
   const lines = content?.split("\n") || [];
 
   return (

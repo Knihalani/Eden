@@ -1,28 +1,11 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useCallback } from "react";
 import { usePolling } from "@/hooks/use-polling";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
-import {
-  Pause,
-  Play,
-  SkipForward,
-  MessageSquare,
-  CheckCircle2,
-  XCircle,
-  RotateCcw,
-  Activity,
-  Terminal,
-  Zap,
-  Loader2,
-  AlertCircle,
-  ChevronDown,
-  ChevronUp,
-  Clock,
-  Send,
-} from "lucide-react";
+import { Pause, Play, SkipForward, MessageSquare, CheckCircle2, XCircle, Activity, Terminal, Loader2, AlertCircle, ChevronDown, ChevronUp, Clock, Send } from "lucide-react";
 
 interface HILTState {
   job_id: string;
@@ -50,8 +33,7 @@ const STATE_LABELS: Record<string, { label: string; color: string; bg: string; i
   paused: { label: "Paused", color: "text-[var(--cat-warning-fg)]", bg: "bg-[var(--cat-warning-dim)]", icon: Pause },
   waiting_approval: { label: "Waiting Approval", color: "text-[var(--cat-info-fg)]", bg: "bg-[var(--cat-info-dim)]", icon: Clock },
   stepping: { label: "Stepping", color: "text-[var(--cat-purple-fg)]", bg: "bg-[var(--cat-purple-dim)]", icon: SkipForward },
-  injected: { label: "Injected", color: "text-teal-400", bg: "bg-teal-400/10", icon: MessageSquare },
-};
+  injected: { label: "Injected", color: "text-teal-400", bg: "bg-teal-400/10", icon: MessageSquare } };
 
 function getStateConfig(state: string) {
   return STATE_LABELS[state] || { label: state, color: "text-[var(--text-faint)]", bg: "bg-[var(--bg-tertiary)]", icon: Activity };
@@ -59,11 +41,9 @@ function getStateConfig(state: string) {
 
 export function HILTPanel({ jobId, jobStatus }: HILTPanelProps) {
   const [hiltState, setHiltState] = useState<HILTState | null>(null);
-  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [injectMessage, setInjectMessage] = useState("");
   const [showHistory, setShowHistory] = useState(false);
-  const [lastCommand, setLastCommand] = useState<string | null>(null);
   const [commandLoading, setCommandLoading] = useState<string | null>(null);
 
   const isTerminal = ["completed", "failed", "cancelled"].includes(jobStatus);
@@ -75,7 +55,7 @@ export function HILTPanel({ jobId, jobStatus }: HILTPanelProps) {
       const state = await api.getHILTState(jobId);
       setHiltState(state);
       setError(null);
-    } catch (e) {
+    } catch (_e) {
       // Silently fail on initial load — HILT may not be initialized yet
     }
   }, [jobId, canControl]);
@@ -87,12 +67,10 @@ export function HILTPanel({ jobId, jobStatus }: HILTPanelProps) {
   usePolling({
     fetch: fetchState,
     intervalMs: 3_000,
-    deps: [fetchState],
-  });
+    deps: [fetchState] });
 
   const sendCommand = async (command: CommandType, payload?: Record<string, unknown>) => {
     setCommandLoading(command);
-    setLastCommand(command);
     setError(null);
     try {
       const result = await api.sendHILTCommand(jobId, command, payload);
@@ -331,8 +309,7 @@ function HILTButton({
   loading,
   active,
   disabled,
-  variant,
-}: {
+  variant }: {
   icon: typeof Pause;
   label: string;
   onClick: () => void;
@@ -346,8 +323,7 @@ function HILTButton({
     emerald: { active: "bg-[var(--terminal-faint)] text-[var(--cat-success-fg)] border-[var(--cat-success-fg)]/30", inactive: "bg-[var(--bg-tertiary)] text-[var(--text-faint)] border-transparent hover:bg-[var(--terminal-faint)] hover:text-[var(--cat-success-fg)]/70", icon: "text-[var(--cat-success-fg)]" },
     violet: { active: "bg-[var(--cat-purple-dim)] text-[var(--cat-purple-fg)] border-[var(--cat-purple-fg)]/30", inactive: "bg-[var(--bg-tertiary)] text-[var(--text-faint)] border-transparent hover:bg-[var(--cat-purple-dim)] hover:text-[var(--cat-purple-fg)]/70", icon: "text-[var(--cat-purple-fg)]" },
     sky: { active: "bg-[var(--cat-info-dim)] text-[var(--cat-info-fg)] border-[var(--cat-info-fg)]/30", inactive: "bg-[var(--bg-tertiary)] text-[var(--text-faint)] border-transparent hover:bg-[var(--cat-info-dim)] hover:text-[var(--cat-info-fg)]/70", icon: "text-[var(--cat-info-fg)]" },
-    rose: { active: "bg-[var(--cat-danger-dim)] text-[var(--cat-danger-fg)] border-[var(--cat-danger-fg)]/30", inactive: "bg-[var(--bg-tertiary)] text-[var(--text-faint)] border-transparent hover:bg-[var(--cat-danger-dim)] hover:text-[var(--cat-danger-fg)]/70", icon: "text-[var(--cat-danger-fg)]" },
-  };
+    rose: { active: "bg-[var(--cat-danger-dim)] text-[var(--cat-danger-fg)] border-[var(--cat-danger-fg)]/30", inactive: "bg-[var(--bg-tertiary)] text-[var(--text-faint)] border-transparent hover:bg-[var(--cat-danger-dim)] hover:text-[var(--cat-danger-fg)]/70", icon: "text-[var(--cat-danger-fg)]" } };
 
   const style = variantStyles[variant];
 

@@ -26,7 +26,7 @@ from typing import Any
 from fastapi import APIRouter, Body, Depends, Path
 from pydantic import BaseModel
 
-from eden.api.deps import get_current_user, require_feature_flag
+from eden.api.deps import get_current_user, require_feature_flag, require_org_member
 from eden.kb.episodic.memory_intel.attributor import (
     MemoryAttributor,
     MemoryImpactScorer,
@@ -42,6 +42,7 @@ router = APIRouter(
     dependencies=[
         Depends(require_feature_flag("intelligence_gap_v0")),
         Depends(get_current_user),
+        Depends(require_org_member),
     ],
 )
 

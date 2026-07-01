@@ -42,7 +42,7 @@ from eden.agents.agent_intel.performance import (
     AgentRelationshipGraph,
     HandoffAnalyzer,
 )
-from eden.api.deps import get_current_user, require_feature_flag
+from eden.api.deps import get_current_user, require_feature_flag, require_org_member
 
 logger = logging.getLogger(__name__)
 
@@ -52,6 +52,7 @@ router = APIRouter(
     dependencies=[
         Depends(require_feature_flag("intelligence_gap_v0")),
         Depends(get_current_user),
+        Depends(require_org_member),
     ],
 )
 

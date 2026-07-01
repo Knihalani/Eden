@@ -91,8 +91,12 @@ function ResetPasswordForm() {
       >
         {submitted ? (
           <div className="space-y-5">
-            <div className="bg-[var(--success-bg)] text-[var(--success)] text-sm px-4 py-3 rounded-xl flex items-center gap-2.5 border border-[var(--success)]/20">
-              <CheckCircle className="w-4 h-4 flex-shrink-0" />
+            <div
+              role="status"
+              aria-live="polite"
+              className="bg-[var(--terminal-faint)] text-[var(--terminal)] text-sm px-4 py-3 rounded-xl flex items-center gap-2.5 border border-[var(--terminal)]/20"
+            >
+              <CheckCircle className="w-4 h-4 flex-shrink-0" aria-hidden="true" />
               <span>Your password has been reset successfully.</span>
             </div>
             <p className="text-sm text-[var(--text-secondary)]">
@@ -102,15 +106,18 @@ function ResetPasswordForm() {
               href="/sign-in"
               className="inline-flex items-center gap-2 text-sm text-[var(--accent)] hover:underline font-medium"
             >
-              <ArrowLeft className="w-4 h-4" />
+              <ArrowLeft className="w-4 h-4" aria-hidden="true" />
               Go to login
             </Link>
           </div>
         ) : (
-          <form onSubmit={handleSubmit} className="space-y-5">
+          <form onSubmit={handleSubmit} className="space-y-5" noValidate>
             {error && (
-              <div className="bg-[var(--error-bg)] text-[var(--error)] text-sm px-4 py-3 rounded-xl flex items-center gap-2.5 border border-[var(--error)]/20">
-                <AlertCircle className="w-4 h-4 flex-shrink-0" />
+              <div
+                role="alert"
+                className="bg-[var(--error-dim)] text-[var(--error)] text-sm px-4 py-3 rounded-xl flex items-center gap-2.5 border border-[var(--error)]/20"
+              >
+                <AlertCircle className="w-4 h-4 flex-shrink-0" aria-hidden="true" />
                 {error}
               </div>
             )}
@@ -120,7 +127,10 @@ function ResetPasswordForm() {
                 New Password
               </label>
               <div className="relative">
-                <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-muted)] z-10" />
+                <Lock
+                  className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-muted)] z-10"
+                  aria-hidden="true"
+                />
                 <Input
                   type={showPassword ? "text" : "password"}
                   value={password}
@@ -128,6 +138,12 @@ function ResetPasswordForm() {
                   onBlur={() => setTouched((t) => ({ ...t, password: true }))}
                   required
                   id="password"
+                  name="password"
+                  autoComplete="new-password"
+                  aria-invalid={touched.password && passwordValidation !== null && passwordValidation !== "valid" ? "true" : "false"}
+                  aria-describedby={
+                    touched.password && passwordValidation === "too-short" ? "password-error" : undefined
+                  }
                   className={cn(
                     "pl-11 pr-11 h-11",
                     touched.password && passwordValidation === "too-short" && "border-[var(--error)]"
@@ -139,12 +155,15 @@ function ResetPasswordForm() {
                   onClick={() => setShowPassword(!showPassword)}
                   className="absolute right-3.5 top-1/2 -translate-y-1/2 text-[var(--text-muted)] hover:text-[var(--text-secondary)] p-1"
                   aria-label={showPassword ? "Hide password" : "Show password"}
+                  aria-pressed={showPassword}
                 >
                   {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                 </button>
               </div>
               {touched.password && passwordValidation === "too-short" && (
-                <p className="text-xs text-[var(--error)]">Password must be at least 10 characters</p>
+                <p id="password-error" className="text-xs text-[var(--error)]">
+                  Password must be at least 10 characters
+                </p>
               )}
               {touched.password && passwordValidation === "weak" && (
                 <p className="text-xs text-[var(--warning)]">
@@ -158,7 +177,10 @@ function ResetPasswordForm() {
                 Confirm Password
               </label>
               <div className="relative">
-                <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-muted)] z-10" />
+                <Lock
+                  className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-muted)] z-10"
+                  aria-hidden="true"
+                />
                 <Input
                   type={showConfirm ? "text" : "password"}
                   value={confirmPassword}
@@ -166,6 +188,12 @@ function ResetPasswordForm() {
                   onBlur={() => setTouched((t) => ({ ...t, confirm: true }))}
                   required
                   id="confirm-password"
+                  name="confirmPassword"
+                  autoComplete="new-password"
+                  aria-invalid={touched.confirm && confirmPassword && !passwordsMatch ? "true" : "false"}
+                  aria-describedby={
+                    touched.confirm && confirmPassword && !passwordsMatch ? "confirm-error" : undefined
+                  }
                   className={cn(
                     "pl-11 pr-11 h-11",
                     touched.confirm && confirmPassword && !passwordsMatch && "border-[var(--error)]"
@@ -177,12 +205,15 @@ function ResetPasswordForm() {
                   onClick={() => setShowConfirm(!showConfirm)}
                   className="absolute right-3.5 top-1/2 -translate-y-1/2 text-[var(--text-muted)] hover:text-[var(--text-secondary)] p-1"
                   aria-label={showConfirm ? "Hide password" : "Show password"}
+                  aria-pressed={showConfirm}
                 >
                   {showConfirm ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                 </button>
               </div>
               {touched.confirm && confirmPassword && !passwordsMatch && (
-                <p className="text-xs text-[var(--error)]">Passwords do not match</p>
+                <p id="confirm-error" className="text-xs text-[var(--error)]">
+                  Passwords do not match
+                </p>
               )}
             </div>
 
@@ -190,8 +221,10 @@ function ResetPasswordForm() {
               type="submit"
               className="w-full h-11 text-sm font-semibold"
               disabled={loading || !token || !passwordsMatch || passwordValidation !== "valid"}
+              loading={loading}
+              aria-label="Reset password"
             >
-              {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : "Reset password"}
+              {loading ? "Resetting password…" : "Reset password"}
             </Button>
 
             <p className="text-center text-sm text-[var(--text-secondary)]">
@@ -211,8 +244,8 @@ export default function ResetPasswordPage() {
     <Suspense
       fallback={
         <AuthSplitLayout brandPanel={<AuthBrandPanel />}>
-          <AuthFormCard title="New password" subtitle="Loading...">
-            <div className="flex items-center justify-center py-8">
+          <AuthFormCard title="New password" subtitle="Loading…">
+            <div className="flex items-center justify-center py-8" aria-busy="true" aria-live="polite">
               <Loader2 className="w-6 h-6 animate-spin text-[var(--accent)]" />
             </div>
           </AuthFormCard>

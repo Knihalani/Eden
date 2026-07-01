@@ -39,10 +39,16 @@ import json
 import logging
 from typing import Any
 
-from eden.providers import PRCreateRequest, PRProvider, get_default_pr_provider
+from eden.providers import (
+    FileEntry,
+    PRCreateRequest,
+    PRProvider,
+    get_default_pr_provider,
+)
 
 from ._common import (
     _check_two_stage_optin,
+    _error_envelope,
     _insert_row,
     _new_id,
     _not_implemented_envelope,
@@ -50,6 +56,70 @@ from ._common import (
     _select_one,
     _select_rows,
 )
+
+
+def _parse_unified_diff(diff: str) -> list[FileEntry]:
+    """Parse a unified diff into FileEntry records.
+
+    Each ``+++ b/<path>`` line starts a new file. Following ``+``/``-``
+    lines are collected as the diff body for that path. The parser
+    is intentionally minimal — it doesn't reconstruct full file
+    contents, it just packages the per-file diff hunks for the PR
+    provider to apply.
+
+    Returns an empty list when the diff can't be parsed.
+    """
+    if not diff:
+        return []
+    entries: list[FileEntry] = []
+    current_path: str | None = None
+    current_lines: list[str] = []
+    for raw_line in diff.splitlines():
+        line = raw_line.rstrip()
+        if line.startswith("+++ b/"):
+            if current_path is not None:
+                body = "\n".join(current_lines)
+                entries.append(
+                    FileEntry(
+                        path=current_path,
+                        content=body,
+                        size=len(body.encode("utf-8")),
+                        sha="",
+                    )
+                )
+            current_path = line[len("+++ b/"):].strip()
+            current_lines = []
+        elif line.startswith("--- "):
+            # Skip — the a/ path is the original, not what we commit.
+            continue
+        elif current_path is not None:
+            current_lines.append(line)
+    if current_path is not None:
+        body = "\n".join(current_lines)
+        entries.append(
+            FileEntry(
+                path=current_path,
+                content=body,
+                size=len(body.encode("utf-8")),
+                sha="",
+            )
+        )
+    return entries
+
+
+async def _load_patch_for_pr(org_id: str, patch_id: str) -> dict[str, Any] | None:
+    """Load the patch row from ``proposed_patches`` for the PR creator.
+
+    Returns the full row including the diff + repo_id + base_sha, or
+    ``None`` if the patch doesn't exist (the caller converts that
+    to a 404-style envelope).
+    """
+    return await _select_one(
+        org_id,
+        "proposed_patches",
+        where="id = $2",
+        params=(patch_id,),
+    )
 
 logger = logging.getLogger(__name__)
 
@@ -97,36 +167,87 @@ class PRCreator:
             )
             if optin is not None:
                 return optin
+            # Load the patch row so we know which repo + files to commit.
+            patch = await _load_patch_for_pr(org_id, patch_id)
+            if patch is None:
+                return _error_envelope(
+                    self.name,
+                    message=(
+                        f"Patch {patch_id} not found in proposed_patches. "
+                        "Generate a patch first via PatchGenerator."
+                    ),
+                    error_code="patch_not_found",
+                    data={"patch_id": patch_id},
+                )
+            repo_id = patch.get("repo_id") or ""
+            if not repo_id:
+                return _error_envelope(
+                    self.name,
+                    message=(
+                        f"Patch {patch_id} has no repo_id — connect the "
+                        "repo via RepoConnector before opening a PR."
+                    ),
+                    error_code="repo_not_connected",
+                    data={"patch_id": patch_id},
+                )
             if pr_patterns is None:
                 pr_patterns = {}
+            files = _parse_unified_diff(patch.get("diff") or "")
+            if not files:
+                return _error_envelope(
+                    self.name,
+                    message=(
+                        f"Patch {patch_id} has an empty diff — nothing "
+                        "to commit. Re-run PatchGenerator."
+                    ),
+                    error_code="empty_diff",
+                    data={"patch_id": patch_id},
+                )
+            title_format = (
+                pr_patterns.get("title_format")
+                or f"[Eden Agent] Fix {patch_id[:8]}"
+            )
+            body = (
+                pr_patterns.get("body_template")
+                or (
+                    f"## Auto-generated patch\n\n"
+                    f"- **Patch ID:** `{patch_id}`\n"
+                    f"- **Trace:** `{patch.get('trace_id', 'n/a')}`\n"
+                    f"- **RCA:** `{patch.get('rca_id', 'n/a')}`\n"
+                    f"- **Quality score:** {patch.get('quality_score', 0):.2f}\n"
+                    f"\n### Explanation\n\n{patch.get('explanation') or '_No explanation provided._'}\n"
+                )
+            )
+            branch_prefix = pr_patterns.get("common_branch_prefix") or "eden/auto-fix"
+            branch = f"{branch_prefix}-{patch_id[:12]}"
             req = PRCreateRequest(
-                title=pr_patterns.get("title_format") or "[Eden Agent] Fix",
-                body=pr_patterns.get("body_template") or "",
-                branch=pr_patterns.get("common_branch_prefix") or "eden/auto-fix",
-                base="main",
+                title=title_format,
+                body=body,
+                branch=branch,
+                base=patch.get("base_sha") or "main",
                 draft=True,
-                repo_id="",
-                files=[],
+                repo_id=repo_id,
+                files=files,
             )
             try:
                 info = await self._provider.create_pr(req)
             except NotImplementedError as exc:
-                return _not_implemented_envelope(
+                return _error_envelope(
                     self.name,
                     message=(
                         f"PR provider not configured: {exc}"
                     ),
-                    gate="provider_not_implemented",
+                    error_code="provider_not_implemented",
                     data={
                         "patch_id": patch_id,
                         "provider": self._provider.name,
                     },
                 )
             except Exception as exc:
-                return _not_implemented_envelope(
+                return _error_envelope(
                     self.name,
                     message=f"PR create failed for {patch_id}: {exc}",
-                    gate="create_failed",
+                    error_code="create_failed",
                     data={"patch_id": patch_id, "error": str(exc)},
                 )
             await self._persist_pr(org_id, patch_id, info, req)
@@ -162,12 +283,12 @@ class PRCreator:
         try:
             info = await self._provider.create_pr(req)
         except NotImplementedError as exc:
-            return _not_implemented_envelope(
+            return _error_envelope(
                 self.name,
                 message=(
                     f"PR provider not configured: {exc}"
                 ),
-                gate="provider_not_implemented",
+                error_code="provider_not_implemented",
                 data={
                     "patch_id": patch_id,
                     "provider": self._provider.name,

@@ -35,7 +35,7 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
 
   componentDidCatch(error: Error, info: React.ErrorInfo) {
     // Log to console so devs can see it; the real telemetry hooks go elsewhere.
-    // eslint-disable-next-line no-console
+     
     console.error("[ErrorBoundary] Caught:", error, info.componentStack);
   }
 

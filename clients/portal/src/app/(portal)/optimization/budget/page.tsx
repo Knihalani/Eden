@@ -1,12 +1,14 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useState, useCallback } from "react";
 import { useOrg } from "@/hooks/use-org";
 import { cn } from "@/lib/utils";
 import { PageHeader } from "@/components/layout/page-header";
 import { NoOrgState } from "@/components/ui/no-org-state";
+import { EmptyState } from "@/components/ui/empty-state";
 import { useToast } from "@/components/ui/toast";
-import { Wallet, Loader2, AlertTriangle, CheckCircle2 } from "lucide-react";
+import { usePolling } from "@/hooks/use-polling";
+import { Wallet, Loader2, AlertTriangle, CheckCircle2, History } from "lucide-react";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
@@ -79,18 +81,25 @@ export default function BudgetPage() {
         setActions(data.data.actions || []);
       }
     } catch (err) {
-      console.error("Budget fetch failed", err);
+      toast.error(
+        "Budget fetch failed",
+        err instanceof Error ? err.message : "Unknown error",
+      );
     } finally {
       setLoading(false);
     }
-  }, [currentOrg?.id]);
+  }, [currentOrg?.id, toast]);
 
-  useEffect(() => {
-    if (!currentOrg?.id) return;
-    fetchData();
-    const interval = setInterval(fetchData, 5000); // 5s ticker
-    return () => clearInterval(interval);
-  }, [currentOrg?.id, fetchData]);
+  // PQ-1 fix: replace the raw ``setInterval`` (which kept firing
+  // on background tabs and didn't back off on auth errors) with
+  // ``usePolling``. Idle-tab pause + exponential backoff are now
+  // the hook's job. The 5_000 ms cadence is preserved.
+  usePolling({
+    fetch: fetchData,
+    intervalMs: 5_000,
+    deps: [currentOrg?.id],
+    enabled: Boolean(currentOrg?.id),
+  });
 
   const handleSave = useCallback(async () => {
     if (!currentOrg?.id || !budget) return;
@@ -116,7 +125,7 @@ export default function BudgetPage() {
         toast.error("Save failed", `HTTP ${res.status}. Org owner required.`);
       }
     } catch (err) {
-      toast.error("Save failed", String(err));
+      toast.error("Save failed", err instanceof Error ? err.message : "Unknown error");
     } finally {
       setSaving(false);
     }
@@ -125,7 +134,7 @@ export default function BudgetPage() {
   if (!currentOrg) return <NoOrgState feature="Budgets" />;
   if (loading) {
     return (
-      <div className="flex items-center justify-center p-12">
+      <div className="flex items-center justify-center p-12" role="status" aria-live="polite">
         <Loader2 className="h-6 w-6 animate-spin text-[var(--text-secondary)]" />
       </div>
     );
@@ -140,6 +149,7 @@ export default function BudgetPage() {
   return (
     <div className="space-y-6">
       <PageHeader
+        eyebrow="Optimize"
         icon={Wallet}
         title="Cost Guardrails"
         subtitle="Per-org budget caps with closed-loop enforcement (D.10)"
@@ -150,10 +160,10 @@ export default function BudgetPage() {
           className={cn(
             "rounded-lg border p-4",
             status === "exceeded"
-              ? "border-red-500/40 bg-red-500/10"
+              ? "border-[var(--error)]/40 bg-[var(--error-dim)]"
               : status === "alert"
-              ? "border-yellow-500/40 bg-yellow-500/10"
-              : "border-[var(--border-default)] bg-[var(--bg-elev-1)]"
+              ? "border-[var(--warning)]/40 bg-[var(--warning-bg)]"
+              : "border-[var(--border-default)] bg-[var(--bg-primary)]"
           )}
         >
           <div className="flex items-center justify-between">
@@ -170,26 +180,26 @@ export default function BudgetPage() {
             </div>
             <div className="flex items-center gap-2">
               {status === "exceeded" ? (
-                <AlertTriangle className="h-5 w-5 text-red-400" />
+                <AlertTriangle className="h-5 w-5 text-[var(--error)]" />
               ) : status === "alert" ? (
-                <AlertTriangle className="h-5 w-5 text-yellow-400" />
+                <AlertTriangle className="h-5 w-5 text-[var(--warning)]" />
               ) : (
-                <CheckCircle2 className="h-5 w-5 text-green-400" />
+                <CheckCircle2 className="h-5 w-5 text-[var(--terminal)]" />
               )}
               <span className="text-sm font-medium text-[var(--text-primary)]">
                 {rollup.pct_of_hard.toFixed(1)}% of hard cap
               </span>
             </div>
           </div>
-          <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-[var(--bg-elev-2)]">
+          <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-[var(--bg-secondary)]">
             <div
               className={cn(
                 "h-full transition-all",
                 status === "exceeded"
-                  ? "bg-red-500"
+                  ? "bg-[var(--error)]"
                   : status === "alert"
-                  ? "bg-yellow-500"
-                  : "bg-green-500"
+                  ? "bg-[var(--warning)]"
+                  : "bg-[var(--terminal)]"
               )}
               style={{ width: `${Math.min(100, rollup.pct_of_hard)}%` }}
             />
@@ -204,7 +214,7 @@ export default function BudgetPage() {
       )}
 
       {budget && (
-        <div className="rounded-lg border border-[var(--border-default)] bg-[var(--bg-elev-1)] p-6">
+        <div className="rounded-lg border border-[var(--border-default)] bg-[var(--bg-primary)] p-6">
           <h2 className="mb-4 text-lg font-semibold text-[var(--text-primary)]">
             Budget config
           </h2>
@@ -216,6 +226,7 @@ export default function BudgetPage() {
                 setBudget({ ...budget, cost_soft_limit_usd: v })
               }
               step={0.05}
+              disabled={saving}
             />
             <Field
               label="Hard limit (USD)"
@@ -224,6 +235,7 @@ export default function BudgetPage() {
                 setBudget({ ...budget, cost_hard_limit_usd: v })
               }
               step={0.05}
+              disabled={saving}
             />
             <Select
               label="Window"
@@ -234,6 +246,7 @@ export default function BudgetPage() {
                 { value: "weekly", label: "Weekly" },
                 { value: "monthly", label: "Monthly" },
               ]}
+              disabled={saving}
             />
             <Select
               label="Action on exceed"
@@ -246,6 +259,7 @@ export default function BudgetPage() {
                 { value: "throttle", label: "Throttle (HTTP 429)" },
                 { value: "kill", label: "Kill (HTTP 429 + closed-loop hook)" },
               ]}
+              disabled={saving}
             />
             <Field
               label="Threshold alert %"
@@ -254,6 +268,7 @@ export default function BudgetPage() {
                 setBudget({ ...budget, threshold_alert_pct: Math.round(v) })
               }
               step={1}
+              disabled={saving}
             />
             <Checkbox
               label="Enforcement enabled"
@@ -262,6 +277,7 @@ export default function BudgetPage() {
                 setBudget({ ...budget, enforcement_enabled: v })
               }
               help="When off, the cap is advisory only (existing customers default)."
+              disabled={saving}
             />
           </div>
           <div className="mt-6 flex items-center justify-end gap-3">
@@ -269,7 +285,8 @@ export default function BudgetPage() {
               type="button"
               onClick={handleSave}
               disabled={saving}
-              className="inline-flex items-center gap-2 rounded-md bg-[var(--accent)] px-4 py-2 text-sm font-medium text-white hover:opacity-90 disabled:opacity-50"
+              aria-label="Save budget configuration"
+              className="inline-flex items-center gap-2 rounded-md bg-[var(--accent)] px-4 py-2 text-sm font-medium text-[var(--accent-foreground)] hover:bg-[var(--accent-hover)] transition-colors disabled:opacity-50"
             >
               {saving ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
@@ -280,7 +297,7 @@ export default function BudgetPage() {
         </div>
       )}
 
-      <div className="rounded-lg border border-[var(--border-default)] bg-[var(--bg-elev-1)]">
+      <div className="rounded-lg border border-[var(--border-default)] bg-[var(--bg-primary)]">
         <div className="border-b border-[var(--border-default)] p-4">
           <h2 className="text-lg font-semibold text-[var(--text-primary)]">
             Recent threshold events
@@ -291,9 +308,13 @@ export default function BudgetPage() {
         </div>
         <div className="divide-y divide-[var(--border-default)]">
           {actions.length === 0 ? (
-            <div className="p-6 text-center text-sm text-[var(--text-secondary)]">
-              No threshold events yet — your cost is below the alert threshold.
-            </div>
+            <EmptyState
+              icon={History}
+              title="No threshold events yet"
+              description="Your cost is below the alert threshold. Events appear here once enforcement kicks in."
+              size="sm"
+              className="py-10"
+            />
           ) : (
             actions.map((a) => (
               <div key={a.id} className="flex items-center justify-between p-3">
@@ -304,10 +325,10 @@ export default function BudgetPage() {
                       className={cn(
                         "ml-2 rounded px-1.5 py-0.5 text-xs",
                         a.severity === "high"
-                          ? "bg-red-500/20 text-red-400"
+                          ? "bg-[var(--error-dim)] text-[var(--error)]"
                           : a.severity === "medium"
-                          ? "bg-yellow-500/20 text-yellow-400"
-                          : "bg-[var(--bg-elev-2)] text-[var(--text-secondary)]"
+                          ? "bg-[var(--warning-bg)] text-[var(--warning)]"
+                          : "bg-[var(--bg-secondary)] text-[var(--text-secondary)]"
                       )}
                     >
                       {a.severity}
@@ -334,11 +355,13 @@ function Field({
   value,
   onChange,
   step,
+  disabled,
 }: {
   label: string;
   value: number;
   onChange: (v: number) => void;
   step?: number;
+  disabled?: boolean;
 }) {
   return (
     <label className="block">
@@ -350,7 +373,9 @@ function Field({
         value={value}
         step={step || 0.01}
         onChange={(e) => onChange(parseFloat(e.target.value) || 0)}
-        className="mt-1 w-full rounded-md border border-[var(--border-default)] bg-[var(--bg-elev-2)] px-3 py-2 text-sm text-[var(--text-primary)] focus:border-[var(--accent)] focus:outline-none"
+        aria-label={label}
+        disabled={disabled}
+        className="mt-1 w-full rounded-md border border-[var(--border-default)] bg-[var(--bg-secondary)] px-3 py-2 text-sm text-[var(--text-primary)] focus:border-[var(--accent)] focus:outline-none focus:ring-2 focus:ring-[var(--accent)]/40 disabled:opacity-60"
       />
     </label>
   );
@@ -361,11 +386,13 @@ function Select({
   value,
   onChange,
   options,
+  disabled,
 }: {
   label: string;
   value: string;
   onChange: (v: string) => void;
   options: { value: string; label: string }[];
+  disabled?: boolean;
 }) {
   return (
     <label className="block">
@@ -375,7 +402,9 @@ function Select({
       <select
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="mt-1 w-full rounded-md border border-[var(--border-default)] bg-[var(--bg-elev-2)] px-3 py-2 text-sm text-[var(--text-primary)] focus:border-[var(--accent)] focus:outline-none"
+        aria-label={label}
+        disabled={disabled}
+        className="mt-1 w-full rounded-md border border-[var(--border-default)] bg-[var(--bg-secondary)] px-3 py-2 text-sm text-[var(--text-primary)] focus:border-[var(--accent)] focus:outline-none focus:ring-2 focus:ring-[var(--accent)]/40 disabled:opacity-60"
       >
         {options.map((o) => (
           <option key={o.value} value={o.value}>
@@ -392,19 +421,23 @@ function Checkbox({
   checked,
   onChange,
   help,
+  disabled,
 }: {
   label: string;
   checked: boolean;
   onChange: (v: boolean) => void;
   help?: string;
+  disabled?: boolean;
 }) {
   return (
-    <label className="flex items-start gap-3 rounded-md border border-[var(--border-default)] bg-[var(--bg-elev-2)] p-3">
+    <label className="flex items-start gap-3 rounded-md border border-[var(--border-default)] bg-[var(--bg-secondary)] p-3">
       <input
         type="checkbox"
         checked={checked}
         onChange={(e) => onChange(e.target.checked)}
-        className="mt-0.5 h-4 w-4 rounded border-[var(--border-default)]"
+        aria-label={label}
+        disabled={disabled}
+        className="mt-0.5 h-4 w-4 rounded border-[var(--border-default)] disabled:opacity-60"
       />
       <div>
         <div className="text-sm font-medium text-[var(--text-primary)]">

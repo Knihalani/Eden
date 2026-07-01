@@ -1,0 +1,18 @@
+{
+  "trace_id": "trace_context_window_exceeded_03",
+  "archetype_id": "conversation-context-window-exceeded",
+  "agent_id": "agent_conversation-context-window-exceeded_03",
+  "expected_TAS": 43,
+  "expected_intervention": "truncate",
+  "expected_metrics": {
+    "prompt_tokens": 32000,
+    "model_window": 32768
+  },
+  "expected_detector_fires": [
+    "context_window_pressure"
+  ],
+  "expected_loop_detected": false,
+  "expected_hallucination_detected": false,
+  "expected_redundancy_pct": 0.0,
+  "notes": "Single LLM call with 32K input tokens \u2014 at the edge of gpt-4o context window. Truncate intervention: summarizer should compress before sending."
+}

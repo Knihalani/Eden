@@ -5,18 +5,10 @@ import { useOrg } from "@/hooks/use-org";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/components/ui/toast";
+import { Alert } from "@/components/ui/alert";
 import { NoOrgState } from "@/components/ui/no-org-state";
 import { PageHeader } from "@/components/layout/page-header";
-import {
-  Search,
-  Loader2,
-  Code2,
-  AlertTriangle,
-  CheckCircle2,
-  Sparkles,
-  ListChecks,
-  Bell,
-} from "lucide-react";
+import { Search, Loader2, Code2, AlertTriangle, CheckCircle2, Sparkles, ListChecks, Bell } from "lucide-react";
 import { motion } from "framer-motion";
 
 const EXAMPLE_EQL = `root.span.duration_ms > 1000 AND any.judge.score < 0.5`;
@@ -103,7 +95,7 @@ export default function QueryDslPage() {
     try {
       const res = await listAlerts(currentOrg.id);
       setAlerts(res.alerts);
-    } catch (err) {
+    } catch (_e) {
       // silent — no toast, alerts are read-only
     } finally {
       setAlertsLoading(false);
@@ -205,10 +197,12 @@ export default function QueryDslPage() {
       />
 
       {error && (
-        <div className="bg-[var(--error-bg)] text-[var(--error)] text-sm px-4 py-3 rounded-xl flex items-center gap-2.5 border border-[var(--error)]/20">
-          <AlertTriangle className="w-4 h-4 flex-shrink-0" />
-          {error}
-        </div>
+        <Alert
+          variant="error"
+          title="Request failed"
+          description={error}
+          onDismiss={() => setError("")}
+        />
       )}
 
       <div className="grid lg:grid-cols-3 gap-6">
@@ -448,8 +442,7 @@ export default function QueryDslPage() {
 function ResultCard({
   title,
   icon: Icon,
-  children,
-}: {
+  children }: {
   title: string;
   icon: React.ComponentType<{ className?: string }>;
   children: React.ReactNode;

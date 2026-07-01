@@ -1,0 +1,281 @@
+{
+  "trace_id": "trace_cat22_error_keep_01",
+  "archetype_id": "cat22-error-keep",
+  "agent_id": "agent_F_01_cat22-error-keep_01",
+  "event_count": 4,
+  "events": [
+    {
+      "event_id": "evt_tcat22_error_keep_01_0000",
+      "tenant_id": "org_eden_synth",
+      "project_id": "proj_synthetic_eval_v3",
+      "trace_id": "trace_cat22_error_keep_01",
+      "realm": "production",
+      "agent_id": "agent_F_01_cat22-error-keep_01",
+      "agent_version": "synth-v3.0.0",
+      "environment_id": "env_prod_main",
+      "tags": [],
+      "source_format": "eden_native",
+      "images": [],
+      "audio": [],
+      "citations": [],
+      "stop_sequence": null,
+      "system_fingerprint": "fp_synth-v3.0.0",
+      "conversation_id": "conv_eep_01",
+      "event_type": "span.start",
+      "timestamp": "2026-06-30T12:00:00+00:00",
+      "parent_span_id": null,
+      "span_id": "spn_trace_cat22_error_keep_01_0000",
+      "name": "trace",
+      "duration_ms": 0.0,
+      "payload": {},
+      "metrics": {},
+      "attributes": {
+        "environment": "production"
+      },
+      "outcome": null,
+      "request_body": null,
+      "response_body": null,
+      "reasoning": null,
+      "tool_calls_full": [],
+      "tool_results": [],
+      "logprobs": null,
+      "finish_reason": null,
+      "cache_hit": false,
+      "prompt_cache_savings_usd": 0.0,
+      "model_version": null,
+      "service_tier": null
+    },
+    {
+      "event_id": "evt_tcat22_error_keep_01_0001",
+      "tenant_id": "org_eden_synth",
+      "project_id": "proj_synthetic_eval_v3",
+      "trace_id": "trace_cat22_error_keep_01",
+      "realm": "production",
+      "agent_id": "agent_F_01_cat22-error-keep_01",
+      "agent_version": "synth-v3.0.0",
+      "environment_id": "env_prod_main",
+      "tags": [],
+      "source_format": "eden_native",
+      "images": [],
+      "audio": [],
+      "citations": [],
+      "stop_sequence": null,
+      "system_fingerprint": "fp_synth-v3.0.0",
+      "conversation_id": "conv_eep_01",
+      "event_type": "tool.call",
+      "timestamp": "2026-06-30T12:00:00.420000+00:00",
+      "parent_span_id": "spn_trace_cat22_error_keep_01_0000",
+      "span_id": "spn_trace_cat22_error_keep_01_0001",
+      "name": "payments.send",
+      "duration_ms": 420.0,
+      "payload": {},
+      "metrics": {
+        "latency_ms": 420.0,
+        "cost_usd": 0.001285
+      },
+      "attributes": {
+        "environment": "production"
+      },
+      "outcome": "failure",
+      "request_body": {
+        "tool": "payments.send",
+        "arguments": {
+          "recipient_id": 4711,
+          "amount_cents": 5000
+        }
+      },
+      "response_body": {
+        "error": "card_declined"
+      },
+      "reasoning": null,
+      "tool_calls_full": [
+        {
+          "tool_call_id": "call_payments.send_28858",
+          "type": "function",
+          "function": {
+            "name": "payments.send",
+            "arguments": "{\"recipient_id\": 4711, \"amount_cents\": 5000}"
+          }
+        }
+      ],
+      "tool_results": [
+        {
+          "tool_call_id": "call_payments.send_28858",
+          "role": "tool",
+          "content": "{\"error\": \"DECLINED\"}",
+          "error": "card_declined"
+        }
+      ],
+      "logprobs": null,
+      "finish_reason": null,
+      "cache_hit": false,
+      "prompt_cache_savings_usd": 0.0,
+      "model_version": null,
+      "service_tier": null
+    },
+    {
+      "event_id": "evt_tcat22_error_keep_01_0002",
+      "tenant_id": "org_eden_synth",
+      "project_id": "proj_synthetic_eval_v3",
+      "trace_id": "trace_cat22_error_keep_01",
+      "realm": "production",
+      "agent_id": "agent_F_01_cat22-error-keep_01",
+      "agent_version": "synth-v3.0.0",
+      "environment_id": "env_prod_main",
+      "tags": [],
+      "source_format": "eden_native",
+      "images": [],
+      "audio": [],
+      "citations": [],
+      "stop_sequence": null,
+      "system_fingerprint": "fp_synth-v3.0.0",
+      "conversation_id": "conv_eep_01",
+      "event_type": "llm.completion",
+      "timestamp": "2026-06-30T12:00:01.220000+00:00",
+      "parent_span_id": "spn_trace_cat22_error_keep_01_0000",
+      "span_id": "spn_trace_cat22_error_keep_01_0002",
+      "name": "llm.fast",
+      "duration_ms": 800.0,
+      "payload": {},
+      "metrics": {
+        "prompt_tokens": 50,
+        "completion_tokens": 20,
+        "total_tokens": 70,
+        "cost_usd": 1.9e-05,
+        "latency_ms": 800.0
+      },
+      "attributes": {
+        "model": "gpt-4o-mini",
+        "environment": "production",
+        "user_id": "user_synth_61",
+        "session_id": "sess_synth_13"
+      },
+      "outcome": "success",
+      "request_body": {
+        "model": "gpt-4o-mini",
+        "messages": [
+          {
+            "role": "tool",
+            "tool_call_id": "call_p_0001",
+            "content": "DECLINED"
+          }
+        ],
+        "temperature": 0.0
+      },
+      "response_body": {
+        "id": "cmpl-evt_cmpl_92583",
+        "model": "gpt-4o-mini",
+        "choices": [
+          {
+            "index": 0,
+            "finish_reason": "stop",
+            "message": {
+              "role": "assistant",
+              "content": "I'm sorry, your card was declined."
+            }
+          }
+        ],
+        "usage": {
+          "prompt_tokens": 50,
+          "completion_tokens": 20,
+          "total_tokens": 70
+        }
+      },
+      "reasoning": null,
+      "tool_calls_full": [],
+      "tool_results": [],
+      "logprobs": {
+        "content": [
+          [
+            {
+              "token": "I'm",
+              "logprob": -0.1,
+              "top_logprobs": []
+            }
+          ],
+          [
+            {
+              "token": "sorry,",
+              "logprob": -0.1,
+              "top_logprobs": []
+            }
+          ],
+          [
+            {
+              "token": "your",
+              "logprob": -0.1,
+              "top_logprobs": []
+            }
+          ],
+          [
+            {
+              "token": "card",
+              "logprob": -0.1,
+              "top_logprobs": []
+            }
+          ],
+          [
+            {
+              "token": "was",
+              "logprob": -0.1,
+              "top_logprobs": []
+            }
+          ],
+          [
+            {
+              "token": "declined.",
+              "logprob": -0.1,
+              "top_logprobs": []
+            }
+          ]
+        ]
+      },
+      "finish_reason": "stop",
+      "cache_hit": false,
+      "prompt_cache_savings_usd": 0.0,
+      "model_version": "gpt-4o-mini",
+      "service_tier": "standard"
+    },
+    {
+      "event_id": "evt_tcat22_error_keep_01_0003",
+      "tenant_id": "org_eden_synth",
+      "project_id": "proj_synthetic_eval_v3",
+      "trace_id": "trace_cat22_error_keep_01",
+      "realm": "production",
+      "agent_id": "agent_F_01_cat22-error-keep_01",
+      "agent_version": "synth-v3.0.0",
+      "environment_id": "env_prod_main",
+      "tags": [],
+      "source_format": "eden_native",
+      "images": [],
+      "audio": [],
+      "citations": [],
+      "stop_sequence": null,
+      "system_fingerprint": "fp_synth-v3.0.0",
+      "conversation_id": "conv_eep_01",
+      "event_type": "span.end",
+      "timestamp": "2026-06-30T12:00:01.220000+00:00",
+      "parent_span_id": null,
+      "span_id": "spn_trace_cat22_error_keep_01_0000",
+      "name": "trace",
+      "duration_ms": 1220.0,
+      "payload": {},
+      "metrics": {},
+      "attributes": {
+        "environment": "production"
+      },
+      "outcome": "success",
+      "request_body": null,
+      "response_body": null,
+      "reasoning": null,
+      "tool_calls_full": [],
+      "tool_results": [],
+      "logprobs": null,
+      "finish_reason": null,
+      "cache_hit": false,
+      "prompt_cache_savings_usd": 0.0,
+      "model_version": null,
+      "service_tier": null
+    }
+  ]
+}

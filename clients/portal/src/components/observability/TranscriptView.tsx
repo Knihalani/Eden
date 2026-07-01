@@ -41,7 +41,7 @@ export interface TranscriptViewProps {
 }
 
 export function TranscriptView({
-  traceId,
+  
   rows,
   totalDurationMs,
   totalCost,
@@ -49,8 +49,7 @@ export function TranscriptView({
   model,
   outcome,
   spanCount,
-  orgId,
-}: TranscriptViewProps) {
+  orgId }: TranscriptViewProps) {
   const [selectedSpanId, setSelectedSpanId] = React.useState<string | null>(
     rows[0]?.span_id || null
   );
@@ -144,8 +143,7 @@ function SummaryCard({
   outcome,
   model,
   totalCost,
-  totalTokens,
-}: {
+  totalTokens }: {
   durationMs: number;
   spanCount: number;
   outcome?: string | null;
@@ -204,8 +202,7 @@ function SummaryCard({
             <span
               className="text-xs font-mono uppercase"
               style={{
-                color: outcome === "success" ? "var(--terminal)" : "var(--error)",
-              }}
+                color: outcome === "success" ? "var(--terminal)" : "var(--error)" }}
             >
               {outcome}
             </span>
@@ -223,8 +220,7 @@ function TranscriptRowItem({
   selected,
   onSelect,
   orgId,
-  depth,
-}: {
+  depth }: {
   row: TR;
   selected: boolean;
   onSelect: (id: string) => void;
@@ -461,7 +457,7 @@ function roleColor(role: string): React.CSSProperties {
   }
 }
 
-function ToolCallsSection({ calls }: { calls: TranscriptToolCall[] | null | undefined }): React.ReactElement | null {
+function __ToolCallsSection({ calls }: { calls: TranscriptToolCall[] | null | undefined }): React.ReactElement | null {
   if (!calls || calls.length === 0) return null;
   return <ToolCallsList toolCalls={calls} />;
 }
@@ -502,8 +498,7 @@ function ToolResultsPanel({ results }: { results: TranscriptToolResult[] }) {
             className="rounded border px-2 py-1.5 text-xs"
             style={{
               background: tr.is_error ? "var(--error)/10" : "var(--bg-secondary)",
-              borderColor: tr.is_error ? "var(--error)" : "var(--border-default)",
-            }}
+              borderColor: tr.is_error ? "var(--error)" : "var(--border-default)" }}
           >
             {tr.is_error && (
               <div className="mb-0.5 flex items-center gap-1 text-[10px] font-mono uppercase text-[var(--error)]">
@@ -520,7 +515,7 @@ function ToolResultsPanel({ results }: { results: TranscriptToolResult[] }) {
   );
 }
 
-function ImagesPanel({ images, orgId }: { images: NonNullable<TR["images"]>; orgId?: string }) {
+function ImagesPanel({ images }: { images: NonNullable<TR["images"]>; orgId?: string }) {
   return (
     <div>
       <SectionHeader>Images ({images.length})</SectionHeader>
@@ -585,7 +580,7 @@ function CitationsPanel({ citations }: { citations: NonNullable<TR["citations"]>
               )}
               {c.cited_text && (
                 <div className="text-[10px] text-[var(--text-muted)] italic">
-                  "{c.cited_text}"
+                  &ldquo;{c.cited_text}&rdquo;
                 </div>
               )}
             </div>
@@ -626,7 +621,7 @@ function LogprobsPanel({ entries }: { entries: NonNullable<NonNullable<TR["logpr
 
 // ── Sidebar ─────────────────────────────────────────────────────────
 
-function SpanDetailSidebar({ row, orgId }: { row: TR; orgId?: string }) {
+function SpanDetailSidebar({ row }: { row: TR; orgId?: string }) {
   return (
     <aside
       className="w-80 shrink-0 border-l border-[var(--border-default)] bg-[var(--bg-secondary)] overflow-y-auto"

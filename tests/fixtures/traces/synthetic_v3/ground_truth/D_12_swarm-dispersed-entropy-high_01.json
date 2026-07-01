@@ -1,0 +1,18 @@
+{
+  "trace_id": "trace_swarm_dispersed_01",
+  "archetype_id": "swarm-dispersed",
+  "agent_id": "agent_swarm-dispersed_01",
+  "expected_TAS": 51,
+  "expected_intervention": "warn",
+  "expected_metrics": {
+    "swarm_entropy": 3.0,
+    "threshold": 4.0
+  },
+  "expected_detector_fires": [
+    "topology_dispersed"
+  ],
+  "expected_loop_detected": false,
+  "expected_hallucination_detected": false,
+  "expected_redundancy_pct": 0.0,
+  "notes": "16 handoffs spread across 8 agents \u2192 entropy 3.0 (near-uniform). Phase 10 SwarmTopologyDetector (dispersed) MUST fire on entropy > 2.5 (proxy)."
+}

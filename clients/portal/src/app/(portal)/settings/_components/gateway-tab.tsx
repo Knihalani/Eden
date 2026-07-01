@@ -80,7 +80,7 @@ export function GatewayTab({ org }: GatewayTabProps) {
     }
   };
 
-  // eslint-disable-next-line react-hooks/set-state-in-effect -- legitimate pattern: refetch on org change
+   
   useEffect(() => {
     loadModels();
   }, [org?.id]);

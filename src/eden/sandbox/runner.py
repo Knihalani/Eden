@@ -110,9 +110,7 @@ class SandboxRunner:
         snapshot_pool_size: int = 10,
         max_concurrent: int = 100,
         bandsox_host: str | None = None,
-        bandsox_port: int | None = None,
-        firecracker_kernel: str | None = None,
-        firecracker_rootfs: str | None = None,
+    bandsox_port: int | None = None,
     ):
         self.memory_mb = memory_mb
         self.cpu_count = cpu_count
@@ -120,10 +118,6 @@ class SandboxRunner:
         self.max_concurrent = max_concurrent
         self.bandsox_host = bandsox_host or self.DEFAULT_BANDSOX_HOST
         self.bandsox_port = bandsox_port or self.DEFAULT_BANDSOX_PORT
-
-        # Paths for Firecracker
-        self.firecracker_kernel = Path(firecracker_kernel) if firecracker_kernel else None
-        self.firecracker_rootfs = Path(firecracker_rootfs) if firecracker_rootfs else None
 
         # VM management
         self._vm_pool: dict[str, VMInstance] = {}
@@ -242,9 +236,7 @@ class SandboxRunner:
                     "config": {
                         "memory_mb": self.memory_mb,
                         "cpu_count": self.cpu_count,
-                        "kernel": str(self.firecracker_kernel) if self.firecracker_kernel else None,
-                        "rootfs": str(self.firecracker_rootfs) if self.firecracker_rootfs else None,
-                    },
+                                            },
                 }
                 msg = BandSoxProtocol.encode_message(BandSoxProtocol.MSG_SNAPSHOT, request)
                 self._writer.write(msg)
@@ -307,9 +299,7 @@ class SandboxRunner:
                     "config": {
                         "memory_mb": self.memory_mb,
                         "cpu_count": self.cpu_count,
-                        "kernel": str(self.firecracker_kernel) if self.firecracker_kernel else None,
-                        "rootfs": str(self.firecracker_rootfs) if self.firecracker_rootfs else None,
-                    },
+                                            },
                 }
                 msg = BandSoxProtocol.encode_message(BandSoxProtocol.MSG_SNAPSHOT, request)
                 self._writer.write(msg)
@@ -958,9 +948,7 @@ async def get_sandbox_runner(
             cpu_count=cpu_count,
             snapshot_pool_size=snapshot_pool_size,
             max_concurrent=max_concurrent,
-            firecracker_kernel=str(settings.firecracker_kernel_path),
-            firecracker_rootfs=str(settings.firecracker_rootfs_path),
-        )
+                    )
         await runner.initialize()
         _sandbox_runner = runner
         logger.info("Initialized real SandboxRunner")

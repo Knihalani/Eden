@@ -1,0 +1,17 @@
+{
+  "trace_id": "trace_cat22_error_keep_02",
+  "archetype_id": "cat22-error-keep",
+  "agent_id": "agent_cat22-error-keep_02",
+  "expected_TAS": 46,
+  "expected_intervention": "allow",
+  "expected_metrics": {
+    "cat22_keep_rule": "error"
+  },
+  "expected_detector_fires": [
+    "SamplingPolicy.keep.error"
+  ],
+  "expected_loop_detected": false,
+  "expected_hallucination_detected": false,
+  "expected_redundancy_pct": 0.0,
+  "notes": "Phase outcome contains error=card_declined \u2192 SamplingPolicy rule 1 (error) keeps the trace."
+}

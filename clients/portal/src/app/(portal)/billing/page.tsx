@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useOrg } from "@/hooks/use-org";
 import { api } from "@/lib/api";
 import { SALES_EMAIL } from "@/lib/constants";
@@ -24,9 +24,11 @@ import {
   Calendar,
   CircleDollarSign,
   FileText,
+  RefreshCw,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/components/ui/toast";
+import { ErrorState } from "@/components/ui/error-state";
 
 interface PlanSpec {
   name: string;
@@ -115,15 +117,12 @@ export default function BillingPage() {
     exp_month: number;
     exp_year: number;
   } | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    if (currentOrg) loadData();
-  }, [currentOrg]);
-
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     if (!currentOrg) return;
     setLoading(true);
+    setLoadError(null);
     try {
       const [usageData, invoiceData, paymentData] = await Promise.all([
         api.getPlans(currentOrg.id).catch(() => null),
@@ -134,11 +133,17 @@ export default function BillingPage() {
       setInvoices(invoiceData);
       setPaymentMethod(paymentData);
     } catch (e) {
-      console.error("Failed to load billing data", e);
+      const message = e instanceof Error ? e.message : "Failed to load billing data";
+      setLoadError(message);
+      toast.error("Failed to load billing data", message);
     } finally {
       setLoading(false);
     }
-  };
+  }, [currentOrg, toast]);
+
+  useEffect(() => {
+    if (currentOrg) loadData();
+  }, [currentOrg, loadData]);
 
   const handleUpgrade = async (planName: string) => {
     if (!currentOrg || planName === "Custom") return;
@@ -173,8 +178,31 @@ export default function BillingPage() {
     return (
       // Match the page wrapper so the loader isn't flush-left on mobile.
       <div className="p-4 sm:p-6 lg:p-8 max-w-6xl mx-auto flex items-center justify-center gap-2 text-sm text-[var(--text-muted)]">
-        <Loader2 className="w-4 h-4 animate-spin" />
+        <Loader2 className="w-4 h-4 animate-spin" aria-hidden />
         Loading billing…
+      </div>
+    );
+  }
+
+  if (loadError && !usage) {
+    return (
+      <div className="p-4 sm:p-6 lg:p-8 max-w-6xl mx-auto">
+        <PageHeader
+          eyebrow="Workspace"
+          title="Billing"
+          subtitle="Manage your subscription, payment method, and invoices."
+          icon={CircleDollarSign}
+        />
+        <ErrorState
+          title="Could not load billing data"
+          message={loadError}
+          action={
+            <Button onClick={loadData} variant="outline">
+              <RefreshCw className="w-3.5 h-3.5" aria-hidden />
+              Try again
+            </Button>
+          }
+        />
       </div>
     );
   }
@@ -182,6 +210,7 @@ export default function BillingPage() {
   return (
     <div className="p-4 sm:p-6 lg:p-8 max-w-6xl mx-auto space-y-6 page-enter">
       <PageHeader
+        eyebrow="Workspace"
         title="Billing"
         subtitle={
           <>
@@ -199,7 +228,7 @@ export default function BillingPage() {
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
           <div>
             <h2 className="text-lg font-semibold text-[var(--text-primary)] flex items-center gap-2">
-              <Building2 className="w-4 h-4 text-[var(--text-muted)]" />
+              <Building2 className="w-4 h-4 text-[var(--text-muted)]" aria-hidden />
               Current plan
             </h2>
             <p className="text-xs text-[var(--text-muted)] mt-0.5">
@@ -247,7 +276,7 @@ export default function BillingPage() {
 
         {usage?.current_period_end && (
           <p className="text-xs text-[var(--text-muted)] mt-4 flex items-center gap-1.5">
-            <Calendar className="w-3 h-3" />
+            <Calendar className="w-3 h-3" aria-hidden />
             Next billing date:{" "}
             {new Date(usage.current_period_end).toLocaleDateString()}
           </p>
@@ -257,7 +286,7 @@ export default function BillingPage() {
       {/* Usage alert */}
       {usage && usage.jobs_limit > 0 && usage.jobs_used / usage.jobs_limit > 0.8 && (
         <div className="p-3 rounded-lg border border-[var(--warning)]/30 bg-[var(--warning-bg)] flex items-start gap-2.5 text-sm text-[var(--warning)]">
-          <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+          <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" aria-hidden />
           <div>
             <p className="font-medium">
               You&apos;ve used {Math.round((usage.jobs_used / usage.jobs_limit) * 100)}% of
@@ -273,7 +302,7 @@ export default function BillingPage() {
       {/* Available plans */}
       <div>
         <h2 className="text-lg font-semibold text-[var(--text-primary)] mb-3 flex items-center gap-2">
-          <Sparkles className="w-4 h-4 text-[var(--accent)]" />
+          <Sparkles className="w-4 h-4 text-[var(--accent)]" aria-hidden />
           Available plans
         </h2>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
@@ -315,7 +344,7 @@ export default function BillingPage() {
                           : "bg-[var(--warning-bg)] text-[var(--warning)]",
                     )}
                   >
-                    <Icon className="w-4 h-4" />
+                    <Icon className="w-4 h-4" aria-hidden />
                   </div>
                   <h3 className="text-base font-semibold text-[var(--text-primary)]">
                     {plan.name}
@@ -340,7 +369,7 @@ export default function BillingPage() {
                       key={feature}
                       className="flex items-start gap-1.5 text-xs text-[var(--text-secondary)]"
                     >
-                      <Check className="w-3 h-3 text-[var(--terminal)] flex-shrink-0 mt-0.5" />
+                      <Check className="w-3 h-3 text-[var(--terminal)] flex-shrink-0 mt-0.5" aria-hidden />
                       <span>{feature}</span>
                     </li>
                   ))}
@@ -351,12 +380,13 @@ export default function BillingPage() {
                     variant="outline"
                     className="w-full"
                     onClick={() => (window.location.href = `mailto:${SALES_EMAIL}`)}
+                    aria-label={`Contact sales about the ${plan.name} plan`}
                   >
                     Contact sales
-                    <ArrowUpRight className="w-3 h-3 ml-1" />
+                    <ArrowUpRight className="w-3 h-3 ml-1" aria-hidden />
                   </Button>
                 ) : isCurrentPlan ? (
-                  <Button variant="outline" className="w-full" disabled>
+                  <Button variant="outline" className="w-full" disabled aria-label={`${plan.name} is your current plan`}>
                     Current plan
                   </Button>
                 ) : isUpgrade ? (
@@ -365,15 +395,16 @@ export default function BillingPage() {
                     className="w-full"
                     onClick={() => handleUpgrade(plan.name)}
                     disabled={upgrading === plan.name}
+                    aria-label={`Upgrade to the ${plan.name} plan`}
                   >
                     {upgrading === plan.name ? (
-                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" aria-label="Upgrading" />
                     ) : (
                       "Upgrade"
                     )}
                   </Button>
                 ) : (
-                  <Button variant="outline" className="w-full" disabled>
+                  <Button variant="outline" className="w-full" disabled aria-label={`Downgrade to the ${plan.name} plan`}>
                     Downgrade
                   </Button>
                 )}
@@ -387,7 +418,7 @@ export default function BillingPage() {
       <Card className="p-6">
         <div className="flex items-center gap-2 mb-4">
           <div className="p-1.5 rounded-md bg-[var(--bg-tertiary)] text-[var(--text-muted)]">
-            <CreditCard className="w-4 h-4" />
+            <CreditCard className="w-4 h-4" aria-hidden />
           </div>
           <div>
             <h2 className="text-lg font-semibold text-[var(--text-primary)]">Payment method</h2>
@@ -415,7 +446,7 @@ export default function BillingPage() {
             </div>
           ) : (
             <div className="flex items-center gap-3 text-[var(--text-muted)]">
-              <CreditCard className="w-5 h-5" />
+              <CreditCard className="w-5 h-5" aria-hidden />
               <div>
                 <p className="text-sm font-medium text-[var(--text-primary)]">
                   No payment method on file
@@ -426,7 +457,7 @@ export default function BillingPage() {
               </div>
             </div>
           )}
-          <Button variant="ghost" size="sm">
+          <Button variant="ghost" size="sm" aria-label={paymentMethod ? "Update payment method" : "Add payment method"}>
             {paymentMethod ? "Update" : "Add payment method"}
           </Button>
         </div>
@@ -436,7 +467,7 @@ export default function BillingPage() {
       <Card className="p-6">
         <div className="flex items-center gap-2 mb-4">
           <div className="p-1.5 rounded-md bg-[var(--bg-tertiary)] text-[var(--text-muted)]">
-            <Receipt className="w-4 h-4" />
+            <Receipt className="w-4 h-4" aria-hidden />
           </div>
           <div>
             <h2 className="text-lg font-semibold text-[var(--text-primary)]">Invoice history</h2>
@@ -450,7 +481,7 @@ export default function BillingPage() {
 
         {invoices.length === 0 ? (
           <div className="text-center py-10">
-            <FileText className="w-8 h-8 mx-auto mb-2 text-[var(--text-muted)] opacity-50" />
+            <FileText className="w-8 h-8 mx-auto mb-2 text-[var(--text-muted)] opacity-50" aria-hidden />
             <p className="text-sm text-[var(--text-muted)]">
               Invoices will appear here once you subscribe to a paid plan.
             </p>
@@ -465,7 +496,7 @@ export default function BillingPage() {
                 >
                   <div className="flex items-center gap-3 min-w-0">
                     <div className="p-1.5 rounded-md bg-[var(--bg-tertiary)] text-[var(--text-muted)] flex-shrink-0">
-                      <FileText className="w-3.5 h-3.5" />
+                      <FileText className="w-3.5 h-3.5" aria-hidden />
                     </div>
                     <div className="min-w-0">
                       <p className="text-sm font-medium text-[var(--text-primary)]">
@@ -502,9 +533,10 @@ export default function BillingPage() {
                         href={invoice.invoice_url}
                         target="_blank"
                         rel="noopener noreferrer"
+                        aria-label={`Download invoice PDF from ${new Date(invoice.created * 1000).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}`}
                         className="text-xs text-[var(--accent)] hover:text-[var(--accent-hover)] flex items-center gap-1"
                       >
-                        <Download className="w-3 h-3" />
+                        <Download className="w-3 h-3" aria-hidden />
                         PDF
                       </a>
                     )}
@@ -524,8 +556,9 @@ export default function BillingPage() {
                     size="sm"
                     onClick={() => setInvoicePage((p) => Math.max(0, p - 1))}
                     disabled={invoicePage === 0}
+                    aria-label="Previous invoice page"
                   >
-                    <ChevronLeft className="w-3.5 h-3.5" />
+                    <ChevronLeft className="w-3.5 h-3.5" aria-hidden />
                     Previous
                   </Button>
                   <Button
@@ -533,9 +566,10 @@ export default function BillingPage() {
                     size="sm"
                     onClick={() => setInvoicePage((p) => Math.min(totalInvoicePages - 1, p + 1))}
                     disabled={invoicePage >= totalInvoicePages - 1}
+                    aria-label="Next invoice page"
                   >
                     Next
-                    <ChevronRight className="w-3.5 h-3.5" />
+                    <ChevronRight className="w-3.5 h-3.5" aria-hidden />
                   </Button>
                 </div>
               </div>

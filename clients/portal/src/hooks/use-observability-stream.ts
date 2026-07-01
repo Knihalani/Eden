@@ -45,8 +45,7 @@ export function useObservabilityStream({
   orgId,
   maxEvents = 100,
   enabled = true,
-  onError,
-}: UseObservabilityStreamOptions) {
+  onError }: UseObservabilityStreamOptions) {
   const [events, setEvents] = React.useState<LiveTrace[]>([]);
   const [connected, setConnected] = React.useState(false);
   const [paused, setPaused] = React.useState(false);
@@ -87,7 +86,7 @@ export function useObservabilityStream({
           if (prev.find((t) => t.trace_id === data.trace_id)) return prev;
           return [data, ...prev].slice(0, maxEvents);
         });
-      } catch (err) {
+      } catch (_err) {
         // ignore malformed event
       }
     });
@@ -137,6 +136,5 @@ export function useObservabilityStream({
     paused,
     pause,
     resume,
-    clear,
-  };
+    clear };
 }

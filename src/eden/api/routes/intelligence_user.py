@@ -47,7 +47,7 @@ from typing import Any
 from fastapi import APIRouter, Body, Depends, Path, Query
 from pydantic import BaseModel, Field
 
-from eden.api.deps import get_current_user, require_feature_flag
+from eden.api.deps import get_current_user, require_feature_flag, require_org_member
 from eden.services.user_intel import (
     AbandonmentTracker,
     BehaviouralDashboard,
@@ -70,6 +70,7 @@ router = APIRouter(
     dependencies=[
         Depends(require_feature_flag("intelligence_gap_v0")),
         Depends(get_current_user),
+        Depends(require_org_member),
     ],
 )
 

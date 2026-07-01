@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery, type UseQueryOptions } from "@tanstack/react-query";
-import { api } from "@/lib/api";
+
 
 /**
  * Thin React Query wrapper around the typed ``api`` client.
@@ -26,6 +26,5 @@ export function useApiQuery<T>(
   return useQuery<T, Error>({
     queryKey: key as unknown[],
     queryFn,
-    ...options,
-  });
+    ...options });
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import * as React from "react";
+import * as _React from "react";
 import { cn } from "@/lib/utils";
 import { AlertTriangle, CheckCircle2, Circle, Clock, Info, LucideIcon, XCircle } from "lucide-react";
 import { STATUS, OUTCOMES, PR_STATUSES, type StatusDescriptor, type OutcomeDescriptor } from "@/lib/types";
@@ -36,8 +36,7 @@ const TRACE_OUTCOME_CLASSES: Record<string, string> = {
   partial: "bg-[var(--warning-bg)] text-[var(--warning)]",
   timeout: "bg-[var(--warning-bg)] text-[var(--warning)]",
   crash: "bg-[var(--error-dim)] text-[var(--error)]",
-  unknown: "bg-[var(--bg-tertiary)] text-[var(--text-secondary)]",
-};
+  unknown: "bg-[var(--bg-tertiary)] text-[var(--text-secondary)]" };
 
 const TRACE_OUTCOME_ICONS: Record<string, LucideIcon> = {
   success: CheckCircle2,
@@ -45,24 +44,21 @@ const TRACE_OUTCOME_ICONS: Record<string, LucideIcon> = {
   partial: AlertTriangle,
   timeout: Clock,
   crash: XCircle,
-  unknown: Circle,
-};
+  unknown: Circle };
 
 const SEVERITY_CLASSES: Record<string, string> = {
   critical: "bg-[var(--error-bg)] text-[var(--error)]",
   high: "bg-[var(--warning-bg)] text-[var(--warning)]",
   medium: "bg-[var(--warning-bg)] text-[var(--warning)]",
   low: "bg-[var(--accent-faint)] text-[var(--accent)]",
-  info: "bg-[var(--bg-tertiary)] text-[var(--text-secondary)]",
-};
+  info: "bg-[var(--bg-tertiary)] text-[var(--text-secondary)]" };
 
 const SEVERITY_ICON_FOR_BADGE: Record<string, LucideIcon> = {
   critical: XCircle,
   high: AlertTriangle,
   medium: AlertTriangle,
   low: Info,
-  info: Info,
-};
+  info: Info };
 
 function resolveStatus(
   status: string,
@@ -72,8 +68,7 @@ function resolveStatus(
   return map[status] ?? {
     label: status,
     className: "bg-[var(--bg-tertiary)] text-[var(--text-secondary)]",
-    icon: Clock,
-  };
+    icon: Clock };
 }
 
 /**
@@ -116,8 +111,7 @@ export function OutcomeBadge({ outcome, className, iconOnly = false }: OutcomeBa
   const desc: OutcomeDescriptor = OUTCOMES[outcome] ?? {
     label: outcome,
     className: "bg-[var(--bg-tertiary)] text-[var(--text-secondary)] border-[var(--border-default)]",
-    icon: Circle,
-  };
+    icon: Circle };
   const Icon = desc.icon;
 
   return (
@@ -186,8 +180,7 @@ const SEVERITY_ICON_MAP: Record<string, { icon: LucideIcon; color: string }> = {
   high: { icon: AlertTriangle, color: "text-[var(--warning)]" },
   medium: { icon: AlertTriangle, color: "text-[var(--warning)]" },
   low: { icon: Info, color: "text-[var(--accent)]" },
-  info: { icon: Info, color: "text-[var(--text-muted)]" },
-};
+  info: { icon: Info, color: "text-[var(--text-muted)]" } };
 
 /**
  * Severity icon — a colored icon-only signal for severity levels.
@@ -196,8 +189,7 @@ const SEVERITY_ICON_MAP: Record<string, { icon: LucideIcon; color: string }> = {
  */
 export function SeverityIcon({
   severity,
-  className,
-}: {
+  className }: {
   severity: string;
   className?: string;
 }) {

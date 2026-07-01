@@ -1,0 +1,273 @@
+{
+  "trace_id": "trace_blackboard_stale_01",
+  "archetype_id": "blackboard-stale",
+  "agent_id": "agent_D_10_blackboard-stale-90s_01",
+  "event_count": 5,
+  "events": [
+    {
+      "event_id": "evt_tblackboard_stale_01_0000",
+      "tenant_id": "org_eden_synth",
+      "project_id": "proj_synthetic_eval_v3",
+      "trace_id": "trace_blackboard_stale_01",
+      "realm": "production",
+      "agent_id": "agent_D_10_blackboard-stale-90s_01",
+      "agent_version": "synth-v3.0.0",
+      "environment_id": "env_prod_main",
+      "tags": [],
+      "source_format": "eden_native",
+      "images": [],
+      "audio": [],
+      "citations": [],
+      "stop_sequence": null,
+      "system_fingerprint": "fp_synth-v3.0.0",
+      "conversation_id": "conv_ale_01",
+      "event_type": "span.start",
+      "timestamp": "2026-06-30T12:00:00+00:00",
+      "parent_span_id": null,
+      "span_id": "spn_trace_blackboard_stale_01_0000",
+      "name": "trace",
+      "duration_ms": 0.0,
+      "payload": {},
+      "metrics": {},
+      "attributes": {
+        "environment": "production"
+      },
+      "outcome": null,
+      "request_body": null,
+      "response_body": null,
+      "reasoning": null,
+      "tool_calls_full": [],
+      "tool_results": [],
+      "logprobs": null,
+      "finish_reason": null,
+      "cache_hit": false,
+      "prompt_cache_savings_usd": 0.0,
+      "model_version": null,
+      "service_tier": null
+    },
+    {
+      "event_id": "evt_tblackboard_stale_01_0001",
+      "tenant_id": "org_eden_synth",
+      "project_id": "proj_synthetic_eval_v3",
+      "trace_id": "trace_blackboard_stale_01",
+      "realm": "production",
+      "agent_id": "agent_D_10_blackboard-stale-90s_01",
+      "agent_version": "synth-v3.0.0",
+      "environment_id": "env_prod_main",
+      "tags": [],
+      "source_format": "eden_native",
+      "images": [],
+      "audio": [],
+      "citations": [],
+      "stop_sequence": null,
+      "system_fingerprint": "fp_synth-v3.0.0",
+      "conversation_id": "conv_ale_01",
+      "event_type": "tool.call",
+      "timestamp": "2026-06-30T12:00:00.080000+00:00",
+      "parent_span_id": "spn_trace_blackboard_stale_01_0000",
+      "span_id": "spn_trace_blackboard_stale_01_0001",
+      "name": "blackboard.write",
+      "duration_ms": 80.0,
+      "payload": {},
+      "metrics": {
+        "latency_ms": 80.0,
+        "cost_usd": 0.000714
+      },
+      "attributes": {
+        "environment": "production"
+      },
+      "outcome": "success",
+      "request_body": {
+        "tool": "blackboard.write",
+        "arguments": {
+          "key": "shared_state",
+          "value": 42
+        }
+      },
+      "response_body": {
+        "result": {
+          "ok": true
+        }
+      },
+      "reasoning": null,
+      "tool_calls_full": [
+        {
+          "tool_call_id": "call_blackboard.write_5128",
+          "type": "function",
+          "function": {
+            "name": "blackboard.write",
+            "arguments": "{\"key\": \"shared_state\", \"value\": 42}"
+          }
+        }
+      ],
+      "tool_results": [
+        {
+          "tool_call_id": "call_blackboard.write_5128",
+          "role": "tool",
+          "content": "{\"ok\": true}"
+        }
+      ],
+      "logprobs": null,
+      "finish_reason": null,
+      "cache_hit": false,
+      "prompt_cache_savings_usd": 0.0,
+      "model_version": null,
+      "service_tier": null
+    },
+    {
+      "event_id": "evt_tblackboard_stale_01_0002",
+      "tenant_id": "org_eden_synth",
+      "project_id": "proj_synthetic_eval_v3",
+      "trace_id": "trace_blackboard_stale_01",
+      "realm": "production",
+      "agent_id": "agent_D_10_blackboard-stale-90s_01",
+      "agent_version": "synth-v3.0.0",
+      "environment_id": "env_prod_main",
+      "tags": [],
+      "source_format": "eden_native",
+      "images": [],
+      "audio": [],
+      "citations": [],
+      "stop_sequence": null,
+      "system_fingerprint": "fp_synth-v3.0.0",
+      "conversation_id": "conv_ale_01",
+      "event_type": "env.step",
+      "timestamp": "2026-06-30T12:01:30.080000+00:00",
+      "parent_span_id": "spn_trace_blackboard_stale_01_0000",
+      "span_id": "spn_trace_blackboard_stale_01_0002",
+      "name": "idle",
+      "duration_ms": 90000.0,
+      "payload": {
+        "observation": "agent waiting"
+      },
+      "metrics": {
+        "latency_ms": 90000.0
+      },
+      "attributes": {
+        "environment": "production"
+      },
+      "outcome": "success",
+      "request_body": null,
+      "response_body": null,
+      "reasoning": null,
+      "tool_calls_full": [],
+      "tool_results": [],
+      "logprobs": null,
+      "finish_reason": null,
+      "cache_hit": false,
+      "prompt_cache_savings_usd": 0.0,
+      "model_version": null,
+      "service_tier": null
+    },
+    {
+      "event_id": "evt_tblackboard_stale_01_0003",
+      "tenant_id": "org_eden_synth",
+      "project_id": "proj_synthetic_eval_v3",
+      "trace_id": "trace_blackboard_stale_01",
+      "realm": "production",
+      "agent_id": "agent_D_10_blackboard-stale-90s_01",
+      "agent_version": "synth-v3.0.0",
+      "environment_id": "env_prod_main",
+      "tags": [],
+      "source_format": "eden_native",
+      "images": [],
+      "audio": [],
+      "citations": [],
+      "stop_sequence": null,
+      "system_fingerprint": "fp_synth-v3.0.0",
+      "conversation_id": "conv_ale_01",
+      "event_type": "tool.call",
+      "timestamp": "2026-06-30T12:01:30.160000+00:00",
+      "parent_span_id": "spn_trace_blackboard_stale_01_0000",
+      "span_id": "spn_trace_blackboard_stale_01_0003",
+      "name": "blackboard.read",
+      "duration_ms": 80.0,
+      "payload": {},
+      "metrics": {
+        "latency_ms": 80.0,
+        "cost_usd": 0.009371
+      },
+      "attributes": {
+        "environment": "production"
+      },
+      "outcome": "success",
+      "request_body": {
+        "tool": "blackboard.read",
+        "arguments": {
+          "key": "shared_state"
+        }
+      },
+      "response_body": {
+        "result": {
+          "value": 42,
+          "version": 1
+        }
+      },
+      "reasoning": null,
+      "tool_calls_full": [
+        {
+          "tool_call_id": "call_blackboard.read_94550",
+          "type": "function",
+          "function": {
+            "name": "blackboard.read",
+            "arguments": "{\"key\": \"shared_state\"}"
+          }
+        }
+      ],
+      "tool_results": [
+        {
+          "tool_call_id": "call_blackboard.read_94550",
+          "role": "tool",
+          "content": "{\"value\": 42, \"version\": 1}"
+        }
+      ],
+      "logprobs": null,
+      "finish_reason": null,
+      "cache_hit": false,
+      "prompt_cache_savings_usd": 0.0,
+      "model_version": null,
+      "service_tier": null
+    },
+    {
+      "event_id": "evt_tblackboard_stale_01_0004",
+      "tenant_id": "org_eden_synth",
+      "project_id": "proj_synthetic_eval_v3",
+      "trace_id": "trace_blackboard_stale_01",
+      "realm": "production",
+      "agent_id": "agent_D_10_blackboard-stale-90s_01",
+      "agent_version": "synth-v3.0.0",
+      "environment_id": "env_prod_main",
+      "tags": [],
+      "source_format": "eden_native",
+      "images": [],
+      "audio": [],
+      "citations": [],
+      "stop_sequence": null,
+      "system_fingerprint": "fp_synth-v3.0.0",
+      "conversation_id": "conv_ale_01",
+      "event_type": "span.end",
+      "timestamp": "2026-06-30T12:01:30.160000+00:00",
+      "parent_span_id": null,
+      "span_id": "spn_trace_blackboard_stale_01_0000",
+      "name": "trace",
+      "duration_ms": 90160.0,
+      "payload": {},
+      "metrics": {},
+      "attributes": {
+        "environment": "production"
+      },
+      "outcome": "success",
+      "request_body": null,
+      "response_body": null,
+      "reasoning": null,
+      "tool_calls_full": [],
+      "tool_results": [],
+      "logprobs": null,
+      "finish_reason": null,
+      "cache_hit": false,
+      "prompt_cache_savings_usd": 0.0,
+      "model_version": null,
+      "service_tier": null
+    }
+  ]
+}
