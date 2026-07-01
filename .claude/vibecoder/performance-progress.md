@@ -35,6 +35,8 @@ Branch: vibecoder/performance
 - [x] 31. Use swap to avoid invisible text (n/a — `next/font/google` defaults `display` to "swap". Verified in next/font docs + the layout doesn't override.)
 - [x] 32. Lazy-load and poster-optimize video (n/a — no <video> elements anywhere in the portal)
 - [x] 33. Self-host critical third-party assets (n/a — Geist + Geist Mono self-hosted via next/font at build; no external CDN scripts/styles in the document)
+- [x] 34. Inline tiny critical SVGs and icons (removed orphan Next scaffold SVGs from /public: file/globe/next/vercel/window.svg — never referenced. Icons via lucide-react are bundled + tree-shaken so each icon's SVG is inlined in the JS chunk automatically.)
+- [x] 35. Serve all static media via CDN (n/a — Vercel auto-CDNs /public + /_next/static. Other dev environments would route through their own infra layer.)
 - [ ] 2. Memoize expensive computed values
 - [ ] 3. Stabilize callbacks passed to children
 - [ ] 4. Split bloated global state
