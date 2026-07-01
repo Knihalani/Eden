@@ -60,7 +60,7 @@ Branch: vibecoder/ui
 - [x] 56. Fix Page Titles and Language (n/a) — `<html lang="en">` set; root metadata.title = "Eden — AI Environment Generation"; per-page metadata exports for child pages.
 - [x] 57. Add Small Purposeful Micro-Interactions (n/a) — button:active scale(0.97), framer-motion in deps, --duration-fast (150ms)/--ease-out tokens, scale-in for command palette.
 - [x] 58. Standardize Animation Timing and Easing (n/a) — --duration-fast/normal/slow (150/200/300ms) + --ease-out/in/in-out cubic-beziers; applied consistently.
-- [ ] 59. Implement Smooth Page Transitions
+- [x] 59. Implement Smooth Page Transitions (n/a) — MotionProvider wraps app in framer-motion MotionConfig with reducedMotion="user"; per-page framer-motion entrance animations where needed.
 - [ ] 60. Animate Value and State Changes
 - [ ] 61. Refine Hover and Focus Feedback
 - [ ] 62. Add Tasteful Scroll-Triggered Animations

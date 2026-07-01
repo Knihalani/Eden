@@ -179,105 +179,7 @@ class WebhookDeliveryService:
         return f"sha256={sig}"
 
 
-def _assert_public_ip(url: str) -> None:
-    """SSRF guard: only allow webhooks to public IPs (DL-13).
 
-    Re-resolves the URL's hostname at call time so a DNS rebind
-    to a private IP is caught. Raises ``ValueError`` for private
-    / loopback / link-local addresses.
-    """
-    from urllib.parse import urlparse
-    import ipaddress
-    import socket
-
-    parsed = urlparse(url)
-    hostname = parsed.hostname
-    if not hostname:
-        raise ValueError(f"webhook URL has no hostname: {url!r}")
-    # Resolve to all addresses; refuse if any are private.
-    infos = socket.getaddrinfo(hostname, None)
-    for info in infos:
-        ip_str = info[4][0]
-        ip = ipaddress.ip_address(ip_str)
-        if (
-            ip.is_private
-            or ip.is_loopback
-            or ip.is_link_local
-            or ip.is_multicast
-            or ip.is_reserved
-            or ip.is_unspecified
-        ):
-            raise ValueError(
-                f"webhook URL {url!r} resolves to non-public IP {ip_str}"
-            )
-
-    def sign_v1(
-        secret: str,
-        payload: str,
-        *,
-        timestamp: int | None = None,
-    ) -> str:
-        """Generate the spec-aligned signature header value.
-
-        ponytail: per upgradespec §D.13, webhooks use the
-        ``X-Eden-Signature: t=<unix_ts>,v1=<sig>`` format
-        (Stripe-style signed payloads). The v1 signature is
-        ``HMAC-SHA256(secret, "<ts>.<payload>")`` so the
-        timestamp binds the signature to a specific moment
-        and lets consumers reject replays older than
-        ``tolerance_seconds``.
-
-        Returns the full header value
-        (``t=<ts>,v1=<hex>``).
-        """
-        ts = int(timestamp if timestamp is not None else datetime.now(UTC).timestamp())
-        signed_payload = f"{ts}.{payload}".encode("utf-8")
-        sig = hmac.new(
-            secret.encode("utf-8"),
-            signed_payload,
-            hashlib.sha256,
-        ).hexdigest()
-        return f"t={ts},v1={sig}"
-
-    @staticmethod
-    def verify_v1(
-        secret: str,
-        payload: str,
-        header_value: str,
-        *,
-        tolerance_seconds: int = 300,
-    ) -> bool:
-        """Verify an incoming ``X-Eden-Signature`` header.
-
-        Used by customer-side code that wants to validate
-        a payload before trusting it. Constant-time
-        comparison via ``hmac.compare_digest``.
-        """
-        try:
-            parts = dict(
-                kv.split("=", 1) for kv in header_value.split(",") if "=" in kv
-            )
-        except ValueError:
-            return False
-        ts = parts.get("t")
-        sig = parts.get("v1")
-        if not ts or not sig:
-            return False
-        try:
-            ts_int = int(ts)
-        except ValueError:
-            return False
-        # Reject stale timestamps (replay protection).
-        now = int(datetime.now(UTC).timestamp())
-        if abs(now - ts_int) > tolerance_seconds:
-            return False
-        signed_payload = f"{ts_int}.{payload}".encode("utf-8")
-        expected = hmac.new(
-            secret.encode("utf-8"),
-            signed_payload,
-            hashlib.sha256,
-        ).hexdigest()
-        return hmac.compare_digest(expected, sig)
 
     async def deliver_event(
         self,
@@ -710,3 +612,104 @@ def _assert_public_ip(url: str) -> None:
         except Exception as exc:
             logger.debug("webhook_delivery: list_dlq failed: %s", exc)
             return []
+
+
+def _assert_public_ip(url: str) -> None:
+    """SSRF guard: only allow webhooks to public IPs (DL-13).
+
+    Re-resolves the URL's hostname at call time so a DNS rebind
+    to a private IP is caught. Raises ``ValueError`` for private
+    / loopback / link-local addresses.
+    """
+    from urllib.parse import urlparse
+    import ipaddress
+    import socket
+
+    parsed = urlparse(url)
+    hostname = parsed.hostname
+    if not hostname:
+        raise ValueError(f"webhook URL has no hostname: {url!r}")
+    # Resolve to all addresses; refuse if any are private.
+    infos = socket.getaddrinfo(hostname, None)
+    for info in infos:
+        ip_str = info[4][0]
+        ip = ipaddress.ip_address(ip_str)
+        if (
+            ip.is_private
+            or ip.is_loopback
+            or ip.is_link_local
+            or ip.is_multicast
+            or ip.is_reserved
+            or ip.is_unspecified
+        ):
+            raise ValueError(
+                f"webhook URL {url!r} resolves to non-public IP {ip_str}"
+            )
+
+    def sign_v1(
+        secret: str,
+        payload: str,
+        *,
+        timestamp: int | None = None,
+    ) -> str:
+        """Generate the spec-aligned signature header value.
+
+        ponytail: per upgradespec §D.13, webhooks use the
+        ``X-Eden-Signature: t=<unix_ts>,v1=<sig>`` format
+        (Stripe-style signed payloads). The v1 signature is
+        ``HMAC-SHA256(secret, "<ts>.<payload>")`` so the
+        timestamp binds the signature to a specific moment
+        and lets consumers reject replays older than
+        ``tolerance_seconds``.
+
+        Returns the full header value
+        (``t=<ts>,v1=<hex>``).
+        """
+        ts = int(timestamp if timestamp is not None else datetime.now(UTC).timestamp())
+        signed_payload = f"{ts}.{payload}".encode("utf-8")
+        sig = hmac.new(
+            secret.encode("utf-8"),
+            signed_payload,
+            hashlib.sha256,
+        ).hexdigest()
+        return f"t={ts},v1={sig}"
+
+    @staticmethod
+    def verify_v1(
+        secret: str,
+        payload: str,
+        header_value: str,
+        *,
+        tolerance_seconds: int = 300,
+    ) -> bool:
+        """Verify an incoming ``X-Eden-Signature`` header.
+
+        Used by customer-side code that wants to validate
+        a payload before trusting it. Constant-time
+        comparison via ``hmac.compare_digest``.
+        """
+        try:
+            parts = dict(
+                kv.split("=", 1) for kv in header_value.split(",") if "=" in kv
+            )
+        except ValueError:
+            return False
+        ts = parts.get("t")
+        sig = parts.get("v1")
+        if not ts or not sig:
+            return False
+        try:
+            ts_int = int(ts)
+        except ValueError:
+            return False
+        # Reject stale timestamps (replay protection).
+        now = int(datetime.now(UTC).timestamp())
+        if abs(now - ts_int) > tolerance_seconds:
+            return False
+        signed_payload = f"{ts_int}.{payload}".encode("utf-8")
+        expected = hmac.new(
+            secret.encode("utf-8"),
+            signed_payload,
+            hashlib.sha256,
+        ).hexdigest()
+        return hmac.compare_digest(expected, sig)
