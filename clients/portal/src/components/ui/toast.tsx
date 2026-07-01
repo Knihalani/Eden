@@ -12,17 +12,31 @@ import { CheckCircle2, XCircle, Info, X } from "lucide-react";
 
 type ToastType = "success" | "error" | "info";
 
+interface ToastAction {
+  /** Button label, e.g. "Undo" or "View". */
+  label: string;
+  /** Click handler. Removing the toast on action is the caller's job. */
+  onClick: () => void;
+}
+
 interface Toast {
   id: string;
   type: ToastType;
   message: string;
   description?: string;
+  /** Optional action button (typically "Undo" for reversible actions). */
+  action?: ToastAction;
   exiting?: boolean;
 }
 
 interface ToastContextType {
   toasts: Toast[];
-  addToast: (type: ToastType, message: string, description?: string) => void;
+  addToast: (
+    type: ToastType,
+    message: string,
+    description?: string,
+    action?: ToastAction,
+  ) => void;
   removeToast: (id: string) => void;
 }
 
@@ -41,12 +55,17 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const addToast = useCallback(
-    (type: ToastType, message: string, description?: string) => {
+    (
+      type: ToastType,
+      message: string,
+      description?: string,
+      action?: ToastAction,
+    ) => {
       const id = `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
-      setToasts((prev) => [...prev, { id, type, message, description }]);
-      // Bump the auto-dismiss to 5s when a description is present —
-      // a longer message takes longer to read.
-      const dismissMs = description ? 5000 : 3000;
+      setToasts((prev) => [...prev, { id, type, message, description, action }]);
+      // Bump auto-dismiss to 5s for longer messages, 6s for action
+      // buttons (give users time to read + click "Undo").
+      const dismissMs = action ? 6000 : description ? 5000 : 3000;
       setTimeout(() => removeToast(id), dismissMs);
     },
     [removeToast]
@@ -66,12 +85,12 @@ export function useToast() {
     throw new Error("useToast must be used within ToastProvider");
   }
   return {
-    success: (message: string, description?: string) =>
-      context.addToast("success", message, description),
-    error: (message: string, description?: string) =>
-      context.addToast("error", message, description),
-    info: (message: string, description?: string) =>
-      context.addToast("info", message, description),
+    success: (message: string, description?: string, action?: ToastAction) =>
+      context.addToast("success", message, description, action),
+    error: (message: string, description?: string, action?: ToastAction) =>
+      context.addToast("error", message, description, action),
+    info: (message: string, description?: string, action?: ToastAction) =>
+      context.addToast("info", message, description, action),
   };
 }
 
@@ -143,6 +162,17 @@ function ToastItem({ toast, onRemove }: { toast: Toast; onRemove: () => void }) 
           </p>
         )}
       </div>
+      {toast.action && (
+        <button
+          onClick={() => {
+            toast.action!.onClick();
+            onRemove();
+          }}
+          className="text-xs font-semibold text-[var(--accent)] hover:text-[var(--accent-hover)] px-2 py-1 rounded transition-colors flex-shrink-0"
+        >
+          {toast.action.label}
+        </button>
+      )}
       <button
         onClick={onRemove}
         className="p-1 text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)] rounded transition-colors"
