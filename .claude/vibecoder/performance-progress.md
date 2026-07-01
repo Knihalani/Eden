@@ -6,6 +6,7 @@ Branch: vibecoder/performance
 - [x] 2. Memoize expensive computed values (n/a) — codebase already uses useMemo on hot paths: TranscriptView.visibleRows, LatencyHistogram.buckets+p50/p95/p99, JobGantt.tStart/tEnd, ObservabilityLanding.deltaTiles, dashboard.throughputSeries/p50/p95, agents.framework/filtered. No further unautomatable inline expensive calculations found.
 - [x] 3. Stabilize callbacks passed to children (TracesTab: handleSelectTrace/ViewTimeline/Export/Annotate wrapped in useCallback)
 - [x] 4. Split bloated global state (n/a) — codebase already splits contexts by concern: OrgProvider, NotificationsProvider, ToastProvider, use-auth. OrgProvider carries many fields but is useMemo'd on identity-stable values (currentOrg.id, clerkOrg.id, userMemberships.data) per its existing FIX-J/Q/R comments. Splitting it would touch ~30 consumers for marginal gain.
+- [x] 5. Virtualize long scrolling lists (n/a) — long lists (/traces, /agents, /incidents) are server-paginated at 20–200 items via DataTable + api limit. No current list hits the 1000-row threshold that virtualization targets, and no virtualization library is installed (would be a new dep, ponytail: skip). Re-assess when a page shows >500 unbounded rows.
 - [ ] 2. Memoize expensive computed values
 - [ ] 3. Stabilize callbacks passed to children
 - [ ] 4. Split bloated global state
