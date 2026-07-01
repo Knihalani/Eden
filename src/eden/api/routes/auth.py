@@ -8,7 +8,7 @@ import secrets
 from pathlib import Path
 
 import pyotp
-from fastapi import APIRouter, Depends, File, HTTPException, Response, UploadFile, status
+from fastapi import APIRouter, Depends, File, HTTPException, Request, Response, UploadFile, status
 from pydantic import BaseModel, EmailStr, Field
 from qrcode import QRCode
 
@@ -30,6 +30,13 @@ from eden.api.utils.clerk_client import (
     extract_user_profile,
     get_user as clerk_get_user,
 )
+from eden.api.utils.rate_limit import (
+    RateLimitExceeded,
+    login_email_limiter,
+    login_limiter,
+    password_reset_limiter,
+    signup_limiter,
+)
 from eden.api.utils.validation import PasswordValidationError, validate_password_strength
 from eden.config import get_settings
 from eden.services.invitation_service import (
@@ -45,6 +52,29 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 
 COOKIE_NAME = "authorization"
 COOKIE_MAX_AGE = settings.jwt_exp_days * 24 * 60 * 60
+
+
+def _client_ip(request: Request) -> str:
+    """Extract the client IP, honouring X-Forwarded-For from trusted proxies."""
+    # Trust the leftmost XFF entry — set by our load balancer / CDN.
+    # Falls back to the socket address when no header is present.
+    fwd = request.headers.get("x-forwarded-for")
+    if fwd:
+        return fwd.split(",")[0].strip()
+    return request.client.host if request.client else "unknown"
+
+
+async def _check_rate_limit(limiter, key: str) -> None:
+    """Run the limiter and raise a 429 with Retry-After when exceeded."""
+    try:
+        await limiter.check(key)
+    except RateLimitExceeded as exc:
+        # Use 429 Too Many Requests; surface Retry-After per RFC 7231 §7.1.3.
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Too many attempts. Please try again later.",
+            headers={"Retry-After": str(int(exc.retry_after))},
+        ) from exc
 
 
 class SignupRequest(BaseModel):
@@ -116,8 +146,11 @@ class EnforceTwoFAResponse(BaseModel):
 
 
 @router.post("/signup", response_model=UserResponse)
-async def signup(request: SignupRequest, response: Response):
+async def signup(request: SignupRequest, response: Response, req: Request):
     """Create a new user account."""
+    # Throttle signups per IP to prevent mass account creation.
+    await _check_rate_limit(signup_limiter, _client_ip(req))
+
     # Enforce password strength policy before hitting the DB. The
     # Pydantic `min_length=8` only checks length; the strength
     # validator additionally rejects common passwords and requires
@@ -214,8 +247,15 @@ async def signup(request: SignupRequest, response: Response):
 
 
 @router.post("/login", response_model=UserResponse)
-async def login(request: LoginRequest, response: Response):
+async def login(request: LoginRequest, response: Response, req: Request):
     """Authenticate user and return JWT cookie."""
+    # Two-axis throttling: per-IP (broad brute force) and per-email
+    # (credential stuffing against one account). Per-email is checked
+    # only once we know the email — the per-IP check fires first so a
+    # flood of unknown emails still gets throttled.
+    await _check_rate_limit(login_limiter, _client_ip(req))
+    await _check_rate_limit(login_email_limiter, request.email.lower())
+
     client = await get_postgres_client()
 
     query = "SELECT id, email, password_hash, name FROM users WHERE email = $1"
@@ -1389,8 +1429,14 @@ class _ResetPasswordRequest(BaseModel):
 @router.post("/forgot-password", response_model=dict)
 async def forgot_password(
     request: _ForgotPasswordRequest,
+    req: Request,
 ):
     """Initiate a password reset.
+
+    Throttled per-IP and per-email so the endpoint cannot be used
+    to spam victims or rack up provider costs. The throttling
+    happens BEFORE the DB lookup so the timing cannot leak which
+    emails are registered.
 
     Always returns the same generic response so the endpoint
     cannot be used to enumerate registered email addresses. The
@@ -1403,6 +1449,11 @@ async def forgot_password(
     """
     import secrets
     from datetime import datetime, timedelta, timezone
+    # Throttle per-IP AND per-email. Per-email prevents one victim
+    # from being spammed; per-IP prevents enumerating many emails.
+    await _check_rate_limit(password_reset_limiter, _client_ip(req))
+    await _check_rate_limit(password_reset_limiter, f"email:{request.email.lower()}")
+
     try:
         client = await get_postgres_client()
         user = await client.fetchrow(
