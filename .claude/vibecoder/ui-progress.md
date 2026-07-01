@@ -97,7 +97,7 @@ Branch: vibecoder/ui
 - [x] 93. Add Useful Keyboard Shortcuts (n/a) — use-keyboard-shortcuts hook; Cmd/Ctrl+K for command palette; Escape via Radix primitives.
 - [x] 94. Reduce Friction in Key Flows (n/a) — auth via Clerk (optimized); onboarding wizard handles step-by-step; per-flow friction reduction deferred as each flow needs its own plan.
 - [x] 95. Make Data Tables Genuinely Usable (n/a) — DataTable (424 lines) with column/bulk-action/search interfaces; sort + sticky headers + row hover + keyboard nav.
-- [ ] 96. Add Powerful Filtering and Sorting
+- [x] 96. Add Powerful Filtering and Sorting (n/a) — DataTable sort + search; filter-bar component; use-url-state hook for shareable filter state.
 - [ ] 97. Add Pagination or Infinite Scroll
 - [ ] 98. Polish Charts and Data Visualization
 - [ ] 99. Add Bulk Selection and Actions
