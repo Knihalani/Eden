@@ -46,6 +46,7 @@ Branch: vibecoder/performance
 - [x] 42. Lazy-initialize heavy client libraries (n/a — recharts + reactflow + fflate already page-scoped or dynamic-imported; framer-motion is the polish across page UIs and lazy-loading each page would gate animations on mount)
 - [x] 43. Replace heavy libraries with lighter ones (n/a — react-syntax-highlighter swapped out (prompt 37). Remaining deps are purpose-built: recharts for charts, @xyflow for graph editor, framer-motion for animations, @tanstack/react-query for client cache, fflate for tarball, Clerk for auth, Radix for a11y primitives. No lighter alt without rewriting.)
 - [x] 44. Hash filenames for long-term caching (n/a — Next.js production build hashes all chunks: e.g. /_next/static/chunks/0-v58bhcmhomo.js. Vercel caching uses immutable directive for /_next/static automatically.)
+- [x] 45. Split vendor and app bundles (n/a — App Router splits framework/vendor/app chunks by default. The 4.5MB .next/static/chunks distribution shows framework separate from app; no custom splitChunks override needed.)
 - [ ] 2. Memoize expensive computed values
 - [ ] 3. Stabilize callbacks passed to children
 - [ ] 4. Split bloated global state
