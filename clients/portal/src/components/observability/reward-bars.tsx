@@ -12,7 +12,7 @@
  * fetches the scores + passes them in.
  */
 
-import * as _React from "react";
+import { memo } from "react";
 import { cn } from "@/lib/utils";
 
 export interface RewardBarItem {
@@ -54,7 +54,7 @@ export function RewardBars({ items, className, title }: RewardBarsProps) {
   );
 }
 
-function RewardBarRow({ item }: { item: RewardBarItem }) {
+const RewardBarRow = memo(function RewardBarRow({ item }: { item: RewardBarItem }) {
   const scale = item.scale ?? "fraction";
   let pct: number;
   let display: string;
@@ -94,7 +94,7 @@ function RewardBarRow({ item }: { item: RewardBarItem }) {
       )}
     </li>
   );
-}
+});
 
 function _colour_for(value: number, threshold: number | undefined, scale: string): string {
   const t = threshold ?? (scale === "percent" ? 90 : 0.9);

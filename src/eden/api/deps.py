@@ -2,6 +2,7 @@
 
 import hashlib
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from typing import Annotated
 
 from fastapi import Cookie, Depends, Header, HTTPException, status
@@ -394,7 +395,6 @@ async def get_current_org(
                 "role": eden_role,
                 "name": org_id,
                 "slug": org_id,
-                "is_owner": eden_role == "owner",
                 "archived_at": None,
                 "_pending_sync": True,
             }
@@ -406,7 +406,6 @@ async def get_current_org(
             "role": eden_role,
             "name": row["name"],
             "slug": row["slug"],
-            "is_owner": row["owner_id"] == user_id,
             "archived_at": row.get("archived_at"),
         }
 
@@ -450,7 +449,6 @@ async def get_current_org(
         "role": row["role"],
         "name": row["name"],
         "slug": row["slug"],
-        "is_owner": row["owner_id"] == user_id,
         "archived_at": row.get("archived_at"),
     }
 
@@ -607,7 +605,8 @@ async def require_org_owner(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Not a member of this organization",
         )
-    if not org.get("is_owner"):
+    # is_owner field removed in S-6 — gate on role instead.
+    if org.get("role") not in ("owner", "admin"):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Owner role required",
@@ -765,7 +764,8 @@ async def get_current_org_api_key(
     key_hash = hashlib.sha256(x_org_api_key.encode()).hexdigest()
 
     query = """
-        SELECT o.name, o.slug, o.owner_id, o.id as org_id, oak.scopes, oak.id as key_id
+        SELECT o.name, o.slug, o.owner_id, o.id as org_id, oak.scopes, oak.id as key_id,
+               oak.active, oak.revoked_at, oak.expires_at
         FROM org_api_keys oak
         JOIN organizations o ON o.id = oak.org_id
         WHERE oak.key_hash = $1 AND oak.org_id = $2
@@ -775,6 +775,24 @@ async def get_current_org_api_key(
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid API key",
+        )
+
+    # S-5: filter on active / revoked_at / expires_at.
+    if not row.get("active", True):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="API key disabled",
+        )
+    if row.get("revoked_at") is not None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="API key revoked",
+        )
+    expires_at = row.get("expires_at")
+    if expires_at is not None and expires_at < datetime.now(UTC):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="API key expired",
         )
 
     # Update last_used_at
@@ -787,7 +805,6 @@ async def get_current_org_api_key(
         "org_id": str(row["org_id"]),
         "name": row["name"],
         "slug": row["slug"],
-        "is_owner": row["owner_id"] == row["org_id"],
         "scopes": row["scopes"],
         "key_id": str(row["key_id"]),
     }

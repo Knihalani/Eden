@@ -328,7 +328,15 @@ class AIGateway:
         self.exact_cache = exact_cache
         self._providers: dict[Provider, Any] = {}
         self._circuit_breakers: dict[Provider, CircuitBreaker] = {}
-        self._metrics: list[dict[str, Any]] = []
+        # DL-12: bounded deque of recent metric events. The fixed
+        # maxlen prevents a long-lived pod from OOM'ing on a noisy
+        # tenant — the oldest entries fall off automatically. Exposed
+        # as both ``self.metrics`` (public) and ``self._metrics``
+        # (legacy/test alias) for backward compatibility with code
+        # that still references the underscored name.
+        from collections import deque as _deque
+        self.metrics: Any = _deque(maxlen=10_000)
+        self._metrics = self.metrics
         self._tenant_budgets: dict[str, dict[str, Any]] = {}
         self._health: dict[Provider, ProviderHealth] = {}
 
@@ -439,6 +447,20 @@ class AIGateway:
 
         # 8. Cache response
         await self._cache_response(request, response)
+
+        # 9. Record usage in the budget service (DL-15: per-tenant cost
+        # tracking). Best-effort — a budget service outage MUST NOT
+        # break the chat response. The test patches
+        # ``eden.services.budget_service.record_usage`` to verify the
+        # call signature. Skip the call when cost_usd is 0 (a cache
+        # hit) — there's no cost to record and no row to update.
+        if float(response.cost_usd or 0.0) > 0:
+            try:
+                from eden.services.budget_service import record_usage
+
+                await record_usage(request.tenant_id, response.cost_usd)
+            except Exception as exc:
+                logger.debug("ai_gateway: record_usage failed: %s", exc)
 
         return response
 
@@ -654,7 +676,7 @@ class AIGateway:
         response: ModelResponse,
         latency_ms: int,
     ) -> None:
-        self._metrics.append({
+        self.metrics.append({
             "tenant_id": request.tenant_id,
             "job_id": request.job_id,
             "provider": provider.value,
@@ -668,7 +690,7 @@ class AIGateway:
         })
 
     def get_metrics(self, tenant_id: str | None = None, limit: int = 1000) -> list[dict[str, Any]]:
-        metrics = self._metrics
+        metrics = self.metrics
         if tenant_id:
             metrics = [m for m in metrics if m["tenant_id"] == tenant_id]
         return metrics[-limit:]

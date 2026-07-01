@@ -57,6 +57,39 @@ def _get_httpx():
     return _httpx
 
 
+
+    """SSRF guard: only allow webhooks to public IPs (DL-13).
+
+    Re-resolves the URL's hostname at call time so a DNS rebind
+    to a private IP is caught. Raises ``ValueError`` for private
+    / loopback / link-local addresses.
+    """
+    from urllib.parse import urlparse
+    import ipaddress
+    import socket
+
+    parsed = urlparse(url)
+    hostname = parsed.hostname
+    if not hostname:
+        raise ValueError(f"webhook URL has no hostname: {url!r}")
+    # Resolve to all addresses; refuse if any are private.
+    infos = socket.getaddrinfo(hostname, None)
+    for info in infos:
+        ip_str = info[4][0]
+        ip = ipaddress.ip_address(ip_str)
+        if (
+            ip.is_private
+            or ip.is_loopback
+            or ip.is_link_local
+            or ip.is_multicast
+            or ip.is_reserved
+            or ip.is_unspecified
+        ):
+            raise ValueError(
+                f"webhook URL {url!r} resolves to non-public IP {ip_str}"
+            )
+
+
 class WebhookTestResult(BaseModel):
     """Result of a webhook test delivery."""
 
@@ -71,6 +104,65 @@ class WebhookDeliveryService:
 
     def __init__(self):
         self._lock = asyncio.Lock()
+        # DL-6: in-flight task tracking. Every concurrent delivery
+        # adds its asyncio.Task here so ``drain()`` can wait for the
+        # queue to settle at shutdown.
+        self._in_flight: set[asyncio.Task] = set()
+
+    async def schedule_delivery(
+        self,
+        event_id: str,
+        org_id: str,
+    ) -> None:
+        """Schedule a delivery task and track it in the in-flight set.
+
+        DL-5 uses ``loop.call_later`` (not ``asyncio.sleep``) for
+        the retry backoff. DL-6 adds the spawned task to
+        ``self._in_flight`` so ``drain()`` can wait on the set.
+        """
+        loop = asyncio.get_event_loop()
+        task = loop.create_task(self._deliver_event_task(event_id, org_id))
+        self._in_flight.add(task)
+        task.add_done_callback(self._in_flight.discard)
+
+    async def _deliver_event_task(
+        self, event_id: str, org_id: str
+    ) -> None:
+        """Wrapper that calls ``deliver_event`` with the in-flight
+        task semantics. The actual work lives in
+        :meth:`deliver_event`."""
+        try:
+            await self.deliver_event(event_id, org_id)
+        except Exception as exc:  # pragma: no cover - defensive
+            logger.warning(
+                "webhook_delivery: in-flight task crashed: %s", exc
+            )
+
+    async def drain(self, timeout: float = 30.0) -> int:
+        """DL-6: wait for all in-flight deliveries to complete.
+
+        Returns the count of tasks still in-flight when the
+        timeout fires (the caller logs a warning). Tasks that
+        finish within the budget are removed from the set as
+        they complete.
+        """
+        if not self._in_flight:
+            return 0
+        try:
+            await asyncio.wait_for(
+                asyncio.gather(
+                    *self._in_flight, return_exceptions=True
+                ),
+                timeout=timeout,
+            )
+            return 0
+        except asyncio.TimeoutError:
+            remaining = len(self._in_flight)
+            logger.warning(
+                "webhook_delivery: drain timed out with %d tasks "
+                "still in flight", remaining,
+            )
+            return remaining
 
     @staticmethod
     def _sign_payload(secret: str, payload: str) -> str:
@@ -86,7 +178,39 @@ class WebhookDeliveryService:
         ).hexdigest()
         return f"sha256={sig}"
 
-    @staticmethod
+
+def _assert_public_ip(url: str) -> None:
+    """SSRF guard: only allow webhooks to public IPs (DL-13).
+
+    Re-resolves the URL's hostname at call time so a DNS rebind
+    to a private IP is caught. Raises ``ValueError`` for private
+    / loopback / link-local addresses.
+    """
+    from urllib.parse import urlparse
+    import ipaddress
+    import socket
+
+    parsed = urlparse(url)
+    hostname = parsed.hostname
+    if not hostname:
+        raise ValueError(f"webhook URL has no hostname: {url!r}")
+    # Resolve to all addresses; refuse if any are private.
+    infos = socket.getaddrinfo(hostname, None)
+    for info in infos:
+        ip_str = info[4][0]
+        ip = ipaddress.ip_address(ip_str)
+        if (
+            ip.is_private
+            or ip.is_loopback
+            or ip.is_link_local
+            or ip.is_multicast
+            or ip.is_reserved
+            or ip.is_unspecified
+        ):
+            raise ValueError(
+                f"webhook URL {url!r} resolves to non-public IP {ip_str}"
+            )
+
     def sign_v1(
         secret: str,
         payload: str,
