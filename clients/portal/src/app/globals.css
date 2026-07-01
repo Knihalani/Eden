@@ -1066,6 +1066,23 @@ h1 {
   line-height: 1.2;
 }
 
+/* ui-audit prompt 22: fluid display headings. Marketing heroes +
+ * landing sections need headings that scale smoothly between
+ * mobile (≥36px readable) and desktop (up to 72px dramatic) without
+ * jumping at sm/md/lg breakpoints. Body text stays at the static
+ * --font-size-base so reading rhythm is preserved. */
+.h1-fluid {
+  font-size: clamp(2.25rem, 4.5vw + 0.5rem, 4.5rem);
+  line-height: 1.05;
+  letter-spacing: -0.04em;
+}
+
+.h2-fluid {
+  font-size: clamp(1.75rem, 3vw + 0.5rem, 3rem);
+  line-height: 1.1;
+  letter-spacing: -0.03em;
+}
+
 h2 {
   font-size: var(--font-size-3xl);
   letter-spacing: var(--letter-spacing-tight);
