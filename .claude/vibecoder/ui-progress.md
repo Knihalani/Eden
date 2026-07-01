@@ -84,7 +84,7 @@ Branch: vibecoder/ui
 - [x] 80. Confirm Destructive and Irreversible Actions (n/a) — useConfirm hook used in 3+ destructive flows (members, references, etc.).
 - [x] 81. Add Undo for Reversible Actions — added optional `action` prop (label + onClick) to toast.success/error/info; auto-dismiss extended to 6s for action toasts so users have time to click "Undo". Callers can pass `{ label: "Undo", onClick: () => revert() }` as the 3rd arg.
 - [x] 82. Handle Offline and Network Errors — added useOnline() hook listening to window online/offline events. SSR-safe defaults to true so server-rendered pages don't flash offline on hydration. Mount with an offline banner as a follow-up where needed.
-- [ ] 83. Show Progress for Long Operations
+- [x] 83. Show Progress for Long Operations (n/a) — onboarding-checklist 7-step progress; budget-ticker color-coded bar; no file uploads in current scope.
 - [ ] 84. Improve Perceived Performance Everywhere
 - [ ] 85. Add Contextual Help and Tooltips
 - [ ] 86. Standardize Status and State Indicators
