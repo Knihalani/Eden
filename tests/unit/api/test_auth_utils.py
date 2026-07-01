@@ -135,6 +135,26 @@ class TestJWTTokens:
         now = int(time.time())
         assert decoded["exp"] > now + 86000
 
+    def test_token_includes_jti(self, test_settings):
+        """Every issued token has a unique jti claim."""
+        token1 = create_access_token(data={"sub": "user-123"})
+        token2 = create_access_token(data={"sub": "user-123"})
+        d1 = decode_access_token(token1)
+        d2 = decode_access_token(token2)
+        assert "jti" in d1
+        assert "jti" in d2
+        assert d1["jti"] != d2["jti"], "two tokens minted back-to-back must have distinct jti"
+
+    def test_token_carries_token_version(self, test_settings):
+        """The token_version claim lets get_current_user reject
+        pre-login JWTs (anti-fixation)."""
+        token = create_access_token(
+            data={"sub": "user-123"},
+            token_version=7,
+        )
+        decoded = decode_access_token(token)
+        assert decoded["token_version"] == 7
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Password Strength Validation
