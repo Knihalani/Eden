@@ -15,6 +15,7 @@ Branch: vibecoder/performance
 - [x] 11. Break up long main-thread tasks (n/a) — no synchronous CPU loops over large datasets. Largest loops are bounded: LatencyHistogram nBuckets=30, JobGantt ticks per row, others inline-array filters on lists already paginated to ≤200. Re-assess with Performance Observer tooling if a real >50ms task is measured.
 - [x] 12. Memoize list items and stabilize keys (memo'd DecisionStep in decisions list; keys already stable on domain IDs — step_index, trace_id, span_id, etc. streaming-sparkline keys append `:${i}` redundantly but tokens are append-only so no harm.)
 - [x] 13. Defer rendering offscreen components (n/a) — `next/dynamic({ ssr: false })` already used for React Flow Canvas (builder), all settings tabs (analytics/autonomous/audit/billing/etc — recharts + crypto heavy), optimization subpages. Remaining eager chart imports are on pages where the chart IS the page (analytics/page.tsx, dashboard).
+- [x] 14. Add skeleton loading placeholders (n/a) — 74 loading.tsx files for 81 pages; missing 7 are marketing docs (DPA/privacy/security/terms/docs) + auth form pages (login/signup/reset-password) where skeletons add no value.
 - [ ] 2. Memoize expensive computed values
 - [ ] 3. Stabilize callbacks passed to children
 - [ ] 4. Split bloated global state
