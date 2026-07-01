@@ -142,33 +142,44 @@ class TestJWTTokens:
 
 class TestPasswordStrength:
     def test_too_short_password(self):
-        """Passwords under 10 chars are rejected."""
-        with pytest.raises(PasswordValidationError, match="at least 10 characters"):
-            validate_password_strength("Short1!")
+        """Passwords under 12 chars are rejected."""
+        with pytest.raises(PasswordValidationError, match="at least 12 characters"):
+            validate_password_strength("Short1!Aa")
+
+    def test_eleven_chars_rejected(self):
+        """Eleven characters is still under the new 12-char minimum."""
+        with pytest.raises(PasswordValidationError, match="at least 12 characters"):
+            validate_password_strength("Aa1!abcdefg")
 
     def test_missing_uppercase(self):
         """Passwords without uppercase are rejected."""
         with pytest.raises(PasswordValidationError, match="uppercase"):
-            validate_password_strength("lowercase123!")
+            validate_password_strength("lowercase123!aa")
 
     def test_missing_lowercase(self):
         """Passwords without lowercase are rejected."""
         with pytest.raises(PasswordValidationError, match="lowercase"):
-            validate_password_strength("UPPERCASE123!")
+            validate_password_strength("UPPERCASE123!A")
 
     def test_missing_digit(self):
         """Passwords without digits are rejected."""
         with pytest.raises(PasswordValidationError, match="digit"):
-            validate_password_strength("NoDigits!!")
+            validate_password_strength("NoDigits!!Aaa")
 
     def test_missing_special(self):
         """Passwords without special chars are rejected."""
         with pytest.raises(PasswordValidationError, match="special character"):
-            validate_password_strength("NoSpecial123")
+            validate_password_strength("NoSpecial123Aa")
 
     def test_common_password_rejected(self):
         """Known weak passwords are rejected."""
-        for weak in ("password", "password123", "12345678"):
+        for weak in ("password", "password123", "12345678", "qwerty123"):
+            with pytest.raises(PasswordValidationError, match="too common"):
+                validate_password_strength(weak)
+
+    def test_extra_common_password_rejected(self):
+        """Newly added common passwords from the expanded list."""
+        for weak in ("iloveyou", "111111", "superman", "654321"):
             with pytest.raises(PasswordValidationError, match="too common"):
                 validate_password_strength(weak)
 
