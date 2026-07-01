@@ -44,6 +44,7 @@ Branch: vibecoder/performance
 - [x] 40. Defer and async non-critical scripts (n/a — no inline `<script>` tags in the document; Next.js emits its bundled scripts with `defer` by default)
 - [x] 41. Minify JS, CSS, and HTML (n/a — Next.js uses SWC to minify all client + server JS, CSS via PostCSS, HTML during static prerender. 369K largest chunk is minified output. Source maps in .next are stripped from client output.)
 - [x] 42. Lazy-initialize heavy client libraries (n/a — recharts + reactflow + fflate already page-scoped or dynamic-imported; framer-motion is the polish across page UIs and lazy-loading each page would gate animations on mount)
+- [x] 43. Replace heavy libraries with lighter ones (n/a — react-syntax-highlighter swapped out (prompt 37). Remaining deps are purpose-built: recharts for charts, @xyflow for graph editor, framer-motion for animations, @tanstack/react-query for client cache, fflate for tarball, Clerk for auth, Radix for a11y primitives. No lighter alt without rewriting.)
 - [ ] 2. Memoize expensive computed values
 - [ ] 3. Stabilize callbacks passed to children
 - [ ] 4. Split bloated global state
