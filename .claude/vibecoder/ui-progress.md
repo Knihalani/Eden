@@ -80,7 +80,7 @@ Branch: vibecoder/ui
 - [x] 76. Clarify Form Submission Feedback (n/a) — button loading prop shows Loader2 + disabled; 94 buttons use the pattern (perf audit).
 - [x] 77. Build a Toast Notification System (n/a) — ToastProvider with success/error/warning/info variants; slide-in/out animations; ARIA live region for screen-reader announcements.
 - [x] 78. Handle Loading, Empty, Error, Success States (n/a) — loading.tsx (skeletons), empty-state.tsx, error-state.tsx, error-boundary.tsx; global-error.tsx + not-found.tsx for 500/404.
-- [ ] 79. Add Graceful Error Boundaries
+- [x] 79. Add Graceful Error Boundaries (n/a) — 3× route error.tsx (portal/marketing/auth) + global-error.tsx + reusable error-boundary.tsx.
 - [ ] 80. Confirm Destructive and Irreversible Actions
 - [ ] 81. Add Undo for Reversible Actions
 - [ ] 82. Handle Offline and Network Errors
