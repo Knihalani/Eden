@@ -14,7 +14,7 @@ Branch: vibecoder/ui
 - [x] 10. Run a Full Consistency Audit — audit findings: text-[10px]/[9px] used in 72 files (off-scale terminal micro-labels); uppercase used consistently for terminal/category labels (26× uppercase vs 3× capitalize, intentional). Action: added --font-size-2xs (10px) + --font-size-3xs (9px) tokens and wired to @theme inline; flagged migration of 72 call sites as opt-in per judgement-call rule (9px is intentionally small for terminal mocks).
 - [x] 11. Audit Mobile and Tablet Breakpoints (n/a) — mobile-first Tailwind (sm/md/lg/xl); responsive grid collapse pattern: 54× `sm:grid-cols-`, 34× `lg:grid-cols-`, 31× `md:grid-cols-` for grids collapsing to 1 col on mobile. Layout uses `flex h-screen` portal chrome with responsive paddings (67× `sm:p-`, 67× `lg:p-`).
 - [x] 12. Eliminate Horizontal Scroll on Mobile (n/a) — body `overflow-x: hidden` in globals.css; 28× `overflow-x-auto` for tables/code blocks self-manage their scroll; only `w-screen` is ChatSidebar's intentional `max-[480px]:!w-screen` full-width pattern.
-- [ ] 13. Build a Flexible Responsive Grid
+- [x] 13. Build a Flexible Responsive Grid (n/a) — Tailwind grid utilities with responsive breakpoints (54× sm, 34× lg, 31× md, 5× xl). Container max-width via `mx-auto max-w-7xl` (auth page) / `max-w-screen-xl` (dashboard).
 - [ ] 14. Enlarge Mobile Touch Targets
 - [ ] 15. Eliminate Cumulative Layout Shift
 - [ ] 16. Respect Mobile Safe Area Insets
