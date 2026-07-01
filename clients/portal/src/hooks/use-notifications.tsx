@@ -77,42 +77,64 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
   });
 
   const markAsRead = useCallback(async (notificationId: string) => {
+    // ponytail: optimistic update — flip is_read + decrement unread
+    // immediately so the bell badge updates with zero perceived
+    // latency. Roll back if the server rejects.
+    setNotifications((prev) =>
+      prev.map((n) =>
+        n.id === notificationId ? { ...n, is_read: true } : n
+      )
+    );
+    let wasUnread = false;
+    setUnreadCount((prev) => {
+      wasUnread = prev > 0;
+      return Math.max(0, prev - 1);
+    });
     try {
       await api.markNotificationRead(notificationId);
+    } catch (e) {
+      // Roll back on failure.
       setNotifications((prev) =>
         prev.map((n) =>
-          n.id === notificationId ? { ...n, is_read: true } : n
+          n.id === notificationId ? { ...n, is_read: false } : n
         )
       );
-      setUnreadCount((prev) => Math.max(0, prev - 1));
-    } catch (e) {
+      if (wasUnread) setUnreadCount((c) => c + 1);
       console.error("Failed to mark notification as read:", e);
     }
   }, []);
 
   const markAllAsRead = useCallback(async () => {
+    const prevNotifications = notifications;
+    const prevCount = unreadCount;
+    setNotifications((prev) =>
+      prev.map((n) => ({ ...n, is_read: true }))
+    );
+    setUnreadCount(0);
     try {
       await api.markAllNotificationsRead();
-      setNotifications((prev) =>
-        prev.map((n) => ({ ...n, is_read: true }))
-      );
-      setUnreadCount(0);
     } catch (e) {
+      setNotifications(prevNotifications);
+      setUnreadCount(prevCount);
       console.error("Failed to mark all notifications as read:", e);
     }
-  }, []);
+  }, [notifications, unreadCount]);
 
   const deleteNotification = useCallback(async (notificationId: string) => {
+    let snapshot: Notification[] = [];
+    let wasUnread = false;
+    setNotifications((prev) => {
+      snapshot = prev;
+      const deleted = prev.find((n) => n.id === notificationId);
+      if (deleted && !deleted.is_read) wasUnread = true;
+      return prev.filter((n) => n.id !== notificationId);
+    });
+    if (wasUnread) setUnreadCount((count) => Math.max(0, count - 1));
     try {
       await api.deleteNotification(notificationId);
-      setNotifications((prev) => {
-        const deleted = prev.find((n) => n.id === notificationId);
-        if (deleted && !deleted.is_read) {
-          setUnreadCount((count) => Math.max(0, count - 1));
-        }
-        return prev.filter((n) => n.id !== notificationId);
-      });
     } catch (e) {
+      setNotifications(snapshot);
+      if (wasUnread) setUnreadCount((c) => c + 1);
       console.error("Failed to delete notification:", e);
     }
   }, []);
