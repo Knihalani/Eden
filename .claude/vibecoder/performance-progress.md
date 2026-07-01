@@ -24,6 +24,8 @@ Branch: vibecoder/performance
 - [x] 20. Prioritize above-the-fold content first (n/a) — `next/font/google` self-hosts fonts at build time with display:swap + auto-preload (no extra fetches). Critical CSS is the Tailwind layer that ships inline with the SSR stream. No <script> tags inline in the document.
 - [x] 21. Add route-level loading states (n/a) — 74 loading.tsx files for 81 pages (91%). Missing 7 are marketing/docs/auth form pages where skeletons add no value.
 - [x] 22. Preconnect to critical third-party origins (n/a) — API_BASE points at same-origin /api/proxy; Clerk SDK auto-preconnects its own auth CDN; no other third-party origins ship on first load. Adding speculative preconnect would waste connection slots.
+- [x] 23. Reserve space to avoid load shift (TranscriptView.tsx ImagesPanel: added explicit width=128 height=128 + object-cover so the 128×128 slot is reserved before image bytes arrive)
+- [x] 24. Render a fast static shell first (n/a) — Marketing layout is a server component (static). Portal layout is "use client" (needs auth context) but already renders sidebar+topbar immediately and gates only auth-required regions. No user-data dependencies in the chrome.
 - [ ] 2. Memoize expensive computed values
 - [ ] 3. Stabilize callbacks passed to children
 - [ ] 4. Split bloated global state
