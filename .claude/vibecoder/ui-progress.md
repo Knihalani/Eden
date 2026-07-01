@@ -55,7 +55,7 @@ Branch: vibecoder/ui
 - [x] 51. Respect Reduced Motion Preferences (n/a) — @media (prefers-reduced-motion: reduce) in globals.css disables all animations + button:active scale + page-enter + stage-active.
 - [x] 52. Announce Dynamic Changes to Screen Readers (n/a) — 10+ files use aria-live, role="status" or role="alert" for dynamic announcements; ToastProvider wraps notifications.
 - [x] 53. Build Fully Accessible Modals (n/a) — @radix-ui/react-dialog handles focus trap, Escape close, aria-modal, aria-labelledby. Custom Dialog in components/ui/dialog.tsx.
-- [ ] 54. Don't Rely on Color Alone
+- [x] 54. Don't Rely on Color Alone (n/a) — StatusBadge pairs color with icons (CheckCircle2/XCircle/AlertTriangle/Clock/Circle). Status tokens are paired with semantic icons in every visual tier.
 - [ ] 55. Add a Skip-To-Content Link
 - [ ] 56. Fix Page Titles and Language
 - [ ] 57. Add Small Purposeful Micro-Interactions
