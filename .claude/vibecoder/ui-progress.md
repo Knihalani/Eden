@@ -56,7 +56,7 @@ Branch: vibecoder/ui
 - [x] 52. Announce Dynamic Changes to Screen Readers (n/a) — 10+ files use aria-live, role="status" or role="alert" for dynamic announcements; ToastProvider wraps notifications.
 - [x] 53. Build Fully Accessible Modals (n/a) — @radix-ui/react-dialog handles focus trap, Escape close, aria-modal, aria-labelledby. Custom Dialog in components/ui/dialog.tsx.
 - [x] 54. Don't Rely on Color Alone (n/a) — StatusBadge pairs color with icons (CheckCircle2/XCircle/AlertTriangle/Clock/Circle). Status tokens are paired with semantic icons in every visual tier.
-- [ ] 55. Add a Skip-To-Content Link
+- [x] 55. Add a Skip-To-Content Link (n/a) — rendered in (portal) layout line 354; .skip-to-content CSS class visually hidden until focused, then anchors to #main-content.
 - [ ] 56. Fix Page Titles and Language
 - [ ] 57. Add Small Purposeful Micro-Interactions
 - [ ] 58. Standardize Animation Timing and Easing
