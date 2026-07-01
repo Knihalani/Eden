@@ -45,6 +45,21 @@ import logging
 import os
 import shutil
 import time
+
+# ponytail: shared httpx.AsyncClient with HTTP/1.1 keep-alive. Each
+# `async with httpx.AsyncClient(...)` opens a fresh client (separate
+# connection pool) and discards keep-alive sockets at scope exit. A
+# module-level singleton keeps the underlying TCP connections warm
+# across calls — material win for repeated GitHub API hits.
+_HTTPX: "httpx.AsyncClient | None" = None
+
+
+def _shared_httpx() -> "httpx.AsyncClient":
+    global _HTTPX
+    if _HTTPX is None:
+        import httpx as _h
+        _HTTPX = _h.AsyncClient(timeout=30.0)
+    return _HTTPX
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any, Protocol, cast
