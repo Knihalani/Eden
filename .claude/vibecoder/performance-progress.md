@@ -68,6 +68,7 @@ Branch: vibecoder/performance
 - [x] 64. Invalidate caches on writes (n/a — explicit invalidation hooks in place: pii_policy route → invalidate_policy(tenant_id), user writes → invalidate_user_cache(clerk_id), graph writes → invalidate_entity(entity_id), optimization/cache has Invalidate(). React Query mutations invalidate via setQueryData.)
 - [x] 65. Add an in-memory cache layer (n/a — Redis (storage/redis.py) wired for rate limiting + idempotency; @lru_cache for module singletons; REDIS_URL fallback to in-memory token buckets. Selective but in place.)
 - [x] 66. Cache rendered pages or fragments (n/a — marketing pages are server-rendered + Vercel CDN + Next.js ISR-style prerender. Portal pages are auth-gated + dynamic, server-streamed live data, so caching the HTML shell would just delay the user's first paint.)
+- [x] 67. Warm caches for hot paths (n/a — lifespan() in app.py:229 already calls initialize_kb() and probes Qdrant at startup. @lru_cache singletons + Redis idempotency warm on first hit. Adding speculative startup warming for arbitrary endpoints risks cold-start overshoot.)
 - [ ] 2. Memoize expensive computed values
 - [ ] 3. Stabilize callbacks passed to children
 - [ ] 4. Split bloated global state
