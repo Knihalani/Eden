@@ -65,6 +65,7 @@ Branch: vibecoder/performance
 - [x] 61. Set correct Cache-Control headers (n/a — selective Cache-Control already applied per route concern: media (private, max-age=86400), trace_quality (private, max-age=300 + ETag), ai_agent + gateway + replay (no-cache for streaming), everything else implicit no-store via per-user responses.)
 - [x] 62. Cache expensive computed results (n/a — @lru_cache(maxsize=1) on get_dict() (zstd dict), @lru_cache on get_settings/get_openrouter_client (singletons), @lru_cache(maxsize=256) on archive helper. Selective memoization already covers hot pure paths.)
 - [x] 63. Choose sensible cache TTLs (n/a — TTLs documented per concern: Clerk user cache 5min (clerk_client.py:46), idempotency 24h (idempotency.py:33), rate-limit windows 60s (tenant_rate_limit.py), React Query 60s stale / 5min gc (query-provider.tsx), @lru_cache unbounded for modules, maxsize-bounded for repeated args.)
+- [x] 64. Invalidate caches on writes (n/a — explicit invalidation hooks in place: pii_policy route → invalidate_policy(tenant_id), user writes → invalidate_user_cache(clerk_id), graph writes → invalidate_entity(entity_id), optimization/cache has Invalidate(). React Query mutations invalidate via setQueryData.)
 - [ ] 2. Memoize expensive computed values
 - [ ] 3. Stabilize callbacks passed to children
 - [ ] 4. Split bloated global state
