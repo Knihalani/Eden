@@ -3,7 +3,6 @@
 import { useState } from "react";
 import { useOrg } from "@/hooks/use-org";
 import { replayApi } from "@/lib/api";
-import { cn } from "@/lib/utils";
 import { EmptyState } from "@/components/ui/empty-state";
 import { NoOrgState } from "@/components/ui/no-org-state";
 import { PageHeader } from "@/components/layout/page-header";
@@ -19,9 +18,7 @@ import {
   ArrowRight,
   Info,
   Sparkles,
-  Play,
-  Send,
-} from "lucide-react";
+  Play } from "lucide-react";
 
 interface Decision {
   step_index: number;
@@ -90,8 +87,7 @@ export default function DecisionsPage() {
     try {
       const data = await replayApi.reasoningExplain(currentOrg.id, {
         trace_id: explTraceId.trim(),
-        step_index: idx,
-      });
+        step_index: idx });
       setExplData(data);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to explain step");
@@ -210,7 +206,7 @@ export default function DecisionsPage() {
             Reasoning explainer
           </h2>
           <p className="text-xs text-[var(--text-muted)]">
-            Deep-dive into a specific step's reasoning and the evidence that supported it.
+            Deep-dive into a specific step&apos;s reasoning and the evidence that supported it.
           </p>
           <div className="grid sm:grid-cols-3 gap-2">
             <div className="sm:col-span-2">

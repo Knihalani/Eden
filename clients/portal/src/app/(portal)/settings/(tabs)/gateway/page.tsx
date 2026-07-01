@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { Loader2 } from "lucide-react";
 
 /**
  * A2 — /settings/gateway
@@ -29,7 +30,12 @@ export default function GatewaySettingsRedirect() {
   }, [router, searchParams]);
 
   return (
-    <div className="p-8 text-sm text-[var(--text-muted)]">
+    <div
+      className="flex items-center justify-center gap-2 p-12 text-sm text-[var(--text-muted)]"
+      role="status"
+      aria-live="polite"
+    >
+      <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
       Redirecting to AI Gateway settings…
     </div>
   );

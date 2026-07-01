@@ -1,0 +1,8 @@
+{
+  "trace_id": "trace_large_50_03",
+  "archetype_id": "large-trace-50-events",
+  "agent_id": "agent_large-trace-50-events_17",
+  "expected_TAS": 80,
+  "expected_intervention": "allow",
+  "notes": "50-event stress test trace with ~40 tool calls, 10 LLM calls, 3 env.step events. Used for throughput and F1 stability measurement."
+}

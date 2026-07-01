@@ -1,0 +1,16 @@
+{
+  "trace_id": "trace_clean_quality_baseline_01",
+  "archetype_id": "clean-quality-baseline",
+  "agent_id": "agent_clean-quality-baseline_01",
+  "expected_TAS": 93,
+  "expected_intervention": "allow",
+  "expected_metrics": {
+    "LHP": 0.02,
+    "numeric_match": 1.0
+  },
+  "expected_detector_fires": [],
+  "expected_loop_detected": false,
+  "expected_hallucination_detected": false,
+  "expected_redundancy_pct": 0.0,
+  "notes": "Negative control for Phase 5: every fact in the LLM response matches the source. DistilBERT-MNLI contradiction \u2248 0, MiniCheck supported \u2248 0.99."
+}

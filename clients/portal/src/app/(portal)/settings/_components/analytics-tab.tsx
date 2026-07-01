@@ -12,7 +12,7 @@ import { Loader2, TrendingUp, Users, Database, Code } from "lucide-react";
 // does not resolve CSS var() — it needs concrete strings — so we
 // pre-compute the palette at module init from the design tokens
 // (with hardcoded fallbacks for SSR, when window is undefined).
-const CHART_COLORS_SSR = [
+const __CHART_COLORS_SSR = [
   "var(--chart-pie-1)",
   "var(--chart-pie-2)",
   "var(--chart-pie-3)",

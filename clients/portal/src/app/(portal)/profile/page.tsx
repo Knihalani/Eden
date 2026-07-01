@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { api } from "@/lib/api";
 import { Button } from "@/components/ui/button";
-import { Loader2, User, Mail, Lock, Shield, ShieldCheck, ShieldAlert, Trash2, Camera, Check, X } from "lucide-react";
+import { Loader2, User, Mail, Lock, Shield, ShieldCheck, ShieldAlert, Trash2, Camera, Check } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { PageHeader } from "@/components/layout/page-header";
 import { useToast } from "@/components/ui/toast";
@@ -53,6 +53,7 @@ export default function ProfilePage() {
 
   useEffect(() => {
     load2FAStatus();
+     
   }, []);
 
   const load2FAStatus = async () => {
@@ -61,7 +62,7 @@ export default function ProfilePage() {
       const status = await api.get2FAStatus();
       setTwoFactorEnabled(status.two_factor_enabled);
     } catch (e) {
-      console.error("Failed to load 2FA status", e);
+      toast.error("Could not load 2FA status", e instanceof Error ? e.message : undefined);
     } finally {
       setLoading2FA(false);
     }
@@ -76,8 +77,8 @@ export default function ProfilePage() {
       setSaveSuccess(true);
       await refreshUser();
       setTimeout(() => setSaveSuccess(false), 2000);
-    } catch (e: any) {
-      toast.error(e.message || "Failed to save profile");
+    } catch (e) {
+      toast.error("Failed to save profile", e instanceof Error ? e.message : undefined);
     } finally {
       setSaving(false);
     }
@@ -106,8 +107,8 @@ export default function ProfilePage() {
       setNewPassword("");
       setConfirmPassword("");
       setTimeout(() => setPasswordSuccess(""), 3000);
-    } catch (e: any) {
-      setPasswordError(e.message || "Failed to change password");
+    } catch (e) {
+      setPasswordError(e instanceof Error ? e.message : "Failed to change password");
     } finally {
       setChangingPassword(false);
     }
@@ -134,8 +135,8 @@ export default function ProfilePage() {
       // wait for the refreshUser() round-trip to settle.
       if (result?.avatar_url) setAvatarUrl(result.avatar_url);
       await refreshUser();
-    } catch (e: any) {
-      toast.error(e.message || "Failed to upload avatar");
+    } catch (e) {
+      toast.error("Failed to upload avatar", e instanceof Error ? e.message : undefined);
     } finally {
       setUploadingAvatar(false);
     }
@@ -162,8 +163,8 @@ export default function ProfilePage() {
     try {
       await api.deleteAccount("DELETE");
       window.location.href = "/";
-    } catch (e: any) {
-      toast.error(e.message || "Failed to delete account");
+    } catch (e) {
+      toast.error("Failed to delete account", e instanceof Error ? e.message : undefined);
       setDeleting(false);
     }
   };
@@ -173,8 +174,9 @@ export default function ProfilePage() {
   return (
     <div className="p-4 sm:p-6 lg:p-8 max-w-2xl mx-auto space-y-6 page-enter">
       <PageHeader
+        eyebrow="Account"
         title="Profile"
-        subtitle="Manage your account settings"
+        subtitle="Manage your account settings, security, and authentication."
         icon={User}
       />
 
@@ -198,15 +200,16 @@ export default function ProfilePage() {
               )}
             </div>
             <button
+              type="button"
               onClick={() => fileInputRef.current?.click()}
               disabled={uploadingAvatar}
-              aria-label="Upload avatar"
+              aria-label={uploadingAvatar ? "Uploading avatar" : "Upload avatar"}
               className="absolute bottom-0 right-0 w-8 h-8 bg-[var(--bg-primary)] border border-[var(--border)] rounded-full flex items-center justify-center hover:bg-[var(--bg-muted)] transition-colors"
             >
               {uploadingAvatar ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
+                <Loader2 className="w-4 h-4 animate-spin" aria-hidden />
               ) : (
-                <Camera className="w-4 h-4" />
+                <Camera className="w-4 h-4" aria-hidden />
               )}
             </button>
             <input
@@ -215,6 +218,7 @@ export default function ProfilePage() {
               accept="image/*"
               onChange={handleAvatarUpload}
               className="hidden"
+              aria-label="Upload profile photo"
             />
           </div>
           <div>
@@ -226,10 +230,13 @@ export default function ProfilePage() {
         {/* Name Input */}
         <div className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1">Name</label>
+            <label htmlFor="profile-name" className="block text-sm font-medium text-[var(--text-secondary)] mb-1">
+              Name
+            </label>
             <div className="relative">
-              <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-muted)]" />
+              <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-muted)]" aria-hidden />
               <input
+                id="profile-name"
                 type="text"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
@@ -240,10 +247,13 @@ export default function ProfilePage() {
 
           {/* Email Input */}
           <div>
-            <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1">Email</label>
+            <label htmlFor="profile-email" className="block text-sm font-medium text-[var(--text-secondary)] mb-1">
+              Email
+            </label>
             <div className="relative">
-              <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-muted)]" />
+              <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-muted)]" aria-hidden />
               <input
+                id="profile-email"
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
@@ -254,20 +264,21 @@ export default function ProfilePage() {
 
           {/* User ID (read-only) */}
           <div>
-            <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1">User ID</label>
-            <p className="text-sm text-[var(--text-primary)] font-mono bg-[var(--bg-muted)] px-3 py-2 rounded-lg inline-block">
+            <p className="block text-sm font-medium text-[var(--text-secondary)] mb-1">User ID</p>
+            <p
+              aria-label={`User ID ${user.user_id}`}
+              className="text-sm text-[var(--text-primary)] font-mono bg-[var(--bg-muted)] px-3 py-2 rounded-lg inline-block"
+            >
               {user.user_id}
             </p>
           </div>
 
           {/* Save Button */}
           <div className="pt-2">
-            <Button onClick={handleSaveProfile} disabled={saving || !name.trim()}>
-              {saving ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
-              ) : saveSuccess ? (
+            <Button onClick={handleSaveProfile} disabled={saving || !name.trim()} loading={saving}>
+              {saveSuccess ? (
                 <>
-                  <Check className="w-4 h-4" />
+                  <Check className="w-4 h-4" aria-hidden />
                   Saved
                 </>
               ) : (
@@ -282,7 +293,7 @@ export default function ProfilePage() {
       <div className="bg-[var(--bg-primary)] rounded-lg border border-[var(--border)] p-6 mb-6">
         <div className="flex items-center gap-3 mb-4">
           <div className="p-2 bg-[var(--accent-faint)] rounded-lg">
-            <Lock className="w-5 h-5 text-[var(--accent)]" />
+            <Lock className="w-5 h-5 text-[var(--accent)]" aria-hidden />
           </div>
           <div>
             <h2 className="text-lg font-semibold text-[var(--text-primary)]">Change Password</h2>
@@ -292,8 +303,11 @@ export default function ProfilePage() {
 
         <form onSubmit={handleChangePassword} className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1">Current Password</label>
+            <label htmlFor="profile-current-password" className="block text-sm font-medium text-[var(--text-secondary)] mb-1">
+              Current Password
+            </label>
             <input
+              id="profile-current-password"
               type="password"
               value={currentPassword}
               onChange={(e) => setCurrentPassword(e.target.value)}
@@ -303,8 +317,11 @@ export default function ProfilePage() {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1">New Password</label>
+            <label htmlFor="profile-new-password" className="block text-sm font-medium text-[var(--text-secondary)] mb-1">
+              New Password
+            </label>
             <input
+              id="profile-new-password"
               type="password"
               value={newPassword}
               onChange={(e) => setNewPassword(e.target.value)}
@@ -314,8 +331,11 @@ export default function ProfilePage() {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1">Confirm New Password</label>
+            <label htmlFor="profile-confirm-password" className="block text-sm font-medium text-[var(--text-secondary)] mb-1">
+              Confirm New Password
+            </label>
             <input
+              id="profile-confirm-password"
               type="password"
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
@@ -325,22 +345,22 @@ export default function ProfilePage() {
           </div>
 
           {passwordError && (
-            <p className="text-sm text-[var(--error)]">{passwordError}</p>
+            <p role="alert" className="text-sm text-[var(--error)]">{passwordError}</p>
           )}
 
           {passwordSuccess && (
             <p className="text-sm text-[var(--terminal)] flex items-center gap-1">
-              <Check className="w-4 h-4" />
+              <Check className="w-4 h-4" aria-hidden />
               {passwordSuccess}
             </p>
           )}
 
-          <Button type="submit" disabled={changingPassword || !currentPassword || !newPassword || !confirmPassword}>
-            {changingPassword ? (
-              <Loader2 className="w-4 h-4 animate-spin" />
-            ) : (
-              "Change Password"
-            )}
+          <Button
+            type="submit"
+            disabled={changingPassword || !currentPassword || !newPassword || !confirmPassword}
+            loading={changingPassword}
+          >
+            Change Password
           </Button>
         </form>
       </div>
@@ -349,7 +369,7 @@ export default function ProfilePage() {
       <div className="bg-[var(--bg-primary)] rounded-lg border border-[var(--border)] p-6 mb-6">
         <div className="flex items-center gap-3 mb-4">
           <div className={cn("p-2 rounded-lg", twoFactorEnabled ? "bg-[var(--terminal-faint)]" : "bg-[var(--warning-bg)]")}>
-            <Shield className={cn("w-5 h-5", twoFactorEnabled ? "text-[var(--terminal)]" : "text-[var(--warning)]")} />
+            <Shield className={cn("w-5 h-5", twoFactorEnabled ? "text-[var(--terminal)]" : "text-[var(--warning)]")} aria-hidden />
           </div>
           <div>
             <h2 className="text-lg font-semibold text-[var(--text-primary)]">Two-Factor Authentication</h2>
@@ -358,9 +378,9 @@ export default function ProfilePage() {
         </div>
 
         {loading2FA ? (
-          <div className="flex items-center gap-2">
-            <Loader2 className="w-4 h-4 animate-spin" />
-            <span className="text-sm text-[var(--text-muted)]">Loading...</span>
+          <div className="flex items-center gap-2" aria-live="polite">
+            <Loader2 className="w-4 h-4 animate-spin" aria-hidden />
+            <span className="text-sm text-[var(--text-muted)]">Loading…</span>
           </div>
         ) : (
           <div className="flex items-center justify-between">
@@ -368,7 +388,7 @@ export default function ProfilePage() {
               {twoFactorEnabled ? (
                 <>
                   <span className="px-3 py-1 bg-[var(--terminal-faint)] text-[var(--terminal)] text-sm font-medium rounded-full flex items-center gap-1">
-                    <ShieldCheck className="w-4 h-4" />
+                    <ShieldCheck className="w-4 h-4" aria-hidden />
                     Enabled
                   </span>
                   <p className="text-sm text-[var(--text-secondary)]">Your account is protected with 2FA</p>
@@ -376,7 +396,7 @@ export default function ProfilePage() {
               ) : (
                 <>
                   <span className="px-3 py-1 bg-[var(--warning-bg)] text-[var(--warning)] text-sm font-medium rounded-full flex items-center gap-1">
-                    <ShieldAlert className="w-4 h-4" />
+                    <ShieldAlert className="w-4 h-4" aria-hidden />
                     Not Enabled
                   </span>
                   <p className="text-sm text-[var(--text-secondary)]">Add an extra layer of security to your account</p>
@@ -385,11 +405,20 @@ export default function ProfilePage() {
             </div>
 
             {twoFactorEnabled ? (
-              <Button variant="destructive" size="sm" onClick={() => setShowDisableDialog(true)}>
+              <Button
+                variant="destructive"
+                size="sm"
+                onClick={() => setShowDisableDialog(true)}
+                aria-label="Disable two-factor authentication"
+              >
                 Disable 2FA
               </Button>
             ) : (
-              <Button size="sm" onClick={() => setShowSetupDialog(true)}>
+              <Button
+                size="sm"
+                onClick={() => setShowSetupDialog(true)}
+                aria-label="Set up two-factor authentication"
+              >
                 Set Up 2FA
               </Button>
             )}
@@ -401,7 +430,7 @@ export default function ProfilePage() {
       <div className="bg-[var(--bg-primary)] rounded-lg border border-[var(--error)] p-6">
         <div className="flex items-center gap-3 mb-4">
           <div className="p-2 bg-[var(--error-dim)] rounded-lg">
-            <Trash2 className="w-5 h-5 text-[var(--error)]" />
+            <Trash2 className="w-5 h-5 text-[var(--error)]" aria-hidden />
           </div>
           <div>
             <h2 className="text-lg font-semibold text-[var(--error)]">Danger Zone</h2>
@@ -419,21 +448,29 @@ export default function ProfilePage() {
             size="sm"
             onClick={() => setShowDeleteConfirm(true)}
             disabled={deleting}
+            aria-label="Delete account"
           >
-            {deleting ? <Loader2 className="w-4 h-4 animate-spin" /> : "Delete Account"}
+            Delete Account
           </Button>
         </div>
       </div>
 
       {/* Delete Confirmation Modal */}
       {showDeleteConfirm && (
-        <div className="fixed inset-0 bg-[var(--bg-base)]/50 flex items-center justify-center z-50">
-          <div className="bg-[var(--bg-primary)] rounded-xl p-6 w-full max-w-md mx-4">
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="delete-account-title"
+          className="fixed inset-0 bg-[var(--overlay)] flex items-center justify-center z-50 p-4"
+        >
+          <div className="bg-[var(--bg-primary)] rounded-xl p-6 w-full max-w-md border border-[var(--border-default)]">
             <div className="flex items-center gap-3 mb-4">
               <div className="p-2 bg-[var(--error-dim)] rounded-lg">
-                <Trash2 className="w-5 h-5 text-[var(--error)]" />
+                <Trash2 className="w-5 h-5 text-[var(--error)]" aria-hidden />
               </div>
-              <h2 className="text-lg font-semibold text-[var(--text-primary)]">Delete Account</h2>
+              <h2 id="delete-account-title" className="text-lg font-semibold text-[var(--text-primary)]">
+                Delete Account
+              </h2>
             </div>
 
             <p className="text-sm text-[var(--text-secondary)] mb-4">
@@ -447,11 +484,11 @@ export default function ProfilePage() {
             </ul>
 
             <div className="flex gap-3 justify-end">
-              <Button variant="outline" onClick={() => setShowDeleteConfirm(false)}>
+              <Button variant="outline" onClick={() => setShowDeleteConfirm(false)} disabled={deleting}>
                 Cancel
               </Button>
-              <Button variant="destructive" onClick={handleDeleteAccount} disabled={deleting}>
-                {deleting ? <Loader2 className="w-4 h-4 animate-spin" /> : "Delete Forever"}
+              <Button variant="destructive" onClick={handleDeleteAccount} disabled={deleting} loading={deleting}>
+                Delete Forever
               </Button>
             </div>
           </div>
@@ -503,44 +540,60 @@ function Disable2FADialog({
     try {
       await api.disable2FA(code);
       onSuccess();
-    } catch (e: any) {
-      setError(e.message || "Failed to disable 2FA");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to disable 2FA");
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="fixed inset-0 bg-[var(--bg-base)]/50 flex items-center justify-center z-50">
-      <div className="bg-[var(--bg-primary)] rounded-xl p-6 w-full max-w-md mx-4">
-        <h2 className="text-lg font-semibold mb-4">Disable 2FA</h2>
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="disable-2fa-title"
+      className="fixed inset-0 bg-[var(--overlay)] flex items-center justify-center z-50 p-4"
+    >
+      <div className="bg-[var(--bg-primary)] rounded-xl p-6 w-full max-w-md border border-[var(--border-default)]">
+        <h2 id="disable-2fa-title" className="text-lg font-semibold mb-4 text-[var(--text-primary)]">
+          Disable 2FA
+        </h2>
         <p className="text-sm text-[var(--text-secondary)] mb-4">
           Enter the 6-digit code from your authenticator app to disable 2FA.
         </p>
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
+            <label htmlFor="disable-2fa-code" className="sr-only">
+              6-digit authenticator code
+            </label>
             <input
+              id="disable-2fa-code"
               type="text"
+              inputMode="numeric"
+              pattern="[0-9]*"
               value={code}
               onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
               placeholder="000000"
               maxLength={6}
-              className="w-full px-3 py-2 text-center text-2xl tracking-widest border border-[var(--border)] rounded-lg"
+              aria-describedby={error ? "disable-2fa-error" : undefined}
+              className="w-full px-3 py-2 text-center text-2xl tracking-widest border border-[var(--border)] rounded-lg bg-[var(--bg-primary)] text-[var(--text-primary)]"
               autoFocus
             />
           </div>
 
           {error && (
-            <p className="text-sm text-[var(--error)]">{error}</p>
+            <p id="disable-2fa-error" role="alert" className="text-sm text-[var(--error)]">
+              {error}
+            </p>
           )}
 
           <div className="flex gap-3 justify-end">
-            <Button type="button" variant="outline" onClick={onClose}>
+            <Button type="button" variant="outline" onClick={onClose} disabled={loading}>
               Cancel
             </Button>
-            <Button type="submit" variant="destructive" disabled={loading || code.length !== 6}>
-              {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : "Disable 2FA"}
+            <Button type="submit" variant="destructive" disabled={loading || code.length !== 6} loading={loading}>
+              Disable 2FA
             </Button>
           </div>
         </form>

@@ -23,10 +23,26 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
-import { ArrowLeft, Bot, Clock, Code, ExternalLink, Package, PlayCircle, FileCode, Cpu, Upload as UploadIcon, Beaker, Loader2 } from "lucide-react";
+import {
+  ArrowLeft,
+  Bot,
+  Clock,
+  Code,
+  ExternalLink,
+  Package,
+  PlayCircle,
+  FileCode,
+  Cpu,
+  Upload as UploadIcon,
+  Beaker,
+  Loader2,
+} from "lucide-react";
 import { useOrg } from "@/hooks/use-org";
 import { agentsApi, type AgentUpload } from "@/lib/api";
 import { Card } from "@/components/ui/card";
+import { EmptyState } from "@/components/ui/empty-state";
+import { ErrorState } from "@/components/ui/error-state";
+import { PageHeader } from "@/components/layout/page-header";
 import { AgentUploadPanel } from "./upload-panel";
 
 function formatRelative(iso?: string | null): string {
@@ -83,38 +99,41 @@ export default function AgentDetailPage() {
   const [simRuns, setSimRuns] = useState<RunsEnvelope>({ runs: [], total: 0 });
   const [testRuns, setTestRuns] = useState<RunsEnvelope>({ runs: [], total: 0 });
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+
+  const load = useMemo(
+    () => async () => {
+      if (!orgId || !agentId) return;
+      setLoading(true);
+      setLoadError(null);
+      try {
+        const [agentsResp, ups, sims, tests] = await Promise.all([
+          agentsApi.list(orgId, { limit: 200 }),
+          agentsApi.listUploads(orgId, agentId, { limit: 20 }),
+          agentsApi.listSimRuns(orgId, agentId, { limit: 5 }),
+          agentsApi.listTestRuns(orgId, agentId, { limit: 5 }),
+        ]);
+        const list = (agentsResp?.agents ?? []) as AgentRecord[];
+        setAgent(list.find((a) => a.agent_id === agentId) ?? null);
+        // ``listUploads`` already returns ``AgentUpload[]`` from the
+        // shared api client — no shape narrowing required. Defensive
+        // nullish fallback in case the catch above swallowed a 4xx.
+        setUploads(ups ?? []);
+        setSimRuns(sims);
+        setTestRuns(tests);
+      } catch (e) {
+        setLoadError(e instanceof Error ? e.message : "Failed to load agent");
+      } finally {
+        setLoading(false);
+      }
+    },
+    [orgId, agentId],
+  );
 
   useEffect(() => {
-    if (!orgId || !agentId) return;
-    let cancelled = false;
-    setLoading(true);
-    Promise.all([
-      agentsApi
-        .list(orgId, { limit: 200 })
-        .catch(() => ({ agents: [] as AgentRecord[] })),
-      agentsApi.listUploads(orgId, agentId, { limit: 20 }).catch(() => [] as AgentUpload[]),
-      agentsApi
-        .listSimRuns(orgId, agentId, { limit: 5 })
-        .catch(() => ({ runs: [], total: 0 }) as RunsEnvelope),
-      agentsApi
-        .listTestRuns(orgId, agentId, { limit: 5 })
-        .catch(() => ({ runs: [], total: 0 }) as RunsEnvelope),
-    ]).then(([agentsResp, ups, sims, tests]) => {
-      if (cancelled) return;
-      const list = (agentsResp?.agents ?? []) as AgentRecord[];
-      setAgent(list.find((a) => a.agent_id === agentId) ?? null);
-      // ``listUploads`` already returns ``AgentUpload[]`` from the
-      // shared api client — no shape narrowing required. Defensive
-      // nullish fallback in case the catch above swallowed a 4xx.
-      setUploads(ups ?? []);
-      setSimRuns(sims);
-      setTestRuns(tests);
-      setLoading(false);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [orgId, agentId]);
+     
+    void load();
+  }, [load]);
 
   const isLive = agent?.last_seen_at
     ? Date.now() - new Date(agent.last_seen_at).getTime() < 1000 * 60 * 60 * 24
@@ -146,6 +165,57 @@ export default function AgentDetailPage() {
     );
   }
 
+  if (loadError) {
+    return (
+      <div className="p-4 sm:p-6 lg:p-8 max-w-3xl mx-auto space-y-4">
+        <Link
+          href="/agents"
+          className="inline-flex items-center gap-1 text-xs text-[var(--text-muted)] hover:text-[var(--accent)] transition-colors"
+        >
+          <ArrowLeft className="w-3 h-3" />
+          All agents
+        </Link>
+        <ErrorState
+          title="Could not load agent"
+          message={loadError}
+          action={
+            <button
+              type="button"
+              onClick={() => void load()}
+              disabled={loading}
+              className="inline-flex items-center gap-2 px-4 py-2 bg-[var(--accent)] text-[var(--bg-base)] rounded-lg text-sm font-medium hover:bg-[var(--accent-hover)] disabled:opacity-50 transition-colors"
+            >
+              {loading ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : null}
+              Try again
+            </button>
+          }
+        />
+      </div>
+    );
+  }
+
+  if (!agent) {
+    return (
+      <div className="p-4 sm:p-6 lg:p-8 max-w-3xl mx-auto space-y-4">
+        <Link
+          href="/agents"
+          className="inline-flex items-center gap-1 text-xs text-[var(--text-muted)] hover:text-[var(--accent)] transition-colors"
+        >
+          <ArrowLeft className="w-3 h-3" />
+          All agents
+        </Link>
+        <EmptyState
+          icon={Bot}
+          title="Agent not found"
+          description={`No agent with id ${agentId} exists in this organisation yet. It will appear once the agent first reports telemetry or you upload code.`}
+          size="lg"
+        />
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6 p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto page-enter">
       {/* Breadcrumb */}
@@ -157,58 +227,53 @@ export default function AgentDetailPage() {
         All agents
       </Link>
 
-      {/* Header card */}
-      <Card className="p-6">
-        <div className="flex items-start gap-4">
-          <div
-            className={
-              isLive
-                ? "p-3 rounded-xl bg-[var(--terminal-faint)] text-[var(--terminal)] flex-shrink-0"
-                : "p-3 rounded-xl bg-[var(--bg-tertiary)] text-[var(--text-muted)] flex-shrink-0"
-            }
-          >
-            <Bot className="w-7 h-7" />
-          </div>
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2 flex-wrap">
-              <h1 className="text-2xl font-bold text-[var(--text-primary)] tracking-tight">
-                {agent?.name ?? agentId}
-              </h1>
-              {agent?.framework && (
-                <span
-                  className={`text-[10px] font-medium uppercase tracking-wide px-2 py-0.5 rounded ${
-                    FRAMEWORK_BADGE[agent.framework] ?? FRAMEWORK_BADGE.none
-                  }`}
+      <PageHeader
+        eyebrow="Agent"
+        title={agent?.name ?? agentId}
+        icon={Bot}
+        subtitle={
+          <>
+            <span className="font-mono">{agentId}</span>
+            {agent?.repo_url && repoHost ? (
+              <>
+                {" · "}
+                <a
+                  href={agent.repo_url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center gap-1 text-[var(--accent)] hover:text-[var(--accent-hover)] transition-colors"
                 >
-                  {agent.framework}
-                </span>
-              )}
-              {isLive && (
-                <span className="inline-flex items-center gap-1 text-[10px] font-medium uppercase tracking-wide px-2 py-0.5 rounded bg-[var(--terminal-faint)] text-[var(--terminal)]">
-                  <span className="w-1.5 h-1.5 rounded-full bg-[var(--terminal)] animate-pulse" />
-                  live
-                </span>
-              )}
-            </div>
-            <p className="text-xs font-mono text-[var(--text-muted)] mt-1 break-all">
-              {agentId}
-            </p>
-            {agent?.repo_url && (
-              <a
-                href={agent.repo_url}
-                target="_blank"
-                rel="noreferrer"
-                className="mt-2 inline-flex items-center gap-1.5 text-sm text-[var(--accent)] hover:text-[var(--accent-hover)] transition-colors"
+                  {repoHost}
+                  <ExternalLink className="w-3 h-3" />
+                </a>
+              </>
+            ) : null}
+          </>
+        }
+        actions={
+          <div className="flex items-center gap-2">
+            {agent?.framework && (
+              <span
+                className={`text-[10px] font-medium uppercase tracking-wide px-2 py-1 rounded ${
+                  FRAMEWORK_BADGE[agent.framework] ?? FRAMEWORK_BADGE.none
+                }`}
               >
-                {repoHost}
-                <ExternalLink className="w-3 h-3" />
-              </a>
+                {agent.framework}
+              </span>
+            )}
+            {isLive && (
+              <span className="inline-flex items-center gap-1 text-[10px] font-medium uppercase tracking-wide px-2 py-1 rounded bg-[var(--terminal-faint)] text-[var(--terminal)]">
+                <span className="w-1.5 h-1.5 rounded-full bg-[var(--terminal)] animate-pulse" />
+                live
+              </span>
             )}
           </div>
-        </div>
+        }
+      />
 
-        {/* Quick stats */}
-        <div className="mt-6 grid grid-cols-2 sm:grid-cols-4 gap-3">
+      {/* Quick stats */}
+      <Card className="p-6">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           <Stat
             icon={UploadIcon}
             label="Uploads"
@@ -301,14 +366,13 @@ export default function AgentDetailPage() {
           )}
         </header>
         {uploads.length === 0 ? (
-          <Card className="p-8">
-            <p className="text-sm text-[var(--text-muted)] text-center">
-              No uploads yet. Use{" "}
-              <code className="rounded bg-[var(--bg-tertiary)] px-1.5 py-0.5 text-xs font-mono text-[var(--text-secondary)]">
-                eden agent push &lt;dir&gt;
-              </code>{" "}
-              from the CLI, or upload a tarball above.
-            </p>
+          <Card className="p-6">
+            <EmptyState
+              icon={Package}
+              title="No uploads yet"
+              description="Run eden agent push <dir> from the CLI, or upload a tarball above."
+              size="md"
+            />
           </Card>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -352,11 +416,6 @@ export default function AgentDetailPage() {
           </div>
         )}
       </section>
-      {loading && (
-        <p className="text-xs text-[var(--text-muted)] text-center pt-4">
-          Loading agent data…
-        </p>
-      )}
     </div>
   );
 }

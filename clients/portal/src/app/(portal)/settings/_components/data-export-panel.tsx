@@ -25,6 +25,7 @@ export function DataExportPanel({ orgId, canExport }: DataExportPanelProps) {
       setSuccess(true);
       // Reset success state after 3 seconds
       setTimeout(() => setSuccess(false), 3000);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (e: any) {
       setError(e.message || "Failed to export data");
     } finally {

@@ -6,8 +6,7 @@ import {
   useEffect,
   useState,
   useCallback,
-  type ReactNode,
-} from "react";
+  type ReactNode } from "react";
 import { useUser } from "@clerk/nextjs";
 import { api } from "@/lib/api";
 import type { User, Organization } from "@/lib/types";
@@ -63,15 +62,14 @@ function buildEdenUser(
     email,
     name,
     organizations,
-    current_org_id: currentOrgId,
-  };
+    current_org_id: currentOrgId };
 }
 
-export function AuthProvider({ children }: { children: React.ReactNode }) {
+export function AuthProvider({ children }: { children: ReactNode }) {
   const { user: clerkUser, isLoaded: clerkLoaded } = useUser();
   const [organizations, setOrganizations] = useState<Organization[]>([]);
   const [currentOrgId, setCurrentOrgId] = useState<string | null>(null);
-  const [profileLoading, setProfileLoading] = useState(false);
+  const [_profileLoading, setProfileLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   // Fetch the Eden-side profile (orgs + current org) once Clerk is ready
@@ -138,7 +136,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // function is recreated every render and depending on it would
     // trigger a refetch on every Clerk state change. The org-hook
     // (use-org) owns the refresh-on-clerk-org-change path.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [clerkUser?.id]);
 
   const user: User | null = clerkUser
@@ -159,8 +157,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         loading: !clerkLoaded,
         error,
         refreshUser,
-        refreshUserWithRetry,
-      }}
+        refreshUserWithRetry }}
     >
       {children}
     </AuthContext.Provider>

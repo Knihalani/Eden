@@ -121,7 +121,7 @@ export default function SidebarSettingsPage() {
             Pinned items <span className="text-[var(--text-muted)] font-normal">({pinnedItems.length})</span>
           </h2>
           <p className="text-xs text-[var(--text-muted)]">
-            Pinned items appear in a "📌 Pinned" section above the groups.
+            Pinned items appear in a &ldquo;📌 Pinned&rdquo; section above the groups.
           </p>
           {pinnedItems.length === 0 ? (
             <p className="text-sm text-[var(--text-muted)] py-2">

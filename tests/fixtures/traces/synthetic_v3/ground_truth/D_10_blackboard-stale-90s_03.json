@@ -1,0 +1,18 @@
+{
+  "trace_id": "trace_blackboard_stale_03",
+  "archetype_id": "blackboard-stale",
+  "agent_id": "agent_blackboard-stale_03",
+  "expected_TAS": 45,
+  "expected_intervention": "warn",
+  "expected_metrics": {
+    "read_after_write_delay_s": 90,
+    "threshold_s": 60
+  },
+  "expected_detector_fires": [
+    "blackboard_stale"
+  ],
+  "expected_loop_detected": false,
+  "expected_hallucination_detected": false,
+  "expected_redundancy_pct": 0.0,
+  "notes": "Read of shared key 90 seconds after write \u2192 blackboard staleness. Phase 10 BlackboardUtilizationAnalyzer MUST fire on delay > 60s."
+}

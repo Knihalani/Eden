@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
-import { CodeHighlightBlock } from "@/components/chat/code-highlighter";
+
 import { ArrowLeftRight, Plus, Minus } from "lucide-react";
 
 interface DiffLine {
@@ -29,8 +29,7 @@ function diffLines(oldCode: string, newCode: string): DiffLine[] {
       result.push({
         type: "removed",
         content: oldLines[oldIdx],
-        oldLineNum: oldLineNum,
-      });
+        oldLineNum: oldLineNum });
       oldIdx++;
       oldLineNum++;
     }
@@ -40,8 +39,7 @@ function diffLines(oldCode: string, newCode: string): DiffLine[] {
       result.push({
         type: "added",
         content: newLines[newIdx],
-        newLineNum: newLineNum,
-      });
+        newLineNum: newLineNum });
       newIdx++;
       newLineNum++;
     }
@@ -51,8 +49,7 @@ function diffLines(oldCode: string, newCode: string): DiffLine[] {
       type: "unchanged",
       content: common.line,
       oldLineNum: oldLineNum,
-      newLineNum: newLineNum,
-    });
+      newLineNum: newLineNum });
     oldIdx++;
     newIdx++;
     oldLineNum++;
@@ -64,8 +61,7 @@ function diffLines(oldCode: string, newCode: string): DiffLine[] {
     result.push({
       type: "removed",
       content: oldLines[oldIdx],
-      oldLineNum: oldLineNum,
-    });
+      oldLineNum: oldLineNum });
     oldIdx++;
     oldLineNum++;
   }
@@ -75,8 +71,7 @@ function diffLines(oldCode: string, newCode: string): DiffLine[] {
     result.push({
       type: "added",
       content: newLines[newIdx],
-      newLineNum: newLineNum,
-    });
+      newLineNum: newLineNum });
     newIdx++;
     newLineNum++;
   }

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
+
 import { ChevronDown, ChevronUp, GitBranch, Clock } from "lucide-react";
 import { cn } from "@/lib/utils";
 

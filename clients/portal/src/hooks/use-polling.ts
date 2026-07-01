@@ -163,6 +163,6 @@ export function usePolling({
       stop();
       document.removeEventListener("visibilitychange", onVisibility);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, deps);
 }

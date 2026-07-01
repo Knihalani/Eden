@@ -1,0 +1,18 @@
+{
+  "trace_id": "trace_calibration_failure_02",
+  "archetype_id": "calibration-failure",
+  "agent_id": "agent_calibration-failure_02",
+  "expected_TAS": 37,
+  "expected_intervention": "block",
+  "expected_metrics": {
+    "mean_logprob": -0.005,
+    "tool_error": true
+  },
+  "expected_detector_fires": [
+    "calibration_audit"
+  ],
+  "expected_loop_detected": false,
+  "expected_hallucination_detected": false,
+  "expected_redundancy_pct": 0.0,
+  "notes": "LLM has very high logprob (-0.005); the next tool.call has outcome=failure. detect_calibration_failure counts this as a high-confidence + contradiction case."
+}

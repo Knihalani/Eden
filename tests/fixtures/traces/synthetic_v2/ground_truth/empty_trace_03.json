@@ -1,0 +1,8 @@
+{
+  "trace_id": "trace_empty_03",
+  "archetype_id": "empty-trace",
+  "agent_id": "agent_empty-trace_14",
+  "expected_TAS": 100,
+  "expected_intervention": "allow",
+  "notes": "Empty trace (only span.start + span.end markers). All quality metrics should handle this gracefully."
+}

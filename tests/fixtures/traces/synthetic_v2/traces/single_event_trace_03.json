@@ -1,0 +1,156 @@
+{
+  "trace_id": "trace_single_event_03",
+  "archetype_id": "single-event-trace",
+  "agent_id": "agent_single-event-trace_15",
+  "event_count": 3,
+  "events": [
+    {
+      "event_id": "evt_tsingle_event_03_0000",
+      "tenant_id": "org_eden_synth",
+      "project_id": "proj_synthetic_eval_v2",
+      "trace_id": "trace_single_event_03",
+      "realm": "production",
+      "agent_id": "agent_single-event-trace_15",
+      "agent_version": "synth-v2.0.0",
+      "environment_id": "env_prod_main",
+      "tags": [],
+      "source_format": "eden_native",
+      "images": [],
+      "audio": [],
+      "citations": [],
+      "stop_sequence": null,
+      "system_fingerprint": "fp_synth-v2.0.0",
+      "event_type": "span.start",
+      "timestamp": "2026-06-29T12:00:00+00:00",
+      "parent_span_id": null,
+      "span_id": "spn_trace_single_event_03_0000",
+      "name": "trace",
+      "duration_ms": 0.0,
+      "payload": {},
+      "metrics": {},
+      "attributes": {
+        "environment": "production"
+      },
+      "outcome": null,
+      "request_body": null,
+      "response_body": null,
+      "reasoning": null,
+      "tool_calls_full": [],
+      "tool_results": [],
+      "logprobs": null,
+      "finish_reason": null,
+      "cache_hit": false,
+      "prompt_cache_savings_usd": 0.0,
+      "model_version": null,
+      "service_tier": null
+    },
+    {
+      "event_id": "evt_tsingle_event_03_0001",
+      "tenant_id": "org_eden_synth",
+      "project_id": "proj_synthetic_eval_v2",
+      "trace_id": "trace_single_event_03",
+      "realm": "production",
+      "agent_id": "agent_single-event-trace_15",
+      "agent_version": "synth-v2.0.0",
+      "environment_id": "env_prod_main",
+      "tags": [],
+      "source_format": "eden_native",
+      "images": [],
+      "audio": [],
+      "citations": [],
+      "stop_sequence": null,
+      "system_fingerprint": "fp_synth-v2.0.0",
+      "event_type": "tool.call",
+      "timestamp": "2026-06-29T12:00:00.120000+00:00",
+      "parent_span_id": "spn_trace_single_event_03_0000",
+      "span_id": "spn_trace_single_event_03_0001",
+      "name": "weather.lookup",
+      "duration_ms": 120.0,
+      "payload": {},
+      "metrics": {
+        "latency_ms": 120.0,
+        "cost_usd": 0.0
+      },
+      "attributes": {
+        "environment": "production"
+      },
+      "outcome": "success",
+      "request_body": {
+        "tool": "weather.lookup",
+        "arguments": {
+          "city": "Tokyo"
+        }
+      },
+      "response_body": {
+        "result": {
+          "temp_c": 22,
+          "condition": "sunny"
+        }
+      },
+      "reasoning": null,
+      "tool_calls_full": [
+        {
+          "tool_call_id": "call_weather.lookup_19979",
+          "type": "function",
+          "function": {
+            "name": "weather.lookup",
+            "arguments": "{\"city\": \"Tokyo\"}"
+          }
+        }
+      ],
+      "tool_results": [
+        {
+          "tool_call_id": "call_weather.lookup_19979",
+          "role": "tool",
+          "content": "{\"temp_c\": 22, \"condition\": \"sunny\"}"
+        }
+      ],
+      "logprobs": null,
+      "finish_reason": null,
+      "cache_hit": false,
+      "prompt_cache_savings_usd": 0.0,
+      "model_version": null,
+      "service_tier": null
+    },
+    {
+      "event_id": "evt_tsingle_event_03_0002",
+      "tenant_id": "org_eden_synth",
+      "project_id": "proj_synthetic_eval_v2",
+      "trace_id": "trace_single_event_03",
+      "realm": "production",
+      "agent_id": "agent_single-event-trace_15",
+      "agent_version": "synth-v2.0.0",
+      "environment_id": "env_prod_main",
+      "tags": [],
+      "source_format": "eden_native",
+      "images": [],
+      "audio": [],
+      "citations": [],
+      "stop_sequence": null,
+      "system_fingerprint": "fp_synth-v2.0.0",
+      "event_type": "span.end",
+      "timestamp": "2026-06-29T12:00:00.120000+00:00",
+      "parent_span_id": null,
+      "span_id": "spn_trace_single_event_03_0000",
+      "name": "trace",
+      "duration_ms": 120.0,
+      "payload": {},
+      "metrics": {},
+      "attributes": {
+        "environment": "production"
+      },
+      "outcome": "success",
+      "request_body": null,
+      "response_body": null,
+      "reasoning": null,
+      "tool_calls_full": [],
+      "tool_results": [],
+      "logprobs": null,
+      "finish_reason": null,
+      "cache_hit": false,
+      "prompt_cache_savings_usd": 0.0,
+      "model_version": null,
+      "service_tier": null
+    }
+  ]
+}

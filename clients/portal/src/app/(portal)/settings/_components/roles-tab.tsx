@@ -28,8 +28,7 @@ import {
   Check,
   Info,
   ChevronDown,
-  ChevronRight,
-} from "lucide-react";
+  ChevronRight } from "lucide-react";
 
 // Built-in permission keys. The full set lives in
 // `src/eden/api/deps.py:PERMISSION_MAP`. We mirror a subset here
@@ -38,28 +37,22 @@ import {
 const PERMISSION_PRESETS: { category: string; permissions: string[] }[] = [
   {
     category: "Members",
-    permissions: ["members:invite", "members:remove"],
-  },
+    permissions: ["members:invite", "members:remove"] },
   {
     category: "Jobs",
-    permissions: ["jobs:read", "jobs:write"],
-  },
+    permissions: ["jobs:read", "jobs:write"] },
   {
     category: "Settings",
-    permissions: ["settings:edit"],
-  },
+    permissions: ["settings:edit"] },
   {
     category: "Billing",
-    permissions: ["billing:view", "billing:edit"],
-  },
+    permissions: ["billing:view", "billing:edit"] },
   {
     category: "Audit",
-    permissions: ["audit:view"],
-  },
+    permissions: ["audit:view"] },
   {
     category: "Org",
-    permissions: ["org:transfer"],
-  },
+    permissions: ["org:transfer"] },
 ];
 
 const BASE_ROLES = ["owner", "admin", "member", "viewer"] as const;
@@ -86,7 +79,7 @@ interface Assignment {
 
 export default function RolesTab() {
   const { currentOrg } = useOrg();
-  const { confirm, ConfirmDialog } = useConfirm();
+  const { confirm } = useConfirm();
   const [roles, setRoles] = useState<Role[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -101,7 +94,7 @@ export default function RolesTab() {
     try {
       const data = await api.get<Role[]>(`/orgs/${currentOrg.id}/roles`);
       setRoles(data);
-    } catch (e) {
+    } catch (_e) {
       setError(
         "Could not load roles. The RBAC migration (020) may not be applied yet, or your org does not have admin permissions.",
       );
@@ -153,8 +146,7 @@ export default function RolesTab() {
       title: `Delete role "${role.name}"?`,
       description: "This cannot be undone. Members with this role will lose these permissions.",
       confirmLabel: "Delete role",
-      variant: "destructive",
-    });
+      variant: "destructive" });
     if (!ok) return;
     try {
       await api.delete(`/orgs/${currentOrg.id}/roles/${role.id}`);
@@ -170,8 +162,7 @@ export default function RolesTab() {
     if (!currentOrg || !userId.trim()) return;
     try {
       await api.post(`/orgs/${currentOrg.id}/roles/${role.id}/assignments`, {
-        user_id: userId.trim(),
-      });
+        user_id: userId.trim() });
       loadAssignments(role.id);
     } catch (e) {
       setError(
@@ -235,7 +226,7 @@ export default function RolesTab() {
             No custom roles yet
           </h3>
           <p className="text-xs text-[var(--text-muted)] max-w-sm mx-auto">
-            Click "New role" to define one. Custom roles are scoped to this org
+            Click &ldquo;New role&rdquo; to define one. Custom roles are scoped to this org
             and inherit from a built-in base role.
           </p>
         </div>
@@ -270,8 +261,7 @@ function RoleRow({
   onToggle,
   assignments,
   onDelete,
-  onAssign,
-}: {
+  onAssign }: {
   role: Role;
   expanded: boolean;
   onToggle: () => void;
@@ -406,8 +396,7 @@ function RoleRow({
 
 function CreateRoleForm({
   onCancel,
-  onSubmit,
-}: {
+  onSubmit }: {
   onCancel: () => void;
   onSubmit: (form: {
     name: string;
@@ -533,8 +522,7 @@ function CreateRoleForm({
               name: name.trim(),
               base_role: baseRole,
               description: description.trim(),
-              permissions: Array.from(selected),
-            })
+              permissions: Array.from(selected) })
           }
           disabled={!name.trim()}
           className="px-4 py-2 bg-[var(--accent)] text-[var(--bg-base)] rounded-lg text-sm font-medium hover:bg-[var(--accent-hover)] disabled:opacity-50"

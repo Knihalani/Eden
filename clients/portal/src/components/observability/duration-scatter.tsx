@@ -14,7 +14,7 @@
  * fetches the data + passes it in.
  */
 
-import * as React from "react";
+import * as _React from "react";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
 
@@ -46,8 +46,7 @@ export function DurationScatter({
   x_label = "Duration (ms)",
   y_label = "Score",
   good_zone_y_min,
-  good_zone_y_max,
-}: DurationScatterProps) {
+  good_zone_y_max }: DurationScatterProps) {
   const [hovered, setHovered] = useState<ScatterPoint | null>(null);
   const padding = { top: 20, right: 20, bottom: 32, left: 40 };
   const plot_w = width - padding.left - padding.right;
@@ -64,7 +63,7 @@ export function DurationScatter({
   }
   // Auto-scale axes.
   const xs = points.map((p) => p.x);
-  const ys = points.map((p) => p.y);
+  const __ys = points.map((p) => p.y);
   const x_min = Math.min(0, ...xs);
   const x_max = Math.max(1, ...xs);
   const y_min = 0;

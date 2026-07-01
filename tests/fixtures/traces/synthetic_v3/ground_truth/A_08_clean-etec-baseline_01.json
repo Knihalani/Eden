@@ -1,0 +1,20 @@
+{
+  "trace_id": "trace_clean_etec_01",
+  "archetype_id": "clean-etec-baseline",
+  "agent_id": "agent_clean-etec-baseline_01",
+  "expected_TAS": 93,
+  "expected_intervention": "allow",
+  "expected_metrics": {
+    "SRR": 0.0,
+    "LDI": 0.0,
+    "RDA": 0.92,
+    "VHP": 0.4,
+    "ISR": 1.0,
+    "LHP": 0.0
+  },
+  "expected_detector_fires": [],
+  "expected_loop_detected": false,
+  "expected_hallucination_detected": false,
+  "expected_redundancy_pct": 0.0,
+  "notes": "Negative control: 3-step trace with grounded citation \u2192 TAS \u2265 92. All metrics clean, no detectors fire, intervention=allow."
+}

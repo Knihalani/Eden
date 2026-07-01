@@ -1,0 +1,10 @@
+{
+  "trace_id": "trace_multi_agent_handoff_01",
+  "archetype_id": "efficient-multi-agent-handoff",
+  "expected_TAS": 89,
+  "expected_intervention": "allow",
+  "expected_loop_detected": false,
+  "expected_hallucination_detected": false,
+  "expected_redundancy_pct": 0.0,
+  "notes": "3 agent handoffs (intake -> billing -> documents -> mail), all context preserved. Outcome=success. No intervention needed."
+}

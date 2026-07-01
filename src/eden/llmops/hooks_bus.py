@@ -31,6 +31,11 @@ from typing import Any, Literal
 logger = logging.getLogger(__name__)
 
 
+# Maximum cascade depth — a chain deeper than this is rejected
+# so a runaway automation can't loop forever (DL-11).
+_MAX_CASCADE_DEPTH = 5
+
+
 Severity = Literal["low", "medium", "high", "critical"]
 
 
@@ -73,6 +78,42 @@ class HookBus:
         self._events: dict[str, HookEvent] = {}
         # Suppression: higher severity pre-empts lower within 1h
         self._suppressions: dict[tuple[str, str], tuple[Severity, float]] = {}
+        # Cascade depth tracking per hook (DL-11): root events are
+        # depth 1, each child increments by 1. Enforced at emit() time.
+        self._cascade_depth: dict[str, int] = {}
+
+    def sweep(self) -> int:
+        """DL-11: evict expired dedup + suppression entries.
+
+        Returns the number of entries removed. Called periodically by
+        a worker (or on every Nth emit) so a noisy org can't OOM the
+        process by minting millions of distinct events per day.
+        """
+        now = time.time()
+        evicted = 0
+        # Dedup: expires_at is the second tuple element
+        expired_keys = [
+            k for k, (_id, exp) in self._dedup.items() if exp <= now
+        ]
+        for k in expired_keys:
+            del self._dedup[k]
+            evicted += 1
+        # Suppressions: 1-hour window
+        expired_sups = [
+            k for k, (_sev, exp) in self._suppressions.items() if exp <= now
+        ]
+        for k in expired_sups:
+            del self._suppressions[k]
+            evicted += 1
+        # Dead events (no live dedup, no live suppression referencing them)
+        live_hook_ids = {hid for hid, _ in self._dedup.values()}
+        dead_events = [
+            k for k in self._events if k not in live_hook_ids
+        ]
+        for k in dead_events:
+            del self._events[k]
+            evicted += 1
+        return evicted
 
     async def emit(self, event: HookEvent) -> str | None:
         """Returns hook_id, or None if dedup'd.
@@ -83,10 +124,24 @@ class HookBus:
         now = time.time()
         primary_entity_id = _extract_primary_entity(event)
 
-        # Cascade dedup: if parent_hook_id set, inherit parent's window
+        # DL-11: cascade depth cap. Walk the parent chain and reject
+        # any event that would push the depth past _MAX_CASCADE_DEPTH.
+        depth = 1
         cascade_parent = event.parent_hook_id
-        if cascade_parent and cascade_parent in self._events:
-            parent = self._events[cascade_parent]
+        while cascade_parent and cascade_parent in self._events:
+            parent_depth = self._cascade_depth.get(cascade_parent, 1)
+            depth = max(depth, parent_depth + 1)
+            cascade_parent = self._events[cascade_parent].parent_hook_id
+        if depth > _MAX_CASCADE_DEPTH:
+            logger.info(
+                "hook_bus: rejected event (cascade depth %d > %d)",
+                depth, _MAX_CASCADE_DEPTH,
+            )
+            return None
+
+        # Cascade dedup: if parent_hook_id set, inherit parent's window
+        if event.parent_hook_id and event.parent_hook_id in self._events:
+            parent = self._events[event.parent_hook_id]
             event.dedup_window_seconds = max(
                 event.dedup_window_seconds, parent.dedup_window_seconds
             )
@@ -129,6 +184,7 @@ class HookBus:
         hook_id = str(uuid.uuid4())
         self._events[hook_id] = event
         self._dedup[key] = (hook_id, now + event.dedup_window_seconds)
+        self._cascade_depth[hook_id] = depth
 
         # Persist + publish
         await self.fan_out(hook_id, event)

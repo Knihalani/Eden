@@ -7,7 +7,9 @@ import { useOrg } from "@/hooks/use-org";
 import { agentsApi, type SimRun } from "@/lib/api";
 import { Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
+import { ErrorState } from "@/components/ui/error-state";
 import { NoOrgState } from "@/components/ui/no-org-state";
+import { PageHeader } from "@/components/layout/page-header";
 import { useToast } from "@/components/ui/toast";
 import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
 import {
@@ -82,7 +84,7 @@ export default function SimRunsPage() {
   }, [currentOrg, agentId]);
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
+     
     if (currentOrg) load();
   }, [currentOrg, load]);
 
@@ -187,7 +189,6 @@ export default function SimRunsPage() {
 
   return (
     <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-6 page-enter">
-      {/* Header */}
       <div>
         <Link
           href={`/agents/${encodeURIComponent(agentId)}`}
@@ -196,29 +197,36 @@ export default function SimRunsPage() {
           <ArrowLeft className="w-3 h-3" />
           Back to agent
         </Link>
-        <div className="mt-3 flex flex-col sm:flex-row sm:items-end justify-between gap-3">
-          <div>
-            <h1 className="text-2xl sm:text-3xl font-bold text-[var(--text-primary)] tracking-tight flex items-center gap-2">
-              <Beaker className="w-7 h-7 text-[var(--accent)]" />
-              Sim runs
-            </h1>
-            <p className="text-sm text-[var(--text-muted)] mt-1">
-              <span className="font-mono">{agentId}</span> · {runs.length} run
-              {runs.length === 1 ? "" : "s"}
-            </p>
-          </div>
+      </div>
+
+      <PageHeader
+        eyebrow="Agent"
+        title="Sim runs"
+        icon={Beaker}
+        subtitle={
+          <>
+            <span className="font-mono">{agentId}</span>
+            {" · "}
+            {runs.length} run{runs.length === 1 ? "" : "s"}
+          </>
+        }
+        actions={
           <div className="flex items-center gap-2">
             <button
-              onClick={load}
+              type="button"
+              onClick={() => void load()}
               disabled={loading}
+              aria-label="Refresh sim runs"
               className="inline-flex items-center gap-1.5 px-3 py-2 bg-[var(--bg-tertiary)] text-[var(--text-primary)] rounded-lg text-sm font-medium hover:bg-[var(--border-default)] disabled:opacity-50 transition-colors"
             >
               <RefreshCw className={cn("w-4 h-4", loading && "animate-spin")} />
               Refresh
             </button>
             <button
+              type="button"
               onClick={handleTrigger}
               disabled={triggering}
+              aria-label="Trigger a new sim run"
               className="inline-flex items-center gap-2 px-4 py-2 bg-[var(--accent)] text-[var(--bg-base)] rounded-lg text-sm font-medium hover:bg-[var(--accent-hover)] disabled:opacity-50 transition-colors"
             >
               {triggering ? (
@@ -229,13 +237,26 @@ export default function SimRunsPage() {
               Trigger sim run
             </button>
           </div>
-        </div>
-      </div>
+        }
+      />
 
       {error && (
-        <div className="p-3 rounded-lg border border-[var(--error)]/20 bg-[var(--error-bg)] text-sm text-[var(--error)]">
-          {error}
-        </div>
+        <ErrorState
+          title="Could not load sim runs"
+          message={error}
+          size="sm"
+          action={
+            <button
+              type="button"
+              onClick={() => void load()}
+              disabled={loading}
+              className="inline-flex items-center gap-2 px-3 py-1.5 bg-[var(--accent)] text-[var(--bg-base)] rounded-lg text-xs font-medium hover:bg-[var(--accent-hover)] disabled:opacity-50 transition-colors"
+            >
+              {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
+              Try again
+            </button>
+          }
+        />
       )}
 
       {/* Filters */}
@@ -244,9 +265,11 @@ export default function SimRunsPage() {
           <div className="relative flex-1 min-w-0">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-muted)]" />
             <input
+              type="search"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search by run id…"
+              aria-label="Search sim runs by run id"
               className="w-full pl-9 pr-3 py-2 bg-[var(--bg-secondary)] border border-[var(--border-default)] rounded-lg text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--accent)]/40"
             />
           </div>
@@ -255,6 +278,7 @@ export default function SimRunsPage() {
             <select
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}
+              aria-label="Filter sim runs by status"
               className="pl-8 pr-8 py-2 bg-[var(--bg-secondary)] border border-[var(--border-default)] rounded-lg text-sm text-[var(--text-primary)] appearance-none cursor-pointer focus:outline-none focus:ring-2 focus:ring-[var(--accent)]/40"
             >
               <option value="">All statuses</option>
@@ -285,8 +309,10 @@ export default function SimRunsPage() {
             size="lg"
             action={
               <button
+                type="button"
                 onClick={handleTrigger}
                 disabled={triggering}
+                aria-label="Trigger a new sim run"
                 className="inline-flex items-center gap-2 px-4 py-2 bg-[var(--accent)] text-[var(--bg-base)] rounded-lg text-sm font-medium hover:bg-[var(--accent-hover)] disabled:opacity-50 transition-colors"
               >
                 {triggering ? (

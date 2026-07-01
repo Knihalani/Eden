@@ -2,11 +2,15 @@
 
 import { useState, useEffect } from "react";
 import { useOrg } from "@/hooks/use-org";
+import { useToast } from "@/components/ui/toast";
 import { api, datasetsApi } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { EmptyState } from "@/components/ui/empty-state";
+import { ErrorState } from "@/components/ui/error-state";
+import { StatCard } from "@/components/ui/stat-card";
 import { SeverityBadge, SeverityIcon } from "@/components/ui/status-badge";
 import { PageHeader } from "@/components/layout/page-header";
+import { Button } from "@/components/ui/button";
 import {
   Lightbulb,
   Activity,
@@ -16,20 +20,17 @@ import {
   Layers,
   ChevronRight,
   Loader2,
-  Search,
+  
   Zap,
   TrendingUp,
-  TrendingDown,
-  Minus,
+  
+  
   Sparkles,
   FileJson,
   Download,
   Play,
-  X,
-  CheckCircle2,
-  XCircle,
-  Info,
-} from "lucide-react";
+  
+  CheckCircle2 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { DataTable } from "@/components/ui/data-table";
 import { NoOrgState } from "@/components/ui/no-org-state";
@@ -37,8 +38,7 @@ import {
   Dialog,
   DialogContent,
   DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+  DialogTitle } from "@/components/ui/dialog";
 
 interface OverviewData {
   summary: {
@@ -135,6 +135,7 @@ interface CorrelationReport {
 
 export default function InsightsPage() {
   const { currentOrg } = useOrg();
+  const toast = useToast();
   const [activeTab, setActiveTab] = useState<Tab>("overview");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -146,6 +147,10 @@ export default function InsightsPage() {
   useEffect(() => {
     if (!currentOrg) return;
     loadOverview();
+    // loadOverview is captured per currentOrg change; pulling it into
+    // a useCallback would only create a stale handle. The fetch path
+    // bails on `!currentOrg` so this stays safe.
+     
   }, [currentOrg]);
 
   async function loadOverview() {
@@ -156,7 +161,9 @@ export default function InsightsPage() {
       const data = await api.getInsightsOverview(currentOrg.id);
       setOverview(data as unknown as OverviewData);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load insights");
+      const msg = err instanceof Error ? err.message : "Failed to load insights";
+      setError(msg);
+      toast.error("Could not load insights", msg);
     } finally {
       setLoading(false);
     }
@@ -167,9 +174,12 @@ export default function InsightsPage() {
     setRunningDetectors(true);
     try {
       await api.runDetectors(currentOrg.id);
+      toast.success("Detectors finished", "Latest insights are now available below.");
       await loadOverview();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to run detectors");
+      const msg = err instanceof Error ? err.message : "Failed to run detectors";
+      setError(msg);
+      toast.error("Detectors failed", msg);
     } finally {
       setRunningDetectors(false);
     }
@@ -193,25 +203,23 @@ export default function InsightsPage() {
         icon={Lightbulb}
         actions={
           <div className="flex items-center gap-2">
-            <button
+            <Button
+              variant="default"
               onClick={handleRunDetectors}
-              disabled={runningDetectors}
-              className="inline-flex items-center gap-2 px-4 py-2 bg-[var(--accent)] text-[var(--bg-base)] rounded-lg text-sm font-medium hover:bg-[var(--accent-hover)] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              loading={runningDetectors}
+              aria-label="Run insight detectors now"
             >
-              {runningDetectors ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
-              ) : (
-                <Play className="w-4 h-4" />
-              )}
+              <Play className="w-4 h-4" />
               Run Detectors
-            </button>
-            <button
+            </Button>
+            <Button
+              variant="outline"
               onClick={loadOverview}
-              className="inline-flex items-center gap-2 px-4 py-2 bg-[var(--bg-tertiary)] text-[var(--text-primary)] rounded-lg text-sm font-medium hover:bg-[var(--border-default)] transition-colors"
+              aria-label="Refresh insights overview"
             >
               <Activity className="w-4 h-4" />
               Refresh
-            </button>
+            </Button>
           </div>
         }
       />
@@ -279,18 +287,15 @@ export default function InsightsPage() {
           description="Insights appear after detectors run over your traces. Hit Run Detectors to scan now — this takes about a minute on a fresh dataset."
           size="lg"
           action={
-            <button
+            <Button
+              variant="default"
               onClick={handleRunDetectors}
-              disabled={runningDetectors}
-              className="inline-flex items-center gap-2 px-4 py-2 bg-[var(--accent)] text-[var(--bg-base)] rounded-lg text-sm font-medium hover:bg-[var(--accent-hover)] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              loading={runningDetectors}
+              aria-label="Run insight detectors"
             >
-              {runningDetectors ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
-              ) : (
-                <Play className="w-4 h-4" />
-              )}
+              <Play className="w-4 h-4" />
               Run Detectors
-            </button>
+            </Button>
           }
         />
       )}
@@ -329,37 +334,25 @@ export default function InsightsPage() {
 // ──────────────────────────────────────────────────────────────────────────
 
 function OverviewTab({ data }: { data: OverviewData }) {
-  const { summary, traces, insights, disparity, datasets } = data;
+  const { summary, traces, insights, disparity } = data;
 
   const cards = [
     {
       label: "Total Traces",
       value: summary.total_traces,
-      icon: Layers,
-      color: "text-[var(--accent)]",
-      bg: "bg-[var(--accent-faint)]",
-    },
+      icon: Layers },
     {
       label: "Insights Found",
       value: summary.total_insights,
-      icon: Sparkles,
-      color: "text-[var(--warning)]",
-      bg: "bg-[var(--warning-bg)]",
-    },
+      icon: Sparkles },
     {
       label: "Disparity Reports",
       value: summary.total_disparity_reports,
-      icon: AlertTriangle,
-      color: "text-[var(--warning)]",
-      bg: "bg-[var(--warning-bg)]",
-    },
+      icon: AlertTriangle },
     {
       label: "Datasets",
       value: summary.total_datasets,
-      icon: Database,
-      color: "text-[var(--terminal)]",
-      bg: "bg-[var(--terminal-faint)]",
-    },
+      icon: Database },
   ];
 
   return (
@@ -367,20 +360,19 @@ function OverviewTab({ data }: { data: OverviewData }) {
       {/* Summary Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {cards.map((card) => (
-          <div
+          <StatCard
             key={card.label}
-            className="bg-[var(--bg-primary)] border border-[var(--border-default)] rounded-xl p-4"
-          >
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-xs font-medium text-[var(--text-muted)] uppercase tracking-wide">
-                {card.label}
-              </span>
-              <div className={cn("p-1.5 rounded-lg", card.bg)}>
-                <card.icon className={cn("w-4 h-4", card.color)} />
-              </div>
-            </div>
-            <p className="text-2xl font-bold text-[var(--text-primary)]">{card.value}</p>
-          </div>
+            title={card.label}
+            value={card.value}
+            icon={card.icon}
+            accent={
+              card.label === "Total Traces"
+                ? "accent"
+                : card.label === "Datasets"
+                ? "terminal"
+                : "warning"
+            }
+          />
         ))}
       </div>
 
@@ -542,8 +534,7 @@ function OverviewTab({ data }: { data: OverviewData }) {
 
 function InsightsTab({
   data,
-  onSelectInsight,
-}: {
+  onSelectInsight }: {
   data: OverviewData["insights"];
   onSelectInsight: (insight: OverviewData["insights"]["recent"][0]) => void;
 }) {
@@ -641,8 +632,7 @@ function InsightsTab({
 
 function DisparityTab({
   data,
-  onSelectReport,
-}: {
+  onSelectReport }: {
   data: OverviewData["disparity"];
   onSelectReport: (report: OverviewData["disparity"]["reports"][0]) => void;
 }) {
@@ -650,20 +640,24 @@ function DisparityTab({
     <div className="space-y-6">
       {/* Stats */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div className="bg-[var(--bg-primary)] border border-[var(--border-default)] rounded-xl p-4">
-          <p className="text-xs text-[var(--text-muted)] uppercase tracking-wide">Total Reports</p>
-          <p className="text-2xl font-bold text-[var(--text-primary)] mt-1">{data.reports.length}</p>
-        </div>
-        <div className="bg-[var(--bg-primary)] border border-[var(--border-default)] rounded-xl p-4">
-          <p className="text-xs text-[var(--text-muted)] uppercase tracking-wide">High Disparity</p>
-          <p className="text-2xl font-bold text-[var(--warning)] mt-1">{data.high_disparity_count}</p>
-        </div>
-        <div className="bg-[var(--bg-primary)] border border-[var(--border-default)] rounded-xl p-4">
-          <p className="text-xs text-[var(--text-muted)] uppercase tracking-wide">Avg Score</p>
-          <p className="text-2xl font-bold text-[var(--text-primary)] mt-1">
-            {(data.avg_score * 100).toFixed(1)}%
-          </p>
-        </div>
+        <StatCard
+          title="Total Reports"
+          value={data.reports.length}
+          icon={BarChart3}
+          accent="neutral"
+        />
+        <StatCard
+          title="High Disparity"
+          value={data.high_disparity_count}
+          icon={AlertTriangle}
+          accent="warning"
+        />
+        <StatCard
+          title="Avg Score"
+          value={`${(data.avg_score * 100).toFixed(1)}%`}
+          icon={TrendingUp}
+          accent="terminal"
+        />
       </div>
 
       {/* Reports */}
@@ -717,13 +711,12 @@ function DisparityTab({
           </button>
         ))}
         {data.reports.length === 0 && (
-          <div className="text-center py-12">
-            <AlertTriangle className="w-10 h-10 mx-auto mb-3 text-[var(--text-muted)] opacity-40" />
-            <p className="text-sm text-[var(--text-muted)]">No disparity reports yet</p>
-            <p className="text-xs text-[var(--text-muted)] mt-1">
-              Compare environment and production traces to generate reports
-            </p>
-          </div>
+          <EmptyState
+            icon={AlertTriangle}
+            title="No disparity reports yet"
+            description="Compare environment and production traces to generate reports."
+            size="md"
+          />
         )}
       </div>
     </div>
@@ -742,8 +735,7 @@ function DatasetsTab({ data }: { data: OverviewData["datasets"] }) {
     adversarial_suite: "Adversarial",
     performance_benchmark: "Performance",
     disparity_collection: "Disparity",
-    golden_path: "Golden Paths",
-  };
+    golden_path: "Golden Paths" };
 
   const typeIcons: Record<string, typeof Database> = {
     regression_suite: CheckCircle2,
@@ -751,8 +743,7 @@ function DatasetsTab({ data }: { data: OverviewData["datasets"] }) {
     adversarial_suite: Zap,
     performance_benchmark: TrendingUp,
     disparity_collection: BarChart3,
-    golden_path: Sparkles,
-  };
+    golden_path: Sparkles };
 
   return (
     <div className="space-y-6">
@@ -801,13 +792,12 @@ function DatasetsTab({ data }: { data: OverviewData["datasets"] }) {
             );
           })}
           {data.items.length === 0 && (
-            <div className="text-center py-12">
-              <Database className="w-10 h-10 mx-auto mb-3 text-[var(--text-muted)] opacity-40" />
-              <p className="text-sm text-[var(--text-muted)]">No datasets generated yet</p>
-              <p className="text-xs text-[var(--text-muted)] mt-1">
-                Datasets are auto-generated from insights and trace analysis
-              </p>
-            </div>
+            <EmptyState
+              icon={Database}
+              title="No datasets generated yet"
+              description="Datasets are auto-generated from insights and trace analysis."
+              size="md"
+            />
           )}
         </div>
       </div>
@@ -821,8 +811,7 @@ function DatasetsTab({ data }: { data: OverviewData["datasets"] }) {
 
 function InsightDetailModal({
   insight,
-  onClose,
-}: {
+  onClose }: {
   insight: OverviewData["insights"]["recent"][0];
   onClose: () => void;
 }) {
@@ -878,6 +867,7 @@ function InsightDetailModal({
         <button
           type="button"
           onClick={onClose}
+          aria-label="Close insight detail"
           className="text-xs text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors"
         >
           Close
@@ -889,8 +879,7 @@ function InsightDetailModal({
 
 function ReportDetailModal({
   report,
-  onClose,
-}: {
+  onClose }: {
   report: OverviewData["disparity"]["reports"][0];
   onClose: () => void;
 }) {
@@ -966,6 +955,7 @@ function ReportDetailModal({
         <button
           type="button"
           onClick={onClose}
+          aria-label="Close disparity report"
           className="text-xs text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors"
         >
           Close
@@ -1001,7 +991,7 @@ function ClosedLoopTab() {
           `/orgs/${currentOrg.id}/insights/correlation?days=${days}`,
         );
         if (!cancelled) setReport(r);
-      } catch (e) {
+      } catch (_e) {
         if (!cancelled) {
           setError(
             "Could not load the correlation report. " +
@@ -1029,16 +1019,14 @@ function ClosedLoopTab() {
 
   if (error || !report) {
     return (
-      <div className="bg-[var(--bg-secondary)] border border-[var(--border-default)] rounded-xl p-8 text-center">
-        <Info className="w-10 h-10 mx-auto mb-3 text-[var(--text-muted)]" />
-        <h3 className="text-lg font-semibold text-[var(--text-primary)] mb-2">
-          No correlation data yet
-        </h3>
-        <p className="text-sm text-[var(--text-muted)] max-w-md mx-auto">
-          {error ??
-            "Once the closed-loop is established, this view shows whether insight-driven KB entries correlate with downstream gold-tier jobs."}
-        </p>
-      </div>
+      <ErrorState
+        size="lg"
+        title="No correlation data yet"
+        message={
+          error ??
+          "Once the closed-loop is established, this view shows whether insight-driven KB entries correlate with downstream gold-tier jobs."
+        }
+      />
     );
   }
 
@@ -1139,8 +1127,7 @@ function ClosedLoopTab() {
                 header: "Gold rate",
                 sortable: true,
                 align: "right",
-                cell: (w) => <span className="font-medium">{w.gold_tier_rate ? `${(w.gold_tier_rate * 100).toFixed(1)}%` : "—"}</span>,
-              },
+                cell: (w) => <span className="font-medium">{w.gold_tier_rate ? `${(w.gold_tier_rate * 100).toFixed(1)}%` : "—"}</span> },
             ]}
             rows={report.weeks}
             rowKey={(w) => w.week_start}

@@ -11,7 +11,6 @@ import { PageHeader } from "@/components/layout/page-header";
 import { useToast } from "@/components/ui/toast";
 import { useConfirm } from "@/hooks/use-confirm";
 import {
-  Loader2,
   Plus,
   Trash2,
   Send,
@@ -31,8 +30,7 @@ import {
   Network,
   FileText,
   GitCommit,
-  AlertTriangle,
-} from "lucide-react";
+  AlertTriangle } from "lucide-react";
 
 type TabKey = "environments" | "communication" | "roles" | "memory" | "planning" | "tests" | "hitl";
 
@@ -98,8 +96,7 @@ function useMultiAgentData(orgId: string | undefined) {
 
 export default function MultiAgentPage() {
   const { currentOrg } = useOrg();
-  const toast = useToast();
-  const { confirm, ConfirmDialog } = useConfirm();
+  const { ConfirmDialog } = useConfirm();
   const orgId = currentOrg?.id;
   const { envs, loading, error, refresh } = useMultiAgentData(orgId);
 
@@ -121,14 +118,26 @@ export default function MultiAgentPage() {
   return (
     <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-6 page-enter" onKeyDown={handleKeyDown}>
       <PageHeader
+        eyebrow="Build"
         title="Multi-Agent Environments"
         subtitle="Orchestrate, observe, and evaluate multi-agent systems"
         icon={Users}
+        actions={
+          <Button size="sm" variant="outline" onClick={refresh} loading={loading} aria-label="Refresh environments">
+            <RefreshCw className="w-4 h-4 mr-1.5" />
+            Refresh
+          </Button>
+        }
       />
 
       {/* Environment selector */}
-      <div className="mb-6 flex flex-wrap items-center gap-3">
+      <div className="flex flex-wrap items-center gap-3" aria-busy={loading}>
+        <label htmlFor="multi-agent-env-select" className="sr-only">
+          Choose environment
+        </label>
         <select
+          id="multi-agent-env-select"
+          aria-label="Select environment"
           className="px-3 py-2 rounded-lg border border-[var(--border-default)] bg-[var(--bg-primary)] text-sm text-[var(--text-primary)]"
           value={selectedEnv?.env_id || ""}
           onChange={(e) => {
@@ -143,15 +152,13 @@ export default function MultiAgentPage() {
             </option>
           ))}
         </select>
-        <Button size="sm" variant="outline" onClick={refresh} disabled={loading}>
-          <RefreshCw className={cn("w-4 h-4 mr-1.5", loading && "animate-spin")} />
-          Refresh
-        </Button>
-        {error && <span className="text-sm text-[var(--error)]">{error}</span>}
+        {error && (
+          <span role="alert" className="text-sm text-[var(--error)]">{error}</span>
+        )}
       </div>
 
       {/* Tabs */}
-      <div className="border-b border-[var(--border-default)] mb-6" role="tablist" aria-label="Multi-Agent sections">
+      <div className="border-b border-[var(--border-default)]" role="tablist" aria-label="Multi-Agent sections">
         <div className="flex gap-1 overflow-x-auto">
           {([
             { key: "environments", label: "Environments", icon: Server },
@@ -176,7 +183,7 @@ export default function MultiAgentPage() {
                   : "text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)]"
               )}
             >
-              <Icon className="w-4 h-4" />
+              <Icon className="w-4 h-4" aria-hidden />
               {label}
             </button>
           ))}
@@ -186,7 +193,7 @@ export default function MultiAgentPage() {
       {/* Tab panels */}
       <div role="tabpanel" id={`tabpanel-${activeTab}`} aria-labelledby={`tab-${activeTab}`}>
         {activeTab === "environments" && (
-          <EnvironmentsTab envs={envs} refresh={refresh} orgId={orgId} />
+          <EnvironmentsTab envs={envs} refresh={refresh} orgId={orgId} loading={loading} />
         )}
         {activeTab === "communication" && (
           <CommunicationTab env={selectedEnv} orgId={orgId} />
@@ -216,7 +223,7 @@ export default function MultiAgentPage() {
 // Environments Tab
 // ──────────────────────────────────────────────────────────────────────────
 
-function EnvironmentsTab({ envs, refresh, orgId }: { envs: MultiAgentEnv[]; refresh: () => void; orgId: string | undefined }) {
+function EnvironmentsTab({ envs, refresh, orgId, loading }: { envs: MultiAgentEnv[]; refresh: () => void; orgId: string | undefined; loading: boolean }) {
   const toast = useToast();
   const { confirm } = useConfirm();
   const [creating, setCreating] = useState(false);
@@ -234,14 +241,14 @@ function EnvironmentsTab({ envs, refresh, orgId }: { envs: MultiAgentEnv[]; refr
         name: name.trim(),
         communication_pattern: pattern,
         agent_count: agentCount,
-        max_steps: maxSteps,
-      });
+        max_steps: maxSteps });
       setName("");
       setPattern("message_passing");
       setAgentCount(3);
       setMaxSteps(50);
       setCreating(false);
       refresh();
+      toast.success("Environment created");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Create failed");
     } finally {
@@ -255,13 +262,13 @@ function EnvironmentsTab({ envs, refresh, orgId }: { envs: MultiAgentEnv[]; refr
       title: "Delete this environment?",
       description: "This removes the environment and all its history. This cannot be undone.",
       confirmLabel: "Delete",
-      variant: "destructive",
-    });
+      variant: "destructive" });
     if (!ok) return;
     setBusy(true);
     try {
       await api.deleteMultiAgentEnv(orgId, envId);
       refresh();
+      toast.success("Environment deleted");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Delete failed");
     } finally {
@@ -273,27 +280,31 @@ function EnvironmentsTab({ envs, refresh, orgId }: { envs: MultiAgentEnv[]; refr
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h2 className="text-lg font-semibold text-[var(--text-primary)]">Environments</h2>
-        <Button size="sm" onClick={() => setCreating(!creating)}>
+        <Button size="sm" onClick={() => setCreating(!creating)} aria-expanded={creating} aria-controls="new-env-form">
           <Plus className="w-4 h-4 mr-1.5" />
           {creating ? "Cancel" : "New Environment"}
         </Button>
       </div>
 
       {creating && (
-        <div className="p-4 bg-[var(--bg-primary)] border border-[var(--border-default)] rounded-xl space-y-4">
+        <div id="new-env-form" className="p-4 bg-[var(--bg-primary)] border border-[var(--border-default)] rounded-xl space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1">Name</label>
+              <label htmlFor="env-name" className="block text-sm font-medium text-[var(--text-secondary)] mb-1">Name</label>
               <input
+                id="env-name"
                 className="w-full px-3 py-2 rounded-lg border border-[var(--border-default)] bg-[var(--bg-secondary)] text-sm"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 placeholder="My Multi-Agent Env"
+                aria-label="Environment name"
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1">Pattern</label>
+              <label htmlFor="env-pattern" className="block text-sm font-medium text-[var(--text-secondary)] mb-1">Pattern</label>
               <select
+                id="env-pattern"
+                aria-label="Communication pattern"
                 className="w-full px-3 py-2 rounded-lg border border-[var(--border-default)] bg-[var(--bg-secondary)] text-sm"
                 value={pattern}
                 onChange={(e) => setPattern(e.target.value)}
@@ -304,36 +315,45 @@ function EnvironmentsTab({ envs, refresh, orgId }: { envs: MultiAgentEnv[]; refr
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1">Agents</label>
+              <label htmlFor="env-agents" className="block text-sm font-medium text-[var(--text-secondary)] mb-1">Agents</label>
               <input
+                id="env-agents"
                 type="number"
                 min={2}
                 max={20}
+                aria-label="Agent count"
                 className="w-full px-3 py-2 rounded-lg border border-[var(--border-default)] bg-[var(--bg-secondary)] text-sm"
                 value={agentCount}
                 onChange={(e) => setAgentCount(Number(e.target.value))}
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1">Max Steps</label>
+              <label htmlFor="env-steps" className="block text-sm font-medium text-[var(--text-secondary)] mb-1">Max Steps</label>
               <input
+                id="env-steps"
                 type="number"
                 min={1}
                 max={500}
+                aria-label="Maximum steps"
                 className="w-full px-3 py-2 rounded-lg border border-[var(--border-default)] bg-[var(--bg-secondary)] text-sm"
                 value={maxSteps}
                 onChange={(e) => setMaxSteps(Number(e.target.value))}
               />
             </div>
           </div>
-          <Button onClick={handleCreate} disabled={busy || !name.trim()}>
-            {busy ? <Loader2 className="w-4 h-4 animate-spin mr-1.5" /> : <Plus className="w-4 h-4 mr-1.5" />}
+          <Button onClick={handleCreate} loading={busy} disabled={!name.trim()}>
             Create
           </Button>
         </div>
       )}
 
-      {envs.length === 0 ? (
+      {loading ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4" aria-busy="true" aria-live="polite">
+          {[1, 2, 3].map((i) => (
+            <div key={i} className="h-32 rounded-xl bg-[var(--bg-primary)] border border-[var(--border-default)] animate-pulse" aria-hidden="true" />
+          ))}
+        </div>
+      ) : envs.length === 0 ? (
         <EmptyState
           icon={Server}
           title="No multi-agent environments yet"
@@ -355,9 +375,9 @@ function EnvironmentsTab({ envs, refresh, orgId }: { envs: MultiAgentEnv[]; refr
                 <button
                   onClick={() => handleDelete(env.env_id)}
                   className="p-1.5 text-[var(--text-muted)] hover:text-[var(--error)] hover:bg-[var(--error-bg)] rounded-lg transition-colors"
-                  aria-label="Delete environment"
+                  aria-label={`Delete environment ${env.name}`}
                 >
-                  <Trash2 className="w-4 h-4" />
+                  <Trash2 className="w-4 h-4" aria-hidden />
                 </button>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
@@ -410,11 +430,10 @@ function CommunicationTab({ env, orgId }: { env: MultiAgentEnv | null; orgId: st
           to_agent: m.to_agent,
           type: "direct",
           content: m.content,
-          timestamp: new Date(m.sent_at).getTime(),
-        })),
+          timestamp: new Date(m.sent_at).getTime() })),
       );
-    } catch {
-      // ignore
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to load messages");
     }
   };
 
@@ -423,8 +442,9 @@ function CommunicationTab({ env, orgId }: { env: MultiAgentEnv | null; orgId: st
     try {
       const res = await api.getMultiAgentCommStats(orgId, env.env_id);
       setStats(res.stats);
-    } catch {
-      // ignore
+    } catch (err) {
+      // Communication stats are non-critical; log only.
+      console.warn("comm stats fetch failed", err);
     }
   };
 
@@ -473,30 +493,44 @@ function CommunicationTab({ env, orgId }: { env: MultiAgentEnv | null; orgId: st
         {/* Send Message */}
         <div className="p-4 bg-[var(--bg-primary)] border border-[var(--border-default)] rounded-xl space-y-4">
           <h3 className="font-semibold text-[var(--text-primary)] flex items-center gap-2">
-            <Send className="w-4 h-4 text-[var(--accent)]" />
+            <Send className="w-4 h-4 text-[var(--accent)]" aria-hidden />
             Send Message
           </h3>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="text-xs text-[var(--text-muted)]">From</label>
-              <input className="w-full px-3 py-2 rounded-lg border border-[var(--border-default)] bg-[var(--bg-secondary)] text-sm" value={fromAgent} onChange={(e) => setFromAgent(e.target.value)} />
+              <label htmlFor="msg-from" className="text-xs text-[var(--text-muted)]">From</label>
+              <input
+                id="msg-from"
+                aria-label="From agent"
+                className="w-full px-3 py-2 rounded-lg border border-[var(--border-default)] bg-[var(--bg-secondary)] text-sm"
+                value={fromAgent}
+                onChange={(e) => setFromAgent(e.target.value)}
+              />
             </div>
             <div>
-              <label className="text-xs text-[var(--text-muted)]">To</label>
-              <input className="w-full px-3 py-2 rounded-lg border border-[var(--border-default)] bg-[var(--bg-secondary)] text-sm" value={toAgent} onChange={(e) => setToAgent(e.target.value)} />
+              <label htmlFor="msg-to" className="text-xs text-[var(--text-muted)]">To</label>
+              <input
+                id="msg-to"
+                aria-label="To agent"
+                className="w-full px-3 py-2 rounded-lg border border-[var(--border-default)] bg-[var(--bg-secondary)] text-sm"
+                value={toAgent}
+                onChange={(e) => setToAgent(e.target.value)}
+              />
             </div>
           </div>
           <div>
-            <label className="text-xs text-[var(--text-muted)]">Content (JSON)</label>
+            <label htmlFor="msg-content" className="text-xs text-[var(--text-muted)]">Content (JSON)</label>
             <textarea
+              id="msg-content"
+              aria-label="Message content as JSON"
               className="w-full px-3 py-2 rounded-lg border border-[var(--border-default)] bg-[var(--bg-secondary)] text-sm font-mono"
               rows={3}
               value={msgContent}
               onChange={(e) => setMsgContent(e.target.value)}
             />
           </div>
-          <Button size="sm" onClick={handleSend} disabled={sending}>
-            {sending ? <Loader2 className="w-4 h-4 animate-spin mr-1.5" /> : <Send className="w-4 h-4 mr-1.5" />}
+          <Button size="sm" onClick={handleSend} loading={sending}>
+            <Send className="w-4 h-4 mr-1.5" />
             Send
           </Button>
         </div>
@@ -504,24 +538,32 @@ function CommunicationTab({ env, orgId }: { env: MultiAgentEnv | null; orgId: st
         {/* Broadcast */}
         <div className="p-4 bg-[var(--bg-primary)] border border-[var(--border-default)] rounded-xl space-y-4">
           <h3 className="font-semibold text-[var(--text-primary)] flex items-center gap-2">
-            <MessageSquare className="w-4 h-4 text-[var(--accent)]" />
+            <MessageSquare className="w-4 h-4 text-[var(--accent)]" aria-hidden />
             Broadcast
           </h3>
           <div>
-            <label className="text-xs text-[var(--text-muted)]">From</label>
-            <input className="w-full px-3 py-2 rounded-lg border border-[var(--border-default)] bg-[var(--bg-secondary)] text-sm" value={fromAgent} onChange={(e) => setFromAgent(e.target.value)} />
+            <label htmlFor="bc-from" className="text-xs text-[var(--text-muted)]">From</label>
+            <input
+              id="bc-from"
+              aria-label="Broadcast from agent"
+              className="w-full px-3 py-2 rounded-lg border border-[var(--border-default)] bg-[var(--bg-secondary)] text-sm"
+              value={fromAgent}
+              onChange={(e) => setFromAgent(e.target.value)}
+            />
           </div>
           <div>
-            <label className="text-xs text-[var(--text-muted)]">Content (JSON)</label>
+            <label htmlFor="bc-content" className="text-xs text-[var(--text-muted)]">Content (JSON)</label>
             <textarea
+              id="bc-content"
+              aria-label="Broadcast content as JSON"
               className="w-full px-3 py-2 rounded-lg border border-[var(--border-default)] bg-[var(--bg-secondary)] text-sm font-mono"
               rows={3}
               value={broadcastContent}
               onChange={(e) => setBroadcastContent(e.target.value)}
             />
           </div>
-          <Button size="sm" onClick={handleBroadcast} disabled={sending}>
-            {sending ? <Loader2 className="w-4 h-4 animate-spin mr-1.5" /> : <MessageSquare className="w-4 h-4 mr-1.5" />}
+          <Button size="sm" onClick={handleBroadcast} loading={sending}>
+            <MessageSquare className="w-4 h-4 mr-1.5" />
             Broadcast
           </Button>
         </div>
@@ -531,7 +573,7 @@ function CommunicationTab({ env, orgId }: { env: MultiAgentEnv | null; orgId: st
       <div className="p-4 bg-[var(--bg-primary)] border border-[var(--border-default)] rounded-xl">
         <div className="flex items-center justify-between mb-3">
           <h3 className="font-semibold text-[var(--text-primary)]">Inbox ({toAgent})</h3>
-          <Button size="sm" variant="outline" onClick={fetchMessages}>
+          <Button size="sm" variant="outline" onClick={fetchMessages} aria-label="Refresh inbox">
             <RefreshCw className="w-3.5 h-3.5 mr-1" />
             Refresh
           </Button>
@@ -549,7 +591,7 @@ function CommunicationTab({ env, orgId }: { env: MultiAgentEnv | null; orgId: st
               <div key={msg.id} className="p-3 bg-[var(--bg-tertiary)] rounded-lg text-sm">
                 <div className="flex items-center gap-2 text-xs text-[var(--text-muted)] mb-1">
                   <span className="font-medium text-[var(--text-primary)]">{msg.from_agent}</span>
-                  <ChevronRight className="w-3 h-3" />
+                  <ChevronRight className="w-3 h-3" aria-hidden />
                   <span>{msg.to_agent}</span>
                   <span className="ml-auto">{msg.type}</span>
                 </div>
@@ -584,6 +626,7 @@ function RolesTab({ env, orgId }: { env: MultiAgentEnv | null; orgId: string | u
   const [assigning, setAssigning] = useState(false);
   const [agentId, setAgentId] = useState("");
   const [selectedRoleName, setSelectedRoleName] = useState("");
+  const [busy, setBusy] = useState(false);
 
   const fetchData = async () => {
     if (!orgId || !env) return;
@@ -594,8 +637,8 @@ function RolesTab({ env, orgId }: { env: MultiAgentEnv | null; orgId: string | u
       ]);
       setRoles(rRes.roles);
       setConfigs(cRes.configs);
-    } catch {
-      // ignore
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to load roles");
     }
   };
 
@@ -603,30 +646,37 @@ function RolesTab({ env, orgId }: { env: MultiAgentEnv | null; orgId: string | u
 
   const handleCreateConfig = async () => {
     if (!orgId || !env || !roleName.trim()) return;
+    setBusy(true);
     try {
       await api.createRoleConfig(orgId, env.env_id, {
         role_name: roleName.trim(),
         hierarchy: "flat",
         objectives: [],
-        tools: [],
-      });
+        tools: [] });
       setRoleName("");
       setCreatingConfig(false);
       fetchData();
+      toast.success("Role config created");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed");
+    } finally {
+      setBusy(false);
     }
   };
 
   const handleAssign = async () => {
     if (!orgId || !env || !agentId.trim() || !selectedRoleName) return;
+    setBusy(true);
     try {
       await api.assignAgentRole(orgId, env.env_id, { agent_id: agentId.trim(), role_name: selectedRoleName });
       setAgentId("");
       setAssigning(false);
       fetchData();
+      toast.success("Role assigned");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed");
+    } finally {
+      setBusy(false);
     }
   };
 
@@ -637,53 +687,66 @@ function RolesTab({ env, orgId }: { env: MultiAgentEnv | null; orgId: string | u
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-3">
-        <Button size="sm" variant="outline" onClick={() => setCreatingConfig(!creatingConfig)}>
+        <Button size="sm" variant="outline" onClick={() => setCreatingConfig(!creatingConfig)} aria-expanded={creatingConfig} aria-controls="new-role-config">
           <Plus className="w-4 h-4 mr-1.5" />
           {creatingConfig ? "Cancel" : "New Role Config"}
         </Button>
-        <Button size="sm" variant="outline" onClick={() => setAssigning(!assigning)}>
+        <Button size="sm" variant="outline" onClick={() => setAssigning(!assigning)} aria-expanded={assigning} aria-controls="assign-role-form">
           <Users className="w-4 h-4 mr-1.5" />
           {assigning ? "Cancel" : "Assign Role"}
         </Button>
       </div>
 
       {creatingConfig && (
-        <div className="p-4 bg-[var(--bg-primary)] border border-[var(--border-default)] rounded-xl space-y-3">
+        <div id="new-role-config" className="p-4 bg-[var(--bg-primary)] border border-[var(--border-default)] rounded-xl space-y-3">
+          <label htmlFor="role-name-input" className="text-xs text-[var(--text-muted)]">Role name</label>
           <input
+            id="role-name-input"
+            aria-label="Role name"
             className="w-full px-3 py-2 rounded-lg border border-[var(--border-default)] bg-[var(--bg-secondary)] text-sm"
             placeholder="Role name (e.g. planner, executor, critic)"
             value={roleName}
             onChange={(e) => setRoleName(e.target.value)}
           />
-          <Button size="sm" onClick={handleCreateConfig} disabled={!roleName.trim()}>
+          <Button size="sm" onClick={handleCreateConfig} loading={busy} disabled={!roleName.trim()}>
             Create Config
           </Button>
         </div>
       )}
 
       {assigning && (
-        <div className="p-4 bg-[var(--bg-primary)] border border-[var(--border-default)] rounded-xl space-y-3">
+        <div id="assign-role-form" className="p-4 bg-[var(--bg-primary)] border border-[var(--border-default)] rounded-xl space-y-3">
           <div className="grid grid-cols-2 gap-3">
-            <input
-              className="px-3 py-2 rounded-lg border border-[var(--border-default)] bg-[var(--bg-secondary)] text-sm"
-              placeholder="Agent ID"
-              value={agentId}
-              onChange={(e) => setAgentId(e.target.value)}
-            />
-            <select
-              className="px-3 py-2 rounded-lg border border-[var(--border-default)] bg-[var(--bg-secondary)] text-sm"
-              value={selectedRoleName}
-              onChange={(e) => setSelectedRoleName(e.target.value)}
-            >
-              <option value="">Select role config…</option>
-              {configs.map((c, i) => (
-                <option key={i} value={String(c.role_name || c.name || "")}>
-                  {String(c.role_name || c.name || "unnamed")}
-                </option>
-              ))}
-            </select>
+            <div>
+              <label htmlFor="assign-agent-id" className="text-xs text-[var(--text-muted)]">Agent ID</label>
+              <input
+                id="assign-agent-id"
+                aria-label="Agent ID"
+                className="w-full px-3 py-2 rounded-lg border border-[var(--border-default)] bg-[var(--bg-secondary)] text-sm"
+                placeholder="Agent ID"
+                value={agentId}
+                onChange={(e) => setAgentId(e.target.value)}
+              />
+            </div>
+            <div>
+              <label htmlFor="assign-role-select" className="text-xs text-[var(--text-muted)]">Role</label>
+              <select
+                id="assign-role-select"
+                aria-label="Role configuration"
+                className="w-full px-3 py-2 rounded-lg border border-[var(--border-default)] bg-[var(--bg-secondary)] text-sm"
+                value={selectedRoleName}
+                onChange={(e) => setSelectedRoleName(e.target.value)}
+              >
+                <option value="">Select role config…</option>
+                {configs.map((c, i) => (
+                  <option key={i} value={String(c.role_name || c.name || "")}>
+                    {String(c.role_name || c.name || "unnamed")}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
-          <Button size="sm" onClick={handleAssign} disabled={!agentId.trim() || !selectedRoleName}>
+          <Button size="sm" onClick={handleAssign} loading={busy} disabled={!agentId.trim() || !selectedRoleName}>
             Assign
           </Button>
         </div>
@@ -751,14 +814,15 @@ function MemoryTab({ env, orgId }: { env: MultiAgentEnv | null; orgId: string | 
   const [memoryData, setMemoryData] = useState<Record<string, unknown> | null>(null);
   const [stats, setStats] = useState<Record<string, unknown> | null>(null);
   const [adding, setAdding] = useState(false);
+  const [consolidating, setConsolidating] = useState(false);
 
   const fetchMemory = async () => {
     if (!orgId || !env) return;
     try {
       const res = await api.queryMemory(orgId, env.env_id, agentId);
       setMemoryData(res);
-    } catch {
-      // ignore
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to query memory");
     }
   };
 
@@ -767,8 +831,8 @@ function MemoryTab({ env, orgId }: { env: MultiAgentEnv | null; orgId: string | 
     try {
       const res = await api.getMemoryStats(orgId, env.env_id);
       setStats(res);
-    } catch {
-      // ignore
+    } catch (err) {
+      console.warn("memory stats fetch failed", err);
     }
   };
 
@@ -782,6 +846,7 @@ function MemoryTab({ env, orgId }: { env: MultiAgentEnv | null; orgId: string | 
       setObsContent("");
       fetchMemory();
       fetchStats();
+      toast.success("Observation added");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed");
     } finally {
@@ -791,12 +856,16 @@ function MemoryTab({ env, orgId }: { env: MultiAgentEnv | null; orgId: string | 
 
   const handleConsolidate = async () => {
     if (!orgId || !env) return;
+    setConsolidating(true);
     try {
       await api.consolidateMemory(orgId, env.env_id, agentId);
       fetchMemory();
       fetchStats();
+      toast.success("Memory consolidated");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed");
+    } finally {
+      setConsolidating(false);
     }
   };
 
@@ -804,12 +873,34 @@ function MemoryTab({ env, orgId }: { env: MultiAgentEnv | null; orgId: string | 
     return <EmptyState icon={MemoryStick} title="Select an environment" description="Choose an environment to view and manage agent memory stores." />;
   }
 
+  const workingCount = stats?.working_memory_count;
+  const episodesTotal = (stats?.episodic as Record<string, unknown>)?.total_recorded;
+  const factsTotal = (stats?.semantic as Record<string, unknown>)?.total_facts;
+
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <StatCard title="Working Memories" value={String(stats?.working_memory_count ?? "—")} icon={MemoryStick} />
-        <StatCard title="Episodes Recorded" value={String((stats?.episodic as Record<string, unknown>)?.total_recorded ?? "—")} icon={GitCommit} />
-        <StatCard title="Semantic Facts" value={String((stats?.semantic as Record<string, unknown>)?.total_facts ?? "—")} icon={FileText} />
+        <StatCard
+          title="Working Memories"
+          value={workingCount == null ? "—" : String(workingCount)}
+          icon={MemoryStick}
+          empty={workingCount == null}
+          emptyText="Stats unavailable"
+        />
+        <StatCard
+          title="Episodes Recorded"
+          value={episodesTotal == null ? "—" : String(episodesTotal)}
+          icon={GitCommit}
+          empty={episodesTotal == null}
+          emptyText="Stats unavailable"
+        />
+        <StatCard
+          title="Semantic Facts"
+          value={factsTotal == null ? "—" : String(factsTotal)}
+          icon={FileText}
+          empty={factsTotal == null}
+          emptyText="Stats unavailable"
+        />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -817,12 +908,20 @@ function MemoryTab({ env, orgId }: { env: MultiAgentEnv | null; orgId: string | 
         <div className="p-4 bg-[var(--bg-primary)] border border-[var(--border-default)] rounded-xl space-y-4">
           <h3 className="font-semibold text-[var(--text-primary)]">Add Observation</h3>
           <div>
-            <label className="text-xs text-[var(--text-muted)]">Agent ID</label>
-            <input className="w-full px-3 py-2 rounded-lg border border-[var(--border-default)] bg-[var(--bg-secondary)] text-sm" value={agentId} onChange={(e) => setAgentId(e.target.value)} />
+            <label htmlFor="mem-agent-id" className="text-xs text-[var(--text-muted)]">Agent ID</label>
+            <input
+              id="mem-agent-id"
+              aria-label="Agent ID for memory observation"
+              className="w-full px-3 py-2 rounded-lg border border-[var(--border-default)] bg-[var(--bg-secondary)] text-sm"
+              value={agentId}
+              onChange={(e) => setAgentId(e.target.value)}
+            />
           </div>
           <div>
-            <label className="text-xs text-[var(--text-muted)]">Content</label>
+            <label htmlFor="mem-obs-content" className="text-xs text-[var(--text-muted)]">Content</label>
             <textarea
+              id="mem-obs-content"
+              aria-label="Observation content"
               className="w-full px-3 py-2 rounded-lg border border-[var(--border-default)] bg-[var(--bg-secondary)] text-sm"
               rows={3}
               value={obsContent}
@@ -831,11 +930,11 @@ function MemoryTab({ env, orgId }: { env: MultiAgentEnv | null; orgId: string | 
             />
           </div>
           <div className="flex gap-2">
-            <Button size="sm" onClick={handleAddObservation} disabled={adding}>
-              {adding ? <Loader2 className="w-4 h-4 animate-spin mr-1.5" /> : <Plus className="w-4 h-4 mr-1.5" />}
+            <Button size="sm" onClick={handleAddObservation} loading={adding} disabled={!obsContent.trim()}>
+              <Plus className="w-4 h-4 mr-1.5" />
               Add
             </Button>
-            <Button size="sm" variant="outline" onClick={handleConsolidate}>
+            <Button size="sm" variant="outline" onClick={handleConsolidate} loading={consolidating}>
               <RefreshCw className="w-4 h-4 mr-1.5" />
               Consolidate
             </Button>
@@ -858,7 +957,7 @@ function MemoryTab({ env, orgId }: { env: MultiAgentEnv | null; orgId: string | 
                 <div className="max-h-[120px] overflow-y-auto space-y-1">
                   {(memoryData.episodes as Record<string, unknown>[] || []).map((ep, i) => (
                     <div key={i} className="p-2 bg-[var(--bg-tertiary)] rounded-lg text-xs">
-                      <div className="font-medium">{String(ep.episode_id || ep.episode_id || "—")}</div>
+                      <div className="font-medium">{String(ep.episode_id || "—")}</div>
                       <div className="text-[var(--text-muted)]">Reward: {String(ep.total_reward ?? "—")} | Success: {String(ep.success ?? "—")}</div>
                     </div>
                   ))}
@@ -906,8 +1005,8 @@ function PlanningTab({ env, orgId }: { env: MultiAgentEnv | null; orgId: string 
     if (!orgId) return;
     api.listPlanningFrameworks(orgId)
       .then((res) => setFrameworks(res.frameworks))
-      .catch(() => {});
-  }, [orgId]);
+      .catch((err) => toast.error(err instanceof Error ? err.message : "Failed to load frameworks"));
+  }, [orgId, toast]);
 
   const handleRun = async () => {
     if (!orgId || !env) return;
@@ -916,6 +1015,7 @@ function PlanningTab({ env, orgId }: { env: MultiAgentEnv | null; orgId: string 
       const ids = agentIds.split(",").map((s) => s.trim()).filter(Boolean);
       const res = await api.runEpisode(orgId, env.env_id, { framework: selectedFramework, agent_ids: ids, max_steps: maxSteps });
       setResult(res.result);
+      toast.success("Episode complete");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Run failed");
     } finally {
@@ -930,6 +1030,8 @@ function PlanningTab({ env, orgId }: { env: MultiAgentEnv | null; orgId: string 
           <button
             key={fw.id}
             onClick={() => setSelectedFramework(fw.id)}
+            aria-pressed={selectedFramework === fw.id}
+            aria-label={`${fw.name} framework`}
             className={cn(
               "p-4 text-left rounded-xl border transition-all",
               selectedFramework === fw.id
@@ -963,16 +1065,29 @@ function PlanningTab({ env, orgId }: { env: MultiAgentEnv | null; orgId: string 
           <h3 className="font-semibold text-[var(--text-primary)]">Run Episode</h3>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div>
-              <label className="text-xs text-[var(--text-muted)]">Agent IDs (comma-separated)</label>
-              <input className="w-full px-3 py-2 rounded-lg border border-[var(--border-default)] bg-[var(--bg-secondary)] text-sm" value={agentIds} onChange={(e) => setAgentIds(e.target.value)} />
+              <label htmlFor="plan-agent-ids" className="text-xs text-[var(--text-muted)]">Agent IDs (comma-separated)</label>
+              <input
+                id="plan-agent-ids"
+                aria-label="Agent IDs"
+                className="w-full px-3 py-2 rounded-lg border border-[var(--border-default)] bg-[var(--bg-secondary)] text-sm"
+                value={agentIds}
+                onChange={(e) => setAgentIds(e.target.value)}
+              />
             </div>
             <div>
-              <label className="text-xs text-[var(--text-muted)]">Max Steps</label>
-              <input type="number" className="w-full px-3 py-2 rounded-lg border border-[var(--border-default)] bg-[var(--bg-secondary)] text-sm" value={maxSteps} onChange={(e) => setMaxSteps(Number(e.target.value))} />
+              <label htmlFor="plan-max-steps" className="text-xs text-[var(--text-muted)]">Max Steps</label>
+              <input
+                id="plan-max-steps"
+                aria-label="Maximum steps"
+                type="number"
+                className="w-full px-3 py-2 rounded-lg border border-[var(--border-default)] bg-[var(--bg-secondary)] text-sm"
+                value={maxSteps}
+                onChange={(e) => setMaxSteps(Number(e.target.value))}
+              />
             </div>
             <div className="flex items-end">
-              <Button onClick={handleRun} disabled={running} className="w-full">
-                {running ? <Loader2 className="w-4 h-4 animate-spin mr-1.5" /> : <Play className="w-4 h-4 mr-1.5" />}
+              <Button onClick={handleRun} loading={running} className="w-full">
+                <Play className="w-4 h-4 mr-1.5" />
                 Run Episode
               </Button>
             </div>
@@ -1013,6 +1128,7 @@ function TestsTab({ env, orgId }: { env: MultiAgentEnv | null; orgId: string | u
     try {
       const res = await api.runMultiAgentTests(orgId, env.env_id);
       setTestResults(res);
+      toast.success(res.all_passed ? "All tests passed" : `${res.failed} test(s) failed`);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Tests failed");
     } finally {
@@ -1026,6 +1142,7 @@ function TestsTab({ env, orgId }: { env: MultiAgentEnv | null; orgId: string | u
     try {
       const res = await api.runMultiAgentBenchmark(orgId, env.env_id);
       setBenchmarks(res);
+      toast.success("Benchmark complete");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Benchmark failed");
     } finally {
@@ -1038,8 +1155,8 @@ function TestsTab({ env, orgId }: { env: MultiAgentEnv | null; orgId: string | u
     try {
       const res = await api.getMultiAgentTestResults(orgId, env.env_id);
       setTestResults(res);
-    } catch {
-      // ignore
+    } catch (err) {
+      console.warn("test results fetch failed", err);
     }
   };
 
@@ -1048,11 +1165,11 @@ function TestsTab({ env, orgId }: { env: MultiAgentEnv | null; orgId: string | u
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-3">
-        <Button onClick={handleRunTests} disabled={running || !env}>
-          {running ? <Loader2 className="w-4 h-4 animate-spin mr-1.5" /> : <FlaskConical className="w-4 h-4 mr-1.5" />}
+        <Button onClick={handleRunTests} loading={running} disabled={!env}>
+          <FlaskConical className="w-4 h-4 mr-1.5" />
           Run Test Suite
         </Button>
-        <Button variant="outline" onClick={handleBenchmark} disabled={running || !env}>
+        <Button variant="outline" onClick={handleBenchmark} loading={running} disabled={!env}>
           <Activity className="w-4 h-4 mr-1.5" />
           Benchmark
         </Button>
@@ -1076,9 +1193,9 @@ function TestsTab({ env, orgId }: { env: MultiAgentEnv | null; orgId: string | u
                   : "bg-[var(--error-bg)] border-[var(--error-dim)]  "
               )}>
                 {r.passed ? (
-                  <CheckCircle className="w-5 h-5 text-[var(--terminal)] shrink-0" />
+                  <CheckCircle className="w-5 h-5 text-[var(--terminal)] shrink-0" aria-hidden />
                 ) : (
-                  <XCircle className="w-5 h-5 text-[var(--error)] shrink-0" />
+                  <XCircle className="w-5 h-5 text-[var(--error)] shrink-0" aria-hidden />
                 )}
                 <div className="flex-1 min-w-0">
                   <div className="font-medium text-[var(--text-primary)] capitalize">{r.test_name.replace("_", " ")}</div>
@@ -1122,8 +1239,8 @@ function HitlTab({ env, orgId }: { env: MultiAgentEnv | null; orgId: string | un
       ]);
       setRules(rRes.rules);
       setPending(pRes.pending);
-    } catch {
-      // ignore
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to load HITL data");
     }
   };
 
@@ -1135,6 +1252,7 @@ function HitlTab({ env, orgId }: { env: MultiAgentEnv | null; orgId: string | un
     try {
       await api.setHitlRule(orgId, env.env_id, { action_type: actionType, rule });
       fetchData();
+      toast.success("Rule updated");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed");
     } finally {
@@ -1148,6 +1266,7 @@ function HitlTab({ env, orgId }: { env: MultiAgentEnv | null; orgId: string | un
     try {
       await api.resolveApproval(orgId, env.env_id, approvalId, approve);
       fetchData();
+      toast.success(approve ? "Approved" : "Blocked");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed");
     } finally {
@@ -1167,6 +1286,7 @@ function HitlTab({ env, orgId }: { env: MultiAgentEnv | null; orgId: string | un
           <h3 className="font-semibold text-[var(--text-primary)]">HITL Rules</h3>
           <div className="grid grid-cols-2 gap-3">
             <select
+              aria-label="Action type"
               className="px-3 py-2 rounded-lg border border-[var(--border-default)] bg-[var(--bg-secondary)] text-sm"
               value={actionType}
               onChange={(e) => setActionType(e.target.value)}
@@ -1181,6 +1301,7 @@ function HitlTab({ env, orgId }: { env: MultiAgentEnv | null; orgId: string | un
               <option value="tool_call">tool_call</option>
             </select>
             <select
+              aria-label="Rule"
               className="px-3 py-2 rounded-lg border border-[var(--border-default)] bg-[var(--bg-secondary)] text-sm"
               value={rule}
               onChange={(e) => setRule(e.target.value)}
@@ -1191,7 +1312,7 @@ function HitlTab({ env, orgId }: { env: MultiAgentEnv | null; orgId: string | un
               <option value="block">block</option>
             </select>
           </div>
-          <Button size="sm" onClick={handleSetRule} disabled={busy}>
+          <Button size="sm" onClick={handleSetRule} loading={busy}>
             Set Rule
           </Button>
 
@@ -1215,7 +1336,7 @@ function HitlTab({ env, orgId }: { env: MultiAgentEnv | null; orgId: string | un
         {/* Pending Approvals */}
         <div className="p-4 bg-[var(--bg-primary)] border border-[var(--border-default)] rounded-xl space-y-4">
           <h3 className="font-semibold text-[var(--text-primary)] flex items-center gap-2">
-            <AlertTriangle className="w-4 h-4 text-[var(--accent)]" />
+            <AlertTriangle className="w-4 h-4 text-[var(--accent)]" aria-hidden />
             Pending Approvals ({pending.length})
           </h3>
           {pending.length === 0 ? (
@@ -1235,11 +1356,11 @@ function HitlTab({ env, orgId }: { env: MultiAgentEnv | null; orgId: string | un
                   </div>
                   <div className="text-xs text-[var(--text-muted)] mb-2">Agent: {String(p.agent_id || "—")}</div>
                   <div className="flex gap-2">
-                    <Button size="sm" variant="outline" className="text-[var(--terminal)] border-[var(--terminal)]/30 hover:bg-[var(--terminal-faint)] " onClick={() => handleResolve(String(p.approval_id || p.id || ""), true)} disabled={busy}>
+                    <Button size="sm" variant="outline" className="text-[var(--terminal)] border-[var(--terminal)]/30 hover:bg-[var(--terminal-faint)] " onClick={() => handleResolve(String(p.approval_id || p.id || ""), true)} loading={busy}>
                       <CheckCircle className="w-3.5 h-3.5 mr-1" />
                       Approve
                     </Button>
-                    <Button size="sm" variant="outline" className="text-[var(--error)] border-[var(--error-dim)] hover:bg-[var(--error-bg)] " onClick={() => handleResolve(String(p.approval_id || p.id || ""), false)} disabled={busy}>
+                    <Button size="sm" variant="outline" className="text-[var(--error)] border-[var(--error-dim)] hover:bg-[var(--error-bg)] " onClick={() => handleResolve(String(p.approval_id || p.id || ""), false)} loading={busy}>
                       <XCircle className="w-3.5 h-3.5 mr-1" />
                       Block
                     </Button>

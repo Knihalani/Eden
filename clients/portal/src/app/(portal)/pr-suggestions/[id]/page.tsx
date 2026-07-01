@@ -24,8 +24,7 @@ import {
   ExternalLink,
   RotateCcw,
   AlertTriangle,
-  History,
-} from "lucide-react";
+  History } from "lucide-react";
 import { useOrg } from "@/hooks/use-org";
 import { prSuggestionApi } from "@/lib/api";
 import { cn } from "@/lib/utils";
@@ -33,14 +32,14 @@ import { StatCard } from "@/components/ui/stat-card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { PageHeader } from "@/components/layout/page-header";
 import { PRStatusBadge } from "@/components/ui/status-badge";
 import { useToast } from "@/components/ui/toast";
 import { EmptyState } from "@/components/ui/empty-state";
 import type {
   PRSuggestion,
   PRSuggestionStatus,
-  PRSuggestionTrigger,
-} from "@/lib/types";
+  PRSuggestionTrigger } from "@/lib/types";
 
 // ── Constants + helpers (mirror the inbox) ──────────────────────
 
@@ -48,25 +47,22 @@ const TRIGGER_LABELS: Record<PRSuggestionTrigger, string> = {
   rca_cluster: "RCA cluster",
   drift_alert: "Drift alert",
   retrieval_gap: "Retrieval gap",
-  judge_regression: "Judge regression",
-};
+  judge_regression: "Judge regression" };
 
 const TRIGGER_COLORS: Record<PRSuggestionTrigger, string> = {
   rca_cluster: "bg-[var(--error)]/10 text-[var(--error)] border-[var(--error)]/20",
   drift_alert: "bg-[var(--warning)]/10 text-[var(--warning)] border-[var(--warning)]/20",
   retrieval_gap: "bg-[var(--accent)]/10 text-[var(--accent)] border-[var(--accent)]/20",
-  judge_regression: "bg-[var(--accent)]/10 text-[var(--accent)] border-[var(--accent)]/20",
-};
+  judge_regression: "bg-[var(--accent)]/10 text-[var(--accent)] border-[var(--accent)]/20" };
 
-const STATUS_ICONS: Record<
+const __STATUS_ICONS: Record<
   PRSuggestionStatus,
   React.ComponentType<{ className?: string }>
 > = {
   pending: Clock,
   opened: GitPullRequestArrow,
   merged: CheckCircle2,
-  rejected: XCircle,
-};
+  rejected: XCircle };
 
 function formatDate(iso: string): string {
   try {
@@ -151,8 +147,7 @@ function parseDiff(diff: string): DiffHunk[] {
           type: "add",
           oldLine: null,
           newLine: n,
-          content: l.slice(1),
-        });
+          content: l.slice(1) });
         n++;
         nCount++;
       } else if (l.startsWith("-")) {
@@ -160,8 +155,7 @@ function parseDiff(diff: string): DiffHunk[] {
           type: "remove",
           oldLine: o,
           newLine: null,
-          content: l.slice(1),
-        });
+          content: l.slice(1) });
         o++;
         oCount++;
       } else if (l.startsWith(" ") || l === "") {
@@ -169,8 +163,7 @@ function parseDiff(diff: string): DiffHunk[] {
           type: "context",
           oldLine: o,
           newLine: n,
-          content: l.startsWith(" ") ? l.slice(1) : "",
-        });
+          content: l.startsWith(" ") ? l.slice(1) : "" });
         o++;
         n++;
         oCount++;
@@ -188,8 +181,7 @@ function parseDiff(diff: string): DiffHunk[] {
       newStart: newLineNum,
       newLines: newCount,
       header: line,
-      lines: diffLines,
-    });
+      lines: diffLines });
   }
   return hunks;
 }
@@ -254,8 +246,7 @@ function wordDiff(
   const rSet = new Set(rTokens);
   return {
     left: lTokens.map((t) => ({ text: t, changed: !rSet.has(t) })),
-    right: rTokens.map((t) => ({ text: t, changed: !lSet.has(t) })),
-  };
+    right: rTokens.map((t) => ({ text: t, changed: !lSet.has(t) })) };
 }
 
 // ── DiffViewer (unified + split) ─────────────────────────────────
@@ -263,8 +254,7 @@ function wordDiff(
 function DiffViewer({
   diff,
   diffMode,
-  onModeChange,
-}: {
+  onModeChange }: {
   diff: string;
   diffMode: "unified" | "split";
   onModeChange: (m: "unified" | "split") => void;
@@ -323,7 +313,7 @@ function DiffViewer({
             Split
           </button>
         </div>
-        <Button variant="ghost" size="sm" onClick={handleCopy}>
+        <Button variant="ghost" size="sm" onClick={handleCopy} aria-label={copied ? "Copied diff to clipboard" : "Copy diff to clipboard"}>
           {copied ? (
             <Check className="h-4 w-4 text-[var(--terminal)]" />
           ) : (
@@ -427,7 +417,7 @@ function SplitHunk({ hunk }: { hunk: DiffHunk }) {
           right = p.right ? <span>{p.right.content}</span> : null;
         }
         return (
-          <div key={i} className="grid grid-cols-2 divide-x divide-zinc-800/50">
+          <div key={i} className="grid grid-cols-2 divide-x divide-[var(--border-default)]/50">
             <div
               className={cn(
                 "flex px-3 py-0.5",
@@ -533,8 +523,7 @@ function ConfirmDialog({
   variant,
   busy,
   onConfirm,
-  onCancel,
-}: {
+  onCancel }: {
   title: string;
   description: string;
   confirmLabel: string;
@@ -598,8 +587,7 @@ function ConfirmDialog({
 function OpenPRDialog({
   suggestion,
   onClose,
-  onOpened,
-}: {
+  onOpened }: {
   suggestion: PRSuggestion;
   onClose: () => void;
   onOpened: (prNumber: number, url: string) => void;
@@ -622,8 +610,7 @@ function OpenPRDialog({
         pr_title: prTitle,
         pr_body: prBody,
         branch,
-        base,
-      });
+        base });
       onOpened(data.data.pr.number, data.data.pr.url);
       toast.success(`PR #${data.data.pr.number} opened`);
     } catch (err) {
@@ -653,7 +640,7 @@ function OpenPRDialog({
             <GitPullRequest className="h-4 w-4 text-[var(--accent)]" />
             Open PR
           </h3>
-          <Button variant="ghost" size="sm" onClick={onClose}>
+          <Button variant="ghost" size="sm" onClick={onClose} aria-label="Close open PR dialog">
             <X className="h-4 w-4" />
           </Button>
         </div>
@@ -663,6 +650,7 @@ function OpenPRDialog({
           <input
             value={prTitle}
             onChange={(e) => setPrTitle(e.target.value)}
+            aria-label="PR title"
             className="w-full bg-[var(--bg-base)] border border-[var(--border-default)] rounded px-3 py-2 text-sm text-[var(--text-primary)]"
           />
         </div>
@@ -671,6 +659,7 @@ function OpenPRDialog({
           <textarea
             value={prBody}
             onChange={(e) => setPrBody(e.target.value)}
+            aria-label="PR body"
             className="w-full h-32 bg-[var(--bg-base)] border border-[var(--border-default)] rounded px-3 py-2 text-sm text-[var(--text-primary)] font-mono"
           />
         </div>
@@ -680,6 +669,7 @@ function OpenPRDialog({
             <input
               value={branch}
               onChange={(e) => setBranch(e.target.value)}
+              aria-label="Branch name"
               className="w-full bg-[var(--bg-base)] border border-[var(--border-default)] rounded px-3 py-2 text-xs font-mono text-[var(--text-primary)]"
             />
           </div>
@@ -688,6 +678,7 @@ function OpenPRDialog({
             <input
               value={base}
               onChange={(e) => setBase(e.target.value)}
+              aria-label="Base branch"
               className="w-full bg-[var(--bg-base)] border border-[var(--border-default)] rounded px-3 py-2 text-xs font-mono text-[var(--text-primary)]"
             />
           </div>
@@ -711,8 +702,7 @@ function OpenPRDialog({
 // ── Main page ─────────────────────────────────────────────────
 
 export default function PRSuggestionDetailPage({
-  params,
-}: {
+  params }: {
   params: Promise<{ id: string }>;
 }) {
   const { id } = use(params);
@@ -752,7 +742,7 @@ export default function PRSuggestionDetailPage({
   }, [currentOrg, id]);
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
+     
     load();
   }, [load]);
 
@@ -823,7 +813,12 @@ export default function PRSuggestionDetailPage({
 
   if (loading) {
     return (
-      <div className="p-6 text-center py-12 text-[var(--text-muted)]">
+      <div
+        role="status"
+        aria-live="polite"
+        aria-busy="true"
+        className="p-6 text-center py-12 text-[var(--text-muted)]"
+      >
         <RefreshCw className="h-6 w-6 animate-spin mx-auto mb-2" />
         Loading…
       </div>
@@ -842,9 +837,21 @@ export default function PRSuggestionDetailPage({
           Back
         </Button>
         <Card className="border-[var(--error)]/20 bg-[var(--error)]/5">
-          <div className="p-4 text-sm text-[var(--error)] flex items-center gap-2">
-            <AlertCircle className="h-4 w-4" />
-            {error || "Suggestion not found."}
+          <div
+            role="alert"
+            className="p-4 text-sm text-[var(--error)] flex items-center justify-between gap-2"
+          >
+            <span className="flex items-center gap-2">
+              <AlertCircle className="h-4 w-4" />
+              {error || "Suggestion not found."}
+            </span>
+            <button
+              onClick={load}
+              disabled={loading}
+              className="text-xs font-medium underline underline-offset-2 hover:opacity-80 disabled:opacity-50"
+            >
+              Retry
+            </button>
           </div>
         </Card>
       </div>
@@ -867,70 +874,68 @@ export default function PRSuggestionDetailPage({
       </Button>
 
       {/* Header */}
-      <div className="flex items-start justify-between gap-4">
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 mb-2 flex-wrap">
-            <Badge
-              variant="outline"
-              className={cn("text-xs", TRIGGER_COLORS[suggestion.trigger])}
+      <PageHeader
+        eyebrow="Optimize"
+        title={suggestion.pr_title || "PR suggestion"}
+        subtitle={suggestion.trigger_summary}
+        icon={GitPullRequest}
+        actions={
+          <div className="flex flex-col gap-2">
+            {isPending && (
+              <>
+                <Button onClick={() => setShowOpenPR(true)}>
+                  <Send className="h-4 w-4 mr-1" />
+                  Open PR
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setConfirmAction("regenerate")}
+                  disabled={busyAction === "regenerate"}
+                >
+                  {busyAction === "regenerate" ? (
+                    <RefreshCw className="h-4 w-4 mr-1 animate-spin" />
+                  ) : (
+                    <RotateCcw className="h-4 w-4 mr-1" />
+                  )}
+                  Regenerate
+                </Button>
+              </>
+            )}
+            {prUrl && (
+              <a href={prUrl} target="_blank" rel="noreferrer">
+                <Button variant="outline" size="sm">
+                  <ExternalLink className="h-4 w-4 mr-1" />
+                  View PR #{prNumber}
+                </Button>
+              </a>
+            )}
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleCopyAsMarkdown}
             >
-              <Sparkles className="h-3 w-3 mr-1" />
-              {TRIGGER_LABELS[suggestion.trigger]}
-            </Badge>
-            <PRStatusBadge status={suggestion.status} />
-            <span className="text-xs text-[var(--text-muted)]">
-              ID: <span className="font-mono">{suggestion.id}</span>
-            </span>
-            <span className="text-xs text-[var(--text-muted)]">
-              • {relativeTime(suggestion.created_at)}
-            </span>
+              <Copy className="h-4 w-4 mr-1" />
+              Copy as markdown
+            </Button>
           </div>
-          <h1 className="text-xl font-semibold text-[var(--text-primary)]">
-            {suggestion.pr_title}
-          </h1>
-          <p className="text-sm text-[var(--text-muted)] mt-1">
-            {suggestion.trigger_summary}
-          </p>
-        </div>
-        <div className="flex flex-col gap-2">
-          {isPending && (
-            <>
-              <Button onClick={() => setShowOpenPR(true)}>
-                <Send className="h-4 w-4 mr-1" />
-                Open PR
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setConfirmAction("regenerate")}
-                disabled={busyAction === "regenerate"}
-              >
-                {busyAction === "regenerate" ? (
-                  <RefreshCw className="h-4 w-4 mr-1 animate-spin" />
-                ) : (
-                  <RotateCcw className="h-4 w-4 mr-1" />
-                )}
-                Regenerate
-              </Button>
-            </>
-          )}
-          {prUrl && (
-            <a href={prUrl} target="_blank" rel="noreferrer">
-              <Button variant="outline" size="sm">
-                <ExternalLink className="h-4 w-4 mr-1" />
-                View PR #{prNumber}
-              </Button>
-            </a>
-          )}
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={handleCopyAsMarkdown}
-          >
-            <Copy className="h-4 w-4 mr-1" />
-            Copy as markdown
-          </Button>
-        </div>
+        }
+      />
+      <div className="flex items-center gap-2 mb-6 flex-wrap -mt-4">
+        <Badge
+          variant="outline"
+          className={cn("text-xs", TRIGGER_COLORS[suggestion.trigger])}
+        >
+          <Sparkles className="h-3 w-3 mr-1" />
+          {TRIGGER_LABELS[suggestion.trigger]}
+        </Badge>
+        <PRStatusBadge status={suggestion.status} />
+        <span className="text-xs text-[var(--text-muted)]">
+          ID: <span className="font-mono">{suggestion.id}</span>
+        </span>
+        <span className="text-xs text-[var(--text-muted)]">
+          • {relativeTime(suggestion.created_at)}
+        </span>
       </div>
 
       {/* Stats strip */}

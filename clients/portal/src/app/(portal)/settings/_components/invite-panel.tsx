@@ -26,6 +26,7 @@ export function InvitePanel({ orgId, canManage }: InvitePanelProps) {
     try {
       const data = await api.listInvitations(orgId);
       setInvitations(data);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (e: any) {
       setError(e.message || "Failed to load invitations");
     } finally {
@@ -50,6 +51,7 @@ export function InvitePanel({ orgId, canManage }: InvitePanelProps) {
     try {
       await api.declineInvite(orgId, invitationId);
       await loadInvitations();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (e: any) {
       toast.error(e.message || "Failed to cancel invitation");
     }

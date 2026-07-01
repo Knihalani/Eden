@@ -24,8 +24,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { ArrowRight, ArrowLeft, Check, SkipForward } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { ArrowRight, ArrowLeft, SkipForward } from "lucide-react";
+
 
 export interface WizardContext {
   /** Per-step state bag (use the slug as a key for cross-step data). */
@@ -79,8 +79,7 @@ export function Wizard({
   brand = { name: "Eden" },
   progressBar,
   children,
-  skipHref = "/dashboard",
-}: WizardProps) {
+  skipHref = "/dashboard" }: WizardProps) {
   const router = useRouter();
   const pathname = usePathname() || steps[0]?.slug || "/";
 

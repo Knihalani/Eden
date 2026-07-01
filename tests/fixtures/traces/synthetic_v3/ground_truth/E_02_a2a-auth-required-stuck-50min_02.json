@@ -1,0 +1,18 @@
+{
+  "trace_id": "trace_a2a_auth_stuck_02",
+  "archetype_id": "a2a-auth-required-stuck",
+  "agent_id": "agent_a2a-auth-required-stuck_02",
+  "expected_TAS": 37,
+  "expected_intervention": "escalate",
+  "expected_metrics": {
+    "task_state": "auth-required",
+    "duration_min": 50
+  },
+  "expected_detector_fires": [
+    "a2a_task_stuck"
+  ],
+  "expected_loop_detected": false,
+  "expected_hallucination_detected": false,
+  "expected_redundancy_pct": 0.0,
+  "notes": "A2A task stuck in auth-required for 50 minutes \u2192 a2a_task_stuck fires."
+}

@@ -1,0 +1,18 @@
+{
+  "trace_id": "trace_tool_result_hallucination_02",
+  "archetype_id": "tool-result-hallucination",
+  "agent_id": "agent_tool-result-hallucination_02",
+  "expected_TAS": 60,
+  "expected_intervention": "warn",
+  "expected_metrics": {
+    "LHP": 0.65,
+    "fabricated_facts": 2
+  },
+  "expected_detector_fires": [
+    "MiniCheck_unsupported"
+  ],
+  "expected_loop_detected": false,
+  "expected_hallucination_detected": true,
+  "expected_redundancy_pct": 0.0,
+  "notes": "The tool said refund_state='queued' \u2014 LLM claims 'processed April 12'. DistilBERT-MNLI should detect the contradiction; MiniCheck should flag unsupported claims."
+}

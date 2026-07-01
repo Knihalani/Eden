@@ -1,0 +1,18 @@
+{
+  "trace_id": "trace_high_rda_02",
+  "archetype_id": "high-rda-shallow",
+  "agent_id": "agent_high-rda-shallow_02",
+  "expected_TAS": 22,
+  "expected_intervention": "warn",
+  "expected_metrics": {
+    "RDA": 0.05,
+    "VHP": 0.0
+  },
+  "expected_detector_fires": [
+    "reasoning_failure"
+  ],
+  "expected_loop_detected": false,
+  "expected_hallucination_detected": false,
+  "expected_redundancy_pct": 0.0,
+  "notes": "Zero verification markers across 3 LLM emissions \u2192 RDA low, VHP=0. No 'let me check' / 'double-checking' markers. Reasoning surface failure."
+}

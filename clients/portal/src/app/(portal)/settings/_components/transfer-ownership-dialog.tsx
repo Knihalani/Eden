@@ -6,6 +6,7 @@ import { Loader2, AlertTriangle } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface TransferOwnershipDialogProps {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   org: any;
   member: {
     user_id: string;
@@ -33,6 +34,7 @@ export function TransferOwnershipDialog({
       await api.transferOwnership(org.id, member.user_id);
       onTransferred();
       onClose();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (e: any) {
       setError(e.message || "Failed to transfer ownership");
     } finally {

@@ -26,7 +26,7 @@ import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Query
 
-from eden.api.deps import get_current_user
+from eden.api.deps import get_current_user, require_org_member
 from eden.llmops.judges.base import JudgeScore
 from eden.llmops.judges.registry import get_judge_registry
 from eden.llmops.judges.runner import JudgeRunner
@@ -42,6 +42,10 @@ logger = logging.getLogger(__name__)
 router = APIRouter(
     prefix="/orgs/{org_id}/observability/judges",
     tags=["judges"],
+    dependencies=[
+        Depends(get_current_user),
+        Depends(require_org_member),
+    ],
 )
 
 

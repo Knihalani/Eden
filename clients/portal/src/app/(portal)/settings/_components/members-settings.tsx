@@ -48,7 +48,7 @@ export function MembersSettings({ org }: MembersSettingsProps) {
     }
   };
 
-  // eslint-disable-next-line react-hooks/set-state-in-effect -- legitimate pattern: refetch on org change
+   
   useEffect(() => {
     loadMembers();
   }, [org?.id]);

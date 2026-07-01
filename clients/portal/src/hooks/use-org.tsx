@@ -8,8 +8,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
-  type ReactNode,
-} from "react";
+  type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { useOrganization, useOrganizationList, useUser } from "@clerk/nextjs";
 import { api } from "@/lib/api";
@@ -54,11 +53,10 @@ const OrgContext = createContext<OrgContextType | null>(null);
  */
 export function OrgProvider({ children }: { children: ReactNode }) {
   const { organization: clerkOrg, isLoaded: clerkOrgLoaded } = useOrganization();
-  const { isLoaded: userListLoaded, userMemberships } = useOrganizationList({
-    userMemberships: { infinite: true },
-  });
+  const { userMemberships, isLoaded: _userMembershipsLoaded } = useOrganizationList({
+    userMemberships: { infinite: true } });
   const { user, isLoaded: userLoaded } = useUser();
-  const router = useRouter();
+  const __router = useRouter();
   const [currentOrg, setCurrentOrgState] = useState<Organization | null>(null);
   const [organizations, setOrganizations] = useState<Organization[]>([]);
   const [loading, setLoading] = useState(false);
@@ -297,13 +295,12 @@ export function OrgProvider({ children }: { children: ReactNode }) {
       // default; map them onto Eden's ``owner``/``member`` vocab so
       // existing RBAC checks (`org["role"] === "admin"`) keep
       // working. The full mapping lives in `lib/roles.ts`.
-      clerkOrgRole: clerkOrg ? userMemberships.data?.[0]?.role ?? null : null,
-    }),
+      clerkOrgRole: clerkOrg ? userMemberships.data?.[0]?.role ?? null : null }),
     // Intentionally depend on the *identity* of `currentOrg.id`,
     // not the object reference — Clerk returns a fresh
     // Organization wrapper per render, which would otherwise
     // invalidate the memo on every parent render.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
     [currentOrg, organizations, loading, authError, clerkOrg?.id, userMemberships.data, refreshOrgs],
   );
 

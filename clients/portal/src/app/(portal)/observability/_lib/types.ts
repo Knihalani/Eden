@@ -25,6 +25,14 @@ export interface TraceItem {
   span_count: number;
   duration_ms: number;
   streaming_metrics?: StreamingMetrics | null;
+  // Pattern 5.1 (Langfuse): optional token / cost columns. Surfaced
+  // by /api/orgs/{orgId}/observability/traces when telemetry-derived
+  // usage_events data is present. Older traces predate this field.
+  input_tokens?: number | null;
+  output_tokens?: number | null;
+  cost_cents?: number | null;
+  model?: string | null;
+  started_at?: string | null;
 }
 
 export interface TraceTreeData {

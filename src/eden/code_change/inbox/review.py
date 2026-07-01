@@ -27,6 +27,7 @@ from typing import Any
 
 from .._common import (
     _check_two_stage_optin,
+    _error_envelope,
     _insert_row,
     _new_id,
     _not_implemented_envelope,
@@ -113,10 +114,15 @@ class PRReviewService:
         machinery that hasn't shipped.
         """
         if action not in INBOX_ACTIONS:
-            return _not_implemented_envelope(
+            return _error_envelope(
                 self.name,
                 message=f"unknown action: {action!r}",
-                data={"patch_id": patch_id, "action": action},
+                error_code="unknown_action",
+                data={
+                    "patch_id": patch_id,
+                    "action": action,
+                    "valid_actions": sorted(INBOX_ACTIONS),
+                },
             )
 
         # Comment bypasses opt-in (read-only).
@@ -180,20 +186,192 @@ class PRReviewService:
                 },
             )
 
-        # ── Destructive actions stay Gate-4a blocked ──
-        return _not_implemented_envelope(
+        # ── Destructive actions: edit / pr / revert / bulk ────────
+        #
+        # Each one writes an audit row to ``closed_loop_actions``
+        # and updates the corresponding patch state. The
+        # opt-in check above already gated them on
+        # ``code_change_enabled`` + ``auto_pr_enabled`` /
+        # ``auto_revert_enabled``.
+        if action == "edit":
+            if not edited_diff:
+                return _error_envelope(
+                    self.name,
+                    message=(
+                        f"action 'edit' requires edited_diff in the "
+                        "request body."
+                    ),
+                    error_code="edited_diff_required",
+                    data={"patch_id": patch_id, "action": action},
+                )
+            approval_id = _new_id("approval")
+            await _insert_row(
+                org_id,
+                "patch_approvals",
+                [
+                    "id", "patch_id", "approver_user_id",
+                    "approval_type", "comment",
+                ],
+                [
+                    approval_id, patch_id, actor_user_id,
+                    "edit", comment or "",
+                ],
+            )
+            await _update_row(
+                org_id,
+                "proposed_patches",
+                where_col="id",
+                where_val=patch_id,
+                set_col="diff",
+                set_val=edited_diff,
+            )
+            await _update_row(
+                org_id,
+                "proposed_patches",
+                where_col="id",
+                where_val=patch_id,
+                set_col="status",
+                set_val="needs_revision",
+            )
+            return _ok_envelope(
+                self.name,
+                {
+                    "patch_id": patch_id,
+                    "action": action,
+                    "approval_id": approval_id,
+                    "actor_user_id": actor_user_id,
+                    "new_status": "needs_revision",
+                    "diff_updated": True,
+                },
+            )
+
+        if action == "pr":
+            # Delegate to PRCreator so the inbox action reuses the
+            # same gate / provider / diff-parsing path. PRCreator
+            # requires ``code_change_enabled`` + ``auto_pr_enabled``
+            # — the opt-in check above already enforced those.
+            from ..pr_creator import PRCreator
+
+            creator = PRCreator()
+            # The inbox doesn't have a built request, so the
+            # PRCreator's destructive-route branch fires (it loads
+            # the patch row + parses the diff + delegates to the
+            # provider).
+            pr_result = await creator.create(
+                org_id, patch_id, policy,
+                pr_patterns=None,
+            )
+            return pr_result
+
+        if action == "revert":
+            # Mark the patch as reverted and record the audit row.
+            # The actual revert-PR creation is delegated to
+            # :class:`AutoRevertEngine` which is a Gate-4b feature.
+            # Until then, ``revert`` records the operator's intent
+            # and flips the status — the operator still has to open
+            # the revert PR manually via the GitHub UI.
+            approval_id = _new_id("approval")
+            await _insert_row(
+                org_id,
+                "patch_approvals",
+                [
+                    "id", "patch_id", "approver_user_id",
+                    "approval_type", "comment",
+                ],
+                [
+                    approval_id, patch_id, actor_user_id,
+                    "revert", comment or "",
+                ],
+            )
+            await _update_row(
+                org_id,
+                "proposed_patches",
+                where_col="id",
+                where_val=patch_id,
+                set_col="status",
+                set_val="reverted",
+            )
+            return _ok_envelope(
+                self.name,
+                {
+                    "patch_id": patch_id,
+                    "action": action,
+                    "approval_id": approval_id,
+                    "actor_user_id": actor_user_id,
+                    "new_status": "reverted",
+                    "revert_pr_url": None,
+                    "note": (
+                        "AutoRevertEngine is a Gate-4b feature. The "
+                        "operator must open the revert PR manually "
+                        "until then."
+                    ),
+                },
+            )
+
+        if action == "bulk":
+            # ``bulk`` takes a list of patch ids in ``comment`` (JSON-encoded
+            # for transport simplicity — the inbox UI passes a JSON
+            # array as the comment field). Each id is reviewed under
+            # the same RBAC + opt-in check.
+            import json as _json
+            try:
+                bulk_ids = _json.loads(comment or "[]")
+            except Exception as exc:
+                return _error_envelope(
+                    self.name,
+                    message=(
+                        "action 'bulk' requires comment to be a "
+                        f"JSON array of patch ids. Got: {exc}"
+                    ),
+                    error_code="bulk_payload_invalid",
+                    data={"patch_id": patch_id},
+                )
+            if not isinstance(bulk_ids, list):
+                return _error_envelope(
+                    self.name,
+                    message=(
+                        "action 'bulk' requires comment to be a "
+                        "JSON array of patch ids."
+                    ),
+                    error_code="bulk_payload_invalid",
+                    data={"patch_id": patch_id},
+                )
+            results = []
+            for bulk_id in bulk_ids:
+                if not isinstance(bulk_id, str):
+                    continue
+                # Each bulk action reuses this same method but with
+                # ``action="approve"`` — the operator already cleared
+                # the opt-in for the bulk action itself.
+                bulk_result = await self.act(
+                    org_id=org_id,
+                    patch_id=bulk_id,
+                    action="approve",
+                    actor_user_id=actor_user_id,
+                    comment=comment,
+                    edited_diff=None,
+                    policy=policy,
+                )
+                results.append({
+                    "patch_id": bulk_id,
+                    "result": bulk_result,
+                })
+            return _ok_envelope(
+                self.name,
+                {
+                    "patch_id": patch_id,
+                    "action": "bulk",
+                    "actor_user_id": actor_user_id,
+                    "results": results,
+                    "bulk_count": len(results),
+                },
+            )
+
+        # Unknown action — should have been caught by INBOX_ACTIONS
+        # check at the top, but keep the safety net.
+        return _error_envelope(
             self.name,
-            message=(
-                f"action {action!r} requires Gate 4a (manual "
-                "end-to-end). STUB returns a blocked envelope."
-            ),
-            gate="4a_blocked",
-            data={
-                "patch_id": patch_id,
-                "action": action,
-                "required_rbac": INBOX_ACTION_RBAC[action],
-                "actor_user_id": actor_user_id,
-                "comment": comment,
-                "edited_diff": edited_diff,
-            },
+            message=f"action {action!r} is not implemented in dispatch()",
+            error_code="unknown_action",
+            data={"patch_id": patch_id, "action": action},
         )

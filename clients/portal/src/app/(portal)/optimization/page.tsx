@@ -1,16 +1,18 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import dynamic from "next/dynamic";
-import { Loader2, TrendingUp, TrendingDown, AlertTriangle, Sparkles, Target, BarChart3 } from "lucide-react";
+import { Loader2, TrendingUp, TrendingDown, Sparkles, Target, BarChart3 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
+import { DataTable } from "@/components/ui/data-table";
 import { EmptyState } from "@/components/ui/empty-state";
+import { ErrorState } from "@/components/ui/error-state";
 import { StatCard } from "@/components/ui/stat-card";
 import { PageHeader } from "@/components/layout/page-header";
+import { NoOrgState } from "@/components/ui/no-org-state";
 import { useOrg } from "@/hooks/use-org";
 import { costApi } from "@/lib/api";
 import { cn } from "@/lib/utils";
@@ -23,22 +25,19 @@ const OutcomesPage = dynamic(() => import("./outcomes/page"), {
     <div className="flex h-64 items-center justify-center">
       <Loader2 className="h-5 w-5 animate-spin text-[var(--text-muted)]" />
     </div>
-  ),
-});
+  ) });
 const PredictPage = dynamic(() => import("./predict/page"), {
   ssr: false,
   loading: () => (
     <div className="flex h-64 items-center justify-center">
       <Loader2 className="h-5 w-5 animate-spin text-[var(--text-muted)]" />
     </div>
-  ),
-});
+  ) });
 
 /* ----------------------- Inline SVG forecast chart -------------------- */
 
 function ForecastChart({
-  data,
-}: {
+  data }: {
   data: Array<{ date: string; projected_cost: number; ci_low: number; ci_high: number }>;
 }) {
   // June 2026 polish: legend, hover tooltip with full date + median +
@@ -99,8 +98,7 @@ function ForecastChart({
   // Horizontal grid lines at 0%, 25%, 50%, 75%, 100% of the y range.
   const gridLines = [0, 0.25, 0.5, 0.75, 1.0].map((frac) => ({
     y: padY + frac * (height - padY * 2),
-    value: yMax - frac * yRange,
-  }));
+    value: yMax - frac * yRange }));
 
   // X-axis tick stride: aim for ~5 ticks; data points may be irregular.
   const xTickCount = Math.min(5, data.length);
@@ -315,8 +313,7 @@ function formatTooltipDate(iso: string): string {
       weekday: "short",
       month: "short",
       day: "numeric",
-      year: "numeric",
-    });
+      year: "numeric" });
   } catch {
     return iso;
   }
@@ -374,9 +371,7 @@ function CostTab() {
       setError("");
     });
     Promise.all([
-      costApi.efficiency(currentOrg.id, { days }).catch((e: unknown) => {
-        throw e;
-      }),
+      costApi.efficiency(currentOrg.id, { days }),
       costApi.roi(currentOrg.id, { days }),
       costApi.anomalies(currentOrg.id, { days }),
       costApi.forecast(currentOrg.id),
@@ -401,16 +396,12 @@ function CostTab() {
   }, [currentOrg, days]);
 
   if (!currentOrg) {
-    return (
-      <div className="rounded-lg border border-[var(--border-subtle)] p-8 text-center text-sm text-[var(--text-muted)]">
-        Select an organization to view cost data.
-      </div>
-    );
+    return <NoOrgState feature="Cost & usage optimization" />;
   }
 
   if (loading) {
     return (
-      <div className="flex h-64 items-center justify-center">
+      <div className="flex h-64 items-center justify-center" role="status" aria-live="polite">
         <Loader2 className="h-5 w-5 animate-spin text-[var(--text-muted)]" />
       </div>
     );
@@ -418,11 +409,21 @@ function CostTab() {
 
   if (error) {
     return (
-      <EmptyState
-        icon={AlertTriangle}
+      <ErrorState
         title="Could not load cost data"
-        description={error}
-        size="md"
+        message={error}
+        action={
+          <button
+            type="button"
+            onClick={() => {
+              setError("");
+              setLoading(true);
+            }}
+            className="inline-flex items-center rounded-md border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-1.5 text-xs font-medium text-[var(--text-primary)] hover:bg-[var(--bg-secondary)]"
+          >
+            Retry
+          </button>
+        }
       />
     );
   }
@@ -431,11 +432,17 @@ function CostTab() {
     <div className="space-y-4">
       {/* Day range selector */}
       <div className="flex items-center justify-end">
-        <div className="inline-flex rounded-lg border border-[var(--border)] bg-[var(--bg-primary)] p-0.5 shadow-sm">
+        <div
+          role="group"
+          aria-label="Day range"
+          className="inline-flex rounded-lg border border-[var(--border-default)] bg-[var(--bg-primary)] p-0.5 shadow-sm"
+        >
           {[7, 30, 90].map((d) => (
             <button
               key={d}
               onClick={() => setDays(d)}
+              aria-pressed={days === d}
+              aria-label={`Last ${d} days`}
               className={cn(
                 "rounded-md px-3 py-1.5 text-xs font-medium transition-all",
                 days === d
@@ -526,8 +533,7 @@ function CostTab() {
                     {a.roi.toFixed(2)}
                   </span>
                 ),
-                sortable: true,
-              },
+                sortable: true },
             ]}
             rows={roi?.per_agent ?? []}
             rowKey={(a) => a.agent_id}
@@ -570,8 +576,7 @@ function CostTab() {
                   >
                     {a.severity}
                   </span>
-                ),
-              },
+                ) },
             ]}
             rows={anomalies?.anomalies ?? []}
             rowKey={(a, i) => `${a.date}-${a.agent_id}-${i}`}
@@ -593,16 +598,13 @@ export default function OptimizationPage() {
   const [tab, setTab] = useState<"cost" | "outcomes" | "predict">("cost");
 
   if (!currentOrg) {
-    return (
-      <div className="p-8 text-center text-sm text-[var(--text-muted)]">
-        Select an organization to view optimization data.
-      </div>
-    );
+    return <NoOrgState feature="Cost & usage optimization" />;
   }
 
   return (
     <div className="page-enter mx-auto max-w-7xl space-y-6 p-4 sm:p-6 lg:p-8">
       <PageHeader
+        eyebrow="Optimize"
         title="Cost & usage optimization"
         subtitle="Where your tokens go, what caching saves, and how the budget is burning."
         icon={Sparkles}

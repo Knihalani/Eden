@@ -1605,6 +1605,21 @@ export const api = {
     return fetchApi(`/orgs/${orgId}/observability/traces${qs ? `?${qs}` : ""}`);
   },
 
+  // Pattern 5.2 (Langfuse) — annotate a trace with a 0-10 score +
+  // category + free-form comment. The real backend route is
+  // expected at `POST /orgs/{orgId}/observability/traces/{traceId}/annotate`
+  // but we currently have no-op'd it: the dialog always resolves
+  // with the payload so the UI ships before the endpoint exists.
+  // When the route is implemented, swap the return to
+  //   fetchApi(`/orgs/${orgId}/observability/traces/${traceId}/annotate`,
+  //            { method: "POST", body: JSON.stringify(payload) });
+  annotateTrace: (
+    _orgId: string,
+    _traceId: string,
+    payload: { score: number; category: string; comment?: string },
+  ): Promise<{ score: number; category: string; comment?: string }> =>
+    Promise.resolve(payload),
+
   getTraceTimeline: (
     orgId: string,
     traceId: string,

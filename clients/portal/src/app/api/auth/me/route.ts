@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+
 import { forwardToBackend, proxyError } from "@/lib/proxy";
 
 /**
@@ -15,8 +15,7 @@ export async function GET(request: Request) {
   try {
     const response = await forwardToBackend("/auth/me", {
       method: "GET",
-      cookieHeader: request.headers.get("cookie") ?? undefined,
-    });
+      cookieHeader: request.headers.get("cookie") ?? undefined });
     response.headers.set("Cache-Control", "no-store, no-cache, must-revalidate");
     response.headers.set("Pragma", "no-cache");
     return response;

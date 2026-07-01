@@ -7,8 +7,7 @@ import {
   useSidebarPrefs,
   applySidebarPrefs,
   readAdvancedCollapsed,
-  writeAdvancedCollapsed,
-} from "@/hooks/use-sidebar-prefs";
+  writeAdvancedCollapsed } from "@/hooks/use-sidebar-prefs";
 import { useClerk } from "@clerk/nextjs";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, useRef, useCallback } from "react";
@@ -16,15 +15,15 @@ import { Pin, PanelLeftClose, PanelLeftOpen, RefreshCw } from "lucide-react";
 import {
   Loader2,
   LayoutDashboard,
-  PlusCircle,
-  PlayCircle,
-  FileText,
+  
+  
+  
   LogOut,
   Layers,
   Menu,
   X,
   Home,
-  ChevronLeft,
+  
   Settings,
   CreditCard,
   Building2,
@@ -32,28 +31,14 @@ import {
   Bell,
   ChevronRight,
   Check,
-  BarChart3,
-  Sparkles,
-  GitPullRequestArrow,
+  
+  
+  
   Activity,
-  Brain,
-  AlertOctagon,
+  
+  
   AlertTriangle,
-  ArrowRight,
-  Wand2,
-  Bot,
-  Wrench,
-  Cog,
-  Shield,
-  FlaskConical,
-  TrendingUp,
-  Compass,
-  Users,
-  Inbox,
-  Box,
-  Server,
-  Network,
-} from "lucide-react";
+  ArrowRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -345,8 +330,7 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
           "transition-[transform,width] duration-300 ease-out lg:transition-[width]"
         )}
         style={{
-          width: collapsed ? SIDEBAR_COLLAPSED_WIDTH : SIDEBAR_EXPANDED_WIDTH,
-        }}
+          width: collapsed ? SIDEBAR_COLLAPSED_WIDTH : SIDEBAR_EXPANDED_WIDTH }}
       >
         {/* Gradient overlay */}
         <div className="absolute inset-0 sidebar-gradient pointer-events-none" />
@@ -988,8 +972,7 @@ function isActivePath(pathname: string, href: string): boolean {
 function NavSubItem({
   href,
   label,
-  onClick,
-}: {
+  onClick }: {
   href: string;
   label: string;
   onClick?: () => void;
@@ -1029,8 +1012,7 @@ function NavItem({
   children,
   badge,
   pinned,
-  onTogglePin,
-}: {
+  onTogglePin }: {
   href: string;
   icon: typeof LayoutDashboard;
   label: string;
@@ -1056,10 +1038,15 @@ function NavItem({
         aria-label={label}
         aria-current={active ? "page" : undefined}
         className={cn(
-          "nav-item flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-150 relative",
+          "nav-item flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-all duration-150 relative",
+          // Pattern 1.4 (Linear): the active item gets full opacity,
+          // accent color, and bold weight; idle items sit at 60%
+          // opacity so the user's eye lands on the active one first.
+          // The hover state bumps opacity back to 100% so the
+          // affordance is still visible.
           active
-            ? "bg-[var(--accent-light)] text-[var(--accent)]"
-            : "text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)]"
+            ? "font-semibold text-[var(--accent)] bg-[var(--accent-light)] opacity-100"
+            : "font-medium text-[var(--text-secondary)] opacity-60 hover:text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)] hover:opacity-100"
         )}
       >
         {/* Left-edge accent bar for active items — gives a stronger
@@ -1119,8 +1106,7 @@ function BottomNavItem({
   href,
   icon: Icon,
   label,
-  isCenter,
-}: {
+  isCenter }: {
   href: string;
   icon: typeof Home;
   label: string;
@@ -1155,8 +1141,7 @@ function BottomNavItem({
 function NavGroup({
   label,
   collapsed,
-  children,
-}: {
+  children }: {
   label: string;
   collapsed: boolean;
   children: React.ReactNode;

@@ -1,0 +1,2321 @@
+{
+  "trace_id": "trace_reward_hogging_03",
+  "archetype_id": "reward-hogging",
+  "agent_id": "agent_D_02_reward-hogging-anomaly_03",
+  "event_count": 41,
+  "events": [
+    {
+      "event_id": "evt_treward_hogging_03_0000",
+      "tenant_id": "org_eden_synth",
+      "project_id": "proj_synthetic_eval_v3",
+      "trace_id": "trace_reward_hogging_03",
+      "realm": "production",
+      "agent_id": "agent_D_02_reward-hogging-anomaly_03",
+      "agent_version": "synth-v3.0.0",
+      "environment_id": "env_prod_main",
+      "tags": [],
+      "source_format": "eden_native",
+      "images": [],
+      "audio": [],
+      "citations": [],
+      "stop_sequence": null,
+      "system_fingerprint": "fp_synth-v3.0.0",
+      "conversation_id": "conv_ing_03",
+      "event_type": "span.start",
+      "timestamp": "2026-06-30T12:00:00+00:00",
+      "parent_span_id": null,
+      "span_id": "spn_trace_reward_hogging_03_0000",
+      "name": "trace",
+      "duration_ms": 0.0,
+      "payload": {},
+      "metrics": {},
+      "attributes": {
+        "environment": "production"
+      },
+      "outcome": null,
+      "request_body": null,
+      "response_body": null,
+      "reasoning": null,
+      "tool_calls_full": [],
+      "tool_results": [],
+      "logprobs": null,
+      "finish_reason": null,
+      "cache_hit": false,
+      "prompt_cache_savings_usd": 0.0,
+      "model_version": null,
+      "service_tier": null
+    },
+    {
+      "event_id": "evt_treward_hogging_03_0001",
+      "tenant_id": "org_eden_synth",
+      "project_id": "proj_synthetic_eval_v3",
+      "trace_id": "trace_reward_hogging_03",
+      "realm": "production",
+      "agent_id": "agent_D_02_reward-hogging-anomaly_03",
+      "agent_version": "synth-v3.0.0",
+      "environment_id": "env_prod_main",
+      "tags": [],
+      "source_format": "eden_native",
+      "images": [],
+      "audio": [],
+      "citations": [],
+      "stop_sequence": null,
+      "system_fingerprint": "fp_synth-v3.0.0",
+      "conversation_id": "conv_ing_03",
+      "event_type": "tool.call",
+      "timestamp": "2026-06-30T12:00:00.140000+00:00",
+      "parent_span_id": "spn_trace_reward_hogging_03_0000",
+      "span_id": "spn_trace_reward_hogging_03_0001",
+      "name": "kb.search",
+      "duration_ms": 140.0,
+      "payload": {},
+      "metrics": {
+        "latency_ms": 140.0,
+        "cost_usd": 0.002107
+      },
+      "attributes": {
+        "environment": "production"
+      },
+      "outcome": "success",
+      "request_body": {
+        "tool": "kb.search",
+        "arguments": {
+          "q": "q_0"
+        }
+      },
+      "response_body": {
+        "result": {
+          "hit_id": "kb_0",
+          "text": "text 0"
+        }
+      },
+      "reasoning": null,
+      "tool_calls_full": [
+        {
+          "tool_call_id": "call_kb.search_74134",
+          "type": "function",
+          "function": {
+            "name": "kb.search",
+            "arguments": "{\"q\": \"q_0\"}"
+          }
+        }
+      ],
+      "tool_results": [
+        {
+          "tool_call_id": "call_kb.search_74134",
+          "role": "tool",
+          "content": "{\"hit_id\": \"kb_0\", \"text\": \"text 0\"}"
+        }
+      ],
+      "logprobs": null,
+      "finish_reason": null,
+      "cache_hit": false,
+      "prompt_cache_savings_usd": 0.0,
+      "model_version": null,
+      "service_tier": null
+    },
+    {
+      "event_id": "evt_treward_hogging_03_0002",
+      "tenant_id": "org_eden_synth",
+      "project_id": "proj_synthetic_eval_v3",
+      "trace_id": "trace_reward_hogging_03",
+      "realm": "production",
+      "agent_id": "agent_D_02_reward-hogging-anomaly_03",
+      "agent_version": "synth-v3.0.0",
+      "environment_id": "env_prod_main",
+      "tags": [],
+      "source_format": "eden_native",
+      "images": [],
+      "audio": [],
+      "citations": [],
+      "stop_sequence": null,
+      "system_fingerprint": "fp_synth-v3.0.0",
+      "conversation_id": "conv_ing_03",
+      "event_type": "env.step",
+      "timestamp": "2026-06-30T12:00:00.160000+00:00",
+      "parent_span_id": "spn_trace_reward_hogging_03_0000",
+      "span_id": "spn_trace_reward_hogging_03_0002",
+      "name": "kb.search",
+      "duration_ms": 20.0,
+      "payload": {
+        "tool_name": "kb.search",
+        "reward": 1.0
+      },
+      "metrics": {
+        "latency_ms": 20.0
+      },
+      "attributes": {
+        "environment": "production"
+      },
+      "outcome": "success",
+      "request_body": null,
+      "response_body": null,
+      "reasoning": null,
+      "tool_calls_full": [],
+      "tool_results": [],
+      "logprobs": null,
+      "finish_reason": null,
+      "cache_hit": false,
+      "prompt_cache_savings_usd": 0.0,
+      "model_version": null,
+      "service_tier": null
+    },
+    {
+      "event_id": "evt_treward_hogging_03_0003",
+      "tenant_id": "org_eden_synth",
+      "project_id": "proj_synthetic_eval_v3",
+      "trace_id": "trace_reward_hogging_03",
+      "realm": "production",
+      "agent_id": "agent_D_02_reward-hogging-anomaly_03",
+      "agent_version": "synth-v3.0.0",
+      "environment_id": "env_prod_main",
+      "tags": [],
+      "source_format": "eden_native",
+      "images": [],
+      "audio": [],
+      "citations": [],
+      "stop_sequence": null,
+      "system_fingerprint": "fp_synth-v3.0.0",
+      "conversation_id": "conv_ing_03",
+      "event_type": "tool.call",
+      "timestamp": "2026-06-30T12:00:00.300000+00:00",
+      "parent_span_id": "spn_trace_reward_hogging_03_0000",
+      "span_id": "spn_trace_reward_hogging_03_0003",
+      "name": "kb.search",
+      "duration_ms": 140.0,
+      "payload": {},
+      "metrics": {
+        "latency_ms": 140.0,
+        "cost_usd": 0.000395
+      },
+      "attributes": {
+        "environment": "production"
+      },
+      "outcome": "success",
+      "request_body": {
+        "tool": "kb.search",
+        "arguments": {
+          "q": "q_1"
+        }
+      },
+      "response_body": {
+        "result": {
+          "hit_id": "kb_1",
+          "text": "text 1"
+        }
+      },
+      "reasoning": null,
+      "tool_calls_full": [
+        {
+          "tool_call_id": "call_kb.search_76473",
+          "type": "function",
+          "function": {
+            "name": "kb.search",
+            "arguments": "{\"q\": \"q_1\"}"
+          }
+        }
+      ],
+      "tool_results": [
+        {
+          "tool_call_id": "call_kb.search_76473",
+          "role": "tool",
+          "content": "{\"hit_id\": \"kb_1\", \"text\": \"text 1\"}"
+        }
+      ],
+      "logprobs": null,
+      "finish_reason": null,
+      "cache_hit": false,
+      "prompt_cache_savings_usd": 0.0,
+      "model_version": null,
+      "service_tier": null
+    },
+    {
+      "event_id": "evt_treward_hogging_03_0004",
+      "tenant_id": "org_eden_synth",
+      "project_id": "proj_synthetic_eval_v3",
+      "trace_id": "trace_reward_hogging_03",
+      "realm": "production",
+      "agent_id": "agent_D_02_reward-hogging-anomaly_03",
+      "agent_version": "synth-v3.0.0",
+      "environment_id": "env_prod_main",
+      "tags": [],
+      "source_format": "eden_native",
+      "images": [],
+      "audio": [],
+      "citations": [],
+      "stop_sequence": null,
+      "system_fingerprint": "fp_synth-v3.0.0",
+      "conversation_id": "conv_ing_03",
+      "event_type": "env.step",
+      "timestamp": "2026-06-30T12:00:00.320000+00:00",
+      "parent_span_id": "spn_trace_reward_hogging_03_0000",
+      "span_id": "spn_trace_reward_hogging_03_0004",
+      "name": "kb.search",
+      "duration_ms": 20.0,
+      "payload": {
+        "tool_name": "kb.search",
+        "reward": 1.0
+      },
+      "metrics": {
+        "latency_ms": 20.0
+      },
+      "attributes": {
+        "environment": "production"
+      },
+      "outcome": "success",
+      "request_body": null,
+      "response_body": null,
+      "reasoning": null,
+      "tool_calls_full": [],
+      "tool_results": [],
+      "logprobs": null,
+      "finish_reason": null,
+      "cache_hit": false,
+      "prompt_cache_savings_usd": 0.0,
+      "model_version": null,
+      "service_tier": null
+    },
+    {
+      "event_id": "evt_treward_hogging_03_0005",
+      "tenant_id": "org_eden_synth",
+      "project_id": "proj_synthetic_eval_v3",
+      "trace_id": "trace_reward_hogging_03",
+      "realm": "production",
+      "agent_id": "agent_D_02_reward-hogging-anomaly_03",
+      "agent_version": "synth-v3.0.0",
+      "environment_id": "env_prod_main",
+      "tags": [],
+      "source_format": "eden_native",
+      "images": [],
+      "audio": [],
+      "citations": [],
+      "stop_sequence": null,
+      "system_fingerprint": "fp_synth-v3.0.0",
+      "conversation_id": "conv_ing_03",
+      "event_type": "tool.call",
+      "timestamp": "2026-06-30T12:00:00.460000+00:00",
+      "parent_span_id": "spn_trace_reward_hogging_03_0000",
+      "span_id": "spn_trace_reward_hogging_03_0005",
+      "name": "kb.search",
+      "duration_ms": 140.0,
+      "payload": {},
+      "metrics": {
+        "latency_ms": 140.0,
+        "cost_usd": 0.00635
+      },
+      "attributes": {
+        "environment": "production"
+      },
+      "outcome": "success",
+      "request_body": {
+        "tool": "kb.search",
+        "arguments": {
+          "q": "q_2"
+        }
+      },
+      "response_body": {
+        "result": {
+          "hit_id": "kb_2",
+          "text": "text 2"
+        }
+      },
+      "reasoning": null,
+      "tool_calls_full": [
+        {
+          "tool_call_id": "call_kb.search_59899",
+          "type": "function",
+          "function": {
+            "name": "kb.search",
+            "arguments": "{\"q\": \"q_2\"}"
+          }
+        }
+      ],
+      "tool_results": [
+        {
+          "tool_call_id": "call_kb.search_59899",
+          "role": "tool",
+          "content": "{\"hit_id\": \"kb_2\", \"text\": \"text 2\"}"
+        }
+      ],
+      "logprobs": null,
+      "finish_reason": null,
+      "cache_hit": false,
+      "prompt_cache_savings_usd": 0.0,
+      "model_version": null,
+      "service_tier": null
+    },
+    {
+      "event_id": "evt_treward_hogging_03_0006",
+      "tenant_id": "org_eden_synth",
+      "project_id": "proj_synthetic_eval_v3",
+      "trace_id": "trace_reward_hogging_03",
+      "realm": "production",
+      "agent_id": "agent_D_02_reward-hogging-anomaly_03",
+      "agent_version": "synth-v3.0.0",
+      "environment_id": "env_prod_main",
+      "tags": [],
+      "source_format": "eden_native",
+      "images": [],
+      "audio": [],
+      "citations": [],
+      "stop_sequence": null,
+      "system_fingerprint": "fp_synth-v3.0.0",
+      "conversation_id": "conv_ing_03",
+      "event_type": "env.step",
+      "timestamp": "2026-06-30T12:00:00.480000+00:00",
+      "parent_span_id": "spn_trace_reward_hogging_03_0000",
+      "span_id": "spn_trace_reward_hogging_03_0006",
+      "name": "kb.search",
+      "duration_ms": 20.0,
+      "payload": {
+        "tool_name": "kb.search",
+        "reward": 1.0
+      },
+      "metrics": {
+        "latency_ms": 20.0
+      },
+      "attributes": {
+        "environment": "production"
+      },
+      "outcome": "success",
+      "request_body": null,
+      "response_body": null,
+      "reasoning": null,
+      "tool_calls_full": [],
+      "tool_results": [],
+      "logprobs": null,
+      "finish_reason": null,
+      "cache_hit": false,
+      "prompt_cache_savings_usd": 0.0,
+      "model_version": null,
+      "service_tier": null
+    },
+    {
+      "event_id": "evt_treward_hogging_03_0007",
+      "tenant_id": "org_eden_synth",
+      "project_id": "proj_synthetic_eval_v3",
+      "trace_id": "trace_reward_hogging_03",
+      "realm": "production",
+      "agent_id": "agent_D_02_reward-hogging-anomaly_03",
+      "agent_version": "synth-v3.0.0",
+      "environment_id": "env_prod_main",
+      "tags": [],
+      "source_format": "eden_native",
+      "images": [],
+      "audio": [],
+      "citations": [],
+      "stop_sequence": null,
+      "system_fingerprint": "fp_synth-v3.0.0",
+      "conversation_id": "conv_ing_03",
+      "event_type": "tool.call",
+      "timestamp": "2026-06-30T12:00:00.620000+00:00",
+      "parent_span_id": "spn_trace_reward_hogging_03_0000",
+      "span_id": "spn_trace_reward_hogging_03_0007",
+      "name": "kb.search",
+      "duration_ms": 140.0,
+      "payload": {},
+      "metrics": {
+        "latency_ms": 140.0,
+        "cost_usd": 0.001843
+      },
+      "attributes": {
+        "environment": "production"
+      },
+      "outcome": "success",
+      "request_body": {
+        "tool": "kb.search",
+        "arguments": {
+          "q": "q_3"
+        }
+      },
+      "response_body": {
+        "result": {
+          "hit_id": "kb_3",
+          "text": "text 3"
+        }
+      },
+      "reasoning": null,
+      "tool_calls_full": [
+        {
+          "tool_call_id": "call_kb.search_81457",
+          "type": "function",
+          "function": {
+            "name": "kb.search",
+            "arguments": "{\"q\": \"q_3\"}"
+          }
+        }
+      ],
+      "tool_results": [
+        {
+          "tool_call_id": "call_kb.search_81457",
+          "role": "tool",
+          "content": "{\"hit_id\": \"kb_3\", \"text\": \"text 3\"}"
+        }
+      ],
+      "logprobs": null,
+      "finish_reason": null,
+      "cache_hit": false,
+      "prompt_cache_savings_usd": 0.0,
+      "model_version": null,
+      "service_tier": null
+    },
+    {
+      "event_id": "evt_treward_hogging_03_0008",
+      "tenant_id": "org_eden_synth",
+      "project_id": "proj_synthetic_eval_v3",
+      "trace_id": "trace_reward_hogging_03",
+      "realm": "production",
+      "agent_id": "agent_D_02_reward-hogging-anomaly_03",
+      "agent_version": "synth-v3.0.0",
+      "environment_id": "env_prod_main",
+      "tags": [],
+      "source_format": "eden_native",
+      "images": [],
+      "audio": [],
+      "citations": [],
+      "stop_sequence": null,
+      "system_fingerprint": "fp_synth-v3.0.0",
+      "conversation_id": "conv_ing_03",
+      "event_type": "env.step",
+      "timestamp": "2026-06-30T12:00:00.640000+00:00",
+      "parent_span_id": "spn_trace_reward_hogging_03_0000",
+      "span_id": "spn_trace_reward_hogging_03_0008",
+      "name": "kb.search",
+      "duration_ms": 20.0,
+      "payload": {
+        "tool_name": "kb.search",
+        "reward": 1.0
+      },
+      "metrics": {
+        "latency_ms": 20.0
+      },
+      "attributes": {
+        "environment": "production"
+      },
+      "outcome": "success",
+      "request_body": null,
+      "response_body": null,
+      "reasoning": null,
+      "tool_calls_full": [],
+      "tool_results": [],
+      "logprobs": null,
+      "finish_reason": null,
+      "cache_hit": false,
+      "prompt_cache_savings_usd": 0.0,
+      "model_version": null,
+      "service_tier": null
+    },
+    {
+      "event_id": "evt_treward_hogging_03_0009",
+      "tenant_id": "org_eden_synth",
+      "project_id": "proj_synthetic_eval_v3",
+      "trace_id": "trace_reward_hogging_03",
+      "realm": "production",
+      "agent_id": "agent_D_02_reward-hogging-anomaly_03",
+      "agent_version": "synth-v3.0.0",
+      "environment_id": "env_prod_main",
+      "tags": [],
+      "source_format": "eden_native",
+      "images": [],
+      "audio": [],
+      "citations": [],
+      "stop_sequence": null,
+      "system_fingerprint": "fp_synth-v3.0.0",
+      "conversation_id": "conv_ing_03",
+      "event_type": "tool.call",
+      "timestamp": "2026-06-30T12:00:00.780000+00:00",
+      "parent_span_id": "spn_trace_reward_hogging_03_0000",
+      "span_id": "spn_trace_reward_hogging_03_0009",
+      "name": "kb.search",
+      "duration_ms": 140.0,
+      "payload": {},
+      "metrics": {
+        "latency_ms": 140.0,
+        "cost_usd": 0.008367
+      },
+      "attributes": {
+        "environment": "production"
+      },
+      "outcome": "success",
+      "request_body": {
+        "tool": "kb.search",
+        "arguments": {
+          "q": "q_4"
+        }
+      },
+      "response_body": {
+        "result": {
+          "hit_id": "kb_4",
+          "text": "text 4"
+        }
+      },
+      "reasoning": null,
+      "tool_calls_full": [
+        {
+          "tool_call_id": "call_kb.search_13090",
+          "type": "function",
+          "function": {
+            "name": "kb.search",
+            "arguments": "{\"q\": \"q_4\"}"
+          }
+        }
+      ],
+      "tool_results": [
+        {
+          "tool_call_id": "call_kb.search_13090",
+          "role": "tool",
+          "content": "{\"hit_id\": \"kb_4\", \"text\": \"text 4\"}"
+        }
+      ],
+      "logprobs": null,
+      "finish_reason": null,
+      "cache_hit": false,
+      "prompt_cache_savings_usd": 0.0,
+      "model_version": null,
+      "service_tier": null
+    },
+    {
+      "event_id": "evt_treward_hogging_03_0010",
+      "tenant_id": "org_eden_synth",
+      "project_id": "proj_synthetic_eval_v3",
+      "trace_id": "trace_reward_hogging_03",
+      "realm": "production",
+      "agent_id": "agent_D_02_reward-hogging-anomaly_03",
+      "agent_version": "synth-v3.0.0",
+      "environment_id": "env_prod_main",
+      "tags": [],
+      "source_format": "eden_native",
+      "images": [],
+      "audio": [],
+      "citations": [],
+      "stop_sequence": null,
+      "system_fingerprint": "fp_synth-v3.0.0",
+      "conversation_id": "conv_ing_03",
+      "event_type": "env.step",
+      "timestamp": "2026-06-30T12:00:00.800000+00:00",
+      "parent_span_id": "spn_trace_reward_hogging_03_0000",
+      "span_id": "spn_trace_reward_hogging_03_0010",
+      "name": "kb.search",
+      "duration_ms": 20.0,
+      "payload": {
+        "tool_name": "kb.search",
+        "reward": 1.0
+      },
+      "metrics": {
+        "latency_ms": 20.0
+      },
+      "attributes": {
+        "environment": "production"
+      },
+      "outcome": "success",
+      "request_body": null,
+      "response_body": null,
+      "reasoning": null,
+      "tool_calls_full": [],
+      "tool_results": [],
+      "logprobs": null,
+      "finish_reason": null,
+      "cache_hit": false,
+      "prompt_cache_savings_usd": 0.0,
+      "model_version": null,
+      "service_tier": null
+    },
+    {
+      "event_id": "evt_treward_hogging_03_0011",
+      "tenant_id": "org_eden_synth",
+      "project_id": "proj_synthetic_eval_v3",
+      "trace_id": "trace_reward_hogging_03",
+      "realm": "production",
+      "agent_id": "agent_D_02_reward-hogging-anomaly_03",
+      "agent_version": "synth-v3.0.0",
+      "environment_id": "env_prod_main",
+      "tags": [],
+      "source_format": "eden_native",
+      "images": [],
+      "audio": [],
+      "citations": [],
+      "stop_sequence": null,
+      "system_fingerprint": "fp_synth-v3.0.0",
+      "conversation_id": "conv_ing_03",
+      "event_type": "tool.call",
+      "timestamp": "2026-06-30T12:00:00.940000+00:00",
+      "parent_span_id": "spn_trace_reward_hogging_03_0000",
+      "span_id": "spn_trace_reward_hogging_03_0011",
+      "name": "kb.search",
+      "duration_ms": 140.0,
+      "payload": {},
+      "metrics": {
+        "latency_ms": 140.0,
+        "cost_usd": 0.004383
+      },
+      "attributes": {
+        "environment": "production"
+      },
+      "outcome": "success",
+      "request_body": {
+        "tool": "kb.search",
+        "arguments": {
+          "q": "q_5"
+        }
+      },
+      "response_body": {
+        "result": {
+          "hit_id": "kb_5",
+          "text": "text 5"
+        }
+      },
+      "reasoning": null,
+      "tool_calls_full": [
+        {
+          "tool_call_id": "call_kb.search_68438",
+          "type": "function",
+          "function": {
+            "name": "kb.search",
+            "arguments": "{\"q\": \"q_5\"}"
+          }
+        }
+      ],
+      "tool_results": [
+        {
+          "tool_call_id": "call_kb.search_68438",
+          "role": "tool",
+          "content": "{\"hit_id\": \"kb_5\", \"text\": \"text 5\"}"
+        }
+      ],
+      "logprobs": null,
+      "finish_reason": null,
+      "cache_hit": false,
+      "prompt_cache_savings_usd": 0.0,
+      "model_version": null,
+      "service_tier": null
+    },
+    {
+      "event_id": "evt_treward_hogging_03_0012",
+      "tenant_id": "org_eden_synth",
+      "project_id": "proj_synthetic_eval_v3",
+      "trace_id": "trace_reward_hogging_03",
+      "realm": "production",
+      "agent_id": "agent_D_02_reward-hogging-anomaly_03",
+      "agent_version": "synth-v3.0.0",
+      "environment_id": "env_prod_main",
+      "tags": [],
+      "source_format": "eden_native",
+      "images": [],
+      "audio": [],
+      "citations": [],
+      "stop_sequence": null,
+      "system_fingerprint": "fp_synth-v3.0.0",
+      "conversation_id": "conv_ing_03",
+      "event_type": "env.step",
+      "timestamp": "2026-06-30T12:00:00.960000+00:00",
+      "parent_span_id": "spn_trace_reward_hogging_03_0000",
+      "span_id": "spn_trace_reward_hogging_03_0012",
+      "name": "kb.search",
+      "duration_ms": 20.0,
+      "payload": {
+        "tool_name": "kb.search",
+        "reward": 1.0
+      },
+      "metrics": {
+        "latency_ms": 20.0
+      },
+      "attributes": {
+        "environment": "production"
+      },
+      "outcome": "success",
+      "request_body": null,
+      "response_body": null,
+      "reasoning": null,
+      "tool_calls_full": [],
+      "tool_results": [],
+      "logprobs": null,
+      "finish_reason": null,
+      "cache_hit": false,
+      "prompt_cache_savings_usd": 0.0,
+      "model_version": null,
+      "service_tier": null
+    },
+    {
+      "event_id": "evt_treward_hogging_03_0013",
+      "tenant_id": "org_eden_synth",
+      "project_id": "proj_synthetic_eval_v3",
+      "trace_id": "trace_reward_hogging_03",
+      "realm": "production",
+      "agent_id": "agent_D_02_reward-hogging-anomaly_03",
+      "agent_version": "synth-v3.0.0",
+      "environment_id": "env_prod_main",
+      "tags": [],
+      "source_format": "eden_native",
+      "images": [],
+      "audio": [],
+      "citations": [],
+      "stop_sequence": null,
+      "system_fingerprint": "fp_synth-v3.0.0",
+      "conversation_id": "conv_ing_03",
+      "event_type": "tool.call",
+      "timestamp": "2026-06-30T12:00:01.100000+00:00",
+      "parent_span_id": "spn_trace_reward_hogging_03_0000",
+      "span_id": "spn_trace_reward_hogging_03_0013",
+      "name": "kb.search",
+      "duration_ms": 140.0,
+      "payload": {},
+      "metrics": {
+        "latency_ms": 140.0,
+        "cost_usd": 0.009517
+      },
+      "attributes": {
+        "environment": "production"
+      },
+      "outcome": "success",
+      "request_body": {
+        "tool": "kb.search",
+        "arguments": {
+          "q": "q_6"
+        }
+      },
+      "response_body": {
+        "result": {
+          "hit_id": "kb_6",
+          "text": "text 6"
+        }
+      },
+      "reasoning": null,
+      "tool_calls_full": [
+        {
+          "tool_call_id": "call_kb.search_33372",
+          "type": "function",
+          "function": {
+            "name": "kb.search",
+            "arguments": "{\"q\": \"q_6\"}"
+          }
+        }
+      ],
+      "tool_results": [
+        {
+          "tool_call_id": "call_kb.search_33372",
+          "role": "tool",
+          "content": "{\"hit_id\": \"kb_6\", \"text\": \"text 6\"}"
+        }
+      ],
+      "logprobs": null,
+      "finish_reason": null,
+      "cache_hit": false,
+      "prompt_cache_savings_usd": 0.0,
+      "model_version": null,
+      "service_tier": null
+    },
+    {
+      "event_id": "evt_treward_hogging_03_0014",
+      "tenant_id": "org_eden_synth",
+      "project_id": "proj_synthetic_eval_v3",
+      "trace_id": "trace_reward_hogging_03",
+      "realm": "production",
+      "agent_id": "agent_D_02_reward-hogging-anomaly_03",
+      "agent_version": "synth-v3.0.0",
+      "environment_id": "env_prod_main",
+      "tags": [],
+      "source_format": "eden_native",
+      "images": [],
+      "audio": [],
+      "citations": [],
+      "stop_sequence": null,
+      "system_fingerprint": "fp_synth-v3.0.0",
+      "conversation_id": "conv_ing_03",
+      "event_type": "env.step",
+      "timestamp": "2026-06-30T12:00:01.120000+00:00",
+      "parent_span_id": "spn_trace_reward_hogging_03_0000",
+      "span_id": "spn_trace_reward_hogging_03_0014",
+      "name": "kb.search",
+      "duration_ms": 20.0,
+      "payload": {
+        "tool_name": "kb.search",
+        "reward": 1.0
+      },
+      "metrics": {
+        "latency_ms": 20.0
+      },
+      "attributes": {
+        "environment": "production"
+      },
+      "outcome": "success",
+      "request_body": null,
+      "response_body": null,
+      "reasoning": null,
+      "tool_calls_full": [],
+      "tool_results": [],
+      "logprobs": null,
+      "finish_reason": null,
+      "cache_hit": false,
+      "prompt_cache_savings_usd": 0.0,
+      "model_version": null,
+      "service_tier": null
+    },
+    {
+      "event_id": "evt_treward_hogging_03_0015",
+      "tenant_id": "org_eden_synth",
+      "project_id": "proj_synthetic_eval_v3",
+      "trace_id": "trace_reward_hogging_03",
+      "realm": "production",
+      "agent_id": "agent_D_02_reward-hogging-anomaly_03",
+      "agent_version": "synth-v3.0.0",
+      "environment_id": "env_prod_main",
+      "tags": [],
+      "source_format": "eden_native",
+      "images": [],
+      "audio": [],
+      "citations": [],
+      "stop_sequence": null,
+      "system_fingerprint": "fp_synth-v3.0.0",
+      "conversation_id": "conv_ing_03",
+      "event_type": "env.step",
+      "timestamp": "2026-06-30T12:00:01.250000+00:00",
+      "parent_span_id": "spn_trace_reward_hogging_03_0000",
+      "span_id": "spn_trace_reward_hogging_03_0015",
+      "name": "documents.search",
+      "duration_ms": 130.0,
+      "payload": {
+        "tool_name": "documents.search",
+        "reward": 1.0
+      },
+      "metrics": {
+        "latency_ms": 130.0
+      },
+      "attributes": {
+        "environment": "production"
+      },
+      "outcome": "success",
+      "request_body": null,
+      "response_body": null,
+      "reasoning": null,
+      "tool_calls_full": [],
+      "tool_results": [],
+      "logprobs": null,
+      "finish_reason": null,
+      "cache_hit": false,
+      "prompt_cache_savings_usd": 0.0,
+      "model_version": null,
+      "service_tier": null
+    },
+    {
+      "event_id": "evt_treward_hogging_03_0016",
+      "tenant_id": "org_eden_synth",
+      "project_id": "proj_synthetic_eval_v3",
+      "trace_id": "trace_reward_hogging_03",
+      "realm": "production",
+      "agent_id": "agent_D_02_reward-hogging-anomaly_03",
+      "agent_version": "synth-v3.0.0",
+      "environment_id": "env_prod_main",
+      "tags": [],
+      "source_format": "eden_native",
+      "images": [],
+      "audio": [],
+      "citations": [],
+      "stop_sequence": null,
+      "system_fingerprint": "fp_synth-v3.0.0",
+      "conversation_id": "conv_ing_03",
+      "event_type": "tool.call",
+      "timestamp": "2026-06-30T12:00:01.390000+00:00",
+      "parent_span_id": "spn_trace_reward_hogging_03_0000",
+      "span_id": "spn_trace_reward_hogging_03_0016",
+      "name": "kb.search",
+      "duration_ms": 140.0,
+      "payload": {},
+      "metrics": {
+        "latency_ms": 140.0,
+        "cost_usd": 0.000109
+      },
+      "attributes": {
+        "environment": "production"
+      },
+      "outcome": "success",
+      "request_body": {
+        "tool": "kb.search",
+        "arguments": {
+          "q": "q_8"
+        }
+      },
+      "response_body": {
+        "result": {
+          "hit_id": "kb_8",
+          "text": "text 8"
+        }
+      },
+      "reasoning": null,
+      "tool_calls_full": [
+        {
+          "tool_call_id": "call_kb.search_20385",
+          "type": "function",
+          "function": {
+            "name": "kb.search",
+            "arguments": "{\"q\": \"q_8\"}"
+          }
+        }
+      ],
+      "tool_results": [
+        {
+          "tool_call_id": "call_kb.search_20385",
+          "role": "tool",
+          "content": "{\"hit_id\": \"kb_8\", \"text\": \"text 8\"}"
+        }
+      ],
+      "logprobs": null,
+      "finish_reason": null,
+      "cache_hit": false,
+      "prompt_cache_savings_usd": 0.0,
+      "model_version": null,
+      "service_tier": null
+    },
+    {
+      "event_id": "evt_treward_hogging_03_0017",
+      "tenant_id": "org_eden_synth",
+      "project_id": "proj_synthetic_eval_v3",
+      "trace_id": "trace_reward_hogging_03",
+      "realm": "production",
+      "agent_id": "agent_D_02_reward-hogging-anomaly_03",
+      "agent_version": "synth-v3.0.0",
+      "environment_id": "env_prod_main",
+      "tags": [],
+      "source_format": "eden_native",
+      "images": [],
+      "audio": [],
+      "citations": [],
+      "stop_sequence": null,
+      "system_fingerprint": "fp_synth-v3.0.0",
+      "conversation_id": "conv_ing_03",
+      "event_type": "env.step",
+      "timestamp": "2026-06-30T12:00:01.410000+00:00",
+      "parent_span_id": "spn_trace_reward_hogging_03_0000",
+      "span_id": "spn_trace_reward_hogging_03_0017",
+      "name": "kb.search",
+      "duration_ms": 20.0,
+      "payload": {
+        "tool_name": "kb.search",
+        "reward": 1.0
+      },
+      "metrics": {
+        "latency_ms": 20.0
+      },
+      "attributes": {
+        "environment": "production"
+      },
+      "outcome": "success",
+      "request_body": null,
+      "response_body": null,
+      "reasoning": null,
+      "tool_calls_full": [],
+      "tool_results": [],
+      "logprobs": null,
+      "finish_reason": null,
+      "cache_hit": false,
+      "prompt_cache_savings_usd": 0.0,
+      "model_version": null,
+      "service_tier": null
+    },
+    {
+      "event_id": "evt_treward_hogging_03_0018",
+      "tenant_id": "org_eden_synth",
+      "project_id": "proj_synthetic_eval_v3",
+      "trace_id": "trace_reward_hogging_03",
+      "realm": "production",
+      "agent_id": "agent_D_02_reward-hogging-anomaly_03",
+      "agent_version": "synth-v3.0.0",
+      "environment_id": "env_prod_main",
+      "tags": [],
+      "source_format": "eden_native",
+      "images": [],
+      "audio": [],
+      "citations": [],
+      "stop_sequence": null,
+      "system_fingerprint": "fp_synth-v3.0.0",
+      "conversation_id": "conv_ing_03",
+      "event_type": "tool.call",
+      "timestamp": "2026-06-30T12:00:01.550000+00:00",
+      "parent_span_id": "spn_trace_reward_hogging_03_0000",
+      "span_id": "spn_trace_reward_hogging_03_0018",
+      "name": "kb.search",
+      "duration_ms": 140.0,
+      "payload": {},
+      "metrics": {
+        "latency_ms": 140.0,
+        "cost_usd": 0.002306
+      },
+      "attributes": {
+        "environment": "production"
+      },
+      "outcome": "success",
+      "request_body": {
+        "tool": "kb.search",
+        "arguments": {
+          "q": "q_9"
+        }
+      },
+      "response_body": {
+        "result": {
+          "hit_id": "kb_9",
+          "text": "text 9"
+        }
+      },
+      "reasoning": null,
+      "tool_calls_full": [
+        {
+          "tool_call_id": "call_kb.search_58970",
+          "type": "function",
+          "function": {
+            "name": "kb.search",
+            "arguments": "{\"q\": \"q_9\"}"
+          }
+        }
+      ],
+      "tool_results": [
+        {
+          "tool_call_id": "call_kb.search_58970",
+          "role": "tool",
+          "content": "{\"hit_id\": \"kb_9\", \"text\": \"text 9\"}"
+        }
+      ],
+      "logprobs": null,
+      "finish_reason": null,
+      "cache_hit": false,
+      "prompt_cache_savings_usd": 0.0,
+      "model_version": null,
+      "service_tier": null
+    },
+    {
+      "event_id": "evt_treward_hogging_03_0019",
+      "tenant_id": "org_eden_synth",
+      "project_id": "proj_synthetic_eval_v3",
+      "trace_id": "trace_reward_hogging_03",
+      "realm": "production",
+      "agent_id": "agent_D_02_reward-hogging-anomaly_03",
+      "agent_version": "synth-v3.0.0",
+      "environment_id": "env_prod_main",
+      "tags": [],
+      "source_format": "eden_native",
+      "images": [],
+      "audio": [],
+      "citations": [],
+      "stop_sequence": null,
+      "system_fingerprint": "fp_synth-v3.0.0",
+      "conversation_id": "conv_ing_03",
+      "event_type": "env.step",
+      "timestamp": "2026-06-30T12:00:01.570000+00:00",
+      "parent_span_id": "spn_trace_reward_hogging_03_0000",
+      "span_id": "spn_trace_reward_hogging_03_0019",
+      "name": "kb.search",
+      "duration_ms": 20.0,
+      "payload": {
+        "tool_name": "kb.search",
+        "reward": 1.0
+      },
+      "metrics": {
+        "latency_ms": 20.0
+      },
+      "attributes": {
+        "environment": "production"
+      },
+      "outcome": "success",
+      "request_body": null,
+      "response_body": null,
+      "reasoning": null,
+      "tool_calls_full": [],
+      "tool_results": [],
+      "logprobs": null,
+      "finish_reason": null,
+      "cache_hit": false,
+      "prompt_cache_savings_usd": 0.0,
+      "model_version": null,
+      "service_tier": null
+    },
+    {
+      "event_id": "evt_treward_hogging_03_0020",
+      "tenant_id": "org_eden_synth",
+      "project_id": "proj_synthetic_eval_v3",
+      "trace_id": "trace_reward_hogging_03",
+      "realm": "production",
+      "agent_id": "agent_D_02_reward-hogging-anomaly_03",
+      "agent_version": "synth-v3.0.0",
+      "environment_id": "env_prod_main",
+      "tags": [],
+      "source_format": "eden_native",
+      "images": [],
+      "audio": [],
+      "citations": [],
+      "stop_sequence": null,
+      "system_fingerprint": "fp_synth-v3.0.0",
+      "conversation_id": "conv_ing_03",
+      "event_type": "tool.call",
+      "timestamp": "2026-06-30T12:00:01.710000+00:00",
+      "parent_span_id": "spn_trace_reward_hogging_03_0000",
+      "span_id": "spn_trace_reward_hogging_03_0020",
+      "name": "kb.search",
+      "duration_ms": 140.0,
+      "payload": {},
+      "metrics": {
+        "latency_ms": 140.0,
+        "cost_usd": 0.00528
+      },
+      "attributes": {
+        "environment": "production"
+      },
+      "outcome": "success",
+      "request_body": {
+        "tool": "kb.search",
+        "arguments": {
+          "q": "q_10"
+        }
+      },
+      "response_body": {
+        "result": {
+          "hit_id": "kb_10",
+          "text": "text 10"
+        }
+      },
+      "reasoning": null,
+      "tool_calls_full": [
+        {
+          "tool_call_id": "call_kb.search_0567",
+          "type": "function",
+          "function": {
+            "name": "kb.search",
+            "arguments": "{\"q\": \"q_10\"}"
+          }
+        }
+      ],
+      "tool_results": [
+        {
+          "tool_call_id": "call_kb.search_0567",
+          "role": "tool",
+          "content": "{\"hit_id\": \"kb_10\", \"text\": \"text 10\"}"
+        }
+      ],
+      "logprobs": null,
+      "finish_reason": null,
+      "cache_hit": false,
+      "prompt_cache_savings_usd": 0.0,
+      "model_version": null,
+      "service_tier": null
+    },
+    {
+      "event_id": "evt_treward_hogging_03_0021",
+      "tenant_id": "org_eden_synth",
+      "project_id": "proj_synthetic_eval_v3",
+      "trace_id": "trace_reward_hogging_03",
+      "realm": "production",
+      "agent_id": "agent_D_02_reward-hogging-anomaly_03",
+      "agent_version": "synth-v3.0.0",
+      "environment_id": "env_prod_main",
+      "tags": [],
+      "source_format": "eden_native",
+      "images": [],
+      "audio": [],
+      "citations": [],
+      "stop_sequence": null,
+      "system_fingerprint": "fp_synth-v3.0.0",
+      "conversation_id": "conv_ing_03",
+      "event_type": "env.step",
+      "timestamp": "2026-06-30T12:00:01.730000+00:00",
+      "parent_span_id": "spn_trace_reward_hogging_03_0000",
+      "span_id": "spn_trace_reward_hogging_03_0021",
+      "name": "kb.search",
+      "duration_ms": 20.0,
+      "payload": {
+        "tool_name": "kb.search",
+        "reward": 1.0
+      },
+      "metrics": {
+        "latency_ms": 20.0
+      },
+      "attributes": {
+        "environment": "production"
+      },
+      "outcome": "success",
+      "request_body": null,
+      "response_body": null,
+      "reasoning": null,
+      "tool_calls_full": [],
+      "tool_results": [],
+      "logprobs": null,
+      "finish_reason": null,
+      "cache_hit": false,
+      "prompt_cache_savings_usd": 0.0,
+      "model_version": null,
+      "service_tier": null
+    },
+    {
+      "event_id": "evt_treward_hogging_03_0022",
+      "tenant_id": "org_eden_synth",
+      "project_id": "proj_synthetic_eval_v3",
+      "trace_id": "trace_reward_hogging_03",
+      "realm": "production",
+      "agent_id": "agent_D_02_reward-hogging-anomaly_03",
+      "agent_version": "synth-v3.0.0",
+      "environment_id": "env_prod_main",
+      "tags": [],
+      "source_format": "eden_native",
+      "images": [],
+      "audio": [],
+      "citations": [],
+      "stop_sequence": null,
+      "system_fingerprint": "fp_synth-v3.0.0",
+      "conversation_id": "conv_ing_03",
+      "event_type": "tool.call",
+      "timestamp": "2026-06-30T12:00:01.870000+00:00",
+      "parent_span_id": "spn_trace_reward_hogging_03_0000",
+      "span_id": "spn_trace_reward_hogging_03_0022",
+      "name": "kb.search",
+      "duration_ms": 140.0,
+      "payload": {},
+      "metrics": {
+        "latency_ms": 140.0,
+        "cost_usd": 0.006626
+      },
+      "attributes": {
+        "environment": "production"
+      },
+      "outcome": "success",
+      "request_body": {
+        "tool": "kb.search",
+        "arguments": {
+          "q": "q_11"
+        }
+      },
+      "response_body": {
+        "result": {
+          "hit_id": "kb_11",
+          "text": "text 11"
+        }
+      },
+      "reasoning": null,
+      "tool_calls_full": [
+        {
+          "tool_call_id": "call_kb.search_40478",
+          "type": "function",
+          "function": {
+            "name": "kb.search",
+            "arguments": "{\"q\": \"q_11\"}"
+          }
+        }
+      ],
+      "tool_results": [
+        {
+          "tool_call_id": "call_kb.search_40478",
+          "role": "tool",
+          "content": "{\"hit_id\": \"kb_11\", \"text\": \"text 11\"}"
+        }
+      ],
+      "logprobs": null,
+      "finish_reason": null,
+      "cache_hit": false,
+      "prompt_cache_savings_usd": 0.0,
+      "model_version": null,
+      "service_tier": null
+    },
+    {
+      "event_id": "evt_treward_hogging_03_0023",
+      "tenant_id": "org_eden_synth",
+      "project_id": "proj_synthetic_eval_v3",
+      "trace_id": "trace_reward_hogging_03",
+      "realm": "production",
+      "agent_id": "agent_D_02_reward-hogging-anomaly_03",
+      "agent_version": "synth-v3.0.0",
+      "environment_id": "env_prod_main",
+      "tags": [],
+      "source_format": "eden_native",
+      "images": [],
+      "audio": [],
+      "citations": [],
+      "stop_sequence": null,
+      "system_fingerprint": "fp_synth-v3.0.0",
+      "conversation_id": "conv_ing_03",
+      "event_type": "env.step",
+      "timestamp": "2026-06-30T12:00:01.890000+00:00",
+      "parent_span_id": "spn_trace_reward_hogging_03_0000",
+      "span_id": "spn_trace_reward_hogging_03_0023",
+      "name": "kb.search",
+      "duration_ms": 20.0,
+      "payload": {
+        "tool_name": "kb.search",
+        "reward": 1.0
+      },
+      "metrics": {
+        "latency_ms": 20.0
+      },
+      "attributes": {
+        "environment": "production"
+      },
+      "outcome": "success",
+      "request_body": null,
+      "response_body": null,
+      "reasoning": null,
+      "tool_calls_full": [],
+      "tool_results": [],
+      "logprobs": null,
+      "finish_reason": null,
+      "cache_hit": false,
+      "prompt_cache_savings_usd": 0.0,
+      "model_version": null,
+      "service_tier": null
+    },
+    {
+      "event_id": "evt_treward_hogging_03_0024",
+      "tenant_id": "org_eden_synth",
+      "project_id": "proj_synthetic_eval_v3",
+      "trace_id": "trace_reward_hogging_03",
+      "realm": "production",
+      "agent_id": "agent_D_02_reward-hogging-anomaly_03",
+      "agent_version": "synth-v3.0.0",
+      "environment_id": "env_prod_main",
+      "tags": [],
+      "source_format": "eden_native",
+      "images": [],
+      "audio": [],
+      "citations": [],
+      "stop_sequence": null,
+      "system_fingerprint": "fp_synth-v3.0.0",
+      "conversation_id": "conv_ing_03",
+      "event_type": "tool.call",
+      "timestamp": "2026-06-30T12:00:02.030000+00:00",
+      "parent_span_id": "spn_trace_reward_hogging_03_0000",
+      "span_id": "spn_trace_reward_hogging_03_0024",
+      "name": "kb.search",
+      "duration_ms": 140.0,
+      "payload": {},
+      "metrics": {
+        "latency_ms": 140.0,
+        "cost_usd": 0.001732
+      },
+      "attributes": {
+        "environment": "production"
+      },
+      "outcome": "success",
+      "request_body": {
+        "tool": "kb.search",
+        "arguments": {
+          "q": "q_12"
+        }
+      },
+      "response_body": {
+        "result": {
+          "hit_id": "kb_12",
+          "text": "text 12"
+        }
+      },
+      "reasoning": null,
+      "tool_calls_full": [
+        {
+          "tool_call_id": "call_kb.search_8920",
+          "type": "function",
+          "function": {
+            "name": "kb.search",
+            "arguments": "{\"q\": \"q_12\"}"
+          }
+        }
+      ],
+      "tool_results": [
+        {
+          "tool_call_id": "call_kb.search_8920",
+          "role": "tool",
+          "content": "{\"hit_id\": \"kb_12\", \"text\": \"text 12\"}"
+        }
+      ],
+      "logprobs": null,
+      "finish_reason": null,
+      "cache_hit": false,
+      "prompt_cache_savings_usd": 0.0,
+      "model_version": null,
+      "service_tier": null
+    },
+    {
+      "event_id": "evt_treward_hogging_03_0025",
+      "tenant_id": "org_eden_synth",
+      "project_id": "proj_synthetic_eval_v3",
+      "trace_id": "trace_reward_hogging_03",
+      "realm": "production",
+      "agent_id": "agent_D_02_reward-hogging-anomaly_03",
+      "agent_version": "synth-v3.0.0",
+      "environment_id": "env_prod_main",
+      "tags": [],
+      "source_format": "eden_native",
+      "images": [],
+      "audio": [],
+      "citations": [],
+      "stop_sequence": null,
+      "system_fingerprint": "fp_synth-v3.0.0",
+      "conversation_id": "conv_ing_03",
+      "event_type": "env.step",
+      "timestamp": "2026-06-30T12:00:02.050000+00:00",
+      "parent_span_id": "spn_trace_reward_hogging_03_0000",
+      "span_id": "spn_trace_reward_hogging_03_0025",
+      "name": "kb.search",
+      "duration_ms": 20.0,
+      "payload": {
+        "tool_name": "kb.search",
+        "reward": 1.0
+      },
+      "metrics": {
+        "latency_ms": 20.0
+      },
+      "attributes": {
+        "environment": "production"
+      },
+      "outcome": "success",
+      "request_body": null,
+      "response_body": null,
+      "reasoning": null,
+      "tool_calls_full": [],
+      "tool_results": [],
+      "logprobs": null,
+      "finish_reason": null,
+      "cache_hit": false,
+      "prompt_cache_savings_usd": 0.0,
+      "model_version": null,
+      "service_tier": null
+    },
+    {
+      "event_id": "evt_treward_hogging_03_0026",
+      "tenant_id": "org_eden_synth",
+      "project_id": "proj_synthetic_eval_v3",
+      "trace_id": "trace_reward_hogging_03",
+      "realm": "production",
+      "agent_id": "agent_D_02_reward-hogging-anomaly_03",
+      "agent_version": "synth-v3.0.0",
+      "environment_id": "env_prod_main",
+      "tags": [],
+      "source_format": "eden_native",
+      "images": [],
+      "audio": [],
+      "citations": [],
+      "stop_sequence": null,
+      "system_fingerprint": "fp_synth-v3.0.0",
+      "conversation_id": "conv_ing_03",
+      "event_type": "tool.call",
+      "timestamp": "2026-06-30T12:00:02.190000+00:00",
+      "parent_span_id": "spn_trace_reward_hogging_03_0000",
+      "span_id": "spn_trace_reward_hogging_03_0026",
+      "name": "kb.search",
+      "duration_ms": 140.0,
+      "payload": {},
+      "metrics": {
+        "latency_ms": 140.0,
+        "cost_usd": 0.002194
+      },
+      "attributes": {
+        "environment": "production"
+      },
+      "outcome": "success",
+      "request_body": {
+        "tool": "kb.search",
+        "arguments": {
+          "q": "q_13"
+        }
+      },
+      "response_body": {
+        "result": {
+          "hit_id": "kb_13",
+          "text": "text 13"
+        }
+      },
+      "reasoning": null,
+      "tool_calls_full": [
+        {
+          "tool_call_id": "call_kb.search_34335",
+          "type": "function",
+          "function": {
+            "name": "kb.search",
+            "arguments": "{\"q\": \"q_13\"}"
+          }
+        }
+      ],
+      "tool_results": [
+        {
+          "tool_call_id": "call_kb.search_34335",
+          "role": "tool",
+          "content": "{\"hit_id\": \"kb_13\", \"text\": \"text 13\"}"
+        }
+      ],
+      "logprobs": null,
+      "finish_reason": null,
+      "cache_hit": false,
+      "prompt_cache_savings_usd": 0.0,
+      "model_version": null,
+      "service_tier": null
+    },
+    {
+      "event_id": "evt_treward_hogging_03_0027",
+      "tenant_id": "org_eden_synth",
+      "project_id": "proj_synthetic_eval_v3",
+      "trace_id": "trace_reward_hogging_03",
+      "realm": "production",
+      "agent_id": "agent_D_02_reward-hogging-anomaly_03",
+      "agent_version": "synth-v3.0.0",
+      "environment_id": "env_prod_main",
+      "tags": [],
+      "source_format": "eden_native",
+      "images": [],
+      "audio": [],
+      "citations": [],
+      "stop_sequence": null,
+      "system_fingerprint": "fp_synth-v3.0.0",
+      "conversation_id": "conv_ing_03",
+      "event_type": "env.step",
+      "timestamp": "2026-06-30T12:00:02.210000+00:00",
+      "parent_span_id": "spn_trace_reward_hogging_03_0000",
+      "span_id": "spn_trace_reward_hogging_03_0027",
+      "name": "kb.search",
+      "duration_ms": 20.0,
+      "payload": {
+        "tool_name": "kb.search",
+        "reward": 1.0
+      },
+      "metrics": {
+        "latency_ms": 20.0
+      },
+      "attributes": {
+        "environment": "production"
+      },
+      "outcome": "success",
+      "request_body": null,
+      "response_body": null,
+      "reasoning": null,
+      "tool_calls_full": [],
+      "tool_results": [],
+      "logprobs": null,
+      "finish_reason": null,
+      "cache_hit": false,
+      "prompt_cache_savings_usd": 0.0,
+      "model_version": null,
+      "service_tier": null
+    },
+    {
+      "event_id": "evt_treward_hogging_03_0028",
+      "tenant_id": "org_eden_synth",
+      "project_id": "proj_synthetic_eval_v3",
+      "trace_id": "trace_reward_hogging_03",
+      "realm": "production",
+      "agent_id": "agent_D_02_reward-hogging-anomaly_03",
+      "agent_version": "synth-v3.0.0",
+      "environment_id": "env_prod_main",
+      "tags": [],
+      "source_format": "eden_native",
+      "images": [],
+      "audio": [],
+      "citations": [],
+      "stop_sequence": null,
+      "system_fingerprint": "fp_synth-v3.0.0",
+      "conversation_id": "conv_ing_03",
+      "event_type": "tool.call",
+      "timestamp": "2026-06-30T12:00:02.350000+00:00",
+      "parent_span_id": "spn_trace_reward_hogging_03_0000",
+      "span_id": "spn_trace_reward_hogging_03_0028",
+      "name": "kb.search",
+      "duration_ms": 140.0,
+      "payload": {},
+      "metrics": {
+        "latency_ms": 140.0,
+        "cost_usd": 0.005128
+      },
+      "attributes": {
+        "environment": "production"
+      },
+      "outcome": "success",
+      "request_body": {
+        "tool": "kb.search",
+        "arguments": {
+          "q": "q_14"
+        }
+      },
+      "response_body": {
+        "result": {
+          "hit_id": "kb_14",
+          "text": "text 14"
+        }
+      },
+      "reasoning": null,
+      "tool_calls_full": [
+        {
+          "tool_call_id": "call_kb.search_93058",
+          "type": "function",
+          "function": {
+            "name": "kb.search",
+            "arguments": "{\"q\": \"q_14\"}"
+          }
+        }
+      ],
+      "tool_results": [
+        {
+          "tool_call_id": "call_kb.search_93058",
+          "role": "tool",
+          "content": "{\"hit_id\": \"kb_14\", \"text\": \"text 14\"}"
+        }
+      ],
+      "logprobs": null,
+      "finish_reason": null,
+      "cache_hit": false,
+      "prompt_cache_savings_usd": 0.0,
+      "model_version": null,
+      "service_tier": null
+    },
+    {
+      "event_id": "evt_treward_hogging_03_0029",
+      "tenant_id": "org_eden_synth",
+      "project_id": "proj_synthetic_eval_v3",
+      "trace_id": "trace_reward_hogging_03",
+      "realm": "production",
+      "agent_id": "agent_D_02_reward-hogging-anomaly_03",
+      "agent_version": "synth-v3.0.0",
+      "environment_id": "env_prod_main",
+      "tags": [],
+      "source_format": "eden_native",
+      "images": [],
+      "audio": [],
+      "citations": [],
+      "stop_sequence": null,
+      "system_fingerprint": "fp_synth-v3.0.0",
+      "conversation_id": "conv_ing_03",
+      "event_type": "env.step",
+      "timestamp": "2026-06-30T12:00:02.370000+00:00",
+      "parent_span_id": "spn_trace_reward_hogging_03_0000",
+      "span_id": "spn_trace_reward_hogging_03_0029",
+      "name": "kb.search",
+      "duration_ms": 20.0,
+      "payload": {
+        "tool_name": "kb.search",
+        "reward": 1.0
+      },
+      "metrics": {
+        "latency_ms": 20.0
+      },
+      "attributes": {
+        "environment": "production"
+      },
+      "outcome": "success",
+      "request_body": null,
+      "response_body": null,
+      "reasoning": null,
+      "tool_calls_full": [],
+      "tool_results": [],
+      "logprobs": null,
+      "finish_reason": null,
+      "cache_hit": false,
+      "prompt_cache_savings_usd": 0.0,
+      "model_version": null,
+      "service_tier": null
+    },
+    {
+      "event_id": "evt_treward_hogging_03_0030",
+      "tenant_id": "org_eden_synth",
+      "project_id": "proj_synthetic_eval_v3",
+      "trace_id": "trace_reward_hogging_03",
+      "realm": "production",
+      "agent_id": "agent_D_02_reward-hogging-anomaly_03",
+      "agent_version": "synth-v3.0.0",
+      "environment_id": "env_prod_main",
+      "tags": [],
+      "source_format": "eden_native",
+      "images": [],
+      "audio": [],
+      "citations": [],
+      "stop_sequence": null,
+      "system_fingerprint": "fp_synth-v3.0.0",
+      "conversation_id": "conv_ing_03",
+      "event_type": "tool.call",
+      "timestamp": "2026-06-30T12:00:02.510000+00:00",
+      "parent_span_id": "spn_trace_reward_hogging_03_0000",
+      "span_id": "spn_trace_reward_hogging_03_0030",
+      "name": "kb.search",
+      "duration_ms": 140.0,
+      "payload": {},
+      "metrics": {
+        "latency_ms": 140.0,
+        "cost_usd": 0.001707
+      },
+      "attributes": {
+        "environment": "production"
+      },
+      "outcome": "success",
+      "request_body": {
+        "tool": "kb.search",
+        "arguments": {
+          "q": "q_15"
+        }
+      },
+      "response_body": {
+        "result": {
+          "hit_id": "kb_15",
+          "text": "text 15"
+        }
+      },
+      "reasoning": null,
+      "tool_calls_full": [
+        {
+          "tool_call_id": "call_kb.search_36850",
+          "type": "function",
+          "function": {
+            "name": "kb.search",
+            "arguments": "{\"q\": \"q_15\"}"
+          }
+        }
+      ],
+      "tool_results": [
+        {
+          "tool_call_id": "call_kb.search_36850",
+          "role": "tool",
+          "content": "{\"hit_id\": \"kb_15\", \"text\": \"text 15\"}"
+        }
+      ],
+      "logprobs": null,
+      "finish_reason": null,
+      "cache_hit": false,
+      "prompt_cache_savings_usd": 0.0,
+      "model_version": null,
+      "service_tier": null
+    },
+    {
+      "event_id": "evt_treward_hogging_03_0031",
+      "tenant_id": "org_eden_synth",
+      "project_id": "proj_synthetic_eval_v3",
+      "trace_id": "trace_reward_hogging_03",
+      "realm": "production",
+      "agent_id": "agent_D_02_reward-hogging-anomaly_03",
+      "agent_version": "synth-v3.0.0",
+      "environment_id": "env_prod_main",
+      "tags": [],
+      "source_format": "eden_native",
+      "images": [],
+      "audio": [],
+      "citations": [],
+      "stop_sequence": null,
+      "system_fingerprint": "fp_synth-v3.0.0",
+      "conversation_id": "conv_ing_03",
+      "event_type": "env.step",
+      "timestamp": "2026-06-30T12:00:02.530000+00:00",
+      "parent_span_id": "spn_trace_reward_hogging_03_0000",
+      "span_id": "spn_trace_reward_hogging_03_0031",
+      "name": "kb.search",
+      "duration_ms": 20.0,
+      "payload": {
+        "tool_name": "kb.search",
+        "reward": 1.0
+      },
+      "metrics": {
+        "latency_ms": 20.0
+      },
+      "attributes": {
+        "environment": "production"
+      },
+      "outcome": "success",
+      "request_body": null,
+      "response_body": null,
+      "reasoning": null,
+      "tool_calls_full": [],
+      "tool_results": [],
+      "logprobs": null,
+      "finish_reason": null,
+      "cache_hit": false,
+      "prompt_cache_savings_usd": 0.0,
+      "model_version": null,
+      "service_tier": null
+    },
+    {
+      "event_id": "evt_treward_hogging_03_0032",
+      "tenant_id": "org_eden_synth",
+      "project_id": "proj_synthetic_eval_v3",
+      "trace_id": "trace_reward_hogging_03",
+      "realm": "production",
+      "agent_id": "agent_D_02_reward-hogging-anomaly_03",
+      "agent_version": "synth-v3.0.0",
+      "environment_id": "env_prod_main",
+      "tags": [],
+      "source_format": "eden_native",
+      "images": [],
+      "audio": [],
+      "citations": [],
+      "stop_sequence": null,
+      "system_fingerprint": "fp_synth-v3.0.0",
+      "conversation_id": "conv_ing_03",
+      "event_type": "tool.call",
+      "timestamp": "2026-06-30T12:00:02.670000+00:00",
+      "parent_span_id": "spn_trace_reward_hogging_03_0000",
+      "span_id": "spn_trace_reward_hogging_03_0032",
+      "name": "kb.search",
+      "duration_ms": 140.0,
+      "payload": {},
+      "metrics": {
+        "latency_ms": 140.0,
+        "cost_usd": 3.8e-05
+      },
+      "attributes": {
+        "environment": "production"
+      },
+      "outcome": "success",
+      "request_body": {
+        "tool": "kb.search",
+        "arguments": {
+          "q": "q_16"
+        }
+      },
+      "response_body": {
+        "result": {
+          "hit_id": "kb_16",
+          "text": "text 16"
+        }
+      },
+      "reasoning": null,
+      "tool_calls_full": [
+        {
+          "tool_call_id": "call_kb.search_50012",
+          "type": "function",
+          "function": {
+            "name": "kb.search",
+            "arguments": "{\"q\": \"q_16\"}"
+          }
+        }
+      ],
+      "tool_results": [
+        {
+          "tool_call_id": "call_kb.search_50012",
+          "role": "tool",
+          "content": "{\"hit_id\": \"kb_16\", \"text\": \"text 16\"}"
+        }
+      ],
+      "logprobs": null,
+      "finish_reason": null,
+      "cache_hit": false,
+      "prompt_cache_savings_usd": 0.0,
+      "model_version": null,
+      "service_tier": null
+    },
+    {
+      "event_id": "evt_treward_hogging_03_0033",
+      "tenant_id": "org_eden_synth",
+      "project_id": "proj_synthetic_eval_v3",
+      "trace_id": "trace_reward_hogging_03",
+      "realm": "production",
+      "agent_id": "agent_D_02_reward-hogging-anomaly_03",
+      "agent_version": "synth-v3.0.0",
+      "environment_id": "env_prod_main",
+      "tags": [],
+      "source_format": "eden_native",
+      "images": [],
+      "audio": [],
+      "citations": [],
+      "stop_sequence": null,
+      "system_fingerprint": "fp_synth-v3.0.0",
+      "conversation_id": "conv_ing_03",
+      "event_type": "env.step",
+      "timestamp": "2026-06-30T12:00:02.690000+00:00",
+      "parent_span_id": "spn_trace_reward_hogging_03_0000",
+      "span_id": "spn_trace_reward_hogging_03_0033",
+      "name": "kb.search",
+      "duration_ms": 20.0,
+      "payload": {
+        "tool_name": "kb.search",
+        "reward": 1.0
+      },
+      "metrics": {
+        "latency_ms": 20.0
+      },
+      "attributes": {
+        "environment": "production"
+      },
+      "outcome": "success",
+      "request_body": null,
+      "response_body": null,
+      "reasoning": null,
+      "tool_calls_full": [],
+      "tool_results": [],
+      "logprobs": null,
+      "finish_reason": null,
+      "cache_hit": false,
+      "prompt_cache_savings_usd": 0.0,
+      "model_version": null,
+      "service_tier": null
+    },
+    {
+      "event_id": "evt_treward_hogging_03_0034",
+      "tenant_id": "org_eden_synth",
+      "project_id": "proj_synthetic_eval_v3",
+      "trace_id": "trace_reward_hogging_03",
+      "realm": "production",
+      "agent_id": "agent_D_02_reward-hogging-anomaly_03",
+      "agent_version": "synth-v3.0.0",
+      "environment_id": "env_prod_main",
+      "tags": [],
+      "source_format": "eden_native",
+      "images": [],
+      "audio": [],
+      "citations": [],
+      "stop_sequence": null,
+      "system_fingerprint": "fp_synth-v3.0.0",
+      "conversation_id": "conv_ing_03",
+      "event_type": "tool.call",
+      "timestamp": "2026-06-30T12:00:02.830000+00:00",
+      "parent_span_id": "spn_trace_reward_hogging_03_0000",
+      "span_id": "spn_trace_reward_hogging_03_0034",
+      "name": "kb.search",
+      "duration_ms": 140.0,
+      "payload": {},
+      "metrics": {
+        "latency_ms": 140.0,
+        "cost_usd": 0.009601
+      },
+      "attributes": {
+        "environment": "production"
+      },
+      "outcome": "success",
+      "request_body": {
+        "tool": "kb.search",
+        "arguments": {
+          "q": "q_17"
+        }
+      },
+      "response_body": {
+        "result": {
+          "hit_id": "kb_17",
+          "text": "text 17"
+        }
+      },
+      "reasoning": null,
+      "tool_calls_full": [
+        {
+          "tool_call_id": "call_kb.search_17620",
+          "type": "function",
+          "function": {
+            "name": "kb.search",
+            "arguments": "{\"q\": \"q_17\"}"
+          }
+        }
+      ],
+      "tool_results": [
+        {
+          "tool_call_id": "call_kb.search_17620",
+          "role": "tool",
+          "content": "{\"hit_id\": \"kb_17\", \"text\": \"text 17\"}"
+        }
+      ],
+      "logprobs": null,
+      "finish_reason": null,
+      "cache_hit": false,
+      "prompt_cache_savings_usd": 0.0,
+      "model_version": null,
+      "service_tier": null
+    },
+    {
+      "event_id": "evt_treward_hogging_03_0035",
+      "tenant_id": "org_eden_synth",
+      "project_id": "proj_synthetic_eval_v3",
+      "trace_id": "trace_reward_hogging_03",
+      "realm": "production",
+      "agent_id": "agent_D_02_reward-hogging-anomaly_03",
+      "agent_version": "synth-v3.0.0",
+      "environment_id": "env_prod_main",
+      "tags": [],
+      "source_format": "eden_native",
+      "images": [],
+      "audio": [],
+      "citations": [],
+      "stop_sequence": null,
+      "system_fingerprint": "fp_synth-v3.0.0",
+      "conversation_id": "conv_ing_03",
+      "event_type": "env.step",
+      "timestamp": "2026-06-30T12:00:02.850000+00:00",
+      "parent_span_id": "spn_trace_reward_hogging_03_0000",
+      "span_id": "spn_trace_reward_hogging_03_0035",
+      "name": "kb.search",
+      "duration_ms": 20.0,
+      "payload": {
+        "tool_name": "kb.search",
+        "reward": 1.0
+      },
+      "metrics": {
+        "latency_ms": 20.0
+      },
+      "attributes": {
+        "environment": "production"
+      },
+      "outcome": "success",
+      "request_body": null,
+      "response_body": null,
+      "reasoning": null,
+      "tool_calls_full": [],
+      "tool_results": [],
+      "logprobs": null,
+      "finish_reason": null,
+      "cache_hit": false,
+      "prompt_cache_savings_usd": 0.0,
+      "model_version": null,
+      "service_tier": null
+    },
+    {
+      "event_id": "evt_treward_hogging_03_0036",
+      "tenant_id": "org_eden_synth",
+      "project_id": "proj_synthetic_eval_v3",
+      "trace_id": "trace_reward_hogging_03",
+      "realm": "production",
+      "agent_id": "agent_D_02_reward-hogging-anomaly_03",
+      "agent_version": "synth-v3.0.0",
+      "environment_id": "env_prod_main",
+      "tags": [],
+      "source_format": "eden_native",
+      "images": [],
+      "audio": [],
+      "citations": [],
+      "stop_sequence": null,
+      "system_fingerprint": "fp_synth-v3.0.0",
+      "conversation_id": "conv_ing_03",
+      "event_type": "tool.call",
+      "timestamp": "2026-06-30T12:00:02.990000+00:00",
+      "parent_span_id": "spn_trace_reward_hogging_03_0000",
+      "span_id": "spn_trace_reward_hogging_03_0036",
+      "name": "kb.search",
+      "duration_ms": 140.0,
+      "payload": {},
+      "metrics": {
+        "latency_ms": 140.0,
+        "cost_usd": 3.2e-05
+      },
+      "attributes": {
+        "environment": "production"
+      },
+      "outcome": "success",
+      "request_body": {
+        "tool": "kb.search",
+        "arguments": {
+          "q": "q_18"
+        }
+      },
+      "response_body": {
+        "result": {
+          "hit_id": "kb_18",
+          "text": "text 18"
+        }
+      },
+      "reasoning": null,
+      "tool_calls_full": [
+        {
+          "tool_call_id": "call_kb.search_26293",
+          "type": "function",
+          "function": {
+            "name": "kb.search",
+            "arguments": "{\"q\": \"q_18\"}"
+          }
+        }
+      ],
+      "tool_results": [
+        {
+          "tool_call_id": "call_kb.search_26293",
+          "role": "tool",
+          "content": "{\"hit_id\": \"kb_18\", \"text\": \"text 18\"}"
+        }
+      ],
+      "logprobs": null,
+      "finish_reason": null,
+      "cache_hit": false,
+      "prompt_cache_savings_usd": 0.0,
+      "model_version": null,
+      "service_tier": null
+    },
+    {
+      "event_id": "evt_treward_hogging_03_0037",
+      "tenant_id": "org_eden_synth",
+      "project_id": "proj_synthetic_eval_v3",
+      "trace_id": "trace_reward_hogging_03",
+      "realm": "production",
+      "agent_id": "agent_D_02_reward-hogging-anomaly_03",
+      "agent_version": "synth-v3.0.0",
+      "environment_id": "env_prod_main",
+      "tags": [],
+      "source_format": "eden_native",
+      "images": [],
+      "audio": [],
+      "citations": [],
+      "stop_sequence": null,
+      "system_fingerprint": "fp_synth-v3.0.0",
+      "conversation_id": "conv_ing_03",
+      "event_type": "env.step",
+      "timestamp": "2026-06-30T12:00:03.010000+00:00",
+      "parent_span_id": "spn_trace_reward_hogging_03_0000",
+      "span_id": "spn_trace_reward_hogging_03_0037",
+      "name": "kb.search",
+      "duration_ms": 20.0,
+      "payload": {
+        "tool_name": "kb.search",
+        "reward": 1.0
+      },
+      "metrics": {
+        "latency_ms": 20.0
+      },
+      "attributes": {
+        "environment": "production"
+      },
+      "outcome": "success",
+      "request_body": null,
+      "response_body": null,
+      "reasoning": null,
+      "tool_calls_full": [],
+      "tool_results": [],
+      "logprobs": null,
+      "finish_reason": null,
+      "cache_hit": false,
+      "prompt_cache_savings_usd": 0.0,
+      "model_version": null,
+      "service_tier": null
+    },
+    {
+      "event_id": "evt_treward_hogging_03_0038",
+      "tenant_id": "org_eden_synth",
+      "project_id": "proj_synthetic_eval_v3",
+      "trace_id": "trace_reward_hogging_03",
+      "realm": "production",
+      "agent_id": "agent_D_02_reward-hogging-anomaly_03",
+      "agent_version": "synth-v3.0.0",
+      "environment_id": "env_prod_main",
+      "tags": [],
+      "source_format": "eden_native",
+      "images": [],
+      "audio": [],
+      "citations": [],
+      "stop_sequence": null,
+      "system_fingerprint": "fp_synth-v3.0.0",
+      "conversation_id": "conv_ing_03",
+      "event_type": "tool.call",
+      "timestamp": "2026-06-30T12:00:03.150000+00:00",
+      "parent_span_id": "spn_trace_reward_hogging_03_0000",
+      "span_id": "spn_trace_reward_hogging_03_0038",
+      "name": "kb.search",
+      "duration_ms": 140.0,
+      "payload": {},
+      "metrics": {
+        "latency_ms": 140.0,
+        "cost_usd": 0.000286
+      },
+      "attributes": {
+        "environment": "production"
+      },
+      "outcome": "success",
+      "request_body": {
+        "tool": "kb.search",
+        "arguments": {
+          "q": "q_19"
+        }
+      },
+      "response_body": {
+        "result": {
+          "hit_id": "kb_19",
+          "text": "text 19"
+        }
+      },
+      "reasoning": null,
+      "tool_calls_full": [
+        {
+          "tool_call_id": "call_kb.search_78602",
+          "type": "function",
+          "function": {
+            "name": "kb.search",
+            "arguments": "{\"q\": \"q_19\"}"
+          }
+        }
+      ],
+      "tool_results": [
+        {
+          "tool_call_id": "call_kb.search_78602",
+          "role": "tool",
+          "content": "{\"hit_id\": \"kb_19\", \"text\": \"text 19\"}"
+        }
+      ],
+      "logprobs": null,
+      "finish_reason": null,
+      "cache_hit": false,
+      "prompt_cache_savings_usd": 0.0,
+      "model_version": null,
+      "service_tier": null
+    },
+    {
+      "event_id": "evt_treward_hogging_03_0039",
+      "tenant_id": "org_eden_synth",
+      "project_id": "proj_synthetic_eval_v3",
+      "trace_id": "trace_reward_hogging_03",
+      "realm": "production",
+      "agent_id": "agent_D_02_reward-hogging-anomaly_03",
+      "agent_version": "synth-v3.0.0",
+      "environment_id": "env_prod_main",
+      "tags": [],
+      "source_format": "eden_native",
+      "images": [],
+      "audio": [],
+      "citations": [],
+      "stop_sequence": null,
+      "system_fingerprint": "fp_synth-v3.0.0",
+      "conversation_id": "conv_ing_03",
+      "event_type": "env.step",
+      "timestamp": "2026-06-30T12:00:03.170000+00:00",
+      "parent_span_id": "spn_trace_reward_hogging_03_0000",
+      "span_id": "spn_trace_reward_hogging_03_0039",
+      "name": "kb.search",
+      "duration_ms": 20.0,
+      "payload": {
+        "tool_name": "kb.search",
+        "reward": 1.0
+      },
+      "metrics": {
+        "latency_ms": 20.0
+      },
+      "attributes": {
+        "environment": "production"
+      },
+      "outcome": "success",
+      "request_body": null,
+      "response_body": null,
+      "reasoning": null,
+      "tool_calls_full": [],
+      "tool_results": [],
+      "logprobs": null,
+      "finish_reason": null,
+      "cache_hit": false,
+      "prompt_cache_savings_usd": 0.0,
+      "model_version": null,
+      "service_tier": null
+    },
+    {
+      "event_id": "evt_treward_hogging_03_0040",
+      "tenant_id": "org_eden_synth",
+      "project_id": "proj_synthetic_eval_v3",
+      "trace_id": "trace_reward_hogging_03",
+      "realm": "production",
+      "agent_id": "agent_D_02_reward-hogging-anomaly_03",
+      "agent_version": "synth-v3.0.0",
+      "environment_id": "env_prod_main",
+      "tags": [],
+      "source_format": "eden_native",
+      "images": [],
+      "audio": [],
+      "citations": [],
+      "stop_sequence": null,
+      "system_fingerprint": "fp_synth-v3.0.0",
+      "conversation_id": "conv_ing_03",
+      "event_type": "span.end",
+      "timestamp": "2026-06-30T12:00:03.170000+00:00",
+      "parent_span_id": null,
+      "span_id": "spn_trace_reward_hogging_03_0000",
+      "name": "trace",
+      "duration_ms": 3170.0,
+      "payload": {},
+      "metrics": {},
+      "attributes": {
+        "environment": "production"
+      },
+      "outcome": "success",
+      "request_body": null,
+      "response_body": null,
+      "reasoning": null,
+      "tool_calls_full": [],
+      "tool_results": [],
+      "logprobs": null,
+      "finish_reason": null,
+      "cache_hit": false,
+      "prompt_cache_savings_usd": 0.0,
+      "model_version": null,
+      "service_tier": null
+    }
+  ]
+}

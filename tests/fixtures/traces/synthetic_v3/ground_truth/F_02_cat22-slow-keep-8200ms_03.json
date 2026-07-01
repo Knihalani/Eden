@@ -1,0 +1,18 @@
+{
+  "trace_id": "trace_cat22_slow_keep_03",
+  "archetype_id": "cat22-slow-keep",
+  "agent_id": "agent_cat22-slow-keep_03",
+  "expected_TAS": 81,
+  "expected_intervention": "allow",
+  "expected_metrics": {
+    "max_tool_duration_ms": 8200,
+    "slow_threshold_ms": 5000
+  },
+  "expected_detector_fires": [
+    "SamplingPolicy.keep.slow"
+  ],
+  "expected_loop_detected": false,
+  "expected_hallucination_detected": false,
+  "expected_redundancy_pct": 0.0,
+  "notes": "Single tool duration > 5s threshold \u2192 Cat 22 SamplingPolicy rule 3 (slow) keeps trace."
+}

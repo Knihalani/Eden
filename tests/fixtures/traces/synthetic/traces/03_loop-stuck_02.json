@@ -1,0 +1,1427 @@
+{
+  "trace_id": "trace_loop_stuck_02",
+  "archetype_id": "loop-stuck",
+  "agent_id": "agent_loop-stuck_02",
+  "event_count": 17,
+  "events": [
+    {
+      "event_id": "evt_tloop_stuck_02_0000",
+      "tenant_id": "org_eden_synth",
+      "project_id": "proj_synthetic_eval_v1",
+      "trace_id": "trace_loop_stuck_02",
+      "realm": "production",
+      "agent_id": "agent_loop-stuck_02",
+      "agent_version": "synth-v1.0.0",
+      "environment_id": "env_prod_main",
+      "tags": [],
+      "source_format": "eden_native",
+      "images": [],
+      "audio": [],
+      "citations": [],
+      "stop_sequence": null,
+      "system_fingerprint": "fp_synth-v1.0.0",
+      "event_type": "span.start",
+      "timestamp": "2026-06-28T12:00:00+00:00",
+      "parent_span_id": null,
+      "span_id": "spn_trace_loop_stuck_02_0000",
+      "name": "trace",
+      "duration_ms": 0.0,
+      "payload": {},
+      "metrics": {},
+      "attributes": {
+        "environment": "production"
+      },
+      "outcome": null,
+      "request_body": null,
+      "response_body": null,
+      "reasoning": null,
+      "tool_calls_full": [],
+      "tool_results": [],
+      "logprobs": null,
+      "finish_reason": null,
+      "cache_hit": false,
+      "prompt_cache_savings_usd": 0.0,
+      "model_version": null,
+      "service_tier": null
+    },
+    {
+      "event_id": "evt_tloop_stuck_02_0001",
+      "tenant_id": "org_eden_synth",
+      "project_id": "proj_synthetic_eval_v1",
+      "trace_id": "trace_loop_stuck_02",
+      "realm": "production",
+      "agent_id": "agent_loop-stuck_02",
+      "agent_version": "synth-v1.0.0",
+      "environment_id": "env_prod_main",
+      "tags": [],
+      "source_format": "eden_native",
+      "images": [],
+      "audio": [],
+      "citations": [],
+      "stop_sequence": null,
+      "system_fingerprint": "fp_synth-v1.0.0",
+      "event_type": "llm.completion",
+      "timestamp": "2026-06-28T12:00:00.800000+00:00",
+      "parent_span_id": "spn_trace_loop_stuck_02_0000",
+      "span_id": "spn_trace_loop_stuck_02_0001",
+      "name": "llm.fast",
+      "duration_ms": 800.0,
+      "payload": {},
+      "metrics": {
+        "prompt_tokens": 50,
+        "completion_tokens": 20,
+        "total_tokens": 70,
+        "cost_usd": 1.9e-05,
+        "latency_ms": 800.0
+      },
+      "attributes": {
+        "model": "gpt-4o-mini",
+        "environment": "production",
+        "user_id": "user_synth_42",
+        "session_id": "sess_synth_42"
+      },
+      "outcome": "success",
+      "request_body": {
+        "model": "gpt-4o-mini",
+        "messages": [
+          {
+            "role": "user",
+            "content": "What's the weather in Tokyo?"
+          }
+        ],
+        "temperature": 0.0
+      },
+      "response_body": {
+        "id": "cmpl-evt_cmpl_50494",
+        "model": "gpt-4o-mini",
+        "choices": [
+          {
+            "index": 0,
+            "finish_reason": "stop",
+            "message": {
+              "role": "assistant",
+              "content": "Let me check.",
+              "tool_calls": [
+                {
+                  "id": "call_w_0000",
+                  "type": "function",
+                  "function": {
+                    "name": "weather.lookup",
+                    "arguments": "{\"q\": \"weather Tokyo\"}"
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "usage": {
+          "prompt_tokens": 50,
+          "completion_tokens": 20,
+          "total_tokens": 70
+        }
+      },
+      "reasoning": null,
+      "tool_calls_full": [
+        {
+          "id": "call_w_0000",
+          "type": "function",
+          "function": {
+            "name": "weather.lookup",
+            "arguments": "{\"q\": \"weather Tokyo\"}"
+          }
+        }
+      ],
+      "tool_results": [],
+      "logprobs": {
+        "content": [
+          [
+            {
+              "token": "Let",
+              "logprob": -0.1,
+              "top_logprobs": []
+            }
+          ],
+          [
+            {
+              "token": "me",
+              "logprob": -0.1,
+              "top_logprobs": []
+            }
+          ],
+          [
+            {
+              "token": "check.",
+              "logprob": -0.1,
+              "top_logprobs": []
+            }
+          ]
+        ]
+      },
+      "finish_reason": "stop",
+      "cache_hit": false,
+      "prompt_cache_savings_usd": 0.0,
+      "model_version": "gpt-4o-mini",
+      "service_tier": "standard"
+    },
+    {
+      "event_id": "evt_tloop_stuck_02_0002",
+      "tenant_id": "org_eden_synth",
+      "project_id": "proj_synthetic_eval_v1",
+      "trace_id": "trace_loop_stuck_02",
+      "realm": "production",
+      "agent_id": "agent_loop-stuck_02",
+      "agent_version": "synth-v1.0.0",
+      "environment_id": "env_prod_main",
+      "tags": [],
+      "source_format": "eden_native",
+      "images": [],
+      "audio": [],
+      "citations": [],
+      "stop_sequence": null,
+      "system_fingerprint": "fp_synth-v1.0.0",
+      "event_type": "tool.call",
+      "timestamp": "2026-06-28T12:00:11.800000+00:00",
+      "parent_span_id": "spn_trace_loop_stuck_02_0000",
+      "span_id": "spn_trace_loop_stuck_02_0002",
+      "name": "weather.lookup",
+      "duration_ms": 11000.0,
+      "payload": {},
+      "metrics": {
+        "latency_ms": 11000.0,
+        "cost_usd": 0.0
+      },
+      "attributes": {
+        "environment": "production"
+      },
+      "outcome": "failure",
+      "request_body": {
+        "tool": "weather.lookup",
+        "arguments": {
+          "q": "weather Tokyo"
+        }
+      },
+      "response_body": {
+        "error": "upstream_timeout"
+      },
+      "reasoning": null,
+      "tool_calls_full": [
+        {
+          "tool_call_id": "call_weather.lookup_34302",
+          "type": "function",
+          "function": {
+            "name": "weather.lookup",
+            "arguments": "{\"q\": \"weather Tokyo\"}"
+          }
+        }
+      ],
+      "tool_results": [
+        {
+          "tool_call_id": "call_weather.lookup_34302",
+          "role": "tool",
+          "content": "{\"error\": \"timeout\"}",
+          "error": "upstream_timeout"
+        }
+      ],
+      "logprobs": null,
+      "finish_reason": null,
+      "cache_hit": false,
+      "prompt_cache_savings_usd": 0.0,
+      "model_version": null,
+      "service_tier": null
+    },
+    {
+      "event_id": "evt_tloop_stuck_02_0003",
+      "tenant_id": "org_eden_synth",
+      "project_id": "proj_synthetic_eval_v1",
+      "trace_id": "trace_loop_stuck_02",
+      "realm": "production",
+      "agent_id": "agent_loop-stuck_02",
+      "agent_version": "synth-v1.0.0",
+      "environment_id": "env_prod_main",
+      "tags": [],
+      "source_format": "eden_native",
+      "images": [],
+      "audio": [],
+      "citations": [],
+      "stop_sequence": null,
+      "system_fingerprint": "fp_synth-v1.0.0",
+      "event_type": "llm.completion",
+      "timestamp": "2026-06-28T12:00:12.600000+00:00",
+      "parent_span_id": "spn_trace_loop_stuck_02_0000",
+      "span_id": "spn_trace_loop_stuck_02_0003",
+      "name": "llm.fast",
+      "duration_ms": 800.0,
+      "payload": {},
+      "metrics": {
+        "prompt_tokens": 50,
+        "completion_tokens": 20,
+        "total_tokens": 70,
+        "cost_usd": 1.9e-05,
+        "latency_ms": 800.0
+      },
+      "attributes": {
+        "model": "gpt-4o-mini",
+        "environment": "production",
+        "user_id": "user_synth_42",
+        "session_id": "sess_synth_42"
+      },
+      "outcome": "success",
+      "request_body": {
+        "model": "gpt-4o-mini",
+        "messages": [
+          {
+            "role": "user",
+            "content": "What's the weather in Tokyo?"
+          }
+        ],
+        "temperature": 0.0
+      },
+      "response_body": {
+        "id": "cmpl-evt_cmpl_23248",
+        "model": "gpt-4o-mini",
+        "choices": [
+          {
+            "index": 0,
+            "finish_reason": "stop",
+            "message": {
+              "role": "assistant",
+              "content": "Let me check.",
+              "tool_calls": [
+                {
+                  "id": "call_w_0001",
+                  "type": "function",
+                  "function": {
+                    "name": "weather.lookup",
+                    "arguments": "{\"q\": \"weather tokyo\"}"
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "usage": {
+          "prompt_tokens": 50,
+          "completion_tokens": 20,
+          "total_tokens": 70
+        }
+      },
+      "reasoning": null,
+      "tool_calls_full": [
+        {
+          "id": "call_w_0001",
+          "type": "function",
+          "function": {
+            "name": "weather.lookup",
+            "arguments": "{\"q\": \"weather tokyo\"}"
+          }
+        }
+      ],
+      "tool_results": [],
+      "logprobs": {
+        "content": [
+          [
+            {
+              "token": "Let",
+              "logprob": -0.1,
+              "top_logprobs": []
+            }
+          ],
+          [
+            {
+              "token": "me",
+              "logprob": -0.1,
+              "top_logprobs": []
+            }
+          ],
+          [
+            {
+              "token": "check.",
+              "logprob": -0.1,
+              "top_logprobs": []
+            }
+          ]
+        ]
+      },
+      "finish_reason": "stop",
+      "cache_hit": false,
+      "prompt_cache_savings_usd": 0.0,
+      "model_version": "gpt-4o-mini",
+      "service_tier": "standard"
+    },
+    {
+      "event_id": "evt_tloop_stuck_02_0004",
+      "tenant_id": "org_eden_synth",
+      "project_id": "proj_synthetic_eval_v1",
+      "trace_id": "trace_loop_stuck_02",
+      "realm": "production",
+      "agent_id": "agent_loop-stuck_02",
+      "agent_version": "synth-v1.0.0",
+      "environment_id": "env_prod_main",
+      "tags": [],
+      "source_format": "eden_native",
+      "images": [],
+      "audio": [],
+      "citations": [],
+      "stop_sequence": null,
+      "system_fingerprint": "fp_synth-v1.0.0",
+      "event_type": "tool.call",
+      "timestamp": "2026-06-28T12:00:23.600000+00:00",
+      "parent_span_id": "spn_trace_loop_stuck_02_0000",
+      "span_id": "spn_trace_loop_stuck_02_0004",
+      "name": "weather.lookup",
+      "duration_ms": 11000.0,
+      "payload": {},
+      "metrics": {
+        "latency_ms": 11000.0,
+        "cost_usd": 0.0
+      },
+      "attributes": {
+        "environment": "production"
+      },
+      "outcome": "failure",
+      "request_body": {
+        "tool": "weather.lookup",
+        "arguments": {
+          "q": "weather tokyo"
+        }
+      },
+      "response_body": {
+        "error": "upstream_timeout"
+      },
+      "reasoning": null,
+      "tool_calls_full": [
+        {
+          "tool_call_id": "call_weather.lookup_66187",
+          "type": "function",
+          "function": {
+            "name": "weather.lookup",
+            "arguments": "{\"q\": \"weather tokyo\"}"
+          }
+        }
+      ],
+      "tool_results": [
+        {
+          "tool_call_id": "call_weather.lookup_66187",
+          "role": "tool",
+          "content": "{\"error\": \"timeout\"}",
+          "error": "upstream_timeout"
+        }
+      ],
+      "logprobs": null,
+      "finish_reason": null,
+      "cache_hit": false,
+      "prompt_cache_savings_usd": 0.0,
+      "model_version": null,
+      "service_tier": null
+    },
+    {
+      "event_id": "evt_tloop_stuck_02_0005",
+      "tenant_id": "org_eden_synth",
+      "project_id": "proj_synthetic_eval_v1",
+      "trace_id": "trace_loop_stuck_02",
+      "realm": "production",
+      "agent_id": "agent_loop-stuck_02",
+      "agent_version": "synth-v1.0.0",
+      "environment_id": "env_prod_main",
+      "tags": [],
+      "source_format": "eden_native",
+      "images": [],
+      "audio": [],
+      "citations": [],
+      "stop_sequence": null,
+      "system_fingerprint": "fp_synth-v1.0.0",
+      "event_type": "llm.completion",
+      "timestamp": "2026-06-28T12:00:24.400000+00:00",
+      "parent_span_id": "spn_trace_loop_stuck_02_0000",
+      "span_id": "spn_trace_loop_stuck_02_0005",
+      "name": "llm.fast",
+      "duration_ms": 800.0,
+      "payload": {},
+      "metrics": {
+        "prompt_tokens": 50,
+        "completion_tokens": 20,
+        "total_tokens": 70,
+        "cost_usd": 1.9e-05,
+        "latency_ms": 800.0
+      },
+      "attributes": {
+        "model": "gpt-4o-mini",
+        "environment": "production",
+        "user_id": "user_synth_42",
+        "session_id": "sess_synth_42"
+      },
+      "outcome": "success",
+      "request_body": {
+        "model": "gpt-4o-mini",
+        "messages": [
+          {
+            "role": "user",
+            "content": "What's the weather in Tokyo?"
+          }
+        ],
+        "temperature": 0.0
+      },
+      "response_body": {
+        "id": "cmpl-evt_cmpl_72702",
+        "model": "gpt-4o-mini",
+        "choices": [
+          {
+            "index": 0,
+            "finish_reason": "stop",
+            "message": {
+              "role": "assistant",
+              "content": "Let me check.",
+              "tool_calls": [
+                {
+                  "id": "call_w_0002",
+                  "type": "function",
+                  "function": {
+                    "name": "weather.lookup",
+                    "arguments": "{\"q\": \"Weather Tokyo\"}"
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "usage": {
+          "prompt_tokens": 50,
+          "completion_tokens": 20,
+          "total_tokens": 70
+        }
+      },
+      "reasoning": null,
+      "tool_calls_full": [
+        {
+          "id": "call_w_0002",
+          "type": "function",
+          "function": {
+            "name": "weather.lookup",
+            "arguments": "{\"q\": \"Weather Tokyo\"}"
+          }
+        }
+      ],
+      "tool_results": [],
+      "logprobs": {
+        "content": [
+          [
+            {
+              "token": "Let",
+              "logprob": -0.1,
+              "top_logprobs": []
+            }
+          ],
+          [
+            {
+              "token": "me",
+              "logprob": -0.1,
+              "top_logprobs": []
+            }
+          ],
+          [
+            {
+              "token": "check.",
+              "logprob": -0.1,
+              "top_logprobs": []
+            }
+          ]
+        ]
+      },
+      "finish_reason": "stop",
+      "cache_hit": false,
+      "prompt_cache_savings_usd": 0.0,
+      "model_version": "gpt-4o-mini",
+      "service_tier": "standard"
+    },
+    {
+      "event_id": "evt_tloop_stuck_02_0006",
+      "tenant_id": "org_eden_synth",
+      "project_id": "proj_synthetic_eval_v1",
+      "trace_id": "trace_loop_stuck_02",
+      "realm": "production",
+      "agent_id": "agent_loop-stuck_02",
+      "agent_version": "synth-v1.0.0",
+      "environment_id": "env_prod_main",
+      "tags": [],
+      "source_format": "eden_native",
+      "images": [],
+      "audio": [],
+      "citations": [],
+      "stop_sequence": null,
+      "system_fingerprint": "fp_synth-v1.0.0",
+      "event_type": "tool.call",
+      "timestamp": "2026-06-28T12:00:35.400000+00:00",
+      "parent_span_id": "spn_trace_loop_stuck_02_0000",
+      "span_id": "spn_trace_loop_stuck_02_0006",
+      "name": "weather.lookup",
+      "duration_ms": 11000.0,
+      "payload": {},
+      "metrics": {
+        "latency_ms": 11000.0,
+        "cost_usd": 0.0
+      },
+      "attributes": {
+        "environment": "production"
+      },
+      "outcome": "failure",
+      "request_body": {
+        "tool": "weather.lookup",
+        "arguments": {
+          "q": "Weather Tokyo"
+        }
+      },
+      "response_body": {
+        "error": "upstream_timeout"
+      },
+      "reasoning": null,
+      "tool_calls_full": [
+        {
+          "tool_call_id": "call_weather.lookup_32990",
+          "type": "function",
+          "function": {
+            "name": "weather.lookup",
+            "arguments": "{\"q\": \"Weather Tokyo\"}"
+          }
+        }
+      ],
+      "tool_results": [
+        {
+          "tool_call_id": "call_weather.lookup_32990",
+          "role": "tool",
+          "content": "{\"error\": \"timeout\"}",
+          "error": "upstream_timeout"
+        }
+      ],
+      "logprobs": null,
+      "finish_reason": null,
+      "cache_hit": false,
+      "prompt_cache_savings_usd": 0.0,
+      "model_version": null,
+      "service_tier": null
+    },
+    {
+      "event_id": "evt_tloop_stuck_02_0007",
+      "tenant_id": "org_eden_synth",
+      "project_id": "proj_synthetic_eval_v1",
+      "trace_id": "trace_loop_stuck_02",
+      "realm": "production",
+      "agent_id": "agent_loop-stuck_02",
+      "agent_version": "synth-v1.0.0",
+      "environment_id": "env_prod_main",
+      "tags": [],
+      "source_format": "eden_native",
+      "images": [],
+      "audio": [],
+      "citations": [],
+      "stop_sequence": null,
+      "system_fingerprint": "fp_synth-v1.0.0",
+      "event_type": "llm.completion",
+      "timestamp": "2026-06-28T12:00:36.200000+00:00",
+      "parent_span_id": "spn_trace_loop_stuck_02_0000",
+      "span_id": "spn_trace_loop_stuck_02_0007",
+      "name": "llm.fast",
+      "duration_ms": 800.0,
+      "payload": {},
+      "metrics": {
+        "prompt_tokens": 50,
+        "completion_tokens": 20,
+        "total_tokens": 70,
+        "cost_usd": 1.9e-05,
+        "latency_ms": 800.0
+      },
+      "attributes": {
+        "model": "gpt-4o-mini",
+        "environment": "production",
+        "user_id": "user_synth_42",
+        "session_id": "sess_synth_42"
+      },
+      "outcome": "success",
+      "request_body": {
+        "model": "gpt-4o-mini",
+        "messages": [
+          {
+            "role": "user",
+            "content": "What's the weather in Tokyo?"
+          }
+        ],
+        "temperature": 0.0
+      },
+      "response_body": {
+        "id": "cmpl-evt_cmpl_12395",
+        "model": "gpt-4o-mini",
+        "choices": [
+          {
+            "index": 0,
+            "finish_reason": "stop",
+            "message": {
+              "role": "assistant",
+              "content": "Let me check.",
+              "tool_calls": [
+                {
+                  "id": "call_w_0003",
+                  "type": "function",
+                  "function": {
+                    "name": "weather.lookup",
+                    "arguments": "{\"query\": \"weather Tokyo\"}"
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "usage": {
+          "prompt_tokens": 50,
+          "completion_tokens": 20,
+          "total_tokens": 70
+        }
+      },
+      "reasoning": null,
+      "tool_calls_full": [
+        {
+          "id": "call_w_0003",
+          "type": "function",
+          "function": {
+            "name": "weather.lookup",
+            "arguments": "{\"query\": \"weather Tokyo\"}"
+          }
+        }
+      ],
+      "tool_results": [],
+      "logprobs": {
+        "content": [
+          [
+            {
+              "token": "Let",
+              "logprob": -0.1,
+              "top_logprobs": []
+            }
+          ],
+          [
+            {
+              "token": "me",
+              "logprob": -0.1,
+              "top_logprobs": []
+            }
+          ],
+          [
+            {
+              "token": "check.",
+              "logprob": -0.1,
+              "top_logprobs": []
+            }
+          ]
+        ]
+      },
+      "finish_reason": "stop",
+      "cache_hit": false,
+      "prompt_cache_savings_usd": 0.0,
+      "model_version": "gpt-4o-mini",
+      "service_tier": "standard"
+    },
+    {
+      "event_id": "evt_tloop_stuck_02_0008",
+      "tenant_id": "org_eden_synth",
+      "project_id": "proj_synthetic_eval_v1",
+      "trace_id": "trace_loop_stuck_02",
+      "realm": "production",
+      "agent_id": "agent_loop-stuck_02",
+      "agent_version": "synth-v1.0.0",
+      "environment_id": "env_prod_main",
+      "tags": [],
+      "source_format": "eden_native",
+      "images": [],
+      "audio": [],
+      "citations": [],
+      "stop_sequence": null,
+      "system_fingerprint": "fp_synth-v1.0.0",
+      "event_type": "tool.call",
+      "timestamp": "2026-06-28T12:00:47.200000+00:00",
+      "parent_span_id": "spn_trace_loop_stuck_02_0000",
+      "span_id": "spn_trace_loop_stuck_02_0008",
+      "name": "weather.lookup",
+      "duration_ms": 11000.0,
+      "payload": {},
+      "metrics": {
+        "latency_ms": 11000.0,
+        "cost_usd": 0.0
+      },
+      "attributes": {
+        "environment": "production"
+      },
+      "outcome": "failure",
+      "request_body": {
+        "tool": "weather.lookup",
+        "arguments": {
+          "query": "weather Tokyo"
+        }
+      },
+      "response_body": {
+        "error": "upstream_timeout"
+      },
+      "reasoning": null,
+      "tool_calls_full": [
+        {
+          "tool_call_id": "call_weather.lookup_96719",
+          "type": "function",
+          "function": {
+            "name": "weather.lookup",
+            "arguments": "{\"query\": \"weather Tokyo\"}"
+          }
+        }
+      ],
+      "tool_results": [
+        {
+          "tool_call_id": "call_weather.lookup_96719",
+          "role": "tool",
+          "content": "{\"error\": \"timeout\"}",
+          "error": "upstream_timeout"
+        }
+      ],
+      "logprobs": null,
+      "finish_reason": null,
+      "cache_hit": false,
+      "prompt_cache_savings_usd": 0.0,
+      "model_version": null,
+      "service_tier": null
+    },
+    {
+      "event_id": "evt_tloop_stuck_02_0009",
+      "tenant_id": "org_eden_synth",
+      "project_id": "proj_synthetic_eval_v1",
+      "trace_id": "trace_loop_stuck_02",
+      "realm": "production",
+      "agent_id": "agent_loop-stuck_02",
+      "agent_version": "synth-v1.0.0",
+      "environment_id": "env_prod_main",
+      "tags": [],
+      "source_format": "eden_native",
+      "images": [],
+      "audio": [],
+      "citations": [],
+      "stop_sequence": null,
+      "system_fingerprint": "fp_synth-v1.0.0",
+      "event_type": "llm.completion",
+      "timestamp": "2026-06-28T12:00:48+00:00",
+      "parent_span_id": "spn_trace_loop_stuck_02_0000",
+      "span_id": "spn_trace_loop_stuck_02_0009",
+      "name": "llm.fast",
+      "duration_ms": 800.0,
+      "payload": {},
+      "metrics": {
+        "prompt_tokens": 50,
+        "completion_tokens": 20,
+        "total_tokens": 70,
+        "cost_usd": 1.9e-05,
+        "latency_ms": 800.0
+      },
+      "attributes": {
+        "model": "gpt-4o-mini",
+        "environment": "production",
+        "user_id": "user_synth_42",
+        "session_id": "sess_synth_42"
+      },
+      "outcome": "success",
+      "request_body": {
+        "model": "gpt-4o-mini",
+        "messages": [
+          {
+            "role": "user",
+            "content": "What's the weather in Tokyo?"
+          }
+        ],
+        "temperature": 0.0
+      },
+      "response_body": {
+        "id": "cmpl-evt_cmpl_85108",
+        "model": "gpt-4o-mini",
+        "choices": [
+          {
+            "index": 0,
+            "finish_reason": "stop",
+            "message": {
+              "role": "assistant",
+              "content": "Let me check.",
+              "tool_calls": [
+                {
+                  "id": "call_w_0004",
+                  "type": "function",
+                  "function": {
+                    "name": "weather.lookup",
+                    "arguments": "{\"q\": \"tokyo weather\"}"
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "usage": {
+          "prompt_tokens": 50,
+          "completion_tokens": 20,
+          "total_tokens": 70
+        }
+      },
+      "reasoning": null,
+      "tool_calls_full": [
+        {
+          "id": "call_w_0004",
+          "type": "function",
+          "function": {
+            "name": "weather.lookup",
+            "arguments": "{\"q\": \"tokyo weather\"}"
+          }
+        }
+      ],
+      "tool_results": [],
+      "logprobs": {
+        "content": [
+          [
+            {
+              "token": "Let",
+              "logprob": -0.1,
+              "top_logprobs": []
+            }
+          ],
+          [
+            {
+              "token": "me",
+              "logprob": -0.1,
+              "top_logprobs": []
+            }
+          ],
+          [
+            {
+              "token": "check.",
+              "logprob": -0.1,
+              "top_logprobs": []
+            }
+          ]
+        ]
+      },
+      "finish_reason": "stop",
+      "cache_hit": false,
+      "prompt_cache_savings_usd": 0.0,
+      "model_version": "gpt-4o-mini",
+      "service_tier": "standard"
+    },
+    {
+      "event_id": "evt_tloop_stuck_02_0010",
+      "tenant_id": "org_eden_synth",
+      "project_id": "proj_synthetic_eval_v1",
+      "trace_id": "trace_loop_stuck_02",
+      "realm": "production",
+      "agent_id": "agent_loop-stuck_02",
+      "agent_version": "synth-v1.0.0",
+      "environment_id": "env_prod_main",
+      "tags": [],
+      "source_format": "eden_native",
+      "images": [],
+      "audio": [],
+      "citations": [],
+      "stop_sequence": null,
+      "system_fingerprint": "fp_synth-v1.0.0",
+      "event_type": "tool.call",
+      "timestamp": "2026-06-28T12:00:59+00:00",
+      "parent_span_id": "spn_trace_loop_stuck_02_0000",
+      "span_id": "spn_trace_loop_stuck_02_0010",
+      "name": "weather.lookup",
+      "duration_ms": 11000.0,
+      "payload": {},
+      "metrics": {
+        "latency_ms": 11000.0,
+        "cost_usd": 0.0
+      },
+      "attributes": {
+        "environment": "production"
+      },
+      "outcome": "failure",
+      "request_body": {
+        "tool": "weather.lookup",
+        "arguments": {
+          "q": "tokyo weather"
+        }
+      },
+      "response_body": {
+        "error": "upstream_timeout"
+      },
+      "reasoning": null,
+      "tool_calls_full": [
+        {
+          "tool_call_id": "call_weather.lookup_28986",
+          "type": "function",
+          "function": {
+            "name": "weather.lookup",
+            "arguments": "{\"q\": \"tokyo weather\"}"
+          }
+        }
+      ],
+      "tool_results": [
+        {
+          "tool_call_id": "call_weather.lookup_28986",
+          "role": "tool",
+          "content": "{\"error\": \"timeout\"}",
+          "error": "upstream_timeout"
+        }
+      ],
+      "logprobs": null,
+      "finish_reason": null,
+      "cache_hit": false,
+      "prompt_cache_savings_usd": 0.0,
+      "model_version": null,
+      "service_tier": null
+    },
+    {
+      "event_id": "evt_tloop_stuck_02_0011",
+      "tenant_id": "org_eden_synth",
+      "project_id": "proj_synthetic_eval_v1",
+      "trace_id": "trace_loop_stuck_02",
+      "realm": "production",
+      "agent_id": "agent_loop-stuck_02",
+      "agent_version": "synth-v1.0.0",
+      "environment_id": "env_prod_main",
+      "tags": [],
+      "source_format": "eden_native",
+      "images": [],
+      "audio": [],
+      "citations": [],
+      "stop_sequence": null,
+      "system_fingerprint": "fp_synth-v1.0.0",
+      "event_type": "llm.completion",
+      "timestamp": "2026-06-28T12:00:59.800000+00:00",
+      "parent_span_id": "spn_trace_loop_stuck_02_0000",
+      "span_id": "spn_trace_loop_stuck_02_0011",
+      "name": "llm.fast",
+      "duration_ms": 800.0,
+      "payload": {},
+      "metrics": {
+        "prompt_tokens": 50,
+        "completion_tokens": 20,
+        "total_tokens": 70,
+        "cost_usd": 1.9e-05,
+        "latency_ms": 800.0
+      },
+      "attributes": {
+        "model": "gpt-4o-mini",
+        "environment": "production",
+        "user_id": "user_synth_42",
+        "session_id": "sess_synth_42"
+      },
+      "outcome": "success",
+      "request_body": {
+        "model": "gpt-4o-mini",
+        "messages": [
+          {
+            "role": "user",
+            "content": "What's the weather in Tokyo?"
+          }
+        ],
+        "temperature": 0.0
+      },
+      "response_body": {
+        "id": "cmpl-evt_cmpl_53952",
+        "model": "gpt-4o-mini",
+        "choices": [
+          {
+            "index": 0,
+            "finish_reason": "stop",
+            "message": {
+              "role": "assistant",
+              "content": "Let me check.",
+              "tool_calls": [
+                {
+                  "id": "call_w_0005",
+                  "type": "function",
+                  "function": {
+                    "name": "weather.lookup",
+                    "arguments": "{\"q\": \"weather in Tokyo\"}"
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "usage": {
+          "prompt_tokens": 50,
+          "completion_tokens": 20,
+          "total_tokens": 70
+        }
+      },
+      "reasoning": null,
+      "tool_calls_full": [
+        {
+          "id": "call_w_0005",
+          "type": "function",
+          "function": {
+            "name": "weather.lookup",
+            "arguments": "{\"q\": \"weather in Tokyo\"}"
+          }
+        }
+      ],
+      "tool_results": [],
+      "logprobs": {
+        "content": [
+          [
+            {
+              "token": "Let",
+              "logprob": -0.1,
+              "top_logprobs": []
+            }
+          ],
+          [
+            {
+              "token": "me",
+              "logprob": -0.1,
+              "top_logprobs": []
+            }
+          ],
+          [
+            {
+              "token": "check.",
+              "logprob": -0.1,
+              "top_logprobs": []
+            }
+          ]
+        ]
+      },
+      "finish_reason": "stop",
+      "cache_hit": false,
+      "prompt_cache_savings_usd": 0.0,
+      "model_version": "gpt-4o-mini",
+      "service_tier": "standard"
+    },
+    {
+      "event_id": "evt_tloop_stuck_02_0012",
+      "tenant_id": "org_eden_synth",
+      "project_id": "proj_synthetic_eval_v1",
+      "trace_id": "trace_loop_stuck_02",
+      "realm": "production",
+      "agent_id": "agent_loop-stuck_02",
+      "agent_version": "synth-v1.0.0",
+      "environment_id": "env_prod_main",
+      "tags": [],
+      "source_format": "eden_native",
+      "images": [],
+      "audio": [],
+      "citations": [],
+      "stop_sequence": null,
+      "system_fingerprint": "fp_synth-v1.0.0",
+      "event_type": "tool.call",
+      "timestamp": "2026-06-28T12:01:10.800000+00:00",
+      "parent_span_id": "spn_trace_loop_stuck_02_0000",
+      "span_id": "spn_trace_loop_stuck_02_0012",
+      "name": "weather.lookup",
+      "duration_ms": 11000.0,
+      "payload": {},
+      "metrics": {
+        "latency_ms": 11000.0,
+        "cost_usd": 0.0
+      },
+      "attributes": {
+        "environment": "production"
+      },
+      "outcome": "failure",
+      "request_body": {
+        "tool": "weather.lookup",
+        "arguments": {
+          "q": "weather in Tokyo"
+        }
+      },
+      "response_body": {
+        "error": "upstream_timeout"
+      },
+      "reasoning": null,
+      "tool_calls_full": [
+        {
+          "tool_call_id": "call_weather.lookup_84994",
+          "type": "function",
+          "function": {
+            "name": "weather.lookup",
+            "arguments": "{\"q\": \"weather in Tokyo\"}"
+          }
+        }
+      ],
+      "tool_results": [
+        {
+          "tool_call_id": "call_weather.lookup_84994",
+          "role": "tool",
+          "content": "{\"error\": \"timeout\"}",
+          "error": "upstream_timeout"
+        }
+      ],
+      "logprobs": null,
+      "finish_reason": null,
+      "cache_hit": false,
+      "prompt_cache_savings_usd": 0.0,
+      "model_version": null,
+      "service_tier": null
+    },
+    {
+      "event_id": "evt_tloop_stuck_02_0013",
+      "tenant_id": "org_eden_synth",
+      "project_id": "proj_synthetic_eval_v1",
+      "trace_id": "trace_loop_stuck_02",
+      "realm": "production",
+      "agent_id": "agent_loop-stuck_02",
+      "agent_version": "synth-v1.0.0",
+      "environment_id": "env_prod_main",
+      "tags": [],
+      "source_format": "eden_native",
+      "images": [],
+      "audio": [],
+      "citations": [],
+      "stop_sequence": null,
+      "system_fingerprint": "fp_synth-v1.0.0",
+      "event_type": "llm.completion",
+      "timestamp": "2026-06-28T12:01:11.600000+00:00",
+      "parent_span_id": "spn_trace_loop_stuck_02_0000",
+      "span_id": "spn_trace_loop_stuck_02_0013",
+      "name": "llm.fast",
+      "duration_ms": 800.0,
+      "payload": {},
+      "metrics": {
+        "prompt_tokens": 50,
+        "completion_tokens": 20,
+        "total_tokens": 70,
+        "cost_usd": 1.9e-05,
+        "latency_ms": 800.0
+      },
+      "attributes": {
+        "model": "gpt-4o-mini",
+        "environment": "production",
+        "user_id": "user_synth_42",
+        "session_id": "sess_synth_42"
+      },
+      "outcome": "success",
+      "request_body": {
+        "model": "gpt-4o-mini",
+        "messages": [
+          {
+            "role": "user",
+            "content": "What's the weather in Tokyo?"
+          }
+        ],
+        "temperature": 0.0
+      },
+      "response_body": {
+        "id": "cmpl-evt_cmpl_35003",
+        "model": "gpt-4o-mini",
+        "choices": [
+          {
+            "index": 0,
+            "finish_reason": "stop",
+            "message": {
+              "role": "assistant",
+              "content": "Let me check.",
+              "tool_calls": [
+                {
+                  "id": "call_w_0006",
+                  "type": "function",
+                  "function": {
+                    "name": "weather.lookup",
+                    "arguments": "{\"q\": \"What's the weather in Tokyo?\"}"
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "usage": {
+          "prompt_tokens": 50,
+          "completion_tokens": 20,
+          "total_tokens": 70
+        }
+      },
+      "reasoning": null,
+      "tool_calls_full": [
+        {
+          "id": "call_w_0006",
+          "type": "function",
+          "function": {
+            "name": "weather.lookup",
+            "arguments": "{\"q\": \"What's the weather in Tokyo?\"}"
+          }
+        }
+      ],
+      "tool_results": [],
+      "logprobs": {
+        "content": [
+          [
+            {
+              "token": "Let",
+              "logprob": -0.1,
+              "top_logprobs": []
+            }
+          ],
+          [
+            {
+              "token": "me",
+              "logprob": -0.1,
+              "top_logprobs": []
+            }
+          ],
+          [
+            {
+              "token": "check.",
+              "logprob": -0.1,
+              "top_logprobs": []
+            }
+          ]
+        ]
+      },
+      "finish_reason": "stop",
+      "cache_hit": false,
+      "prompt_cache_savings_usd": 0.0,
+      "model_version": "gpt-4o-mini",
+      "service_tier": "standard"
+    },
+    {
+      "event_id": "evt_tloop_stuck_02_0014",
+      "tenant_id": "org_eden_synth",
+      "project_id": "proj_synthetic_eval_v1",
+      "trace_id": "trace_loop_stuck_02",
+      "realm": "production",
+      "agent_id": "agent_loop-stuck_02",
+      "agent_version": "synth-v1.0.0",
+      "environment_id": "env_prod_main",
+      "tags": [],
+      "source_format": "eden_native",
+      "images": [],
+      "audio": [],
+      "citations": [],
+      "stop_sequence": null,
+      "system_fingerprint": "fp_synth-v1.0.0",
+      "event_type": "tool.call",
+      "timestamp": "2026-06-28T12:01:22.600000+00:00",
+      "parent_span_id": "spn_trace_loop_stuck_02_0000",
+      "span_id": "spn_trace_loop_stuck_02_0014",
+      "name": "weather.lookup",
+      "duration_ms": 11000.0,
+      "payload": {},
+      "metrics": {
+        "latency_ms": 11000.0,
+        "cost_usd": 0.0
+      },
+      "attributes": {
+        "environment": "production"
+      },
+      "outcome": "failure",
+      "request_body": {
+        "tool": "weather.lookup",
+        "arguments": {
+          "q": "What's the weather in Tokyo?"
+        }
+      },
+      "response_body": {
+        "error": "upstream_timeout"
+      },
+      "reasoning": null,
+      "tool_calls_full": [
+        {
+          "tool_call_id": "call_weather.lookup_34881",
+          "type": "function",
+          "function": {
+            "name": "weather.lookup",
+            "arguments": "{\"q\": \"What's the weather in Tokyo?\"}"
+          }
+        }
+      ],
+      "tool_results": [
+        {
+          "tool_call_id": "call_weather.lookup_34881",
+          "role": "tool",
+          "content": "{\"error\": \"timeout\"}",
+          "error": "upstream_timeout"
+        }
+      ],
+      "logprobs": null,
+      "finish_reason": null,
+      "cache_hit": false,
+      "prompt_cache_savings_usd": 0.0,
+      "model_version": null,
+      "service_tier": null
+    },
+    {
+      "event_id": "evt_tloop_stuck_02_0015",
+      "tenant_id": "org_eden_synth",
+      "project_id": "proj_synthetic_eval_v1",
+      "trace_id": "trace_loop_stuck_02",
+      "realm": "production",
+      "agent_id": "agent_loop-stuck_02",
+      "agent_version": "synth-v1.0.0",
+      "environment_id": "env_prod_main",
+      "tags": [],
+      "source_format": "eden_native",
+      "images": [],
+      "audio": [],
+      "citations": [],
+      "stop_sequence": null,
+      "system_fingerprint": "fp_synth-v1.0.0",
+      "event_type": "env.step",
+      "timestamp": "2026-06-28T12:01:22.640000+00:00",
+      "parent_span_id": "spn_trace_loop_stuck_02_0000",
+      "span_id": "spn_trace_loop_stuck_02_0015",
+      "name": "agent.timeout",
+      "duration_ms": 40.0,
+      "payload": {
+        "observation": "aborted after 7 weather.lookup timeouts"
+      },
+      "metrics": {
+        "latency_ms": 40.0
+      },
+      "attributes": {
+        "environment": "production"
+      },
+      "outcome": "failure",
+      "request_body": null,
+      "response_body": null,
+      "reasoning": null,
+      "tool_calls_full": [],
+      "tool_results": [],
+      "logprobs": null,
+      "finish_reason": null,
+      "cache_hit": false,
+      "prompt_cache_savings_usd": 0.0,
+      "model_version": null,
+      "service_tier": null
+    },
+    {
+      "event_id": "evt_tloop_stuck_02_0016",
+      "tenant_id": "org_eden_synth",
+      "project_id": "proj_synthetic_eval_v1",
+      "trace_id": "trace_loop_stuck_02",
+      "realm": "production",
+      "agent_id": "agent_loop-stuck_02",
+      "agent_version": "synth-v1.0.0",
+      "environment_id": "env_prod_main",
+      "tags": [],
+      "source_format": "eden_native",
+      "images": [],
+      "audio": [],
+      "citations": [],
+      "stop_sequence": null,
+      "system_fingerprint": "fp_synth-v1.0.0",
+      "event_type": "span.end",
+      "timestamp": "2026-06-28T12:01:22.640000+00:00",
+      "parent_span_id": null,
+      "span_id": "spn_trace_loop_stuck_02_0000",
+      "name": "trace",
+      "duration_ms": 82640.0,
+      "payload": {},
+      "metrics": {},
+      "attributes": {
+        "environment": "production"
+      },
+      "outcome": "failure",
+      "request_body": null,
+      "response_body": null,
+      "reasoning": null,
+      "tool_calls_full": [],
+      "tool_results": [],
+      "logprobs": null,
+      "finish_reason": null,
+      "cache_hit": false,
+      "prompt_cache_savings_usd": 0.0,
+      "model_version": null,
+      "service_tier": null
+    }
+  ]
+}

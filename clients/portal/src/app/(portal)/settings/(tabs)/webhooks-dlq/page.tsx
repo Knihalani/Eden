@@ -5,6 +5,8 @@ import { useOrg } from "@/hooks/use-org";
 import { cn } from "@/lib/utils";
 import { PageHeader } from "@/components/layout/page-header";
 import { NoOrgState } from "@/components/ui/no-org-state";
+import { EmptyState } from "@/components/ui/empty-state";
+import { ErrorState } from "@/components/ui/error-state";
 import { useToast } from "@/components/ui/toast";
 import {
   Webhook,
@@ -43,10 +45,12 @@ export default function WebhooksDlqPage() {
   const toast = useToast();
   const [entries, setEntries] = useState<DlqEntry[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [replaying, setReplaying] = useState<string | null>(null);
 
   const fetchData = useCallback(async () => {
     if (!currentOrg?.id) return;
+    setError(null);
     try {
       const res = await fetch(
         `${API_BASE}/orgs/${currentOrg.id}/webhooks/dlq?limit=50`,
@@ -55,9 +59,13 @@ export default function WebhooksDlqPage() {
       if (res.ok) {
         const d = await res.json();
         setEntries(d.data?.entries || []);
+      } else {
+        setError(`Failed to load DLQ entries (HTTP ${res.status}).`);
       }
     } catch (err) {
-      console.error("DLQ fetch failed", err);
+      const message =
+        err instanceof Error ? err.message : "Network error loading DLQ entries.";
+      setError(message);
     } finally {
       setLoading(false);
     }
@@ -83,7 +91,9 @@ export default function WebhooksDlqPage() {
           toast.error("Replay failed", `HTTP ${res.status}`);
         }
       } catch (err) {
-        toast.error("Replay failed", String(err));
+        const message =
+          err instanceof Error ? err.message : "Replay request failed.";
+        toast.error("Replay failed", message);
       } finally {
         setReplaying(null);
       }
@@ -97,11 +107,12 @@ export default function WebhooksDlqPage() {
     <div className="space-y-6">
       <PageHeader
         icon={Webhook}
+        eyebrow="Settings"
         title="Webhook Dead-Letter Queue"
         subtitle="D.13 — Terminal-state deliveries awaiting replay"
       />
 
-      <div className="rounded-lg border border-[var(--border-default)] bg-[var(--bg-elev-1)]">
+      <div className="rounded-lg border border-[var(--border-default)] bg-[var(--bg-primary)]">
         <div className="flex items-center justify-between border-b border-[var(--border-default)] p-4">
           <div>
             <h2 className="text-lg font-semibold text-[var(--text-primary)]">
@@ -115,76 +126,114 @@ export default function WebhooksDlqPage() {
           <button
             type="button"
             onClick={fetchData}
-            className="inline-flex items-center gap-2 rounded-md border border-[var(--border-default)] bg-[var(--bg-elev-2)] px-3 py-1.5 text-xs font-medium text-[var(--text-primary)] hover:bg-[var(--bg-elev-1)]"
+            aria-label="Refresh DLQ entries"
+            disabled={loading}
+            className="inline-flex items-center gap-2 rounded-md border border-[var(--border-default)] bg-[var(--bg-secondary)] px-3 py-1.5 text-xs font-medium text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)] disabled:opacity-50"
           >
-            <RefreshCw className="h-3 w-3" />
+            <RefreshCw className={`h-3 w-3 ${loading ? "animate-spin" : ""}`} aria-hidden="true" />
             Refresh
           </button>
         </div>
 
         <div className="divide-y divide-[var(--border-default)]">
           {loading ? (
-            <div className="flex items-center justify-center p-8">
-              <Loader2 className="h-5 w-5 animate-spin text-[var(--text-secondary)]" />
+            <div
+              className="flex items-center justify-center gap-2 p-8 text-sm text-[var(--text-secondary)]"
+              aria-busy="true"
+              aria-live="polite"
+            >
+              <Loader2 className="h-5 w-5 animate-spin" aria-hidden="true" />
+              Loading DLQ entries…
+            </div>
+          ) : error ? (
+            <div className="p-6">
+              <ErrorState
+                title="Could not load DLQ entries"
+                message={error}
+                action={
+                  <button
+                    type="button"
+                    onClick={fetchData}
+                    className="inline-flex items-center gap-2 rounded-md border border-[var(--border-default)] bg-[var(--bg-secondary)] px-3 py-1.5 text-xs font-medium text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)]"
+                  >
+                    <RefreshCw className="h-3 w-3" aria-hidden="true" />
+                    Try again
+                  </button>
+                }
+              />
             </div>
           ) : entries.length === 0 ? (
-            <div className="p-8 text-center text-sm text-[var(--text-secondary)]">
-              <CheckCircle2 className="mx-auto mb-2 h-8 w-8 text-green-400" />
-              No DLQ entries — every webhook delivery is succeeding within the
-              retry budget.
+            <div className="p-6">
+              <EmptyState
+                icon={CheckCircle2}
+                title="DLQ is clear"
+                description="Every webhook delivery is succeeding within the retry budget."
+              />
             </div>
           ) : (
-            entries.map((e) => (
-              <div
-                key={e.id}
-                className="flex items-center justify-between p-4"
-              >
-                <div className="flex-1">
-                  <div className="flex items-center gap-2">
-                    <AlertOctagon className="h-4 w-4 text-red-400" />
-                    <span className="text-sm font-medium text-[var(--text-primary)]">
-                      {e.event_type}
-                    </span>
-                    {e.last_response_status && (
-                      <span
-                        className={cn(
-                          "rounded px-1.5 py-0.5 text-xs",
-                          e.last_response_status >= 500
-                            ? "bg-red-500/20 text-red-400"
-                            : "bg-yellow-500/20 text-yellow-400"
-                        )}
-                      >
-                        HTTP {e.last_response_status}
-                      </span>
-                    )}
-                    <span className="text-xs text-[var(--text-secondary)]">
-                      {e.attempt_count}/{e.max_attempts} attempts · {e.replay_count} replays
-                    </span>
-                  </div>
-                  <div className="mt-1 text-xs text-[var(--text-secondary)]">
-                    {new Date(e.created_at).toLocaleString()} · webhook {e.webhook_id.slice(0, 8)}…
-                  </div>
-                  {e.last_error && (
-                    <div className="mt-1 truncate text-xs text-red-400">
-                      {e.last_error}
-                    </div>
-                  )}
-                </div>
-                <button
-                  type="button"
-                  onClick={() => handleReplay(e.id)}
-                  disabled={replaying === e.id}
-                  className="inline-flex items-center gap-2 rounded-md bg-[var(--accent)] px-3 py-1.5 text-xs font-medium text-white hover:opacity-90 disabled:opacity-50"
+            <ul className="divide-y divide-[var(--border-default)]" aria-label="Dead-letter entries">
+              {entries.map((e) => (
+                <li
+                  key={e.id}
+                  className="flex items-center justify-between gap-4 p-4"
                 >
-                  {replaying === e.id ? (
-                    <Loader2 className="h-3 w-3 animate-spin" />
-                  ) : (
-                    <RefreshCw className="h-3 w-3" />
-                  )}
-                  Replay
-                </button>
-              </div>
-            ))
+                  <div className="flex-1 min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <AlertOctagon
+                        className="h-4 w-4 text-[var(--error)] shrink-0"
+                        aria-hidden="true"
+                      />
+                      <span className="text-sm font-medium text-[var(--text-primary)]">
+                        {e.event_type}
+                      </span>
+                      {e.last_response_status != null && (
+                        <span
+                          className={cn(
+                            "rounded px-1.5 py-0.5 text-xs font-mono",
+                            e.last_response_status >= 500
+                              ? "bg-[var(--error-dim)] text-[var(--error)]"
+                              : "bg-[var(--warning-bg)] text-[var(--warning)]"
+                          )}
+                        >
+                          HTTP {e.last_response_status}
+                        </span>
+                      )}
+                      <span className="text-xs text-[var(--text-secondary)]">
+                        {e.attempt_count}/{e.max_attempts} attempts · {e.replay_count} replays
+                      </span>
+                    </div>
+                    <div className="mt-1 text-xs text-[var(--text-secondary)]">
+                      {new Date(e.created_at).toLocaleString()} · webhook {e.webhook_id.slice(0, 8)}…
+                    </div>
+                    {e.last_error && (
+                      <div className="mt-1 truncate text-xs text-[var(--error)]" title={e.last_error}>
+                        {e.last_error}
+                      </div>
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleReplay(e.id)}
+                    disabled={replaying === e.id}
+                    aria-busy={replaying === e.id}
+                    aria-label={`Replay ${e.event_type} delivery`}
+                    className="inline-flex items-center gap-2 rounded-md bg-[var(--accent)] px-3 py-1.5 text-xs font-medium text-[var(--accent-foreground)] hover:opacity-90 disabled:opacity-50"
+                  >
+                    {replaying === e.id ? (
+                      <>
+                        <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" />
+                        Replaying…
+                      </>
+                    ) : (
+                      <>
+                        <RefreshCw className="h-3 w-3" aria-hidden="true" />
+                        Replay
+                      </>
+                    )}
+                  </button>
+                </li>
+              ))}
+            </ul>
           )}
         </div>
       </div>

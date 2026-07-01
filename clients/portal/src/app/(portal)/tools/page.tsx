@@ -160,7 +160,7 @@ export default function ToolsPage() {
   }
 
   return (
-    <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-6">
+    <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-6 page-enter">
       <PageHeader
         eyebrow="Observe"
         title="Tool Intelligence"
@@ -291,7 +291,9 @@ function AttributionTab({
     <div className="space-y-4">
       {/* Controls */}
       <div className="flex flex-wrap items-center gap-3 bg-[var(--bg-primary)] border border-[var(--border-default)] rounded-xl p-3">
+        <label className="sr-only" htmlFor="attribution-days">Time window</label>
         <select
+          id="attribution-days"
           value={days}
           onChange={(e) => onDaysChange(Number(e.target.value))}
           className="px-3 py-1.5 bg-[var(--bg-secondary)] border border-[var(--border-default)] rounded-lg text-sm text-[var(--text-primary)]"
@@ -303,6 +305,7 @@ function AttributionTab({
         <button
           onClick={onRefresh}
           disabled={loading}
+          aria-label="Refresh tool attribution"
           className="inline-flex items-center gap-2 px-3 py-1.5 bg-[var(--bg-tertiary)] text-[var(--text-primary)] rounded-lg text-xs font-medium hover:bg-[var(--border-default)] disabled:opacity-50 transition-colors ml-auto"
         >
           {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Activity className="w-3.5 h-3.5" />}
@@ -388,6 +391,8 @@ function CompareTab({
         <div className="relative">
           <button
             onClick={() => onDropdownOpenChange(!dropdownOpen)}
+            aria-haspopup="listbox"
+            aria-expanded={dropdownOpen}
             className="w-full px-3 py-2 bg-[var(--bg-secondary)] border border-[var(--border-default)] rounded-lg text-sm text-left text-[var(--text-primary)] flex items-center justify-between"
           >
             <span>
@@ -442,6 +447,7 @@ function CompareTab({
                 {t}
                 <button
                   onClick={() => toggleTool(t)}
+                  aria-label={`Remove ${t}`}
                   className="hover:text-[var(--text-primary)] transition-colors"
                 >
                   <X className="w-3 h-3" />
@@ -554,6 +560,7 @@ function RecommenderTab({
               if (e.key === "Enter") onRecommend();
             }}
             placeholder="Describe the task — e.g. 'fetch recent news articles'"
+            aria-label="Task description"
             className="flex-1 px-3 py-2 bg-[var(--bg-secondary)] border border-[var(--border-default)] rounded-lg text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)]"
           />
           <button
@@ -640,6 +647,8 @@ function TaxonomyTab({
     <div className="bg-[var(--bg-primary)] border border-[var(--border-default)] rounded-xl">
       <button
         onClick={onToggleExpanded}
+        aria-expanded={expanded}
+        aria-controls="taxonomy-panel"
         className="w-full px-5 py-4 flex items-center justify-between"
       >
         <div className="flex items-center gap-2">
@@ -656,12 +665,13 @@ function TaxonomyTab({
             </span>
           )}
         </div>
-        {loading && <Loader2 className="w-4 h-4 animate-spin text-[var(--accent)]" />}
+        {loading && <Loader2 className="w-4 h-4 animate-spin text-[var(--accent)]" aria-hidden />}
       </button>
 
       <AnimatePresence>
         {expanded && (
           <motion.div
+            id="taxonomy-panel"
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: "auto" }}
             exit={{ opacity: 0, height: 0 }}

@@ -22,6 +22,7 @@ import { Layers } from "lucide-react";
 import { PageHeader } from "@/components/layout/page-header";
 import { NoOrgState } from "@/components/ui/no-org-state";
 import { TracesTab } from "../observability/_components/TracesTab";
+import { AnnotateTraceDialog } from "../observability/_components/AnnotateTraceDialog";
 import type { TraceFilter, TraceItem } from "../observability/_lib/types";
 import { useOrg } from "@/hooks/use-org";
 import { api } from "@/lib/api";
@@ -36,9 +37,14 @@ export default function TracesPage() {
   const [traces, setTraces] = useState<TraceItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<TraceFilter>({ realm: "", outcome: "", agent_id: "" });
-  const [selectedTraceId, setSelectedTraceId] = useState<string>(initialTraceId ?? "");
+  const [_, setSelectedTraceId] = useState<string>(initialTraceId ?? "");
   const [exportOpen, setExportOpen] = useState(false);
   const [exportTraceId, setExportTraceId] = useState<string>("");
+  // Pattern 5.2 (Langfuse): dialog state. Lives at the page level
+  // so the dialog portals cleanly to body regardless of the table
+  // re-rendering.
+  const [annotateOpen, setAnnotateOpen] = useState(false);
+  const [annotateTraceId, setAnnotateTraceId] = useState<string>("");
 
   const loadTraces = useCallback(async () => {
     if (!currentOrg) return;
@@ -48,9 +54,10 @@ export default function TracesPage() {
         ...(filter.realm ? { realm: filter.realm } : {}),
         ...(filter.outcome ? { outcome: filter.outcome } : {}),
         ...(filter.agent_id ? { agent_id: filter.agent_id } : {}),
-        limit: 50,
-      });
+        limit: 50 });
       setTraces(data.traces as TraceItem[]);
+    } catch (e) {
+      console.error("Traces load failed:", e);
     } finally {
       setLoading(false);
     }
@@ -87,10 +94,10 @@ export default function TracesPage() {
           onFilterChange={setFilter}
           onSelectTrace={(id) => {
             setSelectedTraceId(id);
-            // Open the trace tree on the observability landing page.
-            // Pre-selecting via ?trace=… lets the landing highlight
-            // the row in its own table.
-            router.push(`/observability?trace=${encodeURIComponent(id)}`);
+            // Open the observability landing page with the trace
+            // right-rail active (Pattern 4.4). The landing reads
+            // ?trace_id=… and renders <SelectedTraceRail>.
+            router.push(`/observability?trace_id=${encodeURIComponent(id)}`);
           }}
           onViewTimeline={(id) => {
             setSelectedTraceId(id);
@@ -100,6 +107,10 @@ export default function TracesPage() {
             setExportTraceId(id);
             setExportOpen(true);
           }}
+          onAnnotate={(id) => {
+            setAnnotateTraceId(id);
+            setAnnotateOpen(true);
+          }}
           initialTraceId={initialTraceId}
         />
       </div>
@@ -108,6 +119,13 @@ export default function TracesPage() {
         onOpenChange={setExportOpen}
         orgId={currentOrg.id}
         traceId={exportTraceId}
+      />
+      {/* Pattern 5.2 (Langfuse) — annotate dialog. No-op endpoint
+          for now; see api.annotateTrace in src/lib/api.ts. */}
+      <AnnotateTraceDialog
+        open={annotateOpen}
+        onOpenChange={setAnnotateOpen}
+        traceId={annotateTraceId}
       />
     </>
   );

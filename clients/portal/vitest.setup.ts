@@ -5,14 +5,13 @@ import "@testing-library/jest-dom/vitest";
 // (and their dependencies) reach for. Provide minimal stubs so the
 // tests can mount components that use these APIs.
 //
-// We use ``@ts-ignore`` (rather than ``@ts-expect-error``) on the
-// assignments below: once vitest has loaded ``@testing-library/jest-dom``
-// earlier in the same run, the type checker can see the relevant
-// DOM lib augmentations and the assignment becomes well-typed, which
-// would then flag the expect-error directive as unused. Ignore
-// keeps the type checker quiet in either case.
+// We assign to `globalThis` via an `unknown` cast because the lib
+// types may or may not include these globals depending on the
+// tsconfig — using `as unknown as { ResizeObserver: unknown }`
+// keeps the assignment well-typed under either jsdom-lib presence
+// or absence without needing @ts-ignore / @ts-expect-error
+// directives that the type checker may then flag as unused.
 
-// @ts-ignore — ResizeObserver isn't in jsdom's lib by default.
 const ResizeObserverStub = class {
   observe(): void {}
   unobserve(): void {}
@@ -21,7 +20,6 @@ const ResizeObserverStub = class {
 (globalThis as unknown as { ResizeObserver: unknown }).ResizeObserver =
   ResizeObserverStub;
 
-// @ts-ignore — IntersectionObserver isn't in jsdom's lib by default.
 const IntersectionObserverStub = class {
   observe(): void {}
   unobserve(): void {}

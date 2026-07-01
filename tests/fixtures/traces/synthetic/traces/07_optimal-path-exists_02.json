@@ -1,0 +1,1250 @@
+{
+  "trace_id": "trace_optimal_path_exists_02",
+  "archetype_id": "optimal-path-exists",
+  "agent_id": "agent_optimal-path-exists_02",
+  "event_count": 13,
+  "events": [
+    {
+      "event_id": "evt_toptimal_path_exists_02_0000",
+      "tenant_id": "org_eden_synth",
+      "project_id": "proj_synthetic_eval_v1",
+      "trace_id": "trace_optimal_path_exists_02",
+      "realm": "production",
+      "agent_id": "agent_optimal-path-exists_02",
+      "agent_version": "synth-v1.0.0",
+      "environment_id": "env_prod_main",
+      "tags": [],
+      "source_format": "eden_native",
+      "images": [],
+      "audio": [],
+      "citations": [],
+      "stop_sequence": null,
+      "system_fingerprint": "fp_synth-v1.0.0",
+      "event_type": "span.start",
+      "timestamp": "2026-06-28T12:00:00+00:00",
+      "parent_span_id": null,
+      "span_id": "spn_trace_optimal_path_exists_02_0000",
+      "name": "trace",
+      "duration_ms": 0.0,
+      "payload": {},
+      "metrics": {},
+      "attributes": {
+        "environment": "production"
+      },
+      "outcome": null,
+      "request_body": null,
+      "response_body": null,
+      "reasoning": null,
+      "tool_calls_full": [],
+      "tool_results": [],
+      "logprobs": null,
+      "finish_reason": null,
+      "cache_hit": false,
+      "prompt_cache_savings_usd": 0.0,
+      "model_version": null,
+      "service_tier": null
+    },
+    {
+      "event_id": "evt_toptimal_path_exists_02_0001",
+      "tenant_id": "org_eden_synth",
+      "project_id": "proj_synthetic_eval_v1",
+      "trace_id": "trace_optimal_path_exists_02",
+      "realm": "production",
+      "agent_id": "agent_optimal-path-exists_02",
+      "agent_version": "synth-v1.0.0",
+      "environment_id": "env_prod_main",
+      "tags": [],
+      "source_format": "eden_native",
+      "images": [],
+      "audio": [],
+      "citations": [],
+      "stop_sequence": null,
+      "system_fingerprint": "fp_synth-v1.0.0",
+      "event_type": "llm.completion",
+      "timestamp": "2026-06-28T12:00:00.800000+00:00",
+      "parent_span_id": "spn_trace_optimal_path_exists_02_0000",
+      "span_id": "spn_trace_optimal_path_exists_02_0001",
+      "name": "llm.fast",
+      "duration_ms": 800.0,
+      "payload": {},
+      "metrics": {
+        "prompt_tokens": 50,
+        "completion_tokens": 20,
+        "total_tokens": 70,
+        "cost_usd": 1.9e-05,
+        "latency_ms": 800.0
+      },
+      "attributes": {
+        "model": "gpt-4o-mini",
+        "environment": "production",
+        "user_id": "user_synth_42",
+        "session_id": "sess_synth_42"
+      },
+      "outcome": "success",
+      "request_body": {
+        "model": "gpt-4o-mini",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Find me the top 3 trending repos on GitHub today."
+          }
+        ],
+        "temperature": 0.0
+      },
+      "response_body": {
+        "id": "cmpl-evt_cmpl_89377",
+        "model": "gpt-4o-mini",
+        "choices": [
+          {
+            "index": 0,
+            "finish_reason": "stop",
+            "message": {
+              "role": "assistant",
+              "content": "Sure, what language?",
+              "tool_calls": [
+                {
+                  "id": "call_a_0001",
+                  "type": "function",
+                  "function": {
+                    "name": "user.ask",
+                    "arguments": "{}"
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "usage": {
+          "prompt_tokens": 50,
+          "completion_tokens": 20,
+          "total_tokens": 70
+        }
+      },
+      "reasoning": null,
+      "tool_calls_full": [
+        {
+          "id": "call_a_0001",
+          "type": "function",
+          "function": {
+            "name": "user.ask",
+            "arguments": "{}"
+          }
+        }
+      ],
+      "tool_results": [],
+      "logprobs": {
+        "content": [
+          [
+            {
+              "token": "Sure,",
+              "logprob": -0.1,
+              "top_logprobs": []
+            }
+          ],
+          [
+            {
+              "token": "what",
+              "logprob": -0.1,
+              "top_logprobs": []
+            }
+          ],
+          [
+            {
+              "token": "language?",
+              "logprob": -0.1,
+              "top_logprobs": []
+            }
+          ]
+        ]
+      },
+      "finish_reason": "stop",
+      "cache_hit": false,
+      "prompt_cache_savings_usd": 0.0,
+      "model_version": "gpt-4o-mini",
+      "service_tier": "standard"
+    },
+    {
+      "event_id": "evt_toptimal_path_exists_02_0002",
+      "tenant_id": "org_eden_synth",
+      "project_id": "proj_synthetic_eval_v1",
+      "trace_id": "trace_optimal_path_exists_02",
+      "realm": "production",
+      "agent_id": "agent_optimal-path-exists_02",
+      "agent_version": "synth-v1.0.0",
+      "environment_id": "env_prod_main",
+      "tags": [],
+      "source_format": "eden_native",
+      "images": [],
+      "audio": [],
+      "citations": [],
+      "stop_sequence": null,
+      "system_fingerprint": "fp_synth-v1.0.0",
+      "event_type": "env.step",
+      "timestamp": "2026-06-28T12:00:00.840000+00:00",
+      "parent_span_id": "spn_trace_optimal_path_exists_02_0000",
+      "span_id": "spn_trace_optimal_path_exists_02_0002",
+      "name": "user.ask",
+      "duration_ms": 40.0,
+      "payload": {
+        "observation": "user: any"
+      },
+      "metrics": {
+        "latency_ms": 40.0
+      },
+      "attributes": {
+        "environment": "production"
+      },
+      "outcome": "success",
+      "request_body": null,
+      "response_body": null,
+      "reasoning": null,
+      "tool_calls_full": [],
+      "tool_results": [],
+      "logprobs": null,
+      "finish_reason": null,
+      "cache_hit": false,
+      "prompt_cache_savings_usd": 0.0,
+      "model_version": null,
+      "service_tier": null
+    },
+    {
+      "event_id": "evt_toptimal_path_exists_02_0003",
+      "tenant_id": "org_eden_synth",
+      "project_id": "proj_synthetic_eval_v1",
+      "trace_id": "trace_optimal_path_exists_02",
+      "realm": "production",
+      "agent_id": "agent_optimal-path-exists_02",
+      "agent_version": "synth-v1.0.0",
+      "environment_id": "env_prod_main",
+      "tags": [],
+      "source_format": "eden_native",
+      "images": [],
+      "audio": [],
+      "citations": [],
+      "stop_sequence": null,
+      "system_fingerprint": "fp_synth-v1.0.0",
+      "event_type": "llm.completion",
+      "timestamp": "2026-06-28T12:00:01.640000+00:00",
+      "parent_span_id": "spn_trace_optimal_path_exists_02_0000",
+      "span_id": "spn_trace_optimal_path_exists_02_0003",
+      "name": "llm.fast",
+      "duration_ms": 800.0,
+      "payload": {},
+      "metrics": {
+        "prompt_tokens": 50,
+        "completion_tokens": 20,
+        "total_tokens": 70,
+        "cost_usd": 1.9e-05,
+        "latency_ms": 800.0
+      },
+      "attributes": {
+        "model": "gpt-4o-mini",
+        "environment": "production",
+        "user_id": "user_synth_42",
+        "session_id": "sess_synth_42"
+      },
+      "outcome": "success",
+      "request_body": {
+        "model": "gpt-4o-mini",
+        "messages": [
+          {
+            "role": "user",
+            "content": "any"
+          }
+        ],
+        "temperature": 0.0
+      },
+      "response_body": {
+        "id": "cmpl-evt_cmpl_34441",
+        "model": "gpt-4o-mini",
+        "choices": [
+          {
+            "index": 0,
+            "finish_reason": "stop",
+            "message": {
+              "role": "assistant",
+              "content": "Got it, one sec.",
+              "tool_calls": [
+                {
+                  "id": "call_g_0002",
+                  "type": "function",
+                  "function": {
+                    "name": "github.search",
+                    "arguments": "{\"q\": \"trending\"}"
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "usage": {
+          "prompt_tokens": 50,
+          "completion_tokens": 20,
+          "total_tokens": 70
+        }
+      },
+      "reasoning": null,
+      "tool_calls_full": [
+        {
+          "id": "call_g_0002",
+          "type": "function",
+          "function": {
+            "name": "github.search",
+            "arguments": "{\"q\": \"trending\"}"
+          }
+        }
+      ],
+      "tool_results": [],
+      "logprobs": {
+        "content": [
+          [
+            {
+              "token": "Got",
+              "logprob": -0.1,
+              "top_logprobs": []
+            }
+          ],
+          [
+            {
+              "token": "it,",
+              "logprob": -0.1,
+              "top_logprobs": []
+            }
+          ],
+          [
+            {
+              "token": "one",
+              "logprob": -0.1,
+              "top_logprobs": []
+            }
+          ],
+          [
+            {
+              "token": "sec.",
+              "logprob": -0.1,
+              "top_logprobs": []
+            }
+          ]
+        ]
+      },
+      "finish_reason": "stop",
+      "cache_hit": false,
+      "prompt_cache_savings_usd": 0.0,
+      "model_version": "gpt-4o-mini",
+      "service_tier": "standard"
+    },
+    {
+      "event_id": "evt_toptimal_path_exists_02_0004",
+      "tenant_id": "org_eden_synth",
+      "project_id": "proj_synthetic_eval_v1",
+      "trace_id": "trace_optimal_path_exists_02",
+      "realm": "production",
+      "agent_id": "agent_optimal-path-exists_02",
+      "agent_version": "synth-v1.0.0",
+      "environment_id": "env_prod_main",
+      "tags": [],
+      "source_format": "eden_native",
+      "images": [],
+      "audio": [],
+      "citations": [],
+      "stop_sequence": null,
+      "system_fingerprint": "fp_synth-v1.0.0",
+      "event_type": "tool.call",
+      "timestamp": "2026-06-28T12:00:01.800000+00:00",
+      "parent_span_id": "spn_trace_optimal_path_exists_02_0000",
+      "span_id": "spn_trace_optimal_path_exists_02_0004",
+      "name": "github.search",
+      "duration_ms": 160.0,
+      "payload": {},
+      "metrics": {
+        "latency_ms": 160.0,
+        "cost_usd": 0.0
+      },
+      "attributes": {
+        "environment": "production"
+      },
+      "outcome": "success",
+      "request_body": {
+        "tool": "github.search",
+        "arguments": {
+          "q": "trending"
+        }
+      },
+      "response_body": {
+        "result": {
+          "items": []
+        }
+      },
+      "reasoning": null,
+      "tool_calls_full": [
+        {
+          "tool_call_id": "call_github.search_99661",
+          "type": "function",
+          "function": {
+            "name": "github.search",
+            "arguments": "{\"q\": \"trending\"}"
+          }
+        }
+      ],
+      "tool_results": [
+        {
+          "tool_call_id": "call_github.search_99661",
+          "role": "tool",
+          "content": "{\"items\": []}"
+        }
+      ],
+      "logprobs": null,
+      "finish_reason": null,
+      "cache_hit": false,
+      "prompt_cache_savings_usd": 0.0,
+      "model_version": null,
+      "service_tier": null
+    },
+    {
+      "event_id": "evt_toptimal_path_exists_02_0005",
+      "tenant_id": "org_eden_synth",
+      "project_id": "proj_synthetic_eval_v1",
+      "trace_id": "trace_optimal_path_exists_02",
+      "realm": "production",
+      "agent_id": "agent_optimal-path-exists_02",
+      "agent_version": "synth-v1.0.0",
+      "environment_id": "env_prod_main",
+      "tags": [],
+      "source_format": "eden_native",
+      "images": [],
+      "audio": [],
+      "citations": [],
+      "stop_sequence": null,
+      "system_fingerprint": "fp_synth-v1.0.0",
+      "event_type": "llm.completion",
+      "timestamp": "2026-06-28T12:00:02.600000+00:00",
+      "parent_span_id": "spn_trace_optimal_path_exists_02_0000",
+      "span_id": "spn_trace_optimal_path_exists_02_0005",
+      "name": "llm.fast",
+      "duration_ms": 800.0,
+      "payload": {},
+      "metrics": {
+        "prompt_tokens": 50,
+        "completion_tokens": 20,
+        "total_tokens": 70,
+        "cost_usd": 1.9e-05,
+        "latency_ms": 800.0
+      },
+      "attributes": {
+        "model": "gpt-4o-mini",
+        "environment": "production",
+        "user_id": "user_synth_42",
+        "session_id": "sess_synth_42"
+      },
+      "outcome": "success",
+      "request_body": {
+        "model": "gpt-4o-mini",
+        "messages": [
+          {
+            "role": "tool",
+            "tool_call_id": "call_g_0002",
+            "content": "[]"
+          }
+        ],
+        "temperature": 0.0
+      },
+      "response_body": {
+        "id": "cmpl-evt_cmpl_81484",
+        "model": "gpt-4o-mini",
+        "choices": [
+          {
+            "index": 0,
+            "finish_reason": "stop",
+            "message": {
+              "role": "assistant",
+              "content": "Hmm, empty. Let me retry.",
+              "tool_calls": [
+                {
+                  "id": "call_g_0003",
+                  "type": "function",
+                  "function": {
+                    "name": "github.search",
+                    "arguments": "{\"q\": \"trending repos today\"}"
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "usage": {
+          "prompt_tokens": 50,
+          "completion_tokens": 20,
+          "total_tokens": 70
+        }
+      },
+      "reasoning": null,
+      "tool_calls_full": [
+        {
+          "id": "call_g_0003",
+          "type": "function",
+          "function": {
+            "name": "github.search",
+            "arguments": "{\"q\": \"trending repos today\"}"
+          }
+        }
+      ],
+      "tool_results": [],
+      "logprobs": {
+        "content": [
+          [
+            {
+              "token": "Hmm,",
+              "logprob": -0.1,
+              "top_logprobs": []
+            }
+          ],
+          [
+            {
+              "token": "empty.",
+              "logprob": -0.1,
+              "top_logprobs": []
+            }
+          ],
+          [
+            {
+              "token": "Let",
+              "logprob": -0.1,
+              "top_logprobs": []
+            }
+          ],
+          [
+            {
+              "token": "me",
+              "logprob": -0.1,
+              "top_logprobs": []
+            }
+          ],
+          [
+            {
+              "token": "retry.",
+              "logprob": -0.1,
+              "top_logprobs": []
+            }
+          ]
+        ]
+      },
+      "finish_reason": "stop",
+      "cache_hit": false,
+      "prompt_cache_savings_usd": 0.0,
+      "model_version": "gpt-4o-mini",
+      "service_tier": "standard"
+    },
+    {
+      "event_id": "evt_toptimal_path_exists_02_0006",
+      "tenant_id": "org_eden_synth",
+      "project_id": "proj_synthetic_eval_v1",
+      "trace_id": "trace_optimal_path_exists_02",
+      "realm": "production",
+      "agent_id": "agent_optimal-path-exists_02",
+      "agent_version": "synth-v1.0.0",
+      "environment_id": "env_prod_main",
+      "tags": [],
+      "source_format": "eden_native",
+      "images": [],
+      "audio": [],
+      "citations": [],
+      "stop_sequence": null,
+      "system_fingerprint": "fp_synth-v1.0.0",
+      "event_type": "tool.call",
+      "timestamp": "2026-06-28T12:00:02.770000+00:00",
+      "parent_span_id": "spn_trace_optimal_path_exists_02_0000",
+      "span_id": "spn_trace_optimal_path_exists_02_0006",
+      "name": "github.search",
+      "duration_ms": 170.0,
+      "payload": {},
+      "metrics": {
+        "latency_ms": 170.0,
+        "cost_usd": 0.0
+      },
+      "attributes": {
+        "environment": "production"
+      },
+      "outcome": "success",
+      "request_body": {
+        "tool": "github.search",
+        "arguments": {
+          "q": "trending repos today"
+        }
+      },
+      "response_body": {
+        "result": {
+          "items": []
+        }
+      },
+      "reasoning": null,
+      "tool_calls_full": [
+        {
+          "tool_call_id": "call_github.search_41667",
+          "type": "function",
+          "function": {
+            "name": "github.search",
+            "arguments": "{\"q\": \"trending repos today\"}"
+          }
+        }
+      ],
+      "tool_results": [
+        {
+          "tool_call_id": "call_github.search_41667",
+          "role": "tool",
+          "content": "{\"items\": []}"
+        }
+      ],
+      "logprobs": null,
+      "finish_reason": null,
+      "cache_hit": false,
+      "prompt_cache_savings_usd": 0.0,
+      "model_version": null,
+      "service_tier": null
+    },
+    {
+      "event_id": "evt_toptimal_path_exists_02_0007",
+      "tenant_id": "org_eden_synth",
+      "project_id": "proj_synthetic_eval_v1",
+      "trace_id": "trace_optimal_path_exists_02",
+      "realm": "production",
+      "agent_id": "agent_optimal-path-exists_02",
+      "agent_version": "synth-v1.0.0",
+      "environment_id": "env_prod_main",
+      "tags": [],
+      "source_format": "eden_native",
+      "images": [],
+      "audio": [],
+      "citations": [],
+      "stop_sequence": null,
+      "system_fingerprint": "fp_synth-v1.0.0",
+      "event_type": "llm.completion",
+      "timestamp": "2026-06-28T12:00:03.570000+00:00",
+      "parent_span_id": "spn_trace_optimal_path_exists_02_0000",
+      "span_id": "spn_trace_optimal_path_exists_02_0007",
+      "name": "llm.standard",
+      "duration_ms": 800.0,
+      "payload": {},
+      "metrics": {
+        "prompt_tokens": 50,
+        "completion_tokens": 20,
+        "total_tokens": 70,
+        "cost_usd": 0.000325,
+        "latency_ms": 800.0
+      },
+      "attributes": {
+        "model": "gpt-4o",
+        "environment": "production",
+        "user_id": "user_synth_42",
+        "session_id": "sess_synth_42"
+      },
+      "outcome": "success",
+      "request_body": {
+        "model": "gpt-4o",
+        "messages": [
+          {
+            "role": "tool",
+            "tool_call_id": "call_g_0003",
+            "content": "[]"
+          }
+        ],
+        "temperature": 0.0
+      },
+      "response_body": {
+        "id": "cmpl-evt_cmpl_69275",
+        "model": "gpt-4o",
+        "choices": [
+          {
+            "index": 0,
+            "finish_reason": "stop",
+            "message": {
+              "role": "assistant",
+              "content": "Let me try a different query.",
+              "tool_calls": [
+                {
+                  "id": "call_g_0004",
+                  "type": "function",
+                  "function": {
+                    "name": "github.search",
+                    "arguments": "{\"q\": \"popular repos June 2026\"}"
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "usage": {
+          "prompt_tokens": 50,
+          "completion_tokens": 20,
+          "total_tokens": 70
+        }
+      },
+      "reasoning": null,
+      "tool_calls_full": [
+        {
+          "id": "call_g_0004",
+          "type": "function",
+          "function": {
+            "name": "github.search",
+            "arguments": "{\"q\": \"popular repos June 2026\"}"
+          }
+        }
+      ],
+      "tool_results": [],
+      "logprobs": {
+        "content": [
+          [
+            {
+              "token": "Let",
+              "logprob": -0.1,
+              "top_logprobs": []
+            }
+          ],
+          [
+            {
+              "token": "me",
+              "logprob": -0.1,
+              "top_logprobs": []
+            }
+          ],
+          [
+            {
+              "token": "try",
+              "logprob": -0.1,
+              "top_logprobs": []
+            }
+          ],
+          [
+            {
+              "token": "a",
+              "logprob": -0.1,
+              "top_logprobs": []
+            }
+          ],
+          [
+            {
+              "token": "different",
+              "logprob": -0.1,
+              "top_logprobs": []
+            }
+          ],
+          [
+            {
+              "token": "query.",
+              "logprob": -0.1,
+              "top_logprobs": []
+            }
+          ]
+        ]
+      },
+      "finish_reason": "stop",
+      "cache_hit": false,
+      "prompt_cache_savings_usd": 0.0,
+      "model_version": "gpt-4o",
+      "service_tier": "standard"
+    },
+    {
+      "event_id": "evt_toptimal_path_exists_02_0008",
+      "tenant_id": "org_eden_synth",
+      "project_id": "proj_synthetic_eval_v1",
+      "trace_id": "trace_optimal_path_exists_02",
+      "realm": "production",
+      "agent_id": "agent_optimal-path-exists_02",
+      "agent_version": "synth-v1.0.0",
+      "environment_id": "env_prod_main",
+      "tags": [],
+      "source_format": "eden_native",
+      "images": [],
+      "audio": [],
+      "citations": [],
+      "stop_sequence": null,
+      "system_fingerprint": "fp_synth-v1.0.0",
+      "event_type": "tool.call",
+      "timestamp": "2026-06-28T12:00:03.750000+00:00",
+      "parent_span_id": "spn_trace_optimal_path_exists_02_0000",
+      "span_id": "spn_trace_optimal_path_exists_02_0008",
+      "name": "github.search",
+      "duration_ms": 180.0,
+      "payload": {},
+      "metrics": {
+        "latency_ms": 180.0,
+        "cost_usd": 0.0
+      },
+      "attributes": {
+        "environment": "production"
+      },
+      "outcome": "success",
+      "request_body": {
+        "tool": "github.search",
+        "arguments": {
+          "q": "popular repos June 2026"
+        }
+      },
+      "response_body": {
+        "result": {
+          "items": []
+        }
+      },
+      "reasoning": null,
+      "tool_calls_full": [
+        {
+          "tool_call_id": "call_github.search_78034",
+          "type": "function",
+          "function": {
+            "name": "github.search",
+            "arguments": "{\"q\": \"popular repos June 2026\"}"
+          }
+        }
+      ],
+      "tool_results": [
+        {
+          "tool_call_id": "call_github.search_78034",
+          "role": "tool",
+          "content": "{\"items\": []}"
+        }
+      ],
+      "logprobs": null,
+      "finish_reason": null,
+      "cache_hit": false,
+      "prompt_cache_savings_usd": 0.0,
+      "model_version": null,
+      "service_tier": null
+    },
+    {
+      "event_id": "evt_toptimal_path_exists_02_0009",
+      "tenant_id": "org_eden_synth",
+      "project_id": "proj_synthetic_eval_v1",
+      "trace_id": "trace_optimal_path_exists_02",
+      "realm": "production",
+      "agent_id": "agent_optimal-path-exists_02",
+      "agent_version": "synth-v1.0.0",
+      "environment_id": "env_prod_main",
+      "tags": [],
+      "source_format": "eden_native",
+      "images": [],
+      "audio": [],
+      "citations": [],
+      "stop_sequence": null,
+      "system_fingerprint": "fp_synth-v1.0.0",
+      "event_type": "llm.completion",
+      "timestamp": "2026-06-28T12:00:04.550000+00:00",
+      "parent_span_id": "spn_trace_optimal_path_exists_02_0000",
+      "span_id": "spn_trace_optimal_path_exists_02_0009",
+      "name": "llm.standard",
+      "duration_ms": 800.0,
+      "payload": {},
+      "metrics": {
+        "prompt_tokens": 50,
+        "completion_tokens": 20,
+        "total_tokens": 70,
+        "cost_usd": 0.000325,
+        "latency_ms": 800.0
+      },
+      "attributes": {
+        "model": "gpt-4o",
+        "environment": "production",
+        "user_id": "user_synth_42",
+        "session_id": "sess_synth_42"
+      },
+      "outcome": "success",
+      "request_body": {
+        "model": "gpt-4o",
+        "messages": [
+          {
+            "role": "tool",
+            "tool_call_id": "call_g_0004",
+            "content": "[]"
+          }
+        ],
+        "temperature": 0.0
+      },
+      "response_body": {
+        "id": "cmpl-evt_cmpl_0697",
+        "model": "gpt-4o",
+        "choices": [
+          {
+            "index": 0,
+            "finish_reason": "stop",
+            "message": {
+              "role": "assistant",
+              "content": "Let me try the API directly.",
+              "tool_calls": [
+                {
+                  "id": "call_g_0005",
+                  "type": "function",
+                  "function": {
+                    "name": "github.trending",
+                    "arguments": "{}"
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "usage": {
+          "prompt_tokens": 50,
+          "completion_tokens": 20,
+          "total_tokens": 70
+        }
+      },
+      "reasoning": null,
+      "tool_calls_full": [
+        {
+          "id": "call_g_0005",
+          "type": "function",
+          "function": {
+            "name": "github.trending",
+            "arguments": "{}"
+          }
+        }
+      ],
+      "tool_results": [],
+      "logprobs": {
+        "content": [
+          [
+            {
+              "token": "Let",
+              "logprob": -0.1,
+              "top_logprobs": []
+            }
+          ],
+          [
+            {
+              "token": "me",
+              "logprob": -0.1,
+              "top_logprobs": []
+            }
+          ],
+          [
+            {
+              "token": "try",
+              "logprob": -0.1,
+              "top_logprobs": []
+            }
+          ],
+          [
+            {
+              "token": "the",
+              "logprob": -0.1,
+              "top_logprobs": []
+            }
+          ],
+          [
+            {
+              "token": "API",
+              "logprob": -0.1,
+              "top_logprobs": []
+            }
+          ],
+          [
+            {
+              "token": "directly.",
+              "logprob": -0.1,
+              "top_logprobs": []
+            }
+          ]
+        ]
+      },
+      "finish_reason": "stop",
+      "cache_hit": false,
+      "prompt_cache_savings_usd": 0.0,
+      "model_version": "gpt-4o",
+      "service_tier": "standard"
+    },
+    {
+      "event_id": "evt_toptimal_path_exists_02_0010",
+      "tenant_id": "org_eden_synth",
+      "project_id": "proj_synthetic_eval_v1",
+      "trace_id": "trace_optimal_path_exists_02",
+      "realm": "production",
+      "agent_id": "agent_optimal-path-exists_02",
+      "agent_version": "synth-v1.0.0",
+      "environment_id": "env_prod_main",
+      "tags": [],
+      "source_format": "eden_native",
+      "images": [],
+      "audio": [],
+      "citations": [],
+      "stop_sequence": null,
+      "system_fingerprint": "fp_synth-v1.0.0",
+      "event_type": "tool.call",
+      "timestamp": "2026-06-28T12:00:04.770000+00:00",
+      "parent_span_id": "spn_trace_optimal_path_exists_02_0000",
+      "span_id": "spn_trace_optimal_path_exists_02_0010",
+      "name": "github.trending",
+      "duration_ms": 220.0,
+      "payload": {},
+      "metrics": {
+        "latency_ms": 220.0,
+        "cost_usd": 0.0
+      },
+      "attributes": {
+        "environment": "production"
+      },
+      "outcome": "success",
+      "request_body": {
+        "tool": "github.trending",
+        "arguments": {}
+      },
+      "response_body": {
+        "result": {
+          "items": [
+            {
+              "name": "eden-eval",
+              "stars_today": 412
+            },
+            {
+              "name": "agentbench",
+              "stars_today": 318
+            },
+            {
+              "name": "llm-router",
+              "stars_today": 290
+            }
+          ]
+        }
+      },
+      "reasoning": null,
+      "tool_calls_full": [
+        {
+          "tool_call_id": "call_github.trending_7630",
+          "type": "function",
+          "function": {
+            "name": "github.trending",
+            "arguments": "{}"
+          }
+        }
+      ],
+      "tool_results": [
+        {
+          "tool_call_id": "call_github.trending_7630",
+          "role": "tool",
+          "content": "{\"items\": [{\"name\": \"eden-eval\", \"stars_today\": 412}, {\"name\": \"agentbench\", \"stars_today\": 318}, {\"name\": \"llm-router\", \"stars_today\": 290}]}"
+        }
+      ],
+      "logprobs": null,
+      "finish_reason": null,
+      "cache_hit": false,
+      "prompt_cache_savings_usd": 0.0,
+      "model_version": null,
+      "service_tier": null
+    },
+    {
+      "event_id": "evt_toptimal_path_exists_02_0011",
+      "tenant_id": "org_eden_synth",
+      "project_id": "proj_synthetic_eval_v1",
+      "trace_id": "trace_optimal_path_exists_02",
+      "realm": "production",
+      "agent_id": "agent_optimal-path-exists_02",
+      "agent_version": "synth-v1.0.0",
+      "environment_id": "env_prod_main",
+      "tags": [],
+      "source_format": "eden_native",
+      "images": [],
+      "audio": [],
+      "citations": [],
+      "stop_sequence": null,
+      "system_fingerprint": "fp_synth-v1.0.0",
+      "event_type": "llm.completion",
+      "timestamp": "2026-06-28T12:00:05.570000+00:00",
+      "parent_span_id": "spn_trace_optimal_path_exists_02_0000",
+      "span_id": "spn_trace_optimal_path_exists_02_0011",
+      "name": "llm.fast",
+      "duration_ms": 800.0,
+      "payload": {},
+      "metrics": {
+        "prompt_tokens": 50,
+        "completion_tokens": 24,
+        "total_tokens": 74,
+        "cost_usd": 2.2e-05,
+        "latency_ms": 800.0
+      },
+      "attributes": {
+        "model": "gpt-4o-mini",
+        "environment": "production",
+        "user_id": "user_synth_42",
+        "session_id": "sess_synth_42"
+      },
+      "outcome": "success",
+      "request_body": {
+        "model": "gpt-4o-mini",
+        "messages": [
+          {
+            "role": "tool",
+            "tool_call_id": "call_g_0005",
+            "content": "[eden-eval:412, agentbench:318, llm-router:290]"
+          }
+        ],
+        "temperature": 0.0
+      },
+      "response_body": {
+        "id": "cmpl-evt_cmpl_48454",
+        "model": "gpt-4o-mini",
+        "choices": [
+          {
+            "index": 0,
+            "finish_reason": "stop",
+            "message": {
+              "role": "assistant",
+              "content": "Top 3 trending repos today: eden-eval (412 stars today), agentbench (318), and llm-router (290)."
+            }
+          }
+        ],
+        "usage": {
+          "prompt_tokens": 50,
+          "completion_tokens": 24,
+          "total_tokens": 74
+        }
+      },
+      "reasoning": null,
+      "tool_calls_full": [],
+      "tool_results": [],
+      "logprobs": {
+        "content": [
+          [
+            {
+              "token": "Top",
+              "logprob": -0.1,
+              "top_logprobs": []
+            }
+          ],
+          [
+            {
+              "token": "3",
+              "logprob": -0.1,
+              "top_logprobs": []
+            }
+          ],
+          [
+            {
+              "token": "trending",
+              "logprob": -0.1,
+              "top_logprobs": []
+            }
+          ],
+          [
+            {
+              "token": "repos",
+              "logprob": -0.1,
+              "top_logprobs": []
+            }
+          ],
+          [
+            {
+              "token": "today:",
+              "logprob": -0.1,
+              "top_logprobs": []
+            }
+          ],
+          [
+            {
+              "token": "eden-eval",
+              "logprob": -0.1,
+              "top_logprobs": []
+            }
+          ],
+          [
+            {
+              "token": "(412",
+              "logprob": -0.1,
+              "top_logprobs": []
+            }
+          ],
+          [
+            {
+              "token": "stars",
+              "logprob": -0.1,
+              "top_logprobs": []
+            }
+          ],
+          [
+            {
+              "token": "today),",
+              "logprob": -0.1,
+              "top_logprobs": []
+            }
+          ],
+          [
+            {
+              "token": "agentbench",
+              "logprob": -0.1,
+              "top_logprobs": []
+            }
+          ],
+          [
+            {
+              "token": "(318),",
+              "logprob": -0.1,
+              "top_logprobs": []
+            }
+          ],
+          [
+            {
+              "token": "and",
+              "logprob": -0.1,
+              "top_logprobs": []
+            }
+          ],
+          [
+            {
+              "token": "llm-router",
+              "logprob": -0.1,
+              "top_logprobs": []
+            }
+          ],
+          [
+            {
+              "token": "(290).",
+              "logprob": -0.1,
+              "top_logprobs": []
+            }
+          ]
+        ]
+      },
+      "finish_reason": "stop",
+      "cache_hit": false,
+      "prompt_cache_savings_usd": 0.0,
+      "model_version": "gpt-4o-mini",
+      "service_tier": "standard"
+    },
+    {
+      "event_id": "evt_toptimal_path_exists_02_0012",
+      "tenant_id": "org_eden_synth",
+      "project_id": "proj_synthetic_eval_v1",
+      "trace_id": "trace_optimal_path_exists_02",
+      "realm": "production",
+      "agent_id": "agent_optimal-path-exists_02",
+      "agent_version": "synth-v1.0.0",
+      "environment_id": "env_prod_main",
+      "tags": [],
+      "source_format": "eden_native",
+      "images": [],
+      "audio": [],
+      "citations": [],
+      "stop_sequence": null,
+      "system_fingerprint": "fp_synth-v1.0.0",
+      "event_type": "span.end",
+      "timestamp": "2026-06-28T12:00:05.570000+00:00",
+      "parent_span_id": null,
+      "span_id": "spn_trace_optimal_path_exists_02_0000",
+      "name": "trace",
+      "duration_ms": 5570.0,
+      "payload": {},
+      "metrics": {},
+      "attributes": {
+        "environment": "production"
+      },
+      "outcome": "success",
+      "request_body": null,
+      "response_body": null,
+      "reasoning": null,
+      "tool_calls_full": [],
+      "tool_results": [],
+      "logprobs": null,
+      "finish_reason": null,
+      "cache_hit": false,
+      "prompt_cache_savings_usd": 0.0,
+      "model_version": null,
+      "service_tier": null
+    }
+  ]
+}

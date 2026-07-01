@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useOrg } from "@/hooks/use-org";
 import { usePolling } from "@/hooks/use-polling";
+import { useToast } from "@/components/ui/toast";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { formatRelativeTime } from "@/lib/format";
@@ -16,20 +17,15 @@ import {
   AlertCircle,
   Info,
   CheckCircle2,
-  XCircle,
-  Filter,
   Loader2,
   Check,
-  Trash2,
   ShieldAlert,
   Zap,
   Megaphone,
   ChevronDown,
   ChevronUp,
   Clock,
-  RefreshCw,
-  Layers,
-} from "lucide-react";
+  RefreshCw } from "lucide-react";
 
 interface AlertItem {
   alert_id: string;
@@ -48,7 +44,7 @@ interface AlertItem {
   metadata?: Record<string, unknown>;
 }
 
-interface AlertListResponse {
+interface __AlertListResponse {
   alerts: AlertItem[];
   total: number;
   unread_count: number;
@@ -61,8 +57,7 @@ const SEVERITY_CONFIG: Record<string, { icon: typeof AlertCircle; color: string;
   high: { icon: AlertTriangle, color: "text-[var(--warning)]", bg: "bg-[var(--warning)]/10", label: "High" },
   warning: { icon: AlertCircle, color: "text-[var(--warning)]", bg: "bg-[var(--warning-bg)]", label: "Warning" },
   info: { icon: Info, color: "text-[var(--accent)]", bg: "bg-[var(--accent-faint)]", label: "Info" },
-  debug: { icon: Zap, color: "text-[var(--text-muted)]", bg: "bg-[var(--bg-tertiary)]", label: "Debug" },
-};
+  debug: { icon: Zap, color: "text-[var(--text-muted)]", bg: "bg-[var(--bg-tertiary)]", label: "Debug" } };
 
 function getSeverityConfig(severity: string) {
   return SEVERITY_CONFIG[severity] || SEVERITY_CONFIG.info;
@@ -70,10 +65,12 @@ function getSeverityConfig(severity: string) {
 
 export default function AlertsPage() {
   const { currentOrg } = useOrg();
+  const toast = useToast();
   const [alerts, setAlerts] = useState<AlertItem[]>([]);
   const [total, setTotal] = useState(0);
   const [unreadCount, setUnreadCount] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [severityFilter, setSeverityFilter] = useState<SeverityFilter>("all");
   const [acknowledgedFilter, setAcknowledgedFilter] = useState<boolean | null>(null);
@@ -81,17 +78,19 @@ export default function AlertsPage() {
   const [expandedAlert, setExpandedAlert] = useState<string | null>(null);
   const [offset, setOffset] = useState(0);
   const [rulesOpen, setRulesOpen] = useState(false);
+  const [ackLoading, setAckLoading] = useState(false);
   const limit = 50;
 
   const fetchAlerts = useCallback(async () => {
     if (!currentOrg) return;
-    setLoading(true);
+    const isInitial = alerts.length === 0;
+    if (isInitial) setLoading(true);
+    else setRefreshing(true);
     setError(null);
     try {
       const params: { severity?: string; acknowledged?: boolean; limit: number; offset: number } = {
         limit,
-        offset,
-      };
+        offset };
       if (severityFilter !== "all") params.severity = severityFilter;
       if (acknowledgedFilter !== null) params.acknowledged = acknowledgedFilter;
 
@@ -114,17 +113,17 @@ export default function AlertsPage() {
           acknowledged_at: a.acknowledged_at,
           acknowledged_by: a.acknowledged_by,
           channels: [],
-          metadata: a.metadata,
-        })),
+          metadata: a.metadata })),
       );
       setTotal(data.total);
       setUnreadCount(data.unread_count);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load alerts");
     } finally {
-      setLoading(false);
+      if (isInitial) setLoading(false);
+      else setRefreshing(false);
     }
-  }, [currentOrg, severityFilter, acknowledgedFilter, offset, limit]);
+  }, [currentOrg, alerts.length, severityFilter, acknowledgedFilter, offset, limit]);
 
   // Polling via the shared usePolling hook — pauses on tab-hidden,
   // exponential backoff on errors, permanent bail on 401/403. Replaces
@@ -134,8 +133,7 @@ export default function AlertsPage() {
     fetch: fetchAlerts,
     intervalMs: 15_000,
     enabled: Boolean(currentOrg),
-    deps: [currentOrg, severityFilter, acknowledgedFilter, offset, limit],
-  });
+    deps: [currentOrg, severityFilter, acknowledgedFilter, offset, limit] });
 
   const handleAcknowledge = async (alertId: string) => {
     try {
@@ -144,14 +142,16 @@ export default function AlertsPage() {
         prev.map((a) => (a.alert_id === alertId ? { ...a, acknowledged: true } : a))
       );
       setUnreadCount((prev) => Math.max(0, prev - 1));
+      toast.success("Alert acknowledged");
     } catch (e) {
-      console.error("Acknowledge failed:", e);
+      toast.error("Could not acknowledge alert", e instanceof Error ? e.message : undefined);
     }
   };
 
   const handleBatchAcknowledge = async () => {
     const ids = Array.from(selectedAlerts);
     if (ids.length === 0) return;
+    setAckLoading(true);
     try {
       await api.acknowledgeAlertsBatch(ids);
       setAlerts((prev) =>
@@ -159,8 +159,11 @@ export default function AlertsPage() {
       );
       setUnreadCount((prev) => Math.max(0, prev - ids.length));
       setSelectedAlerts(new Set());
+      toast.success(`Acknowledged ${ids.length} alert${ids.length === 1 ? "" : "s"}`);
     } catch (e) {
-      console.error("Batch acknowledge failed:", e);
+      toast.error("Batch acknowledge failed", e instanceof Error ? e.message : undefined);
+    } finally {
+      setAckLoading(false);
     }
   };
 
@@ -203,19 +206,27 @@ export default function AlertsPage() {
           <div className="flex items-center gap-2">
             <button
               onClick={fetchAlerts}
-              className="p-2 text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)] rounded-lg transition-colors"
+              disabled={loading || refreshing}
+              aria-label="Refresh alerts"
+              className="p-2 text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)] rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               title="Refresh"
             >
-              <RefreshCw className={cn("w-4 h-4", loading && "animate-spin")} />
+              <RefreshCw className={cn("w-4 h-4", (loading || refreshing) && "animate-spin")} />
             </button>
           {hasSelection && (
             <motion.button
               initial={{ opacity: 0, scale: 0.9 }}
               animate={{ opacity: 1, scale: 1 }}
               onClick={handleBatchAcknowledge}
-              className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium bg-[var(--accent)] text-[var(--bg-base)] rounded-lg hover:bg-[var(--accent-hover)] transition-colors"
+              disabled={ackLoading}
+              aria-label={`Acknowledge ${selectedAlerts.size} selected alerts`}
+              className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium bg-[var(--accent)] text-[var(--bg-base)] rounded-lg hover:bg-[var(--accent-hover)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              <Check className="w-3.5 h-3.5" />
+              {ackLoading ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              ) : (
+                <Check className="w-3.5 h-3.5" />
+              )}
               Acknowledge {selectedAlerts.size}
             </motion.button>
           )}
@@ -236,7 +247,7 @@ export default function AlertsPage() {
               className={cn(
                 "flex items-center gap-3 p-3 rounded-lg border transition-all text-left",
                 severityFilter === sev
-                  ? cn(config.bg, "border-white/10")
+                  ? cn(config.bg, "border-[var(--border-strong)]")
                   : "bg-[var(--bg-primary)] border-[var(--border-default)] hover:border-[var(--border-strong)]"
               )}
             >
@@ -382,6 +393,9 @@ export default function AlertsPage() {
                         e.stopPropagation();
                         toggleSelect(alert.alert_id);
                       }}
+                      role="checkbox"
+                      aria-checked={isSelected}
+                      aria-label={isSelected ? `Deselect ${alert.title}` : `Select ${alert.title}`}
                       className={cn(
                         "mt-0.5 w-4 h-4 rounded border flex items-center justify-center transition-colors flex-shrink-0",
                         isSelected
@@ -437,13 +451,20 @@ export default function AlertsPage() {
                             e.stopPropagation();
                             handleAcknowledge(alert.alert_id);
                           }}
-                          className="p-1.5 text-[var(--text-muted)] hover:text-[var(--success)] hover:bg-[var(--success-bg)] rounded-lg transition-colors"
+                          aria-label={`Acknowledge alert: ${alert.title}`}
+                          className="p-1.5 text-[var(--text-muted)] hover:text-[var(--success)] hover:bg-[var(--success)]/10 rounded-lg transition-colors"
                           title="Acknowledge"
                         >
                           <CheckCircle2 className="w-4 h-4" />
                         </button>
                       )}
                       <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setExpandedAlert(isExpanded ? null : alert.alert_id);
+                        }}
+                        aria-label={isExpanded ? `Collapse ${alert.title}` : `Expand ${alert.title}`}
+                        aria-expanded={isExpanded}
                         className="p-1.5 text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)] rounded-lg transition-colors"
                       >
                         {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
@@ -530,16 +551,42 @@ function AlertRulesPanel({ orgId }: { orgId?: string }) {
 
   useEffect(() => {
     if (!orgId) return;
-    api.getAlertRules(orgId)
-      .then((data) => setRules(data.rules))
-      .catch(console.error)
-      .finally(() => setLoading(false));
+    let cancelled = false;
+    setLoading(true);
+    (async () => {
+      try {
+        const data = await api.getAlertRules(orgId);
+        if (!cancelled) setRules(data.rules);
+      } catch {
+        // Surfaced at the top-level error banner via fetchAlerts;
+        // swallow here to avoid double-toasting.
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, [orgId]);
 
   if (loading) {
     return (
       <div className="p-4 bg-[var(--bg-primary)] rounded-lg border border-[var(--border-default)]">
         <Loader2 className="w-4 h-4 animate-spin text-[var(--text-muted)]" />
+      </div>
+    );
+  }
+
+  if (rules.length === 0) {
+    return (
+      <div className="bg-[var(--bg-primary)] rounded-lg border border-[var(--border-default)] p-4">
+        <h3 className="text-sm font-semibold text-[var(--text-primary)] mb-2 flex items-center gap-2">
+          <Megaphone className="w-4 h-4 text-[var(--accent)]" />
+          Active Alert Rules
+        </h3>
+        <p className="text-xs text-[var(--text-muted)]">
+          No alert rules configured yet. Configure rules in your backend to start surfacing custom alerts here.
+        </p>
       </div>
     );
   }

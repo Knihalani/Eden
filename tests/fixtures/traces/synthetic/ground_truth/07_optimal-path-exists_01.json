@@ -1,0 +1,10 @@
+{
+  "trace_id": "trace_optimal_path_exists_01",
+  "archetype_id": "optimal-path-exists",
+  "expected_TAS": 49,
+  "expected_intervention": "warn",
+  "expected_loop_detected": false,
+  "expected_hallucination_detected": false,
+  "expected_redundancy_pct": 0.55,
+  "notes": "4 redundant github.search calls before a single github.trending succeeds. Could be done in 1 search + 1 answer. Warn intervention: agent should have a 'shortcut' tool for common queries."
+}

@@ -1,0 +1,21 @@
+{
+  "trace_id": "trace_automix_tier_escalation_02",
+  "archetype_id": "automix-tier-escalation",
+  "agent_id": "agent_automix-tier-escalation_02",
+  "expected_TAS": 80,
+  "expected_intervention": "allow",
+  "expected_metrics": {
+    "tier_progression": [
+      "fast",
+      "standard"
+    ],
+    "escalation": true
+  },
+  "expected_detector_fires": [
+    "AutoMix_escalation"
+  ],
+  "expected_loop_detected": false,
+  "expected_hallucination_detected": false,
+  "expected_redundancy_pct": 0.0,
+  "notes": "Tier-1 (fast) response was low-quality \u2192 AutoMix escalates to standard. Phase 8 AutoMix validator MUST trigger escalation on this tier progression."
+}

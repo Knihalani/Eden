@@ -1,0 +1,15 @@
+{
+  "trace_id": "trace_negative_control_clean_03",
+  "archetype_id": "negative-control-clean",
+  "agent_id": "agent_negative-control-clean_03",
+  "expected_TAS": 98,
+  "expected_intervention": "allow",
+  "expected_metrics": {
+    "all_clean": true
+  },
+  "expected_detector_fires": [],
+  "expected_loop_detected": false,
+  "expected_hallucination_detected": false,
+  "expected_redundancy_pct": 0.0,
+  "notes": "Pure clean baseline: 1-step trivial Q&A. All detectors must NOT fire. TAS target \u2248 95 (highest in dataset)."
+}

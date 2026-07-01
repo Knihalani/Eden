@@ -40,8 +40,7 @@ const STATUS_COLOR: Record<string, string> = {
   failed: "text-[var(--warning)] border-[var(--warning)]/30 bg-[var(--warning)]/10",
   error: "text-[var(--error)] border-[var(--error)]/30 bg-[var(--error)]/10",
   pending: "text-[var(--text-muted)] border-[var(--border-default)] bg-[var(--bg-elev-1)]",
-  running: "text-[var(--accent)] border-sky-500/30 bg-[var(--accent)]/10",
-};
+  running: "text-[var(--accent)] border-sky-500/30 bg-[var(--accent)]/10" };
 
 export function RunResultsDialog({ state, onClose, orgId, onRerun }: RunResultsDialogProps) {
   // Close on Escape
@@ -143,9 +142,7 @@ function StatusBadge({ status }: { status: string }) {
 
 function DoneView({
   state,
-  orgId,
-  onRerun,
-}: {
+  orgId }: {
   state: Extract<RunDialogState, { kind: "done" }>;
   orgId: string | null;
   onRerun?: () => void;

@@ -6,7 +6,9 @@ import { Search, Tag, Star, GitFork, ArrowRight, Sparkles, Box } from "lucide-re
 import { api } from "@/lib/api";
 import { useOrg } from "@/hooks/use-org";
 import { EmptyState } from "@/components/ui/empty-state";
+import { ErrorState } from "@/components/ui/error-state";
 import { PageHeader } from "@/components/layout/page-header";
+import { useToast } from "@/components/ui/toast";
 import { cn } from "@/lib/utils";
 
 interface EnvCardSummary {
@@ -47,18 +49,21 @@ const QUALITY_BADGE_STYLES: Record<string, string> = {
 
 export default function MarketplacePage() {
   const { currentOrg } = useOrg();
+  const toast = useToast();
   const [cards, setCards] = useState<EnvCardSummary[]>([]);
   const [featured, setFeatured] = useState<EnvCardSummary[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState("");
   const [quality, setQuality] = useState<"all" | "high" | "medium" | "low">("all");
 
-  useEffect(() => {
+  const load = () => {
     if (!currentOrg) return;
     let cancelled = false;
-    async function load() {
-      setLoading(true);
+    setLoading(true);
+    setError(null);
+    (async () => {
       try {
         const params: { q?: string; category?: string; quality?: string } = {};
         if (query) params.q = query;
@@ -109,30 +114,39 @@ export default function MarketplacePage() {
           setFeatured((feat || []).map(toCard));
         }
       } catch (e) {
-        console.error("Failed to load marketplace", e);
+        const message = e instanceof Error ? e.message : "Failed to load marketplace";
+        if (!cancelled) setError(message);
+        toast.error("Failed to load marketplace", message);
       } finally {
         if (!cancelled) setLoading(false);
       }
-    }
-    void load();
+    })();
     return () => {
       cancelled = true;
     };
-  }, [currentOrg, query, category, quality]);
+  };
+
+  useEffect(() => load(), [currentOrg, query, category, quality, toast]);
 
   if (!currentOrg) {
     return (
       // Wrap in the standard page container so the no-org empty state
       // isn't flush against the sidebar/header edges. June 2026 fix.
       <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto">
+        <PageHeader
+          eyebrow="Build"
+          title="Marketplace"
+          subtitle="Discover, fork, and contribute quality-gated Eden environments."
+          icon={Box}
+        />
         <EmptyState
           icon={Sparkles}
-          title="Marketplace"
+          title="Marketplace unavailable"
           description="Create an organization to discover, fork, and contribute environments."
           action={
             <Link
               href="/settings"
-              className="inline-flex items-center gap-1.5 text-sm font-semibold bg-[var(--accent)] text-[var(--bg-base)] px-4 py-2 rounded-lg hover:opacity-90"
+              className="inline-flex items-center gap-1.5 text-sm font-semibold bg-[var(--accent)] text-[var(--bg-base)] px-4 py-2 rounded-lg hover:bg-[var(--accent-hover)]"
             >
               Create Organization
             </Link>
@@ -145,9 +159,21 @@ export default function MarketplacePage() {
   return (
     <div className="p-4 sm:p-6 lg:p-8 space-y-6 max-w-7xl mx-auto">
       <PageHeader
+        eyebrow="Build"
         title="Marketplace"
         subtitle="Discover, fork, and contribute quality-gated Eden environments."
         icon={Box}
+        actions={
+          <button
+            onClick={() => load()}
+            disabled={loading}
+            className="inline-flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-lg border border-[var(--border-default)] bg-[var(--bg-primary)] text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)] disabled:opacity-50"
+            aria-label="Refresh marketplace"
+          >
+            <Sparkles className={cn("w-4 h-4", loading && "animate-spin")} aria-hidden />
+            Refresh
+          </button>
+        }
       />
 
       {/* Featured row */}
@@ -222,8 +248,21 @@ export default function MarketplacePage() {
 
       {/* Results */}
       <section aria-label="Marketplace results">
-        {loading ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+        {error ? (
+          <ErrorState
+            title="Failed to load marketplace"
+            message={error}
+            action={
+              <button
+                onClick={() => load()}
+                className="inline-flex items-center gap-1.5 text-sm font-semibold bg-[var(--accent)] text-[var(--bg-base)] px-4 py-2 rounded-lg hover:bg-[var(--accent-hover)]"
+              >
+                Try again
+              </button>
+            }
+          />
+        ) : loading ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3" aria-busy="true" aria-live="polite">
             {[1, 2, 3, 4, 5, 6].map((i) => (
               <div
                 key={i}

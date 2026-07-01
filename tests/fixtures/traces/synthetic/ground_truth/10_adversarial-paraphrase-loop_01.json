@@ -1,0 +1,10 @@
+{
+  "trace_id": "trace_adversarial_paraphrase_01",
+  "archetype_id": "adversarial-paraphrase-loop",
+  "expected_TAS": 27,
+  "expected_intervention": "block",
+  "expected_loop_detected": true,
+  "expected_hallucination_detected": false,
+  "expected_redundancy_pct": 0.0,
+  "notes": "6 semantically identical email-send calls. Naive (exact-hash) loop detectors miss this \u2014 must use semantic embeddings OR canonicalise tool names + argument keys. Block intervention: agent is in a loop."
+}

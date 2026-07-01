@@ -1,0 +1,10 @@
+{
+  "trace_id": "trace_redundant_repeated_03",
+  "archetype_id": "redundant-repeated-context",
+  "expected_TAS": 53,
+  "expected_intervention": "warn",
+  "expected_loop_detected": false,
+  "expected_hallucination_detected": false,
+  "expected_redundancy_pct": 0.48,
+  "notes": "User has to repeat '8842' four times. High redundancy. Warn intervention would suggest the agent check recent turns first."
+}

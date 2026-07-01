@@ -77,7 +77,7 @@ export function MembersTab({ org }: MembersTabProps) {
 
   useEffect(() => {
     loadMembers();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [org?.id]);
 
   const handleInvite = async () => {

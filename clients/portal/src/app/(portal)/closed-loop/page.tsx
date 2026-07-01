@@ -53,8 +53,8 @@ export default function ClosedLoopPage() {
       setPending(pendingRes.actions ?? []);
       setHistory(allRes.actions ?? []);
       setDashboard(dashRes);
-    } catch (e: any) {
-      setError(e?.message ?? "Failed to load closed-loop actions");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load closed-loop actions");
     } finally {
       setLoading(false);
     }
@@ -71,8 +71,8 @@ export default function ClosedLoopPage() {
       await closedLoopApi.approveAction(currentOrg.id, actionId);
       toast.success("Action approved");
       await loadAll();
-    } catch (e: any) {
-      toast.error(e?.message ?? "Failed to approve");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to approve");
     } finally {
       setBusyActionId(null);
     }
@@ -89,8 +89,8 @@ export default function ClosedLoopPage() {
       await closedLoopApi.denyAction(currentOrg.id, actionId, { reason });
       toast.success("Action denied");
       await loadAll();
-    } catch (e: any) {
-      toast.error(e?.message ?? "Failed to deny");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to deny");
     } finally {
       setBusyActionId(null);
     }
@@ -110,8 +110,8 @@ export default function ClosedLoopPage() {
       await closedLoopApi.applyAction(currentOrg.id, actionId);
       toast.success("Action applied");
       await loadAll();
-    } catch (e: any) {
-      toast.error(e?.message ?? "Failed to apply");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to apply");
     } finally {
       setBusyActionId(null);
     }
@@ -122,7 +122,7 @@ export default function ClosedLoopPage() {
   }
 
   return (
-    <div className="p-6 max-w-6xl">
+    <div className="p-4 sm:p-6 lg:p-8 max-w-6xl page-enter space-y-6">
       <PageHeader
         title="Closed-Loop Actions"
         subtitle="Review and act on automated recommendations from the promotion loop, judge regressions, drift alerts, and experiment winners."
@@ -140,30 +140,62 @@ export default function ClosedLoopPage() {
       )}
 
       {/* Tab strip */}
-      <div className="flex items-center gap-1 mb-4 border-b border-[var(--border)]">
-        <TabButton active={tab === "pending"} onClick={() => setTab("pending")} icon={Inbox}>
+      <div role="tablist" aria-label="Closed-loop views" className="flex items-center gap-1 mb-4 border-b border-[var(--border-default)]">
+        <TabButton
+          active={tab === "pending"}
+          onClick={() => setTab("pending")}
+          icon={Inbox}
+          ariaLabel={`Pending actions (${pending.length})`}
+        >
           Pending ({pending.length})
         </TabButton>
-        <TabButton active={tab === "history"} onClick={() => setTab("history")} icon={History}>
+        <TabButton
+          active={tab === "history"}
+          onClick={() => setTab("history")}
+          icon={History}
+          ariaLabel="Action history"
+        >
           History
         </TabButton>
-        <TabButton active={tab === "dashboard"} onClick={() => setTab("dashboard")} icon={BarChart3}>
+        <TabButton
+          active={tab === "dashboard"}
+          onClick={() => setTab("dashboard")}
+          icon={BarChart3}
+          ariaLabel="Action dashboard"
+        >
           Dashboard
         </TabButton>
       </div>
 
       {error && (
-        <div className="mb-4 flex items-start gap-2 rounded-lg border border-[var(--error)] bg-[var(--error-bg)] p-3 text-sm text-[var(--error)]">
-          <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
-          <div>
-            <p className="font-medium">Failed to load actions</p>
-            <p className="text-xs mt-1 opacity-80">{error}</p>
+        <div
+          role="alert"
+          className="mb-4 flex items-start justify-between gap-2 rounded-lg border border-[var(--error)] bg-[var(--error-bg)] p-3 text-sm text-[var(--error)]"
+        >
+          <div className="flex items-start gap-2">
+            <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
+            <div>
+              <p className="font-medium">Failed to load actions</p>
+              <p className="text-xs mt-1 opacity-80">{error}</p>
+            </div>
           </div>
+          <button
+            onClick={loadAll}
+            disabled={loading}
+            className="text-xs font-medium underline underline-offset-2 hover:opacity-80 disabled:opacity-50 shrink-0"
+          >
+            Retry
+          </button>
         </div>
       )}
 
       {loading ? (
-        <div className="flex items-center justify-center p-12 text-sm text-[var(--text-muted)]">
+        <div
+          role="status"
+          aria-live="polite"
+          aria-busy="true"
+          className="flex items-center justify-center p-12 text-sm text-[var(--text-muted)]"
+        >
           <Loader2 className="h-4 w-4 mr-2 animate-spin" /> Loading…
         </div>
       ) : tab === "pending" ? (
@@ -187,7 +219,7 @@ export default function ClosedLoopPage() {
 
 function SummaryCard({ label, value, icon: Icon }: { label: string; value: number; icon: typeof Inbox }) {
   return (
-    <div className="rounded-lg border border-[var(--border)] bg-[var(--bg-primary)] p-4">
+    <div className="rounded-lg border border-[var(--border-default)] bg-[var(--bg-primary)] p-4">
       <div className="flex items-center justify-between">
         <div>
           <p className="text-xs uppercase tracking-wide text-[var(--text-muted)]">{label}</p>
@@ -204,17 +236,20 @@ function TabButton({
   onClick,
   icon: Icon,
   children,
+  ariaLabel,
 }: {
   active: boolean;
   onClick: () => void;
   icon: typeof Inbox;
   children: React.ReactNode;
+  ariaLabel?: string;
 }) {
   return (
     <button
       onClick={onClick}
       role="tab"
       aria-selected={active}
+      aria-label={ariaLabel}
       className={cn(
         "flex items-center gap-2 px-3 py-2 text-sm font-medium border-b-2 -mb-px transition-colors",
         active
@@ -257,7 +292,7 @@ function ActionList({
       {actions.map((a) => (
         <div
           key={a.action_id}
-          className="rounded-lg border border-[var(--border)] bg-[var(--bg-primary)] p-4"
+          className="rounded-lg border border-[var(--border-default)] bg-[var(--bg-primary)] p-4"
         >
           <div className="flex items-start justify-between gap-3">
             <div className="flex-1 min-w-0">
@@ -338,14 +373,14 @@ function StatusBadge({ status }: { status: string }) {
 function DashboardView({ dashboard }: { dashboard: Dashboard | null }) {
   if (!dashboard) {
     return (
-      <div className="rounded-lg border border-dashed border-[var(--border)] bg-[var(--bg-primary)] p-12 text-center text-sm text-[var(--text-muted)]">
+      <div className="rounded-lg border border-dashed border-[var(--border-default)] bg-[var(--bg-primary)] p-12 text-center text-sm text-[var(--text-muted)]">
         Dashboard data unavailable.
       </div>
     );
   }
   return (
     <div className="space-y-4">
-      <div className="rounded-lg border border-[var(--border)] bg-[var(--bg-primary)] p-4">
+      <div className="rounded-lg border border-[var(--border-default)] bg-[var(--bg-primary)] p-4">
         <h3 className="text-sm font-semibold text-[var(--text-primary)] mb-3">Actions by hook</h3>
         {Object.keys(dashboard.by_hook).length === 0 ? (
           <p className="text-sm text-[var(--text-muted)]">No actions recorded yet.</p>

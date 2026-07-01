@@ -7,7 +7,8 @@ import { useOrg } from "@/hooks/use-org";
 import { agentsApi, type SimRun } from "@/lib/api";
 import { Card } from "@/components/ui/card";
 import { NoOrgState } from "@/components/ui/no-org-state";
-import { EmptyState } from "@/components/ui/empty-state";
+import { ErrorState } from "@/components/ui/error-state";
+import { PageHeader } from "@/components/layout/page-header";
 import {
   ArrowLeft,
   CheckCircle2,
@@ -71,7 +72,7 @@ export default function TestRunDetailPage() {
   }, [currentOrg, agentId, runId]);
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
+     
     if (currentOrg) load();
   }, [currentOrg, load]);
 
@@ -103,14 +104,22 @@ export default function TestRunDetailPage() {
           <ArrowLeft className="w-3 h-3" />
           Back to test runs
         </Link>
-        <Card className="p-6">
-          <EmptyState
-            icon={AlertCircle}
-            title="Could not load test run"
-            description={error || "Run not found."}
-            size="sm"
-          />
-        </Card>
+        <ErrorState
+          title="Could not load test run"
+          message={error || "Run not found."}
+          size="md"
+          action={
+            <button
+              type="button"
+              onClick={() => void load()}
+              disabled={loading}
+              className="inline-flex items-center gap-2 px-3 py-1.5 bg-[var(--accent)] text-[var(--bg-base)] rounded-lg text-xs font-medium hover:bg-[var(--accent-hover)] disabled:opacity-50 transition-colors"
+            >
+              {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
+              Try again
+            </button>
+          }
+        />
       </div>
     );
   }
@@ -128,30 +137,28 @@ export default function TestRunDetailPage() {
         Back to test runs
       </Link>
 
-      <Card className="p-6">
-        <div className="flex items-start gap-4">
-          <div className={cn("p-3 rounded-xl flex-shrink-0", statusClass)}>
-            <StatusIcon className={cn("w-6 h-6", run.status === "running" && "animate-spin")} />
-          </div>
-          <div className="flex-1 min-w-0">
-            <h1 className="text-xl font-bold text-[var(--text-primary)] tracking-tight">
-              Test run
-            </h1>
-            <p className="text-xs font-mono text-[var(--text-muted)] mt-1 break-all">
-              {run.id}
-            </p>
-          </div>
-          <span
-            className={cn(
-              "text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded",
-              statusClass,
-            )}
-          >
-            {run.status}
+      <PageHeader
+        eyebrow="Test run"
+        title={run.id}
+        icon={StatusIcon}
+        subtitle={
+          <span className="flex items-center gap-2">
+            <span
+              className={cn(
+                "text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded",
+                statusClass,
+              )}
+            >
+              {run.status}
+            </span>
+            <span>·</span>
+            <span className="font-mono text-xs">{agentId}</span>
           </span>
-        </div>
+        }
+      />
 
-        <div className="mt-6 grid grid-cols-2 sm:grid-cols-4 gap-3">
+      <Card className="p-6">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           <Field icon={Hash} label="Run ID" value={run.id.slice(0, 12) + "…"} mono />
           <Field icon={Play} label="Runner" value={run.runner_kind ?? "—"} />
           <Field icon={Clock} label="Started" value={formatTime(run.started_at)} />

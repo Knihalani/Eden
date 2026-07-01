@@ -1,28 +1,19 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import {
-  Loader2,
-  AlertTriangle,
-  Send,
-  Search,
-  Lightbulb,
-  Wrench,
-  ShieldAlert,
-  Database,
-  Wand2,
-} from "lucide-react";
+import { Loader2, AlertTriangle, Send, Search, Lightbulb, Wrench, ShieldAlert, Database, Wand2 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
-import { EmptyState } from "@/components/ui/empty-state";
+import { DataTable } from "@/components/ui/data-table";
+;
 import { NoOrgState } from "@/components/ui/no-org-state";
 import { useOrg } from "@/hooks/use-org";
 import { autonomousApi } from "@/lib/api";
 import { PageHeader } from "@/components/layout/page-header";
 import { cn } from "@/lib/utils";
+import { EmptyState } from "@/components/ui/empty-state";
 
 /* ----------------------- NL Query section ---------------------------- */
 
@@ -67,11 +58,13 @@ function NLQuerySection() {
             value={question}
             onChange={(e) => setQuestion(e.target.value)}
             placeholder="Top 5 agents by total cost this week…"
+            aria-label="Ask a natural-language question about your data"
             className="flex-1 rounded-md border border-[var(--border-default)] bg-[var(--bg-tertiary)] px-3 py-2 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:border-[var(--accent)] focus:outline-none"
           />
           <button
             type="submit"
             disabled={submitting || !question.trim()}
+            aria-label="Run natural-language query"
             className={cn(
               "inline-flex items-center justify-center gap-2 rounded-md px-4 py-2 text-sm font-medium transition-colors",
               "bg-[var(--accent)] text-[var(--bg-primary)] shadow-sm hover:bg-[var(--accent-hover)]",
@@ -133,8 +126,7 @@ function NLQuerySection() {
                               return typeof v === "object" && v !== null ? JSON.stringify(v) : String(v ?? "—");
                             })()}
                           </span>
-                        ),
-                      }))}
+                        ) }))}
                       rows={result.rows as Array<Record<string, unknown>>}
                       rowKey={(_, i) => `row_${i}`}
                       pageSize={50}
@@ -186,8 +178,7 @@ function InvestigateTab() {
     try {
       const res = await autonomousApi.investigate(currentOrg.id, {
         ...(traceId.trim() ? { trace_id: traceId.trim() } : {}),
-        question: question.trim(),
-      });
+        question: question.trim() });
       setResult(res);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to run investigation");
@@ -213,6 +204,7 @@ function InvestigateTab() {
               value={traceId}
               onChange={(e) => setTraceId(e.target.value)}
               placeholder="trc_…"
+              aria-label="Trace ID (optional)"
               className="mt-1 w-full rounded-md border border-[var(--border-default)] bg-[var(--bg-tertiary)] px-3 py-2 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:border-[var(--accent)] focus:outline-none"
             />
           </label>
@@ -226,12 +218,14 @@ function InvestigateTab() {
               required
               rows={3}
               placeholder="Why did this trace fail…"
+              aria-label="Investigation question"
               className="mt-1 w-full rounded-md border border-[var(--border-default)] bg-[var(--bg-tertiary)] px-3 py-2 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:border-[var(--accent)] focus:outline-none"
             />
           </label>
           <button
             type="submit"
             disabled={submitting || !question.trim()}
+            aria-label="Run autonomous investigation"
             className={cn(
               "inline-flex items-center gap-2 rounded-md px-4 py-2 text-sm font-medium transition-colors",
               "bg-[var(--accent)] text-[var(--bg-primary)] shadow-sm hover:bg-[var(--accent-hover)]",
@@ -301,8 +295,7 @@ function InvestigateTab() {
 const IMPACT_COLORS: Record<string, string> = {
   high: "bg-[var(--error-bg)] text-[var(--error)]",
   medium: "bg-[var(--warning-bg)] text-[var(--warning)]",
-  low: "bg-[var(--success-bg)] text-[var(--success)]",
-};
+  low: "bg-[var(--success-bg)] text-[var(--success)]" };
 
 function RecommendationsTab() {
   const { currentOrg } = useOrg();
@@ -311,6 +304,7 @@ function RecommendationsTab() {
   const [items, setItems] = useState<
     Array<{ id: string; title: string; impact: string; effort: string; rationale: string }>
   >([]);
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     if (!currentOrg) return;
@@ -326,9 +320,9 @@ function RecommendationsTab() {
         if (cancelled) return;
         setItems(res.recommendations ?? []);
       })
-      .catch((e: unknown) => {
+      .catch((err: unknown) => {
         if (cancelled) return;
-        setError(e instanceof Error ? e.message : "Failed to load recommendations");
+        setError(err instanceof Error ? err.message : "Failed to load recommendations");
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -336,17 +330,37 @@ function RecommendationsTab() {
     return () => {
       cancelled = true;
     };
-  }, [currentOrg]);
+  }, [currentOrg, reloadKey]);
 
   if (loading) {
     return (
-      <div className="flex h-48 items-center justify-center">
+      <div
+        role="status"
+        aria-live="polite"
+        aria-busy="true"
+        className="flex h-48 items-center justify-center"
+      >
         <Loader2 className="h-5 w-5 animate-spin text-[var(--text-muted)]" />
       </div>
     );
   }
   if (error) {
-    return <EmptyState icon={AlertTriangle} title="Could not load recommendations" description={error} size="md" />;
+    return (
+      <EmptyState
+        icon={AlertTriangle}
+        title="Could not load recommendations"
+        description={error}
+        size="md"
+        action={
+          <button
+            onClick={() => setReloadKey((k) => k + 1)}
+            className="inline-flex items-center gap-2 px-3 py-1.5 rounded-md bg-[var(--accent)] text-[var(--bg-base)] text-xs font-medium hover:bg-[var(--accent-hover)] transition-colors"
+          >
+            Try again
+          </button>
+        }
+      />
+    );
   }
   if (items.length === 0) {
     return <EmptyState icon={Lightbulb} title="No recommendations" size="md" />;
@@ -374,8 +388,7 @@ function RecommendationsTab() {
                 >
                   {r.impact}
                 </span>
-              ),
-            },
+              ) },
             { key: "effort", header: "Effort", cell: (r) => <span className="text-[var(--text-secondary)]">{r.effort}</span> },
             { key: "rationale", header: "Rationale", cell: (r) => <span className="max-w-md text-[var(--text-secondary)]">{r.rationale}</span> },
           ]}
@@ -420,8 +433,7 @@ function HealTab() {
     try {
       const res = await autonomousApi.heal(currentOrg.id, {
         component,
-        description: description.trim(),
-      });
+        description: description.trim() });
       setResult(res);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to request heal");
@@ -448,6 +460,7 @@ function HealTab() {
             <select
               value={component}
               onChange={(e) => setComponent(e.target.value)}
+              aria-label="Component to heal"
               className="mt-1 w-full rounded-md border border-[var(--border-default)] bg-[var(--bg-tertiary)] px-3 py-2 text-sm text-[var(--text-primary)] focus:border-[var(--accent)] focus:outline-none"
             >
               {HEAL_COMPONENTS.map((c) => (
@@ -467,12 +480,14 @@ function HealTab() {
               required
               rows={3}
               placeholder="Describe the issue and the proposed change…"
+              aria-label="Heal description"
               className="mt-1 w-full rounded-md border border-[var(--border-default)] bg-[var(--bg-tertiary)] px-3 py-2 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:border-[var(--accent)] focus:outline-none"
             />
           </label>
           <button
             type="submit"
             disabled={submitting || !description.trim()}
+            aria-label="Propose a self-heal change"
             className={cn(
               "inline-flex items-center gap-2 rounded-md px-4 py-2 text-sm font-medium transition-colors",
               "bg-[var(--accent)] text-[var(--bg-primary)] shadow-sm hover:bg-[var(--accent-hover)]",

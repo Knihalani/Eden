@@ -16,21 +16,16 @@ const cardVariants = cva(
         elevated: "bg-[var(--bg-secondary)] shadow-md",
         inset: "bg-[var(--bg-inset)]",
         interactive:
-          "transition-all duration-200 ease-out card-hover-lift cursor-pointer hover:border-[var(--border-strong)]",
-      },
+          "transition-all duration-200 ease-out card-hover-lift cursor-pointer hover:border-[var(--border-strong)]" },
       padding: {
         none: "",
         sm: "p-3",
         md: "p-4",
         lg: "p-5",
-        xl: "p-6",
-      },
-    },
+        xl: "p-6" } },
     defaultVariants: {
       variant: "default",
-      padding: "lg",
-    },
-  }
+      padding: "lg" } }
 );
 
 export interface CardProps
@@ -81,7 +76,7 @@ CardDescription.displayName = "CardDescription";
 const CardContent = React.forwardRef<
   HTMLDivElement,
   React.HTMLAttributes<HTMLDivElement> & VariantProps<typeof cardVariants>
->(({ className, padding, ...props }, ref) => {
+>(({ className, padding, ...__props }, ref) => {
   const { padding: _outer, ...content } = { padding };
   void _outer;
   return (
@@ -113,5 +108,4 @@ export {
   CardTitle,
   CardDescription,
   CardContent,
-  cardVariants,
-};
+  cardVariants };

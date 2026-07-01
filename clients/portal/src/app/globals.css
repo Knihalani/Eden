@@ -490,6 +490,16 @@ body {
   }
 }
 
+/* Pattern 3.5 (Datadog carousel): hide native scrollbar on the
+ * horizontal carousel track while preserving scroll behaviour. */
+.no-scrollbar {
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* IE/Edge legacy */
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none; /* Chromium/Safari */
+}
+
 .skeleton {
   background: linear-gradient(
     90deg,

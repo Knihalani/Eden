@@ -1,14 +1,18 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Loader2, AlertTriangle, CheckCircle2, Building2, Sparkles, TrendingUp, Wallet } from "lucide-react";
+import { Loader2, AlertTriangle, CheckCircle2, Building2, Sparkles, TrendingUp, Wallet, Target } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
 import { EmptyState } from "@/components/ui/empty-state";
+import { ErrorState } from "@/components/ui/error-state";
 import { StatCard } from "@/components/ui/stat-card";
+import { PageHeader } from "@/components/layout/page-header";
+import { NoOrgState } from "@/components/ui/no-org-state";
+import { useToast } from "@/components/ui/toast";
 import { useOrg } from "@/hooks/use-org";
 import { outcomesApi } from "@/lib/api";
 import { cn } from "@/lib/utils";
@@ -68,7 +72,7 @@ function DepartmentsTab() {
 
   if (loading) {
     return (
-      <div className="flex h-48 items-center justify-center">
+      <div className="flex h-48 items-center justify-center" role="status" aria-live="polite">
         <Loader2 className="h-5 w-5 animate-spin text-[var(--text-muted)]" />
       </div>
     );
@@ -76,7 +80,10 @@ function DepartmentsTab() {
 
   if (error) {
     return (
-      <EmptyState icon={AlertTriangle} title="Could not load departments" description={error} size="md" />
+      <ErrorState
+        title="Could not load departments"
+        message={error}
+      />
     );
   }
 
@@ -155,18 +162,17 @@ const OUTCOME_OPTIONS = [
 
 function TrackTab() {
   const { currentOrg } = useOrg();
+  const toast = useToast();
   const [traceId, setTraceId] = useState("");
   const [outcome, setOutcome] = useState("won");
   const [department, setDepartment] = useState("");
   const [revenue, setRevenue] = useState("");
   const [submitting, setSubmitting] = useState(false);
-  const [feedback, setFeedback] = useState<{ kind: "success" | "error"; message: string } | null>(null);
 
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!currentOrg || !traceId.trim()) return;
     setSubmitting(true);
-    setFeedback(null);
     try {
       const res = await outcomesApi.track(currentOrg.id, {
         trace_id: traceId.trim(),
@@ -174,18 +180,18 @@ function TrackTab() {
         department: department.trim() || undefined,
         revenue: revenue.trim() ? Number(revenue) : undefined,
       });
-      setFeedback({
-        kind: "success",
-        message: `Tracked outcome on ${res.trace_id.slice(0, 12)}… ROI: ${res.roi.toFixed(2)}`,
-      });
+      toast.success(
+        "Outcome tracked",
+        `Trace ${res.trace_id.slice(0, 12)}… · ROI ${res.roi.toFixed(2)}`,
+      );
       setTraceId("");
       setDepartment("");
       setRevenue("");
     } catch (e) {
-      setFeedback({
-        kind: "error",
-        message: e instanceof Error ? e.message : "Failed to track outcome",
-      });
+      toast.error(
+        "Track failed",
+        e instanceof Error ? e.message : "Failed to track outcome",
+      );
     } finally {
       setSubmitting(false);
     }
@@ -212,7 +218,10 @@ function TrackTab() {
                 onChange={(e) => setTraceId(e.target.value)}
                 required
                 placeholder="trc_…"
-                className="mt-1 w-full rounded-md border border-[var(--border-default)] bg-[var(--bg-tertiary)] px-3 py-2 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:border-[var(--accent)] focus:outline-none"
+                aria-label="Trace ID"
+                aria-required="true"
+                disabled={submitting}
+                className="mt-1 w-full rounded-md border border-[var(--border-default)] bg-[var(--bg-tertiary)] px-3 py-2 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:border-[var(--accent)] focus:outline-none disabled:opacity-60"
               />
             </label>
             <label className="block">
@@ -222,7 +231,9 @@ function TrackTab() {
               <select
                 value={outcome}
                 onChange={(e) => setOutcome(e.target.value)}
-                className="mt-1 w-full rounded-md border border-[var(--border-default)] bg-[var(--bg-tertiary)] px-3 py-2 text-sm text-[var(--text-primary)] focus:border-[var(--accent)] focus:outline-none"
+                aria-label="Outcome type"
+                disabled={submitting}
+                className="mt-1 w-full rounded-md border border-[var(--border-default)] bg-[var(--bg-tertiary)] px-3 py-2 text-sm text-[var(--text-primary)] focus:border-[var(--accent)] focus:outline-none disabled:opacity-60"
               >
                 {OUTCOME_OPTIONS.map((o) => (
                   <option key={o.value} value={o.value}>
@@ -240,7 +251,9 @@ function TrackTab() {
                 value={department}
                 onChange={(e) => setDepartment(e.target.value)}
                 placeholder="e.g. support, sales"
-                className="mt-1 w-full rounded-md border border-[var(--border-default)] bg-[var(--bg-tertiary)] px-3 py-2 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:border-[var(--accent)] focus:outline-none"
+                aria-label="Department"
+                disabled={submitting}
+                className="mt-1 w-full rounded-md border border-[var(--border-default)] bg-[var(--bg-tertiary)] px-3 py-2 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:border-[var(--accent)] focus:outline-none disabled:opacity-60"
               />
             </label>
             <label className="block">
@@ -254,14 +267,17 @@ function TrackTab() {
                 placeholder="0.00"
                 min="0"
                 step="0.01"
-                className="mt-1 w-full rounded-md border border-[var(--border-default)] bg-[var(--bg-tertiary)] px-3 py-2 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:border-[var(--accent)] focus:outline-none"
+                aria-label="Revenue in USD"
+                disabled={submitting}
+                className="mt-1 w-full rounded-md border border-[var(--border-default)] bg-[var(--bg-tertiary)] px-3 py-2 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:border-[var(--accent)] focus:outline-none disabled:opacity-60"
               />
             </label>
           </div>
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-end">
             <button
               type="submit"
               disabled={submitting || !traceId.trim()}
+              aria-label="Track outcome"
               className={cn(
                 "inline-flex items-center gap-2 rounded-md px-4 py-2 text-sm font-medium transition-colors",
                 "bg-[var(--accent)] text-[var(--bg-primary)] shadow-sm hover:bg-[var(--accent-hover)]",
@@ -269,29 +285,12 @@ function TrackTab() {
               )}
             >
               {submitting ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
+                <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
               ) : (
-                <CheckCircle2 className="h-4 w-4" />
+                <CheckCircle2 className="h-4 w-4" aria-hidden />
               )}
               Track outcome
             </button>
-            <AnimatePresence>
-              {feedback && (
-                <motion.span
-                  initial={{ opacity: 0, x: 4 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  exit={{ opacity: 0 }}
-                  className={cn(
-                    "text-xs",
-                    feedback.kind === "success"
-                      ? "text-[var(--success)]"
-                      : "text-[var(--error)]"
-                  )}
-                >
-                  {feedback.message}
-                </motion.span>
-              )}
-            </AnimatePresence>
           </div>
         </form>
       </CardContent>
@@ -341,15 +340,17 @@ export default function OutcomesPage() {
   }, [currentOrg]);
 
   if (!currentOrg) {
-    return (
-      <div className="rounded-lg border border-[var(--border-subtle)] p-8 text-center text-sm text-[var(--text-muted)]">
-        Select an organization to view outcomes.
-      </div>
-    );
+    return <NoOrgState feature="Outcomes" />;
   }
 
   return (
     <div className="space-y-4">
+      <PageHeader
+        eyebrow="Optimize"
+        title="Outcomes & ROI"
+        subtitle="See which departments are profitable and attribute wins to specific traces."
+        icon={Target}
+      />
       {/* KPI strip */}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         <StatCard

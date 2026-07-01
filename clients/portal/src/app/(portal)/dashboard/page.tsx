@@ -7,8 +7,7 @@ import {
   DollarSign,
   AlertTriangle,
   LayoutDashboard,
-  GitBranch,
-} from "lucide-react";
+  GitBranch } from "lucide-react";
 import { api } from "@/lib/api";
 import { useOrg } from "@/hooks/use-org";
 import { usePermissions } from "@/hooks/use-permissions";
@@ -18,8 +17,7 @@ import { ThroughputCard } from "./_components/throughput-card";
 import { LatencyCard } from "./_components/latency-card";
 import {
   RecentTracesCard,
-  type TraceRow,
-} from "./_components/recent-traces-card";
+  type TraceRow } from "./_components/recent-traces-card";
 import { QuickLinks } from "./_components/quick-links";
 import { NoOrgState } from "@/components/ui/no-org-state";
 
@@ -56,9 +54,9 @@ interface DashboardData {
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 export default function DashboardPage() {
-  const { currentOrg, authError, clearAuthError } = useOrg();
+  const { currentOrg, authError } = useOrg();
   const { hasPermission } = usePermissions();
-  const router = useRouter();
+  const __router = useRouter();
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -135,8 +133,7 @@ export default function DashboardPage() {
           optimization: optimization ?? null,
           alerts: (alertsRaw?.alerts ?? []) as unknown as DashboardData["alerts"],
           costThisMonthCents: thisMonth,
-          costLastMonthCents: lastMonth,
-        });
+          costLastMonthCents: lastMonth });
       } catch (e) {
         if (!cancelled) {
           console.error("Failed to load dashboard telemetry:", e);
@@ -175,7 +172,7 @@ export default function DashboardPage() {
   // documents the intent.
   const { p95, p50 } = useMemo(
     () => {
-      // eslint-disable-next-line react-hooks/purity
+       
       const cutoff = Date.now() - 60 * 60 * 1000;
       const recent = (data?.traces ?? []).filter(
         (t) => new Date(t.started_at).getTime() >= cutoff
@@ -200,7 +197,7 @@ export default function DashboardPage() {
   // Last 24h traces — see comment above on the eslint-disable for
   // the same purity rule (filter cutoff, not control flow).
   const lastDayTraces = useMemo(() => {
-    // eslint-disable-next-line react-hooks/purity
+     
     const cutoff = Date.now() - DAY_MS;
     return (data?.traces ?? []).filter((t) => new Date(t.started_at).getTime() >= cutoff);
   }, [data?.traces]);
@@ -365,8 +362,7 @@ function buildThroughputSeries(traces: TraceRow[]): Array<{ t: string; eps: numb
       return {
         t: t.toISOString(),
         eps: 0,
-        count: 0,
-      };
+        count: 0 };
     }
   );
 

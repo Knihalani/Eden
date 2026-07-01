@@ -141,6 +141,50 @@ def _not_implemented_envelope(
     }
 
 
+# ── Real-error envelope ────────────────────────────────────────────
+
+
+def _error_envelope(
+    feature: str,
+    *,
+    message: str,
+    error_code: str,
+    data: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """A real-error envelope for genuine failures.
+
+    Distinct from :func:`_not_implemented_envelope` (which says
+    "this feature isn't wired up") — this says "the user made a
+    request we couldn't fulfill". Returns ``status="error"`` with
+    a stable ``error_code`` so the portal can show a clear message
+    and an actionable next step.
+
+    Examples:
+        >>> env = _error_envelope(
+        ...     "code_change",
+        ...     message="Patch patch_abc not found in proposed_patches",
+        ...     error_code="patch_not_found",
+        ... )
+        >>> env["status"]
+        'error'
+        >>> env["error_code"]
+        'patch_not_found'
+    """
+    payload: dict[str, Any] = {"feature": feature, "message": message, "error_code": error_code}
+    if data is not None:
+        payload["data"] = data
+    return {
+        "status": "error",
+        "feature": feature,
+        "live": True,
+        "trace_id": _new_id("err"),
+        "timestamp": _now_iso(),
+        "error_code": error_code,
+        "message": message,
+        "data": payload,
+    }
+
+
 # ── Policy gate (the two-stage opt-in) ──────────────────────────────
 
 

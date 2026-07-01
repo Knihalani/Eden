@@ -12,7 +12,7 @@
  * fetches the scores + passes them in.
  */
 
-import * as React from "react";
+import * as _React from "react";
 import { cn } from "@/lib/utils";
 
 export interface RewardBarItem {

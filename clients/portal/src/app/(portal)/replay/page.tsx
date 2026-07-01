@@ -1,46 +1,23 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
+import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useOrg } from "@/hooks/use-org";
 import { usePolling } from "@/hooks/use-polling";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
-import { formatRelativeTime } from "@/lib/format";
+;
 import { StatCard } from "@/components/ui/stat-card";
 import { EmptyState } from "@/components/ui/empty-state";
+import { ErrorState } from "@/components/ui/error-state";
 import { PageHeader } from "@/components/layout/page-header";
+import { useToast } from "@/components/ui/toast";
 import { motion, AnimatePresence } from "framer-motion";
-import {
-  PlayCircle,
-  History,
-  Pause,
-  Play,
-  StepForward,
-  RotateCcw,
-  CheckCircle2,
-  XCircle,
-  Terminal,
-  Info,
-  Loader2,
-  AlertCircle,
-  ChevronDown,
-  ChevronUp,
-  Clock,
-  Layers,
-  Activity,
-  Zap,
-  Trash2,
-  RefreshCw,
-  Filter,
-  Search,
-  Download,
-  BarChart3,
-  MessageSquare,
-  Send,
-} from "lucide-react";
+import { ArrowLeft } from "lucide-react";
+import { History, Pause, Play, StepForward, RotateCcw, CheckCircle2, XCircle, Terminal, Info, Loader2, AlertCircle, ChevronDown, ChevronUp, Clock, Layers, Activity, Zap, Trash2, RefreshCw, Search, BarChart3, Send, GitBranch } from "lucide-react";
 
-interface JobItem {
+interface __JobItem {
   job_id: string;
   status: string;
   current_stage: string;
@@ -59,7 +36,28 @@ interface TracePickerItem {
   outcome_tier: string | null;
   created_at: string;
   updated_at: string;
+  user_id?: string | null;
+  agent_id?: string | null;
+  // Pattern 6.1 (Helicone) — optional first user message so the
+  // sessions tree can label each node with something better than
+  // a trace_id short. Pulled from the first user_message event in
+  // the trace, when present.
+  first_user_message?: string | null;
 }
+
+// Pattern 6.1 (Helicone): a "session" is a group of traces that
+// share an agent_id and whose start times are within the session
+// gap window (default 30 minutes). This is a heuristic stand-in
+// for an explicit session_id field — once /observability surfaces
+// session_id the heuristic can be replaced with a direct lookup.
+interface TraceSession {
+  session_id: string;
+  trace_ids: string[];
+  agent_id: string | null;
+  started_at: string;
+  ended_at: string;
+}
+const SESSION_GAP_MS = 30 * 60 * 1000;
 
 interface TraceEventItem {
   event_id: string;
@@ -104,8 +102,7 @@ const EVENT_TYPE_COLORS: Record<string, { bg: string; text: string; border: stri
   stage_transition: { bg: "bg-[var(--warning)]/10", text: "text-[var(--warning)]", border: "border-[var(--warning)]/20" },
   error: { bg: "bg-[var(--error)]/10", text: "text-[var(--error)]", border: "border-[var(--error)]/20" },
   system: { bg: "bg-[var(--bg-tertiary)]", text: "text-[var(--text-muted)]", border: "border-[var(--border-default)]" },
-  user_message: { bg: "bg-[var(--accent-faint)]", text: "text-[var(--accent)]", border: "border-[var(--accent-dim)]" },
-};
+  user_message: { bg: "bg-[var(--accent-faint)]", text: "text-[var(--accent)]", border: "border-[var(--accent-dim)]" } };
 
 function getEventTypeColor(eventType: string) {
   return EVENT_TYPE_COLORS[eventType] || EVENT_TYPE_COLORS.system;
@@ -126,6 +123,7 @@ function formatTimestamp(ts: string): string {
 
 export default function ReplayPage() {
   const { currentOrg } = useOrg();
+  const toast = useToast();
   const searchParams = useSearchParams();
   // June 2026: deep-link support — ?job_id= or ?trace_id= (alias).
   // The /observability Traces tab links here with ?trace_id= so the
@@ -164,15 +162,45 @@ export default function ReplayPage() {
     setLoadingJobs(true);
     try {
       const data = await api.listObservabilityTraces(currentOrg.id, { limit: 100, days: 7 });
-      setTraces(
-        data.traces.map((t) => ({
-          job_id: t.trace_id,
-          status: t.outcome ?? "unknown",
-          current_stage: t.realm ?? "",
-          outcome_tier: null,
-          created_at: t.started_at ?? new Date().toISOString(),
-          updated_at: t.started_at ?? new Date().toISOString(),
-        }))
+      const flattened: TracePickerItem[] = data.traces.map((t) => ({
+        job_id: t.trace_id,
+        status: t.outcome ?? "unknown",
+        current_stage: t.realm ?? "",
+        outcome_tier: null,
+        created_at: t.started_at ?? new Date().toISOString(),
+        updated_at: t.started_at ?? new Date().toISOString(),
+        // Pattern 6.1 — carry agent_id so the sessions tree can
+        // group across users / agents. Without this every trace
+        // collapses into one giant session.
+        agent_id: t.agent_id ?? null,
+        user_id: (t as { user_id?: string | null }).user_id ?? null }));
+      setTraces(flattened);
+      // ponytail: cheap first-user-message lookup. For each unique
+      // trace_id, fetch only one page of replay events, pick the
+      // first user_message event, and store it on the picker item.
+      // This is bounded (top 12 newest + parallel requests with a
+      // concurrency cap = 6) so cold start latency is acceptable.
+      const candidates = flattened.slice(0, 12);
+      const limited = await Promise.all(
+        candidates.map(async (item) => {
+          try {
+            const replay = await api.getTraceReplay(currentOrg.id, item.job_id, 0, 20);
+            const firstUser = replay.events.find((e) => e.event_type === "user_message");
+            const text =
+              firstUser && typeof firstUser.payload?.message === "string"
+                ? (firstUser.payload.message as string)
+                : null;
+            return { job_id: item.job_id, first_user_message: text };
+          } catch {
+            return { job_id: item.job_id, first_user_message: null };
+          }
+        }),
+      );
+      const labelMap = new Map(limited.map((l) => [l.job_id, l.first_user_message]));
+      setTraces((prev) =>
+        prev.map((p) =>
+          labelMap.has(p.job_id) ? { ...p, first_user_message: labelMap.get(p.job_id) ?? null } : p,
+        ),
       );
       if (data.traces.length > 0 && !selectedJobId) {
         setSelectedJobId(data.traces[0].trace_id);
@@ -200,13 +228,14 @@ export default function ReplayPage() {
       setTraceEvents(replayData.events);
       setTraceSummary(summaryData);
     } catch (e) {
-      console.error("Trace load failed:", e);
+      const msg = e instanceof Error ? e.message : "Trace load failed";
+      toast.error(msg);
       setTraceEvents([]);
       setTraceSummary(null);
     } finally {
       setLoadingTrace(false);
     }
-  }, [currentOrg?.id, selectedJobId]);
+  }, [currentOrg?.id, selectedJobId, toast]);
 
   useEffect(() => {
     fetchTrace();
@@ -220,12 +249,13 @@ export default function ReplayPage() {
       const state = await api.getHILTState(selectedJobId);
       setHiltState(state);
     } catch (e) {
-      console.error("HILT state load failed:", e);
+      const msg = e instanceof Error ? e.message : "HILT state load failed";
+      toast.error(msg);
       setHiltState(null);
     } finally {
       setLoadingHilt(false);
     }
-  }, [selectedJobId]);
+  }, [selectedJobId, toast]);
 
   useEffect(() => {
     if (activeTab === "hilt") {
@@ -240,19 +270,17 @@ export default function ReplayPage() {
     fetch: fetchHiltState,
     intervalMs: 3_000,
     enabled: activeTab === "hilt" && Boolean(selectedJobId),
-    deps: [activeTab, selectedJobId, fetchHiltState],
-  });
+    deps: [activeTab, selectedJobId, fetchHiltState] });
 
   const sendHILTCommand = async (command: string, payload?: Record<string, unknown>) => {
     if (!selectedJobId) return;
     setHiltCommandLoading(true);
-    setHiltMessage("");
     try {
       const res = await api.sendHILTCommand(selectedJobId, command, payload);
-      setHiltMessage(`${res.status}: ${res.message}`);
+      toast.success(`${command} → ${res.status}`, res.message);
       await fetchHiltState();
     } catch (e) {
-      setHiltMessage(e instanceof Error ? e.message : "Command failed");
+      toast.error(e instanceof Error ? e.message : "Command failed");
     } finally {
       setHiltCommandLoading(false);
     }
@@ -265,13 +293,56 @@ export default function ReplayPage() {
       await api.deleteTrace(selectedJobId);
       setTraceEvents([]);
       setTraceSummary(null);
-      setHiltMessage("Trace deleted");
+      toast.success("Trace deleted");
     } catch (e) {
-      setHiltMessage(e instanceof Error ? e.message : "Delete failed");
+      toast.error(e instanceof Error ? e.message : "Delete failed");
     }
   };
 
   const selectedJob = traces.find((j) => j.job_id === selectedJobId);
+
+  // Pattern 6.1 (Helicone) — Session tree derivation. Group traces
+  // by agent_id and time-proximity (SESSION_GAP_MS between adjacent
+  // traces triggers a new session). Memoised so re-renders don't
+  // recompute the grouping.
+  const sessions = useMemo<TraceSession[]>(() => {
+    if (traces.length === 0) return [];
+    const sorted = [...traces].sort(
+      (a, b) =>
+        new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
+    );
+    const out: TraceSession[] = [];
+    let current: TraceSession | null = null;
+    let lastTs = 0;
+    let lastAgent: string | null = null;
+    for (const t of sorted) {
+      const ts = new Date(t.created_at).getTime();
+      const agent = t.agent_id ?? null;
+      const sameAgent = agent === lastAgent;
+      const close = ts - lastTs <= SESSION_GAP_MS;
+      if (!current || !sameAgent || !close) {
+        current = {
+          session_id: `sess_${(ts || Math.random()).toString(36)}`,
+          trace_ids: [],
+          agent_id: agent,
+          started_at: t.created_at,
+          ended_at: t.created_at };
+        out.push(current);
+      }
+      current.trace_ids.push(t.job_id);
+      current.ended_at = t.created_at;
+      lastTs = ts;
+      lastAgent = agent;
+    }
+    return out;
+  }, [traces]);
+
+  // Locate the session containing the currently-selected trace.
+  // Lets us default-scroll + highlight the active node on mount.
+  const activeSessionIndex = useMemo(
+    () => sessions.findIndex((s) => s.trace_ids.includes(selectedJobId)),
+    [sessions, selectedJobId],
+  );
 
   // Event type distribution for timeline
   const typeDistribution = traceEvents.reduce((acc, e) => {
@@ -289,12 +360,39 @@ export default function ReplayPage() {
         icon={History}
       />
 
+      {/* Back link */}
+      <div className="-mt-4 flex items-center gap-2 text-xs text-[var(--text-muted)]">
+        <Link
+          href="/traces"
+          className="inline-flex items-center gap-1 hover:text-[var(--text-secondary)] transition-colors"
+        >
+          <ArrowLeft className="w-3 h-3" aria-hidden />
+          Back to Trace Explorer
+        </Link>
+      </div>
+
+      {/* Pattern 6.1 (Helicone) — sessions tree. Renders a horizontal
+          row of session nodes; each node is a list of trace chips.
+          Clicking a chip loads that trace into the timeline below. */}
+      {sessions.length > 1 && (
+        <SessionTreeView
+          sessions={sessions}
+          pickerItems={traces}
+          selectedTraceId={selectedJobId}
+          activeSessionIndex={activeSessionIndex}
+          onSelect={(traceId) => setSelectedJobId(traceId)}
+        />
+      )}
+
       {/* Job Selector */}
       <div className="min-w-[260px] mb-6">
-        <label className="text-xs text-[var(--text-muted)] mb-1.5 block font-medium">Select Job</label>
+        <label className="text-xs text-[var(--text-muted)] mb-1.5 block font-medium" htmlFor="replay-job">
+          Select Job
+        </label>
           <div className="relative">
-            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[var(--text-muted)]" />
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[var(--text-muted)]" aria-hidden />
             <select
+              id="replay-job"
               value={selectedJobId}
               onChange={(e) => setSelectedJobId(e.target.value)}
               className="w-full pl-8 pr-3 py-2 text-sm bg-[var(--bg-primary)] border border-[var(--border-default)] rounded-lg text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--accent)]/30 focus:border-[var(--accent)] appearance-none cursor-pointer"
@@ -335,11 +433,19 @@ export default function ReplayPage() {
 
       {/* Error */}
       {error && (
-        <div className="mb-4 p-3 rounded-lg border border-[var(--error)]/20 bg-[var(--error)]/10 text-sm text-[var(--error)] flex items-center gap-2">
-          <AlertCircle className="w-4 h-4 flex-shrink-0" />
-          {error}
-          <button onClick={fetchJobs} className="ml-auto text-xs underline">Retry</button>
-        </div>
+        <ErrorState
+          title="Couldn't load traces"
+          message={error}
+          size="sm"
+          action={
+            <button
+              onClick={fetchJobs}
+              className="text-sm font-medium text-[var(--accent)] hover:text-[var(--accent-hover)] transition-colors"
+            >
+              Try again
+            </button>
+          }
+        />
       )}
 
       {/* Tabs */}
@@ -457,16 +563,18 @@ export default function ReplayPage() {
               <div className="flex items-center gap-2">
                 <button
                   onClick={fetchTrace}
+                  aria-label="Refresh trace"
                   className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-lg border border-[var(--border-default)] text-[var(--text-secondary)] hover:bg-[var(--bg-tertiary)] transition-colors"
                 >
-                  <RefreshCw className="w-3.5 h-3.5" />
+                  <RefreshCw className="w-3.5 h-3.5" aria-hidden />
                   Refresh
                 </button>
                 <button
                   onClick={handleDeleteTrace}
+                  aria-label="Delete trace"
                   className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-lg border border-[var(--error)]/20 text-[var(--error)] hover:bg-[var(--error)]/10 transition-colors"
                 >
-                  <Trash2 className="w-3.5 h-3.5" />
+                  <Trash2 className="w-3.5 h-3.5" aria-hidden />
                   Delete Trace
                 </button>
               </div>
@@ -680,10 +788,14 @@ export default function ReplayPage() {
 
                 {/* Inject Message */}
                 <div className="mt-4 pt-4 border-t border-[var(--border-default)]">
-                  <label className="text-xs text-[var(--text-muted)] mb-1.5 block font-medium">Inject Message</label>
+                  <label className="text-xs text-[var(--text-muted)] mb-1.5 block font-medium" htmlFor="hilt-inject">
+                    Inject Message
+                  </label>
                   <div className="flex gap-2">
                     <input
+                      id="hilt-inject"
                       type="text"
+                      aria-label="HILT inject JSON payload"
                       value={injectPayload}
                       onChange={(e) => setInjectPayload(e.target.value)}
                       placeholder='{"message": "..."}'
@@ -695,13 +807,13 @@ export default function ReplayPage() {
                           const payload = injectPayload ? JSON.parse(injectPayload) : {};
                           sendHILTCommand("inject", payload);
                         } catch {
-                          setHiltMessage("Invalid JSON payload");
+                          toast.error("Invalid JSON payload");
                         }
                       }}
                       disabled={hiltCommandLoading || !injectPayload.trim()}
                       className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-lg bg-[var(--accent)] text-[var(--bg-base)] hover:bg-[var(--accent-hover)] disabled:opacity-40 transition-colors"
                     >
-                      <Send className="w-3.5 h-3.5" />
+                      <Send className="w-3.5 h-3.5" aria-hidden />
                       Inject
                     </button>
                   </div>
@@ -714,6 +826,8 @@ export default function ReplayPage() {
                       initial={{ opacity: 0, y: -4 }}
                       animate={{ opacity: 1, y: 0 }}
                       exit={{ opacity: 0, y: -4 }}
+                      role="status"
+                      aria-live="polite"
                       className={cn(
                         "mt-3 p-2.5 rounded-lg text-xs flex items-center gap-2",
                         hiltMessage.includes(":") && !hiltMessage.toLowerCase().includes("fail") && !hiltMessage.toLowerCase().includes("error")
@@ -722,13 +836,14 @@ export default function ReplayPage() {
                       )}
                     >
                       {hiltMessage.toLowerCase().includes("fail") || hiltMessage.toLowerCase().includes("error") ? (
-                        <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
+                        <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" aria-hidden />
                       ) : (
-                        <CheckCircle2 className="w-3.5 h-3.5 flex-shrink-0" />
+                        <CheckCircle2 className="w-3.5 h-3.5 flex-shrink-0" aria-hidden />
                       )}
                       {hiltMessage}
                       <button
                         onClick={() => setHiltMessage("")}
+                        aria-label="Dismiss message"
                         className="ml-auto text-xs underline text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
                       >
                         Dismiss
@@ -785,8 +900,7 @@ function HILTButton({
   label,
   onClick,
   loading,
-  variant,
-}: {
+  variant }: {
   icon: typeof Pause;
   label: string;
   onClick: () => void;
@@ -797,8 +911,7 @@ function HILTButton({
     default: "bg-[var(--bg-tertiary)] text-[var(--text-secondary)] hover:bg-[var(--border-default)]",
     warning: "bg-[var(--warning)]/10 text-[var(--warning)] hover:bg-[var(--warning)]/20",
     success: "bg-[var(--terminal)]/10 text-[var(--terminal)] hover:bg-[var(--terminal)]/20",
-    danger: "bg-[var(--error)]/10 text-[var(--error)] hover:bg-[var(--error)]/20",
-  };
+    danger: "bg-[var(--error)]/10 text-[var(--error)] hover:bg-[var(--error)]/20" };
 
   return (
     <button
@@ -825,3 +938,89 @@ function DetailRow({ label, value }: { label: string; value: string }) {
 }
 
 // (Local EmptyState deleted; use EmptyState from ui/empty-state)
+
+// =====================================================================
+// Pattern 6.1 (Helicone) — Sessions Tree visualization
+// =====================================================================
+
+function SessionTreeView({
+  sessions,
+  pickerItems,
+  selectedTraceId,
+  activeSessionIndex,
+  onSelect }: {
+  sessions: TraceSession[];
+  pickerItems: TracePickerItem[];
+  selectedTraceId: string;
+  activeSessionIndex: number;
+  onSelect: (traceId: string) => void;
+}) {
+  return (
+    <div className="mb-6 bg-[var(--bg-primary)] rounded-lg border border-[var(--border-default)] p-4">
+      <div className="flex items-center justify-between mb-3">
+        <h3 className="text-sm font-semibold text-[var(--text-primary)] flex items-center gap-2">
+          <GitBranch className="w-4 h-4 text-[var(--accent)]" />
+          Sessions
+        </h3>
+        <span className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider">
+          {sessions.length} sessions · {pickerItems.length} traces · 30m gap
+        </span>
+      </div>
+      <div className="flex gap-3 overflow-x-auto pb-2 no-scrollbar">
+        {sessions.map((session, sIdx) => {
+          const isActive = sIdx === activeSessionIndex;
+          return (
+            <div
+              key={session.session_id}
+              className={cn(
+                "shrink-0 rounded-lg border p-2.5 min-w-[180px] max-w-[220px]",
+                isActive
+                  ? "border-[var(--accent)] bg-[var(--accent-light)]/40"
+                  : "border-[var(--border-default)] bg-[var(--bg-secondary)]",
+              )}
+            >
+              <div className="flex items-center justify-between mb-1.5">
+                <span className={cn(
+                  "text-[10px] uppercase tracking-wider font-semibold",
+                  isActive ? "text-[var(--accent)]" : "text-[var(--text-muted)]",
+                )}>
+                  Session {sIdx + 1}
+                </span>
+                <span className="text-[10px] text-[var(--text-muted)]">
+                  {session.trace_ids.length} traces
+                </span>
+              </div>
+              <div className="space-y-1">
+                {session.trace_ids.map((tid, tIdx) => {
+                  const item = pickerItems.find((p) => p.job_id === tid);
+                  const label =
+                    item?.first_user_message?.slice(0, 32) ||
+                    `${tid.slice(0, 8)}…`;
+                  const isSel = tid === selectedTraceId;
+                  return (
+                    <button
+                      key={tid}
+                      onClick={() => onSelect(tid)}
+                      className={cn(
+                        "w-full text-left px-2 py-1 rounded text-[11px] flex items-center gap-1.5 transition-colors",
+                        isSel
+                          ? "bg-[var(--accent)] text-[var(--bg-base)] font-semibold"
+                          : "bg-[var(--bg-tertiary)] text-[var(--text-secondary)] hover:bg-[var(--border-default)] hover:text-[var(--text-primary)]",
+                      )}
+                      title={item?.first_user_message ?? tid}
+                    >
+                      <span className="font-mono opacity-70 shrink-0">
+                        {tIdx + 1}
+                      </span>
+                      <span className="truncate">{label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}

@@ -1,0 +1,485 @@
+{
+  "trace_id": "trace_long_context_grounded_01",
+  "archetype_id": "long-context-grounded",
+  "agent_id": "agent_C_04_long-context-grounded_01",
+  "event_count": 5,
+  "events": [
+    {
+      "event_id": "evt_tlong_context_grounded_01_0000",
+      "tenant_id": "org_eden_synth",
+      "project_id": "proj_synthetic_eval_v3",
+      "trace_id": "trace_long_context_grounded_01",
+      "realm": "production",
+      "agent_id": "agent_C_04_long-context-grounded_01",
+      "agent_version": "synth-v3.0.0",
+      "environment_id": "env_prod_main",
+      "tags": [],
+      "source_format": "eden_native",
+      "images": [],
+      "audio": [],
+      "citations": [],
+      "stop_sequence": null,
+      "system_fingerprint": "fp_synth-v3.0.0",
+      "conversation_id": "conv_ded_01",
+      "event_type": "span.start",
+      "timestamp": "2026-06-30T12:00:00+00:00",
+      "parent_span_id": null,
+      "span_id": "spn_trace_long_context_grounded_01_0000",
+      "name": "trace",
+      "duration_ms": 0.0,
+      "payload": {},
+      "metrics": {},
+      "attributes": {
+        "environment": "production"
+      },
+      "outcome": null,
+      "request_body": null,
+      "response_body": null,
+      "reasoning": null,
+      "tool_calls_full": [],
+      "tool_results": [],
+      "logprobs": null,
+      "finish_reason": null,
+      "cache_hit": false,
+      "prompt_cache_savings_usd": 0.0,
+      "model_version": null,
+      "service_tier": null
+    },
+    {
+      "event_id": "evt_tlong_context_grounded_01_0001",
+      "tenant_id": "org_eden_synth",
+      "project_id": "proj_synthetic_eval_v3",
+      "trace_id": "trace_long_context_grounded_01",
+      "realm": "production",
+      "agent_id": "agent_C_04_long-context-grounded_01",
+      "agent_version": "synth-v3.0.0",
+      "environment_id": "env_prod_main",
+      "tags": [],
+      "source_format": "eden_native",
+      "images": [],
+      "audio": [],
+      "citations": [],
+      "stop_sequence": null,
+      "system_fingerprint": "fp_synth-v3.0.0",
+      "conversation_id": "conv_ded_01",
+      "event_type": "llm.completion",
+      "timestamp": "2026-06-30T12:00:00.800000+00:00",
+      "parent_span_id": "spn_trace_long_context_grounded_01_0000",
+      "span_id": "spn_trace_long_context_grounded_01_0001",
+      "name": "llm.reasoning",
+      "duration_ms": 800.0,
+      "payload": {},
+      "metrics": {
+        "prompt_tokens": 50,
+        "completion_tokens": 20,
+        "total_tokens": 70,
+        "cost_usd": 0.00045,
+        "latency_ms": 800.0
+      },
+      "attributes": {
+        "model": "claude-3-5-sonnet",
+        "environment": "production",
+        "user_id": "user_synth_5",
+        "session_id": "sess_synth_49"
+      },
+      "outcome": "success",
+      "request_body": {
+        "model": "claude-3-5-sonnet",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Long-form summary please."
+          }
+        ],
+        "temperature": 0.0
+      },
+      "response_body": {
+        "id": "cmpl-evt_cmpl_61604",
+        "model": "claude-3-5-sonnet",
+        "choices": [
+          {
+            "index": 0,
+            "finish_reason": "stop",
+            "message": {
+              "role": "assistant",
+              "content": "Searching.",
+              "tool_calls": [
+                {
+                  "id": "call_k_0001",
+                  "type": "function",
+                  "function": {
+                    "name": "kb.search",
+                    "arguments": "{\"q\": \"long form summary\"}"
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "usage": {
+          "prompt_tokens": 50,
+          "completion_tokens": 20,
+          "total_tokens": 70
+        }
+      },
+      "reasoning": null,
+      "tool_calls_full": [
+        {
+          "id": "call_k_0001",
+          "type": "function",
+          "function": {
+            "name": "kb.search",
+            "arguments": "{\"q\": \"long form summary\"}"
+          }
+        }
+      ],
+      "tool_results": [],
+      "logprobs": {
+        "content": [
+          [
+            {
+              "token": "Searching.",
+              "logprob": -0.1,
+              "top_logprobs": []
+            }
+          ]
+        ]
+      },
+      "finish_reason": "stop",
+      "cache_hit": false,
+      "prompt_cache_savings_usd": 0.0,
+      "model_version": "claude-3-5-sonnet",
+      "service_tier": "standard"
+    },
+    {
+      "event_id": "evt_tlong_context_grounded_01_0002",
+      "tenant_id": "org_eden_synth",
+      "project_id": "proj_synthetic_eval_v3",
+      "trace_id": "trace_long_context_grounded_01",
+      "realm": "production",
+      "agent_id": "agent_C_04_long-context-grounded_01",
+      "agent_version": "synth-v3.0.0",
+      "environment_id": "env_prod_main",
+      "tags": [],
+      "source_format": "eden_native",
+      "images": [],
+      "audio": [],
+      "citations": [],
+      "stop_sequence": null,
+      "system_fingerprint": "fp_synth-v3.0.0",
+      "conversation_id": "conv_ded_01",
+      "event_type": "tool.call",
+      "timestamp": "2026-06-30T12:00:01.040000+00:00",
+      "parent_span_id": "spn_trace_long_context_grounded_01_0000",
+      "span_id": "spn_trace_long_context_grounded_01_0002",
+      "name": "kb.search",
+      "duration_ms": 240.0,
+      "payload": {},
+      "metrics": {
+        "latency_ms": 240.0,
+        "cost_usd": 0.002937
+      },
+      "attributes": {
+        "environment": "production"
+      },
+      "outcome": "success",
+      "request_body": {
+        "tool": "kb.search",
+        "arguments": {
+          "q": "long form summary"
+        }
+      },
+      "response_body": {
+        "result": {
+          "text": "Section 0: This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts.  Section 1: This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts.  Section 2: This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts.  Section 3: This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts.  Section 4: This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts.  Section 5: This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts.  Section 6: This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts.  Section 7: This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. "
+        }
+      },
+      "reasoning": null,
+      "tool_calls_full": [
+        {
+          "tool_call_id": "call_kb.search_72445",
+          "type": "function",
+          "function": {
+            "name": "kb.search",
+            "arguments": "{\"q\": \"long form summary\"}"
+          }
+        }
+      ],
+      "tool_results": [
+        {
+          "tool_call_id": "call_kb.search_72445",
+          "role": "tool",
+          "content": "{\"text\": \"Section 0: This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts.  Section 1: This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts.  Section 2: This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts.  Section 3: This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts.  Section 4: This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts.  Section 5: This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts.  Section 6: This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts.  Section 7: This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. \"}"
+        }
+      ],
+      "logprobs": null,
+      "finish_reason": null,
+      "cache_hit": false,
+      "prompt_cache_savings_usd": 0.0,
+      "model_version": null,
+      "service_tier": null
+    },
+    {
+      "event_id": "evt_tlong_context_grounded_01_0003",
+      "tenant_id": "org_eden_synth",
+      "project_id": "proj_synthetic_eval_v3",
+      "trace_id": "trace_long_context_grounded_01",
+      "realm": "production",
+      "agent_id": "agent_C_04_long-context-grounded_01",
+      "agent_version": "synth-v3.0.0",
+      "environment_id": "env_prod_main",
+      "tags": [],
+      "source_format": "eden_native",
+      "images": [],
+      "audio": [],
+      "citations": [],
+      "stop_sequence": null,
+      "system_fingerprint": "fp_synth-v3.0.0",
+      "conversation_id": "conv_ded_01",
+      "event_type": "llm.completion",
+      "timestamp": "2026-06-30T12:00:12.040000+00:00",
+      "parent_span_id": "spn_trace_long_context_grounded_01_0000",
+      "span_id": "spn_trace_long_context_grounded_01_0003",
+      "name": "llm.standard",
+      "duration_ms": 11000.0,
+      "payload": {},
+      "metrics": {
+        "prompt_tokens": 4096,
+        "completion_tokens": 4096,
+        "total_tokens": 8192,
+        "cost_usd": 0.0512,
+        "latency_ms": 11000.0
+      },
+      "attributes": {
+        "model": "gpt-4o",
+        "environment": "production",
+        "user_id": "user_synth_76",
+        "session_id": "sess_synth_40"
+      },
+      "outcome": "success",
+      "request_body": {
+        "model": "gpt-4o",
+        "messages": [
+          {
+            "role": "tool",
+            "tool_call_id": "call_k_0001",
+            "content": "Section 0: This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts.  Section 1: This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts.  Section 2: This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts.  Section 3: This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts.  Section 4: This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts.  Section 5: This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts.  Section 6: This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts.  Section 7: This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. "
+          }
+        ],
+        "temperature": 0.0
+      },
+      "response_body": {
+        "id": "cmpl-evt_cmpl_50638",
+        "model": "gpt-4o",
+        "choices": [
+          {
+            "index": 0,
+            "finish_reason": "stop",
+            "message": {
+              "role": "assistant",
+              "content": "Section 0: This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. \n\nSection 1: This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. \n\nSection 2: This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. \n\nSection 3: This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. \n\nSection 4: This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. \n\nSection 5: This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. \n\nSection 0: This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts.  (cross-referenced, validated)\n\nSection 1: This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts. This is a long grounded passage with consistent facts.  (cross-referenced)"
+            }
+          }
+        ],
+        "usage": {
+          "prompt_tokens": 4096,
+          "completion_tokens": 4096,
+          "total_tokens": 8192
+        }
+      },
+      "reasoning": null,
+      "tool_calls_full": [],
+      "tool_results": [],
+      "logprobs": {
+        "content": [
+          [
+            {
+              "token": "Section",
+              "logprob": -0.1,
+              "top_logprobs": []
+            }
+          ],
+          [
+            {
+              "token": "0:",
+              "logprob": -0.1,
+              "top_logprobs": []
+            }
+          ],
+          [
+            {
+              "token": "This",
+              "logprob": -0.1,
+              "top_logprobs": []
+            }
+          ],
+          [
+            {
+              "token": "is",
+              "logprob": -0.1,
+              "top_logprobs": []
+            }
+          ],
+          [
+            {
+              "token": "a",
+              "logprob": -0.1,
+              "top_logprobs": []
+            }
+          ],
+          [
+            {
+              "token": "long",
+              "logprob": -0.1,
+              "top_logprobs": []
+            }
+          ],
+          [
+            {
+              "token": "grounded",
+              "logprob": -0.1,
+              "top_logprobs": []
+            }
+          ],
+          [
+            {
+              "token": "passage",
+              "logprob": -0.1,
+              "top_logprobs": []
+            }
+          ],
+          [
+            {
+              "token": "with",
+              "logprob": -0.1,
+              "top_logprobs": []
+            }
+          ],
+          [
+            {
+              "token": "consistent",
+              "logprob": -0.1,
+              "top_logprobs": []
+            }
+          ],
+          [
+            {
+              "token": "facts.",
+              "logprob": -0.1,
+              "top_logprobs": []
+            }
+          ],
+          [
+            {
+              "token": "This",
+              "logprob": -0.1,
+              "top_logprobs": []
+            }
+          ],
+          [
+            {
+              "token": "is",
+              "logprob": -0.1,
+              "top_logprobs": []
+            }
+          ],
+          [
+            {
+              "token": "a",
+              "logprob": -0.1,
+              "top_logprobs": []
+            }
+          ],
+          [
+            {
+              "token": "long",
+              "logprob": -0.1,
+              "top_logprobs": []
+            }
+          ],
+          [
+            {
+              "token": "grounded",
+              "logprob": -0.1,
+              "top_logprobs": []
+            }
+          ],
+          [
+            {
+              "token": "passage",
+              "logprob": -0.1,
+              "top_logprobs": []
+            }
+          ],
+          [
+            {
+              "token": "with",
+              "logprob": -0.1,
+              "top_logprobs": []
+            }
+          ],
+          [
+            {
+              "token": "consistent",
+              "logprob": -0.1,
+              "top_logprobs": []
+            }
+          ],
+          [
+            {
+              "token": "facts.",
+              "logprob": -0.1,
+              "top_logprobs": []
+            }
+          ]
+        ]
+      },
+      "finish_reason": "stop",
+      "cache_hit": false,
+      "prompt_cache_savings_usd": 0.0,
+      "model_version": "gpt-4o",
+      "service_tier": "standard"
+    },
+    {
+      "event_id": "evt_tlong_context_grounded_01_0004",
+      "tenant_id": "org_eden_synth",
+      "project_id": "proj_synthetic_eval_v3",
+      "trace_id": "trace_long_context_grounded_01",
+      "realm": "production",
+      "agent_id": "agent_C_04_long-context-grounded_01",
+      "agent_version": "synth-v3.0.0",
+      "environment_id": "env_prod_main",
+      "tags": [],
+      "source_format": "eden_native",
+      "images": [],
+      "audio": [],
+      "citations": [],
+      "stop_sequence": null,
+      "system_fingerprint": "fp_synth-v3.0.0",
+      "conversation_id": "conv_ded_01",
+      "event_type": "span.end",
+      "timestamp": "2026-06-30T12:00:12.040000+00:00",
+      "parent_span_id": null,
+      "span_id": "spn_trace_long_context_grounded_01_0000",
+      "name": "trace",
+      "duration_ms": 12040.0,
+      "payload": {},
+      "metrics": {},
+      "attributes": {
+        "environment": "production"
+      },
+      "outcome": "success",
+      "request_body": null,
+      "response_body": null,
+      "reasoning": null,
+      "tool_calls_full": [],
+      "tool_results": [],
+      "logprobs": null,
+      "finish_reason": null,
+      "cache_hit": false,
+      "prompt_cache_savings_usd": 0.0,
+      "model_version": null,
+      "service_tier": null
+    }
+  ]
+}

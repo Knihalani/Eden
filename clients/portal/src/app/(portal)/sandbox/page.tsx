@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
-import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { DataTable } from "@/components/ui/data-table";
 import {
@@ -25,13 +24,14 @@ import {
   BookOpen,
   Send,
   History,
-  X,
-} from "lucide-react";
+  X } from "lucide-react";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { StatCard } from "@/components/ui/stat-card";
 import { PageHeader } from "@/components/layout/page-header";
 import { EmptyState } from "@/components/ui/empty-state";
+import { ErrorState } from "@/components/ui/error-state";
+import { useToast } from "@/components/ui/toast";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -75,7 +75,7 @@ interface SandboxDoc {
   mock_behaviors: Record<string, string>;
 }
 
-interface SandboxResponse {
+interface __SandboxResponse {
   status: number;
   status_code: number;
   body: string | Record<string, unknown>;
@@ -86,7 +86,7 @@ interface SandboxResponse {
 // ─── Component ──────────────────────────────────────────────────────────────
 
 export default function SandboxPage() {
-  const router = useRouter();
+  const toast = useToast();
   const [sessions, setSessions] = useState<SandboxSession[]>([]);
   const [activeSession, setActiveSession] = useState<SandboxSession | null>(null);
   const [loading, setLoading] = useState(true);
@@ -127,6 +127,9 @@ export default function SandboxPage() {
       setLoading(false);
     }
   }, [activeSession]);
+  // Note: loadSessions keeps the inline `error` banner so the user
+  // sees a persistent dismissible error in-page; toast is used for
+  // action-triggered failures (delete/reset/execute) below.
 
   const loadDocs = useCallback(async () => {
     try {
@@ -146,10 +149,8 @@ export default function SandboxPage() {
           path: e.path,
           description: e.description,
           request_schema: e.request_schema,
-          response_schema: e.response_schema,
-        })),
-        mock_behaviors: {},
-      });
+          response_schema: e.response_schema })),
+        mock_behaviors: {} });
     } catch {
       // docs are optional
     }
@@ -177,8 +178,7 @@ export default function SandboxPage() {
           status: e.status,
           status_code: e.status,
           duration_ms: e.duration_ms,
-          requested_at: e.requested_at,
-        })),
+          requested_at: e.requested_at })),
       );
     } catch {
       setRequestLog([]);
@@ -206,8 +206,7 @@ export default function SandboxPage() {
         expires_at: res.expires_at,
         request_count: res.request_count,
         max_requests: res.max_requests,
-        endpoints_available: [],
-      };
+        endpoints_available: [] };
       setSessions((prev) => [newSession, ...prev]);
       setActiveSession(newSession);
     } catch (err) {
@@ -228,8 +227,9 @@ export default function SandboxPage() {
         setActiveSession(null);
         setRequestLog([]);
       }
+      toast.success("Session deleted");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to delete session");
+      toast.error(err instanceof Error ? err.message : "Failed to delete session");
     }
   };
 
@@ -237,7 +237,7 @@ export default function SandboxPage() {
 
   const handleResetSession = async (sessionId: string) => {
     try {
-      const res = await api.resetSandboxSession(sessionId, false);
+      await api.resetSandboxSession(sessionId, false);
       setSessions((prev) =>
         prev.map((s) =>
           s.session_id === sessionId ? { ...s, request_count: 0 } : s
@@ -247,10 +247,9 @@ export default function SandboxPage() {
         setActiveSession((prev) => (prev ? { ...prev, request_count: 0 } : null));
         setRequestLog([]);
       }
-      // show toast-like feedback
-      setError("");
+      toast.success("Session reset");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to reset session");
+      toast.error(err instanceof Error ? err.message : "Failed to reset session");
     }
   };
 
@@ -273,15 +272,13 @@ export default function SandboxPage() {
       const res = await api.executeSandboxRequest(activeSession.session_id, {
         endpoint: selectedEndpoint,
         method: requestMethod,
-        body: parsedBody,
-      });
+        body: parsedBody });
 
       setLastResponse({
         status_code: res.status,
         body: res.body,
         duration_ms: res.duration_ms,
-        warnings: null,
-      });
+        warnings: null });
       setActiveSession((prev) =>
         prev ? { ...prev, request_count: prev.request_count + 1 } : null
       );
@@ -349,6 +346,7 @@ export default function SandboxPage() {
           <div className="flex items-center gap-3">
             <button
               onClick={loadSessions}
+              aria-label="Refresh sessions"
               className="flex items-center gap-2 px-3 py-2 text-sm text-[var(--text-secondary)] bg-[var(--bg-primary)] border border-[var(--border-default)] rounded-lg hover:bg-[var(--bg-tertiary)] transition-colors"
             >
               <RefreshCw className="w-4 h-4" />
@@ -377,7 +375,7 @@ export default function SandboxPage() {
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -10 }}
-            className="mb-4 bg-[var(--error-bg)] text-[var(--error)] px-4 py-3 rounded-xl flex items-center gap-2.5 border border-[var(--error)]/20"
+            className="mb-4 bg-[var(--error-bg)] text-[var(--error)]px-4 py-3 rounded-xl flex items-center gap-2.5 border border-[var(--error)]/20"
           >
             <AlertCircle className="w-4 h-4 flex-shrink-0" />
             <span className="text-sm">{error}</span>
@@ -429,10 +427,24 @@ export default function SandboxPage() {
           Your Sessions
         </h2>
         {loading && sessions.length === 0 ? (
-          <div className="flex items-center gap-2 text-[var(--text-muted)] py-4">
-            <Loader2 className="w-4 h-4 animate-spin" />
+          <div className="flex items-center gap-2 text-[var(--text-muted)] py-4" aria-live="polite">
+            <Loader2 className="w-4 h-4 animate-spin" aria-hidden />
             <span className="text-sm">Loading sessions...</span>
           </div>
+        ) : error && sessions.length === 0 ? (
+          <ErrorState
+            title="Couldn't load sessions"
+            message={error}
+            size="sm"
+            action={
+              <button
+                onClick={loadSessions}
+                className="text-sm font-medium text-[var(--accent)]hover:text-[var(--accent-hover)] transition-colors"
+              >
+                Try again
+              </button>
+            }
+          />
         ) : sessions.length === 0 ? (
           <EmptyState
             icon={Terminal}
@@ -493,7 +505,7 @@ export default function SandboxPage() {
                 className={cn(
                   "px-4 py-2.5 text-sm font-medium border-b-2 transition-colors capitalize",
                   activeTab === tab
-                    ? "text-[var(--accent)] border-[var(--accent)]"
+                    ? "text-[var(--accent)]border-[var(--accent)]"
                     : "text-[var(--text-muted)] border-transparent hover:text-[var(--text-secondary)]"
                 )}
               >
@@ -541,7 +553,10 @@ export default function SandboxPage() {
                     <div className="p-4 space-y-4">
                       {/* Method + endpoint */}
                       <div className="flex gap-2">
+                        <label className="sr-only" htmlFor="sb-method">HTTP method</label>
                         <select
+                          id="sb-method"
+                          aria-label="HTTP method"
                           value={requestMethod}
                           onChange={(e) => setRequestMethod(e.target.value)}
                           className="px-3 py-2 text-sm bg-[var(--bg-secondary)] border border-[var(--border-default)] rounded-lg text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--accent)]/20"
@@ -552,6 +567,7 @@ export default function SandboxPage() {
                         </select>
                         <input
                           type="text"
+                          aria-label="Endpoint path"
                           value={selectedEndpoint}
                           onChange={(e) => setSelectedEndpoint(e.target.value)}
                           placeholder="/v1/jobs"
@@ -572,7 +588,7 @@ export default function SandboxPage() {
                               className={cn(
                                 "px-2.5 py-1 text-xs rounded-md border transition-colors",
                                 selectedEndpoint === ep.path && requestMethod === ep.method
-                                  ? "bg-[var(--accent-faint)] text-[var(--accent)] border-[var(--accent)]/30"
+                                  ? "bg-[var(--accent-faint)] text-[var(--accent)]border-[var(--accent)]/30"
                                   : "bg-[var(--bg-secondary)] text-[var(--text-secondary)] border-[var(--border-default)] hover:border-[var(--accent)]/30"
                               )}
                               title={ep.description}
@@ -585,11 +601,13 @@ export default function SandboxPage() {
 
                       {/* Body editor */}
                       <div>
-                        <label className="text-xs font-medium text-[var(--text-muted)] mb-2 block">
+                        <label className="text-xs font-medium text-[var(--text-muted)] mb-2 block" htmlFor="sb-body">
                           Request Body (JSON)
                         </label>
                         <textarea
+                          id="sb-body"
                           ref={bodyEditorRef}
+                          aria-label="Request body JSON"
                           value={requestBody}
                           onChange={(e) => setRequestBody(e.target.value)}
                           rows={10}
@@ -631,10 +649,10 @@ export default function SandboxPage() {
                             className={cn(
                               "text-xs font-medium px-2 py-0.5 rounded",
                               lastResponse.status_code < 300
-                                ? "bg-[var(--terminal-faint)] text-[var(--terminal)]  "
+                                ? "bg-[var(--terminal-faint)] text-[var(--terminal)] "
                                 : lastResponse.status_code < 400
-                                  ? "bg-[var(--warning-bg)] text-[var(--warning)]  "
-                                  : "bg-[var(--error-dim)] text-[var(--error)]  "
+                                  ? "bg-[var(--warning-bg)] text-[var(--warning)] "
+                                  : "bg-[var(--error-dim)] text-[var(--error)] "
                             )}
                           >
                             {lastResponse.status_code}
@@ -661,14 +679,14 @@ export default function SandboxPage() {
                       {lastResponse ? (
                         <div className="space-y-3">
                           {lastResponse.warnings && lastResponse.warnings.length > 0 && (
-                            <div className="bg-[var(--warning-bg)]  border border-[var(--warning-dim)]  rounded-lg p-3">
-                              <p className="text-xs font-medium text-[var(--warning)]  mb-1">
+                            <div className="bg-[var(--warning-bg)] border border-[var(--warning-dim)] rounded-lg p-3">
+                              <p className="text-xs font-medium text-[var(--warning)] mb-1">
                                 Warnings
                               </p>
                               <ul className="space-y-1">
                                 {lastResponse.warnings.map((w, i) => (
-                                  <li key={i} className="text-xs text-[var(--warning)]  flex items-start gap-1.5">
-                                    <AlertCircle className="w-3 h-3 mt-0.5 flex-shrink-0" />
+                                  <li key={i} className="text-xs text-[var(--warning)] flex items-start gap-1.5">
+                                    <AlertCircle className="w-3 h-3 mt-0.5 flex-shrink-0" aria-hidden />
                                     {w}
                                   </li>
                                 ))}
@@ -725,8 +743,7 @@ export default function SandboxPage() {
                             <span className="text-[var(--text-secondary)] whitespace-nowrap">
                               {new Date(entry.timestamp).toLocaleTimeString()}
                             </span>
-                          ),
-                        },
+                          ) },
                         {
                           key: "method",
                           header: "Method",
@@ -743,8 +760,7 @@ export default function SandboxPage() {
                             >
                               {entry.method}
                             </span>
-                          ),
-                        },
+                          ) },
                         {
                           key: "endpoint",
                           header: "Endpoint",
@@ -752,8 +768,7 @@ export default function SandboxPage() {
                             <span className="text-[var(--text-primary)] font-mono text-xs truncate max-w-[200px] inline-block">
                               {entry.endpoint}
                             </span>
-                          ),
-                        },
+                          ) },
                         {
                           key: "status_code",
                           header: "Status",
@@ -772,8 +787,7 @@ export default function SandboxPage() {
                             >
                               {entry.status_code}
                             </span>
-                          ),
-                        },
+                          ) },
                         {
                           key: "duration_ms",
                           header: "Duration",
@@ -781,8 +795,7 @@ export default function SandboxPage() {
                           align: "right",
                           cell: (entry) => (
                             <span className="text-[var(--text-muted)] whitespace-nowrap">{entry.duration_ms}ms</span>
-                          ),
-                        },
+                          ) },
                       ]}
                       rows={requestLog}
                       rowKey={(_entry, i) => String(i)}
@@ -834,17 +847,17 @@ export default function SandboxPage() {
                             <span
                               className={cn(
                                 "text-xs font-bold px-2 py-0.5 rounded min-w-[52px] text-center",
-                                ep.method === "GET" && "bg-[var(--accent-faint)] text-[var(--accent)]  ",
-                                ep.method === "POST" && "bg-[var(--terminal-faint)] text-[var(--terminal)]  ",
-                                ep.method === "PUT" && "bg-[var(--warning-bg)] text-[var(--warning)]  ",
-                                ep.method === "DELETE" && "bg-[var(--error-dim)] text-[var(--error)]  "
+                                ep.method === "GET" && "bg-[var(--accent-faint)] text-[var(--accent)] ",
+                                ep.method === "POST" && "bg-[var(--terminal-faint)] text-[var(--terminal)] ",
+                                ep.method === "PUT" && "bg-[var(--warning-bg)] text-[var(--warning)] ",
+                                ep.method === "DELETE" && "bg-[var(--error-dim)] text-[var(--error)] "
                               )}
                             >
                               {ep.method}
                             </span>
                             <code className="text-xs font-mono text-[var(--text-primary)]">{ep.path}</code>
                             <span className="text-xs text-[var(--text-muted)] ml-auto">{ep.description}</span>
-                            <Play className="w-3.5 h-3.5 text-[var(--accent)] opacity-0 group-hover:opacity-100" />
+                            <Play className="w-3.5 h-3.5 text-[var(--accent)]opacity-0 group-hover:opacity-100" />
                           </div>
                         ))}
                       </div>
@@ -856,7 +869,7 @@ export default function SandboxPage() {
                         <div className="space-y-2">
                           {Object.entries(docs.mock_behaviors).map(([key, desc]) => (
                             <div key={key} className="flex items-start gap-3 p-3 bg-[var(--bg-secondary)] rounded-lg border border-[var(--border-default)]">
-                              <Zap className="w-4 h-4 text-[var(--accent)] mt-0.5 flex-shrink-0" />
+                              <Zap className="w-4 h-4 text-[var(--accent)]mt-0.5 flex-shrink-0" />
                               <div>
                                 <p className="text-sm font-medium text-[var(--text-primary)]">{key}</p>
                                 <p className="text-xs text-[var(--text-muted)]">{desc}</p>
@@ -885,8 +898,7 @@ function SessionCard({
   active,
   onSelect,
   onDelete,
-  onReset,
-}: {
+  onReset }: {
   session: SandboxSession;
   active: boolean;
   onSelect: () => void;
@@ -924,8 +936,8 @@ function SessionCard({
             className={cn(
               "text-[10px] font-medium px-1.5 py-0.5 rounded",
               expired
-                ? "bg-[var(--error-dim)] text-[var(--error)]  "
-                : "bg-[var(--terminal-faint)] text-[var(--terminal)]  "
+                ? "bg-[var(--error-dim)] text-[var(--error)] "
+                : "bg-[var(--terminal-faint)] text-[var(--terminal)] "
             )}
           >
             {expired ? "Expired" : "Active"}
@@ -964,10 +976,11 @@ function SessionCard({
               e.stopPropagation();
               onReset();
             }}
-            className="flex items-center gap-1 px-2 py-1 text-xs text-[var(--text-secondary)] hover:text-[var(--accent)] hover:bg-[var(--accent-faint)] rounded transition-colors"
+            className="flex items-center gap-1 px-2 py-1 text-xs text-[var(--text-secondary)] hover:text-[var(--accent)]hover:bg-[var(--accent-faint)] rounded transition-colors"
             title="Reset session"
+            aria-label="Reset session"
           >
-            <RotateCcw className="w-3 h-3" />
+            <RotateCcw className="w-3 h-3" aria-hidden />
             Reset
           </button>
           <button
@@ -975,9 +988,10 @@ function SessionCard({
               e.stopPropagation();
               setExpanded(!expanded);
             }}
+            aria-expanded={expanded}
             className="flex items-center gap-1 px-2 py-1 text-xs text-[var(--text-secondary)] hover:bg-[var(--bg-tertiary)] rounded transition-colors ml-auto"
           >
-            {expanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+            {expanded ? <ChevronUp className="w-3 h-3" aria-hidden /> : <ChevronDown className="w-3 h-3" aria-hidden />}
             Details
           </button>
           <button
@@ -985,10 +999,11 @@ function SessionCard({
               e.stopPropagation();
               onDelete();
             }}
-            className="flex items-center gap-1 px-2 py-1 text-xs text-[var(--text-secondary)] hover:text-[var(--error)] hover:bg-[var(--error-bg)]  rounded transition-colors"
+            className="flex items-center gap-1 px-2 py-1 text-xs text-[var(--text-secondary)] hover:text-[var(--error)]hover:bg-[var(--error-dim)] rounded transition-colors"
             title="Delete session"
+            aria-label="Delete session"
           >
-            <Trash2 className="w-3 h-3" />
+            <Trash2 className="w-3 h-3" aria-hidden />
           </button>
         </div>
 

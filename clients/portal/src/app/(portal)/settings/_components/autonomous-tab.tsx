@@ -216,8 +216,8 @@ function FlagRow({
           </label>
         </div>
         {warn && enabled && (
-          <p className="text-[11px] text-amber-400/80 mt-2">
-            Active. Every destructive action still requires an admin's
+          <p className="text-[11px] text-[var(--warning)]/80 mt-2">
+            Active. Every destructive action still requires an admin&apos;s
             explicit approval via the Inbox or the heal queue.
           </p>
         )}

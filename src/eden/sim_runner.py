@@ -440,65 +440,7 @@ sys.exit(0 if failed == 0 else 1)
         )
 
 
-# ── Firecracker adapter (interface stub; real impl is a follow-up) ──
 
-
-class FirecrackerSimAdapter:
-    """Real isolation via Firecracker microVM.
-
-    This is the **interface stub**. When the underlying BandSox
-    protocol is extended to support mounting an upload directory
-    into a fresh microVM + pip-installing requirements + running
-    ``module:callable`` invocations, the methods below will be
-    implemented in terms of :class:`eden.sandbox.runner.SandboxRunner`.
-
-    Until then, ``available()`` returns False and the route handler
-    falls back to :class:`SubprocessSimAdapter`.
-    """
-
-    name: str = "firecracker"
-    # Set to True to make the adapter available; otherwise always falls back.
-    enabled: bool = False
-
-    def available(self) -> bool:
-        # Real implementation will check ``SandboxRunner.initialize()``
-        # + BandSox reachability. For now, only return True when
-        # explicitly enabled.
-        return bool(self.enabled)
-
-    async def run_scenarios(
-        self,
-        *,
-        upload_path: Path,
-        eval_yaml: dict,
-    ) -> SimRunResult:
-        if not self.available():
-            raise RuntimeError("Firecracker adapter is not enabled")
-        # Real impl: spin up a microVM, mount upload_path at /agent,
-        # pip install -r /agent/requirements.txt, then for each
-        # scenario invoke ``python -m scenarios.<id>`` and capture
-        # the EDEN_RESULT lines.
-        raise NotImplementedError(
-            "FirecrackerSimAdapter awaits the BandSox protocol "
-            "extension (filesystem mount + pip install). Use "
-            "SubprocessSimAdapter until then."
-        )
-
-    async def run_tests(
-        self,
-        *,
-        upload_path: Path,
-        eval_yaml: dict,
-    ) -> SimRunResult:
-        if not self.available():
-            raise RuntimeError("Firecracker adapter is not enabled")
-        raise NotImplementedError(
-            "FirecrackerSimAdapter awaits the BandSox protocol "
-            "extension. Use SubprocessSimAdapter until then."
-        )
-
-
-# ── Selector ──────────────────────────────────────────────────────
 
 
 def select_adapter(
@@ -506,24 +448,21 @@ def select_adapter(
 ) -> SimExecutionAdapter:
     """Return the best available adapter.
 
-    ``preferred`` may be ``"firecracker"`` or ``"subprocess"`` (or
-    ``None`` to use the default policy: try Firecracker first, fall
-    back to subprocess).
+    Only :class:`SubprocessSimAdapter` is supported as of the June 2026
+    cleanup (the FirecrackerSimAdapter stub was removed — BandSox
+    protocol extension not on the roadmap). Use the sandbox provider
+    abstraction in :mod:`eden.providers.sandbox` if you need a
+    different isolation backend.
     """
-    fc = FirecrackerSimAdapter()
     sp = SubprocessSimAdapter()
-    if preferred == "subprocess":
+    if preferred == "subprocess" or preferred is None:
         return sp
     if preferred == "firecracker":
-        if fc.available():
-            return fc
-        # Caller asked for Firecracker; surface the unavailability
-        # rather than silently swapping.
-        raise RuntimeError("Firecracker adapter is not available in this env")
-    # Default policy
-    if fc.available():
-        return fc
-    return sp
+        raise RuntimeError(
+            "Firecracker adapter was removed in the June 2026 prod-readiness "
+            "pass. Use the sandbox provider abstraction in eden.providers.sandbox."
+        )
+    raise ValueError(f"Unknown adapter preference: {preferred!r}")
 
 
 # ── LocalProviderSimAdapter (v1.7) ───────────────────────────────
@@ -532,8 +471,7 @@ def select_adapter(
 class LocalProviderSimAdapter:
     """Adapter that delegates to :class:`eden.providers.sandbox.SandboxProvider`.
 
-    Sits alongside :class:`SubprocessSimAdapter` and
-    :class:`FirecrackerSimAdapter` so the Cat 12 sim route
+    Sits alongside :class:`SubprocessSimAdapter` so the Cat 12 sim route
     can pick a uniform adapter surface while the underlying
     sandbox goes through the new provider abstraction.
 

@@ -35,8 +35,7 @@ export function LatencyHistogram({
   durations,
   height = 160,
   className = "",
-  title,
-}: LatencyHistogramProps) {
+  title }: LatencyHistogramProps) {
   const sorted = React.useMemo(
     () => durations.filter((d) => Number.isFinite(d) && d > 0).sort((a, b) => a - b),
     [durations]
@@ -48,8 +47,7 @@ export function LatencyHistogram({
         buckets: [] as Array<{ x: string; lo: number; hi: number; count: number }>,
         maxCount: 0,
         p50: 0, p95: 0, p99: 0,
-        minMs: 0, maxMs: 0,
-      };
+        minMs: 0, maxMs: 0 };
     }
     const p50v = percentile(sorted, 50);
     const p95v = percentile(sorted, 95);
@@ -76,8 +74,7 @@ export function LatencyHistogram({
         x: `${Math.round(bLo)}-${Math.round(bHi)}ms`,
         lo: bLo,
         hi: bHi,
-        count,
-      };
+        count };
     });
     return {
       buckets,
@@ -86,8 +83,7 @@ export function LatencyHistogram({
       p95: p95v,
       p99: p99v,
       minMs: lo,
-      maxMs: hi,
-    };
+      maxMs: hi };
   }, [sorted]);
 
   if (!sorted.length) {
@@ -176,8 +172,7 @@ function PercentileMarker({
   color,
   maxMs,
   minMs,
-  height,
-}: {
+  height: _height }: {
   value: number;
   label: string;
   color: string;
@@ -196,8 +191,7 @@ function PercentileMarker({
         left: `${Math.max(0, Math.min(100, pct))}%`,
         width: "2px",
         background: color,
-        opacity: 0.6,
-      }}
+        opacity: 0.6 }}
       title={`${label}: ${Math.round(value)}ms`}
     >
       <span

@@ -9,6 +9,7 @@ best-effort and never raise.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from collections.abc import Iterable
 from typing import TYPE_CHECKING
@@ -38,6 +39,14 @@ class JudgeRunner:
     ) -> None:
         self.llm_client = llm_client
         self.max_concurrent_per_tenant = max_concurrent_per_tenant
+        # Per-runner semaphore so a single event's judges don't fan
+        # out unboundedly. Per-tenant semaphores live elsewhere
+        # (the calling service owns them).
+        self._sem: asyncio.Semaphore | None = (
+            asyncio.Semaphore(max_concurrent_per_tenant)
+            if max_concurrent_per_tenant > 0
+            else None
+        )
 
     async def run_for_event(
         self,
@@ -63,22 +72,31 @@ class JudgeRunner:
             trace_id=trace_id or event.trace_id,
         )
 
-        # Run judges sequentially inside one event — they're cheap
-        # (fast slot) and concurrency helps less than the per-judge
-        # context switching. Keep it simple for Phase 7.1b.
-        results: list[JudgeScore] = []
-        for judge in judges:
+        # Run judges concurrently via asyncio.gather so a 4-judge
+        # event scores in ~100ms (one LLM call's worth of latency)
+        # rather than ~400ms (sequential). The per-tenant semaphore
+        # in self._sem (set in __init__) bounds total fan-out so a
+        # noisy tenant can't starve other tenants.
+        async def _score_one(judge: Judge) -> JudgeScore | None:
             try:
                 score = await judge.score(event, ctx)
             except Exception as exc:
                 logger.debug(
                     f"judge {judge.name} raised unexpectedly: {exc}"
                 )
-                continue
-            results.append(score)
-            # Best-effort persist.
+                return None
             await self._persist(score)
+            return score
 
+        if self._sem is not None:
+            async def _guarded(judge: Judge) -> JudgeScore | None:
+                async with self._sem:
+                    return await _score_one(judge)
+            tasks = [_guarded(j) for j in judges]
+        else:
+            tasks = [_score_one(j) for j in judges]
+        scored = await asyncio.gather(*tasks, return_exceptions=False)
+        results: list[JudgeScore] = [s for s in scored if s is not None]
         return results
 
     async def _persist(self, score: JudgeScore) -> None:

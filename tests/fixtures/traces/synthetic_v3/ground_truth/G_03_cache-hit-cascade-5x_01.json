@@ -1,0 +1,16 @@
+{
+  "trace_id": "trace_cache_hit_cascade_01",
+  "archetype_id": "cache-hit-cascade",
+  "agent_id": "agent_cache-hit-cascade_01",
+  "expected_TAS": 86,
+  "expected_intervention": "allow",
+  "expected_metrics": {
+    "cache_hits": 5,
+    "cost_saved_usd": 0.025
+  },
+  "expected_detector_fires": [],
+  "expected_loop_detected": false,
+  "expected_hallucination_detected": false,
+  "expected_redundancy_pct": 0.0,
+  "notes": "All 5 calls cache-hit \u2192 cost saved. Phase 8 cache_hit_rate should be 100%. Negative control: efficient cache use, no anomaly."
+}

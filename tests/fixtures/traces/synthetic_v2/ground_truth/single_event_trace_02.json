@@ -1,0 +1,8 @@
+{
+  "trace_id": "trace_single_event_02",
+  "archetype_id": "single-event-trace",
+  "agent_id": "agent_single-event-trace_15",
+  "expected_TAS": 100,
+  "expected_intervention": "allow",
+  "notes": "Single tool call. All metrics should handle this gracefully (no loops, no hallucination, fast)."
+}

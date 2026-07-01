@@ -1,0 +1,15 @@
+{
+  "trace_id": "trace_deep_hierarchy_normal_02",
+  "archetype_id": "deep-hierarchy-normal",
+  "agent_id": "agent_deep-hierarchy-normal_02",
+  "expected_TAS": 84,
+  "expected_intervention": "allow",
+  "expected_metrics": {
+    "max_agent_depth": 3
+  },
+  "expected_detector_fires": [],
+  "expected_loop_detected": false,
+  "expected_hallucination_detected": false,
+  "expected_redundancy_pct": 0.0,
+  "notes": "Negative control for #49: depth=3 is well below the runaway threshold (5+). No detector should fire. Allow."
+}

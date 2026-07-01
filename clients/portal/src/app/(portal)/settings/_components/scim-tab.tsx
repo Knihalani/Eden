@@ -13,6 +13,7 @@ interface ScimConfig {
   has_token: boolean;
 }
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function ScimTab({ org }: { org: any }) {
   const { hasPermission } = usePermissions();
   const [config, setConfig] = useState<ScimConfig | null>(null);

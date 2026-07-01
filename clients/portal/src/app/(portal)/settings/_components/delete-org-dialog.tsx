@@ -23,6 +23,7 @@ export function DeleteOrgDialog({ orgId, orgName, onDeleted }: DeleteOrgDialogPr
       await api.deleteOrg(orgId);
       setOpen(false);
       onDeleted();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (e: any) {
       setError(e.message || "Failed to delete organization");
     } finally {

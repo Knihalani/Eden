@@ -126,7 +126,7 @@ export default function OnboardingAutonomousPage() {
           </div>
           <div className="min-w-0">
             <h3 className="text-sm font-semibold">
-              What Eden Agent can and can't do
+              What Eden Agent can and can&apos;t do
             </h3>
             <p className="text-xs text-[var(--text-secondary)] mt-1 leading-relaxed">
               <span className="text-emerald-400">Can:</span> propose
