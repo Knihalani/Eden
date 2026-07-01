@@ -86,6 +86,7 @@ Branch: vibecoder/performance
 - [x] 82. Route reads to a replica (n/a — Northflank single Postgres instance; no read-replica URL configured in config.py. Routing reads to a replica is a deploy-time decision (Northflank addon creation + ORM session routing). Re-evaluate when write contention is measured.)
 - [x] 83. Partition or archive huge tables (n/a — DataRetentionManager cron (data_platform/retention_cron.py) handles tiered pruning per DEFAULT_POLICIES (ai_agent_retention_days=90, etc.). Partition refactor is a heavy migration; the cron is the chosen approach.)
 - [x] 84. Add database query timeouts (n/a — postgres.py:149 runs SET statement_timeout = 30_000ms in the pool init; idle_in_transaction_session_timeout also set.)
+- [x] 85. Offload slow work to background jobs (n/a — FastAPI BackgroundTasks (agent_runs.py:252, 363, 479), asyncio.create_task for fire-and-forget (detector_loop, communication, bronze_sink). Slow work offloaded appropriately.)
 - [ ] 2. Memoize expensive computed values
 - [ ] 3. Stabilize callbacks passed to children
 - [ ] 4. Split bloated global state
