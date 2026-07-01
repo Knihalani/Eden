@@ -100,5 +100,5 @@ Branch: vibecoder/ui
 - [x] 96. Add Powerful Filtering and Sorting (n/a) — DataTable sort + search; filter-bar component; use-url-state hook for shareable filter state.
 - [x] 97. Add Pagination or Infinite Scroll (n/a) — server-paginated at 20-200 items via DataTable + api limit (perf audit).
 - [x] 98. Polish Charts and Data Visualization (n/a) — recharts with --chart-pie-1..6 token palette; chart-card wrapper; SSR fallback now matches the runtime tokens (prompt 1 fix).
-- [ ] 99. Add Bulk Selection and Actions
+- [x] 99. Add Bulk Selection and Actions (n/a) — DataTable has DataTableBulkAction<T> interface; checkboxes + select-all + contextual action bar.
 - [ ] 100. Add Data Export and Sharing
