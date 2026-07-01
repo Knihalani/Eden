@@ -19,6 +19,12 @@ ALGORITHM = "HS256"
 # https://github.com/pyca/bcrypt/issues/684
 _BCRYPT_MAX_BYTES = 72
 
+# Work factor for new hashes (rounds). 12 is the bcrypt default and
+# gives ~250ms on a modern CPU — slow enough to resist brute force,
+# fast enough to keep logins responsive. Bump together with the
+# transparent upgrade path in :func:`needs_rehash` if you raise it.
+_BCRYPT_ROUNDS = 12
+
 
 def _truncate(password: str) -> bytes:
     """Encode + truncate to bcrypt's 72-byte limit."""
@@ -26,8 +32,11 @@ def _truncate(password: str) -> bytes:
 
 
 def hash_password(password: str) -> str:
-    """Hash a password using bcrypt."""
-    return bcrypt.hashpw(_truncate(password), bcrypt.gensalt()).decode("utf-8")
+    """Hash a password using bcrypt with the configured work factor."""
+    return bcrypt.hashpw(
+        _truncate(password),
+        bcrypt.gensalt(rounds=_BCRYPT_ROUNDS),
+    ).decode("utf-8")
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
@@ -36,6 +45,30 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
         return bcrypt.checkpw(_truncate(plain_password), hashed_password.encode("utf-8"))
     except (ValueError, TypeError):
         return False
+
+
+def needs_rehash(hashed_password: str) -> bool:
+    """Return True when a stored hash should be re-derived at next login.
+
+    Catches three cases:
+      1. Non-bcrypt hashes (legacy pbkdf2 / sha256 from before the
+         bcrypt cutover — should never happen now, but the guard
+         makes the upgrade path safe if it does).
+      2. bcrypt $2a$ — older variant, prefer to roll forward.
+      3. bcrypt rounds < current ``_BCRYPT_ROUNDS`` — bump the
+         work factor without forcing a password reset.
+    """
+    if not hashed_password:
+        return False
+    parts = hashed_password.split("$")
+    # bcrypt format: $2b$rounds$salt+hash  → 4 $-separated parts.
+    if len(parts) != 4 or parts[1] not in ("2b", "2y"):
+        return True
+    try:
+        rounds = int(parts[2])
+    except ValueError:
+        return True
+    return rounds < _BCRYPT_ROUNDS
 
 
 def create_access_token(
