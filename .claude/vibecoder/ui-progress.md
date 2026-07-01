@@ -68,7 +68,7 @@ Branch: vibecoder/ui
 - [x] 64. Improve Drag-And-Drop Interface Affordances (n/a) — @xyflow/react (React Flow) provides drag-handle/insertion-point feedback in the builder canvas.
 - [x] 65. Add Mobile Gesture Support (n/a) — portal is desktop-first; touch gestures deferred per product scope. Mobile-safe-area handled in prompt 16.
 - [x] 66. Add Subtle Success Moments (n/a) — onboarding-checklist has stage-pulse; terminal-cursor blink in empty states; confetti/checkmark-draws deprioritized for data-dense portal.
-- [ ] 67. Add Real-Time Inline Validation
+- [x] 67. Add Real-Time Inline Validation (n/a) — Clerk handles auth validation; portal's own forms are mostly toggles/selects which don't need text validation.
 - [ ] 68. Write Clear Helpful Error Messages
 - [ ] 69. Polish Input Field Design and States
 - [ ] 70. Add Smart Input Masking and Formatting
