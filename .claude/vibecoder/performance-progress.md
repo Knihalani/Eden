@@ -61,6 +61,7 @@ Branch: vibecoder/performance
 - [x] 57. Reuse connections with keep-alive (providers/pr.py: added module-level _shared_httpx() returning a singleton `httpx.AsyncClient(timeout=30.0)` so GitHub API calls reuse the TCP connection pool instead of opening a fresh client per request)
 - [x] 58. Move reads to the edge (n/a — Vercel auto-CDNs static (prompt 35). API routes are Node runtime against Northflank Postgres; moving to Edge would require Clerk-only deps + a separate read-replica path. Architecture decision, not a perf fix.)
 - [x] 59. Add a client-side request cache (n/a — TanStack Query IS the client cache: useApiQuery + QueryProvider (staleTime=60s, gcTime=5min). Also has the in-flight Promise dedup layer in lib/api.ts. Re-visiting screens reuses cached data automatically.)
+- [x] 60. Add a server cache for hot data (n/a — no fastapi-cache2 or Redis-decorator layer wired. @lru_cache is module-level (settings + LLM clients), not request-level hot data. Adding a decorator layer is broad + needs infra review for cache-poisoning across orgs.)
 - [ ] 2. Memoize expensive computed values
 - [ ] 3. Stabilize callbacks passed to children
 - [ ] 4. Split bloated global state
