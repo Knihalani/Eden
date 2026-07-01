@@ -12,8 +12,8 @@
 - [x] 8. Add multi-factor authentication support — TOTP MFA already shipped (pyotp, encrypted secret, QR provisioning); added 10 single-use recovery codes (hashed, migration 078), wired all 3 totp_*_limiter instances, added /auth/2fa/recover that bumps token_version + burns all codes; 4 migration tests, 86 total passing
 - [x] 9. Compare credentials in constant time — SCIM token compare was the only non-constant-time secret check; switched to hmac.compare_digest; audited all other secret compares (webhooks/clerk/metrics/github all already constant-time)
 - [x] 10. Harden the remember-me feature (n/a — no remember-me feature; session is JWT cookie only)
-- [ ] 11. Add bot protection to forms
-- [ ] 12. Throttle password reset and verification emails
+- [x] 11. Add bot protection to forms — added honeypot ``website`` field to /auth/signup; bot submissions return 202 + generic message but skip DB write; per-IP signup_limiter (5/min) is the layer-2 defence; new test covers the drop
+- [x] 12. Throttle password reset and verification emails — already covered by signup_limiter (5/min) + password_reset_limiter (3/5min per IP + per-email); /forgot-password returns enumeration-neutral message
 - [ ] 13. Set secure session cookie flags
 - [ ] 14. Add idle and absolute session timeouts
 - [ ] 15. Fully invalidate sessions on logout

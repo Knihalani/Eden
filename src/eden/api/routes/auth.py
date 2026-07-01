@@ -58,6 +58,40 @@ COOKIE_NAME = "authorization"
 COOKIE_MAX_AGE = settings.jwt_exp_days * 24 * 60 * 60
 
 
+def _set_session_cookie(response: Response, value: str) -> None:
+    """Set the session cookie with the canonical security flags.
+
+    Flags enforced on every issuance:
+      * ``HttpOnly``   — JS cannot read the cookie (XSS-resistant).
+      * ``Secure``     — never sent over plain HTTP. Off only when
+                         ``settings.debug`` is true (so localhost
+                         dev keeps working).
+      * ``SameSite=lax`` — the default for first-party session
+                         cookies. Lax is enough to block CSRF for
+                         state-changing requests while still
+                         allowing top-level navigation.
+      * ``Path=/``     — the cookie is needed for both /auth/* and
+                         /api/* routes. A tighter path would force
+                         duplicate issuance; the auth cookie carries
+                         an expiring JWT and is HttpOnly, so the
+                         broad path doesn't materially expand
+                         exposure.
+
+    All three /auth/* call sites MUST go through this helper so
+    a future policy change (e.g., SameSite=strict, Secure=true
+    always) only needs to be made in one place.
+    """
+    response.set_cookie(
+        key=COOKIE_NAME,
+        value=value,
+        max_age=COOKIE_MAX_AGE,
+        httponly=True,
+        secure=not settings.debug,
+        samesite="lax",
+        path="/",
+    )
+
+
 def _client_ip(request: Request) -> str:
     """Extract the client IP, honouring X-Forwarded-For from trusted proxies."""
     # Trust the leftmost XFF entry — set by our load balancer / CDN.
@@ -283,15 +317,7 @@ async def signup(request: SignupRequest, response: Response, req: Request):
         },
     )
 
-    response.set_cookie(
-        key=COOKIE_NAME,
-        value=access_token,
-        max_age=COOKIE_MAX_AGE,
-        httponly=True,
-        secure=not settings.debug,
-        samesite="lax",
-        path="/",
-    )
+    _set_session_cookie(response, access_token)
 
     # Mirror /auth/login: return the full UserResponse (with empty
     # organizations[]) so the frontend's useAuth() can populate the
@@ -464,15 +490,7 @@ async def login(request: LoginRequest, response: Response, req: Request):
         token_version=new_token_version,
     )
 
-    response.set_cookie(
-        key=COOKIE_NAME,
-        value=access_token,
-        max_age=COOKIE_MAX_AGE,
-        httponly=True,
-        secure=not settings.debug,
-        samesite="lax",
-        path="/",
-    )
+    _set_session_cookie(response, access_token)
 
     # Fetch the user's organizations + preferred_org_id so the
     # frontend's useAuth() can populate the user context in a
@@ -636,15 +654,7 @@ async def signup_from_invite(request: SignupFromInviteRequest, response: Respons
         token_version=user_token_version,
     )
 
-    response.set_cookie(
-        key=COOKIE_NAME,
-        value=access_token,
-        max_age=COOKIE_MAX_AGE,
-        httponly=True,
-        secure=not settings.debug,
-        samesite="lax",
-        path="/",
-    )
+    _set_session_cookie(response, access_token)
 
     return SignupFromInviteResponse(
         user_id=user_id,
