@@ -7,6 +7,8 @@ Branch: vibecoder/performance
 - [x] 3. Stabilize callbacks passed to children (TracesTab: handleSelectTrace/ViewTimeline/Export/Annotate wrapped in useCallback)
 - [x] 4. Split bloated global state (n/a) — codebase already splits contexts by concern: OrgProvider, NotificationsProvider, ToastProvider, use-auth. OrgProvider carries many fields but is useMemo'd on identity-stable values (currentOrg.id, clerkOrg.id, userMemberships.data) per its existing FIX-J/Q/R comments. Splitting it would touch ~30 consumers for marginal gain.
 - [x] 5. Virtualize long scrolling lists (n/a) — long lists (/traces, /agents, /incidents) are server-paginated at 20–200 items via DataTable + api limit. No current list hits the 1000-row threshold that virtualization targets, and no virtualization library is installed (would be a new dep, ponytail: skip). Re-assess when a page shows >500 unbounded rows.
+- [x] 6. Debounce text input and search (marketplace: 300ms debounce on `query` via setTimeout so /api/marketplace fires once per pause instead of per keystroke)
+- [x] 7. Throttle scroll and resize handlers (n/a) — only one resize listener (marketing canvas, lightweight w/h assignment, already cleaned up in effect teardown) and no scroll listeners anywhere. Visibility work uses IntersectionObserver (see prompt 9).
 - [ ] 2. Memoize expensive computed values
 - [ ] 3. Stabilize callbacks passed to children
 - [ ] 4. Split bloated global state
