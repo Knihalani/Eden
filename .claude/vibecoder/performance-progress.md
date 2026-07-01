@@ -2,7 +2,8 @@
 
 Branch: vibecoder/performance
 
-- [ ] 1. Eliminate unnecessary component re-renders
+- [x] 1. Eliminate unnecessary component re-renders (memo'd RewardBarRow, MessageCard, ToolCallBadge in lists)
+- [x] 2. Memoize expensive computed values (n/a) — codebase already uses useMemo on hot paths: TranscriptView.visibleRows, LatencyHistogram.buckets+p50/p95/p99, JobGantt.tStart/tEnd, ObservabilityLanding.deltaTiles, dashboard.throughputSeries/p50/p95, agents.framework/filtered. No further unautomatable inline expensive calculations found.
 - [ ] 2. Memoize expensive computed values
 - [ ] 3. Stabilize callbacks passed to children
 - [ ] 4. Split bloated global state
