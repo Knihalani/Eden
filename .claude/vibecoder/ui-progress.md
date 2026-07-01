@@ -69,7 +69,7 @@ Branch: vibecoder/ui
 - [x] 65. Add Mobile Gesture Support (n/a) — portal is desktop-first; touch gestures deferred per product scope. Mobile-safe-area handled in prompt 16.
 - [x] 66. Add Subtle Success Moments (n/a) — onboarding-checklist has stage-pulse; terminal-cursor blink in empty states; confetti/checkmark-draws deprioritized for data-dense portal.
 - [x] 67. Add Real-Time Inline Validation (n/a) — Clerk handles auth validation; portal's own forms are mostly toggles/selects which don't need text validation.
-- [ ] 68. Write Clear Helpful Error Messages
+- [x] 68. Write Clear Helpful Error Messages (n/a) — toast.error(err.message) with specific fallbacks (e.g. "Invalid or expired invite"); Clerk handles auth-form errors with descriptive copy.
 - [ ] 69. Polish Input Field Design and States
 - [ ] 70. Add Smart Input Masking and Formatting
 - [ ] 71. Add Form Autosave and Recovery
