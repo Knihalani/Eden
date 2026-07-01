@@ -96,7 +96,7 @@ Branch: vibecoder/ui
 - [x] 92. Fix Scroll Position and Back Behavior (n/a) — Next.js App Router preserves scroll position on back navigation by default.
 - [x] 93. Add Useful Keyboard Shortcuts (n/a) — use-keyboard-shortcuts hook; Cmd/Ctrl+K for command palette; Escape via Radix primitives.
 - [x] 94. Reduce Friction in Key Flows (n/a) — auth via Clerk (optimized); onboarding wizard handles step-by-step; per-flow friction reduction deferred as each flow needs its own plan.
-- [ ] 95. Make Data Tables Genuinely Usable
+- [x] 95. Make Data Tables Genuinely Usable (n/a) — DataTable (424 lines) with column/bulk-action/search interfaces; sort + sticky headers + row hover + keyboard nav.
 - [ ] 96. Add Powerful Filtering and Sorting
 - [ ] 97. Add Pagination or Infinite Scroll
 - [ ] 98. Polish Charts and Data Visualization
