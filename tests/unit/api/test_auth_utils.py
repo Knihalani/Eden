@@ -155,6 +155,38 @@ class TestJWTTokens:
         decoded = decode_access_token(token)
         assert decoded["token_version"] == 7
 
+    def test_token_missing_sub_is_rejected(self, test_settings):
+        """A token without a ``sub`` claim is rejected even if the
+        signature is valid — required-claim enforcement."""
+        from jose import jwt
+        token = jwt.encode(
+            {"exp": 9999999999, "iat": 0},
+            test_settings.jwt_secret,
+            algorithm="HS256",
+        )
+        assert decode_access_token(token) is None
+
+    def test_token_missing_exp_is_rejected(self, test_settings):
+        """A token without an ``exp`` claim is rejected."""
+        from jose import jwt
+        token = jwt.encode(
+            {"sub": "user-123", "iat": 0},
+            test_settings.jwt_secret,
+            algorithm="HS256",
+        )
+        assert decode_access_token(token) is None
+
+    def test_token_missing_iat_is_rejected(self, test_settings):
+        """A token without an ``iat`` claim is rejected — the
+        idle-timeout check in get_current_user depends on it."""
+        from jose import jwt
+        token = jwt.encode(
+            {"sub": "user-123", "exp": 9999999999},
+            test_settings.jwt_secret,
+            algorithm="HS256",
+        )
+        assert decode_access_token(token) is None
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Password Strength Validation
