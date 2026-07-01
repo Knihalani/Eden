@@ -23,7 +23,7 @@
 - [x] 19. Store auth tokens safely client-side — Clerk manages auth tokens in secure HttpOnly cookies; portal never reads raw JWT; localStorage only used for UI state (collapse, builder drafts)
 - [x] 20. Issue short-lived access tokens — Clerk path has its own refresh-token model; Eden-issued JWTs are 24h (security 14) + 30min idle; no separate refresh token, deliberate simplification
 - [x] 21. Rotate refresh tokens on use (n/a — no refresh tokens; Clerk handles its own)
-- [ ] 22. Build a token revocation mechanism
+- [x] 22. Build a token revocation mechanism — per-user token_version column bumped on login/logout/password-change/reset/delete/recover; get_current_user rejects mismatched versions on every request
 - [ ] 23. Enforce authorization on the server
 - [ ] 24. Fix insecure direct object references
 - [ ] 25. Implement role-based access control
