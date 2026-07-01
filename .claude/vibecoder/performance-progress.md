@@ -83,6 +83,7 @@ Branch: vibecoder/performance
 - [x] 79. Use database connection pooling (n/a — asyncpg.create_pool with min_size/max_size already configured (storage/postgres.py:55-112); S23 fix B-3 tuned pool timeout=10 + max_inactive_connection_lifetime=300.)
 - [x] 80. Avoid loading whole tables into memory (n/a — most queries cap with LIMIT 50–200; remaining patterns are filtered COUNT(*) (quality.py:266-310) and fetchval (cleanup.py:218). No fetch("SELECT * FROM x") without LIMIT found.)
 - [x] 81. Denormalize critical read paths (n/a — columnar engine + hourly/daily rollups of usage_events / judge_scores / telemetry_events already denormalize the hottest dashboard reads. Adding more denormalization would need explicit hot-path identification.)
+- [x] 82. Route reads to a replica (n/a — Northflank single Postgres instance; no read-replica URL configured in config.py. Routing reads to a replica is a deploy-time decision (Northflank addon creation + ORM session routing). Re-evaluate when write contention is measured.)
 - [ ] 2. Memoize expensive computed values
 - [ ] 3. Stabilize callbacks passed to children
 - [ ] 4. Split bloated global state
