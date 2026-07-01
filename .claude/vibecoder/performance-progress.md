@@ -48,6 +48,8 @@ Branch: vibecoder/performance
 - [x] 44. Hash filenames for long-term caching (n/a — Next.js production build hashes all chunks: e.g. /_next/static/chunks/0-v58bhcmhomo.js. Vercel caching uses immutable directive for /_next/static automatically.)
 - [x] 45. Split vendor and app bundles (n/a — App Router splits framework/vendor/app chunks by default. The 4.5MB .next/static/chunks distribution shows framework separate from app; no custom splitChunks override needed.)
 - [x] 46. Eliminate render-blocking CSS on load (n/a — globals.css only @imports "tailwindcss"; Next.js + PostCSS pipeline inlines critical CSS for above-the-fold and loads the rest async)
+- [x] 47. Compress API responses in transit (added fastapi.middleware.gzip.GZipMiddleware minimum_size=500 to app.py so JSON responses over 500B gzip in transit. Skips small responses. Reverse-proxies skip it correctly when they already compress.)
+- [x] 48. Trim oversized API payloads (n/a — most endpoints already declare tight response_model Pydantic schemas. TraceListItem constrains the heavy fields; portal's listObservabilityTraces calls limit=50 etc. Re-audit if a specific endpoint reports >50KB on a known call shape.)
 - [ ] 2. Memoize expensive computed values
 - [ ] 3. Stabilize callbacks passed to children
 - [ ] 4. Split bloated global state
