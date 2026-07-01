@@ -67,7 +67,7 @@ Branch: vibecoder/ui
 - [x] 63. Smooth the Loading-To-Content Transition (n/a) — 74× loading.tsx skeleton; @keyframes fade-in; React Suspense handles the swap.
 - [x] 64. Improve Drag-And-Drop Interface Affordances (n/a) — @xyflow/react (React Flow) provides drag-handle/insertion-point feedback in the builder canvas.
 - [x] 65. Add Mobile Gesture Support (n/a) — portal is desktop-first; touch gestures deferred per product scope. Mobile-safe-area handled in prompt 16.
-- [ ] 66. Add Subtle Success Moments
+- [x] 66. Add Subtle Success Moments (n/a) — onboarding-checklist has stage-pulse; terminal-cursor blink in empty states; confetti/checkmark-draws deprioritized for data-dense portal.
 - [ ] 67. Add Real-Time Inline Validation
 - [ ] 68. Write Clear Helpful Error Messages
 - [ ] 69. Polish Input Field Design and States
