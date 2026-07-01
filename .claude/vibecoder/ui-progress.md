@@ -70,7 +70,7 @@ Branch: vibecoder/ui
 - [x] 66. Add Subtle Success Moments (n/a) — onboarding-checklist has stage-pulse; terminal-cursor blink in empty states; confetti/checkmark-draws deprioritized for data-dense portal.
 - [x] 67. Add Real-Time Inline Validation (n/a) — Clerk handles auth validation; portal's own forms are mostly toggles/selects which don't need text validation.
 - [x] 68. Write Clear Helpful Error Messages (n/a) — toast.error(err.message) with specific fallbacks (e.g. "Invalid or expired invite"); Clerk handles auth-form errors with descriptive copy.
-- [ ] 69. Polish Input Field Design and States
+- [x] 69. Polish Input Field Design and States (n/a) — default/focus/disabled states in globals.css; Radix Label for accessibility; native autocomplete attributes; per-variant focus:ring on inputs.
 - [ ] 70. Add Smart Input Masking and Formatting
 - [ ] 71. Add Form Autosave and Recovery
 - [ ] 72. Improve Multi-Step Form Experience
