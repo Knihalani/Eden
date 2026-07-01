@@ -53,6 +53,7 @@ Branch: vibecoder/performance
 - [x] 49. Parallelize independent async requests (n/a — codebase uses Promise.all/await Promise.allSettled at all heavy fan-out points (observability landing, agents/[id], closed-loop, marketplace, multi-agent). No inline sequential awaits found that hit independent endpoints.)
 - [x] 50. Eliminate sequential request waterfalls (n/a — no await→await chains found across the portal. Server-side data fetching routes children-first depend on previous request data, which is intrinsic.)
 - [x] 51. Deduplicate concurrent identical requests (n/a — @tanstack/react-query installed via use-api-query.ts and query-provider.tsx; react-query's default 30s staleTime + in-flight dedupes GETs with identical query keys automatically)
+- [x] 52. Paginate large API responses (n/a — every portal list call passes a `limit` (typically 20–200). Backend's pagination contracts include limit + offset/total — no unbounded query returns used.)
 - [ ] 2. Memoize expensive computed values
 - [ ] 3. Stabilize callbacks passed to children
 - [ ] 4. Split bloated global state
