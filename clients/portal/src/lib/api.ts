@@ -128,6 +128,22 @@ async function fetchApi<T>(
       if (refreshed) response = await doFetch();
     }
 
+    // Transient (5xx / network) retry with exponential backoff +
+    // jitter. Capped at 2 retries so a struggling upstream never
+    // stalls the UI for more than ~1.5s before failing. GET / HEAD /
+    // OPTIONS only — POSTs and friends aren't retried for safety.
+    const transient = (s: number) => s >= 500 || s === 0 || s === 408 || s === 429;
+    const isIdempotent = method === "GET" || method === "HEAD" || method === "OPTIONS";
+    let attempt = 0;
+    while (transient(response.status) && attempt < 2 && isIdempotent && !stream) {
+      attempt += 1;
+      // Full jitter: random [0, base * 2^attempt) ms. 250ms base
+      // → 0–500ms after 1st retry, 0–1000ms after 2nd.
+      const backoff = Math.floor(Math.random() * 250 * 2 ** attempt);
+      await new Promise((r) => setTimeout(r, backoff));
+      response = await doFetch();
+    }
+
     if (!response.ok) {
       const error = await response.json().catch(
         () => ({ detail: `Request failed (${response.status})` }),
