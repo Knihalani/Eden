@@ -58,7 +58,7 @@ Branch: vibecoder/ui
 - [x] 54. Don't Rely on Color Alone (n/a) — StatusBadge pairs color with icons (CheckCircle2/XCircle/AlertTriangle/Clock/Circle). Status tokens are paired with semantic icons in every visual tier.
 - [x] 55. Add a Skip-To-Content Link (n/a) — rendered in (portal) layout line 354; .skip-to-content CSS class visually hidden until focused, then anchors to #main-content.
 - [x] 56. Fix Page Titles and Language (n/a) — `<html lang="en">` set; root metadata.title = "Eden — AI Environment Generation"; per-page metadata exports for child pages.
-- [ ] 57. Add Small Purposeful Micro-Interactions
+- [x] 57. Add Small Purposeful Micro-Interactions (n/a) — button:active scale(0.97), framer-motion in deps, --duration-fast (150ms)/--ease-out tokens, scale-in for command palette.
 - [ ] 58. Standardize Animation Timing and Easing
 - [ ] 59. Implement Smooth Page Transitions
 - [ ] 60. Animate Value and State Changes
