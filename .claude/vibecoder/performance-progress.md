@@ -76,6 +76,7 @@ Branch: vibecoder/performance
 - [x] 72. Add composite indexes for filters (n/a — composite indexes already plentiful (e.g. idx_agent_uploads_org_agent (org_id, agent_id), idx_org_scim_config_enabled (org_id, scim_enabled), idx_env_card_versions_card (card_id, version DESC)).)
 - [x] 73. Switch to cursor-based pagination (n/a — most list endpoints cap to 50–200 items per page so deep-offset pathology doesn't kick in. Switching to cursor is a contract change (response shape, client refactor across many pages). Re-evaluate when deep pagination actually surfaces in traffic.)
 - [x] 74. Profile and fix slow queries (n/a — no slow-query log middleware wired. Migration 011 added pg_stat_statements + a SET track_utility=on hook. Run pg_stat_statements on staging before any further index changes, don't speculatively add indexes to fast queries.)
+- [x] 75. Cache repeated read queries (n/a — @cached(ttl=N) Redis decorator in storage/redis.py:175 exists. Application is selective — adding blind caching would risk staleness on user-specific reads.)
 - [ ] 2. Memoize expensive computed values
 - [ ] 3. Stabilize callbacks passed to children
 - [ ] 4. Split bloated global state
