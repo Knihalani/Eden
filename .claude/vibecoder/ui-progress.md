@@ -44,7 +44,7 @@ Branch: vibecoder/ui
 - [x] 40. Prefetch Data on User Intent (n/a) — Next.js <Link> defaults to prefetch={true} (auto-prefetches routes on viewport/hover per perf audit).
 - [x] 41. Debounce and Throttle Costly Handlers (n/a) — marketplace 300ms debounce on query; usePolling for interval throttling (perf audit).
 - [x] 42. Optimize the Critical Rendering Path (n/a) — next/font auto-preloads, Tailwind CSS inlines critical, no inline <script> (perf audit).
-- [ ] 43. Audit Third-Party Script Performance
+- [x] 43. Audit Third-Party Script Performance (n/a) — Clerk is the only third-party script; auto-preconnects auth CDN (perf audit).
 - [ ] 44. Load Critical Content First
 - [ ] 45. Run a Full Accessibility Audit
 - [ ] 46. Make Everything Keyboard Navigable
