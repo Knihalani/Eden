@@ -43,6 +43,7 @@ Branch: vibecoder/performance
 - [x] 39. Analyze bundle composition for bloat (n/a — @next/bundle-analyzer not installed; ANALYZE=true build runs but no analyzer. Heap-spray check: 4.5MB total /tmp/chunks, top chunk 372KB. Re-install analyzer separately when a real bottleneck is reported.)
 - [x] 40. Defer and async non-critical scripts (n/a — no inline `<script>` tags in the document; Next.js emits its bundled scripts with `defer` by default)
 - [x] 41. Minify JS, CSS, and HTML (n/a — Next.js uses SWC to minify all client + server JS, CSS via PostCSS, HTML during static prerender. 369K largest chunk is minified output. Source maps in .next are stripped from client output.)
+- [x] 42. Lazy-initialize heavy client libraries (n/a — recharts + reactflow + fflate already page-scoped or dynamic-imported; framer-motion is the polish across page UIs and lazy-loading each page would gate animations on mount)
 - [ ] 2. Memoize expensive computed values
 - [ ] 3. Stabilize callbacks passed to children
 - [ ] 4. Split bloated global state
