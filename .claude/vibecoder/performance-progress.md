@@ -95,6 +95,7 @@ Branch: vibecoder/performance
 - [x] 91. Add a circuit breaker for slow deps (n/a — CircuitBreaker class at llm/client.py:57 with threshold=5 / timeout=60 covers OpenRouter LLM calls; settings.circuit_breaker_threshold configurable per deploy.)
 - [x] 92. Rate-limit to protect under load (n/a — TenantRateLimitMiddleware (api/app.py:431, defaults 60 req/60s) + QuotaEnforcementMiddleware (returns 429) + settings.rate_limit_enabled toggle for dev. Plus org-resource hard/soft quota enforcement.)
 - [x] 93. Compress and cache server templates (n/a — FastAPI returns JSON, no Jinja templates. Next.js uses RSC which stream + cache naturally via the App Router pipeline.)
+- [x] 94. Gracefully degrade non-critical features (n/a — InsightsCarousel renders `{insights.length > 0 && ...}`; OnboardingBanner returns null when state is null/legacy/done. Many lazy sections skip render until data arrives.)
 - [ ] 2. Memoize expensive computed values
 - [ ] 3. Stabilize callbacks passed to children
 - [ ] 4. Split bloated global state
