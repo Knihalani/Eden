@@ -10,8 +10,8 @@
 - [x] 6. Secure the password reset flow — migration 077 creates password_reset_tokens table (was referenced but not declared); stores SHA-256 of token; reset burns the token + bumps token_version to invalidate sessions; 5 migration tests
 - [x] 7. Regenerate sessions to block fixation — every Eden JWT now carries fresh jti; /auth/login bumps token_version; get_current_user rejects tokens whose version doesn't match DB; 3 new tests, 80 total passing
 - [x] 8. Add multi-factor authentication support — TOTP MFA already shipped (pyotp, encrypted secret, QR provisioning); added 10 single-use recovery codes (hashed, migration 078), wired all 3 totp_*_limiter instances, added /auth/2fa/recover that bumps token_version + burns all codes; 4 migration tests, 86 total passing
-- [ ] 9. Compare credentials in constant time
-- [ ] 10. Harden the remember-me feature
+- [x] 9. Compare credentials in constant time — SCIM token compare was the only non-constant-time secret check; switched to hmac.compare_digest; audited all other secret compares (webhooks/clerk/metrics/github all already constant-time)
+- [x] 10. Harden the remember-me feature (n/a — no remember-me feature; session is JWT cookie only)
 - [ ] 11. Add bot protection to forms
 - [ ] 12. Throttle password reset and verification emails
 - [ ] 13. Set secure session cookie flags

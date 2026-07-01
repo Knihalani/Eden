@@ -82,11 +82,21 @@ async def _check_rate_limit(limiter, key: str) -> None:
 
 
 class SignupRequest(BaseModel):
-    """Request schema for user signup."""
+    """Request schema for user signup.
+
+    The ``website`` field is a honeypot: a real user never sees it,
+    a bot fills every field it finds. Any non-empty value causes
+    the signup to be silently dropped (200 + fake success, so the
+    bot can't tell it was caught).
+    """
 
     email: EmailStr
     password: str = Field(min_length=8)
     name: str = Field(min_length=1, max_length=100)
+    # Honeypot — must be empty. Style the input with display:none
+    # in the portal; legitimate users never fill it; bots that
+    # auto-fill every input always do.
+    website: str | None = Field(default=None, max_length=200)
 
 
 class SignupResponse(BaseModel):
@@ -158,6 +168,29 @@ async def signup(request: SignupRequest, response: Response, req: Request):
     """Create a new user account."""
     # Throttle signups per IP to prevent mass account creation.
     await _check_rate_limit(signup_limiter, _client_ip(req))
+
+    # Honeypot defence: if the invisible ``website`` field is filled,
+    # the submission is almost certainly from a bot that auto-fills
+    # every form field. Return the same generic 202 a legitimate
+    # user gets, but skip the database write — the bot can't tell
+    # it was caught.
+    if request.website:
+        logger.info(
+            "signup honeypot triggered from ip=%s email=%s",
+            _client_ip(req),
+            request.email,
+        )
+        from fastapi.responses import JSONResponse
+        return JSONResponse(
+            status_code=status.HTTP_202_ACCEPTED,
+            content={
+                "message": (
+                    "If that email is not already registered, an account "
+                    "has been created. Check your email to verify before "
+                    "signing in."
+                ),
+            },
+        )
 
     # Enforce password strength policy before hitting the DB. The
     # Pydantic `min_length=8` only checks length; the strength
