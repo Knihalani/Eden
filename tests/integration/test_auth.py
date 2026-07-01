@@ -66,6 +66,19 @@ class TestAuthSignup:
         assert "message" in body
         assert "If that email is not already registered" in body["message"]
 
+    def test_signup_honeypot_drops_bot_submission(self, api_client: TestClient):
+        """A submission with the invisible ``website`` field filled is
+        a bot — return 202 + generic message, but do NOT touch the DB.
+        The bot cannot distinguish this from a real signup."""
+        response = api_client.post("/auth/signup", json={
+            "email": "bot@spam.example",
+            "password": "Str0ng!Pass#2024",
+            "name": "Bot McSpam",
+            "website": "http://spam.example/",
+        })
+        assert response.status_code == 202
+        assert "If that email is not already registered" in response.json()["message"]
+
     def test_signup_rate_limit(self, api_client: TestClient):
         """Too many signups from same IP trigger 429."""
         # Note: rate limiter state is in-memory for tests, so rapid
