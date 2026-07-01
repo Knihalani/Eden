@@ -51,7 +51,7 @@ Branch: vibecoder/ui
 - [x] 47. Add Clear Visible Focus Indicators (n/a) — global :focus-visible box-shadow ring (terminal green, 2px+4px two-tone); per-variant focus:ring-* in button. No focus:outline:none without a replacement.
 - [x] 48. Make Forms Fully Accessible (n/a) — aria-describedby/aria-invalid used in 5+ files; @radix-ui/react-label in deps for proper label association.
 - [x] 49. Use Proper Semantic HTML (n/a) — 52× section, 13× nav, 11× main, 11× header, 9× aside, 3× footer in use. Strong semantic landmark structure.
-- [ ] 50. Add Meaningful Image Alt Text
+- [x] 50. Add Meaningful Image Alt Text (n/a) — all 7× img/Image usages have descriptive alt text. QR = "2FA QR code — scan with your authenticator app"; profile = "Your profile photo".
 - [ ] 51. Respect Reduced Motion Preferences
 - [ ] 52. Announce Dynamic Changes to Screen Readers
 - [ ] 53. Build Fully Accessible Modals
