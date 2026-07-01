@@ -17,7 +17,7 @@ Branch: vibecoder/ui
 - [x] 13. Build a Flexible Responsive Grid (n/a) — Tailwind grid utilities with responsive breakpoints (54× sm, 34× lg, 31× md, 5× xl). Container max-width via `mx-auto max-w-7xl` (auth page) / `max-w-screen-xl` (dashboard).
 - [x] 14. Enlarge Mobile Touch Targets — added @media (max-width: 767px) rule that uses a pseudo-element trick to extend the hit area of buttons/links/labels to 44×44px without changing visual size or layout. `.no-bump` opt-out for dense toolbars. Buttons stay at h-10/h-8 visually but receive a 44px hit area on touch.
 - [x] 15. Eliminate Cumulative Layout Shift (n/a) — perf audit covered: next/image with explicit dims (Logo + transcript 128×128 + QR 192×192), next/font Geist display:swap + subset, 74× loading.tsx skeleton files, avatar inside w-20 h-20 wrapper.
-- [ ] 16. Respect Mobile Safe Area Insets
+- [x] 16. Respect Mobile Safe Area Insets — added `viewportFit: "cover"` to root viewport export so `env(safe-area-inset-*)` resolves on iOS/Android. One existing call site (settings page) already uses `pb-[env(safe-area-inset-bottom)]`; ChatSidebar's fixed bottom-4 right-4 toggle relies on viewport-fit=cover to clear the home indicator.
 - [ ] 17. Build a Smart Sticky Header
 - [ ] 18. Balance Content Density and Whitespace
 - [ ] 19. Use Container Queries for Components
