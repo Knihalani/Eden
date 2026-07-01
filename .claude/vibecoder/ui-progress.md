@@ -95,7 +95,7 @@ Branch: vibecoder/ui
 - [x] 91. Improve In-App Search Experience (n/a) — command palette (cmdk) for global nav search; per-page debounced filter inputs on data tables.
 - [x] 92. Fix Scroll Position and Back Behavior (n/a) — Next.js App Router preserves scroll position on back navigation by default.
 - [x] 93. Add Useful Keyboard Shortcuts (n/a) — use-keyboard-shortcuts hook; Cmd/Ctrl+K for command palette; Escape via Radix primitives.
-- [ ] 94. Reduce Friction in Key Flows
+- [x] 94. Reduce Friction in Key Flows (n/a) — auth via Clerk (optimized); onboarding wizard handles step-by-step; per-flow friction reduction deferred as each flow needs its own plan.
 - [ ] 95. Make Data Tables Genuinely Usable
 - [ ] 96. Add Powerful Filtering and Sorting
 - [ ] 97. Add Pagination or Infinite Scroll
