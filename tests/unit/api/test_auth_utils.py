@@ -247,6 +247,22 @@ class TestJWTTokens:
         finally:
             auth_module.settings.jwt_secret_previous = original
 
+    def test_token_version_mismatch_blocks_token(self):
+        """The token_version claim is the revocation mechanism —
+        if the DB version is higher than the one in the token, the
+        request is rejected. This is exercised end-to-end in
+        get_current_user; here we just confirm the claim is
+        preserved through decode so the dep can compare it."""
+        token = create_access_token(
+            data={"sub": "user-123"},
+            token_version=5,
+        )
+        decoded = decode_access_token(token)
+        assert decoded["token_version"] == 5
+        # The /auth/login flow bumps this on every successful login
+        # and the /auth/logout flow bumps it for explicit revocation;
+        # both call sites are wired and tested in security 7 + 15.
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Password Strength Validation

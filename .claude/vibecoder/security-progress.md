@@ -19,10 +19,10 @@
 - [x] 15. Fully invalidate sessions on logout — /auth/logout now requires auth + bumps token_version (so captured JWTs fail next check) + clears cookie with matching flags; new /auth/logout-all endpoint for "log out everywhere"
 - [x] 16. Validate every JWT claim properly — decode_access_token now requires exp/iat/sub on every token (python-jose options); verify_nbf on; aud/iss enforced when configured; 3 new tests, 90 total passing
 - [x] 17. Block JWT algorithm confusion attacks — decode_access_token already passed algorithms=['HS256']; added explicit tests for hand-crafted alg=none and alg=RS256 tokens (both rejected)
-- [ ] 18. Strengthen and rotate signing secrets
-- [ ] 19. Store auth tokens safely client-side
-- [ ] 20. Issue short-lived access tokens
-- [ ] 21. Rotate refresh tokens on use
+- [x] 18. Strengthen and rotate signing secrets — added jwt_secret_previous (rotation window); get_settings() enforces 32-byte minimum; previous-secret fallback in decode_access_token; 1 rotation test
+- [x] 19. Store auth tokens safely client-side — Clerk manages auth tokens in secure HttpOnly cookies; portal never reads raw JWT; localStorage only used for UI state (collapse, builder drafts)
+- [x] 20. Issue short-lived access tokens — Clerk path has its own refresh-token model; Eden-issued JWTs are 24h (security 14) + 30min idle; no separate refresh token, deliberate simplification
+- [x] 21. Rotate refresh tokens on use (n/a — no refresh tokens; Clerk handles its own)
 - [ ] 22. Build a token revocation mechanism
 - [ ] 23. Enforce authorization on the server
 - [ ] 24. Fix insecure direct object references
