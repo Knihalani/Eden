@@ -67,6 +67,7 @@ Branch: vibecoder/performance
 - [x] 63. Choose sensible cache TTLs (n/a — TTLs documented per concern: Clerk user cache 5min (clerk_client.py:46), idempotency 24h (idempotency.py:33), rate-limit windows 60s (tenant_rate_limit.py), React Query 60s stale / 5min gc (query-provider.tsx), @lru_cache unbounded for modules, maxsize-bounded for repeated args.)
 - [x] 64. Invalidate caches on writes (n/a — explicit invalidation hooks in place: pii_policy route → invalidate_policy(tenant_id), user writes → invalidate_user_cache(clerk_id), graph writes → invalidate_entity(entity_id), optimization/cache has Invalidate(). React Query mutations invalidate via setQueryData.)
 - [x] 65. Add an in-memory cache layer (n/a — Redis (storage/redis.py) wired for rate limiting + idempotency; @lru_cache for module singletons; REDIS_URL fallback to in-memory token buckets. Selective but in place.)
+- [x] 66. Cache rendered pages or fragments (n/a — marketing pages are server-rendered + Vercel CDN + Next.js ISR-style prerender. Portal pages are auth-gated + dynamic, server-streamed live data, so caching the HTML shell would just delay the user's first paint.)
 - [ ] 2. Memoize expensive computed values
 - [ ] 3. Stabilize callbacks passed to children
 - [ ] 4. Split bloated global state
