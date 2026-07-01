@@ -54,6 +54,8 @@ Branch: vibecoder/performance
 - [x] 50. Eliminate sequential request waterfalls (n/a — no await→await chains found across the portal. Server-side data fetching routes children-first depend on previous request data, which is intrinsic.)
 - [x] 51. Deduplicate concurrent identical requests (n/a — @tanstack/react-query installed via use-api-query.ts and query-provider.tsx; react-query's default 30s staleTime + in-flight dedupes GETs with identical query keys automatically)
 - [x] 52. Paginate large API responses (n/a — every portal list call passes a `limit` (typically 20–200). Backend's pagination contracts include limit + offset/total — no unbounded query returns used.)
+- [x] 53. Add timeouts and retry with backoff (api.ts: added exp-backoff (250ms base, full jitter) for transient 5xx/408/429/network on idempotent methods. 30s default timeout + 1-retry-on-401 was already in place.)
+- [x] 54. Cache GET responses with validators (n/a — selective Cache-Control + ETag decorators on public/read-mostly endpoints (media, trace_quality, ai_agent, gateway). Per-org routes intentionally uncached because they're user-specific. Broad policy change would risk private-data leaks; needs explicit auth-team review.)
 - [ ] 2. Memoize expensive computed values
 - [ ] 3. Stabilize callbacks passed to children
 - [ ] 4. Split bloated global state
