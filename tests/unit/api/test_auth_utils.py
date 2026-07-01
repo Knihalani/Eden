@@ -226,6 +226,27 @@ class TestJWTTokens:
         token = f"{header}.{payload}.fake-signature-bytes"
         assert decode_access_token(token) is None
 
+    def test_previous_secret_accepted_during_rotation(self, test_settings):
+        """During a rotation window, tokens signed with the previous
+        secret remain valid. New tokens are signed with the primary."""
+        from jose import jwt
+        previous_secret = "an-old-secret-from-the-prior-deployment-window"
+        token = jwt.encode(
+            {"sub": "user-123", "exp": 9999999999, "iat": 0},
+            previous_secret,
+            algorithm="HS256",
+        )
+        # Simulate the rotation window: monkeypatch settings.
+        from eden.api.utils import auth as auth_module
+        original = auth_module.settings.jwt_secret_previous
+        auth_module.settings.jwt_secret_previous = previous_secret
+        try:
+            decoded = decode_access_token(token)
+            assert decoded is not None
+            assert decoded["sub"] == "user-123"
+        finally:
+            auth_module.settings.jwt_secret_previous = original
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Password Strength Validation

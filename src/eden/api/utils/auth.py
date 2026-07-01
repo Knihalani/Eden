@@ -160,6 +160,19 @@ def decode_access_token(token: str) -> dict | None:
         )
         return payload
     except JWTError as exc:
+        # Signature failure against the primary key — try the
+        # previous key (rotation window). If that also fails, the
+        # token is invalid.
+        if settings.jwt_secret_previous:
+            try:
+                payload = jwt.decode(
+                    token,
+                    settings.jwt_secret_previous,
+                    **decode_kwargs,
+                )
+                return payload
+            except JWTError:
+                pass
         # Log only at debug — invalid tokens are routine (expired
         # sessions, manual API calls) and would flood the warning
         # stream if logged higher.
