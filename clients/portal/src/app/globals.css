@@ -233,6 +233,20 @@
   --ease-in: cubic-bezier(0.32, 0, 0.67, 0);
   --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
 
+  /* Z-index scale (ui-audit prompt 20). Documented tiers so future
+   * call sites don't reach for arbitrary z-9999. Distribution in
+   * source: z-0 (1), z-10 (12) sticky nav/table headers, z-20 (3)
+   * dropdowns, z-30 (6) topbar, z-40 (6) modal/sheets, z-50 (41)
+   * floating overlays (ChatSidebar, notifications, command palette).
+   * The grain overlay uses z-[9999] but is pointer-events:none +
+   * aria-hidden, so it can't trap clicks. */
+  --z-base: 0;
+  --z-sticky: 10;
+  --z-dropdown: 20;
+  --z-topbar: 30;
+  --z-modal: 40;
+  --z-overlay: 50;
+
   /* shadcn / legacy compatibility aliases (map to canonical tokens) */
   --surface: var(--bg-primary);
   --background: var(--bg-secondary);

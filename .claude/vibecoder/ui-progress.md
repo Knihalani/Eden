@@ -20,7 +20,7 @@ Branch: vibecoder/ui
 - [x] 16. Respect Mobile Safe Area Insets — added `viewportFit: "cover"` to root viewport export so `env(safe-area-inset-*)` resolves on iOS/Android. One existing call site (settings page) already uses `pb-[env(safe-area-inset-bottom)]`; ChatSidebar's fixed bottom-4 right-4 toggle relies on viewport-fit=cover to clear the home indicator.
 - [x] 17. Build a Smart Sticky Header (n/a) — sidebar is primary nav (hiding it would defeat the purpose); topbar is sticky top-0 z-30 and only ~56px tall (hiding it saves little vertical space). Hide-on-scroll pattern doesn't apply to this layout.
 - [x] 18. Balance Content Density and Whitespace (n/a) — tier-appropriate: data tables use `py-2.5 px-3 text-xs` (compact for scanning), cards use `p-4`/`p-6` (medium for content groups), auth forms use `p-7` (generous for focus). Hierarchy reads correctly across data-dense and form surfaces.
-- [ ] 19. Use Container Queries for Components
+- [x] 19. Use Container Queries for Components (n/a) — fixed sidebar+main layout means components have predictable context; viewport-based responsive (sm/md/lg) is sufficient. Re-evaluate when components get reused inside sidebars or modals where the parent container is genuinely variable.
 - [ ] 20. Untangle Z-Index Stacking Issues
 - [ ] 21. Establish a Modular Type Scale
 - [ ] 22. Add Fluid Responsive Typography
