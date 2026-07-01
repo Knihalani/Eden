@@ -45,6 +45,7 @@ Branch: vibecoder/performance
 - [x] 41. Minify JS, CSS, and HTML (n/a — Next.js uses SWC to minify all client + server JS, CSS via PostCSS, HTML during static prerender. 369K largest chunk is minified output. Source maps in .next are stripped from client output.)
 - [x] 42. Lazy-initialize heavy client libraries (n/a — recharts + reactflow + fflate already page-scoped or dynamic-imported; framer-motion is the polish across page UIs and lazy-loading each page would gate animations on mount)
 - [x] 43. Replace heavy libraries with lighter ones (n/a — react-syntax-highlighter swapped out (prompt 37). Remaining deps are purpose-built: recharts for charts, @xyflow for graph editor, framer-motion for animations, @tanstack/react-query for client cache, fflate for tarball, Clerk for auth, Radix for a11y primitives. No lighter alt without rewriting.)
+- [x] 44. Hash filenames for long-term caching (n/a — Next.js production build hashes all chunks: e.g. /_next/static/chunks/0-v58bhcmhomo.js. Vercel caching uses immutable directive for /_next/static automatically.)
 - [ ] 2. Memoize expensive computed values
 - [ ] 3. Stabilize callbacks passed to children
 - [ ] 4. Split bloated global state
