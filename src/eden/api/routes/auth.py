@@ -1,6 +1,7 @@
 """Authentication routes for Eden client portal."""
 
 import base64
+import hashlib
 import io
 import logging
 import os
@@ -1564,14 +1565,18 @@ async def forgot_password(
             request.email,
         )
         if user:
+            # Crypto-strong random token; SHA-256 hash is what gets
+            # stored. The plaintext only lives in the email link.
             token = secrets.token_urlsafe(32)
+            token_hash = hashlib.sha256(token.encode("utf-8")).hexdigest()
             expires = datetime.now(timezone.utc) + timedelta(hours=1)
             await client.execute(
                 """
-                INSERT INTO password_reset_tokens (user_id, token, expires_at, used_at, created_at)
+                INSERT INTO password_reset_tokens
+                    (user_id, token_hash, expires_at, used_at, created_at)
                 VALUES ($1, $2, $3, NULL, $3)
                 """,
-                user["id"], token, expires,
+                user["id"], token_hash, expires,
             )
             # Dispatch email (best-effort; don't fail the request on email error).
             try:
@@ -1596,15 +1601,20 @@ async def reset_password(
 ):
     """Complete a password reset with a one-time token.
 
-    Real implementation: verify the token, look up the user,
-    validate the new password, update the hash, rotate
-    token_version. The test contract only exercises the failure
-    paths (invalid token, weak password) so this stub returns the
-    right errors without a real token store.
+    Flow:
+      1. Validate the new password (length, complexity, common-list)
+         FIRST so a weak password doesn't leak whether the token is
+         real (a common side-channel in reset flows).
+      2. Hash the submitted token and look it up in
+         ``password_reset_tokens`` — plaintext tokens are never
+         stored.
+      3. Reject if the row is missing, expired, or already used.
+      4. On success: update the user's password hash, mark the
+         token used, and bump ``token_version`` so any pre-existing
+         JWTs are rejected at next request.
     """
-    # Validate the new password strength FIRST so a weak password
-    # doesn't leak whether the token is real (a common side-channel
-    # in reset flows that always 400 on invalid token).
+    # 1) Password strength FIRST so we don't leak token validity
+    # through the order of error responses.
     try:
         validate_password_strength(request.password)
     except PasswordValidationError as exc:
@@ -1617,6 +1627,59 @@ async def reset_password(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Invalid or expired reset token",
+        )
+
+    client = await get_postgres_client()
+    token_hash = hashlib.sha256(request.token.encode("utf-8")).hexdigest()
+    row = await client.fetchrow(
+        """
+        SELECT id, user_id, expires_at, used_at
+          FROM password_reset_tokens
+         WHERE token_hash = $1
+        """,
+        token_hash,
+    )
+    if row is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid or expired reset token",
+        )
+
+    from datetime import datetime, timezone
+
+    now = datetime.now(timezone.utc)
+    if row["used_at"] is not None or row["expires_at"] <= now:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid or expired reset token",
+        )
+
+    # 4) Burn the token, hash the new password, and bump token_version
+    # so any pre-existing JWTs (which include the old version) are
+    # rejected at next request — kills any session the attacker may
+    # have if they intercepted the email.
+    new_hash = hash_password(request.password)
+    async with client.transaction():
+        await client.execute(
+            """
+            UPDATE password_reset_tokens
+               SET used_at = $1
+             WHERE id = $2
+            """,
+            now,
+            row["id"],
+        )
+        await client.execute(
+            """
+            UPDATE users
+               SET password_hash = $1,
+                   token_version = COALESCE(token_version, 0) + 1,
+                   failed_login_count = 0,
+                   locked_until = NULL
+             WHERE id = $2
+            """,
+            new_hash,
+            row["user_id"],
         )
 
     return {"message": "Password has been reset"}

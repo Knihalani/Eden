@@ -54,9 +54,23 @@ def upgrade() -> None:
             nullable=True,
         ),
     )
+    # token_version is bumped on password change / reset / account
+    # deletion. The change-password route has used it since 2026-06
+    # without a declaring migration — this commit adds the column
+    # so the existing UPDATE statements stop failing in fresh DBs.
+    op.add_column(
+        "users",
+        sa.Column(
+            "token_version",
+            sa.Integer(),
+            nullable=False,
+            server_default="0",
+        ),
+    )
 
 
 def downgrade() -> None:
+    op.drop_column("users", "token_version")
     op.drop_column("users", "last_failed_login_at")
     op.drop_column("users", "locked_until")
     op.drop_column("users", "failed_login_count")
