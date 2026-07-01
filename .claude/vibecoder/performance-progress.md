@@ -18,6 +18,7 @@ Branch: vibecoder/performance
 - [x] 14. Add skeleton loading placeholders (n/a) — 74 loading.tsx files for 81 pages; missing 7 are marketing docs (DPA/privacy/security/terms/docs) + auth form pages (login/signup/reset-password) where skeletons add no value.
 - [x] 15. Apply optimistic UI updates (use-notifications: markAsRead / markAllAsRead / deleteNotification now optimistic — flip is_read + delete from list immediately, roll back on server error)
 - [x] 16. Prefetch the next likely route (n/a) — Next.js App Router `<Link>` defaults to `prefetch={true}` (auto-prefetches routes on viewport/hover). 44 routes use programmatic `router.push` (modal flows, after action) — adding router.prefetch to each is overkill for the page-load speedup it provides.
+- [x] 17. Stream server-rendered HTML progressively (n/a) — Next.js App Router streams server components by default. SelectedTraceCard and reset-password already wrap search-param reads in <Suspense fallback={null}>. There is no buffered SSR path to migrate.
 - [ ] 2. Memoize expensive computed values
 - [ ] 3. Stabilize callbacks passed to children
 - [ ] 4. Split bloated global state
