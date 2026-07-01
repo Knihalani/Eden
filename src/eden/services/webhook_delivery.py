@@ -496,8 +496,9 @@ class WebhookDeliveryService:
                 row["signature_v1"],
             )
         except Exception as exc:
-            logger.debug(
-                "webhook_delivery: _move_to_dlq failed: %s", exc
+            logger.error(
+                "webhook_delivery: _move_to_dlq failed (delivery_id=%s): %s",
+                delivery_id, exc,
             )
 
     async def replay_dlq(self, dlq_id: str) -> dict[str, Any]:
