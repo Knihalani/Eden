@@ -136,9 +136,13 @@ async def get_current_org_scim(
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    # Compare token against stored hash
+    # Compare token against stored hash with a constant-time check
+    # (hmac.compare_digest) so a timing side-channel cannot reveal
+    # how many leading bytes of the submitted token were correct.
     token_hash = hashlib.sha256(bearer_token.encode()).hexdigest()
-    if token_hash != row["scim_token_hash"]:
+    import hmac as _hmac
+
+    if not _hmac.compare_digest(token_hash, row["scim_token_hash"] or ""):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid SCIM bearer token",
