@@ -62,6 +62,7 @@ Branch: vibecoder/performance
 - [x] 58. Move reads to the edge (n/a — Vercel auto-CDNs static (prompt 35). API routes are Node runtime against Northflank Postgres; moving to Edge would require Clerk-only deps + a separate read-replica path. Architecture decision, not a perf fix.)
 - [x] 59. Add a client-side request cache (n/a — TanStack Query IS the client cache: useApiQuery + QueryProvider (staleTime=60s, gcTime=5min). Also has the in-flight Promise dedup layer in lib/api.ts. Re-visiting screens reuses cached data automatically.)
 - [x] 60. Add a server cache for hot data (n/a — no fastapi-cache2 or Redis-decorator layer wired. @lru_cache is module-level (settings + LLM clients), not request-level hot data. Adding a decorator layer is broad + needs infra review for cache-poisoning across orgs.)
+- [x] 61. Set correct Cache-Control headers (n/a — selective Cache-Control already applied per route concern: media (private, max-age=86400), trace_quality (private, max-age=300 + ETag), ai_agent + gateway + replay (no-cache for streaming), everything else implicit no-store via per-user responses.)
 - [ ] 2. Memoize expensive computed values
 - [ ] 3. Stabilize callbacks passed to children
 - [ ] 4. Split bloated global state
