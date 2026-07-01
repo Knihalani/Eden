@@ -71,6 +71,7 @@ Branch: vibecoder/performance
 - [x] 67. Warm caches for hot paths (n/a — lifespan() in app.py:229 already calls initialize_kb() and probes Qdrant at startup. @lru_cache singletons + Redis idempotency warm on first hit. Adding speculative startup warming for arbitrary endpoints risks cold-start overshoot.)
 - [x] 68. Add a service worker asset cache (n/a — public/service-worker.js already pre-caches "/", "/dashboard", "/jobs", "/settings", "/login" + API routes under "eden-portal-v1" + "eden-api-v1". skipWaiting + clients.claim idioms are correct.)
 - [x] 69. Index frequently queried columns (n/a — 253 CREATE INDEX statements across 41 migrations. Indexing is mature.)
+- [x] 70. Fix N+1 query patterns (n/a — no obvious fetchrow-in-for-loop patterns found. SQLAlchemy / asyncpg code uses eager-load + batched queries; detectors fetch one canonical row each. Re-assess if a slow-query log flags a single dominant pattern.)
 - [ ] 2. Memoize expensive computed values
 - [ ] 3. Stabilize callbacks passed to children
 - [ ] 4. Split bloated global state
