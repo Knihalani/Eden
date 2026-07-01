@@ -48,7 +48,7 @@ Branch: vibecoder/ui
 - [x] 44. Load Critical Content First (n/a) — 74× loading.tsx skeletons for 91% of pages (perf audit).
 - [x] 45. Run a Full Accessibility Audit (n/a) — 357× aria-label, 96× role, 9× aria-labelledby, focus-visible ring, skip-to-content, semantic landmarks, Radix primitives for dialogs/menus/tabs.
 - [x] 46. Make Everything Keyboard Navigable (n/a) — Radix primitives implement ARIA keyboard patterns (arrow keys, Escape, Home/End); native button elements throughout; no keyboard traps.
-- [ ] 47. Add Clear Visible Focus Indicators
+- [x] 47. Add Clear Visible Focus Indicators (n/a) — global :focus-visible box-shadow ring (terminal green, 2px+4px two-tone); per-variant focus:ring-* in button. No focus:outline:none without a replacement.
 - [ ] 48. Make Forms Fully Accessible
 - [ ] 49. Use Proper Semantic HTML
 - [ ] 50. Add Meaningful Image Alt Text
