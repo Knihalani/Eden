@@ -93,7 +93,7 @@ Branch: vibecoder/ui
 - [x] 89. Show Clear Active Location Indicators (n/a) — .nav-item.active: 2px left bar + accent bg + accent text + terminal icon glow; aria-current via Link active matching.
 - [x] 90. Add Breadcrumbs for Deep Navigation (n/a) — components/ui/breadcrumb.tsx + lib/breadcrumbs.ts central config; per-page breadcrumb data.
 - [x] 91. Improve In-App Search Experience (n/a) — command palette (cmdk) for global nav search; per-page debounced filter inputs on data tables.
-- [ ] 92. Fix Scroll Position and Back Behavior
+- [x] 92. Fix Scroll Position and Back Behavior (n/a) — Next.js App Router preserves scroll position on back navigation by default.
 - [ ] 93. Add Useful Keyboard Shortcuts
 - [ ] 94. Reduce Friction in Key Flows
 - [ ] 95. Make Data Tables Genuinely Usable
