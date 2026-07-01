@@ -175,6 +175,14 @@
   --font-size-2xl: 1.5rem;
   --font-size-3xl: 1.875rem;
   --font-size-4xl: 2.25rem;
+  /* ui-audit prompt 10: terminal micro-labels. text-[10px]/[9px]
+   * were off-scale (72 call sites). These tokens formalize them as
+   * the "code-style meta label" tier — font-mono + uppercase +
+   * tracking-wide is the consistent pattern. Don't migrate without
+   * verifying the visual context — 9px is genuinely hard to read at
+   * 1× density and intentionally small for terminal mock windows. */
+  --font-size-2xs: 0.625rem;
+  --font-size-3xs: 0.5625rem;
 
   --font-weight-normal: 400;
   --font-weight-medium: 500;
@@ -343,6 +351,8 @@
   --radius-md: var(--radius-md);
   --radius-lg: var(--radius-lg);
   --radius-xl: var(--radius-xl);
+  --font-size-2xs: var(--font-size-2xs);
+  --font-size-3xs: var(--font-size-3xs);
   --shadow-xs: var(--shadow-xs);
   --shadow-sm: var(--shadow-sm);
   --shadow-md: var(--shadow-md);
