@@ -193,6 +193,8 @@ export default function ProfilePage() {
                 <img
                   src={avatarUrl}
                   alt="Your profile photo"
+                  loading="lazy"
+                  decoding="async"
                   className="w-full h-full object-cover"
                 />
               ) : (

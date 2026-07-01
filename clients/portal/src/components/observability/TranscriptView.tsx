@@ -532,6 +532,8 @@ function ImagesPanel({ images }: { images: NonNullable<TR["images"]>; orgId?: st
                 alt={img.content_type?.startsWith("image/") ? "transcript image" : img.content_type || "transcript image"}
                 width={128}
                 height={128}
+                loading="lazy"
+                decoding="async"
                 className="h-32 w-32 rounded object-cover"
               />
             ) : (
