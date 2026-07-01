@@ -1,6 +1,7 @@
 """Password hashing and JWT utilities."""
 
 import logging
+import secrets
 from datetime import datetime, timedelta
 
 import bcrypt
@@ -74,8 +75,22 @@ def needs_rehash(hashed_password: str) -> bool:
 def create_access_token(
     data: dict,
     expires_delta: timedelta | None = None,
+    token_version: int = 0,
 ) -> str:
-    """Create a JWT access token."""
+    """Create a JWT access token.
+
+    Every token gets:
+      * a fresh ``jti`` (random 128-bit URL-safe string) so each
+        token is uniquely identifiable for future revocation;
+      * the user's current ``token_version`` so ``get_current_user``
+        can reject any pre-login JWTs on the next request
+        (anti-fixation).
+
+    Pass ``token_version`` from the DB at the moment of issuance so
+    the token is bound to that exact generation. A login flow
+    should bump the DB version BEFORE calling this so any older
+    tokens immediately fail their next auth check.
+    """
     to_encode = data.copy()
 
     expire = datetime.utcnow() + (
@@ -84,6 +99,8 @@ def create_access_token(
     to_encode.update({
         "exp": expire,
         "iat": datetime.utcnow(),
+        "jti": secrets.token_urlsafe(16),
+        "token_version": token_version,
     })
     # Stamp ``aud``/``iss`` when configured. Tokens issued before
     # these settings existed are still accepted by ``decode_access_token``

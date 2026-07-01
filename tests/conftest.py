@@ -232,6 +232,7 @@ def mock_postgres_client() -> MagicMock:
                     "failed_login_count": 0,
                     "locked_until": None,
                     "last_failed_login_at": None,
+                    "token_version": 1,
                     "two_factor_enabled": _test_user_2fa_enabled,
                     "two_factor_secret": _test_user_2fa_secret,
                     "preferred_org_id": None,
@@ -243,6 +244,7 @@ def mock_postgres_client() -> MagicMock:
                 "id": user_id,
                 "email": "test@example.com",
                 "name": "Test User",
+                "token_version": 1,
                 "two_factor_enabled": _test_user_2fa_enabled,
                 "two_factor_secret": _test_user_2fa_secret,
                 "preferred_org_id": None,
@@ -540,7 +542,10 @@ def api_client(patch_postgres, patch_settings) -> TestClient:
 def auth_token(test_settings: Settings) -> str:
     """Return a valid JWT auth token for test user."""
     from eden.api.utils.auth import create_access_token
-    return create_access_token(data={"sub": "user-123", "email": "test@example.com"})
+    return create_access_token(
+        data={"sub": "user-123", "email": "test@example.com"},
+        token_version=1,
+    )
 
 
 @pytest.fixture

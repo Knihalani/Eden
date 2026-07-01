@@ -275,6 +275,16 @@ async def get_current_user(
     """Validate JWT (Clerk Bearer or Eden cookie) and return user.
 
     Raises HTTPException 401 if not authenticated.
+
+    Anti-fixation: when the JWT carries a ``token_version`` claim
+    (Eden-issued tokens do; Clerk-issued tokens do not), we look up
+    the user's current version in the DB and reject the token if
+    they diverge. This means:
+      * a successful /auth/login (which bumps ``token_version``)
+        invalidates any pre-existing JWTs for the account;
+      * a planted session ID cannot survive the victim's login.
+    The Clerk path skips this check — Clerk manages its own session
+    revocation semantics.
     """
     user_id = payload.get("sub") or extract_user_id(payload)
     email = payload.get("email")
@@ -284,6 +294,30 @@ async def get_current_user(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid token payload",
         )
+
+    # If the token was minted by Eden (has a token_version claim),
+    # verify it against the DB. This is the session-fixation defence.
+    token_version = payload.get("token_version")
+    if token_version is not None:
+        from eden.storage.postgres import get_postgres_client
+        client = await get_postgres_client()
+        row = await client.fetchrow(
+            "SELECT token_version FROM users WHERE id = $1",
+            user_id,
+        )
+        # User vanished (or never existed) — treat as unauthenticated.
+        if row is None:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid token payload",
+            )
+        if (row.get("token_version") or 0) != token_version:
+            # Token was minted before a version bump (login, password
+            # change, reset, account deletion). Reject.
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Session expired. Please sign in again.",
+            )
 
     return {"user_id": user_id, "email": email}
 

@@ -379,18 +379,28 @@ async def login(request: LoginRequest, response: Response, req: Request):
 
     user_id = str(row["id"])
 
-    # Reset lockout state on successful login.
+    # Reset lockout state AND bump token_version on successful login.
+    # The version bump is the anti-fixation defence: any JWT minted
+    # before this login now fails the token_version check in
+    # ``get_current_user`` and is rejected on next request.
     await client.execute(
         """
         UPDATE users
            SET last_login_at = NOW(),
                failed_login_count = 0,
                locked_until = NULL,
-               last_failed_login_at = NULL
+               last_failed_login_at = NULL,
+               token_version = COALESCE(token_version, 0) + 1
          WHERE id = $1
+         RETURNING token_version
         """,
         user_id,
     )
+    new_version_row = await client.fetchrow(
+        "SELECT token_version FROM users WHERE id = $1",
+        user_id,
+    )
+    new_token_version = (new_version_row or {}).get("token_version") or 1
 
     # Transparent upgrade: re-hash on next successful login if the
     # stored hash is using an older algorithm or a weaker cost factor.
@@ -406,8 +416,13 @@ async def login(request: LoginRequest, response: Response, req: Request):
         except Exception:  # noqa: BLE001 — best-effort, never block login
             logger.warning("Password rehash failed for user %s", user_id, exc_info=True)
 
-    # Create JWT and set cookie
-    access_token = create_access_token(data={"sub": user_id, "email": row["email"]})
+    # Create JWT and set cookie. Token is bound to the user's
+    # post-login token_version so any pre-login JWTs are rejected
+    # by ``get_current_user`` on next request.
+    access_token = create_access_token(
+        data={"sub": user_id, "email": row["email"]},
+        token_version=new_token_version,
+    )
 
     response.set_cookie(
         key=COOKIE_NAME,
@@ -567,8 +582,19 @@ async def signup_from_invite(request: SignupFromInviteRequest, response: Respons
 
     user_id = str(row["id"])
 
+    # Fetch the freshly-inserted user's token_version so the issued
+    # JWT is bound to it (defaults to 0 on a brand-new row).
+    ver_row = await client.fetchrow(
+        "SELECT COALESCE(token_version, 0) AS v FROM users WHERE id = $1",
+        user_id,
+    )
+    user_token_version = (ver_row or {}).get("v") or 0
+
     # Create JWT and set cookie
-    access_token = create_access_token(data={"sub": user_id, "email": invite_email})
+    access_token = create_access_token(
+        data={"sub": user_id, "email": invite_email},
+        token_version=user_token_version,
+    )
 
     response.set_cookie(
         key=COOKIE_NAME,
