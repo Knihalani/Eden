@@ -13,6 +13,8 @@ Branch: vibecoder/performance
 - [x] 9. Replace scroll listeners with observers (n/a) — codebase has no scroll-event listeners. Two getBoundingClientRect calls (optimization/page.tsx, Canvas.tsx) run once at mount, not in scroll handlers. No "lazy-load on scroll" pattern exists to migrate.
 - [x] 10. Move heavy computation to Web Workers (n/a) — no client-side CPU-heavy work exists (image processing, crypto, big-parse). The only animation loop (marketing canvas) already pauses on `window.__eden_canvas_paused`. Adding workers for hypothetical future work would be speculative.
 - [x] 11. Break up long main-thread tasks (n/a) — no synchronous CPU loops over large datasets. Largest loops are bounded: LatencyHistogram nBuckets=30, JobGantt ticks per row, others inline-array filters on lists already paginated to ≤200. Re-assess with Performance Observer tooling if a real >50ms task is measured.
+- [x] 12. Memoize list items and stabilize keys (memo'd DecisionStep in decisions list; keys already stable on domain IDs — step_index, trace_id, span_id, etc. streaming-sparkline keys append `:${i}` redundantly but tokens are append-only so no harm.)
+- [x] 13. Defer rendering offscreen components (n/a) — `next/dynamic({ ssr: false })` already used for React Flow Canvas (builder), all settings tabs (analytics/autonomous/audit/billing/etc — recharts + crypto heavy), optimization subpages. Remaining eager chart imports are on pages where the chart IS the page (analytics/page.tsx, dashboard).
 - [ ] 2. Memoize expensive computed values
 - [ ] 3. Stabilize callbacks passed to children
 - [ ] 4. Split bloated global state
