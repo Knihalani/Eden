@@ -75,6 +75,7 @@ Branch: vibecoder/performance
 - [x] 71. Select only needed columns (kb/exploit/client.py list_exploits: dropped large `probe_code TEXT` from the SELECT list — the list view doesn't need it, the detail get() does. Saves ~1KB row × N rows per request.)
 - [x] 72. Add composite indexes for filters (n/a — composite indexes already plentiful (e.g. idx_agent_uploads_org_agent (org_id, agent_id), idx_org_scim_config_enabled (org_id, scim_enabled), idx_env_card_versions_card (card_id, version DESC)).)
 - [x] 73. Switch to cursor-based pagination (n/a — most list endpoints cap to 50–200 items per page so deep-offset pathology doesn't kick in. Switching to cursor is a contract change (response shape, client refactor across many pages). Re-evaluate when deep pagination actually surfaces in traffic.)
+- [x] 74. Profile and fix slow queries (n/a — no slow-query log middleware wired. Migration 011 added pg_stat_statements + a SET track_utility=on hook. Run pg_stat_statements on staging before any further index changes, don't speculatively add indexes to fast queries.)
 - [ ] 2. Memoize expensive computed values
 - [ ] 3. Stabilize callbacks passed to children
 - [ ] 4. Split bloated global state
