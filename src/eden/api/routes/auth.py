@@ -165,15 +165,29 @@ async def signup(request: SignupRequest, response: Response, req: Request):
 
     client = await get_postgres_client()
 
-    # Check if email already exists
+    # Anti-enumeration: do NOT reveal whether the email is already
+    # registered. Always return the same 202 response and the same
+    # generic message; if the email is taken, swallow the insert
+    # conflict silently. The DB query path is taken either way so
+    # the timing is also uniform.
     existing = await client.fetchrow(
         "SELECT id FROM users WHERE email = $1",
         request.email,
     )
     if existing:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="An account with this email already exists",
+        # Generate a dummy hash + run a bcrypt round so the timing
+        # matches a fresh signup. Return the same 202 response.
+        hash_password(request.password)
+        from fastapi.responses import JSONResponse
+        return JSONResponse(
+            status_code=status.HTTP_202_ACCEPTED,
+            content={
+                "message": (
+                    "If that email is not already registered, an account "
+                    "has been created. Check your email to verify before "
+                    "signing in."
+                ),
+            },
         )
 
     # Create user
@@ -214,13 +228,17 @@ async def signup(request: SignupRequest, response: Response, req: Request):
         logger.warning(f"verification email dispatch failed: {exc}")
 
     # Audit 2026-06-22 B1.23 — return 202; no session cookie until verified.
+    # Security audit (enumeration): use the same generic message as the
+    # "email already exists" path above so the two are indistinguishable.
     from fastapi.responses import JSONResponse
     return JSONResponse(
         status_code=status.HTTP_202_ACCEPTED,
         content={
-            "user_id": user_id,
-            "email": request.email,
-            "message": "Account created. Check your email to verify before signing in.",
+            "message": (
+                "If that email is not already registered, an account "
+                "has been created. Check your email to verify before "
+                "signing in."
+            ),
         },
     )
 
@@ -260,7 +278,18 @@ async def login(request: LoginRequest, response: Response, req: Request):
 
     query = "SELECT id, email, password_hash, name, failed_login_count, locked_until, last_failed_login_at FROM users WHERE email = $1"
     row = await client.fetchrow(query, request.email)
+    # Pre-compute a known-invalid bcrypt hash so the "no row" and
+    # "wrong password" branches take the same time. Generated lazily
+    # on first use so we don't pay the cost at import time.
+    global _DUMMY_BCRYPT_HASH
+    try:
+        _DUMMY_BCRYPT_HASH  # noqa: F823
+    except NameError:
+        _DUMMY_BCRYPT_HASH = hash_password("dummy-no-such-user-12345")
     if not row:
+        # Anti-enumeration: run a dummy bcrypt round so the timing
+        # matches the "real user, wrong password" path.
+        verify_password(request.password, _DUMMY_BCRYPT_HASH)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid email or password",
@@ -268,10 +297,13 @@ async def login(request: LoginRequest, response: Response, req: Request):
 
     # Audit 2026-06-22 B1.31 — SCIM/SSO-only users have no password.
     # Reject password login rather than risk bcrypt.checkpw("", "") == True.
+    # The error message is identical to "Invalid email or password" so
+    # the response body cannot be used to distinguish SSO-only users.
     if not row["password_hash"]:
+        verify_password(request.password, _DUMMY_BCRYPT_HASH)  # timing-equalise
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Use SSO or password reset",
+            detail="Invalid email or password",
         )
 
     # Account lockout check — runs BEFORE bcrypt so a locked account
