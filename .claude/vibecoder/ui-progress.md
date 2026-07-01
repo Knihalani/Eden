@@ -63,7 +63,7 @@ Branch: vibecoder/ui
 - [x] 59. Implement Smooth Page Transitions (n/a) — MotionProvider wraps app in framer-motion MotionConfig with reducedMotion="user"; per-page framer-motion entrance animations where needed.
 - [x] 60. Animate Value and State Changes (n/a) — no useSpring/useTransform in portal; sparkline uses CSS animation; framer-motion is for entrance transitions only. Value-counting animations deferred — not central to data-display portal.
 - [x] 61. Refine Hover and Focus Feedback (n/a) — button hover per-variant; nav-item hover/active/focus-visible per-element; .card-hover-lift utility on cards.
-- [ ] 62. Add Tasteful Scroll-Triggered Animations
+- [x] 62. Add Tasteful Scroll-Triggered Animations (n/a) — no IntersectionObserver in portal; data-dense layout where scroll-triggered reveals would distract from focus.
 - [ ] 63. Smooth the Loading-To-Content Transition
 - [ ] 64. Improve Drag-And-Drop Interface Affordances
 - [ ] 65. Add Mobile Gesture Support
