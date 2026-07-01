@@ -9,6 +9,7 @@ Branch: vibecoder/performance
 - [x] 5. Virtualize long scrolling lists (n/a) — long lists (/traces, /agents, /incidents) are server-paginated at 20–200 items via DataTable + api limit. No current list hits the 1000-row threshold that virtualization targets, and no virtualization library is installed (would be a new dep, ponytail: skip). Re-assess when a page shows >500 unbounded rows.
 - [x] 6. Debounce text input and search (marketplace: 300ms debounce on `query` via setTimeout so /api/marketplace fires once per pause instead of per keystroke)
 - [x] 7. Throttle scroll and resize handlers (n/a) — only one resize listener (marketing canvas, lightweight w/h assignment, already cleaned up in effect teardown) and no scroll listeners anywhere. Visibility work uses IntersectionObserver (see prompt 9).
+- [x] 8. Batch related state updates (n/a) — React 19 (in deps) auto-batches both sync and async state updates by default, so explicit batching (useReducer or unstable_batchedUpdates) is unnecessary. No multi-state setX in sequence found that would still re-render multiple times under React 19.
 - [ ] 2. Memoize expensive computed values
 - [ ] 3. Stabilize callbacks passed to children
 - [ ] 4. Split bloated global state
