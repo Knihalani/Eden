@@ -29,7 +29,7 @@ Branch: vibecoder/ui
 - [x] 25. Tune Text Color and Contrast (n/a) — --text-muted #708090 (4.7:1 AA Normal), --text-faint #5A6B85 (3.3:1 AA Large), --border-default #6B7C9E (3.0:1+). Contrast rationale documented in globals.css comments.
 - [x] 26. Fix Semantic Heading Structure (n/a) — 20× h1, 95× h2, 149× h3, 20× h4 — single-h1-per-page with nested sections. Distribution looks right.
 - [x] 27. Handle Text Overflow Gracefully (n/a) — 84× `truncate` + 14× `line-clamp` in use across data tables, card titles, list rows.
-- [ ] 28. Format Numbers, Dates, and Currency
+- [x] 28. Format Numbers, Dates, and Currency — added formatInt (Intl.NumberFormat thousand-separator) and formatCurrency (Intl.NumberFormat USD-default) to lib/format.ts. Existing formatRelativeTime, formatBytes, formatDuration, formatNumber, formatChartDate already cover the compact dashboard view.
 - [ ] 29. Add Refined Typographic Details
 - [ ] 30. Standardize Text Casing and Labels
 - [ ] 31. Run a Full Performance Audit
