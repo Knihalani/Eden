@@ -82,7 +82,7 @@ Branch: vibecoder/ui
 - [x] 78. Handle Loading, Empty, Error, Success States (n/a) — loading.tsx (skeletons), empty-state.tsx, error-state.tsx, error-boundary.tsx; global-error.tsx + not-found.tsx for 500/404.
 - [x] 79. Add Graceful Error Boundaries (n/a) — 3× route error.tsx (portal/marketing/auth) + global-error.tsx + reusable error-boundary.tsx.
 - [x] 80. Confirm Destructive and Irreversible Actions (n/a) — useConfirm hook used in 3+ destructive flows (members, references, etc.).
-- [ ] 81. Add Undo for Reversible Actions
+- [x] 81. Add Undo for Reversible Actions — added optional `action` prop (label + onClick) to toast.success/error/info; auto-dismiss extended to 6s for action toasts so users have time to click "Undo". Callers can pass `{ label: "Undo", onClick: () => revert() }` as the 3rd arg.
 - [ ] 82. Handle Offline and Network Errors
 - [ ] 83. Show Progress for Long Operations
 - [ ] 84. Improve Perceived Performance Everywhere
