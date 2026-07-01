@@ -41,6 +41,7 @@ Branch: vibecoder/performance
 - [x] 37. Remove unused dependencies and dead code (dropped dead chat/code-highlighter.tsx; removed `react-syntax-highlighter` + `@types/react-syntax-highlighter` from package.json — not referenced anywhere now. Worth ~30KB uncompressed from the bundle.)
 - [x] 38. Tree-shake and dedupe the bundle (added `"sideEffects": false` to package.json for max tree-shaking; codebase already uses named imports for React/Radix UI; Turbopack/webpack dedup already on)
 - [x] 39. Analyze bundle composition for bloat (n/a — @next/bundle-analyzer not installed; ANALYZE=true build runs but no analyzer. Heap-spray check: 4.5MB total /tmp/chunks, top chunk 372KB. Re-install analyzer separately when a real bottleneck is reported.)
+- [x] 40. Defer and async non-critical scripts (n/a — no inline `<script>` tags in the document; Next.js emits its bundled scripts with `defer` by default)
 - [ ] 2. Memoize expensive computed values
 - [ ] 3. Stabilize callbacks passed to children
 - [ ] 4. Split bloated global state
