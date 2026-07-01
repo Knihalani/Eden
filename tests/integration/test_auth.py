@@ -13,16 +13,15 @@ from unittest.mock import patch
 
 class TestAuthSignup:
     def test_signup_success(self, api_client: TestClient):
-        """Creating a new account returns user_id; session cookie
-        is issued AFTER email verification.
+        """Creating a new account returns 202 + a generic message;
+        no session cookie until email is verified.
 
         Audit 2026-06-22 B1.23 changed the signup contract to require
-        email verification before issuing a session cookie (status
-        202 + no cookie until /auth/verify-email succeeds). Pre-fix
-        this test asserted status 200 + an authorization cookie —
-        which was the legacy Eden-Auth behaviour. The new contract
-        is the right one for production (prevents fake account spam
-        and ties sessions to verified emails).
+        email verification before issuing a session cookie. The
+        security audit of 2026-07-01 further stripped the user_id
+        from the response so the endpoint cannot be used to enumerate
+        registered emails: every signup — new or duplicate — returns
+        the same 202 + generic message.
         """
         response = api_client.post("/auth/signup", json={
             "email": "newuser@example.com",
@@ -30,11 +29,10 @@ class TestAuthSignup:
             "name": "New User",
         })
 
-        # 202 Accepted = "account created, check your email"
+        # 202 Accepted = "if not already registered, account created"
         assert response.status_code == 202
         data = response.json()
-        assert "user_id" in data
-        assert data["email"] == "newuser@example.com"
+        assert "message" in data
         # No session cookie until email is verified.
         assert "authorization" not in api_client.cookies
 
@@ -49,16 +47,24 @@ class TestAuthSignup:
         assert response.status_code == 400
         assert "password" in response.json()["detail"].lower() or "at least" in response.json()["detail"].lower()
 
-    def test_signup_duplicate_email(self, api_client: TestClient):
-        """Duplicate emails return 409 conflict."""
-        # First signup (mock returns existing row for test@example.com)
+    def test_signup_duplicate_email_returns_generic_202(self, api_client: TestClient):
+        """Anti-enumeration: a duplicate email returns the SAME 202 +
+        generic message as a fresh signup, NOT a 409 + 'already exists'.
+
+        Audit 2026-07-01 — the old 409 response leaked which emails
+        were registered. The mock conftest returns an existing row
+        for ``test@example.com``; the route must therefore return 202
+        with the same body shape as the new-user path.
+        """
         response = api_client.post("/auth/signup", json={
             "email": "test@example.com",
             "password": "Str0ng!Pass#2024",
             "name": "Test User",
         })
-        assert response.status_code == 409
-        assert "already exists" in response.json()["detail"]
+        assert response.status_code == 202
+        body = response.json()
+        assert "message" in body
+        assert "If that email is not already registered" in body["message"]
 
     def test_signup_rate_limit(self, api_client: TestClient):
         """Too many signups from same IP trigger 429."""

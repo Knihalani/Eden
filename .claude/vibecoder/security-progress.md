@@ -5,7 +5,7 @@
 - [x] 1. Hash passwords with a modern algorithm — bcrypt already in use; made rounds explicit (12), added needs_rehash() for transparent upgrade on next login + 5 tests
 - [x] 2. Enforce strong password requirements — raised min 10→12 chars, expanded COMMON_PASSWORDS with 14 top-breached entries, updated tests
 - [x] 3. Rate limit login attempts — wired existing login/signup/password_reset limiters into /auth/* endpoints with 429 + Retry-After; conftest resets between tests; +7 tests
-- [ ] 4. Lock accounts after repeated failures
+- [x] 4. Lock accounts after repeated failures — migration 076 (failed_login_count + locked_until + last_failed_login_at); /auth/login locks 5min after 5 failures with exponential backoff (cap 24h); 423+Retry-After on lock; counter resets on success; 4 migration tests
 - [ ] 5. Stop username and email enumeration
 - [ ] 6. Secure the password reset flow
 - [ ] 7. Regenerate sessions to block fixation
