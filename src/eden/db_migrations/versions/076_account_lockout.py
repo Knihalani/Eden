@@ -67,9 +67,18 @@ def upgrade() -> None:
             server_default="0",
         ),
     )
+    # last_seen_at backs the idle-timeout check in get_current_user.
+    # Updated best-effort on every authenticated request; if a
+    # token's iat predates ``last_seen_at - 30min`` the request is
+    # rejected as idle-expired.
+    op.add_column(
+        "users",
+        sa.Column("last_seen_at", sa.DateTime(timezone=True), nullable=True),
+    )
 
 
 def downgrade() -> None:
+    op.drop_column("users", "last_seen_at")
     op.drop_column("users", "token_version")
     op.drop_column("users", "last_failed_login_at")
     op.drop_column("users", "locked_until")
