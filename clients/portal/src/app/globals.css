@@ -1121,6 +1121,23 @@ h1, h2, h3, h4, h5, h6 {
   text-wrap: pretty;
 }
 
+/* ui-audit prompt 30: casing convention.
+ *
+ *   h1, h2 page section headings → Title Case ("Retention Policy",
+ *     "Two-Factor Authentication", "SCIM Provisioning")
+ *   h2 nav/sidebar labels       → Sentence case ("Documentation",
+ *     "Density", "Group order")
+ *   h3, h4 component labels     → Sentence case ("PII scrub after
+ *     (days)", "New destination", "Per-table overrides")
+ *   Buttons / form labels       → Sentence case ("Create new key",
+ *     "Permanently delete organization")
+ *   Terminal micro-labels       → UPPERCASE (font-mono + tracking)
+ *
+ * Acronyms (SCIM, SSO, SAML, 2FA, PII) keep their canonical form
+ * regardless of surrounding casing. Migrate existing h2 page
+ * headings ("Autonomous features" → "Autonomous Features") as a
+ * follow-up; this comment establishes the rule first.
+
 h2 {
   font-size: var(--font-size-3xl);
   letter-spacing: var(--letter-spacing-tight);

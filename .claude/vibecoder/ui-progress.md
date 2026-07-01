@@ -30,7 +30,7 @@ Branch: vibecoder/ui
 - [x] 26. Fix Semantic Heading Structure (n/a) — 20× h1, 95× h2, 149× h3, 20× h4 — single-h1-per-page with nested sections. Distribution looks right.
 - [x] 27. Handle Text Overflow Gracefully (n/a) — 84× `truncate` + 14× `line-clamp` in use across data tables, card titles, list rows.
 - [x] 28. Format Numbers, Dates, and Currency — added formatInt (Intl.NumberFormat thousand-separator) and formatCurrency (Intl.NumberFormat USD-default) to lib/format.ts. Existing formatRelativeTime, formatBytes, formatDuration, formatNumber, formatChartDate already cover the compact dashboard view.
-- [ ] 29. Add Refined Typographic Details
+- [x] 29. Add Refined Typographic Details — added text-rendering: optimizeLegibility + font-feature kern/liga/calt to body; text-wrap: balance on h1–h6 prevents widow/orphan headings; text-wrap: pretty on .prose p avoids short last lines. Straight-quote→curly transformation deferred (risk of breaking user-input string matching).
 - [ ] 30. Standardize Text Casing and Labels
 - [ ] 31. Run a Full Performance Audit
 - [ ] 32. Shrink the JavaScript Bundle
