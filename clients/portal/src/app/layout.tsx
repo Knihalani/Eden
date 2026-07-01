@@ -7,6 +7,7 @@ import { ToastProvider } from "@/components/ui/toast";
 import { NotificationsProvider } from "@/hooks/use-notifications";
 import { QueryProvider } from "@/components/providers/query-provider";
 import { MotionProvider } from "@/components/providers/motion-provider";
+import { TooltipProvider } from "@radix-ui/react-tooltip";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -70,7 +71,14 @@ export default function RootLayout({
           <OrgProvider>
           <ToastProvider>
             <MotionProvider>
-              <NotificationsProvider>{children}</NotificationsProvider>
+              {/* ui-audit prompt 85: Radix TooltipProvider enables
+               * hover/focus tooltips anywhere in the app. delayDuration
+               * 200ms prevents accidental tooltip flash on quick mouse
+               * passes; skipDelayDuration 300ms lets users move between
+               * adjacent triggers without re-waiting. */}
+              <TooltipProvider delayDuration={200} skipDelayDuration={300}>
+                <NotificationsProvider>{children}</NotificationsProvider>
+              </TooltipProvider>
             </MotionProvider>
           </ToastProvider>
           </OrgProvider>
