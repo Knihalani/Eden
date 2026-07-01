@@ -302,7 +302,7 @@ async def get_current_user(
         from eden.storage.postgres import get_postgres_client
         client = await get_postgres_client()
         row = await client.fetchrow(
-            "SELECT token_version FROM users WHERE id = $1",
+            "SELECT token_version, last_seen_at FROM users WHERE id = $1",
             user_id,
         )
         # User vanished (or never existed) — treat as unauthenticated.
@@ -318,6 +318,38 @@ async def get_current_user(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Session expired. Please sign in again.",
             )
+
+        # Idle timeout enforcement: if last_seen_at is set and the
+        # token's iat is older than the idle window, the session
+        # has been inactive too long — reject and force a re-login.
+        # 30 minutes is the standard. Bumping last_seen_at to NOW()
+        # below slides the window forward on each successful auth
+        # call so an active user never sees this 401.
+        from datetime import datetime, timedelta, timezone
+        idle_window = timedelta(minutes=30)
+        last_seen = row.get("last_seen_at")
+        iat = payload.get("iat")
+        if last_seen is not None and iat is not None:
+            # Convert iat to a datetime. PyJWT returns it as int
+            # (epoch seconds).
+            iat_dt = datetime.fromtimestamp(int(iat), tz=timezone.utc)
+            # If the token was issued BEFORE the last idle window
+            # relative to last_seen, treat the session as expired.
+            if last_seen - iat_dt > idle_window:
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Session expired due to inactivity. Please sign in again.",
+                )
+
+        # Slide the window: best-effort update. A failure here
+        # must not break the auth flow.
+        try:
+            await client.execute(
+                "UPDATE users SET last_seen_at = NOW() WHERE id = $1",
+                user_id,
+            )
+        except Exception:
+            pass  # noqa: BLE001 — best-effort, never block auth
 
     return {"user_id": user_id, "email": email}
 

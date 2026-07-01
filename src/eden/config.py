@@ -275,7 +275,13 @@ class Settings(BaseSettings):
 
     # JWT Authentication
     jwt_secret: str = "change-me-in-production"
-    jwt_exp_days: int = 7
+    # 24h absolute lifetime — serves as the absolute session timeout
+    # regardless of activity. Idle timeout is enforced at
+    # ``get_current_user`` via a sliding last_seen_at window
+    # (see migration 079). 24h is short enough that a leaked cookie
+    # is useful for at most a day; long enough that an active user
+    # never sees an unexpected logout.
+    jwt_exp_days: int = 1
     # Optional JWT aud / iss claim support (opt-in). The auth helpers
     # check for non-empty strings before adding them to the token;
     # leaving them empty preserves the original behaviour. See

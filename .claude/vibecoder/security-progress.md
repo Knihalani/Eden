@@ -14,7 +14,7 @@
 - [x] 10. Harden the remember-me feature (n/a — no remember-me feature; session is JWT cookie only)
 - [x] 11. Add bot protection to forms — added honeypot ``website`` field to /auth/signup; bot submissions return 202 + generic message but skip DB write; per-IP signup_limiter (5/min) is the layer-2 defence; new test covers the drop
 - [x] 12. Throttle password reset and verification emails — already covered by signup_limiter (5/min) + password_reset_limiter (3/5min per IP + per-email); /forgot-password returns enumeration-neutral message
-- [ ] 13. Set secure session cookie flags
+- [x] 13. Set secure session cookie flags — 3 set_cookie call sites consolidated into _set_session_cookie() helper with HttpOnly + Secure + SameSite=lax + Path=/; flag policy documented in one place; 87 tests passing
 - [ ] 14. Add idle and absolute session timeouts
 - [ ] 15. Fully invalidate sessions on logout
 - [ ] 16. Validate every JWT claim properly
