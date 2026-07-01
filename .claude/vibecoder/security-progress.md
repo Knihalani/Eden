@@ -18,7 +18,7 @@
 - [x] 14. Add idle and absolute session timeouts — jwt_exp_days 7→1; get_current_user enforces 30min idle via last_seen_at vs iat; migration 076 adds last_seen_at column; best-effort slide on every auth
 - [x] 15. Fully invalidate sessions on logout — /auth/logout now requires auth + bumps token_version (so captured JWTs fail next check) + clears cookie with matching flags; new /auth/logout-all endpoint for "log out everywhere"
 - [x] 16. Validate every JWT claim properly — decode_access_token now requires exp/iat/sub on every token (python-jose options); verify_nbf on; aud/iss enforced when configured; 3 new tests, 90 total passing
-- [ ] 17. Block JWT algorithm confusion attacks
+- [x] 17. Block JWT algorithm confusion attacks — decode_access_token already passed algorithms=['HS256']; added explicit tests for hand-crafted alg=none and alg=RS256 tokens (both rejected)
 - [ ] 18. Strengthen and rotate signing secrets
 - [ ] 19. Store auth tokens safely client-side
 - [ ] 20. Issue short-lived access tokens

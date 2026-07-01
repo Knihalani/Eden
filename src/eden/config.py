@@ -275,6 +275,13 @@ class Settings(BaseSettings):
 
     # JWT Authentication
     jwt_secret: str = "change-me-in-production"
+    # Optional secondary key accepted during a rotation window. When
+    # set, ``decode_access_token`` will accept tokens signed with
+    # either the primary or this previous key. Tokens issued with
+    # the old key remain valid until natural expiry; new tokens are
+    # always signed with the primary. Clear this after the rotation
+    # window to fully cut over.
+    jwt_secret_previous: str = ""
     # 24h absolute lifetime — serves as the absolute session timeout
     # regardless of activity. Idle timeout is enforced at
     # ``get_current_user`` via a sliding last_seen_at window
@@ -545,4 +552,15 @@ def get_settings() -> Settings:
                 "JWT_SECRET) to a real secret before booting in any "
                 "non-test environment."
             )
+    # Minimum length check. 32 bytes (256 bits) is the floor for
+    # HS256 — anything shorter weakens the signature against brute
+    # force. We skip the check in test mode because fixtures use a
+    # short placeholder.
+    if not os.environ.get("PYTEST_CURRENT_TEST") and len(
+        settings.jwt_secret
+    ) < 32:
+        raise RuntimeError(
+            "jwt_secret must be at least 32 characters. Generate one "
+            "with: python -c 'import secrets; print(secrets.token_urlsafe(32))'"
+        )
     return settings
