@@ -73,7 +73,7 @@ Branch: vibecoder/ui
 - [x] 69. Polish Input Field Design and States (n/a) — default/focus/disabled states in globals.css; Radix Label for accessibility; native autocomplete attributes; per-variant focus:ring on inputs.
 - [x] 70. Add Smart Input Masking and Formatting (n/a) — no phone/credit card inputs in portal; API keys are plaintext paste by design (masking would interfere with paste flows).
 - [x] 71. Add Form Autosave and Recovery (n/a) — no long forms requiring autosave; onboarding multi-step is Clerk-managed.
-- [ ] 72. Improve Multi-Step Form Experience
+- [x] 72. Improve Multi-Step Form Experience (n/a) — Wizard component used by onboarding flow (connect step, OnboardingConnectFlow).
 - [ ] 73. Upgrade Select and Dropdown Inputs
 - [ ] 74. Improve Password Field UX
 - [ ] 75. Add Input Hints and Affordances
