@@ -2,7 +2,7 @@
 
 Branch: vibecoder/ui
 
-- [ ] 1. Establish a Design Token System
+- [x] 1. Establish a Design Token System — added tier 1/2/3 section header to globals.css documenting primitive/semantic/component structure; fixed analytics-tab CHART_COLORS_FALLBACK so pie-4/5 mirrors the actual --chart-pie-4/5 tokens (was #ef4444/#8b5cf6 → now #C084FC/#E879F9).
 - [ ] 2. Build a Semantic Color System
 - [ ] 3. Define a Consistent Spacing Scale
 - [ ] 4. Create an Elevation Shadow System
