@@ -647,6 +647,7 @@ def _assert_public_ip(url: str) -> None:
                 f"webhook URL {url!r} resolves to non-public IP {ip_str}"
             )
 
+    @staticmethod
     def sign_v1(
         secret: str,
         payload: str,

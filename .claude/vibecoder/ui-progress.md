@@ -89,7 +89,7 @@ Branch: vibecoder/ui
 - [x] 85. Add Contextual Help and Tooltips — added Radix TooltipProvider to root layout (delayDuration 200ms, skipDelayDuration 300ms). Now available to all routes for icon-only buttons, complex features, and non-obvious fields.
 - [x] 86. Standardize Status and State Indicators (n/a) — StatusBadge is the standard: 6+ variants pairing color + icon (CheckCircle2/XCircle/AlertTriangle/Clock/Circle).
 - [x] 87. Clarify Primary Navigation Structure (n/a) — sidebar with active-state left bar + accent background; lib/sidebar-config.ts central source; lg:sticky desktop + mobile drawer.
-- [ ] 88. Add a Command Palette
+- [x] 88. Add a Command Palette (n/a) — CommandPalette with cmdk; Cmd/Ctrl+K invocation; fuzzy search across nav destinations; arrow/Enter keyboard nav.
 - [ ] 89. Show Clear Active Location Indicators
 - [ ] 90. Add Breadcrumbs for Deep Navigation
 - [ ] 91. Improve In-App Search Experience
