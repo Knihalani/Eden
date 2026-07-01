@@ -730,8 +730,40 @@ async def accept_invitation_by_token(
 
 
 @router.post("/logout")
-async def logout(response: Response):
-    """Clear the JWT cookie."""
+async def logout(
+    response: Response,
+    user: dict = Depends(get_current_user),
+):
+    """Invalidate the session and clear the cookie.
+
+    Clearing the cookie alone is NOT enough — a captured cookie
+    is still a valid JWT until natural expiry. To truly log out,
+    we bump ``token_version`` for the current user so the JWT
+    fails its next auth check (see get_current_user in
+    api/deps.py). The cookie is then cleared with the same
+    security flags it was set with.
+
+    Note: this invalidates ALL of the user's active sessions, not
+    just the one in the current browser. A "log out of this
+    device only" variant would mint a fresh token and set the
+    cookie rather than bumping the version — out of scope for
+    this endpoint.
+    """
+    client = await get_postgres_client()
+    try:
+        await client.execute(
+            """
+            UPDATE users
+               SET token_version = COALESCE(token_version, 0) + 1
+             WHERE id = $1
+            """,
+            user["user_id"],
+        )
+    except Exception as exc:  # noqa: BLE001
+        # Logged but not re-raised: the user is logging out, we
+        # still clear the cookie so the next request bounces.
+        logger.warning("logout token_version bump failed: %s", exc)
+
     response.delete_cookie(
         key=COOKIE_NAME,
         path="/",
@@ -740,6 +772,39 @@ async def logout(response: Response):
         samesite="lax",
     )
     return {"message": "Logged out successfully"}
+
+
+@router.post("/logout-all", response_model=dict)
+async def logout_all(
+    response: Response,
+    user: dict = Depends(get_current_user),
+):
+    """Invalidate every active session for the current user.
+
+    Functionally identical to /auth/logout right now (both bump
+    the global token_version), but kept as a separate endpoint so
+    the UI can show a distinct "log out of all devices" affordance
+    without surprises. If a per-device jti denylist is added later,
+    this endpoint will be the one to clear it; /auth/logout will
+    only bump the version for the current device's session.
+    """
+    client = await get_postgres_client()
+    await client.execute(
+        """
+        UPDATE users
+           SET token_version = COALESCE(token_version, 0) + 1
+         WHERE id = $1
+        """,
+        user["user_id"],
+    )
+    response.delete_cookie(
+        key=COOKIE_NAME,
+        path="/",
+        httponly=True,
+        secure=not settings.debug,
+        samesite="lax",
+    )
+    return {"message": "All sessions have been terminated"}
 
 
 @router.get("/me", response_model=UserResponse)
