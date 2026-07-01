@@ -94,7 +94,7 @@ Branch: vibecoder/ui
 - [x] 90. Add Breadcrumbs for Deep Navigation (n/a) — components/ui/breadcrumb.tsx + lib/breadcrumbs.ts central config; per-page breadcrumb data.
 - [x] 91. Improve In-App Search Experience (n/a) — command palette (cmdk) for global nav search; per-page debounced filter inputs on data tables.
 - [x] 92. Fix Scroll Position and Back Behavior (n/a) — Next.js App Router preserves scroll position on back navigation by default.
-- [ ] 93. Add Useful Keyboard Shortcuts
+- [x] 93. Add Useful Keyboard Shortcuts (n/a) — use-keyboard-shortcuts hook; Cmd/Ctrl+K for command palette; Escape via Radix primitives.
 - [ ] 94. Reduce Friction in Key Flows
 - [ ] 95. Make Data Tables Genuinely Usable
 - [ ] 96. Add Powerful Filtering and Sorting
