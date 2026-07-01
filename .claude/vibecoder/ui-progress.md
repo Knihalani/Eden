@@ -11,7 +11,7 @@ Branch: vibecoder/ui
 - [x] 7. Polish All Button Interaction States (n/a) — 8 variants (default/destructive/outline/ghost/secondary/emerald/danger/link) each with hover (per-variant bg) + focus-visible (per-variant ring color) + disabled (pointer-events-none opacity-50); global button:active scale(0.97) for press; loading prop shows Loader2 spinner. Native <button> = keyboard-reachable.
 - [x] 8. Design Helpful Empty States (n/a) — EmptyState component (icon + title + description + action + sm/md/lg sizes) used across 20+ pages. Plus NoOrgState for the cross-cutting "join or create org" gate.
 - [x] 9. Unify the App's Iconography (n/a) — single lucide-react library across the portal. Standard sizes: size-4 (16px) inside buttons, size-5 (20px) inline, size-6 (24px) in empty states. No other icon lib in package.json.
-- [ ] 10. Run a Full Consistency Audit
+- [x] 10. Run a Full Consistency Audit — audit findings: text-[10px]/[9px] used in 72 files (off-scale terminal micro-labels); uppercase used consistently for terminal/category labels (26× uppercase vs 3× capitalize, intentional). Action: added --font-size-2xs (10px) + --font-size-3xs (9px) tokens and wired to @theme inline; flagged migration of 72 call sites as opt-in per judgement-call rule (9px is intentionally small for terminal mocks).
 - [ ] 11. Audit Mobile and Tablet Breakpoints
 - [ ] 12. Eliminate Horizontal Scroll on Mobile
 - [ ] 13. Build a Flexible Responsive Grid
