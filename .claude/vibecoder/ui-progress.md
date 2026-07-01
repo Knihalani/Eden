@@ -62,7 +62,7 @@ Branch: vibecoder/ui
 - [x] 58. Standardize Animation Timing and Easing (n/a) — --duration-fast/normal/slow (150/200/300ms) + --ease-out/in/in-out cubic-beziers; applied consistently.
 - [x] 59. Implement Smooth Page Transitions (n/a) — MotionProvider wraps app in framer-motion MotionConfig with reducedMotion="user"; per-page framer-motion entrance animations where needed.
 - [x] 60. Animate Value and State Changes (n/a) — no useSpring/useTransform in portal; sparkline uses CSS animation; framer-motion is for entrance transitions only. Value-counting animations deferred — not central to data-display portal.
-- [ ] 61. Refine Hover and Focus Feedback
+- [x] 61. Refine Hover and Focus Feedback (n/a) — button hover per-variant; nav-item hover/active/focus-visible per-element; .card-hover-lift utility on cards.
 - [ ] 62. Add Tasteful Scroll-Triggered Animations
 - [ ] 63. Smooth the Loading-To-Content Transition
 - [ ] 64. Improve Drag-And-Drop Interface Affordances
