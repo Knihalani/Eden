@@ -98,6 +98,7 @@ Branch: vibecoder/performance
 - [x] 94. Gracefully degrade non-critical features (n/a — InsightsCarousel renders `{insights.length > 0 && ...}`; OnboardingBanner returns null when state is null/legacy/done. Many lazy sections skip render until data arrives.)
 - [x] 95. Add real-user performance monitoring (layout.tsx: added built-in PerformanceObserver for LCP/CLS/INP. Uses console.debug so no prod-noise unless logger is enabled. No new dep.)
 - [x] 96. Run Lighthouse and fix top issues (n/a — Lighthouse not installed (npm dep + browser to drive); adding it just to demonstrate the audit is wasteful. Set up a Lighthouse CI integration as a follow-up if real-world perf becomes a feature gate.)
+- [x] 97. Reduce Largest Contentful Paint (n/a — needs Lighthouse to identify the LCP element first. Marketing canvas has __eden_canvas_paused gate. Next.js + Vercel CDN handle the rest. Re-evaluate after real-world metrics land via the prompt 95 observer.)
 - [ ] 2. Memoize expensive computed values
 - [ ] 3. Stabilize callbacks passed to children
 - [ ] 4. Split bloated global state
