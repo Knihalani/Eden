@@ -37,6 +37,9 @@ from eden.api.utils.rate_limit import (
     login_limiter,
     password_reset_limiter,
     signup_limiter,
+    totp_disable_limiter,
+    totp_setup_limiter,
+    totp_verify_limiter,
 )
 from eden.api.utils.validation import PasswordValidationError, validate_password_strength
 from eden.config import get_settings
@@ -131,6 +134,10 @@ class TwoFAEnableResponse(BaseModel):
 
     enabled: bool
     message: str
+    # Plaintext recovery codes are returned ONLY on the response that
+    # enables 2FA. Each code is single-use; subsequent responses omit
+    # this field entirely.
+    recovery_codes: list[str] | None = None
 
 
 class EnforceTwoFARequest(BaseModel):
@@ -1002,12 +1009,17 @@ async def list_my_pending_invites(user: dict = Depends(get_current_user)):
 
 
 @router.post("/2fa/setup", response_model=TwoFASetupResponse)
-async def setup_2fa(user: dict = Depends(get_current_user)):
+async def setup_2fa(user: dict = Depends(get_current_user), req: Request = None):
     """Initiate 2FA setup for the current user.
 
     Generates a TOTP secret and QR code for authenticator apps.
     The secret is stored encrypted until verified.
+
+    Rate-limited per IP (3 attempts / 15 minutes) so an attacker
+    can't churn through setup to brute-force the secret or
+    phish the QR code.
     """
+    await _check_rate_limit(totp_setup_limiter, _client_ip(req))
     client = await get_postgres_client()
 
     # Check if user already has 2FA enabled
@@ -1060,12 +1072,20 @@ async def setup_2fa(user: dict = Depends(get_current_user)):
 
 
 @router.post("/2fa/verify", response_model=TwoFAEnableResponse)
-async def verify_2fa(request: TwoFAVerifyRequest, user: dict = Depends(get_current_user)):
+async def verify_2fa(request: TwoFAVerifyRequest, user: dict = Depends(get_current_user), req: Request = None):
     """Verify 2FA setup with a TOTP code and enable 2FA.
 
     The user must have initiated setup first via POST /auth/2fa/setup.
+
+    On success: enables 2FA, clears the temporary secret, and
+    issues a fresh set of single-use recovery codes. The plaintext
+    codes are returned ONCE; only their SHA-256 hashes are stored.
     """
     client = await get_postgres_client()
+
+    # Rate-limit by IP — TOTP codes are 6 digits so brute force is
+    # feasible in theory; 5 attempts / 5 minutes is the standard cap.
+    await _check_rate_limit(totp_verify_limiter, _client_ip(req))
 
     # Get the stored secret
     row = await client.fetchrow(
@@ -1092,28 +1112,66 @@ async def verify_2fa(request: TwoFAVerifyRequest, user: dict = Depends(get_curre
             detail="Invalid 2FA code",
         )
 
-    # Enable 2FA and clear the temporary secret
-    await client.execute(
-        """
-        UPDATE users
-        SET two_factor_enabled = TRUE, two_factor_secret = NULL
-        WHERE id = $1
-        """,
-        user["user_id"],
-    )
+    # Mint 10 single-use recovery codes. The plaintext codes are
+    # returned ONCE; we store only their SHA-256 hashes.
+    recovery_codes = []
+    recovery_rows = []
+    from datetime import datetime, timezone
+    now = datetime.now(timezone.utc)
+    for _ in range(10):
+        # 10 random bytes → 20 hex chars; group as 4×5 for readability.
+        raw = secrets.token_hex(5).upper()
+        pretty = f"{raw[:5]}-{raw[5:]}"
+        recovery_codes.append(pretty)
+        recovery_rows.append(
+            (user["user_id"], hashlib.sha256(pretty.encode()).hexdigest(), now)
+        )
+
+    async with client.transaction():
+        await client.execute(
+            """
+            UPDATE users
+            SET two_factor_enabled = TRUE, two_factor_secret = NULL
+            WHERE id = $1
+            """,
+            user["user_id"],
+        )
+        # Wipe any previous recovery codes so a fresh enable replaces them.
+        await client.execute(
+            "DELETE FROM two_factor_recovery_codes WHERE user_id = $1",
+            user["user_id"],
+        )
+        await client.executemany(
+            """
+            INSERT INTO two_factor_recovery_codes (user_id, code_hash, created_at)
+            VALUES ($1, $2, $3)
+            """,
+            recovery_rows,
+        )
 
     return TwoFAEnableResponse(
         enabled=True,
-        message="2FA has been enabled successfully",
+        message=(
+            "2FA has been enabled successfully. Save these recovery "
+            "codes — they are shown ONCE and each can be used once "
+            "if you lose your authenticator."
+        ),
+        recovery_codes=recovery_codes,
     )
 
 
 @router.post("/2fa/disable", response_model=TwoFAEnableResponse)
-async def disable_2fa(request: TwoFAVerifyRequest, user: dict = Depends(get_current_user)):
+async def disable_2fa(
+    request: TwoFAVerifyRequest,
+    user: dict = Depends(get_current_user),
+    req: Request = None,
+):
     """Disable 2FA for the current user.
 
-    Requires the current TOTP code to disable.
+    Requires the current TOTP code to disable. Rate-limited per IP
+    (3 attempts / 15 minutes) to keep the disable path tight.
     """
+    await _check_rate_limit(totp_disable_limiter, _client_ip(req))
     client = await get_postgres_client()
 
     # Get user's 2FA status and secret
@@ -1157,6 +1215,79 @@ async def disable_2fa(request: TwoFAVerifyRequest, user: dict = Depends(get_curr
     return TwoFAEnableResponse(
         enabled=False,
         message="2FA has been disabled",
+    )
+
+
+class TwoFARecoverRequest(BaseModel):
+    """Request schema for the recovery-code fallback path."""
+
+    code: str = Field(min_length=1, max_length=64)
+
+
+@router.post("/2fa/recover", response_model=TwoFAEnableResponse)
+async def recover_with_recovery_code(
+    request: TwoFARecoverRequest,
+    user: dict = Depends(get_current_user),
+):
+    """Use a recovery code in place of a TOTP code.
+
+    On success: marks the code used and disables 2FA so the user
+    can re-enroll from a new device. A successful recovery also
+    bumps ``token_version`` so any captured session is killed.
+    """
+    client = await get_postgres_client()
+    code_hash = hashlib.sha256(request.code.encode("utf-8")).hexdigest()
+
+    row = await client.fetchrow(
+        """
+        SELECT id FROM two_factor_recovery_codes
+         WHERE user_id = $1
+           AND code_hash = $2
+           AND used_at IS NULL
+        """,
+        user["user_id"],
+        code_hash,
+    )
+    if row is None:
+        # Don't reveal whether the code was unknown vs already used.
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid recovery code",
+        )
+
+    from datetime import datetime, timezone
+    now = datetime.now(timezone.utc)
+    async with client.transaction():
+        await client.execute(
+            "UPDATE two_factor_recovery_codes SET used_at = $1 WHERE id = $2",
+            now,
+            row["id"],
+        )
+        # Disable 2FA + bump token_version so any pre-existing
+        # session (including the current one) is invalidated.
+        await client.execute(
+            """
+            UPDATE users
+               SET two_factor_enabled = FALSE,
+                   two_factor_secret = NULL,
+                   token_version = COALESCE(token_version, 0) + 1
+             WHERE id = $1
+            """,
+            user["user_id"],
+        )
+        # Burn ALL the remaining recovery codes — a single use is
+        # the contract; the rest must be regenerated after recovery.
+        await client.execute(
+            "DELETE FROM two_factor_recovery_codes WHERE user_id = $1",
+            user["user_id"],
+        )
+
+    return TwoFAEnableResponse(
+        enabled=False,
+        message=(
+            "Recovery code accepted. 2FA has been disabled — please "
+            "re-enroll from your new device."
+        ),
     )
 
 
