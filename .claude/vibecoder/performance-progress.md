@@ -52,6 +52,7 @@ Branch: vibecoder/performance
 - [x] 48. Trim oversized API payloads (n/a — most endpoints already declare tight response_model Pydantic schemas. TraceListItem constrains the heavy fields; portal's listObservabilityTraces calls limit=50 etc. Re-audit if a specific endpoint reports >50KB on a known call shape.)
 - [x] 49. Parallelize independent async requests (n/a — codebase uses Promise.all/await Promise.allSettled at all heavy fan-out points (observability landing, agents/[id], closed-loop, marketplace, multi-agent). No inline sequential awaits found that hit independent endpoints.)
 - [x] 50. Eliminate sequential request waterfalls (n/a — no await→await chains found across the portal. Server-side data fetching routes children-first depend on previous request data, which is intrinsic.)
+- [x] 51. Deduplicate concurrent identical requests (n/a — @tanstack/react-query installed via use-api-query.ts and query-provider.tsx; react-query's default 30s staleTime + in-flight dedupes GETs with identical query keys automatically)
 - [ ] 2. Memoize expensive computed values
 - [ ] 3. Stabilize callbacks passed to children
 - [ ] 4. Split bloated global state
