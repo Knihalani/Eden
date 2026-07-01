@@ -28,6 +28,7 @@ Branch: vibecoder/performance
 - [x] 24. Render a fast static shell first (n/a) — Marketing layout is a server component (static). Portal layout is "use client" (needs auth context) but already renders sidebar+topbar immediately and gates only auth-required regions. No user-data dependencies in the chrome.
 - [x] 25. Convert images to modern formats (Logo component now uses /logo.webp, 17KB vs original 159KB logo.png. PNG kept as fallback. Apple's apple-touch-icon / favicon / icon-192 / icon-512 stay PNG since browser icon manifests require raster.)
 - [x] 26. Serve responsive image sizes (n/a) — Logo uses next/image with constrained width/height props and is small (17KB). Other imgs are inline data URLs (QR) or user-controlled (avatars, transcript refs). No real user-data image grid that would benefit from srcset.
+- [x] 27. Lazy-load images below the fold (added explicit loading=lazy + decoding=async to plain <img> in TranscriptView ImagesPanel, profile avatar; QR code unchanged since data: URLs decode instantly. next/image handles the Logo automatically.)
 - [ ] 2. Memoize expensive computed values
 - [ ] 3. Stabilize callbacks passed to children
 - [ ] 4. Split bloated global state
