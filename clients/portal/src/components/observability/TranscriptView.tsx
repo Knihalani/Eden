@@ -530,7 +530,9 @@ function ImagesPanel({ images }: { images: NonNullable<TR["images"]>; orgId?: st
               <img
                 src={img.url}
                 alt={img.content_type?.startsWith("image/") ? "transcript image" : img.content_type || "transcript image"}
-                className="max-h-32 max-w-32 rounded"
+                width={128}
+                height={128}
+                className="h-32 w-32 rounded object-cover"
               />
             ) : (
               <div className="flex h-32 w-32 flex-col items-center justify-center text-[10px] text-[var(--text-muted)]">
