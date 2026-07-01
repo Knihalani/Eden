@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { Search, Tag, Star, GitFork, ArrowRight, Sparkles, Box } from "lucide-react";
 import { api } from "@/lib/api";
@@ -58,6 +58,20 @@ export default function MarketplacePage() {
   const [category, setCategory] = useState("");
   const [quality, setQuality] = useState<"all" | "high" | "medium" | "low">("all");
 
+  // ponytail: debounce the search query so each keystroke doesn't
+  // fire an /api/marketplace round-trip. category/quality are
+  // click-driven so they don't need debouncing. Internal `q` is what
+  // the effect actually depends on.
+  const [debouncedQuery, setDebouncedQuery] = useState(query);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => setDebouncedQuery(query), 300);
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
+  }, [query]);
+
   const load = () => {
     if (!currentOrg) return;
     let cancelled = false;
@@ -66,7 +80,7 @@ export default function MarketplacePage() {
     (async () => {
       try {
         const params: { q?: string; category?: string; quality?: string } = {};
-        if (query) params.q = query;
+        if (debouncedQuery) params.q = debouncedQuery;
         if (category) params.category = category;
         if (quality !== "all") params.quality = quality;
         const [list, feat] = await Promise.all([
@@ -126,7 +140,7 @@ export default function MarketplacePage() {
     };
   };
 
-  useEffect(() => load(), [currentOrg, query, category, quality, toast]);
+  useEffect(() => load(), [currentOrg, debouncedQuery, category, quality, toast]);
 
   if (!currentOrg) {
     return (
