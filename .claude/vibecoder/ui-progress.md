@@ -15,7 +15,7 @@ Branch: vibecoder/ui
 - [x] 11. Audit Mobile and Tablet Breakpoints (n/a) — mobile-first Tailwind (sm/md/lg/xl); responsive grid collapse pattern: 54× `sm:grid-cols-`, 34× `lg:grid-cols-`, 31× `md:grid-cols-` for grids collapsing to 1 col on mobile. Layout uses `flex h-screen` portal chrome with responsive paddings (67× `sm:p-`, 67× `lg:p-`).
 - [x] 12. Eliminate Horizontal Scroll on Mobile (n/a) — body `overflow-x: hidden` in globals.css; 28× `overflow-x-auto` for tables/code blocks self-manage their scroll; only `w-screen` is ChatSidebar's intentional `max-[480px]:!w-screen` full-width pattern.
 - [x] 13. Build a Flexible Responsive Grid (n/a) — Tailwind grid utilities with responsive breakpoints (54× sm, 34× lg, 31× md, 5× xl). Container max-width via `mx-auto max-w-7xl` (auth page) / `max-w-screen-xl` (dashboard).
-- [ ] 14. Enlarge Mobile Touch Targets
+- [x] 14. Enlarge Mobile Touch Targets — added @media (max-width: 767px) rule that uses a pseudo-element trick to extend the hit area of buttons/links/labels to 44×44px without changing visual size or layout. `.no-bump` opt-out for dense toolbars. Buttons stay at h-10/h-8 visually but receive a 44px hit area on touch.
 - [ ] 15. Eliminate Cumulative Layout Shift
 - [ ] 16. Respect Mobile Safe Area Insets
 - [ ] 17. Build a Smart Sticky Header
