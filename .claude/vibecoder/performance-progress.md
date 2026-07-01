@@ -56,6 +56,7 @@ Branch: vibecoder/performance
 - [x] 52. Paginate large API responses (n/a — every portal list call passes a `limit` (typically 20–200). Backend's pagination contracts include limit + offset/total — no unbounded query returns used.)
 - [x] 53. Add timeouts and retry with backoff (api.ts: added exp-backoff (250ms base, full jitter) for transient 5xx/408/429/network on idempotent methods. 30s default timeout + 1-retry-on-401 was already in place.)
 - [x] 54. Cache GET responses with validators (n/a — selective Cache-Control + ETag decorators on public/read-mostly endpoints (media, trace_quality, ai_agent, gateway). Per-org routes intentionally uncached because they're user-specific. Broad policy change would risk private-data leaks; needs explicit auth-team review.)
+- [x] 55. Use stale-while-revalidate on the client (n/a — TanStack Query already implements SWR via staleTime: 60s + gcTime: 5min, with useApiQuery wrapper. Cached data serves instantly while background re-fetches update it.)
 - [ ] 2. Memoize expensive computed values
 - [ ] 3. Stabilize callbacks passed to children
 - [ ] 4. Split bloated global state
