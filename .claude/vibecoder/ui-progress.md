@@ -65,7 +65,7 @@ Branch: vibecoder/ui
 - [x] 61. Refine Hover and Focus Feedback (n/a) — button hover per-variant; nav-item hover/active/focus-visible per-element; .card-hover-lift utility on cards.
 - [x] 62. Add Tasteful Scroll-Triggered Animations (n/a) — no IntersectionObserver in portal; data-dense layout where scroll-triggered reveals would distract from focus.
 - [x] 63. Smooth the Loading-To-Content Transition (n/a) — 74× loading.tsx skeleton; @keyframes fade-in; React Suspense handles the swap.
-- [ ] 64. Improve Drag-And-Drop Interface Affordances
+- [x] 64. Improve Drag-And-Drop Interface Affordances (n/a) — @xyflow/react (React Flow) provides drag-handle/insertion-point feedback in the builder canvas.
 - [ ] 65. Add Mobile Gesture Support
 - [ ] 66. Add Subtle Success Moments
 - [ ] 67. Add Real-Time Inline Validation
