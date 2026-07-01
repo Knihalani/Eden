@@ -80,6 +80,7 @@ Branch: vibecoder/performance
 - [x] 76. Batch inserts and updates (n/a — bronze_sink.py:201 + silver_etl.py:420 already use executemany for bulk insert; ORM session.bulk_save_objects used where applicable. No INSERT-in-for-loop patterns found.)
 - [x] 77. Add covering indexes for hot reads (n/a — no INCLUDE indexes in any migration. Adding covering indexes needs EXPLAIN ANALYZE on the specific hot read paths; speculative additions without that data are write-cost-without-proven-read-benefit. Re-evaluate after running pg_stat_statements on staging.)
 - [x] 78. Materialize expensive aggregation queries (n/a — columnar engine (Cat 18) ships hourly/daily/weekly rollups of usage_events for the observability dashboard. No hot aggregation that's not already covered by these rollups; PG materialized views would duplicate what ClickHouse already serves.)
+- [x] 79. Use database connection pooling (n/a — asyncpg.create_pool with min_size/max_size already configured (storage/postgres.py:55-112); S23 fix B-3 tuned pool timeout=10 + max_inactive_connection_lifetime=300.)
 - [ ] 2. Memoize expensive computed values
 - [ ] 3. Stabilize callbacks passed to children
 - [ ] 4. Split bloated global state
