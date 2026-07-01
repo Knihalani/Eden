@@ -88,7 +88,7 @@ Branch: vibecoder/ui
 - [x] 84. Improve Perceived Performance Everywhere (n/a) — 74× loading.tsx skeletons, optimistic updates, debounced search, button loading states, prefetched routes, no inline <script> (perf audit).
 - [x] 85. Add Contextual Help and Tooltips — added Radix TooltipProvider to root layout (delayDuration 200ms, skipDelayDuration 300ms). Now available to all routes for icon-only buttons, complex features, and non-obvious fields.
 - [x] 86. Standardize Status and State Indicators (n/a) — StatusBadge is the standard: 6+ variants pairing color + icon (CheckCircle2/XCircle/AlertTriangle/Clock/Circle).
-- [ ] 87. Clarify Primary Navigation Structure
+- [x] 87. Clarify Primary Navigation Structure (n/a) — sidebar with active-state left bar + accent background; lib/sidebar-config.ts central source; lg:sticky desktop + mobile drawer.
 - [ ] 88. Add a Command Palette
 - [ ] 89. Show Clear Active Location Indicators
 - [ ] 90. Add Breadcrumbs for Deep Navigation
