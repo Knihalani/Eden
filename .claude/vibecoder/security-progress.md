@@ -2,7 +2,7 @@
 
 100 prompts applied to the Eden codebase, one commit each.
 
-- [ ] 1. Hash passwords with a modern algorithm
+- [x] 1. Hash passwords with a modern algorithm — bcrypt already in use; made rounds explicit (12), added needs_rehash() for transparent upgrade on next login + 5 tests
 - [ ] 2. Enforce strong password requirements
 - [ ] 3. Rate limit login attempts
 - [ ] 4. Lock accounts after repeated failures

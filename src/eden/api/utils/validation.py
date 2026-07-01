@@ -20,6 +20,10 @@ COMMON_PASSWORDS: set[str] = {
     "master", "shadow", "sunshine", "princess", "football",
     "passw0rd", "changeme", "secret", "abc123", "test123",
     "password1", "Password1", "Password123", "pass1234",
+    # Top breached/common passwords (RockYou-derivative, NIST guidance).
+    "iloveyou", "trustno1", "superman", "batman", "starwars",
+    "computer", "michael", "ashley", "jessica", "111111",
+    "000000", "654321", "qwertyuiop", "asdfghjkl",
 }
 
 
@@ -32,7 +36,7 @@ def validate_password_strength(password: str) -> None:
     """Validate password strength against policy requirements.
 
     Policy:
-    - Minimum 10 characters
+    - Minimum 12 characters
     - At least one uppercase letter (A-Z)
     - At least one lowercase letter (a-z)
     - At least one digit (0-9)
@@ -47,7 +51,7 @@ def validate_password_strength(password: str) -> None:
     """
     if not password:
         raise PasswordValidationError(
-            "Password must be at least 10 characters long"
+            "Password must be at least 12 characters long"
         )
 
     if password.lower() in COMMON_PASSWORDS:
@@ -55,9 +59,9 @@ def validate_password_strength(password: str) -> None:
             "This password is too common. Please choose a stronger password."
         )
 
-    if len(password) < 10:
+    if len(password) < 12:
         raise PasswordValidationError(
-            "Password must be at least 10 characters long"
+            "Password must be at least 12 characters long"
         )
 
     if len(password) > 128:
