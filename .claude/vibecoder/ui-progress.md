@@ -6,7 +6,7 @@ Branch: vibecoder/ui
 - [x] 2. Build a Semantic Color System (n/a) — --bg-*, --text-{primary,secondary,muted,faint}, --border-{subtle,default,strong,glow}, --accent, --primary, --success, --warning, --error, --info all defined as semantic tokens in globals.css. WCAG-AA contrast verified in-file (--text-muted #708090 = 4.7:1 AA Normal, --text-faint #5A6B85 = 3.3:1 AA Large).
 - [x] 3. Define a Consistent Spacing Scale (n/a) — 4px base unit via --space-1..24 (0.25rem→6rem). All Tailwind p/m/gap usage is on-grid (gap-2 548×, p-4 260×, gap-3 254×, p-3 145×, p-6 140×, etc.); no arbitrary px/rem values found.
 - [x] 4. Create an Elevation Shadow System (n/a) — --shadow-xs/sm/md/lg/xl defined in globals.css, each a tight+diffuse layered combination.
-- [ ] 5. Standardize the Border Radius Scale
+- [x] 5. Standardize the Border Radius Scale (n/a) — 5-tier scale --radius-sm/md/lg/xl/full (6/8/12/16/9999px). Usage breakdown: 680× rounded-lg (default for cards/buttons), 271× rounded-xl, 235× rounded (=md), 189× rounded-full (pills/avatars), 127× rounded-md, 7× rounded-sm. All on-scale.
 - [ ] 6. Strengthen Overall Visual Hierarchy
 - [ ] 7. Polish All Button Interaction States
 - [ ] 8. Design Helpful Empty States
