@@ -163,7 +163,9 @@ export function TwoFASetupDialog({ onClose, onSuccess }: TwoFASetupDialogProps) 
                 <img
                   src={`data:image/png;base64,${qrData.qr_code_base64}`}
                   alt="2FA QR code — scan with your authenticator app"
-                  className="w-48 h-48"
+                  width={192}
+                  height={192}
+                  className="h-48 w-48"
                 />
               </div>
               <p className="text-xs text-[var(--text-muted)] text-center max-w-xs">

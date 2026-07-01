@@ -327,7 +327,7 @@ export function ApiKeysTab({ org }: ApiKeysTabProps) {
                       )
                         return;
                       try {
-                        for (const k of rows) await api.revokeApiKey(org.id, k.id);
+                        await Promise.all(rows.map((k) => api.revokeApiKey(org.id, k.id)));
                         await loadKeys();
                         toast.success(`Revoked ${rows.length} key${rows.length === 1 ? "" : "s"}`);
                       } catch (err: unknown) {

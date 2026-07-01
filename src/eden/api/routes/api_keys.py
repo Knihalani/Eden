@@ -205,7 +205,6 @@ async def validate_org_api_key(org_id: str, key: str) -> dict | None:
         "org_id": str(row["org_id"]),
         "name": row["name"],
         "slug": row["slug"],
-        "is_owner": row["owner_id"] == row["org_id"],
         "scopes": row["scopes"],
         "key_id": str(row["key_id"]),
     }

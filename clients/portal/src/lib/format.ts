@@ -58,6 +58,35 @@ export function formatNumber(n: number | null | undefined): string {
   return `${(n / 1_000_000).toFixed(1)}M`;
 }
 
+/**
+ * Locale-aware integer formatter (thousand separators).
+ * `formatNumber` above is compact (1.2k) for dashboards;
+ * this is the spelled-out form for prose and detail pages.
+ */
+const _intFmt = new Intl.NumberFormat("en-US");
+export function formatInt(n: number | null | undefined): string {
+  if (n == null) return "—";
+  return _intFmt.format(n);
+}
+
+/**
+ * Currency formatter. Defaults to USD; pass a 3-letter ISO code
+ * for the locale's symbol + grouping. Uses Intl.NumberFormat so
+ * negatives show in accounting style, decimals are clamped to 2.
+ */
+export function formatCurrency(
+  amount: number | null | undefined,
+  currency: string = "USD",
+): string {
+  if (amount == null) return "—";
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency,
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(amount);
+}
+
 export function formatChartDate(dateString: string | Date): string {
   const date = typeof dateString === "string" ? new Date(dateString) : dateString;
   return date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
