@@ -26,6 +26,8 @@ Branch: vibecoder/performance
 - [x] 22. Preconnect to critical third-party origins (n/a) — API_BASE points at same-origin /api/proxy; Clerk SDK auto-preconnects its own auth CDN; no other third-party origins ship on first load. Adding speculative preconnect would waste connection slots.
 - [x] 23. Reserve space to avoid load shift (TranscriptView.tsx ImagesPanel: added explicit width=128 height=128 + object-cover so the 128×128 slot is reserved before image bytes arrive)
 - [x] 24. Render a fast static shell first (n/a) — Marketing layout is a server component (static). Portal layout is "use client" (needs auth context) but already renders sidebar+topbar immediately and gates only auth-required regions. No user-data dependencies in the chrome.
+- [x] 25. Convert images to modern formats (Logo component now uses /logo.webp, 17KB vs original 159KB logo.png. PNG kept as fallback. Apple's apple-touch-icon / favicon / icon-192 / icon-512 stay PNG since browser icon manifests require raster.)
+- [x] 26. Serve responsive image sizes (n/a) — Logo uses next/image with constrained width/height props and is small (17KB). Other imgs are inline data URLs (QR) or user-controlled (avatars, transcript refs). No real user-data image grid that would benefit from srcset.
 - [ ] 2. Memoize expensive computed values
 - [ ] 3. Stabilize callbacks passed to children
 - [ ] 4. Split bloated global state
