@@ -35,7 +35,7 @@ Branch: vibecoder/ui
 - [x] 31. Run a Full Performance Audit (n/a) — vibecoder/performance branch shipped all 100 perf prompts. See .claude/vibecoder/performance-progress.md for full detail.
 - [x] 32. Shrink the JavaScript Bundle (n/a) — perf audit dropped react-syntax-highlighter (~30KB), set `"sideEffects": false` in package.json, Turbopack/webpack dedup.
 - [x] 33. Add Route-Based Code Splitting (n/a) — App Router auto-splits per page.tsx; 5 explicit next/dynamic imports for settings tabs, React Flow Canvas, optimization subpages.
-- [ ] 34. Optimize and Modernize All Images
+- [x] 34. Optimize and Modernize All Images (n/a) — perf audit webp'd favicon/icon-192/icon-512/logo (17KB vs 159KB original); manifest.json points at webp first with PNG fallback.
 - [ ] 35. Implement Content-Aware Loading Skeletons
 - [ ] 36. Virtualize Long Scrolling Lists
 - [ ] 37. Eliminate Unnecessary Component Re-renders
