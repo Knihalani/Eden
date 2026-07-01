@@ -10,6 +10,7 @@ Branch: vibecoder/performance
 - [x] 6. Debounce text input and search (marketplace: 300ms debounce on `query` via setTimeout so /api/marketplace fires once per pause instead of per keystroke)
 - [x] 7. Throttle scroll and resize handlers (n/a) — only one resize listener (marketing canvas, lightweight w/h assignment, already cleaned up in effect teardown) and no scroll listeners anywhere. Visibility work uses IntersectionObserver (see prompt 9).
 - [x] 8. Batch related state updates (n/a) — React 19 (in deps) auto-batches both sync and async state updates by default, so explicit batching (useReducer or unstable_batchedUpdates) is unnecessary. No multi-state setX in sequence found that would still re-render multiple times under React 19.
+- [x] 9. Replace scroll listeners with observers (n/a) — codebase has no scroll-event listeners. Two getBoundingClientRect calls (optimization/page.tsx, Canvas.tsx) run once at mount, not in scroll handlers. No "lazy-load on scroll" pattern exists to migrate.
 - [ ] 2. Memoize expensive computed values
 - [ ] 3. Stabilize callbacks passed to children
 - [ ] 4. Split bloated global state
