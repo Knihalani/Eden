@@ -21,6 +21,7 @@ Branch: vibecoder/performance
 - [x] 17. Stream server-rendered HTML progressively (n/a) — Next.js App Router streams server components by default. SelectedTraceCard and reset-password already wrap search-param reads in <Suspense fallback={null}>. There is no buffered SSR path to migrate.
 - [x] 18. Show instant feedback on interactions (n/a) — 94 buttons across the (portal) routes already render `<Loader2>` + `disabled={loading}` while the async action runs. Decisions page added loading state on both "Show path" and "Explain" buttons. Pattern is consistent.
 - [x] 19. Lazy-load below-the-fold page sections (n/a) — Above-the-fold heavy libs already next/dynamic'd. Below-the-fold literal lazy-load (IntersectionObserver) is uncommon in this codebase; marketing/landing pages are content-driven and small. Re-evaluate if the lighthouse LCP report flags specific long-tail sections.
+- [x] 20. Prioritize above-the-fold content first (n/a) — `next/font/google` self-hosts fonts at build time with display:swap + auto-preload (no extra fetches). Critical CSS is the Tailwind layer that ships inline with the SSR stream. No <script> tags inline in the document.
 - [ ] 2. Memoize expensive computed values
 - [ ] 3. Stabilize callbacks passed to children
 - [ ] 4. Split bloated global state
