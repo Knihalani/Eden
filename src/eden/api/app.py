@@ -423,6 +423,17 @@ if getattr(settings, "quota_enforcement_enabled", True):
 # behind Northflank + Vercel.
 app.add_middleware(InternalOnlyMiddleware)
 
+# Default-deny auth middleware (security 26). Every request must
+# carry an auth context (cookie, bearer, or org-specific header)
+# unless the path is on the explicit public-prefix allow-list.
+# Catches the case where a new route ships without
+# ``Depends(get_current_user)`` — the route would be open under
+# the old opt-in posture; here it fails CLOSED with 401.
+from eden.api.middleware.default_deny import DefaultDenyAuthMiddleware
+
+if getattr(settings, "default_deny_enabled", True):
+    app.add_middleware(DefaultDenyAuthMiddleware)
+
 # Per-tenant sliding-window rate limiter. Registered AFTER CORS so
 # preflight OPTIONS requests are never rate-limited. Falls back to
 # in-memory TokenBucket when REDIS_URL is unset. Disable in dev with

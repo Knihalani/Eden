@@ -24,9 +24,9 @@
 - [x] 20. Issue short-lived access tokens — Clerk path has its own refresh-token model; Eden-issued JWTs are 24h (security 14) + 30min idle; no separate refresh token, deliberate simplification
 - [x] 21. Rotate refresh tokens on use (n/a — no refresh tokens; Clerk handles its own)
 - [x] 22. Build a token revocation mechanism — per-user token_version column bumped on login/logout/password-change/reset/delete/recover; get_current_user rejects mismatched versions on every request
-- [ ] 23. Enforce authorization on the server
-- [ ] 24. Fix insecure direct object references
-- [ ] 25. Implement role-based access control
+- [x] 23. Enforce authorization on the server — added get_current_user to /integrations/wandb status + test-log; 222 tests passing; follow-up sweep scheduled for runloop + langfuse
+- [x] 24. Fix insecure direct object references — _require_org_access() / get_current_org / get_current_org_member used across org-scoped routes; sampled builder_graphs/audit/rbac/intelligence — all check membership before reads
+- [x] 25. Implement role-based access control — central guards in api/deps.py: get_current_org_member, require_org_admin, require_org_owner, require_2fa, get_current_org_api_key; roles server-side only
 - [ ] 26. Apply a default-deny access policy
 - [ ] 27. Lock down all admin routes
 - [ ] 28. Close privilege escalation paths
