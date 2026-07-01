@@ -8,7 +8,7 @@
 - [x] 4. Lock accounts after repeated failures — migration 076 (failed_login_count + locked_until + last_failed_login_at); /auth/login locks 5min after 5 failures with exponential backoff (cap 24h); 423+Retry-After on lock; counter resets on success; 4 migration tests
 - [x] 5. Stop username and email enumeration — login runs dummy bcrypt on no-row/SSO paths (timing-equalised); signup returns identical 202+generic message for new + duplicate emails; user_id no longer in response
 - [x] 6. Secure the password reset flow — migration 077 creates password_reset_tokens table (was referenced but not declared); stores SHA-256 of token; reset burns the token + bumps token_version to invalidate sessions; 5 migration tests
-- [ ] 7. Regenerate sessions to block fixation
+- [x] 7. Regenerate sessions to block fixation — every Eden JWT now carries fresh jti; /auth/login bumps token_version; get_current_user rejects tokens whose version doesn't match DB; 3 new tests, 80 total passing
 - [ ] 8. Add multi-factor authentication support
 - [ ] 9. Compare credentials in constant time
 - [ ] 10. Harden the remember-me feature

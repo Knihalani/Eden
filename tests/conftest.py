@@ -509,12 +509,18 @@ def reset_rate_limit():
             login_limiter,
             password_reset_limiter,
             signup_limiter,
+            totp_disable_limiter,
+            totp_setup_limiter,
+            totp_verify_limiter,
         )
         for limiter in (
             login_limiter,
             login_email_limiter,
             signup_limiter,
             password_reset_limiter,
+            totp_verify_limiter,
+            totp_setup_limiter,
+            totp_disable_limiter,
         ):
             limiter._buckets.clear()
     except Exception:
