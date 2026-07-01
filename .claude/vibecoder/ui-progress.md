@@ -54,7 +54,7 @@ Branch: vibecoder/ui
 - [x] 50. Add Meaningful Image Alt Text (n/a) — all 7× img/Image usages have descriptive alt text. QR = "2FA QR code — scan with your authenticator app"; profile = "Your profile photo".
 - [x] 51. Respect Reduced Motion Preferences (n/a) — @media (prefers-reduced-motion: reduce) in globals.css disables all animations + button:active scale + page-enter + stage-active.
 - [x] 52. Announce Dynamic Changes to Screen Readers (n/a) — 10+ files use aria-live, role="status" or role="alert" for dynamic announcements; ToastProvider wraps notifications.
-- [ ] 53. Build Fully Accessible Modals
+- [x] 53. Build Fully Accessible Modals (n/a) — @radix-ui/react-dialog handles focus trap, Escape close, aria-modal, aria-labelledby. Custom Dialog in components/ui/dialog.tsx.
 - [ ] 54. Don't Rely on Color Alone
 - [ ] 55. Add a Skip-To-Content Link
 - [ ] 56. Fix Page Titles and Language
