@@ -107,11 +107,15 @@ class HookBus:
             evicted += 1
         # Dead events (no live dedup, no live suppression referencing them)
         live_hook_ids = {hid for hid, _ in self._dedup.values()}
+        for k, (_sev, exp) in list(self._suppressions.items()):
+            if exp > now:
+                live_hook_ids.add(k)
         dead_events = [
             k for k in self._events if k not in live_hook_ids
         ]
         for k in dead_events:
             del self._events[k]
+            self._cascade_depth.pop(k, None)
             evicted += 1
         return evicted
 
@@ -146,40 +150,81 @@ class HookBus:
                 event.dedup_window_seconds, parent.dedup_window_seconds
             )
 
+        # Use the event's own parent_hook_id for the dedup key
+        # (NOT the post-loop ``cascade_parent`` which has been walked
+        # to the root ancestor).
+        dedup_cascade_parent = event.parent_hook_id
+
         key = _DedupKey(
             reason=event.reason,
             org_id=event.org_id,
             primary_entity_id=primary_entity_id,
-            cascade_parent=cascade_parent,
+            cascade_parent=dedup_cascade_parent,
         )
 
-        # Suppression: higher-severity hook within 1h pre-empts lower
-        sup_key = (event.org_id, primary_entity_id)
-        if sup_key in self._suppressions:
-            prev_sev, prev_at = self._suppressions[sup_key]
-            if now - prev_at < 3600 and _severity_rank(event.severity) < _severity_rank(prev_sev):
-                logger.info(
-                    "hook_bus: suppressed %s (severity=%s) — %s already active",
-                    event.reason,
-                    event.severity,
-                    prev_sev,
-                )
-                return None
-        self._suppressions[sup_key] = (event.severity, now)
+        # Suppression: higher-severity hook within 1h pre-empts lower.
+        # Skip this check when the event is part of a cascade chain —
+        # the cascade itself is the legitimate new event.
+        if event.parent_hook_id is None:
+            sup_key = (event.org_id, primary_entity_id)
+            if sup_key in self._suppressions:
+                prev_sev, prev_at = self._suppressions[sup_key]
+                if now - prev_at < 3600 and _severity_rank(event.severity) < _severity_rank(prev_sev):
+                    logger.info(
+                        "hook_bus: suppressed %s (severity=%s) — %s already active",
+                        event.reason,
+                        event.severity,
+                        prev_sev,
+                    )
+                    return None
+            self._suppressions[sup_key] = (event.severity, now)
 
-        # Dedup window check
+        # Dedup window check. Three paths:
+        # (a) The event's own dedup key matches a recent event.
+        # (b) The event has a parent_hook_id whose dedup entry
+        #     matches the current event's reason/org/entity (cascade
+        #     dedup inheritance — per §E.3 the child inherits the
+        #     parent's dedup window).
+        dedup_hit_id = None
         if key in self._dedup:
             prev_id, prev_expires = self._dedup[key]
             if now < prev_expires:
-                logger.info(
-                    "hook_bus: dedup %s for %s (within %ds)",
-                    event.reason,
-                    event.org_id,
-                    event.dedup_window_seconds,
-                )
-                # Increment repetition_count in DB (best-effort)
-                await _increment_repetition(prev_id)
-                return None
+                dedup_hit_id = prev_id
+        if dedup_hit_id is None and event.parent_hook_id and event.parent_hook_id in self._events:
+            parent = self._events[event.parent_hook_id]
+            parent_primary = _extract_primary_entity(parent)
+            parent_key = _DedupKey(
+                reason=parent.reason,
+                org_id=parent.org_id,
+                primary_entity_id=parent_primary,
+                cascade_parent=None,
+            )
+            if parent_key in self._dedup:
+                prev_id, prev_expires = self._dedup[parent_key]
+                # Cascade dedup only applies when the parent's
+                # severity is at least as high as the child's —
+                # equal severity just means two unrelated events
+                # happened to share a key (the dedup catches them
+                # as a side effect, which is fine for distinct
+                # events but not for an explicit cascade). The
+                # severity-rank check matches the suppression rule
+                # below: a higher-severity parent dedups a lower-
+                # severity child within the cascade window.
+                if (
+                    _severity_rank(event.severity) < _severity_rank(parent.severity)
+                    and now < prev_expires
+                ):
+                    dedup_hit_id = prev_id
+        if dedup_hit_id is not None:
+            logger.info(
+                "hook_bus: dedup %s for %s (within %ds)",
+                event.reason,
+                event.org_id,
+                event.dedup_window_seconds,
+            )
+            # Increment repetition_count in DB (best-effort)
+            await _increment_repetition(dedup_hit_id)
+            return None
 
         hook_id = str(uuid.uuid4())
         self._events[hook_id] = event

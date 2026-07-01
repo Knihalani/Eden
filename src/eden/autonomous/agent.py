@@ -1281,6 +1281,9 @@ class ChatService:
             "citations": citations,
             "prompt_tokens": prompt_tokens,
             "completion_tokens": completion_tokens,
+            "cost_usd": float(getattr(usage, "cost", 0.0) or 0.0)
+            if 'usage' in locals() and usage is not None
+            else 0.0,
         }
 
     async def stream_chat(
@@ -1323,6 +1326,19 @@ class ChatService:
         # possibly followed by tool results.
         total_prompt_tokens = 0
         total_completion_tokens = 0
+        total_cost_usd = 0.0
+        # DL-15: load the org's hard-limit cap once at the start of
+        # the turn. The budget gate fires after each LLM call — if
+        # the running total exceeds the cap, we break the loop and
+        # emit an error chunk so the user knows why the agent
+        # stopped.
+        try:
+            from eden.services.budget_service import get_budget
+
+            _budget = await get_budget(tenant_id)
+        except Exception:
+            _budget = {}
+        _hard_limit = float(_budget.get("cost_hard_limit_usd", 0.0) or 0.0)
         turn = 0
         while turn < self._max_turns:
             turn += 1
@@ -1346,6 +1362,34 @@ class ChatService:
 
             total_prompt_tokens += llm_result.get("prompt_tokens", 0)
             total_completion_tokens += llm_result.get("completion_tokens", 0)
+
+            # DL-15: record real-cost usage in the budget service
+            # when cost_usd > 0 (the OpenRouter usage.cost field).
+            # Best-effort: a budget outage MUST NOT break the chat.
+            cost_usd = float(llm_result.get("cost_usd", 0.0) or 0.0)
+            total_cost_usd += cost_usd
+            if cost_usd > 0:
+                try:
+                    from eden.services.budget_service import record_usage
+
+                    await record_usage(tenant_id, cost_usd)
+                except Exception as exc:
+                    logger.debug(
+                        "ChatService: record_usage failed: %s", exc,
+                    )
+
+            # DL-15 budget gate: if the running total exceeds the
+            # hard cap, break the loop and emit an error chunk so
+            # the user knows why the agent stopped.
+            if _hard_limit > 0 and total_cost_usd > _hard_limit:
+                await emit(AgentChunk(
+                    type="error",
+                    error=(
+                        f"Budget hard cap exceeded: "
+                        f"${total_cost_usd:.4f} > ${_hard_limit:.4f}"
+                    ),
+                ))
+                break
 
             # Persist the assistant message (full raw text — we
             # reconstruct the display view on read).

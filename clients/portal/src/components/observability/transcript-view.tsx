@@ -18,8 +18,7 @@
  * messages. We do NOT make LLM calls from this component.
  */
 
-import * as _React from "react";
-import { useState } from "react";
+import { memo, useState } from "react";
 import { cn } from "@/lib/utils";
 
 export interface ToolCall {
@@ -72,7 +71,7 @@ export function TranscriptView({ messages, className, collapseAtChars = 1000 }: 
   );
 }
 
-function MessageCard({ message, collapseAtChars }: { message: TranscriptMessage; collapseAtChars: number }) {
+const MessageCard = memo(function MessageCard({ message, collapseAtChars }: { message: TranscriptMessage; collapseAtChars: number }) {
   const [expanded, setExpanded] = useState(false);
   const meta = ROLE_META[message.role];
   const tooLong = message.content.length > collapseAtChars;
@@ -138,9 +137,9 @@ function MessageCard({ message, collapseAtChars }: { message: TranscriptMessage;
       )}
     </div>
   );
-}
+});
 
-function ToolCallBadge({ tc }: { tc: ToolCall }) {
+const ToolCallBadge = memo(function ToolCallBadge({ tc }: { tc: ToolCall }) {
   const [open, setOpen] = useState(false);
   return (
     <div className="rounded border border-[var(--border)] bg-[var(--bg-primary)] text-xs">
@@ -178,4 +177,4 @@ function ToolCallBadge({ tc }: { tc: ToolCall }) {
       )}
     </div>
   );
-}
+});
