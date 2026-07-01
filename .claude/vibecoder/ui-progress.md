@@ -3,7 +3,7 @@
 Branch: vibecoder/ui
 
 - [x] 1. Establish a Design Token System — added tier 1/2/3 section header to globals.css documenting primitive/semantic/component structure; fixed analytics-tab CHART_COLORS_FALLBACK so pie-4/5 mirrors the actual --chart-pie-4/5 tokens (was #ef4444/#8b5cf6 → now #C084FC/#E879F9).
-- [ ] 2. Build a Semantic Color System
+- [x] 2. Build a Semantic Color System (n/a) — --bg-*, --text-{primary,secondary,muted,faint}, --border-{subtle,default,strong,glow}, --accent, --primary, --success, --warning, --error, --info all defined as semantic tokens in globals.css. WCAG-AA contrast verified in-file (--text-muted #708090 = 4.7:1 AA Normal, --text-faint #5A6B85 = 3.3:1 AA Large).
 - [ ] 3. Define a Consistent Spacing Scale
 - [ ] 4. Create an Elevation Shadow System
 - [ ] 5. Standardize the Border Radius Scale
