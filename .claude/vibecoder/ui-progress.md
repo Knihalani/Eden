@@ -78,7 +78,7 @@ Branch: vibecoder/ui
 - [x] 74. Improve Password Field UX (n/a) — Clerk handles auth passwords with show/hide + strength; .password-toggle CSS class in globals.css for any custom password fields.
 - [x] 75. Add Input Hints and Affordances (n/a) — native placeholder attribute + Radix Field labels; description pattern via Field components.
 - [x] 76. Clarify Form Submission Feedback (n/a) — button loading prop shows Loader2 + disabled; 94 buttons use the pattern (perf audit).
-- [ ] 77. Build a Toast Notification System
+- [x] 77. Build a Toast Notification System (n/a) — ToastProvider with success/error/warning/info variants; slide-in/out animations; ARIA live region for screen-reader announcements.
 - [ ] 78. Handle Loading, Empty, Error, Success States
 - [ ] 79. Add Graceful Error Boundaries
 - [ ] 80. Confirm Destructive and Irreversible Actions
