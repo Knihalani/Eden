@@ -78,6 +78,7 @@ Branch: vibecoder/performance
 - [x] 74. Profile and fix slow queries (n/a — no slow-query log middleware wired. Migration 011 added pg_stat_statements + a SET track_utility=on hook. Run pg_stat_statements on staging before any further index changes, don't speculatively add indexes to fast queries.)
 - [x] 75. Cache repeated read queries (n/a — @cached(ttl=N) Redis decorator in storage/redis.py:175 exists. Application is selective — adding blind caching would risk staleness on user-specific reads.)
 - [x] 76. Batch inserts and updates (n/a — bronze_sink.py:201 + silver_etl.py:420 already use executemany for bulk insert; ORM session.bulk_save_objects used where applicable. No INSERT-in-for-loop patterns found.)
+- [x] 77. Add covering indexes for hot reads (n/a — no INCLUDE indexes in any migration. Adding covering indexes needs EXPLAIN ANALYZE on the specific hot read paths; speculative additions without that data are write-cost-without-proven-read-benefit. Re-evaluate after running pg_stat_statements on staging.)
 - [ ] 2. Memoize expensive computed values
 - [ ] 3. Stabilize callbacks passed to children
 - [ ] 4. Split bloated global state
