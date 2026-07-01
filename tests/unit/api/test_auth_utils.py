@@ -187,6 +187,45 @@ class TestJWTTokens:
         )
         assert decode_access_token(token) is None
 
+    def test_alg_none_token_is_rejected(self, test_settings):
+        """An ``alg: none`` token is rejected even if the signature
+        segment is empty — defence against the JWT 'none' confusion
+        attack."""
+        from jose import jwt
+        # Manually build a token with alg=none. python-jose refuses
+        # to encode with alg=none, so the attack surface is only via
+        # hand-crafted tokens. We just check the decoder rejects
+        # a token whose alg header is not HS256.
+        import base64
+        import json
+
+        header = base64.urlsafe_b64encode(
+            json.dumps({"alg": "none", "typ": "JWT"}).encode()
+        ).rstrip(b"=").decode()
+        payload = base64.urlsafe_b64encode(
+            json.dumps({"sub": "user-123", "exp": 9999999999, "iat": 0}).encode()
+        ).rstrip(b"=").decode()
+        # Signature is empty for alg=none.
+        token = f"{header}.{payload}."
+        assert decode_access_token(token) is None
+
+    def test_alg_rs256_token_is_rejected(self, test_settings):
+        """A token claiming RS256 is rejected — we only accept HS256.
+        This is the classic asymmetric-vs-symmetric confusion attack."""
+        import base64
+        import json
+        # Hand-craft an RS256-claimed token. The signature is junk
+        # but the point is the decoder must reject on the alg
+        # header before even attempting to verify the signature.
+        header = base64.urlsafe_b64encode(
+            json.dumps({"alg": "RS256", "typ": "JWT"}).encode()
+        ).rstrip(b"=").decode()
+        payload = base64.urlsafe_b64encode(
+            json.dumps({"sub": "user-123", "exp": 9999999999, "iat": 0}).encode()
+        ).rstrip(b"=").decode()
+        token = f"{header}.{payload}.fake-signature-bytes"
+        assert decode_access_token(token) is None
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Password Strength Validation

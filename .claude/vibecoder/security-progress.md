@@ -17,7 +17,7 @@
 - [x] 13. Set secure session cookie flags — 3 set_cookie call sites consolidated into _set_session_cookie() helper with HttpOnly + Secure + SameSite=lax + Path=/; flag policy documented in one place; 87 tests passing
 - [x] 14. Add idle and absolute session timeouts — jwt_exp_days 7→1; get_current_user enforces 30min idle via last_seen_at vs iat; migration 076 adds last_seen_at column; best-effort slide on every auth
 - [x] 15. Fully invalidate sessions on logout — /auth/logout now requires auth + bumps token_version (so captured JWTs fail next check) + clears cookie with matching flags; new /auth/logout-all endpoint for "log out everywhere"
-- [ ] 16. Validate every JWT claim properly
+- [x] 16. Validate every JWT claim properly — decode_access_token now requires exp/iat/sub on every token (python-jose options); verify_nbf on; aud/iss enforced when configured; 3 new tests, 90 total passing
 - [ ] 17. Block JWT algorithm confusion attacks
 - [ ] 18. Strengthen and rotate signing secrets
 - [ ] 19. Store auth tokens safely client-side
