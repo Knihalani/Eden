@@ -69,6 +69,7 @@ Branch: vibecoder/performance
 - [x] 65. Add an in-memory cache layer (n/a — Redis (storage/redis.py) wired for rate limiting + idempotency; @lru_cache for module singletons; REDIS_URL fallback to in-memory token buckets. Selective but in place.)
 - [x] 66. Cache rendered pages or fragments (n/a — marketing pages are server-rendered + Vercel CDN + Next.js ISR-style prerender. Portal pages are auth-gated + dynamic, server-streamed live data, so caching the HTML shell would just delay the user's first paint.)
 - [x] 67. Warm caches for hot paths (n/a — lifespan() in app.py:229 already calls initialize_kb() and probes Qdrant at startup. @lru_cache singletons + Redis idempotency warm on first hit. Adding speculative startup warming for arbitrary endpoints risks cold-start overshoot.)
+- [x] 68. Add a service worker asset cache (n/a — public/service-worker.js already pre-caches "/", "/dashboard", "/jobs", "/settings", "/login" + API routes under "eden-portal-v1" + "eden-api-v1". skipWaiting + clients.claim idioms are correct.)
 - [ ] 2. Memoize expensive computed values
 - [ ] 3. Stabilize callbacks passed to children
 - [ ] 4. Split bloated global state
