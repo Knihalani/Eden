@@ -58,6 +58,8 @@ Branch: vibecoder/performance
 - [x] 54. Cache GET responses with validators (n/a — selective Cache-Control + ETag decorators on public/read-mostly endpoints (media, trace_quality, ai_agent, gateway). Per-org routes intentionally uncached because they're user-specific. Broad policy change would risk private-data leaks; needs explicit auth-team review.)
 - [x] 55. Use stale-while-revalidate on the client (n/a — TanStack Query already implements SWR via staleTime: 60s + gcTime: 5min, with useApiQuery wrapper. Cached data serves instantly while background re-fetches update it.)
 - [x] 56. Batch many small requests together (api-keys-tab.tsx bulk revoke: replaced serial `for await api.revokeApiKey` with `Promise.all(rows.map(...))` — N keys revoked in parallel instead of N round-trips.)
+- [x] 57. Reuse connections with keep-alive (providers/pr.py: added module-level _shared_httpx() returning a singleton `httpx.AsyncClient(timeout=30.0)` so GitHub API calls reuse the TCP connection pool instead of opening a fresh client per request)
+- [x] 58. Move reads to the edge (n/a — Vercel auto-CDNs static (prompt 35). API routes are Node runtime against Northflank Postgres; moving to Edge would require Clerk-only deps + a separate read-replica path. Architecture decision, not a perf fix.)
 - [ ] 2. Memoize expensive computed values
 - [ ] 3. Stabilize callbacks passed to children
 - [ ] 4. Split bloated global state
