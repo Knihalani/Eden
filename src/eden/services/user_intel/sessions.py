@@ -125,37 +125,34 @@ async def _fetch_session_aggregates(
     """
     return await client.fetchrow(
         """
-        WITH per_user AS (
+        WITH per_session AS (
             SELECT
                 user_id,
-                count(*)                            AS n_sessions,
-                max(last_event_at)                  AS last_seen,
-                min(first_event_at)                 AS first_seen,
-                bool_or(abandoned)                  AS any_abandoned,
-                sum((n_turns = 1)::int) FILTER (
-                    WHERE abandoned
-                )                                   AS single_turn_abandoned,
-                sum(n_turns)                        AS total_turns
+                last_event_at,
+                first_event_at,
+                n_turns,
+                abandoned
               FROM user_sessions
              WHERE org_id = $1
                AND first_event_at > NOW() - $2::interval
-             GROUP BY user_id
         )
         SELECT
             count(*)::int                                          AS total_sessions,
             count(DISTINCT user_id)::int                           AS active_users,
             count(DISTINCT user_id) FILTER (
-                WHERE last_seen < NOW() - INTERVAL '7 days'
+                WHERE last_event_at < NOW() - INTERVAL '7 days'
             )::int                                                 AS dormant_users,
             count(DISTINCT user_id) FILTER (
-                WHERE first_seen < NOW() - ($2::interval / 2)
-                  AND last_seen  > NOW() - ($2::interval / 2)
+                WHERE first_event_at < NOW() - ($2::interval / 2)
+                  AND last_event_at  > NOW() - ($2::interval / 2)
             )::int                                                 AS returned_users,
-            coalesce(sum(single_turn_abandoned), 0)::int           AS single_turn_abandoned,
+            count(*) FILTER (
+                WHERE n_turns = 1 AND abandoned
+            )::int                                                 AS single_turn_abandoned,
             percentile_cont(0.5) WITHIN GROUP (
-                ORDER BY total_turns
+                ORDER BY n_turns
             )::float8                                              AS median_n_turns
-          FROM per_user
+          FROM per_session
         """,
         org_id, interval_sql,
     )
@@ -218,6 +215,8 @@ class SessionAnalytics:
             )
         except Exception as exc:
             logger.debug("session_analytics: SQL aggregate failed: %s", exc)
+            row = None
+        if row is None:
             return _ok_envelope(
                 self.name,
                 {
@@ -234,6 +233,22 @@ class SessionAnalytics:
                 },
             )
         total = int(row.get("total_sessions") or 0)
+        if total == 0:
+            return _ok_envelope(
+                self.name,
+                {
+                    "org_id": org_id,
+                    "window": window,
+                    "total_sessions": 0,
+                    "active_users": 0,
+                    "dormant_users": 0,
+                    "returned_users_7d": 0,
+                    "single_turn_abandonment_rate": None,
+                    "regeneration_rate": None,
+                    "median_session_length_turns": None,
+                    "message": "no session data",
+                },
+            )
         single_turn = int(row.get("single_turn_abandoned") or 0)
         rate = (single_turn / total) if total else None
         return _ok_envelope(

@@ -5,7 +5,7 @@ from datetime import datetime, timedelta, UTC
 
 from fastapi import APIRouter, Depends, Query
 
-from eden.api.deps import get_current_user, require_org_permission_dep, require_org_permission
+from eden.api.deps import get_current_user, require_org_permission_dep, require_org_permission  # noqa: F401  (monkeypatched by tests/api/test_analytics_routes.py)
 from eden.storage.postgres import get_postgres_client
 
 logger = logging.getLogger(__name__)
