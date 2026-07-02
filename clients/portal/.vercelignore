@@ -21,3 +21,13 @@ node_modules
 coverage
 .vercel
 .git
+
+# Local tooling + secrets — should never reach Vercel
+.claude/
+.eden/
+.gitleaks.toml
+scripts/
+*.log
+.eslintcache
+coverage
+.vitest-cache
