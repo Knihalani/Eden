@@ -1,11 +1,11 @@
 """Organization analytics routes for Eden API."""
 
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, UTC
 
 from fastapi import APIRouter, Depends, Query
 
-from eden.api.deps import get_current_user, require_org_permission, require_org_permission_dep
+from eden.api.deps import get_current_user, require_org_permission_dep
 from eden.storage.postgres import get_postgres_client
 
 logger = logging.getLogger(__name__)
@@ -28,7 +28,7 @@ async def get_org_analytics(
     # Require audit:view permission (owner/admin)
 
     client = await get_postgres_client()
-    now = datetime.utcnow()
+    now = datetime.now(UTC)
     start_date = now - timedelta(days=days)
 
     # Reference uploads by day
@@ -115,7 +115,7 @@ async def token_usage(
     _user: dict = Depends(get_current_user),
 ):
     """Sum input/output tokens per day from ``usage_events``."""
-    start = datetime.utcnow() - timedelta(days=days)
+    start = datetime.now(UTC) - timedelta(days=days)
     client = await get_postgres_client()
     rows = await client.fetch(
         """
@@ -148,7 +148,7 @@ async def latency(
     _user: dict = Depends(get_current_user),
 ):
     """Per-day latency percentiles from ``telemetry_events``."""
-    start = datetime.utcnow() - timedelta(days=days)
+    start = datetime.now(UTC) - timedelta(days=days)
     client = await get_postgres_client()
     rows = await client.fetch(
         """
@@ -183,7 +183,7 @@ async def throughput(
     _user: dict = Depends(get_current_user),
 ):
     """Request counts per (weekday, hour-of-day) bucket for heatmap viz."""
-    start = datetime.utcnow() - timedelta(days=days)
+    start = datetime.now(UTC) - timedelta(days=days)
     client = await get_postgres_client()
     rows = await client.fetch(
         """
@@ -216,7 +216,7 @@ async def top_agents(
     """Top 25 models by spend over the window. ``agent`` is the
     canonical proxy for "what model was called" until we get a
     proper agent_id column on ``usage_events``."""
-    start = datetime.utcnow() - timedelta(days=days)
+    start = datetime.now(UTC) - timedelta(days=days)
     client = await get_postgres_client()
     rows = await client.fetch(
         """

@@ -18,7 +18,7 @@ from typing import Any
 from fastapi import APIRouter, Body, Depends, HTTPException, Path, Query
 from pydantic import BaseModel, Field
 
-from eden.api.deps import get_current_user, require_org_member
+from eden.api.deps import get_current_user
 from eden.observability.telemetry_collector import (  # noqa: F401
     TelemetryCollector,
     TelemetryEvent,
@@ -250,7 +250,7 @@ async def list_traces(
     Falls back to an empty list if Postgres is unavailable (same
     defensive pattern Cat 1 uses).
     """
-    from datetime import datetime, timedelta
+    from datetime import datetime, timedelta, UTC
     try:
         from eden.storage import postgres as _pg_module
         client = await _pg_module.get_postgres_client()
@@ -260,7 +260,7 @@ async def list_traces(
     if client is None:
         return TraceListResponse(traces=[], total=0, limit=limit, offset=offset)
 
-    since = datetime.utcnow() - timedelta(days=days)
+    since = datetime.now(UTC) - timedelta(days=days)
     where = "tenant_id = $1 AND timestamp >= $2"
     args: list[Any] = [org_id, since]
     if realm:
@@ -619,7 +619,7 @@ async def observability_summary(
     from datetime import datetime, timedelta
     from eden.storage import postgres as _pg_module
     client = await _pg_module.get_postgres_client()
-    since = datetime.utcnow() - timedelta(hours=window_hours)
+    since = datetime.now(UTC) - timedelta(hours=window_hours)
     common_where = "tenant_id = $1 AND timestamp >= $2"
     common_args = [org_id, since]
     if agent_id:

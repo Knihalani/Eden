@@ -1,7 +1,7 @@
 """Research proposals KB client."""
 
 import logging
-from datetime import datetime
+from datetime import datetime, UTC
 from typing import Optional
 from uuid import UUID, uuid4
 
@@ -64,7 +64,7 @@ class ResearchProposalsClient:
             proposal.get("new_version"),
             proposal.get("status", "pending"),
             proposal.get("archivist_reviewed", False),
-            datetime.fromisoformat(proposal["proposed_at"]) if isinstance(proposal.get("proposed_at"), str) else datetime.utcnow(),
+            datetime.fromisoformat(proposal["proposed_at"]) if isinstance(proposal.get("proposed_at"), str) else datetime.now(UTC),
             proposal.get("harvester_run_id"),
         )
 

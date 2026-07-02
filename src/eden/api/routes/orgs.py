@@ -15,7 +15,6 @@ from eden.api.deps import (
     require_org_admin,
     require_org_member,
     require_org_owner,
-    require_org_permission,
     require_org_permission_dep,
 )
 from eden.api.routes.billing import check_limit

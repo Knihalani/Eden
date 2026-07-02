@@ -860,6 +860,32 @@ export default function LandingPage() {
                   Status
                 </a>
               </div>
+              <div className="flex flex-col gap-2">
+                <span className="text-xs text-[var(--text-muted)] uppercase tracking-wider">
+                  Legal
+                </span>
+                <Link href="/privacy" className="text-sm text-[var(--text-secondary)] hover:text-[var(--text-primary)]">
+                  Privacy
+                </Link>
+                <Link href="/terms" className="text-sm text-[var(--text-secondary)] hover:text-[var(--text-primary)]">
+                  Terms
+                </Link>
+                <Link href="/dpa" className="text-sm text-[var(--text-secondary)] hover:text-[var(--text-primary)]">
+                  DPA
+                </Link>
+                <Link href="/security" className="text-sm text-[var(--text-secondary)] hover:text-[var(--text-primary)]">
+                  Security
+                </Link>
+                {/* CCPA "Do Not Sell My Personal Information" — required
+                 * link in the marketing footer for California residents. */}
+                <Link
+                  href="/api/v1/me/do-not-sell"
+                  prefetch={false}
+                  className="text-sm text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+                >
+                  Do Not Sell My Info
+                </Link>
+              </div>
             </div>
 
             <p className="text-xs text-[var(--text-muted)]">

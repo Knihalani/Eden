@@ -31,7 +31,7 @@ import hmac
 import logging
 import os
 import secrets
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta
 from typing import Any
 
 from eden.config import get_settings

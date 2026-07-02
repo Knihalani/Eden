@@ -4,12 +4,12 @@ import io
 import json
 import logging
 import zipfile
-from datetime import datetime
+from datetime import datetime, UTC
 
 from fastapi import APIRouter, Cookie, Depends
 from fastapi.responses import StreamingResponse
 
-from eden.api.deps import require_org_permission, require_org_permission_dep
+from eden.api.deps import require_org_permission_dep
 from eden.storage.postgres import get_postgres_client
 
 logger = logging.getLogger(__name__)
@@ -73,7 +73,7 @@ async def export_org_data(
         ]
         zip_file.writestr(
             "members.json",
-            json.dumps({"members": members_data, "exported_at": datetime.utcnow().isoformat()}, indent=2)
+            json.dumps({"members": members_data, "exported_at": datetime.now(UTC).isoformat()}, indent=2)
         )
 
         # 2. Export references
@@ -101,7 +101,7 @@ async def export_org_data(
         ]
         zip_file.writestr(
             "references.json",
-            json.dumps({"references": references_data, "exported_at": datetime.utcnow().isoformat()}, indent=2)
+            json.dumps({"references": references_data, "exported_at": datetime.now(UTC).isoformat()}, indent=2)
         )
 
         # 3. (jobs feature removed June 2026 — previously exported job metadata here)
@@ -137,7 +137,7 @@ async def export_org_data(
         ]
         zip_file.writestr(
             "audit_log.json",
-            json.dumps({"audit_log": audit_data, "exported_at": datetime.utcnow().isoformat()}, indent=2)
+            json.dumps({"audit_log": audit_data, "exported_at": datetime.now(UTC).isoformat()}, indent=2)
         )
 
         # 5. Export organization settings
@@ -158,14 +158,14 @@ async def export_org_data(
             }
             zip_file.writestr(
                 "settings.json",
-                json.dumps({"organization": settings_data, "exported_at": datetime.utcnow().isoformat()}, indent=2)
+                json.dumps({"organization": settings_data, "exported_at": datetime.now(UTC).isoformat()}, indent=2)
             )
 
     # Prepare response
     zip_buffer.seek(0)
 
     org_name = org_row["name"] if org_row else org_id
-    filename = f"{org_name.replace(' ', '_')}_export_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}.zip"
+    filename = f"{org_name.replace(' ', '_')}_export_{datetime.now(UTC).strftime('%Y%m%d_%H%M%S')}.zip"
 
     return StreamingResponse(
         iter([zip_buffer.getvalue()]),

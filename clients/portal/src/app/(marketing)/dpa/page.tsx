@@ -9,6 +9,8 @@ export const metadata: Metadata = {
     "GDPR-compliant DPA. Standard Contractual Clauses (SCCs). Auto-attached to enterprise contracts.",
 };
 
+{/* TODO: legal review — every clause below needs counsel sign-off before launch. */}
+
 export default function DpaPage() {
   return (
     <div className="min-h-screen bg-[var(--bg-secondary)]">

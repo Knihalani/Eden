@@ -9,6 +9,8 @@ export const metadata: Metadata = {
     "How Eden collects, uses, retains, and protects your data. GDPR + CCPA compliant. EU residency available.",
 };
 
+{/* TODO: legal review — every clause below needs counsel sign-off before launch. */}
+
 const SECTIONS = [
   {
     id: "what-we-collect",

@@ -2,7 +2,7 @@
 
 import logging
 import secrets
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, UTC
 from uuid import uuid4
 
 from eden.config import get_settings
@@ -60,7 +60,7 @@ async def create_invitation(
         # The nested `if` keeps the error message co-located with the
         # condition; collapsing would push a multi-line raise into a
         # ternary.
-        if existing["expires_at"] > datetime.utcnow():  # noqa: SIM102
+        if existing["expires_at"] > datetime.now(UTC):  # noqa: SIM102
             raise ValueError(
                 "An invitation is already pending for this email in this organization"
             )
@@ -68,7 +68,7 @@ async def create_invitation(
     # Generate token
     plain_token = generate_invite_token()
     token_hash = hash_invite_token(plain_token)
-    expires_at = datetime.utcnow() + timedelta(days=expires_in_days)
+    expires_at = datetime.now(UTC) + timedelta(days=expires_in_days)
     invitation_id = str(uuid4())
 
     # Get inviter name
@@ -146,7 +146,7 @@ async def verify_invite_token(token: str) -> dict | None:
         return None
 
     # Check expiry
-    if invitation["expires_at"] < datetime.utcnow():
+    if invitation["expires_at"] < datetime.now(UTC):
         # Mark as expired
         await client.execute(
             "UPDATE org_invitations SET status = 'expired' WHERE id = $1",
@@ -207,7 +207,7 @@ async def accept_invitation(invitation_id: str, user_id: str) -> dict:
     if invitation["status"] != "pending":
         raise ValueError(f"Invitation is {invitation['status']}, cannot accept")
 
-    if invitation["expires_at"] < datetime.utcnow():
+    if invitation["expires_at"] < datetime.now(UTC):
         raise ValueError("Invitation has expired")
 
     # Add user to org. ``ON CONFLICT DO NOTHING`` is defensive against
@@ -308,7 +308,7 @@ async def decline_invitation(invitation_id: str, user_id: str) -> None:
     if invitation["status"] != "pending":
         raise ValueError(f"Invitation is {invitation['status']}, cannot decline")
 
-    if invitation["expires_at"] < datetime.utcnow():
+    if invitation["expires_at"] < datetime.now(UTC):
         raise ValueError("Invitation has expired")
 
     # Update invitation status

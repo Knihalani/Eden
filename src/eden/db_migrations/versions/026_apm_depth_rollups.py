@@ -17,7 +17,6 @@ upgrade is a no-op.
 
 from __future__ import annotations
 
-from alembic import op
 
 revision = "026"
 down_revision = "025"

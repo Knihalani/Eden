@@ -33,7 +33,6 @@ from __future__ import annotations
 
 from typing import Sequence, Union
 
-from alembic import op
 
 revision: str = "049"
 down_revision: Union[str, Sequence[str], None] = ("048", "5c782c65faa3")

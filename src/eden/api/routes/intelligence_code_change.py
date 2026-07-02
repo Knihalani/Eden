@@ -145,7 +145,7 @@ class ConnectRepoRequest(BaseModel):
     provider: str = Field(..., description="github, gitlab, or bitbucket")
     repo_full_name: str
     default_branch: str = "main"
-    connected_by_user_id: str = "stub_user"
+    model_config = {"extra": "ignore"}  # Audit 2026-07-02 S-4: ignore forged fields
 
 
 class UpdatePolicyRequest(BaseModel):
@@ -173,40 +173,40 @@ class InboxActionRequest(BaseModel):
             "revert | bulk"
         ),
     )
-    actor_user_id: str = "stub_user"
     comment: str = ""
     edited_diff: str = ""
     policy: dict[str, Any] = Field(
         default_factory=lambda: {"code_change_enabled": False}
     )
+    model_config = {"extra": "ignore"}  # Audit 2026-07-02 S-4: ignore forged fields
 
 
 class CreateGrantRequest(BaseModel):
     granted_user_id: str
-    granted_by_user_id: str
     scope_type: str
     scope_value: str
     reason: str = ""
     expires_at: str = ""
+    model_config = {"extra": "ignore"}  # Audit 2026-07-02 S-4: ignore forged fields
 
 
 class CreateDelegationRequest(BaseModel):
-    delegator_user_id: str
     delegate_user_id: str
     starts_at: str
     ends_at: str
     scope_filter: str = ""
+    model_config = {"extra": "ignore"}  # Audit 2026-07-02 S-4: ignore forged fields
 
 
 class AutoApprovalRequest(BaseModel):
     patch_id: str
     metrics: dict[str, Any] = Field(default_factory=dict)
-    policy: dict[str, Any] = Field(default_factory=dict)
+    model_config = {"extra": "ignore"}  # Audit 2026-07-02 S-4: ignore forged fields
 
 
 class AutoApprovalDryRunRequest(BaseModel):
-    requested_by_user_id: str = "stub_user"
     window_days: int = Field(30, ge=1, le=90)
+    model_config = {"extra": "ignore"}  # Audit 2026-07-02 S-4: ignore forged fields
 
 
 class RevertRequest(BaseModel):
@@ -238,14 +238,16 @@ class PostMergeWatchRequest(BaseModel):
 async def connect_repo(
     org_id: str = Path(...),
     body: ConnectRepoRequest = Body(...),
+    user: dict = Depends(get_current_user),
     _admin: dict = Depends(require_org_permission_dep("settings:edit")),
 ) -> dict[str, Any]:
+    # Audit 2026-07-02 S-4 — connected_by_user_id comes from auth, not body
     return await _repo_connector.connect(
         org_id,
         provider=body.provider,
         repo_full_name=body.repo_full_name,
         default_branch=body.default_branch,
-        connected_by_user_id=body.connected_by_user_id,
+        connected_by_user_id=user["user_id"],
     )
 
 
@@ -407,13 +409,15 @@ async def inbox_action(
     patch_id: str = Path(...),
     action: str = Path(...),
     body: InboxActionRequest = Body(...),
+    user: dict = Depends(get_current_user),
 ) -> dict[str, Any]:
+    # Audit 2026-07-02 S-4 — actor_user_id comes from auth, not body
     return await _review.act(
         org_id,
         patch_id=patch_id,
         action=action,
         policy=body.policy,
-        actor_user_id=body.actor_user_id,
+        actor_user_id=user["user_id"],
         comment=body.comment,
         edited_diff=body.edited_diff,
     )
@@ -432,11 +436,13 @@ async def list_grants(
 async def create_grant(
     org_id: str = Path(...),
     body: CreateGrantRequest = Body(...),
+    user: dict = Depends(get_current_user),
 ) -> dict[str, Any]:
+    # Audit 2026-07-02 S-4 — granted_by_user_id comes from auth, not body
     return await _grants.create_grant(
         org_id,
         granted_user_id=body.granted_user_id,
-        granted_by_user_id=body.granted_by_user_id,
+        granted_by_user_id=user["user_id"],
         scope_type=body.scope_type,
         scope_value=body.scope_value,
         reason=body.reason,
@@ -448,9 +454,11 @@ async def create_grant(
 async def revoke_grant(
     org_id: str = Path(...),
     grant_id: str = Path(...),
+    user: dict = Depends(get_current_user),
 ) -> dict[str, Any]:
+    # Audit 2026-07-02 S-4 — revoked_by_user_id comes from auth, not body
     return await _grants.revoke_grant(
-        org_id, grant_id=grant_id, revoked_by_user_id="stub_user"
+        org_id, grant_id=grant_id, revoked_by_user_id=user["user_id"]
     )
 
 
@@ -464,10 +472,12 @@ async def list_delegations(org_id: str = Path(...)) -> dict[str, Any]:
 async def create_delegation(
     org_id: str = Path(...),
     body: CreateDelegationRequest = Body(...),
+    user: dict = Depends(get_current_user),
 ) -> dict[str, Any]:
+    # Audit 2026-07-02 S-4 — delegator_user_id comes from auth, not body
     return await _delegations.create_delegation(
         org_id,
-        delegator_user_id=body.delegator_user_id,
+        delegator_user_id=user["user_id"],
         delegate_user_id=body.delegate_user_id,
         starts_at=body.starts_at,
         ends_at=body.ends_at,
@@ -481,11 +491,17 @@ async def auto_approval_evaluate(
     org_id: str = Path(...),
     body: AutoApprovalRequest = Body(...),
 ) -> dict[str, Any]:
+    # Audit 2026-07-02 S-4 — policy is resolved from DB, NEVER from
+    # the body. The body-schema strips ``policy`` via extra='ignore',
+    # but the route is the authoritative source of truth.
+    from eden.code_change import policy as _policy_mod
+
+    db_policy = await _policy_mod.get_org_code_change_policy(org_id)
     return await _auto_approval_rules.evaluate(
         org_id,
         patch_id=body.patch_id,
         metrics=body.metrics,
-        policy=body.policy,
+        policy=db_policy,
     )
 
 
@@ -510,10 +526,12 @@ async def auto_approval_metrics(
 async def auto_approval_dry_run(
     org_id: str = Path(...),
     body: AutoApprovalDryRunRequest = Body(...),
+    user: dict = Depends(get_current_user),
 ) -> dict[str, Any]:
+    # Audit 2026-07-02 S-4 — requested_by_user_id comes from auth, not body
     return await _auto_approval_dry_run.run(
         org_id,
-        requested_by_user_id=body.requested_by_user_id,
+        requested_by_user_id=user["user_id"],
         window_days=body.window_days,
     )
 

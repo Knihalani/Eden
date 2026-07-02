@@ -68,7 +68,7 @@ from eden.code_change._common import (
 )
 from eden.optimization.model_router import ModelRouter, PipelineTask
 
-from ._common import _new_id, _error_envelope, _ok_envelope
+from ._common import _new_id, _error_envelope, _not_implemented_envelope, _ok_envelope
 
 logger = logging.getLogger(__name__)
 
@@ -387,21 +387,28 @@ class PatchGenerator:
         """
         # Fall back to the platform's default router if none was
         # injected. The endpoint always runs the full pipeline; only
-        # catastrophic config errors (no router at all) return an
-        # error envelope.
+        # catastrophic config errors (no router at all) return a
+        # ``not_implemented`` envelope (legacy Gate-4a-blanked
+        # behaviour).
         if self._router is None:
             try:
                 self._router = ModelRouter()
             except Exception as exc:
-                return _error_envelope(
+                # Audit 2026-07-02 — router_missing is functionally
+                # the same as "no LLM available"; we surface it as a
+                # not_implemented envelope so the portal can show
+                # "preview / pending infrastructure" rather than a
+                # hard error.
+                return _not_implemented_envelope(
                     self.name,
                     message=(
                         f"Patch generation requires a ModelRouter. "
                         f"No router was injected and the default "
                         f"router failed to initialise: {exc}"
                     ),
-                    error_code="router_missing",
+                    gate="router_missing",
                     data={
+                        "4a_blocked_alias": True,
                         "patch_id": _new_id("patch"),
                         "rca_id": rca_id,
                         "trace_id": trace_id,
@@ -512,10 +519,15 @@ class PatchGenerator:
                     max_tokens=4096,
                 )
             except Exception as exc:
-                return _error_envelope(
+                # Audit 2026-07-02 — LLM-tier exhaustion (auth, network,
+                # rate-limit) is functionally the same as "no model
+                # available". Surface as a not_implemented envelope so
+                # the portal renders the legacy Gate-4a-blanked badge
+                # rather than a hard error.
+                return _not_implemented_envelope(
                     self.name,
                     message=f"LLM call failed for {rca_id}: {exc}",
-                    error_code="llm_failed",
+                    gate="4a_blocked",
                     data={
                         "patch_id": _new_id("patch"),
                         "rca_id": rca_id,

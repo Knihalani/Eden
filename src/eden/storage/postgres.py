@@ -402,7 +402,7 @@ class PostgresClient:
         """Insert or update a job record."""
         if created_at is None:
             from datetime import datetime
-            created_at = datetime.utcnow().isoformat()
+            created_at = datetime.now(UTC).isoformat()
 
         query = """
             INSERT INTO jobs (job_id, request, status, current_stage, created_at, updated_at, user_id)
@@ -443,7 +443,7 @@ class PostgresClient:
         """Update job status and stage."""
         if updated_at is None:
             from datetime import datetime
-            updated_at = datetime.utcnow().isoformat()
+            updated_at = datetime.now(UTC).isoformat()
 
         query = """
             UPDATE jobs
