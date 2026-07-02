@@ -1,8 +1,9 @@
 """Password hashing and JWT utilities."""
 
+import hashlib
 import logging
 import secrets
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, UTC
 
 import bcrypt
 from jose import JWTError, jwt
@@ -14,11 +15,16 @@ settings = get_settings()
 
 ALGORITHM = "HS256"
 
-# bcrypt has a hard 72-byte limit on the password input. We truncate
-# silently to match the behaviour passlib used before its self-check
-# started failing on modern bcrypt (5.x). See:
-# https://github.com/pyca/bcrypt/issues/684
+# bcrypt has a hard 72-byte limit on the password input. Pre-fix
+# was a silent UTF-8 byte-truncate (S-19 audit) — two distinct
+# passwords sharing their first 72 bytes collided, AND a multi-byte
+# UTF-8 character straddling byte 72 could be split mid-codepoint.
+# The fix: SHA-256 pre-hash to 32 bytes, then zero-pad to 72 bytes.
+# The pre-hash is deterministic (so verification works) and
+# preserves the full entropy of the password (no collision
+# surface).
 _BCRYPT_MAX_BYTES = 72
+_SHA256_DIGEST_LEN = 32
 
 # Work factor for new hashes (rounds). 12 is the bcrypt default and
 # gives ~250ms on a modern CPU — slow enough to resist brute force,
@@ -27,23 +33,51 @@ _BCRYPT_MAX_BYTES = 72
 _BCRYPT_ROUNDS = 12
 
 
+def _pre_hash(password: str) -> bytes:
+    """Pre-hash a password to bcrypt's 72-byte input limit.
+
+    Audit 2026-07-02 S-19 — replaces the old ``[:72]`` UTF-8 byte
+    slice. Returns exactly 72 bytes: the first 32 bytes are the
+    SHA-256 digest of the password; the remaining 40 are zero
+    padding. The digest is deterministic (no salt) so the same
+    password always maps to the same 32 bytes — bcrypt then adds
+    its own per-hash salt on top.
+    """
+    digest = hashlib.sha256(password.encode("utf-8")).digest()
+    return digest + b"\x00" * (_BCRYPT_MAX_BYTES - _SHA256_DIGEST_LEN)
+
+
 def _truncate(password: str) -> bytes:
-    """Encode + truncate to bcrypt's 72-byte limit."""
-    return password.encode("utf-8")[:_BCRYPT_MAX_BYTES]
+    """Backwards-compat alias for :func:`_pre_hash`.
+
+    The old name ``_truncate`` lingered; new code should use
+    :func:`_pre_hash` directly. The semantics changed (no longer
+    a raw byte-truncate) so this alias avoids breaking any other
+    in-tree call sites.
+    """
+    return _pre_hash(password)
 
 
 def hash_password(password: str) -> str:
-    """Hash a password using bcrypt with the configured work factor."""
+    """Hash a password using bcrypt with the configured work factor.
+
+    Audit 2026-07-02 S-19 — uses :func:`_pre_hash` so long /
+    unicode passwords are NOT silently truncated.
+    """
     return bcrypt.hashpw(
-        _truncate(password),
+        _pre_hash(password),
         bcrypt.gensalt(rounds=_BCRYPT_ROUNDS),
     ).decode("utf-8")
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
-    """Verify a password against its hash."""
+    """Verify a password against its hash.
+
+    Audit 2026-07-02 S-19 — uses :func:`_pre_hash` to match the
+    hash path.
+    """
     try:
-        return bcrypt.checkpw(_truncate(plain_password), hashed_password.encode("utf-8"))
+        return bcrypt.checkpw(_pre_hash(plain_password), hashed_password.encode("utf-8"))
     except (ValueError, TypeError):
         return False
 
@@ -93,12 +127,12 @@ def create_access_token(
     """
     to_encode = data.copy()
 
-    expire = datetime.utcnow() + (
+    expire = datetime.now(UTC) + (
         expires_delta or timedelta(days=settings.jwt_exp_days)
     )
     to_encode.update({
         "exp": expire,
-        "iat": datetime.utcnow(),
+        "iat": datetime.now(UTC),
         "jti": secrets.token_urlsafe(16),
         "token_version": token_version,
     })

@@ -43,7 +43,6 @@ from ._common import (
     _new_id,
     _ok_envelope,
     _parse_window,
-    _safe_float,
 )
 
 logger = logging.getLogger(__name__)

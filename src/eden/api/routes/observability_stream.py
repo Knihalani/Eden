@@ -36,7 +36,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, Path, Query
 from fastapi.responses import StreamingResponse
 
-from eden.api.deps import get_current_user, require_org_member
+from eden.api.deps import require_org_member
 from eden.storage.redis import get_redis_client
 
 logger = logging.getLogger(__name__)

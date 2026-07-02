@@ -17,6 +17,8 @@ export const metadata: Metadata = {
   description:
     "How Eden protects your data — encryption, RBAC, audit logs, SOC 2, vulnerability disclosure." };
 
+{/* TODO: legal review — every clause below needs counsel sign-off before launch. */}
+
 const CONTROLS = [
   {
     title: "Encryption in transit",

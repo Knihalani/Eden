@@ -779,7 +779,6 @@ def auto_onboard(
     Returns:
         :class:`AutoOnboardResult` summarising what was done.
     """
-    import os
 
     root = Path(repo_root).expanduser().resolve()
     if not root.exists():

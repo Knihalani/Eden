@@ -22,7 +22,7 @@ from collections import defaultdict, deque
 from datetime import datetime
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Path, Request
+from fastapi import APIRouter, Depends, HTTPException, Path
 from pydantic import BaseModel, Field, field_validator
 
 from eden.api.deps import get_ingestion_auth

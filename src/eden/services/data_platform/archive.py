@@ -46,7 +46,6 @@ from functools import lru_cache
 from typing import Any
 
 from eden.config import get_settings
-from eden.data_platform.retention import DataRetentionManager
 
 logger = logging.getLogger(__name__)
 

@@ -939,7 +939,6 @@ async def _tool_open_pr_suggestion(tenant_id: str, args: dict[str, Any],
             FileEntry,
             get_default_pr_provider,
         )
-        from eden.providers.repo import FileEntry as _FileEntry  # alias for clarity
     except Exception as exc:
         return {"error": f"PR tooling unavailable: {exc}"}
 

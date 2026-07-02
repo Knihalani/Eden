@@ -18,12 +18,10 @@ Sessions are a Phase A1 wrapper around the existing Cat 9
 from __future__ import annotations
 
 import hashlib
-import hmac
 import json
 import logging
-import os
 import secrets
-from datetime import datetime, timedelta
+from datetime import timedelta
 from typing import Any
 
 from ._common import _get_client, _now_utc

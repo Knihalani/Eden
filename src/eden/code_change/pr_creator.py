@@ -51,7 +51,6 @@ from ._common import (
     _error_envelope,
     _insert_row,
     _new_id,
-    _not_implemented_envelope,
     _ok_envelope,
     _select_one,
     _select_rows,

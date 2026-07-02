@@ -27,7 +27,6 @@ from eden.api.utils.auth import (
     verify_password,
 )
 from eden.api.utils.clerk_client import (
-    ClerkAPIError,
     extract_user_profile,
     get_user as clerk_get_user,
 )

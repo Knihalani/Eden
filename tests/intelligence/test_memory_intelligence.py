@@ -154,9 +154,13 @@ def _attribution_row(
     influence_score: float = 0.6,
     created_at: datetime | None = None,
 ) -> dict[str, Any]:
-    """One row from the ``memory_attributions`` table."""
+    """One row from the ``memory_attributions`` table.
+
+    Default ``created_at`` is "now" (UTC). Older dates can be
+    injected by callers for stale-data tests.
+    """
     if created_at is None:
-        created_at = datetime(2026, 6, 1, 12, 0, 0, tzinfo=UTC)
+        created_at = datetime.now(UTC)
     return {
         "memory_id": memory_id,
         "influence_score": influence_score,

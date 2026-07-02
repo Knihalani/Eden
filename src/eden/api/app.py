@@ -103,6 +103,7 @@ from eden.api.routes import (
     websocket,
 )
 from eden.api.routes import (
+    compliance,
     github as github_routes,
     internal_health,
     observability_a2a,
@@ -492,6 +493,7 @@ app.include_router(presigned_feedback.auth_router)  # /orgs/{org_id}/intelligenc
 app.include_router(presigned_feedback.public_router)  # /api/v1/feedback/tokens/{token_id} (no auth, token-gated)
 app.include_router(onboarding.router)  # /v1/internal/onboarding/{org_id}/* (D.14 cold-start UX)
 app.include_router(sql_query.router)  # /orgs/{org_id}/sql (Phase M read-only SQL executor)
+app.include_router(compliance.router)  # /api/v1/me/* + /api/v1/dsar + /subprocessors (GDPR + CCPA)
 app.include_router(qa_generator.router)  # /orgs/{org_id}/synthetic (Phase J synthetic Q/A generator)
 app.include_router(redteam.router)  # /orgs/{org_id}/redteam (Phase L red-team probes)
 app.include_router(labeling.router)  # /orgs/{org_id}/labeling (Phase D labeling queue)

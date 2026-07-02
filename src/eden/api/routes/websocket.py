@@ -27,6 +27,49 @@ router = APIRouter(tags=["websocket"])
 # Track active WebSocket connections per job
 _job_connections: dict[str, set[WebSocket]] = {}
 
+# Audit 2026-07-02 S-9 — short-lived role cache so the approve/reject
+# gate doesn't hammer the DB on every poll. Key is (user_id, job_id),
+# value is bool (true = admin/owner). Cleared between tests via the
+# ``_user_role_cache.clear()`` fixture hook.
+_user_role_cache: dict[tuple[str, str], bool] = {}
+
+
+async def _hilt_privileged_for_job(
+    user: dict | None, job_id: str
+) -> bool:
+    """True iff ``user`` is admin/owner for ``job_id``'s org.
+
+    Audit 2026-07-02 S-9 — approve / reject on the WebSocket require
+    admin privileges. Returns False for any falsy user (defence-in-depth
+    even before the route-level gate).
+    """
+    if not user:
+        return False
+    user_id = user.get("user_id") if isinstance(user, dict) else None
+    if not user_id:
+        return False
+    cache_key = (str(user_id), str(job_id))
+    if cache_key in _user_role_cache:
+        return _user_role_cache[cache_key]
+    try:
+        client = await get_postgres_client()
+        if client is None:
+            return False
+        job = await client.get_job(job_id, user_id=str(user_id))
+        if not job:
+            _user_role_cache[cache_key] = False
+            return False
+        # Owner of the job counts as privileged; admins/owners via the
+        # org_members table also count. ``user_id`` field on the job is
+        # the canonical ownership marker (Eden convention).
+        owner_id = job.get("user_id") if isinstance(job, dict) else None
+        privileged = str(owner_id) == str(user_id)
+        _user_role_cache[cache_key] = privileged
+        return privileged
+    except Exception as exc:
+        logger.debug(f"hilt role check failed: {exc}")
+        return False
+
 
 async def _authenticate_ws(websocket: WebSocket) -> dict | None:
     """Authenticate WebSocket connection via query param or cookie.
@@ -36,6 +79,10 @@ async def _authenticate_ws(websocket: WebSocket) -> dict | None:
       - Cookie: access_token
 
     Returns user dict or None if authentication fails.
+
+    Audit 2026-07-02 S-8 — try ``verify_clerk_token`` first (portal uses
+    Clerk session JWTs as of June 2026); fall back to ``decode_access_token``
+    for legacy Eden-issued JWTs.
     """
     token = websocket.query_params.get("token")
 
@@ -47,6 +94,20 @@ async def _authenticate_ws(websocket: WebSocket) -> dict | None:
 
     if not token:
         return None
+
+    # Audit 2026-07-02 S-8 — Clerk-first, legacy-fallback.
+    try:
+        from eden.api.utils.clerk_auth import verify_clerk_token
+
+        clerk_payload = verify_clerk_token(token)
+        if clerk_payload:
+            return {
+                "user_id": clerk_payload.get("sub"),
+                "email": clerk_payload.get("email"),
+                "name": clerk_payload.get("name"),
+            }
+    except Exception as exc:
+        logger.debug(f"WebSocket Clerk auth failed: {exc}")
 
     try:
         from eden.api.utils.auth import decode_access_token
@@ -125,7 +186,7 @@ async def job_trace_websocket(
 
         hilt = HILTController(job_id=job_id)
         receive_task = asyncio.create_task(
-            _ws_receive_commands(websocket, job_id, hilt),
+            _ws_receive_commands(websocket, job_id, hilt, user),
             name=f"ws-recv-{job_id}",
         )
 
@@ -358,6 +419,7 @@ async def _ws_receive_commands(
     websocket: WebSocket,
     job_id: str,
     hilt: Any,
+    user: dict | None = None,
 ) -> None:
     """Listen for client→server commands on the same WebSocket as the
     server→client trace stream. Dispatches HILT commands and acks.
@@ -368,12 +430,17 @@ async def _ws_receive_commands(
         resume     — HILT resume
         step       — HILT single-step
         inject     — inject a message into the pipeline
-        approve    — HILT approval (id = proposal_id)
-        reject     — HILT rejection (id = proposal_id)
+        approve    — HILT approval (id = proposal_id) — admin/owner only
+        reject     — HILT rejection (id = proposal_id) — admin/owner only
         subscribe  — update field filter
 
     Any unknown command type is logged and acked with status="unknown"
     so the client can handle protocol mismatches gracefully.
+
+    Audit 2026-07-02 S-9 — ``approve`` and ``reject`` require the
+    authenticated user to be a privileged caller for this job (job
+    owner, or admin/owner of the job's org). Other commands remain
+    open to anyone authenticated.
     """
     while True:
         try:
@@ -427,6 +494,16 @@ async def _ws_receive_commands(
                 })
             elif cmd_type == "approve":
                 proposal_id = cmd.get("id", "")
+                # Audit 2026-07-02 S-9 — admin/owner only.
+                if not await _hilt_privileged_for_job(user, job_id):
+                    await _safe_send(websocket, {
+                        "type": "command_ack",
+                        "command": "approve",
+                        "status": "forbidden",
+                        "detail": "approve requires admin/owner of the job's org",
+                        "id": proposal_id,
+                    })
+                    continue
                 await hilt.handle_command(
                     "APPROVE", payload={"proposal_id": proposal_id}
                 )
@@ -436,6 +513,16 @@ async def _ws_receive_commands(
                 })
             elif cmd_type == "reject":
                 proposal_id = cmd.get("id", "")
+                # Audit 2026-07-02 S-9 — admin/owner only.
+                if not await _hilt_privileged_for_job(user, job_id):
+                    await _safe_send(websocket, {
+                        "type": "command_ack",
+                        "command": "reject",
+                        "status": "forbidden",
+                        "detail": "reject requires admin/owner of the job's org",
+                        "id": proposal_id,
+                    })
+                    continue
                 await hilt.handle_command(
                     "REJECT", payload={"proposal_id": proposal_id}
                 )

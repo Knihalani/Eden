@@ -20,13 +20,11 @@ See ``docs/spec/upgradespec-original-2026-06.md`` §D.8 /
 
 from __future__ import annotations
 
-import hashlib
 import logging
 import re
 import time
 import uuid
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
 from typing import Any
 
 logger = logging.getLogger(__name__)

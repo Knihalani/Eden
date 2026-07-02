@@ -68,6 +68,18 @@ async def _read_policy_jsonb(org_id: str) -> dict[str, Any]:
         return {}
 
 
+# Audit 2026-07-02 S-4 — top-level public alias used by route
+# ``auto_approval_evaluate`` so we never accept a body-supplied policy.
+async def get_org_code_change_policy(org_id: str) -> dict[str, Any]:
+    """Return the merged code-change policy for an org (DB only).
+
+    Side-effect free, never reads request bodies. Routes that need
+    the policy must call this — they must NOT trust ``body.policy``.
+    """
+    stored = await _read_policy_jsonb(org_id)
+    return {**DEFAULT_POLICY, **stored}
+
+
 async def _write_policy_jsonb(
     org_id: str, merged_policy: dict[str, Any],
 ) -> bool:

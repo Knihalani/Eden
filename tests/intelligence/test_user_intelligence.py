@@ -1085,7 +1085,7 @@ class TestHelpers:
 
 @pytest.fixture(scope="module")
 def user_test_app() -> FastAPI:
-    from eden.api.deps import get_current_user
+    from eden.api.deps import get_current_user, require_org_member
     from eden.config import get_settings
 
     settings = get_settings()
@@ -1094,10 +1094,14 @@ def user_test_app() -> FastAPI:
     app = FastAPI(title="eden-user-test")
     # Audit 2026-06-22 B1.33 — mock matches real get_current_user shape
     # ({"user_id": ..., "email": ...}).
-    app.dependency_overrides[get_current_user] = lambda: {
+    user_payload = {
         "user_id": "test-user",
         "email": None,
+        "sub": "test-user",
+        "org_id": "org_test",
     }
+    app.dependency_overrides[get_current_user] = lambda: user_payload
+    app.dependency_overrides[require_org_member] = lambda: user_payload
     mod = importlib.import_module("eden.api.routes.intelligence_user")
     app.include_router(mod.router)
     return app

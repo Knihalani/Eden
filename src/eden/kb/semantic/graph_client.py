@@ -5,7 +5,7 @@ Handles graph entities and entity links with bitemporal model.
 
 import json
 import logging
-from datetime import datetime
+from datetime import datetime, UTC
 from uuid import uuid4
 
 from eden.kb.retrieval_logger import get_retrieval_logger
@@ -52,8 +52,8 @@ class SemanticGraphClient:
                 entity["entity_type"],
                 entity["name"],
                 json.dumps(entity.get("properties", {})),
-                entity.get("valid_at", datetime.utcnow()),
-                entity.get("recorded_at", datetime.utcnow()),
+                entity.get("valid_at", datetime.now(UTC)),
+                entity.get("recorded_at", datetime.now(UTC)),
                 entity.get("embedding"),
             )
             return True
@@ -92,8 +92,8 @@ class SemanticGraphClient:
                 link["target_id"],
                 link["edge_type"],
                 json.dumps(link.get("properties", {})),
-                link.get("valid_at", datetime.utcnow()),
-                link.get("recorded_at", datetime.utcnow()),
+                link.get("valid_at", datetime.now(UTC)),
+                link.get("recorded_at", datetime.now(UTC)),
             )
             return True
         except Exception as e:
