@@ -186,7 +186,18 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
           log("INP", entry.duration ?? 0);
         }
       });
-      inp.observe({ type: "event", durationThreshold: 16, buffered: true });
+      // Audit 2026-07-02 — ``durationThreshold`` is not in the
+      // ``PerformanceObserverInit`` lib.dom types under Next 16
+      // (it lives on the event-timing spec but the TypeScript
+      // built-in doesn't expose it). Cast through ``unknown``
+      // so the runtime call is correct without breaking the
+      // typecheck.
+      inp.observe({
+        type: "event",
+        buffered: true,
+        // @ts-expect-error lib.dom typing gap in Next 16.
+        durationThreshold: 16,
+      });
 
       return () => {
         lcp.disconnect();
