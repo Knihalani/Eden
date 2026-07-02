@@ -638,6 +638,15 @@ class AIGateway:
         if not client:
             raise ProviderUnavailable(f"Provider {provider.value} not registered")
 
+        # DL-10: enforce gateway_max_tokens_cap. 0 = disabled.
+        if (
+            settings.gateway_max_tokens_cap > 0
+            and request.max_tokens > settings.gateway_max_tokens_cap
+        ):
+            raise ValueError(
+                f"max_tokens {request.max_tokens} exceeds gateway "
+                f"cap {settings.gateway_max_tokens_cap}"
+            )
         start = time.perf_counter()
         # Delegate to actual client
         if hasattr(client, "complete"):
