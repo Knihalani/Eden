@@ -27,14 +27,14 @@
 - [x] 23. Enforce authorization on the server — added get_current_user to /integrations/wandb status + test-log; 222 tests passing; follow-up sweep scheduled for runloop + langfuse
 - [x] 24. Fix insecure direct object references — _require_org_access() / get_current_org / get_current_org_member used across org-scoped routes; sampled builder_graphs/audit/rbac/intelligence — all check membership before reads
 - [x] 25. Implement role-based access control — central guards in api/deps.py: get_current_org_member, require_org_admin, require_org_owner, require_2fa, get_current_org_api_key; roles server-side only
-- [ ] 26. Apply a default-deny access policy
-- [ ] 27. Lock down all admin routes
-- [ ] 28. Close privilege escalation paths
-- [ ] 29. Isolate data between tenants
-- [ ] 30. Add function-level permission checks
-- [ ] 31. Block mass assignment of fields
-- [ ] 32. Re-verify access on each request
-- [ ] 33. Use parameterized database queries
+- [x] 26. Apply a default-deny access policy — DefaultDenyAuthMiddleware: 401 unless path is on explicit public allow-list OR request carries cookie/bearer/X-Org-Api-Key; default_deny_enabled setting; 8 new tests, 256 total passing
+- [x] 27. Lock down all admin routes — all admin routes use require_org_admin or _require_*_admin helpers; default-deny middleware (security 26) is the second layer that catches forgotten deps
+- [x] 28. Close privilege escalation paths — all UPDATE statements use explicit field lists; org_members.role only set to hardcoded enum values; no route accepts role/is_superuser as input
+- [x] 29. Isolate data between tenants — RLSOrgContextMiddleware sets app.current_org_id GUC per request; migration 015 RLS policies filter rows by GUC; fail-soft on GUC failure
+- [x] 30. Add function-level permission checks — per-action Depends chain: get_current_user for member reads/writes, require_org_admin for admin actions; no implicit "see=edit" rule
+- [x] 31. Block mass assignment of fields — Pydantic v2 defaults to extra='ignore' (unknown fields dropped); all UPDATEs use explicit column lists; no `**kwargs` expansion into DB writes
+- [x] 32. Re-verify access on each request — get_current_user does fresh DB lookup every request; no permission caching; role change takes effect on next request
+- [x] 33. Use parameterized database queries — asyncpg parameter binding ($1/$2/...) used everywhere; the only f-string SQL interpolates TABLE NAMES from frozen dataclass fields or static allowlists, never user input
 - [ ] 34. Prevent NoSQL query injection
 - [ ] 35. Block operating system command injection
 - [ ] 36. Close ORM-level injection vectors

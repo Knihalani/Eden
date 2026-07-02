@@ -4,6 +4,7 @@ Provides hybrid dense+sparse vector search for semantic memory retrieval.
 """
 
 import logging
+import re
 from dataclasses import dataclass
 
 from qdrant_client import QdrantClient
@@ -13,6 +14,23 @@ from qdrant_client.http.exceptions import UnexpectedResponse
 from eden.config import get_settings
 
 logger = logging.getLogger(__name__)
+
+# Filter key allowlist: only safe identifier characters. This blocks
+# spaced / quoted / SQL-meta keys that would otherwise be smuggled
+# into the Qdrant filter builder.
+_SAFE_KEY = re.compile(r"^[A-Za-z0-9_.\-]+$")
+
+# Belt-and-braces: keys whose literal characters all pass the regex
+# but which are still semantically dangerous (prototype-pollution
+# classics, JS reserved words that Qdrant might honour).
+_DENIED_KEYS: frozenset[str] = frozenset(
+    {"__proto__", "constructor", "prototype", "__defineGetter__",
+     "__defineSetter__", "__lookupGetter__", "__lookupSetter__"}
+)
+
+# Filter operator allowlist. Anything outside this set is dropped
+# silently (the search behaves as if the condition was never sent).
+_ALLOWED_OPERATORS: frozenset[str] = frozenset({"$eq", "$ne", "$in"})
 settings = get_settings()
 
 
@@ -413,27 +431,61 @@ class QdrantClientWrapper:
         return result.count
 
     def _build_filter(self, filter_dict: dict) -> models.Filter:
-        """Build a Qdrant filter from a dict."""
+        """Build a Qdrant filter from a dict.
+
+        Security: the field ``key`` and the operator ``$xx`` are both
+        allowlisted before being passed to Qdrant. This stops a caller
+        from smuggling in a meta-field (e.g. ``__proto__``) or an
+        unknown operator that would alter the filter's logic. The
+        value is left untouched — Qdrant's typed matchers handle
+        coercion, and a wrong type is rejected at the Qdrant layer
+        (a useful side-effect: the query fails closed).
+        """
         must = []
 
         for key, value in filter_dict.items():
+            # Key allowlist: only alphanumerics, dot, underscore, hyphen.
+            # Anything else (including __proto__, constructor, prototype)
+            # is dropped silently — the search behaves as if the
+            # caller didn't pass that condition.
+            if (
+                not isinstance(key, str)
+                or not _SAFE_KEY.match(key)
+                or key in _DENIED_KEYS
+            ):
+                continue
             if isinstance(value, dict):
-                # Handle operators like $eq, $ne, $gt, etc.
+                # Handle operators like $eq, $ne, $in, etc.
                 for op, op_value in value.items():
+                    if op not in _ALLOWED_OPERATORS:
+                        continue
                     if op == "$eq":
                         must.append(models.FieldCondition(
                             key=key,
                             match=models.MatchValue(value=op_value),
                         ))
                     elif op == "$ne":
+                        # $ne only makes sense for a finite set; if
+                        # the caller passes a list, take it.
+                        ne_values = (
+                            op_value if isinstance(op_value, list) else [op_value]
+                        )
+                        # Preserve the pre-existing kwarg name
+                        # (``values``) that worked before this audit.
+                        # qdrant-client's pydantic schema has renamed
+                        # the field across versions; the original
+                        # ``values=`` was the kwarg in use.
                         must.append(models.FieldCondition(
                             key=key,
-                            match=models.MatchExcept(values=[op_value]),
+                            match=models.MatchExcept(values=ne_values),
                         ))
                     elif op == "$in":
+                        in_values = (
+                            [op_value] if isinstance(op_value, str) else op_value
+                        )
                         must.append(models.FieldCondition(
                             key=key,
-                            match=models.MatchAny(any=[op_value] if isinstance(op_value, str) else op_value),
+                            match=models.MatchAny(any=in_values),
                         ))
             else:
                 must.append(models.FieldCondition(
