@@ -14,7 +14,7 @@ from datetime import UTC, datetime, timedelta
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel
 
-from eden.api.deps import get_current_user, require_org_permission_dep, require_org_permission
+from eden.api.deps import get_current_user, require_org_permission_dep, require_org_permission  # noqa: F401  (monkeypatched by tests)
 from eden.optimization import (
     BudgetExceededError,
     BudgetStatus,

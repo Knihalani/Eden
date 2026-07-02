@@ -10,7 +10,7 @@ import hashlib
 import json
 import logging
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, UTC
 from enum import Enum
 from typing import Any
 
@@ -36,7 +36,7 @@ class ModelArtifact:
     config_hash: str
     training_config: dict[str, Any] = field(default_factory=dict)
     parent_artifact_id: str | None = None
-    created_at: datetime = field(default_factory=datetime.utcnow)
+    created_at: datetime = field(default_factory=datetime.now(UTC))
     metadata: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
@@ -64,7 +64,7 @@ class ArtifactEvaluation:
     avg_latency_ms: int
     cost_per_1k_tokens: float
     hallucination_rate: float
-    evaluated_at: datetime = field(default_factory=datetime.utcnow)
+    evaluated_at: datetime = field(default_factory=datetime.now(UTC))
 
     def to_dict(self) -> dict[str, Any]:
         return {

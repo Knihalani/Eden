@@ -152,6 +152,7 @@ def _pg_router(
             explicit_aggregate=explicit_aggregate,
             behavioural_aggregate=behavioural_aggregate,
             behavioural_signal=behavioural_signal,
+            sessions=sessions,
         )
     )
     pg.execute = AsyncMock(return_value="OK")
@@ -187,7 +188,45 @@ def _route_fetchrow(
     explicit_aggregate=None,
     behavioural_aggregate=None,
     behavioural_signal=None,
+    sessions=None,
 ) -> Any | None:
+    # Session aggregate (P-13: single CTE with percentile_cont + FILTER).
+    if "WITH per_session AS" in sql:
+        rows = list(sessions or [])
+        from datetime import datetime, timezone
+        from statistics import median
+        now = datetime.now(UTC)
+        users: set[str] = set()
+        dormant: set[str] = set()
+        returned: set[str] = set()
+        single_turn = 0
+        n_turns_list: list[int] = []
+        for r in rows:
+            uid = r.get("user_id", "")
+            users.add(uid)
+            ts = r.get("last_event_at")
+            if ts is not None and (now - ts).days > 7:
+                dormant.add(uid)
+            first_ts = r.get("first_event_at")
+            if first_ts is not None and ts is not None:
+                half = (now - first_ts) - (now - ts)  # negative if first_ts < ts
+                # "returned" = first < mid AND last > mid
+                # Simpler: span > 0 (always true for non-trivial) AND first/straddle
+                # For mock purposes, just count if window is "wide enough"
+                if (now - first_ts).total_seconds() > 0 and (now - ts).total_seconds() < (now - first_ts).total_seconds():
+                    returned.add(uid)
+            if r.get("n_turns") == 1 and r.get("abandoned"):
+                single_turn += 1
+            n_turns_list.append(int(r.get("n_turns") or 0))
+        med = median(n_turns_list) if n_turns_list else 0.0
+        return {
+            "total_sessions": len(rows),
+            "active_users": len(users),
+            "dormant_users": len(dormant),
+            "returned_users": len(returned),
+            "single_turn_abandoned": single_turn,
+            "median_n_turns": float(med),
+        }
     # Single-row conversation lookup.
     if "FROM conversations" in sql and "session_id" in sql:
         return None
