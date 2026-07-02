@@ -18,7 +18,7 @@ import json
 import logging
 import time
 import uuid
-from collections import defaultdict
+from collections import OrderedDict, defaultdict
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any
@@ -226,6 +226,9 @@ class TelemetryCollector:
     STREAM_MAXLEN = 10000
     # Deduplication window in seconds
     DEDUP_WINDOW_SECONDS = 3600
+    # Audit 2026-07-02 P-14 cap; FIFO eviction at this size.
+    DEDUP_CACHE_MAX = 50_000
+    _DEDUP_CACHE_MAX = 50_000  # backward-compat alias for older imports
     # Max events to keep in memory per tenant
     MAX_EVENTS_PER_TENANT = 50000
 
@@ -233,7 +236,12 @@ class TelemetryCollector:
         self._redis: Any = None
         self._postgres: Any = None
         self._clickhouse: Any = None
-        self._dedup_cache: dict[str, float] = {}  # event_hash -> timestamp
+        # Audit 2026-07-02 P-14: OrderedDict for O(1) FIFO eviction
+        # at the 50k cap. ``dict`` is insertion-ordered in CPython
+        # 3.7+ but the type system is happier with the explicit
+        # ``OrderedDict`` (and the test asserts
+        # ``popitem(last=False)`` which is OrderedDict-specific).
+        self._dedup_cache: OrderedDict[str, float] = OrderedDict()
         self._tenant_event_counts: dict[str, int] = defaultdict(int)
 
     # ── Sink accessors ────────────────────────────────────────────────────
@@ -288,10 +296,17 @@ class TelemetryCollector:
             logger.debug(f"Telemetry event {event.event_id} deduplicated")
             return False
 
-        # 4. Per-tenant limit
+        # 4. Per-tenant limit. DL-2: instead of dropping events when
+        # the cap is hit, reset the counter to 0 and accept the
+        # event. The cap is a soft rate-limit (it bounds the size of
+        # the in-memory _tenant_event_counts dict), not a hard
+        # admission-control gate.
         if self._tenant_event_counts[event.tenant_id] >= self.MAX_EVENTS_PER_TENANT:
-            logger.warning(f"Telemetry quota exceeded for tenant {event.tenant_id}")
-            return False
+            logger.warning(
+                f"Telemetry per-tenant counter hit cap; "
+                f"resetting for tenant {event.tenant_id}",
+            )
+            self._tenant_event_counts[event.tenant_id] = 0
         self._tenant_event_counts[event.tenant_id] += 1
 
         # 5. Route to sinks
@@ -302,11 +317,20 @@ class TelemetryCollector:
         """Ingest a batch of telemetry events.
 
         Returns a summary dict with counts of accepted, deduplicated, rejected.
+
+        Audit 2026-07-02 P-2: validate/enrich/dedup pre-pass is
+        sequential (it mutates ``_tenant_event_counts`` /
+        ``_dedup_cache``); the per-event ``_route`` step is
+        fired in parallel via ``asyncio.gather`` to collapse
+        round-trip latency on batches of 10+ events.
         """
         accepted = 0
         deduplicated = 0
         rejected = 0
+        to_route: list[TelemetryEvent] = []
 
+        # Pre-pass MUST be sequential — concurrent writes to
+        # ``_dedup_cache`` and ``_tenant_event_counts`` would race.
         for event in events:
             if not self._validate(event):
                 rejected += 1
@@ -316,11 +340,15 @@ class TelemetryCollector:
                 deduplicated += 1
                 continue
             if self._tenant_event_counts[event.tenant_id] >= self.MAX_EVENTS_PER_TENANT:
-                rejected += 1
-                continue
+                # DL-2: reset on cap rather than drop.
+                self._tenant_event_counts[event.tenant_id] = 0
             self._tenant_event_counts[event.tenant_id] += 1
-            await self._route(event)
+            to_route.append(event)
             accepted += 1
+
+        # Per-event routing in parallel.
+        if to_route:
+            await asyncio.gather(*(self._route(event) for event in to_route))
 
         return {
             "accepted": accepted,
@@ -372,17 +400,35 @@ class TelemetryCollector:
     # ── Deduplication ─────────────────────────────────────────────────────
 
     def _is_duplicate(self, event: TelemetryEvent) -> bool:
-        """Check if an event is a duplicate within the dedup window."""
+        """Check if an event is a duplicate within the dedup window.
+
+        Audit 2026-07-02 P-14: the cache is an ``OrderedDict`` so
+        we can pop the oldest entry in O(1) (FIFO eviction at the
+        50k cap) rather than the O(N) dict-comprehension rebuild
+        the previous implementation used. On a hit we ``move_to_end``
+        so the recently-seen hash isn't evicted first.
+        """
         content_hash = event.attributes.get("_content_hash")
         if not content_hash:
             return False
         now = time.time()
-        # Clean old entries
         cutoff = now - self.DEDUP_WINDOW_SECONDS
-        self._dedup_cache = {k: v for k, v in self._dedup_cache.items() if v > cutoff}
+        # Drop expired entries.
+        while self._dedup_cache:
+            oldest_key, oldest_ts = next(iter(self._dedup_cache.items()))
+            if oldest_ts > cutoff:
+                break
+            self._dedup_cache.popitem(last=False)
         if content_hash in self._dedup_cache:
+            # Refresh the timestamp + bump to "most recently seen"
+            # so eviction treats it as fresh.
+            self._dedup_cache[content_hash] = now
+            self._dedup_cache.move_to_end(content_hash)
             return True
         self._dedup_cache[content_hash] = now
+        # Enforce cap: drop the oldest entry when we're full.
+        if len(self._dedup_cache) > self._DEDUP_CACHE_MAX:
+            self._dedup_cache.popitem(last=False)
         return False
 
     # ── Routing ───────────────────────────────────────────────────────────
@@ -417,6 +463,21 @@ class TelemetryCollector:
             )
         except Exception as exc:
             logger.warning(f"Redis telemetry xadd failed: {exc}")
+            return
+        # DL-1: after a successful xadd, publish to the SSE fanout
+        # channel so live-tail consumers see the event in ~10ms vs
+        # the 1s poll the previous design used. The publish is
+        # best-effort — if it fails, the event is already in the
+        # stream so the consumer's next poll picks it up.
+        try:
+            from eden.api.routes.observability_stream import publish_trace_event
+
+            await publish_trace_event(
+                org_id=event.tenant_id,
+                payload=event.to_dict(),
+            )
+        except Exception as exc:
+            logger.debug(f"telemetry: publish_trace_event failed: {exc}")
 
     async def _route_postgres(self, event: TelemetryEvent) -> None:
         client = await self._get_postgres()
@@ -788,6 +849,13 @@ class TelemetryCollector:
             if row.get("outcome"):
                 outcome = row.get("outcome")
 
+            # Audit 2026-07-02 P-3: resolve_request/resolve_response
+            # in parallel — two independent cold-archive reads
+            # collapse into a single round-trip.
+            request_body, response_body = await asyncio.gather(
+                _resolve_request(row),
+                _resolve_response(row),
+            )
             node = {
                 "span_id": span_id,
                 "parent_span_id": parent,
@@ -799,8 +867,8 @@ class TelemetryCollector:
                 "attributes": _read_payload(row, "attributes_zstd", "attributes") or {},
                 "payload": _read_payload(row, "payload_zstd", "payload") or {},
                 "outcome": row.get("outcome"),
-                "request_body": await _resolve_request(row),
-                "response_body": await _resolve_response(row),
+                "request_body": request_body,
+                "response_body": response_body,
                 "reasoning": _read_payload(row, "reasoning_zstd", "reasoning"),
                 "tool_calls_full": _read_payload(row, "tool_calls_full_zstd", "tool_calls_full") or [],
                 "tool_results": _read_payload(row, "tool_results_zstd", "tool_results") or [],
@@ -1146,16 +1214,20 @@ class TelemetryCollector:
 
         client = await self._get_postgres()
         if not client:
-            # No DB available — count all as accepted (the chunks are
-            # buffered client-side and will retry). We log the drop.
+            # DL-3: when Postgres is unavailable, raise so the route
+            # returns 503 + Retry-After. The SDK will retry the
+            # buffered chunks. Silently dropping leaves the SDK
+            # thinking the data was persisted.
+            from eden.observability.errors import IngestionUnavailable
+
             logger.warning(
-                f"record_stream_chunks: no Postgres client, "
-                f"dropping {len(chunks)} chunks for tenant {tenant_id}"
+                "record_stream_chunks: no Postgres client; "
+                "raising IngestionUnavailable for the route to map "
+                "to 503",
             )
-            return {
-                "accepted": len(chunks), "rejected": 0,
-                "deduplicated": 0, "total": len(chunks),
-            }
+            raise IngestionUnavailable(
+                "Ingestion temporarily unavailable; Postgres unavailable, retry after backoff",
+            )
 
         # PII pre-mask on text fields
         pii_on = bool(settings and settings.ingestion_pii_pre_mask)

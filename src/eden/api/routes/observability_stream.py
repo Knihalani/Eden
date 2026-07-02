@@ -166,30 +166,34 @@ def _format_sse(
 
 
 async def _replay_since(org_id: str, last_event_id: str) -> list[dict]:
-    """Replay missed events from a small Redis list. The list is
+    """Replay missed events from a small Redis sorted set. The set is
     updated by the collector's publish step; it stores the last 1000
-    events per tenant with their sequence number."""
+    events per tenant with their sequence number as score.
+
+    Audit 2026-07-02 P-18 — switched from LIST/LRANGE (O(N) filter)
+    to ZSET/ZRANGEBYSCORE (O(log N + M)) because per-tenant trace
+    volume routinely exceeded what a single LRANGE call could
+    serve in <50ms.
+    """
     redis = await get_redis_client()
     if not redis:
         return []
-    list_key = f"observability:replay:{org_id}"
+    set_key = f"observability:replay:{org_id}"
     try:
-        # The list stores ``(seq, payload_json)`` tuples. We fetch
-        # all and filter to seq > last_event_id. The list is bounded
-        # at 1000 so this stays cheap.
-        raw = await redis.lrange(list_key, 0, -1)
+        try:
+            last_seq = int(last_event_id)
+        except (TypeError, ValueError):
+            return []
+        raw = await redis.zrangebyscore(set_key, last_seq + 1, "+inf")
     except Exception as exc:
-        logger.debug(f"replay lrange failed: {exc}")
+        logger.debug(f"replay zrangebyscore failed: {exc}")
         return []
     out: list[dict] = []
-    try:
-        last_seq = int(last_event_id)
-    except (TypeError, ValueError):
-        return []
     for item in raw:
         try:
-            seq, payload = item.split("|", 1)
-            if int(seq) > last_seq:
+            seq_str, payload = item.split("|", 1)
+            seq = int(seq_str)
+            if seq > last_seq:
                 out.append(json.loads(payload))
         except (ValueError, json.JSONDecodeError):
             continue
@@ -212,19 +216,20 @@ async def publish_trace_event(org_id: str, payload: dict[str, Any]) -> None:
     if not redis:
         return
     channel = f"observability:stream:{org_id}"
-    list_key = f"observability:replay:{org_id}"
+    set_key = f"observability:replay:{org_id}"
     try:
         # Monotonic per-tenant sequence (Redis INCR for atomicity).
         seq = await redis.incr(f"observability:seq:{org_id}")
         # Cap the per-event payload — a 5MB trace would otherwise
-        # blow the bounded replay list past Upstash's free-tier
+        # blow the bounded replay set past Upstash's free-tier
         # command budget. 16 KB is plenty for the live-tail summary
         # (the full trace lives in telemetry_events).
         body = json.dumps(payload, default=str)[:16 * 1024]
         await redis.publish(channel, body)
-        # Push onto the bounded replay list. Trim from the left to
-        # keep at most 1000 entries.
-        await redis.lpush(list_key, f"{seq}|{body}")
-        await redis.ltrim(list_key, 0, 999)
+        # Add to the bounded replay sorted set (audit P-18). Trim
+        # the bottom-1000 with ZREMRANGEBYRANK so the set stays
+        # bounded.
+        await redis.zadd(set_key, {f"{seq}|{body}": seq})
+        await redis.zremrangebyrank(set_key, 0, -1001)
     except Exception as exc:
         logger.debug(f"publish_trace_event failed: {exc}")

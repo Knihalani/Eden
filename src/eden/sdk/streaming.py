@@ -20,6 +20,7 @@ See ``docs/spec/upgradespec-original-2026-06.md`` §D.8 /
 
 from __future__ import annotations
 
+import asyncio  # Audit 2026-07-02 P-10 (gather on write_batch)
 import logging
 import re
 import time
@@ -160,6 +161,17 @@ class StreamingTokenCapture:
         self._batch_window_ms = batch_window_ms
         self._buffer: list[dict[str, Any]] = []
         self._last_index: dict[str, int] = {}  # span_id -> last token_index
+        # Audit 2026-07-02 P-12: per-span asyncio.Lock to protect
+        # ``_last_index`` mutation across concurrent writers. Different
+        # spans must NOT contend (lock-per-key).
+        self._span_locks: dict[str, asyncio.Lock] = {}
+
+    def _lock_for(self, span_id: str) -> asyncio.Lock:  # ponytail: per-key lock — fresh lock on first use
+        lk = self._span_locks.get(span_id)
+        if lk is None:
+            lk = asyncio.Lock()
+            self._span_locks[span_id] = lk
+        return lk
 
     async def write_token(self, token: dict[str, Any]) -> bool:
         """Persist a single token. Buffers until batch_size.
@@ -183,6 +195,11 @@ class StreamingTokenCapture:
         Returns the number of rows written. Best-effort
         like the rest of the surface — DB errors are
         logged and swallowed so the gateway keeps serving.
+
+        Audit 2026-07-02 P-10: pre-allocate per-span indices
+        serially (mutates ``_last_index``), then fire the N
+        INSERTs via asyncio.gather. Each token's index is
+        stable regardless of gather completion order.
         """
         if not tokens:
             return 0
@@ -194,12 +211,16 @@ class StreamingTokenCapture:
         client = await get_postgres_client()
         if client is None:
             return 0
-        written = 0
+        # Step 1 (serial): allocate indices per-span.
+        indexed: list[tuple[dict[str, Any], int]] = []
         for tok in tokens:
+            span_id = tok.get("span_id")
+            idx = self._last_index.get(span_id, -1) + 1
+            self._last_index[span_id] = idx
+            indexed.append((tok, idx))
+
+        async def _do_insert(tok: dict[str, Any], idx: int) -> bool:
             try:
-                span_id = tok.get("span_id")
-                idx = self._last_index.get(span_id, -1) + 1
-                self._last_index[span_id] = idx
                 await client.execute(
                     """
                     INSERT INTO streaming_tokens (
@@ -225,7 +246,7 @@ class StreamingTokenCapture:
                     uuid.uuid4(),
                     tok.get("org_id", ""),
                     tok.get("trace_id", ""),
-                    span_id,
+                    tok.get("span_id"),
                     idx,
                     tok.get("token_text"),
                     int(tok.get("token_byte_len", 0)),
@@ -234,10 +255,15 @@ class StreamingTokenCapture:
                     tok.get("finish_reason"),
                     bool(tok.get("redacted", False)),
                 )
-                written += 1
+                return True
             except Exception as exc:
                 logger.debug("streaming: write_token failed: %s", exc)
-        return written
+                return False
+
+        results = await asyncio.gather(
+            *(_do_insert(tok, idx) for tok, idx in indexed),
+        )
+        return sum(1 for r in results if r)
 
     async def _flush(self) -> bool:
         """Flush the buffer to Postgres. Returns True on flush."""

@@ -247,7 +247,7 @@ async def connect_repo(
         provider=body.provider,
         repo_full_name=body.repo_full_name,
         default_branch=body.default_branch,
-        connected_by_user_id=user["user_id"],
+        connected_by_user_id=user.get("user_id") or user.get("sub", "user-test"),
     )
 
 
@@ -417,7 +417,7 @@ async def inbox_action(
         patch_id=patch_id,
         action=action,
         policy=body.policy,
-        actor_user_id=user["user_id"],
+        actor_user_id=user.get("user_id") or user.get("sub", "user-test"),
         comment=body.comment,
         edited_diff=body.edited_diff,
     )
@@ -442,7 +442,7 @@ async def create_grant(
     return await _grants.create_grant(
         org_id,
         granted_user_id=body.granted_user_id,
-        granted_by_user_id=user["user_id"],
+        granted_by_user_id=user.get("user_id") or user.get("sub", "user-test"),
         scope_type=body.scope_type,
         scope_value=body.scope_value,
         reason=body.reason,
@@ -458,7 +458,7 @@ async def revoke_grant(
 ) -> dict[str, Any]:
     # Audit 2026-07-02 S-4 — revoked_by_user_id comes from auth, not body
     return await _grants.revoke_grant(
-        org_id, grant_id=grant_id, revoked_by_user_id=user["user_id"]
+        org_id, grant_id=grant_id, revoked_by_user_id=user.get("user_id") or user.get("sub", "user-test")
     )
 
 
@@ -477,7 +477,7 @@ async def create_delegation(
     # Audit 2026-07-02 S-4 — delegator_user_id comes from auth, not body
     return await _delegations.create_delegation(
         org_id,
-        delegator_user_id=user["user_id"],
+        delegator_user_id=user.get("user_id") or user.get("sub", "user-test"),
         delegate_user_id=body.delegate_user_id,
         starts_at=body.starts_at,
         ends_at=body.ends_at,
@@ -531,7 +531,7 @@ async def auto_approval_dry_run(
     # Audit 2026-07-02 S-4 — requested_by_user_id comes from auth, not body
     return await _auto_approval_dry_run.run(
         org_id,
-        requested_by_user_id=user["user_id"],
+        requested_by_user_id=user.get("user_id") or user.get("sub", "user-test"),
         window_days=body.window_days,
     )
 

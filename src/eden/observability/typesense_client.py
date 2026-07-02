@@ -450,7 +450,6 @@ class TypesenseClient:
 # ── Singleton accessor ──────────────────────────────────────────────
 
 _typesense_client: TypesenseClient | None = None
-_typesense_lock = asyncio.Lock()
 
 
 def get_typesense_client() -> TypesenseClient | None:

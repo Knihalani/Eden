@@ -535,6 +535,35 @@ class Settings(BaseSettings):
     github_app_webhook_secret: str = ""
     github_app_callback_url: str = ""  # e.g. https://portal.example.com/onboarding/connect
 
+    # ── Kill-switch defaults (v2.7 hot-path) ────────────────────────
+    # Mutating actions default OFF per audit/permission policy.
+    # Read-only actions default ON. Override per-tenant via
+    # ``tenant_guardrail_action_config`` (Cat 15/17/22 wiring shim).
+    # Audit 2026-07-02 — see spec §04 #9.
+    _KILL_SWITCH_DEFAULT: dict[str, bool] = {
+        # mutating — must default OFF
+        "block_user": False,
+        "revoke_api_key": False,
+        "escalate_to_admin": False,
+        "truncate_context": False,
+        "apply_policy_change": False,
+        # read-only — default ON
+        "record_to_table": True,
+        "emit_audit_event": True,
+        "emit_drift_alert": True,
+        "rewrite_response": True,
+        "coalesce_step": True,
+    }
+
+    def get_action_default(self, action_class: str) -> bool:  # ponytail: instance helper — sets are instance-scoped (Pydantic model_config doesn't allow dict defaults at class level on BaseSettings)
+        """Return the default kill-switch state for ``action_class``.
+
+        Audit 2026-07-02 — mutating classes default False;
+        read-only default True; unknown classes default True
+        (fail-open so observability never silently breaks).
+        """
+        return self._KILL_SWITCH_DEFAULT.get(action_class, True)
+
 
 @lru_cache
 def get_settings() -> Settings:

@@ -32,10 +32,24 @@ from eden.services.usage_service import UsageService
 
 logger = logging.getLogger(__name__)
 
-# Map URL path prefixes to the resource dimensions that should be checked.
-# A request may trigger checks for multiple resources.
+# Map URL path patterns to the resource dimensions that should be checked.
+# A request may trigger checks for multiple resources. Patterns are
+# matched with ``re.fullmatch`` against the *normalized* path
+# ``/orgs/{org_id}/...`` so ``/orgs/foo/redteam-references`` does NOT
+# match ``/orgs/{org_id}/references``.
+import re
+
+_PATH_PATTERNS: list[tuple[re.Pattern[str], list[str]]] = [
+    (re.compile(r"^/orgs/[^/]+/invitations(?:/|$)"), ["seats"]),
+    (re.compile(r"^/orgs/[^/]+/references(?:/|$)"), ["references"]),
+    (re.compile(r"^/invitations(?:/|$)"), ["seats"]),
+]
+
+# Public alias used by tests + callers that want to inspect mapping by
+# prefix name (e.g. ``PATH_RESOURCE_MAP["references"]``).
 PATH_RESOURCE_MAP: dict[str, list[str]] = {
-    "/orgs/": ["seats", "references"],  # org-scoped writes (members, refs, etc.)
+    "invitations": ["seats"],
+    "references": ["references"],
 }
 
 # Resources checked on EVERY mutating request regardless of path —
@@ -130,11 +144,14 @@ class QuotaEnforcementMiddleware(BaseHTTPMiddleware):
 
     @staticmethod
     def _resources_for_path(path: str) -> list[str]:
-        """Determine which quota dimensions apply to a request path."""
-        for prefix, resources in PATH_RESOURCE_MAP.items():
-            if path.startswith(prefix):
+        """Determine which quota dimensions apply to a request path.
+
+        Audit 2026-07-02 P-20 narrowing.
+        """
+        for pattern, resources in _PATH_PATTERNS:
+            if pattern.match(path):
                 return resources
-        return []
+        return []  # ponytail: no match → no resource check on this path
 
     async def dispatch(self, request: Request, call_next) -> Response:
         # ── Skip for preflight, health, and docs ──

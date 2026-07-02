@@ -26,6 +26,7 @@ See ``docs/observability-gap/08-cost-intelligence.md``.
 
 from __future__ import annotations
 
+import asyncio  # Audit 2026-07-02 P-8 (gather on cost + outcomes)
 import logging
 from datetime import timedelta
 from typing import Any
@@ -93,19 +94,18 @@ class CostEfficiencyScorer:
                 f"allowed: {sorted(ALLOWED_GROUP_BY)}",
             )
 
-        # Cost by group_by dimension.
-        cost_by_group = await _fetch_cost_by_group(
-            org_id, interval, group_by
-        )
-        # Outcome counts — only meaningful when group_by is
-        # "outcome_type"; for other dimensions the
-        # cost_per_outcome is left null with sample_size=0
-        # because outcomes are not bucketed by model/agent/etc.
-        outcomes_by_type: dict[str, int] = {}
+        # Audit 2026-07-02 P-8: cost + outcomes fetched via
+        # asyncio.gather (collapse 2 round-trips into 1).
         if group_by == "outcome_type":
-            outcomes_by_type = await _fetch_outcome_count_by_type(
-                org_id, interval
+            cost_by_group, outcomes_by_type = await asyncio.gather(
+                _fetch_cost_by_group(org_id, interval, group_by),
+                _fetch_outcome_count_by_type(org_id, interval),
             )
+        else:
+            cost_by_group = await _fetch_cost_by_group(
+                org_id, interval, group_by
+            )
+            outcomes_by_type = {}
 
         # No usage data at all → return the empty-envelope
         # shape so the front-end can render a clean
@@ -216,8 +216,11 @@ class ROIAnalyzer:
                 f"invalid window {window!r}; expected e.g. '30d', '24h'",
             )
 
-        spend_usd = await _fetch_total_cost(org_id, interval)
-        value_usd = await _fetch_total_value(org_id, interval)
+        # Audit 2026-07-02 P-8: parallel fetch total cost + value.
+        spend_usd, value_usd = await asyncio.gather(
+            _fetch_total_cost(org_id, interval),
+            _fetch_total_value(org_id, interval),
+        )
         net_return_usd = value_usd - spend_usd
         if spend_usd > 0:
             roi: float | None = net_return_usd / spend_usd

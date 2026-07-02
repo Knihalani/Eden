@@ -44,6 +44,7 @@ layout of :mod:`eden.kb.retrieval_intel._common` (Cat 4),
 
 from __future__ import annotations
 
+import asyncio  # Audit 2026-07-02 P-9 (gather on telemetry+cost+judge)
 import logging
 import re
 import uuid
@@ -271,81 +272,87 @@ async def _fetch_telemetry_rollup_for_agent(
         "cost_usd": 0.0,
         "judge_avg": None,
     }
-    # 1. Trace counts + latency + success rate from
-    # ``telemetry_events``. We treat an event with
-    # ``status='success'`` as a success; if the table doesn't
-    # track status we treat all rows as success (matches the
-    # Cat 4 / Cat 5 graceful-degradation pattern).
-    try:
-        rows = await client.fetch(
-            """
-            SELECT
-                count(*)::int AS n_traces,
-                AVG(
-                    CASE WHEN status = 'success' THEN 1.0
-                         WHEN status IN ('error', 'failed') THEN 0.0
-                         ELSE 1.0
-                    END
-                )::float8 AS success_rate,
-                percentile_cont(0.5) WITHIN GROUP
-                    (ORDER BY duration_ms)::float8 AS p50,
-                percentile_cont(0.95) WITHIN GROUP
-                    (ORDER BY duration_ms)::float8 AS p95
-              FROM telemetry_events
-             WHERE org_id = $1
-               AND agent_id = $2
-               AND created_at > NOW() - $3::interval
-            """,
-            org_id,
-            agent_id,
-            interval_sql,
-        )
-    except Exception as exc:
-        logger.debug("agent_intel: telemetry rollup failed: %s", exc)
-        rows = []
+    # Audit 2026-07-02 P-9: 3 source-table fetches fired in
+    # parallel via asyncio.gather (collapse 3 round-trips into 1).
+    async def _telemetry_rows() -> list:
+        try:
+            return await client.fetch(
+                """
+                SELECT
+                    count(*)::int AS n_traces,
+                    AVG(
+                        CASE WHEN status = 'success' THEN 1.0
+                             WHEN status IN ('error', 'failed') THEN 0.0
+                             ELSE 1.0
+                        END
+                    )::float8 AS success_rate,
+                    percentile_cont(0.5) WITHIN GROUP
+                        (ORDER BY duration_ms)::float8 AS p50,
+                    percentile_cont(0.95) WITHIN GROUP
+                        (ORDER BY duration_ms)::float8 AS p95
+                  FROM telemetry_events
+                 WHERE org_id = $1
+                   AND agent_id = $2
+                   AND created_at > NOW() - $3::interval
+                """,
+                org_id,
+                agent_id,
+                interval_sql,
+            )
+        except Exception as exc:
+            logger.debug("agent_intel: telemetry rollup failed: %s", exc)
+            return []
+
+    async def _cost_rows() -> list:
+        try:
+            return await client.fetch(
+                """
+                SELECT COALESCE(SUM(cost_usd), 0)::float8 AS cost_usd
+                  FROM usage_events
+                 WHERE org_id = $1
+                   AND agent_id = $2
+                   AND created_at > NOW() - $3::interval
+                """,
+                org_id,
+                agent_id,
+                interval_sql,
+            )
+        except Exception as exc:
+            logger.debug("agent_intel: cost rollup failed: %s", exc)
+            return []
+
+    async def _judge_rows() -> list:
+        try:
+            return await client.fetch(
+                """
+                SELECT AVG(score)::float8 AS judge_avg
+                  FROM judge_scores
+                 WHERE org_id = $1
+                   AND agent_id = $2
+                   AND created_at > NOW() - $3::interval
+                """,
+                org_id,
+                agent_id,
+                interval_sql,
+            )
+        except Exception as exc:
+            logger.debug("agent_intel: judge rollup failed: %s", exc)
+            return []
+
+    rows, cost_rows, judge_rows = await asyncio.gather(
+        _telemetry_rows(),
+        _cost_rows(),
+        _judge_rows(),
+    )
     if rows:
         r = dict(rows[0]) if not isinstance(rows[0], dict) else rows[0]
         out["n_traces"] = int(r.get("n_traces") or 0)
         out["success_rate"] = _safe_float_or_none(r.get("success_rate"))
         out["latency_p50_ms"] = _safe_float_or_none(r.get("p50"))
         out["latency_p95_ms"] = _safe_float_or_none(r.get("p95"))
-    # 2. Cost from ``usage_events``.
-    try:
-        cost_rows = await client.fetch(
-            """
-            SELECT COALESCE(SUM(cost_usd), 0)::float8 AS cost_usd
-              FROM usage_events
-             WHERE org_id = $1
-               AND agent_id = $2
-               AND created_at > NOW() - $3::interval
-            """,
-            org_id,
-            agent_id,
-            interval_sql,
-        )
-    except Exception as exc:
-        logger.debug("agent_intel: cost rollup failed: %s", exc)
-        cost_rows = []
     if cost_rows:
         r = dict(cost_rows[0]) if not isinstance(cost_rows[0], dict) else cost_rows[0]
         out["cost_usd"] = _safe_float(r.get("cost_usd"))
-    # 3. Mean judge score from ``judge_scores``.
-    try:
-        judge_rows = await client.fetch(
-            """
-            SELECT AVG(score)::float8 AS judge_avg
-              FROM judge_scores
-             WHERE org_id = $1
-               AND agent_id = $2
-               AND created_at > NOW() - $3::interval
-            """,
-            org_id,
-            agent_id,
-            interval_sql,
-        )
-    except Exception as exc:
-        logger.debug("agent_intel: judge rollup failed: %s", exc)
-        judge_rows = []
     if judge_rows:
         r = dict(judge_rows[0]) if not isinstance(judge_rows[0], dict) else judge_rows[0]
         out["judge_avg"] = _safe_float_or_none(r.get("judge_avg"))

@@ -137,6 +137,25 @@ def get_ai_gateway() -> AIGateway:
 # ─────────────────────────────────────────────────────────────────────
 
 
+def _scrub_request_body(body: dict[str, Any]) -> dict[str, Any]:
+    """PII-scrub the request body before persistence to telemetry_events.
+
+    Audit 2026-07-02 S-17 — the raw ``request_body`` contains user
+    PII (free-form ``messages[*].content``). Scrub via the shared
+    PIIMasker before the event hits the collector. Best-effort: on
+    any scrubber failure, return the unscrubbed body and let the
+    downstream fail-closed logic decide. Empty/None body is a
+    no-op (no masker instantiation).
+    """
+    if not body:
+        return body
+    try:
+        from eden.data_platform.pii import PIIMasker
+        return PIIMasker().mask(body) or body  # ponytail: mask() may return None for some inputs
+    except Exception:
+        return body
+
+
 async def _emit_gateway_telemetry(
     *,
     org_id: str,
@@ -162,6 +181,8 @@ async def _emit_gateway_telemetry(
         return
     try:
         from eden.observability.telemetry_collector import TelemetryEvent
+
+        request_body = _scrub_request_body(request_body)  # Audit 2026-07-02 S-17
 
         event = TelemetryEvent(
             event_id=f"gw_{endpoint}_{int(time.time() * 1_000_000)}_{uuid.uuid4().hex[:6]}",
