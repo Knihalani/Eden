@@ -185,20 +185,13 @@ async def _fetch_signal_cohort(
             """
             SELECT
                 COUNT(*)::int AS total,
-                COUNT(*) FILTER (WHERE signal_type = 'regeneration')
-                    ::int AS regen_count,
-                COUNT(*) FILTER (WHERE signal_type = 'abandonment')
+                COUNT(*) FILTER (WHERE regenerated)::int AS regen_count,
+                COUNT(*) FILTER (WHERE abandoned_after_one)
                     ::int AS abandon_count,
-                COUNT(*) FILTER (
-                    WHERE signal_type = 'return' AND payload->>'returned' = 'true'
-                )::int AS returned_yes,
-                COUNT(*) FILTER (
-                    WHERE signal_type = 'return' AND payload->>'returned' = 'false'
-                )::int AS returned_no,
-                AVG((payload->>'edit_distance')::float)
-                    FILTER (WHERE signal_type = 'edit') AS edit_distance_mean,
-                AVG((payload->>'ttfa_ms')::float)
-                    FILTER (WHERE signal_type = 'ttfa') AS ttfa_mean
+                COUNT(*) FILTER (WHERE returned)::int AS returned_yes,
+                COUNT(*) FILTER (WHERE NOT returned)::int AS returned_no,
+                AVG(edit_distance)::float AS edit_distance_mean,
+                AVG(time_to_first_action_ms)::float AS ttfa_mean
               FROM user_behavioural_signals
              WHERE org_id = $1
                AND created_at >= NOW() - $2::interval
@@ -210,7 +203,14 @@ async def _fetch_signal_cohort(
         return {}
     if row is None:
         return {}
-    return dict(row)
+    # DL-10: returned_yes / returned_no were deferred per upgradespec
+    # §D.2. The v1 flat columns are populated for the deferred signals
+    # once we ship them; surface 0 today so downstream math doesn't
+    # raise KeyError.
+    out = dict(row)
+    out.setdefault("returned_yes", 0)
+    out.setdefault("returned_no", 0)
+    return out
 
 
 async def _fetch_explicit_cohort(

@@ -321,7 +321,7 @@ async def _fetch_trace_response_text(
             """
             SELECT response_body
               FROM telemetry_events
-             WHERE org_id = $1
+             WHERE tenant_id = $1
                AND trace_id = $2
                AND response_body IS NOT NULL
              ORDER BY created_at DESC

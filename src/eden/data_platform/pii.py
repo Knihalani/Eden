@@ -297,26 +297,37 @@ class PIIMasker:
         result: dict[str, Any] = {}
         for key, value in data.items():
             key_lower = key.lower()
-            if key_lower in self._sensitive_keys:
-                # Audit 2026-07-02 S-15 — credential scan first.
-                # When the value is a string, raise on a credential
-                # hit in fail-closed mode BEFORE the key-based
-                # redaction blanks it. When the value is not a
-                # string (e.g. list, int, None), the credential
-                # check has nothing to scan, so we fall through to
-                # the key-based redaction.
+            # Audit 2026-07-02 S-15 + S-extra — treat
+            # ``redact_keys_extra`` (explicit per-tenant additions)
+            # as ALWAYS-mask; built-in ``SENSITIVE_KEYS`` only
+            # mask when the value matches a credential pattern.
+            # The old behavior blanket-masked both, which let a
+            # credential-in-password bypass the credential scan.
+            is_extra = key_lower in self.policy.redact_keys_extra
+            is_builtin_sensitive = key_lower in (
+                self._sensitive_keys - self.policy.redact_keys_extra
+            )
+            if is_extra:
+                # Explicit redact_keys_extra → always mask the
+                # key. Value is discarded.
+                result[key] = f"[{key.upper()}_{self.mask_token}]"
+            elif is_builtin_sensitive:
+                # Built-in sensitive key. String values: scan for
+                # credentials FIRST (S-15). Non-string values: no
+                # string to credential-scan, so the key-based
+                # redaction IS the safety net (mask with the
+                # key-name placeholder).
                 if isinstance(value, str):
-                    # May raise PIIMaskingError in fail-closed
-                    # mode. The ``check_credentials=True`` path
-                    # raises BEFORE the redaction sub. Then we
-                    # redact (returning the masked string) only
-                    # when no credential was found.
-                    masked = self._mask_string(value, check_credentials=True)
+                    # May raise PIIMaskingError in fail-closed mode
+                    # on a credential hit. If no raise, pass value
+                    # through (no auto-mask).
+                    masked = self._mask_string(
+                        value, check_credentials=True
+                    )
                     result[key] = masked
                 else:
-                    # Non-string sensitive value: no string to scan
-                    # for credentials, so the key-based redaction
-                    # is the only safe option.
+                    # Non-string (list, dict, int, None): key-based
+                    # redaction is the safety net.
                     result[key] = f"[{key.upper()}_{self.mask_token}]"
             elif isinstance(value, str):
                 result[key] = self._mask_string(value, check_credentials=True)

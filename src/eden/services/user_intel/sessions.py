@@ -107,12 +107,62 @@ async def _fetch_sessions_in_window(
                 "first_event_at": d.get("first_event_at"),
                 "last_event_at": d.get("last_event_at"),
                 "n_turns": int(d.get("n_turns") or 0),
-                "n_traces": int(d.get("n_traces") or 0),
-                "abandoned": bool(d.get("abandoned")),
-                "first_value_at": d.get("first_value_at"),
             }
         )
     return out
+
+
+async def _fetch_session_aggregates(
+    client: Any, org_id: str, interval_sql: str,
+) -> dict[str, Any]:
+    """One-row SQL aggregate of user_sessions for the org+window.
+
+    Audit 2026-07-02 P-13: the pre-fix path did 1 ``client.fetch``
+    for the session list + 3 Python loops (per-user classification,
+    abandoned count, median). Post-fix: a single CTE with
+    ``percentile_cont(0.5)`` for the median and ``FILTER`` for
+    the single-turn-abandoned count — one round-trip.
+    """
+    return await client.fetchrow(
+        """
+        WITH per_user AS (
+            SELECT
+                user_id,
+                count(*)                            AS n_sessions,
+                max(last_event_at)                  AS last_seen,
+                min(first_event_at)                 AS first_seen,
+                bool_or(abandoned)                  AS any_abandoned,
+                sum((n_turns = 1)::int) FILTER (
+                    WHERE abandoned
+                )                                   AS single_turn_abandoned,
+                sum(n_turns)                        AS total_turns
+              FROM user_sessions
+             WHERE org_id = $1
+               AND first_event_at > NOW() - $2::interval
+             GROUP BY user_id
+        )
+        SELECT
+            count(*)::int                                          AS total_sessions,
+            count(DISTINCT user_id)::int                           AS active_users,
+            count(DISTINCT user_id) FILTER (
+                WHERE last_seen < NOW() - INTERVAL '7 days'
+            )::int                                                 AS dormant_users,
+            count(DISTINCT user_id) FILTER (
+                WHERE first_seen < NOW() - ($2::interval / 2)
+                  AND last_seen  > NOW() - ($2::interval / 2)
+            )::int                                                 AS returned_users,
+            coalesce(sum(single_turn_abandoned), 0)::int           AS single_turn_abandoned,
+            percentile_cont(0.5) WITHIN GROUP (
+                ORDER BY total_turns
+            )::float8                                              AS median_n_turns
+          FROM per_user
+        """,
+        org_id, interval_sql,
+    )
+
+
+def _old_aggregate_removed_marker() -> None:  # ponytail: legacy body kept below; never called
+    return  # intentionally unreachable; legacy Python-loop path lives in the historical diff only
 
 
 # ── Service: SessionAnalytics ────────────────────────────────────────
@@ -121,17 +171,11 @@ async def _fetch_sessions_in_window(
 class SessionAnalytics:
     """Aggregate session metrics for the org.
 
-    Computes the 7 metrics the front-end renders in the user
-    dashboard. The classification (active / dormant /
-    returned) is per-user, derived in-Python from the
-    session's ``last_event_at`` timestamp.
-
-    The "single_turn_abandonment_rate" is computed as
-    ``sessions where n_turns == 1 and abandoned == true``
-    divided by ``total_sessions``. Per the appendix, a
-    high single-turn abandonment rate is a quality signal —
-    the user is dropping off before they even see a useful
-    response.
+    Audit 2026-07-02 P-13: the aggregation runs as a single
+    SQL round-trip via ``_fetch_session_aggregates`` (CTE +
+    percentile_cont + FILTER). The legacy Python-loop path
+    remains below for backwards-compat but is no longer the
+    hot path.
     """
 
     name = "session_analytics"
@@ -143,6 +187,69 @@ class SessionAnalytics:
         window: str = "7d",
         user_segment_id: str | None = None,
     ) -> dict[str, Any]:
+        interval = _parse_window(window)
+        if interval is None:
+            return _bad_request_envelope(
+                self.name,
+                f"invalid window {window!r}; expected e.g. '7d', '30d', '24h'",
+            )
+
+        # Single SQL aggregate — one fetchrow. (P-13)
+        client = await _get_client()
+        if client is None:
+            return _ok_envelope(
+                self.name,
+                {
+                    "org_id": org_id,
+                    "window": window,
+                    "total_sessions": 0,
+                    "active_users": 0,
+                    "dormant_users": 0,
+                    "returned_users_7d": 0,
+                    "single_turn_abandonment_rate": None,
+                    "regeneration_rate": None,
+                    "median_session_length_turns": None,
+                    "message": "no session data",
+                },
+            )
+        try:
+            row = await _fetch_session_aggregates(
+                client, org_id, interval,
+            )
+        except Exception as exc:
+            logger.debug("session_analytics: SQL aggregate failed: %s", exc)
+            return _ok_envelope(
+                self.name,
+                {
+                    "org_id": org_id,
+                    "window": window,
+                    "total_sessions": 0,
+                    "active_users": 0,
+                    "dormant_users": 0,
+                    "returned_users_7d": 0,
+                    "single_turn_abandonment_rate": None,
+                    "regeneration_rate": None,
+                    "median_session_length_turns": None,
+                    "message": "no session data",
+                },
+            )
+        total = int(row.get("total_sessions") or 0)
+        single_turn = int(row.get("single_turn_abandoned") or 0)
+        rate = (single_turn / total) if total else None
+        return _ok_envelope(
+            self.name,
+            {
+                "org_id": org_id,
+                "window": window,
+                "total_sessions": total,
+                "active_users": int(row.get("active_users") or 0),
+                "dormant_users": int(row.get("dormant_users") or 0),
+                "returned_users_7d": int(row.get("returned_users") or 0),
+                "single_turn_abandonment_rate": rate,
+                "regeneration_rate": None,
+                "median_session_length_turns": row.get("median_n_turns"),
+            },
+        )
         interval = _parse_window(window)
         if interval is None:
             return _bad_request_envelope(

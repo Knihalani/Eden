@@ -395,6 +395,12 @@ class AIGateway:
             "hard": hard_limit,
         }
 
+    # Audit 2026-07-02 P-19 — walk up to 3 fallback providers via
+    # the per-provider CircuitBreaker. Pre-fix: 1 fallback attempt
+    # with NO breaker on the fallback path — a broken fallback
+    # burned money on every retry.
+    _MAX_FALLBACK_DEPTH: int = 3
+
     async def complete(self, request: ModelRequest) -> ModelResponse:
         # 0. Filter chain — PII by default, plus any registered custom
         # filters. Fail-open by default (see FilterRegistry).
@@ -425,17 +431,28 @@ class AIGateway:
         if not provider:
             raise ProviderUnavailable("No healthy provider available for request")
 
-        # 5. Execute with circuit breaker
+        # 5. Walk the primary + up to ``_MAX_FALLBACK_DEPTH`` fallbacks,
+        # each attempt routed through its own CircuitBreaker. Any
+        # breaker in ``open`` state is skipped (cheap, in-process).
         start_ms = int(time.time() * 1000)
-        try:
-            cb = self._circuit_breakers[provider]
-            response = await cb.call(self._execute_provider, provider, request)
-        except ProviderUnavailable:
-            # Fallback to next-best provider
-            provider = self._select_fallback(provider, request)
-            if not provider:
-                raise ProviderUnavailable("All providers unavailable")
-            response = await self._execute_provider(provider, request)
+        last_exc: Exception | None = None
+        attempts = 0
+        while provider is not None and attempts <= self._MAX_FALLBACK_DEPTH:
+            try:
+                cb = self._circuit_breakers[provider]
+                response = await cb.call(self._execute_provider, provider, request)
+                last_exc = None
+                break
+            except ProviderUnavailable as exc:
+                last_exc = exc
+                provider = self._select_fallback(provider, request)
+                attempts += 1
+        else:  # exhausted attempts
+            if last_exc is not None:
+                raise ProviderUnavailable(
+                    f"All {self._MAX_FALLBACK_DEPTH + 1} providers unavailable"
+                ) from last_exc
+            raise ProviderUnavailable("All providers unavailable")
 
         latency_ms = int(time.time() * 1000) - start_ms
 

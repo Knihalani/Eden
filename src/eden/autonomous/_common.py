@@ -32,6 +32,7 @@ chain (Article 1).
 
 from __future__ import annotations
 
+import asyncio  # Audit 2026-07-02 P-7 (gather on the 4 subqueries)
 import json
 import logging
 import uuid
@@ -604,7 +605,9 @@ async def _load_top_signals(org_id: str, *, window_days: int = 7) -> dict[str, A
         if client is None:
             return out
         since = (datetime.now(UTC) - timedelta(days=window_days)).isoformat()
-        try:
+        # Audit 2026-07-02 P-7: 4 subqueries fire in parallel via
+        # asyncio.gather — collapse 4 × ~10ms into ~10ms.
+        async def _judge_trends() -> list:
             rows = await client.fetch(
                 "SELECT judge_name, AVG(score) AS avg_score, "
                 "COUNT(*) AS n "
@@ -615,7 +618,7 @@ async def _load_top_signals(org_id: str, *, window_days: int = 7) -> dict[str, A
                 org_id,
                 since,
             )
-            out["judge_score_trends"] = [
+            return [
                 {
                     "judge_name": r.get("judge_name"),
                     "avg_score": float(r.get("avg_score") or 0.0),
@@ -623,9 +626,8 @@ async def _load_top_signals(org_id: str, *, window_days: int = 7) -> dict[str, A
                 }
                 for r in rows
             ]
-        except Exception:
-            pass
-        try:
+
+        async def _drift() -> list:
             rows = await client.fetch(
                 "SELECT id, drift_type, severity, created_at "
                 "FROM drift_alerts "
@@ -634,7 +636,7 @@ async def _load_top_signals(org_id: str, *, window_days: int = 7) -> dict[str, A
                 org_id,
                 since,
             )
-            out["drift_alerts_recent"] = [
+            return [
                 {
                     "id": r.get("id"),
                     "drift_type": r.get("drift_type"),
@@ -643,9 +645,8 @@ async def _load_top_signals(org_id: str, *, window_days: int = 7) -> dict[str, A
                 }
                 for r in rows
             ]
-        except Exception:
-            pass
-        try:
+
+        async def _incidents() -> list:
             rows = await client.fetch(
                 "SELECT cluster_id, severity, member_count, created_at "
                 "FROM incident_clusters "
@@ -654,7 +655,7 @@ async def _load_top_signals(org_id: str, *, window_days: int = 7) -> dict[str, A
                 org_id,
                 since,
             )
-            out["incidents_recent"] = [
+            return [
                 {
                     "cluster_id": r.get("cluster_id"),
                     "severity": r.get("severity"),
@@ -663,9 +664,8 @@ async def _load_top_signals(org_id: str, *, window_days: int = 7) -> dict[str, A
                 }
                 for r in rows
             ]
-        except Exception:
-            pass
-        try:
+
+        async def _open_recs() -> list:
             rows = await client.fetch(
                 "SELECT id, title, rationale, action_json, created_at "
                 "FROM autonomous_recommendations "
@@ -673,7 +673,7 @@ async def _load_top_signals(org_id: str, *, window_days: int = 7) -> dict[str, A
                 "ORDER BY created_at DESC LIMIT 20",
                 org_id,
             )
-            out["open_recommendations"] = [
+            return [
                 {
                     "id": r.get("id"),
                     "title": r.get("title"),
@@ -683,8 +683,22 @@ async def _load_top_signals(org_id: str, *, window_days: int = 7) -> dict[str, A
                 }
                 for r in rows
             ]
-        except Exception:
-            pass
+
+        results = await asyncio.gather(
+            _judge_trends(),
+            _drift(),
+            _incidents(),
+            _open_recs(),
+            return_exceptions=True,
+        )
+        if not isinstance(results[0], Exception):
+            out["judge_score_trends"] = results[0]
+        if not isinstance(results[1], Exception):
+            out["drift_alerts_recent"] = results[1]
+        if not isinstance(results[2], Exception):
+            out["incidents_recent"] = results[2]
+        if not isinstance(results[3], Exception):
+            out["open_recommendations"] = results[3]
     except Exception as exc:
         logger.debug("autonomous._common: load_top_signals failed: %s", exc)
     return out

@@ -17,6 +17,7 @@ from pydantic import BaseModel
 from eden.api.deps import (
     get_current_user,
     get_postgres_client,
+    require_org_permission,
     require_org_permission_dep,
 )
 from eden.config import get_settings
