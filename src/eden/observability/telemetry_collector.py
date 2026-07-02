@@ -423,57 +423,36 @@ class TelemetryCollector:
         if not client:
             return
         try:
-            # Compress the two LLM payload columns with the trained zstd
-            # dictionary (Phase 3 of the Postgres + Compression plan).
-            # The original JSONB columns stay populated for a 30-day
-            # burn-in so any pre-backfill row is still readable.
-            # See ``eden.storage.compression`` for the lossless guarantee.
+            # B-16: run the 8 zstd compress calls via asyncio.to_thread
+            # inside a single asyncio.gather. zstd is CPU-bound
+            # (zstd.compress is sync); running them serially pinned
+            # the event loop. gather dispatches them to the default
+            # ThreadPoolExecutor concurrently.
             from eden.storage.compression import compress_jsonb
 
-            request_body_zstd = (
-                compress_jsonb(event.request_body)
-                if event.request_body is not None
-                else None
-            )
-            response_body_zstd = (
-                compress_jsonb(event.response_body)
-                if event.response_body is not None
-                else None
-            )
-            # Phase B2 (2026-06-19) — extend zstd compression to 6 more
-            # JSONB columns. Same dictionary, same lossless guarantee
-            # as request_body / response_body. The original JSONB
-            # columns stay populated for the 30-day burn-in (mirrors
-            # migration 038's docstring).
-            reasoning_zstd = (
-                compress_jsonb(event.reasoning)
-                if event.reasoning is not None
-                else None
-            )
-            tool_calls_full_zstd = (
-                compress_jsonb(event.tool_calls_full)
-                if event.tool_calls_full
-                else None
-            )
-            tool_results_zstd = (
-                compress_jsonb(event.tool_results)
-                if event.tool_results
-                else None
-            )
-            payload_zstd = (
-                compress_jsonb(event.payload)
-                if event.payload is not None
-                else None
-            )
-            metrics_zstd = (
-                compress_jsonb(event.metrics)
-                if event.metrics is not None
-                else None
-            )
-            attributes_zstd = (
-                compress_jsonb(event.attributes)
-                if event.attributes is not None
-                else None
+            async def _compress(value):
+                if value is None or value == {} or value == []:
+                    return None
+                return await asyncio.to_thread(compress_jsonb, value)
+
+            (
+                request_body_zstd,
+                response_body_zstd,
+                reasoning_zstd,
+                tool_calls_full_zstd,
+                tool_results_zstd,
+                payload_zstd,
+                metrics_zstd,
+                attributes_zstd,
+            ) = await asyncio.gather(
+                _compress(event.request_body),
+                _compress(event.response_body),
+                _compress(event.reasoning),
+                _compress(event.tool_calls_full),
+                _compress(event.tool_results),
+                _compress(event.payload),
+                _compress(event.metrics),
+                _compress(event.attributes),
             )
             # Phase A — content-addressed message dedup (Laminar 20x trick).
             # Hash every message in request_body / response_body via the

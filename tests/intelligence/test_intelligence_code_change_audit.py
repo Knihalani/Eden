@@ -40,7 +40,7 @@ def _build_app() -> FastAPI:
     """Build a minimal FastAPI app that mounts the Cat 23 router with
     all destructive deps overridden to admin.
     """
-    from eden.api.deps import get_current_user, require_org_admin, require_org_permission_dep
+    from eden.api.deps import get_current_user, require_org_member, require_org_admin, require_org_permission_dep
     from eden.config import get_settings
 
     settings = get_settings()
@@ -48,6 +48,7 @@ def _build_app() -> FastAPI:
 
     app = FastAPI(title="eden-cat23-audit-test")
     app.dependency_overrides[get_current_user] = _fake_user
+    app.dependency_overrides[require_org_member] = _fake_user
 
     mod = importlib.import_module("eden.api.routes.intelligence_code_change")
     app.include_router(mod.router)
@@ -129,7 +130,7 @@ def _build_app(service_mocks: dict[str, AsyncMock]) -> FastAPI:
     """Build a minimal FastAPI app that mounts the Cat 23 router with
     all destructive deps overridden to admin.
     """
-    from eden.api.deps import get_current_user, require_org_admin, require_org_permission_dep
+    from eden.api.deps import get_current_user, require_org_member, require_org_admin, require_org_permission_dep
     from eden.config import get_settings
 
     settings = get_settings()
@@ -137,6 +138,7 @@ def _build_app(service_mocks: dict[str, AsyncMock]) -> FastAPI:
 
     app = FastAPI(title="eden-cat23-audit-test")
     app.dependency_overrides[get_current_user] = _fake_user
+    app.dependency_overrides[require_org_member] = _fake_user
 
     mod = importlib.import_module("eden.api.routes.intelligence_code_change")
     app.include_router(mod.router)

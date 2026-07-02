@@ -63,6 +63,7 @@ class JudgeScore:
     scored_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     latency_ms: float = 0.0
     cost_usd: float = 0.0
+    cached: bool = False
     metadata: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
@@ -77,6 +78,7 @@ class JudgeScore:
             "scored_at": self.scored_at.isoformat(),
             "latency_ms": self.latency_ms,
             "cost_usd": self.cost_usd,
+            "cached": self.cached,
             "metadata": self.metadata,
         }
 

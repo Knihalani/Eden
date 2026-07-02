@@ -173,17 +173,20 @@ class TestDl5RetryScheduling:
         fake_http = MagicMock()
         fake_http.post = AsyncMock(return_value=fake_response)
 
-        class _FakeAsyncClientCM:
-            async def __aenter__(self):
-                return fake_http
+        class _FakeAsyncClient:
+            """Mock of httpx.AsyncClient — exposes post() directly.
 
-            async def __aexit__(self, *a):
-                return None
+            Real httpx.AsyncClient.post() is callable without an
+            ``async with`` (the context manager only manages
+            cleanup). The previous fake required ``async with`` to
+            reach ``.post``, which the production code never does.
+            """
+
+            def post(self, *args, **kwargs):
+                return fake_http.post(*args, **kwargs)
 
         fake_httpx = MagicMock()
-        fake_httpx.AsyncClient = MagicMock(
-            return_value=_FakeAsyncClientCM(),
-        )
+        fake_httpx.AsyncClient = MagicMock(return_value=_FakeAsyncClient())
 
         # Capture call_later invocations.
         call_later_calls: list[tuple] = []
@@ -307,17 +310,20 @@ class TestDl6InFlightTracking:
         fake_http = MagicMock()
         fake_http.post = AsyncMock(return_value=fake_response)
 
-        class _FakeAsyncClientCM:
-            async def __aenter__(self):
-                return fake_http
+        class _FakeAsyncClient:
+            """Mock of httpx.AsyncClient — exposes post() directly.
 
-            async def __aexit__(self, *a):
-                return None
+            Real httpx.AsyncClient.post() is callable without an
+            ``async with`` (the context manager only manages
+            cleanup). The previous fake required ``async with`` to
+            reach ``.post``, which the production code never does.
+            """
+
+            def post(self, *args, **kwargs):
+                return fake_http.post(*args, **kwargs)
 
         fake_httpx = MagicMock()
-        fake_httpx.AsyncClient = MagicMock(
-            return_value=_FakeAsyncClientCM(),
-        )
+        fake_httpx.AsyncClient = MagicMock(return_value=_FakeAsyncClient())
 
         with patch(
             "eden.services.webhook_delivery._get_httpx",

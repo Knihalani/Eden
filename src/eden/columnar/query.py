@@ -72,6 +72,57 @@ _DISALLOWED_DML_KEYWORDS: tuple[str, ...] = (
     "GRANT", "REVOKE", "OPTIMIZE", "KILL",
 )
 
+# B-17: table allowlist regex. Captures the table name
+# after FROM, JOIN, INTO, UPDATE. Each keyword has its own
+# capture group so callers can collect every reference.
+_TABLE_NAME_RE = re.compile(
+    r"\b(?:FROM|JOIN|INTO|UPDATE)\s+"
+    r"(?:`(?P<backtick>[^`]+)`|\"(?P<double>[^\"]+)\"|(?P<bare>[A-Za-z_][A-Za-z0-9_]*))",
+    re.IGNORECASE,
+)
+
+# B-17: tables the Postgres fallback path is allowed to read.
+_PG_ALLOWED_TABLES: frozenset[str] = frozenset(
+    {"telemetry_events", "usage_events", "judge_scores"}
+)
+
+
+def _strip_sql_for_table_check(query: str) -> str:
+    """Strip SQL comments + string literals so they can't fake
+    a table reference.
+
+    Used by the B-17 pg-fallback table allowlist. Both
+    ``-- line`` comments and ``/* block */`` comments are
+    removed; ``'...'`` and ``"..."`` string literals are
+    blanked to ``''`` / ``""`` so a literal like
+    ``SELECT 'FROM users' FROM telemetry_events`` doesn't
+    trick the table regex into seeing ``users``.
+    """
+    if not query:
+        return ""
+    out = re.sub(r"--[^\n]*", "", query)
+    out = re.sub(r"/\*.*?\*/", "", out, flags=re.DOTALL)
+    out = re.sub(r"'(?:''|[^'])*'", "''", out)
+    out = re.sub(r'"(?:""|[^"])*"', '""', out)
+    return out
+
+
+def _extract_referenced_tables(query: str) -> set[str]:
+    """Return the set of table names referenced in the SQL.
+
+    Comments and string literals are stripped first via
+    :func:`_strip_sql_for_table_check` so neither can fake
+    a reference.
+    """
+    cleaned = _strip_sql_for_table_check(query)
+    found: set[str] = set()
+    for m in _TABLE_NAME_RE.finditer(cleaned):
+        for g in m.groups():
+            if g:
+                found.add(g)
+                break
+    return found
+
 
 def _looks_like_readonly_sql(query: str) -> bool:
     """Return True if the SQL passes the read-only allowlist check.
@@ -250,6 +301,11 @@ class ColumnarQueryEngine:
                 "ColumnarQueryEngine",
                 f"postgres query exceeded {QUERY_TIMEOUT_SECONDS}s timeout",
             )
+        # B-17: the pg-fallback path may return the
+        # not-implemented envelope when the SQL references a
+        # non-allowlisted table. Surface it directly.
+        if isinstance(rows, dict):
+            return rows
         duration_ms = int((time.monotonic() - t0) * 1000)
         if engine == "auto":
             return _ok_fallback_envelope(
@@ -287,7 +343,7 @@ class ColumnarQueryEngine:
         raw = await sink._execute(query)  # noqa: SLF001 - intentional
         return sink._parse_tsv(raw)  # noqa: SLF001 - intentional
 
-    async def _pg_execute(self, *, query: str) -> list[dict[str, Any]]:
+    async def _pg_execute(self, *, query: str) -> Any:
         """Run a query against Postgres.
 
         Postgres accepts the same SQL shape as ClickHouse
@@ -297,19 +353,32 @@ class ColumnarQueryEngine:
         ``judge_scores`` source tables so a caller can't
         turn the fallback into a Postgres-side SQL
         injection surface.
+
+        B-17: extracts referenced table names via
+        :func:`_extract_referenced_tables` and refuses any
+        query that touches a table outside the allowlist.
+        On refusal returns the :func:`_not_implemented_envelope`
+        dict (the executor expects a list on the happy path;
+        a dict here signals the caller to render the
+        envelope-shaped error).
         """
+        referenced = _extract_referenced_tables(query)
+        disallowed = referenced - _PG_ALLOWED_TABLES
+        if disallowed:
+            logger.warning(
+                "ColumnarQueryEngine._pg_execute refused query; "
+                "disallowed tables=%s",
+                sorted(disallowed),
+            )
+            return _not_implemented_envelope(
+                "ColumnarQueryEngine",
+                f"query references table(s) outside the "
+                f"pg-fallback allowlist {_PG_ALLOWED_TABLES!r}: "
+                f"{sorted(disallowed)!r}",
+            )
         from eden.storage.postgres import get_postgres_client
 
         client = await get_postgres_client()
-        # The fallback's SQL is the caller's query as-is
-        # (Postgres is forgiving on most of the
-        # ClickHouse-friendly keywords). We don't try to
-        # translate, because the dashboards only ever
-        # issue the small set of v1.3-supported queries.
-        # The read-only allowlist (above) is the primary
-        # defence; this fallback intentionally does NOT
-        # do a second table-name check (the v1.3 callers
-        # are the dashboards we control).
         rows = await client.fetch(query)
         out: list[dict[str, Any]] = []
         for r in rows:
@@ -331,4 +400,8 @@ __all__ = [
     "ColumnarQueryEngine",
     "QUERY_TIMEOUT_SECONDS",
     "_looks_like_readonly_sql",
+    "_strip_sql_for_table_check",
+    "_TABLE_NAME_RE",
+    "_extract_referenced_tables",
+    "_PG_ALLOWED_TABLES",
 ]
