@@ -105,6 +105,10 @@ class JudgeRunner:
         The migration is in ``src/eden/db_migrations/versions/010_judge_scores.py``.
         We import lazily so the runner module is importable before
         the migration has run (e.g. in unit tests).
+
+        C-9: includes the ``cost_usd`` and ``cached`` columns
+        added by migration 065. Per-call spend feeds the per-tenant
+        judge dashboard and the ``BudgetService.record_usage`` path.
         """
         try:
             from eden.storage.postgres import get_postgres_client
@@ -115,10 +119,12 @@ class JudgeRunner:
                 INSERT INTO judge_scores (
                     judge_run_id, tenant_id, trace_id, span_id,
                     judge_name, judge_version, score, rationale,
-                    model, scored_at, latency_ms, source_event_id
+                    model, scored_at, latency_ms,
+                    cost_usd, cached, source_event_id
                 )
                 VALUES (
-                    gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11
+                    gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8,
+                    $9, $10, $11, $12, $13
                 )
                 ON CONFLICT (judge_run_id) DO NOTHING
                 """,
@@ -134,6 +140,8 @@ class JudgeRunner:
                 score.model,
                 score.scored_at,
                 score.latency_ms,
+                float(getattr(score, "cost_usd", 0.0) or 0.0),
+                bool(getattr(score, "cached", False)),
                 getattr(score, "metadata", {}).get("event_id"),
             )
         except Exception as exc:

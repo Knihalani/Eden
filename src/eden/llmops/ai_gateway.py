@@ -18,6 +18,7 @@ from datetime import UTC, datetime
 from enum import Enum
 from typing import Any
 
+from eden.config import get_settings as _get_settings
 from eden.llmops.filters import (
     FilterRegistry,
     GatewayFilter,
@@ -639,6 +640,7 @@ class AIGateway:
             raise ProviderUnavailable(f"Provider {provider.value} not registered")
 
         # DL-10: enforce gateway_max_tokens_cap. 0 = disabled.
+        settings = _get_settings()
         if (
             settings.gateway_max_tokens_cap > 0
             and request.max_tokens > settings.gateway_max_tokens_cap

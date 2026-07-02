@@ -110,6 +110,31 @@ class ChatCompletionRequest(BaseModel):
                 data = {**data, "extras": {**existing, **extras}}
         return data
 
+    @model_validator(mode="after")
+    def _enforce_max_tokens_cap(self) -> "ChatCompletionRequest":
+        """C-11: reject requests that exceed the gateway token cap.
+
+        The cap is enforced at the request boundary (here) so a
+        misconfigured caller gets a 422 instead of a successful
+        response with truncated output. ``cap == 0`` disables the
+        check (enterprise plans raise it via env).
+        """
+        # Lazy import via module so a test patch on
+        # ``eden.config.get_settings`` resolves at call time.
+        from eden.config import get_settings
+
+        cap = get_settings().gateway_max_tokens_cap
+        if cap <= 0:
+            return self
+        for field_name in ("max_tokens", "max_completion_tokens"):
+            value = getattr(self, field_name)
+            if value is not None and value > cap:
+                raise ValueError(
+                    f"{field_name}={value} exceeds gateway_max_tokens_cap "
+                    f"({cap}); lower {field_name} or raise the cap"
+                )
+        return self
+
     model: str = Field(..., description="Model identifier, e.g. openai/gpt-4o-mini")
     messages: list[dict[str, Any]] = Field(..., description="Chat messages")
     # Sampling

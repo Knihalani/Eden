@@ -134,6 +134,8 @@ class CloudflareWorkersProvider:
         if not (worker_url and api_token and account_id):
             raise ValueError("CloudflareWorkersProvider requires worker_url, api_token, account_id")
         self._worker_url = worker_url
+        self._api_token = api_token
+        self._account_id = account_id
         self._session: aiohttp.ClientSession | None = None
 
     async def _ensure_session(self) -> aiohttp.ClientSession:

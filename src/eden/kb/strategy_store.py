@@ -43,17 +43,16 @@ class RetrievalStrategyStore:
 
     @staticmethod
     def _check_org_id(org_id: str | None) -> None:
-        """Log a warning if ``org_id`` was not provided.
+        """S-12: hard-require ``org_id`` — raises on empty / None.
 
-        Until the schema migration lands the SQL cannot actually
-        filter by ``org_id``; this warning is the only signal we
-        can give callers that they should be passing it.
+        The SQL below filters by ``org_id`` so a missing or empty
+        value would silently cross tenants. Refuse at the boundary
+        so the caller gets a clear error.
         """
         if not org_id:
-            logger.warning(
-                "RetrievalStrategyStore called without org_id — "
-                "tenant isolation cannot be enforced until the "
-                "retrieval_strategy_state.tenant_id migration lands",
+            raise ValueError(
+                "org_id is required for RetrievalStrategyStore calls "
+                "(tenant isolation is non-negotiable)",
             )
 
     async def get_strategy(self, collection: str, org_id: str | None = None) -> dict:
@@ -63,19 +62,22 @@ class RetrievalStrategyStore:
 
         row = await client.fetchrow(
             """
-            SELECT * FROM retrieval_strategy_state WHERE collection = $1
+            SELECT * FROM retrieval_strategy_state
+            WHERE collection = $1 AND org_id = $2
             """,
             collection,
+            org_id,
         )
 
         if not row:
             await client.execute(
                 """
-                INSERT INTO retrieval_strategy_state (collection, created_at, updated_at)
-                VALUES ($1, NOW(), NOW())
+                INSERT INTO retrieval_strategy_state (collection, org_id, created_at, updated_at)
+                VALUES ($1, $2, NOW(), NOW())
                 ON CONFLICT (collection) DO NOTHING
                 """,
                 collection,
+                org_id,
             )
             return self.DEFAULTS.copy()
 
@@ -98,13 +100,14 @@ class RetrievalStrategyStore:
             idx += 1
 
         params.append(collection)
+        params.append(org_id)
 
         try:
             await client.execute(
                 f"""
                 UPDATE retrieval_strategy_state
                 SET {', '.join(set_clauses)}
-                WHERE collection = ${idx}
+                WHERE collection = ${idx} AND org_id = ${idx + 1}
                 """,
                 *params,
             )
@@ -127,9 +130,10 @@ class RetrievalStrategyStore:
                 SET relevant_count = relevant_count + 1,
                     queries_analyzed = queries_analyzed + 1,
                     updated_at = NOW()
-                WHERE collection = $1
+                WHERE collection = $1 AND org_id = $2
                 """,
                 collection,
+                org_id,
             )
         else:
             await client.execute(
@@ -138,9 +142,10 @@ class RetrievalStrategyStore:
                 SET irrelevant_count = irrelevant_count + 1,
                     queries_analyzed = queries_analyzed + 1,
                     updated_at = NOW()
-                WHERE collection = $1
+                WHERE collection = $1 AND org_id = $2
                 """,
                 collection,
+                org_id,
             )
 
     async def get_all_strategies(self, org_id: str | None = None) -> list[dict]:
@@ -148,7 +153,9 @@ class RetrievalStrategyStore:
         self._check_org_id(org_id)
         client = await get_postgres_client()
         rows = await client.fetch(
-            "SELECT * FROM retrieval_strategy_state WHERE is_active = TRUE"
+            "SELECT * FROM retrieval_strategy_state "
+            "WHERE is_active = TRUE AND org_id = $1",
+            org_id,
         )
         return [dict(row) for row in rows]
 

@@ -1,82 +1,112 @@
 """Webhook delivery service for Eden.
 
 Handles reliable at-least-once delivery of webhook events with:
-- HMAC-SHA256 signatures for payload verification
-- Exponential backoff retry schedule (up to 10 attempts)
-- Persistent delivery tracking via PostgreSQL
-- Background async delivery
+- HMAC-SHA256 signatures (Stripe-style ``X-Eden-Signature``)
+- Exponential backoff retry schedule via ``loop.call_later``
+- Persistent delivery tracking via PostgreSQL with atomic CAS
+- In-flight task tracking + ``drain()`` for clean shutdown
+- Delivery-time SSRF guard (re-resolves hostname to public IP)
+- Dead-letter queue (DLQ) with bounded replay
 
 Usage:
     from eden.services.webhook_delivery import WebhookDeliveryService
 
     service = WebhookDeliveryService()
     await service.deliver_event(
+        event_id="...",
         org_id="...",
-        event_type="job.completed",
-        payload={"job_id": "...", "status": "completed"},
     )
 """
+
+from __future__ import annotations
 
 import asyncio
 import hashlib
 import hmac
+import ipaddress
 import json
 import logging
+import socket
 from datetime import UTC, datetime
 from typing import Any
-from uuid import uuid4
+from urllib.parse import urlparse
 
 from pydantic import BaseModel
 
-from eden.config import get_settings
 from eden.storage.postgres import get_postgres_client
 
 logger = logging.getLogger(__name__)
-settings = get_settings()
 
-# Retry schedule per upgradespec §D.13: 1s, 5s, 25s, 2m, 10m, 1h, then DLQ.
+# Retry schedule per upgradespec §D.13: 0s, 1s, 5s, 25s, 2m, 10m, 1h, then DLQ.
 # 7 attempts total — once the 7th attempt fails, the delivery is moved to
 # ``webhook_dlq`` for replay via the portal.
 _RETRY_DELAYS = [0, 1, 5, 25, 120, 600, 3600]  # seconds
 
-# HTTP client import (lazy to avoid startup overhead)
-_httpx: type | None = None
+# Replay controls (DL-8).
+_MAX_REPLAY_COUNT = 3
+_MIN_REPLAY_GAP_SECONDS = 60
+
+# HTTP module reference, lazy-loaded to avoid startup overhead.
+_httpx_mod = None
 
 
 def _get_httpx():
-    global _httpx
-    if _httpx is None:
+    """Lazy import of httpx; raises if not installed."""
+    global _httpx_mod
+    if _httpx_mod is None:
         try:
             import httpx
-            _httpx = httpx
-        except ImportError:
+
+            _httpx_mod = httpx
+        except ImportError as exc:
             raise ImportError(
                 "httpx is required for webhook delivery. "
                 "Install it with: pip install httpx"
-            )
-    return _httpx
+            ) from exc
+    return _httpx_mod
 
 
-
-    """SSRF guard: only allow webhooks to public IPs (DL-13).
+def _assert_public_ip(url: str) -> None:
+    """SSRF guard: only allow webhooks to public IPs (DL-13 / S-20).
 
     Re-resolves the URL's hostname at call time so a DNS rebind
-    to a private IP is caught. Raises ``ValueError`` for private
-    / loopback / link-local addresses.
+    to a private IP is caught. Refuses:
+      * non-https schemes
+      * URLs without a hostname
+      * hostnames that fail to resolve
+      * resolved IPs that are private / loopback / link-local /
+        multicast / reserved / unspecified
     """
-    from urllib.parse import urlparse
-    import ipaddress
-    import socket
-
     parsed = urlparse(url)
+    if parsed.scheme != "https":
+        raise ValueError(
+            f"webhook URL {url!r} has non-https scheme "
+            f"{parsed.scheme!r}; only https is allowed"
+        )
     hostname = parsed.hostname
     if not hostname:
-        raise ValueError(f"webhook URL has no hostname: {url!r}")
-    # Resolve to all addresses; refuse if any are private.
-    infos = socket.getaddrinfo(hostname, None)
+        raise ValueError(f"webhook URL {url!r} has no hostname")
+    try:
+        infos = socket.getaddrinfo(hostname, None)
+    except socket.gaierror as exc:
+        raise ValueError(
+            f"webhook URL hostname {hostname!r} could not be "
+            f"resolved: {exc}"
+        ) from exc
+    if not infos:
+        raise ValueError(
+            f"webhook URL hostname {hostname!r} resolved to "
+            f"no addresses"
+        )
     for info in infos:
         ip_str = info[4][0]
-        ip = ipaddress.ip_address(ip_str)
+        try:
+            ip = ipaddress.ip_address(ip_str)
+        except ValueError:
+            raise ValueError(
+                f"webhook URL hostname {hostname!r} resolved to "
+                f"non-IP value {ip_str!r}"
+            )
         if (
             ip.is_private
             or ip.is_loopback
@@ -86,12 +116,13 @@ def _get_httpx():
             or ip.is_unspecified
         ):
             raise ValueError(
-                f"webhook URL {url!r} resolves to non-public IP {ip_str}"
+                f"webhook URL {url!r} resolves to non-public IP "
+                f"{ip_str}"
             )
 
 
 class WebhookTestResult(BaseModel):
-    """Result of a webhook test delivery."""
+    """Result of a synchronous webhook test delivery."""
 
     success: bool
     http_status: int | None = None
@@ -99,102 +130,8 @@ class WebhookTestResult(BaseModel):
     error: str | None = None
 
 
-class WebhookDeliveryService:
-    """Service for reliable webhook event delivery."""
-
-    def __init__(self):
-        self._lock = asyncio.Lock()
-        # DL-6: in-flight task tracking. Every concurrent delivery
-        # adds its asyncio.Task here so ``drain()`` can wait for the
-        # queue to settle at shutdown.
-        self._in_flight: set[asyncio.Task] = set()
-
-    async def schedule_delivery(
-        self,
-        event_id: str,
-        org_id: str,
-    ) -> None:
-        """DL-5/6: schedule a delivery task and track it in the
-        in-flight set so ``drain()`` can wait on the queue to settle
-        at shutdown.
-        """
-        loop = asyncio.get_event_loop()
-        task = loop.create_task(self._deliver_event_task(event_id, org_id))
-        self._in_flight.add(task)
-        task.add_done_callback(self._in_flight.discard)
-
-    async def _deliver_event_task(
-        self, event_id: str, org_id: str
-    ) -> None:
-        """Wrapper that calls ``deliver_event`` with the in-flight
-        task semantics. The actual work lives in
-        :meth:`deliver_event`."""
-        try:
-            await self.deliver_event(event_id, org_id)
-        except Exception as exc:  # pragma: no cover - defensive
-            logger.warning(
-                "webhook_delivery: in-flight task crashed: %s", exc
-            )
-
-    async def drain(self, timeout: float = 30.0) -> int:
-        """DL-6: wait for all in-flight deliveries to complete.
-
-        Returns the count of tasks still in-flight when the
-        timeout fires (the caller logs a warning). Tasks that
-        finish within the budget are removed from the set as
-        they complete.
-        """
-        if not self._in_flight:
-            return 0
-        try:
-            await asyncio.wait_for(
-                asyncio.gather(
-                    *self._in_flight, return_exceptions=True
-                ),
-                timeout=timeout,
-            )
-            return 0
-        except asyncio.TimeoutError:
-            remaining = len(self._in_flight)
-            logger.warning(
-                "webhook_delivery: drain timed out with %d tasks "
-                "still in flight", remaining,
-            )
-            return remaining
-
-
-
-def _assert_public_ip(url: str) -> None:
-    """SSRF guard: only allow webhooks to public IPs (DL-13).
-
-    Re-resolves the URL's hostname at call time so a DNS rebind
-    to a private IP is caught. Raises ``ValueError`` for private
-    / loopback / link-local addresses.
-    """
-    from urllib.parse import urlparse
-    import ipaddress
-    import socket
-
-    parsed = urlparse(url)
-    hostname = parsed.hostname
-    if not hostname:
-        raise ValueError(f"webhook URL has no hostname: {url!r}")
-    # Resolve to all addresses; refuse if any are private.
-    infos = socket.getaddrinfo(hostname, None)
-    for info in infos:
-        ip_str = info[4][0]
-        ip = ipaddress.ip_address(ip_str)
-        if (
-            ip.is_private
-            or ip.is_loopback
-            or ip.is_link_local
-            or ip.is_multicast
-            or ip.is_reserved
-            or ip.is_unspecified
-        ):
-            raise ValueError(
-                f"webhook URL {url!r} resolves to non-public IP {ip_str}"
-            )
+class WebhookSigner:
+    """HMAC-SHA256 webhook signer / verifier (Stripe-style v1)."""
 
     @staticmethod
     def sign_v1(
@@ -203,20 +140,16 @@ def _assert_public_ip(url: str) -> None:
         *,
         timestamp: int | None = None,
     ) -> str:
-        """Generate the spec-aligned signature header value.
+        """Return ``t=<unix_ts>,v1=<hex>``.
 
-        ponytail: per upgradespec §D.13, webhooks use the
-        ``X-Eden-Signature: t=<unix_ts>,v1=<sig>`` format
-        (Stripe-style signed payloads). The v1 signature is
-        ``HMAC-SHA256(secret, "<ts>.<payload>")`` so the
-        timestamp binds the signature to a specific moment
+        The v1 signature is ``HMAC-SHA256(secret, "<ts>.<payload>")``,
+        so the timestamp binds the signature to a specific moment
         and lets consumers reject replays older than
         ``tolerance_seconds``.
-
-        Returns the full header value
-        (``t=<ts>,v1=<hex>``).
         """
-        ts = int(timestamp if timestamp is not None else datetime.now(UTC).timestamp())
+        ts = int(
+            timestamp if timestamp is not None else datetime.now(UTC).timestamp()
+        )
         signed_payload = f"{ts}.{payload}".encode("utf-8")
         sig = hmac.new(
             secret.encode("utf-8"),
@@ -235,13 +168,15 @@ def _assert_public_ip(url: str) -> None:
     ) -> bool:
         """Verify an incoming ``X-Eden-Signature`` header.
 
-        Used by customer-side code that wants to validate
-        a payload before trusting it. Constant-time
-        comparison via ``hmac.compare_digest``.
+        Used by customer-side code to validate a payload before
+        trusting it. Constant-time comparison via
+        ``hmac.compare_digest``.
         """
         try:
             parts = dict(
-                kv.split("=", 1) for kv in header_value.split(",") if "=" in kv
+                kv.split("=", 1)
+                for kv in header_value.split(",")
+                if "=" in kv
             )
         except ValueError:
             return False
@@ -253,7 +188,6 @@ def _assert_public_ip(url: str) -> None:
             ts_int = int(ts)
         except ValueError:
             return False
-        # Reject stale timestamps (replay protection).
         now = int(datetime.now(UTC).timestamp())
         if abs(now - ts_int) > tolerance_seconds:
             return False
@@ -264,3 +198,466 @@ def _assert_public_ip(url: str) -> None:
             hashlib.sha256,
         ).hexdigest()
         return hmac.compare_digest(expected, sig)
+
+
+class WebhookDeliveryService:
+    """Service for reliable webhook event delivery."""
+
+    def __init__(self) -> None:
+        self._lock = asyncio.Lock()
+        # DL-6: in-flight task tracking. Every concurrent delivery
+        # adds its asyncio.Task here so ``drain()`` can wait on
+        # the queue at shutdown.
+        self._in_flight: set[asyncio.Task] = set()
+        # Shared HTTP client + concurrency cap (B-25 fix). Created
+        # on first use so tests can patch ``_ensure_http_client``.
+        self._http_client = None
+        self._http_semaphore: asyncio.Semaphore | None = None
+
+    # ─── public entry points ────────────────────────────────────────
+
+    async def deliver_event(self, event_id: str, org_id: str) -> None:
+        """Resolve an event row and schedule a delivery task.
+
+        The actual delivery work runs in a tracked background
+        task so the request handler can return immediately.
+        """
+        try:
+            pg = await get_postgres_client()
+            row = await pg.fetchrow(
+                "SELECT id, webhook_id, url, secret, payload "
+                "FROM webhook_events WHERE id = $1 AND org_id = $2",
+                event_id,
+                org_id,
+            )
+            if row is None:
+                logger.warning(
+                    "webhook_delivery.deliver_event: event %s not "
+                    "found for org %s",
+                    event_id,
+                    org_id,
+                )
+                return
+            await self._schedule_delivery(
+                delivery_id=row["id"],
+                url=row["url"],
+                secret=row["secret"],
+                payload=json.loads(row["payload"]) if row["payload"] else {},
+            )
+        except Exception as exc:  # pragma: no cover - defensive
+            logger.warning(
+                "webhook_delivery.deliver_event failed for %s: %s",
+                event_id,
+                exc,
+            )
+
+    async def deliver_test(
+        self,
+        *,
+        webhook_id: str,
+        url: str,
+        secret: str,
+    ) -> WebhookTestResult:
+        """Synchronous test delivery (used by the portal
+        "Send test event" button). No retry, no DLQ — fail-fast."""
+        try:
+            _assert_public_ip(url)
+        except ValueError as exc:
+            return WebhookTestResult(success=False, error=str(exc))
+        try:
+            httpx = _get_httpx()
+        except ImportError as exc:
+            return WebhookTestResult(success=False, error=str(exc))
+        body = json.dumps(
+            {
+                "event_type": "webhook.test",
+                "webhook_id": webhook_id,
+                "ts": datetime.now(UTC).isoformat(),
+            }
+        ).encode("utf-8")
+        signature = WebhookSigner.sign_v1(secret, body.decode("utf-8"))
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                resp = await client.post(
+                    url,
+                    content=body,
+                    headers={
+                        "Content-Type": "application/json",
+                        "X-Eden-Signature": signature,
+                        "X-Eden-Event": "webhook.test",
+                    },
+                )
+            return WebhookTestResult(
+                success=200 <= resp.status_code < 300,
+                http_status=resp.status_code,
+                response_body=resp.text[:4096],
+            )
+        except Exception as exc:
+            return WebhookTestResult(success=False, error=str(exc))
+
+    async def list_dlq(
+        self, org_id: str, *, limit: int = 50,
+    ) -> list[dict[str, Any]]:
+        """Return the most recent DLQ entries for ``org_id``."""
+        pg = await get_postgres_client()
+        rows = await pg.fetch(
+            "SELECT id, webhook_id, event_type, payload, "
+            "response_status, error_message, attempt_count, "
+            "replay_count, last_replayed_at, created_at "
+            "FROM webhook_dlq "
+            "WHERE org_id = $1 "
+            "ORDER BY created_at DESC "
+            "LIMIT $2",
+            org_id,
+            max(1, min(limit, 500)),
+        )
+        return [dict(r) for r in rows]
+
+    async def replay_dlq(self, dlq_id: str) -> dict[str, Any]:
+        """Re-fire a DLQ entry. Caps replay_count at 3 and requires
+        ≥60s since the last replay."""
+        pg = await get_postgres_client()
+        row = await pg.fetchrow(
+            "SELECT id, webhook_id, event_type, payload, "
+            "replay_count, signature_v1, last_replayed_at, "
+            "EXTRACT(EPOCH FROM (NOW() - last_replayed_at)) "
+            "  AS seconds_since_last_replay "
+            "FROM webhook_dlq WHERE id = $1",
+            dlq_id,
+        )
+        if row is None:
+            return {"status": "not_found", "dlq_id": dlq_id}
+        replay_count = int(row["replay_count"] or 0)
+        if replay_count >= _MAX_REPLAY_COUNT:
+            return {
+                "status": "replay_cap_reached",
+                "dlq_id": dlq_id,
+                "replay_count": replay_count,
+                "max_replay_count": _MAX_REPLAY_COUNT,
+            }
+        seconds_since = row["seconds_since_last_replay"]
+        if (
+            seconds_since is not None
+            and float(seconds_since) < _MIN_REPLAY_GAP_SECONDS
+        ):
+            return {
+                "status": "replay_rate_limited",
+                "dlq_id": dlq_id,
+                "seconds_since_last_replay": float(seconds_since),
+                "min_replay_gap_seconds": _MIN_REPLAY_GAP_SECONDS,
+            }
+        wh = await pg.fetchrow(
+            "SELECT url, secret FROM webhooks WHERE id = $1",
+            row["webhook_id"],
+        )
+        if wh is None:
+            return {
+                "status": "webhook_not_found",
+                "dlq_id": dlq_id,
+                "webhook_id": row["webhook_id"],
+            }
+        await pg.execute(
+            "UPDATE webhook_dlq "
+            "SET replay_count = replay_count + 1, "
+            "    last_replayed_at = NOW() "
+            "WHERE id = $1",
+            dlq_id,
+        )
+        payload = row["payload"]
+        if isinstance(payload, str):
+            try:
+                payload = json.loads(payload)
+            except json.JSONDecodeError:
+                payload = {"raw": payload}
+        self._schedule_delivery(
+            delivery_id=dlq_id,
+            url=wh["url"],
+            secret=wh["secret"],
+            payload=payload or {},
+        )
+        return {
+            "status": "ok",
+            "dlq_id": dlq_id,
+            "replay_count": replay_count + 1,
+            "max_replay_count": _MAX_REPLAY_COUNT,
+        }
+
+    # ─── shutdown / lifecycle ───────────────────────────────────────
+
+    async def drain(self, timeout: float = 30.0) -> int:
+        """DL-6: wait for all in-flight deliveries to complete.
+
+        Returns the count of tasks still in-flight when the
+        timeout fires. Tasks that finish within the budget are
+        removed from the set as they complete.
+        """
+        if not self._in_flight:
+            return 0
+        try:
+            await asyncio.wait_for(
+                asyncio.gather(
+                    *self._in_flight, return_exceptions=True
+                ),
+                timeout=timeout,
+            )
+            return 0
+        except asyncio.TimeoutError:
+            remaining = len(self._in_flight)
+            logger.warning(
+                "webhook_delivery: drain timed out with %d "
+                "tasks still in flight",
+                remaining,
+            )
+            return remaining
+
+    async def _ensure_http_client(self) -> tuple[Any, asyncio.Semaphore]:
+        """Return a shared ``(client, semaphore)`` pair.
+
+        Created lazily so tests can patch the method directly
+        without needing real network access.
+        """
+        if self._http_client is None or self._http_semaphore is None:
+            httpx = _get_httpx()
+            self._http_client = httpx.AsyncClient(timeout=10.0)
+            self._http_semaphore = asyncio.Semaphore(16)
+        return self._http_client, self._http_semaphore
+
+    # ─── internal scheduling / delivery ─────────────────────────────
+
+    def _schedule_delivery(
+        self,
+        *,
+        delivery_id: str,
+        url: str,
+        secret: str,
+        payload: Any,
+    ) -> asyncio.Task:
+        """Spawn the delivery task and track it in ``_in_flight``.
+
+        Synchronous: returns the :class:`asyncio.Task` directly
+        so callers (tests + production) can ``await`` it without
+        the function itself being a coroutine. The task body
+        ``_attempt_delivery`` does the actual async work.
+        """
+        loop = asyncio.get_event_loop()
+        task = loop.create_task(
+            self._attempt_delivery(
+                delivery_id=delivery_id,
+                url=url,
+                secret=secret,
+                payload=payload,
+            )
+        )
+        self._in_flight.add(task)
+        task.add_done_callback(self._in_flight.discard)
+        return task
+
+    async def _attempt_delivery(
+        self,
+        *,
+        delivery_id: str,
+        url: str,
+        secret: str,
+        payload: Any,
+    ) -> None:
+        """Attempt one delivery with CAS, retries, and DLQ on exhaustion.
+
+        DL-7: single ``UPDATE … RETURNING`` claim — if the row is
+        already in a terminal state, another worker won the race
+        and we silently return.
+
+        DL-5: retries are scheduled via ``loop.call_later`` so the
+        current task ends and the worker is not pinned.
+
+        S-20: ``_assert_public_ip`` is called BEFORE the HTTP POST
+        so a DNS-rebinding attack cannot reach the customer's network.
+        """
+        pg = await get_postgres_client()
+        claimed = await pg.fetchrow(
+            "UPDATE webhook_deliveries "
+            "SET status = 'in_flight', "
+            "    last_attempt_at = NOW() "
+            "WHERE id = $1 "
+            "  AND status IN ('pending', 'retrying') "
+            "RETURNING attempt_count, max_attempts, webhook_id",
+            delivery_id,
+        )
+        if claimed is None:
+            # Another worker already claimed it (or it's terminal).
+            return
+
+        # SSRF guard (S-20). Re-resolve at delivery time.
+        try:
+            _assert_public_ip(url)
+        except ValueError as exc:
+            await pg.execute(
+                "UPDATE webhook_deliveries "
+                "SET status = 'failed', "
+                "    error_message = $2, "
+                "    completed_at = NOW() "
+                "WHERE id = $1",
+                delivery_id,
+                f"SSRF guard rejected URL: {exc}",
+            )
+            logger.error(
+                "webhook_delivery: SSRF guard rejected delivery %s: %s",
+                delivery_id,
+                exc,
+            )
+            await self._move_to_dlq(
+                delivery_id, webhook_id=claimed["webhook_id"],
+            )
+            return
+
+        attempt = int(claimed["attempt_count"]) + 1
+        max_attempts = int(claimed["max_attempts"] or len(_RETRY_DELAYS))
+        body_str = json.dumps(payload, default=str, sort_keys=True)
+        signature = WebhookSigner.sign_v1(secret, body_str)
+
+        try:
+            client, sem = await self._ensure_http_client()
+            async with sem:
+                resp = await client.post(
+                    url,
+                    content=body_str.encode("utf-8"),
+                    headers={
+                        "Content-Type": "application/json",
+                        "X-Eden-Signature": signature,
+                        "X-Eden-Event": payload.get("event_type", "")
+                        if isinstance(payload, dict)
+                        else "",
+                        "X-Eden-Delivery-Id": delivery_id,
+                    },
+                )
+        except Exception as exc:
+            resp = None
+            http_status = None
+            error_text = str(exc)[:1024]
+        else:
+            http_status = resp.status_code
+            error_text = None
+
+        if resp is not None and 200 <= resp.status_code < 300:
+            await pg.execute(
+                "UPDATE webhook_deliveries "
+                "SET status = 'succeeded', "
+                "    response_status = $2, "
+                "    attempt_count = $3, "
+                "    completed_at = NOW() "
+                "WHERE id = $1",
+                delivery_id,
+                http_status,
+                attempt,
+            )
+            return
+
+        # Failure path — schedule a retry or move to DLQ.
+        await pg.execute(
+            "UPDATE webhook_deliveries "
+            "SET status = 'retrying', "
+            "    response_status = $2, "
+            "    error_message = $3, "
+            "    attempt_count = $4, "
+            "    next_attempt_at = NOW() + "
+            "        ($5 || ' seconds')::interval "
+            "WHERE id = $1",
+            delivery_id,
+            http_status,
+            error_text or f"HTTP {http_status}",
+            attempt,
+            str(_RETRY_DELAYS[attempt] if attempt < len(_RETRY_DELAYS) else 0),
+        )
+        if attempt >= max_attempts:
+            await pg.execute(
+                "UPDATE webhook_deliveries "
+                "SET status = 'failed', completed_at = NOW() "
+                "WHERE id = $1",
+                delivery_id,
+            )
+            await self._move_to_dlq(
+                delivery_id, webhook_id=claimed["webhook_id"],
+            )
+            return
+
+        # DL-5: schedule the next attempt via loop.call_later so
+        # the current task ends. ``call_later`` keeps the worker
+        # free during the backoff window.
+        delay = _RETRY_DELAYS[attempt] if attempt < len(_RETRY_DELAYS) else 0
+        loop = asyncio.get_event_loop()
+        loop.call_later(
+            delay,
+            lambda: asyncio.ensure_future(
+                self._attempt_delivery(
+                    delivery_id=delivery_id,
+                    url=url,
+                    secret=secret,
+                    payload=payload,
+                )
+            ),
+        )
+
+    async def _move_to_dlq(
+        self,
+        delivery_id: str,
+        *,
+        webhook_id: str,
+    ) -> None:
+        """Archive a failed delivery to ``webhook_dlq``.
+
+        DL-4: any failure here is logged at ERROR with the
+        ``delivery_id`` for on-call correlation — never silently
+        swallowed.
+        """
+        try:
+            pg = await get_postgres_client()
+            row = await pg.fetchrow(
+                "SELECT id, webhook_id, event_type, payload, "
+                "       response_status, error_message, "
+                "       attempt_count, max_attempts, created_at, "
+                "       signature_v1, webhook_org_id "
+                "FROM webhook_deliveries WHERE id = $1",
+                delivery_id,
+            )
+            if row is None:
+                logger.error(
+                    "webhook_delivery._move_to_dlq: delivery %s "
+                    "not found in webhook_deliveries",
+                    delivery_id,
+                )
+                return
+            await pg.execute(
+                "INSERT INTO webhook_dlq ("
+                "  id, webhook_id, event_type, payload, "
+                "  response_status, error_message, "
+                "  attempt_count, max_attempts, "
+                "  signature_v1, org_id, replay_count, "
+                "  last_replayed_at, created_at"
+                ") VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, "
+                "          $10, 0, NULL, NOW())",
+                row["id"],
+                row["webhook_id"],
+                row["event_type"],
+                row["payload"],
+                row["response_status"],
+                row["error_message"],
+                row["attempt_count"],
+                row["max_attempts"],
+                row.get("signature_v1") or "",
+                row.get("webhook_org_id") or "",
+            )
+            await pg.execute(
+                "UPDATE webhook_deliveries "
+                "SET status = 'dlq', completed_at = NOW() "
+                "WHERE id = $1",
+                delivery_id,
+            )
+        except Exception as exc:
+            # DL-4: surface the failure at ERROR with delivery_id.
+            logger.error(
+                "webhook_delivery._move_to_dlq failed for "
+                "delivery_id=%s webhook_id=%s: %s",
+                delivery_id,
+                webhook_id,
+                exc,
+                exc_info=True,
+            )
