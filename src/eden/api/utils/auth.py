@@ -36,8 +36,8 @@ _BCRYPT_ROUNDS = 12
 def _pre_hash(password: str) -> bytes:
     """Pre-hash a password to bcrypt's 72-byte input limit.
 
-    Audit 2026-07-02 S-19 — replaces the old ``[:72]`` UTF-8 byte
-    slice. Returns exactly 72 bytes: the first 32 bytes are the
+    Audit 2026-07-02 S-19 — replaces the old UTF-8 byte slice.
+    Returns exactly 72 bytes: the first 32 bytes are the
     SHA-256 digest of the password; the remaining 40 are zero
     padding. The digest is deterministic (no salt) so the same
     password always maps to the same 32 bytes — bcrypt then adds

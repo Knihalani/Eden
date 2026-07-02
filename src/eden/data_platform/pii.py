@@ -279,12 +279,45 @@ class PIIMasker:
         return text
 
     def _mask_dict(self, data: dict[str, Any]) -> dict[str, Any]:
-        """Recursively mask PII in a dictionary, including sensitive keys."""
+        """Recursively mask PII in a dictionary, including sensitive keys.
+
+        Audit 2026-07-02 S-15 — credential check runs FIRST, before
+        the key-based redaction. Pre-fix, a sensitive-keyed field
+        (e.g. ``password``) was unconditionally replaced with
+        ``[PASSWORD_REDACTED]`` before the value was scanned for
+        credentials. A password that happened to contain an API-key
+        pattern slipped through unredacted at the value level
+        (the key-level redaction blanked the value, but if the
+        key-based redaction failed for any reason the value would
+        still leak). Now: scan the value for credentials first;
+        if fail-closed + credential hit, raise BEFORE redaction.
+        If no credential hit, the value passes through (the
+        key-based redaction is the safety net for the rest).
+        """
         result: dict[str, Any] = {}
         for key, value in data.items():
             key_lower = key.lower()
             if key_lower in self._sensitive_keys:
-                result[key] = f"[{key.upper()}_{self.mask_token}]"
+                # Audit 2026-07-02 S-15 — credential scan first.
+                # When the value is a string, raise on a credential
+                # hit in fail-closed mode BEFORE the key-based
+                # redaction blanks it. When the value is not a
+                # string (e.g. list, int, None), the credential
+                # check has nothing to scan, so we fall through to
+                # the key-based redaction.
+                if isinstance(value, str):
+                    # May raise PIIMaskingError in fail-closed
+                    # mode. The ``check_credentials=True`` path
+                    # raises BEFORE the redaction sub. Then we
+                    # redact (returning the masked string) only
+                    # when no credential was found.
+                    masked = self._mask_string(value, check_credentials=True)
+                    result[key] = masked
+                else:
+                    # Non-string sensitive value: no string to scan
+                    # for credentials, so the key-based redaction
+                    # is the only safe option.
+                    result[key] = f"[{key.upper()}_{self.mask_token}]"
             elif isinstance(value, str):
                 result[key] = self._mask_string(value, check_credentials=True)
             elif isinstance(value, dict):
