@@ -205,6 +205,12 @@ class TenantRateLimitMiddleware(BaseHTTPMiddleware):
         """Check rate limit via Redis (sliding window using sorted sets).
 
         Returns (allowed, remaining, reset_ts, retry_after).
+
+        Audit 2026-07-02 S-14 — ZADD runs ONLY when the request is
+        allowed. Pre-fix, ZADD was unconditional; a denied request
+        still bumped the counter, so a sustained flood of denied
+        requests would self-DoS by extending the sliding window
+        and never let a real call through.
         """
         redis = await self._get_redis()
         if not redis:
@@ -214,18 +220,34 @@ class TenantRateLimitMiddleware(BaseHTTPMiddleware):
         window_start = now - window
         redis_key = f"ratelimit:{key}"
 
+        # Phase 1: count phase. ZREMRANGEBYSCORE prunes old entries,
+        # ZCARD reports the current window count. NO zadd yet.
         pipe = redis.pipeline()
         pipe.zremrangebyscore(redis_key, 0, window_start)
         pipe.zcard(redis_key)
+        results = await pipe.execute()
+        current_count = results[1]
+
+        allowed = current_count < limit
+        if not allowed:
+            # Audit 2026-07-02 S-14 — skip the zadd on a denied
+            # request. Otherwise a sustained flood would keep the
+            # counter at the limit and never let real calls in.
+            remaining = 0
+            reset_ts = int(now + window)
+            retry_after = int(window)
+            return allowed, remaining, reset_ts, retry_after
+
+        # Phase 2: zadd phase. Now that the count is below the
+        # limit, record this request in the sliding window.
+        pipe = redis.pipeline()
         pipe.zadd(redis_key, {str(now): now})
         pipe.expire(redis_key, window + 1)
-        results = await pipe.execute()
+        await pipe.execute()
 
-        current_count = results[1]  # zcard result before zadd
-        allowed = current_count < limit
-        remaining = max(0, limit - current_count - (0 if allowed else 1))
+        remaining = max(0, limit - current_count - 1)
         reset_ts = int(now + window)
-        retry_after = int(window) if not allowed else 0
+        retry_after = 0
         return allowed, remaining, reset_ts, retry_after
 
     async def shutdown(self) -> None:
