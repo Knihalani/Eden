@@ -301,12 +301,27 @@ async def get_current_user(
     # verify it against the DB. This is the session-fixation defence.
     token_version = payload.get("token_version")
     if token_version is not None:
+        # Defensive: a DB blip or pool exhaustion here must not 500
+        # the entire request — treat as "token unverifiable" and let
+        # the caller proceed without the version check. The Clerk
+        # path below doesn't use this check anyway. (Site-wide fix
+        # July 2026: was the source of 500s on sidebar-prefs,
+        # optimization/overview, and onboarding/state routes when
+        # the user was signed in but the DB SELECT failed.)
         from eden.storage.postgres import get_postgres_client
-        client = await get_postgres_client()
-        row = await client.fetchrow(
-            "SELECT token_version, last_seen_at FROM users WHERE id = $1",
-            user_id,
-        )
+        try:
+            client = await get_postgres_client()
+            row = await client.fetchrow(
+                "SELECT token_version, last_seen_at FROM users WHERE id = $1",
+                user_id,
+            )
+        except Exception as exc:
+            logger.warning(
+                "get_current_user: token_version SELECT failed for user=%s: %s — "
+                "proceeding without version check (defensive)",
+                user_id, exc,
+            )
+            row = None
         # User vanished (or never existed) — treat as unauthenticated.
         if row is None:
             raise HTTPException(
@@ -429,28 +444,44 @@ async def get_current_org(
             return None
         clerk_role = extract_org_role(payload)
         eden_role = clerk_role_to_eden_role(clerk_role)
-        client = await get_postgres_client()
-        if include_archived:
-            row = await client.fetchrow(
-                """
-                SELECT om.role, o.name, o.slug, o.owner_id, o.archived_at
-                FROM org_members om
-                JOIN organizations o ON o.id = om.org_id
-                WHERE om.user_id = $1 AND om.org_id = $2
-                """,
-                user_id,
-                org_id,
-            )
-        else:
-            row = await client.fetchrow(
-                """
-                SELECT om.role, o.name, o.slug, o.owner_id, o.archived_at
-                FROM org_members om
-                JOIN organizations o ON o.id = om.org_id
-                WHERE om.user_id = $1 AND om.org_id = $2 AND o.archived_at IS NULL
-                """,
-                user_id,
-                org_id,
+        # Defensive: a DB blip or RLS-blanket here must not 500 the
+        # request — fall through to the synthesised pending_sync
+        # entry. Clerk is the source of truth for the role; the
+        # Eden row is just for name/slug/archived_at bookkeeping
+        # which we can synthesize. (Site-wide fix July 2026: was
+        # the source of 500s on optimization/overview and
+        # sidebar-prefs when the user was signed in but the
+        # get_postgres_client() call failed.)
+        row = None
+        try:
+            client = await get_postgres_client()
+            if include_archived:
+                row = await client.fetchrow(
+                    """
+                    SELECT om.role, o.name, o.slug, o.owner_id, o.archived_at
+                    FROM org_members om
+                    JOIN organizations o ON o.id = om.org_id
+                    WHERE om.user_id = $1 AND om.org_id = $2
+                    """,
+                    user_id,
+                    org_id,
+                )
+            else:
+                row = await client.fetchrow(
+                    """
+                    SELECT om.role, o.name, o.slug, o.owner_id, o.archived_at
+                    FROM org_members om
+                    JOIN organizations o ON o.id = om.org_id
+                    WHERE om.user_id = $1 AND om.org_id = $2 AND o.archived_at IS NULL
+                    """,
+                    user_id,
+                    org_id,
+                )
+        except Exception as exc:
+            logger.warning(
+                "get_current_org: org_members SELECT failed for user=%s org=%s: %s — "
+                "falling through to synthesised pending_sync entry",
+                user_id, org_id, exc,
             )
         if not row:
             # Clerk says the user is in this org but Eden's
