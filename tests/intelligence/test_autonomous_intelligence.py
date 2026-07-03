@@ -511,7 +511,7 @@ class TestRoutes:
 
     @pytest.fixture
     def client(self) -> TestClient:
-        from eden.api.deps import get_current_user
+        from eden.api.deps import get_current_user, require_org_member
 
         def _fake_user() -> dict[str, Any]:
             return {"sub": "u1", "org_id": "org_test"}
@@ -521,6 +521,7 @@ class TestRoutes:
 
         app = FastAPI()
         app.dependency_overrides[get_current_user] = _fake_user
+        app.dependency_overrides[require_org_member] = lambda: {"sub": "test-user", "org_id": "org_test"}
         # The router uses ``Depends(require_feature_flag(...))``
         # which returns a new inner function each call. The
         # inner function is *bound* at the moment the route
@@ -578,7 +579,7 @@ class TestRoutes:
         # the intelligence_gap_v0 flag. We override the flag
         # dep by identity (the inner ``_dependency``
         # function is the dep's identity key in FastAPI).
-        from eden.api.deps import get_current_user
+        from eden.api.deps import get_current_user, require_org_member
 
         def _fake_user() -> dict[str, Any]:
             return {"sub": "u1", "org_id": "org_test"}
@@ -588,6 +589,7 @@ class TestRoutes:
 
         app = FastAPI()
         app.dependency_overrides[get_current_user] = _fake_user
+        app.dependency_overrides[require_org_member] = lambda: {"sub": "test-user", "org_id": "org_test"}
         import eden.api.routes.intelligence_autonomous as mod
         for r in mod.router.routes:
             if not hasattr(r, "dependant"):

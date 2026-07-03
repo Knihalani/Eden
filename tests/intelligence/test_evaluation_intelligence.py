@@ -2156,13 +2156,18 @@ def _fake_user() -> dict:
 
 @pytest.fixture(scope="module")
 def eval_app() -> FastAPI:
-    from eden.api.deps import get_current_user
+    from eden.api.deps import get_current_user, require_org_member
     from eden.config import get_settings
 
     settings = get_settings()
     settings.intelligence_gap_v0 = True
     app = FastAPI(title="eden-eval-test")
     app.dependency_overrides[get_current_user] = _fake_user
+    # The eval router has require_org_member in its dependencies;
+    # override it so the test client doesn't need a real DB to
+    # resolve the membership. The real org-check still runs in
+    # production.
+    app.dependency_overrides[require_org_member] = lambda: {"sub": "test-user", "org_id": "org_test"}
     mod = importlib.import_module("eden.api.routes.intelligence_eval")
     app.include_router(mod.router)
     return app

@@ -56,10 +56,13 @@
   /* Text — sharp contrast on dark.
    * --text-faint bumped from #475569 (2.7:1) → #5A6B85 (3.3:1) so it
    * passes WCAG AA Large (≥3:1). --text-muted bumped from #64748B
-   * (4.2:1) → #708090 (4.7:1) to pass AA Normal (≥4.5:1). */
+   * (4.2:1) → #708090 (4.7:1) and again to #7A8A9A (5.46:1 on
+   * --bg-primary, 4.89:1 on --bg-tertiary) to pass AA Normal (≥4.5:1)
+   * on every surface — the 4.27:1 reading on terminal/elevated panels
+   * was below threshold. */
   --text-primary: #E4ECF7;
   --text-secondary: #94A3B8;
-  --text-muted: #708090;
+  --text-muted: #7A8A9A;
   --text-faint: #5A6B85;
 
   /* Accent (Terminal Blue) — primary action color */
@@ -1266,6 +1269,17 @@ input::placeholder, textarea::placeholder {
   opacity: 0.04;
   background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
   z-index: 9999;
+}
+
+/* Marketing grid canvas — full-viewport fixed element. It must
+ * never eat scroll or click events, even if a future z-index
+ * tweak raises it above the scroll container. Companion to the
+ * .grain-overlay::before rule above; covers the only other
+ * fixed full-viewport decorative layer in the portal. If you
+ * ever need the canvas to receive events, scope it under a
+ * class. July 2026 site-wide fix. */
+#grid-canvas {
+  pointer-events: none !important;
 }
 
 /* Glass panel — used for command palette, modals, popovers */

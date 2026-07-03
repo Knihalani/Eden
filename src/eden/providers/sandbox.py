@@ -66,6 +66,10 @@ class SandboxSpec:
     """A single sandbox run specification.
 
     Attributes:
+        kind: Free-form provider discriminator (``"local"``,
+            ``"docker"``, ``"firecracker"``, ``"null"``).
+            Kept on the spec for routing + telemetry so the
+            provider can audit which backend ran the command.
         image: The image name (e.g. ``"python:3.12"``).
             For :class:`LocalSandboxProvider` and
             :class:`NullSandboxProvider` this is informational
@@ -87,6 +91,7 @@ class SandboxSpec:
         stdin: Optional stdin payload (bytes).
     """
 
+    kind: str = "local"
     image: str = "python:3.12"
     command: Sequence[str] = field(default_factory=tuple)
     env: dict[str, str] = field(default_factory=dict)
@@ -95,6 +100,10 @@ class SandboxSpec:
     cpu_limit: float | None = None
     memory_mb: int | None = None
     stdin: bytes | None = None
+    # Audit 2026-07-02 S-1 — explicit sandbox kind (``local``,
+    # ``docker``, ``firecracker``, ``null``). Defaults to ``"local"``
+    # so existing callers that pass ``kind=`` no longer crash.
+    kind: str = "local"
 
 
 @dataclass

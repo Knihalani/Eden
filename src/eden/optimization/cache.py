@@ -239,27 +239,34 @@ class SemanticCache:
         self._embed_client: object | None = None
 
     async def _get_embedding(self, text: str) -> list[float]:
-        """Get embedding for text. Uses OpenAI-compatible API."""
+        """Get embedding for text. Uses OpenAI-compatible API.
+
+        C-12: uses ``AsyncOpenAI`` and awaits the ``create`` call so
+        the event loop is released while the embed request is in
+        flight. The pre-fix code used the sync ``OpenAI`` client,
+        which blocked the loop for the full request duration
+        (~100-400ms per embed call).
+        """
         if self._embed_client is None:
-            from openai import OpenAI
+            from openai import AsyncOpenAI
 
             from eden.config import get_settings
 
             s = get_settings()
             if s.use_minimax:
-                self._embed_client = OpenAI(
+                self._embed_client = AsyncOpenAI(
                     api_key=s.minimax_api_key,
                     base_url=s.minimax_base_url,
                 )
             else:
-                self._embed_client = OpenAI(
+                self._embed_client = AsyncOpenAI(
                     api_key=s.openrouter_api_key,
                     base_url=s.openrouter_base_url,
                 )
 
         # Try to get embedding — fall back to hashing if unavailable
         try:
-            resp = self._embed_client.embeddings.create(
+            resp = await self._embed_client.embeddings.create(
                 model="openai/text-embedding-3-small",
                 input=text[:8000],
             )

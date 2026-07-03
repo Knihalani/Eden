@@ -523,12 +523,15 @@ class ModelRouter:
                     loop = asyncio.get_event_loop()
                     response = await loop.run_in_executor(
                         None,
-                        lambda: self.llm_client.call(
+                        # S-21: ``m=model`` default-arg binds
+                        # ``model`` at lambda-creation time so the
+                        # late-binding-for-loop bug never recurs.
+                        lambda m=model: self.llm_client.call(
                             agent=task.agent,
                             prompt=prompt,
                             slot="reasoning",
                             system_prompt=system_prompt,
-                            model=model,
+                            model=m,
                             **kwargs,
                         ),
                     )

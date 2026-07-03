@@ -34,7 +34,6 @@ from .._common import (
     _json_dumps,
     _not_implemented_envelope,
     _ok_envelope,
-    _upsert_nl_query_log,
     _upsert_report,
 )
 

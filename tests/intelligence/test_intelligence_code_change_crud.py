@@ -23,7 +23,7 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from eden.api.deps import get_current_user, require_org_admin, require_org_permission_dep
+from eden.api.deps import get_current_user, require_org_member, require_org_admin, require_org_permission_dep
 
 
 def _fake_user() -> dict:
@@ -42,6 +42,7 @@ def test_app() -> FastAPI:
     settings.intelligence_gap_v0 = True
     app = FastAPI(title="eden-cat23-crud-test")
     app.dependency_overrides[get_current_user] = _fake_user
+    app.dependency_overrides[require_org_member] = lambda: {"sub": "test-user", "org_id": "org_test"}
     # Cat 23 destructive routes are gated by ``require_org_admin`` /
     # ``require_org_permission_dep`` (June 2026 hardening). The CRUD
     # tests don't exercise auth — fake both as admin so the

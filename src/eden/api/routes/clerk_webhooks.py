@@ -33,7 +33,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 import logging
-from datetime import datetime
+from datetime import datetime, UTC
 from typing import Any
 
 from fastapi import APIRouter, Header, HTTPException, Request
@@ -490,5 +490,5 @@ async def clerk_webhook(
     return {
         "status": "ok",
         "event_type": event_type,
-        "received_at": datetime.utcnow().isoformat() + "Z",
+        "received_at": datetime.now(UTC).isoformat() + "Z",
     }

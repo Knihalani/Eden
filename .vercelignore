@@ -29,6 +29,7 @@ __pycache__/
 .coverage
 htmlcov/
 .venv/
+.venv-test/
 venv/
 ENV/
 env/
@@ -39,6 +40,32 @@ env/
 docs/
 sdk/
 eden-sandbox/
+supplementaries/
+migrations/
+tests/
+tools/
+docker/
+helm/
+var/
+scripts/
+prompts/
+golden_datasets/
+tinybird/
+clients/
+bench/
+examples/
+playwright.config.ts
+fly.toml
+northflank.yml
+alembic.ini
+mypy.ini
+ruff.toml
+pyproject.toml
+uv.lock
+.claude/
+.eden/
+.codegraph/
+.aider*
 
 # Local AI tooling caches (not source of truth)
 .aider*

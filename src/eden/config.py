@@ -3,7 +3,6 @@
 import logging
 from functools import lru_cache
 from pathlib import Path
-from typing import Annotated
 
 from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -54,7 +53,13 @@ class Settings(BaseSettings):
     # the API + 2 jobs + worker). The Northflank manifest overrides
     # down to 10/2 per container; PostgresClient honours these.
     postgres_pool_size: int = 20
-    postgres_min_pool_size: int = 5
+    # Audit 2026-07-02 — default to 0 so the pool starts empty and
+    # Neon's auto-suspend can fire during idle periods. Operators who
+    # need a warm pool (e.g. to absorb a burst at startup) override
+    # via ``POSTGRES_MIN_POOL_SIZE`` in the Northflank manifest. The
+    # 5-connection default from earlier shipped 5 warm sockets
+    # forever, which kept Neon running 24/7.
+    postgres_min_pool_size: int = 0
     # Server-side ``statement_timeout`` cap, applied to every pooled
     # connection via ``SET statement_timeout`` in the pool's init
     # callback. 30 s matches the previous hardcoded value; override
@@ -197,6 +202,12 @@ class Settings(BaseSettings):
     # ``usage.cost`` field for budget tracking instead of the
     # per-token estimate. Off by default per C-5 rollout guidance.
     ai_agent_real_cost: bool = False
+    # DL-10: hard cap on the ChatService gateway's request
+    # ``max_tokens`` parameter. The OpenRouter upstream caps at
+    # 4096 by default; set to 0 to disable the cap. The test
+    # suite asserts the default is 4096 (Phase C-7 rollback
+    # preserves the original OpenRouter limit).
+    gateway_max_tokens_cap: int = 4096
 
     # Phase R — stdlib ``logging`` shim (Logfire-style 5-min
     # time-to-first-log). When the user calls ``eden.install()`` (or
@@ -275,7 +286,20 @@ class Settings(BaseSettings):
 
     # JWT Authentication
     jwt_secret: str = "change-me-in-production"
-    jwt_exp_days: int = 7
+    # Optional secondary key accepted during a rotation window. When
+    # set, ``decode_access_token`` will accept tokens signed with
+    # either the primary or this previous key. Tokens issued with
+    # the old key remain valid until natural expiry; new tokens are
+    # always signed with the primary. Clear this after the rotation
+    # window to fully cut over.
+    jwt_secret_previous: str = ""
+    # 24h absolute lifetime — serves as the absolute session timeout
+    # regardless of activity. Idle timeout is enforced at
+    # ``get_current_user`` via a sliding last_seen_at window
+    # (see migration 079). 24h is short enough that a leaked cookie
+    # is useful for at most a day; long enough that an active user
+    # never sees an unexpected logout.
+    jwt_exp_days: int = 1
     # Optional JWT aud / iss claim support (opt-in). The auth helpers
     # check for non-empty strings before adding them to the token;
     # leaving them empty preserves the original behaviour. See
@@ -475,6 +499,11 @@ class Settings(BaseSettings):
     # back to in-memory TokenBucket for single-node dev. The middleware
     # also sets standard X-RateLimit-* headers on every response.
     rate_limit_enabled: bool = True
+    # Default-deny auth middleware (security 26). Every request must
+    # carry an auth context; the middleware short-circuits to 401
+    # before the route runs unless the path is on the public allow-
+    # list. Disable only for debugging — production must be on.
+    default_deny_enabled: bool = True
     rate_limit_default_per_window: int = 60
     rate_limit_window_seconds: int = 60
 
@@ -512,6 +541,35 @@ class Settings(BaseSettings):
     github_app_webhook_secret: str = ""
     github_app_callback_url: str = ""  # e.g. https://portal.example.com/onboarding/connect
 
+    # ── Kill-switch defaults (v2.7 hot-path) ────────────────────────
+    # Mutating actions default OFF per audit/permission policy.
+    # Read-only actions default ON. Override per-tenant via
+    # ``tenant_guardrail_action_config`` (Cat 15/17/22 wiring shim).
+    # Audit 2026-07-02 — see spec §04 #9.
+    _KILL_SWITCH_DEFAULT: dict[str, bool] = {
+        # mutating — must default OFF
+        "block_user": False,
+        "revoke_api_key": False,
+        "escalate_to_admin": False,
+        "truncate_context": False,
+        "apply_policy_change": False,
+        # read-only — default ON
+        "record_to_table": True,
+        "emit_audit_event": True,
+        "emit_drift_alert": True,
+        "rewrite_response": True,
+        "coalesce_step": True,
+    }
+
+    def get_action_default(self, action_class: str) -> bool:  # ponytail: instance helper — sets are instance-scoped (Pydantic model_config doesn't allow dict defaults at class level on BaseSettings)
+        """Return the default kill-switch state for ``action_class``.
+
+        Audit 2026-07-02 — mutating classes default False;
+        read-only default True; unknown classes default True
+        (fail-open so observability never silently breaks).
+        """
+        return self._KILL_SWITCH_DEFAULT.get(action_class, True)
+
 
 @lru_cache
 def get_settings() -> Settings:
@@ -539,4 +597,15 @@ def get_settings() -> Settings:
                 "JWT_SECRET) to a real secret before booting in any "
                 "non-test environment."
             )
+    # Minimum length check. 32 bytes (256 bits) is the floor for
+    # HS256 — anything shorter weakens the signature against brute
+    # force. We skip the check in test mode because fixtures use a
+    # short placeholder.
+    if not os.environ.get("PYTEST_CURRENT_TEST") and len(
+        settings.jwt_secret
+    ) < 32:
+        raise RuntimeError(
+            "jwt_secret must be at least 32 characters. Generate one "
+            "with: python -c 'import secrets; print(secrets.token_urlsafe(32))'"
+        )
     return settings

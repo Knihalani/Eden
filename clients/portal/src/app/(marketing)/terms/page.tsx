@@ -8,6 +8,8 @@ export const metadata: Metadata = {
   description: "Terms governing your use of the Eden platform.",
 };
 
+{/* TODO: legal review — every clause below needs counsel sign-off before launch. */}
+
 export default function TermsPage() {
   return (
     <div className="min-h-screen bg-[var(--bg-secondary)]">

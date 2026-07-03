@@ -41,13 +41,17 @@ def _get_request_identity(request: Request) -> str:
 
     Prefers API key hash, then user cookie, then anonymous fallback.
     This prevents cross-user replay attacks.
+
+    Audit 2026-07-02 B-7 — return the full 64-hex SHA-256, not
+    the [:16] truncation (16 hex chars = 64 bits = brute-forceable
+    in hours on commodity hardware; full digest = 256 bits).
     """
     api_key = request.headers.get("X-Org-Api-Key")
     if api_key:
-        return hashlib.sha256(api_key.encode()).hexdigest()[:16]
+        return hashlib.sha256(api_key.encode()).hexdigest()
     auth_cookie = request.cookies.get("authorization")
     if auth_cookie:
-        return hashlib.sha256(auth_cookie.encode()).hexdigest()[:16]
+        return hashlib.sha256(auth_cookie.encode()).hexdigest()
     # Anonymous — still scoped by remote addr to limit blast radius
     return f"anon:{request.client.host if request.client else 'unknown'}"
 

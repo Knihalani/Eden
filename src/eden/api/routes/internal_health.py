@@ -21,7 +21,6 @@ from typing import Any
 
 from fastapi import APIRouter, HTTPException
 
-from eden.api.middleware.internal_only import InternalOnlyMiddleware
 
 logger = logging.getLogger(__name__)
 

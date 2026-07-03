@@ -230,18 +230,22 @@ class LineageTracker:
         self,
         dataset_name: str,
         limit: int = 50,
+        org_id: str | None = None,
     ) -> list[dict[str, Any]]:
         """Find all upstream datasets that feed into a given dataset."""
+        if not org_id:
+            raise ValueError("org_id is required for LineageTracker calls")
         client = await self._get_postgres()
         query = """
             SELECT run_id, job_name, inputs_json, started_at
             FROM lineage_runs
             WHERE outputs_json::text ILIKE $1
               AND event_type = 'COMPLETE'
+              AND org_id = $3
             ORDER BY started_at DESC
             LIMIT $2
         """
-        rows = await client.fetch(query, f"%{dataset_name}%", limit)
+        rows = await client.fetch(query, f"%{dataset_name}%", limit, org_id)
         upstream: list[dict[str, Any]] = []
         for row in rows:
             inputs = json.loads(row["inputs_json"])
@@ -259,18 +263,22 @@ class LineageTracker:
         self,
         dataset_name: str,
         limit: int = 50,
+        org_id: str | None = None,
     ) -> list[dict[str, Any]]:
         """Find all downstream datasets that consume from a given dataset."""
+        if not org_id:
+            raise ValueError("org_id is required for LineageTracker calls")
         client = await self._get_postgres()
         query = """
             SELECT run_id, job_name, outputs_json, started_at
             FROM lineage_runs
             WHERE inputs_json::text ILIKE $1
               AND event_type = 'COMPLETE'
+              AND org_id = $3
             ORDER BY started_at DESC
             LIMIT $2
         """
-        rows = await client.fetch(query, f"%{dataset_name}%", limit)
+        rows = await client.fetch(query, f"%{dataset_name}%", limit, org_id)
         downstream: list[dict[str, Any]] = []
         for row in rows:
             outputs = json.loads(row["outputs_json"])
@@ -288,18 +296,22 @@ class LineageTracker:
         self,
         job_id: str,
         limit: int = 100,
+        org_id: str | None = None,
     ) -> list[dict[str, Any]]:
         """Get full lineage history for a specific Eden pipeline job."""
+        if not org_id:
+            raise ValueError("org_id is required for LineageTracker calls")
         client = await self._get_postgres()
         query = """
             SELECT run_id, job_name, event_type, inputs_json, outputs_json,
                    facets_json, started_at, ended_at
             FROM lineage_runs
             WHERE facets_json::text ILIKE $1
+              AND org_id = $3
             ORDER BY started_at DESC
             LIMIT $2
         """
-        rows = await client.fetch(query, f"%{job_id}%", limit)
+        rows = await client.fetch(query, f"%{job_id}%", limit, org_id)
         return [
             {
                 "run_id": r["run_id"],
@@ -318,12 +330,15 @@ class LineageTracker:
         self,
         since: datetime | None = None,
         limit: int = 1000,
+        org_id: str | None = None,
     ) -> list[dict[str, Any]]:
         """Export lineage runs as OpenLineage-compatible JSON.
 
         Suitable for ingestion into Marquez, DataHub, or other lineage tools.
         """
         client = await self._get_postgres()
+        if not org_id:
+            raise ValueError("org_id is required for LineageTracker calls")
         if since:
             query = """
                 SELECT run_id, job_name, job_namespace, event_type,
@@ -331,20 +346,22 @@ class LineageTracker:
                        started_at, ended_at
                 FROM lineage_runs
                 WHERE started_at >= $1
+                  AND org_id = $3
                 ORDER BY started_at DESC
                 LIMIT $2
             """
-            rows = await client.fetch(query, since.isoformat(), limit)
+            rows = await client.fetch(query, since.isoformat(), limit, org_id)
         else:
             query = """
                 SELECT run_id, job_name, job_namespace, event_type,
                        inputs_json, outputs_json, facets_json,
                        started_at, ended_at
                 FROM lineage_runs
+                WHERE org_id = $2
                 ORDER BY started_at DESC
                 LIMIT $1
             """
-            rows = await client.fetch(query, limit)
+            rows = await client.fetch(query, limit, org_id)
 
         events = []
         for row in rows:

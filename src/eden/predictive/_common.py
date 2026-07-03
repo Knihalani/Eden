@@ -48,6 +48,10 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
+# Audit 2026-07-02 P-17 — 1 h Redis cache TTL on the
+# _fetch_recent_judge_scores data path. Per-test contract.
+_JUDGE_SCORES_CACHE_TTL_S: int = 3600
+
 
 # ── Public constants ─────────────────────────────────────────────────
 
@@ -201,7 +205,27 @@ async def _fetch_recent_judge_scores(
     When ``judge_name`` is provided, the query is restricted
     to that judge. Used by the QualityPredictor when the
     caller wants a per-judge projection.
+
+    Audit 2026-07-02 P-17 — wrap with a 1 h Redis cache keyed
+    by ``(org_id, judge_name)`` so the dashboard doesn't
+    re-query the same window 10×/min per tenant.
     """
+    cache_key = (
+        f"judge_scores_recent:{org_id}:{judge_name or '_all_'}"
+    )
+    try:
+        from eden.storage.redis import get_redis_client
+        redis = await get_redis_client()
+    except Exception:
+        redis = None
+    if redis is not None:
+        try:
+            cached = await redis.get(cache_key)
+            if cached:
+                import json
+                return json.loads(cached)
+        except Exception:
+            pass
     client = await _get_client()
     if client is None:
         return []
@@ -245,6 +269,15 @@ async def _fetch_recent_judge_scores(
                 "created_at": d.get("created_at"),
             }
         )
+    if redis is not None and out:
+        try:
+            import json
+            await redis.setex(
+                cache_key, _JUDGE_SCORES_CACHE_TTL_S,
+                json.dumps(out, default=str),
+            )
+        except Exception:
+            pass
     return out
 
 

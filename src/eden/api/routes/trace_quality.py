@@ -54,7 +54,6 @@ from eden.observability.trace_quality.queries import (
     fetch_pending_actions,
     fetch_quality_report,
     fetch_reasoning_report,
-    fetch_tenant_action_config,
     set_action_applied,
     set_tenant_action_config,
 )

@@ -1,4 +1,7 @@
 import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
+import createIntlMiddleware from "next-intl/middleware";
+import { NextResponse } from "next/server";
+import { routing } from "@/i18n/routing";
 
 // Protected-first: block everything, allow the routes that must stay
 // reachable without a session (marketing pages, auth flows, the
@@ -40,12 +43,59 @@ const isPublicRoute = createRouteMatcher([
   "/__clerk(.*)",
   "/sign-in(.*)",
   "/sign-up(.*)",
+  // i18n: locale-prefixed root is `/de` + `/de/...` for non-default
+  // locales. The default locale (`en`) stays unprefixed at `/`. See
+  // `src/i18n/routing.ts` for the prefix mode.
+  "/de",
+  "/de/(.*)",
 ]);
 
+// next-intl middleware: reads/writes the `NEXT_LOCALE` cookie,
+// optionally redirects `/` → `/de` when the user's accept-language
+// (or stored cookie) asks for German without the prefix.
+const intlMiddleware = createIntlMiddleware(routing);
+
+/**
+ * Combined middleware chain.
+ *
+ * Why both Clerk AND next-intl live in one file: Next 16 renamed
+ * `middleware.ts` → `proxy.ts` and there can only be one. Clerk's
+ * `clerkMiddleware()` returns the actual Next.js middleware
+ * function, so we wrap it and call `intlMiddleware` first inside.
+ *
+ * Order: next-intl runs first (it may redirect to add a `/de`
+ * prefix). If it redirects, we return that response directly and
+ * Clerk never sees the request. Otherwise we run Clerk's auth gate
+ * and forward any cookies intl set on the way out.
+ *
+ * Clerk's `auth.protect()` only fires for non-public routes, so the
+ * locale switch on the public marketing page never hits Clerk's
+ * auth state — which is what we want.
+ */
 export default clerkMiddleware(async (auth, request) => {
+  const intlResponse = intlMiddleware(request);
+
+  // next-intl wants a redirect (e.g. `/` → `/de` because the
+  // accept-language header says so). Return it untouched — Clerk
+  // doesn't need to run for a locale-prefix redirect.
+  if (intlResponse.headers.get("location")) {
+    return intlResponse;
+  }
+
   if (!isPublicRoute(request)) {
     await auth.protect();
   }
+
+  // Copy the locale cookie(s) from intl's response onto the response
+  // we're about to return. Clerk's wrapper will merge this with its
+  // own auth cookies when it emits the final response.
+  const response = NextResponse.next({
+    request: { headers: request.headers },
+  });
+  for (const cookie of intlResponse.cookies.getAll()) {
+    response.cookies.set(cookie);
+  }
+  return response;
 });
 
 export const config = {

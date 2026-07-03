@@ -14,7 +14,7 @@ from datetime import UTC, datetime, timedelta
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel
 
-from eden.api.deps import get_current_user, require_org_permission, require_org_permission_dep
+from eden.api.deps import get_current_user, require_org_permission_dep, require_org_permission  # noqa: F401  (monkeypatched by tests)
 from eden.optimization import (
     BudgetExceededError,
     BudgetStatus,
@@ -24,7 +24,6 @@ from eden.optimization import (
     SemanticCache,
 )
 from eden.optimization.cost_tracker import CostEvent
-from eden.storage.postgres import get_postgres_client
 
 logger = logging.getLogger(__name__)
 
@@ -678,7 +677,7 @@ async def cost_per_trace(
     """Top 100 traces by total LLM cost in the window."""
     from datetime import datetime, timedelta  # local import to avoid touching module-level
     from eden.storage import postgres as _pg_module
-    start = datetime.utcnow() - timedelta(days=days)
+    start = datetime.now(UTC) - timedelta(days=days)
     client = await _pg_module.get_postgres_client()
     rows = await client.fetch(
         """
