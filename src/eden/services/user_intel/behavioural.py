@@ -87,11 +87,18 @@ async def _upsert_signal_row(
     fields: dict[str, Any],
 ) -> str:
     """Upsert one row into ``user_behavioural_signals`` for
-    ``(org_id, trace_id)``. The schema doesn't have a
-    unique constraint, so the upsert is implemented as
-    DELETE-then-INSERT (the same pattern used by the Cat 8
-    and Cat 11 services for the migration's no-unique-
-    constraint tables).
+    ``(org_id, trace_id)``.
+
+    Audit 2026-07-03 — B-19 (Session 26) spec asked for an
+    idempotent ``INSERT ... ON CONFLICT DO UPDATE``; the
+    previous DELETE-then-INSERT shipped with the rename but
+    the body was never rewritten. Migration 075 added the
+    ``uq_user_behavioural_signals_tuple`` constraint on
+    ``(org_id, trace_id)`` so the upsert is now safe under
+    concurrent callers. The dynamic column builder is
+    unchanged — we just append an ``ON CONFLICT (org_id,
+    trace_id) DO UPDATE SET col1 = EXCLUDED.col1, ...``
+    clause keyed off the same column list.
 
     Returns the generated ``sig_…`` id.
     """
@@ -110,19 +117,14 @@ async def _upsert_signal_row(
             # ponytail: copy_pasted / retried_within_60s /
             # return_7d removed per upgradespec §D.2.
         }
-        # DELETE first (re-runnable).
-        await client.execute(
-            """
-            DELETE FROM user_behavioural_signals
-             WHERE org_id = $1 AND trace_id = $2
-            """,
-            org_id,
-            trace_id,
-        )
-        # Build the INSERT dynamically.
+        # Build the INSERT dynamically. On-conflict updates every
+        # non-PK column to the new value so a re-roll replaces
+        # the prior values rather than appending a stale second
+        # row.
         cols = ["id", "org_id", "user_id", "trace_id"]
         vals: list[Any] = [sig_id, org_id, user_id, trace_id]
         placeholders = ["$1", "$2", "$3", "$4"]
+        update_assigns: list[str] = []
         idx = 5
         for k, v in fields.items():
             col = col_map.get(k, k)
@@ -138,13 +140,23 @@ async def _upsert_signal_row(
             else:
                 vals.append(v)
             placeholders.append(f"${idx}")
+            # EXCLUDED.<col> refers to the row we tried to
+            # insert — on conflict, copy it back in place of the
+            # existing row so a re-roll observes its own values.
+            update_assigns.append(f"{col} = EXCLUDED.{col}")
             idx += 1
         cols.append("created_at")
         placeholders.append("NOW()")
+        # ``user_id`` is part of the natural key — update it too
+        # so the upsert id and the FK stay consistent if a
+        # caller ever retries with a different actor.
+        update_assigns.append("user_id = EXCLUDED.user_id")
         sql = (
             f"INSERT INTO user_behavioural_signals "
             f"({', '.join(cols)}) "
-            f"VALUES ({', '.join(placeholders)})"
+            f"VALUES ({', '.join(placeholders)}) "
+            f"ON CONFLICT (org_id, trace_id) DO UPDATE SET "
+            f"{', '.join(update_assigns)}"
         )
         await client.execute(sql, *vals)
     except Exception as exc:

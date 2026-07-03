@@ -40,9 +40,12 @@ export async function POST(
   // Re-wrap the file in a fresh multipart with a known filename.
   const fd = new FormData();
   fd.append("file", file, (file as File).name ?? "agent.tar.gz");
-  const extraHeaders = await bearerHeader();
+  const [extraHeaders, cookieHeader] = await Promise.all([
+    bearerHeader(),
+    Promise.resolve(request.headers.get("cookie") ?? undefined),
+  ]);
   return forwardToBackend(
     `/orgs/${orgId}/agents/${encodeURIComponent(agentId)}/upload`,
-    { method: "POST", body: fd, extraHeaders }
+    { method: "POST", body: fd, extraHeaders, cookieHeader }
   );
 }

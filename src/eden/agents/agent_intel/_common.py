@@ -45,6 +45,7 @@ layout of :mod:`eden.kb.retrieval_intel._common` (Cat 4),
 from __future__ import annotations
 
 import asyncio  # Audit 2026-07-02 P-9 (gather on telemetry+cost+judge)
+import inspect
 import logging
 import re
 import uuid
@@ -506,10 +507,24 @@ async def _delete_then_insert_perf_snapshot(
     latency_p95_ms: float | None,
     judge_avg: float | None,
 ) -> None:
-    """Replace the ``agent_performance_snapshots`` rows for
-    this ``(org_id, agent_id, window)`` tuple. The table has
-    no unique constraint, so the only way to make the service
-    re-runnable is to delete-then-insert.
+    """Upsert a single ``agent_performance_snapshots`` row per
+    ``(org_id, agent_id, window_name)`` tuple via
+    ``INSERT ... ON CONFLICT DO UPDATE``.
+
+    Audit 2026-07-03 — B-18 (Session 26) spec asked for an
+    idempotent upsert; the previous ``_delete_then_insert_perf_snapshot``
+    still shipped with DELETE+INSERT plus a typo on the column
+    name (``window`` instead of ``window_name``), so every
+    persist had been silently swallowed by the defensive
+    try/except since the table was created. Migration 075 added
+    the ``uq_agent_performance_snapshots_tuple`` constraint
+    so this upsert is safe under concurrent callers.
+
+    The function name kept the ``_delete_then_insert_*`` shape
+    for back-compat with callers; the implementation is a
+    real upsert and the on-conflict clause updates every metric
+    in-place so a re-roll replaces the prior values rather than
+    appending a stale second row.
 
     Best-effort: any exception is logged and swallowed so the
     caller can still return the live envelope with the
@@ -524,26 +539,22 @@ async def _delete_then_insert_perf_snapshot(
     if client is None:
         return
     try:
-        async with client.acquire() as conn, conn.transaction():
-            await conn.execute(
-                """
-                    DELETE FROM agent_performance_snapshots
-                     WHERE org_id = $1
-                       AND agent_id = $2
-                       AND window = $3
-                    """,
-                org_id,
-                agent_id,
-                window,
-            )
+        async with client.acquire() as conn:
             await conn.execute(
                 """
                     INSERT INTO agent_performance_snapshots
-                        (id, org_id, agent_id, window, success_rate,
-                         cost_usd, latency_p50_ms, latency_p95_ms,
-                         judge_avg)
+                        (id, org_id, agent_id, window_name,
+                         success_rate, cost_usd, latency_p50_ms,
+                         latency_p95_ms, judge_avg)
                     VALUES (gen_random_uuid(), $1, $2, $3, $4, $5,
                             $6, $7, $8)
+                    ON CONFLICT (org_id, agent_id, window_name)
+                    DO UPDATE SET
+                        success_rate   = EXCLUDED.success_rate,
+                        cost_usd       = EXCLUDED.cost_usd,
+                        latency_p50_ms = EXCLUDED.latency_p50_ms,
+                        latency_p95_ms = EXCLUDED.latency_p95_ms,
+                        judge_avg      = EXCLUDED.judge_avg
                     """,
                 org_id,
                 agent_id,
@@ -561,12 +572,15 @@ async def _delete_then_insert_perf_snapshot(
 async def _delete_then_insert_relationships(
     org_id: str, rows: list[dict[str, Any]]
 ) -> None:
-    """Replace all ``agent_relationships`` rows for the org.
-    The table has no unique constraint, so the only way to
-    make :class:`AgentRelationshipGraph` re-runnable is to
-    clear the org's rows and re-insert.
+    """Upsert each ``agent_relationships`` row via ``INSERT ... ON
+    CONFLICT DO UPDATE``. Audit 2026-07-03 — the previous
+    ``_delete_then_insert_relationships`` shipped with the
+    B-18 rewrite incomplete (memory note claimed but the file
+    still DELETEd first); migration 075 added
+    ``uq_agent_relationships_tuple`` so concurrent upserts are
+    safe.
 
-    Best-effort like :func:`_delete_then_insert_perf_snapshot`.
+    Best-effort like :func:`_upsert_perf_snapshot`.
     """
     try:
         from eden.storage.postgres import get_postgres_client
@@ -577,11 +591,7 @@ async def _delete_then_insert_relationships(
     if client is None:
         return
     try:
-        async with client.acquire() as conn, conn.transaction():
-            await conn.execute(
-                "DELETE FROM agent_relationships WHERE org_id = $1",
-                org_id,
-            )
+        async with client.acquire() as conn:
             for r in rows:
                 parent = str(r.get("parent_agent_id", ""))[:128]
                 child = str(r.get("child_agent_id", ""))[:128]
@@ -595,6 +605,10 @@ async def _delete_then_insert_relationships(
                             (id, org_id, parent_agent_id, child_agent_id,
                              handoff_count, success_rate)
                         VALUES (gen_random_uuid(), $1, $2, $3, $4, $5)
+                        ON CONFLICT (org_id, parent_agent_id, child_agent_id)
+                        DO UPDATE SET
+                            handoff_count = EXCLUDED.handoff_count,
+                            success_rate  = EXCLUDED.success_rate
                         """,
                     org_id, parent, child, count, sr,
                 )
@@ -610,9 +624,16 @@ async def _delete_then_insert_benchmark_run(
     status: str,
     metrics_json: str,
 ) -> None:
-    """Replace the ``agent_benchmark_runs`` rows for this
-    ``(org_id, agent_id, dataset_id)`` tuple. Re-runnable via
-    DELETE+INSERT.
+    """Upsert a single ``agent_benchmark_runs`` row per
+    ``(org_id, agent_id, dataset_id)`` tuple via
+    ``INSERT ... ON CONFLICT DO UPDATE``.
+
+    Audit 2026-07-03 — same B-18 follow-up as
+    :func:`_upsert_perf_snapshot` / :func:`_upsert_relationships`.
+    ``dataset_id`` may be NULL; Postgres treats each NULL as
+    distinct under the partial UNIQUE constraint, but in practice
+    every benchmark row carries a non-NULL ``dataset_id`` so the
+    tuple is unique.
 
     Best-effort like the other persistence helpers."""
     try:
@@ -624,24 +645,17 @@ async def _delete_then_insert_benchmark_run(
     if client is None:
         return
     try:
-        async with client.acquire() as conn, conn.transaction():
-            await conn.execute(
-                """
-                    DELETE FROM agent_benchmark_runs
-                     WHERE org_id = $1
-                       AND agent_id = $2
-                       AND dataset_id = $3
-                    """,
-                org_id,
-                agent_id,
-                dataset_id,
-            )
+        async with client.acquire() as conn:
             await conn.execute(
                 """
                     INSERT INTO agent_benchmark_runs
                         (id, org_id, agent_id, dataset_id, status,
                          metrics_json)
                     VALUES (gen_random_uuid(), $1, $2, $3, $4, $5)
+                    ON CONFLICT (org_id, agent_id, dataset_id)
+                    DO UPDATE SET
+                        status       = EXCLUDED.status,
+                        metrics_json = EXCLUDED.metrics_json
                     """,
                 org_id, agent_id, dataset_id, status, metrics_json,
             )
@@ -741,13 +755,22 @@ async def _insert_fleet_permissions(
 # ── Closed-loop hook ─────────────────────────────────────────────────
 
 
-def _fire_fleet_drift_hook(org_id: str, agent_id: str) -> None:
+async def _fire_fleet_drift_hook(org_id: str, agent_id: str) -> None:
     """Fire the :class:`PromotionHook.on_drift_alert` closed-
     loop hook for the fleet-deprecation signal. Called from
     :meth:`AgentFleetService.register_agent_identity` when an
     existing identity is re-registered (matches the Cat 2 RCA
     + Cat 8 cost anomaly pattern: a signal that some upstream
     system is still calling a deprecated identity).
+
+    Audit 2026-07-03 — B-23 (Session 26) spec asked for this
+    helper to be ``async def`` and the caller to ``await`` it.
+    Pre-fix the helper was sync but returned a coroutine via
+    ``hook.on_drift_alert``; the discarded coroutine meant the
+    drift alert never actually landed on the bus. The fix
+    awaits the inner call so a fleet re-registration now
+    drives the closed-loop signal even when the hook bus is
+    loaded.
 
     Best-effort: any failure is logged and swallowed so the
     caller can still return the live envelope.
@@ -759,11 +782,13 @@ def _fire_fleet_drift_hook(org_id: str, agent_id: str) -> None:
         return
     try:
         hook = get_promotion_hook()
-        hook.on_drift_alert(
+        result = hook.on_drift_alert(
             org_id,
             drift_type=f"fleet_deprecation:{agent_id}",
             severity="medium",
         )
+        if inspect.isawaitable(result):
+            await result
     except Exception as exc:
         logger.debug("agent_intel: fleet drift hook failed: %s", exc)
 

@@ -23,6 +23,16 @@ The middleware itself does NOT verify the token (that's a job
 for the route's Depends). It only confirms that *some* auth
 header / cookie is present. The real check happens at the
 dep, so a malformed token still 401s at the route layer.
+
+Audit 2026-07-03 — implemented as a pure ASGI middleware so
+``scope["type"] == "websocket"`` upgrades also go through the
+allow-list. ``BaseHTTPMiddleware`` (the pre-fix implementation)
+only fires on HTTP — Starlette dispatches WebSocket upgrades
+without invoking the HTTP middleware chain's ``dispatch`` for
+the auth-checking path. The pure-ASGI form below inspects
+the ``scope`` directly and rejects unauthorised WS upgrades with
+``websocket.close(code=4401)`` so a future WS route that
+forgets to call ``_authenticate_ws`` ships closed, not open.
 """
 
 from __future__ import annotations
@@ -31,7 +41,7 @@ import logging
 from collections.abc import Awaitable, Callable
 
 from fastapi import Request, Response
-from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.types import ASGIApp, Receive, Scope, Send
 
 logger = logging.getLogger(__name__)
 
@@ -66,6 +76,15 @@ DEFAULT_PUBLIC_PREFIXES: tuple[str, ...] = (
 )
 
 
+# Header names accepted as "some auth context is present". Header
+# lookup is case-insensitive at the ASGI scope layer.
+_AUTH_HEADER_NAMES_LOWER: frozenset[str] = frozenset(
+    {"x-org-api-key", "x-clerk-auth", "x-api-key"}
+)
+_COOKIE_NAME = "authorization"
+_BEARER_HEADER = "authorization"
+
+
 def _is_public(path: str) -> bool:
     """True if ``path`` is on the public allow-list."""
     for prefix in DEFAULT_PUBLIC_PREFIXES:
@@ -74,72 +93,103 @@ def _is_public(path: str) -> bool:
     return False
 
 
-class DefaultDenyAuthMiddleware(BaseHTTPMiddleware):
-    """Require *some* auth credential on every non-public request.
+def _scope_has_credential(scope: Scope) -> bool:
+    """True iff ``scope`` headers / query contain an auth-bearing token.
 
-    What this catches: a forgotten ``Depends(get_current_user)`` on
-    a new endpoint. The handler would be open in the old posture;
-    here it returns 401 before the handler is even invoked.
+    Used by both HTTP and WebSocket branches so a forgotten
+    ``_authenticate_ws`` on a new endpoint ships closed, not open.
+    """
+    headers = scope.get("headers") or []
+    headers_lc = {h[0].lower(): h[1] for h in headers}
+
+    # 1. Bearer header.
+    bearer = headers_lc.get(_BEARER_HEADER.encode(), b"")
+    if bearer.lower().startswith(b"bearer "):
+        return True
+    # 2. Cookie.
+    cookie = headers_lc.get(b"cookie", b"").decode("latin1", errors="ignore")
+    if f"{_COOKIE_NAME}=" in cookie:
+        return True
+    # 3. Custom auth headers (X-Org-Api-Key, X-Clerk-Auth, X-Api-Key).
+    for name_lower in _AUTH_HEADER_NAMES_LOWER:
+        if headers_lc.get(name_lower.encode()):
+            return True
+    # 4. ``?token=`` query param — WS routes use this; deprecated but
+    # accepted for backwards compatibility with the live client SDK.
+    if scope.get("type") == "websocket":
+        query = scope.get("query_string", b"").decode("latin1", errors="ignore")
+        if "token=" in query:
+            return True
+    return False
+
+
+class DefaultDenyAuthMiddleware:
+    """Pure-ASGI default-deny middleware.
+
+    Two branches: HTTP requests get the standard 401 JSON envelope on
+    rejection; WebSocket upgrades get a synchronous ``websocket.close``
+    with code 4401 (custom non-normative code meaning "auth required")
+    before the inner app is ever invoked. Either way, a forgotten
+    ``Depends`` or ``_authenticate_ws`` on a new endpoint ships closed.
+
+    What this catches: a forgotten ``Depends(get_current_user)`` on a
+    new HTTP endpoint, or a forgotten ``_authenticate_ws`` on a new
+    WebSocket endpoint. Both cases were previously exploitable
+    because ``BaseHTTPMiddleware`` only wrapped the HTTP path; WS
+    upgrades bypassed the auth check entirely.
 
     What this does NOT do: verify the token. Verification is the
     job of the route's dependency, so a forged token still 401s
     at the dep rather than being silently trusted by this layer.
     """
 
-    async def dispatch(
-        self,
-        request: Request,
-        call_next: Callable[[Request], Awaitable[Response]],
-    ) -> Response:
-        if _is_public(request.url.path):
-            return await call_next(request)
+    def __init__(self, app: ASGIApp) -> None:
+        self.app = app
 
-        # Some auth context must be present. We accept either a
-        # cookie (the Eden session) or a Bearer header (Clerk,
-        # API key, etc.). If neither is present, reject.
-        has_cookie = bool(request.cookies.get("authorization"))
-        has_bearer = bool(
-            request.headers.get("authorization", "").lower().startswith("bearer ")
+    async def __call__(
+        self, scope: Scope, receive: Receive, send: Send
+    ) -> None:
+        path = scope.get("path", "")
+        if _is_public(path) or _scope_has_credential(scope):
+            await self.app(scope, receive, send)
+            return
+
+        if scope["type"] == "websocket":
+            # Close the WS upgrade synchronously before the inner app
+            # sees the connection. Sending an HTTP 401-style body on a
+            # rejected WS upgrade is non-conformant; ``websocket.close``
+            # with a custom code is the documented path.
+            try:
+                await send({"type": "websocket.close", "code": 4401})
+            except Exception:
+                pass
+            return
+
+        # HTTP branch — build the standard envelope.
+        logger.info(
+            "default-deny: rejected %s %s (no auth context)",
+            scope.get("method"),
+            path,
         )
-        # Some ingestion endpoints use custom headers; accept any
-        # non-empty auth-related header so we don't false-positive
-        # on routes the dep will then verify properly.
-        has_other = any(
-            h.lower() in ("x-org-api-key", "x-clerk-auth", "x-api-key")
-            for h in request.headers
+        import uuid
+        from fastapi.responses import JSONResponse
+
+        # Echo the inbound ``X-Request-ID`` so support can correlate
+        # the rejection with a server-side log entry.
+        request_id = str(uuid.uuid4())
+        for h_name, h_val in scope.get("headers") or []:
+            if h_name.lower() == b"x-request-id":
+                try:
+                    request_id = h_val.decode("latin1")
+                except Exception:
+                    pass
+                break
+        response = JSONResponse(
+            status_code=401,
+            content={
+                "error": "unauthorized",
+                "detail": "Authentication required",
+                "request_id": request_id,
+            },
         )
-
-        if not (has_cookie or has_bearer or has_other):
-            # Log the rejection so an attacker scanning the surface
-            # is visible in the audit trail.
-            logger.info(
-                "default-deny: rejected %s %s (no auth context)",
-                request.method,
-                request.url.path,
-            )
-            # Build the 401 in the project's standard envelope shape
-            # (``{error, detail, request_id}``) so the portal's
-            # ``proxyError`` can destructure it consistently. (The
-            # previous bare ``{"detail": ...}`` body skipped the
-            # global exception handler because ``BaseHTTPMiddleware``
-            # doesn't propagate raised HTTPExceptions. We can't
-            # raise here — the ASGI base class would surface the
-            # exception as an unhandled 500. Build the response
-            # directly. July 2026 site-wide fix.)
-            import uuid
-            from fastapi.responses import JSONResponse
-            request_id = (
-                request.headers.get("x-request-id")
-                or request.headers.get("x-correlation-id")
-                or str(uuid.uuid4())
-            )
-            return JSONResponse(
-                status_code=401,
-                content={
-                    "error": "unauthorized",
-                    "detail": "Authentication required",
-                    "request_id": request_id,
-                },
-            )
-
-        return await call_next(request)
+        await response(scope, receive, send)

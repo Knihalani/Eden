@@ -76,7 +76,6 @@ async function handle(
   //  - everything else → read as text and forward as a string
   //    (preserves JSON, raw bytes, etc.).
   let body: string | FormData | undefined;
-  let isMultipart = false;
   if (request.method !== "GET" && request.method !== "HEAD") {
     const contentType = request.headers.get("content-type") || "";
     const declared = request.headers.get("content-length");
@@ -89,7 +88,6 @@ async function handle(
       );
     }
     if (contentType.toLowerCase().startsWith("multipart/form-data")) {
-      isMultipart = true;
       try {
         body = await request.formData();
       } catch {

@@ -88,7 +88,9 @@ class TestDeriveJwksUrl:
 
 
 class TestVerifyClerkToken:
-    def test_returns_none_when_no_keys_configured(self, clerk_settings, caplog):
+    @pytest.mark.asyncio
+    async def test_returns_none_when_no_keys_configured(self, clerk_settings, caplog):
+        # B-6 (Session 23): verify_clerk_token is async; await it.
         clerk_settings(
             clerk_secret_key="",
             clerk_jwt_key="",
@@ -96,9 +98,11 @@ class TestVerifyClerkToken:
             clerk_publishable_key="",
         )
         with caplog.at_level("WARNING"):
-            assert clerk_auth.verify_clerk_token("anything") is None
+            assert await clerk_auth.verify_clerk_token("anything") is None
 
-    def test_returns_none_for_malformed_token(self, clerk_settings):
+    @pytest.mark.asyncio
+    async def test_returns_none_for_malformed_token(self, clerk_settings):
+        # B-6 (Session 23): verify_clerk_token is async; await it.
         # secret_key is set so the early-return doesn't trigger; the
         # malformed token must still be rejected cleanly without
         # raising into the request thread.
@@ -107,7 +111,7 @@ class TestVerifyClerkToken:
             clerk_jwt_key="",
             clerk_publishable_key="",
         )
-        assert clerk_auth.verify_clerk_token("not-a-jwt") is None
+        assert await clerk_auth.verify_clerk_token("not-a-jwt") is None
 
     def test_extract_user_id_falls_through_claim_chain(self):
         # Standard Clerk payload uses ``sub``; some accounts mint

@@ -147,7 +147,32 @@ async def _record_action(
         return None
     if client is None:
         return None
-    action_id = str(uuid.uuid4())
+    # B-8 (Session 24): action_id is content-derived so the same logical
+    # action lands on the same id on retry — the ``UNIQUE`` constraint on
+    # ``id`` then makes the ``ON CONFLICT (id) DO NOTHING`` clause a real
+    # dedup gate against double-emission under hook storms.
+    #
+    # The column is ``UUID PRIMARY KEY`` (see migration 025), so the id
+    # must be a valid UUID. We derive one with ``uuid.uuid5`` over a
+    # canonical JSON encoding of the (org, hook, kind, target, payload)
+    # tuple — uuid5 is deterministic in its name + input, so retries with
+    # the same content map to the same UUID. The first 8 hex chars of the
+    # underlying sha256 are also returned as ``action_short_hash`` so log
+    # greppers can still pivot on a stable token (``act_<short>``)
+    # without needing a UUID parser.
+    canonical = json.dumps(
+        {
+            "org_id": org_id,
+            "hook_name": hook_name,
+            "action_kind": action_kind,
+            "target": target,
+            "payload": payload or {},
+        },
+        sort_keys=True,
+        default=str,
+    )
+    content_uuid = uuid.uuid5(uuid.NAMESPACE_DNS, canonical)
+    action_id = str(content_uuid)
     try:
         await client.execute(
             """
@@ -155,6 +180,7 @@ async def _record_action(
                 (id, org_id, hook_name, action_kind, target,
                  payload_json, severity, status)
             VALUES ($1::uuid, $2, $3, $4, $5, $6, $7, 'pending_approval')
+            ON CONFLICT (id) DO NOTHING
             """,
             action_id,
             org_id,
@@ -262,7 +288,15 @@ class PromotionHook:
                 "drift_type": drift_type,
                 "severity": severity,
             },
-            severity=severity if severity in ("high", "medium", "low") else "medium",
+            # Audit 2026-07-03 B-20 — accept ``critical`` so an
+            # RTBF / GDPR auto-fire path doesn't silently downgrade
+            # to medium (the pre-fix whitelist was the only place
+            # in the codebase that downgraded severity).
+            severity=(
+                severity
+                if severity in ("high", "medium", "low", "critical")
+                else "medium"
+            ),
         )
         logger.debug(
             "promotion_hook.on_drift_alert org=%s drift=%s severity=%s "
@@ -937,7 +971,11 @@ class ColumnarHook:
                 "partition_id": partition_id,
                 "reason": reason,
             },
-            severity=severity if severity in ("high", "medium", "low") else "medium",
+            severity=(
+                severity
+                if severity in ("high", "medium", "low", "critical")
+                else "medium"
+            ),
         )
         logger.debug(
             "columnar_hook.on_compaction_drift org=%s partition=%s "
