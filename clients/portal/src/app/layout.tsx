@@ -78,8 +78,18 @@ export default async function RootLayout({
   const messages = await getMessages();
 
   return (
-    <html lang={locale} className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}>
-      <body className="flex flex-col bg-[var(--bg-primary)] grain-overlay">
+    // Site-wide fix (July 2026): ``min-h-full`` (not ``h-full``) on
+    // the html element. The previous ``h-full`` + globals.css
+    // ``html { overflow-y: auto }`` combination pinned the html to
+    // exactly viewport height — when body content exceeded the
+    // viewport (auth pages with the Clerk <SignIn /> component,
+    // password-reset forms, anything with multi-step verification
+    // inputs) the overflow was clipped instead of scrolling, and the
+    // user saw a frozen auth card. ``min-h-full`` lets the html grow
+    // with its content while still establishing the % height context
+    // ``body { min-height: 100dvh }`` needs.
+    <html lang={locale} className={`${geistSans.variable} ${geistMono.variable} min-h-full antialiased`}>
+      <body className="flex min-h-full flex-col bg-[var(--bg-primary)] grain-overlay">
         <ClerkProvider allowedRedirectOrigins={ALLOWED_REDIRECT_ORIGINS}>
           <NextIntlClientProvider locale={locale} messages={messages}>
             <QueryProvider>

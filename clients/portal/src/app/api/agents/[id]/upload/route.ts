@@ -2,13 +2,33 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { forwardToBackend } from "@/lib/proxy";
+import { bearerHeader } from "@/lib/server/clerk-bearer";
 
+/**
+ * Dedicated multipart upload route. The catch-all proxy at
+ * /api/proxy/[...path] previously routed this through ``request.text()``
+ * which mangled the multipart payload. This route reads the
+ * multipart body directly and re-wraps it so the FastAPI side sees a
+ * well-formed ``multipart/form-data`` body with the file part intact.
+ *
+ * The orgId is read from ``?org_id=`` because the route lives at
+ * /api/agents/[id]/upload — no orgId path segment. Frontend callers
+ * already pass it (see ``agentsApi.upload(orgId, agentId, file, ...)``
+ * in lib/api.ts).
+ */
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
   const agentId = decodeURIComponent(id);
+  const orgId = request.nextUrl.searchParams.get("org_id");
+  if (!orgId) {
+    return NextResponse.json(
+      { detail: "Missing required query parameter: org_id" },
+      { status: 400 }
+    );
+  }
   const form = await request.formData();
   const file = form.get("file");
   if (!file || typeof file === "string") {
@@ -17,13 +37,12 @@ export async function POST(
       { status: 400 }
     );
   }
-  // Re-wrap the file in a fresh multipart with a known filename
-  // (the proxy forwards as JSON by default; we need to keep the
-  // multipart shape end-to-end).
+  // Re-wrap the file in a fresh multipart with a known filename.
   const fd = new FormData();
   fd.append("file", file, (file as File).name ?? "agent.tar.gz");
+  const extraHeaders = await bearerHeader();
   return forwardToBackend(
-    `/orgs/{orgId}/agents/${encodeURIComponent(agentId)}/upload`,
-    { method: "POST", body: fd }
+    `/orgs/${orgId}/agents/${encodeURIComponent(agentId)}/upload`,
+    { method: "POST", body: fd, extraHeaders }
   );
 }

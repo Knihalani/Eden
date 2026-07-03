@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server";
 import { forwardToBackend, proxyError } from "@/lib/proxy";
+import { bearerHeader } from "@/lib/server/clerk-bearer";
 
 /**
  * Next.js proxy for the regenerate endpoint.
@@ -20,9 +21,10 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
   const { orgId, id } = await params;
   const cookieHeader = request.headers.get("cookie") || "";
   try {
+    const extraHeaders = await bearerHeader();
     return await forwardToBackend(
       `/orgs/${orgId}/agent/pr-suggestions/${id}/regenerate`,
-      { method: "POST", cookieHeader }
+      { method: "POST", cookieHeader, extraHeaders }
     );
   } catch (err) {
     return proxyError(err, "Failed to regenerate suggestion");
