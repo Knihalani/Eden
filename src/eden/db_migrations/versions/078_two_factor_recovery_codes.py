@@ -13,10 +13,16 @@ When a user loses their TOTP device they submit a recovery code
 via /auth/2fa/recover; the server hashes the submitted value,
 looks it up, marks it used, and (optionally) clears 2FA so the
 account is recoverable.
+
+IDEMPOTENCY (audit 2026-07-03) — pre-fix ``op.create_table`` raised
+on a re-run after a partial failure. Switched to raw SQL
+``CREATE TABLE IF NOT EXISTS`` + ``CREATE INDEX IF NOT EXISTS``
+so a half-migrated DB can recover with `alembic upgrade head`
+rather than manual intervention. Downgrade keeps sa-level ops
+for Alembic autogenerate symmetry.
 """
 
 from alembic import op
-import sqlalchemy as sa
 
 revision = "078"
 down_revision = "077"
@@ -25,29 +31,35 @@ depends_on = None
 
 
 def upgrade() -> None:
-    op.create_table(
-        "two_factor_recovery_codes",
-        sa.Column(
-            "id",
-            sa.dialects.postgresql.UUID(as_uuid=True),
-            primary_key=True,
-            server_default=sa.text("gen_random_uuid()"),
-        ),
-        sa.Column("user_id", sa.String(length=128), nullable=False),
-        # SHA-256 of the recovery code in hex (64 chars).
-        sa.Column("code_hash", sa.String(length=64), nullable=False),
-        sa.Column("used_at", sa.DateTime(timezone=True), nullable=True),
-        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
+    # Equivalent (in spirit) to:
+    #   op.create_table(
+    #       "two_factor_recovery_codes",
+    #       sa.Column("id", UUID, primary_key=True,
+    #                 server_default=sa.text("gen_random_uuid()")),
+    #       sa.Column("user_id", String(128), nullable=False),
+    #       sa.Column("code_hash", String(64), nullable=False),
+    #       sa.Column("used_at", DateTime(timezone=True)),
+    #       sa.Column("created_at", DateTime(timezone=True), nullable=False),
+    #   )
+    # The CREATE TABLE IF NOT EXISTS form is idempotent on re-run.
+    op.execute(
+        """
+        CREATE TABLE IF NOT EXISTS two_factor_recovery_codes (
+            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            user_id VARCHAR(128) NOT NULL,
+            code_hash VARCHAR(64) NOT NULL,
+            used_at TIMESTAMPTZ,
+            created_at TIMESTAMPTZ NOT NULL
+        )
+        """
     )
-    op.create_index(
-        "idx_recovery_codes_user",
-        "two_factor_recovery_codes",
-        ["user_id"],
+    op.execute(
+        "CREATE INDEX IF NOT EXISTS idx_recovery_codes_user "
+        "ON two_factor_recovery_codes (user_id)"
     )
-    op.create_index(
-        "idx_recovery_codes_code_hash",
-        "two_factor_recovery_codes",
-        ["code_hash"],
+    op.execute(
+        "CREATE INDEX IF NOT EXISTS idx_recovery_codes_code_hash "
+        "ON two_factor_recovery_codes (code_hash)"
     )
 
 

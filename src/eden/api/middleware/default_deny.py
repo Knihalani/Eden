@@ -38,9 +38,7 @@ forgets to call ``_authenticate_ws`` ships closed, not open.
 from __future__ import annotations
 
 import logging
-from collections.abc import Awaitable, Callable
 
-from fastapi import Request, Response
 from starlette.types import ASGIApp, Receive, Scope, Send
 
 logger = logging.getLogger(__name__)
@@ -120,6 +118,17 @@ def _scope_has_credential(scope: Scope) -> bool:
         query = scope.get("query_string", b"").decode("latin1", errors="ignore")
         if "token=" in query:
             return True
+        # 5. ``Sec-WebSocket-Protocol: eden-auth-<base64url-token>``
+        # subprotocol header — PREFERRED WS auth path (the
+        # subprotocol value isn't logged by reverse proxies the way
+        # query params are). The server picks ``eden-auth-...`` and
+        # echoes it back; we just need its presence here so the
+        # upgrade isn't 4401'd at this layer.
+        subproto = headers_lc.get(b"sec-websocket-protocol", b"").decode(
+            "latin1", errors="ignore",
+        )
+        if "eden-auth-" in subproto:
+            return True
     return False
 
 
@@ -172,6 +181,7 @@ class DefaultDenyAuthMiddleware:
             path,
         )
         import uuid
+
         from fastapi.responses import JSONResponse
 
         # Echo the inbound ``X-Request-ID`` so support can correlate

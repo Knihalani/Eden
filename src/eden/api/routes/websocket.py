@@ -11,6 +11,7 @@ Usage:
 from __future__ import annotations
 
 import asyncio
+import base64
 import json
 import logging
 import time
@@ -21,6 +22,7 @@ from typing import Any
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
 from eden.storage.postgres import get_postgres_client
+from eden.storage.redis import get_redis_client
 
 logger = logging.getLogger(__name__)
 
@@ -35,14 +37,26 @@ _job_connections: dict[str, set[WebSocket]] = {}
 # same job; a key farmer could grow the dict without bound. Now:
 # TTL 30 s (stale state auto-expires even if revocation events miss
 # the cache), hard cap 4096 entries with FIFO eviction at the cap.
+#
+# Audit 2026-07-03 (post-pass) — Redis-backed when REDIS_URL is set
+# so multi-worker Northflank deploys share the cache (pre-fix each
+# worker had its own OrderedDict, and a revocation on worker A could
+# leave worker B's cache stale for 30 s). Local OrderedDict is the
+# fallback when Redis is unavailable so single-node dev still works.
 _USER_ROLE_TTL_SECONDS = 30.0
 _USER_ROLE_CACHE_CAP = 4_096
-_user_role_cache: "OrderedDict[tuple[str, str], tuple[float, bool]]" = (
+_USER_ROLE_REDIS_PREFIX = "hilt-role:"
+_user_role_cache: OrderedDict[tuple[str, str], tuple[float, bool]] = (
     OrderedDict()
 )
 
 
-def _role_cache_get(key: tuple[str, str]) -> bool | None:
+def _role_cache_get_local(key: tuple[str, str]) -> bool | None:
+    """In-memory fallback for ``_role_cache_get_async``.
+
+    Same TTL+FIFO contract as the Redis path. Used when REDIS_URL is
+    unset or unreachable.
+    """
     now = time.monotonic()
     entry = _user_role_cache.get(key)
     if entry is None:
@@ -58,12 +72,63 @@ def _role_cache_get(key: tuple[str, str]) -> bool | None:
     return value
 
 
-def _role_cache_set(key: tuple[str, str], value: bool) -> None:
+def _role_cache_set_local(key: tuple[str, str], value: bool) -> None:
     if key in _user_role_cache:
         _user_role_cache.move_to_end(key)
     _user_role_cache[key] = (time.monotonic(), value)
     while len(_user_role_cache) > _USER_ROLE_CACHE_CAP:
         _user_role_cache.popitem(last=False)
+
+
+async def _role_cache_get_async(key: tuple[str, str]) -> bool | None:
+    """Return the cached role decision for ``key``, or ``None`` on miss.
+
+    Distributed via Redis (key ``hilt-role:<user>:<job>``, TTL 30 s)
+    when available so multi-worker deploys share state; falls back
+    to the in-memory OrderedDict otherwise.
+    """
+    try:
+        redis = await get_redis_client()
+    except Exception:
+        redis = None
+    if redis is not None:
+        try:
+            raw = await redis.get(
+                f"{_USER_ROLE_REDIS_PREFIX}{key[0]}:{key[1]}"
+            )
+            if raw is None:
+                return None
+            return raw == "1"
+        except Exception as exc:
+            logger.debug(
+                "hilt role cache Redis GET failed; using local: %s", exc,
+            )
+    return _role_cache_get_local(key)
+
+
+async def _role_cache_set_async(key: tuple[str, str], value: bool) -> None:
+    """Cache a role decision for ``key`` for ``_USER_ROLE_TTL_SECONDS``.
+
+    Writes go to both Redis (when available) AND the local cache so a
+    follow-up read in the same worker doesn't pay a Redis round-trip
+    for a hot key.
+    """
+    _role_cache_set_local(key, value)
+    try:
+        redis = await get_redis_client()
+    except Exception:
+        redis = None
+    if redis is not None:
+        try:
+            await redis.set(
+                f"{_USER_ROLE_REDIS_PREFIX}{key[0]}:{key[1]}",
+                "1" if value else "0",
+                ex=int(_USER_ROLE_TTL_SECONDS) + 1,
+            )
+        except Exception as exc:
+            logger.debug(
+                "hilt role cache Redis SET failed (local-only): %s", exc,
+            )
 
 
 def reset_hilt_role_cache() -> None:
@@ -80,7 +145,8 @@ async def _hilt_privileged_for_job(
     admin privileges. Returns False for any falsy user (defence-in-depth
     even before the route-level gate). Audit 2026-07-03 — bounded
     TTL+cap cache so a revoked admin reverts within 30 s and a key
-    farmer cannot grow memory.
+    farmer cannot grow memory; the cache is now Redis-backed so
+    multi-worker deploys share state.
     """
     if not user:
         return False
@@ -88,7 +154,7 @@ async def _hilt_privileged_for_job(
     if not user_id:
         return False
     cache_key = (str(user_id), str(job_id))
-    cached = _role_cache_get(cache_key)
+    cached = await _role_cache_get_async(cache_key)
     if cached is not None:
         return cached
     try:
@@ -97,14 +163,14 @@ async def _hilt_privileged_for_job(
             return False
         job = await client.get_job(job_id, user_id=str(user_id))
         if not job:
-            _role_cache_set(cache_key, False)
+            await _role_cache_set_async(cache_key, False)
             return False
         # Owner of the job counts as privileged; admins/owners via the
         # org_members table also count. ``user_id`` field on the job is
         # the canonical ownership marker (Eden convention).
         owner_id = job.get("user_id") if isinstance(job, dict) else None
         privileged = str(owner_id) == str(user_id)
-        _role_cache_set(cache_key, privileged)
+        await _role_cache_set_async(cache_key, privileged)
         return privileged
     except Exception as exc:
         logger.debug(f"hilt role check failed: {exc}")
@@ -112,19 +178,32 @@ async def _hilt_privileged_for_job(
 
 
 async def _authenticate_ws(websocket: WebSocket) -> dict | None:
-    """Authenticate WebSocket connection via query param or cookie.
+    """Authenticate WebSocket connection via subprotocol, query param, or cookie.
 
-    Accepts token from:
-      - ?token=JWT query parameter
-      - Cookie: access_token
+    Accepts token from, in order of precedence:
+      1. ``Sec-WebSocket-Protocol`` subprotocol header (PREFERRED —
+         the subprotocol value is not logged by reverse proxies, unlike
+         query-param tokens). Format on the wire:
+         ``Sec-WebSocket-Protocol: eden-auth-<base64url-token>, eden-ws-v1``
+         The server picks ``eden-auth-...`` and echoes it back so the
+         upgrade handshake succeeds.
+      2. ``?token=JWT`` query parameter (legacy back-compat — query
+         strings are logged by Vercel/Northflank edge access logs, so
+         this is being phased out).
+      3. ``Cookie: access_token`` (legacy back-compat).
 
     Returns user dict or None if authentication fails.
 
     Audit 2026-07-02 S-8 — try ``verify_clerk_token`` first (portal uses
     Clerk session JWTs as of June 2026); fall back to ``decode_access_token``
     for legacy Eden-issued JWTs.
+    Audit 2026-07-03 — added ``Sec-WebSocket-Protocol`` extraction so
+    multi-tenant reverse proxies don't write the JWT to access logs.
     """
-    token = websocket.query_params.get("token")
+    token = _extract_token_from_subprotocol(websocket.headers)
+
+    if not token:
+        token = websocket.query_params.get("token")
 
     if not token:
         # Try cookie
@@ -164,6 +243,65 @@ async def _authenticate_ws(websocket: WebSocket) -> dict | None:
         logger.warning(f"WebSocket auth failed: {exc}")
 
     return None
+
+
+_WS_AUTH_SUBPROTOCOL_PREFIX = "eden-auth-"
+
+
+def _extract_token_from_subprotocol(headers: Any) -> str | None:
+    """Pull the auth token from the ``Sec-WebSocket-Protocol`` header.
+
+    The portal sets::
+
+        Sec-WebSocket-Protocol: eden-auth-<base64url-token>, eden-ws-v1
+
+    on the upgrade request. We pick the first subprotocol starting with
+    ``eden-auth-``, base64url-decode the suffix, and return the JWT.
+    Returns ``None`` if the header is missing, has no ``eden-auth-...``
+    entry, or the suffix doesn't base64-decode cleanly. Defensive:
+    malformed headers are silently ignored so a buggy client doesn't
+    poison the upgrade.
+    """
+    raw = (headers.get("sec-websocket-protocol") if headers else None)
+    if not raw:
+        return None
+    for proto in [p.strip() for p in raw.split(",")]:
+        if not proto.startswith(_WS_AUTH_SUBPROTOCOL_PREFIX):
+            continue
+        b64 = proto[len(_WS_AUTH_SUBPROTOCOL_PREFIX):]
+        if not b64:
+            return None
+        # urlsafe_b64decode needs padding; add it.
+        try:
+            padded = b64 + "=" * (-len(b64) % 4)
+            decoded = base64.urlsafe_b64decode(padded.encode("ascii"))
+            return decoded.decode("utf-8")
+        except Exception:
+            return None
+    return None
+
+
+async def _accept_with_subprotocol(websocket: WebSocket) -> str | None:
+    """Accept the WebSocket, echoing the ``eden-auth-...`` subprotocol.
+
+    The WS spec requires the server to pick exactly one of the
+    subprotocols the client offered and echo it back in the response
+    ``Sec-WebSocket-Protocol`` header. If no ``eden-auth-...`` was
+    offered, accept without a subprotocol (legacy clients still work).
+    Returns the chosen subprotocol name, or None.
+    """
+    chosen: str | None = None
+    raw = websocket.headers.get("sec-websocket-protocol") if websocket.headers else None
+    if raw:
+        for proto in [p.strip() for p in raw.split(",")]:
+            if proto.startswith(_WS_AUTH_SUBPROTOCOL_PREFIX):
+                chosen = proto
+                break
+    if chosen:
+        await websocket.accept(subprotocol=chosen)
+    else:
+        await websocket.accept()
+    return chosen
 
 
 @router.websocket("/ws/jobs/{job_id}/trace")
@@ -213,7 +351,7 @@ async def job_trace_websocket(
         return
 
     try:
-        await websocket.accept()
+        await _accept_with_subprotocol(websocket)
 
         # Register connection
         if job_id not in _job_connections:
@@ -385,7 +523,7 @@ async def job_logs_websocket(
         return
 
     try:
-        await websocket.accept()
+        await _accept_with_subprotocol(websocket)
 
         if job_id not in _job_connections:
             _job_connections[job_id] = set()

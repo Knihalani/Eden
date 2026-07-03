@@ -309,28 +309,35 @@ class TestB10LastUsedAtDebounce:
 
 
 class TestB11CreateRateLimit:
-    """5 creates / hour / (org, user); 6th returns 429 + Retry-After."""
+    """5 creates / hour / (org, user); 6th returns 429 + Retry-After.
 
-    def test_allowed_under_limit(self) -> None:
+    Audit 2026-07-03 — the rate-limit helper is now async (Redis-backed
+    distributed counter); the in-memory deque is the fallback path.
+    Tests target the local fallback so they don't need a Redis fixture.
+    """
+
+    @pytest.mark.asyncio
+    async def test_allowed_under_limit(self) -> None:
         """First 5 calls in a window all return None (allowed)."""
         from eden.api.routes.api_keys import _check_api_key_create_rate_limit
 
         # Fresh user → log is empty.
         for i in range(5):
-            r = _check_api_key_create_rate_limit(
+            r = await _check_api_key_create_rate_limit(
                 f"org_{i}", f"user_{i}",
             )
             assert r is None, (
                 f"B-11 regression: call {i+1} unexpectedly rate-limited"
             )
 
-    def test_blocked_at_sixth(self) -> None:
+    @pytest.mark.asyncio
+    async def test_blocked_at_sixth(self) -> None:
         """6th call from same (org, user) returns retry-after seconds."""
         from eden.api.routes.api_keys import _check_api_key_create_rate_limit
 
         for _ in range(5):
-            _check_api_key_create_rate_limit("org_block", "user_block")
-        r = _check_api_key_create_rate_limit("org_block", "user_block")
+            await _check_api_key_create_rate_limit("org_block", "user_block")
+        r = await _check_api_key_create_rate_limit("org_block", "user_block")
         assert r is not None, (
             "B-11 regression: 6th call not rate-limited"
         )
@@ -338,24 +345,26 @@ class TestB11CreateRateLimit:
             f"B-11 regression: retry-after {r} not in (0, 3600]"
         )
 
-    def test_isolated_per_user(self) -> None:
+    @pytest.mark.asyncio
+    async def test_isolated_per_user(self) -> None:
         """User A's blocked state does NOT affect user B."""
         from eden.api.routes.api_keys import _check_api_key_create_rate_limit
 
         for _ in range(5):
-            _check_api_key_create_rate_limit("org_isolated", "user_a")
+            await _check_api_key_create_rate_limit("org_isolated", "user_a")
         # User A is blocked.
         assert (
-            _check_api_key_create_rate_limit("org_isolated", "user_a")
+            await _check_api_key_create_rate_limit("org_isolated", "user_a")
             is not None
         )
         # User B is fresh.
         assert (
-            _check_api_key_create_rate_limit("org_isolated", "user_b")
+            await _check_api_key_create_rate_limit("org_isolated", "user_b")
             is None
         )
 
-    def test_window_expires(self) -> None:
+    @pytest.mark.asyncio
+    async def test_window_expires(self) -> None:
         """After the window passes, the limit resets."""
         from eden.api.routes.api_keys import (
             _API_KEY_CREATE_MAX,
@@ -363,11 +372,11 @@ class TestB11CreateRateLimit:
             _check_api_key_create_rate_limit,
         )
 
-        _check_api_key_create_rate_limit("org_reset", "user_reset")
+        await _check_api_key_create_rate_limit("org_reset", "user_reset")
         # Force-expire by mutating the deque.
         log = _api_key_create_log[("org_reset", "user_reset")]
         log.appendleft(log[0] - 3700.0)
-        r = _check_api_key_create_rate_limit("org_reset", "user_reset")
+        r = await _check_api_key_create_rate_limit("org_reset", "user_reset")
         assert r is None, (
             "B-11 regression: limit did not reset after window"
         )
