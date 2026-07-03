@@ -51,6 +51,20 @@ const isPublicRoute = createRouteMatcher([
   // dashboard. Same for the SSE observability stream — its long-
   // lived response can't tolerate Clerk's redirect-on-401 behavior.
   "/api/ai-insights/(.*)",
+  // All /api/orgs/* routes are pass-through proxies. The orgId in
+  // the path is just a routing key for FastAPI; the actual auth
+  // happens at the FastAPI edge via the Bearer header (or the
+  // forwarded cookies). Letting Clerk's ``auth.protect()`` 404
+  // them meant every dashboard call failed with a bare 404 instead
+  // of letting the upstream return a proper 401 envelope. July 2026
+  // site-wide fix.
+  "/api/orgs/(.*)",
+  // Same logic for /api/agents/* — the dedicated multipart upload
+  // route and the test-runs / sim-runs endpoints are all auth-
+  // gated by FastAPI, not by Clerk middleware. Without this entry
+  // Clerk's protect() returned ``x-clerk-auth-reason: protect-
+  // rewrite`` 404s on every call.
+  "/api/agents/(.*)",
   "/api/orgs/(.*)/observability/stream",
   "/__clerk(.*)",
   "/sign-in(.*)",
