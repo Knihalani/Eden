@@ -137,8 +137,17 @@ export async function GET(request: Request, { params }: RouteParams) {
       },
     });
   } catch {
+    // Echo the inbound request id (or a fresh UUID) so the user can
+    // quote it in a support ticket. Matches the catch-all proxy's
+    // 502 envelope shape (lib/proxy.ts:91-112). July 2026 site-wide fix.
+    const requestId =
+      request.headers.get("x-request-id") ||
+      request.headers.get("x-correlation-id") ||
+      (typeof crypto !== "undefined" && "randomUUID" in crypto
+        ? crypto.randomUUID()
+        : `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`);
     return NextResponse.json(
-      { detail: "Stream connection failed" },
+      { detail: "Stream connection failed", request_id: requestId },
       { status: 500 }
     );
   }

@@ -614,20 +614,34 @@ async def list_sessions(
     org: dict = Depends(require_org_member),
     limit: int = 50,
 ):
-    """List the current user's chat sessions (newest first, archived last)."""
+    """List the current user's chat sessions (newest first, archived last).
+
+    Defensive: a DB blip or missing table must not 500 the chat
+    sidebar — the user would lose their conversation list for
+    reasons the route can't control. Return an empty list so the
+    UI renders "no sessions yet" instead of a red error. July
+    2026 site-wide fix.
+    """
     limit = max(1, min(int(limit), 200))
     user_id = org["user_id"]
-    client = await get_postgres_client()
-    rows = await client.fetch(
-        """
-        SELECT session_id, title, created_at, updated_at, archived_at
-        FROM ai_insights_chat_sessions
-        WHERE org_id = $1 AND user_id = $2
-        ORDER BY (archived_at IS NULL) DESC, updated_at DESC
-        LIMIT $3
-        """,
-        org_id, user_id, limit,
-    )
+    try:
+        client = await get_postgres_client()
+        rows = await client.fetch(
+            """
+            SELECT session_id, title, created_at, updated_at, archived_at
+            FROM ai_insights_chat_sessions
+            WHERE org_id = $1 AND user_id = $2
+            ORDER BY (archived_at IS NULL) DESC, updated_at DESC
+            LIMIT $3
+            """,
+            org_id, user_id, limit,
+        )
+    except Exception as exc:
+        logger.warning(
+            "ai_insights: list_sessions failed for user=%s org=%s: %s",
+            user_id, org_id, exc,
+        )
+        return {"sessions": []}
     return {
         "sessions": [
             {
