@@ -1,0 +1,27 @@
+{
+  "nav": {
+    "pricing": "Pricing",
+    "signin": "Sign in",
+    "signup": "Get started",
+    "about": "About",
+    "contact": "Contact",
+    "docs": "Docs"
+  },
+  "footer": {
+    "privacy": "Privacy",
+    "terms": "Terms",
+    "dpa": "DPA",
+    "security": "Security",
+    "subprocessors": "Subprocessors",
+    "language": "Language"
+  },
+  "hero": {
+    "title": "Eden — AI Environment Generation",
+    "subtitle": "Observability + improvement for AI agents and LLM apps.",
+    "cta": "Get started"
+  },
+  "common": {
+    "loading": "Loading…",
+    "error": "Something went wrong. Please try again."
+  }
+}

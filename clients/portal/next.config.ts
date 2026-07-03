@@ -1,4 +1,11 @@
 import type { NextConfig } from "next";
+import createNextIntlPlugin from "next-intl/plugin";
+
+// next-intl plugin wires `src/i18n/request.ts` into the build so the
+// message bundle is loaded server-side for every render. Without
+// this, `useTranslations()` returns empty strings in production
+// builds because the bundler tree-shakes the JSON imports.
+const withNextIntl = createNextIntlPlugin("./src/i18n/request.ts");
 
 const nextConfig: NextConfig = {
   /* config options here */
@@ -48,4 +55,4 @@ const nextConfig: NextConfig = {
   },
 };
 
-export default nextConfig;
+export default withNextIntl(nextConfig);

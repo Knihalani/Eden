@@ -39,6 +39,15 @@ interface ForwardOptions {
   extraHeaders?: Record<string, string>;
   /** Pre-built ``Authorization`` header value (e.g. ``Bearer <jwt>``). */
   authorization?: string;
+  /**
+   * Caller-supplied request id (the ``X-Request-ID`` header value
+   * from the inbound request, if any). Echoed into the 502 body
+   * when the upstream is unreachable so support can correlate the
+   * user's bug report with a server-side log entry. Falls back to
+   * ``crypto.randomUUID()`` if the caller doesn't supply one. July
+   * 2026 site-wide fix.
+   */
+  requestId?: string;
 }
 
 /**
@@ -51,7 +60,23 @@ export async function forwardToBackend(
   path: string,
   options: ForwardOptions = {}
 ): Promise<NextResponse> {
-  const { method = "POST", body, cookieHeader, extraHeaders, authorization } = options;
+  const {
+    method = "POST",
+    body,
+    cookieHeader,
+    extraHeaders,
+    authorization,
+    requestId: requestIdIn,
+  } = options;
+  // Echo the inbound ``X-Request-ID`` (or a freshly-generated UUID)
+  // into the 502 body so support can correlate "user saw this error"
+  // with a server-side log entry. Generated here (not at import time)
+  // so every failed call gets a distinct id.
+  const requestId =
+    requestIdIn ||
+    (typeof crypto !== "undefined" && "randomUUID" in crypto
+      ? crypto.randomUUID()
+      : `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`);
 
   // Default to JSON content type. Override for FormData / multipart by
   // passing an explicit `Content-Type` in `extraHeaders` — fetch will
@@ -107,6 +132,7 @@ export async function forwardToBackend(
         upstream: API_BASE,
         path,
         cause: message,
+        request_id: requestId,
       },
       { status: 502 },
     );

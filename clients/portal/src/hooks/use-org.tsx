@@ -13,6 +13,7 @@ import { useRouter } from "next/navigation";
 import { useOrganization, useOrganizationList, useUser } from "@clerk/nextjs";
 import { api } from "@/lib/api";
 import type { Organization } from "@/lib/types";
+import { usePolling } from "./use-polling";
 
 interface OrgContextType {
   currentOrg: Organization | null;
@@ -228,42 +229,39 @@ export function OrgProvider({ children }: { children: ReactNode }) {
       // the same tick as the mount.
       queueMicrotask(refreshOrgs);
     }
-    // FIX-Q: poll for an org every 5s when the user is signed in but
-    // has none. The Clerk webhook that creates the Eden-side org row
-    // on first signup can take several seconds to land; without a
-    // poll, the user lands on the onboarding wizard, creates an org
-    // on /onboarding/org, and the welcome step's `currentOrg` stays
-    // null on every subsequent visit until they refresh the page
-    // (because refreshOrgs only ran on initial mount). 5s is
-    // aggressive enough to feel real-time without thrashing the
-    // /auth/me endpoint. The interval is cleared once an org is
-    // found, or when the user signs out.
-    let interval: ReturnType<typeof setInterval> | null = null;
-    if (
+  }, [userLoaded, clerkOrgLoaded, refreshOrgs]);
+
+  // FIX-Q: poll for an org every 5s when the user is signed in but
+  // has none. The Clerk webhook that creates the Eden-side org row
+  // on first signup can take several seconds to land; without a
+  // poll, the user lands on the onboarding wizard, creates an org
+  // on /onboarding/org, and the welcome step's `currentOrg` stays
+  // null on every subsequent visit until they refresh the page.
+  //
+  // Site-wide fix (July 2026): we delegate to the cost-safe
+  // ``usePolling`` hook instead of a hand-rolled ``setInterval``,
+  // so the cadence inherits:
+  //   - visibility-pause (a backgrounded tab contributes 0 req/min
+  //     to the gateway — this is the 429 source on Vercel edge)
+  //   - exponential backoff with full jitter (matches lib/api.ts
+  //     so N concurrent failures don't synchronously re-trip 429)
+  //   - permanent bail on 401/403 (no leaks once the session is
+  //     known to be broken)
+  //   - automatic cleanup on unmount
+  //
+  // Must be called at the top level of the component (rules-of-hooks);
+  // the conditional cadence is encoded as the ``enabled`` flag.
+  usePolling({
+    fetch: () => refreshOrgs(),
+    intervalMs: 5_000,
+    deps: [userLoaded, clerkOrgLoaded, loading, organizations.length, !!authError],
+    enabled:
       userLoaded &&
       clerkOrgLoaded &&
       !loading &&
-      // Don't poll when /me is failing — the authError path already
-      // surfaces a friendly message, and polling just hammers the
-      // endpoint until we hit 429 rate limits (June 2026 fix).
       !authError &&
-      organizations.length === 0
-    ) {
-      interval = setInterval(() => {
-        refreshOrgs();
-      }, 5_000);
-    }
-    return () => {
-      if (interval) clearInterval(interval);
-    };
-  }, [
-    userLoaded,
-    clerkOrgLoaded,
-    loading,
-    organizations.length,
-    authError,
-    refreshOrgs,
-  ]);
+      organizations.length === 0,
+  });
 
   const setCurrentOrg = useCallback((org: Organization | null) => {
     // Note: in practice, switching the active org is done via Clerk's

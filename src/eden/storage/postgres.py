@@ -185,6 +185,15 @@ class PostgresClient:
             command_timeout=60,
             init=_init_connection,
             ssl=ssl,
+            # Audit 2026-07-02 — let idle connections return to the
+            # server so Neon's auto-suspend can fire. asyncpg's default
+            # is ``max_inactive_connection_lifetime=None`` which keeps
+            # every connection forever. 60 s is the same window Neon
+            # uses for scale-to-zero detection on free/launch tiers
+            # (~5 min of zero connections), so we drop ours 4× sooner.
+            # Side effect: a cold request pays the TLS handshake +
+            # auth round-trip. Acceptable for the launch traffic shape.
+            max_inactive_connection_lifetime=60.0,
         )
         logger.info(f"PostgreSQL pool initialized: {self.config.host}:{self.config.port}/{self.config.database}")
 

@@ -112,11 +112,16 @@ export function usePolling({
           stop();
           return;
         }
-        // Exponential backoff with cap. Doubles on each consecutive
-        // failure so a single broken endpoint stops hammering
-        // the backend within ~1 minute.
+        // Exponential backoff with cap, then full-jitter. Doubles on
+        // each consecutive failure so a single broken endpoint stops
+        // hammering the backend within ~1 minute, then randomises the
+        // next delay across [0, currentDelay) so N polling components
+        // that all just tripped the same 429 don't synchronously retry
+        // and re-trip the limiter. Matches lib/api.ts:135-145 (the
+        // fetchApi full-jitter formula). July 2026 site-wide fix.
         currentDelay = Math.min(currentDelay * 2, maxBackoffMs);
-        schedule(currentDelay);
+        currentDelay = Math.floor(Math.random() * currentDelay);
+        schedule(Math.max(currentDelay, intervalMs));
       }
     };
 

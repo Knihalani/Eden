@@ -1,6 +1,7 @@
 """Shared FastAPI dependencies."""
 
 import hashlib
+import logging
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Annotated
@@ -20,6 +21,7 @@ from eden.api.utils.clerk_auth import (
 from eden.config import get_settings
 from eden.storage.postgres import get_postgres_client
 
+logger = logging.getLogger(__name__)
 security = HTTPBearer(auto_error=False)
 
 
@@ -861,11 +863,17 @@ async def get_current_org_api_key(
             detail="API key expired",
         )
 
-    # Update last_used_at
-    await client.execute(
-        "UPDATE org_api_keys SET last_used_at = NOW() WHERE id = $1",
-        row["key_id"],
-    )
+    # Update last_used_at. Non-fatal: the auth above has already
+    # succeeded, so a DB blip on the audit write must not 500 the
+    # whole request. The UPDATE will be retried on the next call
+    # that hits this same key. (S24 hardening per memory.)
+    try:
+        await client.execute(
+            "UPDATE org_api_keys SET last_used_at = NOW() WHERE id = $1",
+            row["key_id"],
+        )
+    except Exception as exc:
+        logger.debug("last_used_at UPDATE failed (non-fatal): %s", exc)
 
     return {
         "org_id": str(row["org_id"]),

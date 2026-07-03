@@ -93,7 +93,9 @@ export function CookieConsent() {
           <button
             type="button"
             onClick={() => set("accepted")}
-            className="rounded-md bg-[var(--accent)] px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-[var(--accent-hover)]"
+            // text-[var(--accent-foreground)] (dark) on --accent (light blue)
+            // gives 7.16:1 — passes WCAG AA Normal. Was text-white (2.69:1, fail).
+            className="rounded-md bg-[var(--accent)] px-3 py-2 text-sm font-medium text-[var(--accent-foreground)] transition-colors hover:bg-[var(--accent-hover)]"
             autoFocus
           >
             Accept
