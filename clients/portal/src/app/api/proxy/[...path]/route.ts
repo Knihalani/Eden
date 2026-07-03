@@ -120,6 +120,14 @@ async function handle(
       cookieHeader: request.headers.get("cookie") ?? undefined,
       extraHeaders: headers,
       authorization,
+      // Echo the inbound request id (or fall through to the
+      // crypto.randomUUID() default inside forwardToBackend) so the
+      // 502 body always carries a request_id the user can quote in
+      // a support ticket. July 2026 site-wide fix.
+      requestId:
+        request.headers.get("x-request-id") ||
+        request.headers.get("x-correlation-id") ||
+        undefined,
     });
   } catch (error) {
     return proxyError(error, `Proxy request to ${upstreamPath} failed`);

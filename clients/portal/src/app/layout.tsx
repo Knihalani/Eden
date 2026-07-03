@@ -1,6 +1,9 @@
 import { ClerkProvider } from "@clerk/nextjs";
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import { NextIntlClientProvider, hasLocale } from "next-intl";
+import { getLocale, getMessages } from "next-intl/server";
+import { notFound } from "next/navigation";
 import { AuthProvider } from "@/hooks/use-auth";
 import { OrgProvider } from "@/hooks/use-org";
 import { ToastProvider } from "@/components/ui/toast";
@@ -9,6 +12,7 @@ import { QueryProvider } from "@/components/providers/query-provider";
 import { MotionProvider } from "@/components/providers/motion-provider";
 import { CookieConsent } from "@/components/cookie-consent";
 import { TooltipProvider } from "@radix-ui/react-tooltip";
+import { routing } from "@/i18n/routing";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -58,39 +62,51 @@ const ALLOWED_REDIRECT_ORIGINS = [
   process.env.NEXT_PUBLIC_SITE_URL,
 ].filter((origin): origin is string => Boolean(origin));
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  // next-intl: read the locale + message bundle on the server so
+  // `useTranslations()` works in both server and client components.
+  // `hasLocale` guards against unknown locales slipping through if
+  // someone hand-crafts a URL we don't serve.
+  const locale = await getLocale();
+  if (!hasLocale(routing.locales, locale)) {
+    notFound();
+  }
+  const messages = await getMessages();
+
   return (
-    <html lang="en" className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}>
+    <html lang={locale} className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}>
       <body className="flex flex-col bg-[var(--bg-primary)] grain-overlay">
         <ClerkProvider allowedRedirectOrigins={ALLOWED_REDIRECT_ORIGINS}>
-          <QueryProvider>
-          <AuthProvider>
-          <OrgProvider>
-          <ToastProvider>
-            <MotionProvider>
-              {/* ui-audit prompt 85: Radix TooltipProvider enables
-               * hover/focus tooltips anywhere in the app. delayDuration
-               * 200ms prevents accidental tooltip flash on quick mouse
-               * passes; skipDelayDuration 300ms lets users move between
-               * adjacent triggers without re-waiting. */}
-              <TooltipProvider delayDuration={200} skipDelayDuration={300}>
-                <NotificationsProvider>
-                  {children}
-                  {/* Cookie consent — GDPR / CCPA gate for analytics +
-                   * marketing tags. Only renders when the user has
-                   * not yet made a choice. */}
-                  <CookieConsent />
-                </NotificationsProvider>
-              </TooltipProvider>
-            </MotionProvider>
-          </ToastProvider>
-          </OrgProvider>
-          </AuthProvider>
-          </QueryProvider>
+          <NextIntlClientProvider locale={locale} messages={messages}>
+            <QueryProvider>
+            <AuthProvider>
+            <OrgProvider>
+            <ToastProvider>
+              <MotionProvider>
+                {/* ui-audit prompt 85: Radix TooltipProvider enables
+                 * hover/focus tooltips anywhere in the app. delayDuration
+                 * 200ms prevents accidental tooltip flash on quick mouse
+                 * passes; skipDelayDuration 300ms lets users move between
+                 * adjacent triggers without re-waiting. */}
+                <TooltipProvider delayDuration={200} skipDelayDuration={300}>
+                  <NotificationsProvider>
+                    {children}
+                    {/* Cookie consent — GDPR / CCPA gate for analytics +
+                     * marketing tags. Only renders when the user has
+                     * not yet made a choice. */}
+                    <CookieConsent />
+                  </NotificationsProvider>
+                </TooltipProvider>
+              </MotionProvider>
+            </ToastProvider>
+            </OrgProvider>
+            </AuthProvider>
+            </QueryProvider>
+          </NextIntlClientProvider>
         </ClerkProvider>
       </body>
     </html>

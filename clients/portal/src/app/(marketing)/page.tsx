@@ -12,8 +12,10 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useUser } from "@clerk/nextjs";
 import { useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
 import { cn } from "@/lib/utils";
 import { Logo } from "@/components/brand/logo";
+import { LocaleSwitcher } from "@/components/i18n/locale-switcher";
 import {
   PRODUCT_VERSION,
   PRODUCT_COPYRIGHT_YEAR,
@@ -129,6 +131,7 @@ const IMPROVE_LOG = [
 ];
 
 export default function LandingPage() {
+  const t = useTranslations();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [activeTab, setActiveTab] = useState("gateway");
   const [logRevealed, setLogRevealed] = useState(0);
@@ -336,13 +339,13 @@ export default function LandingPage() {
                   href="/sign-in"
                   className="px-4 py-2 text-sm text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors"
                 >
-                  Sign in
+                  {t("nav.signin")}
                 </Link>
                 <Link
                   href="/sign-up"
                   className="px-4 py-2 text-sm font-medium bg-[var(--accent)] text-[var(--bg-base)] rounded-lg hover:bg-[var(--accent-hover)] transition-colors"
                 >
-                  Get started
+                  {t("nav.signup")}
                 </Link>
               </>
             )}
@@ -865,16 +868,16 @@ export default function LandingPage() {
                   Legal
                 </span>
                 <Link href="/privacy" className="text-sm text-[var(--text-secondary)] hover:text-[var(--text-primary)]">
-                  Privacy
+                  {t("footer.privacy")}
                 </Link>
                 <Link href="/terms" className="text-sm text-[var(--text-secondary)] hover:text-[var(--text-primary)]">
-                  Terms
+                  {t("footer.terms")}
                 </Link>
                 <Link href="/dpa" className="text-sm text-[var(--text-secondary)] hover:text-[var(--text-primary)]">
-                  DPA
+                  {t("footer.dpa")}
                 </Link>
                 <Link href="/security" className="text-sm text-[var(--text-secondary)] hover:text-[var(--text-primary)]">
-                  Security
+                  {t("footer.security")}
                 </Link>
                 {/* CCPA "Do Not Sell My Personal Information" — required
                  * link in the marketing footer for California residents. */}
@@ -888,9 +891,15 @@ export default function LandingPage() {
               </div>
             </div>
 
-            <p className="text-xs text-[var(--text-muted)]">
-              © {PRODUCT_COPYRIGHT_YEAR} Eden · {PRODUCT_VERSION}
-            </p>
+            <div className="flex flex-col gap-2">
+              <p className="text-xs text-[var(--text-muted)]">
+                © {PRODUCT_COPYRIGHT_YEAR} Eden · {PRODUCT_VERSION}
+              </p>
+              {/* i18n toggle. Reads/writes the `NEXT_LOCALE` cookie via
+               * next-intl's middleware; full path refresh so the
+               * server-rendered chrome re-renders in the new locale. */}
+              <LocaleSwitcher />
+            </div>
           </div>
         </footer>
       </main>

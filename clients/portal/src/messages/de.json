@@ -1,0 +1,27 @@
+{
+  "nav": {
+    "pricing": "Preise",
+    "signin": "Anmelden",
+    "signup": "Loslegen",
+    "about": "Über uns",
+    "contact": "Kontakt",
+    "docs": "Dokumentation"
+  },
+  "footer": {
+    "privacy": "Datenschutz",
+    "terms": "Nutzungsbedingungen",
+    "dpa": "Auftragsverarbeitung",
+    "security": "Sicherheit",
+    "subprocessors": "Unterauftragsverarbeiter",
+    "language": "Sprache"
+  },
+  "hero": {
+    "title": "Eden — KI-Umgebungsgenerierung",
+    "subtitle": "Observability und Verbesserung für KI-Agenten und LLM-Apps.",
+    "cta": "Loslegen"
+  },
+  "common": {
+    "loading": "Wird geladen…",
+    "error": "Etwas ist schiefgelaufen. Bitte versuche es erneut."
+  }
+}

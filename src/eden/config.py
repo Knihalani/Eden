@@ -53,7 +53,13 @@ class Settings(BaseSettings):
     # the API + 2 jobs + worker). The Northflank manifest overrides
     # down to 10/2 per container; PostgresClient honours these.
     postgres_pool_size: int = 20
-    postgres_min_pool_size: int = 5
+    # Audit 2026-07-02 — default to 0 so the pool starts empty and
+    # Neon's auto-suspend can fire during idle periods. Operators who
+    # need a warm pool (e.g. to absorb a burst at startup) override
+    # via ``POSTGRES_MIN_POOL_SIZE`` in the Northflank manifest. The
+    # 5-connection default from earlier shipped 5 warm sockets
+    # forever, which kept Neon running 24/7.
+    postgres_min_pool_size: int = 0
     # Server-side ``statement_timeout`` cap, applied to every pooled
     # connection via ``SET statement_timeout`` in the pool's init
     # callback. 30 s matches the previous hardcoded value; override
