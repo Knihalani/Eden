@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server";
 import { forwardToBackend, proxyError } from "@/lib/proxy";
+import { bearerHeader } from "@/lib/server/clerk-bearer";
 
 /**
  * Next.js proxy for a single file referenced by a PR suggestion.
@@ -21,9 +22,10 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
   const cookieHeader = request.headers.get("cookie") || "";
   const filePath = Array.isArray(path) ? path.join("/") : String(path);
   try {
+    const extraHeaders = await bearerHeader();
     return await forwardToBackend(
       `/orgs/${orgId}/agent/pr-suggestions/${id}/files/${filePath}`,
-      { method: "GET", cookieHeader }
+      { method: "GET", cookieHeader, extraHeaders }
     );
   } catch (err) {
     return proxyError(err, "Failed to read suggestion file");

@@ -24,27 +24,39 @@ interface AuthSplitLayoutProps {
  */
 export function AuthSplitLayout({ brandPanel, children }: AuthSplitLayoutProps) {
   return (
-    <div className="min-h-screen grid grid-cols-1 md:grid-cols-[55%_1fr] bg-[var(--bg-secondary)]">
+    // Site-wide fix (July 2026): ``min-h-dvh`` (not ``h-screen``)
+    // so the layout grows past the viewport when the auth form is
+    // tall (multi-step verification, password reset, sso-callback).
+    // Combined with the root layout's ``html min-h-full`` + body
+    // ``min-h-full``, the document now scrolls natively instead of
+    // clipping. Brand panel uses ``md:min-h-dvh`` so it stays full
+    // height on desktop but doesn't force the row taller than the
+    // form content on mobile.
+    <div className="grid min-h-dvh grid-cols-1 bg-[var(--bg-secondary)] md:grid-cols-[55%_1fr]">
       {/* Left: Brand panel — hidden on mobile (compact header above replaces it) */}
-      <div className="hidden md:block relative">{brandPanel}</div>
+      <div className="relative hidden md:block md:min-h-dvh">{brandPanel}</div>
 
       {/* Mobile-only compact header with logo + tagline */}
-      <div className="md:hidden flex items-center justify-between px-6 py-4 border-b border-[var(--border-subtle)] bg-[var(--bg-primary)]">
+      <div className="flex items-center justify-between border-b border-[var(--border-subtle)] bg-[var(--bg-primary)] px-6 py-4 md:hidden">
         <Link href="/" className="flex items-center gap-2.5">
-          <div className="w-9 h-9 bg-[var(--accent)] rounded-lg flex items-center justify-center shadow-md shadow-[var(--accent)]/30">
-            <Layers className="w-4 h-4 text-[var(--bg-base)]" strokeWidth={2.5} />
+          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-[var(--accent)] shadow-md shadow-[var(--accent)]/30">
+            <Layers className="h-4 w-4 text-[var(--bg-base)]" strokeWidth={2.5} />
           </div>
-          <span className="text-base font-bold text-[var(--text-primary)] tracking-tight">
+          <span className="text-base font-bold tracking-tight text-[var(--text-primary)]">
             Eden
           </span>
         </Link>
-        <p className="text-[11px] font-mono text-[var(--text-muted)] tracking-wide" aria-label="Eden product version">
+        <p className="font-mono text-[11px] tracking-wide text-[var(--text-muted)]" aria-label="Eden product version">
           {PRODUCT_VERSION} · observability
         </p>
       </div>
 
-      {/* Right: Form content */}
-      <div className="flex items-center justify-center px-6 py-10 md:p-8 md:py-12 bg-[var(--bg-secondary)]">
+      {/* Right: Form content — grows past viewport on tall forms.
+          ``items-start md:items-center`` so mobile users land at the
+          top of the form (no need to scroll to reach the first
+          input) while desktop centers the form vertically within
+          the viewport. */}
+      <div className="flex items-start justify-center bg-[var(--bg-secondary)] px-6 py-10 md:items-center md:p-8 md:py-12">
         {children}
       </div>
     </div>

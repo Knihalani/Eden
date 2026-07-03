@@ -563,6 +563,14 @@ class AgentBenchmarkRunner:
         h = abs(hash((agent_id, dataset_id)))
         score = 0.50 + (h % 50) / 100.0  # 0.50 .. 0.99
 
+        # Audit 2026-07-03 B-24 — ``synthetic: True`` flag at both
+        # the top level AND inside ``metrics``. The metrics payload
+        # is persisted to ``agent_benchmark_runs.metrics_json`` and
+        # later surfaced on the operator dashboard; consumers use
+        # the in-metrics flag (NOT the response-only one) to decide
+        # whether the row counts toward downstream ROI / regression
+        # calculations. Without the in-metrics flag, real ops
+        # decisions will end up trained on a synthetic fixture.
         metrics = {
             "benchmark": benchmark_name,
             "task_count": BENCHMARK_TASK_COUNT,
@@ -571,6 +579,7 @@ class AgentBenchmarkRunner:
             - int(score * BENCHMARK_TASK_COUNT),
             "score": round(score, 4),
             "ran_at": _now_iso(),
+            "synthetic": True,
         }
         metrics_json = json.dumps(metrics, sort_keys=True)
 
@@ -586,6 +595,7 @@ class AgentBenchmarkRunner:
                 "agent_id": agent_id,
                 "dataset_id": dataset_id,
                 "status": "completed",
+                "synthetic": True,
                 "metrics": metrics,
             },
         )
@@ -665,7 +675,9 @@ class AgentFleetService:
         # v2 once we have the "still being called" call-graph
         # signal.
         if is_reregistration:
-            _fire_fleet_drift_hook(org_id, agent_id)
+            # Audit 2026-07-03 B-23 — must ``await``; pre-fix this
+            # discarded a coroutine on every fleet re-registration.
+            await _fire_fleet_drift_hook(org_id, agent_id)
 
         return _ok_envelope(
             self.name,

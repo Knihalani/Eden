@@ -191,7 +191,7 @@ def _route_fetchrow(
     sessions=None,
 ) -> Any | None:
     # Session aggregate (P-13: single CTE with percentile_cont + FILTER).
-    if "WITH per_session AS" in sql:
+    if "WITH per_user AS" in sql:
         rows = list(sessions or [])
         from datetime import datetime, timezone
         from statistics import median

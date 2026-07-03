@@ -79,11 +79,25 @@ async def _event_stream(
     """Generator: yield SSE messages from the per-tenant channel."""
     redis = await get_redis_client()
     if not redis:
-        # No Redis available — emit a single keep-alive then close
-        # so the client at least knows we're alive.
-        yield _format_sse("ping", "{}")
-        await asyncio.sleep(15)
-        yield _format_sse("ping", "{}")
+        # Audit 2026-07-03 B-21 — Redis-down used to emit two
+        # ``event: ping`` keep-alives then silently close, which
+        # the Braintrust dashboard interpreted as "stream
+        # active, just quiet". The portal then polled forever.
+        # Now emit a single ``event: error`` with
+        # ``code=redis_unavailable`` so the client can fail open
+        # to the REST fallback immediately.
+        yield _format_sse(
+            "error",
+            json.dumps(
+                {
+                    "code": "redis_unavailable",
+                    "message": (
+                        "Realtime channel is offline; falling back "
+                        "to REST polling."
+                    ),
+                }
+            ),
+        )
         return
 
     channel = f"observability:stream:{org_id}"
@@ -102,6 +116,42 @@ async def _event_stream(
                 seq = int(last_event_id)
             except (TypeError, ValueError):
                 seq = 0
+
+        # Audit 2026-07-03 B-22 — bound the last_event_id gap. A
+        # reconnecting client that woke up > ``_MAX_REPLAY_GAP``
+        # behind the server's current seq would otherwise try to
+        # backfill a multi-hour window and DDoS the ZSET replay
+        # path. Refuse with ``event: error`` / ``code=last_event_id_too_old``
+        # so the client falls back to a fresh REST query.
+        if last_event_id is not None:
+            try:
+                raw_seq = await redis.get(
+                    f"observability:replay:seq:{org_id}"
+                )
+                current_seq = int(raw_seq) if raw_seq is not None else seq
+            except (TypeError, ValueError):
+                current_seq = seq
+            try:
+                last_seq = int(last_event_id)
+            except (TypeError, ValueError):
+                last_seq = seq
+            if current_seq - last_seq > _MAX_REPLAY_GAP:
+                yield _format_sse(
+                    "error",
+                    json.dumps(
+                        {
+                            "code": "last_event_id_too_old",
+                            "message": (
+                                f"Stream replay gap exceeds the "
+                                f"{_MAX_REPLAY_GAP}-event bound; "
+                                f"resync from a fresh REST query."
+                            ),
+                            "current_seq": current_seq,
+                            "last_event_id": last_seq,
+                        }
+                    ),
+                )
+                return
 
         # Initial backfill: if the client sent last_event_id, replay
         # events newer than that from a short-lived list.
@@ -163,6 +213,14 @@ def _format_sse(
         out += f"id: {event_id}\n"
     out += "\n"
     return out.encode("utf-8")
+
+
+# Audit 2026-07-03 B-22 — bound on how far a reconnecting client
+# can backfill. Matches the ZSET replay window written by the
+# collector (``observability:replay:{org}`` ZSET, capped at the
+# last 1000 events); anything older than that isn't in the buffer
+# anyway, so refusing up-front is the safe default.
+_MAX_REPLAY_GAP = 1000
 
 
 async def _replay_since(org_id: str, last_event_id: str) -> list[dict]:

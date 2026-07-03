@@ -203,6 +203,17 @@ class WebhookSigner:
 class WebhookDeliveryService:
     """Service for reliable webhook event delivery."""
 
+    # Audit 2026-07-03 B-25 — bound concurrent outbound deliveries
+    # to the same value as httpx's default connection-pool size
+    # (16). Without a semaphore, a webhook burst could open N
+    # parallel connections per worker and pin the upstream at
+    # the receiving end (Stripe / GitHub / Slack all rate-limit
+    # at 16 simultaneous open sockets). Per-class so tests can
+    # tune it without patching ``__init__``; not exposed at the
+    # module level so external code can't accidentally raise it
+    # past the upstream pools.
+    _HTTP_CONCURRENCY = 16
+
     def __init__(self) -> None:
         self._lock = asyncio.Lock()
         # DL-6: in-flight task tracking. Every concurrent delivery
@@ -419,7 +430,12 @@ class WebhookDeliveryService:
         if self._http_client is None or self._http_semaphore is None:
             httpx = _get_httpx()
             self._http_client = httpx.AsyncClient(timeout=10.0)
-            self._http_semaphore = asyncio.Semaphore(16)
+            # Audit 2026-07-03 B-25 — class-level constant so the
+            # cap can be tuned / observed in tests without patching
+            # ``__init__``.
+            self._http_semaphore = asyncio.Semaphore(
+                self._HTTP_CONCURRENCY
+            )
         return self._http_client, self._http_semaphore
 
     # ─── internal scheduling / delivery ─────────────────────────────

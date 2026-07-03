@@ -41,12 +41,16 @@ class _StubWebSocket:
     def __init__(self, token: str | None = None) -> None:
         self.query_params: dict[str, str] = {"token": token} if token else {}
         self.cookies: dict[str, str] = {}
+        self.headers: dict[str, str] = {}
         self.sent: list[Any] = []
         self.closed_with: tuple[int, str] | None = None
         self._accept_called = False
+        self._accept_subprotocol: str | None = None
+        self.client_state = 0  # CONNECTING (matches starlette WebSocketState.CONNECTING)
 
-    async def accept(self) -> None:
+    async def accept(self, subprotocol: str | None = None) -> None:
         self._accept_called = True
+        self._accept_subprotocol = subprotocol
 
     async def send_json(self, payload: Any) -> None:
         self.sent.append(payload)
@@ -153,6 +157,125 @@ class TestS8ClerkJWTAuth:
 
         assert user is not None
         assert user["user_id"] == "user_cookie_1"
+
+
+# ─── Subprotocol auth (audit 2026-07-03) ──────────────────────────
+class TestSubprotocolAuth:
+    """``Sec-WebSocket-Protocol: eden-auth-<base64url-token>`` is the
+    PREFERRED auth path on the upgrade request — query-param tokens
+    leak into Vercel/Northflank edge access logs and are being
+    phased out. Cookie auth remains as a back-compat path.
+
+    The server must pick ``eden-auth-...`` on accept() so the WS
+    upgrade handshake completes.
+    """
+
+    def _encode(self, token: str) -> str:
+        import base64 as _b64
+
+        return (
+            "eden-auth-"
+            + _b64.urlsafe_b64encode(token.encode()).rstrip(b"=").decode()
+        )
+
+    @pytest.mark.asyncio
+    async def test_subprotocol_token_authenticates(self) -> None:
+        from eden.api.routes.websocket import _authenticate_ws
+
+        ws = _StubWebSocket(token=None)
+        # No query-param, no cookie — only the subprotocol header.
+        ws.headers = {
+            "sec-websocket-protocol": (
+                f"{self._encode('clerk_session_jwt_sub')}, eden-ws-v1"
+            ),
+        }
+        clerk_payload = {"sub": "user_sub_1", "email": "s@e.com"}
+
+        with patch(
+            "eden.api.utils.clerk_auth.verify_clerk_token",
+            return_value=clerk_payload,
+        ) as verify_mock:
+            user = await _authenticate_ws(ws)
+
+        assert user is not None
+        assert user["user_id"] == "user_sub_1"
+        # The base64url-decoded value must be the raw token, not the
+        # wrapped form — Clerk verifies the actual JWT.
+        assert verify_mock.call_args.args[0] == "clerk_session_jwt_sub"
+
+    @pytest.mark.asyncio
+    async def test_subprotocol_takes_precedence_over_query_param(self) -> None:
+        """If both are present, the subprotocol wins (it's the secure path)."""
+        from eden.api.routes.websocket import _authenticate_ws
+
+        ws = _StubWebSocket(token="query_param_token")
+        ws.headers = {
+            "sec-websocket-protocol": self._encode("subprotocol_token"),
+        }
+        clerk_payload = {"sub": "user_sub_2", "email": "s@e.com"}
+
+        with patch(
+            "eden.api.utils.clerk_auth.verify_clerk_token",
+            return_value=clerk_payload,
+        ) as verify_mock:
+            user = await _authenticate_ws(ws)
+
+        assert user["user_id"] == "user_sub_2"
+        assert verify_mock.call_args.args[0] == "subprotocol_token"
+
+    @pytest.mark.asyncio
+    async def test_subprotocol_malformed_falls_through_to_query_param(self) -> None:
+        """A garbage b64 suffix must not poison the upgrade; fall back
+        to the legacy ``?token=`` path so a buggy client can still
+        authenticate.
+        """
+        from eden.api.routes.websocket import _authenticate_ws
+
+        ws = _StubWebSocket(token="legacy_query_token")
+        # Trailing junk that doesn't base64-decode to utf-8.
+        ws.headers = {
+            "sec-websocket-protocol": "eden-auth-!!!not-base64!!!",
+        }
+        clerk_payload = {"sub": "user_legacy_q", "email": "l@e.com"}
+
+        with patch(
+            "eden.api.utils.clerk_auth.verify_clerk_token",
+            return_value=clerk_payload,
+        ):
+            user = await _authenticate_ws(ws)
+
+        assert user["user_id"] == "user_legacy_q"
+
+    @pytest.mark.asyncio
+    async def test_accept_echoes_subprotocol(self) -> None:
+        """The WS spec requires the server to echo the chosen subprotocol
+        on accept(). Without it, the browser closes the connection.
+        """
+        from eden.api.routes.websocket import _accept_with_subprotocol
+
+        ws = _StubWebSocket()
+        ws.headers = {
+            "sec-websocket-protocol": (
+                f"{self._encode('token_xyz')}, eden-ws-v1"
+            ),
+        }
+        chosen = await _accept_with_subprotocol(ws)
+        assert ws._accept_called is True
+        assert ws._accept_subprotocol is not None
+        assert ws._accept_subprotocol.startswith("eden-auth-")
+        assert chosen == ws._accept_subprotocol
+
+    @pytest.mark.asyncio
+    async def test_accept_without_subprotocol_works(self) -> None:
+        """Legacy clients without a subprotocol header still connect."""
+        from eden.api.routes.websocket import _accept_with_subprotocol
+
+        ws = _StubWebSocket()
+        ws.headers = {}
+        chosen = await _accept_with_subprotocol(ws)
+        assert ws._accept_called is True
+        assert ws._accept_subprotocol is None
+        assert chosen is None
 
 
 # ─── S-9: HILT approve / reject role gate ─────────────────────────

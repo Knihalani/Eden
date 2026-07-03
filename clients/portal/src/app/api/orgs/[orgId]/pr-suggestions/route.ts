@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server";
 import { forwardToBackend, proxyError } from "@/lib/proxy";
+import { bearerHeader } from "@/lib/server/clerk-bearer";
 
 /**
  * Next.js proxy for the agent PR-suggestion inbox.
@@ -20,9 +21,10 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
   const qs = url.search;
   const cookieHeader = request.headers.get("cookie") || "";
   try {
+    const extraHeaders = await bearerHeader();
     return await forwardToBackend(
       `/orgs/${orgId}/agent/pr-suggestions${qs}`,
-      { method: "GET", cookieHeader }
+      { method: "GET", cookieHeader, extraHeaders }
     );
   } catch (err) {
     return proxyError(err, "Failed to list PR suggestions");
@@ -39,9 +41,10 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     body = {};
   }
   try {
+    const extraHeaders = await bearerHeader();
     return await forwardToBackend(
       `/orgs/${orgId}/agent/pr-suggestions`,
-      { method: "POST", body, cookieHeader }
+      { method: "POST", body, cookieHeader, extraHeaders }
     );
   } catch (err) {
     return proxyError(err, "Failed to create PR suggestion");
