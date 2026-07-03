@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { auth } from "@clerk/nextjs/server";
 
 /**
  * Replay messages for an AI Insights chat session.
@@ -6,6 +7,12 @@ import { NextResponse } from "next/server";
  * Pass-through proxy. The portal rehydrates the chat transcript
  * from this endpoint when the user picks a session from the
  * sidebar.
+ *
+ * Site-wide fix (July 2026): also forward the Clerk session JWT
+ * as ``Authorization: Bearer`` so FastAPI's
+ * ``DefaultDenyAuthMiddleware`` + ``_resolve_token_payload`` accept
+ * the request. Without it, the messages endpoint 401s under the
+ * Clerk cutover (same bug as the sessions list).
  */
 
 // Same server-side URL choice as app/api/ai-insights/sessions/
@@ -29,12 +36,26 @@ export async function GET(request: Request, { params }: RouteParams) {
     );
   }
 
+  let authorization: string | undefined;
+  try {
+    const { getToken } = await auth();
+    const token = await getToken();
+    if (token) authorization = `Bearer ${token}`;
+  } catch {
+    // Clerk fail-open per lib/server/clerk-bearer.ts:39
+  }
   const cookieHeader = request.headers.get("cookie") || "";
 
   try {
     const upstream = await fetch(
       `${FASTAPI_URL}/orgs/${orgId}/ai-insights/sessions/${session_id}/messages`,
-      { method: "GET", headers: { Cookie: cookieHeader } },
+      {
+        method: "GET",
+        headers: {
+          ...(authorization ? { Authorization: authorization } : {}),
+          Cookie: cookieHeader,
+        },
+      },
     );
     if (!upstream.ok) {
       const text = await upstream.text().catch(() => "");
