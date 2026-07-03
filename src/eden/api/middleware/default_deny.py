@@ -117,10 +117,29 @@ class DefaultDenyAuthMiddleware(BaseHTTPMiddleware):
                 request.method,
                 request.url.path,
             )
+            # Build the 401 in the project's standard envelope shape
+            # (``{error, detail, request_id}``) so the portal's
+            # ``proxyError`` can destructure it consistently. (The
+            # previous bare ``{"detail": ...}`` body skipped the
+            # global exception handler because ``BaseHTTPMiddleware``
+            # doesn't propagate raised HTTPExceptions. We can't
+            # raise here — the ASGI base class would surface the
+            # exception as an unhandled 500. Build the response
+            # directly. July 2026 site-wide fix.)
+            import uuid
             from fastapi.responses import JSONResponse
+            request_id = (
+                request.headers.get("x-request-id")
+                or request.headers.get("x-correlation-id")
+                or str(uuid.uuid4())
+            )
             return JSONResponse(
                 status_code=401,
-                content={"detail": "Authentication required"},
+                content={
+                    "error": "unauthorized",
+                    "detail": "Authentication required",
+                    "request_id": request_id,
+                },
             )
 
         return await call_next(request)
