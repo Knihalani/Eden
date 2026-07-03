@@ -3,6 +3,7 @@
 import hashlib
 import logging
 import secrets
+import time
 from collections import deque
 from datetime import UTC, datetime, timedelta
 from uuid import uuid4
@@ -11,6 +12,7 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Query, Response, 
 
 from eden.api.deps import get_current_user, require_org_admin
 from eden.storage.postgres import get_postgres_client
+from eden.storage.redis import get_redis_client
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/orgs/{org_id}/api-keys", tags=["api-keys"])
@@ -24,43 +26,44 @@ VALID_SCOPES = [
 ]
 
 # B-11 (Session 24): per-(org, user) sliding-window rate limit on
-# ``POST /orgs/{org_id}/api-keys``. In-memory deques — a single
-# process is the only enforcement context here; see deploy notes
-# for why not Redis. 5 / hour is comfortable for an interactive
-# portal flow (most users will create 1–2 keys lifetime) and punitive
-# enough to stop a token-farming script.
+# ``POST /orgs/{org_id}/api-keys``. Audit 2026-07-03 — distributed
+# via Redis sorted set when REDIS_URL is configured so multi-worker
+# Northflank deploys share the counter (pre-fix each worker had its
+# own in-process deque, multiplying the effective limit by N workers).
+# Falls back to the in-memory deque when Redis is unavailable so
+# single-node dev still works without infra.
 _API_KEY_CREATE_MAX = 5
 _API_KEY_CREATE_WINDOW = timedelta(hours=1)
-# Hard cap on dict cardinality. Past the cap, idle (org,user)
-# tuples are evicted on a sweep so a token farmer using random
-# (org,user) pairs cannot exhaust worker memory. 50k entries ≈ a
-# few MB at most — keeps memory bounded without a background thread.
+_API_KEY_CREATE_WINDOW_SEC = int(_API_KEY_CREATE_WINDOW.total_seconds())
+# Hard cap on dict cardinality for the in-memory fallback. Past the
+# cap, idle (org,user) tuples are evicted on a sweep so a token
+# farmer using random (org,user) pairs cannot exhaust worker memory.
+# 50k entries ≈ a few MB at most — keeps memory bounded without a
+# background thread.
 _API_KEY_CREATE_DICT_CAP = 50_000
 _api_key_create_log: dict[tuple[str, str], deque[float]] = {}
 
 
-def _check_api_key_create_rate_limit(
+def _check_api_key_create_rate_limit_local(
     org_id: str,
     user_id: str,
 ) -> float | None:
-    """Return ``None`` if the (org, user) is allowed to create another
-    API key this hour; otherwise return the number of seconds to wait
-    before retrying (suitable as a ``Retry-After`` value).
+    """In-memory fallback for ``_check_api_key_create_rate_limit``.
+
+    Same algorithm as the B-11 patch but without Redis. Used when
+    REDIS_URL is unset or the Redis client cannot connect — keeps
+    single-node dev usable without a Redis dependency.
     """
-    now = datetime.now(UTC).timestamp()
-    window_sec = _API_KEY_CREATE_WINDOW.total_seconds()
-    # Evict any bucket whose newest entry is outside the window. Cheap
-    # because the average bucket has 1–5 timestamps, and running on
-    # every call keeps memory bounded without a background sweep task.
+    now = time.time()
+    window_sec = _API_KEY_CREATE_WINDOW_SEC
+    # Evict any bucket whose newest entry is outside the window.
     stale = [
         k for k, b in _api_key_create_log.items()
         if not b or now - b[-1] >= window_sec
     ]
     for k in stale:
         _api_key_create_log.pop(k, None)
-    # Hard cap on dict cardinality. Sweep idle buckets first; if the
-    # cap is still hit, drop the oldest (org,user) by insertion order
-    # so the most recent legitimate caller is preserved.
+    # Hard cap on dict cardinality.
     if len(_api_key_create_log) >= _API_KEY_CREATE_DICT_CAP:
         for k in list(_api_key_create_log.keys())[
             : len(_api_key_create_log) - _API_KEY_CREATE_DICT_CAP + 1
@@ -69,15 +72,78 @@ def _check_api_key_create_rate_limit(
     bucket = _api_key_create_log.setdefault(
         (org_id, user_id), deque(maxlen=_API_KEY_CREATE_MAX),
     )
-    # Drop entries outside the window.
     while bucket and now - bucket[0] >= window_sec:
         bucket.popleft()
     if len(bucket) >= _API_KEY_CREATE_MAX:
-        # Wait until the oldest entry expires.
         wait = window_sec - (now - bucket[0])
-        return max(1.0, min(wait, window_sec))
+        return max(1.0, min(wait, float(window_sec)))
     bucket.append(now)
     return None
+
+
+async def _check_api_key_create_rate_limit(
+    org_id: str,
+    user_id: str,
+) -> float | None:
+    """Return ``None`` if the (org, user) is allowed to create another
+    API key this hour; otherwise return the number of seconds to wait
+    before retrying (suitable as a ``Retry-After`` value).
+
+    Audit 2026-07-03 — Redis-backed sliding window (ZSET) when
+    REDIS_URL is configured so multi-worker deploys share the
+    counter. In-memory deque fallback otherwise.
+    """
+    redis = None
+    try:
+        redis = await get_redis_client()
+    except Exception:
+        redis = None
+
+    if redis is not None:
+        try:
+            now = time.time()
+            window_start = now - _API_KEY_CREATE_WINDOW_SEC
+            redis_key = f"apikey-create:{org_id}:{user_id}"
+            # Atomic prune + count + add via pipeline. Members are
+            # unique tokens so concurrent callers don't collide on
+            # the same ZSET score.
+            member = f"{now}:{secrets.token_hex(4)}"
+            pipe = redis.pipeline()
+            pipe.zremrangebyscore(redis_key, 0, window_start)
+            pipe.zcard(redis_key)
+            pipe.zadd(redis_key, {member: now})
+            pipe.expire(redis_key, _API_KEY_CREATE_WINDOW_SEC + 1)
+            results = await pipe.execute()
+            count_after_add = int(results[1]) + 1
+            if count_after_add > _API_KEY_CREATE_MAX:
+                # Roll back the just-added entry so the next attempt
+                # doesn't see a stale +1 we shouldn't have recorded.
+                try:
+                    await redis.zrem(redis_key, member)
+                except Exception:
+                    pass
+                # Compute wait from the oldest surviving entry.
+                oldest = await redis.zrange(
+                    redis_key, 0, 0, withscores=True
+                )
+                if oldest:
+                    wait = max(
+                        1.0,
+                        min(
+                            float(_API_KEY_CREATE_WINDOW_SEC),
+                            (oldest[0][1] + _API_KEY_CREATE_WINDOW_SEC) - now,
+                        ),
+                    )
+                    return wait
+                return float(_API_KEY_CREATE_WINDOW_SEC)
+            return None
+        except Exception as exc:
+            logger.warning(
+                "apikey-create rate limit Redis path failed; "
+                "falling back to in-memory: %s", exc,
+            )
+
+    return _check_api_key_create_rate_limit_local(org_id, user_id)
 
 
 def generate_api_key() -> str:
@@ -111,9 +177,10 @@ async def create_api_key(
     await require_org_admin(org_id)
 
     # B-11 (Session 24): per-(org, user) sliding window throttle.
+    # Audit 2026-07-03 — now async (Redis-backed distributed counter).
     user_id = user.get("user_id")
     if user_id:
-        wait = _check_api_key_create_rate_limit(org_id, user_id)
+        wait = await _check_api_key_create_rate_limit(org_id, user_id)
         if wait is not None:
             raise HTTPException(
                 status_code=status.HTTP_429_TOO_MANY_REQUESTS,
