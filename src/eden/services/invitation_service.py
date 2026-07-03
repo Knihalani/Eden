@@ -2,7 +2,7 @@
 
 import logging
 import secrets
-from datetime import datetime, timedelta, UTC
+from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
 from eden.config import get_settings
@@ -15,6 +15,20 @@ settings = get_settings()
 
 # Default invitation expiry: 7 days
 DEFAULT_EXPIRY_DAYS = 7
+
+
+def _as_utc(dt: datetime) -> datetime:
+    """Coerce a datetime to UTC-aware.
+
+    asyncpg returns ``TIMESTAMP WITH TIME ZONE`` columns as naive
+    ``datetime`` objects when the server's ``TimeZone`` setting is
+    ``UTC`` (our default) — even though the column carries timezone
+    info on the wire. Comparing those naive values against
+    ``datetime.now(UTC)`` (which is tz-aware) raises
+    ``TypeError: can't compare offset-naive and offset-aware
+    datetimes`` and 500s the request. Normalise here.
+    """
+    return dt if dt.tzinfo else dt.replace(tzinfo=UTC)
 
 
 def generate_invite_token() -> str:
@@ -60,7 +74,7 @@ async def create_invitation(
         # The nested `if` keeps the error message co-located with the
         # condition; collapsing would push a multi-line raise into a
         # ternary.
-        if existing["expires_at"] > datetime.now(UTC):  # noqa: SIM102
+        if _as_utc(existing["expires_at"]) > datetime.now(UTC):  # noqa: SIM102
             raise ValueError(
                 "An invitation is already pending for this email in this organization"
             )
@@ -146,7 +160,7 @@ async def verify_invite_token(token: str) -> dict | None:
         return None
 
     # Check expiry
-    if invitation["expires_at"] < datetime.now(UTC):
+    if _as_utc(invitation["expires_at"]) < datetime.now(UTC):
         # Mark as expired
         await client.execute(
             "UPDATE org_invitations SET status = 'expired' WHERE id = $1",
@@ -207,7 +221,7 @@ async def accept_invitation(invitation_id: str, user_id: str) -> dict:
     if invitation["status"] != "pending":
         raise ValueError(f"Invitation is {invitation['status']}, cannot accept")
 
-    if invitation["expires_at"] < datetime.now(UTC):
+    if _as_utc(invitation["expires_at"]) < datetime.now(UTC):
         raise ValueError("Invitation has expired")
 
     # Add user to org. ``ON CONFLICT DO NOTHING`` is defensive against
@@ -308,7 +322,7 @@ async def decline_invitation(invitation_id: str, user_id: str) -> None:
     if invitation["status"] != "pending":
         raise ValueError(f"Invitation is {invitation['status']}, cannot decline")
 
-    if invitation["expires_at"] < datetime.now(UTC):
+    if _as_utc(invitation["expires_at"]) < datetime.now(UTC):
         raise ValueError("Invitation has expired")
 
     # Update invitation status

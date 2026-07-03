@@ -51,9 +51,39 @@ def pick_canary_version(
     Each assignment has at least ``version`` and ``traffic_pct``.
     Returns the chosen assignment dict, or ``None`` if the global
     active version should be used.
+
+    B-13 (Session 24): clamps ``traffic_pct`` to [0, 100] at function
+    entry. Stale DB rows with ``traffic_pct = 150`` otherwise
+    double-bucket the roll (assignments cumulatively exceed 1.0 →
+    every tenant lands on the inflated row). Bad rows are still
+    returned (the caller's UI shows the truth) but the roll below
+    treats them as 100.
     """
     if not assignments:
         return None
+    # B-13 (Session 24): validate + clamp every pct at entry. We
+    # mutate the dict in place so the caller's view (e.g. an admin
+    # dashboard listing) reflects the corrected value too.
+    clamped = False
+    for row in assignments:
+        pct = row.get("traffic_pct")
+        if pct is None:
+            row["traffic_pct"] = 0.0
+            clamped = True
+            continue
+        pct_f = float(pct)
+        if pct_f < 0.0 or pct_f > 100.0:
+            logger.warning(
+                "pick_canary_version: traffic_pct=%.1f out of "
+                "[0, 100] for (tenant=%s, agent=%s, version=%s); "
+                "clamping to 100",
+                pct_f, tenant_id, agent, row.get("version"),
+            )
+            row["traffic_pct"] = 100.0
+            clamped = True
+        else:
+            row["traffic_pct"] = pct_f
+
     from datetime import datetime
     minute = int(datetime.now(UTC).timestamp()) // 60
     roll = _stable_roll(tenant_id, agent, minute)

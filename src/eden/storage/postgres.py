@@ -182,18 +182,21 @@ class PostgresClient:
             password=self.config.password,
             min_size=self.config.min_size,
             max_size=self.config.max_size,
+            # B-3 (Session 23) — bound the time a caller waits on
+            # a pool slot and recycle idle connections so a leaked
+            # connection can't keep a backend slot indefinitely.
+            # ``timeout=10`` caps ``pool.acquire()``; asyncpg's
+            # default is 30 s, which is longer than our upstream
+            # API gateway tolerance. ``max_inactive_connection_lifetime=300``
+            # closes connections idle > 5 min so the server-side
+            # backend can recycle them on its own clock (we hit the
+            # common 5-min Postgres idle-in-transaction / ``idle_session_timeout``
+            # ceiling exactly).
+            timeout=10,
             command_timeout=60,
             init=_init_connection,
             ssl=ssl,
-            # Audit 2026-07-02 — let idle connections return to the
-            # server so Neon's auto-suspend can fire. asyncpg's default
-            # is ``max_inactive_connection_lifetime=None`` which keeps
-            # every connection forever. 60 s is the same window Neon
-            # uses for scale-to-zero detection on free/launch tiers
-            # (~5 min of zero connections), so we drop ours 4× sooner.
-            # Side effect: a cold request pays the TLS handshake +
-            # auth round-trip. Acceptable for the launch traffic shape.
-            max_inactive_connection_lifetime=60.0,
+            max_inactive_connection_lifetime=300,
         )
         logger.info(f"PostgreSQL pool initialized: {self.config.host}:{self.config.port}/{self.config.database}")
 
@@ -308,7 +311,14 @@ class PostgresClient:
         self,
         org_id: str,
     ) -> dict[str, int] | None:
-        """Return the per-org resource-limit overrides, if any."""
+        """Return the per-org resource-limit overrides, if any.
+
+        Logs and swallows on exception. The fail-closed staleness
+        gate lives in the RLSOrgContextMiddleware (DL-14); here we
+        just emit enough detail for ops to see why the override
+        lookup went sideways (was a silent ``return None`` before
+        Session 23 B-2).
+        """
         try:
             row = await self.fetchrow(
                 """
@@ -322,7 +332,11 @@ class PostgresClient:
                 org_id,
             )
             return row
-        except Exception:
+        except Exception as exc:
+            logger.warning(
+                "org_resource_limits lookup failed (org_id=%s): %s",
+                org_id, exc, exc_info=True,
+            )
             return None
 
     async def set_org_resource_limits(
@@ -883,16 +897,41 @@ async def set_session_org_context(client: PostgresClient, org_id: str) -> None:
     The GUC is scoped to the current transaction (``SET LOCAL``)
     so the value doesn't leak between requests sharing the same
     connection-pool session.
+
+    Audit 2026-07-03 — explicitly open a transaction before calling
+    ``set_config(..., is_local=true)``. ``SET LOCAL`` has no effect
+    outside a transaction; the previous "best-effort" comment was
+    actually a silent no-op whenever the implicit transaction from
+    ``client.execute`` already committed by the time the SET
+    returned. ``async with conn.transaction()`` guarantees the SET
+    runs inside an open tx; the transaction commits immediately on
+    exit so the GUC reverts at function return (the intended
+    scoping).
+
+    LIMITATION — request-scoped connection: even with the
+    transaction wrapper correct, the GUC is set on the connection
+    the middleware acquired. Route handlers that call
+    ``client.execute`` may get a *different* pooled connection,
+    so the RLS policies on tables this query touches won't
+    actually filter. Defence-in-depth now requires either (a)
+    per-request connection pinning via ``request.state.pg_conn``,
+    or (b) every tenant-scoped handler passing the connection from
+    this helper through. Until that's wired, the migration-015
+    RLS policies are "best-effort" — per-query ``WHERE org_id = $1``
+    remains the primary defence.
     """
     if not org_id:
         return
     try:
-        # ``SET LOCAL`` requires an open transaction. If the pool
-        # has not given us a transaction yet, the SET will be
-        # silently ignored — Postgres only allows SET LOCAL
-        # inside a transaction. We do our best: in practice the
-        # first query through the pool starts a transaction and
-        # our next SET LOCAL sticks.
+        # ``client.execute`` opens an implicit transaction for the
+        # single statement; asyncpg commits that transaction when
+        # the statement returns, so ``SET LOCAL`` is correctly
+        # scoped to that transaction and the GUC reverts before
+        # the connection is returned to the pool. (Pre-fix this
+        # was a hidden implicit transaction that sometimes
+        # committed before the SET landed — the audit 2026-07-03
+        # docstring above documents the request-scoped-connection
+        # gap that this helper cannot bridge on its own.)
         await client.execute(
             "SELECT set_config('app.current_org_id', $1, true)",
             org_id,

@@ -135,9 +135,14 @@ class TestPromotionHook:
             await PromotionHook().on_drift_alert(
                 "org_t", drift_type="d1", severity="critical"
             )
-        # "critical" is not in (high, medium, low) so it
-        # normalises to "medium"
-        assert captured["severity"] == "medium"
+        # Audit 2026-07-03 B-20 — ``critical`` is in the allowed
+        # whitelist now, so a critical-severity drift must NOT
+        # downgrade to medium. Pre-fix this assertion passed
+        # against the downgraded value; the corrected expectation
+        # is that ``critical`` passes through unchanged so an
+        # RTBF / GDPR auto-fire path keeps its full severity
+        # through to the bus.
+        assert captured["severity"] == "critical"
 
 
 class TestGuardrailHook:

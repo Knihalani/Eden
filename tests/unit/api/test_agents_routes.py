@@ -257,7 +257,7 @@ def app():
     test_app.include_router(agents.router)
     test_app.include_router(observability.router)
 
-    from eden.api.deps import get_current_user
+    from eden.api.deps import get_current_user, require_org_member
 
     def _override_user():
         return {
@@ -268,7 +268,20 @@ def app():
             "auth_kind": "session",
         }
 
+    async def _override_org_member(
+        org_id: str,
+        user: dict | None = None,
+    ) -> dict:
+        # Audit 2026-07-03 — the observability router requires
+        # ``require_org_member`` at the router level so a forgotten
+        # ``org_id`` filter on a new endpoint can't cross-leak
+        # tenant data. The test fixture bypasses the membership
+        # lookup (no ``org_members`` table in the stub) and trusts
+        # the caller is a member of ``org-test``.
+        return {"org_id": org_id, "role": "admin"}
+
     test_app.dependency_overrides[get_current_user] = _override_user
+    test_app.dependency_overrides[require_org_member] = _override_org_member
 
     stub = _StubPostgresClient()
     # Seed events so /summary has something to aggregate

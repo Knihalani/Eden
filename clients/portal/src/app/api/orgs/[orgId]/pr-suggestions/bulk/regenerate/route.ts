@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server";
 import { forwardToBackend, proxyError } from "@/lib/proxy";
+import { bearerHeader } from "@/lib/server/clerk-bearer";
 
 /**
  * Next.js proxy for the bulk-regenerate endpoint.
@@ -25,9 +26,10 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     body = {};
   }
   try {
+    const extraHeaders = await bearerHeader();
     return await forwardToBackend(
       `/orgs/${orgId}/agent/pr-suggestions/bulk/regenerate`,
-      { method: "POST", body, cookieHeader }
+      { method: "POST", body, cookieHeader, extraHeaders }
     );
   } catch (err) {
     return proxyError(err, "Failed to bulk-regenerate suggestions");

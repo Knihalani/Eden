@@ -21,14 +21,17 @@
  *   can sit alongside this one without colliding with the read API.
  */
 import { forwardToBackend, proxyError } from "@/lib/proxy";
+import { bearerHeader } from "@/lib/server/clerk-bearer";
 
 export async function POST(request: Request) {
   try {
+    const extraHeaders = await bearerHeader();
     const response = await forwardToBackend("/auth/me", {
       method: "GET",
       // Pass cookies through so the proxy can fall back to the
       // legacy Eden cookie path if the Clerk JWT is missing.
       cookieHeader: request.headers.get("cookie") ?? undefined,
+      extraHeaders,
     });
     // Never cache a refresh — see comment on the /api/auth/me route.
     response.headers.set("Cache-Control", "no-store, no-cache, must-revalidate");

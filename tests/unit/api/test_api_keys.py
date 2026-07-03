@@ -135,6 +135,29 @@ class TestS5ActiveRevokedExpiredFilter:
         resp = client.get("/probe", headers=_headers())
         assert resp.status_code == 200, resp.text
 
+    def test_naive_past_expires_at_rejected(
+        self, client: TestClient, mock_postgres_client,
+    ) -> None:
+        """Audit 2026-07-03 — asyncpg returns naive ``datetime`` from
+        ``TIMESTAMP WITH TIME ZONE`` columns when the server's
+        ``TimeZone`` setting is ``UTC`` (the project default). The
+        pre-fix ``expires_at < datetime.now(UTC)`` comparison raised
+        ``TypeError`` and 500'd the request. The fix pins an
+        explicit tz-aware coercion so the comparison is naive-safe.
+        """
+        # Naive datetime — exactly what asyncpg returns under the
+        # project's default ``TimeZone = UTC`` server setting.
+        naive_expired = datetime.utcnow() - timedelta(minutes=1)
+        assert naive_expired.tzinfo is None
+        _stub_key_query(
+            mock_postgres_client,
+            _key_row(expires_at=naive_expired),
+        )
+        resp = client.get("/probe", headers=_headers())
+        # Must NOT 500 — the comparison is now naive-safe.
+        assert resp.status_code in (200, 401), resp.text
+        assert "expired" in resp.text.lower()
+
     def test_no_row_rejected(
         self, client: TestClient, mock_postgres_client,
     ) -> None:

@@ -18,7 +18,7 @@ from typing import Any
 from fastapi import APIRouter, Body, Depends, HTTPException, Path, Query
 from pydantic import BaseModel, Field
 
-from eden.api.deps import get_current_user
+from eden.api.deps import get_current_user, require_org_member
 from eden.observability.telemetry_collector import (  # noqa: F401
     TelemetryCollector,
     TelemetryEvent,
@@ -26,7 +26,20 @@ from eden.observability.telemetry_collector import (  # noqa: F401
 )
 
 logger = logging.getLogger(__name__)
-router = APIRouter(prefix="/orgs/{org_id}/observability", tags=["observability"])
+# Audit 2026-07-03 — every observability route MUST validate that the
+# caller is a member of the ``org_id`` in the path. Previously the
+# router only carried ``Depends(get_current_user)`` which validates a
+# JWT but never confirms the caller belongs to the requested org;
+# defence-in-depth was leaning entirely on the migration-015 RLS
+# policies + per-query ``org_id`` filters. Forgetting a single
+# ``WHERE org_id = $1`` on a new endpoint would have cross-leaked
+# tenant data silently. The dep at the router level makes "you're not
+# a member" a hard 403, so a forgotten filter can't leak.
+router = APIRouter(
+    prefix="/orgs/{org_id}/observability",
+    tags=["observability"],
+    dependencies=[Depends(require_org_member)],
+)
 
 
 # ── Pydantic Schemas ─────────────────────────────────────────────────────────
