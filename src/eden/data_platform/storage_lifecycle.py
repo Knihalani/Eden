@@ -248,7 +248,6 @@ class StorageLifecycleManager:
             return True
 
         try:
-            import boto3
             s3 = _make_s3_client()
             loop = asyncio.get_event_loop()
             await loop.run_in_executor(
@@ -346,7 +345,6 @@ class StorageLifecycleManager:
             return False
 
         try:
-            import boto3
             s3 = _make_s3_client()
             prefix = f"warm/{table}"
             ts = datetime.now(UTC)
@@ -399,7 +397,6 @@ class StorageLifecycleManager:
         cutoff = datetime.now(UTC) - timedelta(days=before_days)
 
         try:
-            import boto3
             s3 = _make_s3_client()
             loop = asyncio.get_event_loop()
 
@@ -457,7 +454,6 @@ class StorageLifecycleManager:
         total_deleted = 0
 
         try:
-            import boto3
             s3 = _make_s3_client()
             loop = asyncio.get_event_loop()
 
@@ -517,7 +513,6 @@ class StorageLifecycleManager:
         bucket = getattr(settings, "bronze_s3_bucket", "")
         if bucket:
             try:
-                import boto3
                 s3 = _make_s3_client()
                 loop = asyncio.get_event_loop()
 

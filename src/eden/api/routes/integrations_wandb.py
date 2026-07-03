@@ -17,9 +17,10 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
+from eden.api.deps import get_current_user
 from eden.integrations import INTEGRATION_API_VERSION
 from eden.integrations.wandb import WeaveClient, fan_out_bronze_event
 
@@ -43,7 +44,9 @@ def _client() -> WeaveClient:
 
 
 @router.get("/status", response_model=StatusResponse)
-async def wandb_status() -> StatusResponse:
+async def wandb_status(
+    user: dict = Depends(get_current_user),
+) -> StatusResponse:
     client = _client()
     return StatusResponse(
         enabled=client.enabled,
@@ -57,7 +60,10 @@ class TestLogRequest(BaseModel):
 
 
 @router.post("/test-log")
-async def wandb_test_log(req: TestLogRequest) -> dict[str, Any]:
+async def wandb_test_log(
+    req: TestLogRequest,
+    user: dict = Depends(get_current_user),
+) -> dict[str, Any]:
     """Return the Weave payload that would be published for ``event``."""
     payload = fan_out_bronze_event(req.event, _client())
     if payload is None:

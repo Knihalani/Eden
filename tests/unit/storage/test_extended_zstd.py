@@ -240,7 +240,10 @@ class TestTelemetryCollectorWiring:
         ).read_text()
 
     def test_write_path_compresses_all_six(self, write_source):
-        # Find each *_zstd = compress_jsonb(...) call.
+        # Each *_zstd local must be assigned by either a direct
+        # ``= compress_jsonb(event.<base>)`` call OR via the
+        # async gather that pipes ``_compress(event.<base>)``
+        # into the unpacked tuple.
         for field in (
             "reasoning_zstd",
             "tool_calls_full_zstd",
@@ -249,9 +252,23 @@ class TestTelemetryCollectorWiring:
             "metrics_zstd",
             "attributes_zstd",
         ):
-            assert f"{field} = (\n                compress_jsonb(event.{field[:-5]})" in write_source or \
-                f"{field} = compress_jsonb(event.{field[:-5]})" in write_source, (
-                f"_route_postgres must compress {field}"
+            base = field[:-5]
+            direct = f"{field} = compress_jsonb(event.{base})"
+            direct_paren = (
+                f"{field} = (\n                compress_jsonb(event.{base})"
+            )
+            gather_unpack = f"{field},"
+            gather_call = f"_compress(event.{base})"
+            assert (
+                direct in write_source
+                or direct_paren in write_source
+                or (
+                    gather_unpack in write_source
+                    and gather_call in write_source
+                )
+            ), (
+                f"_route_postgres must compress {field} "
+                f"(direct line, parenthesised block, or gather unpack)"
             )
 
     def test_write_path_inserts_all_six(self, write_source):

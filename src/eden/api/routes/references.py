@@ -13,7 +13,6 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Upload
 from eden.api.deps import (
     get_current_user,
     require_org_member,
-    require_org_permission,
     require_org_permission_dep,
 )
 from eden.api.routes.billing import check_limit

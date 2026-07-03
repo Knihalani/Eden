@@ -43,18 +43,34 @@ _BUCKETS_MS = (5, 10, 25, 50, 100, 200, 500, 1000, 2500, 5000, 10000)
 
 
 class LatencyHistogram:
-    """In-memory per-(method, route) latency histogram."""
+    """In-memory per-(method, route) latency histogram.
+
+    Audit 2026-07-02 P-12: per-(method, route) threading.Lock
+    instead of a single global lock. Different routes don't
+    contend; high-volume routes (e.g. ``/observability/sse``)
+    don't block low-volume ones.
+    """
 
     def __init__(self) -> None:
-        self._lock = Lock()
-        # { (method, route_template) : { bucket_upper_ms : count, "+Inf": count, "_sum": float, "_count": int } }
+        # { (method, route_template) : threading.Lock }  — one per bucket
+        self._locks: dict[tuple[str, str], Lock] = {}
+        # { (method, route_template) : { bucket_upper_ms : count, ... } }
         self._data: dict[tuple[str, str], dict[str, float]] = defaultdict(
             lambda: {f"{b}": 0.0 for b in _BUCKETS_MS} | {"+Inf": 0.0, "_sum": 0.0, "_count": 0.0}
         )
 
+    def _lock_for(self, key: tuple[str, str]) -> Lock:
+        # Ponytail: lock-per-bucket; new buckets get a fresh lock lazily.
+        lk = self._locks.get(key)
+        if lk is None:
+            lk = Lock()
+            self._locks[key] = lk
+        return lk
+
     def observe(self, method: str, route: str, status: int, latency_ms: float) -> None:
-        with self._lock:
-            row = self._data[(method, route)]
+        key = (method, route)
+        with self._lock_for(key):
+            row = self._data[key]
             row["_sum"] += latency_ms
             row["_count"] += 1
             row["+Inf"] += 1
@@ -64,7 +80,13 @@ class LatencyHistogram:
 
     def snapshot(self) -> dict:
         """Return a JSON-serializable snapshot of the histogram."""
-        with self._lock:
+        # Take all per-bucket locks in a stable order to avoid
+        # snapshot-vs-observe inconsistency. Sort by key.
+        keys = sorted(self._data.keys())
+        locks = [self._lock_for(k) for k in keys]
+        for lk in locks:
+            lk.acquire()
+        try:
             return {
                 "buckets_ms": list(_BUCKETS_MS),
                 "rows": [
@@ -75,9 +97,14 @@ class LatencyHistogram:
                         "sum_ms": row["_sum"],
                         "count": row["_count"],
                     }
-                    for (m, r), row in sorted(self._data.items())
+                    for (m, r), row in (
+                        (k, self._data[k]) for k in keys
+                    )
                 ],
             }
+        finally:
+            for lk in reversed(locks):
+                lk.release()
 
 
 # Process-wide singleton. Tests can monkey-patch ``get_metrics_snapshot``

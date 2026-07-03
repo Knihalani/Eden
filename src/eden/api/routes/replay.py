@@ -21,7 +21,7 @@ import logging
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 from eden.api.deps import get_current_user
 from eden.realtime.alert_stream import get_alert_processor

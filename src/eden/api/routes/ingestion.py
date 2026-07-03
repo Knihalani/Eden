@@ -311,8 +311,17 @@ async def ingest_chunks(
 
     from eden.observability.telemetry_collector import get_telemetry_collector
     collector = await get_telemetry_collector()
-    result = await collector.record_stream_chunks(
-        org_id, payload.chunks, settings=settings
-    )
+    try:
+        result = await collector.record_stream_chunks(
+            org_id, payload.chunks, settings=settings
+        )
+    except Exception as exc:  # ponytail: IngestionUnavailable + future backend-down signals
+        # DL-3: surface Postgres-unavailable as 503 + Retry-After so
+        # the SDK buffers and retries.
+        raise HTTPException(
+            status_code=503,
+            detail=str(exc) or "ingestion_unavailable",
+            headers={"Retry-After": "5"},
+        )
     return ChunksIngestResponse(**result)
 

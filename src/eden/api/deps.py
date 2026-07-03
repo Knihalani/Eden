@@ -1,6 +1,7 @@
 """Shared FastAPI dependencies."""
 
 import hashlib
+import logging
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Annotated
@@ -20,6 +21,7 @@ from eden.api.utils.clerk_auth import (
 from eden.config import get_settings
 from eden.storage.postgres import get_postgres_client
 
+logger = logging.getLogger(__name__)
 security = HTTPBearer(auto_error=False)
 
 
@@ -275,6 +277,16 @@ async def get_current_user(
     """Validate JWT (Clerk Bearer or Eden cookie) and return user.
 
     Raises HTTPException 401 if not authenticated.
+
+    Anti-fixation: when the JWT carries a ``token_version`` claim
+    (Eden-issued tokens do; Clerk-issued tokens do not), we look up
+    the user's current version in the DB and reject the token if
+    they diverge. This means:
+      * a successful /auth/login (which bumps ``token_version``)
+        invalidates any pre-existing JWTs for the account;
+      * a planted session ID cannot survive the victim's login.
+    The Clerk path skips this check — Clerk manages its own session
+    revocation semantics.
     """
     user_id = payload.get("sub") or extract_user_id(payload)
     email = payload.get("email")
@@ -284,6 +296,62 @@ async def get_current_user(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid token payload",
         )
+
+    # If the token was minted by Eden (has a token_version claim),
+    # verify it against the DB. This is the session-fixation defence.
+    token_version = payload.get("token_version")
+    if token_version is not None:
+        from eden.storage.postgres import get_postgres_client
+        client = await get_postgres_client()
+        row = await client.fetchrow(
+            "SELECT token_version, last_seen_at FROM users WHERE id = $1",
+            user_id,
+        )
+        # User vanished (or never existed) — treat as unauthenticated.
+        if row is None:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid token payload",
+            )
+        if (row.get("token_version") or 0) != token_version:
+            # Token was minted before a version bump (login, password
+            # change, reset, account deletion). Reject.
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Session expired. Please sign in again.",
+            )
+
+        # Idle timeout enforcement: if last_seen_at is set and the
+        # token's iat is older than the idle window, the session
+        # has been inactive too long — reject and force a re-login.
+        # 30 minutes is the standard. Bumping last_seen_at to NOW()
+        # below slides the window forward on each successful auth
+        # call so an active user never sees this 401.
+        from datetime import datetime, timedelta, timezone
+        idle_window = timedelta(minutes=30)
+        last_seen = row.get("last_seen_at")
+        iat = payload.get("iat")
+        if last_seen is not None and iat is not None:
+            # Convert iat to a datetime. PyJWT returns it as int
+            # (epoch seconds).
+            iat_dt = datetime.fromtimestamp(int(iat), tz=timezone.utc)
+            # If the token was issued BEFORE the last idle window
+            # relative to last_seen, treat the session as expired.
+            if last_seen - iat_dt > idle_window:
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Session expired due to inactivity. Please sign in again.",
+                )
+
+        # Slide the window: best-effort update. A failure here
+        # must not break the auth flow.
+        try:
+            await client.execute(
+                "UPDATE users SET last_seen_at = NOW() WHERE id = $1",
+                user_id,
+            )
+        except Exception:
+            pass  # noqa: BLE001 — best-effort, never block auth
 
     return {"user_id": user_id, "email": email}
 
@@ -795,11 +863,17 @@ async def get_current_org_api_key(
             detail="API key expired",
         )
 
-    # Update last_used_at
-    await client.execute(
-        "UPDATE org_api_keys SET last_used_at = NOW() WHERE id = $1",
-        row["key_id"],
-    )
+    # Update last_used_at. Non-fatal: the auth above has already
+    # succeeded, so a DB blip on the audit write must not 500 the
+    # whole request. The UPDATE will be retried on the next call
+    # that hits this same key. (S24 hardening per memory.)
+    try:
+        await client.execute(
+            "UPDATE org_api_keys SET last_used_at = NOW() WHERE id = $1",
+            row["key_id"],
+        )
+    except Exception as exc:
+        logger.debug("last_used_at UPDATE failed (non-fatal): %s", exc)
 
     return {
         "org_id": str(row["org_id"]),

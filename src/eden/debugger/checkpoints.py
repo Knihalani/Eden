@@ -151,8 +151,22 @@ class CheckpointStore:
     def __init__(self, pg: Any) -> None:
         self._pg = pg
 
-    async def save(self, checkpoint: Checkpoint) -> None:
-        """Persist a single checkpoint."""
+    async def save(
+        self,
+        checkpoint: Checkpoint,
+        org_id: str | None = None,
+    ) -> None:
+        """Persist a single checkpoint.
+
+        Audit 2026-07-02 S-11 — ``tenant_id`` derives from ``org_id``
+        (or ``"default"`` when missing). The old hardcoded
+        ``"org-stub"`` string violated tenant isolation: every
+        checkpoint was tagged with the same tenant id, so cross-tenant
+        reads couldn't distinguish them.
+        """
+        # Audit 2026-07-02 S-11 — no more "org-stub". tenant_id is
+        # always either the real org_id or the explicit "default".
+        tenant_id = org_id or "default"
         await self._pg.execute(
             """
             INSERT INTO telemetry_events (
@@ -163,7 +177,7 @@ class CheckpointStore:
             )
             """,
             str(uuid.uuid4()),
-            "org-stub",
+            tenant_id,
             "default",
             checkpoint.trace_id,
             "production",

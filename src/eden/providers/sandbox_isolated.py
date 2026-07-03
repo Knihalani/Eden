@@ -61,7 +61,6 @@ from collections.abc import Callable
 
 from .sandbox import (
     LocalSandboxProvider,
-    SandboxProvider,
     SandboxResult,
     SandboxSpec,
     _decode,

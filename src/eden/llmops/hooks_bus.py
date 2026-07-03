@@ -22,7 +22,6 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 import time
 import uuid
 from dataclasses import dataclass, field
@@ -370,7 +369,12 @@ async def _persist_hook_event(hook_id: str, event: HookEvent) -> None:
 
 
 async def _increment_repetition(hook_id: str) -> None:
-    """Bump repetition_count on a prior event (best-effort)."""
+    """Bump repetition_count on a prior event (best-effort).
+
+    B-15: actually UPDATEs ``hook_events`` (primary) and falls back to
+    ``closed_loop_actions`` (legacy schema) — never log-only. Errors
+    are swallowed so the calling hook emission is not blocked.
+    """
     try:
         from eden.storage.postgres import get_postgres_client
 
@@ -380,12 +384,28 @@ async def _increment_repetition(hook_id: str) -> None:
     if client is None:
         return
     try:
-        # closed_loop_actions doesn't have a repetition_count column today
-        # (would land with migration 051_hook_events.sql). For now log the
-        # dedup hit so operators see the cascade.
-        logger.info("hook_bus: dedup hit on %s", hook_id)
+        await client.execute(
+            "UPDATE hook_events "
+            "SET repetition_count = COALESCE(repetition_count, 0) + 1, "
+            "    last_repeated_at = NOW() "
+            "WHERE id = $1",
+            hook_id,
+        )
     except Exception:
-        pass
+        # Fall back to legacy closed_loop_actions table for older rows.
+        try:
+            await client.execute(
+                "UPDATE closed_loop_actions "
+                "SET repetition_count = COALESCE(repetition_count, 0) + 1 "
+                "WHERE id = $1",
+                hook_id,
+            )
+        except Exception as exc:
+            logger.debug(
+                "hook_bus: _increment_repetition fallback failed for %s: %s",
+                hook_id,
+                exc,
+            )
 
 
 # ─── Singleton accessor ──────────────────────────────────────────

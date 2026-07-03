@@ -195,11 +195,17 @@ async def validate_org_api_key(org_id: str, key: str) -> dict | None:
     if not row:
         return None
 
-    # Update last_used_at
-    await client.execute(
-        "UPDATE org_api_keys SET last_used_at = NOW() WHERE id = $1",
-        row["key_id"],
-    )
+    # Update last_used_at. Non-fatal: the auth above has already
+    # succeeded, so a DB blip on the audit write must not 500 the
+    # whole request. The UPDATE will be retried on the next call
+    # that hits this same key. (S24 hardening per memory.)
+    try:
+        await client.execute(
+            "UPDATE org_api_keys SET last_used_at = NOW() WHERE id = $1",
+            row["key_id"],
+        )
+    except Exception as exc:
+        logger.debug("last_used_at UPDATE failed (non-fatal): %s", exc)
 
     return {
         "org_id": str(row["org_id"]),

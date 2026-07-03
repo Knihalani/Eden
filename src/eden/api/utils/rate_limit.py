@@ -10,7 +10,7 @@ the bucket map cannot grow unbounded under attack.
 import asyncio
 import logging
 import time
-from collections import OrderedDict, defaultdict
+from collections import OrderedDict
 
 from eden.config import get_settings
 

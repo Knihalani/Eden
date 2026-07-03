@@ -11,18 +11,17 @@ running USD cost against its tier cap (the primary free-tier lever).
 import json
 import logging
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel
 
 from eden.api.deps import (
-    _try_resolve_token_payload,
     get_current_user,
     get_postgres_client,
-    require_org_permission,
+    require_org_permission,  # noqa: F401  (monkeypatched by tests/api/test_billing_routes.py)
     require_org_permission_dep,
 )
 from eden.config import get_settings
-from eden.services.plan_tiers import get_plan_tier, list_public_plan_tiers
+from eden.services.plan_tiers import get_plan_tier
 from eden.services.usage_service import UsageService
 
 logger = logging.getLogger(__name__)

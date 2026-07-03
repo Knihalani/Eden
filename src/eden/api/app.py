@@ -2,12 +2,15 @@
 
 import logging
 import os
+import uuid
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from eden.api.middleware.quota_enforcement import QuotaEnforcementMiddleware
 from eden.api.middleware.tenant_rate_limit import TenantRateLimitMiddleware
@@ -103,6 +106,7 @@ from eden.api.routes import (
     websocket,
 )
 from eden.api.routes import (
+    compliance,
     github as github_routes,
     internal_health,
     observability_a2a,
@@ -423,6 +427,38 @@ if getattr(settings, "quota_enforcement_enabled", True):
 # behind Northflank + Vercel.
 app.add_middleware(InternalOnlyMiddleware)
 
+# Default-deny auth middleware (security 26). Every request must
+# carry an auth context (cookie, bearer, or org-specific header)
+# unless the path is on the explicit public-prefix allow-list.
+# Catches the case where a new route ships without
+# ``Depends(get_current_user)`` — the route would be open under
+# the old opt-in posture; here it fails CLOSED with 401.
+from eden.api.middleware.default_deny import DefaultDenyAuthMiddleware
+
+if getattr(settings, "default_deny_enabled", True):
+    app.add_middleware(DefaultDenyAuthMiddleware)
+
+# RLS GUC middleware (B-1 fix, now actually wired in). Sets the
+# ``app.current_org_id`` Postgres session var for every request that
+# resolves an org, so the migration-015 RLS policies actually filter
+# rows on the observability / retention / audit tables. Without this
+# the policies read NULL from ``current_setting`` and return empty
+# row sets — the "org not picked up" symptom. Registered AFTER
+# DefaultDeny (so the auth context is in place) and BEFORE
+# TenantRateLimit (so the per-org key is correct). Fail-soft: a DB
+# blip on the ``set_config`` logs a warning but does not block the
+# request (a missing GUC → empty RLS rows → safe default).
+try:
+    from eden.api.middleware.rls_org_context import RLSOrgContextMiddleware
+
+    if getattr(settings, "rls_org_context_enabled", True):
+        app.add_middleware(RLSOrgContextMiddleware)
+except ImportError:  # pragma: no cover — defensive
+    logger.warning(
+        "RLSOrgContextMiddleware could not be imported; org-scoped "
+        "queries will return empty row sets until the import is fixed."
+    )
+
 # Per-tenant sliding-window rate limiter. Registered AFTER CORS so
 # preflight OPTIONS requests are never rate-limited. Falls back to
 # in-memory TokenBucket when REDIS_URL is unset. Disable in dev with
@@ -440,6 +476,80 @@ if getattr(settings, "rate_limit_enabled", True):
 # sees the request with Content-Encoding set and skips; harmless.
 # minimum_size=500 skips compressing tiny JSON like {"ok": true}.
 app.add_middleware(GZipMiddleware, minimum_size=500)
+
+
+# ============================================================================
+# Global exception handlers (Site-wide fix — July 2026)
+# ============================================================================
+# Before this: an uncaught exception in any route became a bare
+# Starlette 500 with body ``Internal Server Error`` and no JSON. The
+# portal's ``proxyError`` couldn't pretty-print it, support had no
+# ``request_id`` to correlate, and 404s from middleware raised
+# StarletteHTTPException with the default ``{"detail": "Not Found"}``
+# body — which the portal's lib/proxy.ts couldn't destructure
+# consistently. Now every 5xx and 4xx middleware raise gets the same
+# envelope shape the rest of the project uses: {error, detail, request_id}.
+def _request_id(request: Request) -> str:
+    return (
+        request.headers.get("x-request-id")
+        or request.headers.get("x-correlation-id")
+        or str(uuid.uuid4())
+    )
+
+
+@app.exception_handler(Exception)
+async def _unhandled_exception(request: Request, exc: Exception):
+    rid = _request_id(request)
+    # Log the full traceback once, on the server, with the request id
+    # the user (or our own error envelope) will surface. ``exc_info``
+    # captures the traceback in the log without re-raising.
+    logger.exception(
+        "unhandled exception [request_id=%s] %s %s",
+        rid, request.method, request.url.path,
+    )
+    return JSONResponse(
+        status_code=500,
+        content={
+            "error": "internal_error",
+            "detail": "An unexpected error occurred",
+            "request_id": rid,
+        },
+    )
+
+
+@app.exception_handler(StarletteHTTPException)
+async def _http_exception(request: Request, exc: StarletteHTTPException):
+    rid = _request_id(request)
+    status = exc.status_code
+    # Map the most common middleware raises to a stable, frontend-
+    # friendly envelope. Anything outside the map falls through to a
+    # generic shape; the upstream ``exc.detail`` is preserved as
+    # ``detail`` when it's a plain string.
+    if status == 404:
+        err, detail = "not_found", "The requested resource was not found"
+    elif status == 401:
+        err, detail = "unauthorized", "Authentication required"
+    elif status == 403:
+        err, detail = "forbidden", "You don't have access to this resource"
+    elif status == 429:
+        err, detail = "rate_limited", "Too many requests — slow down"
+    elif status == 503:
+        # Audit 2026-07-02 — surface the *missing config* reason in
+        # the detail so on-call can grep logs for the cause
+        # ("CLERK_WEBHOOK_SIGNING_SECRET unset", "DB unavailable", etc.)
+        # without needing to read the upstream detail field. The
+        # per-route 503 handlers still set their own HTTPException
+        # detail — we only see them here when the exception bubbles
+        # through unhandled.
+        err, detail = "service_unavailable", exc.detail if isinstance(exc.detail, str) else "service temporarily unavailable"
+    else:
+        err = "http_error"
+        detail = exc.detail if isinstance(exc.detail, str) else "Request failed"
+    return JSONResponse(
+        status_code=status,
+        content={"error": err, "detail": detail, "request_id": rid},
+        headers=exc.headers or {},
+    )
 
 # Include route modules
 app.include_router(kb.router)
@@ -481,6 +591,7 @@ app.include_router(presigned_feedback.auth_router)  # /orgs/{org_id}/intelligenc
 app.include_router(presigned_feedback.public_router)  # /api/v1/feedback/tokens/{token_id} (no auth, token-gated)
 app.include_router(onboarding.router)  # /v1/internal/onboarding/{org_id}/* (D.14 cold-start UX)
 app.include_router(sql_query.router)  # /orgs/{org_id}/sql (Phase M read-only SQL executor)
+app.include_router(compliance.router)  # /api/v1/me/* + /api/v1/dsar + /subprocessors (GDPR + CCPA)
 app.include_router(qa_generator.router)  # /orgs/{org_id}/synthetic (Phase J synthetic Q/A generator)
 app.include_router(redteam.router)  # /orgs/{org_id}/redteam (Phase L red-team probes)
 app.include_router(labeling.router)  # /orgs/{org_id}/labeling (Phase D labeling queue)

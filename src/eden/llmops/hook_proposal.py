@@ -10,7 +10,6 @@ Auto-approves (status='approved', applied_at=now) when requires_approval=False.
 
 from __future__ import annotations
 
-import datetime
 import json
 import logging
 import uuid

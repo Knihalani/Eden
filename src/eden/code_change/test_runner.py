@@ -29,7 +29,7 @@ from eden.providers import (
     get_default_sandbox_provider,
 )
 
-from ._common import _new_id, _ok_envelope
+from ._common import _new_id, _not_implemented_envelope, _ok_envelope
 
 logger = logging.getLogger(__name__)
 
@@ -156,32 +156,28 @@ class TestPlanRunner:
     ) -> dict[str, Any]:
         """Run the test plan in the sandbox.
 
-        If no ``SandboxSpec`` is provided, fall back to the
-        SubprocessSimAdapter's "local" provider with a
-        deterministic smoke-test command. This means the endpoint
-        always returns a real result — never a not-implemented
-        envelope — even when the operator didn't supply an
-        explicit spec. The smoke-test runs pytest if a tests/
-        directory is present, otherwise returns a passing
-        baseline ("no tests to run" → pass_rate=1.0).
+        Gate-3 STUB behaviour: when no explicit ``spec`` is
+        provided, the destructive path returns the
+        not-implemented envelope with ``gate=3_blocked`` so
+        the portal can render "this requires Gate 3 (real
+        ship)". The real execution is enabled by an
+        operator-supplied ``SandboxSpec`` — that is the
+        opt-in path that bypasses the STUB gate.
         """
         if spec is None:
-            from eden.sim_runner import SubprocessSimAdapter
-
-            spec = SandboxSpec(
-                kind="local",
-                image="local",
-                command=(
-                    "bash -c 'set -e; "
-                    "if [ -d tests ] || [ -d test ]; then "
-                    "  python -m pytest -x --tb=short --no-header -q 2>&1 | tail -50; "
-                    "else "
-                    "  echo \"no tests to run\"; "
-                    "fi'"
+            return _not_implemented_envelope(
+                self.name,
+                message=(
+                    "test plan execution is gated until Cat 23 Gate 3 ships; "
+                    "pass an explicit SandboxSpec to opt in"
                 ),
-                cpu_limit=SANDBOX_CPU_LIMIT,
-                memory_mb=SANDBOX_MEMORY_MB,
-                wall_clock_sec=SANDBOX_WALL_CLOCK_SEC,
+                gate="3_blocked",
+                data={
+                    "patch_id": patch_id,
+                    "sandbox_cpu_limit": SANDBOX_CPU_LIMIT,
+                    "sandbox_memory_mb": SANDBOX_MEMORY_MB,
+                    "sandbox_wall_clock_sec": SANDBOX_WALL_CLOCK_SEC,
+                },
             )
         result: SandboxResult = await self._sandbox.run(spec)
         # Parse pytest output if available to compute pass_rate.

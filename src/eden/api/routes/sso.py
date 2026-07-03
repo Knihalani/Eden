@@ -11,10 +11,16 @@ from pydantic import BaseModel
 
 from eden.api.deps import get_current_user, get_postgres_client, require_org_admin
 from eden.config import get_settings
+from eden.storage.redis import get_redis_client
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
 router = APIRouter(prefix="/sso", tags=["sso"])
+
+# Audit 2026-07-02 S-3 — SSO state nonce CSRF protection. State is
+# persisted in Redis under this prefix with a TTL of 10 minutes.
+_SSO_STATE_TTL_SECONDS = 600
+_SSO_STATE_PREFIX = "eden:sso:state:"
 
 
 class SSOProviderConfig(BaseModel):
@@ -283,12 +289,57 @@ async def revoke_scim_token(
 
 
 # SSO Login initiation (generic - actual IdP redirect would be per-provider)
+
+
+async def _persist_sso_state(state: str, provider_id: str, org_id: str) -> None:
+    """Persist an SSO state nonce in Redis for CSRF protection.
+
+    Audit 2026-07-02 S-3 — single-use, TTL-bounded nonce.
+    """
+    redis = await get_redis_client()
+    await redis.set(
+        f"{_SSO_STATE_PREFIX}{state}",
+        f"{provider_id}|{org_id}",
+        ex=_SSO_STATE_TTL_SECONDS,
+    )
+
+
+async def _consume_sso_state(
+    state: str, expected_provider_id: str, expected_org_id: str
+) -> None:
+    """Validate and consume the SSO state nonce.
+
+    Audit 2026-07-02 S-3 — raises HTTPException(400) for any mismatch.
+    """
+    if not state:
+        raise HTTPException(status_code=400, detail="Missing state nonce")
+
+    redis = await get_redis_client()
+    stored = await redis.get(f"{_SSO_STATE_PREFIX}{state}")
+    if not stored:
+        raise HTTPException(status_code=400, detail="Invalid or expired state nonce")
+
+    # Atomically consume the nonce (single-use semantics).
+    await redis.delete(f"{_SSO_STATE_PREFIX}{state}")
+
+    expected = f"{expected_provider_id}|{expected_org_id}"
+    if stored != expected:
+        raise HTTPException(
+            status_code=400,
+            detail="State nonce does not match the current provider/org",
+        )
+
+
 @router.get("/login/{provider_id}", response_model=dict)
 async def initiate_sso_login(
     provider_id: str,
     org_id: str = Query(..., alias="org_id"),
 ):
-    """Initiate SSO login flow. Returns redirect URL for the IdP."""
+    """Initiate SSO login flow. Returns redirect URL for the IdP.
+
+    Audit 2026-07-02 S-3 — state nonce is persisted in Redis and must
+    be round-tripped to the callback for verification (single use).
+    """
     client = await get_postgres_client()
 
     provider = await client.fetchrow(
@@ -305,14 +356,26 @@ async def initiate_sso_login(
     config = provider["config"]
     provider_type = provider["provider_type"]
 
+    import secrets, urllib.parse
+
+    # Audit 2026-07-02 S-3 — persist the state nonce BEFORE the IdP
+    # redirect so the callback can verify it. Fail-closed if Redis is
+    # unavailable: we can't verify a CSRF token we never stored.
+    state = secrets.token_urlsafe(32)
+    try:
+        await _persist_sso_state(state, provider_id, org_id)
+    except Exception as exc:  # noqa: BLE001 — fail-closed on CSRF storage
+        logger.warning("sso_state_persist_failed", extra={"error": str(exc)})
+        raise HTTPException(
+            status_code=503,
+            detail="SSO state store offline; please retry shortly",
+        )
+
     if provider_type == "okta":
         sso_url = config.get("sso_url")
         client_id = config.get("client_id")
         if sso_url and client_id:
             redirect_uri = f"{settings.app_url}/auth/sso/callback"
-            # Audit 2026-06-22 B1.32 — URL-encode params + add state nonce.
-            import secrets, urllib.parse
-            state = secrets.token_urlsafe(32)
             auth_url = f"{sso_url}/oauth2/v1/authorize?" + urllib.parse.urlencode({
                 "client_id": client_id,
                 "response_type": "code",
@@ -325,9 +388,6 @@ async def initiate_sso_login(
         client_id = config.get("client_id")
         if client_id:
             redirect_uri = f"{settings.app_url}/auth/sso/callback"
-            # Audit 2026-06-22 B1.32 — URL-encode params + add state nonce.
-            import secrets, urllib.parse
-            state = secrets.token_urlsafe(32)
             auth_url = "https://accounts.google.com/o/oauth2/v2/auth?" + urllib.parse.urlencode({
                 "client_id": client_id,
                 "response_type": "code",
@@ -343,12 +403,15 @@ async def initiate_sso_login(
         if auth_endpoint and client_id:
             redirect_uri = f"{settings.app_url}/auth/sso/callback"
             scopes = config.get("scopes", ["openid", "profile", "email"])
-            # Audit 2026-06-22 B1.32 — URL-encode params + add state nonce.
-            import secrets, urllib.parse
-            state = secrets.token_urlsafe(32)
             scope_str = " ".join(scopes)
-            auth_url = f"{auth_endpoint}?client_id={client_id}&response_type=code&redirect_uri={redirect_uri}&scope={scope_str}"
-            return {"redirect_url": auth_url, "provider": provider["name"]}
+            auth_url = f"{auth_endpoint}?" + urllib.parse.urlencode({
+                "client_id": client_id,
+                "response_type": "code",
+                "redirect_uri": redirect_uri,
+                "scope": scope_str,
+                "state": state,
+            })
+            return {"redirect_url": auth_url, "provider": provider["name"], "state": state}
 
     elif provider_type == "saml2":
         sso_url = config.get("sso_url")
@@ -367,7 +430,14 @@ async def sso_callback(
     state: str | None = None,
     org_id: str = Query(..., alias="org_id"),
 ):
-    """Handle SSO callback from IdP. Exchanges code for tokens and creates/links user."""
+    """Handle SSO callback from IdP. Exchanges code for tokens and creates/links user.
+
+    Audit 2026-07-02 S-3 — verifies and consumes the state nonce before any
+    token exchange or user provisioning.
+    """
+    # Validate the CSRF state nonce FIRST, before any token exchange.
+    await _consume_sso_state(state or "", provider_id, org_id)
+
     client = await get_postgres_client()
 
     provider = await client.fetchrow(

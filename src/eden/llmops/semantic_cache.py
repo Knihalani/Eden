@@ -10,7 +10,7 @@ from __future__ import annotations
 import hashlib
 import time
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, UTC
 from typing import Any, Protocol
 
 
@@ -21,7 +21,7 @@ class CacheEntry:
     response_text: str
     embedding: list[float]
     model_version: str
-    created_at: datetime = field(default_factory=datetime.utcnow)
+    created_at: datetime = field(default_factory=datetime.now(UTC))
     ttl_seconds: int = 3600
     metadata: dict[str, Any] = field(default_factory=dict)
 

@@ -716,7 +716,6 @@ class NullSandboxRunner(SandboxRunner):
         # We DO NOT use nested ``exec()`` because that creates a new
         # namespace and the test_suite's ``assert`` can't see the
         # env code's locals.
-        import textwrap
 
         def _indent_block(s: str, prefix: str) -> str:
             """Indent every non-empty line of ``s`` by ``prefix``.

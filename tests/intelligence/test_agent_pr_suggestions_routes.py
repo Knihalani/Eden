@@ -24,7 +24,7 @@ from fastapi.testclient import TestClient
 
 @pytest.fixture(scope="module")
 def client() -> TestClient:
-    from eden.api.deps import get_current_user
+    from eden.api.deps import get_current_user, require_org_member
     from eden.api.routes.agent_pr_suggestions import router
     from eden.config import get_settings
 
@@ -36,6 +36,7 @@ def client() -> TestClient:
 
     app = FastAPI(title="eden-agent-pr-suggestions-test")
     app.dependency_overrides[get_current_user] = _fake_user
+    app.dependency_overrides[require_org_member] = lambda: {"sub": "test-user", "org_id": "org_test"}
     app.include_router(router)
     return TestClient(app)
 

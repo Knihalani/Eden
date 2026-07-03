@@ -73,6 +73,12 @@ async def mask_payload(
         except PIIMaskingError:
             raise
         except Exception as exc:
+            # Audit 2026-07-02 S-16 — when fail_closed, any
+            # exception (including non-PII ones like a regex
+            # engine crash) must propagate. Otherwise return
+            # the original payload and continue (fail-open).
+            if policy.fail_closed_on_credentials:
+                raise
             logger.warning(f"PII pre-mask failed; persisting unmasked: {exc}")
             return payload
     return payload

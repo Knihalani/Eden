@@ -51,7 +51,6 @@ falls back to Postgres in those cases.
 
 from __future__ import annotations
 
-import asyncio
 import json
 import logging
 import time
@@ -450,7 +449,6 @@ class TypesenseClient:
 # ── Singleton accessor ──────────────────────────────────────────────
 
 _typesense_client: TypesenseClient | None = None
-_typesense_lock = asyncio.Lock()
 
 
 def get_typesense_client() -> TypesenseClient | None:

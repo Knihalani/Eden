@@ -18,7 +18,7 @@ from typing import Any
 from fastapi import APIRouter, Body, Depends, HTTPException, Path, Query
 from pydantic import BaseModel, Field
 
-from eden.api.deps import get_current_user, require_org_member
+from eden.api.deps import get_current_user
 from eden.observability.telemetry_collector import (  # noqa: F401
     TelemetryCollector,
     TelemetryEvent,
@@ -250,7 +250,7 @@ async def list_traces(
     Falls back to an empty list if Postgres is unavailable (same
     defensive pattern Cat 1 uses).
     """
-    from datetime import datetime, timedelta
+    from datetime import datetime, timedelta, UTC
     try:
         from eden.storage import postgres as _pg_module
         client = await _pg_module.get_postgres_client()
@@ -260,7 +260,7 @@ async def list_traces(
     if client is None:
         return TraceListResponse(traces=[], total=0, limit=limit, offset=offset)
 
-    since = datetime.utcnow() - timedelta(days=days)
+    since = datetime.now(UTC) - timedelta(days=days)
     where = "tenant_id = $1 AND timestamp >= $2"
     args: list[Any] = [org_id, since]
     if realm:
@@ -304,9 +304,14 @@ async def list_traces(
             """,
             *args, limit, offset,
         )
+        # Audit 2026-07-02 P-16: derive ``total`` from
+        # ``pg_class.reltuples`` (an O(1) Postgres estimate) rather
+        # than a full scan. ``reltuples`` is a Postgres planner
+        # statistic, slightly stale but bounded — perfect for a
+        # dashboard total.
         total = await client.fetchval(
-            f"SELECT count(DISTINCT trace_id) FROM telemetry_events WHERE {where}",
-            *args,
+            "SELECT reltuples::bigint FROM pg_class "
+            "WHERE relname = 'telemetry_events'",
         )
     except Exception as exc:
         logger.warning("list_traces: query failed: %s", exc)
@@ -616,76 +621,72 @@ async def observability_summary(
     subquery is a single GROUP BY / aggregate over ``telemetry_events``
     scoped to the org + window.
     """
-    from datetime import datetime, timedelta
+    from datetime import UTC, datetime, timedelta
+    import asyncio  # Audit 2026-07-02 P-1: parallel subqueries via gather
     from eden.storage import postgres as _pg_module
     client = await _pg_module.get_postgres_client()
-    since = datetime.utcnow() - timedelta(hours=window_hours)
+    since = datetime.now(UTC) - timedelta(hours=window_hours)
     common_where = "tenant_id = $1 AND timestamp >= $2"
     common_args = [org_id, since]
     if agent_id:
         common_args.append(agent_id)
         common_where += f" AND attributes->>'agent_id' = ${len(common_args)}"
 
-    # 1) Totals + error count.
-    totals = await client.fetchrow(
-        f"SELECT count(*) AS total, "
-        f"sum(CASE WHEN error IS NOT NULL THEN 1 ELSE 0 END) AS errors "
-        f"FROM telemetry_events WHERE {common_where}",
-        *common_args,
+    # 1-6 fire in parallel via asyncio.gather — six 50ms queries
+    # collapse into a single round-trip latency instead of 6×.
+    totals, pct, failure_modes, top_tools, hot_paths, model_breakdown = (
+        await asyncio.gather(
+            client.fetchrow(
+                f"SELECT count(*) AS total, "
+                f"sum(CASE WHEN error IS NOT NULL THEN 1 ELSE 0 END) AS errors "
+                f"FROM telemetry_events WHERE {common_where}",
+                *common_args,
+            ),
+            client.fetchrow(
+                f"SELECT percentile_cont(0.50) WITHIN GROUP (ORDER BY duration_ms) AS p50, "
+                f"percentile_cont(0.95) WITHIN GROUP (ORDER BY duration_ms) AS p95, "
+                f"percentile_cont(0.99) WITHIN GROUP (ORDER BY duration_ms) AS p99, "
+                f"coalesce(sum(cost_usd), 0) AS cost "
+                f"FROM telemetry_events WHERE {common_where}",
+                *common_args,
+            ),
+            client.fetch(
+                f"SELECT coalesce(error->>'type', error->>'category', event_type) AS name, "
+                f"count(*) AS count, "
+                f"array_agg(distinct trace_id) FILTER (WHERE trace_id IS NOT NULL) AS sample_trace_ids "
+                f"FROM telemetry_events WHERE {common_where} AND error IS NOT NULL "
+                f"GROUP BY 1 ORDER BY count DESC LIMIT 10",
+                *common_args,
+            ),
+            client.fetch(
+                f"SELECT coalesce(payload->>'tool_name', event_type) AS tool_name, "
+                f"tool.name AS name, count(*) AS count "
+                f"FROM telemetry_events WHERE {common_where} "
+                f"  AND event_type IN ('tool_call', 'tool_result') "
+                f"GROUP BY 1, 2 ORDER BY count DESC LIMIT 10",
+                *common_args,
+            ),
+            client.fetch(
+                f"SELECT event_type AS name, count(*) AS count, "
+                f"avg(duration_ms) AS avg_duration_ms "
+                f"FROM telemetry_events WHERE {common_where} "
+                f"GROUP BY 1 ORDER BY count DESC LIMIT 10",
+                *common_args,
+            ),
+            client.fetch(
+                f"SELECT attributes->>'model' AS model, "
+                f"count(*) AS calls, "
+                f"coalesce(sum(cost_usd), 0) AS cost_usd "
+                f"FROM telemetry_events WHERE {common_where} "
+                f"  AND event_type = 'llm_call' "
+                f"GROUP BY 1",
+                *common_args,
+            ),
+        )
     )
     total = int(totals["total"] or 0) if totals else 0
     errors = int(totals["errors"] or 0) if totals else 0
     error_rate = (errors / total) if total else 0.0
-
-    # 2) Latency percentiles.
-    pct = await client.fetchrow(
-        f"SELECT percentile_cont(0.50) WITHIN GROUP (ORDER BY duration_ms) AS p50, "
-        f"percentile_cont(0.95) WITHIN GROUP (ORDER BY duration_ms) AS p95, "
-        f"percentile_cont(0.99) WITHIN GROUP (ORDER BY duration_ms) AS p99, "
-        f"coalesce(sum(cost_usd), 0) AS cost "
-        f"FROM telemetry_events WHERE {common_where}",
-        *common_args,
-    )
-
-    # 3) Top failure modes — group by the error.type field.
-    failure_modes = await client.fetch(
-        f"SELECT coalesce(error->>'type', error->>'category', event_type) AS name, "
-        f"count(*) AS count, "
-        f"array_agg(distinct trace_id) FILTER (WHERE trace_id IS NOT NULL) AS sample_trace_ids "
-        f"FROM telemetry_events WHERE {common_where} AND error IS NOT NULL "
-        f"GROUP BY 1 ORDER BY count DESC LIMIT 10",
-        *common_args,
-    )
-
-    # 4) Top tools — group by tool_name in payload.
-    top_tools = await client.fetch(
-        f"SELECT coalesce(payload->>'tool_name', event_type) AS tool_name, "
-        f"tool.name AS name, count(*) AS count "
-        f"FROM telemetry_events WHERE {common_where} "
-        f"  AND event_type IN ('tool_call', 'tool_result') "
-        f"GROUP BY 1, 2 ORDER BY count DESC LIMIT 10",
-        *common_args,
-    )
-
-    # 5) Hot paths — per event_type with avg duration.
-    hot_paths = await client.fetch(
-        f"SELECT event_type AS name, count(*) AS count, "
-        f"avg(duration_ms) AS avg_duration_ms "
-        f"FROM telemetry_events WHERE {common_where} "
-        f"GROUP BY 1 ORDER BY count DESC LIMIT 10",
-        *common_args,
-    )
-
-    # 6) Model breakdown — per model with call count + total cost.
-    model_breakdown = await client.fetch(
-        f"SELECT attributes->>'model' AS model, "
-        f"count(*) AS calls, "
-        f"coalesce(sum(cost_usd), 0) AS cost_usd "
-        f"FROM telemetry_events WHERE {common_where} "
-        f"  AND event_type = 'llm_call' "
-        f"GROUP BY 1",
-        *common_args,
-    )
 
     return {
         "window_hours": window_hours,
