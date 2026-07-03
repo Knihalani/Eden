@@ -36,8 +36,10 @@ async def _resolve_token_payload(
     bearer: Annotated[HTTPAuthorizationCredentials | None, Depends(security)] = None,
 ) -> dict:
     # Clerk path: portal forwards the Clerk session JWT as a Bearer.
+    # B-6 (Session 23): verify_clerk_token is now async — the JWKS
+    # path performs a non-blocking httpx round-trip inside.
     if bearer and bearer.scheme.lower() == "bearer":
-        clerk_payload = verify_clerk_token(bearer.credentials)
+        clerk_payload = await verify_clerk_token(bearer.credentials)
         if clerk_payload:
             return clerk_payload
 
@@ -888,11 +890,25 @@ async def get_current_org_api_key(
             detail="API key revoked",
         )
     expires_at = row.get("expires_at")
-    if expires_at is not None and expires_at < datetime.now(UTC):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="API key expired",
+    if expires_at is not None:
+        # Audit 2026-07-03 — asyncpg returns naive ``datetime`` from
+        # ``TIMESTAMP WITH TIME ZONE`` columns when the server's
+        # ``TimeZone`` setting is ``UTC`` (the project default).
+        # Comparing a naive value against ``datetime.now(UTC)`` (tz-
+        # aware) raises ``TypeError`` and 500s the request — the same
+        # class of bug fixed in ``invitation_service._as_utc``. Inline
+        # the coercion here rather than import from a service module:
+        # the helper is a single expression and the api layer
+        # shouldn't depend on ``services/``.
+        cmp_expires = (
+            expires_at if expires_at.tzinfo
+            else expires_at.replace(tzinfo=UTC)
         )
+        if cmp_expires < datetime.now(UTC):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="API key expired",
+            )
 
     # Update last_used_at. Non-fatal: the auth above has already
     # succeeded, so a DB blip on the audit write must not 500 the

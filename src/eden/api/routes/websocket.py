@@ -13,6 +13,8 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import time
+from collections import OrderedDict
 from datetime import UTC, datetime
 from typing import Any
 
@@ -27,11 +29,46 @@ router = APIRouter(tags=["websocket"])
 # Track active WebSocket connections per job
 _job_connections: dict[str, set[WebSocket]] = {}
 
-# Audit 2026-07-02 S-9 — short-lived role cache so the approve/reject
-# gate doesn't hammer the DB on every poll. Key is (user_id, job_id),
-# value is bool (true = admin/owner). Cleared between tests via the
-# ``_user_role_cache.clear()`` fixture hook.
-_user_role_cache: dict[tuple[str, str], bool] = {}
+# Audit 2026-07-03 — bounded TTL role cache. Pre-fix the cache was
+# a plain ``dict[(user_id, job_id), bool]`` with no eviction: a
+# revoked admin stayed privileged for any future HILT call on the
+# same job; a key farmer could grow the dict without bound. Now:
+# TTL 30 s (stale state auto-expires even if revocation events miss
+# the cache), hard cap 4096 entries with FIFO eviction at the cap.
+_USER_ROLE_TTL_SECONDS = 30.0
+_USER_ROLE_CACHE_CAP = 4_096
+_user_role_cache: "OrderedDict[tuple[str, str], tuple[float, bool]]" = (
+    OrderedDict()
+)
+
+
+def _role_cache_get(key: tuple[str, str]) -> bool | None:
+    now = time.monotonic()
+    entry = _user_role_cache.get(key)
+    if entry is None:
+        return None
+    ts, value = entry
+    if now - ts >= _USER_ROLE_TTL_SECONDS:
+        try:
+            del _user_role_cache[key]
+        except KeyError:
+            pass
+        return None
+    _user_role_cache.move_to_end(key)
+    return value
+
+
+def _role_cache_set(key: tuple[str, str], value: bool) -> None:
+    if key in _user_role_cache:
+        _user_role_cache.move_to_end(key)
+    _user_role_cache[key] = (time.monotonic(), value)
+    while len(_user_role_cache) > _USER_ROLE_CACHE_CAP:
+        _user_role_cache.popitem(last=False)
+
+
+def reset_hilt_role_cache() -> None:
+    """Clear cache for tests; no-op in production."""
+    _user_role_cache.clear()
 
 
 async def _hilt_privileged_for_job(
@@ -41,7 +78,9 @@ async def _hilt_privileged_for_job(
 
     Audit 2026-07-02 S-9 — approve / reject on the WebSocket require
     admin privileges. Returns False for any falsy user (defence-in-depth
-    even before the route-level gate).
+    even before the route-level gate). Audit 2026-07-03 — bounded
+    TTL+cap cache so a revoked admin reverts within 30 s and a key
+    farmer cannot grow memory.
     """
     if not user:
         return False
@@ -49,22 +88,23 @@ async def _hilt_privileged_for_job(
     if not user_id:
         return False
     cache_key = (str(user_id), str(job_id))
-    if cache_key in _user_role_cache:
-        return _user_role_cache[cache_key]
+    cached = _role_cache_get(cache_key)
+    if cached is not None:
+        return cached
     try:
         client = await get_postgres_client()
         if client is None:
             return False
         job = await client.get_job(job_id, user_id=str(user_id))
         if not job:
-            _user_role_cache[cache_key] = False
+            _role_cache_set(cache_key, False)
             return False
         # Owner of the job counts as privileged; admins/owners via the
         # org_members table also count. ``user_id`` field on the job is
         # the canonical ownership marker (Eden convention).
         owner_id = job.get("user_id") if isinstance(job, dict) else None
         privileged = str(owner_id) == str(user_id)
-        _user_role_cache[cache_key] = privileged
+        _role_cache_set(cache_key, privileged)
         return privileged
     except Exception as exc:
         logger.debug(f"hilt role check failed: {exc}")
@@ -96,10 +136,12 @@ async def _authenticate_ws(websocket: WebSocket) -> dict | None:
         return None
 
     # Audit 2026-07-02 S-8 — Clerk-first, legacy-fallback.
+    # B-6 (Session 23): verify_clerk_token is async; await it so the
+    # WebSocket upgrade handshake doesn't block on a sync JWKS fetch.
     try:
         from eden.api.utils.clerk_auth import verify_clerk_token
 
-        clerk_payload = verify_clerk_token(token)
+        clerk_payload = await verify_clerk_token(token)
         if clerk_payload:
             return {
                 "user_id": clerk_payload.get("sub"),

@@ -78,12 +78,16 @@ export async function forwardToBackend(
       ? crypto.randomUUID()
       : `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`);
 
-  // Default to JSON content type. Override for FormData / multipart by
-  // passing an explicit `Content-Type` in `extraHeaders` — fetch will
-  // also auto-set the multipart boundary if you pass a FormData body.
-  const headers: Record<string, string> = {
-    "Content-Type": "application/json",
-  };
+  // Default to JSON content type. When the body is a ``FormData``
+  // instance we MUST NOT pre-set ``Content-Type`` — the WHATWG fetch
+  // spec only auto-derives the ``multipart/form-data; boundary=...``
+  // header when the caller hasn't already pinned a value, and a
+  // stale ``application/json`` here would refuse the upload at the
+  // upstream with a 415. Override behavior for non-FormData callers
+  // is unchanged (pass an explicit ``Content-Type`` in
+  // ``extraHeaders`` to take precedence over the JSON default).
+  const headers: Record<string, string> =
+    body instanceof FormData ? {} : { "Content-Type": "application/json" };
   if (cookieHeader) headers["Cookie"] = cookieHeader;
   if (authorization) headers["Authorization"] = authorization;
   if (extraHeaders) {

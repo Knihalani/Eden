@@ -525,7 +525,7 @@ class EvalToGuardrailLink:
         judge_name: str,
         threshold: float,
         action: str = "block",
-        fire_hook: bool = True,
+        fire_hook: bool = False,
     ) -> dict[str, Any]:
         """Create the link and the policy.
 

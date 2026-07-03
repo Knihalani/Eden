@@ -38,30 +38,47 @@ from fastapi import HTTPException
 
 
 class TestB8ActionIdFormat:
-    """The fallback path returns ``act_<sha256[:16]>`` matching
-    the HookBus path's wire format.
+    """The fallback path returns a deterministic ``UUID`` (uuid5 over
+    canonical JSON encoding) so the same logical action lands on the
+    same id on retry — the ``UNIQUE`` constraint on ``id`` then
+    makes the ``ON CONFLICT (id) DO NOTHING`` clause a real dedup
+    gate against double-emission.
+
+    The ``closed_loop_actions.id`` column is ``UUID PRIMARY KEY``
+    (see migration 025), so the id must be a valid UUID. Earlier
+    attempts used ``act_<sha256[:16]>`` strings which the column
+    silently rejected at INSERT time (audit 2026-07-03 — the
+    pre-fix ``VALUES ($1, ...)`` missing ``::uuid`` cast was an
+    immediate runtime break).
     """
 
-    def test_fallback_uses_act_prefix(self) -> None:
-        """Static check: the fallback ``action_id`` is prefixed
-        with ``act_`` and built from a SHA-256 hash (content-derived).
+    def test_fallback_uses_uuid5(self) -> None:
+        """Static check: the fallback ``action_id`` is derived via
+        ``uuid.uuid5`` so it fits the ``UUID PRIMARY KEY`` column.
         """
         from eden.llmops import promotion_hooks
 
         source = textwrap.dedent(
             inspect.getsource(promotion_hooks._record_action)
         )
-        assert '"act_" + hashlib.sha256(' in source, (
-            "B-8 regression: fallback action_id not act_<sha256>"
+        assert "uuid.uuid5" in source, (
+            "B-8 regression: fallback action_id not derived via uuid5"
         )
         # The bare uuid4 fallback must be gone.
         assert 'str(uuid.uuid4())' not in source, (
             "B-8 regression: fallback still uses bare uuid4"
         )
+        # The PG cast must be present so asyncpg writes a uuid,
+        # not a string, into the column.
+        assert "$1::uuid" in source, (
+            "B-8 regression: missing $1::uuid cast on the INSERT — "
+            "a string id would 500 with 'invalid input syntax for "
+            "type uuid'"
+        )
 
     @pytest.mark.asyncio
     async def test_fallback_id_is_deterministic(self) -> None:
-        """Two calls with the same inputs produce the same id."""
+        """Two calls with the same inputs produce the same uuid5 id."""
         from eden.llmops import promotion_hooks
 
         # Force the fallback path: stub out HookBus by patching the
@@ -86,11 +103,111 @@ class TestB8ActionIdFormat:
                     target="t", payload={"a": 1},
                 )
         assert id1 == id2, "B-8 regression: ids not deterministic"
-        assert id1.startswith("act_"), (
-            f"B-8 regression: id {id1!r} missing act_ prefix"
+        # Validate UUID format — uuid5 yields a 36-char canonical
+        # string ``8-4-4-4-12`` (xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx).
+        import uuid as _uuid_mod
+
+        try:
+            parsed = _uuid_mod.UUID(id1)
+        except (TypeError, ValueError):
+            raise AssertionError(
+                f"B-8 regression: id {id1!r} is not a valid UUID"
+            )
+        # uuid5 is version 5 — confirm we got the right scheme
+        # (defence against accidental uuid4 / random fallback
+        # slipping back in).
+        assert parsed.version == 5, (
+            f"B-8 regression: id {id1!r} is uuid v{parsed.version}, "
+            "expected v5 (uuid5 over canonical content)"
         )
-        assert len(id1) == 4 + 16, (
-            f"B-8 regression: id length {len(id1)}, expected 20"
+
+
+# ─── B-8 audit 2026-07-03: regression tests for the runtime fix ────
+
+
+class TestB8Uuid5ColumnSafety:
+    """Audit 2026-07-03 — the pre-fix code wrote a 20-char string
+    (``"act_" + sha256[:16]``) into a ``UUID PRIMARY KEY`` column;
+    Postgres rejected it with ``invalid input syntax for type uuid``
+    and the entire row insert was lost. The uuid5 fix restores the
+    cast. Pin the requirement here so a refactor that drops it
+    again fails CI.
+    """
+
+    @pytest.mark.asyncio
+    async def test_retry_yields_same_uuid5(self) -> None:
+        """Retry with the same content lands on the same uuid,
+        so the ON CONFLICT (id) DO NOTHING dedup actually fires.
+        """
+        import sys
+        from eden.llmops import promotion_hooks
+
+        fake_hooks_bus = type(sys)("fake_hooks_bus")
+        fake_hooks_bus.HookEvent = object
+        fake_hooks_bus.get_hook_bus = lambda: (_ for _ in ()).throw(
+            RuntimeError("HookBus unavailable"),
+        )
+        with patch.dict(
+            sys.modules, {"eden.llmops.hooks_bus": fake_hooks_bus}
+        ):
+            with patch(
+                "eden.storage.postgres.get_postgres_client",
+                new=AsyncMock(return_value=AsyncMock(execute=AsyncMock())),
+            ):
+                id_a = await promotion_hooks._record_action(
+                    "org_x",
+                    hook_name="h1",
+                    action_kind="k1",
+                    target="t1",
+                    payload={"x": 1},
+                )
+                id_b = await promotion_hooks._record_action(
+                    "org_x",
+                    hook_name="h1",
+                    action_kind="k1",
+                    target="t1",
+                    payload={"x": 1},
+                )
+        assert id_a == id_b
+
+    @pytest.mark.asyncio
+    async def test_different_content_yields_different_uuid5(self) -> None:
+        """Different content must yield a different uuid — the
+        dedup gate must not collapse legitimate distinct events
+        into the same row.
+        """
+        import sys
+        from eden.llmops import promotion_hooks
+
+        fake_hooks_bus = type(sys)("fake_hooks_bus")
+        fake_hooks_bus.HookEvent = object
+        fake_hooks_bus.get_hook_bus = lambda: (_ for _ in ()).throw(
+            RuntimeError("HookBus unavailable"),
+        )
+        with patch.dict(
+            sys.modules, {"eden.llmops.hooks_bus": fake_hooks_bus}
+        ):
+            with patch(
+                "eden.storage.postgres.get_postgres_client",
+                new=AsyncMock(return_value=AsyncMock(execute=AsyncMock())),
+            ):
+                id_a = await promotion_hooks._record_action(
+                    "org_x",
+                    hook_name="h1",
+                    action_kind="k1",
+                    target="t1",
+                    payload={"x": 1},
+                )
+                id_b = await promotion_hooks._record_action(
+                    "org_x",
+                    hook_name="h1",
+                    action_kind="k1",
+                    target="t1",
+                    payload={"x": 2},
+                )
+        assert id_a != id_b, (
+            "B-8 regression: distinct payloads collapsed to same id "
+            "— the dedup gate would drop a legitimate follow-up event"
         )
 
 

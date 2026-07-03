@@ -125,7 +125,7 @@ async def _fetch_session_aggregates(
     """
     return await client.fetchrow(
         """
-        WITH per_session AS (
+        WITH per_user AS (
             SELECT
                 user_id,
                 last_event_at,
@@ -152,7 +152,7 @@ async def _fetch_session_aggregates(
             percentile_cont(0.5) WITHIN GROUP (
                 ORDER BY n_turns
             )::float8                                              AS median_n_turns
-          FROM per_session
+          FROM per_user
         """,
         org_id, interval_sql,
     )

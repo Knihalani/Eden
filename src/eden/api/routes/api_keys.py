@@ -3,9 +3,11 @@
 import hashlib
 import logging
 import secrets
+from collections import deque
+from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
-from fastapi import APIRouter, Depends, Header, HTTPException, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Response, status
 
 from eden.api.deps import get_current_user, require_org_admin
 from eden.storage.postgres import get_postgres_client
@@ -20,6 +22,62 @@ VALID_SCOPES = [
     "jobs:read",
     "jobs:write",
 ]
+
+# B-11 (Session 24): per-(org, user) sliding-window rate limit on
+# ``POST /orgs/{org_id}/api-keys``. In-memory deques — a single
+# process is the only enforcement context here; see deploy notes
+# for why not Redis. 5 / hour is comfortable for an interactive
+# portal flow (most users will create 1–2 keys lifetime) and punitive
+# enough to stop a token-farming script.
+_API_KEY_CREATE_MAX = 5
+_API_KEY_CREATE_WINDOW = timedelta(hours=1)
+# Hard cap on dict cardinality. Past the cap, idle (org,user)
+# tuples are evicted on a sweep so a token farmer using random
+# (org,user) pairs cannot exhaust worker memory. 50k entries ≈ a
+# few MB at most — keeps memory bounded without a background thread.
+_API_KEY_CREATE_DICT_CAP = 50_000
+_api_key_create_log: dict[tuple[str, str], deque[float]] = {}
+
+
+def _check_api_key_create_rate_limit(
+    org_id: str,
+    user_id: str,
+) -> float | None:
+    """Return ``None`` if the (org, user) is allowed to create another
+    API key this hour; otherwise return the number of seconds to wait
+    before retrying (suitable as a ``Retry-After`` value).
+    """
+    now = datetime.now(UTC).timestamp()
+    window_sec = _API_KEY_CREATE_WINDOW.total_seconds()
+    # Evict any bucket whose newest entry is outside the window. Cheap
+    # because the average bucket has 1–5 timestamps, and running on
+    # every call keeps memory bounded without a background sweep task.
+    stale = [
+        k for k, b in _api_key_create_log.items()
+        if not b or now - b[-1] >= window_sec
+    ]
+    for k in stale:
+        _api_key_create_log.pop(k, None)
+    # Hard cap on dict cardinality. Sweep idle buckets first; if the
+    # cap is still hit, drop the oldest (org,user) by insertion order
+    # so the most recent legitimate caller is preserved.
+    if len(_api_key_create_log) >= _API_KEY_CREATE_DICT_CAP:
+        for k in list(_api_key_create_log.keys())[
+            : len(_api_key_create_log) - _API_KEY_CREATE_DICT_CAP + 1
+        ]:
+            _api_key_create_log.pop(k, None)
+    bucket = _api_key_create_log.setdefault(
+        (org_id, user_id), deque(maxlen=_API_KEY_CREATE_MAX),
+    )
+    # Drop entries outside the window.
+    while bucket and now - bucket[0] >= window_sec:
+        bucket.popleft()
+    if len(bucket) >= _API_KEY_CREATE_MAX:
+        # Wait until the oldest entry expires.
+        wait = window_sec - (now - bucket[0])
+        return max(1.0, min(wait, window_sec))
+    bucket.append(now)
+    return None
 
 
 def generate_api_key() -> str:
@@ -51,6 +109,21 @@ async def create_api_key(
     The user must save the raw key securely.
     """
     await require_org_admin(org_id)
+
+    # B-11 (Session 24): per-(org, user) sliding window throttle.
+    user_id = user.get("user_id")
+    if user_id:
+        wait = _check_api_key_create_rate_limit(org_id, user_id)
+        if wait is not None:
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail=(
+                    f"API-key create rate limit exceeded for this "
+                    f"organization (max {_API_KEY_CREATE_MAX}/hour). "
+                    f"Retry after {int(wait)}s."
+                ),
+                headers={"Retry-After": str(int(wait))},
+            )
 
     # Validate name
     if not name or len(name) < 2 or len(name) > 100:
@@ -109,27 +182,102 @@ async def create_api_key(
 @router.get("", response_model=list[dict])
 async def list_api_keys(
     org_id: str,
+    limit: int = Query(50, ge=1, le=200),
+    cursor: str | None = Query(
+        None,
+        description=(
+            "Opaque pagination cursor from the ``X-Next-Cursor`` "
+            "response header. Omit for the first page."
+        ),
+    ),
+    response: Response = None,
     user: dict = Depends(get_current_user),
 ):
-    """List all API keys for an organization (without raw keys)."""
-    # Require org membership (any role can view keys)
-    from eden.api.deps import get_current_org
-    org = await get_current_org(org_id)
-    if not org:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Not a member of this organization",
-        )
+    """List all API keys for an organization (without raw keys).
+
+    Audit 2026-07-03 — bounded pagination. Pre-fix a compromised
+    admin token could pull the entire ``org_api_keys`` table for
+    any org in one request. Cap is 200 keys per page (the realistic
+    organisation rarely carries more than a dozen); cursor on
+    ``(created_at, id)`` keeps order stable across writes. The
+    response body remains a list (no shape drift for existing
+    clients); pagination state is conveyed via the ``X-Next-Cursor``
+    header.
+    """
+    # B-12 (Session 24): admin/owner only. Pre-fix any org member
+    # could enumerate key prefixes — enough to fingerprint the
+    # stack + craft targeted social-engineering follow-ups.
+    await require_org_admin(org_id)
 
     client = await get_postgres_client()
 
-    query = """
-        SELECT id, name, key_prefix, scopes, created_by, last_used_at, created_at
-        FROM org_api_keys
-        WHERE org_id = $1
-        ORDER BY created_at DESC
-    """
-    rows = await client.fetch(query, org_id)
+    # Cursor format: ``"<created_at_iso>|<id>"`` — opaque to clients,
+    # lexicographically ordered on the same axis as ``ORDER BY``.
+    cursor_created_at: datetime | None = None
+    cursor_id: str | None = None
+    if cursor:
+        try:
+            ts_part, id_part = cursor.split("|", 1)
+            cursor_created_at = datetime.fromisoformat(ts_part)
+            cursor_id = id_part
+        except (ValueError, AttributeError):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=(
+                    "Invalid cursor; expected ``<created_at_iso>|<id>``."
+                ),
+            )
+
+    if cursor_created_at is not None and cursor_id is not None:
+        query = """
+            SELECT id, name, key_prefix, scopes, created_by,
+                   last_used_at, created_at
+            FROM org_api_keys
+            WHERE org_id = $1
+              AND (created_at, id) < ($2, $3)
+            ORDER BY created_at DESC, id DESC
+            LIMIT $4
+        """
+        rows = await client.fetch(
+            query,
+            org_id,
+            cursor_created_at,
+            cursor_id,
+            limit + 1,  # +1 to detect "has next page"
+        )
+    else:
+        query = """
+            SELECT id, name, key_prefix, scopes, created_by,
+                   last_used_at, created_at
+            FROM org_api_keys
+            WHERE org_id = $1
+            ORDER BY created_at DESC, id DESC
+            LIMIT $2
+        """
+        rows = await client.fetch(query, org_id, limit + 1)
+
+    has_more = len(rows) > limit
+    page_rows = rows[:limit]
+
+    items = [
+        {
+            "id": str(r["id"]),
+            "name": r["name"],
+            "key_prefix": r["key_prefix"],
+            "scopes": r["scopes"],
+            "created_by": str(r["created_by"]),
+            "last_used_at": r["last_used_at"].isoformat() if r.get("last_used_at") else None,
+            "created_at": r["created_at"].isoformat() if r.get("created_at") else None,
+        }
+        for r in page_rows
+    ]
+
+    if has_more and page_rows:
+        last = page_rows[-1]
+        response.headers["X-Next-Cursor"] = (
+            f"{last['created_at'].isoformat()}|{last['id']}"
+        )
+    return items
 
     return [
         {
@@ -180,13 +328,18 @@ async def validate_org_api_key(org_id: str, key: str) -> dict | None:
     """Validate an API key and return org context if valid.
 
     Returns None if key is invalid or doesn't match the org.
-    Updates last_used_at timestamp.
+    Updates last_used_at timestamp (B-10 debounced to >60s).
     """
     client = await get_postgres_client()
 
     key_hash = hashlib.sha256(key.encode()).hexdigest()
+    # B-10 (Session 24): also read ``last_used_at`` so we can skip
+    # the UPDATE when the row was stamped < 60s ago. Pre-fix this
+    # fired on every successful auth → ~3.6M UPDATEs/hour for a
+    # single hot SDK key.
     query = """
-        SELECT o.name, o.slug, o.owner_id, oak.org_id, oak.scopes, oak.id as key_id
+        SELECT o.name, o.slug, o.owner_id, oak.org_id, oak.scopes, oak.id as key_id,
+               oak.last_used_at
         FROM org_api_keys oak
         JOIN organizations o ON o.id = oak.org_id
         WHERE oak.key_hash = $1 AND oak.org_id = $2
@@ -195,17 +348,41 @@ async def validate_org_api_key(org_id: str, key: str) -> dict | None:
     if not row:
         return None
 
-    # Update last_used_at. Non-fatal: the auth above has already
-    # succeeded, so a DB blip on the audit write must not 500 the
-    # whole request. The UPDATE will be retried on the next call
-    # that hits this same key. (S24 hardening per memory.)
-    try:
-        await client.execute(
-            "UPDATE org_api_keys SET last_used_at = NOW() WHERE id = $1",
-            row["key_id"],
-        )
-    except Exception as exc:
-        logger.debug("last_used_at UPDATE failed (non-fatal): %s", exc)
+    # B-10 (Session 24): debounce the ``last_used_at`` UPDATE to one
+    # write per 60s per key. Hot SDK keys otherwise hammer Postgres
+    # with a write per request — pointless work since the column's
+    # only consumer is the keys-list UI which rounds to minutes.
+    last_used = row.get("last_used_at")
+    if last_used is None:
+        should_stamp = True
+    else:
+        # asyncpg may return naive datetimes depending on the server's
+        # TimeZone setting; treat them as UTC for the comparison.
+        cmp = last_used if last_used.tzinfo else last_used.replace(tzinfo=UTC)
+        should_stamp = (datetime.now(UTC) - cmp) >= timedelta(seconds=60)
+    if should_stamp:
+        # B-10 (Session 24) + audit 2026-07-03 — combine the
+        # debounce check and the UPDATE into a single statement
+        # so two concurrent auths on the same key cannot race
+        # past the 60 s window. The conditional UPDATE writes
+        # only when ``last_used_at`` is NULL or stale; the row
+        # count is intentionally ignored (an idempotent no-op
+        # stamp is correct behaviour).
+        try:
+            await client.execute(
+                """
+                UPDATE org_api_keys
+                SET last_used_at = NOW()
+                WHERE id = $1
+                  AND (
+                    last_used_at IS NULL
+                    OR last_used_at < NOW() - INTERVAL '60 seconds'
+                  )
+                """,
+                row["key_id"],
+            )
+        except Exception as exc:
+            logger.debug("last_used_at UPDATE failed (non-fatal): %s", exc)
 
     return {
         "org_id": str(row["org_id"]),

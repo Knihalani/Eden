@@ -538,8 +538,10 @@ class TestB25SharedHttpClient:
             return_value=None,
         ):
             await service._attempt_delivery(
-                "d_test", "https://example.com/hook", "secret",
-                {"event": "test"},
+                delivery_id="d_test",
+                url="https://example.com/hook",
+                secret="secret",
+                payload={"event": "test"},
             )
         # The POST went through the shared fake_http.
         fake_http.post.assert_awaited_once()

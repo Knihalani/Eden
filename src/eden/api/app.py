@@ -370,6 +370,18 @@ async def lifespan(app: FastAPI):
 
     await close_sandbox_runner()
     await close_postgres_client()
+
+    # B-6 follow-up — release the shared ``httpx.AsyncClient`` used
+    # by ``clerk_auth._fetch_jwks`` so the underlying SSL transport
+    # pool is closed cleanly. Pre-fix the module-global client was
+    # created lazily and never closed across pod restarts.
+    try:
+        from eden.api.utils.clerk_auth import shutdown_clerk_auth
+
+        await shutdown_clerk_auth()
+    except Exception as e:
+        logger.warning(f"clerk_auth shutdown failed: {e}")
+
     logger.info("Shutting down Eden API...")
 
 

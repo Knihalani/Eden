@@ -23,12 +23,18 @@ Verification strategy, in priority order:
 3. **Disabled** — when ``clerk_secret_key`` is empty, every Clerk
    verification call returns ``None`` so the legacy cookie flow keeps
    working for CLI / SDK / service-to-service callers.
+
+B-6 (Session 23): ``_fetch_jwks`` and ``verify_clerk_token`` are async;
+the JWKS lock is ``asyncio.Lock``. Pre-fix the JWKS fetch blocked the
+event loop on a sync ``httpx.get`` while holding ``threading.Lock``,
+which meant a single 5 s timeout stalled every concurrent request on
+the same worker.
 """
 
 from __future__ import annotations
 
+import asyncio
 import logging
-import threading
 import time
 from typing import Any
 
@@ -46,10 +52,47 @@ _settings = get_settings()
 # if a fresh key appears, because we re-fetch on cache miss.
 _JWKS_CACHE: dict[str, Any] = {"fetched_at": 0.0, "keys": None}
 _JWKS_TTL_SECONDS = 3600
-# Lock guards the read-modify-write on _JWKS_CACHE so concurrent
-# first-call bursts don't stomp each other. Per-request cache hits
-# stay lock-free via the TTL fast-path.
-_JWKS_LOCK = threading.Lock()
+# B-6 (Session 23): use ``asyncio.Lock`` so a slow httpx fetch doesn't
+# block the event loop or starve other coroutines waiting on the lock.
+_JWKS_LOCK = asyncio.Lock()
+# Shared async HTTP client. ``verify_clerk_token`` is awaited many
+# times per request lifecycle (one per Clerk-protected endpoint), and
+# creating a fresh AsyncClient per call paid the TLS handshake cost
+# each time. Created lazily so importing this module in offline tests
+# (which never call ``verify_clerk_token``) doesn't open a real socket.
+_HTTP_CLIENT: httpx.AsyncClient | None = None
+
+
+def _get_http_client() -> httpx.AsyncClient:
+    global _HTTP_CLIENT
+    if _HTTP_CLIENT is None:
+        _HTTP_CLIENT = httpx.AsyncClient(
+            timeout=httpx.Timeout(5.0, connect=5.0, read=5.0, write=5.0),
+            headers={"User-Agent": "eden-api/1.0"},
+        )
+    return _HTTP_CLIENT
+
+
+async def shutdown_clerk_auth() -> None:
+    """Close the shared ``httpx.AsyncClient``.
+
+    Called from the FastAPI lifespan on shutdown so the underlying
+    SSL transport + connection pool are released cleanly. Pre-fix
+    the module-global ``_HTTP_CLIENT`` was created lazily and never
+    closed, leaking open sockets and HTTP/2 connection-pool
+    resources on every pod restart. Safe to call multiple times.
+    """
+    global _HTTP_CLIENT
+    client = _HTTP_CLIENT
+    if client is None:
+        return
+    try:
+        await client.aclose()
+    except Exception as exc:  # pragma: no cover - defensive
+        # Surface as debug, not error: shutdown should never crash
+        # the process over a socket close.
+        logger.debug("clerk_auth httpx client close failed: %s", exc)
+    _HTTP_CLIENT = None
 
 
 def _derive_jwks_url() -> str | None:
@@ -98,15 +141,21 @@ def _derive_jwks_url() -> str | None:
     return None
 
 
-def _fetch_jwks() -> dict[str, Any]:
-    """Fetch and cache the Clerk JWKS document."""
+async def _fetch_jwks() -> dict[str, Any]:
+    """Fetch and cache the Clerk JWKS document.
+
+    B-6 (Session 23): now async so the 5 s ``httpx`` round-trip
+    doesn't block the event loop. Uses ``asyncio.Lock`` to serialize
+    cache fills — a stampede of concurrent first-calls shares one
+    upstream request instead of issuing N parallel ones.
+    """
     now = time.time()
     # Fast path: cache hit, no lock needed.
     if _JWKS_CACHE["keys"] is not None and now - _JWKS_CACHE["fetched_at"] < _JWKS_TTL_SECONDS:
         return _JWKS_CACHE["keys"]
     # Slow path: take the lock so only one fetch happens at a time.
-    with _JWKS_LOCK:
-        # Re-check after acquiring the lock — another thread may
+    async with _JWKS_LOCK:
+        # Re-check after acquiring the lock — another coroutine may
         # have refreshed while we were waiting.
         if _JWKS_CACHE["keys"] is not None and now - _JWKS_CACHE["fetched_at"] < _JWKS_TTL_SECONDS:
             return _JWKS_CACHE["keys"]
@@ -117,7 +166,8 @@ def _fetch_jwks() -> dict[str, Any]:
             # raising into a request thread.
             return {"keys": []}
         try:
-            resp = httpx.get(url, timeout=5.0, headers={"User-Agent": "eden-api/1.0"})
+            client = _get_http_client()
+            resp = await client.get(url)
             resp.raise_for_status()
             data = resp.json()
             _JWKS_CACHE["keys"] = data
@@ -128,13 +178,18 @@ def _fetch_jwks() -> dict[str, Any]:
             return _JWKS_CACHE["keys"] or {"keys": []}
 
 
-def verify_clerk_token(token: str) -> dict[str, Any] | None:
+async def verify_clerk_token(token: str) -> dict[str, Any] | None:
     """Verify a Clerk session JWT and return the decoded payload.
 
     Returns ``None`` if Clerk isn't configured, the token is malformed,
     the signature doesn't match, or the token has expired. Callers
     should treat ``None`` as "try the legacy cookie flow" rather than
     "reject", so the same handler can serve both auth paths.
+
+    B-6 (Session 23): now ``async`` so the production JWKS path
+    (``_fetch_jwks``) can perform an async httpx round-trip without
+    stalling the event loop. Production callers (``deps._resolve_token_payload``
+    and ``websocket._authenticate_ws``) now await this function.
     """
     if not _settings.clerk_secret_key and not _settings.clerk_jwt_key:
         return None
@@ -164,7 +219,7 @@ def verify_clerk_token(token: str) -> dict[str, Any] | None:
     # Production path: JWKS lookup by ``kid``.
     if alg.startswith("RS"):
         try:
-            jwks = _fetch_jwks()
+            jwks = await _fetch_jwks()
             kid = header.get("kid")
             matching = next(
                 (k for k in jwks.get("keys", []) if k.get("kid") == kid),
@@ -182,9 +237,9 @@ def verify_clerk_token(token: str) -> dict[str, Any] | None:
                     "forcing fresh fetch",
                     kid,
                 )
-                with _JWKS_LOCK:
+                async with _JWKS_LOCK:
                     _JWKS_CACHE["fetched_at"] = 0.0
-                jwks = _fetch_jwks()
+                jwks = await _fetch_jwks()
                 matching = next(
                     (k for k in jwks.get("keys", []) if k.get("kid") == kid),
                     None,
