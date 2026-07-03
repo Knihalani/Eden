@@ -65,10 +65,20 @@ async function handle(
     if (v) headers[h] = v;
   }
 
-  let body: string | undefined;
+  // Body transport. Three branches:
+  //  - multipart/form-data → read as FormData, pass through verbatim
+  //    so the upstream gets the same boundary the browser set.
+  //    ``request.text()`` would mangle the binary payload into a
+  //    string and strip the boundary, so this MUST branch before
+  //    the text() read. (July 2026 fix — previously every multipart
+  //    upload — agent code, avatar, reference doc — was rejected
+  //    upstream as a malformed body.)
+  //  - everything else → read as text and forward as a string
+  //    (preserves JSON, raw bytes, etc.).
+  let body: string | FormData | undefined;
+  let isMultipart = false;
   if (request.method !== "GET" && request.method !== "HEAD") {
-    // Cheap pre-check via the Content-Length header when present
-    // (catches the obvious case without reading the stream).
+    const contentType = request.headers.get("content-type") || "";
     const declared = request.headers.get("content-length");
     if (declared && Number.parseInt(declared, 10) > MAX_BODY_BYTES) {
       return new NextResponse(
@@ -78,18 +88,27 @@ async function handle(
         { status: 413, headers: { "Content-Type": "application/json" } },
       );
     }
-    try {
-      body = await request.text();
-    } catch {
-      body = undefined;
-    }
-    if (body && body.length > MAX_BODY_BYTES) {
-      return new NextResponse(
-        JSON.stringify({
-          detail: `Request body exceeds ${MAX_BODY_BYTES} bytes`,
-        }),
-        { status: 413, headers: { "Content-Type": "application/json" } },
-      );
+    if (contentType.toLowerCase().startsWith("multipart/form-data")) {
+      isMultipart = true;
+      try {
+        body = await request.formData();
+      } catch {
+        body = undefined;
+      }
+    } else {
+      try {
+        body = await request.text();
+      } catch {
+        body = undefined;
+      }
+      if (body && typeof body === "string" && body.length > MAX_BODY_BYTES) {
+        return new NextResponse(
+          JSON.stringify({
+            detail: `Request body exceeds ${MAX_BODY_BYTES} bytes`,
+          }),
+          { status: 413, headers: { "Content-Type": "application/json" } },
+        );
+      }
     }
   }
 
