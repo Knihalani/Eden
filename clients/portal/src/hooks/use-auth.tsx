@@ -136,8 +136,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // function is recreated every render and depending on it would
     // trigger a refetch on every Clerk state change. The org-hook
     // (use-org) owns the refresh-on-clerk-org-change path.
-     
-  }, [clerkUser?.id]);
+    //
+    // PQ-13: depend on ``clerkUser?.updatedAt`` in addition to ``id``
+    // so accepting a new org invite in another tab triggers a re-fetch.
+    // Pre-fix the dep array was ``[clerkUser?.id]`` alone, which left
+    // the org list stale after an invite-accept until a full reload.
+
+  }, [clerkUser?.id, clerkUser?.updatedAt]);
 
   const user: User | null = clerkUser
     ? buildEdenUser(clerkUser, organizations, currentOrgId)

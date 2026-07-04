@@ -518,18 +518,18 @@ export const api = {
     }),
 
   uploadAvatar: async (file: File): Promise<{ avatar_url: string }> => {
+    // PT-9: route through fetchApi so the 401-retry + in-flight
+    // dedup machinery applies (the bare-fetch path was missing both,
+    // so a stale session JWT left the upload silently 401'ing).
     const formData = new FormData();
     formData.append("file", file);
-    const res = await fetch("/api/proxy/auth/users/me/avatar", {
-      method: "POST",
-      body: formData,
-      credentials: "include",
-    });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      throw new Error(err.detail || `Upload failed: ${res.status}`);
-    }
-    return res.json();
+    return fetchApi<{ avatar_url: string }>(
+      "/auth/users/me/avatar",
+      {
+        method: "POST",
+        body: formData,
+      }
+    );
   },
 
   deleteAccount: (confirm: string) =>
@@ -941,34 +941,24 @@ export const api = {
       { method: "POST" },
     ),
 
-  // Data Export
-  exportOrgData: (orgId: string) => {
-    const url = `${API_BASE}/orgs/${orgId}/export`;
-    // Return a promise that triggers download
-    return fetch(url, {
-      credentials: "include",
-    }).then(async (response) => {
-      if (!response.ok) {
-        const error = await response.json().catch(() => ({ detail: "Export failed" }));
-        throw new Error(error.detail || `HTTP ${response.status}`);
-      }
-      // Get blob and trigger download
-      const blob = await response.blob();
-      const contentDisposition = response.headers.get("content-disposition");
-      const filenameMatch = contentDisposition?.match(/filename="?(.+)"?/);
-      const filename = filenameMatch ? filenameMatch[1] : `export_${orgId}.zip`;
-
-      // Create download link
-      const url = window.URL.createObjectURL(blob);
+  // Data Export — route through fetchApi with ``stream: true`` so the
+  // binary zip body isn't JSON-parsed (PT-9). Pre-fix the bare-fetch
+  // path returned the response as-is but skipped the 401-retry /
+  // in-flight dedup machinery the rest of the api surface uses.
+  exportOrgData: async (orgId: string): Promise<string> => {
+    return fetchApi<string>(`/orgs/${orgId}/export`, {
+      stream: true,
+    }).then(async (raw) => {
+      // ``stream: true`` returns the raw text body (zip bytes, not
+      // JSON). Trigger a download via a Blob URL.
+      const blob = new Blob([raw], { type: "application/zip" });
+      const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = filename;
-      document.body.appendChild(a);
+      a.download = `eden-export-${orgId}-${Date.now()}.zip`;
       a.click();
-      window.URL.revokeObjectURL(url);
-      document.body.removeChild(a);
-
-      return { success: true, filename };
+      URL.revokeObjectURL(url);
+      return raw;
     });
   },
 

@@ -39,8 +39,8 @@ with eden.trace(name="hello-world") as t:
     init: `import { init, trace } from "@eden-ai/sdk";
 
 init({
-  apiKey: process.env.EDEN_API_KEY!,
-  orgId: process.env.EDEN_DEFAULT_ORG!,
+  apiKey: process.env.EDEN_API_KEY ?? "<your-api-key>",
+  orgId: process.env.EDEN_DEFAULT_ORG ?? "<your-org-id>",
   baseUrl: process.env.EDEN_BASE_URL ?? "https://api.eden.ai",
 });
 
