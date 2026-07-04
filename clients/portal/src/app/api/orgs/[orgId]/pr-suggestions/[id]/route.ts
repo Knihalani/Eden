@@ -17,10 +17,10 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
   const { orgId, id } = await params;
   const cookieHeader = request.headers.get("cookie") || "";
   try {
-    const extraHeaders = await bearerHeader();
+    const authHeaders = await bearerHeader();
     return await forwardToBackend(
       `/orgs/${orgId}/agent/pr-suggestions/${id}`,
-      { method: "GET", cookieHeader, extraHeaders }
+      { method: "GET", cookieHeader, extraHeaders: authHeaders }
     );
   } catch (err) {
     return proxyError(err, "Failed to fetch PR suggestion");

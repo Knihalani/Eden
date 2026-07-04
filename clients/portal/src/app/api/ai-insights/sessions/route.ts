@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { auth } from "@clerk/nextjs/server";
+import { bearerHeader } from "@/lib/server/clerk-bearer";
 
 /**
  * List AI Insights chat sessions for the current user / org.
@@ -38,17 +38,11 @@ export async function GET(request: Request) {
     );
   }
 
-  // Resolve the Clerk session JWT server-side and forward it as
-  // a Bearer header (fail-open per lib/server/clerk-bearer.ts:39).
-  let authorization: string | undefined;
-  try {
-    const { getToken } = await auth();
-    const token = await getToken();
-    if (token) authorization = `Bearer ${token}`;
-  } catch {
-    // Clerk not configured / signed out — fall through to cookie auth.
-  }
-
+  // Resolve the Clerk session JWT server-side via the shared helper
+  // (PT-7) and forward as a Bearer header. ``bearerHeader()`` returns
+  // ``{}`` when the caller isn't signed in via Clerk; in that case
+  // the legacy Eden ``authorization`` cookie carries the request.
+  const authHeaders = await bearerHeader();
   const cookieHeader = request.headers.get("cookie") || "";
 
   try {
@@ -57,7 +51,7 @@ export async function GET(request: Request) {
       {
         method: "GET",
         headers: {
-          ...(authorization ? { Authorization: authorization } : {}),
+          ...authHeaders,
           Cookie: cookieHeader,
         },
       },
