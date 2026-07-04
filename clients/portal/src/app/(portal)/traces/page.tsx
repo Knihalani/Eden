@@ -20,14 +20,17 @@ import { useCallback, useEffect, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { Layers } from "lucide-react";
 import { PageHeader } from "@/components/layout/page-header";
+import { PageContent } from "@/components/layout/page-content";
 import { NoOrgState } from "@/components/ui/no-org-state";
 import { useToast } from "@/components/ui/toast";
+import { Button } from "@/components/ui/button";
 import { TracesTab } from "../observability/_components/TracesTab";
 import { AnnotateTraceDialog } from "../observability/_components/AnnotateTraceDialog";
 import type { TraceFilter, TraceItem } from "../observability/_lib/types";
 import { useOrg } from "@/hooks/use-org";
 import { api } from "@/lib/api";
 import { TraceExportModal } from "../observability/_components/TraceExportModal";
+import { RefreshCw } from "lucide-react";
 
 export default function TracesPage() {
   const { currentOrg } = useOrg();
@@ -109,16 +112,13 @@ export default function TracesPage() {
         subtitle="Search, filter, and inspect every trace in your system"
         icon={Layers}
         actions={
-          <button
-            onClick={loadTraces}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-[var(--bg-tertiary)] text-[var(--text-primary)] rounded-lg text-sm font-medium hover:bg-[var(--border-default)] transition-colors"
-          >
-            <Layers className="w-4 h-4" />
+          <Button variant="outline" size="sm" onClick={loadTraces}>
+            <RefreshCw className="w-3.5 h-3.5" />
             Refresh
-          </button>
+          </Button>
         }
       />
-      <div className="page-enter px-4 sm:p-6 lg:p-8 max-w-[1600px] mx-auto w-full">
+      <PageContent size="wide" className="space-y-0">
         <TracesTab
           traces={traces}
           loading={loading}
@@ -130,7 +130,7 @@ export default function TracesPage() {
           onAnnotate={handleAnnotate}
           initialTraceId={initialTraceId}
         />
-      </div>
+      </PageContent>
       <TraceExportModal
         open={exportOpen}
         onOpenChange={setExportOpen}
