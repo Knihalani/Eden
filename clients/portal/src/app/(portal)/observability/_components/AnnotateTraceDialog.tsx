@@ -8,9 +8,12 @@
  *   • Category dropdown (Quality / Latency / Cost / Correctness)
  *   • Comment textarea (optional)
  *
- * On Save: calls api.annotateTrace(...) (no-op for now, see the
- * matching endpoint in src/lib/api.ts) and toasts success. The
- * dialog can be opened from any row action in the TracesTab table.
+ * On Save: persists to localStorage under
+ *   ``eden:annotate:{org_id}:{trace_id}``
+ * The toast is honest about it — ``Annotation saved locally —
+ * server sync coming soon`` — so the user knows their data is
+ * captured but not yet durable on the backend. The dialog can be
+ * opened from any row action in the TracesTab table.
  */
 
 import { useEffect, useState } from "react";
@@ -25,7 +28,6 @@ import {
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/toast";
 import { useOrg } from "@/hooks/use-org";
-import { api } from "@/lib/api";
 
 const CATEGORIES = ["Quality", "Latency", "Cost", "Correctness"] as const;
 type Category = (typeof CATEGORIES)[number];
@@ -68,12 +70,21 @@ export function AnnotateTraceDialog({
     }
     setSaving(true);
     try {
-      await api.annotateTrace(currentOrg.id, traceId, {
+      // Audit 2026-07-04 — api.annotateTrace was a Promise.resolve()
+      // no-op that toasted fake success and persisted nothing. The
+      // backend route isn't wired yet. Persist to localStorage so the
+      // user's input isn't lost, and surface an honest toast.
+      const key = `eden:annotate:${currentOrg.id}:${traceId}`;
+      const payload = {
         score,
         category,
         comment: comment.trim() || undefined,
-      });
-      toast.success("Annotation saved");
+        saved_at: new Date().toISOString(),
+      };
+      window.localStorage.setItem(key, JSON.stringify(payload));
+      toast.success(
+        "Annotation saved locally — server sync coming soon",
+      );
       onOpenChange(false);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Failed to save annotation");

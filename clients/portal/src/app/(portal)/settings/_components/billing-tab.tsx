@@ -6,6 +6,7 @@ import { useOrg } from "@/hooks/use-org";
 import { Loader2, CreditCard, Users, Code, Briefcase, AlertCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { BillingUsage } from "@/components/billing/billing-types";
+import { useToast } from "@/components/ui/toast";
 
 // Ponytail: use the shared ``BillingUsage`` shape from billing-types
 // instead of redefining it here. Previously ``PlanLimits`` was missing
@@ -15,6 +16,7 @@ import type { BillingUsage } from "@/components/billing/billing-types";
 
 export function BillingTab() {
   const { currentOrg } = useOrg();
+  const toast = useToast();
   // ``api.getPlans`` and ``BillingUsage`` have drifted (the backend
   // adds fields the UI type doesn't include). Partial<> bridges
   // the gap so the build doesn't fail while keeping the UI type
@@ -41,6 +43,7 @@ export function BillingTab() {
     } catch (e: any) {
       console.error("Failed to load billing data", e);
       setError(e.message || "Failed to load billing data");
+      toast.error(e.message || "Failed to load billing data");
     } finally {
       setLoading(false);
     }

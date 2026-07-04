@@ -70,6 +70,7 @@ export function MembersTab({ org }: MembersTabProps) {
       setMembers(data as typeof members);
     } catch (err) {
       console.error("Failed to load members", err);
+      toast.error(err instanceof Error ? err.message : "Failed to load members");
     } finally {
       setLoading(false);
     }

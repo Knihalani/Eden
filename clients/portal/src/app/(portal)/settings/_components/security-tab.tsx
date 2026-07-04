@@ -56,6 +56,7 @@ export function SecurityTab() {
       }
     } catch (e) {
       console.error("Failed to load 2FA data", e);
+      toast.error(e instanceof Error ? e.message : "Failed to load 2FA data");
     } finally {
       setLoading(false);
     }

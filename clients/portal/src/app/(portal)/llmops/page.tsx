@@ -163,6 +163,7 @@ function ModelsTab({ orgId }: { orgId: string }) {
       setArtifacts(res.artifacts);
     } catch (err) {
       console.error("Failed to load artifacts", err);
+      toast.error(err instanceof Error ? err.message : "Failed to load artifacts");
     } finally {
       setLoading(false);
     }
@@ -174,6 +175,7 @@ function ModelsTab({ orgId }: { orgId: string }) {
       setSelectedArtifact(res);
     } catch (err) {
       console.error("Failed to load artifact detail", err);
+      toast.error(err instanceof Error ? err.message : "Failed to load artifact detail");
     }
   };
 
@@ -330,6 +332,7 @@ function PromptsTab({ orgId }: { orgId: string }) {
       setPrompts(res.prompts);
     } catch (err) {
       console.error("Failed to load prompts", err);
+      toast.error(err instanceof Error ? err.message : "Failed to load prompts");
     } finally {
       setLoading(false);
     }
@@ -461,6 +464,7 @@ function ExperimentsTab({ orgId }: { orgId: string }) {
       setExperiments(res.experiments);
     } catch (err) {
       console.error("Failed to load experiments", err);
+      toast.error(err instanceof Error ? err.message : "Failed to load experiments");
     } finally {
       setLoading(false);
     }
@@ -472,6 +476,7 @@ function ExperimentsTab({ orgId }: { orgId: string }) {
       setSelectedExp(res);
     } catch (err) {
       console.error("Failed to load experiment detail", err);
+      toast.error(err instanceof Error ? err.message : "Failed to load experiment detail");
     }
   };
 
@@ -594,6 +599,7 @@ function ABTestsTab({ orgId }: { orgId: string }) {
       setTests(res.tests);
     } catch (err) {
       console.error("Failed to load A/B tests", err);
+      toast.error(err instanceof Error ? err.message : "Failed to load A/B tests");
     } finally {
       setLoading(false);
     }
@@ -686,6 +692,7 @@ function GatewayTab({ orgId }: { orgId: string }) {
       setMetrics(m.metrics || []);
     } catch (err) {
       console.error("Failed to load gateway data", err);
+      toast.error(err instanceof Error ? err.message : "Failed to load gateway data");
     } finally {
       setLoading(false);
     }
@@ -814,6 +821,7 @@ function MonitoringTab({ orgId }: { orgId: string }) {
       setAlerts(a.alerts || []);
     } catch (err) {
       console.error("Failed to load monitoring data", err);
+      toast.error(err instanceof Error ? err.message : "Failed to load monitoring data");
     } finally {
       setLoading(false);
     }
@@ -825,6 +833,7 @@ function MonitoringTab({ orgId }: { orgId: string }) {
       setAlerts((prev) => prev.map((a) => a.alert_id === alertId ? { ...a, acknowledged: true } : a));
     } catch (err) {
       console.error("Failed to acknowledge alert", err);
+      toast.error(err instanceof Error ? err.message : "Failed to acknowledge alert");
     }
   };
 
@@ -924,6 +933,7 @@ function CacheTab({ orgId }: { orgId: string }) {
       setStats(res);
     } catch (err) {
       console.error("Failed to load cache stats", err);
+      toast.error(err instanceof Error ? err.message : "Failed to load cache stats");
     } finally {
       setLoading(false);
     }
@@ -1021,6 +1031,7 @@ function CacheTab({ orgId }: { orgId: string }) {
                 loadStats();
               } catch (err) {
                 console.error("Failed to invalidate cache", err);
+                toast.error(err instanceof Error ? err.message : "Failed to invalidate cache");
               }
             }}
             className="px-4 py-2 text-sm font-medium bg-[var(--error-bg)] hover:bg-[var(--error-dim)] text-[var(--error)] rounded-lg transition-colors flex items-center gap-2"
