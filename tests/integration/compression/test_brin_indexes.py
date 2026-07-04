@@ -36,6 +36,11 @@ async def _try_get_pool():
     )
     try:
         await asyncio.wait_for(client.initialize(), timeout=3.0)
+        # initialize() may complete without actually connecting
+        # (lazy asyncpg pool). Force a real round-trip via SELECT 1
+        # so the fixture skips cleanly when the DB is unreachable
+        # rather than failing every test with a ConnectionError.
+        await asyncio.wait_for(client.fetchval("SELECT 1"), timeout=3.0)
     except Exception:
         return None
     return client
