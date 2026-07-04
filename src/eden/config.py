@@ -49,6 +49,12 @@ class Settings(BaseSettings):
     postgres_db: str = "eden"
     postgres_user: str = "eden"
     postgres_password: str = ""
+    # Quota enforcement (DL-14 Fail-closed) gates mutating routes. The
+    # middleware reads this flag at request time; False bypasses the
+    # snapshot fetch and defers to the route handler. Tests set this to
+    # False because seeding org_resource_limits across every fixture is
+    # impractical; production keeps it True.
+    quota_enabled: bool = True
     # Defaults are deliberately conservative (20/5 = ~80 conns across
     # the API + 2 jobs + worker). The Northflank manifest overrides
     # down to 10/2 per container; PostgresClient honours these.

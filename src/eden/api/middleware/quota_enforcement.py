@@ -158,6 +158,19 @@ class QuotaEnforcementMiddleware(BaseHTTPMiddleware):
         if request.method == "OPTIONS" or request.url.path == "/health":
             return await call_next(request)
 
+        # ── Test bypass ──
+        # Integration tests mock Postgres but can't realistically
+        # seed the org_resource_limits snapshot table on every
+        # fixture. The middleware is fail-closed by design (DL-14)
+        # — without a snapshot it returns 429 — but every test that
+        # exercises a mutating route needs the middleware to defer
+        # to the route handler. The test_settings fixture sets
+        # ``quota_enabled=False`` so the middleware short-circuits
+        # in the test suite without affecting production.
+        from eden.config import get_settings
+        if not get_settings().quota_enabled:
+            return await call_next(request)
+
         org_id = await self._resolve_org_id(request)
         if not org_id:
             # Unauthenticated — let the route handler deal with auth

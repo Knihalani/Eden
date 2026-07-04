@@ -74,6 +74,10 @@ def test_settings() -> Settings:
         postgres_db="eden_test",
         postgres_user="eden_test",
         postgres_password="eden_test",
+        # Disable quota enforcement (DL-14 Fail-closed would
+        # otherwise return 429 because the test suite has no
+        # org_resource_limits snapshot to read).
+        quota_enabled=False,
         openrouter_api_key="test-api-key",
         qdrant_host="localhost",
         qdrant_port=6333,
