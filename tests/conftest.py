@@ -78,6 +78,15 @@ def test_settings() -> Settings:
         qdrant_host="localhost",
         qdrant_port=6333,
         cors_origins="*",
+        # Disable Redis in the rate-limit middleware so it falls
+        # back to the in-memory bucket immediately rather than
+        # attempting a connection that fails the whole request.
+        # Pre-fix the integration suite required a running Redis
+        # on localhost:6379; the test_settings redis_url default
+        # is ``redis://localhost:6379/0`` and the middleware's
+        # from_url() surfaced a ConnectionError before the route
+        # ever ran.
+        redis_url="",
         # The 413 test sends a 1.1 MiB body and expects the
         # ingestion route to reject it. The production cap is
         # 5 MiB; tighten it to 1 MiB for the integration suite
@@ -93,14 +102,38 @@ def patch_settings(test_settings: Settings):
     Also patch the module-level settings imported by auth utils so that
     JWT creation/verification uses the test secret regardless of import-time
     caching.
+
+    Also patches the module-level settings cached at import time by
+    the rate-limit middleware (``tenant_rate_limit.py:30`` reads
+    ``get_settings()`` at module load, so the autouse fixture's
+    patch on the function doesn't reach the cached attribute).
     """
     with patch("eden.config.get_settings", return_value=test_settings):
         with patch("eden.api.utils.auth.settings", test_settings):
             try:
                 with patch("eden.api.utils.rate_limit.settings", test_settings, create=True):
-                    yield
+                    pass
             except (AttributeError, ModuleNotFoundError):
-                yield
+                pass
+            # Override the cached ``settings`` attribute on every
+            # middleware module that captured ``get_settings()`` at
+            # import time. tenant_rate_limit.py:30 is the worst
+            # offender — without this the middleware hits
+            # ``localhost:6379`` even though test_settings.redis_url=""
+            try:
+                from eden.api.middleware import tenant_rate_limit as _trl
+
+                _trl.settings = test_settings
+                # Drop the per-instance Redis client cache so the
+                # middleware re-reads the (now-empty) redis_url on
+                # the next request.
+                for _mw in (
+                    getattr(_trl, "_middleware_instances", None) or []
+                ):
+                    _mw._redis = False  # sentinel: skip Redis entirely
+            except Exception:
+                pass
+            yield
 
 
 # ─────────────────────────────────────────────────────────────────────────────
