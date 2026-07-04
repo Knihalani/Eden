@@ -353,13 +353,25 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
     // and nothing is clickable" (the scroll wheel hit the trapped
     // container instead of the document, and clicks on the overlay
     // pseudo-elements were absorbed). Switching to a native
-    // document scroll with `min-h-screen` + row flex gives the
+    // document scroll with `min-h-dvh` + row flex gives the
     // user the standard browser-scroll affordance everywhere, on
     // every viewport, with no special-casing for mobile bottom nav.
     // FIX-D: must be flex-row on lg+ so the sidebar sits beside
     // <main>, not stacked above it. flex-col on mobile so the
     // sidebar becomes the mobile drawer.
-    <div className="min-h-dvh flex flex-col lg:flex-row bg-[var(--bg-secondary)]">
+    // FIX-E: ``lg:items-start`` on the row — NOT the default
+    // ``items-stretch``. With ``stretch``, both <aside> and <main>
+    // resolve to the row's cross-axis size (``min-h-dvh``), and
+    // content that's taller than the viewport OVERFLOWS <main> but
+    // never grows the row. The document element stays at viewport
+    // height, the html scroll container has nothing to scroll, and
+    // users see a frozen page. With ``items-start``, the row's
+    // cross-axis = max(child intrinsic sizes) = the tallest item's
+    // natural height. <main>'s content grows the row, the body
+    // grows, the html element scrolls. Sidebar keeps its own
+    // ``lg:h-dvh`` so the chrome still fills the viewport on
+    // short pages.
+    <div className="min-h-dvh flex flex-col lg:flex-row lg:items-start bg-[var(--bg-secondary)]">
       {/* Skip-to-content link — visually hidden until focused, allows keyboard users to bypass the sidebar nav */}
       <a href="#main-content" className="skip-to-content">
         Skip to main content
