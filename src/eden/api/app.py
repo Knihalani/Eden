@@ -535,7 +535,7 @@ async def _http_exception(request: Request, exc: StarletteHTTPException):
     # to this resource" stripped actionable info — the test
     # suite lost the ability to distinguish cross-tenant
     # attempts from generic permission denials.
-    upstream_detail = exc.detail if isinstance(exc.detail, str) else None
+    upstream_detail = exc.detail if isinstance(exc.detail, (str, dict)) else None
     if status == 404:
         err, detail = "not_found", upstream_detail or "The requested resource was not found"
     elif status == 401:
@@ -555,7 +555,7 @@ async def _http_exception(request: Request, exc: StarletteHTTPException):
         err, detail = "service_unavailable", exc.detail if isinstance(exc.detail, str) else "service temporarily unavailable"
     else:
         err = "http_error"
-        detail = exc.detail if isinstance(exc.detail, str) else "Request failed"
+        detail = exc.detail if isinstance(exc.detail, (str, dict)) else "Request failed"
     return JSONResponse(
         status_code=status,
         content={"error": err, "detail": detail, "request_id": rid},
