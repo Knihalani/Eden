@@ -69,7 +69,13 @@ async def _fake_admin() -> dict:
 
 @pytest.fixture
 def a2a_client(mock_postgres_client: MagicMock) -> TestClient:
-    """TestClient with the A2A route's auth deps stubbed."""
+    """TestClient with the A2A route's auth deps stubbed.
+
+    Sets the ``authorization`` cookie so default-deny middleware
+    accepts the request. Pre-fix the test sent only ``X-Org-Id``
+    and got 401 from the middleware (the dep-override doesn't
+    reach ASGI middleware).
+    """
     from eden.api.app import app
     from eden.api.deps import (
         get_current_user,
@@ -80,7 +86,9 @@ def a2a_client(mock_postgres_client: MagicMock) -> TestClient:
     app.dependency_overrides[require_org_member] = _fake_member
     app.dependency_overrides[require_org_admin] = _fake_admin
     try:
-        yield TestClient(app)
+        client = TestClient(app)
+        client.cookies.set("authorization", "test-token-for-default-deny")
+        yield client
     finally:
         app.dependency_overrides.clear()
 

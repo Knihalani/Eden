@@ -84,7 +84,9 @@ def routing_client(mock_postgres_client: MagicMock) -> TestClient:
     app.dependency_overrides[require_org_member] = _fake_member
     app.dependency_overrides[require_org_admin] = _fake_admin
     try:
-        yield TestClient(app)
+        client = TestClient(app)
+        client.cookies.set("authorization", "test-token-for-default-deny")
+        yield client
     finally:
         app.dependency_overrides.clear()
 
