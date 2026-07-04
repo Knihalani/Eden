@@ -38,7 +38,7 @@ export const BREADCRUMB_LABELS: Record<string, BreadcrumbLabel> = {
   builder: { label: "Builder", category: "build" },
   marketplace: { label: "Marketplace", category: "build" },
   "multi-agent": { label: "Multi-Agent", category: "build" },
-  sandbox: { label: "Sandbox", category: "build" },
+  // sandbox entry removed 2026-07-04 — sandbox subsystem retired
   users: { label: "Members", category: "admin" },
   guardrails: { label: "Guardrails", category: "optimize" },
   autonomous: { label: "Autonomous", category: "automate" },

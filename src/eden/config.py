@@ -240,12 +240,6 @@ class Settings(BaseSettings):
     model_fast: str = "deepseek/deepseek-v4-flash:free"
     model_fallback: str = "meta-llama/llama-3.3-70b-instruct"
 
-    # Sandboxing
-    sandbox_memory_mb: int = 512
-    sandbox_cpu_count: int = 2
-    sandbox_snapshot_pool_size: int = 10
-    sandbox_max_concurrent: int = 100
-
     # Token budgets per agent
     max_tokens_planner: int = 50000
     max_tokens_critic: int = 30000

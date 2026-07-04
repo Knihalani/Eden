@@ -2,15 +2,14 @@
 
 Two paths:
 
-* **Generate the test plan** (no sandbox execution) — uses a
-  T1 model to derive 3-5 targeted regression tests from the
-  RCA + the diff. Returns the test plan as a JSON array. Always
-  available (no Gate-3 dependency).
-* **Run the tests** — spins up a sandbox container via the
-  configured :class:`SandboxProvider`. Returns the pass/fail
-  counts. Requires the Gate-3 sandbox worker; falls back to a
-  ``gate=3_blocked`` envelope when no provider is configured
-  or no ``spec`` is passed.
+* **Generate the test plan** — uses a T1 model to derive
+  3-5 targeted regression tests from the RCA + the diff.
+  Returns the test plan as a JSON array. Always available.
+* **Run the tests** — sandbox execution path. Removed 2026-07-04
+  along with the rest of the sandbox subsystem. ``run()`` now
+  returns the deterministic ``gate=3_blocked`` envelope for every
+  call; re-introduce when a real isolation back-end is back on
+  the roadmap.
 
 Persists to ``patch_test_runs`` with the pass/fail counts.
 """
@@ -22,12 +21,6 @@ import logging
 from typing import Any
 
 from eden.optimization.model_router import ModelRouter, PipelineTask
-from eden.providers import (
-    SandboxProvider,
-    SandboxResult,
-    SandboxSpec,
-    get_default_sandbox_provider,
-)
 
 from ._common import _new_id, _not_implemented_envelope, _ok_envelope
 
@@ -119,10 +112,8 @@ class TestPlanRunner:
 
     def __init__(
         self,
-        provider: SandboxProvider | None = None,
         router: ModelRouter | None = None,
     ) -> None:
-        self._sandbox = provider or get_default_sandbox_provider()
         self._router = router
 
     async def generate_plan(
@@ -164,72 +155,26 @@ class TestPlanRunner:
         operator-supplied ``SandboxSpec`` — that is the
         opt-in path that bypasses the STUB gate.
         """
-        if spec is None:
-            return _not_implemented_envelope(
-                self.name,
-                message=(
-                    "test plan execution is gated until Cat 23 Gate 3 ships; "
-                    "pass an explicit SandboxSpec to opt in"
-                ),
-                gate="3_blocked",
-                data={
-                    "patch_id": patch_id,
-                    "sandbox_cpu_limit": SANDBOX_CPU_LIMIT,
-                    "sandbox_memory_mb": SANDBOX_MEMORY_MB,
-                    "sandbox_wall_clock_sec": SANDBOX_WALL_CLOCK_SEC,
-                },
-            )
-        result: SandboxResult = await self._sandbox.run(spec)
-        # Parse pytest output if available to compute pass_rate.
-        passed = passed_failed = 0
-        stdout = result.stdout or ""
-        for line in stdout.splitlines():
-            line = line.strip()
-            if " passed" in line or " failed" in line:
-                # Lines like "5 passed, 2 failed in 0.42s"
-                import re as _re
-                m = _re.match(
-                    r"(?:(\d+)\s+passed)?\s*(?:,\s*)?(?:(\d+)\s+failed)?",
-                    line,
-                )
-                if m:
-                    try:
-                        passed = int(m.group(1) or 0)
-                    except (TypeError, ValueError):
-                        passed = 0
-                    try:
-                        passed_failed = int(m.group(2) or 0)
-                    except (TypeError, ValueError):
-                        passed_failed = 0
-        total = passed + passed_failed
-        pass_rate = (
-            (passed / total) if total > 0
-            else (1.0 if result.success else 0.0)
-        )
-        return {
-            "status": "ok" if result.success else "failed",
-            "feature": self.name,
-            "live": True,
-            "trace_id": _new_id("live"),
-            "timestamp": None,
-            "data": {
+        # Sandbox execution path retired 2026-07-04 — always return
+        # the deterministic ``gate=3_blocked`` envelope. The opt-in
+        # SandboxSpec parameter is preserved as a no-op for callers
+        # that still pass one.
+        del spec  # noqa: F841
+        return _not_implemented_envelope(
+            self.name,
+            message=(
+                "test plan execution is disabled; sandbox subsystem "
+                "retired 2026-07-04"
+            ),
+            gate="3_blocked",
+            data={
                 "patch_id": patch_id,
-                "sandbox_run_id": _new_id("sandbox"),
-                "sandbox_provider": result.provider,
-                "passed": result.success,
-                "exit_code": result.exit_code,
-                "stdout": result.stdout,
-                "stderr": result.stderr,
-                "duration_ms": result.duration_ms,
-                "timed_out": result.timed_out,
-                "signal": result.signal,
-                "passed_tests": passed if total > 0 else None,
-                "failed_tests": passed_failed if total > 0 else None,
-                "total_tests": total if total > 0 else None,
-                "pass_rate": pass_rate,
+                "sandbox_cpu_limit": SANDBOX_CPU_LIMIT,
+                "sandbox_memory_mb": SANDBOX_MEMORY_MB,
+                "sandbox_wall_clock_sec": SANDBOX_WALL_CLOCK_SEC,
             },
-        }
+        )
 
     @property
     def provider_name(self) -> str:
-        return self._sandbox.name
+        return "retired"

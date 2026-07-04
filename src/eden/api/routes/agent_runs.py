@@ -23,7 +23,8 @@ Execution
 Run triggers return immediately with a row in ``pending`` state. The
 actual execution is dispatched via FastAPI's ``BackgroundTasks``.
 The subprocess adapter is the default; Firecracker awaits the
-BandSox protocol extension (see ``src/eden/sim_runner.py``).
+BandSox protocol extension. Sandbox execution disabled 2026-07-04 —
+runs return ``error`` with message ``sandbox_disabled``.
 """
 
 from __future__ import annotations
@@ -55,7 +56,6 @@ from fastapi import (
 from pydantic import BaseModel
 
 from eden.api.deps import get_current_user
-from eden.sim_runner import select_adapter
 
 logger = logging.getLogger(__name__)
 
@@ -599,7 +599,7 @@ async def _execute_run(
 
     client = await get_postgres_client()
     if client is None:
-        logger.error("sim_runner: postgres unavailable; run %s stuck in pending", run_id)
+        logger.error("agent_runs: postgres unavailable; run %s stuck in pending", run_id)
         return
 
     # Filter scenarios if the request specified a subset
@@ -618,26 +618,18 @@ async def _execute_run(
 
     t0 = time.time()
     try:
-        adapter = select_adapter(preferred=runner_kind)
-        upload_path = Path(code_path)
-        if kind == "test":
-            result = await adapter.run_tests(
-                upload_path=upload_path, eval_yaml=yaml,
-            )
-        else:
-            result = await adapter.run_scenarios(
-                upload_path=upload_path, eval_yaml=yaml,
-            )
+        # Sandbox execution disabled 2026-07-04 — adapter dispatch
+        # removed. Persist a deterministic error so the run is no
+        # longer stuck in ``pending`` and the UI can surface the
+        # reason without polling forever.
         duration_ms = int((time.time() - t0) * 1000)
         await client.update_sim_run_status(
-            run_id, status=result.status, duration_ms=duration_ms,
-        )
-        await client.update_sim_run_result(
-            run_id, results=result.to_results_jsonb(),
+            run_id, status="error", duration_ms=duration_ms,
+            error="sandbox_disabled",
         )
     except Exception as exc:  # noqa: BLE001
         duration_ms = int((time.time() - t0) * 1000)
-        logger.exception("sim_runner: run %s failed", run_id)
+        logger.exception("agent_runs: run %s failed", run_id)
         await client.update_sim_run_status(
             run_id, status="error", duration_ms=duration_ms,
             error=f"{type(exc).__name__}: {exc}",

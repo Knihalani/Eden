@@ -1,7 +1,7 @@
 """Shared helpers for the ``bench/`` suite.
 
 The benches don't talk to a real Eden backend. They synthesize fake
-workloads (mock LLM responses, mock sandbox boot, mock KB lookups)
+workloads (mock LLM responses, mock KB lookups)
 so the harness runs in CI without any external dependencies. To
 benchmark a real deployment, set the env vars documented in each
 module.

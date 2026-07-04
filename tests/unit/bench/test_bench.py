@@ -10,7 +10,7 @@ import asyncio
 
 import pytest
 
-from bench import kb_retrieval, latency, llm_provider, sandbox_boot
+from bench import kb_retrieval, latency, llm_provider
 from bench.common import BenchResult, bench_async
 
 # ────────────────────────────────────────────────────────────────────────
@@ -72,19 +72,6 @@ async def test_bench_api_p95_under_sanity_threshold():
     results = await latency.bench_api(n=20, concurrency=4)
     for r in results:
         assert r.p95_ms < 500, f"{r.name} p95 too high: {r.p95_ms}"
-
-
-# ────────────────────────────────────────────────────────────────────────
-# bench.sandbox_boot
-# ────────────────────────────────────────────────────────────────────────
-
-
-@pytest.mark.asyncio
-async def test_bench_sandbox_boot_returns_result():
-    res = await sandbox_boot.bench_sandbox_boot(n=3, concurrency=1)
-    assert res.n == 3
-    # Mock uses 150ms; allow generous slack
-    assert 100 < res.p95_ms < 500
 
 
 # ────────────────────────────────────────────────────────────────────────
@@ -150,5 +137,5 @@ async def test_run_all_produces_results(tmp_path, monkeypatch):
     import json
     data = json.loads(files[0].read_text())
     assert "suites" in data
-    for suite in ("api_latency", "sandbox_boot", "llm_provider", "kb_retrieval"):
+    for suite in ("api_latency", "llm_provider", "kb_retrieval"):
         assert suite in data["suites"], f"missing suite {suite}"

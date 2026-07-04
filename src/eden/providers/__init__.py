@@ -1,14 +1,10 @@
-"""Provider abstractions — sandbox, repo, PR.
+"""Provider abstractions — repo, PR.
 
 This package ships the general-purpose provider interfaces
 that the rest of Eden (Cat 12 Simulator, Cat 23
 TestPlanRunner, the new agent-suggest flow) can target.
-Three families:
+Two families (sandbox removed 2026-07-04):
 
-* :class:`eden.providers.sandbox.SandboxProvider` — execute
-  a single command in a sandbox. ``Local`` + ``Null``
-  implementations ship; Docker / Firecracker are
-  follow-ups.
 * :class:`eden.providers.repo.RepoProvider` — read-only
   access to a source-control repo. ``Local`` (git CLI)
   ships; ``GitHub`` is a placeholder.
@@ -18,7 +14,7 @@ Three families:
   placeholder.
 
 The package uses **lazy re-exports** so that
-``from eden.providers import LocalSandboxProvider`` does
+``from eden.providers import LocalPRProvider`` does
 not eagerly import the sibling submodules.
 
 See ``docs/eden-observability-gap-roadmap.md`` § Cat 23
@@ -35,22 +31,15 @@ __all__ = [
     "FileEntry",
     "GitHubPRProvider",
     "GitHubRepoProvider",
-    "IsolatedSandboxProvider",
     "LocalPRProvider",
     "LocalRepoProvider",
-    "LocalSandboxProvider",
-    "NullSandboxProvider",
     "PRCreateRequest",
     "PRProvider",
     "PRRevertRequest",
     "PullRequestInfo",
     "RepoProvider",
-    "SandboxProvider",
-    "SandboxResult",
-    "SandboxSpec",
     "get_default_pr_provider",
     "get_default_repo_provider",
-    "get_default_sandbox_provider",
 ]
 
 
@@ -72,15 +61,6 @@ if TYPE_CHECKING:  # pragma: no cover - import only
         RepoProvider,
         get_default_repo_provider,
     )
-    from .sandbox import (
-        LocalSandboxProvider,
-        NullSandboxProvider,
-        SandboxProvider,
-        SandboxResult,
-        SandboxSpec,
-        get_default_sandbox_provider,
-    )
-    from .sandbox_isolated import IsolatedSandboxProvider
 
 
 _LAZY_IMPORTS: dict[str, tuple[str, str]] = {
@@ -97,17 +77,6 @@ _LAZY_IMPORTS: dict[str, tuple[str, str]] = {
     "PullRequestInfo": (".repo", "PullRequestInfo"),
     "RepoProvider": (".repo", "RepoProvider"),
     "get_default_repo_provider": (".repo", "get_default_repo_provider"),
-    "IsolatedSandboxProvider": (
-        ".sandbox_isolated", "IsolatedSandboxProvider",
-    ),
-    "LocalSandboxProvider": (".sandbox", "LocalSandboxProvider"),
-    "NullSandboxProvider": (".sandbox", "NullSandboxProvider"),
-    "SandboxProvider": (".sandbox", "SandboxProvider"),
-    "SandboxResult": (".sandbox", "SandboxResult"),
-    "SandboxSpec": (".sandbox", "SandboxSpec"),
-    "get_default_sandbox_provider": (
-        ".sandbox", "get_default_sandbox_provider",
-    ),
 }
 
 

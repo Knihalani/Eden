@@ -22,7 +22,7 @@ RESULTS_DIR = Path(__file__).resolve().parent / "results"
 
 
 async def main() -> int:
-    from bench import kb_retrieval, latency, llm_provider, sandbox_boot
+    from bench import kb_retrieval, latency, llm_provider
 
     started = time.time()
     all_results: dict = {
@@ -37,11 +37,7 @@ async def main() -> int:
     for r in api_dicts:
         print(f"  {r['name']:35s}  p50={r['p50_ms']:7.2f}ms  p95={r['p95_ms']:7.2f}ms  p99={r['p99_ms']:7.2f}ms")
 
-    print("\n== bench: sandbox boot ==")
-    sb_result = await sandbox_boot.bench_sandbox_boot(n=20, concurrency=1)
-    sb_dict = sb_result.to_dict()
-    all_results["suites"]["sandbox_boot"] = sb_dict
-    print(f"  {sb_dict['name']:35s}  p50={sb_dict['p50_ms']:7.2f}ms  p95={sb_dict['p95_ms']:7.2f}ms")
+    # Sandbox boot bench removed 2026-07-04 — sandbox subsystem retired.
 
     print("\n== bench: llm provider ==")
     llm_results = await llm_provider.bench_llm_provider(n=30, concurrency=4)

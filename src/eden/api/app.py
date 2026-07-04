@@ -92,7 +92,6 @@ from eden.api.routes import (
     region,
     replay,
     retention_policy,
-    sandbox,
     scim,
     sessions,
     sharing,
@@ -222,7 +221,6 @@ class HealthResponse(BaseModel):
     version: str
     postgres: str
     qdrant: str
-    sandbox: str
 
 
 # ============================================================================
@@ -286,15 +284,6 @@ async def lifespan(app: FastAPI):
             logger.warning(f"Postgres probe: {kb_health.get('postgres', 'unknown')}")
     except Exception as e:
         logger.warning(f"KB startup probe warning: {e}")
-
-    # Initialize sandbox runner
-    try:
-        from eden.sandbox.runner import get_sandbox_runner
-        # Initialize async sandbox runner
-        await get_sandbox_runner()
-        logger.info("Sandbox runner initialized")
-    except Exception as e:
-        logger.warning(f"Sandbox initialization warning: {e}")
 
     # Phase 7.1b follow-up — start the Insights detector loop.
     # Best-effort: a failure to start the loop must never block
@@ -365,10 +354,8 @@ async def lifespan(app: FastAPI):
         except Exception as e:
             logger.warning(f"Insights detector loop stop failed: {e}")
 
-    from eden.sandbox.runner import close_sandbox_runner
     from eden.storage.postgres import close_postgres_client
 
-    await close_sandbox_runner()
     await close_postgres_client()
 
     # B-6 follow-up — release the shared ``httpx.AsyncClient`` used
@@ -615,7 +602,6 @@ app.include_router(prompts_v2.router)  # /orgs/{org_id}/prompts/* (D.9 versionin
 app.include_router(pii_policy.router)  # /orgs/{org_id}/pii-policy
 app.include_router(retention_policy.router)  # /orgs/{org_id}/retention-policy
 app.include_router(region.router)  # /orgs/{org_id}/region
-app.include_router(sandbox.router)  # /sandbox (gated)
 app.include_router(experiments.router)  # /experiments (gated)
 app.include_router(evaluation.router)  # /evaluation (gated)
 app.include_router(multi_agent.router)  # /orgs/{org_id}/multi-agent (gated)
@@ -742,12 +728,10 @@ async def health_check():
     from fastapi.responses import JSONResponse
 
     kb_health = await kb_health_check()
-    sandbox_status = _get_sandbox_health()
 
     overall = "healthy" if (
         kb_health.get("postgres") == "connected" and
-        kb_health.get("qdrant") == "connected" and
-        sandbox_status in ("ready", "null_sandbox", "healthy")
+        kb_health.get("qdrant") == "connected"
     ) else "degraded"
 
     # Surface the DB target the runtime is actually using so deploy
@@ -781,7 +765,6 @@ async def health_check():
         version=settings.app_version,
         postgres=pg,
         qdrant=kb_health.get("qdrant", "unknown"),
-        sandbox=sandbox_status,
     )
 
     # HEALH_PROBE_MODE controls the status code:
@@ -800,16 +783,8 @@ async def health_check():
 
 
 def _get_sandbox_health() -> str:
-    """Get sandbox health status."""
-    try:
-        from eden.sandbox.runner import NullSandboxRunner, _sandbox_runner
-        if _sandbox_runner is None:
-            return "uninitialized"
-        if isinstance(_sandbox_runner, NullSandboxRunner):
-            return "null_sandbox"
-        return "ready"
-    except Exception:
-        return "unknown"
+    """Removed 2026-07-04 — sandbox subsystem retired."""
+    return "removed"
 
 
 if __name__ == "__main__":

@@ -21,7 +21,6 @@ import {
   Wand2,
   Box,
   Network,
-  Server,
   Layers,
   PlayCircle,
   Activity,
@@ -84,7 +83,7 @@ export const DEFAULT_SIDEBAR: SidebarGroup[] = [
       { id: "builder",     href: "/builder",      label: "Builder",       icon: Wand2 },
       { id: "marketplace", href: "/marketplace",  label: "Marketplace",   icon: Box },
       { id: "multi-agent", href: "/multi-agent",  label: "Multi-Agent",   icon: Network, badge: "beta" },
-      { id: "sandbox",     href: "/sandbox",      label: "Sandbox",       icon: Server },
+      // Sandbox sidebar entry removed 2026-07-04 — subsystem retired.
     ],
   },
   {
