@@ -165,6 +165,32 @@ export default function BillingPage() {
     }
   };
 
+  // Add / Update payment method — opens the Stripe Customer Portal in a
+  // new tab so the user can manage cards without leaving the billing
+  // page. Pre-fix this button was an orphan with no onClick (PQ-9).
+  const handleUpdatePaymentMethod = async () => {
+    if (!currentOrg) {
+      toast.error("No active organization selected");
+      return;
+    }
+    try {
+      const result = await api.createPortalSession(currentOrg.id, {
+        return_url: window.location.href,
+      });
+      if (result.portal_url) {
+        window.open(result.portal_url, "_blank", "noopener,noreferrer");
+      } else {
+        toast.error("Stripe portal URL unavailable. Please contact support.");
+      }
+    } catch (e: unknown) {
+      const message =
+        e instanceof Error
+          ? e.message
+          : "Failed to open payment method manager";
+      toast.error(`Could not open payment portal: ${message}`);
+    }
+  };
+
   const currentPlanIndex = PLANS.findIndex(
     (p) => p.name.toLowerCase() === usage?.plan_name?.toLowerCase(),
   );
@@ -457,7 +483,12 @@ export default function BillingPage() {
               </div>
             </div>
           )}
-          <Button variant="ghost" size="sm" aria-label={paymentMethod ? "Update payment method" : "Add payment method"}>
+          <Button
+            variant="ghost"
+            size="sm"
+            aria-label={paymentMethod ? "Update payment method" : "Add payment method"}
+            onClick={handleUpdatePaymentMethod}
+          >
             {paymentMethod ? "Update" : "Add payment method"}
           </Button>
         </div>

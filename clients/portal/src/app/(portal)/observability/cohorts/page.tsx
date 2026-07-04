@@ -3,13 +3,12 @@
 import { useState } from "react";
 import { useOrg } from "@/hooks/use-org";
 import { cn } from "@/lib/utils";
+import { API_BASE } from "@/lib/api";
 import { useToast } from "@/components/ui/toast";
 import { NoOrgState } from "@/components/ui/no-org-state";
 import { PageHeader } from "@/components/layout/page-header";
 import { Database, Play, Layers, RefreshCw, Loader2, AlertTriangle, Archive, FileText } from "lucide-react";
 import { motion } from "framer-motion";
-
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 interface ColumnarQueryResult {
   columns: string[];

@@ -14,8 +14,9 @@
  * deep link like `/traces?trace_id=abc-123` can pre-select a row.
  */
 
-import { Filter, Loader2, TreePine, Clock, PlayCircle, Download, Layers, Tag } from "lucide-react";
+import { Filter, TreePine, Clock, PlayCircle, Download, Layers, Tag } from "lucide-react";
 import Link from "next/link";
+import { SkeletonTableRow } from "@/components/ui/skeleton";
 import { TraceOutcomeBadge } from "@/components/ui/status-badge";
 import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
 import type { TraceFilter, TraceItem } from "../_lib/types";
@@ -285,8 +286,16 @@ export function TracesTab({
       </div>
 
       {loading && traces.length === 0 ? (
-        <div className="flex items-center justify-center py-20">
-          <Loader2 className="w-8 h-8 animate-spin text-[var(--accent)]" />
+        <div className="rounded-xl border border-[var(--border-default)] bg-[var(--bg-primary)] overflow-hidden" role="status" aria-live="polite" aria-label="Loading traces">
+          <div className="flex items-center gap-4 px-4 py-3 border-b border-[var(--border-default)] bg-[var(--bg-secondary)]">
+            <span className="text-xs uppercase tracking-wide text-[var(--text-muted)]">Loading traces…</span>
+          </div>
+          {Array.from({ length: 8 }).map((_, i) => (
+            <SkeletonTableRow
+              key={i}
+              columns={["w-32", "w-24", "w-20", "w-28", "w-16"]}
+            />
+          ))}
         </div>
       ) : (
         <DataTable

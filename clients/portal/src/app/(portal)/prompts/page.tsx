@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { useOrg } from "@/hooks/use-org";
+import { API_BASE } from "@/lib/api";
 import { PageHeader } from "@/components/layout/page-header";
 import { NoOrgState } from "@/components/ui/no-org-state";
 import { useToast } from "@/components/ui/toast";
@@ -13,8 +14,6 @@ import {
   History,
   ChevronDown,
   ChevronRight } from "lucide-react";
-
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 interface PromptEntry {
   id: string;

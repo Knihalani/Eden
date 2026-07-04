@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { useOrg } from "@/hooks/use-org";
 import { cn } from "@/lib/utils";
+import { API_BASE } from "@/lib/api";
 import { PageHeader } from "@/components/layout/page-header";
 import { NoOrgState } from "@/components/ui/no-org-state";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -15,8 +16,6 @@ import {
   AlertOctagon,
   CheckCircle2,
 } from "lucide-react";
-
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 interface DlqEntry {
   id: string;
