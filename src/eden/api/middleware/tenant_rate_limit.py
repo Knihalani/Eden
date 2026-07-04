@@ -169,7 +169,10 @@ class TenantRateLimitMiddleware(BaseHTTPMiddleware):
                 if row:
                     return str(row["org_id"])
             except Exception:
-                pass
+                logger.warning(
+                    "tenant_rate_limit: API-key lookup failed; falling back",
+                    exc_info=True,
+                )
 
         # Try JWT cookie
         token = request.cookies.get("authorization")
@@ -286,6 +289,11 @@ class TenantRateLimitMiddleware(BaseHTTPMiddleware):
             )
         except Exception:
             # Best-effort: a DB blip must not break the request.
+            logger.warning(
+                "tenant_rate_limit: region lookup failed for org %s",
+                org_id,
+                exc_info=True,
+            )
             self._region_cache[org_id] = None
             return None
         region = row.get("region") if row else None
@@ -356,6 +364,11 @@ class TenantRateLimitMiddleware(BaseHTTPMiddleware):
         try:
             allowed, remaining, reset_ts, retry_after = await self._check_redis(limit_key, limit, window)
         except Exception:
+            logger.warning(
+                "tenant_rate_limit: Redis check failed for %s; falling back to local bucket",
+                limit_key,
+                exc_info=True,
+            )
             refill_rate = limit / window
             bucket = await self._get_bucket(limit_key, limit, refill_rate)
             allowed, remaining, retry_after = await bucket.consume(1.0)
