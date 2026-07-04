@@ -331,6 +331,19 @@ class TenantRateLimitMiddleware(BaseHTTPMiddleware):
         if request.url.path == "/health" or request.method == "OPTIONS":
             return await call_next(request)
 
+        # ── Test bypass ──
+        # The local-bucket fallback is fine for production (single
+        # pod, distributed-rate-limit-capable via Redis) but in
+        # tests a TestClient makes many back-to-back requests with
+        # the same client IP — the per-IP bucket fills within
+        # milliseconds and the suite starts returning 429. Match
+        # the quota middleware's ``quota_enabled`` escape hatch
+        # so the rate limiter is short-circuited when the test
+        # Settings fixture disables it.
+        from eden.config import get_settings
+        if not get_settings().rate_limit_enabled:
+            return await call_next(request)
+
         # ── Identify the limit key ──
         # Phase 5.1.4: per-API-key limits are tighter than per-org so a
         # single key can't burn the whole org budget. We look up the

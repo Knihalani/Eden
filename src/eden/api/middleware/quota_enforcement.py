@@ -171,7 +171,14 @@ class QuotaEnforcementMiddleware(BaseHTTPMiddleware):
         # Import-time binding so context-manager patches from tests
         # (``patch("eden.config.get_settings", ...)``) still reach
         # this call site even after the middleware module is loaded.
-        if not get_settings().quota_enabled:
+        # The ``patch_settings`` autouse fixture overrides
+        # ``eden.config.get_settings`` with a function that returns
+        # test_settings; we resolve through the source attribute
+        # so the patch propagates even when the middleware's
+        # local ``get_settings`` binding is stale.
+        from eden import config as _eden_config
+
+        if not _eden_config.get_settings().quota_enabled:
             return await call_next(request)
 
         org_id = await self._resolve_org_id(request)
