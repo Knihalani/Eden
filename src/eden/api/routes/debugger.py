@@ -91,9 +91,6 @@ class DiscoverResponse(BaseModel):
 # ─- Helpers ───────────────────────────────────────────────────────
 
 
-def _get_user():  # pragma: no cover — B1.18 stub
-    raise NotImplementedError("Use Depends(get_current_user) directly")
-
 def _checkpoint_to_response(c: Checkpoint) -> CheckpointResponse:
     return CheckpointResponse(
         id=c.id, trace_id=c.trace_id, step_number=c.step_number,

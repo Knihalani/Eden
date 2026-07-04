@@ -588,36 +588,19 @@ async def gateway_complete(
     user: dict = Depends(get_current_user),
 ):
     _check_org_access(org_id, user)
-    # Stub: return mock response since providers aren't configured in this demo
-    request = ModelRequest(
-        model_family=body.model_family,
-        model_version=body.model_version,
-        prompt=body.prompt,
-        temperature=body.temperature,
-        max_tokens=body.max_tokens,
-        tenant_id=org_id,
-        job_id="gateway",
+    # Audit 2026-07-04 — the previous implementation returned a
+    # hardcoded mock response with fabricated cost / latency /
+    # provider values. That silently shipped fabricated metrics into
+    # the LLMOps dashboard and the judge-eval pipeline. The real
+    # provider call lives in ``eden.api.routes.gateway`` (mounted
+    # under ``/gateway/v1``). Surface a 501 so callers route there.
+    raise HTTPException(
+        status_code=501,
+        detail=(
+            "Legacy /llmops/gateway/complete stub retired 2026-07-04; "
+            "use /gateway/v1/chat/completions instead."
+        ),
     )
-    # Mock response
-    return {
-        "response": {
-            "text": f"[Gateway mock response for {body.model_family}/{body.model_version}]",
-            "input_tokens": len(body.prompt.split()),
-            "output_tokens": 50,
-            "latency_ms": 120,
-            "cost_usd": 0.001,
-            "provider": "openrouter",
-            "model": body.model_version,
-            "cached": False,
-        },
-        "gateway_status": {
-            "circuit_breaker": "closed",
-            "provider_health": [
-                {"provider": "openrouter", "healthy": True, "avg_latency_ms": 120},
-                {"provider": "minimax", "healthy": True, "avg_latency_ms": 80},
-            ],
-        },
-    }
 
 
 @router.get("/gateway/metrics", response_model=dict[str, Any])

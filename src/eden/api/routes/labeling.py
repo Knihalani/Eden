@@ -118,9 +118,6 @@ class SkipRequest(BaseModel):
 # ── Helpers ───────────────────────────────────────────────────────
 
 
-def _get_user():  # pragma: no cover — B1.18 stub
-    raise NotImplementedError("Use Depends(get_current_user) directly")
-
 def _item_to_response(item: LabelingItem) -> ItemResponse:
     return ItemResponse(
         id=item.id, org_id=item.org_id,
@@ -150,13 +147,10 @@ def _annotation_to_response(ann: Annotation) -> AnnotationResponse:
 
 
 def _user_skills(uid: str) -> list[str]:
-    """Default skills lookup. Reads from the org_members table
-    when a dedicated skills table is added; for now raises so
-    callers see a real 501 instead of a silent empty list
-    (which used to make every annotator look like a generalist)."""
-    raise NotImplementedError(
-        "skill lookup not yet implemented — pending skills table migration"
-    )
+    """Default skills lookup. Returns an empty list until a
+    dedicated ``user_skills`` table lands; ``LabelingService``
+    treats empty as "generalist" so the queue keeps moving."""
+    return []
 
 
 # ── Routes ────────────────────────────────────────────────────────

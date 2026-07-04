@@ -114,9 +114,6 @@ class FindingsListResponse(BaseModel):
 # ── Helpers ───────────────────────────────────────────────────────
 
 
-def _get_user():  # pragma: no cover — B1.18 stub
-    raise NotImplementedError("Use Depends(get_current_user) directly")
-
 def _probe_to_response(p: Probe) -> ProbeResponse:
     return ProbeResponse(
         name=p.name, category=p.category, severity=p.severity,

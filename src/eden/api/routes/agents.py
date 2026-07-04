@@ -32,7 +32,7 @@ from datetime import UTC, datetime
 from fastapi import APIRouter, Depends, HTTPException, Path, Query
 from pydantic import BaseModel, Field
 
-from eden.api.deps import get_current_user
+from eden.api.deps import get_current_user, require_org_member
 
 logger = logging.getLogger(__name__)
 
@@ -112,14 +112,10 @@ async def list_agents(
     name: str | None = Query(None, description="Substring match on name"),
     limit: int = Query(50, ge=1, le=500),
     offset: int = Query(0, ge=0),
+    _org: dict = Depends(require_org_member),
     user: dict = Depends(get_current_user),
 ) -> AgentListResponse:
     """List agent registrations for the org, most-recently-active first."""
-    # Audit 2026-06-22 B1.9 — _require_org_access removed (it depended
-    # on phantom auth_kind/is_superuser/org_ids dict keys that get_current_user
-    # never sets). Phase 2 will replace get_current_user → require_org_member
-    # on this route.
-
     from eden.storage.postgres import get_postgres_client
 
     client = await get_postgres_client()
@@ -164,11 +160,10 @@ async def list_agents(
 async def register_agent(
     body: AgentRegisterRequest,
     org_id: str = Path(..., description="Organization ID"),
+    _org: dict = Depends(require_org_member),
     user: dict = Depends(get_current_user),
 ) -> AgentRegisterResponse:
     """Register an agent. Idempotent on (org_id, agent_id)."""
-    # Audit 2026-06-22 B1.9 — _require_org_access removed (see list_agents).
-
     from eden.storage.postgres import get_postgres_client
 
     client = await get_postgres_client()
@@ -242,11 +237,10 @@ async def register_agent(
 async def get_agent(
     org_id: str = Path(..., description="Organization ID"),
     agent_id: str = Path(..., description="Agent ID"),
+    _org: dict = Depends(require_org_member),
     user: dict = Depends(get_current_user),
 ) -> AgentRegistration:
     """Fetch one agent registration by id."""
-    # Audit 2026-06-22 B1.9 — _require_org_access removed (see list_agents).
-
     from eden.storage.postgres import get_postgres_client
 
     client = await get_postgres_client()
