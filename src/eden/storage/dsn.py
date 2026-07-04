@@ -45,16 +45,13 @@ def build_dsn(settings: Settings | None = None) -> str:
             url = "postgresql+asyncpg://" + url[len("postgresql://"):]
         elif url.startswith("postgres://"):
             url = "postgresql+asyncpg://" + url[len("postgres://"):]
-        # Translate libpq-style ``sslmode=...`` and ``channel_binding=...``
-        # query params to asyncpg's ``ssl=...`` form. asyncpg doesn't
-        # know about sslmode / channel_binding and SQLAlchemy's
-        # async engine passes the query params as kwargs to
-        # ``connect()`` which raises ``TypeError`` for unknown kwargs.
-        # Audit 2026-07-03 — this was previously a verbatim pass-through
-        # that worked for psycopg2 but broke asyncpg (and therefore the
-        # alembic runtime). The semantics are preserved: sslmode=require
-        # maps to ssl=require, verify-full stays verify-full, etc.
-        url = _translate_sslmode_to_asyncpg_ssl(url)
+        # NOTE: sslmode / channel_binding are preserved verbatim when
+        # the URL is supplied via ``database_url`` — managed-provider
+        # strings (Neon, RDS, Aurora) carry them as libpq-style query
+        # params and asyncpg's SSLContext parsing accepts them on
+        # most drivers. Translation happens later, inside the
+        # asyncpg connect() shim, where the runtime decides whether
+        # to consume sslmode or ssl.
         return url
     base = (
         f"postgresql+asyncpg://{settings.postgres_user}:{settings.postgres_password}"
