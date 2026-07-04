@@ -568,9 +568,17 @@ def api_client(patch_postgres, patch_settings) -> TestClient:
     The app is imported *inside* the fixture so that any module-level
     get_settings() calls inside eden.api.app happen while patches are
     already active, preventing production settings from being cached.
+
+    Pre-sets the ``authorization`` cookie so the default-deny
+    middleware accepts the request (it inspects the request scope
+    BEFORE FastAPI dep-overrides take effect). Tests that need a
+    different auth state can call ``client.cookies.clear()``
+    themselves.
     """
     from eden.api.app import app
-    return TestClient(app)
+    client = TestClient(app)
+    client.cookies.set("authorization", "test-token-for-default-deny")
+    return client
 
 
 # ─────────────────────────────────────────────────────────────────────────────
