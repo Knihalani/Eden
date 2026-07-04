@@ -225,7 +225,11 @@ def api_client_with_gateway(gateway_store: GatewayModelStore) -> TestClient:
     gm_module.get_postgres_client = _pg
     deps_module.get_postgres_client = _pg
     try:
-        yield TestClient(app), pg, gateway_store
+        client = TestClient(app)
+        # Pre-set the auth cookie so default-deny middleware accepts
+        # the request (overriding deps doesn't reach the middleware).
+        client.cookies.set("authorization", "test-token-for-default-deny")
+        yield client, pg, gateway_store
     finally:
         app.dependency_overrides.pop(get_current_org_member, None)
         app.dependency_overrides.pop(get_postgres_client, None)
