@@ -66,6 +66,14 @@ DEFAULT_PUBLIC_PREFIXES: tuple[str, ...] = (
     # Webhook receivers — verified per-receiver with HMAC, not JWT
     "/webhooks",
     "/clerk/webhook",
+    # GitHub App integration — public so the OAuth callback
+    # (which the user lands on with NO Eden auth) and the GitHub
+    # webhook (HMAC-verified, no JWT) can be reached. ``configured``
+    # is also public — it returns the boolean ``is_configured()``
+    # flag + app slug, no org data. Internal write-side routes
+    # (``/integrations/github/authorize``) re-gate with
+    # ``integrations:write`` permission at the route layer.
+    "/integrations/github",
     # Cross-origin ingestion — uses X-Org-Api-Key
     "/v1/ingest",
     "/gateway",
