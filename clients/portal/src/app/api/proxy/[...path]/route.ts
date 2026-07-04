@@ -131,6 +131,62 @@ async function handle(
   }
 
   try {
+    // SSE detection (PT-5). When the caller sends
+    // ``Accept: text/event-stream`` the JSON-response path can't pipe
+    // bytes correctly (it would buffer the stream into memory and
+    // close on the first ``event:`` boundary). Hand the stream off
+    // directly via a ReadableStream that reads from upstream.body
+    // — no buffering, no timeout (PT-10's isStream skip).
+    const accept = (headers["accept"] || "").toLowerCase();
+    if (accept.includes("text/event-stream")) {
+      const FASTAPI_URL =
+        process.env.API_INTERNAL_URL || "http://localhost:8000";
+      const upstream = await fetch(
+        `${FASTAPI_URL}${upstreamPath}${search}`,
+        {
+          method: request.method as "GET" | "POST" | "PUT" | "PATCH" | "DELETE",
+          headers,
+          body: body as BodyInit | null | undefined,
+        },
+      );
+      if (!upstream.ok || !upstream.body) {
+        return new Response("Upstream stream error", {
+          status: upstream.status || 502,
+        });
+      }
+      // Pipe upstream.body through unchanged. No buffering, no
+      // transform — the SSE protocol is byte-stable and any
+      // ``JSON.parse`` here would corrupt multi-byte UTF-8 events.
+      const stream = new ReadableStream({
+        start(controller) {
+          const reader = upstream.body!.getReader();
+          const pump = async () => {
+            try {
+              while (true) {
+                const { done, value } = await reader.read();
+                if (done) {
+                  controller.close();
+                  return;
+                }
+                controller.enqueue(value);
+              }
+            } catch {
+              controller.close();
+            }
+          };
+          pump();
+        },
+      });
+      return new Response(stream, {
+        status: upstream.status,
+        headers: {
+          "Content-Type": "text/event-stream",
+          "Cache-Control": "no-cache, no-transform",
+          Connection: "keep-alive",
+          "X-Accel-Buffering": "no",
+        },
+      });
+    }
     return await forwardToBackend(upstreamPath + search, {
       method: request.method as "GET" | "POST" | "PUT" | "PATCH" | "DELETE",
       body,
@@ -145,6 +201,7 @@ async function handle(
         request.headers.get("x-request-id") ||
         request.headers.get("x-correlation-id") ||
         undefined,
+      stream: false,
     });
   } catch (error) {
     return proxyError(error, `Proxy request to ${upstreamPath} failed`);

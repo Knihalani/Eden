@@ -11,10 +11,10 @@ import { bearerHeader } from "@/lib/server/clerk-bearer";
  * multipart body directly and re-wraps it so the FastAPI side sees a
  * well-formed ``multipart/form-data`` body with the file part intact.
  *
- * The orgId is read from ``?org_id=`` because the route lives at
- * /api/agents/[id]/upload — no orgId path segment. Frontend callers
- * already pass it (see ``agentsApi.upload(orgId, agentId, file, ...)``
- * in lib/api.ts).
+ * The orgId is read from the ``org_id`` query parameter because the
+ * route lives at /api/agents/[id]/upload — no org-id path segment.
+ * Frontend callers already pass it (see ``agentsApi.upload(orgId,
+ * agentId, file, ...)`` in lib/api.ts).
  */
 export async function POST(
   request: NextRequest,
@@ -25,7 +25,7 @@ export async function POST(
   const orgId = request.nextUrl.searchParams.get("org_id");
   if (!orgId) {
     return NextResponse.json(
-      { detail: "Missing required query parameter: org_id" },
+      { detail: "Missing org_id query parameter" },
       { status: 400 }
     );
   }
@@ -45,7 +45,7 @@ export async function POST(
     Promise.resolve(request.headers.get("cookie") ?? undefined),
   ]);
   return forwardToBackend(
-    `/orgs/${orgId}/agents/${encodeURIComponent(agentId)}/upload`,
+    `/orgs/${encodeURIComponent(orgId)}/agents/${encodeURIComponent(agentId)}/upload`,
     { method: "POST", body: fd, extraHeaders, cookieHeader }
   );
 }

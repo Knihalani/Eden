@@ -48,6 +48,13 @@ interface ForwardOptions {
    * 2026 site-wide fix.
    */
   requestId?: string;
+  /**
+   * Set to ``true`` for SSE / long-lived streamed responses. Skips
+   * the 25s AbortSignal timeout (PT-10) so the upstream can keep the
+   * connection open for minutes. The client-side ``EventSource``
+   * tears the connection down on unmount, not the server.
+   */
+  stream?: boolean;
 }
 
 /**
@@ -67,6 +74,7 @@ export async function forwardToBackend(
     extraHeaders,
     authorization,
     requestId: requestIdIn,
+    stream,
   } = options;
   // Echo the inbound ``X-Request-ID`` (or a freshly-generated UUID)
   // into the 502 body so support can correlate "user saw this error"
@@ -78,16 +86,19 @@ export async function forwardToBackend(
       ? crypto.randomUUID()
       : `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`);
 
-  // Default to JSON content type. When the body is a ``FormData``
-  // instance we MUST NOT pre-set ``Content-Type`` — the WHATWG fetch
-  // spec only auto-derives the ``multipart/form-data; boundary=...``
-  // header when the caller hasn't already pinned a value, and a
-  // stale ``application/json`` here would refuse the upload at the
-  // upstream with a 415. Override behavior for non-FormData callers
-  // is unchanged (pass an explicit ``Content-Type`` in
-  // ``extraHeaders`` to take precedence over the JSON default).
-  const headers: Record<string, string> =
-    body instanceof FormData ? {} : { "Content-Type": "application/json" };
+  // Body-type guard (PT-6). Multipart (FormData) bodies need
+  // ``Content-Type: multipart/form-data; boundary=...`` derived
+  // automatically by WHATWG fetch — pre-setting ``application/json``
+  // here would refuse the upload at the upstream with a 415.
+  // Streamed bodies (``ReadableStream``) have no Content-Type to
+  // pre-set. JSON gets the default. Caller-supplied ``extraHeaders``
+  // still win (override semantics preserved).
+  const isStream = stream === true;
+  const isForm = body instanceof FormData;
+  const headers: Record<string, string> = {};
+  if (!isStream && !isForm) {
+    headers["Content-Type"] = "application/json";
+  }
   if (cookieHeader) headers["Cookie"] = cookieHeader;
   if (authorization) headers["Authorization"] = authorization;
   if (extraHeaders) {
@@ -97,26 +108,30 @@ export async function forwardToBackend(
     }
   }
 
+  // 25s hard timeout for non-streaming requests (PT-10). SSE streams
+  // are long-lived by design — the client-side ``EventSource`` /
+  // ``AbortController`` in lib/api.ts tears the connection down on
+  // unmount, not the server. Forcing a 25s abort here would kill
+  // every active trace stream mid-event.
+  const fetchInit: RequestInit = {
+    method,
+    headers,
+    // ``body`` arrives from the catch-all route handler as either a
+    // raw string (already JSON, from request.text()) or undefined.
+    // Stringifying again would wrap the JSON string in extra quotes
+    // ("\"{\"email\":...}\"") and FastAPI would reject it as a string
+    // where an object is expected. Pass through as-is. (Multipart
+    // bodies still don't survive the text() read upstream; that's a
+    // separate gap.)
+    body: body as BodyInit | null | undefined,
+  };
+  if (!isStream) {
+    fetchInit.signal = AbortSignal.timeout(25_000);
+  }
+
   let response: Response;
   try {
-    response = await fetch(`${API_BASE}${path}`, {
-      method,
-      headers,
-      // ``body`` arrives from the catch-all route handler as either a
-      // raw string (already JSON, from request.text()) or undefined.
-      // Stringifying again would wrap the JSON string in extra quotes
-      // ("\"{\"email\":...}\"") and FastAPI would reject it as a string
-      // where an object is expected. Pass through as-is. (Multipart
-      // bodies still don't survive the text() read upstream; that's a
-      // separate gap.)
-      body: body as BodyInit | null | undefined,
-      // 25s hard timeout. SSE streams pass `stream: true` via
-      // `extraHeaders` and rely on the lower-level ``AbortController``
-      // in lib/api.ts to cancel the request — we don't want a stale
-      // fetch() to hang the worker for 5 minutes if the upstream
-      // FastAPI pod is unresponsive.
-      signal: AbortSignal.timeout(25_000),
-    });
+    response = await fetch(`${API_BASE}${path}`, fetchInit);
   } catch (error) {
     // Network-level failure: DNS resolution, connection refused, TLS
     // handshake, timeout, or pod restart. Surface as 502 Bad Gateway

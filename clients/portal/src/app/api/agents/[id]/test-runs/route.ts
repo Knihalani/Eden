@@ -5,9 +5,9 @@ import { forwardToBackend } from "@/lib/proxy";
 import { bearerHeader } from "@/lib/server/clerk-bearer";
 
 /**
- * Dedicated route — orgId comes from ``?org_id=`` because the path
- * has no orgId segment. Returning 400 instead of forwarding a
- * literal ``{orgId}`` placeholder (which 404s upstream).
+ * Dedicated route — orgId comes from the ``org_id`` query parameter
+ * because the path has no org-id segment. Returns 400 instead of
+ * forwarding an unfilled placeholder (which 404s upstream).
  */
 
 export async function GET(
@@ -19,13 +19,13 @@ export async function GET(
   const orgId = request.nextUrl.searchParams.get("org_id");
   if (!orgId) {
     return new Response(
-      JSON.stringify({ detail: "Missing required query parameter: org_id" }),
+      JSON.stringify({ detail: "Missing org_id query parameter" }),
       { status: 400, headers: { "Content-Type": "application/json" } }
     );
   }
   const extraHeaders = await bearerHeader();
   return forwardToBackend(
-    `/orgs/${orgId}/agents/${encodeURIComponent(agentId)}/test/runs`,
+    `/orgs/${encodeURIComponent(orgId)}/agents/${encodeURIComponent(agentId)}/test/runs`,
     { extraHeaders }
   );
 }
@@ -39,14 +39,14 @@ export async function POST(
   const orgId = request.nextUrl.searchParams.get("org_id");
   if (!orgId) {
     return new Response(
-      JSON.stringify({ detail: "Missing required query parameter: org_id" }),
+      JSON.stringify({ detail: "Missing org_id query parameter" }),
       { status: 400, headers: { "Content-Type": "application/json" } }
     );
   }
   const body = await request.text();
   const extraHeaders = await bearerHeader();
   return forwardToBackend(
-    `/orgs/${orgId}/agents/${encodeURIComponent(agentId)}/test/runs`,
+    `/orgs/${encodeURIComponent(orgId)}/agents/${encodeURIComponent(agentId)}/test/runs`,
     { method: "POST", body, extraHeaders }
   );
 }
