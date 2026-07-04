@@ -85,15 +85,19 @@ export function usePolling(
   },
 ): void {
   // Normalize the two call signatures into a single options bag.
-  const normalized: UsePollingOptions & { deps: ReadonlyArray<unknown> } =
+  const normalized: UsePollingOptions & { deps: ReadonlyArray<unknown> } & {
+    intervalMs: number;
+  } =
     typeof arg1 === "function"
       ? {
           fetch: arg1,
           ...(arg2 ?? {}),
+          intervalMs: arg2?.intervalMs ?? 0,
           deps: arg2?.deps ?? [],
         }
       : {
           ...(arg1 ?? {}),
+          intervalMs: arg1.intervalMs,
           deps: (arg1 as UsePollingOptions | undefined)?.deps ?? [],
         };
 
