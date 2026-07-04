@@ -23,6 +23,11 @@ class TestAuthSignup:
         registered emails: every signup — new or duplicate — returns
         the same 202 + generic message.
         """
+        # Clear the default-deny auth cookie so the
+        # ``not in api_client.cookies`` assertion below sees the
+        # raw response state (signup doesn't issue a cookie until
+        # email verification).
+        api_client.cookies.clear()
         response = api_client.post("/auth/signup", json={
             "email": "newuser@example.com",
             "password": "Str0ng!Pass#2024",
