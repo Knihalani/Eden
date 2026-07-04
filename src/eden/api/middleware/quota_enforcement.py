@@ -28,6 +28,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse, Response
 
 from eden.api.utils.auth import decode_access_token
+from eden.config import get_settings
 from eden.services.usage_service import UsageService
 
 logger = logging.getLogger(__name__)
@@ -167,7 +168,9 @@ class QuotaEnforcementMiddleware(BaseHTTPMiddleware):
         # to the route handler. The test_settings fixture sets
         # ``quota_enabled=False`` so the middleware short-circuits
         # in the test suite without affecting production.
-        from eden.config import get_settings
+        # Import-time binding so context-manager patches from tests
+        # (``patch("eden.config.get_settings", ...)``) still reach
+        # this call site even after the middleware module is loaded.
         if not get_settings().quota_enabled:
             return await call_next(request)
 

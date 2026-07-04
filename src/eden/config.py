@@ -504,6 +504,12 @@ class Settings(BaseSettings):
     # before the route runs unless the path is on the public allow-
     # list. Disable only for debugging — production must be on.
     default_deny_enabled: bool = True
+    # Gate the per-tenant rate-limit middleware. The local-bucket
+    # fallback fills up within milliseconds of back-to-back test
+    # requests and the suite returns 429 from every mutating test.
+    # Tests set this to False (paired with quota_enabled); production
+    # keeps it True.
+    rate_limit_enabled: bool = True
     rate_limit_default_per_window: int = 60
     rate_limit_window_seconds: int = 60
 
