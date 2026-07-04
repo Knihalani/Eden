@@ -13,8 +13,39 @@
 //      server proxies to localhost:8000 via the route handler) and
 //      in production (Vercel → Northflank via the env-configured
 //      upstream).
-const API_BASE =
+export const API_BASE =
   process.env.NEXT_PUBLIC_API_URL || "/api/proxy";
+
+/**
+ * Typed error thrown by ``fetchApi`` (and every portal-side API
+ * wrapper) when the upstream returns a non-2xx response. Carries
+ * the HTTP status so callers can branch on it without parsing
+ * the message string:
+ *
+ *   try { await agentsApi.list() }
+ *   catch (err) {
+ *     if (err instanceof ApiError && err.status === 401) {
+ *       // signed out — redirect to /sign-in
+ *     } else if (err instanceof ApiError && err.status === 403) {
+ *       // forbidden
+ *     } else {
+ *       throw err;
+ *     }
+ *   }
+ *
+ * Extends ``Error`` so existing ``err instanceof Error`` /
+ * ``err.message`` checks continue to work.
+ */
+export class ApiError extends Error {
+  readonly status: number;
+  readonly detail: string;
+  constructor(status: number, detail: string) {
+    super(detail || `HTTP ${status}`);
+    this.name = "ApiError";
+    this.status = status;
+    this.detail = detail;
+  }
+}
 
 // Default timeout. SSE streams pass `stream: true` in options to
 // opt out — otherwise the timeout would close a long-lived
@@ -148,7 +179,7 @@ async function fetchApi<T>(
       const error = await response.json().catch(
         () => ({ detail: `Request failed (${response.status})` }),
       );
-      throw new Error(error.detail || `HTTP ${response.status}`);
+      throw new ApiError(response.status, error.detail || `HTTP ${response.status}`);
     }
 
     // SSE streams don't return JSON.
@@ -595,6 +626,15 @@ export const api = {
   cancelSubscription: (orgId: string) =>
     fetchApi<{ message: string; cancel_at: number }>(`/orgs/${orgId}/billing/cancel`, {
       method: "POST",
+    }),
+
+  // Stripe customer portal — opens the hosted UI where the user
+  // can manage cards / bank accounts / billing details. Returns a
+  // short-lived URL the portal opens in a new tab.
+  createPortalSession: (orgId: string, data: { return_url: string }) =>
+    fetchApi<{ portal_url: string }>(`/orgs/${orgId}/billing/portal`, {
+      method: "POST",
+      body: JSON.stringify(data),
     }),
 
   // Domain Restrictions

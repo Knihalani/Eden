@@ -2,9 +2,8 @@
 
 import { useEffect, useState, useMemo } from "react";
 import { cn } from "@/lib/utils";
+import { API_BASE } from "@/lib/api";
 import { Loader2, AlertTriangle } from "lucide-react";
-
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 interface StreamingToken {
   span_id: string;

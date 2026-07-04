@@ -17,7 +17,8 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Activity, BarChart3, Brain, Compass, Database, History, Loader2, Network, Sparkles, ArrowRight, TrendingUp, Zap, DollarSign, AlertOctagon, Bot, LineChart } from "lucide-react";
+import { Activity, BarChart3, Brain, Compass, Database, History, Network, Sparkles, ArrowRight, TrendingUp, Zap, DollarSign, AlertOctagon, Bot, LineChart } from "lucide-react";
+import { Skeleton } from "@/components/ui/skeleton";
 import { motion } from "framer-motion";
 import { PageHeader } from "@/components/layout/page-header";
 import { Card } from "@/components/ui/card";
@@ -464,8 +465,10 @@ function KpiTile({
   const isZero = Number(value) === 0 || value == null;
   if (isZero && loading) {
     return (
-      <div className="bg-[var(--bg-primary)] rounded-xl p-4 border border-[var(--border-default)] h-full min-h-[112px] flex items-center justify-center">
-        <Loader2 className="h-5 w-5 animate-spin text-[var(--text-muted)]" />
+      <div className="bg-[var(--bg-primary)] rounded-xl p-4 border border-[var(--border-default)] h-full min-h-[112px] flex flex-col justify-center gap-2" aria-busy="true" aria-live="polite">
+        <Skeleton className="h-3 w-16" />
+        <Skeleton className="h-6 w-24" />
+        <Skeleton className="h-3 w-20" />
       </div>
     );
   }

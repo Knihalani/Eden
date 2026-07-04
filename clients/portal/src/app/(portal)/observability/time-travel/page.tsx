@@ -3,14 +3,13 @@
 import { useState } from "react";
 import { useOrg } from "@/hooks/use-org";
 import { cn } from "@/lib/utils";
+import { API_BASE } from "@/lib/api";
 import { useToast } from "@/components/ui/toast";
 import { Alert } from "@/components/ui/alert";
 import { NoOrgState } from "@/components/ui/no-org-state";
 import { PageHeader } from "@/components/layout/page-header";
 import { History, Loader2, Play, GitBranch, RotateCcw, Info, Circle, CheckCircle2, Code2 } from "lucide-react";
 import { motion } from "framer-motion";
-
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 const DEFAULT_EDITED_STATE = `{
   "messages": [

@@ -4,9 +4,8 @@ import { useEffect, useState, useCallback } from "react";
 import { useOrg } from "@/hooks/use-org";
 import { usePolling } from "@/hooks/use-polling";
 import { cn } from "@/lib/utils";
+import { API_BASE } from "@/lib/api";
 import { Wallet, AlertTriangle, CheckCircle2, Loader2 } from "lucide-react";
-
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 interface TickerData {
   budget: {
