@@ -78,6 +78,12 @@ def test_settings() -> Settings:
         # otherwise return 429 because the test suite has no
         # org_resource_limits snapshot to read).
         quota_enabled=False,
+        # Disable the per-tenant rate-limit middleware. The
+        # local-bucket fallback fills up within milliseconds of
+        # back-to-back test requests with the same TestClient
+        # IP — every mutating test starts returning 429. Paired
+        # with quota_enabled; production keeps both True.
+        rate_limit_enabled=False,
         openrouter_api_key="test-api-key",
         qdrant_host="localhost",
         qdrant_port=6333,
@@ -111,6 +117,10 @@ def patch_settings(test_settings: Settings):
     the rate-limit middleware (``tenant_rate_limit.py:30`` reads
     ``get_settings()`` at module load, so the autouse fixture's
     patch on the function doesn't reach the cached attribute).
+
+    Also patches the get_settings binding on every middleware that
+    imported it (``from eden.config import get_settings``) so the
+    quota + rate_limit short-circuits see test_settings.
     """
     with patch("eden.config.get_settings", return_value=test_settings):
         with patch("eden.api.utils.auth.settings", test_settings):
@@ -119,11 +129,33 @@ def patch_settings(test_settings: Settings):
                     pass
             except (AttributeError, ModuleNotFoundError):
                 pass
-            # Override the cached ``settings`` attribute on every
-            # middleware module that captured ``get_settings()`` at
-            # import time. tenant_rate_limit.py:30 is the worst
-            # offender — without this the middleware hits
-            # ``localhost:6379`` even though test_settings.redis_url=""
+            # Patch ``get_settings`` on every middleware module that
+            # imported it at module load — ``from eden.config import
+            # get_settings`` creates a local binding that won't see
+            # patches on the source ``eden.config.get_settings``
+            # attribute. Walk the middleware subtree and patch each.
+            import sys as _sys
+
+            for _mod_name, _mod in list(_sys.modules.items()):
+                if not _mod_name.startswith("eden.api.middleware"):
+                    continue
+                # Skip quota_enforcement — the DL-14 fail-closed
+                # tests in test_session14_dl11_dl15 need
+                # ``quota_enabled=True`` and patch this module's
+                # ``get_settings`` directly. Overriding here would
+                # silently leak test_settings (quota_enabled=False)
+                # into those tests and break them.
+                if _mod_name == "eden.api.middleware.quota_enforcement":
+                    continue
+                if not hasattr(_mod, "get_settings"):
+                    continue
+                try:
+                    _mod.get_settings = lambda: test_settings
+                except Exception:
+                    pass
+            # Override the cached ``settings`` attribute on the
+            # rate-limit middleware (the worst offender — see
+            # tenant_rate_limit.py:30).
             try:
                 from eden.api.middleware import tenant_rate_limit as _trl
 
