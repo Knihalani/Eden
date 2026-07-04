@@ -21,7 +21,7 @@ class CacheEntry:
     response_text: str
     embedding: list[float]
     model_version: str
-    created_at: datetime = field(default_factory=datetime.now(UTC))
+    created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     ttl_seconds: int = 3600
     metadata: dict[str, Any] = field(default_factory=dict)
 

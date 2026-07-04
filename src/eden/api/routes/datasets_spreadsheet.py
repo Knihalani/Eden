@@ -117,9 +117,6 @@ class GenerateRequest(BaseModel):
 # ─- Helpers ──────────────────────────────────────────────────────
 
 
-def _get_user():  # pragma: no cover — B1.18 stub
-    raise NotImplementedError("Use Depends(get_current_user) directly")
-
 def _column_to_response(c: SpreadsheetColumn) -> ColumnResponse:
     return ColumnResponse(
         id=c.id, name=c.name, type=c.type, source=c.source,

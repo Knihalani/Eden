@@ -41,9 +41,6 @@ router = APIRouter(
 _REGISTRY = PromptRegistry()
 
 
-def _get_user():  # pragma: no cover — B1.18 stub
-    raise NotImplementedError("Use Depends(get_current_user) directly")
-
 # ── Schemas ───────────────────────────────────────────────────────
 
 
