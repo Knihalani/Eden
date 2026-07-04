@@ -527,14 +527,23 @@ async def _http_exception(request: Request, exc: StarletteHTTPException):
     # friendly envelope. Anything outside the map falls through to a
     # generic shape; the upstream ``exc.detail`` is preserved as
     # ``detail`` when it's a plain string.
+    #
+    # Preserve the original detail when the handler that raised
+    # passed an explicit message (e.g. ``HTTPException(
+    # status_code=403, detail="Destination belongs to a different
+    # org")``). Overwriting with a generic "You don't have access
+    # to this resource" stripped actionable info — the test
+    # suite lost the ability to distinguish cross-tenant
+    # attempts from generic permission denials.
+    upstream_detail = exc.detail if isinstance(exc.detail, str) else None
     if status == 404:
-        err, detail = "not_found", "The requested resource was not found"
+        err, detail = "not_found", upstream_detail or "The requested resource was not found"
     elif status == 401:
-        err, detail = "unauthorized", "Authentication required"
+        err, detail = "unauthorized", upstream_detail or "Authentication required"
     elif status == 403:
-        err, detail = "forbidden", "You don't have access to this resource"
+        err, detail = "forbidden", upstream_detail or "You don't have access to this resource"
     elif status == 429:
-        err, detail = "rate_limited", "Too many requests — slow down"
+        err, detail = "rate_limited", upstream_detail or "Too many requests — slow down"
     elif status == 503:
         # Audit 2026-07-02 — surface the *missing config* reason in
         # the detail so on-call can grep logs for the cause
