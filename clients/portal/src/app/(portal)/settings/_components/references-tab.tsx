@@ -44,6 +44,7 @@ export function ReferencesTab({ org }: ReferencesTabProps) {
       setReferences(data as Reference[]);
     } catch (e) {
       console.error("Failed to load references", e);
+      toast.error(e instanceof Error ? e.message : "Failed to load references");
     } finally {
       setLoading(false);
     }

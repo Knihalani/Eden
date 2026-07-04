@@ -21,6 +21,7 @@ import { useSearchParams, useRouter } from "next/navigation";
 import { Layers } from "lucide-react";
 import { PageHeader } from "@/components/layout/page-header";
 import { NoOrgState } from "@/components/ui/no-org-state";
+import { useToast } from "@/components/ui/toast";
 import { TracesTab } from "../observability/_components/TracesTab";
 import { AnnotateTraceDialog } from "../observability/_components/AnnotateTraceDialog";
 import type { TraceFilter, TraceItem } from "../observability/_lib/types";
@@ -30,6 +31,7 @@ import { TraceExportModal } from "../observability/_components/TraceExportModal"
 
 export default function TracesPage() {
   const { currentOrg } = useOrg();
+  const toast = useToast();
   const router = useRouter();
   const searchParams = useSearchParams();
   const initialTraceId = searchParams.get("trace_id") || undefined;
@@ -87,6 +89,7 @@ export default function TracesPage() {
       setTraces(data.traces as TraceItem[]);
     } catch (e) {
       console.error("Traces load failed:", e);
+      toast.error(e instanceof Error ? e.message : "Failed to load traces");
     } finally {
       setLoading(false);
     }

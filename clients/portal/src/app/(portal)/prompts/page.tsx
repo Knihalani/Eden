@@ -72,6 +72,7 @@ export default function PromptsPage() {
       }
     } catch (err) {
       console.error("Prompts fetch failed", err);
+      toast.error(err instanceof Error ? err.message : "Failed to load prompts");
     } finally {
       setLoading(false);
     }
@@ -96,6 +97,7 @@ export default function PromptsPage() {
         }
       } catch (err) {
         console.error("Versions fetch failed", err);
+        toast.error(err instanceof Error ? err.message : "Failed to load prompt versions");
       }
     },
     [currentOrg?.id]

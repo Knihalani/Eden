@@ -13,6 +13,7 @@ import { useOrg } from "@/hooks/use-org";
 import { usePermissions } from "@/hooks/use-permissions";
 import { PageHeader } from "@/components/layout/page-header";
 import { StatCard } from "@/components/ui/stat-card";
+import { useToast } from "@/components/ui/toast";
 import { ThroughputCard } from "./_components/throughput-card";
 import { LatencyCard } from "./_components/latency-card";
 import {
@@ -55,6 +56,7 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 
 export default function DashboardPage() {
   const { currentOrg, authError } = useOrg();
+  const toast = useToast();
   const { hasPermission } = usePermissions();
   const __router = useRouter();
   const [data, setData] = useState<DashboardData | null>(null);
@@ -138,6 +140,7 @@ export default function DashboardPage() {
         if (!cancelled) {
           console.error("Failed to load dashboard telemetry:", e);
           setError(e instanceof Error ? e.message : "Failed to load telemetry");
+          toast.error(e instanceof Error ? e.message : "Failed to load telemetry");
         }
       } finally {
         if (!cancelled) setLoading(false);

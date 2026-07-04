@@ -7,6 +7,7 @@ import { AuditEvent } from "@/lib/types";
 import { Loader2, Filter, FileText } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
+import { useToast } from "@/components/ui/toast";
 
 const ACTION_LABELS: Record<string, string> = {
   "member.invited": "Member invited",
@@ -26,6 +27,7 @@ const ACTION_LABELS: Record<string, string> = {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function AuditLogTab({ org }: { org: any }) {
   const { hasPermission } = usePermissions();
+  const toast = useToast();
   const [events, setEvents] = useState<AuditEvent[]>([]);
   const [loading, setLoading] = useState(false);
   const [total, setTotal] = useState(0);
@@ -54,6 +56,7 @@ export function AuditLogTab({ org }: { org: any }) {
       setTotal(data.total);
     } catch (e) {
       console.error("Failed to load audit log", e);
+      toast.error(e instanceof Error ? e.message : "Failed to load audit log");
     } finally {
       setLoading(false);
     }
