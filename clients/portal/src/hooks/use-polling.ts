@@ -97,7 +97,7 @@ export function usePolling(
         }
       : {
           ...(arg1 ?? {}),
-          intervalMs: arg1.intervalMs,
+          intervalMs: arg1?.intervalMs ?? 0,
           deps: (arg1 as UsePollingOptions | undefined)?.deps ?? [],
         };
 

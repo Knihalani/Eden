@@ -85,7 +85,7 @@ export function WaitStep() {
         <div className="flex items-center justify-between border-b border-[var(--border-default)] px-4 py-2">
           <span className="text-sm font-medium">Integration PRs</span>
           <button
-            onClick={refresh}
+            onClick={poll}
             disabled={loading}
             className="flex items-center gap-1 rounded border border-[var(--border-default)] bg-[var(--bg-primary)] px-2 py-1 text-xs text-[var(--text-secondary)] hover:bg-[var(--bg-tertiary)]"
           >
