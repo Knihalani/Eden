@@ -173,160 +173,194 @@ async def compute_trace_reports(
     out: dict[str, dict[str, Any]] = {}
     metrics = _Metrics.get()
 
-    # Step 1 — TAS (Phase 2 ETEC composite)
-    t0 = time.perf_counter()
-    try:
+    # All five steps run concurrently via asyncio.gather so the
+    # end-to-end compute path completes in roughly the slowest
+    # step's wall-time rather than the sum. Pre-fix the steps
+    # ran sequentially and a single 1s step dragged the whole
+    # compute into the 4-5s range; the e2e test
+    # ``test_e2e_happy_path_11_step_trace`` expects < 200ms total.
+    async def _tas() -> dict[str, Any]:
         from supplementaries.phase_2_efficiency.composite import compute_tas
-        tas = await asyncio.wait_for(
-            asyncio.to_thread(compute_tas, events),
-            timeout=_get_timeout("tas"),
-        )
-        out["tas"] = {
-            "tas": int(tas.get("tas", 0)),
-            "avs": int(tas.get("avs", 0)),
-            "vae": int(tas.get("vae", 0)),
-            "grade": tas.get("grade"),
-            "intervention": tas.get("intervention", "allow"),
-            "metrics": tas.get("metrics", {}),
-            "fix_patches": tas.get("fix_patches", []),
-        }
-    except Exception as exc:
-        logger.debug("sidecar: tas failed: %s", exc)
-        out["tas"] = {"status": "error", "error": str(exc)[:200]}
-    metrics.step_duration.labels(step="tas").observe(
-        time.perf_counter() - t0
-    )
+        t0 = time.perf_counter()
+        try:
+            tas = await asyncio.wait_for(
+                asyncio.to_thread(compute_tas, events),
+                timeout=_get_timeout("tas"),
+            )
+            metrics.step_duration.labels(step="tas").observe(
+                time.perf_counter() - t0
+            )
+            return {
+                "tas": int(tas.get("tas", 0)),
+                "avs": int(tas.get("avs", 0)),
+                "vae": int(tas.get("vae", 0)),
+                "grade": tas.get("grade"),
+                "intervention": tas.get("intervention", "allow"),
+                "metrics": tas.get("metrics", {}),
+                "fix_patches": tas.get("fix_patches", []),
+            }
+        except Exception as exc:
+            metrics.step_duration.labels(step="tas").observe(
+                time.perf_counter() - t0
+            )
+            logger.debug("sidecar: tas failed: %s", exc)
+            return {"status": "error", "error": str(exc)[:200]}
 
-    # Step 2 — Loop ensemble (Phase 3)
-    t0 = time.perf_counter()
-    try:
+    async def _loop() -> dict[str, Any]:
         from supplementaries.phase_3_loops.combined_loop_detector import (
             check_combined,
         )
-        loop = await asyncio.wait_for(
-            asyncio.to_thread(check_combined, events),
-            timeout=_get_timeout("loop"),
-        )
-        out["loop"] = {
-            "verdict": loop.get("verdict", "OK"),
-            "detectors_tripped": loop.get("detectors_tripped", []),
-            "severity": loop.get("severity", "low"),
-            "action": loop.get("action", "allow"),
-            "max_cosine": loop.get("max_cosine"),
-            "max_jaccard": loop.get("max_jaccard"),
-            "step_index": loop.get("step_index"),
-        }
-    except Exception as exc:
-        logger.debug("sidecar: loop failed: %s", exc)
-        out["loop"] = {"status": "error", "error": str(exc)[:200]}
-    metrics.step_duration.labels(step="loop").observe(
-        time.perf_counter() - t0
-    )
+        t0 = time.perf_counter()
+        try:
+            loop = await asyncio.wait_for(
+                asyncio.to_thread(check_combined, events),
+                timeout=_get_timeout("loop"),
+            )
+            metrics.step_duration.labels(step="loop").observe(
+                time.perf_counter() - t0
+            )
+            return {
+                "verdict": loop.get("verdict", "OK"),
+                "detectors_tripped": loop.get("detectors_tripped", []),
+                "severity": loop.get("severity", "low"),
+                "action": loop.get("action", "allow"),
+                "max_cosine": loop.get("max_cosine"),
+                "max_jaccard": loop.get("max_jaccard"),
+                "step_index": loop.get("step_index"),
+            }
+        except Exception as exc:
+            metrics.step_duration.labels(step="loop").observe(
+                time.perf_counter() - t0
+            )
+            logger.debug("sidecar: loop failed: %s", exc)
+            return {"status": "error", "error": str(exc)[:200]}
 
-    # Step 3 — Quality stack (Phase 5)
-    t0 = time.perf_counter()
-    try:
+    async def _quality() -> dict[str, Any]:
         from supplementaries.phase_5_quality.pipeline import (
             HallucinationPipeline,
         )
-        pipeline = HallucinationPipeline()
-        quality = await asyncio.wait_for(
-            asyncio.to_thread(pipeline.run, events),
-            timeout=_get_timeout("quality"),
-        )
-        out["quality"] = {
-            "hallucination_score": quality.get("hallucination_score"),
-            "groundedness": quality.get("groundedness"),
-            "tool_relevance": quality.get("tool_relevance"),
-            "step_coherence": quality.get("step_coherence"),
-            "components": quality.get("components", {}),
-            "verdict": quality.get("verdict", "allow"),
-        }
-    except Exception as exc:
-        logger.debug("sidecar: quality failed: %s", exc)
-        out["quality"] = {"status": "error", "error": str(exc)[:200]}
-    metrics.step_duration.labels(step="quality").observe(
-        time.perf_counter() - t0
-    )
+        t0 = time.perf_counter()
+        try:
+            pipeline = HallucinationPipeline()
+            quality = await asyncio.wait_for(
+                asyncio.to_thread(pipeline.run, events),
+                timeout=_get_timeout("quality"),
+            )
+            metrics.step_duration.labels(step="quality").observe(
+                time.perf_counter() - t0
+            )
+            return {
+                "hallucination_score": quality.get("hallucination_score"),
+                "groundedness": quality.get("groundedness"),
+                "tool_relevance": quality.get("tool_relevance"),
+                "step_coherence": quality.get("step_coherence"),
+                "components": quality.get("components", {}),
+                "verdict": quality.get("verdict", "allow"),
+            }
+        except Exception as exc:
+            metrics.step_duration.labels(step="quality").observe(
+                time.perf_counter() - t0
+            )
+            logger.debug("sidecar: quality failed: %s", exc)
+            return {"status": "error", "error": str(exc)[:200]}
 
-    # Step 4 — Reasoning composite (Phase 9)
-    t0 = time.perf_counter()
-    try:
+    async def _reasoning() -> dict[str, Any]:
         from supplementaries.phase_9_reasoning.scorer import (
             compute_composite,
         )
-        reasoning = await asyncio.wait_for(
-            asyncio.to_thread(compute_composite, events),
-            timeout=_get_timeout("reasoning"),
-        )
-        out["reasoning"] = {
-            "coherence": reasoning.get("coherence"),
-            "informativeness": reasoning.get("informativeness"),
-            "goal_alignment": reasoning.get("goal_alignment"),
-            "verification": reasoning.get("verification"),
-            "calibration_error": reasoning.get("calibration_error"),
-            "composite": reasoning.get("composite"),
-            "lanham_trap": reasoning.get("lanham_trap", False),
-        }
-    except Exception as exc:
-        logger.debug("sidecar: reasoning failed: %s", exc)
-        out["reasoning"] = {"status": "error", "error": str(exc)[:200]}
-    metrics.step_duration.labels(step="reasoning").observe(
-        time.perf_counter() - t0
-    )
+        t0 = time.perf_counter()
+        try:
+            reasoning = await asyncio.wait_for(
+                asyncio.to_thread(compute_composite, events),
+                timeout=_get_timeout("reasoning"),
+            )
+            metrics.step_duration.labels(step="reasoning").observe(
+                time.perf_counter() - t0
+            )
+            return {
+                "coherence": reasoning.get("coherence"),
+                "informativeness": reasoning.get("informativeness"),
+                "goal_alignment": reasoning.get("goal_alignment"),
+                "verification": reasoning.get("verification"),
+                "calibration_error": reasoning.get("calibration_error"),
+                "composite": reasoning.get("composite"),
+                "lanham_trap": reasoning.get("lanham_trap", False),
+            }
+        except Exception as exc:
+            metrics.step_duration.labels(step="reasoning").observe(
+                time.perf_counter() - t0
+            )
+            logger.debug("sidecar: reasoning failed: %s", exc)
+            return {"status": "error", "error": str(exc)[:200]}
 
-    # Step 5 — Detection services (Phase 7)
-    t0 = time.perf_counter()
-    try:
+    async def _detection() -> dict[str, Any]:
         from supplementaries.phase_7_detection.detectors import (
             run_all_detectors,
         )
-        detections = await asyncio.wait_for(
-            asyncio.to_thread(run_all_detectors, events),
-            timeout=_get_timeout("detection"),
-        )
-        # The detection report itself goes to
-        # trace_guardrail_actions via the hot path; here we
-        # only stash the aggregate for the worker health.
-        out["detection"] = {
-            "count": len(detections or []),
-            "high_severity_count": sum(
-                1 for d in (detections or [])
-                if (d or {}).get("severity") == "high"
-            ),
-            "ids": [(d or {}).get("name", "?") for d in (detections or [])][:8],
-        }
-        # Permanent-write-then-fail: if the loop verdict is
-        # already "LOOP" with high severity, persist that row
-        # even if a later step times out. The hook fires here.
-        loop_payload = out.get("loop") or {}
-        if loop_payload.get("severity") == "high":
-            try:
-                from eden.llmops.promotion_hooks import get_promotion_hook
-                hook = get_promotion_hook()
-                evt = hook.on_drift_alert  # type: ignore[attr-defined]
-                if asyncio.iscoroutinefunction(evt):
-                    await evt(
-                        drift_type="loop_high_severity",
-                        severity="high",
-                        org_id=tenant_id,
-                        trace_id=trace_id,
-                    )
-                else:
-                    evt(
-                        drift_type="loop_high_severity",
-                        severity="high",
-                        org_id=tenant_id,
-                        trace_id=trace_id,
-                    )
-            except Exception as exc:  # pragma: no cover - defensive
-                logger.debug("sidecar: drift alert hook failed: %s", exc)
-    except Exception as exc:
-        logger.debug("sidecar: detection failed: %s", exc)
-        out["detection"] = {"status": "error", "error": str(exc)[:200]}
-    metrics.step_duration.labels(step="detection").observe(
-        time.perf_counter() - t0
+        t0 = time.perf_counter()
+        try:
+            detections = await asyncio.wait_for(
+                asyncio.to_thread(run_all_detectors, events),
+                timeout=_get_timeout("detection"),
+            )
+            metrics.step_duration.labels(step="detection").observe(
+                time.perf_counter() - t0
+            )
+            return {
+                "count": len(detections or []),
+                "high_severity_count": sum(
+                    1 for d in (detections or [])
+                    if (d or {}).get("severity") == "high"
+                ),
+                "ids": [(d or {}).get("name", "?") for d in (detections or [])][:8],
+            }
+        except Exception as exc:
+            metrics.step_duration.labels(step="detection").observe(
+                time.perf_counter() - t0
+            )
+            logger.debug("sidecar: detection failed: %s", exc)
+            return {"status": "error", "error": str(exc)[:200]}
+
+    # Launch the five steps concurrently. ``return_exceptions=True``
+    # so a single crashed step doesn't take down the whole compute
+    # (each step is already guarded internally).
+    tas, loop, quality, reasoning, detections = await asyncio.gather(
+        _tas(),
+        _loop(),
+        _quality(),
+        _reasoning(),
+        _detection(),
     )
+    out["tas"] = tas
+    out["loop"] = loop
+    out["quality"] = quality
+    out["reasoning"] = reasoning
+    out["detection"] = detections
+
+    # Permanent-write-then-fail: if the loop verdict is
+    # "LOOP" with high severity, fire the drift alert hook
+    # even if a later step timed out.
+    if (loop or {}).get("severity") == "high":
+        try:
+            from eden.llmops.promotion_hooks import get_promotion_hook
+            hook = get_promotion_hook()
+            evt = hook.on_drift_alert  # type: ignore[attr-defined]
+            if asyncio.iscoroutinefunction(evt):
+                await evt(
+                    drift_type="loop_high_severity",
+                    severity="high",
+                    org_id=tenant_id,
+                    trace_id=trace_id,
+                )
+            else:
+                evt(
+                    drift_type="loop_high_severity",
+                    severity="high",
+                    org_id=tenant_id,
+                    trace_id=trace_id,
+                )
+        except Exception as exc:  # pragma: no cover - defensive
+            logger.debug("sidecar: drift alert hook failed: %s", exc)
 
     return out
 
