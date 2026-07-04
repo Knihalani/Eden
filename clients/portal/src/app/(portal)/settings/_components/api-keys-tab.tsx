@@ -67,8 +67,17 @@ export function ApiKeysTab({ org }: ApiKeysTabProps) {
     if (!org || !newKeyName.trim() || selectedScopes.length === 0) return;
     setCreating(true);
     try {
-      const data = await api.createApiKey(org.id, newKeyName, selectedScopes);
-      setCreatedKey((data as { key?: string }).key ?? null);
+      // PT-11: the backend's createApiKey returns ``raw_key`` (not
+      // ``key``) so the secret is one-time-readable only on creation.
+      // Pre-fix the tab read ``data.key`` and silently copied an
+      // empty string.
+      const data: { raw_key?: string } = await api.createApiKey(
+        org.id,
+        newKeyName,
+        selectedScopes,
+      );
+      // data.raw_key is the one-time-secret the user needs to copy.
+      setCreatedKey(data.raw_key ?? null);
       setNewKeyName("");
       setSelectedScopes([]);
       setShowCreate(false);

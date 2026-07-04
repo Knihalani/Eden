@@ -293,7 +293,11 @@ export function OrgProvider({ children }: { children: ReactNode }) {
       // default; map them onto Eden's ``owner``/``member`` vocab so
       // existing RBAC checks (`org["role"] === "admin"`) keep
       // working. The full mapping lives in `lib/roles.ts`.
-      clerkOrgRole: clerkOrg ? userMemberships.data?.[0]?.role ?? null : null }),
+      clerkOrgRole: clerkOrg
+        ? userMemberships.data?.find(
+            (m) => m.organization?.id === clerkOrg.id,
+          )?.role ?? null
+        : null }),
     // Intentionally depend on the *identity* of `currentOrg.id`,
     // not the object reference — Clerk returns a fresh
     // Organization wrapper per render, which would otherwise
