@@ -137,7 +137,7 @@ class TestS14RateLimiterZaddOrder:
         assert len(zadd_calls) == 1
 
 
-# ─── S-15: PII _mask_dict runs credential check first ──────────────
+# ─── S-15: PII _mask_dict always blanks sensitive keys ──────────
 class TestS15MaskDictCredentialFirst:
     def _masker(self, fail_closed: bool = False):
         from eden.data_platform.pii import PIIMasker
@@ -146,38 +146,36 @@ class TestS15MaskDictCredentialFirst:
         policy = PIIPolicy(fail_closed_on_credentials=fail_closed)
         return PIIMasker(policy=policy)
 
-    def test_password_field_with_api_key_raises_when_fail_closed(self) -> None:
-        """The audit bug: a ``password`` value containing an API key
-        bypassed the fail-closed contract because the key-based mask
-        happened BEFORE the value check. Fix runs the value check
-        first.
+    def test_password_field_with_api_key_blanks_value(self) -> None:
+        """A ``password`` value that happens to contain an API-key
+        pattern is still always redacted to ``[PASSWORD_REDACTED]``.
+        The credential-in-password leak that the original
+        'credential-first' audit was trying to defend against is
+        closed by the unconditional blanking: there is no way for
+        the credential bytes to survive the redaction. Pre-fix the
+        audit left passwords un-redacted when the value didn't
+        match a credential pattern — see test_mask_dict_sensitive_keys.
         """
-        from eden.data_platform.pii import PIIMaskingError
-
         masker = self._masker(fail_closed=True)
         # The credential pattern matches ``sk_<20+>``; ``sk-`` (dash)
         # wouldn't match. Use the underscore form.
         body = {"password": "sk_abcdef1234567890abcdef1234567890"}
-        with pytest.raises(PIIMaskingError):
-            masker.mask(body)
+        result = masker.mask(body)
+        # Value is fully wiped — no exception, no leak surface.
+        assert result["password"] == "[PASSWORD_REDACTED]"
 
-    def test_password_field_without_credential_passes_value_through(self) -> None:
-        """A non-credential string value (one without an API-key /
-        JWT / credit-card pattern) is returned unchanged. The S-15
-        fix reorders the checks: credential detection runs first.
-        If no credential matches, the value passes through as-is.
-
-        This is a regression-vs-intent check: the pre-fix code
-        masked the password via the key-based redaction BEFORE the
-        credential check — a credential-in-password bypass. The
-        fix runs the credential check first; if it doesn't fire,
-        the original value is the safe result.
+    def test_password_field_without_credential_still_blanks(self) -> None:
+        """A non-credential password value is still always redacted
+        to ``[PASSWORD_REDACTED]`` — a password is sensitive by
+        definition, not by regex shape. Pre-fix the 'credential-
+        first' audit left this value un-redacted, which leaked
+        every password that didn't accidentally look like a known
+        credential pattern.
         """
         masker = self._masker(fail_closed=False)
         body = {"password": "user-typed-this"}
         result = masker.mask(body)
-        # No credential hit → value passes through (no exception).
-        assert result["password"] == "user-typed-this"
+        assert result["password"] == "[PASSWORD_REDACTED]"
 
     def test_top_level_string_value_runs_credential_check(self) -> None:
         """Any string value — at any depth — runs the credential
