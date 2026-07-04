@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { Command as Cmnd } from "cmdk";
 import { useRouter, usePathname } from "next/navigation";
-import { Search, Bot, Wand2, Box, Network, Server, Activity, Layers, Brain, Compass, Bell, Cog, Sparkles, FlaskConical, Shield, Inbox, GitPullRequestArrow, BarChart3, Settings, CreditCard, FileText, User, Users, X, ChevronRight, Wrench, PlayCircle, Gauge, Database, GitBranch, Library, History } from "lucide-react";
+import { Search, Bot, Wand2, Box, Network, Activity, Layers, Brain, Compass, Bell, Cog, Sparkles, FlaskConical, Shield, Inbox, GitPullRequestArrow, BarChart3, Settings, CreditCard, FileText, User, Users, X, ChevronRight, Wrench, PlayCircle, Gauge, Database, GitBranch, Library, History } from "lucide-react"; // Sandbox (Server) icon import removed 2026-07-04.
 import { cn } from "@/lib/utils";
 import {
   COMMAND_PALETTE_RECENT_KEY,
@@ -33,7 +33,7 @@ const COMMANDS: NavEntry[] = [
   { href: "/builder", label: "Builder", description: "Scaffold new agent configs", group: "Build", icon: Wand2, accent: "accent" },
   { href: "/marketplace", label: "Marketplace", description: "Browse community agents", group: "Build", icon: Box },
   { href: "/multi-agent", label: "Multi-Agent", description: "Orchestrate multi-agent flows", group: "Build", icon: Network },
-  { href: "/sandbox", label: "Sandbox", description: "Run code in a sandboxed env", group: "Build", icon: Server },
+  // Sandbox command removed 2026-07-04 — subsystem retired.
   // Observe
   { href: "/traces", label: "Trace Explorer", description: "Browse and filter traces", group: "Observe", icon: Layers },
   { href: "/replay", label: "Replay", description: "Step through a past trace", group: "Observe", icon: PlayCircle },

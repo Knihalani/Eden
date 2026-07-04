@@ -2430,87 +2430,9 @@ export const api = {
       }>
     >(`/marketplace/featured`),
 
-  // ── Sandbox (developer playground) ────────────────────────────
-  // Sessions are 24h, capped at 50 requests; the FE tracks request
-  // count from the create-session payload + after every execute.
-
-  listSandboxSessions: () =>
-    fetchApi<{
-      sessions: Array<{
-        session_id: string;
-        status: "active" | "expired" | "deleted";
-        created_at: string;
-        last_used_at: string;
-        expires_at: string;
-        request_count: number;
-        max_requests: number;
-        endpoints_available: string[];
-      }>;
-    }>(`/sandbox/sessions`),
-
-  createSandboxSession: (data: { name?: string }) =>
-    fetchApi<{
-      session_id: string;
-      status: "active";
-      created_at: string;
-      expires_at: string;
-      request_count: number;
-      max_requests: number;
-    }>(`/sandbox/sessions`, { method: "POST", body: JSON.stringify(data) }),
-
-  deleteSandboxSession: (sessionId: string) =>
-    fetchApi<{ deleted: boolean }>(`/sandbox/sessions/${sessionId}`, {
-      method: "DELETE",
-    }),
-
-  resetSandboxSession: (sessionId: string, hardReset: boolean) =>
-    fetchApi<{
-      session_id: string;
-      request_count: number;
-      reset_at: string;
-      hard: boolean;
-    }>(`/sandbox/sessions/${sessionId}/reset`, {
-      method: "POST",
-      body: JSON.stringify({ hard: hardReset }),
-    }),
-
-  getSandboxDocs: () =>
-    fetchApi<{
-      title: string;
-      version: string;
-      endpoints: Array<{
-        path: string;
-        method: string;
-        description: string;
-        request_schema: Record<string, unknown>;
-        response_schema: Record<string, unknown>;
-      }>;
-    }>(`/sandbox/docs`),
-
-  getSandboxRequestLog: (sessionId: string) =>
-    fetchApi<{
-      entries: Array<{
-        request_id: string;
-        endpoint: string;
-        method: string;
-        status: number;
-        duration_ms: number;
-        requested_at: string;
-      }>;
-    }>(`/sandbox/sessions/${sessionId}/log`),
-
-  executeSandboxRequest: (
-    sessionId: string,
-    data: { endpoint: string; method: string; body: Record<string, unknown> },
-  ) =>
-    fetchApi<{
-      status: number;
-      body: Record<string, unknown>;
-      duration_ms: number;
-    }>(`/sandbox/sessions/${sessionId}/execute`, {
-      method: "POST",
-      body: JSON.stringify(data),
-    }),
+  // Sandbox client removed 2026-07-04 — sandbox subsystem retired on
+  // the backend. Sandbox navigation entries were removed from
+  // sidebar-config.ts, breadcrumbs.ts, and command-palette.tsx.
 };
 
 // Phase 2: the environment-generation pipeline (Planner→Critic→…→Archivist)
