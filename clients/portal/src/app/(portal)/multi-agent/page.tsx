@@ -116,7 +116,7 @@ export default function MultiAgentPage() {
   }, [activeTab]);
 
   return (
-    <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-6 page-enter" onKeyDown={handleKeyDown}>
+    <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-6" onKeyDown={handleKeyDown}>
       <PageHeader
         eyebrow="Build"
         title="Multi-Agent Environments"

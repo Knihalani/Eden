@@ -1,0 +1,7 @@
+{
+  "tool_name": "Bash",
+  "tool_input_preview": "{\"command\":\"pwd; ls -d clients/portal 2>&1\",\"description\":\"Check cwd\"}",
+  "error": "Exit code 1\n/Users/kaiavnihalani/Downloads/Eden/clients/portal\nls: clients/portal: No such file or directory",
+  "timestamp": "2026-07-04T20:31:19.230Z",
+  "retry_count": 1
+}

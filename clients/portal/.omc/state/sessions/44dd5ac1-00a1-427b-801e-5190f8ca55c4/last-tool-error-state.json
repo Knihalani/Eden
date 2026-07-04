@@ -1,0 +1,7 @@
+{
+  "tool_name": "Bash",
+  "tool_input_preview": "{\"command\":\"for path in \\\"/health\\\" \\\"/api/proxy/health\\\"; do\\n  status=$(curl -s -o /dev/null -w \\\"%{http_code}\\\" \\\"https://edenobservability.com$path\\\" --max-time 15)\\n  echo \\\"$status $path\\\"\\ndone...",
+  "error": "Exit code 1\n(eval):2: command not found: curl\n(eval):2: read-only variable: status",
+  "timestamp": "2026-07-04T16:40:07.420Z",
+  "retry_count": 2
+}

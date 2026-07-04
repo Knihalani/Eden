@@ -1,0 +1,303 @@
+{
+  "version": "1.0.0",
+  "lastScanned": 1783163467522,
+  "projectRoot": "/Users/kaiavnihalani/Downloads/Eden/clients/portal",
+  "techStack": {
+    "languages": [
+      {
+        "name": "JavaScript/TypeScript",
+        "version": null,
+        "confidence": "high",
+        "markers": [
+          "package.json"
+        ]
+      },
+      {
+        "name": "TypeScript",
+        "version": null,
+        "confidence": "high",
+        "markers": [
+          "tsconfig.json"
+        ]
+      }
+    ],
+    "frameworks": [
+      {
+        "name": "next",
+        "version": "16.2.6",
+        "category": "fullstack"
+      },
+      {
+        "name": "react",
+        "version": "19.2.4",
+        "category": "frontend"
+      },
+      {
+        "name": "react-dom",
+        "version": "19.2.4",
+        "category": "frontend"
+      },
+      {
+        "name": "playwright",
+        "version": "1.61.1",
+        "category": "testing"
+      },
+      {
+        "name": "vitest",
+        "version": "4.1.8",
+        "category": "testing"
+      }
+    ],
+    "packageManager": "npm",
+    "runtime": null
+  },
+  "build": {
+    "buildCommand": "bun run build 2>&1 | tail -40; echo \"BUILD EXIT $?\"",
+    "testCommand": "npm test",
+    "lintCommand": "npm run lint",
+    "devCommand": "npm run dev",
+    "scripts": {
+      "dev": "next dev",
+      "build": "next build",
+      "start": "next start",
+      "lint": "eslint",
+      "typecheck": "tsc --noEmit",
+      "test": "echo 'No unit tests yet — add a test runner (e.g. vitest) before relying on this.' && exit 0",
+      "lint:portal-layout": "node scripts/lint-portal-layout.cjs",
+      "lint:portal-classes": "node scripts/lint-portal-classes.cjs",
+      "check:bundle": "bash scripts/check-bundle-size.sh",
+      "analyze": "ANALYZE=true next build",
+      "polish:check": "bash scripts/polish-check.sh"
+    }
+  },
+  "conventions": {
+    "namingStyle": null,
+    "importStyle": null,
+    "testPattern": null,
+    "fileOrganization": "type-based"
+  },
+  "structure": {
+    "isMonorepo": false,
+    "workspaces": [],
+    "mainDirectories": [
+      "public",
+      "scripts",
+      "src"
+    ],
+    "gitBranches": {
+      "defaultBranch": "feat/sdk-ts-ai-batch-a4",
+      "branchingStrategy": null
+    }
+  },
+  "customNotes": [],
+  "directoryMap": {
+    "public": {
+      "path": "public",
+      "purpose": "Public files",
+      "fileCount": 11,
+      "lastAccessed": 1783163467500,
+      "keyFiles": [
+        "apple-touch-icon.png",
+        "favicon.png",
+        "favicon.webp",
+        "icon-192x192.png",
+        "icon-192x192.webp"
+      ]
+    },
+    "scripts": {
+      "path": "scripts",
+      "purpose": "Build/utility scripts",
+      "fileCount": 4,
+      "lastAccessed": 1783163467500,
+      "keyFiles": [
+        "check-bundle-size.sh",
+        "lint-portal-classes.cjs",
+        "lint-portal-layout.cjs",
+        "polish-check.sh"
+      ]
+    },
+    "src": {
+      "path": "src",
+      "purpose": "Source code",
+      "fileCount": 1,
+      "lastAccessed": 1783163467503,
+      "keyFiles": [
+        "proxy.ts"
+      ]
+    },
+    "src/app": {
+      "path": "src/app",
+      "purpose": "Application code",
+      "fileCount": 7,
+      "lastAccessed": 1783163467503,
+      "keyFiles": [
+        "favicon.ico",
+        "global-error.tsx",
+        "globals.css"
+      ]
+    },
+    "src/components": {
+      "path": "src/components",
+      "purpose": "UI components",
+      "fileCount": 5,
+      "lastAccessed": 1783163467503,
+      "keyFiles": [
+        "budget-ticker.tsx",
+        "cookie-consent.tsx",
+        "onboarding-banner.tsx"
+      ]
+    },
+    "src/lib": {
+      "path": "src/lib",
+      "purpose": "Library code",
+      "fileCount": 11,
+      "lastAccessed": 1783163467503,
+      "keyFiles": [
+        "api.ts",
+        "breadcrumbs.ts",
+        "chart-colors.ts"
+      ]
+    }
+  },
+  "hotPaths": [
+    {
+      "path": "src/app/(portal)/llmops/page.tsx",
+      "accessCount": 9,
+      "lastAccessed": 1783184437169,
+      "type": "file"
+    },
+    {
+      "path": "src/app/globals.css",
+      "accessCount": 5,
+      "lastAccessed": 1783182781391,
+      "type": "file"
+    },
+    {
+      "path": "src/components/streaming-sparkline.tsx",
+      "accessCount": 5,
+      "lastAccessed": 1783184269008,
+      "type": "file"
+    },
+    {
+      "path": "src/components/budget-ticker.tsx",
+      "accessCount": 5,
+      "lastAccessed": 1783184271493,
+      "type": "file"
+    },
+    {
+      "path": "src/app/(portal)/settings/_components/autonomous-tab.tsx",
+      "accessCount": 5,
+      "lastAccessed": 1783184290464,
+      "type": "file"
+    },
+    {
+      "path": "src/app/(portal)/onboarding/_steps/autonomous.tsx",
+      "accessCount": 5,
+      "lastAccessed": 1783184320742,
+      "type": "file"
+    },
+    {
+      "path": "scripts/verify-scroll.cjs",
+      "accessCount": 4,
+      "lastAccessed": 1783184179472,
+      "type": "file"
+    },
+    {
+      "path": "src/components/layout/page-content.tsx",
+      "accessCount": 3,
+      "lastAccessed": 1783183534908,
+      "type": "file"
+    },
+    {
+      "path": "src/app/(portal)/traces/page.tsx",
+      "accessCount": 3,
+      "lastAccessed": 1783183652712,
+      "type": "file"
+    },
+    {
+      "path": "src/app/(portal)/layout.tsx",
+      "accessCount": 3,
+      "lastAccessed": 1783183696683,
+      "type": "file"
+    },
+    {
+      "path": "src/proxy.ts",
+      "accessCount": 3,
+      "lastAccessed": 1783184199825,
+      "type": "file"
+    },
+    {
+      "path": "src/components/layout/index.ts",
+      "accessCount": 2,
+      "lastAccessed": 1783182811760,
+      "type": "file"
+    },
+    {
+      "path": "src/components/layout/page-header.tsx",
+      "accessCount": 2,
+      "lastAccessed": 1783184221156,
+      "type": "file"
+    },
+    {
+      "path": "src/components/jobs/hilt-panel.tsx",
+      "accessCount": 2,
+      "lastAccessed": 1783184288903,
+      "type": "file"
+    },
+    {
+      "path": "src/app/(portal)/prompts/page.tsx",
+      "accessCount": 2,
+      "lastAccessed": 1783184306806,
+      "type": "file"
+    },
+    {
+      "path": "src/app/(portal)/alerts/page.tsx",
+      "accessCount": 2,
+      "lastAccessed": 1783184429126,
+      "type": "file"
+    },
+    {
+      "path": "src/app/(portal)/inspector/page.tsx",
+      "accessCount": 1,
+      "lastAccessed": 1783182619837,
+      "type": "file"
+    },
+    {
+      "path": "src/app/(portal)/dashboard/page.tsx",
+      "accessCount": 1,
+      "lastAccessed": 1783183652813,
+      "type": "file"
+    },
+    {
+      "path": "src/app/(portal)/error.tsx",
+      "accessCount": 1,
+      "lastAccessed": 1783183684170,
+      "type": "file"
+    },
+    {
+      "path": "src/components/ai-insights/ChatSidebar.tsx",
+      "accessCount": 1,
+      "lastAccessed": 1783183808030,
+      "type": "file"
+    },
+    {
+      "path": "src/hooks/use-auth.tsx",
+      "accessCount": 1,
+      "lastAccessed": 1783184109150,
+      "type": "file"
+    },
+    {
+      "path": "src/components/ui/button.tsx",
+      "accessCount": 1,
+      "lastAccessed": 1783184216848,
+      "type": "file"
+    },
+    {
+      "path": "src/components/ui/card.tsx",
+      "accessCount": 1,
+      "lastAccessed": 1783184216955,
+      "type": "file"
+    }
+  ],
+  "userDirectives": []
+}

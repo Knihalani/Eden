@@ -24,6 +24,7 @@
 import * as React from "react";
 import { ChevronRight, ChevronDown, Wrench, Bot, MessageSquare, Brain, Image as ImageIcon, AlertCircle, CheckCircle2, Clock } from "lucide-react";
 import { isInternalFrameworkSpan } from "@/lib/observability/elide";
+import { cn } from "@/lib/utils";
 import type { TranscriptRow as TR, TranscriptMessage, TranscriptToolCall, TranscriptToolResult } from "@/lib/observability/types";
 
 // ── Public entry ────────────────────────────────────────────────────
@@ -243,23 +244,30 @@ function TranscriptRowItem({
     <div>
       <button
         onClick={() => onSelect(row.span_id)}
-        className={`group w-full text-left rounded-md border transition-colors ${
+        className={`group w-full text-left rounded-md border transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-base)] ${
           selected
             ? "border-[var(--accent)] bg-[var(--bg-tertiary)]"
             : "border-transparent hover:border-[var(--border-default)] hover:bg-[var(--bg-secondary)]"
         }`}
         style={{ marginLeft: depth * 16 }}
+        aria-expanded={expanded}
       >
         <div className="flex items-center gap-2 px-3 py-2">
-          <span
+          {/* Expand toggle: a sibling button so we don't nest a
+              <button> inside the outer <button> (invalid HTML
+              that browsers silently swallow — clicks on the chevron
+              never fired before this fix). */}
+          <button
+            type="button"
             onClick={(e) => {
               e.stopPropagation();
               setExpanded((v) => !v);
             }}
-            className="text-[var(--text-muted)]"
+            aria-label={expanded ? "Collapse details" : "Expand details"}
+            className="text-[var(--text-muted)] hover:text-[var(--text-primary)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] rounded"
           >
             {expanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
-          </span>
+          </button>
           <Icon className="h-3.5 w-3.5" style={{ color: iconColor }} />
           <span className="flex-1 truncate font-mono text-xs">
             {row.name || row.event_type || row.span_id.slice(0, 12)}
@@ -495,10 +503,12 @@ function ToolResultsPanel({ results }: { results: TranscriptToolResult[] }) {
         {results.map((tr, i) => (
           <div
             key={i}
-            className="rounded border px-2 py-1.5 text-xs"
-            style={{
-              background: tr.is_error ? "var(--error)/10" : "var(--bg-secondary)",
-              borderColor: tr.is_error ? "var(--error)" : "var(--border-default)" }}
+            className={cn(
+              "rounded border px-2 py-1.5 text-xs",
+              tr.is_error
+                ? "bg-[var(--error-dim)] border-[var(--error)]"
+                : "bg-[var(--bg-secondary)] border-[var(--border-default)]"
+            )}
           >
             {tr.is_error && (
               <div className="mb-0.5 flex items-center gap-1 text-[10px] font-mono uppercase text-[var(--error)]">

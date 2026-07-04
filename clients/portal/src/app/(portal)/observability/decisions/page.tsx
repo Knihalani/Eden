@@ -109,7 +109,7 @@ export default function DecisionsPage() {
   }
 
   return (
-    <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-6 page-enter">
+    <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-6">
       <PageHeader
         title="Decisions"
         subtitle="Trace the choice points in your agent's reasoning"

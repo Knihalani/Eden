@@ -18,7 +18,7 @@ export default function PortalError({
 
   return (
     <div className="flex items-center justify-center min-h-[60vh] px-4">
-      <div className="max-w-md w-full text-center space-y-6 page-enter">
+      <div className="max-w-md w-full text-center space-y-6">
         <div className="w-16 h-16 bg-[var(--error-dim)] border border-[var(--error)]/20 rounded-2xl flex items-center justify-center mx-auto">
           <AlertTriangle className="w-8 h-8 text-[var(--error)]" />
         </div>

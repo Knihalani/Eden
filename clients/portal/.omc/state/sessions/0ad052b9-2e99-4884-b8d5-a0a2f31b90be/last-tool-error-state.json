@@ -1,0 +1,7 @@
+{
+  "tool_name": "Read",
+  "tool_input_preview": "{\"file_path\":\"/Users/kaiavnihalani/Downloads/Eden/clients/portal/src/hooks/use-auth.ts\",\"limit\":80}",
+  "error": "File does not exist. Note: your current working directory is /Users/kaiavnihalani/Downloads/Eden/clients/portal. Did you mean use-auth.tsx?",
+  "timestamp": "2026-07-04T16:55:06.306Z",
+  "retry_count": 1
+}

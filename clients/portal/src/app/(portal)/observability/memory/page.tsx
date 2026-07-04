@@ -70,7 +70,7 @@ export default function MemoryIntelligencePage() {
   }
 
   return (
-    <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-6 page-enter">
+    <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-6">
       <PageHeader
         title="Memory"
         subtitle="Episodic + semantic memory attribution and reweaving"
