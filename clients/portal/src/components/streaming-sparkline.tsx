@@ -93,7 +93,7 @@ export function StreamingSparkline({
   }
   if (error) {
     return (
-      <div className="flex items-center gap-2 rounded-md border border-red-500/40 bg-red-500/5 p-3 text-xs text-red-400">
+      <div className="flex items-center gap-2 rounded-md border border-[var(--error)]/30 bg-[var(--error-bg)] p-3 text-xs text-[var(--error)]">
         <AlertTriangle className="h-3 w-3" />
         {error}
       </div>
@@ -125,7 +125,7 @@ export function StreamingSparkline({
           </p>
         </div>
         {stalls > 0 && (
-          <div className="flex items-center gap-1 rounded-md bg-red-500/10 px-2 py-1 text-xs text-red-400">
+          <div className="flex items-center gap-1 rounded-md bg-[var(--error-bg)] px-2 py-1 text-xs text-[var(--error)]">
             <AlertTriangle className="h-3 w-3" />
             {stalls} stall{stalls === 1 ? "" : "s"}
           </div>
@@ -141,7 +141,7 @@ export function StreamingSparkline({
               key={`${t.span_id}:${t.token_index}:${i}`}
               className={cn(
                 "flex-1 rounded-sm transition-all hover:opacity-80",
-                isStall ? "bg-red-500" : "bg-blue-500/60"
+                isStall ? "bg-[var(--error)]" : "bg-[var(--accent)]/60"
               )}
               style={{ height: `${Math.max(2, heightPct)}%` }}
               title={`Token ${t.token_index} · ${t.token_byte_len}B · Δ ${t.delta_ms}ms${isStall ? " (stall)" : ""}`}
@@ -158,7 +158,7 @@ export function StreamingSparkline({
               className={cn(
                 "rounded px-1.5 py-0.5",
                 t.redacted
-                  ? "bg-yellow-500/20 text-yellow-400"
+                  ? "bg-[var(--warning-bg)] text-[var(--warning)]"
                   : "bg-[var(--bg-elev-2)] text-[var(--text-primary)]"
               )}
             >

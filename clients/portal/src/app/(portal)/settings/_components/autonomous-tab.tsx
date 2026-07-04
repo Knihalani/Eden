@@ -168,13 +168,13 @@ function FlagRow({
     <div
       className={`rounded-xl border p-4 flex items-start gap-4 ${
         warn && enabled
-          ? "border-amber-700/40 bg-amber-950/10"
+          ? "border-[var(--warning)]/30 bg-[var(--warning-bg)]"
           : "border-[var(--border-default)] bg-[var(--bg-secondary)]/30"
       }`}
     >
       <div
         className={`rounded-lg p-2 shrink-0 ${
-          enabled ? "bg-emerald-950/30" : "bg-[var(--bg-base)]"
+          enabled ? "bg-[var(--success-bg)]" : "bg-[var(--bg-base)]"
         }`}
       >
         <Icon
@@ -203,8 +203,8 @@ function FlagRow({
               className={`w-10 h-5 rounded-full transition-colors ${
                 enabled
                   ? warn
-                    ? "bg-amber-500"
-                    : "bg-emerald-500"
+                    ? "bg-[var(--warning)]"
+                    : "bg-[var(--success)]"
                   : "bg-[var(--bg-base)]"
               } ${disabled ? "opacity-50 cursor-not-allowed" : ""}`}
             />

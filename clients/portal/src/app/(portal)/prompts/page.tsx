@@ -269,7 +269,7 @@ export default function PromptsPage() {
                     </div>
                     <div className="flex items-center gap-3 text-xs text-[var(--text-secondary)]">
                       {p.auto_eval_on_save && (
-                        <span className="rounded bg-green-500/10 px-1.5 py-0.5 text-green-400">
+                        <span className="rounded bg-[var(--success-bg)] px-1.5 py-0.5 text-[var(--success)]">
                           auto-eval
                         </span>
                       )}

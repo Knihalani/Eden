@@ -129,10 +129,10 @@ export default function OnboardingAutonomousPage() {
               What Eden Agent can and can&apos;t do
             </h3>
             <p className="text-xs text-[var(--text-secondary)] mt-1 leading-relaxed">
-              <span className="text-emerald-400">Can:</span> propose
+              <span className="text-[var(--success)]">Can:</span> propose
               patches, open draft PRs, queue rollbacks, score code
               quality, learn your repo&apos;s style.{" "}
-              <span className="text-rose-400">Cannot:</span> merge to
+              <span className="text-[var(--error)]">Cannot:</span> merge to
               main, push to a protected branch, or modify{" "}
               <code className="font-mono text-[var(--text-primary)]">
                 protected_paths
@@ -153,9 +153,9 @@ export default function OnboardingAutonomousPage() {
         <div className="min-w-0">
           <div className="flex items-center gap-2 text-sm font-medium">
             {optOut ? (
-              <ShieldOff className="w-4 h-4 text-rose-400" />
+              <ShieldOff className="w-4 h-4 text-[var(--error)]" />
             ) : (
-              <ShieldCheck className="w-4 h-4 text-emerald-400" />
+              <ShieldCheck className="w-4 h-4 text-[var(--success)]" />
             )}
             Turn off autonomous features for this org
           </div>

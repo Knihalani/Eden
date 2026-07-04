@@ -95,9 +95,9 @@ export function BudgetTicker() {
       className={cn(
         "rounded-md border p-3",
         status === "exceeded"
-          ? "border-red-500/40 bg-red-500/5"
+          ? "border-[var(--error)]/30 bg-[var(--error-bg)]"
           : status === "alert"
-          ? "border-yellow-500/40 bg-yellow-500/5"
+          ? "border-[var(--warning)]/30 bg-[var(--warning-bg)]"
           : "border-[var(--border-default)] bg-[var(--bg-elev-1)]"
       )}
     >
@@ -107,11 +107,11 @@ export function BudgetTicker() {
           {data.consumption.window} budget
         </div>
         {status === "exceeded" ? (
-          <AlertTriangle className="h-3 w-3 text-red-400" />
+          <AlertTriangle className="h-3 w-3 text-[var(--error)]" />
         ) : status === "alert" ? (
-          <AlertTriangle className="h-3 w-3 text-yellow-400" />
+          <AlertTriangle className="h-3 w-3 text-[var(--warning)]" />
         ) : (
-          <CheckCircle2 className="h-3 w-3 text-green-400" />
+          <CheckCircle2 className="h-3 w-3 text-[var(--success)]" />
         )}
       </div>
       <div className="mt-2 text-lg font-semibold text-[var(--text-primary)]">
@@ -125,16 +125,16 @@ export function BudgetTicker() {
           className={cn(
             "h-full transition-all",
             status === "exceeded"
-              ? "bg-red-500"
+              ? "bg-[var(--error)]"
               : status === "alert"
-              ? "bg-yellow-500"
-              : "bg-green-500"
+              ? "bg-[var(--warning)]"
+              : "bg-[var(--success)]"
           )}
           style={{ width: `${Math.min(100, pct)}%` }}
         />
       </div>
       {highSeverityCount > 0 && (
-        <div className="mt-2 text-xs text-red-400">
+        <div className="mt-2 text-xs text-[var(--error)]">
           {highSeverityCount} high-severity event
           {highSeverityCount === 1 ? "" : "s"} in last 10
         </div>
