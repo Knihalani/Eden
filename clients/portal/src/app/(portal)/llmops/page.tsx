@@ -6,6 +6,7 @@ import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { StatCard } from "@/components/ui/stat-card";
 import { NoOrgState } from "@/components/ui/no-org-state";
+import { useToast } from "@/components/ui/toast";
 import { PageHeader } from "@/components/layout/page-header";
 import { DataTable } from "@/components/ui/data-table";
 import {
@@ -149,6 +150,7 @@ export default function LLMOpsPage() {
 // ──────────────────────────────────────────────────────────────────────────
 
 function ModelsTab({ orgId }: { orgId: string }) {
+  const toast = useToast();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [artifacts, setArtifacts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -317,6 +319,7 @@ function ModelsTab({ orgId }: { orgId: string }) {
 // ──────────────────────────────────────────────────────────────────────────
 
 function PromptsTab({ orgId }: { orgId: string }) {
+  const toast = useToast();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [prompts, setPrompts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -451,6 +454,7 @@ function PromptsTab({ orgId }: { orgId: string }) {
 // ──────────────────────────────────────────────────────────────────────────
 
 function ExperimentsTab({ orgId }: { orgId: string }) {
+  const toast = useToast();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [experiments, setExperiments] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -588,6 +592,7 @@ function ExperimentsTab({ orgId }: { orgId: string }) {
 // ──────────────────────────────────────────────────────────────────────────
 
 function ABTestsTab({ orgId }: { orgId: string }) {
+  const toast = useToast();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [tests, setTests] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -675,6 +680,7 @@ function ABTestsTab({ orgId }: { orgId: string }) {
 // ──────────────────────────────────────────────────────────────────────────
 
 function GatewayTab({ orgId }: { orgId: string }) {
+  const toast = useToast();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [health, setHealth] = useState<any>(null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -804,6 +810,7 @@ function GatewayTab({ orgId }: { orgId: string }) {
 // ──────────────────────────────────────────────────────────────────────────
 
 function MonitoringTab({ orgId }: { orgId: string }) {
+  const toast = useToast();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [health, setHealth] = useState<any>(null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -918,6 +925,7 @@ function MonitoringTab({ orgId }: { orgId: string }) {
 // ──────────────────────────────────────────────────────────────────────────
 
 function CacheTab({ orgId }: { orgId: string }) {
+  const toast = useToast();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [stats, setStats] = useState<any>(null);
   const [loading, setLoading] = useState(true);
