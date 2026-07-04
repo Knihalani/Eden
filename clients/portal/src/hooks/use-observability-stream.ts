@@ -19,6 +19,18 @@
 
 import * as React from "react";
 
+/**
+ * Hard cap on reconnect attempts (PQ-6). After the cap the
+ * EventSource is closed and the parent component stops trying.
+ * 6 was chosen empirically — covers the typical mobile-network
+ * drop pattern (~3-4 quick disconnects on a subway commute) while
+ * bounding the wasted worker time when the upstream is permanently
+ * down. Pre-fix the browser's default reconnect behaviour was
+ * unbounded: a single broken backend could rack up 1000+ socket
+ * attempts per minute per open tab.
+ */
+const MAX_RECONNECT_ATTEMPTS = 6;
+
 export interface LiveTrace {
   trace_id: string;
   realm: string;
@@ -53,6 +65,11 @@ export function useObservabilityStream({
   const reconnectAttemptsRef = React.useRef(0);
   const sourceRef = React.useRef<EventSource | null>(null);
   const reconnectTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  // PQ-5: capture onError via ref so the ``connect`` useCallback
+  // doesn't tear down + reopen the EventSource every time the
+  // parent passes a fresh closure. Same pattern as usePolling.
+  const onErrorRef = React.useRef(onError);
+  onErrorRef.current = onError;
 
   const connect = React.useCallback(() => {
     if (typeof window === "undefined" || !enabled) return;
@@ -97,20 +114,31 @@ export function useObservabilityStream({
 
     source.onerror = (err) => {
       setConnected(false);
-      onError?.(err);
-      // EventSource auto-reconnects, but if the connection is
-      // permanently broken (server gone) the browser keeps
-      // hammering. Cap with explicit backoff.
+      // Read via ref so a fresh onError closure doesn't invalidate
+      // the connect useCallback identity (PQ-5).
+      onErrorRef.current?.(err);
+      // PQ-6: cap reconnect attempts. EventSource auto-reconnects,
+      // but if the upstream is permanently down the browser keeps
+      // hammering indefinitely — bounded at MAX_RECONNECT_ATTEMPTS
+      // (default 6) by closing the source on the cap.
+      if (reconnectAttemptsRef.current >= MAX_RECONNECT_ATTEMPTS) {
+        source.close();
+        sourceRef.current = null;
+        return;
+      }
+      reconnectAttemptsRef.current = Math.min(
+        reconnectAttemptsRef.current + 1,
+        MAX_RECONNECT_ATTEMPTS,
+      );
+      const backoff = Math.min(1000 * Math.pow(2, reconnectAttemptsRef.current), 30_000);
       if (reconnectTimerRef.current) {
         clearTimeout(reconnectTimerRef.current);
       }
-      reconnectAttemptsRef.current = Math.min(reconnectAttemptsRef.current + 1, 6);
-      const backoff = Math.min(1000 * Math.pow(2, reconnectAttemptsRef.current), 30_000);
       reconnectTimerRef.current = setTimeout(() => {
         if (enabled) connect();
       }, backoff);
     };
-  }, [orgId, lastEventId, maxEvents, enabled, onError]);
+  }, [orgId, lastEventId, maxEvents, enabled]);
 
   React.useEffect(() => {
     if (!enabled) return;

@@ -92,7 +92,13 @@ export function ChatSidebar() {
   const [streaming, setStreaming] = useState(false);
   const [loadingSessions, setLoadingSessions] = useState(false);
   const scrollRef = useRef<HTMLDivElement | null>(null);
-  const eventSourceRef = useRef<EventSource | null>(null);
+  // PQ-3: AbortController per submit() so unmount cancels the
+  // in-flight fetch + its reader. Previously a dead EventSource
+  // ref was kept here (the legacy code path used EventSource for
+  // the GET sessions list); submit() has always used fetch
+  // streaming (EventSource doesn't support POST), so the ref was
+  // both dead AND the in-flight POST had no cancel path.
+  const abortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -206,11 +212,11 @@ export function ChatSidebar() {
     el.scrollTop = el.scrollHeight;
   }, [messages, streaming]);
 
-  // Clean up any open stream on unmount.
+  // Clean up any in-flight stream on unmount.
   useEffect(() => {
     return () => {
-      eventSourceRef.current?.close();
-      eventSourceRef.current = null;
+      abortRef.current?.abort();
+      abortRef.current = null;
     };
   }, []);
 
@@ -260,6 +266,10 @@ export function ChatSidebar() {
 
     // Use POST + fetch streaming (the backend returns text/event-stream).
     // We can't use EventSource here because it doesn't support POST.
+    // PQ-3: install an AbortController so unmount can cancel the
+    // in-flight request and the inner reader loop.
+    const controller = new AbortController();
+    abortRef.current = controller;
     let response: Response;
     try {
       response = await fetch(`/api/ai-insights/chat?org_id=${orgId}`, {
@@ -267,6 +277,7 @@ export function ChatSidebar() {
         credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ message: text, session_id: activeSessionId }),
+        signal: controller.signal,
       });
     } catch (err) {
       setStreaming(false);
@@ -441,6 +452,16 @@ export function ChatSidebar() {
 
     try {
       while (true) {
+        // PQ-3: short-circuit on abort so we don't try to enqueue
+        // half-drained bytes into the transcript after the user
+        // closes the sidebar. The reader is also explicitly cancelled
+        // so the underlying TCP socket is released immediately
+        // (a dangling reader keeps the response body buffered until
+        // GC, which can hold the SSE stream open for minutes).
+        if (controller.signal.aborted) {
+          await reader.cancel();
+          break;
+        }
         const { value, done } = await reader.read();
         if (done) break;
         buffer += decoder.decode(value, { stream: true });
