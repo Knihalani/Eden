@@ -309,7 +309,11 @@ class TestP15Migration:
         assert "idx_user_satisfaction_corrected_org_user_ts" in joined
         assert "idx_closed_loop_actions_pending" in joined
         # Partial indexes preserved.
-        assert "WHERE parent_agent_id IS NOT NULL" in joined
+        # Audit 2026-07-03 — telemetry_events has no parent_agent_id
+        # column (parentage is encoded via parent_span_id); the
+        # migration was corrected in place and the partial index
+        # now filters on parent_span_id.
+        assert "WHERE parent_span_id IS NOT NULL" in joined
         assert "WHERE status = 'pending_approval'" in joined
 
     def test_downgrade_emits_11_drop_index(self) -> None:
