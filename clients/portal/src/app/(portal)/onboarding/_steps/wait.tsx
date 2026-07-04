@@ -11,9 +11,10 @@
  */
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import Link from "next/link";
 import { useOrg } from "@/hooks/use-org";
+import { usePolling } from "@/hooks/use-polling";
 import { onboardingApi, type OnboardingPRRun } from "@/lib/api";
 import { useToast } from "@/components/ui/toast";
 import { ArrowRight, CheckCircle2, ExternalLink, Loader2, RefreshCw, SkipForward } from "lucide-react";
@@ -27,7 +28,10 @@ export function WaitStep() {
   const [loading, setLoading] = useState(true);
   const [advancing, setAdvancing] = useState(false);
 
-  const refresh = useCallback(async () => {
+  // PQ-2: route polling through the shared usePolling hook. It
+  // owns the setInterval lifecycle + jitter, full-jitter backoff
+  // on auth errors, and pauses while the tab is hidden.
+  const poll = useCallback(async () => {
     if (!currentOrg?.id) return;
     setLoading(true);
     try {
@@ -40,14 +44,11 @@ export function WaitStep() {
     }
   }, [currentOrg?.id]);
 
-  useEffect(() => {
-    refresh();
-  }, [refresh]);
-
-  useEffect(() => {
-    const interval = setInterval(refresh, POLL_INTERVAL_MS);
-    return () => clearInterval(interval);
-  }, [refresh]);
+  usePolling(poll, {
+    intervalMs: POLL_INTERVAL_MS,
+    enabled: Boolean(currentOrg?.id),
+    pauseWhenHidden: true,
+  });
 
   const anyMerged = runs.some((r) => r.status === "merged");
   const anyOpen = runs.some((r) => r.status === "opened" || r.status === "pending");
