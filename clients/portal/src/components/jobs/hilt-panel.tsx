@@ -33,7 +33,7 @@ const STATE_LABELS: Record<string, { label: string; color: string; bg: string; i
   paused: { label: "Paused", color: "text-[var(--cat-warning-fg)]", bg: "bg-[var(--cat-warning-dim)]", icon: Pause },
   waiting_approval: { label: "Waiting Approval", color: "text-[var(--cat-info-fg)]", bg: "bg-[var(--cat-info-dim)]", icon: Clock },
   stepping: { label: "Stepping", color: "text-[var(--cat-purple-fg)]", bg: "bg-[var(--cat-purple-dim)]", icon: SkipForward },
-  injected: { label: "Injected", color: "text-teal-400", bg: "bg-teal-400/10", icon: MessageSquare } };
+  injected: { label: "Injected", color: "text-[var(--info)]", bg: "bg-[var(--info-bg)]", icon: MessageSquare } };
 
 function getStateConfig(state: string) {
   return STATE_LABELS[state] || { label: state, color: "text-[var(--text-faint)]", bg: "bg-[var(--bg-tertiary)]", icon: Activity };

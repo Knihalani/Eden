@@ -752,11 +752,21 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
           </div>
         </header>
 
-        {/* Page content — flex-1 + min-h-0 lets the wrapper shrink
-            with the parent <main> so pages with `min-h-screen` or
-            `h-screen` don't push the whole flex row past the viewport.
-            June 2026 UI overhaul. */}
-        <div className="page-enter flex-1 min-h-0 flex flex-col">
+        {/* Page content — content-sized wrapper. The previous
+            ``flex-1 min-h-0`` here was the silent scroll killer:
+            ``flex-1`` is ``flex: 1 1 0%`` — flex-basis 0% forces the
+            wrapper's main-axis (height) to 0 inside a content-sized
+            column (main is content-sized because the row uses
+            ``lg:items-start``). Wrapper stays 0px tall, page content
+            overflows but never grows main, main never grows the row,
+            the document never grows past the viewport, and the user
+            reports "scrolling doesn't work anywhere". Drop ``flex-1``
+            so the wrapper sizes to its content; main then grows,
+            the row grows, body grows, html scrolls natively.
+            ``flex flex-col`` is retained because some pages
+            (auth banner, error boundary) render multi-row stacks
+            that benefit from a column flex parent. */}
+        <div className="page-enter flex flex-col">
           {/* D.14 cold-start UX banner — renders nothing for legacy
               orgs (created before 2026-07-01) or once onboarding is
               complete. Best-effort: an API failure just hides it. */}
