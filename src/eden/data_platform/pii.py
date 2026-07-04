@@ -281,54 +281,28 @@ class PIIMasker:
     def _mask_dict(self, data: dict[str, Any]) -> dict[str, Any]:
         """Recursively mask PII in a dictionary, including sensitive keys.
 
-        Audit 2026-07-02 S-15 — credential check runs FIRST, before
-        the key-based redaction. Pre-fix, a sensitive-keyed field
-        (e.g. ``password``) was unconditionally replaced with
-        ``[PASSWORD_REDACTED]`` before the value was scanned for
-        credentials. A password that happened to contain an API-key
-        pattern slipped through unredacted at the value level
-        (the key-level redaction blanked the value, but if the
-        key-based redaction failed for any reason the value would
-        still leak). Now: scan the value for credentials first;
-        if fail-closed + credential hit, raise BEFORE redaction.
-        If no credential hit, the value passes through (the
-        key-based redaction is the safety net for the rest).
+        Built-in sensitive keys (``password``, ``api_key``, etc.) are
+        ALWAYS replaced with a ``[KEY_REDACTED]`` placeholder, regardless
+        of whether the value matches a known credential pattern — a
+        password field's value is sensitive by definition, not by
+        shape. Earlier revisions tried a "credential-first" scan that
+        only masked when the value matched a regex; the
+        ``test_mask_dict_sensitive_keys`` regression caught that
+        change as a real PII leak (a password like ``supersecret123``
+        is not a known credential pattern but is still a password).
         """
         result: dict[str, Any] = {}
         for key, value in data.items():
             key_lower = key.lower()
-            # Audit 2026-07-02 S-15 + S-extra — treat
-            # ``redact_keys_extra`` (explicit per-tenant additions)
-            # as ALWAYS-mask; built-in ``SENSITIVE_KEYS`` only
-            # mask when the value matches a credential pattern.
-            # The old behavior blanket-masked both, which let a
-            # credential-in-password bypass the credential scan.
             is_extra = key_lower in self.policy.redact_keys_extra
             is_builtin_sensitive = key_lower in (
                 self._sensitive_keys - self.policy.redact_keys_extra
             )
-            if is_extra:
-                # Explicit redact_keys_extra → always mask the
-                # key. Value is discarded.
+            if is_extra or is_builtin_sensitive:
+                # Explicit per-tenant extra OR built-in sensitive key.
+                # Always blank the value — the key name alone signals
+                # sensitivity. The original value is discarded.
                 result[key] = f"[{key.upper()}_{self.mask_token}]"
-            elif is_builtin_sensitive:
-                # Built-in sensitive key. String values: scan for
-                # credentials FIRST (S-15). Non-string values: no
-                # string to credential-scan, so the key-based
-                # redaction IS the safety net (mask with the
-                # key-name placeholder).
-                if isinstance(value, str):
-                    # May raise PIIMaskingError in fail-closed mode
-                    # on a credential hit. If no raise, pass value
-                    # through (no auto-mask).
-                    masked = self._mask_string(
-                        value, check_credentials=True
-                    )
-                    result[key] = masked
-                else:
-                    # Non-string (list, dict, int, None): key-based
-                    # redaction is the safety net.
-                    result[key] = f"[{key.upper()}_{self.mask_token}]"
             elif isinstance(value, str):
                 result[key] = self._mask_string(value, check_credentials=True)
             elif isinstance(value, dict):

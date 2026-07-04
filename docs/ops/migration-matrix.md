@@ -94,6 +94,22 @@
 | 062 | provider_routing (D.12.6) | yes | forever | none | medium | D.12.6 Provider routing | Phase 2 |
 | 0f45068e1e8e | merge (018 into main chain) | yes | forever | none | low | chain fix | Phase 0 |
 | 5c782c65faa3 | merge (Cat 23 pr_patterns + June) | yes | forever | none | low | chain fix | Phase 0 |
+| 063 | sidebar_prefs | yes | forever | none | low | portal | Phase 2 |
+| 064 | org_clerk_org_id | yes | forever | none | low | auth (Clerk cutover) | Phase 2 |
+| 065 | judge_cost | yes | forever | none | low | Cat 3 eval cost | Phase 2 |
+| 066 | session21_indexes (P-15, 11 partial + full indexes) | yes | forever | none | medium | perf + dashboard | Phase 2 |
+| 067 | trace_quality_otel_columns | yes | forever | none | medium | Cat 22 APM | v2.6 |
+| 068 | trace_efficiency_reports | yes | forever | none | low | Cat 8 cost | v2.6 |
+| 069 | trace_loop_reports | yes | forever | none | low | Cat 22 loop detector | v2.6 |
+| 070 | trace_quality_reports | yes | forever | none | medium | Cat 22 quality | v2.6 |
+| 071 | trace_reasoning_reports | yes | forever | none | low | Cat 22 reasoning | v2.6 |
+| 072 | trace_guardrail_actions | yes | forever | none | medium | Cat 15 + Cat 22 guardrail | v2.7 |
+| 073 | tenant_guardrail_action_config | yes | forever | none | medium | v2.7 kill switch | v2.7 |
+| 074_hook_repetition_closed_loop | hook_repetition_closed_loop | yes | forever | none | low | Cat 15 B-15 | v2.7 |
+| 075_uniqueness_constraints | uniqueness_constraints | yes | forever | none | medium | B-18 dedup CTEs | v2.7 |
+| 076 | account_lockout | yes | forever | none | low | auth | Phase 4 |
+| 077 | password_reset_tokens | yes | forever | none | low | auth | Phase 4 |
+| 078 | two_factor_recovery_codes | yes | forever | none | low | auth (2FA) | Phase 4 |
 
 ## Critical-path migrations (downgrade risk = `hard`)
 

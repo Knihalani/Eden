@@ -62,8 +62,14 @@ def _matrix_revisions() -> set[str]:
         if first.startswith("#") or first == "" or set(first) <= {"-", " "}:
             continue
         # The revision id is alphanumeric (numbers for the linear chain,
-        # sha-prefix for the merge files)
-        if re.fullmatch(r"[0-9a-f]{6,}", first) or re.fullmatch(r"\d{3}", first):
+        # sha-prefix for the merge files). A few migrations (074,
+        # 075) carry a descriptive suffix after the numeric prefix;
+        # accept those too.
+        if (
+            re.fullmatch(r"[0-9a-f]{6,}", first)
+            or re.fullmatch(r"\d{3}", first)
+            or re.fullmatch(r"\d{3}_[a-z0-9_]+", first)
+        ):
             revs.add(first)
     return revs
 
