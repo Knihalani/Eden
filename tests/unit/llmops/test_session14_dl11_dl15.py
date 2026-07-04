@@ -41,6 +41,21 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from eden.config import Settings
+
+
+def _quota_enabled_settings() -> Settings:
+    """Settings with ``quota_enabled=True`` for DL-14 fail-closed tests.
+
+    The conftest's ``patch_settings`` autouse fixture flips
+    ``quota_enabled`` to False so the observability / onboarding
+    suites can exercise mutating routes without seeding
+    org_resource_limits. The DL-14 fail-closed tests need
+    enforcement ON so the ``quota_enabled`` short-circuit at
+    the top of ``dispatch`` is skipped.
+    """
+    return Settings(quota_enabled=True)
+
 
 # ─── DL-11: HookBus sweep + cascade depth cap ──────────────────────
 class TestDl11HookBusSweep:
@@ -460,47 +475,59 @@ class TestDl14QuotaFailClosed:
             QuotaEnforcementMiddleware,
         )
 
-        mw = QuotaEnforcementMiddleware(MagicMock())
+        # The conftest's ``patch_settings`` fixture flips
+        # ``quota_enabled`` to False so observability / onboarding
+        # suites can exercise mutating routes without seeding
+        # org_resource_limits. The fail-closed tests need the
+        # enforcement ON so the ``quota_enabled`` short-circuit at
+        # the top of dispatch is skipped — patch the source
+        # ``eden.config.get_settings`` for the entire test so the
+        # middleware reads the enabled settings at dispatch time.
+        with patch(
+            "eden.config.get_settings",
+            return_value=_quota_enabled_settings(),
+        ):
+            mw = QuotaEnforcementMiddleware(MagicMock())
 
-        # Stub _resolve_org_id to return a fixed org.
-        mw._resolve_org_id = AsyncMock(return_value="org-x")  # type: ignore[method-assign]
-        # Stub _build_quota_headers (returns empty dict).
-        mw._build_quota_headers = AsyncMock(return_value={})  # type: ignore[method-assign]
-        # _check_hard_limits raises (DB blip).
-        mw._check_hard_limits = AsyncMock(  # type: ignore[method-assign]
-            side_effect=RuntimeError("postgres unreachable"),
-        )
-        # Cache has a recent value so fail-closed can use it.
-        mw._record_hard_limits(
-            "org-x",
-            {
-                "cost_usd": {
-                    "used": 100.0, "hard_limit": 50.0,
-                    "status": "hard_exceeded",
+            # Stub _resolve_org_id to return a fixed org.
+            mw._resolve_org_id = AsyncMock(return_value="org-x")  # type: ignore[method-assign]
+            # Stub _build_quota_headers (returns empty dict).
+            mw._build_quota_headers = AsyncMock(return_value={})  # type: ignore[method-assign]
+            # _check_hard_limits raises (DB blip).
+            mw._check_hard_limits = AsyncMock(  # type: ignore[method-assign]
+                side_effect=RuntimeError("postgres unreachable"),
+            )
+            # Cache has a recent value so fail-closed can use it.
+            mw._record_hard_limits(
+                "org-x",
+                {
+                    "cost_usd": {
+                        "used": 100.0, "hard_limit": 50.0,
+                        "status": "hard_exceeded",
+                    },
                 },
-            },
-        )
+            )
 
-        scope = {
-            "type": "http",
-            "method": "POST",
-            "path": "/some/mutating/path",
-            "headers": [],
-            "query_string": b"",
-        }
-        request = Request(scope)
+            scope = {
+                "type": "http",
+                "method": "POST",
+                "path": "/some/mutating/path",
+                "headers": [],
+                "query_string": b"",
+            }
+            request = Request(scope)
 
-        call_next = AsyncMock(
-            return_value=MagicMock(headers={}),
-        )
+            call_next = AsyncMock(
+                return_value=MagicMock(headers={}),
+            )
 
-        from starlette.responses import JSONResponse
-        result = await mw.dispatch(request, call_next)
+            from starlette.responses import JSONResponse
+            result = await mw.dispatch(request, call_next)
 
-        # 429 fail-closed — call_next was NOT invoked.
-        assert isinstance(result, JSONResponse)
-        assert result.status_code == 429
-        call_next.assert_not_awaited()
+            # 429 fail-closed — call_next was NOT invoked.
+            assert isinstance(result, JSONResponse)
+            assert result.status_code == 429
+            call_next.assert_not_awaited()
 
     @pytest.mark.asyncio
     async def test_dispatch_fails_closed_on_stale_budget(
@@ -515,40 +542,49 @@ class TestDl14QuotaFailClosed:
             QuotaEnforcementMiddleware,
         )
 
-        mw = QuotaEnforcementMiddleware(MagicMock())
-        mw._resolve_org_id = AsyncMock(return_value="org-stale")  # type: ignore[method-assign]
-        mw._build_quota_headers = AsyncMock(return_value={})  # type: ignore[method-assign]
-        # Live check returns ok (under cap).
-        mw._check_hard_limits = AsyncMock(  # type: ignore[method-assign]
-            return_value=(False, ""),
-        )
-        # But the budget was last refreshed 120s ago (> 60s).
-        mw._record_hard_limits(
-            "org-stale",
-            {"cost_usd": {"used": 0, "hard_limit": 50.0}},
-        )
-        # Manually backdate the cache entry.
-        old_ts, cached = mw._last_known_hard_limits["org-stale"]
-        mw._last_known_hard_limits["org-stale"] = (
-            time.monotonic() - 120.0, cached,
-        )
+        # Override conftest's quota_enabled=False so the
+        # middleware actually enforces (fail-closed on stale
+        # budget is the behaviour under test). Wrap the entire
+        # dispatch so the patch is in effect when ``dispatch``
+        # reads ``get_settings()`` from the source module.
+        with patch(
+            "eden.config.get_settings",
+            return_value=_quota_enabled_settings(),
+        ):
+            mw = QuotaEnforcementMiddleware(MagicMock())
+            mw._resolve_org_id = AsyncMock(return_value="org-stale")  # type: ignore[method-assign]
+            mw._build_quota_headers = AsyncMock(return_value={})  # type: ignore[method-assign]
+            # Live check returns ok (under cap).
+            mw._check_hard_limits = AsyncMock(  # type: ignore[method-assign]
+                return_value=(False, ""),
+            )
+            # But the budget was last refreshed 120s ago (> 60s).
+            mw._record_hard_limits(
+                "org-stale",
+                {"cost_usd": {"used": 0, "hard_limit": 50.0}},
+            )
+            # Manually backdate the cache entry.
+            old_ts, cached = mw._last_known_hard_limits["org-stale"]
+            mw._last_known_hard_limits["org-stale"] = (
+                time.monotonic() - 120.0, cached,
+            )
 
-        scope = {
-            "type": "http",
-            "method": "POST",
-            "path": "/some/path",
-            "headers": [],
-            "query_string": b"",
-        }
-        request = Request(scope)
-        call_next = AsyncMock(
-            return_value=MagicMock(headers={}),
-        )
+            scope = {
+                "type": "http",
+                "method": "POST",
+                "path": "/some/path",
+                "headers": [],
+                "query_string": b"",
+            }
+            request = Request(scope)
+            call_next = AsyncMock(
+                return_value=MagicMock(headers={}),
+            )
 
-        from starlette.responses import JSONResponse
-        result = await mw.dispatch(request, call_next)
+            from starlette.responses import JSONResponse
+            result = await mw.dispatch(request, call_next)
 
-        # Stale budget → 429 fail-closed.
-        assert isinstance(result, JSONResponse)
-        assert result.status_code == 429
-        call_next.assert_not_awaited()
+            # Stale budget → 429 fail-closed.
+            assert isinstance(result, JSONResponse)
+            assert result.status_code == 429
+            call_next.assert_not_awaited()
