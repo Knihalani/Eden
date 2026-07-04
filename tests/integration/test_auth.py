@@ -96,6 +96,10 @@ class TestAuthSignup:
 class TestAuthLogin:
     def test_login_success(self, api_client: TestClient):
         """Valid credentials return user data and set cookie."""
+        # Clear any pre-set cookies so the Set-Cookie response from
+        # login doesn't collide with the test's default cookie
+        # (httpx raises CookieConflict on duplicate cookie names).
+        api_client.cookies.clear()
         response = api_client.post("/auth/login", json={
             "email": "test@example.com",
             "password": "correct-password",
