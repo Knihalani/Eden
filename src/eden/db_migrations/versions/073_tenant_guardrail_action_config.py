@@ -94,24 +94,32 @@ def upgrade() -> None:
     # Seed defaults from any pre-existing tenant rows. The
     # tenanted_orgs table is the canonical tenant registry;
     # fall back to ``tenants`` if it doesn't exist.
+    # Audit 2026-07-03 — wrap the parametrised probe in ``text(...)``
+    # so the sync psycopg2 engine accepts it; the pre-fix raw string
+    # worked with asyncpg but raised ``Not an executable object`` on
+    # the sync path.
+    from sqlalchemy import text
+
     for table in ("tenanted_orgs", "tenants", "orgs"):
         # ponytail: existence probe via to_regclass so the
         # seed step is no-op when the tenant table is missing.
         exists = op.get_bind().execute(
-            "SELECT 1 FROM pg_class WHERE relname = :t",
+            text("SELECT 1 FROM pg_class WHERE relname = :t"),
             {"t": table},
         ).fetchone()
         if not exists:
             continue
         for action_class, default in _READ_ONLY.items():
             op.execute(
-                f"""
-                INSERT INTO tenant_guardrail_action_config
-                    (tenant_id, action_class, applied_by_default)
-                SELECT id, :action, :default
-                FROM {table}
-                ON CONFLICT (tenant_id, action_class) DO NOTHING
-                """,
+                text(
+                    f"""
+                    INSERT INTO tenant_guardrail_action_config
+                        (tenant_id, action_class, applied_by_default)
+                    SELECT id, :action, :default
+                    FROM {table}
+                    ON CONFLICT (tenant_id, action_class) DO NOTHING
+                    """
+                ),
                 {"action": action_class, "default": default},
             )
         break  # seed from first existing tenant table

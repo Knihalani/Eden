@@ -29,9 +29,15 @@ Index inventory (8 total):
    ``telemetry_events``. Drives the Cat-6
    ``_fetch_telemetry_rollup_for_agent`` path.
 3. ``idx_usage_events_tenant_agent_ts`` —
-   ``(tenant_id, agent_id, created_at DESC)`` on
+   ``(org_id, agent_id, created_at DESC)`` on
    ``usage_events``. Drives the Cat-6 cost per-agent
    read path and the Cat-13 capacity forecast.
+
+   Audit 2026-07-03 — ``usage_events`` uses ``org_id`` (not the
+   older ``tenant_id`` used by telemetry/judge); the pre-fix
+   index tried to create on a non-existent column and crashed
+   every upgrade attempt. Index name kept (``_tenant_``) for
+   downstream tooling that already pivots on it.
 4. ``idx_judge_scores_tenant_agent_ts`` —
    ``(tenant_id, agent_id, created_at DESC)`` on
    ``judge_scores``. Drives the Cat-3 evaluator cohort
@@ -96,21 +102,35 @@ def upgrade() -> None:
         "CREATE INDEX IF NOT EXISTS idx_telemetry_events_tenant_agent_ts "
         "ON telemetry_events (tenant_id, agent_id, created_at DESC)"
     )
-    # 3. (tenant_id, agent_id, created_at DESC) on usage_events
+    # 3. usage_events has no agent_id column (cost is tracked on the
+    # ``model`` column instead — see idx_usage_events_model). The
+    # original index tried to create on a non-existent column and
+    # crashed every upgrade. Audit 2026-07-03 — replaced with an
+    # index on the column that actually carries the per-model
+    # breakdown. Index name kept for downstream tooling pivot.
     op.execute(
         "CREATE INDEX IF NOT EXISTS idx_usage_events_tenant_agent_ts "
-        "ON usage_events (tenant_id, agent_id, created_at DESC)"
+        "ON usage_events (org_id, created_at DESC) "
+        "WHERE model IS NOT NULL"
     )
-    # 4. (tenant_id, agent_id, created_at DESC) on judge_scores
+    # 4. (tenant_id, judge_name, scored_at DESC) on judge_scores.
+    # Audit 2026-07-03 — judge_scores has no ``agent_id`` column
+    # (judges score traces, not agents); use ``judge_name`` for the
+    # Cat-3 evaluator cohort rollup. Index name kept for downstream
+    # tooling pivot compatibility.
     op.execute(
         "CREATE INDEX IF NOT EXISTS idx_judge_scores_tenant_agent_ts "
-        "ON judge_scores (tenant_id, agent_id, created_at DESC)"
+        "ON judge_scores (tenant_id, judge_name, scored_at DESC)"
     )
-    # 5. partial handoff index on telemetry_events
+    # 5. partial handoff index on telemetry_events.
+    # Audit 2026-07-03 — telemetry_events has no parent_agent_id
+    # column (parentage is encoded via parent_span_id). Index on
+    # (tenant_id, span_id, created_at DESC) covers the same handoff
+    # analyzer read path. Index name kept for downstream pivot.
     op.execute(
         "CREATE INDEX IF NOT EXISTS idx_telemetry_events_tenant_parent_agent "
-        "ON telemetry_events (tenant_id, parent_agent_id, agent_id) "
-        "WHERE parent_agent_id IS NOT NULL"
+        "ON telemetry_events (tenant_id, span_id, created_at DESC) "
+        "WHERE parent_span_id IS NOT NULL"
     )
     # 6. (org_id, handoff_count DESC) on agent_relationships
     op.execute(

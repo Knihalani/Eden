@@ -48,10 +48,13 @@ def upgrade() -> None:
     )
     # Cheap partial index for dashboard queries that filter on
     # cached=FALSE (the non-cache-hit rows that drove spend).
+    # Audit 2026-07-03 — asyncpg chokes on ``WHERE cached = FALSE``
+    # in CREATE INDEX ("unrecognized node type: 0"); ``NOT cached``
+    # is semantically identical and parses cleanly through asyncpg.
     op.execute(
         "CREATE INDEX IF NOT EXISTS idx_judge_scores_uncached "
         "ON judge_scores (tenant_id, scored_at DESC) "
-        "WHERE cached = FALSE"
+        "WHERE NOT cached"
     )
 
 
