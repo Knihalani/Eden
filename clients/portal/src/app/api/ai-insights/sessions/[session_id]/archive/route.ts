@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { auth } from "@clerk/nextjs/server";
+import { bearerHeader } from "@/lib/server/clerk-bearer";
 
 /**
  * Archive an AI Insights chat session.
@@ -31,14 +31,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     );
   }
 
-  let authorization: string | undefined;
-  try {
-    const { getToken } = await auth();
-    const token = await getToken();
-    if (token) authorization = `Bearer ${token}`;
-  } catch {
-    // Clerk fail-open per lib/server/clerk-bearer.ts:39
-  }
+  const authHeaders = await bearerHeader();
   const cookieHeader = request.headers.get("cookie") || "";
 
   try {
@@ -47,7 +40,7 @@ export async function POST(request: Request, { params }: RouteParams) {
       {
         method: "POST",
         headers: {
-          ...(authorization ? { Authorization: authorization } : {}),
+          ...authHeaders,
           Cookie: cookieHeader,
         },
       },

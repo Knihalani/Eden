@@ -22,11 +22,11 @@ import { bearerHeader } from "@/lib/server/clerk-bearer";
  */
 export async function GET(request: Request) {
   try {
-    const extraHeaders = await bearerHeader();
+    const authHeaders = await bearerHeader();
     const response = await forwardToBackend("/auth/me", {
       method: "GET",
       cookieHeader: request.headers.get("cookie") ?? undefined,
-      extraHeaders });
+      extraHeaders: authHeaders });
     response.headers.set("Cache-Control", "no-store, no-cache, must-revalidate");
     response.headers.set("Pragma", "no-cache");
     return response;

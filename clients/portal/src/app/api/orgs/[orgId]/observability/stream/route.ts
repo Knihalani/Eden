@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { auth } from "@clerk/nextjs/server";
+import { bearerHeader } from "@/lib/server/clerk-bearer";
 
 /**
  * Phase 7.2 (C3) — Next.js proxy for the observability SSE stream.
@@ -32,19 +32,12 @@ export async function GET(request: Request, { params }: RouteParams) {
   const cookieHeader = request.headers.get("cookie") || "";
   const lastEventId = request.headers.get("last-event-id") || "";
 
-  // Resolve the Clerk session JWT server-side and forward it as a
-  // Bearer header. ``getToken()`` returns null when the caller isn't
-  // signed in via Clerk; in that case we leave the Authorization
-  // header unset so the legacy Eden cookie path can still serve the
-  // request. Mirrors lib/server/clerk-bearer.ts:39 (fail-open).
-  let bearer: string | undefined;
-  try {
-    const { getToken } = await auth();
-    const token = await getToken();
-    if (token) bearer = `Bearer ${token}`;
-  } catch {
-    // Clerk not configured / signed out — fall through to cookie auth.
-  }
+  // Resolve the Clerk session JWT server-side via the shared helper
+  // (PT-7) and forward it as a Bearer header. ``bearerHeader()``
+  // returns ``{}`` when the caller isn't signed in via Clerk; in that
+  // case we leave the Authorization header unset so the legacy Eden
+  // cookie path can still serve the request.
+  const authHeaders = await bearerHeader();
 
   // Forward query params (e.g. last_event_id)
   const url = new URL(request.url);
@@ -52,16 +45,17 @@ export async function GET(request: Request, { params }: RouteParams) {
 
   try {
     const response = await fetch(
-      `${FASTAPI_URL}/orgs/${orgId}/observability/stream${qs}`,
+      `${FASTAPI_URL}/orgs/${orgId}/observability/sse/stream${qs}`,
       {
         headers: {
           Cookie: cookieHeader,
           ...(lastEventId ? { "Last-Event-ID": lastEventId } : {}),
-          // Forward the Clerk JWT so FastAPI's ``DefaultDenyAuthMiddleware``
-          // + ``get_current_user`` accept the request. Without this the
-          // SSE returns 401 on the first byte and the client reconnects
-          // every few seconds, thrashing the Vercel function slot.
-          ...(bearer ? { Authorization: bearer } : {}),
+          // Spread the Clerk Bearer (when present) — FastAPI's
+          // ``DefaultDenyAuthMiddleware`` + ``get_current_user`` accept
+          // the request. Without this the SSE returns 401 on the
+          // first byte and the client reconnects every few seconds,
+          // thrashing the Vercel function slot.
+          ...authHeaders,
           // Same X-Org-Id forward the catch-all proxy uses — keeps RLS
           // + quota + rate-limit in sync with the catch-all path. (The
           // path param already resolves the org, but the header keeps
