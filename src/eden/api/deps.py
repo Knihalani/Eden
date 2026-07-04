@@ -1045,7 +1045,26 @@ async def get_ingestion_auth(
             detail="X-Org-Api-Key header or session cookie required",
         )
 
-    org = await get_current_org(x_org_id, authorization)
+    # NOTE: get_current_org's ``payload`` parameter is a FastAPI
+    # dependency (``_try_resolve_token_payload``). Calling it
+    # imperatively with ``get_current_org(x_org_id)`` here passes
+    # nothing for the dep slot, so FastAPI leaves the placeholder
+    # ``Depends(...)`` object unevaluated — and the next
+    # ``payload.get("sub")`` raises AttributeError on the
+    # ``Depends`` object. Resolve the payload up front and pass
+    # it through. Pre-fix the call was
+    # ``get_current_org(x_org_id, authorization)`` which collided
+    # the cookie string with the payload slot (same AttributeError,
+    # different cause).
+    from eden.api.deps import _try_resolve_token_payload
+
+    payload = await _try_resolve_token_payload(authorization_cookie=authorization)
+    if not payload:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid session cookie",
+        )
+    org = await get_current_org(x_org_id, payload=payload)
     if not org:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
