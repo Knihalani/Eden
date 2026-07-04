@@ -57,49 +57,59 @@ export function CookieConsent() {
   if (!visible) return null;
 
   return (
+    // Outer wrapper is pointer-events-none so the wheel scrolls the
+    // page underneath the banner (without this the bottom strip of
+    // the viewport stops responding to scroll on first visit, which
+    // the user reported as "scrolling doesn't work anywhere"). The
+    // inner card opts back in to pointer-events so the buttons +
+    // link remain clickable. The banner is a sibling of the page
+    // chrome (root layout) and z-[60] so it floats above everything
+    // except a critical modal.
     <div
       role="dialog"
       aria-live="polite"
       aria-label="Cookie consent"
-      className="fixed bottom-4 left-4 right-4 z-[60] mx-auto max-w-3xl rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-elevated)]/95 p-4 shadow-2xl backdrop-blur md:bottom-6 md:left-6 md:right-auto md:p-5"
+      className="pointer-events-none fixed inset-x-0 bottom-0 z-[60] flex justify-center p-4 md:p-6"
     >
-      <div className="flex flex-col gap-3 md:flex-row md:items-center md:gap-4">
-        <div className="flex-1 text-sm text-[var(--text-secondary)]">
-          <p className="font-medium text-[var(--text-primary)]">
-            Cookies & analytics
-          </p>
-          <p className="mt-1 leading-relaxed">
-            Eden uses essential cookies to keep you signed in. With
-            your consent we also use analytics cookies to understand
-            how the portal is used. You can change this any time in
-            {" "}
-            <a
-              href="/settings/privacy"
-              className="underline underline-offset-2 hover:text-[var(--text-primary)]"
+      <div className="pointer-events-auto w-full max-w-3xl rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-elevated)]/95 p-4 shadow-2xl backdrop-blur md:p-5">
+        <div className="flex flex-col gap-3 md:flex-row md:items-center md:gap-4">
+          <div className="flex-1 text-sm text-[var(--text-secondary)]">
+            <p className="font-medium text-[var(--text-primary)]">
+              Cookies & analytics
+            </p>
+            <p className="mt-1 leading-relaxed">
+              Eden uses essential cookies to keep you signed in. With
+              your consent we also use analytics cookies to understand
+              how the portal is used. You can change this any time in
+              {" "}
+              <a
+                href="/settings/privacy"
+                className="underline underline-offset-2 hover:text-[var(--text-primary)]"
+              >
+                privacy settings
+              </a>
+              .
+            </p>
+          </div>
+          <div className="flex gap-2 md:flex-shrink-0">
+            <button
+              type="button"
+              onClick={() => set("declined")}
+              className="rounded-md border border-[var(--border-subtle)] px-3 py-2 text-sm font-medium text-[var(--text-secondary)] transition-colors hover:bg-[var(--bg-secondary)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-base)]"
             >
-              privacy settings
-            </a>
-            .
-          </p>
-        </div>
-        <div className="flex gap-2 md:flex-shrink-0">
-          <button
-            type="button"
-            onClick={() => set("declined")}
-            className="rounded-md border border-[var(--border-subtle)] px-3 py-2 text-sm font-medium text-[var(--text-secondary)] transition-colors hover:bg-[var(--bg-secondary)]"
-          >
-            Decline
-          </button>
-          <button
-            type="button"
-            onClick={() => set("accepted")}
-            // text-[var(--accent-foreground)] (dark) on --accent (light blue)
-            // gives 7.16:1 — passes WCAG AA Normal. Was text-white (2.69:1, fail).
-            className="rounded-md bg-[var(--accent)] px-3 py-2 text-sm font-medium text-[var(--accent-foreground)] transition-colors hover:bg-[var(--accent-hover)]"
-            autoFocus
-          >
-            Accept
-          </button>
+              Decline
+            </button>
+            <button
+              type="button"
+              onClick={() => set("accepted")}
+              // text-[var(--accent-foreground)] (dark) on --accent (light blue)
+              // gives 7.16:1 — passes WCAG AA Normal. Was text-white (2.69:1, fail).
+              className="rounded-md bg-[var(--accent)] px-3 py-2 text-sm font-medium text-[var(--accent-foreground)] transition-colors hover:bg-[var(--accent-hover)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-base)]"
+              autoFocus
+            >
+              Accept
+            </button>
+          </div>
         </div>
       </div>
     </div>

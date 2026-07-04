@@ -85,8 +85,8 @@ export function StreamingSparkline({
 
   if (loading) {
     return (
-      <div className="flex items-center gap-2 rounded-md border border-[var(--border-default)] bg-[var(--bg-elev-1)] p-3 text-xs text-[var(--text-secondary)]">
-        <Loader2 className="h-3 w-3 animate-spin" />
+      <div className="flex items-center gap-2 rounded-md border border-[var(--border-default)] bg-[var(--bg-tertiary)] p-3 text-xs text-[var(--text-secondary)]">
+        <Loader2 className="h-4 w-4 animate-spin" />
         Loading streaming tokens…
       </div>
     );
@@ -94,16 +94,16 @@ export function StreamingSparkline({
   if (error) {
     return (
       <div className="flex items-center gap-2 rounded-md border border-[var(--error)]/30 bg-[var(--error-bg)] p-3 text-xs text-[var(--error)]">
-        <AlertTriangle className="h-3 w-3" />
+        <AlertTriangle className="h-4 w-4" />
         {error}
       </div>
     );
   }
   if (tokens.length === 0) {
     return (
-      <div className="rounded-md border border-[var(--border-default)] bg-[var(--bg-elev-1)] p-3 text-xs text-[var(--text-secondary)]">
+      <div className="rounded-md border border-[var(--border-default)] bg-[var(--bg-tertiary)] p-3 text-xs text-[var(--text-secondary)]">
         No streaming tokens captured for this trace. Enable
-        <code className="mx-1 rounded bg-[var(--bg-elev-2)] px-1">streaming_token_capture_mode=full</code>
+        <code className="mx-1 rounded bg-[var(--bg-inset)] px-1">streaming_token_capture_mode=full</code>
         in the SDK config to capture token text.
       </div>
     );
@@ -112,7 +112,7 @@ export function StreamingSparkline({
   const maxDelta = Math.max(...tokens.map((t) => t.delta_ms), 1);
 
   return (
-    <div className="space-y-3 rounded-lg border border-[var(--border-default)] bg-[var(--bg-elev-1)] p-4">
+    <div className="space-y-3 rounded-lg border border-[var(--border-default)] bg-[var(--bg-tertiary)] p-4">
       <div className="flex items-center justify-between">
         <div>
           <h3 className="text-sm font-semibold text-[var(--text-primary)]">
@@ -126,7 +126,7 @@ export function StreamingSparkline({
         </div>
         {stalls > 0 && (
           <div className="flex items-center gap-1 rounded-md bg-[var(--error-bg)] px-2 py-1 text-xs text-[var(--error)]">
-            <AlertTriangle className="h-3 w-3" />
+            <AlertTriangle className="h-4 w-4" />
             {stalls} stall{stalls === 1 ? "" : "s"}
           </div>
         )}
@@ -159,7 +159,7 @@ export function StreamingSparkline({
                 "rounded px-1.5 py-0.5",
                 t.redacted
                   ? "bg-[var(--warning-bg)] text-[var(--warning)]"
-                  : "bg-[var(--bg-elev-2)] text-[var(--text-primary)]"
+                  : "bg-[var(--bg-inset)] text-[var(--text-primary)]"
               )}
             >
               {t.redacted ? "[REDACTED]" : t.token_text || `Δ${t.delta_ms}ms`}

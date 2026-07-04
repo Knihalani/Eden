@@ -213,11 +213,11 @@ export default function TraceInspectorPage() {
   return (
     // Matches the canonical page wrapper used by every other portal
     // page (``p-4 sm:p-6 lg:p-8 max-w-6xl mx-auto space-y-6
-    // page-enter``). The previous ``min-h-full`` here was a leftover
+    //``). The previous ``min-h-full`` here was a leftover
     // from the old ``h-screen + overflow-clip`` (portal) contract
     // that was retired in June 2026; with the new flex layout it
     // collapsed the page. June 2026 layout-pass fix.
-    <div className="page-enter p-4 sm:p-6 lg:p-8 max-w-6xl mx-auto space-y-6 bg-[var(--bg-base)]">
+    <div className=" p-4 sm:p-6 lg:p-8 max-w-6xl mx-auto space-y-6 bg-[var(--bg-base)]">
       <PageHeader
         eyebrow="Observe"
         title="Trace Inspector"

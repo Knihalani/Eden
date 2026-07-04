@@ -334,7 +334,7 @@ export default function ObservabilityLanding() {
         icon={Activity}
       />
 
-      <div className="px-4 sm:p-6 lg:p-8 max-w-7xl mx-auto w-full space-y-6 page-enter">
+      <div className="px-4 sm:p-6 lg:p-8 max-w-7xl mx-auto w-full space-y-6">
         {/* Pattern 4.4 (Honeycomb) — When the URL carries ?trace_id=…,
             the SelectedTraceRail renders as a sticky sidebar on lg+
             viewports. On mobile it stacks above the KPI tiles. */}

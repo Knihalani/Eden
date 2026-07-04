@@ -118,7 +118,7 @@ export default function SimRunDetailPage() {
   const statusClass = STATUS_BADGE[run.status]?.bg ?? "bg-[var(--bg-tertiary)] text-[var(--text-secondary)]";
 
   return (
-    <div className="p-4 sm:p-6 lg:p-8 max-w-4xl mx-auto space-y-6 page-enter">
+    <div className="p-4 sm:p-6 lg:p-8 max-w-4xl mx-auto space-y-6">
       <Link
         href={`/agents/${encodeURIComponent(agentId)}/sim-runs`}
         className="inline-flex items-center gap-1 text-xs text-[var(--text-muted)] hover:text-[var(--accent)] transition-colors"

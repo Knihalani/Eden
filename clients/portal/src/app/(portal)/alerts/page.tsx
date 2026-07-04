@@ -197,7 +197,7 @@ export default function AlertsPage() {
   }
 
   return (
-    <div className="page-enter p-4 sm:p-6 lg:p-8 max-w-6xl mx-auto">
+    <div className=" p-4 sm:p-6 lg:p-8 max-w-6xl mx-auto">
       <PageHeader
         title="Alert Feed"
         subtitle={loading ? "..." : `${total} alerts · ${unreadCount} unread`}

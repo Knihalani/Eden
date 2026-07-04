@@ -220,10 +220,10 @@ export function HILTPanel({ jobId, jobStatus }: HILTPanelProps) {
             placeholder="Type a message to inject into the agent context..."
             disabled={!canControl || commandLoading === "inject"}
             className={cn(
-              "flex-1 px-3 py-2 text-xs rounded-lg bg-[var(--bg-tertiary)] border border-white/10",
+              "flex-1 px-3 py-2 text-xs rounded-lg bg-[var(--bg-tertiary)] border border-[var(--border-subtle)]",
               "text-[var(--text-muted)] placeholder:text-[var(--text-faint)]",
-              "focus:outline-none focus:border-white/20 focus:ring-1 focus:ring-white/10",
-              "disabled:opacity-40"
+              "focus:outline-none focus:border-[var(--accent)] focus:ring-1 focus:ring-[var(--accent-faint)]",
+              "disabled:opacity-50"
             )}
           />
           <button
@@ -334,7 +334,7 @@ function HILTButton({
       className={cn(
         "flex flex-col items-center gap-1.5 px-3 py-2.5 rounded-lg border text-xs font-medium transition-all",
         active ? style.active : style.inactive,
-        disabled && "opacity-30 cursor-not-allowed hover:bg-[var(--bg-tertiary)] hover:text-[var(--text-faint)]"
+        disabled && "opacity-50 cursor-not-allowed hover:bg-[var(--bg-tertiary)] hover:text-[var(--text-faint)]"
       )}
     >
       {loading ? (

@@ -22,7 +22,7 @@ import { PageHeader } from "@/components/layout/page-header";
 
 export default function ApmPage() {
   return (
-    <div className="space-y-6 page-enter">
+    <div className="space-y-6">
       <PageHeader
         icon={Server}
         title="APM Depth"

@@ -122,7 +122,7 @@ export default function ClosedLoopPage() {
   }
 
   return (
-    <div className="p-4 sm:p-6 lg:p-8 max-w-6xl page-enter space-y-6">
+    <div className="p-4 sm:p-6 lg:p-8 max-w-6xl space-y-6">
       <PageHeader
         title="Closed-Loop Actions"
         subtitle="Review and act on automated recommendations from the promotion loop, judge regressions, drift alerts, and experiment winners."

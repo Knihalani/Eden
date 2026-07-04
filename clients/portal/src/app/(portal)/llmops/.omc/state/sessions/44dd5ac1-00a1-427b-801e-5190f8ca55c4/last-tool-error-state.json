@@ -1,0 +1,7 @@
+{
+  "tool_name": "Bash",
+  "tool_input_preview": "{\"command\":\"cd 'clients/portal/src/app/(portal)/llmops' && git checkout page.tsx 2>&1 | tail -3\",\"description\":\"Revert broken llmops edit\"}",
+  "error": "Exit code 1\n(eval):cd:1: no such file or directory: clients/portal/src/app/(portal)/llmops",
+  "timestamp": "2026-07-04T15:39:48.724Z",
+  "retry_count": 1
+}

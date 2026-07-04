@@ -217,7 +217,7 @@ export default function AgentDetailPage() {
   }
 
   return (
-    <div className="space-y-6 p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto page-enter">
+    <div className="space-y-6 p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto">
       {/* Breadcrumb */}
       <Link
         href="/agents"

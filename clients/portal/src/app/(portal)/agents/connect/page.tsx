@@ -38,7 +38,7 @@ export default function ConnectAgentPage() {
   }
 
   return (
-    <div className="mx-auto max-w-3xl p-4 sm:p-6 lg:p-8 page-enter">
+    <div className="mx-auto max-w-3xl p-4 sm:p-6 lg:p-8">
       <Link
         href="/agents"
         className="inline-flex items-center gap-1 text-sm text-[var(--text-muted)] hover:text-[var(--text-primary)] mb-3 transition-colors"
