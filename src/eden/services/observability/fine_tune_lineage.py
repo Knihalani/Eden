@@ -293,7 +293,7 @@ class FineTuneLineageService:
             # these into one prepared-statement call instead of one
             # INSERT per trace_id (was N+1 round-trips for an N-trace
             # dataset).
-            result = await client.executemany(
+            await client.executemany(
                 """
                 INSERT INTO dataset_trace_lineage (
                     dataset_id, trace_id, span_id
@@ -302,11 +302,19 @@ class FineTuneLineageService:
                 """,
                 records,
             )
-            # executemany doesn't return per-row status; approximate
-            # the "inserted" count from the list length minus the
-            # count of pre-existing rows (best effort: caller can
-            # cross-check by querying dataset_trace_lineage after).
-            return len(records)
+            # executemany doesn't return per-row status, so the actual
+            # "inserted" count has to come from a follow-up SELECT.
+            # We narrow to the rows we just attempted (the trace_ids
+            # passed in) so we don't have to count the whole table.
+            inserted = await client.fetchval(
+                """
+                SELECT COUNT(*)::bigint FROM dataset_trace_lineage
+                 WHERE dataset_id = $1::uuid
+                   AND trace_id = ANY($2::uuid[])
+                """,
+                dataset_id, [tid for tid in trace_ids],
+            ) or 0
+            return int(inserted)
         except Exception as exc:
             logger.debug("fine_tune.link_dataset_to_traces failed: %s", exc)
             return 0
