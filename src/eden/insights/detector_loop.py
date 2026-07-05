@@ -279,18 +279,31 @@ class InsightsDetectorLoop:
             from eden.insights.insights_service import InsightsService
 
             service = InsightsService()
-            for insight in insights:
-                try:
-                    row_id = await service.persist_insight_to_postgres(
+            # Fan out the per-insight persists concurrently via
+            # asyncio.gather — each persist is an independent write
+            # (separate row + audit). With many insights per cycle
+            # this drops wall-clock latency from O(N) to ~O(1).
+            # return_exceptions=True preserves the original per-row
+            # try/except semantics: one bad insight doesn't kill the
+            # rest of the batch.
+            persist_results = await asyncio.gather(
+                *(
+                    service.persist_insight_to_postgres(
                         insight, organization_id=tenant_id
                     )
-                    if row_id is not None:
-                        persisted += 1
-                except Exception as exc:  # noqa: BLE001
+                    for insight in insights
+                ),
+                return_exceptions=True,
+            )
+            for insight, result in zip(insights, persist_results):
+                if isinstance(result, Exception):
                     logger.debug(
                         f"insights loop: persist failed for "
-                        f"{insight.insight_id}: {exc}"
+                        f"{insight.insight_id}: {result}"
                     )
+                    continue
+                if result is not None:
+                    persisted += 1
         except Exception as exc:  # noqa: BLE001
             logger.debug(f"insights loop: InsightsService unavailable: {exc}")
 
