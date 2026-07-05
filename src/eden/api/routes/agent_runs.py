@@ -267,8 +267,11 @@ async def upload_agent_code(
     if client is None:
         raise HTTPException(status_code=503, detail="Postgres unavailable")
 
-    # Read the upload into memory (max 50 MB to keep the MVP simple)
-    raw = await file.read()
+    # Read the upload into memory (max 50 MB to keep the MVP simple).
+    # Use the bounded ``read(size)`` form so a malicious caller can't
+    # exhaust server memory with a multi-GB upload — Starlette's
+    # UploadFile.read() with no argument reads until EOF.
+    raw = await file.read(50 * 1024 * 1024 + 1)
     if len(raw) > 50 * 1024 * 1024:
         raise HTTPException(
             status_code=413, detail="Upload too large (50MB limit for MVP)"

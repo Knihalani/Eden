@@ -1705,7 +1705,11 @@ async def upload_my_avatar(
             ),
         )
 
-    blob = await file.read()
+    # Bounded read (cap + 1) so a malicious multi-GB upload can't exhaust
+    # server memory — Starlette's UploadFile.read() with no argument
+    # reads until EOF. The +1 lets us detect "exactly at cap" vs
+    # "exceeds cap" without an extra round-trip.
+    blob = await file.read(_AVATAR_MAX_BYTES + 1)
     if len(blob) > _AVATAR_MAX_BYTES:
         raise HTTPException(
             status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,

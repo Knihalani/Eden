@@ -149,8 +149,14 @@ async def upload_reference(
             detail="Invalid filename",
         )
 
-    # Read file content
-    content = await file.read()
+    # Read file content. Bounded read (10 MiB cap for reference docs)
+    # so a malicious upload can't exhaust server memory — Starlette's
+    # ``UploadFile.read()`` with no argument reads until EOF.
+    content = await file.read(10 * 1024 * 1024 + 1)
+    if len(content) > 10 * 1024 * 1024:
+        raise HTTPException(
+            status_code=413, detail="Reference file too large (10 MiB max)"
+        )
     try:
         text_content = content.decode("utf-8")
     except UnicodeDecodeError:
