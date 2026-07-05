@@ -195,6 +195,8 @@ export default function ProfilePage() {
                   alt="Your profile photo"
                   loading="lazy"
                   decoding="async"
+                  width={80}
+                  height={80}
                   className="w-full h-full object-cover"
                 />
               ) : (

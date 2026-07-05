@@ -69,18 +69,22 @@ def test_rate_limit_exception_carries_retry_after():
     assert "42" in str(exc) or "Retry" in str(exc)
 
 
-def test_client_ip_uses_xff_first():
-    """When behind a proxy, leftmost X-Forwarded-For entry wins."""
+def test_client_ip_falls_back_to_socket_when_no_trusted_proxy():
+    """When no TRUSTED_PROXY_CIDRS is configured, XFF is *not*
+    trusted — the direct socket address wins. Pre-fix this used
+    to honour leftmost-XFF unconditionally, letting an attacker
+    spoof the IP key for per-IP rate limits on signup / login /
+    TOTP setup."""
     from eden.api.routes.auth import _client_ip
 
     class _FakeRequest:
         class _Client:
-            host = "127.0.0.1"
+            host = "198.51.100.42"
 
         client = _Client()
         headers = {"x-forwarded-for": "203.0.113.7, 10.0.0.1"}
 
-    assert _client_ip(_FakeRequest()) == "203.0.113.7"
+    assert _client_ip(_FakeRequest()) == "198.51.100.42"
 
 
 def test_client_ip_falls_back_to_socket():
@@ -95,3 +99,26 @@ def test_client_ip_falls_back_to_socket():
         headers: dict = {}
 
     assert _client_ip(_FakeRequest()) == "198.51.100.42"
+
+
+def test_client_ip_honours_xff_when_direct_is_trusted_proxy():
+    """When the direct socket address is in TRUSTED_PROXY_CIDRS,
+    the leftmost XFF hop is honoured. This is the deployed path:
+    CDN/LB terminates TLS and forwards to us with XFF set."""
+    from eden.api.routes.auth import _client_ip
+    from eden.api.utils import client_ip as client_ip_mod
+
+    class _FakeRequest:
+        class _Client:
+            host = "10.0.0.1"  # inside the trusted CDN network
+
+        client = _Client()
+        headers = {"x-forwarded-for": "203.0.113.7, 10.0.0.1"}
+
+    # Override the module-level trust list just for this test.
+    original = client_ip_mod.TRUSTED_PROXY_CIDRS
+    client_ip_mod.TRUSTED_PROXY_CIDRS = ["10.0.0.0/8"]
+    try:
+        assert _client_ip(_FakeRequest()) == "203.0.113.7"
+    finally:
+        client_ip_mod.TRUSTED_PROXY_CIDRS = original
