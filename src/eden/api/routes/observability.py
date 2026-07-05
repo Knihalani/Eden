@@ -11,6 +11,7 @@ Provides endpoints for:
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 from typing import Any
@@ -292,7 +293,12 @@ async def list_traces(
         args.append(outcome)
 
     try:
-        rows = await client.fetch(
+        # P-16 (2026-07-02): total comes from pg_class.reltuples (O(1)
+        # planner estimate) instead of a full COUNT(DISTINCT trace_id).
+        # The two queries are independent so we issue them concurrently
+        # rather than awaiting serially — saves one round-trip on every
+        # list_traces call.
+        rows_coro = client.fetch(
             f"""
             SELECT trace_id,
                    min(timestamp) AS started_at,
@@ -317,15 +323,11 @@ async def list_traces(
             """,
             *args, limit, offset,
         )
-        # Audit 2026-07-02 P-16: derive ``total`` from
-        # ``pg_class.reltuples`` (an O(1) Postgres estimate) rather
-        # than a full scan. ``reltuples`` is a Postgres planner
-        # statistic, slightly stale but bounded — perfect for a
-        # dashboard total.
-        total = await client.fetchval(
+        total_coro = client.fetchval(
             "SELECT reltuples::bigint FROM pg_class "
             "WHERE relname = 'telemetry_events'",
         )
+        rows, total = await asyncio.gather(rows_coro, total_coro)
     except Exception as exc:
         logger.warning("list_traces: query failed: %s", exc)
         return TraceListResponse(traces=[], total=0, limit=limit, offset=offset)
