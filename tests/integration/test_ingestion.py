@@ -368,10 +368,28 @@ class TestIngestErrors:
         assert response.status_code == 422
 
     def test_body_too_large_returns_413(
-        self, api_client: TestClient, mock_collector, mock_auth
+        self, api_client: TestClient, mock_collector, mock_auth, monkeypatch
     ):
         # Build a body over the 1 MiB cap.
         huge = b'{"event_type": "x", "payload": {"a": "' + b"x" * 1_100_000 + b'"}}'
+        # Same path-binding fix as test_unknown_format_returns_415: the
+        # route's local get_settings binding bypasses the conftest
+        # patch, so when an earlier test in the full suite has called
+        # get_settings.cache_clear() the route reads a fresh Settings()
+        # with the 5 MiB production cap and our 1.1 MiB body fits.
+        # Patch the route's own binding to a Settings with the
+        # 1_000_000 cap so the body guard actually trips.
+        from eden.api.routes import ingestion as ingestion_module
+        from eden.config import Settings
+
+        monkeypatch.setattr(
+            ingestion_module,
+            "get_settings",
+            lambda: Settings(
+                jwt_secret="test-jwt-secret-do-not-use-in-production-ever",
+                ingestion_max_body_bytes=1_000_000,
+            ),
+        )
         response = api_client.post(
             "/orgs/org-123/ingest/webhook",
             content=huge,
