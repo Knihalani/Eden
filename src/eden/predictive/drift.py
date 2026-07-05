@@ -39,6 +39,7 @@ See ``docs/observability-gap/13-predictive-intelligence.md``.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 from typing import Any
@@ -127,11 +128,12 @@ class DriftDetector:
                 },
             )
 
-        baseline_rows = await _fetch_recent_judge_scores(
-            org_id, f"{OUTPUT_BASELINE_DAYS} days",
-        )
-        current_rows = await _fetch_recent_judge_scores(
-            org_id, interval_sql,
+        # Baseline + current windows are independent reads; run them
+        # concurrently via asyncio.gather to cut per-detector
+        # wall-clock latency in half on this hot path.
+        baseline_rows, current_rows = await asyncio.gather(
+            _fetch_recent_judge_scores(org_id, f"{OUTPUT_BASELINE_DAYS} days"),
+            _fetch_recent_judge_scores(org_id, interval_sql),
         )
         baseline_scores = [_safe_float(r.get("score")) for r in baseline_rows]
         current_scores = [_safe_float(r.get("score")) for r in current_rows]
@@ -216,11 +218,15 @@ class DriftDetector:
                 },
             )
 
-        baseline_texts = await _fetch_response_text_samples(
-            org_id, f"{EMBEDDING_BASELINE_DAYS} days", limit=EMBEDDING_SAMPLE_LIMIT,
-        )
-        current_texts = await _fetch_response_text_samples(
-            org_id, interval_sql, limit=EMBEDDING_SAMPLE_LIMIT,
+        # Same concurrent-fetch pattern as the output-drift detector above.
+        baseline_texts, current_texts = await asyncio.gather(
+            _fetch_response_text_samples(
+                org_id, f"{EMBEDDING_BASELINE_DAYS} days",
+                limit=EMBEDDING_SAMPLE_LIMIT,
+            ),
+            _fetch_response_text_samples(
+                org_id, interval_sql, limit=EMBEDDING_SAMPLE_LIMIT,
+            ),
         )
         # Hash each text into a bucket index, then expand
         # into a per-bucket "1.0" sample (so the PSI sees
