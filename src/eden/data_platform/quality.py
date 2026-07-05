@@ -499,7 +499,7 @@ def _to_ge_expectation(exp: Expectation) -> Any | None:
     """Convert an in-house :class:`Expectation` to a GE expectation
     (returns ``None`` if the type doesn't map)."""
     try:
-        import great_expectations as ge  # type: ignore
+        import great_expectations  # noqa: F401  — availability check
     except ImportError:
         return None
 
