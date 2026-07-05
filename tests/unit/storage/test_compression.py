@@ -18,7 +18,6 @@ from eden.storage.compression import (
     train_dictionary,
 )
 
-
 # Representative LLM payload shapes used by the major providers. The
 # round-trip test exercises each.
 REPRESENTATIVE_PAYLOADS = [

@@ -38,7 +38,6 @@ import importlib.util
 import sys
 from pathlib import Path
 
-
 # The list of modules we run doctests against. Order is not
 # significant -- doctest walks each module independently.
 #

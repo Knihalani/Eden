@@ -56,6 +56,7 @@ Settings
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
 import time
 from typing import Any
@@ -143,10 +144,8 @@ class InsightsDetectorLoop:
                 logger.warning(f"insights detector loop tick failed: {exc}")
             elapsed = time.monotonic() - tick_start
             sleep_for = max(0.0, self.interval_seconds - elapsed)
-            try:
+            with contextlib.suppress(TimeoutError):
                 await asyncio.wait_for(self._stop.wait(), timeout=sleep_for)
-            except TimeoutError:
-                pass
 
     async def tick_once(self) -> dict[str, int]:
         """Run one iteration of the loop and return per-tenant counts.

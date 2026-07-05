@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import contextlib
 import json
 import logging
 import time
@@ -63,10 +64,8 @@ def _role_cache_get_local(key: tuple[str, str]) -> bool | None:
         return None
     ts, value = entry
     if now - ts >= _USER_ROLE_TTL_SECONDS:
-        try:
+        with contextlib.suppress(KeyError):
             del _user_role_cache[key]
-        except KeyError:
-            pass
         return None
     _user_role_cache.move_to_end(key)
     return value
@@ -390,10 +389,8 @@ async def job_trace_websocket(
                 break
 
             # Poll for updates every 2 seconds (or break early if HILT paused)
-            try:
+            with contextlib.suppress(TimeoutError):
                 await asyncio.wait_for(hilt.wait_for_resume(timeout=2.0), timeout=2.0)
-            except TimeoutError:
-                pass
 
             # Fetch latest job state
             job = await client.get_job(job_id, user_id=user["user_id"])
@@ -477,26 +474,20 @@ async def job_trace_websocket(
         logger.info(f"WebSocket disconnected for job {job_id}")
     except Exception as exc:
         logger.error(f"WebSocket error for job {job_id}: {exc}")
-        try:
+        with contextlib.suppress(Exception):
             await websocket.send_json({"type": "error", "message": str(exc)})
-        except Exception:
-            pass
     finally:
         if not receive_task.done():
             receive_task.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError, Exception):
                 await receive_task
-            except (asyncio.CancelledError, Exception):
-                pass
         # Unregister connection
         if job_id in _job_connections:
             _job_connections[job_id].discard(websocket)
             if not _job_connections[job_id]:
                 del _job_connections[job_id]
-        try:
+        with contextlib.suppress(Exception):
             await websocket.close()
-        except Exception:
-            pass
 
 
 @router.websocket("/ws/jobs/{job_id}/logs")
@@ -585,10 +576,8 @@ async def job_logs_websocket(
             _job_connections[job_id].discard(websocket)
             if not _job_connections[job_id]:
                 del _job_connections[job_id]
-        try:
+        with contextlib.suppress(Exception):
             await websocket.close()
-        except Exception:
-            pass
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -735,7 +724,5 @@ async def _ws_receive_commands(
 
 async def _safe_send(websocket: WebSocket, payload: dict[str, Any]) -> None:
     """Send JSON on the WebSocket, swallowing client-disconnect errors."""
-    try:
+    with contextlib.suppress(Exception):
         await websocket.send_json(payload)
-    except Exception:
-        pass

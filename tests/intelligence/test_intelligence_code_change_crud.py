@@ -23,7 +23,12 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from eden.api.deps import get_current_user, require_org_member, require_org_admin, require_org_permission_dep
+from eden.api.deps import (
+    get_current_user,
+    require_org_admin,
+    require_org_member,
+    require_org_permission_dep,
+)
 
 
 def _fake_user() -> dict:
@@ -134,7 +139,7 @@ def test_repo_connect_then_list_round_trip(
     captured_rows: dict[str, Any] = {}
 
     async def _capture_insert(org_id, table, columns, values):
-        row = dict(zip(columns, values))
+        row = dict(zip(columns, values, strict=False))
         row["org_id"] = org_id
         captured_rows[row.get("id") or row.get("repo_id")] = row
 
@@ -191,7 +196,7 @@ def test_approve_writes_patch_approval_and_flips_status(
     updated: list[tuple[str, str, Any]] = []
 
     async def _capture_insert(org_id, table, columns, values):
-        row = dict(zip(columns, values))
+        row = dict(zip(columns, values, strict=False))
         row["org_id"] = org_id
         row["table"] = table
         inserted.append(row)

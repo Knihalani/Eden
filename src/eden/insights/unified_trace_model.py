@@ -303,7 +303,7 @@ def _normalize_span(data: dict[str, Any]) -> Span:
 
 def _normalize_sdk_span(data: dict[str, Any]) -> Span:
     """Normalize a span from the Eden SDK / OpenTelemetry format."""
-    span_kind = data.get("kind", "internal")
+    data.get("kind", "internal")
     name = data.get("name", "")
 
     # Map OTel span kinds to our types
@@ -387,17 +387,16 @@ def _auto_classify_errors(trace: UnifiedTrace) -> list[dict[str, Any]]:
             })
 
         # Tool misuse indicators
-        if span.span_type == SpanType.TOOL_INVOCATION:
-            if not payload.get("success", True):
-                insights.append({
-                    "insight_id": f"ins_{span.span_id}_tool_misuse",
-                    "detector": "error_classifier",
-                    "severity": "high",
-                    "confidence": 0.85,
-                    "category": "tool_misuse",
-                    "summary": f"Tool {payload.get('tool_name', 'unknown')} invocation failed",
-                    "span_id": span.span_id,
-                })
+        if span.span_type == SpanType.TOOL_INVOCATION and not payload.get("success", True):
+            insights.append({
+                "insight_id": f"ins_{span.span_id}_tool_misuse",
+                "detector": "error_classifier",
+                "severity": "high",
+                "confidence": 0.85,
+                "category": "tool_misuse",
+                "summary": f"Tool {payload.get('tool_name', 'unknown')} invocation failed",
+                "span_id": span.span_id,
+            })
 
     # Loop detection
     tool_sequence = [

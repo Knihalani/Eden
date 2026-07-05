@@ -149,7 +149,7 @@ class TestLiveSSLHandshake:
         # (checking the connection's ssl attribute) varies by asyncpg version.
         conn = await pg_client.acquire().__aenter__()
         try:
-            sock = conn.get_server_pid and getattr(conn, "_connection", None)
+            conn.get_server_pid and getattr(conn, "_connection", None)
             # The simplest portable check: query ssl_is_used() on the
             # connection (asyncpg >= 0.27).
             try:

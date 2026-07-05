@@ -25,6 +25,7 @@ import pytest
 # module still parses under minimal deps.
 try:
     from fastapi.testclient import TestClient  # type: ignore
+
     from eden.api.app import app
     _HAVE_FASTAPI = True
 except Exception:
@@ -187,8 +188,8 @@ def test_cross_tenant_returns_404_not_200() -> None:
     client = TestClient(app)
     trace_id = "t_cross_tenant_001"
     # Write under tenant A.
-    write_resp = client.post(
-        f"/v1/guardrails/tenant_a/guardrails/trajectory/check",
+    client.post(
+        "/v1/guardrails/tenant_a/guardrails/trajectory/check",
         json={
             "trace_id": trace_id,
             "step_index": 0,

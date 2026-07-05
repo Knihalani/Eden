@@ -9,6 +9,7 @@ always normalize to the same internal ``TelemetryEvent`` shape via
 
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
 from typing import Any
@@ -32,10 +33,8 @@ def _openai_extract_usage(usage: dict[str, Any]) -> dict[str, float]:
         ("total_tokens", "total_tokens"),
     ):
         if src in usage:
-            try:
+            with contextlib.suppress(TypeError, ValueError):
                 metrics[dst] = float(usage[src])
-            except (TypeError, ValueError):
-                pass
     return metrics
 
 
@@ -97,10 +96,8 @@ def _openai_to_raw(item: dict[str, Any]) -> dict[str, Any]:
     if isinstance(completion_details, dict):
         o1_tokens = completion_details.get("reasoning_tokens")
         if o1_tokens is not None:
-            try:
+            with contextlib.suppress(TypeError, ValueError):
                 reasoning["o1_tokens"] = int(o1_tokens)
-            except (TypeError, ValueError):
-                pass
     if isinstance(prompt_details, dict):
         cached = prompt_details.get("cached_tokens")
         if cached is not None:
@@ -246,9 +243,7 @@ class OpenAIDecoder:
             "model" in parsed or "object" in parsed
         ):
             return True
-        if "choices" in parsed and isinstance(parsed["choices"], list):
-            return True
-        return False
+        return bool("choices" in parsed and isinstance(parsed["choices"], list))
 
     async def decode(
         self, body: bytes, attribution: Attribution
@@ -300,10 +295,8 @@ def _anthropic_to_raw(item: dict[str, Any]) -> dict[str, Any]:
         ("cache_read_input_tokens", "cache_read_tokens"),
     ):
         if src in usage:
-            try:
+            with contextlib.suppress(TypeError, ValueError):
                 metrics[dst] = float(usage[src])
-            except (TypeError, ValueError):
-                pass
     if (
         "input_tokens" in metrics
         and "output_tokens" in metrics
@@ -499,12 +492,7 @@ class AnthropicDecoder:
             return False
         if parsed.get("type") == "message" and "content" in parsed:
             return True
-        if "usage" in parsed and (
-            "input_tokens" in parsed["usage"]
-            or "output_tokens" in parsed["usage"]
-        ):
-            return True
-        return False
+        return bool("usage" in parsed and ("input_tokens" in parsed["usage"] or "output_tokens" in parsed["usage"]))
 
     async def decode(
         self, body: bytes, attribution: Attribution
@@ -567,10 +555,8 @@ def _bedrock_to_raw(item: dict[str, Any]) -> dict[str, Any]:
         ("cacheReadInputTokenCount", "cache_read_tokens"),
     ):
         if src in usage:
-            try:
+            with contextlib.suppress(TypeError, ValueError):
                 metrics[dst] = float(usage[src])
-            except (TypeError, ValueError):
-                pass
 
     # Pull request and response bodies verbatim. Bedrock's wire shape
     # varies; the most common keys are `input` (Converse), `body`
@@ -746,10 +732,8 @@ def _gemini_to_raw(item: dict[str, Any]) -> dict[str, Any]:
         ("total_token_count", "total_tokens"),
     ):
         if src in usage_metadata:
-            try:
+            with contextlib.suppress(TypeError, ValueError):
                 metrics[dst] = float(usage_metadata[src])
-            except (TypeError, ValueError):
-                pass
 
     # Extract first text from candidates for backward-compat detectors
     candidates = item.get("candidates") or []

@@ -14,6 +14,7 @@ Rejects with HTTP 429 when the limit is exceeded.
 """
 
 import asyncio
+import contextlib
 import hashlib
 import logging
 import time
@@ -258,10 +259,8 @@ class TenantRateLimitMiddleware(BaseHTTPMiddleware):
         self._running = False
         if self._cleanup_task:
             self._cleanup_task.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError):
                 await self._cleanup_task
-            except asyncio.CancelledError:
-                pass
 
     async def _resolve_region(self, org_id: str | None) -> str | None:
         """Resolve the org's region for the ``X-Region-Hint`` header.
@@ -353,10 +352,7 @@ class TenantRateLimitMiddleware(BaseHTTPMiddleware):
         api_key_id: str | None = None
         if org_id:
             api_key_id = await self._resolve_api_key_id(request)
-            if api_key_id:
-                limit_key = f"key:{api_key_id}"
-            else:
-                limit_key = f"org:{org_id}"
+            limit_key = f"key:{api_key_id}" if api_key_id else f"org:{org_id}"
         else:
             forwarded = request.headers.get("x-forwarded-for", "")
             client_ip = forwarded.split(",")[0].strip() if forwarded else (request.client.host if request.client else "unknown")

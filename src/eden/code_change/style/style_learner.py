@@ -319,7 +319,7 @@ class CodeStyleLearner:
         if lint_config and isinstance(base_profile.get("lint_config"), dict):
             base_profile["lint_config"] = {
                 **base_profile["lint_config"],
-                **{k: v for k, v in lint_config.items()},
+                **dict(lint_config.items()),
             }
 
         last_pr_id: str | None = None

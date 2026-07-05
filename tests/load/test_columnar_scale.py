@@ -25,7 +25,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-
 # ── SLO targets (mirrors docs/ops/clickhouse-slo.md) ─────────────────
 
 # These are the *local-mock* thresholds. The live k6 thresholds are

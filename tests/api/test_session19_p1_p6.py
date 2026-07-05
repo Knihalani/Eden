@@ -34,7 +34,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-
 # ─── P-1: dashboard summary runs subqueries in parallel ──────────
 
 

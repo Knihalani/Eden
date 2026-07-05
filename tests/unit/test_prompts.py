@@ -69,7 +69,6 @@ from eden.prompts.registry import (
     default_llm_handler,
 )
 
-
 # ─- Placeholders ──────────────────────────────────────────────
 
 

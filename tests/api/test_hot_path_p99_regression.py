@@ -183,7 +183,7 @@ def test_action_precedence_monotonic() -> None:
     )
 
     # All 10 action classes must appear in the precedence list.
-    for action_class in ACTION_CLASS_DEFAULTS.keys():
+    for action_class in ACTION_CLASS_DEFAULTS:
         assert action_class in ACTION_PRECEDENCE, (
             f"{action_class} missing from ACTION_PRECEDENCE"
         )

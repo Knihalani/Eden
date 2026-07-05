@@ -15,8 +15,10 @@ from eden.api.utils.clerk_auth import (
     extract_org_id,
     extract_org_role,
     extract_user_id,
-    is_clerk_payload as _is_clerk_payload_public,  # canonical impl in clerk_auth.py
     verify_clerk_token,
+)
+from eden.api.utils.clerk_auth import (
+    is_clerk_payload as _is_clerk_payload_public,  # canonical impl in clerk_auth.py
 )
 from eden.config import get_settings
 from eden.storage.postgres import get_postgres_client
@@ -344,14 +346,14 @@ async def get_current_user(
         # 30 minutes is the standard. Bumping last_seen_at to NOW()
         # below slides the window forward on each successful auth
         # call so an active user never sees this 401.
-        from datetime import datetime, timedelta, timezone
+        from datetime import datetime, timedelta
         idle_window = timedelta(minutes=30)
         last_seen = row.get("last_seen_at")
         iat = payload.get("iat")
         if last_seen is not None and iat is not None:
             # Convert iat to a datetime. PyJWT returns it as int
             # (epoch seconds).
-            iat_dt = datetime.fromtimestamp(int(iat), tz=timezone.utc)
+            iat_dt = datetime.fromtimestamp(int(iat), tz=UTC)
             # If the token was issued BEFORE the last idle window
             # relative to last_seen, treat the session as expired.
             if last_seen - iat_dt > idle_window:

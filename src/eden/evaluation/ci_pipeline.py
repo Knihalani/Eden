@@ -16,7 +16,7 @@ import subprocess
 import time
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from enum import Enum
+from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
@@ -43,7 +43,7 @@ __all__ = [
 ]
 
 
-class StageStatus(str, Enum):
+class StageStatus(StrEnum):
     """Status of an evaluation stage."""
 
     PENDING = "pending"
@@ -54,7 +54,7 @@ class StageStatus(str, Enum):
     WARNED = "warned"
 
 
-class StageName(str, Enum):
+class StageName(StrEnum):
     """Named evaluation stages."""
 
     STATIC_ANALYSIS = "static_analysis"
@@ -408,7 +408,7 @@ class CIPipeline:
     ) -> list[StageResult]:
         """Collect results from asyncio.gather, handling exceptions."""
         collected = []
-        for stage, result in zip(stages, results):
+        for stage, result in zip(stages, results, strict=False):
             if isinstance(result, Exception):
                 collected.append(StageResult(
                     stage=stage,

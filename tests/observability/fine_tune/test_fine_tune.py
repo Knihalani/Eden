@@ -33,7 +33,6 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from fastapi.testclient import TestClient
 
-
 # ── helpers ───────────────────────────────────────────────────────────
 
 
@@ -442,7 +441,7 @@ class TestOpenAIFineTuneWebhook:
         ts = str(int(time.time()))
         sig = hmac.new(
             b"test-secret-xyz",
-            f"{ts}.".encode("utf-8") + body_bytes,
+            f"{ts}.".encode() + body_bytes,
             hashlib.sha256,
         ).hexdigest()
         mock_postgres_client.fetchrow = AsyncMock(return_value={"id": _RUN_ID})

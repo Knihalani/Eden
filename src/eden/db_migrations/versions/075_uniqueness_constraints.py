@@ -41,7 +41,6 @@ from __future__ import annotations
 
 from alembic import op
 
-
 revision = "075"
 down_revision = "074_hook_repetition_closed_loop"
 branch_labels = None

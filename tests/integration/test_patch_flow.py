@@ -30,7 +30,6 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-
 GIT = "/usr/bin/git"
 
 
@@ -76,9 +75,9 @@ async def test_patch_flow_e2e(temp_git_repo: Path) -> None:
     The router is mocked (no real LLM call). The
     generator returns a synthetic diff via the mock.
     """
+    from eden.code_change.pr_creator import PRCreator
     from eden.code_change.rca_linker import CodeRootCauseLinker
     from eden.code_change.repo_connector import RepoConnector
-    from eden.code_change.pr_creator import PRCreator
     from eden.providers.pr import LocalPRProvider, PRCreateRequest
     from eden.providers.repo import FileEntry, LocalRepoProvider
 

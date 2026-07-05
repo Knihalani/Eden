@@ -10,14 +10,13 @@ prompt variant registered as inactive for A/B testing.
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime, timezone
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
 from eden.agents.evolution.components import JudgeScorePromptEvolver
-
 
 # ── Helpers ──────────────────────────────────────────────────────
 
@@ -40,7 +39,7 @@ def _judge_row(
         "trace_id": trace_id,
         "span_id": span_id,
         "model": model,
-        "scored_at": scored_at or datetime(2026, 6, 3, 12, 0, 0, tzinfo=timezone.utc),
+        "scored_at": scored_at or datetime(2026, 6, 3, 12, 0, 0, tzinfo=UTC),
         "agent_id": agent_id,
     }
 

@@ -36,7 +36,6 @@ from starlette.testclient import TestClient
 
 from eden.llmops.judges.base import Judge, JudgeContext, JudgeScore
 
-
 # ─── Test doubles ────────────────────────────────────────────────
 
 
@@ -383,8 +382,8 @@ class TestC3IntelligenceRbac:
     ) -> None:
         """Static check: the router's dependency tree includes
         ``require_org_member``."""
-        from eden.api.routes import judges as judges_routes
         from eden.api.deps import require_org_member
+        from eden.api.routes import judges as judges_routes
 
         mod = __import__(
             f"eden.api.routes.{router_module}", fromlist=["router"],
@@ -415,8 +414,8 @@ class TestC3IntelligenceRbac:
     def test_cross_org_request_returns_403(self) -> None:
         """End-to-end: hit /orgs/org-B/intelligence/user/... as
         a user authenticated to org-A → 403."""
-        from eden.api.routes import intelligence_user
         from eden.api.deps import require_org_member
+        from eden.api.routes import intelligence_user
 
         app = FastAPI()
         app.include_router(intelligence_user.router)

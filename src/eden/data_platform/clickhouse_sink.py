@@ -604,10 +604,7 @@ class ClickHouseSink:
 
         where = f"WHERE {' AND '.join(conditions)}" if conditions else ""
 
-        if granularity == "day":
-            time_bucket = "toDate(hour)"
-        else:
-            time_bucket = "hour"
+        time_bucket = "toDate(hour)" if granularity == "day" else "hour"
 
         query = f"""
             SELECT
@@ -635,7 +632,7 @@ class ClickHouseSink:
         rows = []
         for line in lines[1:]:
             values = line.split("\t")
-            rows.append({h: v for h, v in zip(headers, values)})
+            rows.append(dict(zip(headers, values, strict=False)))
         return rows
 
     async def health_check(self) -> str:

@@ -15,7 +15,6 @@ from pathlib import Path
 
 import pytest
 
-
 _PORTAL_ROOT = Path(__file__).parent.parent.parent / "clients/portal"
 
 

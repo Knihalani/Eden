@@ -372,7 +372,6 @@ class TestS20WebhookSsrf:
                 "webhook_id": "wh-1",
             }
         )
-        update_calls: list[tuple] = []
         execute_calls: list[tuple] = []
 
         async def _execute_capture(sql, *args):

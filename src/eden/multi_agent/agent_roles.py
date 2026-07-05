@@ -8,14 +8,14 @@ from __future__ import annotations
 import time
 from collections import defaultdict
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 # ──────────────────────────────────────────────────────────────────────────
 # Enums
 # ──────────────────────────────────────────────────────────────────────────
 
-class ActionType(str, Enum):
+class ActionType(StrEnum):
     CODE_EXECUTION = "code_execution"
     FILE_WRITE = "file_write"
     NETWORK_ACCESS = "network_access"
@@ -26,14 +26,14 @@ class ActionType(str, Enum):
     TOOL_CALL = "tool_call"
 
 
-class ActionResult(str, Enum):
+class ActionResult(StrEnum):
     APPROVED = "approved"
     BLOCKED = "blocked"
     PENDING = "pending"
     TIMEOUT = "timeout"
 
 
-class RoleHierarchy(str, Enum):
+class RoleHierarchy(StrEnum):
     FLAT = "flat"               # Peer-to-peer
     MANAGER_WORKER = "manager_worker"
     SPECIALIST_POOL = "specialist_pool"
@@ -232,7 +232,7 @@ class RoleSystem:
     def to_dict(self) -> dict[str, Any]:
         return {
             "roles": [r.to_dict() for r in self._roles.values()],
-            "teams": {tid: aids for tid, aids in self._teams.items()},
+            "teams": dict(self._teams.items()),
             "role_configs": {name: cfg.to_dict() for name, cfg in self._role_configs.items()},
         }
 

@@ -119,18 +119,12 @@ async def test_zstd_falls_back_to_jsonb_for_legacy_rows(pg_conn: Any) -> None:
     # Simulate the fallback: a "legacy" row where the zstd column is None.
     zstd_value = None
     jsonb_value = sample
-    if zstd_value:
-        recovered = decompress_jsonb(zstd_value)
-    else:
-        recovered = jsonb_value
+    recovered = decompress_jsonb(zstd_value) if zstd_value else jsonb_value
     assert recovered == sample, "Legacy fallback path is broken"
 
     # And the post-backfill path: when zstd is present, decompress it.
     zstd_value = compress_jsonb(sample)
-    if zstd_value:
-        recovered = decompress_jsonb(zstd_value)
-    else:
-        recovered = None
+    recovered = decompress_jsonb(zstd_value) if zstd_value else None
     assert recovered == sample, "Post-backfill read path is broken"
 
 

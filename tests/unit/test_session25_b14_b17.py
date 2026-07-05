@@ -32,7 +32,6 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-
 # ─── B-14: async retry uses asyncio.sleep with cap ──────────────
 
 
@@ -126,7 +125,7 @@ class TestB15Repetition:
             await hooks_bus._increment_repetition("any-hook-id")
 
         assert call_log, (
-            f"B-15 regression: _increment_repetition called execute 0 times"
+            "B-15 regression: _increment_repetition called execute 0 times"
         )
         assert "UPDATE" in call_log, (
             f"B-15 regression: _increment_repetition didn't issue UPDATE; "

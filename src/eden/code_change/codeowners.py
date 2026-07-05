@@ -269,11 +269,7 @@ def _matches(pattern: str, file_path: str) -> bool:
             return True
         # Try matching the suffix against any tail segment
         # (``a/**/foo.py`` should match ``x/y/foo.py``).
-        if "/" in file_path and re.match(
-            rf"^{suffix_regex}$", file_path.rsplit("/", 1)[-1],
-        ):
-            return True
-        return False
+        return bool("/" in file_path and re.match(rf"^{suffix_regex}$", file_path.rsplit("/", 1)[-1]))
     if directory_only:
         # The path must be under this directory. With the
         # leading-/ anchor, only at the root; without the
@@ -299,9 +295,7 @@ def _matches(pattern: str, file_path: str) -> bool:
     # semantics: ``*.js`` matches anywhere in the tree).
     if re.match(rf"^{regex}$", file_path):
         return True
-    if "/" in file_path and re.match(rf"^{regex}$", file_path.rsplit("/", 1)[-1]):
-        return True
-    return False
+    return bool("/" in file_path and re.match(rf"^{regex}$", file_path.rsplit("/", 1)[-1]))
 
 
 __all__ = [

@@ -22,7 +22,6 @@ from eden.services.data_platform import (
     PartitionManager,
 )
 
-
 # ── Migration 042 syntax ─────────────────────────────────────────────
 
 

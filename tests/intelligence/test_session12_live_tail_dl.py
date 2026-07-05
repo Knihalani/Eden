@@ -53,8 +53,8 @@ class TestDl1PublishTraceEvent:
     async def test_route_redis_calls_publish_trace_event(self) -> None:
         from eden.observability.telemetry_collector import (
             TelemetryCollector,
+            TelemetryEvent,
         )
-        from eden.observability.telemetry_collector import TelemetryEvent
 
         collector = TelemetryCollector()
         # Stub Redis to return a fake xadd-able client.
@@ -96,8 +96,8 @@ class TestDl1PublishTraceEvent:
         advertise it."""
         from eden.observability.telemetry_collector import (
             TelemetryCollector,
+            TelemetryEvent,
         )
-        from eden.observability.telemetry_collector import TelemetryEvent
 
         collector = TelemetryCollector()
         fake_redis = MagicMock()
@@ -133,8 +133,8 @@ class TestDl1PublishTraceEvent:
         The publish is best-effort."""
         from eden.observability.telemetry_collector import (
             TelemetryCollector,
+            TelemetryEvent,
         )
-        from eden.observability.telemetry_collector import TelemetryEvent
 
         collector = TelemetryCollector()
         fake_redis = MagicMock()
@@ -174,8 +174,8 @@ class TestDl2TenantCounterReset:
     async def test_tenant_counter_resets_on_cap(self) -> None:
         from eden.observability.telemetry_collector import (
             TelemetryCollector,
+            TelemetryEvent,
         )
-        from eden.observability.telemetry_collector import TelemetryEvent
 
         collector = TelemetryCollector()
 
@@ -213,8 +213,8 @@ class TestDl2TenantCounterReset:
         """Same reset behaviour in the batch path."""
         from eden.observability.telemetry_collector import (
             TelemetryCollector,
+            TelemetryEvent,
         )
-        from eden.observability.telemetry_collector import TelemetryEvent
 
         collector = TelemetryCollector()
         collector._tenant_event_counts["org-1"] = TelemetryCollector.MAX_EVENTS_PER_TENANT

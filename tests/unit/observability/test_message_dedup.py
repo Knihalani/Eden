@@ -20,7 +20,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-
 # ── Migration 041 syntax ─────────────────────────────────────────────
 
 # Audit 2026-06-23: the original path was a hardcoded absolute
@@ -51,12 +50,12 @@ class TestMigration041Syntax:
         """The upgrade must use IF NOT EXISTS so re-runs are safe
         on databases that already have the table from the legacy
         raw-SQL file."""
-        m = self._load_migration()
+        self._load_migration()
         body = (_MIGRATIONS_DIR / "041_trace_messages.py").read_text()
         assert "CREATE TABLE IF NOT EXISTS trace_messages" in body
 
     def test_indexes_created(self):
-        m = self._load_migration()
+        self._load_migration()
         body = (_MIGRATIONS_DIR / "041_trace_messages.py").read_text()
         assert "idx_trace_messages_trace_id" in body
         assert "idx_trace_messages_content_gin" in body

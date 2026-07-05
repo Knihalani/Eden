@@ -40,7 +40,6 @@ import pytest
 
 from eden.autonomous.agent import ChatService, get_chat_service
 
-
 # ─── C-4: Anthropic prompt cache_control ─────────────────────────
 
 
@@ -49,7 +48,7 @@ class _EmptyAsyncIter:
     OpenRouterClient's streaming response. ``async for chunk in
     _EmptyAsyncIter()`` exits cleanly on the first ``__anext__``."""
 
-    def __aiter__(self) -> "_EmptyAsyncIter":
+    def __aiter__(self) -> _EmptyAsyncIter:
         return self
 
     async def __anext__(self) -> Any:
@@ -64,7 +63,7 @@ class _OneChunkAsyncIter:
         self._chunk = chunk
         self._yielded = False
 
-    def __aiter__(self) -> "_OneChunkAsyncIter":
+    def __aiter__(self) -> _OneChunkAsyncIter:
         return self
 
     async def __anext__(self) -> Any:

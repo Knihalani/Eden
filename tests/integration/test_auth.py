@@ -6,9 +6,10 @@ Covers: signup, login, logout, /me, 2FA setup/verify/disable,
         used by the onboarding wizard.
 """
 
+from unittest.mock import patch
+
 import pytest
 from fastapi.testclient import TestClient
-from unittest.mock import patch
 
 
 class TestAuthSignup:

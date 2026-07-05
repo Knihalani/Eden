@@ -111,7 +111,7 @@ class ChatCompletionRequest(BaseModel):
         return data
 
     @model_validator(mode="after")
-    def _enforce_max_tokens_cap(self) -> "ChatCompletionRequest":
+    def _enforce_max_tokens_cap(self) -> ChatCompletionRequest:
         """C-11: reject requests that exceed the gateway token cap.
 
         The cap is enforced at the request boundary (here) so a

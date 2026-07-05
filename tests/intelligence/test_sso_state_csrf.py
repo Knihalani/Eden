@@ -92,7 +92,7 @@ def test_initiate_persists_state_nonce(provider_type: str) -> None:
         ):
             client = TestClient(_build_app())
             resp = client.get(
-                f"/sso/login/prov-1?org_id=org-1"
+                "/sso/login/prov-1?org_id=org-1"
             )
     assert resp.status_code == 200, resp.text
     body = resp.json()

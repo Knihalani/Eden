@@ -1141,8 +1141,8 @@ class CodeChangeHook:
         # connector (and their package init side-effects)
         # when the hook fires for an advisory-only call.
         try:
-            from eden.code_change.rca_linker import CodeRootCauseLinker
             from eden.code_change.patch_generator import PatchGenerator
+            from eden.code_change.rca_linker import CodeRootCauseLinker
             from eden.code_change.repo_connector import RepoConnector
             from eden.optimization.model_router import ModelRouter
         except Exception as exc:

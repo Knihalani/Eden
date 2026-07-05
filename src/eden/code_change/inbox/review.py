@@ -197,7 +197,7 @@ class PRReviewService:
                 return _error_envelope(
                     self.name,
                     message=(
-                        f"action 'edit' requires edited_diff in the "
+                        "action 'edit' requires edited_diff in the "
                         "request body."
                     ),
                     error_code="edited_diff_required",

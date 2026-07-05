@@ -37,7 +37,7 @@ What's covered:
 from __future__ import annotations
 
 import json
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta, timezone
 from typing import Any, Optional
 from unittest.mock import AsyncMock
 
@@ -55,7 +55,6 @@ from eden.observability.sharing import (
     _token_prefix,
     _validate_token_format,
 )
-
 
 # ── Fake Postgres client ──────────────────────────────────────────
 
@@ -77,8 +76,8 @@ class FakePostgresClient:
     def __init__(self) -> None:
         self.calls: list[tuple[str, tuple]] = []
         self.execute_responses: list[str] = []  # returned in order
-        self.fetchrow_response: Optional[list[dict]] = None
-        self.fetch_response: Optional[list[list[dict]]] = None
+        self.fetchrow_response: list[dict] | None = None
+        self.fetch_response: list[list[dict]] | None = None
         # Storage backends (the real DBs).
         self._shared_traces: dict[str, dict[str, Any]] = {}
         self._saved_searches: dict[str, dict[str, Any]] = {}
@@ -113,7 +112,7 @@ class FakePostgresClient:
             return self.execute_responses.pop(0)
         return "OK"
 
-    async def fetchrow(self, query: str, *args: Any) -> Optional[dict]:
+    async def fetchrow(self, query: str, *args: Any) -> dict | None:
         self._record(query, args)
         sql_lc = query.strip().lower()
         if "from shared_traces" in sql_lc:
@@ -153,7 +152,7 @@ class FakePostgresClient:
             "revoked_at": None,
             "view_count": 0,
             "last_viewed_at": None,
-            "created_at": datetime.now(timezone.utc),
+            "created_at": datetime.now(UTC),
         }
 
     def _apply_revoke(self, args: tuple) -> str:
@@ -161,7 +160,7 @@ class FakePostgresClient:
         row = self._shared_traces.get(share_id)
         if row is None or str(row["org_id"]) != str(org_id) or row["revoked_at"] is not None:
             return "UPDATE 0"
-        row["revoked_at"] = datetime.now(timezone.utc)
+        row["revoked_at"] = datetime.now(UTC)
         return "UPDATE 1"
 
     def _apply_view(self, args: tuple) -> str:
@@ -170,12 +169,12 @@ class FakePostgresClient:
         if row is None:
             return "UPDATE 0"
         row["view_count"] = int(row["view_count"]) + 1
-        row["last_viewed_at"] = datetime.now(timezone.utc)
+        row["last_viewed_at"] = datetime.now(UTC)
         return "UPDATE 1"
 
     def _apply_purge(self, args: tuple) -> str:
         org_filter = args[0] if args else None
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         to_delete = []
         for sid, row in self._shared_traces.items():
             if row["revoked_at"] is not None:
@@ -184,7 +183,7 @@ class FakePostgresClient:
                 continue
             exp = row["expires_at"]
             if exp.tzinfo is None:
-                exp = exp.replace(tzinfo=timezone.utc)
+                exp = exp.replace(tzinfo=UTC)
             if exp > now:
                 continue
             if org_filter is not None and str(row["org_id"]) != str(org_filter):
@@ -198,7 +197,7 @@ class FakePostgresClient:
         # INSERT args: id, org_id, owner_id, name, query_type, query,
         #              params, is_shared, is_pinned, tags
         search_id, org_id, owner_id, name, query_type, query, params_json, is_shared, is_pinned, tags = args
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         self._saved_searches[search_id] = {
             "id": search_id,
             "org_id": org_id,
@@ -238,7 +237,7 @@ class FakePostgresClient:
         if len(param_clauses) > len(args) - 2:
             return "UPDATE 0"
         set_args = args[:len(param_clauses)]
-        for clause, val in zip(param_clauses, set_args):
+        for clause, val in zip(param_clauses, set_args, strict=False):
             if clause.startswith("name"):
                 row["name"] = val
             elif clause.startswith("query ="):
@@ -254,7 +253,7 @@ class FakePostgresClient:
             elif clause.startswith("tags"):
                 row["tags"] = val
         # Apply any literal expressions (NOW(), count + 1, etc).
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         for clause in set_clause:
             if "use_count" in clause and "+" in clause:
                 row["use_count"] = int(row["use_count"]) + 1
@@ -271,7 +270,7 @@ class FakePostgresClient:
         del self._saved_searches[search_id]
         return "DELETE 1"
 
-    def _select_share(self, args: tuple, sql_lc: str) -> Optional[dict]:
+    def _select_share(self, args: tuple, sql_lc: str) -> dict | None:
         # Decide which column to look up by based on the WHERE
         # clause (not the SELECT clause, which lists token_hash
         # unconditionally as a column). ``sql_lc`` is already
@@ -294,7 +293,7 @@ class FakePostgresClient:
         rows = list(self._shared_traces.values())
         return [dict(r) for r in rows]
 
-    def _select_search(self, args: tuple) -> Optional[dict]:
+    def _select_search(self, args: tuple) -> dict | None:
         search_id, org_id = args
         row = self._saved_searches.get(search_id)
         if row and str(row["org_id"]) == str(org_id):
@@ -379,7 +378,7 @@ class TestSharedTraceDataclass:
             id="id-1", org_id="o", trace_id="t", token_hash="h",
             token_prefix="abcd", created_by="u", label=None,
             expires_at=None, revoked_at=None, view_count=0,
-            last_viewed_at=None, created_at=datetime.now(timezone.utc),
+            last_viewed_at=None, created_at=datetime.now(UTC),
             _plaintext_token="abcd1234",
         )
         assert s.public_url("https://app.eden.example") == (
@@ -394,7 +393,7 @@ class TestSharedTraceDataclass:
             id="id-1", org_id="o", trace_id="t", token_hash="h",
             token_prefix="abcd", created_by="u", label=None,
             expires_at=None, revoked_at=None, view_count=0,
-            last_viewed_at=None, created_at=datetime.now(timezone.utc),
+            last_viewed_at=None, created_at=datetime.now(UTC),
         )
         with pytest.raises(ValueError, match="plaintext"):
             s.public_url("https://app.eden.example")
@@ -404,7 +403,7 @@ class TestSharedTraceDataclass:
             id="id-1", org_id="o", trace_id="t", token_hash="h",
             token_prefix="abcd", created_by="u", label=None,
             expires_at=None, revoked_at=None, view_count=0,
-            last_viewed_at=None, created_at=datetime.now(timezone.utc),
+            last_viewed_at=None, created_at=datetime.now(UTC),
         )
         assert s.is_active() is True
 
@@ -412,10 +411,10 @@ class TestSharedTraceDataclass:
         s = SharedTrace(
             id="id-1", org_id="o", trace_id="t", token_hash="h",
             token_prefix="abcd", created_by="u", label=None,
-            expires_at=datetime.now(timezone.utc) + timedelta(days=1),
-            revoked_at=datetime.now(timezone.utc),
+            expires_at=datetime.now(UTC) + timedelta(days=1),
+            revoked_at=datetime.now(UTC),
             view_count=0, last_viewed_at=None,
-            created_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
         )
         assert s.is_active() is False
 
@@ -423,9 +422,9 @@ class TestSharedTraceDataclass:
         s = SharedTrace(
             id="id-1", org_id="o", trace_id="t", token_hash="h",
             token_prefix="abcd", created_by="u", label=None,
-            expires_at=datetime.now(timezone.utc) - timedelta(hours=1),
+            expires_at=datetime.now(UTC) - timedelta(hours=1),
             revoked_at=None, view_count=0, last_viewed_at=None,
-            created_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
         )
         assert s.is_active() is False
 
@@ -434,8 +433,8 @@ class TestSharedTraceDataclass:
             id="id-1", org_id="o", trace_id="t", token_hash="h",
             token_prefix="abcd", created_by="u", label="incident",
             expires_at=None, revoked_at=None, view_count=3,
-            last_viewed_at=datetime.now(timezone.utc),
-            created_at=datetime.now(timezone.utc),
+            last_viewed_at=datetime.now(UTC),
+            created_at=datetime.now(UTC),
             _plaintext_token="secret",
         )
         d = s.to_dict()
@@ -447,7 +446,7 @@ class TestSharedTraceDataclass:
             id="id-1", org_id="o", trace_id="t", token_hash="h",
             token_prefix="abcd", created_by="u", label=None,
             expires_at=None, revoked_at=None, view_count=0,
-            last_viewed_at=None, created_at=datetime.now(timezone.utc),
+            last_viewed_at=None, created_at=datetime.now(UTC),
             _plaintext_token="secret",
         )
         d = s.to_dict(include_plaintext=True)
@@ -477,7 +476,7 @@ class TestShareService:
         assert share.token_prefix == _token_prefix(share._plaintext_token)
         assert share.expires_at is not None
         # Roughly 7 days from now (allow some clock skew).
-        delta = (share.expires_at - datetime.now(timezone.utc)).total_seconds()
+        delta = (share.expires_at - datetime.now(UTC)).total_seconds()
         assert 6 * 86400 < delta < 8 * 86400
         # URL renders.
         url = share.public_url("https://app.eden.example")
@@ -492,13 +491,13 @@ class TestShareService:
         share = await svc.create_share(
             org_id="o", trace_id="t", created_by="u", expiry_days=0,
         )
-        delta = (share.expires_at - datetime.now(timezone.utc)).total_seconds()
+        delta = (share.expires_at - datetime.now(UTC)).total_seconds()
         assert 0 < delta < 2 * 86400
         # 999 days clamps to MAX.
         share = await svc.create_share(
             org_id="o", trace_id="t", created_by="u", expiry_days=999,
         )
-        delta = (share.expires_at - datetime.now(timezone.utc)).total_seconds()
+        delta = (share.expires_at - datetime.now(UTC)).total_seconds()
         assert (MAX_EXPIRY_DAYS - 1) * 86400 < delta < (MAX_EXPIRY_DAYS + 1) * 86400
 
     @pytest.mark.asyncio
@@ -577,14 +576,14 @@ class TestShareService:
             "(id, org_id, trace_id, token_hash, token_prefix, created_by, label, expires_at) "
             "VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
             "expired-1", "o", "t1", "h1", "abcd", "u", None,
-            datetime.now(timezone.utc) - timedelta(hours=1),
+            datetime.now(UTC) - timedelta(hours=1),
         )
         await pg.execute(
             "INSERT INTO shared_traces "
             "(id, org_id, trace_id, token_hash, token_prefix, created_by, label, expires_at) "
             "VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
             "active-1", "o", "t2", "h2", "efgh", "u", None,
-            datetime.now(timezone.utc) + timedelta(days=7),
+            datetime.now(UTC) + timedelta(days=7),
         )
         n = await svc.purge_expired()
         assert n == 1
@@ -755,9 +754,9 @@ class TestSavedSearchDataclass:
             id="id-1", org_id="o", owner_id="u", name="x",
             query_type="text", query="hello", params={"k": "v"},
             is_shared=True, is_pinned=False, tags=["t1"],
-            last_used_at=datetime.now(timezone.utc), use_count=5,
-            created_at=datetime.now(timezone.utc),
-            updated_at=datetime.now(timezone.utc),
+            last_used_at=datetime.now(UTC), use_count=5,
+            created_at=datetime.now(UTC),
+            updated_at=datetime.now(UTC),
         )
         d = s.to_dict()
         assert d["id"] == "id-1"

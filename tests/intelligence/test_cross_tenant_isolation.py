@@ -27,6 +27,7 @@ an ``org_id`` predicate. They run against the conftest's
 
 from __future__ import annotations
 
+from datetime import UTC
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
@@ -174,7 +175,7 @@ class TestS13LineageOrgFilter:
         mock_postgres_client.fetch = AsyncMock(return_value=[])
         await tracker.export_openlineage(
             org_id="org-A",
-            since=datetime(2026, 1, 1, tzinfo=timezone.utc),
+            since=datetime(2026, 1, 1, tzinfo=UTC),
             limit=50,
         )
 

@@ -27,7 +27,6 @@ from unittest.mock import AsyncMock, patch
 import pytest
 from fastapi.testclient import TestClient
 
-
 # ── Shared fixtures ───────────────────────────────────────────────────
 
 CLERK_OK_ORG = {
@@ -258,9 +257,9 @@ class TestUpsertOrgRace:
         non-UUID INSERT. We assert that the INSERT statement is
         guarded by a ``NOT EXISTS`` check AND only inserts UUID
         ``clerk_id`` values."""
-        from eden.api.routes.clerk_webhooks import _upsert_org
-
         import asyncio
+
+        from eden.api.routes.clerk_webhooks import _upsert_org
         asyncio.run(_upsert_org({
             "id": "org_2xabc",
             "name": "Acme",
@@ -291,9 +290,9 @@ class TestUpsertOrgRace:
     ):
         """The UPDATE branch must run on every webhook delivery
         (idempotent for case 2; backfills case 3)."""
-        from eden.api.routes.clerk_webhooks import _upsert_org
-
         import asyncio
+
+        from eden.api.routes.clerk_webhooks import _upsert_org
         asyncio.run(_upsert_org({
             "id": "org_2xabc",
             "name": "Acme",

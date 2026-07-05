@@ -14,6 +14,7 @@ Usage:
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import logging
 from datetime import UTC, datetime
@@ -230,10 +231,8 @@ async def mobile_sse_stream(
         if not _mobile_streams[job_id]:
             del _mobile_streams[job_id]
         poll_task.cancel()
-        try:
+        with contextlib.suppress(asyncio.CancelledError):
             await poll_task
-        except asyncio.CancelledError:
-            pass
 
     # Build response headers with reconnect advice
     headers = {
@@ -359,7 +358,5 @@ async def broadcast_to_mobile(job_id: str, event: dict[str, Any]) -> None:
         return
 
     for stream in list(_mobile_streams[job_id]):
-        try:
+        with contextlib.suppress(Exception):
             await stream.emit(event)
-        except Exception:
-            pass

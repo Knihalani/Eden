@@ -57,7 +57,6 @@ from eden.services.cat2_intel.signals import (
     signal_signature,
 )
 
-
 # ── compile_signal ──────────────────────────────────────────────
 
 

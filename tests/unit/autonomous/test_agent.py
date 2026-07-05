@@ -31,11 +31,16 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from eden.api.routes.ai_agent import (
+    _resolve_user_role,
+    _sse_format,
+)
 from eden.autonomous.agent import (
+    _TOOL_REGISTRY,
     AgentChunk,
+    ChartSpec,
     ChatService,
     Citation,
-    ChartSpec,
     ToolCall,
     _build_system_prompt,
     _extract_blocks,
@@ -43,16 +48,10 @@ from eden.autonomous.agent import (
     _parse_citation,
     _parse_tool_call,
     _strip_blocks,
-    _TOOL_REGISTRY,
     dispatch_tool,
     get_chat_service,
     tool_specs,
 )
-from eden.api.routes.ai_agent import (
-    _sse_format,
-    _resolve_user_role,
-)
-
 
 # ── Tool registry ─────────────────────────────────────────────────
 

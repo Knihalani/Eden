@@ -98,7 +98,7 @@ class TestDl11HookBusSweep:
 
         # Build a chain of 5 events: p1 → p2 → p3 → p4 → p5.
         prev_id = None
-        for i in range(5):
+        for _i in range(5):
             ev = HookEvent(
                 reason="test_cascade",
                 severity="low",

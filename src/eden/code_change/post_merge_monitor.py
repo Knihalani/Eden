@@ -30,8 +30,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from eden.code_change._common import _insert_row, _new_id, _ok_envelope
-from eden.code_change._common import _json_dumps
+from eden.code_change._common import _insert_row, _json_dumps, _new_id, _ok_envelope
 
 logger = logging.getLogger(__name__)
 

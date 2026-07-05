@@ -10,7 +10,6 @@ from typing import Any
 
 import pytest
 
-
 # (table, timestamp_column, expected_index_name)
 _BRIN_TARGETS = [
     ("usage_events", "created_at", "idx_brin_usage_events_created_at"),

@@ -459,14 +459,13 @@ async def _tool_get_trace_messages(tenant_id: str, args: dict[str, Any]) -> dict
 
     trace_id = args["trace_id"]
     limit = int(args.get("limit") or 50)
-    store = get_message_store()
+    get_message_store()
     collector = await get_telemetry_collector()
     tree = await collector.get_trace_tree(tenant_id, trace_id)
     if tree is None:
         return {"error": f"trace {trace_id} not found", "trace_id": trace_id}
 
     out: list[dict[str, Any]] = []
-    seen_hashes: set[str] = set()
     # Walk spans in chronological order; reconstruct via dedup.
     for span_id, span in sorted(
         tree.span_map.items(),
@@ -935,8 +934,8 @@ async def _tool_open_pr_suggestion(tenant_id: str, args: dict[str, Any],
     try:
         from eden.agent import PRSuggester
         from eden.providers import (
-            PRCreateRequest,
             FileEntry,
+            PRCreateRequest,
             get_default_pr_provider,
         )
     except Exception as exc:
@@ -1392,7 +1391,7 @@ class ChatService:
 
             # Persist the assistant message (full raw text — we
             # reconstruct the display view on read).
-            assistant_msg_id = await self._append_message(
+            await self._append_message(
                 client, conv_id, role="assistant",
                 content=llm_result["text"],
                 tool_calls=llm_result["tool_calls"],

@@ -1,11 +1,15 @@
 """Organization analytics routes for Eden API."""
 
 import logging
-from datetime import datetime, timedelta, UTC
+from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, Depends, Query
 
-from eden.api.deps import get_current_user, require_org_permission_dep, require_org_permission  # noqa: F401  (monkeypatched by tests/api/test_analytics_routes.py)
+from eden.api.deps import (  # noqa: F401  (monkeypatched by tests/api/test_analytics_routes.py)
+    get_current_user,
+    require_org_permission,
+    require_org_permission_dep,
+)
 from eden.storage.postgres import get_postgres_client
 
 logger = logging.getLogger(__name__)

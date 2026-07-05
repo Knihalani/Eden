@@ -26,7 +26,6 @@ from pydantic import BaseModel
 from eden.api.deps import require_feature_flag
 from eden.config import get_settings
 
-
 # Resolve the routes directory at import time.
 _THIS_DIR = os.path.dirname(os.path.abspath(__file__))
 _ROUTES_DIR = os.path.normpath(

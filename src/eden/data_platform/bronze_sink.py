@@ -24,7 +24,7 @@ import asyncio
 import json
 import logging
 import time
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 
@@ -129,10 +129,8 @@ class BronzeEventSink:
         self._running = False
         if self._flush_task:
             self._flush_task.cancel()
-            try:
+            with suppress(asyncio.CancelledError):
                 await self._flush_task
-            except asyncio.CancelledError:
-                pass
         await self._flush_buffer()
         logger.info(
             f"BronzeEventSink stopped (ingested={self._total_ingested}, "

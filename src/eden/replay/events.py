@@ -45,7 +45,7 @@ import logging
 import re
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 logger = logging.getLogger(__name__)
@@ -54,7 +54,7 @@ logger = logging.getLogger(__name__)
 # ─- Event types ─────────────────────────────────────────────
 
 
-class SessionEventType(str, Enum):
+class SessionEventType(StrEnum):
     """The 5 event types the recorder emits."""
 
     DOM_MUTATION = "dom_mutation"

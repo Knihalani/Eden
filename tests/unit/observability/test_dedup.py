@@ -42,7 +42,6 @@ from eden.observability.message_store import (
     hash_messages,
 )
 
-
 # ── canonical_hash ────────────────────────────────────────────────
 
 
@@ -85,7 +84,7 @@ class TestCanonicalHash:
         assert h1 != h2
 
     def test_handles_datetime(self):
-        ts = _dt.datetime(2026, 6, 17, 12, 0, 0, tzinfo=_dt.timezone.utc)
+        ts = _dt.datetime(2026, 6, 17, 12, 0, 0, tzinfo=_dt.UTC)
         h = canonical_hash({"created_at": ts, "role": "system"})
         # Roundtripping through JSON should give the same hash
         again = json.loads(json.dumps({"created_at": ts.isoformat(), "role": "system"}))

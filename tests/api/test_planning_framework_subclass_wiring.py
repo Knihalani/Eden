@@ -34,7 +34,6 @@ from typing import Any
 
 import pytest
 
-
 # ── Subclass event-payload builders ────────────────────────────────
 
 

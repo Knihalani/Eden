@@ -738,7 +738,7 @@ class VerifyResult:
     """Outcome of :func:`verify_setup`."""
 
     ok: bool  # overall — True if no errors (warnings allowed)
-    checks: list["CheckResult"]  # field(default_factory=list)
+    checks: list[CheckResult]  # field(default_factory=list)
 
 
 @dataclass

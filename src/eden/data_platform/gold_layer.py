@@ -499,7 +499,7 @@ class GoldLayerEngine:
         jobs_by_outcome = {r["outcome_tier"] or "unknown": r["count"] for r in outcome_rows}
 
         # Data quality
-        quality_report = await client.fetchrow(
+        await client.fetchrow(
             """
             SELECT quality_score, pii_detected
             FROM silver_events

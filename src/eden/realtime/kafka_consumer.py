@@ -384,7 +384,7 @@ class KafkaEventConsumer:
             return {
                 "status": "healthy",
                 "group_id": self.group_id,
-                "topics": [t for t in assignment] if assignment else [],
+                "topics": list(assignment) if assignment else [],
                 "metrics": self.get_metrics(),
             }
         except Exception as exc:

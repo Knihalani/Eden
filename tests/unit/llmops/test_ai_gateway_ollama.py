@@ -28,7 +28,6 @@ from eden.llmops.ai_gateway import (
     register_default_providers,
 )
 
-
 # ────────────────────────────────────────────────────────────────────────
 # OllamaClient.complete — wire format
 # ────────────────────────────────────────────────────────────────────────

@@ -30,9 +30,7 @@ import time
 from unittest.mock import AsyncMock, patch
 
 import pytest
-
 from fastapi import HTTPException
-
 
 # ─── B-8: action_id format standardised ────────────────────────────
 
@@ -79,11 +77,11 @@ class TestB8ActionIdFormat:
     @pytest.mark.asyncio
     async def test_fallback_id_is_deterministic(self) -> None:
         """Two calls with the same inputs produce the same uuid5 id."""
-        from eden.llmops import promotion_hooks
-
         # Force the fallback path: stub out HookBus by patching the
         # import path that _record_action actually resolves.
         import sys
+
+        from eden.llmops import promotion_hooks
         fake_hooks_bus = type(sys)("fake_hooks_bus")
         fake_hooks_bus.HookEvent = object
         fake_hooks_bus.get_hook_bus = lambda: (_ for _ in ()).throw(
@@ -140,6 +138,7 @@ class TestB8Uuid5ColumnSafety:
         so the ON CONFLICT (id) DO NOTHING dedup actually fires.
         """
         import sys
+
         from eden.llmops import promotion_hooks
 
         fake_hooks_bus = type(sys)("fake_hooks_bus")
@@ -177,6 +176,7 @@ class TestB8Uuid5ColumnSafety:
         into the same row.
         """
         import sys
+
         from eden.llmops import promotion_hooks
 
         fake_hooks_bus = type(sys)("fake_hooks_bus")
@@ -281,7 +281,8 @@ class TestB10LastUsedAtDebounce:
     @pytest.mark.asyncio
     async def test_recent_key_skips_stamp(self) -> None:
         """A key whose ``last_used_at`` is < 60s old does NOT write."""
-        from datetime import datetime, timedelta, UTC
+        from datetime import UTC, datetime, timedelta
+
         from eden.api.routes import api_keys
 
         fake_client = AsyncMock()

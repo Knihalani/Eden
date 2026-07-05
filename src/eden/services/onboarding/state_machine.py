@@ -36,8 +36,8 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
-from datetime import UTC, datetime, date
-from enum import Enum
+from datetime import UTC, date, datetime
+from enum import StrEnum
 from typing import Any
 
 logger = logging.getLogger(__name__)
@@ -46,7 +46,7 @@ logger = logging.getLogger(__name__)
 # ── Step enum + ordering ─────────────────────────────────────────────
 
 
-class OnboardingStep(str, Enum):
+class OnboardingStep(StrEnum):
     """The 7 ordered steps of the cold-start UX."""
 
     INSTALL = "install"

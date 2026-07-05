@@ -41,7 +41,6 @@ from eden.observability.logging_shim import (
 )
 from eden.observability.telemetry_collector import TelemetryEvent
 
-
 # ── Fixtures ────────────────────────────────────────────────────────
 
 

@@ -24,7 +24,6 @@ from eden.llmops import (
     ModelArtifact,
     ModelArtifactRegistry,
     ModelHealthSnapshot,
-    ModelRequest,
     ProductionMonitor,
     PromptABTest,
     PromptRegistry,

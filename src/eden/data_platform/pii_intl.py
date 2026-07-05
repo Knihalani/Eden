@@ -131,14 +131,14 @@ def _cpf_checksum_ok(cpf: str) -> bool:
         # Disallow 000.000.000-00 etc.
         return False
     # First check digit.
-    s = sum(int(d) * w for d, w in zip(digits[:9], range(10, 1, -1)))
+    s = sum(int(d) * w for d, w in zip(digits[:9], range(10, 1, -1), strict=False))
     r = (s * 10) % 11
     if r == 10:
         r = 0
     if r != int(digits[9]):
         return False
     # Second check digit.
-    s = sum(int(d) * w for d, w in zip(digits[:10], range(11, 1, -1)))
+    s = sum(int(d) * w for d, w in zip(digits[:10], range(11, 1, -1), strict=False))
     r = (s * 10) % 11
     if r == 10:
         r = 0
@@ -152,20 +152,14 @@ def _cnpj_checksum_ok(cnpj: str) -> bool:
         return False
     if digits == digits[0] * 14:
         return False
-    s = sum(int(d) * w for d, w in zip(digits[:12], [5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2]))
+    s = sum(int(d) * w for d, w in zip(digits[:12], [5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2], strict=False))
     r1 = (s % 11)
-    if r1 < 2:
-        r1 = 0
-    else:
-        r1 = 11 - r1
+    r1 = 0 if r1 < 2 else 11 - r1
     if r1 != int(digits[12]):
         return False
-    s = sum(int(d) * w for d, w in zip(digits[:13], [6, 5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2]))
+    s = sum(int(d) * w for d, w in zip(digits[:13], [6, 5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2], strict=False))
     r2 = (s % 11)
-    if r2 < 2:
-        r2 = 0
-    else:
-        r2 = 11 - r2
+    r2 = 0 if r2 < 2 else 11 - r2
     return r2 == int(digits[13])
 
 
@@ -334,9 +328,7 @@ class MultiLangPIIMasker:
         """True if ``name`` is enabled by the policy."""
         if name in self.policy.disabled_categories:
             return False
-        if self.policy.enabled_categories and name not in self.policy.enabled_categories:
-            return False
-        return True
+        return not (self.policy.enabled_categories and name not in self.policy.enabled_categories)
 
     def _mask_intl(self, value: Any) -> Any:
         """Walk ``value`` and replace international PII matches

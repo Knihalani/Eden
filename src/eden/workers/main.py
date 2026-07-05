@@ -37,6 +37,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import contextlib
 import logging
 import signal
 import sys
@@ -107,7 +108,7 @@ async def _run_forever() -> None:
                 ),
                 timeout=10.0,
             )
-        except asyncio.TimeoutError:
+        except TimeoutError:
             logger.warning("worker: drain timeout; cancelling remaining loops")
             for _, task in loops:
                 if isinstance(task, asyncio.Task) and not task.done():
@@ -169,10 +170,8 @@ def main(argv: list[str] | None = None) -> int:
         asyncio.run(_run_once())
         return 0
 
-    try:
+    with contextlib.suppress(KeyboardInterrupt):
         asyncio.run(_run_forever())
-    except KeyboardInterrupt:
-        pass
     return 0
 
 

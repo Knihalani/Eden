@@ -38,6 +38,7 @@ related calls land under the same trace in the portal.
 
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
 from typing import Any
@@ -169,16 +170,12 @@ def _helicone_log_to_raw(item: dict[str, Any]) -> dict[str, Any]:
         ("total_tokens", "total_tokens"),
     ):
         if src_key in usage:
-            try:
+            with contextlib.suppress(TypeError, ValueError):
                 metrics[dst_key] = float(usage[src_key])
-            except (TypeError, ValueError):
-                pass
     cost = item.get("cost")
     if cost is not None:
-        try:
+        with contextlib.suppress(TypeError, ValueError):
             metrics["cost_usd"] = float(cost)
-        except (TypeError, ValueError):
-            pass
 
     # Outcome
     response_status = item.get("response_status") or item.get("responseStatus")

@@ -74,7 +74,8 @@ def test_D_03_calibration_failure_detected():
 def test_D_04_multi_turn_escalation_detected():
     """User-message escalation → multi_turn_escalation > 0."""
     from supplementaries.phase_7_detection.detectors import (
-        detect_multi_turn_escalation, _extract_user_messages,
+        _extract_user_messages,
+        detect_multi_turn_escalation,
     )
     pairs = _load("D_04_multi-turn-escalation")
     for evts in _to_events(pairs):

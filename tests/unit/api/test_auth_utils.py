@@ -10,8 +10,8 @@ import pytest
 from jose import jwt
 
 from eden.api.utils.auth import (
-    ALGORITHM,
     _BCRYPT_ROUNDS,
+    ALGORITHM,
     create_access_token,
     decode_access_token,
     hash_password,
@@ -158,7 +158,6 @@ class TestJWTTokens:
     def test_token_missing_sub_is_rejected(self, test_settings):
         """A token without a ``sub`` claim is rejected even if the
         signature is valid — required-claim enforcement."""
-        from jose import jwt
         token = jwt.encode(
             {"exp": 9999999999, "iat": 0},
             test_settings.jwt_secret,
@@ -168,7 +167,6 @@ class TestJWTTokens:
 
     def test_token_missing_exp_is_rejected(self, test_settings):
         """A token without an ``exp`` claim is rejected."""
-        from jose import jwt
         token = jwt.encode(
             {"sub": "user-123", "iat": 0},
             test_settings.jwt_secret,
@@ -179,7 +177,6 @@ class TestJWTTokens:
     def test_token_missing_iat_is_rejected(self, test_settings):
         """A token without an ``iat`` claim is rejected — the
         idle-timeout check in get_current_user depends on it."""
-        from jose import jwt
         token = jwt.encode(
             {"sub": "user-123", "exp": 9999999999},
             test_settings.jwt_secret,
@@ -191,7 +188,6 @@ class TestJWTTokens:
         """An ``alg: none`` token is rejected even if the signature
         segment is empty — defence against the JWT 'none' confusion
         attack."""
-        from jose import jwt
         # Manually build a token with alg=none. python-jose refuses
         # to encode with alg=none, so the attack surface is only via
         # hand-crafted tokens. We just check the decoder rejects
@@ -229,7 +225,6 @@ class TestJWTTokens:
     def test_previous_secret_accepted_during_rotation(self, test_settings):
         """During a rotation window, tokens signed with the previous
         secret remain valid. New tokens are signed with the primary."""
-        from jose import jwt
         previous_secret = "an-old-secret-from-the-prior-deployment-window"
         token = jwt.encode(
             {"sub": "user-123", "exp": 9999999999, "iat": 0},

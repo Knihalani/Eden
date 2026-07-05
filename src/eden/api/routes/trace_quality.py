@@ -477,7 +477,7 @@ async def enable_kill_switch(
     Admin-only. Mutating actions are flagged in the audit log
     so operators can review high-blast-radius flips.
     """
-    row = await set_tenant_action_config(
+    await set_tenant_action_config(
         org_id,
         action_class=action_class,
         applied_by_default=True,
@@ -510,7 +510,7 @@ async def disable_kill_switch(
     _org: dict = Depends(require_org_admin),
 ):
     """Per-tenant per-action kill switch: disable auto-apply."""
-    row = await set_tenant_action_config(
+    await set_tenant_action_config(
         org_id,
         action_class=action_class,
         applied_by_default=False,

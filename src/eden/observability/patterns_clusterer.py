@@ -294,7 +294,7 @@ def _coherence(vectors: list[list[float]], indices: list[int]) -> float:
         for j in indices[i_pos + 1:]:
             vi = vectors[i]
             vj = vectors[j]
-            dot = sum(a * b for a, b in zip(vi, vj))
+            dot = sum(a * b for a, b in zip(vi, vj, strict=False))
             n_i = math.sqrt(sum(a * a for a in vi))
             n_j = math.sqrt(sum(b * b for b in vj))
             if n_i > 0 and n_j > 0:

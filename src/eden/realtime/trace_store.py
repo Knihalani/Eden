@@ -241,7 +241,7 @@ class TraceEventStore:
             )
 
         events: list[dict] = []
-        for stream_id, fields in rows:
+        for _stream_id, fields in rows:
             try:
                 events.append(json.loads(fields["data"]))
             except (KeyError, TypeError, json.JSONDecodeError):

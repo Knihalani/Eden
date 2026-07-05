@@ -24,7 +24,6 @@ from fastapi.testclient import TestClient
 from eden.api.middleware.internal_only import InternalOnlyMiddleware
 from eden.api.routes import internal_health
 
-
 # ── Fixtures ──────────────────────────────────────────────────────────
 
 

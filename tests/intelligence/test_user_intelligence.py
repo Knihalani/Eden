@@ -209,7 +209,7 @@ def _route_fetchrow(
                 dormant.add(uid)
             first_ts = r.get("first_event_at")
             if first_ts is not None and ts is not None:
-                half = (now - first_ts) - (now - ts)  # negative if first_ts < ts
+                (now - first_ts) - (now - ts)  # negative if first_ts < ts
                 # "returned" = first < mid AND last > mid
                 # Simpler: span > 0 (always true for non-trivial) AND first/straddle
                 # For mock purposes, just count if window is "wide enough"

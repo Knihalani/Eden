@@ -46,6 +46,7 @@ list are accepted.
 
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
 from typing import Any
@@ -135,7 +136,7 @@ class LangfuseDecoder:
         for trace in traces:
             if not isinstance(trace, dict):
                 continue
-            trace_id = str(trace.get("id") or trace.get("traceId") or "")
+            str(trace.get("id") or trace.get("traceId") or "")
             scores = trace.get("scores") or []
             trace_scores: list[dict[str, Any]] = []
             obs_scores: dict[str, list[dict[str, Any]]] = {}
@@ -257,10 +258,8 @@ def _observation_to_raw(
         ("totalTokens", "total_tokens"),
     ):
         if src_key in usage:
-            try:
+            with contextlib.suppress(TypeError, ValueError):
                 metrics[dst_key] = float(usage[src_key])
-            except (TypeError, ValueError):
-                pass
 
     # Outcome
     level = str(obs.get("level") or "").upper()

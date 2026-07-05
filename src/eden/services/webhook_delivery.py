@@ -150,7 +150,7 @@ class WebhookSigner:
         ts = int(
             timestamp if timestamp is not None else datetime.now(UTC).timestamp()
         )
-        signed_payload = f"{ts}.{payload}".encode("utf-8")
+        signed_payload = f"{ts}.{payload}".encode()
         sig = hmac.new(
             secret.encode("utf-8"),
             signed_payload,
@@ -191,7 +191,7 @@ class WebhookSigner:
         now = int(datetime.now(UTC).timestamp())
         if abs(now - ts_int) > tolerance_seconds:
             return False
-        signed_payload = f"{ts_int}.{payload}".encode("utf-8")
+        signed_payload = f"{ts_int}.{payload}".encode()
         expected = hmac.new(
             secret.encode("utf-8"),
             signed_payload,
@@ -412,7 +412,7 @@ class WebhookDeliveryService:
                 timeout=timeout,
             )
             return 0
-        except asyncio.TimeoutError:
+        except TimeoutError:
             remaining = len(self._in_flight)
             logger.warning(
                 "webhook_delivery: drain timed out with %d "

@@ -23,7 +23,6 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-
 USER_X = {"id": "u-x", "user_id": "u-x", "org_id": "org-x", "role": "owner"}
 USER_Y = {"id": "u-y", "user_id": "u-y", "org_id": "org-y", "role": "owner"}
 USER_NONMEMBER = {

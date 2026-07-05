@@ -66,12 +66,12 @@ async def _ingest_otlp_json(payload: str) -> None:
     from eden.observability.ingestion.attribution import Attribution
     from eden.observability.ingestion.errors import IngestError
 
-    settings = get_settings()
+    get_settings()
     # gRPC clients don't carry an explicit tenant_id — we use a header
     # sent via gRPC metadata. For now we extract from metadata or
     # default to a placeholder; production deployments would route via
     # an auth interceptor.
-    metadata = dict(context.invocation_metadata() if False else [])  # placeholder
+    dict(context.invocation_metadata() if False else [])  # placeholder
     attribution = Attribution(
         tenant_id="otel_grpc",
         project_id="otel_grpc",

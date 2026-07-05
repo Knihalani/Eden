@@ -46,7 +46,7 @@ def test_github_callback_reachable_without_auth():
     # middleware. With default-deny blocking, we'd see 401 instead.
     resp = client.get("/integrations/github/callback")
     assert resp.status_code != 401, (
-        f"/integrations/github/callback must be public; got 401"
+        "/integrations/github/callback must be public; got 401"
     )
     # 422 = validation error (no installation_id), 302 = redirect to
     # the wizard, 503 = GitHub App not configured. All prove reach.
@@ -64,6 +64,6 @@ def test_github_webhook_reachable_without_auth():
     # route is reachable past default-deny. 503 = webhook secret not
     # configured. Both acceptable; default-deny-401 is the bug.
     assert resp.status_code != 401, (
-        f"/integrations/github/webhook must be public; got 401"
+        "/integrations/github/webhook must be public; got 401"
     )
     assert resp.status_code in (401, 503)

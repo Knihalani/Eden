@@ -8,7 +8,6 @@ the indexes that back the lookup + per-user lookup paths.
 import importlib.util
 from pathlib import Path
 
-
 MIGRATION_PATH = (
     Path(__file__).resolve().parents[3]
     / "src/eden/db_migrations/versions/077_password_reset_tokens.py"

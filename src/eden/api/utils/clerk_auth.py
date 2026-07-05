@@ -39,7 +39,6 @@ import time
 from typing import Any
 
 import httpx
-
 from jose import JWTError, jwt
 
 from eden.config import get_settings

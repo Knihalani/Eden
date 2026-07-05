@@ -338,13 +338,13 @@ def test_invariant_10_4_model_coverage(quality_pipeline: Any) -> None:
     if quality_pipeline is None:
         pytest.skip("quality_pipeline not importable")
     try:
-        from supplementaries.phase_5_quality.nli import get_singleton
-        from supplementaries.phase_5_quality.minicheck import (
-            MiniCheckScorer,
-        )
         from supplementaries.phase_5_quality.cross_encoder import (
             CrossEncoderScorer,
         )
+        from supplementaries.phase_5_quality.minicheck import (
+            MiniCheckScorer,
+        )
+        from supplementaries.phase_5_quality.nli import get_singleton
     except ImportError as exc:
         pytest.skip(f"models not importable: {exc}")
     # All four should import without raising.

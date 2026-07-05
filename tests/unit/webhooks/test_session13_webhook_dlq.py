@@ -38,6 +38,7 @@ Five audit items:
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -150,8 +151,8 @@ class TestDl5RetryScheduling:
         self, mock_postgres_client: MagicMock,
     ) -> None:
         from eden.services.webhook_delivery import (
-            WebhookDeliveryService,
             _RETRY_DELAYS,
+            WebhookDeliveryService,
         )
 
         service = WebhookDeliveryService()
@@ -421,10 +422,8 @@ class TestDl6InFlightTracking:
             assert t in service._in_flight
         finally:
             t.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError, Exception):
                 await t
-            except (asyncio.CancelledError, Exception):
-                pass
 
 
 # ─── DL-7: atomic compare-and-set for _attempt_delivery ─────────────

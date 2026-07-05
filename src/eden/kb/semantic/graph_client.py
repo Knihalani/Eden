@@ -5,7 +5,7 @@ Handles graph entities and entity links with bitemporal model.
 
 import json
 import logging
-from datetime import datetime, UTC
+from datetime import UTC, datetime
 from uuid import uuid4
 
 from eden.kb.retrieval_logger import get_retrieval_logger

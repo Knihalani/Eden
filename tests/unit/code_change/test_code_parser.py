@@ -16,7 +16,6 @@ from eden.code_change.code_parser import (
     first_function_def,
 )
 
-
 # ── Basic extraction ─────────────────────────────────────────
 
 

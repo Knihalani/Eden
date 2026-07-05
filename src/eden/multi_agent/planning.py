@@ -521,7 +521,7 @@ class ReflexionEnvironment(PlanningFramework):
         best_result: EpisodeResult | None = None
         all_trajectories = []
 
-        for iteration in range(self.max_iterations):
+        for _iteration in range(self.max_iterations):
             # Run episode
             result = self._run_single_episode(agent, env_state)
             all_trajectories.append(result.trajectory)

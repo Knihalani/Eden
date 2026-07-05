@@ -10,14 +10,14 @@ import hashlib
 import json
 import logging
 from dataclasses import dataclass, field
-from datetime import datetime, UTC
-from enum import Enum
+from datetime import UTC, datetime
+from enum import StrEnum
 from typing import Any
 
 logger = logging.getLogger(__name__)
 
 
-class ArtifactType(str, Enum):
+class ArtifactType(StrEnum):
     BASE_MODEL = "base_model"
     LORA_ADAPTER = "lora_adapter"
     EMBEDDING_MODEL = "embedding_model"

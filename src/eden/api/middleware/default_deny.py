@@ -37,6 +37,7 @@ forgets to call ``_authenticate_ws`` ships closed, not open.
 
 from __future__ import annotations
 
+import contextlib
 import logging
 
 from starlette.types import ASGIApp, Receive, Scope, Send
@@ -94,7 +95,7 @@ _BEARER_HEADER = "authorization"
 def _is_public(path: str) -> bool:
     """True if ``path`` is on the public allow-list."""
     for prefix in DEFAULT_PUBLIC_PREFIXES:
-        if path == prefix or path.startswith(prefix + "/") or path == prefix:
+        if path in (prefix, prefix) or path.startswith(prefix + "/"):
             return True
     return False
 
@@ -176,10 +177,8 @@ class DefaultDenyAuthMiddleware:
             # sees the connection. Sending an HTTP 401-style body on a
             # rejected WS upgrade is non-conformant; ``websocket.close``
             # with a custom code is the documented path.
-            try:
+            with contextlib.suppress(Exception):
                 await send({"type": "websocket.close", "code": 4401})
-            except Exception:
-                pass
             return
 
         # HTTP branch — build the standard envelope.
@@ -197,10 +196,8 @@ class DefaultDenyAuthMiddleware:
         request_id = str(uuid.uuid4())
         for h_name, h_val in scope.get("headers") or []:
             if h_name.lower() == b"x-request-id":
-                try:
+                with contextlib.suppress(Exception):
                     request_id = h_val.decode("latin1")
-                except Exception:
-                    pass
                 break
         response = JSONResponse(
             status_code=401,

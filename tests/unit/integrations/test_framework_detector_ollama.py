@@ -28,7 +28,6 @@ from eden.integrations.framework_detector import (
     detect_framework_from_files,
 )
 
-
 # ────────────────────────────────────────────────────────────────────────
 # FRAMEWORK_MARKERS table
 # ────────────────────────────────────────────────────────────────────────

@@ -27,11 +27,11 @@ above.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import time
 from typing import Any
 
 import pytest
-
 
 # ── E2E #1: Happy path ─────────────────────────────────────────────
 
@@ -269,10 +269,10 @@ def test_e2e_cross_tenant_returns_404_not_200() -> None:
     No migration rows are leaked across tenants."""
     from eden.observability.trace_quality.queries import (
         fetch_efficiency_report,
+        fetch_guardrail_actions,
         fetch_loop_report,
         fetch_quality_report,
         fetch_reasoning_report,
-        fetch_guardrail_actions,
     )
 
     async def _run() -> dict[str, int]:
@@ -306,16 +306,16 @@ def test_e2e_watermark_resume_no_duplicates() -> None:
     Idempotency check on (trace_id, step). Dead-letter rows present
     for poison traces."""
     from eden.observability.quality_pipeline.worker import (
-        SidecarWorker,
         _STATE,
+        SidecarWorker,
     )
 
     async def _run() -> dict[str, Any]:
         # Pre-populate the watermark so a "restart" picks up
         # at the right offset.
         from eden.observability.quality_pipeline.worker import (
-            save_watermark,
             load_watermark,
+            save_watermark,
         )
         await save_watermark("tenant_e2e_wm", "evt_0001")
 
@@ -327,19 +327,17 @@ def test_e2e_watermark_resume_no_duplicates() -> None:
         async def _poll_and_cancel() -> None:
             try:
                 await asyncio.wait_for(worker.run(stop_event), timeout=0.5)
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 stop_event.set()
 
         task = asyncio.create_task(_poll_and_cancel())
         try:
             await asyncio.wait_for(task, timeout=1.0)
-        except asyncio.TimeoutError:
+        except TimeoutError:
             stop_event.set()
             task.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError, Exception):
                 await task
-            except (asyncio.CancelledError, Exception):
-                pass
 
         # Restart: re-load the watermark; it MUST survive.
         wm = await load_watermark()

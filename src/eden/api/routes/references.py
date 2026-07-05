@@ -6,6 +6,7 @@ References are org-scoped and include purpose labels.
 
 import hashlib
 import logging
+import os  # Audit 2026-06-22 B1.22 — for filename sanitization
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
@@ -17,8 +18,6 @@ from eden.api.deps import (
 )
 from eden.api.routes.billing import check_limit
 from eden.storage.postgres import get_postgres_client
-
-import os  # Audit 2026-06-22 B1.22 — for filename sanitization
 
 logger = logging.getLogger(__name__)
 

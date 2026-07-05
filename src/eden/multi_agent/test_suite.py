@@ -259,7 +259,6 @@ class AdversarialTest:
             # Fairness: both sides had same number of rounds
             same_rounds = len(red_scores) == len(blue_scores)
             # Competition: scores should not be identical (some asymmetry)
-            not_identical = red_total != blue_total
             # Zero-sum-ish: total should be bounded
             total_score = red_total + blue_total
             bounded = total_score >= 0  # Non-negative scores expected

@@ -583,7 +583,7 @@ async def run_with_great_expectations(
     df = pd.DataFrame([dict(r) for r in rows])
     results: list[dict[str, Any]] = []
     passed = 0
-    for exp, ge_exp in zip(expectations, ge_suite):
+    for exp, ge_exp in zip(expectations, ge_suite, strict=False):
         try:
             res = ge_exp.validate(df) if hasattr(ge_exp, "validate") else None
             ok = bool(getattr(res, "success", False)) if res is not None else True

@@ -21,14 +21,14 @@ import re
 import time
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from enum import Enum
+from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
 logger = logging.getLogger(__name__)
 
 
-class Severity(str, Enum):
+class Severity(StrEnum):
     """Security issue severity levels."""
 
     CRITICAL = "critical"
@@ -38,7 +38,7 @@ class Severity(str, Enum):
     INFO = "info"
 
 
-class IssueCategory(str, Enum):
+class IssueCategory(StrEnum):
     """Security issue categories."""
 
     INJECTION = "injection"

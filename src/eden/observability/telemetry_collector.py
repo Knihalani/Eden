@@ -921,15 +921,15 @@ class TelemetryCollector:
 
         try:
             rows = await client.fetch(
-                """
+                f"""
                 SELECT name, event_type, metrics->>$3 as metric_value, timestamp
                 FROM telemetry_events
                 WHERE tenant_id = $1
-                  AND timestamp > NOW() - INTERVAL '%s days'
+                  AND timestamp > NOW() - INTERVAL '{days} days'
                   AND name IS NOT NULL
                 ORDER BY timestamp DESC
                 LIMIT 5000
-                """ % days,
+                """,
                 tenant_id, metric_name,
             )
         except Exception as exc:

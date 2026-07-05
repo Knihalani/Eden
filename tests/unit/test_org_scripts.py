@@ -19,7 +19,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-
 # ── backfill_legacy_orgs ───────────────────────────────────────────
 
 

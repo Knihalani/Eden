@@ -53,6 +53,7 @@ What's covered:
 
 from __future__ import annotations
 
+import contextlib
 import json
 from typing import Any, Optional
 from unittest.mock import AsyncMock
@@ -70,7 +71,6 @@ from eden.datasets.spreadsheet import (
     jsonl_to_rows,
     rows_to_jsonl,
 )
-
 
 # ─- Fake PG ──────────────────────────────────────────────────────
 
@@ -113,10 +113,8 @@ class FakePg:
                     if len(args) >= 2:
                         payload = args[-2]
                         if isinstance(payload, str):
-                            try:
+                            with contextlib.suppress(ValueError, TypeError):
                                 payload = json.loads(payload)
-                            except (ValueError, TypeError):
-                                pass
                         if isinstance(payload, dict):
                             r["payload"] = payload
                     break
@@ -143,7 +141,7 @@ class FakePg:
             return [r for r in self._rows if r["dataset_id"] == dataset_id]
         return []
 
-    async def fetchrow(self, query: str, *args: Any) -> Optional[dict[str, Any]]:
+    async def fetchrow(self, query: str, *args: Any) -> dict[str, Any] | None:
         if "from dataset_items" in query.lower() and "where id" in query.lower():
             row_id = args[0]
             for r in self._rows:
@@ -152,7 +150,7 @@ class FakePg:
         return None
 
 
-def _row(input_: str, expected: str = "", values: Optional[dict] = None) -> SpreadsheetRow:
+def _row(input_: str, expected: str = "", values: dict | None = None) -> SpreadsheetRow:
     return SpreadsheetRow(
         id=str(id(values)) + "-" + input_[:3],
         dataset_id="d1",

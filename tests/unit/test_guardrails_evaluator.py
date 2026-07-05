@@ -46,10 +46,10 @@ from typing import Any, Optional
 import pytest
 
 from eden.guardrails.evaluator import (
+    SEVERITY_RANK,
     GuardrailPolicy,
     GuardrailResult,
     GuardrailViolation,
-    SEVERITY_RANK,
     _blocklist_match,
     _judge_match,
     _length_match,
@@ -57,7 +57,6 @@ from eden.guardrails.evaluator import (
     _regex_match,
     evaluate,
 )
-
 
 # ── Helpers ───────────────────────────────────────────────────────
 

@@ -16,10 +16,9 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from pydantic import ValidationError
 
-from eden.services.app_intel.events import AppEventsService, MAX_BATCH
+from eden.services.app_intel.events import MAX_BATCH, AppEventsService
 from eden.services.app_intel.presigned import DEFAULT_TTL_SECONDS, PresignedFeedbackService
 from eden.services.app_intel.sessions import DEFAULT_TTL_HOURS, SessionIdentityService
-
 
 # ── AppEventsService ──────────────────────────────────────────────────
 

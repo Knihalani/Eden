@@ -3,7 +3,6 @@
 import importlib.util
 from pathlib import Path
 
-
 MIGRATION_PATH = (
     Path(__file__).resolve().parents[3]
     / "src/eden/db_migrations/versions/078_two_factor_recovery_codes.py"

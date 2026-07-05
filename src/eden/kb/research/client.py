@@ -1,7 +1,7 @@
 """Research proposals KB client."""
 
 import logging
-from datetime import datetime, UTC
+from datetime import UTC, datetime
 from typing import Optional
 from uuid import UUID, uuid4
 

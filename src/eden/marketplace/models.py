@@ -2,14 +2,14 @@
 from __future__ import annotations
 
 from datetime import datetime
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 from uuid import UUID
 
 from pydantic import BaseModel, Field, field_validator
 
 
-class EnvCardState(str, Enum):
+class EnvCardState(StrEnum):
     """Lifecycle states for an env card.
 
     See ``migrations/022_marketplace.sql`` for the canonical
@@ -24,7 +24,7 @@ class EnvCardState(str, Enum):
     RETIRED = "retired"
 
 
-class QualityBand(str, Enum):
+class QualityBand(StrEnum):
     """Quality bands used in listings + filters."""
 
     LOW = "low"

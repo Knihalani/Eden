@@ -21,7 +21,6 @@ import pytest
 
 from eden.services.data_platform import DEFAULT_COLD_AGE_DAYS, ArchiveService
 
-
 # ── Constants ─────────────────────────────────────────────────────────
 
 
