@@ -312,7 +312,7 @@ class FineTuneLineageService:
                  WHERE dataset_id = $1::uuid
                    AND trace_id = ANY($2::uuid[])
                 """,
-                dataset_id, [tid for tid in trace_ids],
+                dataset_id, list(trace_ids),
             ) or 0
             return int(inserted)
         except Exception as exc:
@@ -489,7 +489,7 @@ class FineTuneLineageService:
         # Sample stdev (n-1 denominator).
         variance = sum((s - mean) ** 2 for s in prior_scores) / (len(prior_scores) - 1)
         stdev = math.sqrt(variance) if variance > 0 else 0.0
-        if stdev == 0.0:
+        if math.isclose(stdev, 0.0):
             return None
         z = (current_score - mean) / stdev
         if abs(z) < z_threshold:
