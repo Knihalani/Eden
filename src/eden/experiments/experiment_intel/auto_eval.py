@@ -31,6 +31,7 @@ See ``docs/observability-gap/12-experimentation-intelligence.md``.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from collections.abc import Iterable
 from typing import Any
@@ -106,15 +107,33 @@ class AutoEvaluator:
             variants = ["control", "treatment"]
         # 2. Per-judge per-variant aggregation.
         per_judge: dict[str, dict[str, Any]] = {}
+        # Fan out the (judge × variant) fetches concurrently — each
+        # is an independent read, and the pre-fix serial pattern
+        # scaled O(J × V) round-trips per auto_eval call.
+        keys: list[tuple[str, str]] = [
+            (j, v) for j in judge_list for v in variants
+        ]
+        if keys:
+            batch = await asyncio.gather(
+                *(
+                    _fetch_variant_scores(
+                        org_id=org_id,
+                        experiment_id=experiment_id,
+                        variant=v,
+                        judge=j,
+                    )
+                    for j, v in keys
+                )
+            )
+            scores_by_key: dict[tuple[str, str], list[float]] = {
+                (j, v): s for (j, v), s in zip(keys, batch)
+            }
+        else:
+            scores_by_key = {}
         for judge in judge_list:
             per_variant: dict[str, dict[str, Any]] = {}
             for variant in variants:
-                scores = await _fetch_variant_scores(
-                    org_id=org_id,
-                    experiment_id=experiment_id,
-                    variant=variant,
-                    judge=judge,
-                )
+                scores = scores_by_key.get((judge, variant), [])
                 n = len(scores)
                 if n == 0:
                     per_variant[variant] = {
