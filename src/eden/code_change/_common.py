@@ -327,7 +327,26 @@ async def _delete_then_insert(
     Best-effort: any exception is logged and swallowed so the
     caller can still return the live envelope with the in-memory
     data. Persistence is a side-effect, not the contract.
+
+    Defence-in-depth: ``table``/``key_col``/``columns`` are
+    interpolated raw into SQL below. Today every caller passes
+    hardcoded strings, but we still validate at the function
+    boundary so a future caller can't smuggle SQL via a column
+    list that came from request input.
     """
+    # Whitelist identifier shape: ``[A-Za-z_][A-Za-z0-9_]*``. Anything
+    # else (whitespace, quotes, semicolons) is rejected so a caller
+    # can't smuggle SQL through a column list.
+    import re as _re
+    _IDENT = _re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+    for ident_name, ident_value in (
+        ("table", table), ("key_col", key_col), *((f"column[{i}]", c) for i, c in enumerate(columns)),
+    ):
+        if not isinstance(ident_value, str) or not _IDENT.match(ident_value):
+            raise ValueError(
+                f"_delete_then_insert: invalid SQL identifier {ident_name}={ident_value!r}"
+            )
+
     client = await get_postgres_client()
     if client is None:
         return

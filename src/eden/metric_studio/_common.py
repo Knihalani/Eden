@@ -197,7 +197,24 @@ async def _delete_then_insert(
     caller can still return the live envelope with the
     in-memory data. Persistence is a side-effect, not the
     contract.
+
+    Defence-in-depth: ``table`` and each ``columns[i]`` are
+    interpolated raw into SQL below. Today every caller passes
+    hardcoded strings, but we validate the identifier shape so a
+    future caller can't smuggle SQL via a column list that came
+    from request input.
     """
+    import re as _re
+    _IDENT = _re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+    if not isinstance(table, str) or not _IDENT.match(table):
+        raise ValueError(
+            f"_delete_then_insert: invalid SQL identifier table={table!r}"
+        )
+    for i, c in enumerate(columns):
+        if not isinstance(c, str) or not _IDENT.match(c):
+            raise ValueError(
+                f"_delete_then_insert: invalid SQL identifier column[{i}]={c!r}"
+            )
     try:
         from eden.storage.postgres import get_postgres_client
     except Exception as exc:  # pragma: no cover - defensive
