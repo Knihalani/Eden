@@ -88,14 +88,6 @@ message Ack {
 def _build_servicer():
     """Build the servicer. Imported lazily so missing grpcio is a
     clear error at runtime, not at import time."""
-    try:
-        import grpc  # type: ignore
-    except ImportError as exc:
-        raise RuntimeError(
-            "grpcio is required for the gRPC server. "
-            "Install with `pip install grpcio grpcio-tools`."
-        ) from exc
-
     from eden.realtime.trace_store import get_trace_event_store  # noqa: F401
 
     class RealtimeServicer:
