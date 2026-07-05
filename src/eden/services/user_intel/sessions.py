@@ -158,6 +158,23 @@ async def _fetch_session_aggregates(
     )
 
 
+def _coerce_aware(dt: datetime) -> datetime:
+    """Return ``dt`` as a tz-aware datetime in UTC.
+
+    Sessions rows can mix naive and aware datetimes depending on the
+    driver / column type. Comparing ``datetime >= datetime`` raises
+    ``TypeError`` when one side is naive and the other is aware, and
+    string comparison (the pre-fix approach) is silently wrong in the
+    mixed case. This helper normalises both sides to UTC-aware so
+    callers can compare freely.
+    """
+    if dt is None:
+        raise ValueError("_coerce_aware: dt must not be None")
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=UTC)
+    return dt.astimezone(UTC)
+
+
 def _old_aggregate_removed_marker() -> None:  # ponytail: legacy body kept below; never called
     return  # intentionally unreachable; legacy Python-loop path lives in the historical diff only
 
@@ -369,27 +386,34 @@ class SessionAnalytics:
             # Max of last_event_at
             le = s["last_event_at"]
             cur_le = user_stats[user_id]["last_event_at"]
-            if cur_le is None or (le is not None and le > cur_le):
+            if cur_le is None and le is not None:
+                user_stats[user_id]["last_event_at"] = le
+            elif le is not None and cur_le is not None and le > cur_le:
                 user_stats[user_id]["last_event_at"] = le
             # Min of first_event_at
             fe = s["first_event_at"]
             cur_fe = user_stats[user_id]["first_event_at"]
-            if cur_fe is None or (fe is not None and fe < cur_fe):
+            if cur_fe is None and fe is not None:
+                user_stats[user_id]["first_event_at"] = fe
+            elif fe is not None and cur_fe is not None and fe < cur_fe:
                 user_stats[user_id]["first_event_at"] = fe
             user_stats[user_id]["session_count"] += 1
             user_stats[user_id]["n_turns_sum"] += n_turns
 
             # Classify first-half vs second-half.
             if midpoint is not None and le is not None:
-                # ``le`` is a datetime; compare to midpoint
-                # (aware or naive). Try: convert both to
-                # ISO and compare as strings — works for
-                # ISO-8601 with consistent tz.
-                le_str = (
-                    le.isoformat() if hasattr(le, "isoformat") else str(le)
-                )
-                mid_str = midpoint.isoformat()
-                if le_str >= mid_str:
+                # Datetime-aware comparison: ``le`` and ``midpoint``
+                # may be naive or tz-aware depending on the row source.
+                # Comparing datetimes directly is correct *only* when
+                # both sides share tz-awareness. The pre-fix code went
+                # through isoformat() strings which was both slower and
+                # silently wrong when one side had tz info and the
+                # other didn't (e.g. naive ``le`` vs aware ``midpoint``
+                # compared via "..." >= "..." would sort purely by
+                # lexical order, not by wall time).
+                le_aware = _coerce_aware(le)
+                mid_aware = _coerce_aware(midpoint)
+                if le_aware >= mid_aware:
                     user_has_session_in_second_half.add(user_id)
                 else:
                     user_has_session_in_first_half.add(user_id)
