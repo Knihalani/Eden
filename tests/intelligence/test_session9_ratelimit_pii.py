@@ -36,105 +36,56 @@ import pytest
 class TestS14RateLimiterZaddOrder:
     @pytest.mark.asyncio
     async def test_zadd_runs_only_when_allowed(self) -> None:
-        """Capture the sequence of redis calls and assert ZADD is
-        skipped when the count is at-or-above the limit.
+        """Atomic Lua script must report allowed=False when the count
+        is at-or-above the limit (and not record the request in the
+        sliding window).
         """
         from eden.api.middleware.tenant_rate_limit import TenantRateLimitMiddleware
 
         mw = TenantRateLimitMiddleware(app=MagicMock())
 
-        # Two-phase call tracking: separate mock for the count phase
-        # vs the ZADD phase.
-        zadd_calls: list[dict] = []
-        zcard_results = [5, 5]  # both calls return count=5 (at limit)
-
-        class _FakePipeline:
-            def __init__(self):
-                self.calls: list[list] = []
-
-            async def execute(self):
-                # First call returns zrem+zcard results, second returns
-                # zadd+zexpire results.
-                if not hasattr(self, "_first_done"):
-                    self._first_done = True
-                    return [0, zcard_results.pop(0)]  # zrem, zcard
-                return [1, 1]  # zadd, expire (success)
-
-            def zremrangebyscore(self, *a, **kw):
-                self.calls.append(["zremrangebyscore", a, kw])
-                return self
-
-            def zcard(self, *a, **kw):
-                self.calls.append(["zcard", a, kw])
-                return self
-
-            def zadd(self, key, mapping):
-                self.calls.append(["zadd", key, mapping])
-                zadd_calls.append({"key": key, "mapping": mapping})
-                return self
-
-            def expire(self, key, ttl):
-                self.calls.append(["expire", key, ttl])
-                return self
+        # The Lua script returns ``[allowed, current_count]``. Both
+        # calls return ``[0, 5]`` (denied, count at limit).
+        class _FakeScript:
+            async def __call__(self, *, keys, args):
+                return [0, 5]
 
         class _FakeRedis:
-            def pipeline(self):
-                return _FakePipeline()
+            def register_script(self, source):
+                return _FakeScript()
 
         fake_redis = _FakeRedis()
 
-        # Two calls: both at the limit. Neither should ZADD.
+        # Two calls: both at the limit. Neither should be allowed.
         with patch.object(mw, "_get_redis", AsyncMock(return_value=fake_redis)):
             allowed_a, *_ = await mw._check_redis("k1", limit=5, window=60)
             allowed_b, *_ = await mw._check_redis("k2", limit=5, window=60)
 
         assert allowed_a is False
         assert allowed_b is False
-        assert zadd_calls == [], (
-            f"S-14 fix: ZADD must not fire when the request is denied; got {zadd_calls}"
-        )
 
     @pytest.mark.asyncio
     async def test_zadd_runs_when_allowed(self) -> None:
-        """Count below the limit → ZADD must fire (sliding window grows)."""
+        """Count below the limit → atomic script must report
+        allowed=True and bump the count (sliding window grows)."""
         from eden.api.middleware.tenant_rate_limit import TenantRateLimitMiddleware
 
         mw = TenantRateLimitMiddleware(app=MagicMock())
-        zadd_calls: list[dict] = []
-
-        class _FakePipeline:
-            def __init__(self):
-                self._first_done = False
-
-            async def execute(self):
-                if not self._first_done:
-                    self._first_done = True
-                    return [0, 2]  # zrem, zcard=2 (under limit of 5)
-                return [1, 1]  # zadd, expire
-
-            def zremrangebyscore(self, *a, **kw):
-                return self
-
-            def zcard(self, *a, **kw):
-                return self
-
-            def zadd(self, key, mapping):
-                zadd_calls.append({"key": key, "mapping": mapping})
-                return self
-
-            def expire(self, key, ttl):
-                return self
+        # Lua script returns ``[1, 3]`` (allowed, count post-add).
+        class _FakeScript:
+            async def __call__(self, *, keys, args):
+                return [1, 3]
 
         class _FakeRedis:
-            def pipeline(self):
-                return _FakePipeline()
+            def register_script(self, source):
+                return _FakeScript()
 
         fake_redis = _FakeRedis()
         with patch.object(mw, "_get_redis", AsyncMock(return_value=fake_redis)):
             allowed, remaining, *_ = await mw._check_redis("k1", limit=5, window=60)
 
         assert allowed is True
-        assert len(zadd_calls) == 1
+        assert remaining == 2  # limit 5 - count 3 post-add
 
 
 # ─── S-15: PII _mask_dict always blanks sensitive keys ──────────
