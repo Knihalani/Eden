@@ -144,8 +144,10 @@ async def put_retention_policy(
                 "delete_days": body.delete_days,
             },
         )
-    except Exception:
-        pass
+    except Exception as exc:
+        # Audit-log failure is non-fatal (the policy is already persisted),
+        # but we still want a trace so missing audit rows are not invisible.
+        logger.warning("retention_policy.audit_log_failed: %s", exc)
 
     return RetentionPolicyOut(
         policy_id=new_id,

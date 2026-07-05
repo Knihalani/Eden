@@ -21,6 +21,29 @@ from typing import Any
 logger = logging.getLogger(__name__)
 
 
+# Identifiers used in raw SQL interpolations (table_name, column).
+# Even though our shipped expectation suites are static, we whitelist at
+# runtime so a caller-supplied expectation set cannot smuggle SQL.
+_IDENT_PATTERN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+
+
+def _safe_ident(name: str, *, kind: str = "identifier") -> str:
+    """Validate a SQL identifier (table or column name).
+
+    Postgres unquoted identifiers must match ``[A-Za-z_][A-Za-z0-9_]*``.
+    Anything else is rejected. We do NOT support quoted identifiers here
+    because the expectation framework has no legitimate need for unusual
+    names and quoting would only widen the attack surface.
+    """
+    if not isinstance(name, str) or not _IDENT_PATTERN.match(name):
+        raise ValueError(
+            f"Invalid SQL {kind}: {name!r}. "
+            "Only ASCII letters, digits, and underscores are allowed "
+            "(must start with a letter or underscore)."
+        )
+    return name
+
+
 @dataclass
 class Expectation:
     """A single data-quality expectation (inspired by Great Expectations)."""
@@ -217,6 +240,10 @@ class DataQualityValidator:
         client = await self._get_client()
         results: list[ExpectationResult] = []
 
+        # Defence-in-depth: reject any non-identifier table name before
+        # it reaches a raw-SQL interpolation below.
+        table_name = _safe_ident(table_name, kind="table name")
+
         # Get row count
         count_query = f"SELECT COUNT(*) FROM {table_name}"
         if where_clause:
@@ -254,6 +281,11 @@ class DataQualityValidator:
         etype = expectation.expectation_type
         kwargs = expectation.kwargs
         where = f"WHERE {where_clause}" if where_clause else ""
+
+        # Validate every column identifier this expectation references
+        # before any of it reaches a raw-SQL interpolation below.
+        if "column" in kwargs:
+            _safe_ident(kwargs["column"], kind="column name")
 
         if etype == Expectation.EXPECT_NOT_NULL:
             col = kwargs["column"]
@@ -541,6 +573,10 @@ async def run_with_great_expectations(
     Returns a dict shaped like :class:`ValidationReport` so the
     caller can use either engine interchangeably.
     """
+    # Defence-in-depth: reject any non-identifier table name before
+    # it reaches the raw-SQL interpolation below.
+    table_name = _safe_ident(table_name, kind="table name")
+
     ge_suite: list[Any] = []
     for exp in expectations:
         ge_exp = _to_ge_expectation(exp)

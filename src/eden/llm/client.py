@@ -357,7 +357,11 @@ class OpenRouterClient:
                         error=True,
                     )
                     if attempt < self.max_retries - 1:
-                        time.sleep(2**attempt)
+                        # Cap exponential backoff so a deeply broken
+                        # provider can't stall a worker thread for
+                        # 8-16s per retry (matches async path's
+                        # ``min(2**attempt, 4)`` cap).
+                        time.sleep(min(2**attempt, 4))
                     continue
                 except APIError as e:
                     last_error = e
@@ -375,7 +379,11 @@ class OpenRouterClient:
                         error=True,
                     )
                     if attempt < self.max_retries - 1:
-                        time.sleep(2**attempt)
+                        # Cap exponential backoff so a deeply broken
+                        # provider can't stall a worker thread for
+                        # 8-16s per retry (matches async path's
+                        # ``min(2**attempt, 4)`` cap).
+                        time.sleep(min(2**attempt, 4))
                     continue
 
         self.circuit_breaker.record_failure(agent)
