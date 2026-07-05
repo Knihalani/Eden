@@ -18,6 +18,7 @@ import contextlib
 import hashlib
 import logging
 import time
+from typing import Any
 
 from fastapi import Request
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -87,6 +88,11 @@ class TenantRateLimitMiddleware(BaseHTTPMiddleware):
         self._redis = None  # Lazy-load Redis if available
         self._cleanup_task: asyncio.Task | None = None
         self._running = True
+        # Cached Redis Lua script handle. ``register_script`` returns a
+        # Script object whose __call__ uses EVALSHA so we don't ship
+        # the full source on every invocation. Filled lazily on first
+        # use (needs a live Redis connection).
+        self._sliding_window_script: Any | None = None
         # Start periodic bucket cleanup background task
         self._cleanup_task = asyncio.create_task(self._periodic_bucket_cleanup())
 
@@ -224,32 +230,47 @@ class TenantRateLimitMiddleware(BaseHTTPMiddleware):
         window_start = now - window
         redis_key = f"ratelimit:{key}"
 
-        # Phase 1: count phase. ZREMRANGEBYSCORE prunes old entries,
-        # ZCARD reports the current window count. NO zadd yet.
-        pipe = redis.pipeline()
-        pipe.zremrangebyscore(redis_key, 0, window_start)
-        pipe.zcard(redis_key)
-        results = await pipe.execute()
-        current_count = results[1]
+        # Atomic sliding-window admission via a Lua script.
+        # Pre-fix we ran Phase 1 (count) + Phase 2 (zadd) as two
+        # pipelines, leaving a TOCTOU window: two concurrent
+        # requests at count=limit-1 could both observe "allowed"
+        # and both ZADD, over-admitting by 1 per race. The Lua
+        # script runs prune + count + conditional-zadd in one
+        # round-trip so the limit is enforced atomically.
+        # Script returns: {allowed_int, current_count_after}
+        sliding_window_script = """
+        redis.call('ZREMRANGEBYSCORE', KEYS[1], 0, ARGV[1])
+        local n = redis.call('ZCARD', KEYS[1])
+        local allowed = 0
+        if n < tonumber(ARGV[2]) then
+          redis.call('ZADD', KEYS[1], ARGV[3], ARGV[3])
+          redis.call('EXPIRE', KEYS[1], ARGV[4])
+          n = n + 1
+          allowed = 1
+        end
+        return {allowed, n}
+        """
+        script = self._sliding_window_script
+        if script is None:
+            script = redis.register_script(sliding_window_script)
+            self._sliding_window_script = script
+        results = await script(
+            keys=[redis_key],
+            args=[window_start, limit, now, int(window) + 1],
+        )
+        allowed_int, current_count = results[0], results[1]
+        allowed = bool(int(allowed_int))
 
-        allowed = current_count < limit
+        allowed = bool(int(allowed_int))
         if not allowed:
-            # Audit 2026-07-02 S-14 — skip the zadd on a denied
-            # request. Otherwise a sustained flood would keep the
-            # counter at the limit and never let real calls in.
             remaining = 0
             reset_ts = int(now + window)
             retry_after = int(window)
             return allowed, remaining, reset_ts, retry_after
 
-        # Phase 2: zadd phase. Now that the count is below the
-        # limit, record this request in the sliding window.
-        pipe = redis.pipeline()
-        pipe.zadd(redis_key, {str(now): now})
-        pipe.expire(redis_key, window + 1)
-        await pipe.execute()
-
-        remaining = max(0, limit - current_count - 1)
+        # The Lua script has already ZADDed this request and updated
+        # the count; ``current_count`` is post-add.
+        remaining = max(0, limit - current_count)
         reset_ts = int(now + window)
         retry_after = 0
         return allowed, remaining, reset_ts, retry_after
