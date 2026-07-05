@@ -95,13 +95,16 @@ def _set_session_cookie(response: Response, value: str) -> None:
 
 
 def _client_ip(request: Request) -> str:
-    """Extract the client IP, honouring X-Forwarded-For from trusted proxies."""
-    # Trust the leftmost XFF entry — set by our load balancer / CDN.
-    # Falls back to the socket address when no header is present.
-    fwd = request.headers.get("x-forwarded-for")
-    if fwd:
-        return fwd.split(",")[0].strip()
-    return request.client.host if request.client else "unknown"
+    """Extract the client IP, honouring X-Forwarded-For from trusted proxies.
+
+    Delegates to :func:`eden.api.utils.client_ip.get_client_ip` so the
+    trust boundary (TRUSTED_PROXY_CIDRS) is enforced consistently.
+    Pre-fix this function trusted the leftmost XFF hop unconditionally,
+    so an attacker could spoof ``X-Forwarded-For: 1.2.3.4`` to bypass
+    per-IP rate limits on signup, login, and TOTP setup.
+    """
+    from eden.api.utils.client_ip import get_client_ip
+    return get_client_ip(request)
 
 
 async def _check_rate_limit(limiter, key: str) -> None:
