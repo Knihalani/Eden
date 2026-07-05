@@ -71,6 +71,7 @@ from ._common import (
     _fetch_memories_metadata_for_org,
     _fetch_memories_used_in_trace,
     _fetch_recent_attributions_for_memory,
+    _fetch_recent_attributions_for_memories,
     _fetch_trace_response_text,
     _insert_timeline_event,
     _normalise_attributions,
@@ -349,6 +350,14 @@ class MemoryImpactScorer:
         answer_text = await _fetch_trace_response_text(org_id, trace_id)
         per_memory: list[dict[str, Any]] = []
         primary: str | None = None
+        # Batch the per-memory attribution counts into one
+        # ``memory_id = ANY($1)`` query (with the 30-day window)
+        # so we avoid an N+1 round-trip over ``memories``. The
+        # helper still exists for single-memory callers.
+        memory_ids = [str(m["memory_id"]) for m in memories]
+        recent_by_memory = await _fetch_recent_attributions_for_memories(
+            org_id, memory_ids, interval_sql="30 days",
+        )
         for mem in memories:
             text = mem.get("memory_text") or mem.get("memory_id", "")
             overlap = _token_overlap(text, answer_text) if answer_text else 0.0
@@ -357,9 +366,7 @@ class MemoryImpactScorer:
             # Materiality: count of attributions in the last
             # 30 days, normalised to a 0..1 score with a
             # soft cap at 10 (anything past 10 saturates).
-            recent = await _fetch_recent_attributions_for_memory(
-                org_id, mem["memory_id"], interval_sql="30 days",
-            )
+            recent = recent_by_memory.get(str(mem["memory_id"]), [])
             n_recent = len(recent)
             materiality = min(1.0, n_recent / 10.0)
             # Recency: how recent the most recent attribution
