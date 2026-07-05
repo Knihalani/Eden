@@ -327,11 +327,11 @@ async def update_webhook(
     param_idx = 2
 
     if request.url is not None:
-        if not request.url.startswith("https://"):
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Webhook URL must use HTTPS",
-            )
+        # Reuse the create-path validator: HTTPS-only + resolves to a
+        # public IP. The pre-fix update path skipped this check, so
+        # an org admin could store a webhook pointing at ``127.0.0.1``
+        # or ``169.254.169.254`` (cloud metadata) for later delivery.
+        _validate_webhook_url(request.url)
         updates.append(f"url = ${param_idx}")
         params.append(request.url)
         param_idx += 1

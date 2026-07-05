@@ -239,12 +239,15 @@ class A2ALinkService:
                 "depth": d.get("depth"),
             })
             for tid in (d.get("parent_trace_id"), d.get("child_trace_id")):
-                if tid and tid not in nodes:
-                    nodes[tid] = {
-                        "trace_id": tid,
-                        "is_root": False,
-                        "depth": int(d.get("depth") or 0),
-                    }
+                if tid:
+                    nodes.setdefault(
+                        tid,
+                        {
+                            "trace_id": tid,
+                            "is_root": False,
+                            "depth": int(d.get("depth") or 0),
+                        },
+                    )
         return {"nodes": nodes, "edges": edges}
 
     async def mark_failed(
