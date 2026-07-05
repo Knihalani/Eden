@@ -54,6 +54,7 @@ Pure functions — no global state, no module-level singletons.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 from datetime import UTC, datetime
@@ -424,9 +425,14 @@ async def evaluate_pending_clusters(
         if not _is_opted_in(policy):
             continue
         summary["orgs_opted_in"] += 1
-        cost_today = await _recent_cost_for_org(org_id)
-        count_today = await _recent_count_for_org(org_id, "1 day")
-        count_week = await _recent_count_for_org(org_id, "7 days")
+        # The three per-org budget fetches are independent reads;
+        # fire them concurrently to halve the per-org latency on
+        # this loop's hot path.
+        cost_today, count_today, count_week = await asyncio.gather(
+            _recent_cost_for_org(org_id),
+            _recent_count_for_org(org_id, "1 day"),
+            _recent_count_for_org(org_id, "7 days"),
+        )
         if cost_today >= float(settings.max_cost_per_user_per_day):
             await _emit_drift(
                 org_id=org_id,
