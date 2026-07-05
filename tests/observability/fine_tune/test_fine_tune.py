@@ -190,15 +190,19 @@ class TestFineTuneLineageService:
     ):
         from eden.services.observability import get_fine_tune_service
         svc = get_fine_tune_service()
-        # 1 successful insert, 1 conflict
-        mock_postgres_client.execute = AsyncMock(
-            side_effect=["INSERT 0 1", "INSERT 0 0"],
-        )
+        # executemany returns nothing; the actual inserted count
+        # comes from a follow-up COUNT(*) so we mock both.
+        # 1 successful insert, 1 conflict ⇒ COUNT returns 1.
+        mock_postgres_client.executemany = AsyncMock(return_value=None)
+        mock_postgres_client.fetchval = AsyncMock(return_value=1)
         inserted = await svc.link_dataset_to_traces(
             _DATASET_ID,
             trace_ids=[_TRACE_ID, "00000000-0000-0000-0000-0000000000aa"],
         )
         assert inserted == 1
+        # The follow-up count narrows to the trace_ids passed in.
+        sql = mock_postgres_client.fetchval.call_args.args[0]
+        assert "trace_id = ANY" in sql
 
     async def test_get_lineage_for_run_returns_backward_and_forward(
         self, mock_postgres_client: MagicMock,
@@ -343,7 +347,9 @@ class TestFineTuneRoutes:
         self, mock_postgres_client: MagicMock, fine_tune_client: TestClient,
     ):
         mock_postgres_client.fetchrow = AsyncMock(return_value=_run_row())
-        mock_postgres_client.execute = AsyncMock(return_value="INSERT 0 1")
+        # executemany + follow-up COUNT(*) ⇒ 1 newly-inserted row.
+        mock_postgres_client.executemany = AsyncMock(return_value=None)
+        mock_postgres_client.fetchval = AsyncMock(return_value=1)
         resp = fine_tune_client.post(
             f"/v1/fine_tuning_runs/{_RUN_ID}/dataset_traces",
             json={"trace_ids": [_TRACE_ID]},
