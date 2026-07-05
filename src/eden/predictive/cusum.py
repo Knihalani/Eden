@@ -113,7 +113,7 @@ def cusum_detect(
         stdev = math.sqrt(variance) if variance > 0 else 0.0
     else:
         stdev = 0.0
-    if stdev == 0.0:
+    if math.isclose(stdev, 0.0):
         return []
     k = slack_ratio * stdev
     h = threshold_ratio * stdev
