@@ -8,6 +8,7 @@
 "use client";
 
 import { useEffect } from "react";
+import Link from "next/link";
 import { CheckCircle2, Loader2, XCircle, AlertCircle, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
@@ -212,12 +213,12 @@ function DoneView({
       )}
 
       {orgId && (
-        <a
+        <Link
           href={`/agents/${state.agentId}?org=${orgId}`}
           className="text-[11px] text-[var(--terminal)] hover:text-[var(--terminal)] underline"
         >
           View in agent detail page →
-        </a>
+        </Link>
       )}
     </div>
   );

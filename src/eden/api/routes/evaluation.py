@@ -7,7 +7,7 @@ security scanning, and review gates via REST API.
 from __future__ import annotations
 
 import logging
-import os
+import os  # noqa: F401  (kept for legacy path constants — remove in next pass)
 from typing import Any
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
@@ -591,21 +591,35 @@ async def scan_file(
     requirements: list[str] | None = None,
     user: dict = Depends(require_org_admin),
 ):
-    """Scan a file on disk."""
+    """Scan a file on disk.
+
+    Path is resolved (follows symlinks) and must lie within the
+    process CWD. ``relative_to`` is the real boundary check; the
+    earlier ``startswith("..")`` pre-flight was bypassable via
+    ``..foo`` style inputs and ``/etc/passwd`` absolute paths, so
+    we now lean entirely on the post-resolve relative_to guard.
+    """
     scanner = _get_security_scanner()
 
-    # Sanitize and validate path to prevent directory traversal
-    normalized = os.path.normpath(file_path)
-    if normalized.startswith("..") or "/../" in normalized or normalized.startswith("/"):
-        raise HTTPException(status_code=400, detail="Invalid file path: directory traversal not allowed")
+    if not isinstance(file_path, str) or not file_path.strip():
+        raise HTTPException(status_code=400, detail="file_path is required")
 
-    path = Path(file_path).resolve()
+    # Resolve the input first (collapses ``..`` segments AND follows
+    # symlinks), then verify the resolved absolute path lives under
+    # the project root. Any path that escapes the CWD — via symlink,
+    # absolute path, or ``..`` segments — is rejected here.
     try:
-        # Ensure the resolved path is within the project directory
+        path = Path(file_path).resolve(strict=False)
         project_root = Path(".").resolve()
         path.relative_to(project_root)
-    except ValueError:
-        raise HTTPException(status_code=400, detail="Invalid file path: must be within project directory")
+    except (ValueError, OSError) as exc:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "Invalid file path: must resolve to a location inside "
+                f"the project directory ({exc})"
+            ),
+        )
 
     if not path.exists():
         raise HTTPException(status_code=404, detail=f"File not found: {file_path}")

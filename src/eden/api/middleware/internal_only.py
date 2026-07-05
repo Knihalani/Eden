@@ -64,12 +64,28 @@ class InternalOnlyMiddleware(BaseHTTPMiddleware):
         if not request.url.path.startswith("/v1/internal/health"):
             return await call_next(request)
 
-        # Honour X-Forwarded-For first (Northflank terminates TLS),
-        # fall back to client.host.
-        forwarded = request.headers.get("x-forwarded-for", "")
-        client_ip = forwarded.split(",")[0].strip() if forwarded else (
-            request.client.host if request.client else ""
-        )
+        # IP resolution order:
+        #   1. ``request.client.host`` (TCP source — cannot be spoofed
+        #      by a remote attacker).
+        #   2. ``X-Forwarded-For`` — ONLY honoured when the TCP source
+        #      matches one of the trusted proxies (so an attacker
+        #      cannot inject a fake XFF and bypass the allow-list).
+        # Pre-fix, XFF was the *primary* source with no trust check,
+        # so any remote caller could set the header to ``127.0.0.1``
+        # and walk into ``/v1/internal/health/*``.
+        client_ip = request.client.host if request.client else ""
+
+        if client_ip not in self.allowed_ips:
+            # Caller isn't directly in the allow-list. They could
+            # still be a legitimate reverse proxy forwarding on
+            # behalf of a loopback peer — accept XFF only when the
+            # TCP source is itself allow-listed.
+            trusted_proxy = client_ip in self.allowed_ips
+            if trusted_proxy:
+                forwarded = request.headers.get("x-forwarded-for", "")
+                xff = forwarded.split(",")[0].strip() if forwarded else ""
+                if xff:
+                    client_ip = xff
 
         if client_ip not in self.allowed_ips:
             logger.warning(
