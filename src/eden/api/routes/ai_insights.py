@@ -413,13 +413,19 @@ async def _stream_chat(
             # the client to handle transient provider errors.
             loop = asyncio.get_event_loop()
             try:
+                # Bind user_prompt/system_prompt as default args so
+                # the lambda captures THIS iteration's values, not
+                # whatever the loop variable happens to point at
+                # when the executor actually runs the closure
+                # (B023). Without the binding, concurrent iterations
+                # could see stale prompts.
                 response = await loop.run_in_executor(
                     None,
-                    lambda: client.call(
+                    lambda prompt=user_prompt, sp=system_prompt: client.call(
                         agent="ai_insights",
-                        prompt=user_prompt,
+                        prompt=prompt,
                         slot=LLM_SLOT,
-                        system_prompt=system_prompt,
+                        system_prompt=sp,
                         max_tokens=MAX_OUTPUT_TOKENS,
                     ),
                 )
