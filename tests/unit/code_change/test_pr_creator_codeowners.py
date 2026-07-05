@@ -21,7 +21,6 @@ from eden.code_change.pr_creator import PRCreator
 from eden.providers.pr import PRCreateRequest
 from eden.providers.repo import FileEntry, PullRequestInfo
 
-
 # ── attach_codeowners_reviewers (pure function) ────────────────
 
 
@@ -252,8 +251,9 @@ class _StubProvider:
         pass
 
     async def commit_files(self, branch, files, message):
-        from eden.providers.repo import CommitInfo
         from datetime import UTC, datetime
+
+        from eden.providers.repo import CommitInfo
         return CommitInfo(
             sha="abc", message=message, author="",
             timestamp=datetime.now(UTC),

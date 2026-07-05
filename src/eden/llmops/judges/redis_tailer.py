@@ -14,6 +14,7 @@ the loop continues. The tailer must never crash the app process.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import logging
 from typing import Any
@@ -91,12 +92,10 @@ class RedisTailer:
                 break
             except Exception as exc:
                 logger.warning(f"judge tailer poll failed: {exc}")
-            try:
+            with contextlib.suppress(TimeoutError):
                 await asyncio.wait_for(
                     self._stop.wait(), timeout=self.poll_interval_seconds
                 )
-            except TimeoutError:
-                pass
         logger.info("judge redis tailer stopped")
 
     async def _poll_once(self) -> None:

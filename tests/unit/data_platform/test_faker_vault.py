@@ -58,12 +58,12 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from eden.data_platform.faker_vault import (
+    EMAIL_DOMAINS,
     EN_FIRST_NAMES,
     EN_LAST_NAMES,
-    EMAIL_DOMAINS,
-    FakerVault,
     STREET_NAMES,
     US_CITIES_STATES,
+    FakerVault,
     get_default_vault,
     normalise_for_vault,
     reset_default_vault,
@@ -82,7 +82,6 @@ from eden.services.governance_intel.rtbf_tracker import (
     RTBF_STATUS_PENDING,
     RtbfRequestTracker,
 )
-
 
 # ── FakerVault ────────────────────────────────────────────────────
 
@@ -532,14 +531,14 @@ class FakePg:
     async def fetch(self, query: str, *args: Any) -> list[dict[str, Any]]:
         return list(self._table.values())
 
-    async def fetchrow(self, query: str, *args: Any) -> Optional[dict[str, Any]]:
+    async def fetchrow(self, query: str, *args: Any) -> dict[str, Any] | None:
         if args:
             return self._table.get(str(args[0]))
         return None
 
 
 class FakeRtbfService:
-    def __init__(self, *, raises: Optional[Exception] = None) -> None:
+    def __init__(self, *, raises: Exception | None = None) -> None:
         self.raised = raises
         self.calls: list[dict[str, Any]] = []
 
@@ -548,7 +547,7 @@ class FakeRtbfService:
         org_id: str,
         *,
         user_id: str,
-        requested_by: Optional[str] = None,
+        requested_by: str | None = None,
         sla_days: int = 14,
         dry_run: bool = False,
     ) -> dict[str, Any]:
@@ -684,7 +683,7 @@ class TestIntlPatternCatalogue:
 
     def test_all_patterns_compile(self) -> None:
         # Every pattern in the catalogue should compile.
-        for name, pat in INTL_PATTERNS.items():
+        for _name, pat in INTL_PATTERNS.items():
             assert pat.pattern  # non-empty
             # Quick smoke: re.compile the pattern fresh.
             import re as _re

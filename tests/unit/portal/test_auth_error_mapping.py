@@ -16,9 +16,9 @@ revert the raw-error leak that confounded users before the fix.
 
 from __future__ import annotations
 
+import asyncio
 import re
 from unittest.mock import MagicMock, patch
-import asyncio
 
 import pytest
 

@@ -560,7 +560,7 @@ def make_clean_etec_baseline(variant: int) -> tuple[list[Step], dict[str, Any]]:
              "grew from 218 to 311 — a 43% increase year-over-year.",
              logprobs_override=[
                  [{"token": t, "logprob": -0.05, "top_logprobs": []}]
-                 for t in "Q3 2026 ARR 14.2M net retention 122%".split()[:20]
+                 for t in ["Q3", "2026", "ARR", "14.2M", "net", "retention", "122%"][:20]
              ]),
     ]
     return steps, _gt(trace_id, "clean-etec-baseline", variant,
@@ -903,7 +903,7 @@ def make_calibration_failure(variant: int) -> tuple[list[Step], dict[str, Any]]:
              "I am fully confident the transfer will succeed.",
              logprobs_override=[
                  [{"token": t, "logprob": -0.005, "top_logprobs": []}]
-                 for t in "I am fully confident the transfer will succeed".split()[:20]
+                 for t in ["I", "am", "fully", "confident", "the", "transfer", "will", "succeed"][:20]
              ]),
         _tool("payments.transfer", {"from": "8821", "to": "9921", "amount": 500},
               {"error": "card_declined"}, duration_ms=410.0,
@@ -1290,7 +1290,7 @@ def make_automix_tier_escalation(variant: int) -> tuple[list[Step], dict[str, An
              "Some people say it's real.",  # low-quality response
              logprobs_override=[
                  [{"token": t, "logprob": -2.5, "top_logprobs": []}]
-                 for t in "Some people say it's real".split()
+                 for t in ["Some", "people", "say", "it's", "real"]
              ]),
         _llm("standard",
              [{"role": "user", "content": "What's the scientific consensus on climate change?"}],

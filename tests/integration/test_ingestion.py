@@ -310,12 +310,21 @@ class TestIngestErrors:
     def test_unknown_format_returns_415(
         self, api_client: TestClient, mock_collector, mock_auth, monkeypatch
     ):
-        from eden.config import get_settings
+        # Restrict the allow-list to exclude "openai". The route binds
+        # ``get_settings`` at import time, so the conftest's
+        # ``patch_settings`` mock on ``eden.config.get_settings`` does
+        # not reach it. Patch the route's own binding directly so the
+        # route sees our restricted allow-list without disturbing the
+        # cached instance other tests rely on.
+        import eden.api.routes.ingestion as ingestion_module
+        from eden.config import Settings
 
-        # Restrict the allow-list to exclude "openai".
-        settings = get_settings()
+        test_settings = Settings(
+            jwt_secret="test-jwt-secret-do-not-use-in-production-ever",
+            ingestion_allowed_formats=["otel"],
+        )
         monkeypatch.setattr(
-            settings, "ingestion_allowed_formats", ["otel"]
+            ingestion_module, "get_settings", lambda: test_settings
         )
         response = api_client.post(
             "/orgs/org-123/ingest/openai",

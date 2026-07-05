@@ -51,7 +51,6 @@ from eden.observability.typesense_client import (
     build_span_doc,
 )
 
-
 # ── Helpers ────────────────────────────────────────────────────────
 
 
@@ -546,10 +545,9 @@ def test_span_schema_has_required_fields():
 
 
 def test_get_typesense_client_returns_none_when_disabled(monkeypatch):
-    from eden.observability.typesense_client import get_typesense_client
-
     # Monkeypatch the module-level cache + Settings
     import eden.observability.typesense_client as mod
+    from eden.observability.typesense_client import get_typesense_client
     monkeypatch.setattr(mod, "_typesense_client", None)
 
     fake_settings = MagicMock()

@@ -39,7 +39,6 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-
 GIT = "/usr/bin/git"
 
 
@@ -98,13 +97,13 @@ async def test_auto_mode_self_healing_loop(temp_git_repo: Path) -> None:
     from eden.code_change.rca_linker import CodeRootCauseLinker
     from eden.code_change.repo_connector import RepoConnector
     from eden.code_change.revert_engine import AutoRevertEngine
+    from eden.optimization.model_router import ModelRouter, PipelineTask
     from eden.providers.pr import LocalPRProvider
     from eden.providers.repo import (
         FileEntry,
         LocalRepoProvider,
         PullRequestInfo,
     )
-    from eden.optimization.model_router import ModelRouter, PipelineTask
 
     # Stub router returns a synthetic diff that touches
     # the rate_limiter file.

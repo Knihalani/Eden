@@ -151,7 +151,7 @@ def main() -> int:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     results = asyncio.run(run(dry_run=args.dry_run))
     summary_keys = [
-        k for k in results.keys() if k not in {"lifecycle_rules_applied", "expired_objects"}
+        k for k in results if k not in {"lifecycle_rules_applied", "expired_objects"}
     ]
     logger.info(
         f"[retention_cron] dry_run={args.dry_run}; "

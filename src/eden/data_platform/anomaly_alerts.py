@@ -507,7 +507,7 @@ class AnomalyDetector:
         try:
             from eden.api.routes.websocket import _job_connections
 
-            for job_id, connections in _job_connections.items():
+            for _job_id, connections in _job_connections.items():
                 for ws in list(connections):
                     try:
                         await ws.send_json({

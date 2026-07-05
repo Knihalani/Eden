@@ -68,7 +68,13 @@ from typing import Any
 from fastapi import APIRouter, Body, Depends, Path
 from pydantic import BaseModel, Field
 
-from eden.api.deps import get_current_user, require_feature_flag, require_org_admin, require_org_permission_dep, require_org_member
+from eden.api.deps import (
+    get_current_user,
+    require_feature_flag,
+    require_org_admin,
+    require_org_member,
+    require_org_permission_dep,
+)
 from eden.code_change import (
     AgentActivityFeed,
     AgentPersonaService,
@@ -90,10 +96,10 @@ from eden.code_change import (
     PRCreator,
     PRExplanationService,
     PRInboxService,
+    PRPatternService,
     PRQualityScorer,
     PRReviewerNotifier,
     PRReviewService,
-    PRPatternService,
     RepoConnector,
     TestPlanRunner,
 )

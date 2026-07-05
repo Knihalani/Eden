@@ -19,8 +19,7 @@ from logging.config import fileConfig
 from alembic import context
 from alembic.config import Config
 from sqlalchemy import pool
-from sqlalchemy.engine import Connection
-from sqlalchemy.engine import create_engine
+from sqlalchemy.engine import Connection, create_engine
 
 # Add project root to path so we can import Settings
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", ".."))
@@ -38,10 +37,7 @@ from eden.storage.dsn import build_dsn  # noqa: E402
 
 _async_url = build_dsn(settings)
 # Strip +asyncpg suffix (psycopg2 understands postgresql://).
-if "+asyncpg" in _async_url:
-    _sync_url = _async_url.replace("+asyncpg", "", 1)
-else:
-    _sync_url = _async_url
+_sync_url = _async_url.replace("+asyncpg", "", 1) if "+asyncpg" in _async_url else _async_url
 # Translate asyncpg's ``ssl=...`` query param (e.g. ``ssl=require``) to
 # libpq's ``sslmode=...`` so psycopg2 can parse the DSN. asyncpg used
 # ``ssl=`` because that's what its connect() accepts; psycopg2 / libpq

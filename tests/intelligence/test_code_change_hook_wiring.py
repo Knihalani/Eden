@@ -22,7 +22,6 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-
 # ── propose_patch_from_rca ───────────────────────────────────
 
 

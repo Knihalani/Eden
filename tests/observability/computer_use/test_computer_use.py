@@ -23,7 +23,6 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from fastapi.testclient import TestClient
 
-
 # ── helpers ───────────────────────────────────────────────────────────
 
 
@@ -289,7 +288,12 @@ class TestComputerUseSdk:
 
     def test_six_action_constructors(self):
         from eden.sdk.computer_use import (
-            click, drag, key, scroll, type_text, wait,
+            click,
+            drag,
+            key,
+            scroll,
+            type_text,
+            wait,
         )
         a_click = click(x=10, y=20, target_app="chrome")
         assert a_click.action_type == "click"
@@ -334,8 +338,9 @@ class TestComputerUseSdk:
         assert step_id == "00000000-0000-0000-0000-0000000000aa"
 
     def test_invalid_action_type_raises(self):
-        from eden.services.observability import get_computer_use_service
         import asyncio
+
+        from eden.services.observability import get_computer_use_service
         svc = get_computer_use_service()
 
         async def _call():

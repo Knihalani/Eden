@@ -21,7 +21,6 @@ import pytest
 from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
-
 # ── helpers ───────────────────────────────────────────────────────────
 
 
@@ -72,12 +71,12 @@ def onboarding_client(mock_postgres_client: MagicMock) -> TestClient:
     mechanism and works regardless of when the route was
     registered.
     """
+    from eden.api.app import app
     from eden.api.deps import (
         get_current_user,
         require_org_admin,
         require_org_member,
     )
-    from eden.api.app import app
 
     app.dependency_overrides[get_current_user] = _fake_user
     app.dependency_overrides[require_org_member] = _fake_member
@@ -125,12 +124,12 @@ class TestOnboardingApi:
         ``require_org_admin`` to raise 403 — mirroring the real
         RBAC: members can read state, only admins can advance.
         """
+        from eden.api.app import app
         from eden.api.deps import (
             get_current_user,
             require_org_admin,
             require_org_member,
         )
-        from eden.api.app import app
         app.dependency_overrides[get_current_user] = _fake_user
         app.dependency_overrides[require_org_member] = _fake_member
         app.dependency_overrides[require_org_admin] = _deny_admin

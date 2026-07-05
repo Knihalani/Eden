@@ -28,7 +28,6 @@ from eden.storage.compression import (
     decompress_jsonb,
 )
 
-
 # ── Compression round-trip on the 6 new field shapes ──────────────────
 
 
@@ -173,7 +172,6 @@ class TestMigrationSQLSyntax:
         """Load a migration module by filename (the alembic versions
         dir doesn't auto-import every file)."""
         import importlib.util
-
         from pathlib import Path
 
         path = _MIGRATIONS_DIR / filename

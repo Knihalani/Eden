@@ -69,7 +69,7 @@ def _serialise(rows: list[dict], format: str) -> bytes:
         writer = csv.DictWriter(buf, fieldnames=list(rows[0].keys()))
         writer.writeheader()
         for r in rows:
-            writer.writerow({k: r.get(k) for k in rows[0].keys()})
+            writer.writerow({k: r.get(k) for k in rows[0]})
         return buf.getvalue().encode("utf-8")
 
     if format == "parquet":

@@ -39,7 +39,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-
 # ─── P-13: SessionAnalytics.aggregate uses a single SQL with CTE ─────
 
 
@@ -80,10 +79,11 @@ class TestP13SessionSQL:
         ``_fetch_session_aggregates`` uses
         ``percentile_cont(0.5) WITHIN GROUP`` to compute
         the median in SQL (not in Python)."""
+        import inspect
+
         from eden.services.user_intel.sessions import (
             _fetch_session_aggregates,
         )
-        import inspect
 
         source = inspect.getsource(_fetch_session_aggregates)
         assert "percentile_cont" in source, (
@@ -197,10 +197,11 @@ class TestP14DedupCache:
         """AST check: ``_is_duplicate`` calls
         ``popitem(last=False)`` for the bounded eviction
         (the OrderedDict-FIFO contract)."""
+        import inspect
+
         from eden.observability.telemetry_collector import (
             TelemetryCollector,
         )
-        import inspect
 
         source = textwrap.dedent(
             inspect.getsource(TelemetryCollector._is_duplicate)
@@ -235,10 +236,11 @@ class TestP14DedupCache:
     def test_is_duplicate_uses_move_to_end_on_hit(self) -> None:
         """AST check: ``_is_duplicate`` calls
         ``move_to_end`` on a cache hit (LRU touch)."""
+        import inspect
+
         from eden.observability.telemetry_collector import (
             TelemetryCollector,
         )
-        import inspect
 
         source = textwrap.dedent(
             inspect.getsource(TelemetryCollector._is_duplicate)
@@ -274,8 +276,9 @@ class TestP15Migration:
         indexes + 3 (tenant_id, agent_id, ts) + 1
         handoff + 1 user_satisfaction_corrected + 1
         user_sessions + 1 closed_loop_actions)."""
-        from alembic import op as real_op
         from unittest.mock import patch
+
+        from alembic import op as real_op
 
         m = importlib.import_module(
             "eden.db_migrations.versions.066_session21_indexes"
@@ -321,8 +324,9 @@ class TestP15Migration:
         EXISTS`` statements — matches the upgrade count
         so a partial upgrade + downgrade leaves no
         orphan indexes."""
-        from alembic import op as real_op
         from unittest.mock import patch
+
+        from alembic import op as real_op
 
         m = importlib.import_module(
             "eden.db_migrations.versions.066_session21_indexes"

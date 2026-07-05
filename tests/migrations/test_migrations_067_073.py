@@ -22,7 +22,6 @@ from typing import Any
 
 import pytest
 
-
 MIGRATIONS_DIR = Path(
     "/Users/kaiavnihalani/Downloads/Eden/src/eden/db_migrations/versions"
 )

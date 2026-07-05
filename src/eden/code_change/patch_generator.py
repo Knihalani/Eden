@@ -68,7 +68,7 @@ from eden.code_change._common import (
 )
 from eden.optimization.model_router import ModelRouter, PipelineTask
 
-from ._common import _new_id, _error_envelope, _not_implemented_envelope, _ok_envelope
+from ._common import _error_envelope, _new_id, _not_implemented_envelope, _ok_envelope
 
 logger = logging.getLogger(__name__)
 
@@ -645,10 +645,7 @@ class PatchGenerator:
         # initial quality_score from the critic verdict: PASS → 0.85
         # baseline, FAIL → 0.5 (will trip the floor for most cases).
         initial_quality = 0.85 if (critic_verdict or {}).get("passed") else 0.5
-        if initial_quality < quality_floor:
-            patch_status = "low_quality"
-        else:
-            patch_status = "proposed"
+        patch_status = "low_quality" if initial_quality < quality_floor else "proposed"
 
         metrics = _estimate_diff_metrics(diff)
         patch_id = _new_id("patch")

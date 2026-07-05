@@ -34,7 +34,8 @@ class TestLambdaBindingSemantics:
         """
         results = []
         for x in ["a", "b", "c"]:
-            f = lambda m=x: m
+            def f(m=x):
+                return m
             results.append(f())
         assert results == ["a", "b", "c"]
 
@@ -75,10 +76,10 @@ class TestS21ModelRouterFallbackChain:
         chain walks the full T1 list.
         """
         from eden.optimization.model_router import (
+            TIER_MODELS,
             ModelRouter,
             ModelTier,
             PipelineTask,
-            TIER_MODELS,
         )
 
         router = ModelRouter()
@@ -135,10 +136,10 @@ class TestS21ModelRouterFallbackChain:
         correctly — not the last one in the list.
         """
         from eden.optimization.model_router import (
+            TIER_MODELS,
             ModelRouter,
             ModelTier,
             PipelineTask,
-            TIER_MODELS,
         )
 
         router = ModelRouter()

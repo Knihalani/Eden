@@ -12,15 +12,16 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
+from eden.api.middleware.internal_only import InternalOnlyMiddleware
 from eden.api.middleware.quota_enforcement import QuotaEnforcementMiddleware
 from eden.api.middleware.tenant_rate_limit import TenantRateLimitMiddleware
-from eden.api.middleware.internal_only import InternalOnlyMiddleware
 from eden.api.routes import (
     agent_pr_suggestions,
     agent_runs,
     agents,
     ai_agent,
     ai_insights,
+    alerts,
     analytics,
     analytics_v2,
     api_keys,
@@ -28,14 +29,15 @@ from eden.api.routes import (
     audit,
     auth,
     billing,
+    budgets,
     builder_graphs,
     chain,
     clerk_webhooks,
+    compliance,
     cost,
     data_platform,
     datasets_spreadsheet,
     debugger,
-    budgets,
     evaluation,
     experiments,
     export,
@@ -70,6 +72,7 @@ from eden.api.routes import (
     intelligence_time_travel,
     intelligence_tools,
     intelligence_user,
+    internal_health,
     judges,
     kb,
     labeling,
@@ -78,14 +81,22 @@ from eden.api.routes import (
     media,
     multi_agent,
     notifications,
+    observability,
+    observability_a2a,
+    observability_computer_use,
+    observability_fine_tune,
+    observability_mcp,
+    observability_provider_routing,
     observability_stream,
+    observability_voice,
     onboarding,
+    optimization,
     orgs,
     patterns,
     pii_policy,
     presigned_feedback,
-    prompts,
     prompt_canary,
+    prompts,
     prompts_v2,
     qa_generator,
     rbac,
@@ -108,18 +119,7 @@ from eden.api.routes import (
     websocket,
 )
 from eden.api.routes import (
-    compliance,
     github as github_routes,
-    internal_health,
-    observability_a2a,
-    observability_computer_use,
-    observability_fine_tune,
-    observability_mcp,
-    observability_provider_routing,
-    observability_voice,
-    optimization,
-    observability,
-    alerts,
 )
 from eden.config import get_settings
 from eden.kb import health_check as kb_health_check

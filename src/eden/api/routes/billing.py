@@ -218,9 +218,9 @@ async def check_limit(
         # never-queried org). Use the tier definition rather than 0/0.
         tier = get_plan_tier("org_free")
         if limit_type == "seats":
-            return 0 >= tier.seats_limit  # always False at zero
+            return tier.seats_limit <= 0  # always False at zero
         if limit_type == "references":
-            return 0 >= tier.references_limit
+            return tier.references_limit <= 0
         return False
 
     if limit_type == "seats":
@@ -693,7 +693,7 @@ async def handle_subscription_event(event: dict) -> None:
         )
 
         # Update org_plans with subscription reference
-        plan_def = PLAN_DEFINITIONS.get("pro")  # Default to pro on active subscription
+        PLAN_DEFINITIONS.get("pro")  # Default to pro on active subscription
         await client.execute(
             """
             UPDATE org_plans

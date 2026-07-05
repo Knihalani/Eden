@@ -295,8 +295,9 @@ class TestS9HILTRoleGate:
 
     @pytest.mark.asyncio
     async def test_approve_as_admin_passes_through(self) -> None:
-        from eden.api.routes.websocket import _ws_receive_commands
         from starlette.websockets import WebSocketDisconnect
+
+        from eden.api.routes.websocket import _ws_receive_commands
 
         ws = _StubWebSocket()
         hilt = MagicMock()
@@ -310,7 +311,6 @@ class TestS9HILTRoleGate:
 
         ws.receive_text = _receive_text
         # Stop the loop after the first command by raising Disconnect.
-        original_receive_text = ws.receive_text
 
         call_count = {"n": 0}
 
@@ -338,8 +338,9 @@ class TestS9HILTRoleGate:
 
     @pytest.mark.asyncio
     async def test_approve_as_non_admin_returns_forbidden(self) -> None:
-        from eden.api.routes.websocket import _ws_receive_commands
         from starlette.websockets import WebSocketDisconnect
+
+        from eden.api.routes.websocket import _ws_receive_commands
 
         ws = _StubWebSocket()
         hilt = MagicMock()
@@ -371,8 +372,9 @@ class TestS9HILTRoleGate:
 
     @pytest.mark.asyncio
     async def test_reject_as_member_returns_forbidden(self) -> None:
-        from eden.api.routes.websocket import _ws_receive_commands
         from starlette.websockets import WebSocketDisconnect
+
+        from eden.api.routes.websocket import _ws_receive_commands
 
         ws = _StubWebSocket()
         hilt = MagicMock()
@@ -405,8 +407,9 @@ class TestS9HILTRoleGate:
         """Non-privileged users can still drive pause / resume / step /
         inject — only approve/reject are gated.
         """
-        from eden.api.routes.websocket import _ws_receive_commands
         from starlette.websockets import WebSocketDisconnect
+
+        from eden.api.routes.websocket import _ws_receive_commands
 
         ws = _StubWebSocket()
         hilt = MagicMock()

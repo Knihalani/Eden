@@ -13,12 +13,13 @@ Usage:
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import logging
 import uuid
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 from eden.config import get_settings
@@ -27,7 +28,7 @@ logger = logging.getLogger(__name__)
 settings = get_settings()
 
 
-class AlertSeverity(str, Enum):
+class AlertSeverity(StrEnum):
     """Alert severity levels."""
 
     DEBUG = "debug"
@@ -37,7 +38,7 @@ class AlertSeverity(str, Enum):
     CRITICAL = "critical"
 
 
-class AlertChannel(str, Enum):
+class AlertChannel(StrEnum):
     """Alert dispatch channels."""
 
     IN_APP = "in_app"
@@ -252,10 +253,8 @@ class AlertStreamProcessor:
         severity = rule.severity_threshold
         payload_severity = event.get("payload", {}).get("severity")
         if payload_severity:
-            try:
+            with contextlib.suppress(ValueError):
                 severity = AlertSeverity(payload_severity)
-            except ValueError:
-                pass
 
         # Build title and message
         if "failure" in event_type or "error" in event_type:
@@ -266,7 +265,7 @@ class AlertStreamProcessor:
             title = f"Cost Alert: ${cost}"
             message = f"Daily cost is {context.get('cost_multiplier', 'elevated')}x average"
         elif "hilt" in event_type:
-            state = event.get("payload", {}).get("state", {})
+            event.get("payload", {}).get("state", {})
             title = "Human Approval Required"
             message = f"Pipeline {entity_id} is waiting for approval"
         else:

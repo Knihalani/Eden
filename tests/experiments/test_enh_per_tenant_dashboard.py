@@ -71,10 +71,11 @@ def test_dashboard_per_tenant_isolation(tenant_id: str) -> None:
     # The route layer enforces ``require_org_member`` + the
     # queries layer filters on ``tenant_id = $1``; this is
     # the unit-level assertion that the contract holds.
+    import asyncio
+
     from eden.observability.trace_quality.queries import (
         fetch_pending_actions,
     )
-    import asyncio
 
     async def _check() -> list[dict[str, Any]]:
         return await fetch_pending_actions(tenant_id, limit=10)

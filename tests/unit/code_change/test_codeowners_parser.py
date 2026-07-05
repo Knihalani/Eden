@@ -28,7 +28,6 @@ from eden.code_change.codeowners import (
     parse_codeowners,
 )
 
-
 # ── Parser tests ────────────────────────────────────────────────
 
 

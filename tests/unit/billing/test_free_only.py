@@ -12,7 +12,6 @@ import pytest
 
 from eden.services import plan_tiers
 
-
 # ──────────────────────────────────────────────────────────────────────────
 # plan_tiers.py — single source of truth
 # ──────────────────────────────────────────────────────────────────────────
@@ -155,8 +154,9 @@ class TestQuotaEnforcementCostCap:
 
     def test_cost_hard_exceeded_returns_429(self):
         """Simulate the 429 path: budget['cost_usd']['status'] == 'hard_exceeded'."""
-        from eden.api.middleware.quota_enforcement import QuotaEnforcementMiddleware
         import asyncio
+
+        from eden.api.middleware.quota_enforcement import QuotaEnforcementMiddleware
 
         # Inline-construct a fake middleware to call _check_hard_limits.
         mw = QuotaEnforcementMiddleware(app=None)
@@ -188,8 +188,9 @@ class TestQuotaEnforcementCostCap:
         assert "$1.00" in detail
 
     def test_cost_within_cap_does_not_block(self):
-        from eden.api.middleware.quota_enforcement import QuotaEnforcementMiddleware
         import asyncio
+
+        from eden.api.middleware.quota_enforcement import QuotaEnforcementMiddleware
 
         mw = QuotaEnforcementMiddleware(app=None)
         budget = {
@@ -212,8 +213,9 @@ class TestQuotaEnforcementCostCap:
         assert detail == ""
 
     def test_quota_headers_include_cost(self):
-        from eden.api.middleware.quota_enforcement import QuotaEnforcementMiddleware
         import asyncio
+
+        from eden.api.middleware.quota_enforcement import QuotaEnforcementMiddleware
 
         mw = QuotaEnforcementMiddleware(app=None)
         budget = {
@@ -257,8 +259,9 @@ class TestPaidPlansDisabled:
         assert billing.PAID_PLANS_ENABLED is False
 
     def test_require_paid_plans_enabled_raises_503(self):
-        from eden.api.routes.billing import _require_paid_plans_enabled
         from fastapi import HTTPException
+
+        from eden.api.routes.billing import _require_paid_plans_enabled
 
         with pytest.raises(HTTPException) as exc_info:
             _require_paid_plans_enabled()
@@ -277,11 +280,11 @@ class TestPaidPlansDisabled:
     def test_legacy_free_alias_maps_to_org_free_for_check_limit(self):
         """The ``check_limit`` fallback (no plan row) must consult
         ``get_plan_tier('org_free')`` — not the removed literal ``free``."""
-        from eden.api.routes.billing import check_limit
-
         # ``check_limit`` requires a real DB; we just verify the import
         # + symbol resolution path doesn't blow up on the literal "free".
         import inspect
+
+        from eden.api.routes.billing import check_limit
 
         source = inspect.getsource(check_limit)
         assert "org_free" in source

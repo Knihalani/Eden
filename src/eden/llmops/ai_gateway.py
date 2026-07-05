@@ -8,15 +8,16 @@ automatic failover with circuit breakers.
 from __future__ import annotations
 
 import hashlib
-import httpx
 import json
 import logging
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from enum import Enum
+from enum import StrEnum
 from typing import Any
+
+import httpx
 
 from eden.config import get_settings as _get_settings
 from eden.llmops.filters import (
@@ -29,7 +30,7 @@ from eden.llmops.filters import (
 logger = logging.getLogger(__name__)
 
 
-class Provider(str, Enum):
+class Provider(StrEnum):
     """LLM provider identifiers.
 
     Every provider that the AI gateway can route to.  Values match the
@@ -65,7 +66,7 @@ class Provider(str, Enum):
     SELF_HOSTED = "self_hosted"
 
 
-class WireFormat(str, Enum):
+class WireFormat(StrEnum):
     """The three wire formats the gateway supports."""
 
     OPENAI = "openai"  # POST /v1/chat/completions

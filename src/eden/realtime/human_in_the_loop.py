@@ -13,12 +13,13 @@ Usage:
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import logging
 import uuid
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 from eden.config import get_settings
@@ -27,7 +28,7 @@ logger = logging.getLogger(__name__)
 settings = get_settings()
 
 
-class HILTCommandType(str, Enum):
+class HILTCommandType(StrEnum):
     """Supported HILT command types."""
 
     PAUSE = "pause"
@@ -40,7 +41,7 @@ class HILTCommandType(str, Enum):
     STATUS = "status"  # Query current HILT state
 
 
-class HILTState(str, Enum):
+class HILTState(StrEnum):
     """Current HILT control state for a job."""
 
     IDLE = "idle"  # No HILT active
@@ -437,10 +438,7 @@ class HILTController:
             state.current_step = step_number
             return True
 
-        if state.state == HILTState.WAITING_APPROVAL:
-            return True
-
-        return False
+        return state.state == HILTState.WAITING_APPROVAL
 
     async def wait_for_resume(self, job_id: str, timeout: float | None = None) -> bool:
         """Block until resume signal or timeout.
@@ -470,10 +468,8 @@ class HILTController:
         raw = await redis.lrange(key, 0, -1)
         messages = []
         for item in raw:
-            try:
+            with contextlib.suppress(Exception):
                 messages.append(json.loads(item))
-            except Exception:
-                pass
 
         # Clear after retrieval
         await redis.delete(key)

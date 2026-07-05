@@ -5,9 +5,13 @@ Webhook delivery and retry scheduling is handled by the
 WebhookDeliveryService.
 """
 
+# Audit 2026-06-22 B1.17 — block SSRF via webhooks.
+# Refuses http://, userinfo tricks, and private/loopback/link-local IPs.
+import ipaddress
 import logging
 import secrets
 from datetime import UTC, datetime
+from urllib.parse import urlparse
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -18,12 +22,6 @@ from eden.api.middleware.api_version import CURRENT_VERSION
 from eden.api.middleware.correlation_id import get_correlation_id
 from eden.api.schemas.envelope import APIEnvelope, PaginatedAPIEnvelope
 from eden.storage.postgres import get_postgres_client
-
-
-# Audit 2026-06-22 B1.17 — block SSRF via webhooks.
-# Refuses http://, userinfo tricks, and private/loopback/link-local IPs.
-import ipaddress
-from urllib.parse import urlparse
 
 
 def _validate_webhook_url(url: str) -> None:

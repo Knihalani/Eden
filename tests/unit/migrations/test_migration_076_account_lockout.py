@@ -14,7 +14,6 @@ verified, not its on-disk effect.
 import importlib.util
 from pathlib import Path
 
-
 MIGRATION_PATH = (
     Path(__file__).resolve().parents[3]
     / "src/eden/db_migrations/versions/076_account_lockout.py"

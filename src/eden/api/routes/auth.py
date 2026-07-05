@@ -6,6 +6,7 @@ import io
 import logging
 import os
 import secrets
+from datetime import UTC
 from pathlib import Path
 
 import pyotp
@@ -28,6 +29,8 @@ from eden.api.utils.auth import (
 )
 from eden.api.utils.clerk_client import (
     extract_user_profile,
+)
+from eden.api.utils.clerk_client import (
     get_user as clerk_get_user,
 )
 from eden.api.utils.rate_limit import (
@@ -286,9 +289,9 @@ async def signup(request: SignupRequest, response: Response, req: Request):
     # The session cookie is only issued AFTER /auth/verify-email succeeds.
     try:
         import secrets
-        from datetime import datetime, timedelta, timezone
+        from datetime import datetime, timedelta
         verify_token = secrets.token_urlsafe(32)
-        expires = datetime.now(timezone.utc) + timedelta(hours=24)
+        expires = datetime.now(UTC) + timedelta(hours=24)
         await client.execute(
             """
             INSERT INTO email_verification_tokens (user_id, token, expires_at, used_at, created_at)
@@ -380,9 +383,9 @@ async def login(request: LoginRequest, response: Response, req: Request):
     locked_until = row["locked_until"]
     if locked_until is not None:
         # asyncpg returns timezone-aware datetimes; compare in UTC.
-        from datetime import datetime, timezone
+        from datetime import datetime
 
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         if locked_until > now:
             # 423 Locked + Retry-After = seconds until unlock.
             retry_secs = max(1, int((locked_until - now).total_seconds()))
@@ -403,13 +406,13 @@ async def login(request: LoginRequest, response: Response, req: Request):
         # (5m → 10m → 20m …, capped at 24h). The counter resets
         # automatically after 1h of inactivity via the comparison
         # below — no separate cleanup job needed.
-        from datetime import datetime, timedelta, timezone
+        from datetime import datetime, timedelta
 
         new_count = (row["failed_login_count"] or 0) + 1
         # Age out: if the last failure was >1h ago, restart at 1.
         last_fail = row["last_failed_login_at"]
         if last_fail is not None:
-            age = datetime.now(timezone.utc) - last_fail
+            age = datetime.now(UTC) - last_fail
             if age > timedelta(hours=1):
                 new_count = 1
 
@@ -421,7 +424,7 @@ async def login(request: LoginRequest, response: Response, req: Request):
             # since we don't track that, cap at 24h and let the
             # backoff grow by powers of two until the cap.
             backoff_minutes = min(5 * (2 ** (new_count - 5)), 60 * 24)
-            new_locked_until = datetime.now(timezone.utc) + timedelta(
+            new_locked_until = datetime.now(UTC) + timedelta(
                 minutes=backoff_minutes
             )
 
@@ -1223,8 +1226,8 @@ async def verify_2fa(request: TwoFAVerifyRequest, user: dict = Depends(get_curre
     # returned ONCE; we store only their SHA-256 hashes.
     recovery_codes = []
     recovery_rows = []
-    from datetime import datetime, timezone
-    now = datetime.now(timezone.utc)
+    from datetime import datetime
+    now = datetime.now(UTC)
     for _ in range(10):
         # 10 random bytes → 20 hex chars; group as 4×5 for readability.
         raw = secrets.token_hex(5).upper()
@@ -1362,8 +1365,8 @@ async def recover_with_recovery_code(
             detail="Invalid recovery code",
         )
 
-    from datetime import datetime, timezone
-    now = datetime.now(timezone.utc)
+    from datetime import datetime
+    now = datetime.now(UTC)
     async with client.transaction():
         await client.execute(
             "UPDATE two_factor_recovery_codes SET used_at = $1 WHERE id = $2",
@@ -1816,7 +1819,7 @@ async def forgot_password(
     earlier stub returned 200 without dispatching anything.
     """
     import secrets
-    from datetime import datetime, timedelta, timezone
+    from datetime import datetime, timedelta
     # Throttle per-IP AND per-email. Per-email prevents one victim
     # from being spammed; per-IP prevents enumerating many emails.
     await _check_rate_limit(password_reset_limiter, _client_ip(req))
@@ -1833,7 +1836,7 @@ async def forgot_password(
             # stored. The plaintext only lives in the email link.
             token = secrets.token_urlsafe(32)
             token_hash = hashlib.sha256(token.encode("utf-8")).hexdigest()
-            expires = datetime.now(timezone.utc) + timedelta(hours=1)
+            expires = datetime.now(UTC) + timedelta(hours=1)
             await client.execute(
                 """
                 INSERT INTO password_reset_tokens
@@ -1909,9 +1912,9 @@ async def reset_password(
             detail="Invalid or expired reset token",
         )
 
-    from datetime import datetime, timezone
+    from datetime import datetime
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     if row["used_at"] is not None or row["expires_at"] <= now:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

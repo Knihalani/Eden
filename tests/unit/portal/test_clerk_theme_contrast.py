@@ -23,7 +23,6 @@ from pathlib import Path
 
 import pytest
 
-
 THEME_PATH = (
     Path(__file__).resolve().parents[3]
     / "clients"

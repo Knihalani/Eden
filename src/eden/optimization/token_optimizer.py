@@ -153,7 +153,7 @@ class ContextWindowManager:
 
         # Always include the most recent exchanges (temporal locality)
         recent_cutoff = max(0, len(scored) - 3)
-        for msg, score in scored[:recent_cutoff]:
+        for msg, _score in scored[:recent_cutoff]:
             msg_tokens = estimate_tokens(msg.content)
             if current_tokens + msg_tokens <= available:
                 selected.append(msg)

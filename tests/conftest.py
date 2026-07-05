@@ -3,7 +3,7 @@
 import asyncio
 import json
 from collections.abc import AsyncIterator
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 from unittest.mock import AsyncMock, MagicMock, patch
 
 # Pre-existing passlib 1.7.4 + bcrypt 5.x incompatibility: passlib's
@@ -149,10 +149,8 @@ def patch_settings(test_settings: Settings):
                     continue
                 if not hasattr(_mod, "get_settings"):
                     continue
-                try:
+                with suppress(Exception):
                     _mod.get_settings = lambda: test_settings
-                except Exception:
-                    pass
             # Override the cached ``settings`` attribute on the
             # rate-limit middleware (the worst offender — see
             # tenant_rate_limit.py:30).

@@ -126,7 +126,7 @@ class DataRetentionManager:
         Returns (rows_archived, s3_objects_created).
         """
         client = await self._get_postgres()
-        report = RetentionReport()
+        RetentionReport()
 
         # Fetch rows to archive
         query = f"""
@@ -340,7 +340,7 @@ class DataRetentionManager:
             report.errors.append(f"Archival failed: {exc}")
 
         # Deletion
-        delete_before = now - timedelta(days=policy.delete_after_days)
+        now - timedelta(days=policy.delete_after_days)
         try:
             # Only delete if policy allows (e.g., debug_dumps after 7 days)
             if policy.delete_after_days <= policy.warm_days:

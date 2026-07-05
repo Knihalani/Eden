@@ -14,7 +14,6 @@ from typing import Any
 
 import pytest
 
-
 # (table, column) — must match migration 031's _TOAST_COLUMNS.
 _LZ4_COLUMNS = [
     ("telemetry_events", "payload"),

@@ -25,11 +25,10 @@ from eden.services.onboarding import (
     OnboardingStateMachine,
 )
 from eden.services.onboarding.state_machine import (
+    MILESTONE_ADVANCES,
     _is_legacy_org,
     _step_index,
-    MILESTONE_ADVANCES,
 )
-
 
 # ── helpers ───────────────────────────────────────────────────────────
 

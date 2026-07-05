@@ -12,11 +12,10 @@ from __future__ import annotations
 import pytest
 
 from tests.fixtures.traces import (
+    SYNTH_ROOT,
     SyntheticExample,
     load_synthetic_dataset,
-    SYNTH_ROOT,
 )
-
 
 # ---------------------------------------------------------------------------
 # Fixtures

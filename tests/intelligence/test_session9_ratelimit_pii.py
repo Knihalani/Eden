@@ -140,8 +140,7 @@ class TestS14RateLimiterZaddOrder:
 # ─── S-15: PII _mask_dict always blanks sensitive keys ──────────
 class TestS15MaskDictCredentialFirst:
     def _masker(self, fail_closed: bool = False):
-        from eden.data_platform.pii import PIIMasker
-        from eden.data_platform.pii import PIIPolicy
+        from eden.data_platform.pii import PIIMasker, PIIPolicy
 
         policy = PIIPolicy(fail_closed_on_credentials=fail_closed)
         return PIIMasker(policy=policy)

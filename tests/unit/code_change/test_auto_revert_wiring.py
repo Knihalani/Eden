@@ -24,16 +24,15 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 from eden.code_change.revert_engine import (
-    AutoRevertEngine,
     STRATEGY_CLOSE_PR,
     STRATEGY_REVERT_BRANCH,
     STRATEGY_REVERT_PR,
+    AutoRevertEngine,
     _parse_pr_number,
     _pick_strategy,
 )
 from eden.providers.pr import PRRevertRequest
 from eden.providers.repo import PullRequestInfo
-
 
 # ── Strategy selection (pure function) ───────────────────────
 
@@ -291,8 +290,9 @@ async def test_revert_with_provider_handles_failure() -> None:
 def test_default_engine_uses_default_provider_when_configured() -> None:
     """The default-engine convenience constructs with the platform
     default PRProvider (LocalPRProvider when no token is set)."""
-    from eden.providers import LocalPRProvider
     import os
+
+    from eden.providers import LocalPRProvider
     # Ensure no GitHub token in env so the default is Local.
     env = {k: v for k, v in os.environ.items()
            if k not in ("EDEN_PR_PROVIDER", "EDEN_GITHUB_TOKEN", "EDEN_GITHUB_REPO")}

@@ -263,7 +263,7 @@ async def list_traces(
     Falls back to an empty list if Postgres is unavailable (same
     defensive pattern Cat 1 uses).
     """
-    from datetime import datetime, timedelta, UTC
+    from datetime import UTC, datetime, timedelta
     try:
         from eden.storage import postgres as _pg_module
         client = await _pg_module.get_postgres_client()
@@ -470,7 +470,7 @@ async def export_trace_route(
     fmt = body.format_type
     if fmt == "jsonl":
         lines = []
-        for span_id, span in tree.span_map.items():
+        for _span_id, span in tree.span_map.items():
             lines.append(json.dumps(span, default=str))
         data = "\n".join(lines)
     elif fmt == "csv":
@@ -479,7 +479,7 @@ async def export_trace_route(
         buf = io.StringIO()
         writer = csv.writer(buf)
         writer.writerow(["span_id", "parent_span_id", "name", "event_type", "duration_ms", "outcome"])
-        for span_id, span in tree.span_map.items():
+        for _span_id, span in tree.span_map.items():
             writer.writerow([
                 span.get("span_id", ""),
                 span.get("parent_span_id", ""),
@@ -634,8 +634,9 @@ async def observability_summary(
     subquery is a single GROUP BY / aggregate over ``telemetry_events``
     scoped to the org + window.
     """
-    from datetime import UTC, datetime, timedelta
     import asyncio  # Audit 2026-07-02 P-1: parallel subqueries via gather
+    from datetime import UTC, datetime, timedelta
+
     from eden.storage import postgres as _pg_module
     client = await _pg_module.get_postgres_client()
     since = datetime.now(UTC) - timedelta(hours=window_hours)

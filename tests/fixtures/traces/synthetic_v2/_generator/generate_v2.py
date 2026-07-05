@@ -233,7 +233,6 @@ def _events_to_dict(
 ) -> list[dict[str, Any]]:
     root_span = _sid(trace_id, 0)
     cursor = 0
-    parent_for_index = root_span
     out: list[dict[str, Any]] = []
 
     def _row(idx: int, **fields: Any) -> dict[str, Any]:
@@ -598,7 +597,7 @@ def main() -> None:
 
     for gen in generators:
         for variant in range(1, 4):  # 3 variants each
-            trace_id_default = f"trace_{gen.__name__[5:]}_{variant:02d}"
+            f"trace_{gen.__name__[5:]}_{variant:02d}"
             steps, gt = gen(variant)
             trace_id = gt["trace_id"]
             agent_id = gt["agent_id"]

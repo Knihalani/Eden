@@ -45,7 +45,7 @@ class SlidingWindowRateLimiter:
         self.max_requests = max_requests
         self.window_seconds = window_seconds
         # B1.28 — bounded OrderedDict; oldest unpoked keys evicted on overflow.
-        self._buckets: "OrderedDict[str, list[float]]" = OrderedDict()
+        self._buckets: OrderedDict[str, list[float]] = OrderedDict()
         self._lock = asyncio.Lock()
 
     async def check(self, key: str) -> None:

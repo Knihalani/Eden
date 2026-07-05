@@ -22,8 +22,9 @@ covering the full data flow.
 """
 
 import json
-import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
 
 from eden.agents.evolution.components import PromptEvolvers
 

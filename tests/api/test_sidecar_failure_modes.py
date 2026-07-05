@@ -33,7 +33,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-
 # ── Mode 1: Transient DB failure ────────────────────────────────
 
 
@@ -59,7 +58,7 @@ def test_transient_db_failure_retries_then_succeeds() -> None:
         # The retry pattern from ``SidecarWorker.run``:
         for attempt in range(max_retries):
             try:
-                result = await flaky_persist()
+                await flaky_persist()
                 return {"ok": 1, "calls": call_count["n"]}
             except Exception:
                 await asyncio.sleep(0.05 * (2 ** attempt))
@@ -83,8 +82,8 @@ def test_permanent_db_failure_dead_letters() -> None:
 
     # The DLQ counter starts at 0.
     from eden.observability.quality_pipeline.worker import (
-        SidecarWorkerState,
         _STATE,
+        SidecarWorkerState,
     )
     initial_count = _STATE.dead_lettered_total
 
@@ -227,7 +226,7 @@ def test_sigterm_mid_batch_drains_in_flight() -> None:
                 ),
                 timeout=1.0,
             )
-        except asyncio.TimeoutError:
+        except TimeoutError:
             stop_event.set()
         finally:
             worker._process_one = original  # type: ignore[assignment]

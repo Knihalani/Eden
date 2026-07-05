@@ -1,5 +1,6 @@
 """Organization API Key management routes."""
 
+import contextlib
 import hashlib
 import logging
 import secrets
@@ -118,10 +119,8 @@ async def _check_api_key_create_rate_limit(
             if count_after_add > _API_KEY_CREATE_MAX:
                 # Roll back the just-added entry so the next attempt
                 # doesn't see a stale +1 we shouldn't have recorded.
-                try:
+                with contextlib.suppress(Exception):
                     await redis.zrem(redis_key, member)
-                except Exception:
-                    pass
                 # Compute wait from the oldest surviving entry.
                 oldest = await redis.zrange(
                     redis_key, 0, 0, withscores=True

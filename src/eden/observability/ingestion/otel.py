@@ -37,6 +37,7 @@ Span fields consumed:
 
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
 from datetime import UTC
@@ -238,10 +239,8 @@ def _span_to_raw_dict(
         drop anything that isn't a number."""
         if value is None:
             return
-        try:
+        with contextlib.suppress(TypeError, ValueError):
             metrics[key] = float(value)
-        except (TypeError, ValueError):
-            pass
 
     # Token usage (canonical)
     _add_metric("input_tokens", attrs.get("gen_ai.usage.input_tokens"))

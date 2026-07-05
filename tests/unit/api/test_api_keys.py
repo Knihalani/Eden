@@ -19,7 +19,7 @@ These tests pin both behaviors using the conftest's autouse
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta, timezone
 from typing import Any
 from unittest.mock import AsyncMock
 
@@ -27,8 +27,7 @@ import pytest
 from fastapi import Depends, FastAPI
 from fastapi.testclient import TestClient
 
-
-UTC = timezone.utc
+UTC = UTC
 
 
 def _key_row(**overrides: Any) -> dict[str, Any]:

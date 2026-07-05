@@ -11,7 +11,7 @@ import json
 import logging
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from enum import Enum
+from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
@@ -27,7 +27,7 @@ __all__ = [
 ]
 
 
-class EnvironmentCategory(str, Enum):
+class EnvironmentCategory(StrEnum):
     """Canonical environment categories for golden dataset organization."""
 
     AGENT_SANDBOX = "agent_sandbox"
@@ -39,7 +39,7 @@ class EnvironmentCategory(str, Enum):
     CUSTOM = "custom"
 
 
-class DifficultyLevel(str, Enum):
+class DifficultyLevel(StrEnum):
     """Difficulty levels for golden cases."""
 
     BEGINNER = "beginner"

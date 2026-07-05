@@ -25,11 +25,11 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from eden.llmops.ai_gateway import (
+    PROVIDER_SPECS,
     AIGateway,
     AnthropicCompatibleClient,
     OllamaClient,
     OpenAICompatibleClient,
-    PROVIDER_SPECS,
     Provider,
     ProviderSpec,
     WireFormat,
@@ -37,7 +37,6 @@ from eden.llmops.ai_gateway import (
     register_default_providers,
     register_providers_from_env,
 )
-
 
 # ────────────────────────────────────────────────────────────────────────
 # Provider enum + PROVIDER_SPECS table

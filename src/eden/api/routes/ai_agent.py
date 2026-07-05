@@ -179,7 +179,6 @@ async def chat_route(
         async def emit(chunk: AgentChunk) -> None:
             # ``StreamingResponse`` queues data into the ASGI
             # send channel; we just yield the SSE frame.
-            yield_placeholder = None  # silence linters
             yield _sse_format(chunk.to_dict())
 
         # Run the loop in a task; we drain its emit() events into the

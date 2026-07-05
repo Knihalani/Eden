@@ -47,6 +47,7 @@ holds the GUC is the one issuing the query.
 
 from __future__ import annotations
 
+import contextlib
 import logging
 from collections.abc import Awaitable, Callable
 from typing import Any
@@ -124,15 +125,11 @@ class RLSOrgContextMiddleware(BaseHTTPMiddleware):
                 )
                 # Best-effort cleanup if we partially acquired.
                 if tx is not None:
-                    try:
+                    with contextlib.suppress(Exception):
                         await tx.__aexit__(None, None, None)
-                    except Exception:
-                        pass
                 if conn_ctx is not None:
-                    try:
+                    with contextlib.suppress(Exception):
                         await conn_ctx.__aexit__(None, None, None)
-                    except Exception:
-                        pass
 
         try:
             return await call_next(request)

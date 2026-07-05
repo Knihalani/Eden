@@ -151,7 +151,7 @@ class MessageStore:
         hashes = hash_messages(messages)
         rows = [
             (trace_id, h, m.get("role", "user"), json.dumps(m, default=str))
-            for h, m in zip(hashes, messages)
+            for h, m in zip(hashes, messages, strict=False)
         ]
         client = await self._get_client()
         if client is None:

@@ -284,7 +284,6 @@ def _events_to_dict(
     """
     root_span = _sid(trace_id, 0)
     cursor = 0
-    parent_for_index = root_span
     out: list[dict[str, Any]] = []
 
     def _row(idx: int, **fields: Any) -> dict[str, Any]:

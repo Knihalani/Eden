@@ -69,9 +69,7 @@ class DatasetRule:
             return False
         if self.tags_exclude and any(t in trace_tags for t in self.tags_exclude):
             return False
-        if self.custom_filter and not self.custom_filter(trace):
-            return False
-        return True
+        return not (self.custom_filter and not self.custom_filter(trace))
 
 
 @dataclass

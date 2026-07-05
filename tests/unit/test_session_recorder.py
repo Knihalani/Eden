@@ -39,14 +39,13 @@ from __future__ import annotations
 import pytest
 
 from eden.replay.events import (
-    SessionRecorder,
+    SessionEvent,
     SessionEventType,
+    SessionRecorder,
     build_timeline,
     event_id,
     redact_event,
-    SessionEvent,
 )
-
 
 # ─- redact_event ─────────────────────────────────────────
 

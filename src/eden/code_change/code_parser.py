@@ -166,10 +166,7 @@ def _walk_python(
         # the range should start at the first decorator
         # so the diff includes the whole function
         # (decorators are part of the function).
-        if node.decorator_list:
-            start = min(d.lineno for d in node.decorator_list)
-        else:
-            start = node.lineno
+        start = min(d.lineno for d in node.decorator_list) if node.decorator_list else node.lineno
         end = getattr(node, "end_lineno", None) or start
         return (start, end)
     return (0, 0)

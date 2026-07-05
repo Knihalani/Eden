@@ -164,7 +164,6 @@ def mock_auth(api_client: TestClient, mock_collector, monkeypatch):
     from eden.api.routes import gateway as gateway_module
     from eden.config import Settings, get_settings
     from eden.observability import telemetry_collector as tc_module
-    from eden.config import get_settings
 
     # Make sure /v1/models and the upstream probe don't reach out
     # to the real OpenRouter: empty key → gateway falls back to the

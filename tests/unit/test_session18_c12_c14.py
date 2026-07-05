@@ -28,7 +28,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-
 # ─── C-12: SemanticCache uses AsyncOpenAI ─────────────────────────
 
 
@@ -366,7 +365,7 @@ class TestC14SdkPiiSync:
         # token_text is None — we only count bytes.
         assert result.get("token_text") is None
         assert result.get("token_byte_len") == len(
-            "ping jane@example.com".encode("utf-8"),
+            b"ping jane@example.com",
         )
 
 

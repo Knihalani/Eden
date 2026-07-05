@@ -126,7 +126,7 @@ def _build_servicer():
                 while True:
                     await asyncio.sleep(1.0)
                     for ev in await store.get_events_after(topic, last_event_id, limit=10):
-                        last_event_id = ev.get("event_id", last_event_id)
+                        ev.get("event_id", last_event_id)
                         await queue.put(ev)
 
             task = asyncio.create_task(publish_loop())

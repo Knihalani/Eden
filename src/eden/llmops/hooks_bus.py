@@ -316,13 +316,13 @@ def _infer_action_kind(event: HookEvent) -> str:
 def _now() -> str:
     import datetime
 
-    return datetime.datetime.now(datetime.timezone.utc).isoformat()
+    return datetime.datetime.now(datetime.UTC).isoformat()
 
 
 def _now_plus(seconds: int) -> str:
     import datetime
 
-    return (datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(seconds=seconds)).isoformat()
+    return (datetime.datetime.now(datetime.UTC) + datetime.timedelta(seconds=seconds)).isoformat()
 
 
 async def _persist_hook_event(hook_id: str, event: HookEvent) -> None:

@@ -16,12 +16,12 @@ Each test exercises:
 from __future__ import annotations
 
 import asyncio
+import contextlib
 from typing import Any
 
 import pytest
 
 from eden.config import get_settings
-
 
 # ── Per-action defaults match the spec ─────────────────────────────
 
@@ -119,15 +119,13 @@ def test_hot_path_respects_kill_switch(
             from eden.observability.trace_quality.queries import (
                 set_tenant_action_config,
             )
-            try:
+            with contextlib.suppress(Exception):
                 await set_tenant_action_config(
                     tenant_id,
                     action_class="block_user",
                     applied_by_default=True,
                     updated_by="test",
                 )
-            except Exception:
-                pass
             hooks._KILL_CACHE.pop((tenant_id, "block_user"), None)
         result = await evaluate_trajectory_step(
             org_id=tenant_id,

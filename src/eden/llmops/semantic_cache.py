@@ -10,7 +10,7 @@ from __future__ import annotations
 import hashlib
 import time
 from dataclasses import dataclass, field
-from datetime import datetime, UTC
+from datetime import UTC, datetime
 from typing import Any, Protocol
 
 
@@ -73,7 +73,7 @@ class SemanticCache:
     def _cosine_similarity(self, a: list[float], b: list[float]) -> float:
         if len(a) != len(b):
             return 0.0
-        dot = sum(x * y for x, y in zip(a, b))
+        dot = sum(x * y for x, y in zip(a, b, strict=False))
         norm_a = math.sqrt(sum(x * x for x in a))
         norm_b = math.sqrt(sum(x * x for x in b))
         if norm_a == 0 or norm_b == 0:
@@ -106,7 +106,7 @@ class SemanticCache:
         # available so dev environments without vector infra still work.
         best_match: CacheEntry | None = None
         best_score = 0.0
-        query_lower = query.lower().split()
+        query.lower().split()
 
         for entry in self._l2_entries:
             if entry.model_version != model_version:
@@ -255,7 +255,7 @@ class Embedder(Protocol):
 def _cosine_similarity(a: list[float], b: list[float]) -> float:
     if not a or not b or len(a) != len(b):
         return 0.0
-    dot = sum(x * y for x, y in zip(a, b))
+    dot = sum(x * y for x, y in zip(a, b, strict=False))
     norm_a = math.sqrt(sum(x * x for x in a))
     norm_b = math.sqrt(sum(x * x for x in b))
     if norm_a == 0 or norm_b == 0:

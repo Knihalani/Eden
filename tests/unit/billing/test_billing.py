@@ -28,6 +28,7 @@ class TestBillingStubsRaise:
     ):
         """When stripe package is missing, invoices must 503, not silently []."""
         import builtins
+
         from eden.api.routes import billing
 
         real_import = builtins.__import__

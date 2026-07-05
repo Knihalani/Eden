@@ -31,13 +31,12 @@ schema change.
 
 from __future__ import annotations
 
-from typing import Sequence, Union
-
+from collections.abc import Sequence
 
 revision: str = "049"
-down_revision: Union[str, Sequence[str], None] = ("048", "5c782c65faa3")
-branch_labels: Union[str, Sequence[str], None] = None
-depends_on: Union[str, Sequence[str], None] = None
+down_revision: str | Sequence[str] | None = ("048", "5c782c65faa3")
+branch_labels: str | Sequence[str] | None = None
+depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:

@@ -11,11 +11,11 @@ import math
 import time
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 
-class AlertSeverity(str, Enum):
+class AlertSeverity(StrEnum):
     INFO = "info"
     WARNING = "warning"
     CRITICAL = "critical"
@@ -295,7 +295,7 @@ class ProductionMonitor:
         """Aggregate health across all models."""
         all_latest: list[ModelHealthSnapshot] = []
         seen_families: set[str] = set()
-        for k, snaps in self._snapshots.items():
+        for k, _snaps in self._snapshots.items():
             family = k.split(":")[0]
             if family in seen_families:
                 continue

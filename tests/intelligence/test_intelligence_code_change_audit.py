@@ -40,7 +40,12 @@ def _build_app() -> FastAPI:
     """Build a minimal FastAPI app that mounts the Cat 23 router with
     all destructive deps overridden to admin.
     """
-    from eden.api.deps import get_current_user, require_org_member, require_org_admin, require_org_permission_dep
+    from eden.api.deps import (
+        get_current_user,
+        require_org_admin,
+        require_org_member,
+        require_org_permission_dep,
+    )
     from eden.config import get_settings
 
     settings = get_settings()
@@ -113,7 +118,7 @@ def service_mocks() -> dict[str, AsyncMock]:
         policy_mock = AsyncMock(
             return_value={"code_change_enabled": False, "auto_pr_enabled": False}
         )
-        setattr(policy_mod, "get_org_code_change_policy", policy_mock)
+        policy_mod.get_org_code_change_policy = policy_mock
         originals.append((policy_mod, "get_org_code_change_policy", policy_original))
 
     yield mocks
@@ -130,7 +135,12 @@ def _build_app(service_mocks: dict[str, AsyncMock]) -> FastAPI:
     """Build a minimal FastAPI app that mounts the Cat 23 router with
     all destructive deps overridden to admin.
     """
-    from eden.api.deps import get_current_user, require_org_member, require_org_admin, require_org_permission_dep
+    from eden.api.deps import (
+        get_current_user,
+        require_org_admin,
+        require_org_member,
+        require_org_permission_dep,
+    )
     from eden.config import get_settings
 
     settings = get_settings()
@@ -274,7 +284,7 @@ def test_auto_approval_evaluate_reads_policy_from_db_not_body(
         return db_policy
 
     original = getattr(policy_mod, "get_org_code_change_policy", None)
-    setattr(policy_mod, "get_org_code_change_policy", _db)
+    policy_mod.get_org_code_change_policy = _db
     try:
         app = _build_app(service_mocks)
         client = TestClient(app)
@@ -292,4 +302,4 @@ def test_auto_approval_evaluate_reads_policy_from_db_not_body(
         assert mock.call_args.kwargs["patch_id"] == "patch-1"
     finally:
         if original is not None:
-            setattr(policy_mod, "get_org_code_change_policy", original)
+            policy_mod.get_org_code_change_policy = original

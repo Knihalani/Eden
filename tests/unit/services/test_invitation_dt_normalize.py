@@ -10,7 +10,7 @@ exact line, so the regression surfaced across three tests in one
 test run (see ``tests/integration/test_orgs.py::TestAcceptInviteClerkSync``).
 """
 
-from datetime import datetime, timedelta, UTC
+from datetime import UTC, datetime, timedelta
 
 from eden.services.invitation_service import _as_utc
 

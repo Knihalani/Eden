@@ -28,7 +28,6 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse, Response
 
 from eden.api.utils.auth import decode_access_token
-from eden.config import get_settings
 from eden.services.usage_service import UsageService
 
 logger = logging.getLogger(__name__)
@@ -113,7 +112,7 @@ class QuotaEnforcementMiddleware(BaseHTTPMiddleware):
         # ``view["cost_usd"] == 20.0`` works. The high_util path
         # uses ``view.budget[resource]`` to get the full resource
         # dict (including ``used`` for the threshold check).
-        self._last_known_hard_limits: dict[str, tuple[float, "_BudgetView"]] = {}
+        self._last_known_hard_limits: dict[str, tuple[float, _BudgetView]] = {}
 
     async def _get_usage_service(self) -> UsageService:
         if self._usage_service is None:

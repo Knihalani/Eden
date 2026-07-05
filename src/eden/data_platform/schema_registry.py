@@ -312,7 +312,7 @@ class SchemaRegistry:
         old_props = latest.definition.get("properties", {})
         old_required = set(latest.definition.get("required", []))
         new_props = new_definition.get("properties", {})
-        new_required = set(new_definition.get("required", []))
+        set(new_definition.get("required", []))
 
         # Backward compatibility: old readers must read new data
         # - Cannot remove required fields

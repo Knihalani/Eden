@@ -47,7 +47,6 @@ from eden.llmops.openai_adapter import (
     chat_to_provider_kwargs,
 )
 
-
 # ─── C-8: client retry/timeout belt-and-braces ────────────────────
 
 

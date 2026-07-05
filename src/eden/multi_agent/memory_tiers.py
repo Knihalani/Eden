@@ -8,14 +8,14 @@ from __future__ import annotations
 import time
 from collections import deque
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 # ──────────────────────────────────────────────────────────────────────────
 # Enums and data structures
 # ──────────────────────────────────────────────────────────────────────────
 
-class MemoryTier(str, Enum):
+class MemoryTier(StrEnum):
     WORKING = "working"
     EPISODIC = "episodic"
     SEMANTIC = "semantic"

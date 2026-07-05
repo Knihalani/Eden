@@ -21,7 +21,6 @@ from typing import Any
 
 from fastapi import APIRouter, HTTPException
 
-
 logger = logging.getLogger(__name__)
 
 

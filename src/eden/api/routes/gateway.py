@@ -39,6 +39,7 @@ Risks / known limitations:
 
 from __future__ import annotations
 
+import contextlib
 import logging
 import time
 import uuid
@@ -455,10 +456,8 @@ async def _chat_completions_stream(
             # Audit 2026-06-22 B1.26 — close upstream stream on disconnect
             # to avoid leaking OpenRouter connections.
             if stream is not None:
-                try:
+                with contextlib.suppress(Exception):
                     await stream.close()
-                except Exception:
-                    pass
             duration_ms = (time.monotonic() - start) * 1000
             await _emit_gateway_telemetry(
                 org_id=org_id,

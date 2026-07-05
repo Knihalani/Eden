@@ -26,7 +26,6 @@ from scripts.qdrant_enable_quantization import (
     validate_recall,
 )
 
-
 # ── Fakes ────────────────────────────────────────────────────────────
 
 

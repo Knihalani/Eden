@@ -235,10 +235,7 @@ async def evaluate_trajectory_step(
     skip on already-decided events → fewer FPs).
     """
     t0 = time.perf_counter()
-    if ordering == "enhanced":
-        check_set = _ENHANCED_HOT_PATH_CHECKS
-    else:
-        check_set = _HOT_PATH_CHECKS
+    check_set = _ENHANCED_HOT_PATH_CHECKS if ordering == "enhanced" else _HOT_PATH_CHECKS
     checks = [chk(event) for chk in check_set]
     recommended = _reduce_recommended(checks)
 

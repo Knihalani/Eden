@@ -61,7 +61,6 @@ from eden.debugger.checkpoints import (
     discover_entrypoint,
 )
 
-
 # ─- Fake PG ──────────────────────────────────────────────────────
 
 
@@ -100,7 +99,7 @@ class FakePg:
             ][:1]
         return rows
 
-    async def fetchrow(self, query: str, *args: Any) -> Optional[dict[str, Any]]:
+    async def fetchrow(self, query: str, *args: Any) -> dict[str, Any] | None:
         for r in self._rows:
             if (
                 r["trace_id"] == args[0]

@@ -356,7 +356,8 @@ async def initiate_sso_login(
     config = provider["config"]
     provider_type = provider["provider_type"]
 
-    import secrets, urllib.parse
+    import secrets
+    import urllib.parse
 
     # Audit 2026-07-02 S-3 — persist the state nonce BEFORE the IdP
     # redirect so the callback can verify it. Fail-closed if Redis is

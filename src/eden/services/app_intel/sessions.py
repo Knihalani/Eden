@@ -56,7 +56,7 @@ class SessionIdentityService:
         raw_secret = secrets.token_urlsafe(32)
         secret_hash = hashlib.sha256(raw_secret.encode()).digest()
         expires_at = _now_utc() + timedelta(hours=ttl_hours)
-        metadata_json = json.dumps(metadata or {})
+        json.dumps(metadata or {})
 
         # Write session_secrets (Phase A1)
         await client.execute(

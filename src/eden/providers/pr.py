@@ -51,10 +51,10 @@ import time
 # connection pool) and discards keep-alive sockets at scope exit. A
 # module-level singleton keeps the underlying TCP connections warm
 # across calls — material win for repeated GitHub API hits.
-_HTTPX: "httpx.AsyncClient | None" = None
+_HTTPX: httpx.AsyncClient | None = None
 
 
-def _shared_httpx() -> "httpx.AsyncClient":
+def _shared_httpx() -> httpx.AsyncClient:
     global _HTTPX
     if _HTTPX is None:
         import httpx as _h

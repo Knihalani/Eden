@@ -17,7 +17,6 @@ upgrade is a no-op.
 
 from __future__ import annotations
 
-
 revision = "026"
 down_revision = "025"
 branch_labels = None

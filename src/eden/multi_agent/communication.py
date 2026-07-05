@@ -17,14 +17,14 @@ import uuid
 from collections import defaultdict, deque
 from collections.abc import Callable, Coroutine
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 # ──────────────────────────────────────────────────────────────────────────
 # Core data structures
 # ──────────────────────────────────────────────────────────────────────────
 
-class MessageType(str, Enum):
+class MessageType(StrEnum):
     REQUEST = "request"
     RESPONSE = "response"
     BROADCAST = "broadcast"

@@ -43,7 +43,6 @@ from unittest.mock import patch
 
 import pytest
 
-
 # ─── B-1: RLSOrgContextMiddleware wired at app level ────────────────────
 
 
@@ -105,10 +104,11 @@ class TestB1RLSMiddleware:
 
     def test_middleware_resolves_org_id_from_header(self) -> None:
         """When path param absent, fall back to ``X-Org-Id``."""
+        from starlette.requests import Request
+
         from eden.api.middleware.rls_org_context import (
             RLSOrgContextMiddleware,
         )
-        from starlette.requests import Request
 
         async def _receive():
             return {"type": "http.request", "body": b"", "more_body": False}
@@ -138,10 +138,11 @@ class TestB1RLSMiddleware:
         request — RLS policies treat a missing GUC as
         ``NULL`` → empty row set, which is the safe default.
         """
+        from starlette.requests import Request
+
         from eden.api.middleware.rls_org_context import (
             RLSOrgContextMiddleware,
         )
-        from starlette.requests import Request
 
         async def _receive():
             return {"type": "http.request", "body": b"", "more_body": False}
@@ -345,6 +346,7 @@ class TestB6ClerkAsync:
     def test_lock_is_asyncio(self) -> None:
         """The JWKS lock is ``asyncio.Lock``, not ``threading.Lock``."""
         import asyncio as _asyncio
+
         from eden.api.utils import clerk_auth
 
         assert isinstance(clerk_auth._JWKS_LOCK, _asyncio.Lock), (
@@ -410,8 +412,9 @@ class TestB7IdempotencyIdentity:
 
     def test_api_key_identity_full_digest(self) -> None:
         """The api-key identity is the full 64-hex char digest."""
-        from eden.api.middleware.idempotency import _get_request_identity
         from starlette.requests import Request
+
+        from eden.api.middleware.idempotency import _get_request_identity
 
         api_key = "sk_test_abcdef"
 

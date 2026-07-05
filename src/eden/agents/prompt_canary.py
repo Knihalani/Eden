@@ -64,12 +64,10 @@ def pick_canary_version(
     # B-13 (Session 24): validate + clamp every pct at entry. We
     # mutate the dict in place so the caller's view (e.g. an admin
     # dashboard listing) reflects the corrected value too.
-    clamped = False
     for row in assignments:
         pct = row.get("traffic_pct")
         if pct is None:
             row["traffic_pct"] = 0.0
-            clamped = True
             continue
         pct_f = float(pct)
         if pct_f < 0.0 or pct_f > 100.0:
@@ -80,7 +78,6 @@ def pick_canary_version(
                 pct_f, tenant_id, agent, row.get("version"),
             )
             row["traffic_pct"] = 100.0
-            clamped = True
         else:
             row["traffic_pct"] = pct_f
 

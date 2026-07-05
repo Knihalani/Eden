@@ -64,7 +64,7 @@ class DatasetExportRequest(BaseModel):
 async def langfuse_dataset_export(req: DatasetExportRequest) -> dict[str, Any]:
     if not req.envs:
         raise HTTPException(status_code=400, detail="envs must be a non-empty list")
-    client = _client()
+    _client()
     items = [eden_env_to_langfuse_dataset(env).to_langfuse() for env in req.envs]
     return {
         "integration_version": INTEGRATION_API_VERSION,

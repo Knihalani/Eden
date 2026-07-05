@@ -149,7 +149,7 @@ def cohens_kappa(
         return None
     n = len(labels_a)
     # Observed agreement.
-    agree = sum(1 for a, b in zip(labels_a, labels_b) if a == b)
+    agree = sum(1 for a, b in zip(labels_a, labels_b, strict=False) if a == b)
     p_o = agree / n
     # Expected agreement by chance.
     counts_a = Counter(labels_a)
@@ -238,7 +238,7 @@ def agreement_rate(labels_a: list[Any], labels_b: list[Any]) -> float:
     """Simple observed-agreement rate (no chance correction)."""
     if not labels_a or len(labels_a) != len(labels_b):
         return 0.0
-    return sum(1 for a, b in zip(labels_a, labels_b) if a == b) / len(labels_a)
+    return sum(1 for a, b in zip(labels_a, labels_b, strict=False) if a == b) / len(labels_a)
 
 
 # ── The service ──────────────────────────────────────────────────
@@ -643,10 +643,7 @@ class LabelingService:
             # If kappa is None (degenerate single-class) and
             # all labels match, treat as 1.0.
             if k is None:
-                if all(x == y for x, y in zip(la_list, lb_list)):
-                    k = 1.0
-                else:
-                    k = -1.0
+                k = 1.0 if all(x == y for x, y in zip(la_list, lb_list, strict=False)) else -1.0
             r = agreement_rate(la_list, lb_list)
             per_pair[pair_key] = {
                 "kappa": k,
@@ -675,7 +672,7 @@ class LabelingService:
         ann_by_ann: dict[str, list[Any]] = {
             a: [None] * n_items for a in all_annotators
         }
-        for idx, item_labels in enumerate(all_pairs_for_alpha):
+        for idx, _item_labels in enumerate(all_pairs_for_alpha):
             # Re-pair: we need annotator identities per item.
             # Walk by_item[idx] (the N-th item).
             item_id_at_idx = ids[idx] if idx < len(ids) else None

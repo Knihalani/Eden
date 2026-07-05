@@ -25,7 +25,6 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-
 # ── record_outcome ──────────────────────────────────────────
 
 
@@ -333,11 +332,12 @@ async def test_auto_revert_engine_records_kg_reverted_outcome() -> None:
     """A successful ``AutoRevertEngine.revert`` calls
     ``record_outcome`` with outcome=``reverted`` for the
     affected code_path in the regression_evidence."""
+    from datetime import UTC, datetime
+
     from eden.code_change import knowledge_graph as kg_mod
     from eden.code_change.revert_engine import AutoRevertEngine
     from eden.providers.pr import PRRevertRequest
     from eden.providers.repo import PullRequestInfo
-    from datetime import UTC, datetime
 
     provider = AsyncMock()
     provider.revert = AsyncMock(return_value=PullRequestInfo(
@@ -390,10 +390,11 @@ async def test_auto_revert_engine_records_kg_reverted_outcome() -> None:
 @pytest.mark.asyncio
 async def test_auto_revert_engine_skips_kg_when_no_code_path() -> None:
     """When the evidence has no code_path, the KG record is skipped."""
+    from datetime import UTC, datetime
+
     from eden.code_change import knowledge_graph as kg_mod
     from eden.code_change.revert_engine import AutoRevertEngine
     from eden.providers.repo import PullRequestInfo
-    from datetime import UTC, datetime
 
     provider = AsyncMock()
     provider.revert = AsyncMock(return_value=PullRequestInfo(

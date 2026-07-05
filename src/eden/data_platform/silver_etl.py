@@ -17,6 +17,7 @@ Usage:
 
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
 import uuid
@@ -398,10 +399,8 @@ class SilverETLPipeline:
             logger.warning(f"Quality validation failed: {exc}")
             return events, 0
         finally:
-            try:
+            with contextlib.suppress(Exception):
                 await client.execute(f"DROP TABLE IF EXISTS {temp_table}")
-            except Exception:
-                pass
 
     async def _create_temp_table(
         self, client: Any, table_name: str, events: list[dict[str, Any]]

@@ -39,9 +39,9 @@ from .worker import (
     SidecarWorker,
     SidecarWorkerState,
     compute_trace_reports,
+    get_worker_state,
     start_worker,
     stop_worker,
-    get_worker_state,
 )
 
 __all__ = [

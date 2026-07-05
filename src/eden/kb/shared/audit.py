@@ -74,19 +74,18 @@ def evaluate_audn(
     proposed_time = proposed.get(timestamp_key)
     existing_time = max(e.get(timestamp_key, "") for e in matching)
 
-    if proposed_time and existing_time:
-        if proposed_time > existing_time:
-            # Check if there's actual new information
-            if _has_new_information(proposed, matching[0]):
-                return AUDNResult(
-                    action=AUDNAction.UPDATE,
-                    reason=f"Newer timestamp and new information for '{subject}'"
-                )
-            else:
-                return AUDNResult(
-                    action=AUDNAction.NONE,
-                    reason=f"No new information in update for '{subject}'"
-                )
+    if proposed_time and existing_time and proposed_time > existing_time:
+        # Check if there's actual new information
+        if _has_new_information(proposed, matching[0]):
+            return AUDNResult(
+                action=AUDNAction.UPDATE,
+                reason=f"Newer timestamp and new information for '{subject}'"
+            )
+        else:
+            return AUDNResult(
+                action=AUDNAction.NONE,
+                reason=f"No new information in update for '{subject}'"
+            )
 
     # Check if proposed is duplicate
     if _is_duplicate(proposed, matching[0]):
@@ -110,12 +109,7 @@ def _contradicts(a: dict, b: dict) -> bool:
     """
     # Key fields that should be consistent for a given subject
     contradictory_keys = ["entity_type", "edge_type", "category"]
-    for key in contradictory_keys:
-        if key in a and key in b and a[key] != b[key]:
-            # Same subject but different type - contradiction
-            return True
-
-    return False
+    return any(key in a and key in b and a[key] != b[key] for key in contradictory_keys)
 
 
 def _has_new_information(proposed: dict, existing: dict) -> bool:

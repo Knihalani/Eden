@@ -71,7 +71,6 @@ from eden.evaluation.labeling import (
     krippendorffs_alpha,
 )
 
-
 # ── Cohen's kappa ────────────────────────────────────────────────
 
 
@@ -349,7 +348,7 @@ class FakePg:
             return "UPDATE 1"
         return "OK"
 
-    async def fetchrow(self, query: str, *args: Any) -> Optional[dict[str, Any]]:
+    async def fetchrow(self, query: str, *args: Any) -> dict[str, Any] | None:
         sql = " ".join(query.strip().lower().split())
         if "select 1 from labeling_assignments" in sql:
             item_id, ann_id = args

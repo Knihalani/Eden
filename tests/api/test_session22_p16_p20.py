@@ -39,7 +39,6 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-
 # ─── P-16: pg_class reltuples for trace count ─────────────────────────
 
 

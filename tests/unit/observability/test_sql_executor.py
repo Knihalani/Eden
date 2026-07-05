@@ -45,7 +45,6 @@ from eden.observability.sql_executor import (
     get_schema_summary,
 )
 
-
 # ── Fake Postgres client ───────────────────────────────────────────
 
 
@@ -60,7 +59,7 @@ class FakePg:
     so tests can assert against the rewritten query.
     """
 
-    def __init__(self, table_rows: Optional[list[dict]] = None) -> None:
+    def __init__(self, table_rows: list[dict] | None = None) -> None:
         self.table_rows = table_rows or []
         self.calls: list[tuple[str, tuple]] = []
         # Pre-populate one allowlisted table so the schema
@@ -79,7 +78,7 @@ class FakePg:
             ],
         }
 
-    def transaction(self) -> "_Transaction":
+    def transaction(self) -> _Transaction:
         return _Transaction(self)
 
     async def fetch(self, query: str, *args: Any) -> list[dict[str, Any]]:
@@ -101,7 +100,7 @@ class _Transaction:
     def __init__(self, pg: FakePg) -> None:
         self.pg = pg
 
-    async def __aenter__(self) -> "FakePg":
+    async def __aenter__(self) -> FakePg:
         return self.pg
 
     async def __aexit__(self, *args: Any) -> None:

@@ -93,7 +93,7 @@ def test_v3_archetype_set_is_complete():
         "F_": 2,   # Cat 22
         "G_": 5,   # Edge / structural
     }
-    actual: dict[str, int] = {cat: 0 for cat in expected_categories}
+    actual: dict[str, int] = dict.fromkeys(expected_categories, 0)
     for p in _v3_gts():
         for prefix in expected_categories:
             if p.name.startswith(prefix):

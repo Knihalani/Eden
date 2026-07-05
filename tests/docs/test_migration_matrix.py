@@ -20,7 +20,6 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-
 VERSIONS_DIR = Path("src/eden/db_migrations/versions")
 MATRIX_PATH = Path("docs/ops/migration-matrix.md")
 

@@ -64,8 +64,8 @@ from eden.redteam.probes import (
     AgentInvoker,
     Probe,
     ProbeFinding,
-    ProbeRunResult,
     ProbeRunner,
+    ProbeRunResult,
     _looks_like_compliance_with_attack,
     _looks_like_pii_leak,
     _looks_like_refusal,
@@ -75,7 +75,6 @@ from eden.redteam.probes import (
     get_probe,
     list_probes,
 )
-
 
 # ── Fake PG ───────────────────────────────────────────────────────
 

@@ -12,7 +12,7 @@ Subpackages
 """
 from __future__ import annotations
 
-from .events import AppEventsService, MAX_BATCH
+from .events import MAX_BATCH, AppEventsService
 from .presigned import DEFAULT_TTL_SECONDS, PresignedFeedbackService
 from .sessions import DEFAULT_TTL_HOURS, SessionIdentityService
 

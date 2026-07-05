@@ -36,6 +36,7 @@ spec §3 measured budgets).
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import logging
 import os
@@ -73,7 +74,7 @@ class _Metrics:
     without ``prometheus_client`` the wrappers fall back to a
     no-op shim so the worker still runs.
     """
-    _instance: "_Metrics | None" = None
+    _instance: _Metrics | None = None
 
     def __init__(self) -> None:
         prom = _prom()
@@ -99,14 +100,14 @@ class _Metrics:
         )
 
     @classmethod
-    def get(cls) -> "_Metrics":
+    def get(cls) -> _Metrics:
         if cls._instance is None:
             cls._instance = _Metrics()
         return cls._instance
 
 
 class _NoopCounter:
-    def labels(self, **_: Any) -> "_NoopCounter":
+    def labels(self, **_: Any) -> _NoopCounter:
         return self
 
     def inc(self, *_a: Any, **_k: Any) -> None:
@@ -114,7 +115,7 @@ class _NoopCounter:
 
 
 class _NoopHistogram:
-    def labels(self, **_: Any) -> "_NoopHistogram":
+    def labels(self, **_: Any) -> _NoopHistogram:
         return self
 
     def observe(self, *_a: Any, **_k: Any) -> None:
@@ -406,13 +407,13 @@ async def persist_reports(
     try:
         from eden.storage.postgres import get_postgres_client
     except Exception:
-        return {s: None for s in reports}
+        return dict.fromkeys(reports)
     try:
         client = await get_postgres_client()
     except Exception:
-        return {s: None for s in reports}
+        return dict.fromkeys(reports)
     if client is None:
-        return {s: None for s in reports}
+        return dict.fromkeys(reports)
 
     out: dict[str, str | None] = {}
     async with client.transaction():
@@ -431,7 +432,7 @@ async def persist_reports(
             except Exception as exc:
                 logger.debug("persist %s: %s", table, exc)
                 out[step] = None
-    return {k: v for k, v in out.items()}
+    return dict(out.items())
 
 
 async def _upsert_report(
@@ -736,13 +737,11 @@ class SidecarWorker:
             while not stop_event.is_set():
                 events = await self._poll_events(last_event_id)
                 if not events:
-                    try:
+                    with contextlib.suppress(TimeoutError):
                         await asyncio.wait_for(
                             stop_event.wait(),
                             timeout=self.poll_interval_s,
                         )
-                    except asyncio.TimeoutError:
-                        pass
                     continue
                 # Group by (tenant_id, trace_id); a trace is ready
                 # when its span.end event has been observed.
@@ -755,10 +754,9 @@ class SidecarWorker:
                         # Not yet complete — skip; will pick up
                         # next iteration when span.end arrives.
                         continue
-                    ok = False
                     for attempt in range(self.max_retries):
                         try:
-                            ok = await self._process_one(tid, trace_id, evs)
+                            await self._process_one(tid, trace_id, evs)
                             break
                         except Exception as exc:
                             logger.debug(
@@ -820,12 +818,10 @@ async def stop_worker() -> None:
         return
     try:
         await asyncio.wait_for(_WORKER_TASK, timeout=30.0)
-    except asyncio.TimeoutError:
+    except TimeoutError:
         _WORKER_TASK.cancel()
-        try:
+        with contextlib.suppress(asyncio.CancelledError, Exception):
             await _WORKER_TASK
-        except (asyncio.CancelledError, Exception):
-            pass
     finally:
         _WORKER_TASK = None
         _STOP_EVENT = None
@@ -878,7 +874,5 @@ async def _main() -> None:
 
 
 if __name__ == "__main__" or os.environ.get("EDEN_QUALITY_PIPELINE_MAIN"):
-    try:
+    with contextlib.suppress(KeyboardInterrupt):
         asyncio.run(_main())
-    except KeyboardInterrupt:
-        pass
