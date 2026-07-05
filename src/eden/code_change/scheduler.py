@@ -611,14 +611,34 @@ async def weekly_digest(
         "ts": datetime.now(UTC).isoformat(),
     }
     orgs = await _list_active_orgs()
-    for org_id in orgs:
-        rows = await _select_rows(
-            org_id,
-            "proposed_patches",
-            where=f"created_at > NOW() - INTERVAL '{int(window_days)} days'",
-            order_by="created_at DESC",
-            limit=2000,
-        )
+    # One bulk query across all orgs (vs N round-trips). The
+    # per-org budget fetch pattern was previously serial — pulling
+    # all rows in one ``org_id = ANY($1)`` query, then grouping in
+    # Python, lets us handle 100+ active orgs in 1 round-trip.
+    if not orgs:
+        return summary
+    from eden.storage.postgres import get_postgres_client
+    client = await get_postgres_client()
+    all_rows: list[dict[str, Any]] = []
+    if client is not None:
+        try:
+            all_rows = await client.fetch(
+                f"""
+                SELECT org_id, status, cost_usd
+                  FROM proposed_patches
+                 WHERE org_id = ANY($1::text[])
+                   AND created_at > NOW() - INTERVAL '{int(window_days)} days'
+                 ORDER BY created_at DESC
+                 LIMIT 2000
+                """,
+                orgs,
+            )
+        except Exception as exc:
+            logger.warning("cat23 weekly digest: bulk fetch failed: %s", exc)
+    by_org: dict[str, list[dict[str, Any]]] = {o: [] for o in orgs}
+    for r in all_rows:
+        by_org.setdefault(str(r.get("org_id", "")), []).append(dict(r))
+    for org_id, rows in by_org.items():
         rollup: dict[str, int] = {}
         total_cost = 0.0
         for r in rows:
