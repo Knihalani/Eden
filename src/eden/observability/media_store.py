@@ -30,6 +30,7 @@ Concurrency:
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import logging
 import os
@@ -155,12 +156,17 @@ class MediaStore:
         path = os.path.join(tenant_dir, sha256)
         # Idempotent write — if the file exists with the same SHA-256
         # we don't re-write. Cheap race-protection: write to a temp
-        # file and rename atomically.
-        if not os.path.exists(path):
-            tmp = path + ".tmp"
+        # file and rename atomically. Wrap in asyncio.to_thread so the
+        # sync file I/O doesn't block the event loop on large blobs
+        # (the route layer may upload multi-MB media files here).
+        def _write_atomic(path: str, tmp: str, data: bytes) -> None:
             with open(tmp, "wb") as f:
                 f.write(data)
             os.replace(tmp, path)
+
+        if not os.path.exists(path):
+            tmp = path + ".tmp"
+            await asyncio.to_thread(_write_atomic, path, tmp, data)
         return f"local://{_safe_tenant(tenant_id)}/{sha256}"
 
     async def _get_local(self, blob: MediaBlob) -> bytes:
@@ -169,8 +175,12 @@ class MediaStore:
         assert uri.startswith("local://")
         rel = uri[len("local://"):]
         path = os.path.join(self._local_root, rel)
-        with open(path, "rb") as f:
-            return f.read()
+        # ``asyncio.to_thread`` keeps the sync read off the event loop
+        # — callers may request multi-MB media files in a tight loop.
+        def _read(path: str) -> bytes:
+            with open(path, "rb") as f:
+                return f.read()
+        return await asyncio.to_thread(_read, path)
 
     # ── s3 backend ──────────────────────────────────────────────────
 
