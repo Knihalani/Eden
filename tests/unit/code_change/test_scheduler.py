@@ -494,8 +494,17 @@ class TestWeeklyDigest:
                 new=AsyncMock(return_value=["org_a"]),
             ),
             patch(
-                "eden.code_change.scheduler._select_rows",
-                new=AsyncMock(return_value=rows),
+                "eden.storage.postgres.get_postgres_client",
+                new=AsyncMock(
+                    return_value=AsyncMock(
+                        fetch=AsyncMock(
+                            return_value=[
+                                {"org_id": "org_a", **r, "cost_usd": 0.0}
+                                for r in rows
+                            ]
+                        )
+                    )
+                ),
             ),
         ):
             result = await weekly_digest(dry_run=True)
