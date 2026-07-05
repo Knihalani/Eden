@@ -870,7 +870,6 @@ def _gemini_to_raw(item: dict[str, Any]) -> dict[str, Any]:
         "modelVersion": model or None,
         "responseId": response_id or None,
         "usageMetadata": usage_metadata,
-        "modelVersion": item.get("modelVersion"),
     } if (candidates or usage_metadata) else None
 
     request_body: dict[str, Any] | None = item.get("request_payload") or item.get("request")

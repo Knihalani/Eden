@@ -1337,22 +1337,6 @@ def get_code_change_hook() -> CodeChangeHook:
     return _code_change_hook
 
 
-def register_all_hooks() -> None:
-    """Wire the hooks into the lifespan startup.
-
-    Each hook is a coroutine-returning object. The lifespan
-    registers them as the singleton instances the rest of
-    the codebase imports; downstream services fire them
-    via :func:`get_promotion_hook` etc.
-
-    In v0 the hooks are *advisory only* — they record the
-    recommended action to ``closed_loop_actions`` and let
-    the :class:`ClosedLoopExecutor` surface it. A future
-    version wires the auto-apply path behind a per-tenant
-    opt-in.
-    """
-
-
 # ─── Phase 2B.4 — new hooks per upgradespec §E.1 ─────────────────
 #
 # Each is a thin wrapper around :func:`_record_action` (which now
