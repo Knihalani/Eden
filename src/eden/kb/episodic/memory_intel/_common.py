@@ -419,6 +419,50 @@ async def _fetch_recent_attributions_for_memory(
     return [dict(r) for r in rows]
 
 
+async def _fetch_recent_attributions_for_memories(
+    org_id: str,
+    memory_ids: list[str],
+    *,
+    interval_sql: str,
+) -> dict[str, list[dict[str, Any]]]:
+    """Bulk fetch recent ``memory_attributions`` rows for many memories.
+
+    Same shape as :func:`_fetch_recent_attributions_for_memory` but
+    takes a list and returns ``{memory_id: [rows...]}``. Used by
+    :class:`MemoryReweaver` to avoid an N+1 round-trip over the
+    candidate memory set.
+
+    Returns an empty dict on failure; callers must tolerate missing
+    keys (a memory with no rows maps to ``[]``).
+    """
+    if not memory_ids:
+        return {}
+    client = await _get_client()
+    if client is None:
+        return {}
+    try:
+        rows = await client.fetch(
+            """
+            SELECT trace_id, memory_id, influence_score, created_at
+              FROM memory_attributions
+             WHERE org_id = $1
+               AND memory_id = ANY($2::uuid[])
+               AND created_at > NOW() - $3::interval
+             ORDER BY created_at DESC
+            """,
+            org_id, memory_ids, interval_sql,
+        )
+    except Exception as exc:
+        logger.debug(
+            "memory_intel: fetch attributions (bulk) failed: %s", exc,
+        )
+        return {}
+    out: dict[str, list[dict[str, Any]]] = {mid: [] for mid in memory_ids}
+    for r in rows:
+        out.setdefault(str(r["memory_id"]), []).append(dict(r))
+    return out
+
+
 async def _fetch_distinct_memory_ids_in_window(
     org_id: str, interval_sql: str
 ) -> list[str]:
