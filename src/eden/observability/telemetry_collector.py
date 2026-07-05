@@ -434,21 +434,25 @@ class TelemetryCollector:
     # ── Routing ───────────────────────────────────────────────────────────
 
     async def _route(self, event: TelemetryEvent) -> None:
-        """Route an event to all configured sinks."""
-        # Redis hot path
-        await self._route_redis(event)
-        # PostgreSQL cold path
-        await self._route_postgres(event)
-        # ClickHouse analytics
-        await self._route_clickhouse(event)
-        # Real-time WebSocket fanout
-        await self._route_websocket(event)
-        # OTel dual-emit (Phase 7.2c) — fire-and-forget mirror to OTLP
-        await self._route_otel_dual_emit(event)
-        # Typesense full-text index (Phase B) — span text becomes
-        # searchable via /observability/search and Cmd-K. Best-effort:
-        # no-op when Typesense is down or disabled.
-        await self._route_typesense(event)
+        """Route an event to all configured sinks.
+
+        Sinks are independent — Redis, Postgres, ClickHouse, WebSocket,
+        OTel dual-emit, and Typesense can run concurrently. Pre-fix
+        they were awaited serially, so per-event latency was the sum
+        of every sink's hot path (PG insert alone can be 10-50ms).
+        Using ``asyncio.gather`` with ``return_exceptions=True`` keeps
+        the old fail-soft semantics: a single sink error must never
+        take down the others.
+        """
+        await asyncio.gather(
+            self._route_redis(event),
+            self._route_postgres(event),
+            self._route_clickhouse(event),
+            self._route_websocket(event),
+            self._route_otel_dual_emit(event),
+            self._route_typesense(event),
+            return_exceptions=True,
+        )
 
     async def _route_redis(self, event: TelemetryEvent) -> None:
         redis = await self._get_redis()
