@@ -284,10 +284,13 @@ async def publish_trace_event(org_id: str, payload: dict[str, Any]) -> None:
         # (the full trace lives in telemetry_events).
         body = json.dumps(payload, default=str)[:16 * 1024]
         await redis.publish(channel, body)
-        # Add to the bounded replay sorted set (audit P-18). Trim
-        # the bottom-1000 with ZREMRANGEBYRANK so the set stays
-        # bounded.
-        await redis.zadd(set_key, {f"{seq}|{body}": seq})
+        # Add to the bounded replay sorted set (audit P-18). Use the
+        # sequence number as the member itself so a Redis retry or
+        # duplicate INCR can't silently overwrite a different
+        # event's payload — pre-fix the member was ``{seq}|{body}``
+        # which collides on identical body content and overwrote the
+        # score under that member, hiding the prior event.
+        await redis.zadd(set_key, {str(seq): seq})
         await redis.zremrangebyrank(set_key, 0, -1001)
     except Exception as exc:
         logger.debug(f"publish_trace_event failed: {exc}")
