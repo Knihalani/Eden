@@ -821,9 +821,16 @@ async def _upsert_capacity_forecast(
         return
     try:
         async with client.acquire() as conn, conn.transaction():
+            # Scope the delete to the specific (org, window) being
+            # replaced — the pre-fix query wiped ALL capacity_forecasts
+            # for the org before inserting the new row, losing every
+            # other window's forecast in the process. capacity_forecasts
+            # has no unique constraint on (org_id, window_start), so
+            # multiple rows can co-exist per window.
             await conn.execute(
-                "DELETE FROM capacity_forecasts WHERE org_id = $1",
-                org_id,
+                "DELETE FROM capacity_forecasts "
+                "WHERE org_id = $1 AND window_start = $2 AND window_end = $3",
+                org_id, window_start, window_end,
             )
             await conn.execute(
                 """
