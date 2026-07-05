@@ -198,7 +198,7 @@ function GanttRow({
                   const stagePct = (s.duration_ms / job.duration_ms) * 100;
                   return (
                     <div
-                      key={i}
+                      key={`${s.name ?? "stage"}-${i}`}
                       className="h-full"
                       style={{
                         width: `${stagePct}%`,

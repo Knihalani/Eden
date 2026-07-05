@@ -114,7 +114,7 @@ export function LatencyHistogram({
           const heightPct = (b.count / maxCount) * 100;
           return (
             <motion.div
-              key={i}
+              key={b.x ?? i}
               initial={{ height: 0 }}
               animate={{ height: `${heightPct}%` }}
               transition={{ delay: i * 0.005, duration: 0.3 }}

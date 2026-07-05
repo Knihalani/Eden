@@ -277,7 +277,7 @@ export function HILTPanel({ jobId, jobStatus }: HILTPanelProps) {
                     const ts = (entry.timestamp as string) || "";
                     return (
                       <div
-                        key={i}
+                        key={`${ts}-${cmd}-${i}`}
                         className="flex items-center gap-2 px-2 py-1.5 rounded bg-[var(--bg-tertiary)] text-xs"
                       >
                         <span className="text-[10px] text-[var(--text-faint)] font-mono">
