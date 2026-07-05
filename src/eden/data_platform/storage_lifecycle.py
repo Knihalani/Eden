@@ -421,12 +421,19 @@ class StorageLifecycleManager:
             # Batch transition via copy_object
             transitioned = 0
             for obj in objects_to_transition:
+                # Bind ``obj`` and ``bucket`` as default args so the
+                # lambda captures THIS iteration's values, not the
+                # last-iteration alias when the executor runs the
+                # closure (B023). Pre-fix a fast executor could see
+                # ``obj`` pointing at the final element while the
+                # copy was still being prepared for the previous one.
+                key = obj["Key"]
                 await loop.run_in_executor(
                     None,
-                    lambda: s3.copy_object(
-                        Bucket=bucket,
-                        CopySource={"Bucket": bucket, "Key": obj["Key"]},
-                        Key=obj["Key"],
+                    lambda k=key, b=bucket: s3.copy_object(
+                        Bucket=b,
+                        CopySource={"Bucket": b, "Key": k},
+                        Key=k,
                         StorageClass=to_storage_class,
                         MetadataDirective="COPY",
                     ),
