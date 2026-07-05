@@ -293,11 +293,13 @@ async def list_traces(
         args.append(outcome)
 
     try:
-        # P-16 (2026-07-02): total comes from pg_class.reltuples (O(1)
-        # planner estimate) instead of a full COUNT(DISTINCT trace_id).
-        # The two queries are independent so we issue them concurrently
-        # rather than awaiting serially — saves one round-trip on every
-        # list_traces call.
+        # P-16 (2026-07-02): total comes from a per-tenant COUNT(*)
+        # narrowed to the same ``where`` clause as the rows query.
+        # Pre-fix this used ``pg_class.reltuples`` (O(1) planner
+        # estimate) but that's a *table-level* statistic — tenant A
+        # would see tenant B's row count. The two queries run
+        # concurrently so per-tenant total cost is one extra round-trip
+        # overlapped with the rows fetch.
         rows_coro = client.fetch(
             f"""
             SELECT trace_id,
@@ -324,8 +326,8 @@ async def list_traces(
             *args, limit, offset,
         )
         total_coro = client.fetchval(
-            "SELECT reltuples::bigint FROM pg_class "
-            "WHERE relname = 'telemetry_events'",
+            f"SELECT count(*) FROM telemetry_events WHERE {where}",
+            *args,
         )
         rows, total = await asyncio.gather(rows_coro, total_coro)
     except Exception as exc:
