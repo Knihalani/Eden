@@ -376,6 +376,17 @@ async def initiate_sso_login(
         sso_url = config.get("sso_url")
         client_id = config.get("client_id")
         if sso_url and client_id:
+            # Defence-in-depth: a misconfigured or hostile ``sso_url``
+            # value (org-supplied) would otherwise be concatenated
+            # into the authorize URL we send the browser to. Reject
+            # anything that isn't a plain http(s) URL with a host —
+            # ``javascript:`` / ``data:`` / IP literals are blocked.
+            parsed = urllib.parse.urlparse(sso_url)
+            if parsed.scheme not in ("http", "https") or not parsed.hostname:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="sso_url must be a plain http(s) URL with a hostname",
+                )
             redirect_uri = f"{settings.app_url}/auth/sso/callback"
             auth_url = f"{sso_url}/oauth2/v1/authorize?" + urllib.parse.urlencode({
                 "client_id": client_id,
