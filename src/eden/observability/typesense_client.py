@@ -288,9 +288,15 @@ class TypesenseClient:
         if self._session is None or self._session.closed:
             try:
                 import aiohttp
+                # ``allow_redirects=False`` keeps a future re-target of
+                # Typesense (e.g. operator misconfiguration pointing at
+                # a user-supplied URL) from being coerced into following
+                # a 30x into a private-IP endpoint — aiohttp has no
+                # built-in SSRF guard at redirect time.
                 self._session = aiohttp.ClientSession(
                     timeout=aiohttp.ClientTimeout(total=self._timeout_s),
                     headers={"X-TYPESENSE-API-KEY": self._api_key},
+                    allow_redirects=False,
                 )
             except Exception as exc:
                 logger.warning(f"Typesense: aiohttp unavailable: {exc}")
