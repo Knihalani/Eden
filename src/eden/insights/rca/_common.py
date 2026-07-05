@@ -506,27 +506,38 @@ async def _delete_then_insert_incidents(
                 "DELETE FROM incident_clusters WHERE org_id = $1",
                 org_id,
             )
-            for c in clusters:
-                await conn.execute(
+            # executemany fans out into a single asyncpg pipeline call
+            # instead of one INSERT per cluster / per member — pre-fix
+            # this was O(N) round-trips inside the write transaction.
+            if clusters:
+                await conn.executemany(
                     """
                         INSERT INTO incident_clusters
                             (id, org_id, name, centroid_embedding,
                              member_count, severity, summary)
                         VALUES ($1, $2, $3, $4, $5, $6, $7)
                         """,
-                    c["id"], org_id, c["name"],
-                    c.get("centroid_embedding"),
-                    c["member_count"], c["severity"],
-                    c.get("summary"),
+                    [
+                        (
+                            c["id"], org_id, c["name"],
+                            c.get("centroid_embedding"),
+                            c["member_count"], c["severity"],
+                            c.get("summary"),
+                        )
+                        for c in clusters
+                    ],
                 )
-            for m in members:
-                await conn.execute(
+            if members:
+                await conn.executemany(
                     """
                         INSERT INTO incident_cluster_members
                             (cluster_id, trace_id, similarity)
                         VALUES ($1, $2, $3)
                         """,
-                    m["cluster_id"], m["trace_id"], m["similarity"],
+                    [
+                        (m["cluster_id"], m["trace_id"], m["similarity"])
+                        for m in members
+                    ],
                 )
     except Exception as exc:
         logger.debug("rca._common: incidents write failed: %s", exc)
