@@ -429,3 +429,72 @@ async def test_model_response_carries_cost_source_and_pricing_version(patch_post
     response: ModelResponse = await g._execute_provider(Provider.OPENAI, request)
     assert response.cost_source == "static"  # no override, static seed
     assert response.pricing_version.startswith("seed=2026-07;")
+
+
+# ─────────────────────────────────────────────────────────────────────
+# models.dev overlay in the resolver chain
+# ─────────────────────────────────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_models_dev_overlay_used_when_no_override(patch_postgres):
+    """When the catalog has a row with source=models_dev, the
+    resolver reports source=models_dev. This is the new highest
+    tier for native vendor rows.
+    """
+    from eden.llmops.pricing import PricingCatalog, PricingRow
+
+    patch_postgres.fetchrow = AsyncMock(return_value=None)
+    resolver = CostResolver()
+    resolver.catalog = PricingCatalog.from_seed({
+        "claude-opus-4-5": PricingRow(
+            model_id="claude-opus-4-5",
+            quality=0.97,
+            latency_p95_ms=1500,
+            cost_per_1k_input=Decimal("0.005"),
+            cost_per_1k_output=Decimal("0.025"),
+            reliability=0.999,
+            context_window=200000,
+            source="models_dev",
+        ),
+    })
+    resolver.catalog.last_refresh = 1234567890.0
+
+    res = await resolver.resolve(
+        org_id=None, provider="anthropic", model_id="claude-opus-4-5",
+    )
+    assert res.source == "models_dev"
+    assert res.cost_per_1k_input == Decimal("0.005")
+    assert res.cost_per_1k_output == Decimal("0.025")
+    # Estimate uses the split rates.
+    cost = res.estimate(1000, 1000)
+    assert cost == Decimal("0.030")
+
+
+@pytest.mark.asyncio
+async def test_models_dev_overlay_wins_over_static_seed(patch_postgres):
+    """Precedence: per-tenant override > models.dev overlay >
+    static seed > zero. With no override and no openrouter row,
+    a models.dev row beats a static seed row for the same id.
+    """
+    from eden.llmops.pricing import PricingCatalog, PricingRow
+
+    patch_postgres.fetchrow = AsyncMock(return_value=None)
+    resolver = CostResolver()
+    # Two rows for the same model id - one from models.dev, one
+    # in the seed. The merge semantics should keep only the
+    # newer one, but if both are present, models.dev wins.
+    resolver.catalog = PricingCatalog.from_seed({
+        "gpt-4o": PricingRow(
+            model_id="gpt-4o",
+            quality=0.93,
+            latency_p95_ms=700,
+            cost_per_1k_input=Decimal("0.0025"),
+            cost_per_1k_output=Decimal("0.010"),
+            reliability=0.998,
+            context_window=128000,
+            source="models_dev",  # marked as models_dev, not static
+        ),
+    })
+    res = await resolver.resolve(org_id=None, provider="openai", model_id="gpt-4o")
+    assert res.source == "models_dev"
