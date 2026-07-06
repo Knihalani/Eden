@@ -22,14 +22,24 @@ const withNextIntl = createNextIntlPlugin("./src/i18n/request.ts");
 // https://nextjs.org/docs/app/api-reference/config/next-config-js/turbopack#root-directory
 const portalRoot = path.resolve(process.cwd());
 
+// We intentionally do NOT set `outputFileTracingRoot` here. Setting it
+// to a string conflicts with Next 16's Turbopack trace logic on Vercel
+// and surfaces as
+//
+//   ENOENT: no such file or directory, lstat
+//   '/vercel/path0/.next/routes-manifest-deterministic.json'
+//
+// See https://github.com/vercel/vercel/issues/12415 — Vercel's build
+// worker expects the routes-manifest-deterministic.json to be written
+// at the unshifted `<cwd>/.next/...` path, but pinning
+// `outputFileTracingRoot` to a directory outside that path causes the
+// traces to land in a different `.next` and the manifest lookup misses.
+
 const nextConfig: NextConfig = {
   /* config options here */
   turbopack: {
     root: portalRoot,
   },
-  // Also pin output-file tracing to this directory so Vercel's build
-  // step doesn't walk above the portal root while collecting files.
-  outputFileTracingRoot: portalRoot,
   async redirects() {
     return [
       // Legacy /jobs URL renamed to /eval-harnesses.
