@@ -269,3 +269,66 @@ class TestSymbolGraphWithTypeScript:
         assert "add" in names
         assert "UserService" in names
         assert "ARROW" in names
+
+
+# ── Performance / incremental indexing ─────────────────────────────
+
+
+class TestSymbolGraphMtimeCache:
+    """The mtime cache makes repeat indexing essentially free."""
+
+    @pytest.mark.asyncio
+    async def test_warm_reindex_is_fast(self, repo_and_db):
+        """A second index() with no file changes should be <100ms."""
+        import time as _t
+        repo, db, _ = repo_and_db
+        g = SymbolGraph(root=repo, db_path=str(db))
+        # Cold index.
+        await g.request_index("test_repo", "main", background=False)
+        # Warm index — no file changes.
+        t0 = _t.perf_counter()
+        await g.request_index("test_repo", "main", background=False)
+        elapsed_ms = (_t.perf_counter() - t0) * 1000
+        # No-git, single-file repo — warm should be sub-100ms.
+        assert elapsed_ms < 100, f"warm re-index too slow: {elapsed_ms:.1f}ms"
+
+    @pytest.mark.asyncio
+    async def test_modified_file_reparses(self, repo_and_db):
+        """A file whose mtime changed must be re-parsed on next index."""
+        repo, db, files = repo_and_db
+        g = SymbolGraph(root=repo, db_path=str(db))
+        await g.request_index("test_repo", "main", background=False)
+        # Add a new function to foo.py.
+        fp = repo / "src" / "foo.py"
+        original = fp.read_text()
+        fp.write_text(original + "\ndef new_function():\n    return 42\n")
+        import os as _os
+        _os.utime(fp, None)  # ensure mtime bumps
+        await g.request_index("test_repo", "main", background=False)
+        # The new symbol should appear.
+        result = await g.query("test_repo", "new_function", "main")
+        assert result is not None
+        assert any("foo.py" in f for f in result.files)
+
+
+class TestSymbolGraphThreadLocalConn:
+    """Multiple SymbolGraph instances with different DB files don't
+    share connections (a regression caught when refactoring to
+    thread-local connections)."""
+
+    @pytest.mark.asyncio
+    async def test_different_db_paths_isolated(self, tmp_path):
+        from eden.code_change.graph.symbol_graph import _get_cached_conn, _set_cached_conn
+        # Two distinct DB paths.
+        db_a = str(tmp_path / "a.sqlite")
+        db_b = str(tmp_path / "b.sqlite")
+        # First access opens a connection.
+        # We can't easily open a connection without the store, but
+        # we can verify the cache key isolation: a key set for A
+        # must not be returned for B.
+        import sqlite3 as _sq
+        c_a = _sq.connect(db_a)
+        _set_cached_conn(db_a, c_a)
+        assert _get_cached_conn(db_a) is c_a
+        assert _get_cached_conn(db_b) is None
+        c_a.close()

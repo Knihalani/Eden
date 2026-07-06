@@ -295,3 +295,94 @@ The user pushed back on the v1.7 architecture:
 * [x] Lint clean on new code (F821/F822/B904 + auto-fixed SIM102/SIM101).
 * [x] App boot + frontend typecheck/lint/vitest unaffected.
 
+
+---
+
+## v1.7.2 — Performance pass
+
+**Date:** 2026-07-06
+**Status:** Complete
+
+### Goal
+
+Make the v1.7.1 system measurably faster and more efficient without
+breaking any existing tests or behavior. Profile → identify
+bottlenecks → fix → re-benchmark.
+
+### Profiling findings (before)
+
+| Path | Time | % of cold index |
+|---|---|---|
+| `_parse_python_with_parents` | 15.2 s | 54% |
+| `insert_symbols` (per-file SQLite) | 10.9 s | 39% |
+| `ast.walk` | 8.5 s | 30% |
+| `_git_head_sha` (per-call subprocess) | 22 ms | — |
+| `status()` total | 24.7 ms | — |
+| `query()` (LIKE w/ 32 OR clauses) | 40.9 ms | — |
+
+### What changed
+
+| Optimisation | File | Effect |
+|---|---|---|
+| Git SHA cache (process-wide, 30s TTL) | `symbol_graph.py` | `status()` 24.74 ms → 0.165 ms (**145x**) |
+| Thread-local SQLite connection cache, keyed by db_path | `symbol_graph.py` | Avoids 0.4 ms connection open on every read |
+| Single bulk `INSERT INTO symbols` + `ref_index` + `symbols_fts` in one transaction | `symbol_graph.py` (new `insert_all`) | Indexing 10.9 s → 4.5 s |
+| Single-pass AST walk (collect symbols + refs in one `ast.walk`) | `symbol_graph.py` (new `_parse_python_single_pass`) | AST walking 8.5 s → 4.3 s |
+| FTS5 virtual table + direct query (no JOIN) | `symbol_graph.py` | `query()` 40.88 ms → 0.275 ms (**132x**) |
+| mtime-based file-skip cache (`file_mtimes` table) | `symbol_graph.py` | Warm re-index 15.3 s → **0.33 ms** (~50,000x) |
+| Serial parsing by default (GIL doesn't reward threads for AST) | `symbol_graph.py` | Removes 30% overhead from `ThreadPoolExecutor` |
+| `_one` parse worker renamed `rel` → `rel_path` | `symbol_graph.py` | Lint clean (B007) |
+| `try/except: pass` → `contextlib.suppress(Exception)` | `symbol_graph.py` | Lint clean (SIM105) |
+
+### Final benchmarks (after)
+
+| Path | Time | Speedup |
+|---|---|---|
+| Cold index (1530 files, 43k symbols) | 8,121 ms | **1.82x** |
+| Warm re-index (no changes) | 0.33 ms | **~50,000x** |
+| `status()` (avg over 100 calls) | 0.165 ms | **145x** |
+| `query()` (avg over 100 calls) | 0.275 ms | **132x** |
+| Multi-token `query()` | 0.422 ms | **14x** |
+| `find_affected_areas()` | 0.364 ms | **4.4x** |
+
+### Tests
+
+* `tests/unit/code_change/` — **350 pass** (was 264, +86 new SymbolGraph
+  tests added by another contributor; +3 new mtime / thread-local
+  cache tests by this session)
+* `tests/intelligence/test_autonomous_code_modification_stubs.py` —
+  83 pass
+* `tests/api/` + `tests/integration/` + `tests/security/` — 485 pass,
+  55 skip (no regressions)
+
+### New tests added this session
+
+* `tests/unit/code_change/graph/test_symbol_graph.py::TestSymbolGraphMtimeCache`
+  — warm re-index is fast, modified file re-parses.
+* `tests/unit/code_change/graph/test_symbol_graph.py::TestSymbolGraphThreadLocalConn`
+  — different DB paths don't share connections (regression test for
+  the thread-local cache).
+
+### Schema migration
+
+* New `file_mtimes` table for incremental indexing.
+* `symbols_fts` virtual table now has `line` + `end_line` columns;
+  old databases are auto-migrated on first connect (the migration
+  drops + recreates the FTS table).
+* All migrations are idempotent (`IF NOT EXISTS`).
+
+### Lint
+
+* `ruff check src/eden/code_change/graph/symbol_graph.py` — 0 errors.
+
+### Definition of Done (v1.7.2)
+
+* [x] Cold index 8.1 s (was 15.3 s).
+* [x] Warm re-index 0.33 ms (was 15.3 s).
+* [x] `status()` 0.165 ms (was 24.7 ms).
+* [x] `query()` 0.275 ms (was 40.9 ms).
+* [x] `find_affected_areas()` 0.364 ms (was 1.58 ms).
+* [x] Schema migration for `file_mtimes` + FTS5 column additions.
+* [x] Lint clean on new code.
+* [x] All existing tests pass (350 unit + 83 stub + 485 integration).
+* [x] Docs + PLAN.md updated.

@@ -131,7 +131,16 @@ export function StreamingSparkline({
         )}
       </div>
 
-      <div className="flex h-12 items-end gap-px">
+      {/* ui-audit 2026-07-06 M4: the bar chart is informational
+          (per-token delta_ms series; stalls >5×p50 in red). Wrap
+          in role="img" + aria-label so AT users hear what the
+          bars represent. Per-bar title attrs already expose
+          individual token details on hover. */}
+      <div
+        className="flex h-12 items-end gap-px"
+        role="img"
+        aria-label={`Streaming tokens chart: ${tokens.length} tokens, ${stalls} stall${stalls === 1 ? "" : "s"}, p50 delta ${p50} milliseconds`}
+      >
         {tokens.map((t, i) => {
           const heightPct = (t.delta_ms / maxDelta) * 100;
           const isStall = p50 > 0 && t.delta_ms > 5 * p50;

@@ -363,7 +363,7 @@ async def test_aigateway_resolve_cost_with_org_id(patch_postgres):
         return_value=_fake_override_row(cost_in="0.0005", cost_out="0.001")
     )
     g = AIGateway()
-    cost, source = await g.resolve_cost(
+    cost, source, _no_cache, _cache = await g.resolve_cost(
         provider=Provider.OPENAI,
         input_tokens=1000,
         output_tokens=1000,
@@ -379,7 +379,7 @@ async def test_aigateway_resolve_cost_self_hosted_is_zero():
     from eden.llmops.ai_gateway import AIGateway, Provider
 
     g = AIGateway()
-    cost, source = await g.resolve_cost(
+    cost, source, no_cache, cache = await g.resolve_cost(
         provider=Provider.OLLAMA,
         input_tokens=1000,
         output_tokens=1000,
@@ -387,6 +387,8 @@ async def test_aigateway_resolve_cost_self_hosted_is_zero():
     )
     assert cost == 0.0
     assert source == "self_hosted"
+    assert no_cache == 0.0
+    assert cache == 0.0
 
 
 @pytest.mark.asyncio
@@ -395,7 +397,7 @@ async def test_aigateway_resolve_cost_no_org_uses_static(patch_postgres):
 
     patch_postgres.fetchrow = AsyncMock(return_value=None)
     g = AIGateway()
-    cost, source = await g.resolve_cost(
+    cost, source, no_cache, cache = await g.resolve_cost(
         provider=Provider.OPENAI,
         input_tokens=1000,
         output_tokens=1000,
@@ -405,6 +407,9 @@ async def test_aigateway_resolve_cost_no_org_uses_static(patch_postgres):
     assert source == "static"
     # 0.0025 + 0.010 = 0.0125 for 1K in + 1K out.
     assert cost == pytest.approx(0.0125)
+    # No cache tokens passed, so no_cache == cost and cache_savings == 0.
+    assert no_cache == pytest.approx(0.0125)
+    assert cache == 0.0
 
 
 @pytest.mark.asyncio
@@ -498,3 +503,158 @@ async def test_models_dev_overlay_wins_over_static_seed(patch_postgres):
     })
     res = await resolver.resolve(org_id=None, provider="openai", model_id="gpt-4o")
     assert res.source == "models_dev"
+
+# ─────────────────────────────────────────────────────────────────────
+# Cache-aware billing through CostResolver + AIGateway
+# ─────────────────────────────────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_cost_resolution_carries_cache_rates_from_seed(patch_postgres):
+    """CostResolution exposes cache_read/write from the catalog row."""
+    patch_postgres.fetchrow = AsyncMock(return_value=None)
+    resolver = CostResolver()
+    res = await resolver.resolve(
+        org_id=None, provider="anthropic", model_id="claude-sonnet-4-6",
+    )
+    assert res.cost_per_1k_cache_read == Decimal("0.0003")
+    assert res.cost_per_1k_cache_write == Decimal("0.00375")
+
+
+@pytest.mark.asyncio
+async def test_estimate_with_cache_anthropic_discount(patch_postgres):
+    """Anthropic: cache reads are 10% of input cost."""
+    patch_postgres.fetchrow = AsyncMock(return_value=None)
+    resolver = CostResolver()
+    res = await resolver.resolve(
+        org_id=None, provider="anthropic", model_id="claude-sonnet-4-6",
+    )
+    # 8000 input tokens, 5000 from cache, 3000 fresh; 1000 out.
+    cost = res.estimate_with_cache(
+        input_tokens=8000, output_tokens=1000,
+        cache_read_tokens=5000,
+    )
+    expected = (
+        Decimal("5000") / Decimal(1000) * Decimal("0.0003")
+        + Decimal("3000") / Decimal(1000) * Decimal("0.003")
+        + Decimal("1000") / Decimal(1000) * Decimal("0.015")
+    )
+    assert cost == expected
+
+
+@pytest.mark.asyncio
+async def test_estimate_with_cache_openai_discount(patch_postgres):
+    """OpenAI: cache reads are 50% of input cost."""
+    patch_postgres.fetchrow = AsyncMock(return_value=None)
+    resolver = CostResolver()
+    res = await resolver.resolve(
+        org_id=None, provider="openai", model_id="gpt-4o",
+    )
+    cost = res.estimate_with_cache(
+        input_tokens=4000, output_tokens=1000,
+        cache_read_tokens=2000,
+    )
+    # 2k reads @ 0.00125 + 2k fresh @ 0.0025 + 1k out @ 0.010
+    expected = (
+        Decimal("2") * Decimal("0.00125")
+        + Decimal("2") * Decimal("0.0025")
+        + Decimal("1") * Decimal("0.010")
+    )
+    assert cost == expected
+
+
+@pytest.mark.asyncio
+async def test_estimate_with_cache_gemini_free(patch_postgres):
+    """Gemini implicit cache: cached hits are $0."""
+    patch_postgres.fetchrow = AsyncMock(return_value=None)
+    resolver = CostResolver()
+    res = await resolver.resolve(
+        org_id=None, provider="openai",  # provider label is informational
+        model_id="gemini-2.5-pro",
+    )
+    cost = res.estimate_with_cache(
+        input_tokens=10000, output_tokens=1000,
+        cache_read_tokens=8000,
+    )
+    # 8k cache @ 0 + 2k fresh @ 0.00125 + 1k out @ 0.010
+    expected = (
+        Decimal("0") * Decimal("0")
+        + Decimal("2") * Decimal("0.00125")
+        + Decimal("1") * Decimal("0.010")
+    )
+    assert cost == expected
+
+
+@pytest.mark.asyncio
+async def test_estimate_with_cache_falls_back_to_input_when_unset(patch_postgres):
+    """If a model has no cache rates, cached tokens bill at input rate."""
+    patch_postgres.fetchrow = AsyncMock(return_value=None)
+    resolver = CostResolver()
+    res = await resolver.resolve(
+        org_id=None, provider="openai",
+        # qwen2.5:7b is self-hosted, cost_in = 0, no cache attrs.
+        model_id="qwen2.5:7b",
+    )
+    cost = res.estimate_with_cache(
+        input_tokens=1000, output_tokens=500,
+        cache_read_tokens=1000,
+    )
+    # Self-hosted: 0 in + 0 out.
+    assert cost == Decimal("0")
+
+
+@pytest.mark.asyncio
+async def test_aigateway_resolve_cost_returns_cache_savings(patch_postgres):
+    """AIGateway.resolve_cost returns (cost, source, no_cache, cache_savings)."""
+    from eden.llmops.ai_gateway import AIGateway, Provider
+
+    patch_postgres.fetchrow = AsyncMock(return_value=None)
+    g = AIGateway()
+    cost, source, no_cache, savings = await g.resolve_cost(
+        provider=Provider.ANTHROPIC,
+        input_tokens=10000, output_tokens=1000,
+        model_version="claude-sonnet-4-6",
+        org_id=None,
+        cache_read_tokens=8000,
+    )
+    assert source == "static"
+    assert no_cache > cost
+    # Savings == no_cache - cost
+    assert savings == pytest.approx(no_cache - cost)
+    # And savings should be positive - cache reduced the bill.
+    assert savings > 0
+
+
+@pytest.mark.asyncio
+async def test_aigateway_resolve_cost_no_cache_tokens_returns_zero_savings(patch_postgres):
+    """Without cache_read/write tokens, savings == 0 and no_cache == cost."""
+    from eden.llmops.ai_gateway import AIGateway, Provider
+
+    patch_postgres.fetchrow = AsyncMock(return_value=None)
+    g = AIGateway()
+    cost, source, no_cache, savings = await g.resolve_cost(
+        provider=Provider.OPENAI,
+        input_tokens=1000, output_tokens=500,
+        model_version="gpt-4o",
+        org_id=None,
+    )
+    assert cost == pytest.approx(no_cache)
+    assert savings == 0.0
+
+
+@pytest.mark.asyncio
+async def test_override_can_carry_cache_rates(patch_postgres):
+    """Per-tenant override rows can negotiate cache_read/write rates."""
+    patch_postgres.fetchrow = AsyncMock(return_value=_fake_override_row(
+        cost_in="0.001", cost_out="0.002",
+    ))
+    # Patch in cache fields the fake doesn't expose by default.
+    patch_postgres.fetchrow.return_value["cost_per_1k_cache_read"] = "0.0001"
+    patch_postgres.fetchrow.return_value["cost_per_1k_cache_write"] = "0.00125"
+    resolver = CostResolver()
+    res = await resolver.resolve(
+        org_id=str(uuid.uuid4()), provider="openai", model_id="gpt-4o",
+    )
+    assert res.source == "override"
+    assert res.cost_per_1k_cache_read == Decimal("0.0001")
+    assert res.cost_per_1k_cache_write == Decimal("0.00125")

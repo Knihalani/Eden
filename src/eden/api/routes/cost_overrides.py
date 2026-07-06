@@ -50,6 +50,12 @@ class CostOverrideIn(BaseModel):
     effective_from: datetime | None = None
     effective_until: datetime | None = None
     notes: str | None = None
+    cost_per_1k_cache_read: Decimal | None = None
+    """Optional negotiated cache-read rate (USD per 1K tokens).
+    ``None`` falls back to the catalog rate."""
+    cost_per_1k_cache_write: Decimal | None = None
+    """Optional negotiated cache-write rate (USD per 1K tokens).
+    ``None`` falls back to the catalog rate."""
 
 
 class CostOverrideOut(BaseModel):
@@ -64,6 +70,8 @@ class CostOverrideOut(BaseModel):
     effective_from: str
     effective_until: str | None = None
     notes: str | None = None
+    cost_per_1k_cache_read: Decimal | None = None
+    cost_per_1k_cache_write: Decimal | None = None
 
 
 class CostResolveIn(BaseModel):
@@ -101,8 +109,9 @@ async def list_cost_overrides(
     rows = await client.fetch(
         """
         SELECT override_id, org_id, provider, model_id,
-               cost_per_1k_input, cost_per_1k_output, currency,
-               source, effective_from, effective_until, notes
+               cost_per_1k_input, cost_per_1k_output,
+               cost_per_1k_cache_read, cost_per_1k_cache_write,
+               currency, source, effective_from, effective_until, notes
         FROM org_cost_overrides
         WHERE org_id = $1
         ORDER BY effective_from DESC
@@ -122,6 +131,16 @@ async def list_cost_overrides(
             effective_from=r["effective_from"].isoformat(),
             effective_until=r["effective_until"].isoformat() if r["effective_until"] else None,
             notes=r["notes"],
+            cost_per_1k_cache_read=(
+                Decimal(str(r["cost_per_1k_cache_read"]))
+                if r.get("cost_per_1k_cache_read") is not None
+                else None
+            ),
+            cost_per_1k_cache_write=(
+                Decimal(str(r["cost_per_1k_cache_write"]))
+                if r.get("cost_per_1k_cache_write") is not None
+                else None
+            ),
         )
         for r in rows
     ]
@@ -154,13 +173,15 @@ async def create_cost_override(
         """
         INSERT INTO org_cost_overrides (
             override_id, org_id, provider, model_id,
-            cost_per_1k_input, cost_per_1k_output, currency,
-            source, effective_from, effective_until, notes, created_by
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8,
-                  COALESCE($9, NOW()), $10, $11, $12)
+            cost_per_1k_input, cost_per_1k_output,
+            cost_per_1k_cache_read, cost_per_1k_cache_write,
+            currency, source, effective_from, effective_until, notes, created_by
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9,
+                  COALESCE($10, NOW()), $11, $12, $13)
         RETURNING override_id, org_id, provider, model_id,
-                  cost_per_1k_input, cost_per_1k_output, currency,
-                  source, effective_from, effective_until, notes
+                  cost_per_1k_input, cost_per_1k_output,
+                  cost_per_1k_cache_read, cost_per_1k_cache_write,
+                  currency, source, effective_from, effective_until, notes
         """,
         override_id,
         org_id,
@@ -168,6 +189,8 @@ async def create_cost_override(
         body.model_id,
         body.cost_per_1k_input,
         body.cost_per_1k_output,
+        body.cost_per_1k_cache_read,
+        body.cost_per_1k_cache_write,
         body.currency,
         body.source,
         body.effective_from,
@@ -175,6 +198,18 @@ async def create_cost_override(
         body.notes,
         uuid.UUID(user["user_id"]) if user.get("user_id") else None,
     )
+    # Invalidate the in-process resolver cache so this tenant's
+    # subsequent requests pick up the new rate immediately
+    # instead of waiting up to 60s for the cache TTL to expire.
+    # Best-effort: a resolver miss here is harmless because the
+    # next request will repopulate.
+    try:
+        from eden.llmops.cost_resolver import CostResolver
+
+        resolver = CostResolver()
+        await resolver.invalidate(org_id=org_id)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("failed to invalidate cost resolver cache after override POST: %s", exc)
     return _row_to_out(row)
 
 
@@ -244,6 +279,8 @@ async def resolve_cost(
 
 
 def _row_to_out(row: dict[str, Any]) -> CostOverrideOut:
+    cache_read = row.get("cost_per_1k_cache_read")
+    cache_write = row.get("cost_per_1k_cache_write")
     return CostOverrideOut(
         override_id=str(row["override_id"]),
         org_id=str(row["org_id"]),
@@ -256,4 +293,10 @@ def _row_to_out(row: dict[str, Any]) -> CostOverrideOut:
         effective_from=row["effective_from"].isoformat(),
         effective_until=row["effective_until"].isoformat() if row["effective_until"] else None,
         notes=row["notes"],
+        cost_per_1k_cache_read=(
+            Decimal(str(cache_read)) if cache_read is not None else None
+        ),
+        cost_per_1k_cache_write=(
+            Decimal(str(cache_write)) if cache_write is not None else None
+        ),
     )

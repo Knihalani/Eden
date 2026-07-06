@@ -1,8 +1,9 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import dynamic from "next/dynamic";
-import { Loader2, TrendingUp, TrendingDown, Sparkles, Target, BarChart3 } from "lucide-react";
+import { ArrowRight, Brain, Loader2, TrendingUp, TrendingDown, Sparkles, Target, BarChart3 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -430,6 +431,25 @@ function CostTab() {
 
   return (
     <div className="space-y-4">
+      {/* Cross-sell: model advisor */}
+      <Link
+        href="/optimization/model-advisor"
+        className="group flex items-center justify-between gap-3 rounded-lg border border-[var(--accent)]/30 bg-[var(--accent-faint)] px-4 py-2.5 text-sm transition-colors hover:border-[var(--accent)]/50"
+      >
+        <div className="flex items-center gap-3">
+          <Brain className="h-4 w-4 text-[var(--accent)]" />
+          <div>
+            <div className="font-medium text-[var(--text-primary)]">
+              Switch to a cheaper or better model?
+            </div>
+            <div className="text-xs text-[var(--text-muted)]">
+              Compare, project, and pick — uses your real usage history.
+            </div>
+          </div>
+        </div>
+        <ArrowRight className="h-4 w-4 shrink-0 text-[var(--accent)] transition-transform group-hover:translate-x-0.5" />
+      </Link>
+
       {/* Day range selector */}
       <div className="flex items-center justify-end">
         <div

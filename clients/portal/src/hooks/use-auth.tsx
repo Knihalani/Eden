@@ -113,6 +113,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
    * cause the very first /auth/me to 404. Two quick retries with a
    * short backoff (250ms, 500ms) cover the typical race window
    * without leaving the user staring at a stuck banner.
+   *
+   * Jul 2026 fix: 401 / 403 / 429 / 5xx errors are *not* retried
+   * here. fetchApi already waits on the upstream's ``Retry-After``
+   * header for 429 (and backsoff with full jitter for 5xx) inside
+   * a single invocation, so retrying on top of that here used to
+   * turn one rate-limited call into seven within a second. The
+   * outer AuthProvider's `error` state is set so the caller can
+   * show a banner, and the layout's retry button is the user's
+   * escape hatch once the upstream cools down.
    */
   const refreshUserWithRetry = useCallback(async () => {
     const delays = [0, 250, 500];

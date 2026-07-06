@@ -28,12 +28,31 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Eden — AI Environment Generation",
   description: "AI-native environment generation system for reinforcement learning and agent evaluation",
+  applicationName: "Eden",
   // Tell crawlers (Google, Bing, etc.) not to index the portal — the
   // app is auth-gated and indexed pages would be empty/error frames
   // to anyone following a search-result link. Public marketing pages
   // (docs/, marketing/) override this with their own metadata.
   // June 2026 polish.
   robots: { index: false, follow: false, nocache: true },
+  // Eden favicon / app icons. `src/app/icon.png` (32x32) is picked up
+  // automatically by Next.js App Router and served at /icon.png;
+  // we declare the larger sizes here so Safari pinned tabs, Android
+  // home-screen installs, and Windows taskbar shortcuts all get the
+  // right resolution. The multi-res `src/app/favicon.ico` covers
+  // classic browser tabs (16/32/48/64/128).
+  icons: {
+    icon: [
+      { url: "/favicon.ico", sizes: "16x16 32x32 48x48 64x64 128x128", type: "image/x-icon" },
+      { url: "/favicon.png", sizes: "32x32", type: "image/png" },
+      { url: "/favicon.webp", sizes: "32x32", type: "image/webp" },
+      { url: "/icon-192x192.png", sizes: "192x192", type: "image/png" },
+      { url: "/icon-192x192.webp", sizes: "192x192", type: "image/webp" },
+      { url: "/icon-512x512.png", sizes: "512x512", type: "image/png" },
+      { url: "/icon-512x512.webp", sizes: "512x512", type: "image/webp" },
+    ],
+    apple: [{ url: "/apple-touch-icon.png", sizes: "180x180", type: "image/png" }],
+  },
 };
 
 // ui-audit prompt 16: viewportFit: "cover" is required for the

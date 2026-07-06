@@ -347,3 +347,169 @@ class TestChatRequestSchema:
         assert r2.session_id is not None
         with pytest.raises(ValueError):
             ChatRequest(message="x" * 8001)  # max_length=8000
+
+
+# ============================================================================
+# Defensive DB error handling (July 2026 site-wide hardening)
+# ============================================================================
+#
+# The chat sidebar renders "no sessions yet" or an empty transcript
+# when the persistence layer blips instead of red-erroring the user
+# out. These tests stub `get_postgres_client` so every DB call
+# raises ``RuntimeError`` and assert the route returns the empty
+# payload (or a 503 envelope for archive) rather than 500.
+# Mirrors the verification pattern used in the
+# ``ee2671f7`` (wrap-deps) commit.
+
+
+class _FakeClient:
+    """Stand-in for the Eden PostgresClient whose every method
+    raises ``RuntimeError`` to simulate a DB blip / pool
+    exhaustion / missing table."""
+
+    async def fetch(self, *_args: Any, **_kw: Any) -> Any:
+        raise RuntimeError("simulated DB blip")
+
+    async def fetchrow(self, *_args: Any, **_kw: Any) -> Any:
+        raise RuntimeError("simulated DB blip")
+
+    async def execute(self, *_args: Any, **_kw: Any) -> Any:
+        raise RuntimeError("simulated DB blip")
+
+
+
+
+def _patch_blip(monkeypatch: pytest.MonkeyPatch, ai_mod: Any) -> None:
+    """Replace ``get_postgres_client`` on ``ai_mod`` with a
+    coroutine returning :class:`_FakeClient`. All of the
+    helpers (``_load_session``, ``_append_message``,
+    ``_touch_session``, ``_load_history``) resolve the name
+    via the module's ``__globals__`` dict, so this patch sticks
+    for the duration of the test."""
+
+    async def _blip() -> "_FakeClient":
+        return _FakeClient()
+
+    monkeypatch.setattr(ai_mod, "get_postgres_client", _blip)
+
+
+class TestAiInsightsDefensiveDB:
+    """A DB blip on any of the chat sidebar's surfaces must
+    fail soft, not 500."""
+
+    def _stub_blip_client(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Replace ``get_postgres_client`` in the route module with
+        a coroutine returning :class:`_FakeClient`. The ``ai_insights``
+        helpers import it lazily, so we patch the symbol in the
+        module where they're looked up."""
+
+        async def _blip() -> _FakeClient:
+            return _FakeClient()
+
+        monkeypatch.setattr(
+            "eden.api.routes.ai_insights.get_postgres_client",
+            _blip,
+        )
+
+    @pytest.mark.asyncio
+    async def test_list_sessions_returns_empty_on_db_blip(
+        self, monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """GET /sessions must return ``{"sessions": []}`` instead
+        of 500 when the DB is unreachable. The chat sidebar's
+        "no conversations yet" empty state is then rendered."""
+
+        ai_mod = _load_ai_insights_module()
+        _patch_blip(monkeypatch, ai_mod)
+
+        org = {"user_id": "00000000-0000-0000-0000-000000000001"}
+        result = await ai_mod.list_sessions(
+            org_id="00000000-0000-0000-0000-000000000002",
+            org=org,
+            limit=10,
+        )
+        assert result == {"sessions": []}
+
+    @pytest.mark.asyncio
+    async def test_load_session_returns_none_on_db_blip(
+        self, monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """``_load_session`` returns ``None`` on DB blip so the
+        caller raises the standard 404 rather than 500."""
+
+        ai_mod = _load_ai_insights_module()
+        _patch_blip(monkeypatch, ai_mod)
+
+        result = await ai_mod._load_session(
+            org_id="00000000-0000-0000-0000-000000000002",
+            user_id="00000000-0000-0000-0000-000000000001",
+            session_id="00000000-0000-0000-0000-000000000003",
+        )
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_load_history_returns_empty_on_db_blip(
+        self, monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """``_load_history`` returns ``[]`` on DB blip so the chat
+        stream can continue (the outer ``_stream_chat`` finally
+        block still emits a ``done`` event)."""
+
+        ai_mod = _load_ai_insights_module()
+        _patch_blip(monkeypatch, ai_mod)
+
+        result = await ai_mod._load_history(
+            session_id="00000000-0000-0000-0000-000000000003",
+        )
+        assert result == []
+
+    @pytest.mark.asyncio
+    async def test_append_message_swallows_db_blip(
+        self, monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """``_append_message`` is best-effort: a DB blip logs and
+        returns ``None`` instead of breaking the stream."""
+
+        ai_mod = _load_ai_insights_module()
+        _patch_blip(monkeypatch, ai_mod)
+
+        result = await ai_mod._append_message(
+            session_id="00000000-0000-0000-0000-000000000003",
+            role="user",
+            content=[{"type": "text", "text": "hi"}],
+        )
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_touch_session_swallows_db_blip(
+        self, monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """``_touch_session`` is best-effort: a DB blip logs and
+        returns ``None`` instead of breaking the stream."""
+
+        ai_mod = _load_ai_insights_module()
+        _patch_blip(monkeypatch, ai_mod)
+
+        result = await ai_mod._touch_session(
+            session_id="00000000-0000-0000-0000-000000000003",
+        )
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_create_session_reraises_for_stream_error(
+        self, monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """``_create_session`` re-raises so the SSE stream's outer
+        ``except`` surfaces it as ``{"type": "error", ...}`` —
+        a chat failure should be loud (so the user knows the AI
+        answer didn't land) rather than silent."""
+
+        ai_mod = _load_ai_insights_module()
+        _patch_blip(monkeypatch, ai_mod)
+
+        with pytest.raises(RuntimeError, match="simulated DB blip"):
+            await ai_mod._create_session(
+                org_id="00000000-0000-0000-0000-000000000002",
+                user_id="00000000-0000-0000-0000-000000000001",
+                title="hi",
+            )

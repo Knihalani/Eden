@@ -34,12 +34,17 @@ interface StreamingMetricsCardProps {
 
 function Sparkline({
   values,
-  color = "var(--terminal)" }: {
+  color = "var(--terminal)",
+  label }: {
   values: number[];
   color?: string;
+  /** ui-audit 2026-07-06 M4: human-readable description of what
+   * the polyline shows. Used as aria-label so AT users hear the
+   * trend (e.g. "TTFT over last 24 hours: trend up 12ms"). */
+  label: string;
 }) {
   if (values.length < 2) {
-    return <div className="h-6 w-20" />;
+    return <div className="h-6 w-20" role="img" aria-label={label} />;
   }
   const min = Math.min(...values);
   const max = Math.max(...values);
@@ -52,7 +57,14 @@ function Sparkline({
     })
     .join(" ");
   return (
-    <svg width="80" height="24" className="overflow-visible">
+    <svg
+      width="80"
+      height="24"
+      className="overflow-visible"
+      role="img"
+      aria-label={label}
+    >
+      <title>{label}</title>
       <polyline
         points={points}
         fill="none"
@@ -89,6 +101,7 @@ export function StreamingMetricsCard({
         unit="ms"
         sub="Time to first token"
         sparkline={ttftSeries}
+        sparklineLabel={`TTFT over last 24 hours, ${ttftSeries.length} samples`}
         color="var(--terminal)"
       />
       <Stat
@@ -97,6 +110,7 @@ export function StreamingMetricsCard({
         unit="ms"
         sub="Inter-token latency (avg)"
         sparkline={itlSeries}
+        sparklineLabel={`ITL over last 24 hours, ${itlSeries.length} samples`}
         color="var(--accent)"
       />
       <Stat
@@ -105,6 +119,7 @@ export function StreamingMetricsCard({
         unit="ms"
         sub="Time per output token"
         sparkline={tpotSeries}
+        sparklineLabel={`TPOT over last 24 hours, ${tpotSeries.length} samples`}
         color="var(--warning)"
       />
     </div>
@@ -117,12 +132,14 @@ function Stat({
   unit,
   sub,
   sparkline,
+  sparklineLabel,
   color }: {
   label: string;
   value: string;
   unit: string;
   sub: string;
   sparkline: number[];
+  sparklineLabel: string;
   color: string;
 }) {
   return (
@@ -136,7 +153,7 @@ function Stat({
         <span className="text-[10px] font-mono uppercase tracking-wider text-[var(--text-muted)]">
           {label}
         </span>
-        <Sparkline values={sparkline} color={color} />
+        <Sparkline values={sparkline} color={color} label={sparklineLabel} />
       </div>
       <div className="mt-1 flex items-baseline gap-1">
         <span className="text-2xl font-mono tabular-nums" style={{ color }}>

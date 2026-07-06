@@ -1,13 +1,57 @@
 import { NextResponse } from "next/server";
 
 /**
- * Standard error response for proxy route handlers. Preserves a 401 from the
- * backend (so the client's setUnauthorizedHandler can react) instead of
- * collapsing every failure to a generic 500.
+ * Standard error response for proxy route handlers. Preserves a 401 from
+ * the backend (so the client's ``setUnauthorizedHandler`` can react)
+ * instead of collapsing every failure to a generic 500.
+ *
+ * F35 fix (July 2026): the previous implementation only matched the
+ * exact string ``"Not authenticated"`` — a string-match the upstream
+ * never produces on its own. The actual FastAPI 401 detail strings
+ * we see in production are ``"Not authenticated"``, ``"Invalid or
+ * expired token"``, ``"Token has expired"``, ``"Session expired"``,
+ * etc. Match those (case-insensitive) so the portal's sign-in prompt
+ * actually triggers when the backend rejects a session. The fallback
+ * remains a 500 for genuinely unexpected errors.
  */
+/**
+ * Retry-After header parser. Returns the suggested wait in
+ * milliseconds, or ``null`` when the header is absent or
+ * unparseable. Supports both delta-seconds (``Retry-After: 5``)
+ * and the RFC 7231 HTTP-date form
+ * (``Retry-After: Wed, 21 Oct 2015 07:28:00 GMT``).
+ *
+ * Caps the value at 60s so a misconfigured upstream can't pin a
+ * Next.js worker on a 6-hour sleep. Returns 0 (immediate) for
+ * ``Retry-After: 0`` so callers can use the value directly in a
+ * ``setTimeout`` without special-casing.
+ */
+export function retryAfterMs(response: Response): number | null {
+  const raw = response.headers.get("Retry-After");
+  if (!raw) return null;
+  const asNum = Number(raw);
+  if (Number.isFinite(asNum) && asNum >= 0) {
+    return Math.min(asNum * 1000, 60_000);
+  }
+  const asDate = Date.parse(raw);
+  if (!Number.isNaN(asDate)) {
+    return Math.min(Math.max(asDate - Date.now(), 0), 60_000);
+  }
+  return null;
+}
+
+/** Default cooldown when ``Retry-After`` is absent on a 429.
+ *  Conservative — a throttled upstream won't want to be
+ *  re-pinged within hundreds of milliseconds. */
+export const RETRY_AFTER_DEFAULT_MS = 5_000;
+
 export function proxyError(error: unknown, fallback: string) {
   const message = error instanceof Error ? error.message : fallback;
-  const status = message === "Not authenticated" ? 401 : 500;
+  const isAuthFailure =
+    /not\s*authenticated|session\s*expired|invalid\s*or\s*expired\s*token|token\s*(has\s*)?expired|unauthor(ized|ised)/i.test(
+      message,
+    );
+  const status = isAuthFailure ? 401 : 500;
   return NextResponse.json({ detail: message }, { status });
 }
 

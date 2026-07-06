@@ -254,7 +254,17 @@ export function OrgProvider({ children }: { children: ReactNode }) {
   usePolling({
     fetch: () => refreshOrgs(),
     intervalMs: 5_000,
-    deps: [userLoaded, clerkOrgLoaded, loading, organizations.length, !!authError],
+    // Jul 2026 fix: ``loading`` is no longer part of the deps.
+    // ``refreshOrgs`` flips ``loading`` true → false on every call,
+    // and including it in the deps caused ``usePolling`` to tear
+    // down + re-create its effect (firing an immediate ``tick()``)
+    // on every state flip. Combined with a 429 window that meant
+    // every re-arm immediately re-tried the upstream and re-tripped
+    // the rate limiter — exactly the spam the user observed. The
+    // ``enabled`` gate already keeps the poll paused during a
+    // pending call, so removing it from deps doesn't change
+    // correctness.
+    deps: [userLoaded, clerkOrgLoaded, organizations.length, !!authError],
     enabled:
       userLoaded &&
       clerkOrgLoaded &&

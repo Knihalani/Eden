@@ -9,6 +9,7 @@ import {
   readAdvancedCollapsed,
   writeAdvancedCollapsed } from "@/hooks/use-sidebar-prefs";
 import { useClerk } from "@clerk/nextjs";
+import { api } from "@/lib/api";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, useRef, useCallback } from "react";
 import { Pin, PanelLeftClose, PanelLeftOpen, RefreshCw } from "lucide-react";
@@ -66,16 +67,41 @@ function readCollapsedPreference(): boolean {
   }
 }
 
-// Logout delegates to Clerk (which terminates the session, clears the
-// __session cookie, and signs out across all tabs). We follow with a
-// router push to /login so the user lands back on the auth flow.
+// Logout fans out two responsibilities in parallel:
+//
+//   1. Clerk: ``useClerk().signOut()`` terminates the Clerk session,
+//      clears the ``__session`` cookie, and broadcasts the sign-out
+//      to other tabs. (F34 fix: previously the only step here.)
+//   2. FastAPI: ``api.logout()`` hits ``POST /api/auth/logout``,
+//      which bumps ``users.token_version`` and clears the
+//      httponly Eden ``authorization`` cookie via Set-Cookie.
+//      Without step 2 the Eden cookie remains valid against
+//      FastAPI until natural expiry, and every other tab stays
+//      authenticated against FastAPI — a real cookie-session
+//      invalidation bug because httponly cookies can't be cleared
+//      from JavaScript. (F34 fix, July 2026.)
+//
+// We fire both in parallel; whichever resolves first unblocks the
+// ``router.push("/login")``. We swallow ``api.logout()`` errors
+// because the Clerk-side cleanup is the user-visible one — a
+// network blip on the backend logout must not leave the user
+// staring at an error toast after they've already signed out of
+// Clerk. The proxy's logout route (F34) translates backend 401s
+// (stale cookie) into 200s so this rarely throws anyway.
 async function handleLogout(
   router: ReturnType<typeof useRouter>,
   closeDropdown: () => void,
   signOut: () => Promise<void>,
 ) {
   closeDropdown();
-  await signOut();
+  await Promise.allSettled([
+    signOut(),
+    api.logout().catch((err) => {
+      if (process.env.NODE_ENV !== "production") {
+        console.warn("Backend logout failed (continuing):", err);
+      }
+    }),
+  ]);
   router.push("/login");
 }
 

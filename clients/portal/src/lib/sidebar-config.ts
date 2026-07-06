@@ -127,8 +127,9 @@ export const DEFAULT_SIDEBAR: SidebarGroup[] = [
         label: "Cost",
         icon: Sparkles,
         children: [
-          { id: "opt-outcomes", href: "/optimization/outcomes", label: "Outcomes",   icon: Compass },
-          { id: "opt-predict",  href: "/optimization/predict",  label: "Predictive", icon: BarChart3 },
+          { id: "opt-outcomes",   href: "/optimization/outcomes",     label: "Outcomes",    icon: Compass },
+          { id: "opt-predict",    href: "/optimization/predict",      label: "Predictive",  icon: BarChart3 },
+          { id: "opt-advisor",    href: "/optimization/model-advisor", label: "Model Advisor", icon: Brain, badge: "new" },
         ],
       },
       { id: "studio",     href: "/studio",     label: "Custom Metrics", icon: FlaskConical, category: "advanced" },

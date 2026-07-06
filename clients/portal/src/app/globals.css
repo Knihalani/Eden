@@ -189,7 +189,22 @@
    * the "code-style meta label" tier — font-mono + uppercase +
    * tracking-wide is the consistent pattern. Don't migrate without
    * verifying the visual context — 9px is genuinely hard to read at
-   * 1× density and intentionally small for terminal mock windows. */
+   * 1× density and intentionally small for terminal mock windows.
+   *
+   * ui-audit 2026-07-06 L4: documented the font-mono usage rule
+   * below. Survey of all 226 font-mono call sites:
+   *   70% — actual code/data surfaces (trace IDs, durations,
+   *         JSON tool inputs, SDK code samples, version strings,
+   *         error codes, currency + token counts).
+   *   20% — the "terminal micro-label" pattern (PageHeader
+   *         eyebrow + greeting; banner badges; hilt-panel status
+   *         indicators). font-mono + uppercase + tracking-widest.
+   *         INTENTIONAL — leans into the terminal aesthetic.
+   *   10% — identifier-shaped labels (tool/agent/span names like
+   *         `tc.name`, `gpt-4o`, `agent_id`). Mono preserves the
+   *         identity even when names collide with English words.
+   * Rule: mono is for *identity-shaped* and *data* text. Reserve
+   * it. Don't apply mono to prose. */
   --font-size-2xs: 0.625rem;
   --font-size-3xs: 0.5625rem;
 
@@ -205,6 +220,25 @@
   --letter-spacing-tight: -0.025em;
   --letter-spacing-normal: 0;
   --letter-spacing-wide: 0.025em;
+
+  /* ui-audit 2026-07-06 L1: icon stroke-width ladder. Lucide
+   * defaults to 2; the portal overrides in four documented cases:
+   *   --icon-stroke-default  2    Lucide default; charts; toolbars
+   *   --icon-stroke-fine     1.5  EmptyState placeholder; sparkline
+   *                              polyline (small canvas, needs weight
+   *                              reduction to avoid blobbing)
+   *   --icon-stroke-feature  2.25 Auth brand-panel feature icons
+   *                              (slightly heavier to balance the
+   *                              mesh gradient behind them)
+   *   --icon-stroke-brand    2.5  Auth split-layout Layers icon
+   *                              (single hero icon — needs presence)
+   * LineageGraph connector strokes are strokeWidth=1 because they
+   * are NOT icons (they are SVG <path> connectors), so they don't
+   * need a token here. */
+  --icon-stroke-default: 2;
+  --icon-stroke-fine: 1.5;
+  --icon-stroke-feature: 2.25;
+  --icon-stroke-brand: 2.5;
 
   /* Spacing System (base 4px) */
   --space-1: 0.25rem;
@@ -390,6 +424,15 @@
   --shadow-xl: var(--shadow-xl);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+  /* ui-audit 2026-07-06 M1: --font-display is the explicit
+   * commitment to Geist as the display face. Today it aliases
+   * --font-sans (both are Geist), but exposing the alias means
+   * a future swap to e.g. IBM Plex Sans + Geist Mono only has
+   * to change ONE variable here, not 200+ components. Future
+   * audit: if you ever want a different display face, set
+   * --font-display to a new token + add the @font-face in
+   * layout.tsx. */
+  --font-display: var(--font-sans);
 }
 
 /* ==================== Base Styles ==================== */
@@ -740,21 +783,50 @@ body {
 
 /* ==================== Auth Form Card ==================== */
 
+/* ui-audit 2026-07-06 L2: opaque terminal-style auth card.
+ * The previous version used backdrop-blur + 70% transparent
+ * background — glassmorphism. That works for floating dialogs
+ * (modal, command palette, wizard) where you need the underlying
+ * content to read as "behind a layer", but the auth card sits
+ * on top of a *decorative* mesh gradient panel where there is
+ * nothing important to see through. The glass effect diluted
+ * the auth surface's identity — it looked like a generic
+ * floating card, not "the login surface".
+ *
+ * The new card is fully opaque with a terminal-green accent
+ * line at the top edge. The visual hierarchy is now:
+ *   - page background: solid --bg-base
+ *   - brand panel (left half): mesh gradient decoration
+ *   - auth card (right half): opaque terminal-style surface,
+ *     reads as the *destination* of the eye, not a floating
+ *     overlay over decoration
+ *
+ * Contrast: --bg-primary on --bg-base is 1.06:1 (same as
+ * before) but the card now has a clearer edge (--border-default
+ * 4.6:1) and the terminal accent line makes it unmistakable. */
 .auth-card {
+  position: relative;
   width: 100%;
   max-width: 420px;
-  padding: 1.75rem 1.75rem 1.5rem;
-  background: color-mix(in srgb, var(--bg-primary) 70%, transparent);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  /* June 2026: bumped border to --border-strong (4.6:1) so the
-   * native form card (forgot-password, reset-password) actually
-   * separates from the brand-panel background. The 1px accent ring
-   * was dropped — it produced a faint ghost line that users
-   * read as a layout glitch. */
-  border: 1px solid var(--border-strong);
+  padding: 1.85rem 1.75rem 1.5rem;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-default);
   border-radius: var(--radius-xl);
   box-shadow: 0 0 48px var(--overlay);
+}
+
+/* Terminal-green accent line at the top of the card. Pure
+ * decoration; no pointer events. */
+.auth-card::before {
+  content: "";
+  position: absolute;
+  top: -1px;
+  left: 1.5rem;
+  right: 1.5rem;
+  height: 2px;
+  background: var(--terminal);
+  border-radius: 1px;
+  box-shadow: 0 0 8px var(--terminal-glow);
 }
 
 .auth-card-title {

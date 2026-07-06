@@ -427,3 +427,68 @@ Each entry: file changed · what was broken · what was fixed · priority.
 **Verification:** 105/105 tests pass.
 
 **Priority:** P2
+
+---
+
+## F36 — Catch-all proxy SSE handshake honoured `Retry-After` on 429
+
+**Files:**
+- `clients/portal/src/lib/proxy.ts` (lifted `retryAfterMs` + `RETRY_AFTER_DEFAULT_MS` here as canonical exports)
+- `clients/portal/src/lib/api.ts` (now imports the same helpers — single source of truth)
+- `clients/portal/src/app/api/proxy/[...path]/route.ts` (SSE branch retries the handshake once)
+- `clients/portal/src/app/api/proxy/__tests__/sse-handshake-retry.test.ts` (new — 3 cases)
+- `clients/portal/src/lib/__tests__/proxy-retry-after.test.ts` (new — 7 cases on the helper)
+
+**Issue:** The catch-all proxy's SSE branch (long-lived EventSource streams — observability trace streams, AI-insights chat streams) waited for the upstream response and either piped the bytes through or surfaced a bare `Upstream stream error` text on non-2xx. A `429 Too Many Requests` from the upstream throttler was treated like any other failure — the consumer-side `EventSource` would auto-reconnect immediately and re-trip the rate limiter every retry. This is the same bug F31 fixed for the regular fetch path; F32 fixed it for `stream: true` useApi; this entry closes the gap on the catch-all proxy's hot SSE path.
+
+**Fix:**
+- Extracted `retryAfterMs(response)` + `RETRY_AFTER_DEFAULT_MS = 5_000` from `lib/api.ts` into `lib/proxy.ts` so every retry-path in the auth-process surface shares one canonical implementation. `api.ts` now imports them.
+- The catch-all proxy's SSE branch (`if (accept.includes("text/event-stream"))`) now:
+  1. Dials the upstream.
+  2. On `429`, sleeps `retryAfterMs(upstream) ?? RETRY_AFTER_DEFAULT_MS` and re-dials **exactly once**.
+  3. On hard failure (still 429, 5xx, etc.) returns a structured JSON envelope `{ detail, upstream_status }` with the upstream status verbatim — so the consumer-side SSE hook can decide its reconnect policy.
+  4. After the body has started flowing, never retries (would corrupt the live stream).
+- On success (any 2xx), pipes bytes unchanged as before.
+
+**Tests:**
+- `src/app/api/proxy/__tests__/sse-handshake-retry.test.ts` — 3 cases: `Retry-After=0` retry-and-success; 5 s default cooldown honoured; one-retry cap (single hard failure surfaces 429 status verbatim).
+- `src/lib/__tests__/proxy-retry-after.test.ts` — 7 cases on the helper itself (delta-seconds, HTTP-date, past dates, garbage, 60 s cap, etc.).
+
+**Verification:** `vitest run` 123/123 pass (excluding one pre-existing flaky test in `model-advisor/__tests__/page.test.tsx` that has been untracked since main and is unrelated to this change — `recommendMock.toHaveBeenCalledTimes(1)` fails because React Strict Mode + the test's own `currentOrg` re-renders triple-fire the effect). `tsc --noEmit` clean, ESLint clean.
+
+**Priority:** P1
+
+---
+
+## F37 — Delete dead `/api/auth/*` dedicated routes; catch-all proxy is the canonical auth surface
+
+**Files (deleted):**
+- `clients/portal/src/app/api/auth/2fa/{disable,setup,status,verify}/route.ts`
+- `clients/portal/src/app/api/auth/{login,logout,signup,refresh,signup-from-invite,verify-invite-token}/route.ts`
+- `clients/portal/src/app/api/auth/me/route.ts`
+- `clients/portal/src/app/api/auth/me/debug/route.ts`
+
+**Files (modified):**
+- `clients/portal/src/proxy.ts` — dropped the now-unreferenced `isPublicRoute` entries for the deleted routes; updated the comment block to point future readers at `/api/proxy/(.*)` as the canonical auth-aware surface.
+- `clients/portal/src/app/api/auth/__tests__/auth-route-fixes.test.ts` — deleted (the canonical retry-after coverage now lives at `src/lib/__tests__/proxy-retry-after.test.ts` + `src/app/api/proxy/__tests__/sse-handshake-retry.test.ts`).
+
+**Issue:** A full audit of the portal's auth surface (grep + cross-reference) showed **none** of the dedicated `/api/auth/*` route handlers were called by any client code. They were only referenced by:
+1. The `proxy.ts` `isPublicRoute` allowlist (which only matters if a request reaches the route, and nothing does).
+2. Self-references in comments.
+
+The client actually invokes everything through `lib/api.ts`'s typed helpers (`api.login`, `api.logout`, `api.signup`, `api.getMe`, the 2FA helpers, the invite helpers) which all hit `/api/proxy/[...path]` via `${API_BASE}/auth/...`. The catch-all proxy at `src/app/api/proxy/[...path]/route.ts` is the canonical auth-aware surface — it forwards both Clerk Bearer + cookies, runs the same SSE-handshake Retry-After policy (F36), and handles multipart bodies safely.
+
+**Fix:**
+- Deleted all 12 dedicated route files. The `__tests__/auth-route-fixes.test.ts` (14 cases) was also deleted; the canonical retry policy coverage now lives in:
+  - `src/lib/__tests__/proxy-retry-after.test.ts` — 7 cases on the shared `retryAfterMs` helper.
+  - `src/app/api/proxy/__tests__/sse-handshake-retry.test.ts` — 3 cases on the catch-all SSE handshake.
+  - `src/lib/__tests__/api.retry.test.ts` (F31) — 4 cases on the JSON fetch path.
+  - `src/lib/__tests__/api.stream-retry.test.ts` (F32) — 3 cases on `api.exportOrgData`.
+- Pruned `proxy.ts` `isPublicRoute` of the 8 deleted paths and rewrote the comment to direct future readers at the catch-all proxy.
+
+**Verification:**
+- `vitest run` → 109/109 pass (was 123/123 with the deleted tests; **the new total is 109** because the auth-route-fixes suite is gone and the work it covered is now split across the canonical test files above).
+- `tsc --noEmit` → clean for my changes (the 3 pre-existing errors in `src/components/observability/StreamingMetricsCard.tsx` are from a different in-flight change and are out of scope per the audit policy).
+- `eslint` clean on touched files.
+
+**Priority:** P2 (cleanup; no functional impact)

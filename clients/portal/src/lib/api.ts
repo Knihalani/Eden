@@ -13,6 +13,11 @@
 //      server proxies to localhost:8000 via the route handler) and
 //      in production (Vercel → Northflank via the env-configured
 //      upstream).
+import {
+  retryAfterMs,
+  RETRY_AFTER_DEFAULT_MS,
+} from "@/lib/proxy";
+
 export const API_BASE =
   process.env.NEXT_PUBLIC_API_URL || "/api/proxy";
 
@@ -159,18 +164,68 @@ async function fetchApi<T>(
       if (refreshed) response = await doFetch();
     }
 
+    // Jul 2026 fix: stream paths ("stream: true") used to skip
+    // every retry branch because the original transport (SSE) is
+    // long-lived and re-issuing the request would tear the existing
+    // stream. But the connect-time handshake is a normal HTTP GET
+    // — if the gateway returns 429 BEFORE the stream opens, we are
+    // free (and safer) to back off and re-dial. The same
+    // Retry-After + 5 s default logic that protects /auth/me below
+    // applies here: wait the cooldown, retry the handshake once,
+    // surface the error to the SSE / export consumer if it still
+    // 429s. We deliberately don't retry once a stream has started
+    // emitting bytes (the body-read happens *after* this branch,
+    // so the early status is always the handshake status).
+    //
+    // Also covers the ``api.exportOrgData`` case: that's a one-shot
+    // binary stream that never opens anyway, so re-issuing is fine.
+    if (stream && response.status === 429) {
+      // Stream-handshake 429 (F32 + F36). ``retryAfterMs`` and
+      // ``RETRY_AFTER_DEFAULT_MS`` are imported from
+      // ``@/lib/proxy`` so the catch-all SSE branch can reuse the
+      // same canonical implementation.
+      const wait = retryAfterMs(response) ?? RETRY_AFTER_DEFAULT_MS;
+      await new Promise((r) => setTimeout(r, wait));
+      response = await doFetch();
+    }
+
     // Transient (5xx / network) retry with exponential backoff +
-    // jitter. Capped at 2 retries so a struggling upstream never
-    // stalls the UI for more than ~1.5s before failing. GET / HEAD /
-    // OPTIONS only — POSTs and friends aren't retried for safety.
-    const transient = (s: number) => s >= 500 || s === 0 || s === 408 || s === 429;
+    // jitter. GET / HEAD / OPTIONS only — POSTs and friends aren't
+    // retried for safety.
+    //
+    // Jul 2026 fix: 429s are capped at ONE retry (not the general 2)
+    // and we honor the upstream's ``Retry-After`` header. Without
+    // the cap, a single ``fetchApi`` call during a throttle window
+    // could burn 3 backend roundtrips in a row, and the providers
+    // (useAuth / useOrg) that call ``api.getMe`` on every state
+    // flip would compound that into hundreds of calls/second until
+    // the upstream returned a hard error. With the cap + Retry-After
+    // we either wait the upstream's advertised cooldown or sleep a
+    // safe 5s default before trying once more — whichever is longer.
     const isIdempotent = method === "GET" || method === "HEAD" || method === "OPTIONS";
+    const generalTransient = (s: number) => s >= 500 || s === 0 || s === 408;
     let attempt = 0;
-    while (transient(response.status) && attempt < 2 && isIdempotent && !stream) {
+    const maxAttempts = (status: number) => (status === 429 ? 1 : 2);
+    while (
+      isIdempotent &&
+      !stream &&
+      attempt < maxAttempts(response.status) &&
+      (response.status === 429 || generalTransient(response.status))
+    ) {
       attempt += 1;
-      // Full jitter: random [0, base * 2^attempt) ms. 250ms base
-      // → 0–500ms after 1st retry, 0–1000ms after 2nd.
-      const backoff = Math.floor(Math.random() * 250 * 2 ** attempt);
+      let backoff: number;
+      if (response.status === 429) {
+        // Honour Retry-After when the upstream gives us one; fall
+        // back to a safe 5s default so a throttled gateway isn't
+        // peppered with retries every few hundred milliseconds.
+        const hint = retryAfterMs(response);
+        backoff = hint ?? RETRY_AFTER_DEFAULT_MS;
+      } else {
+        // Full jitter for non-429 transients: random [0, base *
+        // 2^attempt) ms. 250ms base → 0–500ms after 1st retry,
+        // 0–1000ms after 2nd.
+        backoff = Math.floor(Math.random() * 250 * 2 ** attempt);
+      }
       await new Promise((r) => setTimeout(r, backoff));
       response = await doFetch();
     }
@@ -2960,6 +3015,121 @@ export const costApi = {
     fetchApi<{ anomalies: Array<{ date: string; z_score: number; severity: string; agent_id: string; cost: number }>; }>(`/orgs/${orgId}/intelligence/cost/anomalies`, { method: "POST", body: JSON.stringify(data) }),
   forecast: (orgId: string) =>
     fetchApi<{ forecast: Array<{ date: string; projected_cost: number; ci_low: number; ci_high: number }>; model: string; period_days: number; }>(`/orgs/${orgId}/intelligence/cost/forecast`),
+};
+
+// ── Model Advisor (Phase 7.6) ─────────────────────────────────────
+//
+// Backend endpoint shape mirrors :class:`eden.llmops.model_comparator`:
+//   POST /orgs/{orgId}/models/compare   -> side-by-side two models
+//   POST /orgs/{orgId}/models/recommend  -> best model (pick or switch)
+//   POST /orgs/{orgId}/models/project    -> projected cost of a switch
+//
+// All requests honour per-tenant overrides so the prices match the
+// customer's invoice, not the list price.
+export interface ModelSpecDto {
+  provider: string;
+  model_id: string;
+  quality: number;
+  latency_p95_ms: number;
+  reliability: number;
+  context_window: number;
+  cost_per_1k_input: number;
+  cost_per_1k_output: number;
+  cost_per_1k_cache_read: number | null;
+  cost_per_1k_cache_write: number | null;
+  source: string;
+}
+
+export interface ModelComparisonDto {
+  current: ModelSpecDto;
+  candidate: ModelSpecDto;
+  delta_cost_per_1k_input: number;
+  delta_cost_per_1k_output: number;
+  delta_quality: number;
+  delta_latency_p95_ms: number;
+  delta_reliability: number;
+  cost_ratio: number;
+}
+
+export interface RunnerUpDto {
+  provider: string;
+  model_id: string;
+  score: number;
+  rationale: string;
+}
+
+export interface RecommendationDto {
+  recommended_provider: string;
+  recommended_model_id: string;
+  score: number;
+  rationale: string;
+  monthly_savings_usd: number | null;
+  current_provider: string | null;
+  current_model_id: string | null;
+  runners_up: RunnerUpDto[];
+  empty_history: boolean;
+}
+
+export interface SwitchProjectionDto {
+  current_provider: string;
+  current_model_id: string;
+  candidate_provider: string;
+  candidate_model_id: string;
+  current_total_usd: number;
+  projected_total_usd: number;
+  savings_usd: number;
+  savings_pct: number;
+  per_request_savings_usd: number;
+  cache_savings_usd: number;
+  window_days: number;
+  requests_in_window: number;
+}
+
+export interface ModelRefDto {
+  provider: string;
+  model_id: string;
+}
+
+export const modelAdvisorApi = {
+  /** Side-by-side compare two models. Honours per-tenant overrides. */
+  compare: (
+    orgId: string,
+    body: { current: ModelRefDto; candidate: ModelRefDto },
+  ) =>
+    fetchApi<ModelComparisonDto>(
+      `/orgs/${orgId}/models/compare`,
+      { method: "POST", body: JSON.stringify(body) },
+    ),
+
+  /** Recommend the best model — fresh pick or a switch projection. */
+  recommend: (
+    orgId: string,
+    body: {
+      mode: "pick" | "switch";
+      candidates: ModelRefDto[];
+      current?: ModelRefDto;
+      window_days?: number;
+    },
+  ) =>
+    fetchApi<RecommendationDto>(
+      `/orgs/${orgId}/models/recommend`,
+      { method: "POST", body: JSON.stringify(body) },
+    ),
+
+  /** Project what a model switch would cost the org. */
+  project: (
+    orgId: string,
+    body: {
+      current: ModelRefDto;
+      candidate: ModelRefDto;
+      scale_factor?: number;
+      window_days?: number;
+    },
+  ) =>
+    fetchApi<SwitchProjectionDto>(
+      `/orgs/${orgId}/models/project`,
+      { method: "POST", body: JSON.stringify(body) },
+    ),
 };
 
 // ── Intelligence: Experiments (Cat 12) ──────────────────────────────

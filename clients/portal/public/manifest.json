@@ -16,6 +16,12 @@
       "purpose": "any"
     },
     {
+      "src": "/favicon.ico",
+      "sizes": "16x16 32x32 48x48 64x64 128x128",
+      "type": "image/x-icon",
+      "purpose": "any"
+    },
+    {
       "src": "/icon-192x192.webp",
       "sizes": "192x192",
       "type": "image/webp",
@@ -28,31 +34,15 @@
       "purpose": "any maskable"
     },
     {
-      "src": "/logo.svg",
-      "sizes": "478x458",
-      "type": "image/svg+xml",
+      "src": "/logo.webp",
+      "sizes": "510x489",
+      "type": "image/webp",
       "purpose": "any"
     }
   ],
   "categories": ["developer", "productivity", "utilities"],
   "lang": "en",
   "dir": "ltr",
-  "screenshots": [
-    {
-      "src": "/screenshots/dashboard.png",
-      "sizes": "1280x720",
-      "type": "image/png",
-      "form_factor": "wide",
-      "label": "Eden Dashboard"
-    },
-    {
-      "src": "/screenshots/mobile-dashboard.png",
-      "sizes": "750x1334",
-      "type": "image/png",
-      "form_factor": "narrow",
-      "label": "Eden Mobile Dashboard"
-    }
-  ],
   "shortcuts": [
     {
       "name": "Observability",
