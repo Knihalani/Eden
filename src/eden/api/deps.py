@@ -408,15 +408,30 @@ async def get_user_by_id(user_id: str, lookup_column: str = "id") -> dict | None
     Both columns are indexed (``id`` is the PK, ``clerk_id`` has a
     partial unique index from migration 047). The single combined
     query keeps this trivial to call from either path.
+
+    Defensive: a DB blip or missing table must not 500 callers. Return
+    None so the auth path falls through to whatever synthesize /
+    fallback the caller has (Clerk trust, synthesized pending_sync,
+    etc.). 2026-07-06 site-wide fix: the previous unguarded
+    ``client.fetchrow`` caused unhandled 500s in
+    /orgs/{org_id}/ai-insights/sessions and other dep-graph chains
+    when the postgres client briefly disconnected.
     """
     if lookup_column not in ("id", "clerk_id"):
-        raise ValueError(f"lookup_column must be 'id' or 'clerk_id', got {lookup_column!r}")
-    client = await get_postgres_client()
-    query = (
-        "SELECT id, email, name, created_at, preferred_org_id, clerk_id "
-        f"FROM users WHERE {lookup_column}::text = $1"
-    )
-    return await client.fetchrow(query, user_id)
+        raise ValueError(f"lookup_column must be id or clerk_id, got {lookup_column!r}")
+    try:
+        client = await get_postgres_client()
+        query = (
+            "SELECT id, email, name, created_at, preferred_org_id, clerk_id "
+            f"FROM users WHERE {lookup_column}::text = $1"
+        )
+        return await client.fetchrow(query, user_id)
+    except Exception as exc:
+        logger.warning(
+            "get_user_by_id: users SELECT failed for user=%s lookup=%s: %s",
+            user_id, lookup_column, exc,
+        )
+        return None
 
 
 async def get_current_org(
@@ -560,8 +575,36 @@ async def require_org_member(
     x_org_id: str | None = Header(None, alias="X-Org-Id"),
     payload: dict | None = Depends(_try_resolve_token_payload),
 ) -> dict:
-    """Require user to be an org member, otherwise raise 403."""
-    org = await get_current_org(x_org_id, payload)
+    """Require user to be an org member, otherwise raise 403.
+
+    Defensive: any DB blip inside get_current_org (which itself has
+    inner try/except per the May 2026 hardening) MUST NOT 500 the
+    request. If the membership lookup fails AND the JWT carries a
+    valid Clerk ``org_id`` claim, fall through to a synthesized
+    pending_sync entry the same way get_current_org does; otherwise
+    403 (not 500). 2026-07-06 site-wide fix: the previous unguarded
+    chain caused 500s on /orgs/{org_id}/ai-insights/sessions and
+    similar org-scoped routes during a Postgres reconnect window.
+    """
+    try:
+        org = await get_current_org(x_org_id, payload)
+    except Exception as exc:
+        logger.warning(
+            "require_org_member: get_current_org raised for x_org=%s: %s — "
+            "falling back to synthesized entry if JWT carries one",
+            x_org_id, exc,
+        )
+        # Try the synthesize path so Clerk-trusted users still pass.
+        if payload and payload.get("org_id"):
+            return {
+                "org_id": payload.get("org_id"),
+                "role": payload.get("org_role", "member"),
+                "name": payload.get("org_id"),
+                "slug": payload.get("org_id"),
+                "archived_at": None,
+                "_pending_sync": True,
+            }
+        org = None
     if not org:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
