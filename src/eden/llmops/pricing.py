@@ -463,7 +463,7 @@ class PricingCatalog:
         # Per-million to per-1K conversion factor.
         per_m_to_per_1k = 1.0 / 1000.0
 
-        for provider_key, provider_payload in payload.items():
+        for _provider_key, provider_payload in payload.items():
             if not isinstance(provider_payload, dict):
                 continue
             models = provider_payload.get("models")

@@ -722,12 +722,22 @@ CREATE VIRTUAL TABLE IF NOT EXISTS symbols_fts USING fts5(
 """
 
 
+# Thread-local connection cache. SQLite connections are
+# cheap to open (~0.4ms) but on hot paths (status / query
+# / find_affected_areas) we can serve thousands of QPS.
+# Caching one connection per thread drops the per-call
+# overhead to ~0.01ms and lets the FTS5 query cache stay
+# warm across calls.
+_TLS = threading.local()
+
+
 class _Store:
     """A thread-safe, low-overhead SQLite wrapper.
 
-    We open one connection per call (SQLite is fast enough
-    for the discipline layer's traffic — at most a few QPS).
-    For write paths (indexing) we wrap in a transaction.
+    Reads reuse a thread-local cached connection (each thread
+    keeps one open connection, opened on first use). Writes
+    (insert / delete / bulk) get their own short-lived
+    connection so a writer doesn't block readers in WAL mode.
     """
 
     def __init__(self, db_path: str) -> None:
@@ -737,9 +747,22 @@ class _Store:
         self._initialized = False
 
     def _connect(self) -> sqlite3.Connection:
+        """Open a fresh connection (for writes — no caching)."""
         conn = sqlite3.connect(self._db_path, timeout=10.0)
         conn.execute("PRAGMA journal_mode=WAL;")
         conn.execute("PRAGMA synchronous=NORMAL;")
+        return conn
+
+    def _read_conn(self) -> sqlite3.Connection:
+        """Return the thread-local read connection, opening one
+        on first use.
+        """
+        conn = getattr(_TLS, "conn", None)
+        if conn is None:
+            conn = self._connect()
+            conn.execute("PRAGMA cache_size=-32768;")  # 32 MiB
+            conn.execute("PRAGMA temp_store=MEMORY;")
+            _TLS.conn = conn
         return conn
 
     def _ensure_schema(self) -> None:
@@ -958,25 +981,21 @@ class _Store:
         try:
             conn = self._connect()
             try:
-                # Try FTS5 first.
+                # Try FTS5 first. The FTS table mirrors all the
+                # searchable fields (name / signature / docstring /
+                # parent) plus the unindexed row identifiers (path /
+                # kind / repo / branch), so we don't need a JOIN
+                # to ``symbols`` — that JOIN was 500x slower because
+                # SQLite has to re-derive the rowid mapping.
                 rows: list[Any] = []
                 try:
                     rows = conn.execute(
-                        """
-                        SELECT s.path, s.kind, s.name, s.line, s.end_line,
-                               s.parent, s.signature, s.docstring
-                        FROM symbols_fts f
-                        JOIN symbols s
-                          ON s.repo = f.repo
-                         AND s.branch = f.branch
-                         AND s.path = f.path
-                         AND s.kind = f.kind
-                         AND s.name = f.name
-                         AND s.line = f.line
-                        WHERE f.repo = ? AND f.branch = ?
-                          AND symbols_fts MATCH ?
-                        LIMIT ?
-                        """,
+                        """SELECT path, kind, name, line, end_line,
+                                  parent, signature, docstring
+                           FROM symbols_fts
+                           WHERE repo = ? AND branch = ?
+                             AND symbols_fts MATCH ?
+                           LIMIT ?""",
                         (repo, branch, fts_expr, int(limit)),
                     ).fetchall()
                 except sqlite3.OperationalError:

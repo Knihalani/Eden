@@ -448,3 +448,258 @@ def test_seed_self_hosted_reliability_lower_than_cloud():
     """
     seed = default_seed_rows()
     assert seed["llama3.1:8b"].reliability < seed["gpt-4o"].reliability
+
+
+# ─────────────────────────────────────────────────────────────────────
+# models.dev overlay
+# ─────────────────────────────────────────────────────────────────────
+
+
+def _models_dev_provider(provider_key: str, *models: dict[str, Any]) -> dict[str, Any]:
+    """Helper that produces one provider block in models.dev's
+    ``/api.json`` shape.
+    """
+    return {
+        provider_key: {
+            "name": provider_key.title(),
+            "models": {m["id"]: m for m in models},
+        },
+    }
+
+
+def _models_dev_model(
+    model_id: str,
+    cost_in: float | None,
+    cost_out: float | None,
+    *,
+    context: int | None = None,
+    last_updated: str = "2026-04-15",
+) -> dict[str, Any]:
+    entry: dict[str, Any] = {
+        "id": model_id,
+        "last_updated": last_updated,
+    }
+    if cost_in is None and cost_out is None:
+        # No cost field -> not priced.
+        return entry
+    entry["cost"] = {"input": cost_in, "output": cost_out}
+    if context is not None:
+        entry["limit"] = {"context": context}
+    return entry
+
+
+def test_models_dev_refresh_overwrites_static_seed_with_live_data():
+    """When models.dev reports a model already in the seed, the
+    cost columns get the live data; quality/latency/reliability
+    estimates from the seed are preserved. The Anthropic Opus 4.5
+    case is the canonical example: my seed had $15/$75 (wrong,
+    pre-mid-2026 number); models.dev correctly has $5/$25.
+    """
+    catalog = PricingCatalog.default()
+    seed_opus = catalog.lookup("claude-opus-4-5")
+    assert seed_opus is not None
+    assert seed_opus.source == "static"
+
+    payload = _models_dev_provider(
+        "anthropic",
+        _models_dev_model("claude-opus-4-5", cost_in=5.0, cost_out=25.0, context=200000),
+    )
+    n = catalog._merge_models_dev_rows(payload)
+    assert n == 1
+    row = catalog.lookup("claude-opus-4-5")
+    assert row is not None
+    # $5 / 1M tokens = $0.005 per 1K.
+    assert row.cost_per_1k_input == pytest.approx(0.005)
+    assert row.cost_per_1k_output == pytest.approx(0.025)
+    # Source becomes "merged" since this row was already in the seed.
+    assert row.source == "merged"
+    # Quality/latency preserved from the seed.
+    assert row.quality == seed_opus.quality
+    assert row.latency_p95_ms == seed_opus.latency_p95_ms
+
+
+def test_models_dev_refresh_adds_new_rows_with_conservative_defaults():
+    catalog = PricingCatalog.default()
+    payload = _models_dev_provider(
+        "openai",
+        _models_dev_model("gpt-7-future", cost_in=3.0, cost_out=12.0, context=400000),
+    )
+    n = catalog._merge_models_dev_rows(payload)
+    assert n == 1
+    row = catalog.lookup("gpt-7-future")
+    assert row is not None
+    assert row.source == "models_dev"
+    assert row.cost_per_1k_input == pytest.approx(0.003)
+    assert row.cost_per_1k_output == pytest.approx(0.012)
+    assert row.context_window == 400000
+    # Conservative defaults for new rows.
+    assert row.quality == 0.85
+    assert row.latency_p95_ms == 1000
+
+
+def test_models_dev_refresh_handles_free_models():
+    """Free models carry 0 for both rates - keep them, don't skip."""
+    catalog = PricingCatalog.default()
+    payload = _models_dev_provider(
+        "meta",
+        _models_dev_model("llama-5-ultra-free", cost_in=0, cost_out=0),
+    )
+    n = catalog._merge_models_dev_rows(payload)
+    assert n == 1
+    row = catalog.lookup("llama-5-ultra-free")
+    assert row is not None
+    assert row.cost_per_1k_input == 0.0
+    assert row.cost_per_1k_output == 0.0
+
+
+def test_models_dev_refresh_skips_unpriced_models():
+    """Models without a cost block (input and output both missing)
+    are silently skipped.
+    """
+    catalog = PricingCatalog.default()
+    payload = {
+        "openai": {
+            "name": "OpenAI",
+            "models": {
+                "mystery-model": {"id": "mystery-model"},  # no cost field
+                "priced-model": {"id": "priced-model", "cost": {"input": 1.0, "output": 2.0}},
+            },
+        },
+    }
+    n = catalog._merge_models_dev_rows(payload)
+    assert n == 1
+    assert catalog.lookup("mystery-model") is None
+    assert catalog.lookup("priced-model") is not None
+
+
+def test_models_dev_refresh_skips_malformed_cost_values():
+    """Non-numeric cost values are skipped without crashing the
+    whole refresh.
+    """
+    catalog = PricingCatalog.default()
+    payload = {
+        "openai": {
+            "models": {
+                "bad-model": {"id": "bad-model", "cost": {"input": "not-a-number", "output": 1.0}},
+                "good-model": {"id": "good-model", "cost": {"input": 1.0, "output": 2.0}},
+            },
+        },
+    }
+    n = catalog._merge_models_dev_rows(payload)
+    assert n == 1
+    assert catalog.lookup("bad-model") is None
+    assert catalog.lookup("good-model") is not None
+
+
+def test_models_dev_refresh_handles_multi_provider_payload():
+    """The real /api.json has 100+ providers - exercise the
+    outer loop walking every top-level entry.
+    """
+    catalog = PricingCatalog.default()
+    payload = {
+        "openai": {"models": {"x-model": {"id": "x-model", "cost": {"input": 1.0, "output": 2.0}}}},
+        "anthropic": {"models": {"y-model": {"id": "y-model", "cost": {"input": 3.0, "output": 15.0}}}},
+        "google": {"models": {"z-model": {"id": "z-model", "cost": {"input": 1.25, "output": 10.0}}}},
+        # Non-provider entries (like the routing aggregators) should be skipped.
+        "requesty": {"name": "Requesty", "models": {}},
+    }
+    n = catalog._merge_models_dev_rows(payload)
+    assert n == 3
+    assert catalog.lookup("x-model") is not None
+    assert catalog.lookup("y-model") is not None
+    assert catalog.lookup("z-model") is not None
+
+
+def test_models_dev_refresh_skips_non_dict_entries():
+    """Top-level entries that aren't dicts (the real payload has
+    a few) are silently skipped.
+    """
+    catalog = PricingCatalog.default()
+    payload = {
+        "openai": "this should be a dict not a string",
+        "anthropic": {"models": {"ok-model": {"id": "ok-model", "cost": {"input": 1.0, "output": 2.0}}}},
+    }
+    n = catalog._merge_models_dev_rows(payload)
+    assert n == 1
+
+
+def test_models_dev_refresh_updates_last_refresh_timestamp():
+    catalog = PricingCatalog.default()
+    assert catalog.last_refresh == 0.0
+    payload = _models_dev_provider(
+        "openai",
+        _models_dev_model("any-model", cost_in=1.0, cost_out=2.0),
+    )
+    catalog._merge_models_dev_rows(payload)
+    assert catalog.last_refresh > 0.0
+
+
+def test_models_dev_refresh_no_updates_doesnt_refresh_timestamp():
+    catalog = PricingCatalog.default()
+    catalog.last_refresh = 12345.0
+    catalog._merge_models_dev_rows({})
+    assert catalog.last_refresh == 12345.0
+
+
+@pytest.mark.asyncio
+async def test_models_dev_refresh_with_mock_client():
+    """End-to-end refresh with a fake httpx client - verifies
+    the URL parsing, header setup, and JSON extraction without
+    hitting the network.
+    """
+    catalog = PricingCatalog.default()
+
+    payload = _models_dev_provider(
+        "anthropic",
+        _models_dev_model("claude-opus-4-5", cost_in=5.0, cost_out=25.0, context=200000),
+    )
+    fake_response = MagicMock()
+    fake_response.json = MagicMock(return_value=payload)
+    fake_response.raise_for_status = MagicMock()
+    fake_response.aclose = AsyncMock()
+
+    fake_client = MagicMock()
+    fake_client.get = AsyncMock(return_value=fake_response)
+
+    n = await catalog.refresh_from_models_dev(client=fake_client)
+    assert n == 1
+    assert catalog.last_refresh > 0
+    opus = catalog.lookup("claude-opus-4-5")
+    assert opus is not None
+    assert opus.cost_per_1k_input == pytest.approx(0.005)
+
+
+@pytest.mark.asyncio
+async def test_models_dev_refresh_bad_payload_raises():
+    """A non-dict payload should raise ValueError, not silently
+    succeed.
+    """
+    catalog = PricingCatalog.default()
+
+    fake_response = MagicMock()
+    fake_response.json = MagicMock(return_value=["not", "a", "dict"])
+    fake_response.raise_for_status = MagicMock()
+    fake_response.aclose = AsyncMock()
+
+    fake_client = MagicMock()
+    fake_client.get = AsyncMock(return_value=fake_response)
+
+    with pytest.raises(ValueError, match="unexpected models.dev"):
+        await catalog.refresh_from_models_dev(client=fake_client)
+
+
+def test_models_dev_overlay_coverage_exceeds_static_seed():
+    """models.dev publishes ~5000 priced models; the static seed
+    only covers ~40. After a refresh, the catalog should grow
+    by orders of magnitude.
+    """
+    catalog = PricingCatalog.default()
+    pre_count = len(catalog)
+    payload = _models_dev_provider(
+        "openai",
+        _models_dev_model("m1", cost_in=1.0, cost_out=2.0),
+        _models_dev_model("m2", cost_in=1.0, cost_out=2.0),
+        _models_dev_model("m3", cost_in=1.0, cost_out=2.0),
+    )
+    catalog._merge_models_dev_rows(payload)
+    assert len(catalog) == pre_count + 3
