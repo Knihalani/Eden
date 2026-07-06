@@ -8,6 +8,7 @@ import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { formatRelativeTime } from "@/lib/format";
 import { EmptyState } from "@/components/ui/empty-state";
+import { Button } from "@/components/ui/button";
 import { NoOrgState } from "@/components/ui/no-org-state";
 import { PageHeader } from "@/components/layout/page-header";
 import { motion, AnimatePresence } from "framer-motion";
@@ -328,7 +329,14 @@ export default function AlertsPage() {
         <div className="mb-4 p-3 rounded-lg border border-[var(--error)]/20 bg-[var(--error)]/10 text-sm text-[var(--error)] flex items-center gap-2">
           <AlertCircle className="w-4 h-4 flex-shrink-0" />
           {error}
-          <button onClick={fetchAlerts} className="ml-auto text-xs underline">Retry</button>
+          <Button
+              variant="link"
+              size="sm"
+              onClick={fetchAlerts}
+              className="ml-auto"
+            >
+              Retry
+            </Button>
         </div>
       )}
 

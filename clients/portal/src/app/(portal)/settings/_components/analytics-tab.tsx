@@ -7,41 +7,13 @@ import { api } from "@/lib/api";
 import type { OrgAnalytics } from "@/lib/types";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, PieChart, Pie, Cell } from "recharts";
 import { Loader2, TrendingUp, Users, Database, Code } from "lucide-react";
+// ui-audit 2026-07-06 H1: centralized SSR-safe chart palette.
+// The hex SSR fallback + var() resolver now live in
+// @/lib/chart-colors so every chart in the portal uses the
+// same single source of truth.
+import { getStorageColorsResolved } from "@/lib/chart-colors";
 
-// ponytail: SSR-safe chart-palette reader. Recharts' <Cell fill="…">
-// does not resolve CSS var() — it needs concrete strings — so we
-// pre-compute the palette at module init from the design tokens
-// (with hardcoded fallbacks for SSR, when window is undefined).
-const __CHART_COLORS_SSR = [
-  "var(--chart-pie-1)",
-  "var(--chart-pie-2)",
-  "var(--chart-pie-3)",
-  "var(--chart-pie-4)",
-  "var(--chart-pie-5)",
-] as const;
-// ponytail: SSR fallback mirrors the actual --chart-pie-* token values
-// in globals.css. Mismatches used to be (#ef4444 / #8b5cf6) which
-// produced a red+violet chart on first server render and a
-// purple+pink chart after hydration — visually jarring on the
-// initial paint even though recharts re-renders client-side.
-const CHART_COLORS_FALLBACK = [
-  "#5B9EFF",
-  "#5FE5A8",
-  "#FFB547",
-  "#C084FC",
-  "#E879F9",
-] as const;
-
-function readChartColors(): string[] {
-  if (typeof window === "undefined") return [...CHART_COLORS_FALLBACK];
-  const style = getComputedStyle(document.documentElement);
-  return [1, 2, 3, 4, 5].map((i, idx) => {
-    const v = style.getPropertyValue(`--chart-pie-${i}`).trim();
-    return v || CHART_COLORS_FALLBACK[idx];
-  });
-}
-
-const STORAGE_COLORS = readChartColors();
+const STORAGE_COLORS = getStorageColorsResolved();
 
 export function AnalyticsTab() {
   const { currentOrg } = useOrg();

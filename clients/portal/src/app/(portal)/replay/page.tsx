@@ -9,6 +9,7 @@ import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
 ;
 import { StatCard } from "@/components/ui/stat-card";
+import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ErrorState } from "@/components/ui/error-state";
 import { PageHeader } from "@/components/layout/page-header";
@@ -841,13 +842,15 @@ export default function ReplayPage() {
                         <CheckCircle2 className="w-3.5 h-3.5 flex-shrink-0" aria-hidden />
                       )}
                       {hiltMessage}
-                      <button
+                      <Button
+                        variant="link"
+                        size="sm"
                         onClick={() => setHiltMessage("")}
                         aria-label="Dismiss message"
-                        className="ml-auto text-xs underline text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+                        className="ml-auto"
                       >
                         Dismiss
-                      </button>
+                      </Button>
                     </motion.div>
                   )}
                 </AnimatePresence>

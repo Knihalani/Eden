@@ -15,7 +15,8 @@
     "lint:portal-classes": "node scripts/lint-portal-classes.cjs",
     "check:bundle": "bash scripts/check-bundle-size.sh",
     "analyze": "ANALYZE=true next build",
-    "polish:check": "bash scripts/polish-check.sh"
+    "polish:check": "bash scripts/polish-check.sh",
+    "audit:a11y": "node scripts/audit-a11y.cjs"
   },
   "dependencies": {
     "@clerk/nextjs": "^7.5.3",
