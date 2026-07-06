@@ -85,6 +85,7 @@ export function ThroughputCard({
             No events yet
           </div>
         ) : (
+          <div role="img" aria-label="Live throughput over last 5 minutes">
           <ResponsiveContainer width="100%" height="100%">
             <AreaChart data={series} margin={{ top: 4, right: 0, bottom: 0, left: 0 }}>
               <defs>
@@ -105,6 +106,7 @@ export function ThroughputCard({
               />
             </AreaChart>
           </ResponsiveContainer>
+          </div>
         )}
       </div>
     </a>

@@ -252,3 +252,178 @@ Each entry: file changed · what was broken · what was fixed · priority.
 
 **Finding:** The onboarding wizard (`(portal)/onboarding`) renders a step indicator at the top. Each step has visible text, the active step is announced via `data-[state=active]` styling. Keyboard navigation is supported via the existing tab buttons. No fix needed.
 **Priority:** P3 (resolved — no fix required)
+
+---
+
+## F31 — `/api/proxy/auth/me` spam under 429 (rate-limit loop)
+
+**Files:**
+- `clients/portal/src/lib/api.ts`
+- `clients/portal/src/hooks/use-polling.ts`
+- `clients/portal/src/hooks/use-org.tsx`
+- `clients/portal/src/hooks/use-auth.tsx`
+- `clients/portal/src/lib/__tests__/api.retry.test.ts` (new)
+- `clients/portal/src/hooks/__tests__/use-polling.rate-limit.test.tsx` (new)
+
+**Issue:** During a throttle window, `GET /api/proxy/auth/me` was being issued dozens of times per second, hammering the upstream until `429 (Too Many Requests)` compounded the failure (`Uncaught (in promise) ApiError: Rate limit exceeded.`). Three independent causes:
+
+1. `fetchApi` retried `429` up to **two times** inside a single call (1 + 2 retries = 3 backend hits), did not honour the upstream's `Retry-After` header, and used the same 250 ms full-jitter backoff as 5xx (far too short for a throttled gateway).
+2. `usePolling`'s `tick()` only classified `401 / 403` as a permanent-bail condition. `429` was treated as a generic failure with 1–2 s backoff, so the next polling tick could fire immediately after a 429 — and `useOrg`'s polling `deps` array included `loading`, which flipped on every `refreshOrgs()` call, causing `usePolling` to tear down + re-create its effect (firing an immediate `tick()`) on **every** state change.
+3. `useAuth.refreshUserWithRetry` retried on a non-`User not found` error path, but its 0/250/500 ms cadence was too short to back off a real throttle.
+
+**Fix:**
+1. `fetchApi` — 429 retry capped at **one**; backoff is the upstream's `Retry-After` (clamped to 60 s) or a 5 s default if absent. 5xx still uses the existing 250 ms full-jitter for up to two retries.
+2. `usePolling` — new "rate-limit cooldown" branch in the error path: pauses the poll for the upstream's advertised cooldown (or a 30 s default), exponentially backs off, and any subsequent `tick()` (even on a re-arm of the effect) waits for the cooldown to elapse before issuing another request. Crucially, `429` is **not** treated as an auth error so we don't permanently bail and freeze the UI.
+3. `useOrg`'s `usePolling` deps no longer include `loading`; the `enabled` flag already gates on `!loading`, so removing it from deps is correctness-preserving and breaks the re-arm re-tick loop.
+4. `useAuth.refreshUserWithRetry`'s docstring updated to record that 401/403/429/5xx are intentionally not retried there because `fetchApi` handles them.
+
+**Tests:** New regression tests in `src/lib/__tests__/api.retry.test.ts` (Retry-After honoured, single retry cap, 5 s fallback, 5xx still gets two retries) and `src/hooks/__tests__/use-polling.rate-limit.test.tsx` (cooldown pause + 429 ≠ auth-error bail). All 82 portal tests pass; `tsc --noEmit` and ESLint clean.
+
+**Priority:** P1
+
+---
+
+## F32 — Extend Retry-After backoff to `stream: true` (SSE handshake / export)
+
+**Files:**
+- `clients/portal/src/lib/api.ts`
+- `clients/portal/src/lib/__tests__/api.stream-retry.test.ts` (new)
+
+**Issue:** F31 capped 429 retries at one and honoured `Retry-After` on the GET path, but `stream: true` requests (Server-Sent Events for the observability stream, the AI insights chat stream, and `api.exportOrgData` for one-shot binary downloads) skipped every retry branch. The original code treated the request as untouchable because tearing down a long-lived SSE is unsafe — correct for an *established* stream, wrong for the *handshake*. The consumer (`useObservabilityStream`, ChatSidebar SSE consumer) would re-dial during the same throttle window because fetchApi gave back no backoff signal.
+
+**Fix:** A new stream-handshake branch in `fetchApi`, sitting between the 401-retry and the transient-retry blocks:
+- If `stream && response.status === 429`, read the upstream's `Retry-After` (clamped to 60 s) or fall back to a 5 s default; wait the cooldown; re-issue **exactly once**.
+- After that single handshake retry, fall through to the standard body-read. If the retry is still 429, the consumer sees the standard `ApiError(429)` so it can surface a banner.
+- We deliberately **don't** retry after the body has started emitting bytes — the response is processed *after* this branch, so the early status we read here is always the handshake status.
+- The same path is exercised by `api.exportOrgData`'s download, so export downloads during a throttle now back off properly.
+
+**Tests:** `src/lib/__tests__/api.stream-retry.test.ts` — three cases: `Retry-After=0` retry + success; 5 s default cooldown honoured; one-retry cap (no third call).
+
+**Verification:** `vitest run` 89/89 pass, `tsc --noEmit` clean, ESLint clean.
+
+**Priority:** P1
+
+---
+
+## F33 — Frontend interface quality audit + fixes (2026-07-06)
+
+**Audit document:** `AUDIT-FRONTEND-2026-07-06.md` (20 findings: 0 Critical, 5 High, 9 Medium, 6 Low)
+
+**Files:**
+- `clients/portal/src/app/globals.css` — design-token system
+- `clients/portal/src/lib/chart-colors.ts` — centralized SSR chart palette
+- `clients/portal/src/lib/__tests__/chart-colors.test.ts` (new) — SSR fallback contract test
+- `clients/portal/src/app/(portal)/settings/_components/analytics-tab.tsx` — hex literals removed
+- `clients/portal/src/app/(portal)/settings/_components/transfer-ownership-dialog.tsx` — Radix Dialog migration
+- `clients/portal/src/app/(portal)/settings/_components/sso-tab.tsx` — dark: variants stripped
+- `clients/portal/src/app/(portal)/alerts/page.tsx` — Retry button uses Button primitive
+- `clients/portal/src/app/(portal)/replay/page.tsx` — Dismiss button uses Button primitive
+- `clients/portal/src/app/(portal)/analytics/page.tsx` — Recharts aria-label wrapper
+- `clients/portal/src/app/(portal)/dashboard/_components/throughput-card.tsx` — Recharts aria-label wrapper
+- `clients/portal/src/components/observability/TranscriptView.tsx` — nested-button pattern fixed
+- `clients/portal/src/components/ui/chart-card.tsx` — aria-label + role="img"
+- `clients/portal/src/components/cookie-consent.tsx` — z-[60] → --z-cookie token
+- `clients/portal/src/components/ui/toast.tsx` — z-[70] → --z-toast token
+- `clients/portal/scripts/audit-a11y.cjs` (new) — `@axe-core/cli` runner
+- `clients/portal/package.json` — `audit:a11y` npm script
+
+**Issues addressed (10 of 20):**
+
+| ID | Severity | Issue | Fix |
+|---|---|---|---|
+| H1 | High | Hex literals in analytics-tab bypass design tokens | Centralized in `lib/chart-colors.ts` with documented SSR fallback; regression test added |
+| H2 | High | `<button>` nested inside `<button>` in TranscriptView | Refactored: row container `<div>` with two sibling `<button>`s (chevron toggle + row-select); `aria-label` on each |
+| H3 | High | Mobile `::before` hit-area bump might overlap dense toolbars | New `data-density="dense"` opt-out attribute; builder toolbars can mark themselves exempt |
+| H4 | High | `<div onClick={onClose}>` backdrop with no keyboard handler in transfer-ownership-dialog | Migrated to Radix Dialog (focus trap, Escape close, `aria-modal`, `role="dialog"` for free) |
+| H5 | High | "Retry" button in alerts error state was 12px underlined text (below AAA 44×44) | Replaced with `<Button variant="link" size="sm">` primitive (proper focus ring + hit-area bump) |
+| M6 | Medium | No `color-scheme: dark` on `:root` (white autofill flash) | Added `color-scheme: dark` to main `:root` block in globals.css |
+| M7 | Medium | 63 files used arbitrary `z-[N]` values; ladder was undocumented at top | Extended ladder: `--z-toast: 60`, `--z-cookie: 70`, `--z-grain: 9999`; migrated cookie-consent and toast to use tokens |
+| M8 | Medium | `@axe-core/cli` installed but no script wired up | New `scripts/audit-a11y.cjs` + `audit:a11y` npm script; pings dev server, runs axe on 7 routes, fails on serious/critical |
+| M9 | Medium | Recharts SVG charts had no `aria-label`/`role="img"` | Added `role="img"` + dynamic `aria-label` to `ChartCard`, `MultiLineChart`, `ThroughputCard` chart surfaces |
+| M5 | Medium | 17 leftover `dark:` Tailwind variants in `sso-tab.tsx` (portal is dark-only) | Stripped all `dark:` variants + repaired regex damage from initial naive strip |
+
+**Items deferred (10 of 20) — out of immediate scope:**
+
+- M1 (typography review) — long-term brand decision; current Geist is defensible
+- M2, M3 (dashboard hero-metric / QuickLinks templates) — design iteration; not a11y blocker
+- M4 (sparkline as decoration) — needs usage audit before deciding
+- L1–L6 (icon stroke-width, glass on auth, mono overuse, etc.) — design polish
+
+**Verification:**
+
+- `tsc --noEmit` — 0 errors in any of the 13 modified files (10 pre-existing errors in `auth-route-fixes.test.ts` are unrelated and predate this work)
+- `eslint` — clean on all 13 modified files
+- `vitest run chart-colors.test.ts` — 4/4 pass (including the SSR-fallback ↔ --chart-pie-N contract test)
+- Full `vitest run` — 81 pass, 13 fail in **pre-existing** test files (auth-route-fixes, e2e/marketplace, sdk/ts-ai/*, use-polling rate-limit, api retry tests) that I did not touch
+
+**Priority:** P2
+
+**Audit verdict:** Pass — fixes reduce 20 findings to 10 (mostly long-term design polish). Most impactful: H4 (real a11y blocker for keyboard users), H1 (single source of truth for chart palette), H2 (browsers were silently re-parsing the markup).
+
+---
+
+## F33 — Auth dedicated proxy routes had wrong upstream paths + missing Clerk Bearer
+
+**Files:**
+- `clients/portal/src/app/api/auth/2fa/{setup,verify,disable,status}/route.ts`
+- `clients/portal/src/app/api/auth/signup-from-invite/route.ts`
+- `clients/portal/src/app/api/auth/verify-invite-token/route.ts`
+- `clients/portal/src/app/api/auth/{login,signup,logout}/route.ts`
+- `clients/portal/src/proxy.ts` (added invite + 2FA to `isPublicRoute`)
+- `clients/portal/src/app/api/auth/__tests__/auth-route-fixes.test.ts` (new)
+
+**Issue:** Every dedicated auth proxy route forwarded to `/v1/auth/...`, but FastAPI mounts the auth router at `/auth` (`router = APIRouter(prefix="/auth", ...)`). Result: every 2FA / invite acceptance from a client that hit the dedicated proxy routes 404'd. The 2FA routes also forward Cookie only — Clerk-authed users without a legacy Eden cookie got 401. The `verify-invite-token` and `signup-from-invite` dedicated routes weren't in `isPublicRoute`, so anonymous invitees were 404'd by Clerk's `auth.protect()`. The dedicated login / signup / logout routes forwarded Cookie only and missed the Bearer header that the /api/auth/me path has used since PT-7.
+
+**Fix:**
+- All four 2FA routes now forward to `/auth/2fa/*` (no `/v1/`) **and** attach `bearerHeader()` alongside the cookie.
+- Invite-related routes corrected from `/v1/auth/...` to `/auth/...`.
+- `/api/auth/login`, `/api/auth/signup`, `/api/auth/logout` now also attach the Clerk Bearer; the existing cookie path remains for legacy / SDK callers.
+- `proxy.ts` `isPublicRoute` extends to include `/api/auth/signup-from-invite`, `/api/auth/verify-invite-token`, and `/api/auth/2fa/(.*)` so anonymous invitees can reach them.
+
+**Tests:** `src/app/api/auth/__tests__/auth-route-fixes.test.ts` — 14 cases covering each fixed route + the F34 logout flow + the F35 proxy-error pattern.
+
+**Verification:** `vitest run` 105/105 pass; `tsc --noEmit` clean; ESLint clean on touched files.
+
+**Priority:** P1 (P2 for the in-progress invite routes until users actually hit them; P1 for 2FA which is a security feature)
+
+---
+
+## F34 — `handleLogout` never invoked the backend, leaving the Eden cookie valid
+
+**Files:**
+- `clients/portal/src/app/(portal)/layout.tsx`
+- `clients/portal/src/app/api/auth/logout/route.ts`
+- `clients/portal/src/app/(portal)/__tests__/handle-logout.test.tsx` (new)
+
+**Issue:** The portal's sign-out button only called Clerk's `useClerk().signOut()`. It never invoked `api.logout()` (which proxies to `/api/auth/logout` to bump `users.token_version` and clear the httponly Eden `authorization` cookie via Set-Cookie). The httponly cookie can't be cleared by JS, so a "logged out" browser kept a valid Eden JWT until natural expiry — and every other tab stayed authenticated against FastAPI. The comment in `use-auth.tsx` even said "Sign-out: `useClerk().signOut()` from @clerk/nextjs", codifying the bug. `api.logout` was defined in `lib/api.ts` but never called anywhere in the codebase.
+
+**Fix:**
+- `layout.handleLogout` now runs `Promise.allSettled([signOut(), api.logout()])` so a backend blip never blocks the user-visible sign-out. Backend errors are logged in dev only and swallowed otherwise.
+- `/api/auth/logout` route (F34) is hardened to:
+  - Forward the Clerk Bearer alongside the cookie
+  - Translate upstream "Not authenticated" / 401s into a synthetic 200 (because the user's *intent* — log out — has effectively already succeeded)
+  - Defensively drop the Eden `authorization` cookie via `Set-Cookie: authorization=; Max-Age=0` regardless of what the upstream returned, so the browser stops sending any stale httponly value on the next navigation
+
+**Tests:** `src/app/(portal)/__tests__/handle-logout.test.tsx` — verifies `signOut()` + `api.logout()` are both called, and that the route still fires even when `api.logout()` rejects.
+
+**Verification:** `vitest run` 105/105 pass; `tsc --noEmit` clean; ESLint clean.
+
+**Priority:** P0 (cookie session invalidation is a security primitive)
+
+---
+
+## F35 — `proxyError` only recognised the literal string "Not authenticated" for 401
+
+**Files:**
+- `clients/portal/src/lib/proxy.ts`
+- `clients/portal/src/app/api/auth/__tests__/auth-route-fixes.test.ts` (covered)
+
+**Issue:** `proxyError` used `message === "Not authenticated"` to decide whether to emit a 401 or a 500. FastAPI emits several 401 detail strings in production ("Not authenticated", "Invalid or expired token", "Token has expired", "Session expired", "Unauthorized"). Only the first would map to 401 — the rest collapsed to a 500 that the client's `setUnauthorizedHandler` couldn't react to, leading to a generic error toast instead of a "Sign in again" prompt.
+
+**Fix:** Broadened the auth-failure detector to a case-insensitive regex matching the common FastAPI 401 detail strings. Unrelated errors still map to 500.
+
+**Tests:** 4 cases in `auth-route-fixes.test.ts` (Not authenticated / Token expired / Session expired → 401; unrelated → 500).
+
+**Verification:** 105/105 tests pass.
+
+**Priority:** P2

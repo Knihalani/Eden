@@ -3,6 +3,12 @@
 /* ==================== Design Tokens ==================== */
 
 :root {
+  /* ui-audit 2026-07-06 M6: tell the browser this surface is
+   * always dark. Without this, autofill flashes white on
+   * Android Chrome / iOS Safari and <select> opens with native
+   * light styling. Single declaration, no other changes needed. */
+  color-scheme: dark;
+
   /* ==================== Design Token System ====================
    * Three-tier structure (ui-audit prompt 1):
    *
@@ -249,6 +255,13 @@
   --z-topbar: 30;
   --z-modal: 40;
   --z-overlay: 50;
+  /* ui-audit 2026-07-06 M7: extended ladder. Cookie consent and
+   * toast notifications use the slots below the grain texture
+   * but above page content. Anything truly full-viewport
+   * decorative (grain, marketing grid) sits at --z-grain. */
+  --z-toast: 60;
+  --z-cookie: 70;
+  --z-grain: 9999;
 
   /* shadcn / legacy compatibility aliases (map to canonical tokens) */
   --surface: var(--bg-primary);
@@ -1232,7 +1245,9 @@ input::placeholder, textarea::placeholder {
   pointer-events: none !important;
   opacity: 0.04;
   background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
-  z-index: 9999;
+  /* ui-audit 2026-07-06 M7: use --z-grain token (9999) from the
+   * extended ladder. Keeps the magic number out of this rule. */
+  z-index: var(--z-grain);
 }
 
 /* Marketing grid canvas — full-viewport fixed element. It must
@@ -1268,7 +1283,10 @@ input::placeholder, textarea::placeholder {
   position: absolute;
   top: -100px;
   left: var(--space-4);
-  z-index: 10000;
+  /* ui-audit 2026-07-06 M7: skip-link is a focus-only emergency
+   * target that must beat the grain texture (--z-grain). One
+   * tier above the cookie banner keeps keyboard users first. */
+  z-index: calc(var(--z-cookie) + 1);
   padding: var(--space-2) var(--space-4);
   background: var(--accent);
   color: var(--bg-base);
@@ -1345,11 +1363,14 @@ input::placeholder, textarea::placeholder {
   /* Invisible padding via ::before on the interactive element.
    * Negative-inset trick keeps the visible button compact while
    * expanding the hit area to the full 44×44 box. Components can
-   * opt-out with .no-bump (e.g. dense toolbar icon buttons). */
-  button:not(.no-bump)::before,
-  [role="button"]:not(.no-bump)::before,
-  a[href]:not(.no-bump)::before,
-  label:not(.no-bump)::before {
+   * opt-out with .no-bump OR by adding data-density="dense" to
+   * the button itself — signals "this button already meets WCAG
+   * visually and the invisible ::before expansion would overlap
+   * neighbors in dense toolbars" (H3 audit fix 2026-07-06). */
+  button:not(.no-bump):not([data-density="dense"])::before,
+  [role="button"]:not(.no-bump):not([data-density="dense"])::before,
+  a[href]:not(.no-bump):not([data-density="dense"])::before,
+  label:not(.no-bump):not([data-density="dense"])::before {
     content: "";
     position: absolute;
     inset: max(-4px, calc((44px - 100%) / -2));
@@ -1359,10 +1380,10 @@ input::placeholder, textarea::placeholder {
     border-radius: inherit;
   }
   /* Required for the pseudo-element to size against the parent */
-  button:not(.no-bump),
-  [role="button"]:not(.no-bump),
-  a[href]:not(.no-bump),
-  label:not(.no-bump) {
+  button:not(.no-bump):not([data-density="dense"]),
+  [role="button"]:not(.no-bump):not([data-density="dense"]),
+  a[href]:not(.no-bump):not([data-density="dense"]),
+  label:not(.no-bump):not([data-density="dense"]) {
     position: relative;
   }
 }

@@ -146,7 +146,13 @@ function MultiLineChart({
   valueFormatter: (v: number) => string;
   labelFormatter: (v: string) => string;
 }) {
+  // ui-audit 2026-07-06 M9: announce the chart to AT users.
+  const seriesLabels = series.map((s) => s.label).join(", ");
+  const ariaLabel = seriesLabels
+    ? `Trend chart with: ${seriesLabels}`
+    : "Trend chart";
   return (
+    <div role="img" aria-label={ariaLabel}>
     <ResponsiveContainer width="100%" height="100%">
       <LineChart data={data}>
         <CartesianGrid strokeDasharray="3 3" stroke="var(--border-subtle)" vertical={false} />
@@ -190,6 +196,7 @@ function MultiLineChart({
         ))}
       </LineChart>
     </ResponsiveContainer>
+    </div>
   );
 }
 

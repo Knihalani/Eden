@@ -242,32 +242,38 @@ function TranscriptRowItem({
 
   return (
     <div>
-      <button
-        onClick={() => onSelect(row.span_id)}
-        className={`group w-full text-left rounded-md border transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-base)] ${
+      <div
+        className={`group flex items-center gap-2 rounded-md border px-3 py-2 transition-colors ${
           selected
             ? "border-[var(--accent)] bg-[var(--bg-tertiary)]"
             : "border-transparent hover:border-[var(--border-default)] hover:bg-[var(--bg-secondary)]"
         }`}
         style={{ marginLeft: depth * 16 }}
-        aria-expanded={expanded}
       >
-        <div className="flex items-center gap-2 px-3 py-2">
-          {/* Expand toggle: a sibling button so we don't nest a
-              <button> inside the outer <button> (invalid HTML
-              that browsers silently swallow — clicks on the chevron
-              never fired before this fix). */}
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              setExpanded((v) => !v);
-            }}
-            aria-label={expanded ? "Collapse details" : "Expand details"}
-            className="text-[var(--text-muted)] hover:text-[var(--text-primary)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] rounded"
-          >
-            {expanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
-          </button>
+        {/* Expand toggle: a real <button>, sibling to the row-select
+            button below. Both buttons live inside the row div so
+            we never nest <button> inside <button> (invalid HTML
+            that browsers silently re-parse — see H2 audit 2026-07-06). */}
+        <button
+          type="button"
+          onClick={() => setExpanded((v) => !v)}
+          aria-label={expanded ? "Collapse details" : "Expand details"}
+          aria-expanded={expanded}
+          className="text-[var(--text-muted)] hover:text-[var(--text-primary)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] rounded p-0.5 -m-0.5"
+        >
+          {expanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+        </button>
+        {/* Row-select button: covers the icon + label + metrics
+            area. Visually looks like the whole row is clickable,
+            but the chevron is a sibling (not nested) so clicks
+            route correctly. */}
+        <button
+          type="button"
+          onClick={() => onSelect(row.span_id)}
+          aria-expanded={expanded}
+          aria-label={`Select span ${row.name || row.event_type || row.span_id.slice(0, 12)}`}
+          className="flex flex-1 items-center gap-2 min-w-0 text-left rounded focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-base)] -my-1 -mr-1 py-1 pr-1"
+        >
           <Icon className="h-3.5 w-3.5" style={{ color: iconColor }} />
           <span className="flex-1 truncate font-mono text-xs">
             {row.name || row.event_type || row.span_id.slice(0, 12)}
@@ -288,8 +294,8 @@ function TranscriptRowItem({
           {row.outcome === "failure" && (
             <AlertCircle className="h-3 w-3 text-[var(--error)]" />
           )}
-        </div>
-      </button>
+        </button>
+      </div>
 
       {expanded && (
         <div className="ml-7 mt-1 space-y-2 px-3 pb-2">

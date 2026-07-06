@@ -85,7 +85,7 @@ export function CookieConsent() {
       role="dialog"
       aria-live="polite"
       aria-label="Cookie consent"
-      className="pointer-events-none fixed inset-x-0 bottom-0 z-[60] flex justify-center p-4 md:p-6"
+      className="pointer-events-none fixed inset-x-0 bottom-0 flex justify-center p-4 md:p-6" style={{ zIndex: "var(--z-cookie)" }}
     >
       <div className="pointer-events-auto w-full max-w-3xl rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-elevated)]/95 p-4 shadow-2xl backdrop-blur md:p-5">
         <div className="flex flex-col gap-3 md:flex-row md:items-center md:gap-4">
