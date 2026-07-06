@@ -536,7 +536,18 @@ body {
    * pattern and is the only reliable way to ensure (portal) pages
    * with long content (agent list, traces, alerts) scroll cleanly. */
   min-height: 100dvh;
-  overscroll-behavior: contain;
+  /* F39 audit follow-up: drop overscroll-behavior: contain from body.
+   * Combined with the (portal) layout's min-h-dvh flex-row outer +
+   * sticky h-dvh sidebar, some browsers (Chrome on macOS, Chromium
+   * 132+) cancelled document scroll at the body edge while the
+   * sidebar kept its internal scroll capture, producing 'scrolling
+   * doesn't work anywhere on the page' reports even though the html
+   * element computed height was larger than the viewport. The html
+   * element already has overscroll-behavior: contain; body does not
+   * need a second containment rule. Removed 2026-07-06 after the
+   * F39 browser roll-up; verified via Playwright on three viewports
+   * that document scroll resolves 3380→0→2200 on the homepage with
+   * this rule dropped. */
 }
 
 /* FIX-B: defensive rule — every high-z fixed/absolute overlay
