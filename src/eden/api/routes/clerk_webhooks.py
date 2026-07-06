@@ -485,7 +485,7 @@ async def clerk_webhook(
                 invalidate_user_cache(clerk_id)
     except Exception as exc:  # noqa: BLE001
         logger.exception("Clerk webhook handler failed for %s: %s", event_type, exc)
-        raise HTTPException(status_code=500, detail=f"Handler failed: {exc}")
+        raise HTTPException(status_code=500, detail=f"Handler failed: {exc}") from exc
 
     return {
         "status": "ok",

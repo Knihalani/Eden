@@ -48,6 +48,7 @@ import { Logo } from "@/components/brand/logo";
 import { buildBreadcrumbs } from "@/lib/breadcrumbs";
 import { ErrorBoundary } from "@/components/ui/error-boundary";
 import { OnboardingBanner } from "@/components/onboarding-banner";
+import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 
 const SIDEBAR_EXPANDED_WIDTH = 260;
 const SIDEBAR_COLLAPSED_WIDTH = 64;
@@ -740,13 +741,20 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
                 <span className="text-xs">Search...</span>
                 <kbd className="ml-2 px-1.5 py-0.5 bg-[var(--bg-primary)] border border-[var(--border-default)] rounded text-[var(--text-muted)] font-mono text-xs">⌘K</kbd>
               </button>
-              <button
-                onClick={() => setCommandPaletteOpen(true)}
-                className="lg:hidden p-2 text-[var(--text-secondary)] hover:bg-[var(--bg-tertiary)] rounded-lg active:bg-[var(--border-default)]"
-                aria-label="Search"
-              >
-                <Search className="w-5 h-5" />
-              </button>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    onClick={() => setCommandPaletteOpen(true)}
+                    className="lg:hidden p-2 text-[var(--text-secondary)] hover:bg-[var(--bg-tertiary)] rounded-lg active:bg-[var(--border-default)]"
+                    aria-label="Search (⌘K)"
+                  >
+                    <Search className="w-5 h-5" />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" sideOffset={6}>
+                  Search · <kbd className="font-mono">⌘K</kbd>
+                </TooltipContent>
+              </Tooltip>
               <NotificationsDropdown />
             </div>
           </div>
@@ -1115,69 +1123,87 @@ function NavItem({
 
   return (
     <div className="group/navitem relative">
-      <Link
-        href={href}
-        onClick={onClick}
-        aria-label={label}
-        aria-current={active ? "page" : undefined}
-        className={cn(
-          "nav-item flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-all duration-150 relative",
-          // Pattern 1.4 (Linear): the active item gets full opacity,
-          // accent color, and bold weight; idle items sit at 60%
-          // opacity so the user's eye lands on the active one first.
-          // The hover state bumps opacity back to 100% so the
-          // affordance is still visible.
-          active
-            ? "font-semibold text-[var(--accent)] bg-[var(--accent-light)] opacity-100"
-            : "font-medium text-[var(--text-secondary)] opacity-60 hover:text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)] hover:opacity-100"
-        )}
-      >
-        {/* Left-edge accent bar for active items — gives a stronger
-            visual "you are here" cue than just icon color. */}
-        {active && (
-          <span
-            aria-hidden="true"
-            className="absolute left-0 top-1.5 bottom-1.5 w-0.5 rounded-full bg-[var(--accent)]"
-          />
-        )}
-        <Icon
-          className={cn(
-            "flex-shrink-0 nav-icon transition-all duration-200",
-            active ? "w-4 h-4 text-[var(--accent)]" : "w-4 h-4 text-[var(--text-muted)] group-hover:text-[var(--text-secondary)]"
-          )}
-        />
-        {!collapsed && (
-          <>
-            <span className="truncate flex-1">{label}</span>
-            {badge && (
-              <span className="px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider rounded bg-[var(--accent-faint)] text-[var(--accent)]">
-                {badge}
-              </span>
+      {(() => {
+        // Inline render of the nav link. When the sidebar is collapsed,
+        // wrap it in a Radix Tooltip so keyboard / screen-reader users
+        // can discover the label (the previous CSS-only tooltip was
+        // hover-only and invisible to AT).
+        const link = (
+          <Link
+            href={href}
+            onClick={onClick}
+            aria-label={label}
+            aria-current={active ? "page" : undefined}
+            className={cn(
+              "nav-item flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-all duration-150 relative",
+              // Pattern 1.4 (Linear): the active item gets full opacity,
+              // accent color, and bold weight; idle items sit at 60%
+              // opacity so the user's eye lands on the active one first.
+              // The hover state bumps opacity back to 100% so the
+              // affordance is still visible.
+              active
+                ? "font-semibold text-[var(--accent)] bg-[var(--accent-light)] opacity-100"
+                : "font-medium text-[var(--text-secondary)] opacity-60 hover:text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)] hover:opacity-100"
             )}
-            {onTogglePin && (
-              <button
-                onClick={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  onTogglePin();
-                }}
-                aria-label={pinned ? `Unpin ${label}` : `Pin ${label}`}
-                aria-pressed={pinned}
-                className={cn(
-                  "pin-button p-1 rounded transition-all",
-                  pinned
-                    ? "text-[var(--accent)] opacity-100"
-                    : "text-[var(--text-muted)] hover:text-[var(--accent)] hover:bg-[var(--bg-tertiary)]"
+          >
+            {/* Left-edge accent bar for active items — gives a stronger
+                visual "you are here" cue than just icon color. */}
+            {active && (
+              <span
+                aria-hidden="true"
+                className="absolute left-0 top-1.5 bottom-1.5 w-0.5 rounded-full bg-[var(--accent)]"
+              />
+            )}
+            <Icon
+              className={cn(
+                "flex-shrink-0 nav-icon transition-all duration-200",
+                active ? "w-4 h-4 text-[var(--accent)]" : "w-4 h-4 text-[var(--text-muted)] group-hover:text-[var(--text-secondary)]"
+              )}
+            />
+            {!collapsed && (
+              <>
+                <span className="truncate flex-1">{label}</span>
+                {badge && (
+                  <span className="px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider rounded bg-[var(--accent-faint)] text-[var(--accent)]">
+                    {badge}
+                  </span>
                 )}
-                title={pinned ? "Unpin from sidebar" : "Pin to top of sidebar"}
-              >
-                <Pin className={cn("w-3.5 h-3.5", pinned && "fill-current")} />
-              </button>
+                {onTogglePin && (
+                  <button
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      onTogglePin();
+                    }}
+                    aria-label={pinned ? `Unpin ${label}` : `Pin ${label}`}
+                    aria-pressed={pinned}
+                    className={cn(
+                      "pin-button p-1 rounded transition-all",
+                      pinned
+                        ? "text-[var(--accent)] opacity-100"
+                        : "text-[var(--text-muted)] hover:text-[var(--accent)] hover:bg-[var(--bg-tertiary)]"
+                    )}
+                    title={pinned ? "Unpin from sidebar" : "Pin to top of sidebar"}
+                  >
+                    <Pin className={cn("w-3.5 h-3.5", pinned && "fill-current")} />
+                  </button>
+                )}
+              </>
             )}
-          </>
-        )}
-        {collapsed && <span className="nav-tooltip">{label}</span>}
-      </Link>
+          </Link>
+        );
+        if (collapsed) {
+          return (
+            <Tooltip delayDuration={120}>
+              <TooltipTrigger asChild>{link}</TooltipTrigger>
+              <TooltipContent side="right" sideOffset={8}>
+                {label}
+              </TooltipContent>
+            </Tooltip>
+          );
+        }
+        return link;
+      })()}
       {hasChildren && (
         <div className="mt-0.5 space-y-0.5">{children}</div>
       )}
@@ -1204,11 +1230,17 @@ function BottomNavItem({
       aria-label={label}
       aria-current={active ? "page" : undefined}
       className={cn(
-        "flex flex-col items-center justify-center min-w-[44px] min-h-[44px] gap-1 transition-colors",
+        "flex flex-col items-center justify-center min-w-[44px] min-h-[44px] gap-1 transition-colors relative",
         isCenter && "relative -mt-3",
         active ? "text-[var(--accent)]" : "text-[var(--text-muted)] hover:text-[var(--text-secondary)]"
       )}
     >
+      {active && !isCenter && (
+        <span
+          aria-hidden="true"
+          className="absolute top-0 left-1/2 -translate-x-1/2 w-8 h-0.5 rounded-full bg-[var(--accent)]"
+        />
+      )}
       {isCenter ? (
         <span className="flex items-center justify-center w-12 h-12 rounded-full bg-[var(--accent)] text-[var(--accent-foreground)] shadow-lg shadow-[var(--accent)]/30">
           <Icon className="w-6 h-6" />

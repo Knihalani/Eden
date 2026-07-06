@@ -307,7 +307,15 @@ def msprt_always_valid(
     denom = sigma_sq + nu_sq_scaled
     if denom == 0:
         return 1.0
-    lr = math.sqrt(sigma_sq / denom) * math.exp(delta_hat ** 2 / (2 * denom))
+    # Compute log(lr) safely to avoid math.exp overflow when the
+    # observed effect is very large relative to the pooled variance.
+    exponent = delta_hat ** 2 / (2 * denom)
+    try:
+        if exponent > 700:  # double-precision overflow threshold for exp
+            return 0.0
+        lr = math.sqrt(sigma_sq / denom) * math.exp(exponent)
+    except OverflowError:
+        return 0.0
     if lr <= 0:
         return 1.0
     return min(1.0, 1.0 / lr)

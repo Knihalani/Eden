@@ -294,7 +294,7 @@ export default function SidebarSettingsPage() {
           </Link>
         </section>
 
-        <p className="text-[10px] text-[var(--text-faint)] text-center">
+        <p className="text-xs text-[var(--text-muted)] text-center">
           {saving ? "Saving…" : "Changes save automatically"}{" "}
           · {ALL_ITEM_IDS.length} total items
         </p>

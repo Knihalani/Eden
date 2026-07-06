@@ -12,8 +12,10 @@
  * See `README.md` for usage examples.
  */
 
-export { EdenSDK, getDefaultClient, setDefaultClient, resetDefaultClient, type ResolvedConfig } from "./client.js";
+export { EdenSDK, getDefaultClient, setDefaultClient, resetDefaultClient, resolvedGatewayUrl, type ResolvedConfig, type GatewayHeadersOptions } from "./client.js";
 export { trace, traceAgent, configure, type TraceContext } from "./trace.js";
+export { FilterConfig, PIIConfig, FILTER_NAMES, type FilterName, type PIIMode, type PIIConfigOptions, type FilterConfigOptions } from "./filters.js";
+export { openaiClient, type OpenAIClientOptions } from "./gateway_session.js";
 export {
   SOURCE_FORMATS,
   type EdenSDKOptions,

@@ -46,18 +46,95 @@ logger = logging.getLogger(__name__)
 @dataclass
 class PIIPolicy:
     """Per-tenant PII policy. The default policy matches the
-    hard-coded category list; tenants override via org_pii_policies."""
+    hard-coded category list; tenants override via org_pii_policies.
 
+    Top-level ``mode`` is the tri-state customers actually care about:
+
+    * ``"off"`` — never mask. The system is designed to use the
+      raw values (e.g. an internal credential-management flow that
+      needs the API key to authenticate downstream). The per-request
+      ``pii_filter_enabled`` header still wins over this — a request
+      with ``X-PII-Bypass: false`` would re-enable masking, but in
+      practice tenants set this when they want zero masking by
+      default. Implemented as ``enabled_categories = set()``.
+    * ``"redact"`` (default) — mask per the active category set.
+    * ``"fail_closed"`` — same as redact, plus any credential
+      detection raises ``PIIMaskingError`` so the caller gets a
+      422 (gateway) or a rejected event (ingest) instead of a
+      silently-masked payload.
+
+    The granular ``enabled_categories`` / ``disabled_categories`` /
+    ``fail_closed_on_credentials`` fields are kept for backwards
+    compat with the ``org_pii_policies`` table; ``mode`` is the
+    preferred way to set a policy via the public API.
+    """
+
+    mode: str = "redact"  # "off" | "redact" | "fail_closed"
     enabled_categories: set[str] = field(default_factory=lambda: set(_DEFAULT_CATEGORIES))
     disabled_categories: set[str] = field(default_factory=set)
     fail_closed_on_credentials: bool = False
     redact_keys_extra: set[str] = field(default_factory=set)
     mask_token: str = "REDACTED"
 
+    def __post_init__(self) -> None:
+        # ``mode`` subsumes the boolean + category fields. Apply it
+        # last so callers can either set ``mode`` directly OR set the
+        # legacy fields and have them take effect.
+        if self.mode == "off":
+            self.enabled_categories = set()
+            self.fail_closed_on_credentials = False
+        elif self.mode == "fail_closed":
+            self.fail_closed_on_credentials = True
+        elif self.mode == "redact":
+            # No-op: keep explicit enabled/disabled/fail_closed values.
+            pass
+        else:
+            raise ValueError(
+                f"PIIPolicy.mode must be 'off', 'redact', or "
+                f"'fail_closed'; got {self.mode!r}"
+            )
+
     @classmethod
     def from_db_row(cls, row: dict[str, Any]) -> "PIIPolicy":
+        """Build a :class:`PIIPolicy` from an ``org_pii_policies`` row.
+
+        Distinguishes *explicit empty* ``enabled_categories`` (operator
+        opted out of all categories → ``mode="off"``) from *field
+        absent* (use the default category set → ``mode="redact"``).
+        ``row.get("enabled_categories") is None`` is "absent";
+        ``row.get("enabled_categories") == []`` is "explicit empty".
+        """
+        # ``mode`` may be missing in older rows; fall back to
+        # ``fail_closed_on_credentials`` to derive it.
+        explicit_mode = row.get("mode")
+        if explicit_mode in ("off", "redact", "fail_closed"):
+            mode = explicit_mode
+        elif row.get("fail_closed_on_credentials"):
+            mode = "fail_closed"
+        else:
+            mode = "redact"
+
+        # Same trick for enabled_categories: ``None`` means "absent,
+        # use defaults"; ``[]`` means "explicit empty, mask nothing".
+        enabled = row.get("enabled_categories")
+        if enabled is None:
+            enabled_categories: set[str] = set(_DEFAULT_CATEGORIES)
+            # Only flip to off if the row was explicitly stored as
+            # empty (handled by the explicit_mode check above).
+        else:
+            enabled_categories = set(enabled)
+
+        # Recompute mode when enabled_categories is explicitly empty
+        # and the row didn't carry an explicit ``mode`` value. This
+        # handles pre-079 rows that "opted out" by clearing the
+        # category list rather than setting a mode flag.
+        if explicit_mode is None and enabled == []:
+            mode = "off"
+            enabled_categories = set()
+
         return cls(
-            enabled_categories=set(row.get("enabled_categories") or list(_DEFAULT_CATEGORIES)),
+            mode=mode,
+            enabled_categories=enabled_categories,
             disabled_categories=set(row.get("disabled_categories") or []),
             fail_closed_on_credentials=bool(row.get("fail_closed_on_credentials", False)),
             redact_keys_extra=set(row.get("redact_keys_extra") or []),

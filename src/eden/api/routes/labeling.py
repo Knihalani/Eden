@@ -233,7 +233,7 @@ async def annotate(
         raise HTTPException(
             status_code=400,
             detail={"error": "invalid_annotation", "detail": str(exc)},
-        )
+        ) from exc
     return _annotation_to_response(ann)
 
 

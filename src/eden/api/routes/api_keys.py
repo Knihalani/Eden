@@ -292,7 +292,7 @@ async def list_api_keys(
                 detail=(
                     "Invalid cursor; expected ``<created_at_iso>|<id>``."
                 ),
-            )
+            ) from None
 
     if cursor_created_at is not None and cursor_id is not None:
         query = """

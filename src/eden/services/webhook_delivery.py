@@ -106,7 +106,7 @@ def _assert_public_ip(url: str) -> None:
             raise ValueError(
                 f"webhook URL hostname {hostname!r} resolved to "
                 f"non-IP value {ip_str!r}"
-            )
+            ) from None
         if (
             ip.is_private
             or ip.is_loopback

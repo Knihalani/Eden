@@ -413,7 +413,7 @@ async def render_prompt(
         rendered = _prompt_registry.render(prompt.prompt_name, variables, override_version=prompt.version)
         return {"rendered": rendered, "prompt_id": prompt_id}
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e)) from e
 
 
 # ============================================================================

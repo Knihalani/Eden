@@ -131,10 +131,13 @@ class PRSuggestion:
 class LLMClientLike(Protocol):
     """The minimal LLM client surface the suggester needs.
 
-    Matches :class:`eden.llm.client.OpenRouterClient`'s
-    ``complete`` method shape. Defined as a Protocol so
-    tests can mock it without pulling in the real client
-    (which has its own model router + cache + retry).
+    The suggester historically typed itself against a fictional
+    ``complete(prompt, system=, max_tokens=)`` method; the real
+    :class:`eden.llm.client.OpenRouterClient` exposes
+    ``acall(agent, prompt, slot, system_prompt, ...)``. We bridge via
+    :class:`_OpenRouterAdapter` below so the suggester can default to
+    the real client without hand-rolling an LLM in every call site.
+    Tests still mock the Protocol directly.
     """
 
     async def complete(
@@ -147,6 +150,52 @@ class LLMClientLike(Protocol):
     ) -> str:
         """Return the LLM's text completion for ``prompt``."""
         ...
+
+
+class _OpenRouterAdapter:
+    """Adapt :class:`eden.llm.client.OpenRouterClient` to ``LLMClientLike``.
+
+    The real client is keyed on ``agent`` (per-agent circuit breaker)
+    and on ``slot`` (the model-slots table). The suggester has neither
+    concept, so we hardcode ``agent="pr_suggester"`` and pick the slot
+    from ``max_tokens``: ``fast`` for small prompts, ``reasoning`` for
+    everything else. Mirrors the chat agent's pattern in
+    ``autonomous/agent.py`` where one fixed agent id routes all
+    suggester traffic through a single breaker.
+
+    If the wrapped client doesn't expose ``acall`` (an older test
+    stub), we fall back to ``complete`` so existing tests keep working.
+    """
+
+    def __init__(self, client: Any) -> None:
+        self._client = client
+
+    async def complete(
+        self,
+        prompt: str,
+        *,
+        system: str = "",
+        model: str | None = None,
+        max_tokens: int = 1024,
+    ) -> str:
+        slot = "fast" if max_tokens <= 1024 else "reasoning"
+        if hasattr(self._client, "acall"):
+            resp = await self._client.acall(
+                agent="pr_suggester",
+                prompt=prompt,
+                slot=slot,
+                system_prompt=system or None,
+                max_tokens=max_tokens,
+            )
+            return getattr(resp, "content", "") or ""
+        # Test stub path: the Protocol still works as-is.
+        fn = getattr(self._client, "complete", None)
+        if fn is None:
+            raise RuntimeError(
+                "LLM client lacks both 'acall' and 'complete'; cannot adapt"
+            )
+        out = await fn(prompt=prompt, system=system, max_tokens=max_tokens)
+        return out if isinstance(out, str) else getattr(out, "content", str(out))
 
 
 # ── PRSuggester ─────────────────────────────────────────────────
@@ -205,6 +254,25 @@ class PRSuggester:
         store_path: str | None = None,
     ) -> None:
         self._repo = repo_provider
+        # Default to a real OpenRouter client (matches the chat agent
+        # pattern). ``OpenRouterClient`` is imported lazily so tests
+        # that mock the Protocol don't pay the network-stack import
+        # cost, and so a missing API key in tests doesn't blow up
+        # at import time.
+        if llm_client is None:
+            try:
+                from eden.llm.client import OpenRouterClient
+                llm_client = _OpenRouterAdapter(OpenRouterClient())
+            except Exception as exc:  # noqa: BLE001
+                # If the OpenRouter client can't be constructed
+                # (no API key, missing dependency in a unit-test
+                # env, etc.) keep ``self._llm`` as None and let the
+                # runtime path raise a clearer RuntimeError.
+                logger.debug(
+                    "PRSuggester: could not construct default "
+                    "OpenRouterClient (%s); llm_client stays None",
+                    exc,
+                )
         self._llm = llm_client
         self._store_path = store_path or self._default_store_path()
 

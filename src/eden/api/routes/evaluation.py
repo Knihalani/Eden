@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import logging
 import os  # noqa: F401  (kept for legacy path constants — remove in next pass)
+from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
@@ -305,7 +306,7 @@ async def run_ci_pipeline(
         try:
             skip_stages.add(StageName(name))
         except ValueError:
-            raise HTTPException(status_code=400, detail=f"Unknown stage: {name}")
+            raise HTTPException(status_code=400, detail=f"Unknown stage: {name}") from None
 
     report = await pipeline.run(
         commit_sha=request.commit_sha,
@@ -367,7 +368,7 @@ async def canary_deploy(
     try:
         strategy = DeploymentStrategy(request.strategy)
     except ValueError:
-        raise HTTPException(status_code=400, detail=f"Unknown strategy: {request.strategy}")
+        raise HTTPException(status_code=400, detail=f"Unknown strategy: {request.strategy}") from None
 
     config = DeploymentConfig(
         strategy=strategy,
@@ -505,7 +506,7 @@ async def approve_review(
             auto_approved=decision.auto_approved,
         )
     except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        raise HTTPException(status_code=404, detail=str(e)) from e
 
 
 @router.post("/review/reject")
@@ -533,7 +534,7 @@ async def reject_review(
             auto_approved=decision.auto_approved,
         )
     except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        raise HTTPException(status_code=404, detail=str(e)) from e
 
 
 @router.get("/review/pending")
@@ -619,7 +620,7 @@ async def scan_file(
                 "Invalid file path: must resolve to a location inside "
                 f"the project directory ({exc})"
             ),
-        )
+        ) from exc
 
     if not path.exists():
         raise HTTPException(status_code=404, detail=f"File not found: {file_path}")

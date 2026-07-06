@@ -311,8 +311,6 @@ def _truncate_for_prompt(
 
 
 __all__ = [
-    "NLQueryEngine",
-    "AutoDashboardBuilder",
     "NLReportGenerator",
     "_validate_readonly_sql",
     "_truncate_for_prompt",

@@ -4475,3 +4475,92 @@ const datasetsApi = {
 (api as unknown as Record<string, unknown>).datasetsApi = datasetsApi;
 
 export { labelingApi, signalsApi, debuggerApi, qaApi, redteamApi, datasetsApi };
+
+
+// ── Cat 23 v1.7 PR-discipline surface ────────────────────────────
+//
+// The discipline layer (server-side, eden.code_change.discipline)
+// exposes a small read-side API for the portal to render
+// "why did / didn't Eden open a PR" transparently.
+export interface DisciplineDecision {
+  allowed: boolean;
+  score: number;
+  reasons: string[];
+  fingerprint: string;
+  trigger_kind: string;
+  trigger_identifier: string;
+}
+
+export interface BreakerStatus {
+  breaker_name: string;
+  org_id: string;
+  state: "closed" | "open" | "half_open";
+  failure_count: number;
+  rejection_count: number;
+  opened_at: string;
+  window_started_at: string;
+  policy: Record<string, unknown>;
+}
+
+export interface RateLimitSnapshot {
+  allowed: boolean;
+  repo_id: string;
+  org_id: string;
+  per_repo_per_day: { current: number; max: number; remaining_today: number; exceeded: boolean };
+  per_repo_per_hour: { current: number; max: number; remaining_this_hour: number; exceeded: boolean };
+  per_org_per_day: { current: number; max: number; remaining_today: number; exceeded: boolean };
+  policy: Record<string, unknown>;
+}
+
+export interface GraphStatusSnapshot {
+  graph_provider: string;
+  repo_full_name?: string;
+  branch?: string;
+  status?: { indexed: boolean; latest_sha: string; last_indexed_at: string; status: string } | null;
+  repos?: Array<Record<string, unknown>>;
+  message?: string;
+}
+
+export const disciplineApi = {
+  decide: (orgId: string, payload: Partial<DisciplineDecision> & {
+    trigger_kind: string;
+    trigger_identifier: string;
+    summary?: string;
+    rca_confidence?: number;
+    quality_score?: number;
+    blast_radius_score?: number;
+    evidence_count?: number;
+    reverted_history?: number;
+    denied_history?: number;
+    fix_area_localized?: boolean;
+    can_validate?: boolean;
+    protected_path_match?: boolean;
+    file_paths?: string[];
+    repo_id?: string;
+  }) =>
+    fetchApi<{ status: string; data: { decision: DisciplineDecision } }>(
+      `/orgs/${orgId}/intelligence/code-change/discipline/decide`,
+      { method: "POST", body: JSON.stringify(payload) }
+    ),
+  breakerStatus: (orgId: string, breakerName: string = "incident_pr") =>
+    fetchApi<{ status: string; data: { breaker: BreakerStatus } }>(
+      `/orgs/${orgId}/intelligence/code-change/discipline/breaker-status?breaker_name=${encodeURIComponent(breakerName)}`
+    ),
+  rateLimit: (orgId: string, repoId: string = "") =>
+    fetchApi<{ status: string; data: { rate_limit: RateLimitSnapshot } }>(
+      `/orgs/${orgId}/intelligence/code-change/discipline/rate-limit?repo_id=${encodeURIComponent(repoId)}`
+    ),
+  graphStatus: (orgId: string, repoFullName?: string) => {
+    const q = repoFullName
+      ? `?repo_full_name=${encodeURIComponent(repoFullName)}`
+      : "";
+    return fetchApi<{ status: string; data: GraphStatusSnapshot }>(
+      `/orgs/${orgId}/intelligence/code-change/repos/graph-status${q}`
+    );
+  },
+  requestIndex: (orgId: string, repoId: string) =>
+    fetchApi<{ status: string; data: Record<string, unknown> }>(
+      `/orgs/${orgId}/intelligence/code-change/repos/${encodeURIComponent(repoId)}/request-index`,
+      { method: "POST" }
+    ),
+};

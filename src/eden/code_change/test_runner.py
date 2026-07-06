@@ -143,7 +143,7 @@ class TestPlanRunner:
         org_id: str,
         patch_id: str,
         *,
-        spec: SandboxSpec | None = None,
+        spec: Any | None = None,
     ) -> dict[str, Any]:
         """Run the test plan in the sandbox.
 

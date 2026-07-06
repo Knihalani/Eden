@@ -177,7 +177,7 @@ async def ingest_trace(
             raise HTTPException(status_code=400, detail=f"Unknown realm: {req.realm}")
     except (KeyError, TypeError, ValueError) as e:
         logger.warning(f"Trace ingestion failed for org {org_id}: {e}")
-        raise HTTPException(status_code=422, detail=f"Malformed trace data: {e}")
+        raise HTTPException(status_code=422, detail=f"Malformed trace data: {e}") from e
 
     # Auto-process for datasets
     service.generate_datasets(tenant_id, [trace.trace_id])
@@ -205,7 +205,7 @@ async def list_traces(
     try:
         realm_enum = Realm(realm) if realm else None
     except ValueError:
-        raise HTTPException(status_code=422, detail=f"Invalid realm: {realm}")
+        raise HTTPException(status_code=422, detail=f"Invalid realm: {realm}") from None
     traces = service.list_traces(member.org_id, realm=realm_enum, limit=limit, offset=offset)
     return [t.to_dict() for t in traces]
 
@@ -423,7 +423,7 @@ async def compare_traces(
         report = service.compare_env_vs_prod(member.org_id, req.env_trace_id, req.prod_trace_id)
         return DisparityReportResponse(**report.to_dict())
     except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        raise HTTPException(status_code=404, detail=str(e)) from e
 
 
 @router.post("/insights/disparity/batch-compare", response_model=list[DisparityReportResponse])

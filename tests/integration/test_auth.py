@@ -99,6 +99,38 @@ class TestAuthSignup:
         assert response.status_code in (202, 429)
 
 
+
+    def test_signup_does_not_leak_session_cookie_or_user_response(
+        self, api_client: TestClient,
+    ):
+        """Regression: signup must never set a session cookie or
+        return the UserResponse envelope — the 202 anti-enumeration
+        response is the only valid shape until email verification.
+
+        Pre-fix: the signup handler had a dead-code tail that called
+        ``_set_session_cookie(response, access_token)`` and returned
+        ``UserResponse(...)`` — neither could be reached because the
+        function returned earlier with ``JSONResponse(202, ...)``,
+        but the dead code referenced an undefined ``access_token``
+        variable. Ruff F821 flagged it; we deleted the dead block.
+
+        This test locks in the contract: no cookie, no UserResponse,
+        just the 202 + generic message."""
+        api_client.cookies.clear()
+        response = api_client.post("/auth/signup", json={
+            "email": "deadcode@example.com",
+            "password": "Str0ng!Pass#2024",
+            "name": "Dead Code",
+        })
+        assert response.status_code == 202
+        body = response.json()
+        # Only the generic message shape — never user_id/email/etc.
+        assert "user_id" not in body
+        assert "email" not in body
+        assert "organizations" not in body
+        # No session cookie was set.
+        assert "authorization" not in api_client.cookies
+
 class TestAuthLogin:
     def test_login_success(self, api_client: TestClient):
         """Valid credentials return user data and set cookie."""

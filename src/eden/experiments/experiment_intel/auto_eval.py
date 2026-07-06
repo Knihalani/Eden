@@ -126,7 +126,7 @@ class AutoEvaluator:
                 )
             )
             scores_by_key: dict[tuple[str, str], list[float]] = {
-                (j, v): s for (j, v), s in zip(keys, batch)
+                (j, v): s for (j, v), s in zip(keys, batch, strict=False)
             }
         else:
             scores_by_key = {}

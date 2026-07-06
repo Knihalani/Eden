@@ -146,7 +146,7 @@ async def execute_sql(
                 "kind": "forbidden_statement",
                 "detail": str(exc),
             },
-        )
+        ) from exc
     except SqlMultiStatementError as exc:
         raise HTTPException(
             status_code=400,
@@ -155,7 +155,7 @@ async def execute_sql(
                 "kind": "multi_statement",
                 "detail": str(exc),
             },
-        )
+        ) from exc
     except SqlUnknownTableError as exc:
         raise HTTPException(
             status_code=400,
@@ -164,7 +164,7 @@ async def execute_sql(
                 "kind": "unknown_table",
                 "detail": str(exc),
             },
-        )
+        ) from exc
     except SqlTenantViolationError as exc:
         raise HTTPException(
             status_code=403,
@@ -173,7 +173,7 @@ async def execute_sql(
                 "kind": "tenant_violation",
                 "detail": str(exc),
             },
-        )
+        ) from exc
     except SqlTimeoutError as exc:
         raise HTTPException(
             status_code=408,
@@ -182,7 +182,7 @@ async def execute_sql(
                 "kind": "timeout",
                 "detail": str(exc),
             },
-        )
+        ) from exc
 
     return SqlExecuteResponse(
         columns=result.columns,

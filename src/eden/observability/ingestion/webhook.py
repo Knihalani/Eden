@@ -90,7 +90,7 @@ class WebhookDecoder:
             raise SchemaInvalidError(
                 f"webhook body is not valid JSON: {exc}",
                 problems=[f"json_decode_error: {exc}"],
-            )
+            ) from exc
 
         if isinstance(payload, list):
             items = [p for p in payload if isinstance(p, dict)]

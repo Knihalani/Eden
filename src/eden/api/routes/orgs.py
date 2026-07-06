@@ -193,7 +193,7 @@ async def create_org(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to create organization",
-        )
+        ) from exc
     if not row:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -416,7 +416,7 @@ async def send_invite(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e),
-        )
+        ) from e
 
     # Send invitation email (stub)
     await send_invite_email(
@@ -478,7 +478,7 @@ async def accept_org_invitation(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e),
-        )
+        ) from e
 
     # Audit log
     client = await get_postgres_client()
@@ -518,7 +518,7 @@ async def decline_org_invitation(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e),
-        )
+        ) from e
 
     # Audit log
     client = await get_postgres_client()
@@ -1104,11 +1104,11 @@ async def add_allowed_domain(
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail="Domain is already in the allowed list",
-            )
+            ) from e
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to add domain",
-        )
+        ) from e
 
     # Audit log
     await log_audit_event(

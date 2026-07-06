@@ -68,10 +68,9 @@ async def _ingest_otlp_json(payload: str) -> None:
 
     get_settings()
     # gRPC clients don't carry an explicit tenant_id — we use a header
-    # sent via gRPC metadata. For now we extract from metadata or
-    # default to a placeholder; production deployments would route via
-    # an auth interceptor.
-    dict(context.invocation_metadata() if False else [])  # placeholder
+    # sent via gRPC metadata. Production deployments would route via
+    # an auth interceptor. The metadata dict is currently a no-op
+    # (the grpc context isn't wired into the request handler).
     attribution = Attribution(
         tenant_id="otel_grpc",
         project_id="otel_grpc",

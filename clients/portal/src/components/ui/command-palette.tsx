@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { Command as Cmnd } from "cmdk";
 import { useRouter, usePathname } from "next/navigation";
 import { Search, Bot, Wand2, Box, Network, Activity, Layers, Brain, Compass, Bell, Cog, Sparkles, FlaskConical, Shield, Inbox, GitPullRequestArrow, BarChart3, Settings, CreditCard, FileText, User, Users, X, ChevronRight, Wrench, PlayCircle, Gauge, Database, GitBranch, Library, History } from "lucide-react"; // Sandbox (Server) icon import removed 2026-07-04.
@@ -124,8 +124,23 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
   }, [open, onOpenChange]);
 
   // Re-read recent items each time the palette opens.
+  // F4: also capture the previously-focused element so we can restore
+  // focus to it after the palette closes (it isn't a Radix Dialog, so
+  // Radix's auto-restore doesn't apply).
+  const lastFocusRef = useRef<HTMLElement | null>(null);
   useEffect(() => {
-    if (open) setRecentHrefs(readRecent());
+    if (open) {
+      lastFocusRef.current = (document.activeElement as HTMLElement) ?? null;
+      setRecentHrefs(readRecent());
+    } else if (lastFocusRef.current && typeof lastFocusRef.current.focus === "function") {
+      // Defer to the next tick so we don't fight with anything else
+      // closing at the same time (e.g. the ⌘K handler that toggled
+      // us off also tries to refocus its trigger).
+      const t = window.setTimeout(() => {
+        try { lastFocusRef.current?.focus(); } catch { /* node unmounted */ }
+      }, 0);
+      return () => window.clearTimeout(t);
+    }
   }, [open]);
 
   // Track the current route as recently visited (only for routes the

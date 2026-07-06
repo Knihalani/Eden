@@ -84,7 +84,7 @@ async def put_region(
         )
     except Exception as exc:
         logger.warning(f"put_region failed: {exc}")
-        raise HTTPException(status_code=500, detail=str(exc))
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
 
     # Audit log
     try:

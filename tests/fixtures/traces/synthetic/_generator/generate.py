@@ -278,13 +278,24 @@ def _events_to_dict(
     trace_id: str,
     agent_id: str,
     steps: list[Step],
+    archetype_id: str = "",
 ) -> list[dict[str, Any]]:
     """Materialise a step list into TelemetryEvent dicts with proper
     ids, parents, and monotonic timestamps.
+
+    Every event's ``attributes`` dict carries the archetype_id so the
+    quality-pipeline worker can recover it without inspecting the
+    trace's top-level metadata.
     """
     root_span = _sid(trace_id, 0)
     cursor = 0
     out: list[dict[str, Any]] = []
+
+    def _with_archetype(attrs: dict[str, Any]) -> dict[str, Any]:
+        """Stamp archetype_id into every event's attributes."""
+        attrs = dict(attrs) if attrs else {}
+        attrs.setdefault("archetype_id", archetype_id)
+        return attrs
 
     def _row(idx: int, **fields: Any) -> dict[str, Any]:
         base = {
@@ -316,7 +327,8 @@ def _events_to_dict(
         span_id=root_span,
         name="trace",
         duration_ms=0.0,
-        payload={}, metrics={}, attributes={"environment": "production"},
+        payload={}, metrics={},
+        attributes=_with_archetype({"environment": "production"}),
         outcome=None,
         request_body=None, response_body=None, reasoning=None,
         tool_calls_full=[], tool_results=[],
@@ -344,7 +356,7 @@ def _events_to_dict(
             duration_ms=step.duration_ms,
             payload=step.payload,
             metrics=step.metrics,
-            attributes=step.attributes,
+            attributes=_with_archetype(step.attributes),
             tags=step.tags,
             outcome=step.outcome,
             request_body=step.request_body,
@@ -374,7 +386,7 @@ def _events_to_dict(
         span_id=root_span,
         name="trace",
         duration_ms=float(cursor),
-        payload={}, metrics={}, attributes={"environment": "production"},
+        payload={}, metrics={}, attributes=_with_archetype({"environment": "production"}),
         outcome=steps[-1].outcome if steps else None,
         request_body=None, response_body=None, reasoning=None,
         tool_calls_full=[], tool_results=[],
@@ -393,9 +405,16 @@ def _events_to_dict(
 def make_efficient_good(variant: int) -> tuple[list[Step], dict[str, Any]]:
     """7-step customer-support trace: 1 LLM + 3 tool calls. Outcome=success."""
     trace_id = f"trace_efficient_good_{variant:02d}"
+    # Vary order_id, amount, and card across variants.
+    order_ids = ["4471", "2218", "9053"]
+    amounts = [42.00, 18.50, 75.99]
+    cards = ["8842", "1129", "6670"]
+    order_id = order_ids[variant - 1]
+    amount = amounts[variant - 1]
+    card = cards[variant - 1]
     user_msg = (
-        "Hi, I cancelled my order #4471 on May 14 and was told I'd get a "
-        "$42.00 refund. I still don't see it on my Visa ending 8842."
+        f"Hi, I cancelled my order #{order_id} on May 14 and was told I'd get a "
+        f"${amount:.2f} refund. I still don't see it on my Visa ending {card}."
     )
     steps: list[Step] = [
         _llm("fast", [{"role": "user", "content": user_msg}],
@@ -404,15 +423,15 @@ def make_efficient_good(variant: int) -> tuple[list[Step], dict[str, Any]]:
                  "id": _tid("lookup", 1),
                  "type": "function",
                  "function": {"name": "crm.order_lookup",
-                              "arguments": json.dumps({"order_id": "4471"})},
+                              "arguments": json.dumps({"order_id": order_id})},
              }]),
-        _tool("crm.order_lookup", {"order_id": "4471"},
-              {"order_id": "4471", "status": "cancelled",
-               "refund_promised_cents": 4200, "currency": "USD",
-               "customer_card_last4": "8842"},
+        _tool("crm.order_lookup", {"order_id": order_id},
+              {"order_id": order_id, "status": "cancelled",
+               "refund_promised_cents": int(amount * 100), "currency": "USD",
+               "customer_card_last4": card},
               duration_ms=180.0),
         _tool("payments.refund_status",
-              {"order_id": "4471"},
+              {"order_id": order_id},
               {"refund_state": "queued", "eta_days": 3, "initiated_at": "2026-05-15"},
               duration_ms=210.0),
         _tool("kb.search",
@@ -426,96 +445,106 @@ def make_efficient_good(variant: int) -> tuple[list[Step], dict[str, Any]]:
                   "id": _tid("lookup", 1),
                   "type": "function",
                   "function": {"name": "crm.order_lookup",
-                               "arguments": "{\"order_id\":\"4471\"}"}}]},
+                               "arguments": json.dumps({"order_id": order_id})}}]},
               {"role": "tool", "tool_call_id": _tid("lookup", 1),
-               "content": json.dumps({"order_id": "4471", "status": "cancelled",
-                                       "refund_promised_cents": 4200})},
+               "content": json.dumps({"order_id": order_id, "status": "cancelled",
+                                       "refund_promised_cents": int(amount * 100)})},
               {"role": "tool", "tool_call_id": _tid("lookup", 1),
                "content": json.dumps({"refund_state": "queued", "eta_days": 3})},
               {"role": "tool", "tool_call_id": _tid("lookup", 1),
                "content": "Refunds queued Mon-Thu post 6pm PT settle in 3 business days."}],
-             "Your $42.00 refund is queued and per our policy will land on your Visa ending 8842 "
+             f"Your ${amount:.2f} refund is queued and per our policy will land on your Visa ending {card} "
              "within 3 business days. Is there anything else I can help with?"),
     ]
-    return steps, _gt(trace_id, "efficient-good", 0,
-                      expected_tas=88 + variant,
+    return steps, _gt(trace_id, "efficient-good", variant - 1,
+                      expected_tas=88 + variant,  # re-baselined after generation
                       expected_intervention="allow",
-                      notes="Optimal path: 1 LLM call, 3 tool lookups, low tokens, fast.")
+                      notes=f"Optimal path: 1 LLM call, 3 tool lookups, order_id={order_id}, low tokens, fast.")
 
 
 def make_redundant_repeated(variant: int) -> tuple[list[Step], dict[str, Any]]:
     """12-step trace: agent re-asks the same question 4x. Outcome=success."""
     trace_id = f"trace_redundant_repeated_{variant:02d}"
+    # Vary order_id, amount, card across variants.
+    order_ids = ["4471", "2218", "9053"]
+    amounts = [42, 18, 76]
+    cards = ["8842", "1129", "6670"]
+    order_id = order_ids[variant - 1]
+    amount = amounts[variant - 1]
+    card = cards[variant - 1]
     q = "Can you confirm the last 4 digits of the card on file so I can check the refund?"
     steps: list[Step] = [
         _llm("fast",
-             [{"role": "user", "content": "Where's my $42 refund for order 4471?"}],
+             [{"role": "user", "content": f"Where's my ${amount} refund for order {order_id}?"}],
              "I'll help. " + q,
              tool_calls=[{"id": _tid("ask", 1),
                           "type": "function",
                           "function": {"name": "user.ask", "arguments": "{}"}}]),
-        _env_step("user.ask", "user: 8842"),
+        _env_step("user.ask", f"user: {card}"),
         _llm("fast",
-             [{"role": "user", "content": "Where's my $42 refund for order 4471?"},
+             [{"role": "user", "content": f"Where's my ${amount} refund for order {order_id}?"},
               {"role": "assistant", "content": q},
-              {"role": "user", "content": "8842"}],
+              {"role": "user", "content": card}],
              "Let me look that up.",
              tool_calls=[{"id": _tid("lookup", 2),
                           "type": "function",
                           "function": {"name": "crm.order_lookup",
-                                       "arguments": json.dumps({"order_id": "4471"})}}]),
-        _tool("crm.order_lookup", {"order_id": "4471"},
-              {"order_id": "4471", "status": "cancelled"}, duration_ms=190.0),
-        _llm("fast", [{"role": "user", "content": "8842"}],
+                                       "arguments": json.dumps({"order_id": order_id})}}]),
+        _tool("crm.order_lookup", {"order_id": order_id},
+              {"order_id": order_id, "status": "cancelled"}, duration_ms=190.0),
+        _llm("fast", [{"role": "user", "content": card}],
              "Before I check the refund status, " + q,
              tool_calls=[{"id": _tid("ask", 3),
                           "type": "function",
                           "function": {"name": "user.ask", "arguments": "{}"}}]),
-        _env_step("user.ask", "user: 8842, I already told you"),
+        _env_step("user.ask", f"user: {card}, I already told you"),
         _llm("standard",
-             [{"role": "user", "content": "8842, I already told you"}],
+             [{"role": "user", "content": f"{card}, I already told you"}],
              "Apologies. " + q,
              tool_calls=[{"id": _tid("ask", 4),
                           "type": "function",
                           "function": {"name": "user.ask", "arguments": "{}"}}]),
-        _env_step("user.ask", "user: 8842!"),
+        _env_step("user.ask", f"user: {card}!"),
         _llm("standard",
-             [{"role": "user", "content": "8842!"}],
+             [{"role": "user", "content": f"{card}!"}],
              "Sorry, let me re-confirm. " + q,
              tool_calls=[{"id": _tid("ask", 5),
                           "type": "function",
                           "function": {"name": "user.ask", "arguments": "{}"}}]),
-        _env_step("user.ask", "user: 8842, please just check"),
+        _env_step("user.ask", f"user: {card}, please just check"),
         _tool("payments.refund_status",
-              {"order_id": "4471", "card_last4": "8842"},
+              {"order_id": order_id, "card_last4": card},
               {"refund_state": "queued", "eta_days": 3},
               duration_ms=240.0),
-        _llm("fast", [{"role": "user", "content": "8842, please just check"}],
-             "Got it — your $42 refund is queued and will land in 3 business days."),
+        _llm("fast", [{"role": "user", "content": f"{card}, please just check"}],
+             f"Got it — your ${amount} refund is queued and will land in 3 business days."),
     ]
-    return steps, _gt(trace_id, "redundant-repeated-context", 1,
+    return steps, _gt(trace_id, "redundant-repeated-context", variant,
                       expected_tas=50 + variant,
                       expected_intervention="warn",
                       expected_redundancy_pct=0.42 + variant * 0.02,
-                      notes="User has to repeat '8842' four times. High redundancy. "
-                            "Warn intervention would suggest the agent check recent turns first.")
+                      notes=f"User has to repeat '{card}' four times for order {order_id}. "
+                            "High redundancy. Warn intervention would suggest the agent check recent turns first.")
 
 
 def make_loop_stuck(variant: int) -> tuple[list[Step], dict[str, Any]]:
     """25-step trace: 7 near-identical retries. Outcome=timeout."""
     trace_id = f"trace_loop_stuck_{variant:02d}"
+    # Vary city across variants.
+    cities = ["Tokyo", "Paris", "London"]
+    city = cities[variant - 1]
     arg_variants = [
-        {"q": "weather Tokyo"},
-        {"q": "weather tokyo"},
-        {"q": "Weather Tokyo"},
-        {"query": "weather Tokyo"},
-        {"q": "tokyo weather"},
-        {"q": "weather in Tokyo"},
-        {"q": "What's the weather in Tokyo?"},
+        {"q": f"weather {city}"},
+        {"q": f"weather {city.lower()}"},
+        {"q": f"Weather {city}"},
+        {"query": f"weather {city}"},
+        {"q": f"{city.lower()} weather"},
+        {"q": f"weather in {city}"},
+        {"q": f"What's the weather in {city}?"},
     ]
     steps: list[Step] = [
         _llm("fast",
-             [{"role": "user", "content": "What's the weather in Tokyo?"}],
+             [{"role": "user", "content": f"What's the weather in {city}?"}],
              "Let me check.",
              tool_calls=[{"id": _tid("w", i),
                           "type": "function",
@@ -533,14 +562,14 @@ def make_loop_stuck(variant: int) -> tuple[list[Step], dict[str, Any]]:
         )
     # One final env.step showing the agent gave up.
     steps.append(_env_step("agent.timeout",
-                           "aborted after 7 weather.lookup timeouts",
+                           f"aborted after 7 weather.lookup timeouts for {city}",
                            outcome="failure"))
     # Add an outer span.end with timeout outcome.
-    return steps, _gt(trace_id, "loop-stuck", 2,
+    return steps, _gt(trace_id, "loop-stuck", variant,
                       expected_tas=18 + variant,
                       expected_intervention="block",
                       expected_loop_detected=True,
-                      notes="7 consecutive weather.lookup attempts with paraphrased "
+                      notes=f"7 consecutive weather.lookup attempts for {city} with paraphrased "
                             "arguments. Loop detector MUST fire. Block intervention "
                             "recommended: agent should give up after 2 identical-tool "
                             "failures.")
@@ -549,34 +578,40 @@ def make_loop_stuck(variant: int) -> tuple[list[Step], dict[str, Any]]:
 def make_hallucinating(variant: int) -> tuple[list[Step], dict[str, Any]]:
     """8-step trace: LLM cites fabricated statistic. Outcome=success."""
     trace_id = f"trace_hallucinating_{variant:02d}"
+    # Vary the hallucinated statistic across variants.
+    quarters = [
+        ("Q3 2026", "$14.2M", "122%", "144%", "218", "311"),
+        ("Q2 2026", "$12.8M", "118%", "139%", "201", "287"),
+        ("Q1 2026", "$11.5M", "115%", "137%", "189", "265"),
+    ]
+    q, arr, real_nrr, fake_nrr, cust_start, cust_end = quarters[variant - 1]
     grounding = (
-        "Q3 2026 results: ARR $14.2M, up 38% YoY. Net retention 122%. "
-        "Customer count grew from 218 to 311. Largest customer contributed 8.4% of ARR. "
-        "Average contract length 14 months. Gross margin 71%."
+        f"{q} results: ARR {arr}, up 38% YoY. Net retention {real_nrr}. "
+        f"Customer count grew from {cust_start} to {cust_end}. Largest customer contributed 8.4% of ARR. "
+        f"Average contract length 14 months. Gross margin 71%."
     )
-    # The fabricated statistic: "Net retention 144% — top-decile in the industry".
-    # The source only says 122%.
+    # The fabricated statistic: "Net retention {fake_nrr} — top-decile in the industry".
     steps: list[Step] = [
         _llm("reasoning",
-             [{"role": "user", "content": "Summarize Q3 2026 for the board."}],
+             [{"role": "user", "content": f"Summarize {q} for the board."}],
              "I'll pull the deck.",
              tool_calls=[{"id": _tid("kb", 11),
                           "type": "function",
                           "function": {"name": "kb.search",
-                                       "arguments": json.dumps({"q": "Q3 2026 results"})}}]),
+                                       "arguments": json.dumps({"q": f"{q} results"})}}]),
         _tool("kb.search",
-              {"q": "Q3 2026 results"},
+              {"q": f"{q} results"},
               {"hit_id": "kb_4419", "text": grounding},
               duration_ms=180.0),
         _llm("standard",
-             [{"role": "user", "content": "Summarize Q3 2026 for the board."},
+             [{"role": "user", "content": f"Summarize {q} for the board."},
               {"role": "tool", "tool_call_id": _tid("kb", 11),
                "content": grounding}],
              (
-                 "Q3 2026 was a strong quarter: ARR reached $14.2M (up 38% YoY), net retention "
-                 "was 144% — which puts us in the top decile of the industry — and customer count "
-                 "grew from 218 to 311. Largest customer was 8.4% of ARR, average contract "
-                 "length was 14 months, and gross margin held at 71%."
+                 f"{q} was a strong quarter: ARR reached {arr} (up 38% YoY), net retention "
+                 f"was {fake_nrr} — which puts us in the top decile of the industry — and customer count "
+                 f"grew from {cust_start} to {cust_end}. Largest customer was 8.4% of ARR, average contract "
+                 f"length was 14 months, and gross margin held at 71%."
              ),
              # Logprobs skewed toward the hallucinated token to keep
              # the evaluator from short-circuiting on "obvious" bad output.
@@ -584,22 +619,22 @@ def make_hallucinating(variant: int) -> tuple[list[Step], dict[str, Any]]:
         _llm("reasoning",
              [{"role": "user", "content": "Double check the NR figure."}],
              (
-                 "Cross-checked: net retention of 144% remains in the top decile of "
+                 f"Cross-checked: net retention of {fake_nrr} remains in the top decile of "
                  "B2B SaaS — the median NRR for our peer set is around 108%."
              )),
         _tool("kb.search",
-              {"q": "Q3 2026 net retention 144 peer median"},
-              {"hit_id": "kb_4420", "text": "Q3 2026: Net retention 122%. No peer-median doc on file."},
+              {"q": f"{q} net retention {fake_nrr} peer median"},
+              {"hit_id": "kb_4420", "text": f"{q}: Net retention {real_nrr}. No peer-median doc on file."},
               duration_ms=200.0),
         _llm("standard",
              [{"role": "user", "content": "Double check the NR figure."}],
-             "Confirmed: 144% NRR — top decile. Anything else?"),
+             f"Confirmed: {fake_nrr} NRR — top decile. Anything else?"),
     ]
-    return steps, _gt(trace_id, "hallucinating", 3,
+    return steps, _gt(trace_id, "hallucinating", variant,
                       expected_tas=70 - variant * 3,
                       expected_intervention="warn",
                       expected_hallucination_detected=True,
-                      notes="LLM invents '144% NRR (top decile)' — source only says 122%. "
+                      notes=f"LLM invents '{fake_nrr} NRR (top decile)' — source only says {real_nrr}%. "
                             "Grounding check MUST flag. Warn intervention: tag the response "
                             "as unverified and require human review before board send.")
 
@@ -609,6 +644,8 @@ def make_slow_cost_overrun(variant: int) -> tuple[list[Step], dict[str, Any]]:
     trace_id = f"trace_slow_cost_overrun_{variant:02d}"
     # 5 reasoning LLM calls + 4 tool calls + 1 long-tail LLM call (the offender).
     steps: list[Step] = []
+    # Vary the long-tail duration across variants.
+    long_tail_durations = [11_800.0, 14_500.0, 18_200.0]
     plan = [
         ("plan", "Outline a migration plan for the Q3 cluster.", 3_400.0),
         ("kb.search", None, 480.0),
@@ -616,7 +653,7 @@ def make_slow_cost_overrun(variant: int) -> tuple[list[Step], dict[str, Any]]:
         ("tool.calls", None, 520.0),
         ("plan", "What about rollback?", 3_300.0),
         ("plan", "What about data backfill?", 3_500.0),
-        ("plan", "Final summary for the eng team.", 11_800.0),  # the long-tail offender
+        ("plan", "Final summary for the eng team.", long_tail_durations[variant - 1]),
     ]
     body_so_far: list[dict[str, Any]] = [
         {"role": "user", "content": "Outline a migration plan for the Q3 cluster."},
@@ -635,40 +672,51 @@ def make_slow_cost_overrun(variant: int) -> tuple[list[Step], dict[str, Any]]:
                                duration_ms=dur))
             body_so_far.append({"role": "tool", "tool_call_id": _tid("d", i),
                                 "content": json.dumps({"nodes": 412})})
-    return steps, _gt(trace_id, "slow-cost-overrun", 4,
+    return steps, _gt(trace_id, "slow-cost-overrun", variant,
                       expected_tas=82 - variant * 2,
                       expected_intervention="summarize",
-                      notes="Total wall time ~28s due to a single 11.8s reasoning call. "
+                      notes=f"Total wall time elevated due to a single {long_tail_durations[variant - 1]/1000:.1f}s reasoning call. "
                             "Structure is otherwise optimal. Cost-optimisation intervention: "
                             "downgrade the final summary to slot=standard.")
 
 
 def make_failing_tool(variant: int) -> tuple[list[Step], dict[str, Any]]:
     """6-step trace: tool returns 500 3 times, agent doesn't adapt."""
+    # Vary the failing tool name and args across variants.
+    failing_tools = [
+        ("bank.transfer", {"from": "acc_8842", "to": "acc_3344", "amount_usd": 250.00}),
+        ("payments.refund", {"order_id": "7822", "amount_usd": 89.99}),
+        ("inventory.reserve", {"sku": "WIDGET-001", "qty": 50}),
+    ]
+    tool_name, tool_args = failing_tools[variant - 1]
     trace_id = f"trace_failing_tool_{variant:02d}"
+    # Use the failing_tool's args for the actual events.
+    amount = tool_args.get("amount_usd", tool_args.get("qty", 100))
+    src_acc = tool_args.get("from", tool_args.get("sku", "acc_8821"))
+    dst_acc = tool_args.get("to", "acc_9921")
     steps: list[Step] = [
         _llm("fast",
-             [{"role": "user", "content": "Move $500 from acct 8821 to acct 9921."}],
-             "Executing the transfer.",
+             [{"role": "user", "content": f"Move ${amount} from acct {src_acc[-4:]} to acct {dst_acc[-4:]}."}],
+             "Executing the call.",
              tool_calls=[{"id": _tid("t", 1),
                           "type": "function",
-                          "function": {"name": "bank.transfer",
-                                       "arguments": json.dumps({"from": "8821", "to": "9921", "amount": 500})}}]),
-        _tool("bank.transfer",
-              {"from": "8821", "to": "9921", "amount": 500},
+                          "function": {"name": tool_name,
+                                       "arguments": json.dumps(tool_args)}}]),
+        _tool(tool_name,
+              tool_args,
               {"error": "internal_error"},
               duration_ms=410.0, outcome="failure", error="HTTP 500"),
         _llm("fast",
-             [{"role": "user", "content": "Move $500 from acct 8821 to acct 9921."},
+             [{"role": "user", "content": f"Move ${amount} from acct {src_acc[-4:]} to acct {dst_acc[-4:]}."},
               {"role": "tool", "tool_call_id": _tid("t", 1),
                "content": "HTTP 500 internal_error"}],
              "Retrying.",
              tool_calls=[{"id": _tid("t", 2),
                           "type": "function",
-                          "function": {"name": "bank.transfer",
-                                       "arguments": json.dumps({"from": "8821", "to": "9921", "amount": 500})}}]),
-        _tool("bank.transfer",
-              {"from": "8821", "to": "9921", "amount": 500},
+                          "function": {"name": tool_name,
+                                       "arguments": json.dumps(tool_args)}}]),
+        _tool(tool_name,
+              tool_args,
               {"error": "internal_error"},
               duration_ms=420.0, outcome="failure", error="HTTP 500"),
         _llm("fast",
@@ -694,7 +742,19 @@ def make_failing_tool(variant: int) -> tuple[list[Step], dict[str, Any]]:
 def make_optimal_path_exists(variant: int) -> tuple[list[Step], dict[str, Any]]:
     """18-step trace that could be done in 8. Same outcome."""
     trace_id = f"trace_optimal_path_exists_{variant:02d}"
-    base_msg = "Find me the top 3 trending repos on GitHub today."
+    # Vary the user request and trending repos across variants.
+    base_msgs = [
+        "Find me the top 3 trending repos on GitHub today.",
+        "What are the most popular Python repos this week?",
+        "Show me the top trending ML repos on GitHub right now.",
+    ]
+    trending_lists = [
+        [("eden-eval", 412), ("agentbench", 318), ("llm-router", 290)],
+        [("django-rest", 287), ("fastapi-best", 256), ("pydantic-v3", 198)],
+        [("huggingface-agents", 502), ("langgraph-pro", 411), ("rag-eval", 367)],
+    ]
+    base_msg = base_msgs[variant - 1]
+    trending = trending_lists[variant - 1]
     steps: list[Step] = [
         _llm("fast", [{"role": "user", "content": base_msg}],
              "Sure, what language?",
@@ -737,14 +797,13 @@ def make_optimal_path_exists(variant: int) -> tuple[list[Step], dict[str, Any]]:
                                        "arguments": "{}"}}]),
         _tool("github.trending", {},
               {"items": [
-                  {"name": "eden-eval", "stars_today": 412},
-                  {"name": "agentbench", "stars_today": 318},
-                  {"name": "llm-router", "stars_today": 290}]},
+                  {"name": name, "stars_today": stars}
+                  for name, stars in trending]},
               duration_ms=220.0),
         _llm("fast", [{"role": "tool", "tool_call_id": _tid("g", 5),
-                       "content": "[eden-eval:412, agentbench:318, llm-router:290]"}],
-             "Top 3 trending repos today: eden-eval (412 stars today), "
-             "agentbench (318), and llm-router (290)."),
+                       "content": str([{"name": n, "stars_today": s} for n, s in trending])}],
+             f"Top 3 trending repos today: {trending[0][0]} ({trending[0][1]} stars today), "
+             f"{trending[1][0]} ({trending[1][1]}), and {trending[2][0]} ({trending[2][1]})."),
     ]
     return steps, _gt(trace_id, "optimal-path-exists", 6,
                       expected_tas=48 + variant,
@@ -758,26 +817,33 @@ def make_optimal_path_exists(variant: int) -> tuple[list[Step], dict[str, Any]]:
 def make_multi_agent_handoff(variant: int) -> tuple[list[Step], dict[str, Any]]:
     """15-step trace, 3 smooth agent handoffs."""
     trace_id = f"trace_multi_agent_handoff_{variant:02d}"
+    # Vary invoice ID and VAT across variants.
+    invoices = [
+        (2210, "GB123", "GB987654321", 49900),
+        (3712, "DE456", "DE321098765", 12750),
+        (8845, "FR789", "FR456123789", 8999),
+    ]
+    inv_id, old_vat, new_vat, amount_cents = invoices[variant - 1]
     steps: list[Step] = [
         _llm("fast",
-             [{"role": "user", "content": "My invoice #2210 has the wrong VAT number."}],
+             [{"role": "user", "content": f"My invoice #{inv_id} has the wrong VAT number."}],
              "Routing to the billing agent.",
              tool_calls=[{"id": _tid("h", 1),
                           "type": "function",
                           "function": {"name": "agent.handoff",
                                        "arguments": json.dumps({"to": "billing"})}}]),
         _env_step("agent.handoff",
-                  "handed off billing -> billing context: invoice_id=2210"),
+                  "handed off billing -> billing context: invoice_id={inv_id}"),
         _llm("standard",
-             [{"role": "user", "content": "Invoice 2210 — fix the VAT number."}],
+             [{"role": "user", "content": f"Invoice {inv_id} — fix the VAT number."}],
              "Pulling the invoice.",
              tool_calls=[{"id": _tid("b", 2),
                           "type": "function",
                           "function": {"name": "billing.invoice_get",
-                                       "arguments": json.dumps({"id": 2210})}}]),
+                                       "arguments": json.dumps({"id": inv_id})}}]),
         _tool("billing.invoice_get", {"id": 2210},
-              {"id": 2210, "vat": "GB123", "currency": "GBP",
-               "amount_cents": 49900},
+              {"id": inv_id, "vat": old_vat, "currency": "GBP",
+               "amount_cents": amount_cents},
               duration_ms=190.0),
         _llm("standard",
              [{"role": "tool", "tool_call_id": _tid("b", 2),
@@ -786,17 +852,17 @@ def make_multi_agent_handoff(variant: int) -> tuple[list[Step], dict[str, Any]]:
              tool_calls=[{"id": _tid("a", 3),
                           "type": "function",
                           "function": {"name": "user.ask", "arguments": "{}"}}]),
-        _env_step("user.ask", "user: GB987654321"),
+        _env_step("user.ask", f"user: {new_vat}"),
         _llm("standard",
-             [{"role": "user", "content": "GB987654321"}],
+             [{"role": "user", "content": f"{new_vat}"}],
              "Updating and reissuing.",
              tool_calls=[{"id": _tid("b", 4),
                           "type": "function",
                           "function": {"name": "billing.invoice_update",
-                                       "arguments": json.dumps({"id": 2210, "vat": "GB987654321"})}}]),
+                                       "arguments": json.dumps({"id": inv_id, "vat": new_vat})}}]),
         _tool("billing.invoice_update",
-              {"id": 2210, "vat": "GB987654321"},
-              {"id": 2210, "status": "updated"}, duration_ms=240.0),
+              {"id": inv_id, "vat": new_vat},
+              {"id": inv_id, "status": "updated"}, duration_ms=240.0),
         _llm("standard",
              [{"role": "tool", "tool_call_id": _tid("b", 4),
                "content": "updated"}],
@@ -806,20 +872,20 @@ def make_multi_agent_handoff(variant: int) -> tuple[list[Step], dict[str, Any]]:
                           "function": {"name": "agent.handoff",
                                        "arguments": json.dumps({"to": "documents"})}}]),
         _env_step("agent.handoff",
-                  "handed off documents -> context: invoice_id=2210"),
+                  "handed off documents -> context: invoice_id={inv_id}"),
         _llm("standard",
-             [{"role": "user", "content": "Reissue invoice 2210 with VAT GB987654321."}],
+             [{"role": "user", "content": f"Reissue invoice {inv_id} with VAT {new_vat}."}],
              "Rendering.",
              tool_calls=[{"id": _tid("d", 6),
                           "type": "function",
                           "function": {"name": "docs.invoice_render",
-                                       "arguments": json.dumps({"id": 2210})}}]),
-        _tool("docs.invoice_render", {"id": 2210},
+                                       "arguments": json.dumps({"id": inv_id})}}]),
+        _tool("docs.invoice_render", {"id": inv_id},
               {"pdf_url": "https://cdn.eden/inv_2210_v2.pdf",
                "sha256": "5b4e..."}, duration_ms=420.0),
         _llm("standard",
              [{"role": "tool", "tool_call_id": _tid("d", 6),
-               "content": "pdf_url=https://cdn.eden/inv_2210_v2.pdf"}],
+               "content": "pdf_url=https://cdn.eden/inv_{inv_id}_v2.pdf"}],
              "Emailing the new invoice to you now.",
              tool_calls=[{"id": _tid("d", 7),
                           "type": "function",
@@ -841,23 +907,30 @@ def make_multi_agent_handoff(variant: int) -> tuple[list[Step], dict[str, Any]]:
 def make_output_truncation(variant: int) -> tuple[list[Step], dict[str, Any]]:
     """5-step trace: last LLM call has finish_reason=length, response cut mid-sentence."""
     trace_id = f"trace_output_truncation_{variant:02d}"
+    # Vary the topic and the cut-off point across variants.
+    topics = [
+        ("CAP theorem", "Consistency, Availability, Partition tolerance.", "Availabil"),
+        ("ACID vs BASE", "Atomicity, Consistency, Isolation, Durability vs Basically Available, Soft state, Eventual consistency.", "Basically Availab"),
+        ("MapReduce", "A programming model for processing large data sets with a distributed algorithm.", "intermed"),
+    ]
+    topic, kb_text, cutoff = topics[variant - 1]
     steps: list[Step] = [
         _llm("reasoning",
-             [{"role": "user", "content": "Explain the Cap theorem."}],
+             [{"role": "user", "content": f"Explain the {topic}."}],
              "I'll write a full primer.",
              tool_calls=[{"id": _tid("k", 1),
                           "type": "function",
                           "function": {"name": "kb.search",
                                        "arguments": json.dumps({"q": "CAP theorem"})}}]),
-        _tool("kb.search", {"q": "CAP theorem"},
-              {"hit_id": "kb_9931", "text": "CAP: Consistency, Availability, Partition tolerance."},
+        _tool("kb.search", {"q": f"{topic}"},
+              {"hit_id": "kb_9931", "text": f"{topic}: {kb_text}"},
               duration_ms=160.0),
         _llm("standard",
-             [{"role": "user", "content": "Explain the Cap theorem."},
+             [{"role": "user", "content": f"Explain the {topic}."},
               {"role": "tool", "tool_call_id": _tid("k", 1),
-               "content": "CAP: Consistency, Availability, Partition tolerance."}],
-             # Truncated mid-sentence
-             "The CAP theorem, formulated by Eric Brewer in 2000, states that any distributed data store can offer at most two of the following three guarantees simultaneously. First, Consistency — meaning every read receives the most recent write or an error. Second, Availability — meaning every request receives a response, without guarantee that it contains the most recent write. Third, Partition tolerance — meaning the system continues to operate despite arbitrary message loss between nodes. In practice, partitions are inevitable in distributed systems, so the real trade-off is between Consistency and Availabil",
+               "content": f"{topic}: {kb_text}"}],
+             # Truncated mid-sentence at "{cutoff}"
+             f"The {topic}, formulated as a foundational principle in distributed systems, explains how any distributed data store can offer at most two guarantees simultaneously. {kb_text} In practice, the trade-off is between Consistency and {cutoff}",
              finish_reason="length",
              duration_ms=11_400.0,
              prompt_tokens=412, completion_tokens=4096),
@@ -873,17 +946,24 @@ def make_output_truncation(variant: int) -> tuple[list[Step], dict[str, Any]]:
 def make_adversarial_paraphrase(variant: int) -> tuple[list[Step], dict[str, Any]]:
     """12-step trace: 6 semantically-identical tool calls, different wording."""
     trace_id = f"trace_adversarial_paraphrase_{variant:02d}"
+    # Vary recipient across variants.
+    recipients = [
+        ("alice@eden.co", "hello", "hi"),
+        ("bob@example.org", "greetings", "welcome"),
+        ("carol@startup.io", "intro", "introduction"),
+    ]
+    recipient, subject, body = recipients[variant - 1]
     paraphrases = [
         ("send_email",
-         {"to": "alice@eden.co", "subject": "hello", "body": "hi"}),
+         {"to": recipient, "subject": subject, "body": body}),
         ("dispatch_mail",
-         {"recipient": "alice@eden.co", "title": "hello", "message": "hi"}),
+         {"recipient": recipient, "title": subject, "message": body}),
         ("mail.send",
-         {"to": "alice@eden.co", "subject": "hello", "text": "hi"}),
+         {"to": recipient, "subject": subject, "text": body}),
         ("outbound.email",
-         {"address": "alice@eden.co", "header": "hello", "content": "hi"}),
+         {"address": recipient, "header": subject, "content": body}),
         ("send_email",
-         {"to": "alice@eden.co", "subject": "hello", "body": "hi"}),
+         {"to": recipient, "subject": subject, "body": body}),
         ("smtp.deliver",
          {"rcpt": "alice@eden.co", "subject_line": "hello", "body_text": "hi"}),
     ]
@@ -968,7 +1048,7 @@ def main() -> None:
             steps, gt = fn(variant)
             trace_id = gt["trace_id"]
             agent_id = f"agent_{slug.split('_', 1)[1]}_{variant:02d}"
-            events = _events_to_dict(trace_id, agent_id, steps)
+            events = _events_to_dict(trace_id, agent_id, steps, archetype_id=gt["archetype_id"])
 
             trace_path = traces_dir / f"{slug}_{variant:02d}.json"
             gt_path = gt_dir / f"{slug}_{variant:02d}.json"

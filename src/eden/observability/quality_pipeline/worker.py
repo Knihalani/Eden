@@ -49,6 +49,15 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
+# Install the cache-first HuggingFace download patch so the
+# quality pipeline doesn't hit the network-probe bug when loading
+# sentence-transformers / BGE / cross-encoder / MiniCheck models.
+# Idempotent — safe to import multiple times.
+try:
+    from supplementaries import _hf_cache_patch  # noqa: F401  pylint: disable=unused-import
+except Exception:  # pragma: no cover - supplementaries not on path
+    pass
+
 
 # ponytail: keep step labels here (also used as Prometheus label
 # values and as the field name on the persisted report). Adding a
@@ -159,6 +168,8 @@ async def compute_trace_reports(
     tenant_id: str,
     trace_id: str,
     events: list[dict[str, Any]],
+    *,
+    archetype_id: str | None = None,
 ) -> dict[str, dict[str, Any]]:
     """Compute all 5 reports for one trace.
 
@@ -170,9 +181,29 @@ async def compute_trace_reports(
     Per-step timeouts are enforced via ``asyncio.wait_for``.
     On timeout, the step's payload is a stub with ``status =
     "timeout"`` so the caller knows to dead-letter.
+
+    Parameters
+    ----------
+    archetype_id : str | None
+        Optional archetype slug (e.g. ``"efficient-good"``) used to
+        look up the per-archetype Task Value Score (TVS) and pick
+        the right intervention. If ``None``, a neutral TVS of 0.7
+        is used and the generic intervention policy applies.
     """
     out: dict[str, dict[str, Any]] = {}
     metrics = _Metrics.get()
+
+    # Convert dict events to TelemetryEvent objects so the supplementaries
+    # modules (which all expect typed events) can consume them.
+    try:
+        telemetry_events = _coerce_to_telemetry_events(events)
+    except Exception as exc:
+        # If we can't coerce at all, every step will fail — short-circuit.
+        err = {"status": "error", "error": f"event coercion failed: {exc}"[:200]}
+        return {
+            "tas": err, "loop": err, "quality": err,
+            "reasoning": err, "detection": err,
+        }
 
     # All five steps run concurrently via asyncio.gather so the
     # end-to-end compute path completes in roughly the slowest
@@ -181,146 +212,200 @@ async def compute_trace_reports(
     # compute into the 4-5s range; the e2e test
     # ``test_e2e_happy_path_11_step_trace`` expects < 200ms total.
     async def _tas() -> dict[str, Any]:
-        from supplementaries.phase_2_efficiency.composite import compute_tas
+        from supplementaries.phase_2_efficiency.composite import (
+            TASResult,
+            compute_tas,
+        )
         t0 = time.perf_counter()
         try:
-            tas = await asyncio.wait_for(
-                asyncio.to_thread(compute_tas, events),
+            tas_result = await asyncio.wait_for(
+                asyncio.to_thread(
+                    compute_tas,
+                    telemetry_events,
+                    archetype_id=archetype_id,
+                ),
                 timeout=_get_timeout("tas"),
             )
             metrics.step_duration.labels(step="tas").observe(
                 time.perf_counter() - t0
             )
+            if not isinstance(tas_result, TASResult):
+                raise TypeError(
+                    f"compute_tas returned {type(tas_result).__name__}, "
+                    "expected TASResult"
+                )
             return {
-                "tas": int(tas.get("tas", 0)),
-                "avs": int(tas.get("avs", 0)),
-                "vae": int(tas.get("vae", 0)),
-                "grade": tas.get("grade"),
-                "intervention": tas.get("intervention", "allow"),
-                "metrics": tas.get("metrics", {}),
-                "fix_patches": tas.get("fix_patches", []),
+                "tas": int(tas_result.tas),
+                "avs": int(tas_result.avs),
+                "vae": int(tas_result.vae),
+                "grade": tas_result.grade,
+                "intervention": tas_result.intervention,
+                "metrics": dict(tas_result.metrics),
+                "fix_patches": list(tas_result.fix_patches),
             }
         except Exception as exc:
             metrics.step_duration.labels(step="tas").observe(
                 time.perf_counter() - t0
             )
-            logger.debug("sidecar: tas failed: %s", exc)
-            return {"status": "error", "error": str(exc)[:200]}
+            kind = "timeout" if isinstance(exc, asyncio.TimeoutError) else "error"
+            logger.warning("sidecar: tas %s: %r", kind, exc)
+            return {
+                "status": kind,
+                "error": f"{type(exc).__name__}: {exc}"[:200] or kind,
+            }
 
     async def _loop() -> dict[str, Any]:
         from supplementaries.phase_3_loops.combined_loop_detector import (
+            CombinedLoopReport,
             check_combined,
         )
         t0 = time.perf_counter()
         try:
-            loop = await asyncio.wait_for(
-                asyncio.to_thread(check_combined, events),
+            loop_report = await asyncio.wait_for(
+                asyncio.to_thread(check_combined, telemetry_events),
                 timeout=_get_timeout("loop"),
             )
             metrics.step_duration.labels(step="loop").observe(
                 time.perf_counter() - t0
             )
+            if not isinstance(loop_report, CombinedLoopReport):
+                raise TypeError(
+                    f"check_combined returned {type(loop_report).__name__}, "
+                    "expected CombinedLoopReport"
+                )
             return {
-                "verdict": loop.get("verdict", "OK"),
-                "detectors_tripped": loop.get("detectors_tripped", []),
-                "severity": loop.get("severity", "low"),
-                "action": loop.get("action", "allow"),
-                "max_cosine": loop.get("max_cosine"),
-                "max_jaccard": loop.get("max_jaccard"),
-                "step_index": loop.get("step_index"),
+                "verdict": loop_report.verdict,
+                "detectors_tripped": list(loop_report.detectors_tripped),
+                "severity": loop_report.severity,
+                "action": loop_report.action,
+                "max_cosine": loop_report.cosine_max,
+                "max_jaccard": None,  # jaccard not exposed on CombinedLoopReport
+                "step_index": None,
             }
         except Exception as exc:
             metrics.step_duration.labels(step="loop").observe(
                 time.perf_counter() - t0
             )
-            logger.debug("sidecar: loop failed: %s", exc)
-            return {"status": "error", "error": str(exc)[:200]}
+            kind = "timeout" if isinstance(exc, asyncio.TimeoutError) else "error"
+            logger.warning("sidecar: loop %s: %r", kind, exc)
+            return {
+                "status": kind,
+                "error": f"{type(exc).__name__}: {exc}"[:200] or kind,
+            }
 
     async def _quality() -> dict[str, Any]:
         from supplementaries.phase_5_quality.pipeline import (
             HallucinationPipeline,
+            QualityReport,
         )
         t0 = time.perf_counter()
         try:
             pipeline = HallucinationPipeline()
-            quality = await asyncio.wait_for(
-                asyncio.to_thread(pipeline.run, events),
+            # Quality is premise/hypothesis-based, not per-event.
+            # Walk the trace: for each llm.completion, score the
+            # request_body vs response_body. Aggregate to one report.
+            quality_report = await asyncio.wait_for(
+                asyncio.to_thread(_score_trace_quality, pipeline, telemetry_events),
                 timeout=_get_timeout("quality"),
             )
             metrics.step_duration.labels(step="quality").observe(
                 time.perf_counter() - t0
             )
+            if not isinstance(quality_report, QualityReport):
+                raise TypeError(
+                    f"_score_trace_quality returned "
+                    f"{type(quality_report).__name__}, expected QualityReport"
+                )
+            components = dict(quality_report.components)
             return {
-                "hallucination_score": quality.get("hallucination_score"),
-                "groundedness": quality.get("groundedness"),
-                "tool_relevance": quality.get("tool_relevance"),
-                "step_coherence": quality.get("step_coherence"),
-                "components": quality.get("components", {}),
-                "verdict": quality.get("verdict", "allow"),
+                "hallucination_score": quality_report.hallucination_score,
+                "groundedness": quality_report.grounded,
+                "tool_relevance": components.get("tool_relevance"),
+                "step_coherence": components.get("step_coherence"),
+                "components": components,
+                "verdict": quality_report.intervention,
             }
         except Exception as exc:
             metrics.step_duration.labels(step="quality").observe(
                 time.perf_counter() - t0
             )
-            logger.debug("sidecar: quality failed: %s", exc)
-            return {"status": "error", "error": str(exc)[:200]}
+            kind = "timeout" if isinstance(exc, asyncio.TimeoutError) else "error"
+            logger.warning("sidecar: quality %s: %r", kind, exc)
+            return {
+                "status": kind,
+                "error": f"{type(exc).__name__}: {exc}"[:200] or kind,
+            }
 
     async def _reasoning() -> dict[str, Any]:
         from supplementaries.phase_9_reasoning.scorer import (
-            compute_composite,
+            score_with_composite,
         )
         t0 = time.perf_counter()
         try:
-            reasoning = await asyncio.wait_for(
-                asyncio.to_thread(compute_composite, events),
+            steps = _reasoning_steps(telemetry_events)
+            user_prompt = _first_user_prompt(telemetry_events)
+            reasoning_score = await asyncio.wait_for(
+                asyncio.to_thread(score_with_composite, steps, user_prompt),
                 timeout=_get_timeout("reasoning"),
             )
             metrics.step_duration.labels(step="reasoning").observe(
                 time.perf_counter() - t0
             )
             return {
-                "coherence": reasoning.get("coherence"),
-                "informativeness": reasoning.get("informativeness"),
-                "goal_alignment": reasoning.get("goal_alignment"),
-                "verification": reasoning.get("verification"),
-                "calibration_error": reasoning.get("calibration_error"),
-                "composite": reasoning.get("composite"),
-                "lanham_trap": reasoning.get("lanham_trap", False),
+                "coherence": reasoning_score.coherence,
+                "informativeness": reasoning_score.informativeness,
+                "goal_alignment": reasoning_score.goal_alignment,
+                "verification": reasoning_score.verification,
+                "calibration_error": reasoning_score.calibration_error,
+                "composite": reasoning_score.composite,
+                "lanham_trap": False,
             }
         except Exception as exc:
             metrics.step_duration.labels(step="reasoning").observe(
                 time.perf_counter() - t0
             )
-            logger.debug("sidecar: reasoning failed: %s", exc)
-            return {"status": "error", "error": str(exc)[:200]}
+            kind = "timeout" if isinstance(exc, asyncio.TimeoutError) else "error"
+            logger.warning("sidecar: reasoning %s: %r", kind, exc)
+            return {
+                "status": kind,
+                "error": f"{type(exc).__name__}: {exc}"[:200] or kind,
+            }
 
     async def _detection() -> dict[str, Any]:
         from supplementaries.phase_7_detection.detectors import (
+            DetectionReport,
             run_all_detectors,
         )
         t0 = time.perf_counter()
         try:
-            detections = await asyncio.wait_for(
-                asyncio.to_thread(run_all_detectors, events),
+            det_report = await asyncio.wait_for(
+                asyncio.to_thread(run_all_detectors, telemetry_events),
                 timeout=_get_timeout("detection"),
             )
             metrics.step_duration.labels(step="detection").observe(
                 time.perf_counter() - t0
             )
+            if not isinstance(det_report, DetectionReport):
+                raise TypeError(
+                    f"run_all_detectors returned {type(det_report).__name__}, "
+                    "expected DetectionReport"
+                )
+            severities = _detection_severities(det_report)
             return {
-                "count": len(detections or []),
-                "high_severity_count": sum(
-                    1 for d in (detections or [])
-                    if (d or {}).get("severity") == "high"
-                ),
-                "ids": [(d or {}).get("name", "?") for d in (detections or [])][:8],
+                "count": sum(1 for s in severities if s != "ok"),
+                "high_severity_count": sum(1 for s in severities if s == "high"),
+                "ids": [name for name, s in zip(_DETECTION_FIELDS, severities) if s != "ok"][:8],
             }
         except Exception as exc:
             metrics.step_duration.labels(step="detection").observe(
                 time.perf_counter() - t0
             )
-            logger.debug("sidecar: detection failed: %s", exc)
-            return {"status": "error", "error": str(exc)[:200]}
+            kind = "timeout" if isinstance(exc, asyncio.TimeoutError) else "error"
+            logger.warning("sidecar: detection %s: %r", kind, exc)
+            return {
+                "status": kind,
+                "error": f"{type(exc).__name__}: {exc}"[:200] or kind,
+            }
 
     # Launch the five steps concurrently. ``return_exceptions=True``
     # so a single crashed step doesn't take down the whole compute
@@ -378,9 +463,206 @@ def _get_timeout(step: str) -> float:
             "reasoning": s.quality_step_timeout_reasoning_ms,
             "detection": s.quality_step_timeout_detection_ms,
         }
-        return float(mapping.get(step, 200)) / 1000.0
+        # Default budget is generous — covers cold-start model load
+        # for sentence-transformers + BGE + MiniCheck on first run.
+        # Subsequent runs are sub-50ms per the spec §3 measured budgets.
+        return float(mapping.get(step, 30000)) / 1000.0
     except Exception:
-        return 0.2  # 200ms fallback
+        return 30.0  # 30s fallback for cold start
+
+
+
+
+# ── Event coercion ───────────────────────────────────────────────
+
+
+def _coerce_to_telemetry_events(
+    events: list[dict[str, Any]],
+) -> list[Any]:
+    """Convert event dicts to ``TelemetryEvent`` instances.
+
+    Falls back to a permissive dict-shaped wrapper if
+    ``TelemetryEvent.from_dict`` rejects an event — keeps the
+    pipeline alive on malformed input.
+    """
+    from eden.observability.telemetry_collector import TelemetryEvent
+    out = []
+    for e in events:
+        if isinstance(e, TelemetryEvent):
+            out.append(e)
+            continue
+        try:
+            out.append(TelemetryEvent.from_dict(dict(e)))
+        except Exception:
+            # Permissive fallback — preserves the raw fields the
+            # supplementaries modules look at, but skips strict
+            # validation so a single bad event doesn't 500 the
+            # whole compute.
+            class _PermissiveEvent:
+                __slots__ = ("__dict__",)
+            pe = _PermissiveEvent()
+            pe.__dict__.update(dict(e))
+            out.append(pe)
+    return out
+
+
+# ── Per-step event-list adapters ────────────────────────────────
+
+
+def _reasoning_steps(events: list[Any]) -> list[str]:
+    """Extract a sequence of assistant response strings for reasoning."""
+    steps: list[str] = []
+    for e in events:
+        et = getattr(e, "event_type", None)
+        if et != "llm.completion":
+            continue
+        rb = getattr(e, "response_body", None) or {}
+        choices = (rb or {}).get("choices") or []
+        if not choices:
+            continue
+        msg = (choices[0] or {}).get("message") or {}
+        content = msg.get("content") or ""
+        if isinstance(content, str) and content:
+            steps.append(content)
+    return steps or ["(empty trace — no LLM completions)"]
+
+
+def _first_user_prompt(events: list[Any]) -> str:
+    """Return the first user message in the trace, or empty string."""
+    for e in events:
+        et = getattr(e, "event_type", None)
+        if et != "llm.completion":
+            continue
+        rb = getattr(e, "request_body", None) or {}
+        for m in (rb or {}).get("messages") or []:
+            if m.get("role") == "user":
+                return str(m.get("content") or "")
+    return ""
+
+
+# ── Quality adapter ──────────────────────────────────────────────
+
+
+def _score_trace_quality(pipeline: Any, events: list[Any]) -> Any:
+    """Score every LLM completion in the trace and aggregate.
+
+    Walks each ``llm.completion`` event, extracts the user
+    message and the assistant response, runs them through
+    ``HallucinationPipeline.score(premise, hypothesis)``, and
+    averages the per-step reports into one. If no completions
+    are found, returns a neutral report with score=0.5.
+    """
+    from supplementaries.phase_5_quality.pipeline import (
+        QualityReport,
+    )
+
+    scored: list[QualityReport] = []
+    for e in events:
+        et = getattr(e, "event_type", None)
+        if et != "llm.completion":
+            continue
+        rb_req = getattr(e, "request_body", None) or {}
+        rb_res = getattr(e, "response_body", None) or {}
+        user_msg = ""
+        for m in (rb_req or {}).get("messages") or []:
+            if m.get("role") == "user":
+                user_msg = str(m.get("content") or "")
+                break
+        assistant_msg = ""
+        choices = (rb_res or {}).get("choices") or []
+        if choices:
+            msg = (choices[0] or {}).get("message") or {}
+            assistant_msg = str(msg.get("content") or "")
+        if not user_msg or not assistant_msg:
+            continue
+        try:
+            scored.append(pipeline.score(premise=user_msg, hypothesis=assistant_msg))
+        except Exception:
+            # Skip events that fail scoring — e.g. PII placeholder
+            # strings or non-English text.
+            continue
+
+    if not scored:
+        return QualityReport(
+            grounded=True,
+            hallucination_score=0.5,
+            confidence=0.0,
+            intervention="allow",
+            components={"tool_relevance": None, "step_coherence": None},
+            inference_ms=0.0,
+            notes="no scorable LLM completions",
+        )
+
+    n = len(scored)
+    avg_hallu = sum(r.hallucination_score for r in scored) / n
+    avg_conf = sum(r.confidence for r in scored) / n
+    # Aggregate intervention = most-restrictive across steps.
+    RESTRICTIVENESS = {
+        "allow": 0, "warn": 1, "skip_step": 2, "block": 3, "summarize": 3,
+        "escalate": 4,
+    }
+    worst = max(scored, key=lambda r: RESTRICTIVENESS.get(r.intervention, 0))
+    return QualityReport(
+        grounded=all(r.grounded for r in scored),
+        hallucination_score=avg_hallu,
+        confidence=avg_conf,
+        intervention=worst.intervention,
+        components={
+            "per_step_count": n,
+            "step_interventions": [r.intervention for r in scored],
+        },
+        inference_ms=sum(r.inference_ms for r in scored),
+        notes=f"aggregated across {n} LLM completions",
+    )
+
+
+# ── Detection severity mapping ──────────────────────────────────
+
+
+_DETECTION_FIELDS: tuple[str, ...] = (
+    "indirect_injection_max",
+    "sycophancy_rate",
+    "reward_hogging",
+    "calibration_failure_rate",
+    "multi_turn_escalation_score",
+    "pair_tap_crescendo",
+    "memory_bloat",
+    "agent_depth_runaway",
+)
+
+
+def _detection_severities(report: Any) -> list[str]:
+    """Map each DetectionReport numeric field to a severity bucket.
+
+    Bucket boundaries are intentionally conservative:
+      high   — value >= 0.75 (extreme)
+      medium — value >= 0.50 (elevated)
+      low    — value >= 0.25 (minor)
+      ok     — value < 0.25 (normal)
+    """
+    out = []
+    for name in _DETECTION_FIELDS:
+        v = getattr(report, name, 0.0) or 0.0
+        try:
+            v = float(v)
+        except (TypeError, ValueError):
+            v = 0.0
+        if v >= 0.75:
+            out.append("high")
+        elif v >= 0.50:
+            out.append("medium")
+        elif v >= 0.25:
+            out.append("low")
+        else:
+            out.append("ok")
+    # topology is a string field, not numeric.
+    topology = getattr(report, "topology", None) or ""
+    if topology in {"star", "mesh"}:
+        # Add a synthetic "medium" for centralised / hyperconnected topologies.
+        out.append("medium")
+    else:
+        out.append("ok")
+    return out
 
 
 # ── Persistence ───────────────────────────────────────────────────
@@ -712,7 +994,13 @@ class SidecarWorker:
         self, tenant_id: str, trace_id: str, events: list[dict[str, Any]]
     ) -> bool:
         """Process one trace. Returns True on success, False on DLQ."""
-        reports = await compute_trace_reports(tenant_id, trace_id, events)
+        # Extract archetype_id from the first event's attributes if present,
+        # otherwise leave None (generic TAS policy).
+        arc_id = None
+        if events and isinstance(events[0], dict):
+            attrs = events[0].get("attributes") or {}
+            arc_id = attrs.get("archetype_id") or None
+        reports = await compute_trace_reports(tenant_id, trace_id, events, archetype_id=arc_id)
         persisted = await persist_reports(tenant_id, trace_id, reports)
         if all(v is None for v in persisted.values()):
             await dead_letter(

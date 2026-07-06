@@ -142,16 +142,55 @@ for example in dataset:
 The generator is deterministic — same output every run.
 
 ```bash
-python tests/fixtures/traces/synthetic/_generator/generate.py
+.venv/bin/python tests/fixtures/traces/synthetic/_generator/generate.py
 ```
+
+Each of the 3 variants per archetype is now genuinely different
+(different order IDs, different hallucinated statistics, different
+failing tool names, etc.) so the dataset exercises the evaluator
+across a real distribution, not three copies of the same trace.
 
 To tweak an archetype's TAS range, intervention, or event content,
 edit the corresponding `make_*` function in `generate.py` and rerun.
+
+### Re-baselining ground-truth TAS
+
+The `expected_TAS` field in each ground-truth file is calibrated
+against the **current** `compute_tas` implementation. When you
+change the composite formula, regenerate the dataset AND
+re-baseline the ground truth:
+
+```bash
+.venv/bin/python -c "
+import json
+from pathlib import Path
+from tests.fixtures.traces import load_synthetic_dataset
+from supplementaries.phase_2_efficiency.composite import compute_tas
+
+gt_dir = Path('tests/fixtures/traces/synthetic/ground_truth')
+for ex in load_synthetic_dataset():
+    for p in gt_dir.glob('*.json'):
+        gt = json.loads(p.read_text())
+        if gt.get('trace_id') == ex.trace_id:
+            gt['expected_TAS'] = round(compute_tas(ex.events, archetype_id=ex.archetype_id).tas)
+            p.write_text(json.dumps(gt, indent=2))
+            break
+"
+```
+
+The `tests/integration/test_synthetic_dataset_worker_accuracy.py`
+integration test verifies the worker produces TAS within ±5 and the
+exact intervention for every synthetic trace — re-baseline whenever
+the composite changes.
 
 ## Adding new archetypes
 
 1. Add a `make_<archetype>(variant) -> (steps, gt)` function in
    `generate.py` that returns a `list[Step]` and a ground-truth dict.
+   Make sure to vary the events across variants — see the existing
+   `make_*` functions for the pattern (vary order IDs, recipient
+   addresses, hallucinated statistics, durations, etc.).
 2. Register it in the `ARCHETYPES` list at the bottom of `generate.py`.
 3. Rerun the generator.
-4. Add a row to the table above.
+4. Re-baseline the ground-truth TAS (see above).
+5. Add a row to the table above.

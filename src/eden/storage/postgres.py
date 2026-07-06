@@ -10,6 +10,7 @@ import logging
 from collections.abc import AsyncIterator, Iterable, Sequence
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
+from datetime import UTC
 from typing import Any, cast
 
 import asyncpg

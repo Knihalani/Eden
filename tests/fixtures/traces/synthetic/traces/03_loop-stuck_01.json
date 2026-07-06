@@ -29,7 +29,8 @@
       "payload": {},
       "metrics": {},
       "attributes": {
-        "environment": "production"
+        "environment": "production",
+        "archetype_id": "loop-stuck"
       },
       "outcome": null,
       "request_body": null,
@@ -78,7 +79,8 @@
         "model": "gpt-4o-mini",
         "environment": "production",
         "user_id": "user_synth_42",
-        "session_id": "sess_synth_42"
+        "session_id": "sess_synth_42",
+        "archetype_id": "loop-stuck"
       },
       "outcome": "success",
       "request_body": {
@@ -191,7 +193,8 @@
         "cost_usd": 0.0
       },
       "attributes": {
-        "environment": "production"
+        "environment": "production",
+        "archetype_id": "loop-stuck"
       },
       "outcome": "failure",
       "request_body": {
@@ -263,7 +266,8 @@
         "model": "gpt-4o-mini",
         "environment": "production",
         "user_id": "user_synth_42",
-        "session_id": "sess_synth_42"
+        "session_id": "sess_synth_42",
+        "archetype_id": "loop-stuck"
       },
       "outcome": "success",
       "request_body": {
@@ -376,7 +380,8 @@
         "cost_usd": 0.0
       },
       "attributes": {
-        "environment": "production"
+        "environment": "production",
+        "archetype_id": "loop-stuck"
       },
       "outcome": "failure",
       "request_body": {
@@ -448,7 +453,8 @@
         "model": "gpt-4o-mini",
         "environment": "production",
         "user_id": "user_synth_42",
-        "session_id": "sess_synth_42"
+        "session_id": "sess_synth_42",
+        "archetype_id": "loop-stuck"
       },
       "outcome": "success",
       "request_body": {
@@ -561,7 +567,8 @@
         "cost_usd": 0.0
       },
       "attributes": {
-        "environment": "production"
+        "environment": "production",
+        "archetype_id": "loop-stuck"
       },
       "outcome": "failure",
       "request_body": {
@@ -633,7 +640,8 @@
         "model": "gpt-4o-mini",
         "environment": "production",
         "user_id": "user_synth_42",
-        "session_id": "sess_synth_42"
+        "session_id": "sess_synth_42",
+        "archetype_id": "loop-stuck"
       },
       "outcome": "success",
       "request_body": {
@@ -746,7 +754,8 @@
         "cost_usd": 0.0
       },
       "attributes": {
-        "environment": "production"
+        "environment": "production",
+        "archetype_id": "loop-stuck"
       },
       "outcome": "failure",
       "request_body": {
@@ -818,7 +827,8 @@
         "model": "gpt-4o-mini",
         "environment": "production",
         "user_id": "user_synth_42",
-        "session_id": "sess_synth_42"
+        "session_id": "sess_synth_42",
+        "archetype_id": "loop-stuck"
       },
       "outcome": "success",
       "request_body": {
@@ -931,7 +941,8 @@
         "cost_usd": 0.0
       },
       "attributes": {
-        "environment": "production"
+        "environment": "production",
+        "archetype_id": "loop-stuck"
       },
       "outcome": "failure",
       "request_body": {
@@ -1003,7 +1014,8 @@
         "model": "gpt-4o-mini",
         "environment": "production",
         "user_id": "user_synth_42",
-        "session_id": "sess_synth_42"
+        "session_id": "sess_synth_42",
+        "archetype_id": "loop-stuck"
       },
       "outcome": "success",
       "request_body": {
@@ -1116,7 +1128,8 @@
         "cost_usd": 0.0
       },
       "attributes": {
-        "environment": "production"
+        "environment": "production",
+        "archetype_id": "loop-stuck"
       },
       "outcome": "failure",
       "request_body": {
@@ -1188,7 +1201,8 @@
         "model": "gpt-4o-mini",
         "environment": "production",
         "user_id": "user_synth_42",
-        "session_id": "sess_synth_42"
+        "session_id": "sess_synth_42",
+        "archetype_id": "loop-stuck"
       },
       "outcome": "success",
       "request_body": {
@@ -1301,7 +1315,8 @@
         "cost_usd": 0.0
       },
       "attributes": {
-        "environment": "production"
+        "environment": "production",
+        "archetype_id": "loop-stuck"
       },
       "outcome": "failure",
       "request_body": {
@@ -1362,13 +1377,14 @@
       "name": "agent.timeout",
       "duration_ms": 40.0,
       "payload": {
-        "observation": "aborted after 7 weather.lookup timeouts"
+        "observation": "aborted after 7 weather.lookup timeouts for Tokyo"
       },
       "metrics": {
         "latency_ms": 40.0
       },
       "attributes": {
-        "environment": "production"
+        "environment": "production",
+        "archetype_id": "loop-stuck"
       },
       "outcome": "failure",
       "request_body": null,
@@ -1408,7 +1424,8 @@
       "payload": {},
       "metrics": {},
       "attributes": {
-        "environment": "production"
+        "environment": "production",
+        "archetype_id": "loop-stuck"
       },
       "outcome": "failure",
       "request_body": null,

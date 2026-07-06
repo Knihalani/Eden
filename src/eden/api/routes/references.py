@@ -204,6 +204,11 @@ async def upload_reference(
         content_hash,
         embedding,
     )
+    if row is None:
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to create code reference",
+        )
 
     return {
         "id": str(row["id"]),

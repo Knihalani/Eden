@@ -326,6 +326,12 @@ class TestDl6InFlightTracking:
         fake_httpx = MagicMock()
         fake_httpx.AsyncClient = MagicMock(return_value=_FakeAsyncClient())
 
+        # The patches MUST stay active while the scheduled task runs.
+        # The previous version exited the ``with`` blocks before the
+        # task fired, so the real ``_assert_public_ip`` ran against
+        # ``example.com`` and raised ``ValueError`` — sending the
+        # delivery into the DLQ branch and breaking the in-flight
+        # assertion. Keep both patches open until the task is awaited.
         with patch(
             "eden.services.webhook_delivery._get_httpx",
             return_value=fake_httpx,
@@ -340,9 +346,15 @@ class TestDl6InFlightTracking:
                     payload={"event": "job.completed"},
                 )
 
-        # Yield once so the task runs and removes itself.
-        await asyncio.sleep(0)
-        await task
+                # Yield once so the task runs and removes itself.
+                # The done_callback is scheduled via ``call_soon``
+                # and fires on the NEXT event-loop iteration after
+                # the task transitions to done, so a single
+                # ``asyncio.sleep(0)`` is not enough — we yield
+                # twice to drain both the task and the callback.
+                await task
+                await asyncio.sleep(0)
+                await asyncio.sleep(0)
 
         # Task drained itself via done_callback.
         assert len(service._in_flight) == 0

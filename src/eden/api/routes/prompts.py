@@ -157,7 +157,7 @@ async def register_template(
         raise HTTPException(
             status_code=409,
             detail={"error": "already_exists", "detail": str(exc)},
-        )
+        ) from exc
     return _to_response(template)
 
 
@@ -243,7 +243,7 @@ async def update_template(
         raise HTTPException(
             status_code=409,
             detail={"error": "update_failed", "detail": str(exc)},
-        )
+        ) from exc
     return _to_response(new)
 
 
@@ -280,7 +280,7 @@ async def rollback_template(
         raise HTTPException(
             status_code=404,
             detail={"error": "rollback_failed", "detail": str(exc)},
-        )
+        ) from exc
     return _to_response(new)
 
 
@@ -315,7 +315,7 @@ async def playground(
         raise HTTPException(
             status_code=400,
             detail={"error": "compile_failed", "detail": str(exc)},
-        )
+        ) from exc
     return _playground_to_response(result)
 
 
@@ -340,7 +340,7 @@ async def compare(
         raise HTTPException(
             status_code=400,
             detail={"error": "compare_failed", "detail": str(exc)},
-        )
+        ) from exc
     return CompareResponse(
         a=_playground_to_response(a),
         b=_playground_to_response(b),

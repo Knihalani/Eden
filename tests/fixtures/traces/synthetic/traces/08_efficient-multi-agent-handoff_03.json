@@ -29,7 +29,8 @@
       "payload": {},
       "metrics": {},
       "attributes": {
-        "environment": "production"
+        "environment": "production",
+        "archetype_id": "efficient-multi-agent-handoff"
       },
       "outcome": null,
       "request_body": null,
@@ -78,7 +79,8 @@
         "model": "gpt-4o-mini",
         "environment": "production",
         "user_id": "user_synth_42",
-        "session_id": "sess_synth_42"
+        "session_id": "sess_synth_42",
+        "archetype_id": "efficient-multi-agent-handoff"
       },
       "outcome": "success",
       "request_body": {
@@ -86,7 +88,7 @@
         "messages": [
           {
             "role": "user",
-            "content": "My invoice #2210 has the wrong VAT number."
+            "content": "My invoice #8845 has the wrong VAT number."
           }
         ],
         "temperature": 0.0
@@ -200,13 +202,14 @@
       "name": "agent.handoff",
       "duration_ms": 40.0,
       "payload": {
-        "observation": "handed off billing -> billing context: invoice_id=2210"
+        "observation": "handed off billing -> billing context: invoice_id={inv_id}"
       },
       "metrics": {
         "latency_ms": 40.0
       },
       "attributes": {
-        "environment": "production"
+        "environment": "production",
+        "archetype_id": "efficient-multi-agent-handoff"
       },
       "outcome": "success",
       "request_body": null,
@@ -255,7 +258,8 @@
         "model": "gpt-4o",
         "environment": "production",
         "user_id": "user_synth_42",
-        "session_id": "sess_synth_42"
+        "session_id": "sess_synth_42",
+        "archetype_id": "efficient-multi-agent-handoff"
       },
       "outcome": "success",
       "request_body": {
@@ -263,7 +267,7 @@
         "messages": [
           {
             "role": "user",
-            "content": "Invoice 2210 \u2014 fix the VAT number."
+            "content": "Invoice 8845 \u2014 fix the VAT number."
           }
         ],
         "temperature": 0.0
@@ -284,7 +288,7 @@
                   "type": "function",
                   "function": {
                     "name": "billing.invoice_get",
-                    "arguments": "{\"id\": 2210}"
+                    "arguments": "{\"id\": 8845}"
                   }
                 }
               ]
@@ -304,7 +308,7 @@
           "type": "function",
           "function": {
             "name": "billing.invoice_get",
-            "arguments": "{\"id\": 2210}"
+            "arguments": "{\"id\": 8845}"
           }
         }
       ],
@@ -368,7 +372,8 @@
         "cost_usd": 0.0
       },
       "attributes": {
-        "environment": "production"
+        "environment": "production",
+        "archetype_id": "efficient-multi-agent-handoff"
       },
       "outcome": "success",
       "request_body": {
@@ -379,10 +384,10 @@
       },
       "response_body": {
         "result": {
-          "id": 2210,
-          "vat": "GB123",
+          "id": 8845,
+          "vat": "FR789",
           "currency": "GBP",
-          "amount_cents": 49900
+          "amount_cents": 8999
         }
       },
       "reasoning": null,
@@ -400,7 +405,7 @@
         {
           "tool_call_id": "call_billing.invoice_get_92941",
           "role": "tool",
-          "content": "{\"id\": 2210, \"vat\": \"GB123\", \"currency\": \"GBP\", \"amount_cents\": 49900}"
+          "content": "{\"id\": 8845, \"vat\": \"FR789\", \"currency\": \"GBP\", \"amount_cents\": 8999}"
         }
       ],
       "logprobs": null,
@@ -444,7 +449,8 @@
         "model": "gpt-4o",
         "environment": "production",
         "user_id": "user_synth_42",
-        "session_id": "sess_synth_42"
+        "session_id": "sess_synth_42",
+        "archetype_id": "efficient-multi-agent-handoff"
       },
       "outcome": "success",
       "request_body": {
@@ -581,13 +587,14 @@
       "name": "user.ask",
       "duration_ms": 40.0,
       "payload": {
-        "observation": "user: GB987654321"
+        "observation": "user: FR456123789"
       },
       "metrics": {
         "latency_ms": 40.0
       },
       "attributes": {
-        "environment": "production"
+        "environment": "production",
+        "archetype_id": "efficient-multi-agent-handoff"
       },
       "outcome": "success",
       "request_body": null,
@@ -636,7 +643,8 @@
         "model": "gpt-4o",
         "environment": "production",
         "user_id": "user_synth_42",
-        "session_id": "sess_synth_42"
+        "session_id": "sess_synth_42",
+        "archetype_id": "efficient-multi-agent-handoff"
       },
       "outcome": "success",
       "request_body": {
@@ -644,7 +652,7 @@
         "messages": [
           {
             "role": "user",
-            "content": "GB987654321"
+            "content": "FR456123789"
           }
         ],
         "temperature": 0.0
@@ -665,7 +673,7 @@
                   "type": "function",
                   "function": {
                     "name": "billing.invoice_update",
-                    "arguments": "{\"id\": 2210, \"vat\": \"GB987654321\"}"
+                    "arguments": "{\"id\": 8845, \"vat\": \"FR456123789\"}"
                   }
                 }
               ]
@@ -685,7 +693,7 @@
           "type": "function",
           "function": {
             "name": "billing.invoice_update",
-            "arguments": "{\"id\": 2210, \"vat\": \"GB987654321\"}"
+            "arguments": "{\"id\": 8845, \"vat\": \"FR456123789\"}"
           }
         }
       ],
@@ -749,19 +757,20 @@
         "cost_usd": 0.0
       },
       "attributes": {
-        "environment": "production"
+        "environment": "production",
+        "archetype_id": "efficient-multi-agent-handoff"
       },
       "outcome": "success",
       "request_body": {
         "tool": "billing.invoice_update",
         "arguments": {
-          "id": 2210,
-          "vat": "GB987654321"
+          "id": 8845,
+          "vat": "FR456123789"
         }
       },
       "response_body": {
         "result": {
-          "id": 2210,
+          "id": 8845,
           "status": "updated"
         }
       },
@@ -772,7 +781,7 @@
           "type": "function",
           "function": {
             "name": "billing.invoice_update",
-            "arguments": "{\"id\": 2210, \"vat\": \"GB987654321\"}"
+            "arguments": "{\"id\": 8845, \"vat\": \"FR456123789\"}"
           }
         }
       ],
@@ -780,7 +789,7 @@
         {
           "tool_call_id": "call_billing.invoice_update_13146",
           "role": "tool",
-          "content": "{\"id\": 2210, \"status\": \"updated\"}"
+          "content": "{\"id\": 8845, \"status\": \"updated\"}"
         }
       ],
       "logprobs": null,
@@ -824,7 +833,8 @@
         "model": "gpt-4o",
         "environment": "production",
         "user_id": "user_synth_42",
-        "session_id": "sess_synth_42"
+        "session_id": "sess_synth_42",
+        "archetype_id": "efficient-multi-agent-handoff"
       },
       "outcome": "success",
       "request_body": {
@@ -975,13 +985,14 @@
       "name": "agent.handoff",
       "duration_ms": 40.0,
       "payload": {
-        "observation": "handed off documents -> context: invoice_id=2210"
+        "observation": "handed off documents -> context: invoice_id={inv_id}"
       },
       "metrics": {
         "latency_ms": 40.0
       },
       "attributes": {
-        "environment": "production"
+        "environment": "production",
+        "archetype_id": "efficient-multi-agent-handoff"
       },
       "outcome": "success",
       "request_body": null,
@@ -1030,7 +1041,8 @@
         "model": "gpt-4o",
         "environment": "production",
         "user_id": "user_synth_42",
-        "session_id": "sess_synth_42"
+        "session_id": "sess_synth_42",
+        "archetype_id": "efficient-multi-agent-handoff"
       },
       "outcome": "success",
       "request_body": {
@@ -1038,7 +1050,7 @@
         "messages": [
           {
             "role": "user",
-            "content": "Reissue invoice 2210 with VAT GB987654321."
+            "content": "Reissue invoice 8845 with VAT FR456123789."
           }
         ],
         "temperature": 0.0
@@ -1059,7 +1071,7 @@
                   "type": "function",
                   "function": {
                     "name": "docs.invoice_render",
-                    "arguments": "{\"id\": 2210}"
+                    "arguments": "{\"id\": 8845}"
                   }
                 }
               ]
@@ -1079,7 +1091,7 @@
           "type": "function",
           "function": {
             "name": "docs.invoice_render",
-            "arguments": "{\"id\": 2210}"
+            "arguments": "{\"id\": 8845}"
           }
         }
       ],
@@ -1129,13 +1141,14 @@
         "cost_usd": 0.0
       },
       "attributes": {
-        "environment": "production"
+        "environment": "production",
+        "archetype_id": "efficient-multi-agent-handoff"
       },
       "outcome": "success",
       "request_body": {
         "tool": "docs.invoice_render",
         "arguments": {
-          "id": 2210
+          "id": 8845
         }
       },
       "response_body": {
@@ -1151,7 +1164,7 @@
           "type": "function",
           "function": {
             "name": "docs.invoice_render",
-            "arguments": "{\"id\": 2210}"
+            "arguments": "{\"id\": 8845}"
           }
         }
       ],
@@ -1203,7 +1216,8 @@
         "model": "gpt-4o",
         "environment": "production",
         "user_id": "user_synth_42",
-        "session_id": "sess_synth_42"
+        "session_id": "sess_synth_42",
+        "archetype_id": "efficient-multi-agent-handoff"
       },
       "outcome": "success",
       "request_body": {
@@ -1212,7 +1226,7 @@
           {
             "role": "tool",
             "tool_call_id": "call_d_0006",
-            "content": "pdf_url=https://cdn.eden/inv_2210_v2.pdf"
+            "content": "pdf_url=https://cdn.eden/inv_{inv_id}_v2.pdf"
           }
         ],
         "temperature": 0.0
@@ -1345,7 +1359,8 @@
         "cost_usd": 0.0
       },
       "attributes": {
-        "environment": "production"
+        "environment": "production",
+        "archetype_id": "efficient-multi-agent-handoff"
       },
       "outcome": "success",
       "request_body": {
@@ -1411,7 +1426,8 @@
       "payload": {},
       "metrics": {},
       "attributes": {
-        "environment": "production"
+        "environment": "production",
+        "archetype_id": "efficient-multi-agent-handoff"
       },
       "outcome": "success",
       "request_body": null,

@@ -52,8 +52,8 @@
     "runtime": null
   },
   "build": {
-    "buildCommand": "bun run build 2>&1 | tail -40; echo \"BUILD EXIT $?\"",
-    "testCommand": "npm test",
+    "buildCommand": "bunx tsc --noEmit 2>&1 | tail -5",
+    "testCommand": "pwd; ls /Users/kaiavnihalani/Downloads/Eden/.venv/bin/pytest 2>&1 | head -3",
     "lintCommand": "npm run lint",
     "devCommand": "npm run dev",
     "scripts": {
@@ -203,6 +203,12 @@
       "type": "file"
     },
     {
+      "path": "src/components/jobs/hilt-panel.tsx",
+      "accessCount": 4,
+      "lastAccessed": 1783244201289,
+      "type": "file"
+    },
+    {
       "path": "src/components/layout/page-content.tsx",
       "accessCount": 3,
       "lastAccessed": 1783183534908,
@@ -239,12 +245,6 @@
       "type": "file"
     },
     {
-      "path": "src/components/jobs/hilt-panel.tsx",
-      "accessCount": 2,
-      "lastAccessed": 1783184288903,
-      "type": "file"
-    },
-    {
       "path": "src/app/(portal)/prompts/page.tsx",
       "accessCount": 2,
       "lastAccessed": 1783184306806,
@@ -254,6 +254,12 @@
       "path": "src/app/(portal)/alerts/page.tsx",
       "accessCount": 2,
       "lastAccessed": 1783184429126,
+      "type": "file"
+    },
+    {
+      "path": "src/components/observability/JobGantt.tsx",
+      "accessCount": 2,
+      "lastAccessed": 1783244163891,
       "type": "file"
     },
     {

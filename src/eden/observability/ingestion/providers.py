@@ -254,7 +254,7 @@ class OpenAIDecoder:
             raise SchemaInvalidError(
                 f"OpenAI body is not valid JSON: {exc}",
                 problems=[f"json_decode_error: {exc}"],
-            )
+            ) from exc
         items = payload if isinstance(payload, list) else [payload]
         if not items:
             raise SchemaInvalidError(
@@ -503,7 +503,7 @@ class AnthropicDecoder:
             raise SchemaInvalidError(
                 f"Anthropic body is not valid JSON: {exc}",
                 problems=[f"json_decode_error: {exc}"],
-            )
+            ) from exc
         items = payload if isinstance(payload, list) else [payload]
         if not items:
             raise SchemaInvalidError(
@@ -681,7 +681,7 @@ class BedrockDecoder:
             raise SchemaInvalidError(
                 f"Bedrock body is not valid JSON: {exc}",
                 problems=[f"json_decode_error: {exc}"],
-            )
+            ) from exc
         items = payload if isinstance(payload, list) else [payload]
         if not items:
             raise SchemaInvalidError(
@@ -932,7 +932,7 @@ class GeminiDecoder:
             raise SchemaInvalidError(
                 f"Gemini body is not valid JSON: {exc}",
                 problems=[f"json_decode_error: {exc}"],
-            )
+            ) from exc
         items = payload if isinstance(payload, list) else [payload]
         if not items:
             raise SchemaInvalidError(

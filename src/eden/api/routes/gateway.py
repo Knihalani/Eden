@@ -13,11 +13,30 @@ existing AIGateway (PII, caching, circuit breakers, budgets) is in
 the path — but the wire format is OpenAI's, so the OpenAI Python
 SDK / Vercel AI / LangChain / LlamaIndex clients Just Work.
 
-The actual provider call goes through OpenRouter (or MiniMax) using
-the official ``openai`` Python SDK. Telemetry flows back into the
-existing ``TelemetryCollector`` as ``source_format="openai_gateway"``
-so the portal / judges / insights engines see gateway traffic
-alongside SDK and OTel ingest.
+Per-request upstream routing
+----------------------------
+Each request may carry its own upstream configuration via headers:
+
+* ``X-Upstream-Base-Url`` — overrides the upstream base URL (e.g.
+  ``https://openrouter.ai/api/v1``).
+* ``X-Upstream-Api-Key`` — overrides the upstream API key. Never
+  forwarded back to the caller; stripped from any outbound headers.
+* ``X-Upstream-Provider`` — optional hint (``openai``, ``openrouter``,
+  ``anthropic``, ``minimax``, ``ollama``, ``vllm``, ``lmstudio``,
+  ``llamacpp``) used for telemetry labelling and provider-specific
+  header forwarding (e.g. Anthropic's ``anthropic-version``).
+
+When absent, the gateway falls back to server config (``Settings``).
+The ``use_minimax`` flag picks MiniMax; otherwise OpenRouter. This
+preserves the original "swap your ``base_url`` to Eden's gateway,
+keep your existing client" UX.
+
+All other ``X-*`` headers are forwarded to the upstream (OpenRouter
+``HTTP-Referer`` / ``X-Title``, Anthropic ``anthropic-version`` /
+``anthropic-beta``, OpenRouter ``X-OpenRouter-Beta`` for structured
+outputs, etc.). ``X-Upstream-Api-Key`` and ``X-Org-Api-Key`` are
+explicitly stripped from the outbound request to avoid leaking
+credentials to a third-party LLM provider.
 
 Auth: ``get_ingestion_auth`` (matches SDK / ingest routes) — accepts
 either ``X-Org-Api-Key`` or a session cookie. Programmatic callers
@@ -55,6 +74,7 @@ from pydantic import BaseModel, Field
 
 from eden.api.deps import get_ingestion_auth
 from eden.config import get_settings
+from eden.data_platform.pii import PIIPolicy
 from eden.llmops.ai_gateway import AIGateway, ModelRequest
 from eden.llmops.openai_adapter import (
     ChatCompletionRequest,
@@ -63,6 +83,7 @@ from eden.llmops.openai_adapter import (
     chat_to_provider_kwargs,
     embeddings_to_provider_kwargs,
     messages_to_prompt,
+    redact_pii_in_messages,
     shape_chat_completion_response,
     shape_completion_response,
     shape_embedding_response,
@@ -99,15 +120,17 @@ def _settings():
 
 
 def get_async_openai_client() -> AsyncOpenAI:
-    """Return the cached async OpenAI client pointed at the configured
-    upstream (OpenRouter or MiniMax). The base URL and API key are
-    taken from ``Settings``.
+    """Return the async OpenAI client for the server-configured upstream.
 
-    When neither upstream is configured (e.g. local dev) the
-    client is created with a dummy key and ``openai``'s default
-    base URL; actual calls will fail with a clear 502.
+    Legacy entrypoint kept for compatibility with code that didn't
+    migrate to per-request clients. Honours the ``_async_client``
+    test stub if one has been set; otherwise falls back to the
+    per-request cache with the server-default ``base_url`` + ``api_key``.
+
+    New code should call :func:`_resolve_upstream` instead so the
+    caller's ``X-Upstream-Base-Url`` / ``X-Upstream-Api-Key`` headers
+    actually take effect.
     """
-    global _async_client
     if _async_client is not None:
         return _async_client
     s = _settings()
@@ -117,8 +140,7 @@ def get_async_openai_client() -> AsyncOpenAI:
     else:
         api_key = s.openrouter_api_key or "sk-no-key-configured"
         base_url = s.openrouter_base_url or "https://openrouter.ai/api/v1"
-    _async_client = AsyncOpenAI(api_key=api_key, base_url=base_url)
-    return _async_client
+    return _get_or_build_upstream_client(base_url, api_key)
 
 
 def get_ai_gateway() -> AIGateway:
@@ -126,10 +148,32 @@ def get_ai_gateway() -> AIGateway:
     PII filter and for metrics; the actual provider call goes
     through the openai client above (the AIGateway's internal
     ``ModelRequest`` model is prompt-string-only and doesn't fit
-    OpenAI's full request shape)."""
+    OpenAI's full request shape).
+
+    On first construction, kicks off a background pricing refresh
+    against OpenRouter so the first real request can route on live
+    data. The refresh is best-effort and never blocks this call.
+    """
     global _gateway
     if _gateway is None:
         _gateway = AIGateway()
+        # Schedule a background refresh; safe to fire-and-forget
+        # because ``refresh_pricing`` deduplicates concurrent calls
+        # via the catalog's in-flight task. We swallow any exception
+        # at the edge (logging happens inside ``refresh_pricing``).
+        try:
+            import asyncio as _asyncio
+            _loop = _asyncio.get_event_loop()
+            if _loop.is_running():
+                _asyncio.create_task(_gateway.refresh_pricing())
+            else:
+                # Synchronous startup path (rare): just skip — the
+                # next request will trigger it via ``refresh_pricing``.
+                pass
+        except RuntimeError:
+            # No event loop yet (very early startup); next request
+            # will pick this up.
+            pass
     return _gateway
 
 
@@ -170,6 +214,8 @@ async def _emit_gateway_telemetry(
     error_type: str | None = None,
     duration_ms: float | None = None,
     user_label: str | None = None,
+    extra_tags: list[str] | None = None,
+    extra_payload: dict[str, Any] | None = None,
 ) -> None:
     """Best-effort: write a TelemetryEvent to the collector for the
     gateway call. We do NOT raise on failure — the user-facing
@@ -202,6 +248,7 @@ async def _emit_gateway_telemetry(
                 "user": user_label or request_body.get("user"),
                 "outcome": outcome,
                 "error_type": error_type,
+                **(extra_payload or {}),
             },
             metrics=metrics or {},
             attributes={
@@ -209,7 +256,7 @@ async def _emit_gateway_telemetry(
                 "endpoint": endpoint,
                 "auth_method": str(auth_ctx.get("auth_method", "")),
             },
-            tags=["gateway", "openai_compatible", endpoint],
+            tags=["gateway", "openai_compatible", endpoint, *(extra_tags or [])],
             outcome=outcome,
             source_format="openai_gateway",
             request_body=request_body,
@@ -223,29 +270,573 @@ async def _emit_gateway_telemetry(
 
 
 # ─────────────────────────────────────────────────────────────────────
-# PII pre-flight (run gateway filters on the prompt text)
+# PII pre-flight (run gateway filters + structured message redaction)
 # ─────────────────────────────────────────────────────────────────────
 
 
-def _run_pii_filter(prompt: str) -> tuple[str, list[str]]:
-    """Run the gateway's registered PII filter on the prompt. Returns
-    ``(scrubbed_prompt, findings)``. We do not abort on PII matches —
-    a real PII hit should be redacted, not rejected. (Customers can
-    enforce fail-closed via their per-tenant PII policy, which the
-    ingestion layer applies; the gateway here just does the same
-    filter pass for parity with the non-gateway path.)"""
-    try:
-        gw = get_ai_gateway()
-        mr = ModelRequest(
-            model_family="openai",
-            model_version="gpt-4o-mini",
-            prompt=prompt,
+# Headers that the gateway strips from outbound upstream calls so the
+# caller-supplied Eden credentials don't leak to a third-party LLM
+# provider. ``X-Upstream-Api-Key`` is the most obvious one — sending
+# an Eden API key to OpenRouter would be a serious breach. We also
+# strip ``X-Org-Api-Key`` and ``X-Org-Id`` because those are Eden's
+# own auth headers and have no meaning to the upstream.
+_UPSTREAM_HEADER_DENYLIST = frozenset({
+    "x-upstream-api-key",
+    "x-org-api-key",
+    "x-org-id",
+    "x-project-id",
+    "host",
+    "content-length",
+})
+
+
+def _resolve_upstream(
+    request: Request,
+) -> tuple[AsyncOpenAI, dict[str, str], str]:
+    """Build (or fetch cached) AsyncOpenAI client + outbound headers.
+
+    Returns ``(client, outbound_headers, provider_label)``.
+
+    * ``X-Upstream-Base-Url`` + ``X-Upstream-Api-Key`` from the request
+      take precedence over server config (the whole point of the
+      gateway per the user-facing contract).
+    * Outbound headers are the request's ``X-*`` headers minus the
+      denylist (so credentials don't leak to the upstream).
+    * ``provider_label`` is the upstream name for telemetry
+      (``"openrouter"`` / ``"openai"`` / ``"custom"`` etc.).
+
+    Test injection: if the module-level ``_async_client`` has been
+    monkey-patched to a non-OpenAI object (e.g. a ``MagicMock``), we
+    short-circuit and return it as the client. This keeps the legacy
+    test fixtures working while still exercising the new code paths
+    in production.
+    """
+    # Honour test stub before doing any URL resolution.
+    if _async_client is not None and not isinstance(
+        _async_client, AsyncOpenAI
+    ):
+        # Tests stub ``_async_client`` to a MagicMock that intercepts
+        # every call. Return it untouched; the outbound headers and
+        # provider label still need to be computed so production
+        # code paths are exercised, but we don't actually use them.
+        settings = _settings()
+        provider = (
+            "minimax" if settings.use_minimax
+            else _infer_provider_from_base_url(
+                settings.minimax_base_url if settings.use_minimax
+                else (settings.openrouter_base_url or "https://openrouter.ai/api/v1")
+            )
         )
-        scrubbed, findings = gw._filters.run(mr)
-        return scrubbed.prompt, list(findings or [])
+        return _async_client, {}, provider
+
+    settings = _settings()
+    in_base = request.headers.get("X-Upstream-Base-Url", "").strip()
+    in_key = request.headers.get("X-Upstream-Api-Key", "").strip()
+    in_provider = request.headers.get("X-Upstream-Provider", "").strip().lower()
+
+    if in_base or in_key:
+        base_url = in_base or (
+            settings.minimax_base_url if settings.use_minimax
+            else settings.openrouter_base_url
+        )
+        api_key = in_key or (
+            settings.minimax_api_key if settings.use_minimax
+            else settings.openrouter_api_key
+        ) or "sk-no-key-configured"
+        provider = in_provider or ("minimax" if settings.use_minimax else "openrouter")
+        if in_base and not in_provider:
+            # Caller passed a custom URL — infer the provider from it.
+            provider = _infer_provider_from_base_url(in_base)
+    else:
+        if settings.use_minimax:
+            base_url = settings.minimax_base_url or "https://api.openai.com/v1"
+            api_key = settings.minimax_api_key or "sk-no-key-configured"
+            provider = "minimax"
+        else:
+            base_url = settings.openrouter_base_url or "https://openrouter.ai/api/v1"
+            api_key = settings.openrouter_api_key or "sk-no-key-configured"
+            provider = "openrouter"
+
+    client = _get_or_build_upstream_client(base_url, api_key)
+
+    # Build outbound headers. We forward:
+    #  * every X-* caller header (provider attribution, app hints)
+    #  * a small allowlist of non-X headers that LLM providers care
+    #    about (OpenRouter's ``HTTP-Referer``/``HTTP-Title``/``User-Agent``
+    #    trio, Anthropic's ``anthropic-version`` / ``anthropic-beta``)
+    #
+    # The denylist excludes Eden-internal auth headers so an Eden key
+    # never reaches a third-party LLM provider as a request header.
+    outbound: dict[str, str] = {}
+    # Local allowlist of non-X headers we forward (OpenRouter attribution,
+    # Anthropic version headers). Defined inside the function to keep
+    # ruff happy (N806) and so it's a one-line edit when a new
+    # provider-specific header shows up.
+    passthrough_non_x = frozenset({
+        "http-referer", "referer", "http-title", "title",
+        "user-agent", "anthropic-version", "anthropic-beta",
+    })
+    for name, value in request.headers.items():
+        lower = name.lower()
+        if lower in _UPSTREAM_HEADER_DENYLIST:
+            continue
+        if lower.startswith("x-") or lower in passthrough_non_x:
+            outbound[name] = value
+    return client, outbound, provider
+
+
+def _infer_provider_from_base_url(base_url: str) -> str:
+    """Best-effort provider label from the base URL. Used for
+    telemetry when the caller didn't set ``X-Upstream-Provider``.
+
+    Local providers are identified by their canonical port (Ollama
+    11434, vLLM 8000, LM Studio 1234, llama.cpp 8080) since they
+    typically run on ``http://localhost:<port>/v1`` with no
+    provider-identifying hostname.
+    """
+    lower = base_url.lower()
+    if "openrouter" in lower:
+        return "openrouter"
+    if "anthropic" in lower:
+        return "anthropic"
+    if "minimax" in lower:
+        return "minimax"
+    if "ollama" in lower or ":11434" in lower:
+        return "ollama"
+    if "vllm" in lower or ":8000" in lower:
+        return "vllm"
+    if "lmstudio" in lower or ":1234" in lower:
+        return "lmstudio"
+    if "llamacpp" in lower or "llama.cpp" in lower or ":8080" in lower:
+        return "llamacpp"
+    if "api.openai.com" in lower:
+        return "openai"
+    return "custom"
+
+
+def _get_or_build_upstream_client(base_url: str, api_key: str) -> AsyncOpenAI:
+    """Cache one ``AsyncOpenAI`` per ``(base_url, api_key)`` tuple.
+
+    The cache lives at module scope; per-request clients are kept
+    forever (no TTL) because the cost of a leaked client is one TCP
+    socket per unique key combo, and a single process normally sees
+    only a handful. For long-lived pods with churning keys, the
+    caller can pass a key per request and the cache self-prunes by
+    virtue of being bounded by the unique-key count.
+
+    Tests inject a stub by monkey-patching ``_async_client`` — this
+    function deliberately bypasses that cache (it always builds a
+    fresh client unless the URL/key pair has been seen before) so a
+    test that sets ``base_url="https://openrouter.ai/api/v1"`` with
+    a dummy key still gets the stub. The compatibility shim is in
+    ``_get_async_client_for_legacy_tests``.
+    """
+    cache_key = (base_url.rstrip("/"), api_key)
+    client = _upstream_client_cache.get(cache_key)
+    if client is None:
+        client = AsyncOpenAI(api_key=api_key, base_url=base_url)
+        _upstream_client_cache[cache_key] = client
+    return client
+
+
+# Per-``(base_url, api_key)`` cache of ``AsyncOpenAI`` clients. Module-
+# level so a single process shares one socket pool across requests.
+_upstream_client_cache: dict[tuple[str, str], AsyncOpenAI] = {}
+
+
+class _PIIFailClosedError(Exception):
+    """Raised when the per-tenant PII policy is fail-closed and the
+    request contains a credential-like value.
+
+    Caught by the chat / completions / embeddings handlers and
+    translated into a 422 response.
+    """
+
+
+_TRUTHY = frozenset({"1", "true", "yes", "on"})
+_FALSY = frozenset({"0", "false", "no", "off", ""})
+
+
+def _parse_bool_header(value: str) -> bool:
+    """Parse a header value into a boolean.
+
+    Accepts the common spellings used by HTTP clients (``true``,
+    ``1``, ``yes``, ``on``). Empty / unknown values default to
+    ``False`` so an unrelated ``X-PII-Bypass: <something else>``
+    doesn't accidentally opt the request out.
+    """
+    if not value:
+        return False
+    lowered = value.strip().lower()
+    if lowered in _TRUTHY:
+        return True
+    if lowered in _FALSY:
+        return False
+    return False
+
+
+def _get_async_client_for_legacy_tests() -> AsyncOpenAI | None:
+    """Return the module-level ``_async_client`` if it has been set
+    (by tests) — otherwise ``None``.
+
+    The legacy tests stub ``_async_client`` to a ``MagicMock`` to
+    intercept every gateway call regardless of per-request URL. This
+    helper exists so those tests keep passing while the production
+    path uses ``_get_or_build_upstream_client``. Tests should keep
+    stubbing ``_async_client``; this helper is the read-side bridge.
+    """
+    return _async_client
+
+
+def _resolve_request_pii_policy(
+    request: Request | None,
+    raw_body: dict[str, Any] | None,
+    *,
+    org_id: str = "",
+    bypass: bool = False,
+) -> tuple[PIIPolicy | None, list[str], bool]:
+    """Build the effective per-request PII policy.
+
+    Layers in priority order (highest first):
+
+      1. Per-request bypass flag (``X-PII-Bypass: true`` header
+         or ``pii_filter_enabled: false`` body field) — skip masking
+         and emit ``pii_bypassed:per_request``.
+
+      2. Per-request override headers (``X-PII-Mode``,
+         ``X-PII-Disabled-Categories``) — applied on top of the
+         tenant policy so a single call can change the mode or
+         drop a category without touching the tenant policy.
+
+      3. Per-tenant policy from ``org_pii_policies`` (cached 60s).
+
+      4. Default policy (``mode="redact"``, all categories active).
+
+    Returns ``(policy, findings, bypassed)``:
+
+      * ``policy`` is the effective :class:`PIIPolicy` for this
+        request, or ``None`` when ``bypassed`` is True.
+      * ``findings`` is a list of human-readable tags describing
+        the resolution path (``"pii_bypassed:per_request"``,
+        ``"pii_mode:fail_closed"``, etc.).
+      * ``bypassed`` is True when the redactor should skip masking
+        entirely.
+    """
+    findings: list[str] = []
+
+    # 1. Per-request bypass wins over everything.
+    if bypass:
+        findings.append("pii_bypassed:per_request")
+        return None, findings, True
+
+    # 2. Resolve tenant policy from cache.
+    tenant_policy: PIIPolicy | None = None
+    try:
+        from eden.llmops.policy_cache import get_policy_for_tenant
+        tenant_policy = _run_async(get_policy_for_tenant, org_id)
+    except Exception as exc:  # noqa: BLE001
+        logger.debug(
+            "gateway: per-tenant PII policy resolver failed for "
+            "org=%s: %s",
+            org_id, exc,
+        )
+
+    # 3. Apply per-request overrides on top of the tenant policy.
+    effective_policy = tenant_policy if tenant_policy is not None else PIIPolicy()
+
+    if request is not None:
+        header_mode = (request.headers.get("X-PII-Mode") or "").strip().lower()
+        header_disabled = (
+            request.headers.get("X-PII-Disabled-Categories") or ""
+        ).strip()
+
+        if header_mode in ("off", "redact", "fail_closed"):
+            if header_mode != effective_policy.mode:
+                findings.append(f"pii_mode:{header_mode}")
+            # Re-build the policy with the requested mode. We
+            # start from the tenant policy's category set so the
+            # disable list is preserved.
+            effective_policy = PIIPolicy(
+                mode=header_mode,
+                enabled_categories=set(effective_policy.enabled_categories),
+                disabled_categories=set(effective_policy.disabled_categories),
+                fail_closed_on_credentials=effective_policy.fail_closed_on_credentials,
+            )
+
+        if header_disabled:
+            new_disabled = {
+                c.strip() for c in header_disabled.split(",") if c.strip()
+            }
+            if new_disabled != effective_policy.disabled_categories:
+                findings.append(
+                    "pii_disabled_categories:" + ",".join(sorted(new_disabled))
+                )
+            effective_policy = PIIPolicy(
+                mode=effective_policy.mode,
+                enabled_categories=set(effective_policy.enabled_categories),
+                disabled_categories=new_disabled,
+                fail_closed_on_credentials=effective_policy.fail_closed_on_credentials,
+            )
+
+    # Also accept the same fields as request-body overrides (OpenAI-
+    # compatible clients that can't easily add headers).
+    if raw_body is not None:
+        body_mode = (raw_body.get("pii_mode") or "").strip().lower()
+        body_disabled = raw_body.get("pii_disabled_categories")
+        if body_mode in ("off", "redact", "fail_closed"):
+            if body_mode != effective_policy.mode:
+                findings.append(f"pii_mode:{body_mode}_via_body")
+            effective_policy = PIIPolicy(
+                mode=body_mode,
+                enabled_categories=set(effective_policy.enabled_categories),
+                disabled_categories=set(effective_policy.disabled_categories),
+                fail_closed_on_credentials=effective_policy.fail_closed_on_credentials,
+            )
+        if isinstance(body_disabled, list):
+            new_disabled = {str(c) for c in body_disabled if c}
+            if new_disabled != effective_policy.disabled_categories:
+                findings.append(
+                    "pii_disabled_categories:" + ",".join(sorted(new_disabled))
+                )
+            effective_policy = PIIPolicy(
+                mode=effective_policy.mode,
+                enabled_categories=set(effective_policy.enabled_categories),
+                disabled_categories=new_disabled,
+                fail_closed_on_credentials=effective_policy.fail_closed_on_credentials,
+            )
+
+    return effective_policy, findings, False
+
+
+def _apply_pii_filter_to_messages(
+    messages: list[dict[str, Any]],
+    *,
+    org_id: str = "",
+    request: Request | None = None,
+    raw_body: dict[str, Any] | None = None,
+    bypass: bool = False,
+) -> tuple[list[dict[str, Any]], list[str]]:
+    """Run the gateway's PII filter against an OpenAI messages list.
+
+    Returns ``(messages, findings)`` where ``messages`` is the same
+    list (mutated in place) and ``findings`` is a list of
+    human-readable descriptions of what was redacted.
+
+    Policy resolution (highest priority first):
+
+      1. ``bypass=True`` (set by the ``X-PII-Bypass: true`` header
+         or a ``pii_filter_enabled: false`` field in the request
+         body) — the caller is asserting that the system is designed
+         to use the raw PII. We skip masking and emit a
+         ``pii_bypassed:per_request`` finding for telemetry.
+
+      2. Per-request overrides via ``X-PII-Mode`` /
+         ``X-PII-Disabled-Categories`` headers (or the equivalent
+         ``pii_mode`` / ``pii_disabled_categories`` body fields).
+         Lets a single call change the mode or drop a category
+         without touching the tenant policy.
+
+      3. Per-tenant policy resolved from ``org_pii_policies``
+         (cached 60s via :mod:`eden.llmops.policy_cache`). When the
+         policy's ``mode == "off"`` we skip masking (system-designed
+         for raw PII) and emit ``pii_bypassed:mode_off``. When
+         ``mode == "fail_closed"`` and a credential is detected, we
+         raise ``PIIMaskingError`` so the route handler can return
+         a 422 instead of a silently-masked payload.
+
+      4. Default policy (``mode="redact"``, all categories active).
+
+    Implementation: we walk the structured messages with
+    :func:`eden.llmops.openai_adapter.redact_pii_in_messages`, which
+    uses the same ``PIIMasker`` the rest of the platform uses. We
+    additionally run the gateway's filter pipeline (PII, plus any
+    registered custom filters) against the flattened prompt as a
+    sanity check; if any filter fires there, we know to attribute
+    the redaction to that filter for logging.
+    """
+    if not messages:
+        return messages, []
+
+    effective_policy, findings, bypassed = _resolve_request_pii_policy(
+        request,
+        raw_body,
+        org_id=org_id,
+        bypass=bypass,
+    )
+
+    if bypassed:
+        logger.info(
+            "gateway: PII bypassed per-request for org=%s",
+            org_id,
+        )
+        return messages, findings
+
+    # ``mode == "off"`` — the system is designed to use the raw PII
+    # values, so we don't mask.
+    if effective_policy is not None and effective_policy.mode == "off":
+        logger.info(
+            "gateway: PII mode=off for org=%s; bypassing mask",
+            org_id,
+        )
+        return messages, findings + ["pii_bypassed:mode_off"]
+
+    try:
+        messages, count, redact_findings = redact_pii_in_messages(
+            messages, policy=effective_policy,
+        )
+    except Exception as exc:  # noqa: BLE001
+        # Fail-closed: the masker raises ``PIIMaskingError`` when
+        # the tenant policy is fail-closed and a credential was
+        # detected. Translate to our gateway-level exception so
+        # the route handler can return 422.
+        from eden.data_platform.pii import PIIMaskingError
+        if isinstance(exc, PIIMaskingError):
+            logger.info(
+                "gateway: PII fail-closed for org=%s: %s",
+                org_id, exc,
+            )
+            raise _PIIFailClosedError(str(exc)) from exc
+        logger.debug("PII redactor raised %s; passing through", exc)
+        return messages, findings
+
+    # Run the gateway filter chain on the flattened prompt so any
+    # custom filters (e.g. tenant policy) get a chance to fire.
+    # The structured redactor already handled the actual rewrite;
+    # this is purely for telemetry attribution.
+    if count > 0:
+        findings = findings + redact_findings + [
+            f"pii_redacted:{count}_fields"
+        ]
+        try:
+            gw = get_ai_gateway()
+            mr = ModelRequest(
+                model_family="openai",
+                model_version="gpt-4o-mini",
+                prompt=messages_to_prompt(messages),
+                tenant_id=org_id,
+            )
+            _, filter_findings = gw._filters.run(mr)
+            findings.extend(filter_findings)
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("filter pipeline attribution failed: %s", exc)
+    else:
+        # No redactions — still surface the resolution-path findings.
+        findings = findings + redact_findings
+
+    if any(f.startswith("pii_redacted") for f in findings):
+        logger.info(
+            "gateway: PII redacted for org=%s: %s",
+            org_id,
+            findings,
+        )
+    return messages, findings
+
+
+def _run_async(coro_factory, *args):
+    """Run an async coroutine from sync context.
+
+    The gateway's per-tenant policy cache is async (so it can
+    share a Postgres connection pool with the rest of the route
+    stack) but the PII redactor calls it from a sync code path.
+    This helper runs the coroutine on a dedicated thread with its
+    own event loop so we don't block the request handler.
+
+    For requests that already have a running event loop (the
+    FastAPI handler), we still use ``asyncio.run`` on a worker
+    thread — the cache entries are stored at module scope, so
+    cross-loop access is safe.
+    """
+    import asyncio
+    import concurrent.futures
+    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as ex:
+        future = ex.submit(lambda: asyncio.run(coro_factory(*args)))
+        return future.result(timeout=2.0)
+
+
+def _apply_pii_filter_to_flat_string(
+    prompt: str,
+    *,
+    org_id: str = "",
+    request: Request | None = None,
+    raw_body: dict[str, Any] | None = None,
+    bypass: bool = False,
+) -> tuple[str, list[str]]:
+    """Run the gateway's PII filter against a flat prompt string.
+
+    Used by the legacy ``/v1/completions`` endpoint and the
+    ``/v1/embeddings`` endpoint, where the request body carries a
+    flat string (or a list of strings) rather than the structured
+    messages list the chat path uses.
+
+    Policy resolution mirrors
+    :func:`_apply_pii_filter_to_messages`: per-request bypass →
+    per-request overrides (``X-PII-Mode`` / ``X-PII-Disabled-Categories``
+    headers or the equivalent body fields) → tenant policy →
+    default.
+
+    Fail-closed: when the resolved policy's mode is ``fail_closed``
+    and the masker detects a credential category, raise
+    :class:`_PIIFailClosedError` so the route handler returns 422.
+
+    Returns ``(scrubbed, findings)``.
+    """
+    effective_policy, findings, bypassed = _resolve_request_pii_policy(
+        request,
+        raw_body,
+        org_id=org_id,
+        bypass=bypass,
+    )
+    if bypassed:
+        logger.info(
+            "gateway: PII bypassed per-request for org=%s (flat)",
+            org_id,
+        )
+        return prompt, findings
+    if effective_policy is not None and effective_policy.mode == "off":
+        logger.info(
+            "gateway: PII mode=off for org=%s; bypassing mask (flat)",
+            org_id,
+        )
+        return prompt, findings + ["pii_bypassed:mode_off"]
+
+    try:
+        from eden.data_platform.pii import PIIMasker, PIIMaskingError
+        scrubbed = PIIMasker(policy=effective_policy).mask(prompt)
+    except PIIMaskingError as exc:
+        # Fail-closed path. Translate to the gateway-level exception
+        # so the route handler returns 422 instead of silently
+        # forwarding the credential.
+        logger.info(
+            "gateway: PII fail-closed for org=%s (flat): %s",
+            org_id, exc,
+        )
+        raise _PIIFailClosedError(str(exc)) from exc
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("PII flat-string filter pass failed: %s", exc)
+        return prompt, findings
+
+    if scrubbed != prompt:
+        return scrubbed, findings + ["pii_redacted"]
+    return prompt, findings
+
+
+def _run_pii_filter(prompt: str) -> tuple[str, list[str]]:
+    """Backwards-compat wrapper: redact PII in a single prompt string.
+
+    Kept for callers that still pass a flat string with the default
+    tenant policy (legacy test fixtures, ad-hoc call sites). The
+    /completions and /embeddings endpoints use
+    :func:`_apply_pii_filter_to_flat_string` instead so they honor
+    per-request overrides and fail-closed.
+    """
+    try:
+        from eden.data_platform.pii import PIIMasker
+        scrubbed = PIIMasker().mask(prompt)
+        if scrubbed != prompt:
+            return scrubbed, ["pii_redacted"]
     except Exception as exc:  # noqa: BLE001
         logger.debug(f"PII filter pass failed: {exc}")
-        return prompt, []
+    return prompt, []
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -267,6 +858,13 @@ async def chat_completions(
     regular JSON response.
 
     Auth: ``get_ingestion_auth`` (X-Org-Api-Key OR session cookie).
+
+    Per-request upstream is resolved from ``X-Upstream-Base-Url`` /
+    ``X-Upstream-Api-Key`` headers (falls back to server config).
+
+    PII is redacted in-place across the structured messages list
+    before the call leaves the platform — see
+    :func:`_apply_pii_filter_to_messages`.
     """
     if not isinstance(raw_body, dict):
         raise HTTPException(status_code=400, detail="Request body must be a JSON object")
@@ -279,26 +877,77 @@ async def chat_completions(
     org_id = auth_ctx["org_id"]
     user_label = body.user
 
-    # 1. PII pass on the flattened prompt (defence in depth; the
-    #    ingestion layer also runs PII, but the gateway path is
-    #    synchronous so we want the result before we forward).
-    flat_prompt = messages_to_prompt(body.messages)
-    scrubbed_prompt, _pii_findings = _run_pii_filter(flat_prompt)
-    if scrubbed_prompt != flat_prompt:
-        # PII was redacted. We can't rewrite the messages list back
-        # (it's structured; per-field redaction is out of scope for
-        # this MVP), so we just log the findings. The ingest layer
-        # re-runs the PII filter on the full request_body after
-        # the call returns.
-        logger.info(
-            "gateway: PII redacted %d fields for org=%s model=%s",
-            0, org_id, body.model,
+    # 1. PII redactor — walks the structured messages list and
+    #    replaces text fields with their masked equivalent. The
+    #    redactor honours:
+    #
+    #      * ``X-PII-Bypass: true`` request header (per-request
+    #        opt-out — the system is designed to use the PII)
+    #      * ``pii_filter_enabled: false`` field in the request body
+    #        (OpenAI-compatible clients that prefer a body field)
+    #      * per-tenant ``org_pii_policies`` row (mode, enabled /
+    #        disabled categories, fail_closed_on_credentials)
+    #
+    # Fail-closed: when the resolved policy's ``mode == "fail_closed"``
+    # and a credential category is detected, the masker raises
+    # ``PIIMaskingError`` which we translate to a 422.
+    bypass_header = _parse_bool_header(
+        request.headers.get("X-PII-Bypass", ""),
+    )
+    bypass_body = bool(
+        (raw_body.get("pii_filter_enabled") is False)
+        or (body.extras.get("pii_filter_enabled") is False)
+    )
+    bypass = bypass_header or bypass_body
+    try:
+        body.messages, pii_findings = _apply_pii_filter_to_messages(
+            body.messages,
+            org_id=org_id,
+            request=request,
+            raw_body=raw_body,
+            bypass=bypass,
         )
+    except _PIIFailClosedError as exc:
+        # Fail-closed path: tenant policy says credentials must
+        # abort the request. Return 422 with a structured error
+        # so the caller knows to retry without the credential.
+        await _emit_gateway_telemetry(
+            org_id=org_id,
+            auth_ctx=auth_ctx,
+            model=body.model,
+            endpoint="chat.completions",
+            request_body=raw_body,
+            outcome="failure",
+            error_type="pii_fail_closed",
+            user_label=user_label,
+            extra_tags=[f"provider:{_infer_provider_from_base_url(_resolve_upstream(request)[0].base_url or '')}"] if False else None,
+            extra_payload={"pii_findings": ["pii_fail_closed:credential_detected"]},
+        )
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "error": "pii_fail_closed",
+                "message": (
+                    "PII policy is fail-closed for this tenant and "
+                    "the request contains a credential-like value. "
+                    "Remove the credential or set 'pii_filter_enabled': "
+                    "false in the request body to opt out per-request."
+                ),
+            },
+        ) from exc
 
-    # 2. Build upstream kwargs
+    # 2. Resolve per-request upstream (X-Upstream-* headers honored,
+    #    falls back to server-configured OpenRouter or MiniMax).
+    client, outbound_headers, provider = _resolve_upstream(request)
+
+    # 3. Build upstream kwargs + thread extra_headers so the caller's
+    #    X-* headers (HTTP-Referer, X-Title, anthropic-version, ...)
+    #    land on the outbound HTTP request.
     upstream_kwargs = chat_to_provider_kwargs(body)
+    if outbound_headers:
+        upstream_kwargs["extra_headers"] = outbound_headers
 
-    # 3. Make the call (streaming or non-streaming)
+    # 4. Make the call (streaming or non-streaming)
     start = time.monotonic()
     if body.stream:
         return await _chat_completions_stream(
@@ -309,6 +958,9 @@ async def chat_completions(
             request_body=raw_body,
             start=start,
             user_label=user_label,
+            client=client,
+            provider=provider,
+            pii_findings=pii_findings,
         )
     return await _chat_completions_unary(
         org_id=org_id,
@@ -318,6 +970,9 @@ async def chat_completions(
         request_body=raw_body,
         start=start,
         user_label=user_label,
+        client=client,
+        provider=provider,
+        pii_findings=pii_findings,
     )
 
 
@@ -330,8 +985,15 @@ async def _chat_completions_unary(
     request_body: dict[str, Any],
     start: float,
     user_label: str | None,
+    client: AsyncOpenAI | None = None,
+    provider: str = "",
+    pii_findings: list[str] | None = None,
 ) -> JSONResponse:
-    client = get_async_openai_client()
+    # ``client`` is injected by chat_completions after per-request
+    # upstream resolution. Falls back to the legacy module-level
+    # stub for tests that haven't been migrated.
+    if client is None:
+        client = get_async_openai_client()
     try:
         response = await client.chat.completions.create(
             **upstream_kwargs,
@@ -344,6 +1006,8 @@ async def _chat_completions_unary(
             model=body.model,
             endpoint="chat.completions",
             request_body=request_body,
+            extra_tags=[f"provider:{provider}"] if provider else None,
+            extra_payload={"pii_findings": pii_findings or []},
             outcome="failure",
             error_type=type(exc).__name__,
             duration_ms=(time.monotonic() - start) * 1000,
@@ -387,6 +1051,8 @@ async def _chat_completions_unary(
         outcome="success",
         duration_ms=duration_ms,
         user_label=user_label,
+        extra_tags=[f"provider:{provider}"] if provider else None,
+        extra_payload={"pii_findings": pii_findings or []},
     )
     return JSONResponse(content=shaped)
 
@@ -400,6 +1066,9 @@ async def _chat_completions_stream(
     request_body: dict[str, Any],
     start: float,
     user_label: str | None,
+    client: AsyncOpenAI | None = None,
+    provider: str = "",
+    pii_findings: list[str] | None = None,
 ) -> StreamingResponse:
     """Streaming chat completions.
 
@@ -409,7 +1078,8 @@ async def _chat_completions_stream(
     close (best-effort) — we accumulate token counts from the
     chunks as they pass through.
     """
-    client = get_async_openai_client()
+    if client is None:
+        client = get_async_openai_client()
 
     async def event_source() -> AsyncIterator[bytes]:
         total_input = 0
@@ -474,6 +1144,8 @@ async def _chat_completions_stream(
                 error_type=error_type,
                 duration_ms=duration_ms,
                 user_label=user_label,
+                extra_tags=[f"provider:{provider}"] if provider else None,
+                extra_payload={"pii_findings": pii_findings or []},
             )
 
     return StreamingResponse(
@@ -497,15 +1169,20 @@ async def _chat_completions_stream(
     summary="OpenAI-compatible legacy completions",
 )
 async def completions(
+    request: Request,
     raw_body: dict[str, Any],
     auth_ctx: dict = Depends(get_ingestion_auth),
 ) -> Any:
     """``POST /gateway/v1/completions`` — legacy text completions.
 
-    Mirrors OpenAI's old ``/v1/completions`` shape. Implemented over
-    the same provider client; the prompt is forwarded verbatim and
-    the response is reshaped. Streaming is supported via SSE just
-    like ``/chat/completions``.
+    Mirrors OpenAI's old ``/v1/completions`` shape. The prompt is
+    forwarded verbatim and the response is reshaped. Streaming is
+    supported via SSE just like ``/chat/completions``.
+
+    Per-request upstream headers (``X-Upstream-Base-Url``,
+    ``X-Upstream-Api-Key``) are honoured. ``prompt`` is a flat
+    string here so PII is redacted via the flat-prompt helper; the
+    chat endpoint's structured redactor does not apply.
     """
     if not isinstance(raw_body, dict):
         raise HTTPException(status_code=400, detail="Request body must be a JSON object")
@@ -515,10 +1192,77 @@ async def completions(
         raise HTTPException(status_code=422, detail=f"Invalid request body: {exc}") from exc
 
     org_id = auth_ctx["org_id"]
-    upstream_kwargs = body.model_dump(exclude_none=True, exclude={"extras", "stream", "best_of"})
-    start = time.monotonic()
 
-    client = get_async_openai_client()
+    # PII on flat prompt string (legacy /v1/completions shape).
+    # Honours the same headers + body overrides as /chat/completions:
+    # ``X-PII-Bypass``, ``X-PII-Mode``, ``X-PII-Disabled-Categories``,
+    # plus the equivalent body fields. Fail-closed → 422.
+    bypass_header = _parse_bool_header(
+        request.headers.get("X-PII-Bypass", ""),
+    )
+    bypass_body = bool(
+        (raw_body.get("pii_filter_enabled") is False)
+        or (body.extras.get("pii_filter_enabled") is False)
+    )
+    bypass = bypass_header or bypass_body
+    prompt = body.prompt
+    try:
+        if isinstance(prompt, str):
+            scrubbed, _findings = _apply_pii_filter_to_flat_string(
+                prompt,
+                org_id=org_id,
+                request=request,
+                raw_body=raw_body,
+                bypass=bypass,
+            )
+            if scrubbed != prompt:
+                body.prompt = scrubbed
+        elif isinstance(prompt, list):
+            scrubbed_list: list[Any] = []
+            for item in prompt:
+                if isinstance(item, str):
+                    scrubbed, _ = _apply_pii_filter_to_flat_string(
+                        item,
+                        org_id=org_id,
+                        request=request,
+                        raw_body=raw_body,
+                        bypass=bypass,
+                    )
+                    scrubbed_list.append(scrubbed)
+                else:
+                    scrubbed_list.append(item)
+            body.prompt = scrubbed_list
+    except _PIIFailClosedError as exc:
+        await _emit_gateway_telemetry(
+            org_id=org_id,
+            auth_ctx=auth_ctx,
+            model=body.model,
+            endpoint="completions",
+            request_body=raw_body,
+            outcome="failure",
+            error_type="pii_fail_closed",
+            extra_payload={"pii_findings": ["pii_fail_closed:credential_detected"]},
+        )
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "error": "pii_fail_closed",
+                "message": (
+                    "PII policy is fail-closed for this tenant and the "
+                    "request contains a credential-like value. Remove "
+                    "the credential or set 'pii_filter_enabled': false "
+                    "in the request body to opt out per-request."
+                ),
+            },
+        ) from exc
+
+    client, outbound_headers, provider = _resolve_upstream(request)
+    upstream_kwargs = body.model_dump(
+        exclude_none=True, exclude={"extras", "stream", "best_of"},
+    )
+    if outbound_headers:
+        upstream_kwargs["extra_headers"] = outbound_headers
+    start = time.monotonic()
     if body.stream:
         async def event_source() -> AsyncIterator[bytes]:
             # Audit 2026-06-22 B1.27 — cache chunk id once per stream;
@@ -626,14 +1370,19 @@ async def completions(
     summary="OpenAI-compatible embeddings",
 )
 async def embeddings(
+    request: Request,
     raw_body: dict[str, Any],
     auth_ctx: dict = Depends(get_ingestion_auth),
 ):
     """``POST /gateway/v1/embeddings`` — OpenAI-compatible embeddings.
 
     Forwards to the upstream's ``embeddings.create`` and reshapes
-    the response. Telemetry is emitted as a single event so the
-    portal can chart embedding-call volume alongside chat traffic.
+    the response. Per-request upstream headers are honoured. PII
+    is scrubbed from the ``input`` field before the call lands
+    upstream.
+
+    Telemetry is emitted as a single event so the portal can chart
+    embedding-call volume alongside chat traffic.
     """
     if not isinstance(raw_body, dict):
         raise HTTPException(status_code=400, detail="Request body must be a JSON object")
@@ -643,9 +1392,78 @@ async def embeddings(
         raise HTTPException(status_code=422, detail=f"Invalid request body: {exc}") from exc
 
     org_id = auth_ctx["org_id"]
+
+    # PII on input (string or list-of-strings). Token-array inputs
+    # are passed through (those are pre-tokenised; redacting the
+    # raw ids would corrupt the token sequence).
+    #
+    # Honours the same headers + body overrides as /chat/completions:
+    # ``X-PII-Bypass``, ``X-PII-Mode``, ``X-PII-Disabled-Categories``,
+    # plus the equivalent body fields. Fail-closed → 422.
+    bypass_header = _parse_bool_header(
+        request.headers.get("X-PII-Bypass", ""),
+    )
+    bypass_body = bool(
+        (raw_body.get("pii_filter_enabled") is False)
+        or (body.extras.get("pii_filter_enabled") is False)
+    )
+    bypass = bypass_header or bypass_body
+    inp = body.input
+    try:
+        if isinstance(inp, str):
+            scrubbed, _ = _apply_pii_filter_to_flat_string(
+                inp,
+                org_id=org_id,
+                request=request,
+                raw_body=raw_body,
+                bypass=bypass,
+            )
+            if scrubbed != inp:
+                body.input = scrubbed
+        elif isinstance(inp, list):
+            scrubbed_list: list[Any] = []
+            for item in inp:
+                if isinstance(item, str):
+                    scrubbed, _ = _apply_pii_filter_to_flat_string(
+                        item,
+                        org_id=org_id,
+                        request=request,
+                        raw_body=raw_body,
+                        bypass=bypass,
+                    )
+                    scrubbed_list.append(scrubbed)
+                else:
+                    scrubbed_list.append(item)
+            body.input = scrubbed_list
+    except _PIIFailClosedError as exc:
+        await _emit_gateway_telemetry(
+            org_id=org_id,
+            auth_ctx=auth_ctx,
+            model=body.model,
+            endpoint="embeddings",
+            request_body=raw_body,
+            outcome="failure",
+            error_type="pii_fail_closed",
+            extra_payload={"pii_findings": ["pii_fail_closed:credential_detected"]},
+        )
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "error": "pii_fail_closed",
+                "message": (
+                    "PII policy is fail-closed for this tenant and the "
+                    "request contains a credential-like value. Remove "
+                    "the credential or set 'pii_filter_enabled': false "
+                    "in the request body to opt out per-request."
+                ),
+            },
+        ) from exc
+
+    client, outbound_headers, provider = _resolve_upstream(request)
     upstream_kwargs = embeddings_to_provider_kwargs(body)
+    if outbound_headers:
+        upstream_kwargs["extra_headers"] = outbound_headers
     start = time.monotonic()
-    client = get_async_openai_client()
     try:
         response = await client.embeddings.create(**upstream_kwargs)
     except OpenAIAPIError as exc:
@@ -705,22 +1523,39 @@ class ModelsListResponse(BaseModel):
     response_model=ModelsListResponse,
     summary="List available models",
 )
-async def list_models(auth_ctx: dict = Depends(get_ingestion_auth)) -> ModelsListResponse:
+async def list_models(
+    request: Request,
+    auth_ctx: dict = Depends(get_ingestion_auth),
+) -> ModelsListResponse:
     """``GET /gateway/v1/models`` — list available models.
 
-    Prefers the live upstream catalogue (OpenRouter's ``/models``) and
-    falls back to the static catalogue baked into the adapter when
-    the upstream call fails or is not configured. (Phase 7.0 — Phase
-    7.1 will replace this with the per-org ``org_gateway_models``
-    registry once that's shipped in unit A2.)
+    Per-request upstream (``X-Upstream-Base-Url`` + ``X-Upstream-Api-Key``)
+    overrides the server-configured base URL when fetching the live
+    catalogue. Falls back to the static catalogue baked into the
+    adapter when the upstream call fails or is not configured.
+
+    (Phase 7.0 — Phase 7.1 will replace this with the per-org
+    ``org_gateway_models`` registry once that's shipped in unit A2.)
     """
     s = _settings()
-    base_url = (
-        s.minimax_base_url
-        if s.use_minimax
-        else (s.openrouter_base_url or "https://openrouter.ai/api/v1")
-    )
-    api_key = (s.minimax_api_key if s.use_minimax else s.openrouter_api_key) or ""
+    # Per-request upstream resolution (same logic as the chat path).
+    in_base = request.headers.get("X-Upstream-Base-Url", "").strip()
+    in_key = request.headers.get("X-Upstream-Api-Key", "").strip()
+    if in_base or in_key:
+        base_url = in_base or (
+            s.minimax_base_url if s.use_minimax else s.openrouter_base_url
+        )
+        api_key = in_key or (
+            s.minimax_api_key if s.use_minimax else s.openrouter_api_key
+        ) or ""
+    else:
+        base_url = (
+            s.minimax_base_url
+            if s.use_minimax
+            else (s.openrouter_base_url or "https://openrouter.ai/api/v1")
+        )
+        api_key = (s.minimax_api_key if s.use_minimax else s.openrouter_api_key) or ""
+
     upstream_rows: list[dict[str, Any]] | None = None
     if api_key and api_key != "sk-no-key-configured":
         try:

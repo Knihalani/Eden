@@ -134,5 +134,5 @@ async def set_sidebar_prefs(
         logger.warning("sidebar_prefs: upsert failed for user=%s org=%s: %s", user_id, org_id, exc)
         from fastapi import HTTPException
 
-        raise HTTPException(status_code=503, detail="Sidebar prefs storage unavailable")
+        raise HTTPException(status_code=503, detail="Sidebar prefs storage unavailable") from exc
     return {"ok": True}

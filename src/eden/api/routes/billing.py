@@ -406,13 +406,13 @@ async def subscribe(
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Stripe SDK not installed. Run: pip install stripe",
-        )
+        ) from None
     except Exception as e:
         logger.error(f"Stripe checkout error: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to create checkout session: {str(e)}",
-        )
+        ) from e
 
 
 @router.get("/invoices", response_model=list[InvoiceResponse])
@@ -466,13 +466,13 @@ async def get_invoices(org_id: str, user: dict = Depends(get_current_user),
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Stripe is not installed.",
-        )
+        ) from None
     except Exception as e:
         logger.error(f"Stripe invoice error: {e}")
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Stripe is currently unavailable.",
-        )
+        ) from e
 
 
 @router.post("/cancel", response_model=dict)
@@ -522,13 +522,13 @@ async def cancel_subscription(org_id: str, user: dict = Depends(get_current_user
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Stripe SDK not installed.",
-        )
+        ) from None
     except Exception as e:
         logger.error(f"Stripe cancel error: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to cancel subscription: {str(e)}",
-        )
+        ) from e
 
 
 # ============================================================================
@@ -573,7 +573,7 @@ async def stripe_webhook(
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Invalid webhook payload",
-            )
+            ) from None
         except Exception as e:
             # If no webhook secret configured, just parse
             logger.warning(f"Stripe webhook verification failed: {e}")
@@ -605,7 +605,7 @@ async def stripe_webhook(
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Stripe SDK not installed.",
-        )
+        ) from None
     except HTTPException:
         raise
     except Exception as e:
@@ -613,7 +613,7 @@ async def stripe_webhook(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Webhook processing failed: {str(e)}",
-        )
+        ) from e
 
 
 async def handle_subscription_event(event: dict) -> None:

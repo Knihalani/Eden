@@ -54,7 +54,7 @@ def _validate_webhook_url(url: str) -> None:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Webhook URL hostname could not be resolved",
-            )
+            ) from None
     # Block private, loopback, link-local, multicast, reserved.
     if (
         ip.is_private

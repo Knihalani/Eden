@@ -45,6 +45,16 @@ import logging
 import os
 import shutil
 import time
+from dataclasses import dataclass, field
+from datetime import UTC, datetime
+from typing import Any, Protocol, cast
+
+import httpx
+
+from .repo import CommitInfo, FileEntry, PullRequestInfo
+
+logger = logging.getLogger(__name__)
+
 
 # ponytail: shared httpx.AsyncClient with HTTP/1.1 keep-alive. Each
 # `async with httpx.AsyncClient(...)` opens a fresh client (separate
@@ -57,16 +67,8 @@ _HTTPX: httpx.AsyncClient | None = None
 def _shared_httpx() -> httpx.AsyncClient:
     global _HTTPX
     if _HTTPX is None:
-        import httpx as _h
-        _HTTPX = _h.AsyncClient(timeout=30.0)
+        _HTTPX = httpx.AsyncClient(timeout=30.0)
     return _HTTPX
-from dataclasses import dataclass, field
-from datetime import UTC, datetime
-from typing import Any, Protocol, cast
-
-from .repo import CommitInfo, FileEntry, PullRequestInfo
-
-logger = logging.getLogger(__name__)
 
 
 # ── Data classes ─────────────────────────────────────────────────

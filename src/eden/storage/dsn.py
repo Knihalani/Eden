@@ -107,30 +107,3 @@ def _translate_sslmode_to_asyncpg_ssl(url: str) -> str:
         doseq=True,
     )
     return urlunparse(parsed._replace(query=new_query))
-    # asyncpg's DSN format is different from libpq's:
-    #   - libpq uses ``sslmode=require`` to require SSL
-    #   - asyncpg accepts ``ssl=require`` (or ``ssl=true``, ``ssl=verify-full``,
-    #     or an ``ssl.SSLContext``) and passes it to ``connect()``
-    # We translate ``postgres_sslmode`` (a libpq-style string) to the
-    # asyncpg equivalent. ``channel_binding`` is libpq-only; not honoured
-    # by asyncpg — the SSL handshake in asyncpg uses scram-sha-256 by
-    # default, which is the same thing channel_binding=require enforces.
-    query_parts: list[str] = []
-    if settings.postgres_sslmode:
-        # Map libpq-style sslmode values to asyncpg's ``ssl`` parameter.
-        # asyncpg accepts: True / False / 'require' / 'verify-ca' /
-        # 'verify-full' / an SSLContext.
-        sslmode = settings.postgres_sslmode.lower()
-        if sslmode in {"disable", "allow", "prefer"}:
-            query_parts.append("ssl=false")
-        elif sslmode in {"require", "verify-ca", "verify-full"}:
-            # asyncpg's 'require' is the closest match to libpq's
-            # 'require' (no cert verification); 'verify-ca' / 'verify-full'
-            # map directly.
-            query_parts.append(f"ssl={sslmode}")
-        else:
-            # Unknown sslmode — fall back to 'require'.
-            query_parts.append("ssl=require")
-    if query_parts:
-        base = f"{base}?{'&'.join(query_parts)}"
-    return base

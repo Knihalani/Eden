@@ -1,7 +1,7 @@
 {
   "trace_id": "trace_failing_tool_03",
   "archetype_id": "failing-tool",
-  "expected_TAS": 19,
+  "expected_TAS": 37,
   "expected_intervention": "escalate",
   "expected_loop_detected": false,
   "expected_hallucination_detected": false,

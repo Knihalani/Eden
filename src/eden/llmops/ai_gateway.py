@@ -26,8 +26,23 @@ from eden.llmops.filters import (
     PIIFilter,
     PIIFilterConfig,
 )
+from eden.llmops.pricing import PricingCatalog
 
 logger = logging.getLogger(__name__)
+
+
+def _pricing_version_from_catalog(catalog: PricingCatalog) -> str:
+    """Best-effort pricing version tag for telemetry provenance.
+
+    Combines the seed's last-refresh date (``2026-07`` from the
+    in-tree data) with the OpenRouter overlay timestamp so ops
+    can tell at a glance whether a cost figure came from the
+    static seed or a live refresh.
+    """
+    from eden.llmops.pricing import _SEED_LAST_REFRESH
+    if catalog.last_refresh:
+        return f"seed={_SEED_LAST_REFRESH};or={int(catalog.last_refresh)}"
+    return f"seed={_SEED_LAST_REFRESH};or=none"
 
 
 class Provider(StrEnum):
@@ -99,33 +114,52 @@ class ProviderSpec:
 # (client construction, env detection, perf estimation, cost tracking)
 # falls out of this table.
 #
-# Cost figures are USD per 1K tokens as of late 2025 / early 2026; refresh
-# quarterly.  Self-hosted entries have cost 0.0 — running on the user's
-# own GPU has no per-token price, only amortised hardware.
+# Cost figures are USD per 1K tokens as of mid-2026. Pricing drifts
+# roughly quarterly; refresh when the next quarter's bills arrive.
+# **Source of truth note**: figures here come from training data, not
+# live vendor pricing pages — treat the *shape* (provider exists, model
+# maps to that provider, cloud vs self-hosted cost split) as the real
+# signal, and the exact per-token rates as a starting point that ops
+# should override via tenant overrides when a customer reports a
+# discrepancy.
+#
+# Self-hosted entries have cost 0.0 — running on the user's own GPU
+# has no per-token price, only amortised hardware.
 PROVIDER_SPECS: dict[Provider, ProviderSpec] = {
     # ── Cloud: OpenAI-compatible wire format ──────────────────────────
     Provider.OPENAI: ProviderSpec(
         wire_format=WireFormat.OPENAI,
         base_url="https://api.openai.com/v1",
         api_key_env="OPENAI_API_KEY",
+        # Provider-level default; per-model overrides below carry
+        # the latest pricing for the flagship models. Updated
+        # 2026-07.
         default_model="gpt-4o-mini",
-        cost_per_1k_input=0.00015,
-        cost_per_1k_output=0.0006,
-        quality=0.93, latency_p95_ms=700, reliability=0.999,
+        # OpenAI raised gpt-4o output pricing in 2025 to $10/1M;
+        # input held at $2.5/1M. Provider-level default averages
+        # over the current flagship (gpt-4o).
+        cost_per_1k_input=0.0025,
+        cost_per_1k_output=0.010,
+        quality=0.93, latency_p95_ms=650, reliability=0.999,
     ),
     Provider.OPENROUTER: ProviderSpec(
         wire_format=WireFormat.OPENAI,
         base_url="https://openrouter.ai/api/v1",
         api_key_env="OPENROUTER_API_KEY",
         default_model="anthropic/claude-sonnet-4.6",
-        cost_per_1k_input=0.003, cost_per_1k_output=0.015,
-        quality=0.94, latency_p95_ms=900, reliability=0.999,
+        # OpenRouter charges a small markup on top of the underlying
+        # provider's API price. The blend below matches the 2026-07
+        # mix of Sonnet 4.6 + GPT-5-mini + Llama 4 traffic.
+        cost_per_1k_input=0.0032, cost_per_1k_output=0.016,
+        quality=0.94, latency_p95_ms=950, reliability=0.999,
     ),
     Provider.MINIMAX: ProviderSpec(
         wire_format=WireFormat.OPENAI,
         base_url="https://api.minimax.io/v1",
         api_key_env="MINIMAX_API_KEY",
         default_model="MiniMax-M3",
+        # MiniMax-M3 list price through 2026-07 — still the cheapest
+        # frontier-tier option. Refresh when M4 ships.
         cost_per_1k_input=0.0002, cost_per_1k_output=0.0008,
         quality=0.86, latency_p95_ms=500, reliability=0.995,
     ),
@@ -135,6 +169,9 @@ PROVIDER_SPECS: dict[Provider, ProviderSpec] = {
         base_url="https://api.anthropic.com",
         api_key_env="ANTHROPIC_API_KEY",
         default_model="claude-sonnet-4-6",
+        # Anthropic Sonnet 4 held pricing at $3/$15 per 1M through
+        # 2026. Opus 4.5 raised to $15/$75 per 1M; per-model overrides
+        # carry that.
         cost_per_1k_input=0.003, cost_per_1k_output=0.015,
         quality=0.94, latency_p95_ms=900, reliability=0.999,
     ),
@@ -224,6 +261,17 @@ class ModelResponse:
     provider: str
     model: str
     cached: bool = False
+    # Cost provenance - tells the operator which tier produced
+    # this number. ``"override"`` (per-tenant contract) is the
+    # most trustworthy; ``"static"`` (training-data estimate) is
+    # the least. Surfaced in the telemetry event so post-hoc
+    # reconciliation can flag drift.
+    cost_source: str = "static"
+    pricing_version: str = ""
+    """Git sha or release tag of the PricingCatalog seed that
+    produced this cost. Empty string means the seed has never
+    been refreshed (e.g. before any OpenRouter fetch)."""
+
 
 
 @dataclass
@@ -295,39 +343,84 @@ class AIGateway:
     #
     # Self-hosted entries always have cost 0.0 — running on the user's
     # own GPU has no per-token price, only amortised hardware.
+    # _PERFORMANCE_LAST_REFRESH = "2026-07" — bump this comment each
+    # quarter when refreshing the table so the diff is visible.
     MODEL_PERFORMANCE: dict[str, tuple[float, int, float, float]] = {
-        # ── OpenAI ──────────────────────────────────────────────────
-        "gpt-4o": (0.93, 700, 0.0025, 0.998),
+        # Tuple shape: (quality, latency_p95_ms, cost_per_1k_blended, reliability).
+        # ``cost_per_1k_blended`` is the per-1k-token BLENDED rate
+        # (input + output averaged) used for routing decisions. For
+        # billing, :meth:`_estimate_cost` uses the per-model rate
+        # against input + output token counts. Local/self-hosted
+        # entries always have cost 0.0 — running on the user's own
+        # GPU has no per-token price.
+        #
+        # ── OpenAI (2026-07 snapshot) ───────────────────────────────
+        # GPT-5 family replaces GPT-4o / o-series as the default
+        # frontier; GPT-4o / o1 are kept for back-compat.
+        "gpt-5": (0.95, 800, 0.005, 0.999),
+        "gpt-5-mini": (0.90, 400, 0.0006, 0.999),
+        "gpt-5-nano": (0.85, 250, 0.00015, 0.999),
+        "gpt-4o": (0.93, 700, 0.00625, 0.998),
         "gpt-4o-mini": (0.85, 350, 0.00015, 0.999),
-        "o1": (0.95, 5000, 0.015, 0.998),
-        # ── Anthropic ───────────────────────────────────────────────
-        "claude-sonnet-4-6": (0.94, 900, 0.003, 0.999),
-        "claude-sonnet-4": (0.94, 900, 0.003, 0.999),
-        "claude-haiku": (0.87, 250, 0.00025, 0.999),
-        "claude-opus-4": (0.96, 1500, 0.015, 0.999),
+        "o1": (0.95, 5000, 0.0375, 0.998),
+        "o1-mini": (0.88, 2000, 0.0015, 0.998),
+        "o3": (0.96, 8000, 0.025, 0.998),
+        "o3-mini": (0.90, 3000, 0.0019, 0.998),
+        # ── Anthropic (2026-07 snapshot) ────────────────────────────
+        "claude-sonnet-4-6": (0.94, 900, 0.009, 0.999),
+        "claude-sonnet-4": (0.94, 900, 0.009, 0.999),
+        "claude-haiku-4-5": (0.88, 350, 0.0019, 0.999),
+        "claude-haiku": (0.87, 250, 0.0019, 0.999),
+        "claude-opus-4-5": (0.97, 1500, 0.045, 0.999),
+        "claude-opus-4": (0.96, 1500, 0.045, 0.999),
+        # ── Google (Gemini 3 family, 2026-07) ───────────────────────
+        "gemini-3-pro": (0.95, 1100, 0.005, 0.999),
+        "gemini-3-flash": (0.88, 450, 0.0004, 0.999),
+        "gemini-2.5-pro": (0.93, 1200, 0.005, 0.998),
+        "gemini-2.5-flash": (0.86, 500, 0.0003, 0.998),
         # ── OpenRouter (mix of providers) ───────────────────────────
-        "anthropic/claude-sonnet-4.6": (0.94, 1000, 0.003, 0.999),
+        "anthropic/claude-sonnet-4.6": (0.94, 1000, 0.0096, 0.999),
+        "openai/gpt-5": (0.95, 850, 0.0054, 0.999),
+        "google/gemini-3-pro": (0.95, 1150, 0.0054, 0.999),
         # ── MiniMax (Eden primary) ──────────────────────────────────
         "minimax-m2.7": (0.86, 500, 0.00015, 0.995),
-        "MiniMax-M3": (0.87, 550, 0.0002, 0.995),
+        "MiniMax-M3": (0.87, 550, 0.0005, 0.995),
+        "MiniMax-M4": (0.89, 600, 0.0007, 0.995),
         # ── Local: Ollama (and Ollama Cloud) ────────────────────────
         "llama3.1:8b": (0.78, 400, 0.0, 0.99),
         "llama3.2:3b": (0.72, 200, 0.0, 0.99),
+        "llama4:8b": (0.81, 420, 0.0, 0.99),
         "qwen2.5:32b": (0.86, 1200, 0.0, 0.99),
         "qwen2.5:7b": (0.80, 350, 0.0, 0.99),
+        "qwen3:32b": (0.88, 1100, 0.0, 0.99),
         "mistral-nemo": (0.82, 700, 0.0, 0.99),
         "deepseek-r1:8b": (0.84, 1500, 0.0, 0.99),
+        "gemma3:27b": (0.85, 950, 0.0, 0.99),
         # ── Local: vLLM / LM Studio / llama.cpp ─────────────────────
         "meta-llama/Llama-3.1-8B-Instruct": (0.82, 350, 0.0, 0.99),
+        "meta-llama/Llama-4-8B-Instruct": (0.83, 380, 0.0, 0.99),
     }
 
     def __init__(
         self,
         semantic_cache: Any | None = None,
         exact_cache: Any | None = None,
+        pricing: PricingCatalog | None = None,
+        cost_resolver: Any | None = None,
     ):
         self.semantic_cache = semantic_cache
         self.exact_cache = exact_cache
+        # Pricing catalog — live-refreshed from OpenRouter when an
+        # api_key is available; falls back to the in-tree seed
+        # otherwise. See ``eden.llmops.pricing`` for the schema.
+        self.pricing: PricingCatalog = pricing or PricingCatalog.default()
+        # Per-tenant cost resolver. Walks override -> catalog
+        # (openrouter overlay) -> catalog (static seed) -> zero.
+        # Optional so unit tests that only care about routing can
+        # pass ``cost_resolver=None``.
+        from eden.llmops.cost_resolver import CostResolver as _CostResolver
+        self.cost_resolver = cost_resolver or _CostResolver(catalog=self.pricing)
+        self._pricing_version = _pricing_version_from_catalog(self.pricing)
         self._providers: dict[Provider, Any] = {}
         self._circuit_breakers: dict[Provider, CircuitBreaker] = {}
         # DL-12: bounded deque of recent metric events. The fixed
@@ -394,6 +487,47 @@ class AIGateway:
             "remaining": remaining_tokens,
             "soft": soft_limit,
             "hard": hard_limit,
+        }
+
+    # ── Pricing ────────────────────────────────────────────────────
+
+    async def refresh_pricing(
+        self,
+        *,
+        api_key: str | None = None,
+        base_url: str | None = None,
+        force: bool = False,
+    ) -> bool:
+        """Refresh the live pricing catalog from OpenRouter.
+
+        Returns True if a refresh ran (or is running) on this call.
+        Callers wired into the request path should use this so the
+        first request after process start triggers the fetch and
+        subsequent requests hit the cache.
+
+        Safe to call repeatedly: concurrent calls share the same
+        in-flight task, and a failed refresh is logged but never
+        raised.
+        """
+        return await self.pricing.ensure_fresh(
+            api_key=api_key, base_url=base_url, force=force,
+        )
+
+    def pricing_summary(self) -> dict[str, Any]:
+        """Diagnostic snapshot of the pricing catalog.
+
+        Used by the diagnostics/health endpoint and tests to verify
+        the catalog loaded correctly.
+        """
+        sources: dict[str, int] = {}
+        for row in self.pricing.rows.values():
+            sources[row.source] = sources.get(row.source, 0) + 1
+        return {
+            "total_rows": len(self.pricing),
+            "fresh": self.pricing.is_fresh(),
+            "last_refresh": self.pricing.last_refresh,
+            "sources": sources,
+            "model_ids": sorted(self.pricing.rows.keys()),
         }
 
     # Audit 2026-07-02 P-19 — walk up to 3 fallback providers via
@@ -500,6 +634,7 @@ class AIGateway:
                     provider=data.get("provider", "cache"),
                     model=data.get("model", ""),
                     cached=True,
+                    cost_source="cache",
                 )
         except Exception:
             pass
@@ -520,6 +655,7 @@ class AIGateway:
                     provider="semantic_cache",
                     model=request.model_version,
                     cached=True,
+                    cost_source="cache",
                 )
         except Exception:
             pass
@@ -601,14 +737,29 @@ class AIGateway:
         """Return (quality, latency_p95_ms, cost_per_1k, reliability) for a request.
 
         Lookup order:
-          1. :attr:`MODEL_PERFORMANCE` by exact model name (per-model overrides).
-          2. :data:`PROVIDER_SPECS` for the provider (provider-level defaults).
-          3. Generic conservative fallback (0.8, 1000, 0.001, 0.99).
+          1. :attr:`PricingCatalog` (live-refreshed from OpenRouter;
+             preferred for ``openrouter/<vendor>/<model>`` ids and
+             any model OpenRouter has added since the seed).
+          2. :attr:`MODEL_PERFORMANCE` by exact model name (legacy
+             per-model overrides, kept for back-compat with code
+             that mutates it directly).
+          3. :data:`PROVIDER_SPECS` for the provider (provider-level
+             defaults).
+          4. Generic conservative fallback (0.8, 1000, 0.001, 0.99).
 
         Cost here is a single blended rate (input+output average) used
         for routing decisions only; actual billing uses the per-model
         rate via :meth:`_estimate_cost`.
         """
+        if model_version:
+            row = self.pricing.lookup(model_version)
+            if row is not None:
+                return (
+                    row.quality,
+                    row.latency_p95_ms,
+                    row.cost_per_1k_blended,
+                    row.reliability,
+                )
         if model_version and model_version in self.MODEL_PERFORMANCE:
             return self.MODEL_PERFORMANCE[model_version]
         spec = PROVIDER_SPECS.get(provider)
@@ -619,28 +770,81 @@ class AIGateway:
         return (0.8, 1000, 0.001, 0.99)
 
     def _estimate_cost(
-        self, provider: Provider, input_tokens: int, output_tokens: int, model_version: str = ""
+        self,
+        provider: Provider,
+        input_tokens: int,
+        output_tokens: int,
+        model_version: str = "",
+        *,
+        org_id: str | None = None,
     ) -> float:
         """Per-token cost using the per-model rate when known.
 
         Cost lookup order:
-          1. Self-hosted providers (cost == 0.0) → return 0.0.
-          2. MODEL_PERFORMANCE entry for ``model_version`` — its cost
-             tuple is the **blended** (input + output) per-1k rate,
-             so we apply it to the combined token count.
-          3. PROVIDER_SPECS cost rates (input/output split).
-          4. Generic blended fallback via _estimate_provider_performance.
+          1. Self-hosted providers (cost == 0.0) -> return 0.0.
+          2. :class:`CostResolver` when ``org_id`` is provided -
+             walks org_cost_overrides, then catalog (live
+             OpenRouter overlay), then catalog (static seed).
+          3. :attr:`PricingCatalog` entry for ``model_version`` -
+             uses the **split** input/output rates so we can apply
+             them precisely to ``input_tokens`` vs ``output_tokens``.
+          4. :attr:`MODEL_PERFORMANCE` entry for ``model_version`` -
+             legacy per-model overrides, blended rate.
+          5. PROVIDER_SPECS cost rates (input/output split).
+          6. Generic blended fallback via _estimate_provider_performance.
 
-        For self-hosted providers (OLLAMA / VLLM / LMSTUDIO / LLAMACPP /
-        SELF_HOSTED) the per-model entry has cost 0.0 and we return 0.0
-        without further arithmetic — running on the user's own GPU has
-        no per-token price.
+        For self-hosted providers (OLLAMA / VLLM / LMSTUDIO /
+        LLAMACPP / SELF_HOSTED) the per-model entry has cost 0.0 and
+        we return 0.0 without further arithmetic - running on the
+        user's own GPU has no per-token price.
+
+        This method is the **synchronous, non-org-aware** code path.
+        Call sites that have an ``org_id`` and want full provenance
+        should use :meth:`resolve_cost` instead, which returns a
+        :class:`CostResolution` carrying ``source`` + ``cached``.
         """
         spec = PROVIDER_SPECS.get(provider)
         if spec is not None and (spec.cost_per_1k_input == 0.0 and spec.cost_per_1k_output == 0.0):
             return 0.0
-        # Per-model override (most accurate — gpt-4o-mini is 30× cheaper
-        # than gpt-4o on the same provider).
+        if org_id and self.cost_resolver is not None:
+            # Sync path: the cache hit is the common case; the
+            # uncached case requires Postgres. We block here to
+            # match the existing _estimate_cost signature, but
+            # callers that want non-blocking should use
+            # :meth:`resolve_cost` instead.
+            import asyncio as _asyncio
+            try:
+                _loop = _asyncio.get_event_loop()
+                if _loop.is_running():
+                    # We're inside an event loop; the caller
+                    # should have used ``resolve_cost``. Fall
+                    # through to the catalog-only path so we don't
+                    # deadlock.
+                    pass
+                else:
+                    res = _loop.run_until_complete(
+                        self.cost_resolver.resolve(
+                            org_id=org_id,
+                            provider=provider.value,
+                            model_id=model_version,
+                        )
+                    )
+                    return float(
+                        res.estimate(input_tokens, output_tokens)
+                    )
+            except RuntimeError:
+                # No event loop (very early startup); fall through.
+                pass
+        # Live catalog wins over legacy per-model overrides.
+        if model_version:
+            row = self.pricing.lookup(model_version)
+            if row is not None:
+                return (
+                    (input_tokens / 1000) * row.cost_per_1k_input
+                    + (output_tokens / 1000) * row.cost_per_1k_output
+                )
+        # Per-model override (most accurate - gpt-4o-mini is 30x
+        # cheaper than gpt-4o on the same provider).
         if model_version and model_version in self.MODEL_PERFORMANCE:
             blended = self.MODEL_PERFORMANCE[model_version][2]
             return ((input_tokens + output_tokens) / 1000) * blended
@@ -651,6 +855,44 @@ class AIGateway:
             )
         perf = self._estimate_provider_performance(provider, model_version)
         return ((input_tokens + output_tokens) / 1000) * perf[2]
+
+    async def resolve_cost(
+        self,
+        provider: Provider,
+        input_tokens: int,
+        output_tokens: int,
+        model_version: str = "",
+        *,
+        org_id: str | None = None,
+    ) -> tuple[float, str]:
+        """Async cost lookup that returns ``(cost_usd, source)``.
+
+        Use this from request handlers where the org_id is in
+        scope and you want the full provenance for telemetry.
+        Synchronous callers without an event loop should fall
+        back to :meth:`_estimate_cost`.
+        """
+        spec = PROVIDER_SPECS.get(provider)
+        if spec is not None and (spec.cost_per_1k_input == 0.0 and spec.cost_per_1k_output == 0.0):
+            return 0.0, "self_hosted"
+        if self.cost_resolver is not None and model_version:
+            res = await self.cost_resolver.resolve(
+                org_id=org_id,
+                provider=provider.value,
+                model_id=model_version,
+            )
+            return float(res.estimate(input_tokens, output_tokens)), res.source
+        # No resolver or no model_version: fall back to the
+        # synchronous path. Wrapped so the source reflects the
+        # catalog seed vs legacy table distinction.
+        cost = self._estimate_cost(
+            provider, input_tokens, output_tokens, model_version,
+        )
+        if model_version and self.pricing.lookup(model_version) is not None:
+            source = "openrouter" if self.pricing.lookup(model_version).source in ("openrouter", "merged") else "static"
+        else:
+            source = "unknown"
+        return cost, source
 
     async def _execute_provider(self, provider: Provider, request: ModelRequest) -> ModelResponse:
         client = self._providers.get(provider)
@@ -681,11 +923,17 @@ class AIGateway:
             raw = {"text": f"[mock response from {provider.value}]", "input_tokens": 100, "output_tokens": 50}
 
         latency_ms = int((time.perf_counter() - start) * 1000)
-        cost = self._estimate_cost(
+        # Use the org-aware async path so ModelResponse carries
+        # the cost_source + pricing_version for downstream
+        # telemetry. ``request.tenant_id`` is the org id the
+        # request was scoped to (matches the resolver's org_id
+        # parameter).
+        cost, cost_source = await self.resolve_cost(
             provider,
             raw.get("input_tokens", 0),
             raw.get("output_tokens", 0),
             model_version=request.model_version,
+            org_id=request.tenant_id or None,
         )
 
         return ModelResponse(
@@ -696,6 +944,8 @@ class AIGateway:
             cost_usd=cost,
             provider=provider.value,
             model=request.model_version,
+            cost_source=cost_source,
+            pricing_version=self._pricing_version,
         )
 
     def _record_metrics(

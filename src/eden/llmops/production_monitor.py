@@ -7,12 +7,15 @@ statistical process control for trend monitoring.
 
 from __future__ import annotations
 
+import logging
 import math
 import time
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from enum import StrEnum
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 
 class AlertSeverity(StrEnum):

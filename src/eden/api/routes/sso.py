@@ -6,7 +6,7 @@ import secrets
 from datetime import datetime
 from uuid import uuid4
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
 
 from eden.api.deps import get_current_user, get_postgres_client, require_org_admin
@@ -121,6 +121,14 @@ async def create_sso_provider(
     row = await client.fetchrow(
         query, provider_id, org_id, config.provider_type, config.name, config_data, user["user_id"]
     )
+    if row is None:
+        # INSERT with RETURNING returning None signals a constraint
+        # violation (e.g. org_id FK, duplicate provider_type+name).
+        # Surface as 409 so the client can retry with a unique name.
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="SSO provider already exists for this organization",
+        )
 
     return {"id": str(row["id"]), "message": "SSO provider created"}
 
@@ -370,7 +378,7 @@ async def initiate_sso_login(
         raise HTTPException(
             status_code=503,
             detail="SSO state store offline; please retry shortly",
-        )
+        ) from exc
 
     if provider_type == "okta":
         sso_url = config.get("sso_url")

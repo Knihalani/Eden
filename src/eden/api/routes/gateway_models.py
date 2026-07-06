@@ -169,8 +169,8 @@ async def create_gateway_model(
             raise HTTPException(
                 status_code=409,
                 detail=f"A model named '{body.name}' is already registered",
-            )
-        raise HTTPException(status_code=422, detail=str(exc))
+            ) from exc
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
     except Exception as exc:  # noqa: BLE001
         # Unique-constraint violation on (org_id, name) → 409
         msg = str(exc)
@@ -178,14 +178,14 @@ async def create_gateway_model(
             raise HTTPException(
                 status_code=409,
                 detail=f"A model named '{body.name}' is already registered",
-            )
+            ) from exc
         if "foreign key" in msg.lower():
             raise HTTPException(
                 status_code=400,
                 detail="Unknown organization",
-            )
+            ) from exc
         logger.warning("create_gateway_model failed: %s", exc)
-        raise HTTPException(status_code=500, detail="Failed to register model")
+        raise HTTPException(status_code=500, detail="Failed to register model") from exc
 
     # Audit
     try:
@@ -254,7 +254,7 @@ async def update_gateway_model(
             metadata=body.metadata,
         )
     except ValueError as exc:
-        raise HTTPException(status_code=422, detail=str(exc))
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
     if not cfg:
         raise HTTPException(status_code=404, detail="Model not found")
 

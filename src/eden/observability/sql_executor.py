@@ -306,7 +306,7 @@ class SqlExecutor:
         except _StatementTimeoutSignal:
             raise SqlTimeoutError(
                 f"query exceeded {self.max_seconds}s statement_timeout",
-            )
+            ) from None
         elapsed_ms = (time.monotonic() - start) * 1000
 
         # 8. Format result.

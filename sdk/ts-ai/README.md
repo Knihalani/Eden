@@ -132,6 +132,73 @@ const result = await chat.invoke([new HumanMessage("Hello!")]);
 
 `wrapLangChain` is a Proxy that instruments `invoke`, `call`, `stream`, and `batch` methods on any chat-model instance.
 
+## Talking to the Eden gateway (OpenAI-compatible)
+
+Eden ships an OpenAI-compatible proxy at `https://gateway.eden.ai/v1`
+that exposes `/chat/completions`, `/completions`, `/embeddings`, and
+`/models`. Point any OpenAI-compatible client at it and Eden applies
+PII redaction, semantic caching, per-tenant budgets, circuit
+breakers, and cost-aware routing in the path.
+
+The SDK ships a typed filter-config surface so callers can configure
+PII (and any future gateway filters) without hand-rolling headers:
+
+```ts
+import {
+  EdenSDK,
+  FilterConfig,
+  PIIConfig,
+  openaiClient,
+} from "@eden-ai/sdk";
+
+const sdk = new EdenSDK({
+  orgId: "org_abc",
+  apiKey: "sk_...",
+  filters: new FilterConfig({
+    pii: new PIIConfig({ mode: "fail_closed", disabledCategories: ["api_key"] }),
+  }),
+});
+
+// Built-in helper that wires the right URL + headers in one call:
+const client = await openaiClient(sdk, {
+  // Optional per-call upstream override — route this specific call
+  // through your own OpenAI-compatible server instead of the
+  // Eden-default upstream.
+  upstreamBaseUrl: "https://my-internal-llm.example.com/v1",
+  upstreamApiKey: "<your-internal-key>",
+});
+
+const reply = await client.chat.completions.create({
+  model: "gpt-5",
+  messages: [{ role: "user", content: "hello" }],
+});
+```
+
+You can also call `sdk.gatewayHeaders()` to get the headers as a
+record and pass them to any HTTP client:
+
+```ts
+const headers = sdk.gatewayHeaders({
+  piiBypass: true,        // skip PII for this one call
+  filters: new FilterConfig({ pii: new PIIConfig({ mode: "off" }) }),
+});
+await fetch(`${sdk.resolvedGatewayUrl()}/chat/completions`, {
+  method: "POST",
+  headers,
+  body: JSON.stringify({ model: "gpt-5", messages: [...] }),
+});
+```
+
+`resolvedGatewayUrl()` returns `${baseUrl}/v1` by default and honours
+an explicit `gatewayUrl` option when one is set. The gateway strips
+`X-Upstream-Api-Key`, `X-Org-Api-Key`, and `X-Org-Id` before
+forwarding to the upstream so Eden credentials never leak to a
+third-party LLM provider.
+
+The Python SDK has the same surface (`eden_sdk.filters.FilterConfig`,
+`EdenConfig.filters`, `openai_client()`, `chat_completion()`); see
+`sdk/python/README.md` for the Python equivalent.
+
 ## Manual tracing
 
 If you want to trace arbitrary functions (not just LLM calls), use `trace()` or `@traceAgent()`.

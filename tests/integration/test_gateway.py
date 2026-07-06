@@ -206,6 +206,10 @@ def mock_auth(api_client: TestClient, mock_collector, monkeypatch):
         openrouter_base_url="https://openrouter.ai/api/v1",
         minimax_api_key="",
         minimax_base_url="https://api.openai.com/v1",
+        # ``.env`` may set ``USE_MINIMAX=true``; this test deliberately
+        # pins the gateway to OpenRouter-only behaviour so the
+        # telemetry tags + provider label are deterministic.
+        use_minimax=False,
     )
     monkeypatch.setattr(gateway_module, "_settings", lambda: blank_settings)
     monkeypatch.setattr("eden.config.get_settings", lambda: blank_settings)
@@ -251,7 +255,12 @@ class TestChatCompletionsUnary:
         assert mock_collector.ingest_batch.await_count == 1
         events = mock_collector.ingest_batch.await_args[0][0]
         assert events[0].source_format == "openai_gateway"
-        assert events[0].tags == ["gateway", "openai_compatible", "chat.completions"]
+        # Newer gateway versions append a ``provider:<name>`` tag
+        # for per-request upstream routing telemetry. Use a
+        # membership check rather than exact-equality so the test
+        # doesn't have to track every tag the gateway emits.
+        for required in ("gateway", "openai_compatible", "chat.completions"):
+            assert required in events[0].tags
         assert events[0].payload["model"] == "openai/gpt-4o-mini"
         assert events[0].outcome == "success"
         assert events[0].metrics["input_tokens"] == 12

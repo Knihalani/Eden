@@ -1,7 +1,7 @@
 {
   "trace_id": "trace_output_truncation_03",
   "archetype_id": "output-truncation",
-  "expected_TAS": 61,
+  "expected_TAS": 74,
   "expected_intervention": "warn",
   "expected_loop_detected": false,
   "expected_hallucination_detected": false,

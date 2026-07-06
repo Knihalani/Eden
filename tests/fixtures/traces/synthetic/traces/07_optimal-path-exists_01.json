@@ -29,7 +29,8 @@
       "payload": {},
       "metrics": {},
       "attributes": {
-        "environment": "production"
+        "environment": "production",
+        "archetype_id": "optimal-path-exists"
       },
       "outcome": null,
       "request_body": null,
@@ -78,7 +79,8 @@
         "model": "gpt-4o-mini",
         "environment": "production",
         "user_id": "user_synth_42",
-        "session_id": "sess_synth_42"
+        "session_id": "sess_synth_42",
+        "archetype_id": "optimal-path-exists"
       },
       "outcome": "success",
       "request_body": {
@@ -192,7 +194,8 @@
         "latency_ms": 40.0
       },
       "attributes": {
-        "environment": "production"
+        "environment": "production",
+        "archetype_id": "optimal-path-exists"
       },
       "outcome": "success",
       "request_body": null,
@@ -241,7 +244,8 @@
         "model": "gpt-4o-mini",
         "environment": "production",
         "user_id": "user_synth_42",
-        "session_id": "sess_synth_42"
+        "session_id": "sess_synth_42",
+        "archetype_id": "optimal-path-exists"
       },
       "outcome": "success",
       "request_body": {
@@ -361,7 +365,8 @@
         "cost_usd": 0.0
       },
       "attributes": {
-        "environment": "production"
+        "environment": "production",
+        "archetype_id": "optimal-path-exists"
       },
       "outcome": "success",
       "request_body": {
@@ -434,7 +439,8 @@
         "model": "gpt-4o-mini",
         "environment": "production",
         "user_id": "user_synth_42",
-        "session_id": "sess_synth_42"
+        "session_id": "sess_synth_42",
+        "archetype_id": "optimal-path-exists"
       },
       "outcome": "success",
       "request_body": {
@@ -562,7 +568,8 @@
         "cost_usd": 0.0
       },
       "attributes": {
-        "environment": "production"
+        "environment": "production",
+        "archetype_id": "optimal-path-exists"
       },
       "outcome": "success",
       "request_body": {
@@ -635,7 +642,8 @@
         "model": "gpt-4o",
         "environment": "production",
         "user_id": "user_synth_42",
-        "session_id": "sess_synth_42"
+        "session_id": "sess_synth_42",
+        "archetype_id": "optimal-path-exists"
       },
       "outcome": "success",
       "request_body": {
@@ -770,7 +778,8 @@
         "cost_usd": 0.0
       },
       "attributes": {
-        "environment": "production"
+        "environment": "production",
+        "archetype_id": "optimal-path-exists"
       },
       "outcome": "success",
       "request_body": {
@@ -843,7 +852,8 @@
         "model": "gpt-4o",
         "environment": "production",
         "user_id": "user_synth_42",
-        "session_id": "sess_synth_42"
+        "session_id": "sess_synth_42",
+        "archetype_id": "optimal-path-exists"
       },
       "outcome": "success",
       "request_body": {
@@ -978,7 +988,8 @@
         "cost_usd": 0.0
       },
       "attributes": {
-        "environment": "production"
+        "environment": "production",
+        "archetype_id": "optimal-path-exists"
       },
       "outcome": "success",
       "request_body": {
@@ -1062,7 +1073,8 @@
         "model": "gpt-4o-mini",
         "environment": "production",
         "user_id": "user_synth_42",
-        "session_id": "sess_synth_42"
+        "session_id": "sess_synth_42",
+        "archetype_id": "optimal-path-exists"
       },
       "outcome": "success",
       "request_body": {
@@ -1071,7 +1083,7 @@
           {
             "role": "tool",
             "tool_call_id": "call_g_0005",
-            "content": "[eden-eval:412, agentbench:318, llm-router:290]"
+            "content": "[{'name': 'eden-eval', 'stars_today': 412}, {'name': 'agentbench', 'stars_today': 318}, {'name': 'llm-router', 'stars_today': 290}]"
           }
         ],
         "temperature": 0.0
@@ -1231,7 +1243,8 @@
       "payload": {},
       "metrics": {},
       "attributes": {
-        "environment": "production"
+        "environment": "production",
+        "archetype_id": "optimal-path-exists"
       },
       "outcome": "success",
       "request_body": null,

@@ -29,7 +29,8 @@
       "payload": {},
       "metrics": {},
       "attributes": {
-        "environment": "production"
+        "environment": "production",
+        "archetype_id": "failing-tool"
       },
       "outcome": null,
       "request_body": null,
@@ -78,7 +79,8 @@
         "model": "gpt-4o-mini",
         "environment": "production",
         "user_id": "user_synth_42",
-        "session_id": "sess_synth_42"
+        "session_id": "sess_synth_42",
+        "archetype_id": "failing-tool"
       },
       "outcome": "success",
       "request_body": {
@@ -86,7 +88,7 @@
         "messages": [
           {
             "role": "user",
-            "content": "Move $500 from acct 8821 to acct 9921."
+            "content": "Move $89.99 from acct 8821 to acct 9921."
           }
         ],
         "temperature": 0.0
@@ -100,14 +102,14 @@
             "finish_reason": "stop",
             "message": {
               "role": "assistant",
-              "content": "Executing the transfer.",
+              "content": "Executing the call.",
               "tool_calls": [
                 {
                   "id": "call_t_0001",
                   "type": "function",
                   "function": {
-                    "name": "bank.transfer",
-                    "arguments": "{\"from\": \"8821\", \"to\": \"9921\", \"amount\": 500}"
+                    "name": "payments.refund",
+                    "arguments": "{\"order_id\": \"7822\", \"amount_usd\": 89.99}"
                   }
                 }
               ]
@@ -126,8 +128,8 @@
           "id": "call_t_0001",
           "type": "function",
           "function": {
-            "name": "bank.transfer",
-            "arguments": "{\"from\": \"8821\", \"to\": \"9921\", \"amount\": 500}"
+            "name": "payments.refund",
+            "arguments": "{\"order_id\": \"7822\", \"amount_usd\": 89.99}"
           }
         }
       ],
@@ -150,7 +152,7 @@
           ],
           [
             {
-              "token": "transfer.",
+              "token": "call.",
               "logprob": -0.1,
               "top_logprobs": []
             }
@@ -183,7 +185,7 @@
       "timestamp": "2026-06-28T12:00:01.210000+00:00",
       "parent_span_id": "spn_trace_failing_tool_02_0000",
       "span_id": "spn_trace_failing_tool_02_0002",
-      "name": "bank.transfer",
+      "name": "payments.refund",
       "duration_ms": 410.0,
       "payload": {},
       "metrics": {
@@ -191,15 +193,15 @@
         "cost_usd": 0.0
       },
       "attributes": {
-        "environment": "production"
+        "environment": "production",
+        "archetype_id": "failing-tool"
       },
       "outcome": "failure",
       "request_body": {
-        "tool": "bank.transfer",
+        "tool": "payments.refund",
         "arguments": {
-          "from": "8821",
-          "to": "9921",
-          "amount": 500
+          "order_id": "7822",
+          "amount_usd": 89.99
         }
       },
       "response_body": {
@@ -208,17 +210,17 @@
       "reasoning": null,
       "tool_calls_full": [
         {
-          "tool_call_id": "call_bank.transfer_60598",
+          "tool_call_id": "call_payments.refund_60598",
           "type": "function",
           "function": {
-            "name": "bank.transfer",
-            "arguments": "{\"from\": \"8821\", \"to\": \"9921\", \"amount\": 500}"
+            "name": "payments.refund",
+            "arguments": "{\"order_id\": \"7822\", \"amount_usd\": 89.99}"
           }
         }
       ],
       "tool_results": [
         {
-          "tool_call_id": "call_bank.transfer_60598",
+          "tool_call_id": "call_payments.refund_60598",
           "role": "tool",
           "content": "{\"error\": \"internal_error\"}",
           "error": "HTTP 500"
@@ -265,7 +267,8 @@
         "model": "gpt-4o-mini",
         "environment": "production",
         "user_id": "user_synth_42",
-        "session_id": "sess_synth_42"
+        "session_id": "sess_synth_42",
+        "archetype_id": "failing-tool"
       },
       "outcome": "success",
       "request_body": {
@@ -273,7 +276,7 @@
         "messages": [
           {
             "role": "user",
-            "content": "Move $500 from acct 8821 to acct 9921."
+            "content": "Move $89.99 from acct 8821 to acct 9921."
           },
           {
             "role": "tool",
@@ -298,8 +301,8 @@
                   "id": "call_t_0002",
                   "type": "function",
                   "function": {
-                    "name": "bank.transfer",
-                    "arguments": "{\"from\": \"8821\", \"to\": \"9921\", \"amount\": 500}"
+                    "name": "payments.refund",
+                    "arguments": "{\"order_id\": \"7822\", \"amount_usd\": 89.99}"
                   }
                 }
               ]
@@ -318,8 +321,8 @@
           "id": "call_t_0002",
           "type": "function",
           "function": {
-            "name": "bank.transfer",
-            "arguments": "{\"from\": \"8821\", \"to\": \"9921\", \"amount\": 500}"
+            "name": "payments.refund",
+            "arguments": "{\"order_id\": \"7822\", \"amount_usd\": 89.99}"
           }
         }
       ],
@@ -361,7 +364,7 @@
       "timestamp": "2026-06-28T12:00:02.430000+00:00",
       "parent_span_id": "spn_trace_failing_tool_02_0000",
       "span_id": "spn_trace_failing_tool_02_0004",
-      "name": "bank.transfer",
+      "name": "payments.refund",
       "duration_ms": 420.0,
       "payload": {},
       "metrics": {
@@ -369,15 +372,15 @@
         "cost_usd": 0.0
       },
       "attributes": {
-        "environment": "production"
+        "environment": "production",
+        "archetype_id": "failing-tool"
       },
       "outcome": "failure",
       "request_body": {
-        "tool": "bank.transfer",
+        "tool": "payments.refund",
         "arguments": {
-          "from": "8821",
-          "to": "9921",
-          "amount": 500
+          "order_id": "7822",
+          "amount_usd": 89.99
         }
       },
       "response_body": {
@@ -386,17 +389,17 @@
       "reasoning": null,
       "tool_calls_full": [
         {
-          "tool_call_id": "call_bank.transfer_23217",
+          "tool_call_id": "call_payments.refund_23217",
           "type": "function",
           "function": {
-            "name": "bank.transfer",
-            "arguments": "{\"from\": \"8821\", \"to\": \"9921\", \"amount\": 500}"
+            "name": "payments.refund",
+            "arguments": "{\"order_id\": \"7822\", \"amount_usd\": 89.99}"
           }
         }
       ],
       "tool_results": [
         {
-          "tool_call_id": "call_bank.transfer_23217",
+          "tool_call_id": "call_payments.refund_23217",
           "role": "tool",
           "content": "{\"error\": \"internal_error\"}",
           "error": "HTTP 500"
@@ -443,7 +446,8 @@
         "model": "gpt-4o-mini",
         "environment": "production",
         "user_id": "user_synth_42",
-        "session_id": "sess_synth_42"
+        "session_id": "sess_synth_42",
+        "archetype_id": "failing-tool"
       },
       "outcome": "success",
       "request_body": {
@@ -557,7 +561,8 @@
         "cost_usd": 0.0
       },
       "attributes": {
-        "environment": "production"
+        "environment": "production",
+        "archetype_id": "failing-tool"
       },
       "outcome": "failure",
       "request_body": {
@@ -622,7 +627,8 @@
       "payload": {},
       "metrics": {},
       "attributes": {
-        "environment": "production"
+        "environment": "production",
+        "archetype_id": "failing-tool"
       },
       "outcome": "failure",
       "request_body": null,

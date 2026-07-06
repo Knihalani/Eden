@@ -29,7 +29,8 @@
       "payload": {},
       "metrics": {},
       "attributes": {
-        "environment": "production"
+        "environment": "production",
+        "archetype_id": "hallucinating"
       },
       "outcome": null,
       "request_body": null,
@@ -78,7 +79,8 @@
         "model": "claude-3-5-sonnet",
         "environment": "production",
         "user_id": "user_synth_42",
-        "session_id": "sess_synth_42"
+        "session_id": "sess_synth_42",
+        "archetype_id": "hallucinating"
       },
       "outcome": "success",
       "request_body": {
@@ -86,7 +88,7 @@
         "messages": [
           {
             "role": "user",
-            "content": "Summarize Q3 2026 for the board."
+            "content": "Summarize Q1 2026 for the board."
           }
         ],
         "temperature": 0.0
@@ -107,7 +109,7 @@
                   "type": "function",
                   "function": {
                     "name": "kb.search",
-                    "arguments": "{\"q\": \"Q3 2026 results\"}"
+                    "arguments": "{\"q\": \"Q1 2026 results\"}"
                   }
                 }
               ]
@@ -127,7 +129,7 @@
           "type": "function",
           "function": {
             "name": "kb.search",
-            "arguments": "{\"q\": \"Q3 2026 results\"}"
+            "arguments": "{\"q\": \"Q1 2026 results\"}"
           }
         }
       ],
@@ -198,19 +200,20 @@
         "cost_usd": 0.0
       },
       "attributes": {
-        "environment": "production"
+        "environment": "production",
+        "archetype_id": "hallucinating"
       },
       "outcome": "success",
       "request_body": {
         "tool": "kb.search",
         "arguments": {
-          "q": "Q3 2026 results"
+          "q": "Q1 2026 results"
         }
       },
       "response_body": {
         "result": {
           "hit_id": "kb_4419",
-          "text": "Q3 2026 results: ARR $14.2M, up 38% YoY. Net retention 122%. Customer count grew from 218 to 311. Largest customer contributed 8.4% of ARR. Average contract length 14 months. Gross margin 71%."
+          "text": "Q1 2026 results: ARR $11.5M, up 38% YoY. Net retention 115%. Customer count grew from 189 to 265. Largest customer contributed 8.4% of ARR. Average contract length 14 months. Gross margin 71%."
         }
       },
       "reasoning": null,
@@ -220,7 +223,7 @@
           "type": "function",
           "function": {
             "name": "kb.search",
-            "arguments": "{\"q\": \"Q3 2026 results\"}"
+            "arguments": "{\"q\": \"Q1 2026 results\"}"
           }
         }
       ],
@@ -228,7 +231,7 @@
         {
           "tool_call_id": "call_kb.search_88045",
           "role": "tool",
-          "content": "{\"hit_id\": \"kb_4419\", \"text\": \"Q3 2026 results: ARR $14.2M, up 38% YoY. Net retention 122%. Customer count grew from 218 to 311. Largest customer contributed 8.4% of ARR. Average contract length 14 months. Gross margin 71%.\"}"
+          "content": "{\"hit_id\": \"kb_4419\", \"text\": \"Q1 2026 results: ARR $11.5M, up 38% YoY. Net retention 115%. Customer count grew from 189 to 265. Largest customer contributed 8.4% of ARR. Average contract length 14 months. Gross margin 71%.\"}"
         }
       ],
       "logprobs": null,
@@ -272,7 +275,8 @@
         "model": "gpt-4o",
         "environment": "production",
         "user_id": "user_synth_42",
-        "session_id": "sess_synth_42"
+        "session_id": "sess_synth_42",
+        "archetype_id": "hallucinating"
       },
       "outcome": "success",
       "request_body": {
@@ -280,12 +284,12 @@
         "messages": [
           {
             "role": "user",
-            "content": "Summarize Q3 2026 for the board."
+            "content": "Summarize Q1 2026 for the board."
           },
           {
             "role": "tool",
             "tool_call_id": "call_kb_0011",
-            "content": "Q3 2026 results: ARR $14.2M, up 38% YoY. Net retention 122%. Customer count grew from 218 to 311. Largest customer contributed 8.4% of ARR. Average contract length 14 months. Gross margin 71%."
+            "content": "Q1 2026 results: ARR $11.5M, up 38% YoY. Net retention 115%. Customer count grew from 189 to 265. Largest customer contributed 8.4% of ARR. Average contract length 14 months. Gross margin 71%."
           }
         ],
         "temperature": 0.0
@@ -299,7 +303,7 @@
             "finish_reason": "stop",
             "message": {
               "role": "assistant",
-              "content": "Q3 2026 was a strong quarter: ARR reached $14.2M (up 38% YoY), net retention was 144% \u2014 which puts us in the top decile of the industry \u2014 and customer count grew from 218 to 311. Largest customer was 8.4% of ARR, average contract length was 14 months, and gross margin held at 71%."
+              "content": "Q1 2026 was a strong quarter: ARR reached $11.5M (up 38% YoY), net retention was 137% \u2014 which puts us in the top decile of the industry \u2014 and customer count grew from 189 to 265. Largest customer was 8.4% of ARR, average contract length was 14 months, and gross margin held at 71%."
             }
           }
         ],
@@ -316,7 +320,7 @@
         "content": [
           [
             {
-              "token": "Q3",
+              "token": "Q1",
               "logprob": -0.1,
               "top_logprobs": []
             }
@@ -372,7 +376,7 @@
           ],
           [
             {
-              "token": "$14.2M",
+              "token": "$11.5M",
               "logprob": -0.1,
               "top_logprobs": []
             }
@@ -421,7 +425,7 @@
           ],
           [
             {
-              "token": "144%",
+              "token": "137%",
               "logprob": -0.1,
               "top_logprobs": []
             }
@@ -496,7 +500,8 @@
         "model": "claude-3-5-sonnet",
         "environment": "production",
         "user_id": "user_synth_42",
-        "session_id": "sess_synth_42"
+        "session_id": "sess_synth_42",
+        "archetype_id": "hallucinating"
       },
       "outcome": "success",
       "request_body": {
@@ -518,7 +523,7 @@
             "finish_reason": "stop",
             "message": {
               "role": "assistant",
-              "content": "Cross-checked: net retention of 144% remains in the top decile of B2B SaaS \u2014 the median NRR for our peer set is around 108%."
+              "content": "Cross-checked: net retention of 137% remains in the top decile of B2B SaaS \u2014 the median NRR for our peer set is around 108%."
             }
           }
         ],
@@ -563,7 +568,7 @@
           ],
           [
             {
-              "token": "144%",
+              "token": "137%",
               "logprob": -0.1,
               "top_logprobs": []
             }
@@ -709,19 +714,20 @@
         "cost_usd": 0.0
       },
       "attributes": {
-        "environment": "production"
+        "environment": "production",
+        "archetype_id": "hallucinating"
       },
       "outcome": "success",
       "request_body": {
         "tool": "kb.search",
         "arguments": {
-          "q": "Q3 2026 net retention 144 peer median"
+          "q": "Q1 2026 net retention 137% peer median"
         }
       },
       "response_body": {
         "result": {
           "hit_id": "kb_4420",
-          "text": "Q3 2026: Net retention 122%. No peer-median doc on file."
+          "text": "Q1 2026: Net retention 115%. No peer-median doc on file."
         }
       },
       "reasoning": null,
@@ -731,7 +737,7 @@
           "type": "function",
           "function": {
             "name": "kb.search",
-            "arguments": "{\"q\": \"Q3 2026 net retention 144 peer median\"}"
+            "arguments": "{\"q\": \"Q1 2026 net retention 137% peer median\"}"
           }
         }
       ],
@@ -739,7 +745,7 @@
         {
           "tool_call_id": "call_kb.search_56976",
           "role": "tool",
-          "content": "{\"hit_id\": \"kb_4420\", \"text\": \"Q3 2026: Net retention 122%. No peer-median doc on file.\"}"
+          "content": "{\"hit_id\": \"kb_4420\", \"text\": \"Q1 2026: Net retention 115%. No peer-median doc on file.\"}"
         }
       ],
       "logprobs": null,
@@ -783,7 +789,8 @@
         "model": "gpt-4o",
         "environment": "production",
         "user_id": "user_synth_42",
-        "session_id": "sess_synth_42"
+        "session_id": "sess_synth_42",
+        "archetype_id": "hallucinating"
       },
       "outcome": "success",
       "request_body": {
@@ -805,7 +812,7 @@
             "finish_reason": "stop",
             "message": {
               "role": "assistant",
-              "content": "Confirmed: 144% NRR \u2014 top decile. Anything else?"
+              "content": "Confirmed: 137% NRR \u2014 top decile. Anything else?"
             }
           }
         ],
@@ -829,7 +836,7 @@
           ],
           [
             {
-              "token": "144%",
+              "token": "137%",
               "logprob": -0.1,
               "top_logprobs": []
             }
@@ -909,7 +916,8 @@
       "payload": {},
       "metrics": {},
       "attributes": {
-        "environment": "production"
+        "environment": "production",
+        "archetype_id": "hallucinating"
       },
       "outcome": "success",
       "request_body": null,

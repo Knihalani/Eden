@@ -198,9 +198,20 @@ async def create_role(
     except Exception as exc:
         # Unique violation on (org_id, name)
         if "unique" in str(exc).lower() or "duplicate" in str(exc).lower():
-            raise HTTPException(status_code=409, detail=f"Role {req.name!r} already exists")
+            raise HTTPException(
+                status_code=409,
+                detail=f"Role {req.name!r} already exists",
+            ) from exc
         raise
 
+    if row is None:
+        # ``INSERT ... RETURNING`` returning None signals a non-
+        # exception failure (shouldn't happen for unique-violations,
+        # which raise). Surface as a 500 to avoid ``NoneType`` 500s.
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to create role",
+        )
     role_id = str(row["id"])
     if req.permissions:
         await client.executemany(

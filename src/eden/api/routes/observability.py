@@ -220,7 +220,7 @@ async def ingest_telemetry_event(
         raise
     except Exception as exc:
         logger.warning(f"Telemetry ingest failed for org {org_id}: {exc}")
-        raise HTTPException(status_code=500, detail="Telemetry ingestion failed")
+        raise HTTPException(status_code=500, detail="Telemetry ingestion failed") from exc
 
 
 @router.post("/telemetry/ingest/batch", response_model=TelemetryIngestResponse)
@@ -239,7 +239,7 @@ async def ingest_telemetry_batch(
         raise
     except Exception as exc:
         logger.warning(f"Telemetry batch ingest failed for org {org_id}: {exc}")
-        raise HTTPException(status_code=500, detail="Batch telemetry ingestion failed")
+        raise HTTPException(status_code=500, detail="Batch telemetry ingestion failed") from exc
 
 
 @router.get("/traces", response_model=TraceListResponse)
