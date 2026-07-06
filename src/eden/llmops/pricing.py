@@ -67,7 +67,7 @@ _PER_TOKEN_TO_PER_1K = 1000.0
 # day is the right refresh cadence for a stable-cost dashboard.
 DEFAULT_TTL_SECONDS = 24 * 60 * 60
 
-PricingSource = Literal["static", "openrouter", "merged"]
+PricingSource = Literal["static", "openrouter", "models_dev", "merged"]
 
 
 @dataclass(frozen=True)
@@ -375,6 +375,156 @@ class PricingCatalog:
                     source="openrouter",
                 )
             updated += 1
+
+        if updated:
+            self.last_refresh = time.time()
+        return updated
+
+
+    async def refresh_from_models_dev(
+        self,
+        *,
+        url: str = "https://models.dev/api.json",
+        timeout: float = 30.0,
+        client: Any | None = None,
+    ) -> int:
+        """Fetch the live model catalogue from models.dev.
+
+        models.dev is a community-maintained index that aggregates
+        pricing from each vendor's public pricing page. The schema::
+
+            {
+              "openai": {
+                "name": "OpenAI",
+                "models": {
+                  "gpt-4o": {
+                    "id": "gpt-4o",
+                    "limit": {"context": 128000},
+                    "cost": {"input": 2.5, "output": 10, "cache_read": 1.25},
+                    "last_updated": "2026-04-15"
+                  },
+                  ...
+                }
+              },
+              "anthropic": {...},
+              ...
+            }
+
+        ``cost.input`` and ``cost.output`` are USD per **million**
+        tokens (different convention from OpenRouter's per-token).
+        We convert to USD per 1K inside the parser.
+
+        The merger prefers this overlay over the static seed but
+        defers to OpenRouter's live routing markup when both are
+        present. ``_resolve_uncached`` (in
+        :mod:`eden.llmops.cost_resolver`) is what actually picks
+        the winner for a given request; this method just makes
+        models.dev rows available in the catalog.
+
+        Returns the number of rows updated.
+        """
+        if client is None:
+            import httpx
+
+            async with httpx.AsyncClient(timeout=timeout) as c:
+                r = await c.get(url)
+                r.raise_for_status()
+                payload = r.json()
+        else:
+            r = await client.get(url)
+            try:
+                r.raise_for_status()
+                payload = r.json()
+            finally:
+                aclose = getattr(r, "aclose", None)
+                if callable(aclose):
+                    await aclose()
+
+        if not isinstance(payload, dict):
+            raise ValueError(
+                f"unexpected models.dev payload shape: {type(payload).__name__}"
+            )
+
+        return self._merge_models_dev_rows(payload)
+
+    def _merge_models_dev_rows(self, payload: dict[str, Any]) -> int:
+        """Synchronous inner of :meth:`refresh_from_models_dev`.
+
+        Walks each top-level provider entry and merges its models.
+        Existing rows get their cost columns overwritten with the
+        live data (marked ``source="merged"``); new rows are added
+        with conservative quality/latency defaults and
+        ``source="models_dev"``.
+
+        Pricing is **per-million tokens** in the source; we convert
+        to per-1K so the rest of the catalog stays consistent.
+        """
+        updated = 0
+        # Per-million to per-1K conversion factor.
+        per_m_to_per_1k = 1.0 / 1000.0
+
+        for provider_key, provider_payload in payload.items():
+            if not isinstance(provider_payload, dict):
+                continue
+            models = provider_payload.get("models")
+            if not isinstance(models, dict):
+                continue
+
+            for model_id, model_entry in models.items():
+                if not isinstance(model_entry, dict):
+                    continue
+                cost = model_entry.get("cost") or {}
+                in_raw = cost.get("input")
+                out_raw = cost.get("output")
+                # models.dev uses null for unknown; treat null
+                # and missing the same.
+                if in_raw is None or out_raw is None:
+                    # Free models carry "0" for both - keep them.
+                    if in_raw == 0 and out_raw == 0:
+                        cost_in = 0.0
+                        cost_out = 0.0
+                    else:
+                        continue
+                else:
+                    try:
+                        cost_in = float(in_raw) * per_m_to_per_1k
+                        cost_out = float(out_raw) * per_m_to_per_1k
+                    except (TypeError, ValueError):
+                        continue
+
+                limit = model_entry.get("limit") or {}
+                context_window = int(limit.get("context") or 0)
+
+                existing = self.rows.get(model_id)
+                if existing is not None:
+                    # models.dev wins on cost columns; preserve
+                    # our quality/latency/reliability estimates.
+                    self.rows[model_id] = PricingRow(
+                        model_id=model_id,
+                        quality=existing.quality,
+                        latency_p95_ms=existing.latency_p95_ms,
+                        cost_per_1k_input=cost_in,
+                        cost_per_1k_output=cost_out,
+                        reliability=existing.reliability,
+                        context_window=context_window or existing.context_window,
+                        source="merged",
+                    )
+                else:
+                    # Brand-new model from models.dev we don't
+                    # have a seed entry for. Use conservative
+                    # defaults; ops can refine via tenant
+                    # overrides.
+                    self.rows[model_id] = PricingRow(
+                        model_id=model_id,
+                        quality=0.85,
+                        latency_p95_ms=1000,
+                        cost_per_1k_input=cost_in,
+                        cost_per_1k_output=cost_out,
+                        reliability=0.99,
+                        context_window=context_window,
+                        source="models_dev",
+                    )
+                updated += 1
 
         if updated:
             self.last_refresh = time.time()
