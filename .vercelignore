@@ -51,7 +51,7 @@ scripts/
 prompts/
 golden_datasets/
 tinybird/
-clients/
+
 bench/
 examples/
 playwright.config.ts
