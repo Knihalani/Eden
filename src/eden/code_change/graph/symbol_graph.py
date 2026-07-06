@@ -937,25 +937,22 @@ class _Store:
     def get_status(self, repo: str, branch: str) -> IndexStatus | None:
         self._ensure_schema()
         try:
-            conn = self._connect()
-            try:
-                row = conn.execute(
-                    "SELECT head_sha, last_indexed_at, file_count, symbol_count "
-                    "FROM repos WHERE repo=? AND branch=?",
-                    (repo, branch),
-                ).fetchone()
-                if row is None:
-                    return IndexStatus(indexed=False, status="never_indexed")
-                return IndexStatus(
-                    indexed=True,
-                    latest_sha=row[0] or "",
-                    last_indexed_at=row[1] or "",
-                    status="indexed",
-                    file_count=int(row[2] or 0),
-                    symbol_count=int(row[3] or 0),
-                )
-            finally:
-                conn.close()
+            conn = self._read_conn()
+            row = conn.execute(
+                "SELECT head_sha, last_indexed_at, file_count, symbol_count "
+                "FROM repos WHERE repo=? AND branch=?",
+                (repo, branch),
+            ).fetchone()
+            if row is None:
+                return IndexStatus(indexed=False, status="never_indexed")
+            return IndexStatus(
+                indexed=True,
+                latest_sha=row[0] or "",
+                last_indexed_at=row[1] or "",
+                status="indexed",
+                file_count=int(row[2] or 0),
+                symbol_count=int(row[3] or 0),
+            )
         except Exception as exc:
             logger.debug("SymbolGraph get_status: %s", exc)
             return None
@@ -979,45 +976,42 @@ class _Store:
             return []
         fts_expr = " ".join(f"{tok}*" for tok in tokens[:8])  # prefix match
         try:
-            conn = self._connect()
+            conn = self._read_conn()
+            # Try FTS5 first. The FTS table mirrors all the
+            # searchable fields (name / signature / docstring /
+            # parent) plus the unindexed row identifiers (path /
+            # kind / repo / branch), so we don't need a JOIN
+            # to ``symbols`` — that JOIN was 500x slower because
+            # SQLite has to re-derive the rowid mapping.
+            rows: list[Any]
             try:
-                # Try FTS5 first. The FTS table mirrors all the
-                # searchable fields (name / signature / docstring /
-                # parent) plus the unindexed row identifiers (path /
-                # kind / repo / branch), so we don't need a JOIN
-                # to ``symbols`` — that JOIN was 500x slower because
-                # SQLite has to re-derive the rowid mapping.
-                rows: list[Any] = []
-                try:
-                    rows = conn.execute(
-                        """SELECT path, kind, name, line, end_line,
-                                  parent, signature, docstring
-                           FROM symbols_fts
-                           WHERE repo = ? AND branch = ?
-                             AND symbols_fts MATCH ?
-                           LIMIT ?""",
-                        (repo, branch, fts_expr, int(limit)),
-                    ).fetchall()
-                except sqlite3.OperationalError:
-                    # FTS5 unavailable on this SQLite build — fall
-                    # back to LIKE.
-                    conds = []
-                    params: list[Any] = [repo, branch]
-                    for tok in tokens[:8]:
-                        pat = f"%{tok}%"
-                        conds.append(
-                            "(name LIKE ? OR signature LIKE ? OR docstring LIKE ? OR path LIKE ?)"
-                        )
-                        params.extend([pat, pat, pat, pat])
-                    sql = (
-                        "SELECT path, kind, name, line, end_line, parent, signature, docstring "
-                        f"FROM symbols WHERE repo=? AND branch=? AND ({' OR '.join(conds)}) "
-                        "LIMIT ?"
+                rows = conn.execute(
+                    """SELECT path, kind, name, line, end_line,
+                              parent, signature, docstring
+                       FROM symbols_fts
+                       WHERE repo = ? AND branch = ?
+                         AND symbols_fts MATCH ?
+                       LIMIT ?""",
+                    (repo, branch, fts_expr, int(limit)),
+                ).fetchall()
+            except sqlite3.OperationalError:
+                # FTS5 unavailable on this SQLite build — fall
+                # back to LIKE.
+                conds = []
+                params: list[Any] = [repo, branch]
+                for tok in tokens[:8]:
+                    pat = f"%{tok}%"
+                    conds.append(
+                        "(name LIKE ? OR signature LIKE ? OR docstring LIKE ? OR path LIKE ?)"
                     )
-                    params.append(int(limit))
-                    rows = conn.execute(sql, params).fetchall()
-            finally:
-                conn.close()
+                    params.extend([pat, pat, pat, pat])
+                sql = (
+                    "SELECT path, kind, name, line, end_line, parent, signature, docstring "
+                    f"FROM symbols WHERE repo=? AND branch=? AND ({' OR '.join(conds)}) "
+                    "LIMIT ?"
+                )
+                params.append(int(limit))
+                rows = conn.execute(sql, params).fetchall()
         except Exception as exc:
             logger.debug("SymbolGraph search_symbols: %s", exc)
             return []
@@ -1045,22 +1039,19 @@ class _Store:
         if not names:
             return []
         try:
-            conn = self._connect()
-            try:
-                qmarks = ",".join("?" * len(names))
-                rows = conn.execute(
-                    f"""
-                    SELECT path, name, COUNT(*) AS n
-                    FROM ref_index
-                    WHERE repo=? AND branch=? AND name IN ({qmarks})
-                    GROUP BY path
-                    ORDER BY n DESC
-                    LIMIT ?
-                    """,
-                    (repo, branch, *names, int(limit)),
-                ).fetchall()
-            finally:
-                conn.close()
+            conn = self._read_conn()
+            qmarks = ",".join("?" * len(names))
+            rows = conn.execute(
+                f"""
+                SELECT path, name, COUNT(*) AS n
+                FROM ref_index
+                WHERE repo=? AND branch=? AND name IN ({qmarks})
+                GROUP BY path
+                ORDER BY n DESC
+                LIMIT ?
+                """,
+                (repo, branch, *names, int(limit)),
+            ).fetchall()
         except Exception as exc:
             logger.debug("SymbolGraph find_affected_areas_from_refs: %s", exc)
             return []
