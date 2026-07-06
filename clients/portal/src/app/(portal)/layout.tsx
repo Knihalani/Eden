@@ -343,7 +343,7 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
 
         {/* Main pane skeleton with status copy so the user knows
             the portal is loading their session, not stuck. */}
-        <main className="flex-1 min-w-0 min-h-0 flex flex-col">
+        <main className="flex-1 min-w-0 flex flex-col">
           <header className="h-14 border-b border-[var(--border-default)] bg-[var(--bg-primary)] flex items-center justify-between px-6">
             <div className="h-4 w-40 bg-[var(--bg-tertiary)] rounded-md relative overflow-hidden after:absolute after:inset-0 after:-translate-x-full after:bg-gradient-to-r after:from-transparent after:via-[var(--shimmer)] after:to-transparent after:animate-[skeleton-shimmer_1.6s_infinite]" />
             <div className="h-8 w-8 bg-[var(--bg-tertiary)] rounded-lg relative overflow-hidden after:absolute after:inset-0 after:-translate-x-full after:bg-gradient-to-r after:from-transparent after:via-[var(--shimmer)] after:to-transparent after:animate-[skeleton-shimmer_1.6s_infinite]" />
@@ -679,7 +679,7 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
           grows to fit the page content and pushes the body past
           100dvh, breaking the document-scroll affordance. June 2026
           scroll-pass fix. */}
-      <main id="main-content" className="flex-1 min-w-0 min-h-0 pb-20 lg:pb-0 flex flex-col" tabIndex={-1}>
+      <main id="main-content" className="flex-1 min-w-0 pb-20 lg:pb-0 flex flex-col" tabIndex={-1}>
         {/* Top bar */}
         <header className="sticky top-0 z-30 bg-[var(--bg-primary)] border-b border-[var(--border-default)]">
           <div className="flex items-center justify-between px-4 lg:px-6 py-3">
