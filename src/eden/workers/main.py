@@ -41,6 +41,7 @@ import contextlib
 import logging
 import signal
 import sys
+from typing import Any
 
 logger = logging.getLogger("eden.workers.main")
 
@@ -147,7 +148,9 @@ def _install_signal_handlers(stop: asyncio.Event) -> None:
         try:
             loop.add_signal_handler(sig, _signal, sig.name)
         except NotImplementedError:  # pragma: no cover - Windows
-            signal.signal(sig, lambda *_: _signal(sig.name))
+            # Capture ``sig.name`` in default args so each lambda
+            # closure binds the current signal name (B023).
+            signal.signal(sig, lambda *_, name=sig.name: _signal(name))
 
 
 def main(argv: list[str] | None = None) -> int:

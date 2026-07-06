@@ -103,7 +103,13 @@ from eden.code_change import (
     RepoConnector,
     TestPlanRunner,
 )
-from eden.code_change._common import _new_id
+from eden.code_change._common import (
+    _error_envelope,
+    _new_id,
+    _ok_envelope,
+    _select_one,
+    _select_rows,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -791,3 +797,236 @@ async def link_rca(
         trace_id=body.trace_id,
     )
 
+
+
+# ─── Discipline (Cat 23 v1.7 PR revamp) ──────────────────────────
+#
+# These endpoints expose the discipline layer for the
+# portal UI: the repo-graph status, the dedupe index,
+# the circuit-breaker status, and the rate-limit
+# snapshot. They are read-only side-effect-light
+# endpoints — the actual trigger flows are invoked
+# elsewhere (the incident pipeline + the scheduled
+# optimization cron).
+
+
+class DisciplineDecisionRequest(BaseModel):
+    trigger_kind: str = Field(
+        "incident",
+        description="incident or scheduled",
+    )
+    trigger_identifier: str = Field(...)
+    summary: str = ""
+    rca_confidence: float = 0.0
+    quality_score: float = 0.0
+    blast_radius_score: float = 0.0
+    evidence_count: int = 0
+    reverted_history: int = 0
+    denied_history: int = 0
+    fix_area_localized: bool = False
+    can_validate: bool = False
+    protected_path_match: bool = False
+    file_paths: list[str] = Field(default_factory=list)
+    repo_id: str = ""
+    model_config = {"extra": "ignore"}
+
+
+@router.post("/discipline/decide")
+async def discipline_decide(
+    org_id: str = Path(...),
+    body: DisciplineDecisionRequest = Body(...),
+) -> dict[str, Any]:
+    """Evaluate the discipline gate for a single candidate.
+
+    Returns the same Cat 23 envelope shape as the rest
+    of the surface so the portal can render uniformly.
+    """
+    from eden.code_change.discipline import (
+        Trigger,
+        compute_decision,
+    )
+
+    trigger = Trigger(
+        kind=body.trigger_kind if body.trigger_kind in ("incident", "scheduled") else "incident",
+        identifier=body.trigger_identifier,
+        summary=body.summary,
+    )
+    decision = compute_decision(
+        trigger,
+        rca_confidence=body.rca_confidence,
+        quality_score=body.quality_score,
+        blast_radius_score=body.blast_radius_score,
+        evidence_count=body.evidence_count,
+        reverted_history=body.reverted_history,
+        denied_history=body.denied_history,
+        fix_area_localized=body.fix_area_localized,
+        can_validate=body.can_validate,
+        protected_path_match=body.protected_path_match,
+        file_paths=tuple(body.file_paths),
+    )
+    return _ok_envelope(
+        "discipline",
+        {
+            "decision": {
+                "allowed": decision.allowed,
+                "score": decision.score,
+                "reasons": decision.reasons,
+                "fingerprint": decision.fingerprint,
+                "trigger_kind": trigger.kind,
+                "trigger_identifier": trigger.identifier,
+            }
+        },
+    )
+
+
+@router.get("/discipline/breaker-status")
+async def discipline_breaker_status(
+    org_id: str = Path(...),
+    breaker_name: str = "incident_pr",
+) -> dict[str, Any]:
+    """Return the current state of the org's PR breaker."""
+    from eden.code_change.discipline.circuit_breaker import CircuitBreaker
+
+    breaker = CircuitBreaker(breaker_name=breaker_name)
+    status = await breaker.status(org_id)
+    return _ok_envelope("discipline", {"breaker": status})
+
+
+@router.post("/discipline/breaker-reset")
+async def discipline_breaker_reset(
+    org_id: str = Path(...),
+    breaker_name: str = "incident_pr",
+    _admin: dict = Depends(require_org_admin),
+) -> dict[str, Any]:
+    """Manually reset an org's PR breaker (admin-only)."""
+    from eden.code_change.discipline.circuit_breaker import CircuitBreaker
+
+    breaker = CircuitBreaker(breaker_name=breaker_name)
+    await breaker.record_outcome(org_id, outcome="manual_reset")
+    status = await breaker.status(org_id)
+    return _ok_envelope(
+        "discipline",
+        {"breaker": status, "message": "breaker reset"},
+    )
+
+
+@router.get("/discipline/rate-limit")
+async def discipline_rate_limit(
+    org_id: str = Path(...),
+    repo_id: str = "",
+) -> dict[str, Any]:
+    """Return the current rate-limit snapshot for an org (+ optional repo)."""
+    from eden.code_change.discipline import RateLimiter
+
+    limiter = RateLimiter()
+    verdict = await limiter.check(org_id, repo_id)
+    return _ok_envelope("discipline", {"rate_limit": verdict})
+
+
+@router.get("/repos/graph-status")
+async def repo_graph_status(
+    org_id: str = Path(...),
+    repo_full_name: str | None = None,
+) -> dict[str, Any]:
+    """Return the repo-graph status for an org's linked repo(s).
+
+    When ``repo_full_name`` is omitted, returns the status
+    for the first active repo in the org. The endpoint
+    surfaces whether Greptile is configured (via the
+    ``graph_provider`` column) and the most recent
+    ``graph_indexed_at`` timestamp.
+    """
+    from eden.code_change.graph import get_default_repo_graph
+
+    graph = get_default_repo_graph()
+    graph_name = getattr(graph, "name", "unknown")
+    if repo_full_name is None:
+        rows = await _select_rows(
+            org_id,
+            "repo_connections",
+            where="status = 'active'",
+            order_by="created_at DESC",
+            limit=1,
+        )
+        if not rows:
+            return _ok_envelope(
+                "graph_status",
+                {
+                    "graph_provider": graph_name,
+                    "repos": [],
+                    "message": "no active repos for this org",
+                },
+            )
+        repo_full_name = str(rows[0].get("repo_full_name") or "")
+        branch = str(rows[0].get("default_branch") or "main")
+    else:
+        branch = "main"
+    if not repo_full_name:
+        return _ok_envelope(
+            "graph_status",
+            {
+                "graph_provider": graph_name,
+                "repos": [],
+                "message": "repo_full_name not set",
+            },
+        )
+    status = await graph.status(repo_full_name, branch=branch)
+    return _ok_envelope(
+        "graph_status",
+        {
+            "graph_provider": graph_name,
+            "repo_full_name": repo_full_name,
+            "branch": branch,
+            "status": status,
+        },
+    )
+
+
+@router.post("/repos/{repo_id}/request-index")
+async def request_repo_index(
+    org_id: str = Path(...),
+    repo_id: str = Path(...),
+    _admin: dict = Depends(require_org_admin),
+) -> dict[str, Any]:
+    """Kick off (re-)indexing for a linked repo.
+
+    Returns the acceptance status. The actual indexing
+    runs in the background; callers should poll
+    ``GET /repos/graph-status`` to confirm completion.
+    """
+    from eden.code_change.graph import get_default_repo_graph
+
+    row = await _select_one(
+        org_id,
+        "repo_connections",
+        where="id = $2",
+        params=(repo_id,),
+    )
+    if row is None:
+        return _error_envelope(
+            "graph_status",
+            message=f"repo {repo_id} not found",
+            error_code="repo_not_found",
+        )
+    repo_full_name = str(row.get("repo_full_name") or "")
+    branch = str(row.get("default_branch") or "main")
+    if not repo_full_name:
+        return _error_envelope(
+            "graph_status",
+            message="repo_full_name not set on connection",
+            error_code="repo_full_name_missing",
+        )
+    graph = get_default_repo_graph()
+    accepted = await graph.request_index(
+        repo_full_name, branch=branch,
+    )
+    return _ok_envelope(
+        "graph_status",
+        {
+            "repo_id": repo_id,
+            "repo_full_name": repo_full_name,
+            "branch": branch,
+            "index_requested": accepted,
+            "graph_provider": getattr(graph, "name", "unknown"),
+        },
+    )

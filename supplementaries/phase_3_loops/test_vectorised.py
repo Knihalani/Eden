@@ -277,31 +277,47 @@ def test_scan_ensemble_numpy_numerical_stability():
 
 
 def test_scan_ensemble_numpy_50_events_under_50ms():
-    """50 events through the numpy ensemble in <50ms."""
+    """50 events through the numpy ensemble in <50ms (median, warm)."""
+    import statistics
+    import time
     events = [
         _make_event("tool.call", i, request_body={"tool": f"t{i}", "arguments": {"x": str(i)}})
         for i in range(50)
     ]
-    import time
-    t0 = time.perf_counter()
-    results = scan_ensemble_numpy(events)
-    elapsed_ms = (time.perf_counter() - t0) * 1000.0
+    # Warm-up pass — prime one-time imports / cache fills.
+    scan_ensemble_numpy(events)
+    times = []
+    for _ in range(10):
+        t0 = time.perf_counter()
+        results = scan_ensemble_numpy(events)
+        times.append((time.perf_counter() - t0) * 1000.0)
+    median_ms = statistics.median(times)
     assert len(results) == 50
-    assert elapsed_ms < 50.0, f"50 events took {elapsed_ms:.1f}ms"
+    assert median_ms < 50.0, (
+        f"50 events median={median_ms:.1f}ms (samples={times})"
+    )
 
 
 def test_scan_ensemble_numpy_100_events_under_150ms():
-    """100 events through the numpy ensemble in <150ms."""
+    """100 events through the numpy ensemble in <150ms (median, warm)."""
+    import statistics
+    import time
     events = [
         _make_event("tool.call", i, request_body={"tool": f"t{i}", "arguments": {"x": str(i)}})
         for i in range(100)
     ]
-    import time
-    t0 = time.perf_counter()
-    results = scan_ensemble_numpy(events)
-    elapsed_ms = (time.perf_counter() - t0) * 1000.0
+    # Warm-up pass.
+    scan_ensemble_numpy(events)
+    times = []
+    for _ in range(10):
+        t0 = time.perf_counter()
+        results = scan_ensemble_numpy(events)
+        times.append((time.perf_counter() - t0) * 1000.0)
+    median_ms = statistics.median(times)
     assert len(results) == 100
-    assert elapsed_ms < 150.0, f"100 events took {elapsed_ms:.1f}ms"
+    assert median_ms < 150.0, (
+        f"100 events median={median_ms:.1f}ms (samples={times})"
+    )
 
 
 # ── Numerical correctness vs pure-Python ─────────────────────

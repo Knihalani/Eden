@@ -35,6 +35,7 @@ from eden.api.routes import (
     clerk_webhooks,
     compliance,
     cost,
+    cost_overrides,
     data_platform,
     datasets_spreadsheet,
     debugger,
@@ -615,7 +616,7 @@ app.include_router(datasets_spreadsheet.router)  # /orgs/{org_id}/datasets/{data
 app.include_router(prompts.router)  # /orgs/{org_id}/prompts (Phase I prompt management + playground)
 app.include_router(prompts_v2.router)  # /orgs/{org_id}/prompts/* (D.9 versioning: /{name}/versions + /eval-runs)
 app.include_router(pii_policy.router)  # /orgs/{org_id}/pii-policy
-app.include_router(retention_policy.router)  # /orgs/{org_id}/retention-policy
+app.include_router(cost_overrides.router)  # /orgs/{org_id}/cost-overrides (per-tenant contract rates)  # /orgs/{org_id}/retention-policy
 app.include_router(region.router)  # /orgs/{org_id}/region
 app.include_router(experiments.router)  # /experiments (gated)
 app.include_router(evaluation.router)  # /evaluation (gated)

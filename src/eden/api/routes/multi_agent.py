@@ -8,6 +8,7 @@ Ref: eden-multi-agent-orchestration-architecture.md §2–10
 
 from __future__ import annotations
 
+import logging
 import time
 from typing import Any
 
@@ -34,6 +35,8 @@ from eden.multi_agent import (
     RoleSystem,
     TreeOfThoughtsEnvironment,
 )
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(
     prefix="/orgs/{org_id}/multi-agent",
@@ -620,7 +623,7 @@ async def set_hitl_rule(
     try:
         action_type = ActionType(req.action_type)
     except ValueError:
-        raise HTTPException(status_code=400, detail=f"Invalid action type: {req.action_type}")
+        raise HTTPException(status_code=400, detail=f"Invalid action type: {req.action_type}") from None
 
     hitl.rules[action_type] = req.rule
     return {"rule_set": True, "action_type": req.action_type, "rule": req.rule}
@@ -663,7 +666,7 @@ async def check_hitl_action(
     try:
         at = ActionType(req.action_type)
     except ValueError:
-        raise HTTPException(status_code=400, detail=f"Invalid action type: {req.action_type}")
+        raise HTTPException(status_code=400, detail=f"Invalid action type: {req.action_type}") from None
 
     result = await hitl.check_action(req.agent_id, at, req.action_payload)
     return result
@@ -966,3 +969,4 @@ async def run_benchmark(
         agent_counts=agent_counts or [2, 5, 10],
         message_counts=message_counts or [10, 50, 100],
     )
+

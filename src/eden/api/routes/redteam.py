@@ -153,7 +153,7 @@ def _resolve_invoker(req: Any) -> AgentInvoker:
                     "error": "missing_dependency",
                     "detail": f"httpx is required for target_endpoint: {exc}",
                 },
-            )
+            ) from exc
 
         async def _invoker(prompt: str) -> str:
             async with httpx.AsyncClient(timeout=30) as client:

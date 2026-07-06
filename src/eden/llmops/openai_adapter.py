@@ -264,6 +264,115 @@ def messages_to_prompt(messages: list[dict[str, Any]]) -> str:
 # ─────────────────────────────────────────────────────────────────────
 
 
+def redact_pii_in_messages(
+    messages: list[dict[str, Any]],
+    *,
+    masker: Any | None = None,
+    policy: Any | None = None,
+    skip_message_types: tuple[str, ...] = ("image_url", "input_audio"),
+) -> tuple[list[dict[str, Any]], int, list[str]]:
+    """Redact PII in-place across an OpenAI-shaped messages list.
+
+    Walks every message and every multi-part content block, replacing
+    text fields with their PII-masked equivalent. Returns the (possibly
+    mutated) messages list and the count of fields that were redacted.
+
+    Why this lives here: the gateway's PII filter operates on a single
+    string (the flattened prompt). For OpenAI wire compatibility we
+    must keep the messages list structured, so we need a structured
+    redactor that walks the same shape. Anything that ``PIIMasker.mask``
+    can take as a string is handled here; image / audio binary blobs
+    are skipped (no text to mask).
+
+    Parameters
+    ----------
+    messages
+        OpenAI-style messages list. Mutated in place (we also return
+        it for chaining).
+    masker
+        Optional pre-built ``PIIMasker`` for callers that want to
+        share one across requests. Defaults to a fresh
+        ``PIIMasker()`` with default policy.
+    skip_message_types
+        Content-part types that are skipped during redaction (binary
+        blobs / URLs that are not PII candidates). Defaults to image
+        and audio parts.
+
+    Returns
+    -------
+    (messages, redacted_count, findings)
+        ``redacted_count`` is the number of text-bearing fields whose
+        value changed after masking. ``findings`` is a list of
+        human-readable finding tags (``"pii_bypassed:mode_off"``,
+        ``"pii_masked:email,phone"``, etc.) suitable for telemetry.
+
+    ``policy`` is the resolved per-tenant :class:`PIIPolicy` (or
+    ``None`` for the platform default). When the policy's
+    ``mode == "off"``, the messages are returned untouched with a
+    ``pii_bypassed:mode_off`` finding so callers can attribute the
+    bypass to the policy rather than a missing masker.
+    """
+    findings: list[str] = []
+
+    # Honour the per-tenant policy. ``mode == "off"`` is the
+    # documented "designed to use the PII" case — skip masking.
+    if policy is not None and getattr(policy, "mode", "redact") == "off":
+        return messages, 0, ["pii_bypassed:mode_off"]
+
+    # Lazy import: the PII module pulls in eden.data_platform; tests
+    # that don't exercise PII don't pay the import cost.
+    if masker is None:
+        from eden.data_platform.pii import PIIMasker
+        masker = PIIMasker(policy=policy) if policy is not None else PIIMasker()
+
+    redacted = 0
+    for msg in messages:
+        # ``name`` is a free-form identifier on tool/function messages.
+        name = msg.get("name")
+        if isinstance(name, str) and name:
+            new = masker.mask(name)
+            if isinstance(new, str) and new != name:
+                msg["name"] = new
+                redacted += 1
+
+        content = msg.get("content")
+        if isinstance(content, str):
+            new = masker.mask(content)
+            if isinstance(new, str) and new != content:
+                msg["content"] = new
+                redacted += 1
+        elif isinstance(content, list):
+            for part in content:
+                if not isinstance(part, dict):
+                    continue
+                ptype = part.get("type", "text")
+                if ptype in skip_message_types:
+                    continue
+                # text / refusal / json / unknown — mask any string field.
+                for key in ("text", "refusal", "input", "content"):
+                    val = part.get(key)
+                    if isinstance(val, str) and val:
+                        new = masker.mask(val)
+                        if isinstance(new, str) and new != val:
+                            part[key] = new
+                            redacted += 1
+        # Assistant tool_calls: serialised args may carry PII.
+        for tc in msg.get("tool_calls") or ():
+            if not isinstance(tc, dict):
+                continue
+            fn = tc.get("function") or {}
+            args = fn.get("arguments")
+            if isinstance(args, str) and args:
+                new = masker.mask(args)
+                if isinstance(new, str) and new != args:
+                    fn["arguments"] = new
+                    redacted += 1
+
+    if redacted > 0:
+        findings.append("pii_redacted")
+    return messages, redacted, findings
+
+
 def chat_to_provider_kwargs(body: ChatCompletionRequest) -> dict[str, Any]:
     """Translate an OpenAI ``ChatCompletionRequest`` into kwargs the
     ``openai`` Python SDK can pass to ``chat.completions.create``.

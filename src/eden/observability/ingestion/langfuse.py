@@ -104,7 +104,7 @@ class LangfuseDecoder:
             raise SchemaInvalidError(
                 f"Langfuse body is not valid JSON: {exc}",
                 problems=[f"json_decode_error: {exc}"],
-            )
+            ) from exc
 
         # Accept three wire shapes:
         #   1. {"batch": [trace, ...]}

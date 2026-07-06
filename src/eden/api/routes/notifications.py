@@ -2,7 +2,7 @@
 
 import logging
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 
 from eden.api.deps import get_current_user
@@ -156,7 +156,11 @@ async def create_notification(
         """,
         user_id, request.org_id, request.type, request.title, request.message, request.metadata
     )
-
+    if row is None:
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to create notification",
+        )
     return NotificationResponse(
         id=str(row["id"]),
         message="Notification created"

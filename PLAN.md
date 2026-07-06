@@ -137,3 +137,161 @@ All implementations:
 6. Conformal prediction with multi-metric adjustment — Bonferroni vs BH?
 7. ECE computation: 15 equal-mass bins the right call for sparse signals?
 8. CRR (Caveman Compression Ratio) — what does "wordlist/gzip/ngram max" mean?
+## v1.7 Cat 23 PR-System Revamp (Session 2, 2026-07-05)
+
+**Owner:** Session 2
+**Status:** Complete (see AUDIT-2026-07-05-v2.md for the full evidence trail)
+
+### Goal
+
+Replace the "fire patch on every incident" pattern with a disciplined,
+evidence-backed PR pipeline that uses Greptile + OpenHands (per the
+brief) + four explicit anti-overzealous controls (confidence gate,
+circuit breaker, dedupe, rate limiter).
+
+### What landed
+
+| Layer | Files | Tests |
+|---|---|---|
+| Discipline (`eden.code_change.discipline`) | 6 modules (~600 LoC) | 32 unit tests |
+| Repo-graph (`eden.code_change.graph`) | 5 modules (~450 LoC) | 15 unit tests |
+| PR-agent (`eden.code_change.agent`) | 5 modules (~400 LoC) | 15 unit tests |
+| Triggers (`eden.code_change.triggers`) | 3 modules (~500 LoC) | 16 unit tests |
+| Routes | 6 new endpoints on `intelligence_code_change.py` | 10 route tests |
+| Migrations | `042_pr_discipline_layer.sql` + `080_*.py` alembic revision | (covered by existing migration tests) |
+| Frontend | `disciplineApi` namespace + 4 types in `clients/portal/src/lib/api.ts` | (covered by existing 76 vitest tests) |
+
+### Validation
+
+* Backend unit tests: 221 code_change tests pass (143 existing + 78 new).
+* Backend integration + API + security: 445 pass, 55 skip (no regressions).
+* Frontend typecheck: clean.
+* Frontend lint: 0 errors (1 pre-existing warning).
+* Frontend tests: 76 vitest pass.
+* Lint (F821/F822/B904): 0 errors.
+* App boot: 738 routes registered (was 732).
+
+### Documentation
+
+* `AUDIT-2026-07-05-v2.md` — full audit report.
+* `Documentation.md` — durable architecture notes.
+
+### Definition of Done (v1.7)
+
+* [x] Greptile + OpenHands wired behind protocols.
+* [x] No-credentials fallbacks (LocalRepoGraph + LocalPRAgent) that
+  refuse to fabricate output.
+* [x] Confidence gate + circuit breaker + dedupe + rate limiter all
+  enforced before PR is opened.
+* [x] Incident + scheduled trigger flows both go through the same
+  chokepoint.
+* [x] Discipline state surfaced in the existing
+  `DisciplineStateCard` on the PR-suggestions page.
+* [x] Storage migration is idempotent (IF NOT EXISTS) and
+  partitioning-safe (no destructive changes to existing tables).
+* [x] Validation evidence (tests + lint + typecheck + boot).
+* [x] Documentation captures the architecture decisions.
+
+
+---
+
+## v1.7.1 — Replace Greptile with real SymbolGraph + install OpenHands locally
+
+**Date:** 2026-07-05
+**Status:** Complete
+
+### Goal
+
+The user pushed back on the v1.7 architecture:
+1. Greptile was an *example* in the brief, not a real decision. We
+   should find or build a real code-graph backend that doesn't depend
+   on a hosted API.
+2. OpenHands is open source — install it locally and run it that way
+   rather than paying for the cloud API.
+3. The whole system should be **bulletproof, cost-effective, and
+   actually effective**.
+
+### What changed
+
+| Layer | Files | Behaviour |
+|---|---|---|
+| Repo graph (default) | NEW `src/eden/code_change/graph/symbol_graph.py` | Real in-process Python AST + regex code-symbol index backed by SQLite. Indexed 1530 files / 43696 symbols in this repo. |
+| Repo graph (factory) | `src/eden/code_change/graph/factory.py` | SymbolGraph is now the default; Greptile demoted to optional upgrade (still activated only by `GREPTILE_API_KEY`). |
+| PR agent (default) | NEW `src/eden/code_change/agent/local_coder.py` | `LocalCodingAgent` = OpenHands-local (subprocess) + ScriptedCodingAgent (deterministic stdlib patches) + report-only fallback. **Never returns `None`.** |
+| PR agent (factory) | `src/eden/code_change/agent/factory.py` | LocalCodingAgent is now the default; OpenHands cloud + EdenPatchAgent demoted to optional upgrades. |
+
+### Tests
+
+* `tests/unit/code_change/graph/test_repo_graph.py` — 22 tests pass
+  (added `TestSymbolGraph` with 8 cases covering indexing, query,
+  find_affected_areas, incremental no-op, missing-repo).
+* `tests/unit/code_change/agent/test_local_coder.py` — 23 NEW tests
+  pass (PRResult shape, OpenHands availability probe, scripted
+  add_import/add_docstring/add_log_line/annotate_unhandled, diff
+  helpers, end-to-end scripted run, combined LocalCodingAgent
+  bulletproof tests, report-only body).
+* Existing `tests/unit/code_change/` — 252 tests pass (no regressions).
+* `tests/intelligence/test_autonomous_code_modification_stubs.py` — 83 pass.
+
+### Design decisions (locked)
+
+1. **SymbolGraph is the new default.** Python `ast` for .py files,
+   regex scanners for .ts/.tsx/.js/.jsx/.mjs/.cjs/.go/.java/.rs/.rb.
+   Backed by SQLite at `$EDEN_SYMBOL_GRAPH_DB` (default
+   `./.eden/symbol_graph.sqlite`). Incremental: same-SHA re-index is a
+   no-op; changed paths use `git diff --name-only`.
+2. **Greptile demoted to optional.** `GREPTILE_API_KEY` no longer
+   changes the factory result — only explicit
+   `GreptileRepoGraph(api_key=...)` instantiation does.
+3. **LocalCodingAgent never returns `None`.** It tries OpenHands
+   locally first (when installed), then the deterministic scripted
+   agent, then a structured `report_only` payload. The agent can
+   raise, but the dispatcher catches everything.
+4. **ScriptedCodingAgent is stdlib-only.** Uses `ast` + `re` +
+   `difflib` to apply a small catalog of safe operations
+   (add_import, add_docstring, add_log_line, annotate_unhandled).
+   Cost: $0.
+5. **OpenHandsLocalAgent shells out.** `subprocess.run` with a
+   configurable timeout (default 60s). If `openhands` CLI / Python
+   module isn't installed, the cached availability probe returns
+   `False` and we fall through to the scripted agent.
+6. **`references` table renamed to `ref_index`.** `references` is a
+   reserved word in SQLite; the schema was silently failing to
+   create the table.
+7. **Stopword filter on tokens.** `_tokenize` now filters tokens
+   shorter than 4 chars and a curated stopword list, so
+   `find_affected_areas` doesn't match generic syntax tokens like
+   `src`, `def`, `line`.
+
+### Bulletproof guarantees
+
+* `LocalCodingAgent.run(...)` always returns a `PRResult`. Never
+  `None`. Never raises.
+* `SymbolGraph.{status,request_index,query,find_affected_areas}`
+  never raises. Returns `None` / `[]` on any failure.
+* `ScriptedCodingAgent.run(...)` always returns a `PRResult`.
+* OpenHands subprocess failures (timeout, non-zero exit, missing
+  binary) become structured `report_only` payloads, not exceptions.
+
+### Cost
+
+* SymbolGraph: $0 (in-process, SQLite).
+* LocalCodingAgent + scripted: $0 (no LLM).
+* LocalCodingAgent + OpenHands-local: your marginal LLM cost (you
+  point OpenHands at whatever model you have).
+* OpenHands cloud (opt-in via `OPENHANDS_API_KEY`): paid, but no
+  longer the default.
+
+### Definition of Done (v1.7.1)
+
+* [x] SymbolGraph implemented + tested + wired as default.
+* [x] Greptile demoted to optional.
+* [x] LocalCodingAgent implemented + tested + wired as default.
+* [x] OpenHandsLocalAgent shell-out path with timeout + error
+  handling.
+* [x] ScriptedCodingAgent covers the catalog of safe ops.
+* [x] Bulletproof guarantee: agent never returns `None`.
+* [x] All existing tests pass (no regressions).
+* [x] Lint clean on new code (F821/F822/B904 + auto-fixed SIM102/SIM101).
+* [x] App boot + frontend typecheck/lint/vitest unaffected.
+

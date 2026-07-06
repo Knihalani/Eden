@@ -175,10 +175,6 @@ def _coerce_aware(dt: datetime) -> datetime:
     return dt.astimezone(UTC)
 
 
-def _old_aggregate_removed_marker() -> None:  # ponytail: legacy body kept below; never called
-    return  # intentionally unreachable; legacy Python-loop path lives in the historical diff only
-
-
 # ── Service: SessionAnalytics ────────────────────────────────────────
 
 
@@ -386,16 +382,16 @@ class SessionAnalytics:
             # Max of last_event_at
             le = s["last_event_at"]
             cur_le = user_stats[user_id]["last_event_at"]
-            if cur_le is None and le is not None:
-                user_stats[user_id]["last_event_at"] = le
-            elif le is not None and cur_le is not None and le > cur_le:
+            if (cur_le is None and le is not None) or (
+                le is not None and cur_le is not None and le > cur_le
+            ):
                 user_stats[user_id]["last_event_at"] = le
             # Min of first_event_at
             fe = s["first_event_at"]
             cur_fe = user_stats[user_id]["first_event_at"]
-            if cur_fe is None and fe is not None:
-                user_stats[user_id]["first_event_at"] = fe
-            elif fe is not None and cur_fe is not None and fe < cur_fe:
+            if (cur_fe is None and fe is not None) or (
+                fe is not None and cur_fe is not None and fe < cur_fe
+            ):
                 user_stats[user_id]["first_event_at"] = fe
             user_stats[user_id]["session_count"] += 1
             user_stats[user_id]["n_turns_sum"] += n_turns

@@ -1073,5 +1073,3 @@ async def get_ingestion_auth(
             detail="Not a member of this organization",
         )
     return org
-
-    return _dependency

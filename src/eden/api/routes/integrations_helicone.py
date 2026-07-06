@@ -67,7 +67,7 @@ async def helicone_webhook(
     try:
         payload = await request.json()
     except Exception:
-        raise HTTPException(status_code=400, detail="Invalid JSON")
+        raise HTTPException(status_code=400, detail="Invalid JSON") from None
     if not isinstance(payload, dict):
         raise HTTPException(status_code=400, detail="Expected JSON object")
     event = parse_helicone_event(payload)
@@ -113,4 +113,4 @@ async def helicone_test() -> dict[str, Any]:
             "integration_version": INTEGRATION_API_VERSION,
         }
     except httpx.RequestError as exc:
-        raise HTTPException(status_code=502, detail=f"Helicone upstream unreachable: {exc}")
+        raise HTTPException(status_code=502, detail=f"Helicone upstream unreachable: {exc}") from exc

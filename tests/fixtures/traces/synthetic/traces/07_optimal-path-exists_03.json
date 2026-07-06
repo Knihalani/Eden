@@ -29,7 +29,8 @@
       "payload": {},
       "metrics": {},
       "attributes": {
-        "environment": "production"
+        "environment": "production",
+        "archetype_id": "optimal-path-exists"
       },
       "outcome": null,
       "request_body": null,
@@ -78,7 +79,8 @@
         "model": "gpt-4o-mini",
         "environment": "production",
         "user_id": "user_synth_42",
-        "session_id": "sess_synth_42"
+        "session_id": "sess_synth_42",
+        "archetype_id": "optimal-path-exists"
       },
       "outcome": "success",
       "request_body": {
@@ -86,7 +88,7 @@
         "messages": [
           {
             "role": "user",
-            "content": "Find me the top 3 trending repos on GitHub today."
+            "content": "Show me the top trending ML repos on GitHub right now."
           }
         ],
         "temperature": 0.0
@@ -192,7 +194,8 @@
         "latency_ms": 40.0
       },
       "attributes": {
-        "environment": "production"
+        "environment": "production",
+        "archetype_id": "optimal-path-exists"
       },
       "outcome": "success",
       "request_body": null,
@@ -241,7 +244,8 @@
         "model": "gpt-4o-mini",
         "environment": "production",
         "user_id": "user_synth_42",
-        "session_id": "sess_synth_42"
+        "session_id": "sess_synth_42",
+        "archetype_id": "optimal-path-exists"
       },
       "outcome": "success",
       "request_body": {
@@ -361,7 +365,8 @@
         "cost_usd": 0.0
       },
       "attributes": {
-        "environment": "production"
+        "environment": "production",
+        "archetype_id": "optimal-path-exists"
       },
       "outcome": "success",
       "request_body": {
@@ -434,7 +439,8 @@
         "model": "gpt-4o-mini",
         "environment": "production",
         "user_id": "user_synth_42",
-        "session_id": "sess_synth_42"
+        "session_id": "sess_synth_42",
+        "archetype_id": "optimal-path-exists"
       },
       "outcome": "success",
       "request_body": {
@@ -562,7 +568,8 @@
         "cost_usd": 0.0
       },
       "attributes": {
-        "environment": "production"
+        "environment": "production",
+        "archetype_id": "optimal-path-exists"
       },
       "outcome": "success",
       "request_body": {
@@ -635,7 +642,8 @@
         "model": "gpt-4o",
         "environment": "production",
         "user_id": "user_synth_42",
-        "session_id": "sess_synth_42"
+        "session_id": "sess_synth_42",
+        "archetype_id": "optimal-path-exists"
       },
       "outcome": "success",
       "request_body": {
@@ -770,7 +778,8 @@
         "cost_usd": 0.0
       },
       "attributes": {
-        "environment": "production"
+        "environment": "production",
+        "archetype_id": "optimal-path-exists"
       },
       "outcome": "success",
       "request_body": {
@@ -843,7 +852,8 @@
         "model": "gpt-4o",
         "environment": "production",
         "user_id": "user_synth_42",
-        "session_id": "sess_synth_42"
+        "session_id": "sess_synth_42",
+        "archetype_id": "optimal-path-exists"
       },
       "outcome": "success",
       "request_body": {
@@ -978,7 +988,8 @@
         "cost_usd": 0.0
       },
       "attributes": {
-        "environment": "production"
+        "environment": "production",
+        "archetype_id": "optimal-path-exists"
       },
       "outcome": "success",
       "request_body": {
@@ -989,16 +1000,16 @@
         "result": {
           "items": [
             {
-              "name": "eden-eval",
-              "stars_today": 412
+              "name": "huggingface-agents",
+              "stars_today": 502
             },
             {
-              "name": "agentbench",
-              "stars_today": 318
+              "name": "langgraph-pro",
+              "stars_today": 411
             },
             {
-              "name": "llm-router",
-              "stars_today": 290
+              "name": "rag-eval",
+              "stars_today": 367
             }
           ]
         }
@@ -1018,7 +1029,7 @@
         {
           "tool_call_id": "call_github.trending_49038",
           "role": "tool",
-          "content": "{\"items\": [{\"name\": \"eden-eval\", \"stars_today\": 412}, {\"name\": \"agentbench\", \"stars_today\": 318}, {\"name\": \"llm-router\", \"stars_today\": 290}]}"
+          "content": "{\"items\": [{\"name\": \"huggingface-agents\", \"stars_today\": 502}, {\"name\": \"langgraph-pro\", \"stars_today\": 411}, {\"name\": \"rag-eval\", \"stars_today\": 367}]}"
         }
       ],
       "logprobs": null,
@@ -1053,16 +1064,17 @@
       "payload": {},
       "metrics": {
         "prompt_tokens": 50,
-        "completion_tokens": 24,
-        "total_tokens": 74,
-        "cost_usd": 2.2e-05,
+        "completion_tokens": 26,
+        "total_tokens": 76,
+        "cost_usd": 2.3e-05,
         "latency_ms": 800.0
       },
       "attributes": {
         "model": "gpt-4o-mini",
         "environment": "production",
         "user_id": "user_synth_42",
-        "session_id": "sess_synth_42"
+        "session_id": "sess_synth_42",
+        "archetype_id": "optimal-path-exists"
       },
       "outcome": "success",
       "request_body": {
@@ -1071,7 +1083,7 @@
           {
             "role": "tool",
             "tool_call_id": "call_g_0005",
-            "content": "[eden-eval:412, agentbench:318, llm-router:290]"
+            "content": "[{'name': 'huggingface-agents', 'stars_today': 502}, {'name': 'langgraph-pro', 'stars_today': 411}, {'name': 'rag-eval', 'stars_today': 367}]"
           }
         ],
         "temperature": 0.0
@@ -1085,14 +1097,14 @@
             "finish_reason": "stop",
             "message": {
               "role": "assistant",
-              "content": "Top 3 trending repos today: eden-eval (412 stars today), agentbench (318), and llm-router (290)."
+              "content": "Top 3 trending repos today: huggingface-agents (502 stars today), langgraph-pro (411), and rag-eval (367)."
             }
           }
         ],
         "usage": {
           "prompt_tokens": 50,
-          "completion_tokens": 24,
-          "total_tokens": 74
+          "completion_tokens": 26,
+          "total_tokens": 76
         }
       },
       "reasoning": null,
@@ -1137,14 +1149,14 @@
           ],
           [
             {
-              "token": "eden-eval",
+              "token": "huggingface-agents",
               "logprob": -0.1,
               "top_logprobs": []
             }
           ],
           [
             {
-              "token": "(412",
+              "token": "(502",
               "logprob": -0.1,
               "top_logprobs": []
             }
@@ -1165,14 +1177,14 @@
           ],
           [
             {
-              "token": "agentbench",
+              "token": "langgraph-pro",
               "logprob": -0.1,
               "top_logprobs": []
             }
           ],
           [
             {
-              "token": "(318),",
+              "token": "(411),",
               "logprob": -0.1,
               "top_logprobs": []
             }
@@ -1186,14 +1198,14 @@
           ],
           [
             {
-              "token": "llm-router",
+              "token": "rag-eval",
               "logprob": -0.1,
               "top_logprobs": []
             }
           ],
           [
             {
-              "token": "(290).",
+              "token": "(367).",
               "logprob": -0.1,
               "top_logprobs": []
             }
@@ -1231,7 +1243,8 @@
       "payload": {},
       "metrics": {},
       "attributes": {
-        "environment": "production"
+        "environment": "production",
+        "archetype_id": "optimal-path-exists"
       },
       "outcome": "success",
       "request_body": null,

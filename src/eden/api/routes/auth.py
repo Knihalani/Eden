@@ -322,19 +322,6 @@ async def signup(request: SignupRequest, response: Response, req: Request):
         },
     )
 
-    _set_session_cookie(response, access_token)
-
-    # Mirror /auth/login: return the full UserResponse (with empty
-    # organizations[]) so the frontend's useAuth() can populate the
-    # context in a single roundtrip.
-    return UserResponse(
-        user_id=user_id,
-        email=request.email,
-        name=request.name,
-        organizations=[],
-        current_org_id=None,
-    )
-
 
 @router.post("/login", response_model=UserResponse)
 async def login(request: LoginRequest, response: Response, req: Request):
@@ -355,7 +342,7 @@ async def login(request: LoginRequest, response: Response, req: Request):
     # on first use so we don't pay the cost at import time.
     global _DUMMY_BCRYPT_HASH
     try:
-        _DUMMY_BCRYPT_HASH  # noqa: F823
+        _DUMMY_BCRYPT_HASH  # noqa: B018, F823
     except NameError:
         _DUMMY_BCRYPT_HASH = hash_password("dummy-no-such-user-12345")
     if not row:
@@ -708,7 +695,7 @@ async def accept_invitation_by_token(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e),
-        )
+        ) from e
 
     client = await get_postgres_client()
     await log_audit_event(

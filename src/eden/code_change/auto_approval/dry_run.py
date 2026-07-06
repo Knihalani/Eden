@@ -109,7 +109,7 @@ class AutoApprovalDryRunService:
                 #   cool_off: patches rejected via "reverted" status in
                 #             the last `cool_off_hours` window per file.
                 #   rate_limit: approved_count_per_day over the last 7d.
-                cfg = {**AUTO_APPROVAL_DEFAULTS, **policy} if "policy" in dir() else AUTO_APPROVAL_DEFAULTS
+                cfg = AUTO_APPROVAL_DEFAULTS
                 cool_off_hours = int(cfg.get("cool_off_after_revert_hours", 168))
                 max_per_day = int(cfg.get("max_auto_approvals_per_day", 20))
                 max_per_file_per_week = int(

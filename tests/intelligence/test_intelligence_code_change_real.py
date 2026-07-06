@@ -341,7 +341,9 @@ class TestCodeChangePolicyService:
         assert result["data"]["policy"]["code_change_enabled"] is False
         assert result["data"]["policy_source"] == "defaults"
 
-    def test_update_validates_boolean_fields(self) -> None:
+    def test_update_validates_boolean_fields(
+        self, mock_postgres_client: MagicMock
+    ) -> None:
         from eden.code_change.policy import CodeChangePolicyService
 
         async def _run() -> dict[str, Any]:
@@ -355,7 +357,9 @@ class TestCodeChangePolicyService:
         assert result["status"] == "bad_request"
         assert "must be a bool" in result["message"]
 
-    def test_update_validates_pct_range(self) -> None:
+    def test_update_validates_pct_range(
+        self, mock_postgres_client: MagicMock
+    ) -> None:
         from eden.code_change.policy import CodeChangePolicyService
 
         async def _run() -> dict[str, Any]:

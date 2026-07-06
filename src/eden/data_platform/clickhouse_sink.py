@@ -23,6 +23,8 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any
 
+import aiohttp
+
 from eden.config import get_settings
 
 logger = logging.getLogger(__name__)
@@ -83,7 +85,6 @@ class ClickHouseSink:
 
     async def _get_session(self) -> Any:
         if self._session is None:
-            import aiohttp
             self._session = aiohttp.ClientSession(
                 timeout=aiohttp.ClientTimeout(total=self.config.timeout),
             )

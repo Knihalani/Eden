@@ -29,7 +29,8 @@
       "payload": {},
       "metrics": {},
       "attributes": {
-        "environment": "production"
+        "environment": "production",
+        "archetype_id": "failing-tool"
       },
       "outcome": null,
       "request_body": null,
@@ -78,7 +79,8 @@
         "model": "gpt-4o-mini",
         "environment": "production",
         "user_id": "user_synth_42",
-        "session_id": "sess_synth_42"
+        "session_id": "sess_synth_42",
+        "archetype_id": "failing-tool"
       },
       "outcome": "success",
       "request_body": {
@@ -86,7 +88,7 @@
         "messages": [
           {
             "role": "user",
-            "content": "Move $500 from acct 8821 to acct 9921."
+            "content": "Move $250.0 from acct 8842 to acct 3344."
           }
         ],
         "temperature": 0.0
@@ -100,14 +102,14 @@
             "finish_reason": "stop",
             "message": {
               "role": "assistant",
-              "content": "Executing the transfer.",
+              "content": "Executing the call.",
               "tool_calls": [
                 {
                   "id": "call_t_0001",
                   "type": "function",
                   "function": {
                     "name": "bank.transfer",
-                    "arguments": "{\"from\": \"8821\", \"to\": \"9921\", \"amount\": 500}"
+                    "arguments": "{\"from\": \"acc_8842\", \"to\": \"acc_3344\", \"amount_usd\": 250.0}"
                   }
                 }
               ]
@@ -127,7 +129,7 @@
           "type": "function",
           "function": {
             "name": "bank.transfer",
-            "arguments": "{\"from\": \"8821\", \"to\": \"9921\", \"amount\": 500}"
+            "arguments": "{\"from\": \"acc_8842\", \"to\": \"acc_3344\", \"amount_usd\": 250.0}"
           }
         }
       ],
@@ -150,7 +152,7 @@
           ],
           [
             {
-              "token": "transfer.",
+              "token": "call.",
               "logprob": -0.1,
               "top_logprobs": []
             }
@@ -191,15 +193,16 @@
         "cost_usd": 0.0
       },
       "attributes": {
-        "environment": "production"
+        "environment": "production",
+        "archetype_id": "failing-tool"
       },
       "outcome": "failure",
       "request_body": {
         "tool": "bank.transfer",
         "arguments": {
-          "from": "8821",
-          "to": "9921",
-          "amount": 500
+          "from": "acc_8842",
+          "to": "acc_3344",
+          "amount_usd": 250.0
         }
       },
       "response_body": {
@@ -212,7 +215,7 @@
           "type": "function",
           "function": {
             "name": "bank.transfer",
-            "arguments": "{\"from\": \"8821\", \"to\": \"9921\", \"amount\": 500}"
+            "arguments": "{\"from\": \"acc_8842\", \"to\": \"acc_3344\", \"amount_usd\": 250.0}"
           }
         }
       ],
@@ -265,7 +268,8 @@
         "model": "gpt-4o-mini",
         "environment": "production",
         "user_id": "user_synth_42",
-        "session_id": "sess_synth_42"
+        "session_id": "sess_synth_42",
+        "archetype_id": "failing-tool"
       },
       "outcome": "success",
       "request_body": {
@@ -273,7 +277,7 @@
         "messages": [
           {
             "role": "user",
-            "content": "Move $500 from acct 8821 to acct 9921."
+            "content": "Move $250.0 from acct 8842 to acct 3344."
           },
           {
             "role": "tool",
@@ -299,7 +303,7 @@
                   "type": "function",
                   "function": {
                     "name": "bank.transfer",
-                    "arguments": "{\"from\": \"8821\", \"to\": \"9921\", \"amount\": 500}"
+                    "arguments": "{\"from\": \"acc_8842\", \"to\": \"acc_3344\", \"amount_usd\": 250.0}"
                   }
                 }
               ]
@@ -319,7 +323,7 @@
           "type": "function",
           "function": {
             "name": "bank.transfer",
-            "arguments": "{\"from\": \"8821\", \"to\": \"9921\", \"amount\": 500}"
+            "arguments": "{\"from\": \"acc_8842\", \"to\": \"acc_3344\", \"amount_usd\": 250.0}"
           }
         }
       ],
@@ -369,15 +373,16 @@
         "cost_usd": 0.0
       },
       "attributes": {
-        "environment": "production"
+        "environment": "production",
+        "archetype_id": "failing-tool"
       },
       "outcome": "failure",
       "request_body": {
         "tool": "bank.transfer",
         "arguments": {
-          "from": "8821",
-          "to": "9921",
-          "amount": 500
+          "from": "acc_8842",
+          "to": "acc_3344",
+          "amount_usd": 250.0
         }
       },
       "response_body": {
@@ -390,7 +395,7 @@
           "type": "function",
           "function": {
             "name": "bank.transfer",
-            "arguments": "{\"from\": \"8821\", \"to\": \"9921\", \"amount\": 500}"
+            "arguments": "{\"from\": \"acc_8842\", \"to\": \"acc_3344\", \"amount_usd\": 250.0}"
           }
         }
       ],
@@ -443,7 +448,8 @@
         "model": "gpt-4o-mini",
         "environment": "production",
         "user_id": "user_synth_42",
-        "session_id": "sess_synth_42"
+        "session_id": "sess_synth_42",
+        "archetype_id": "failing-tool"
       },
       "outcome": "success",
       "request_body": {
@@ -557,7 +563,8 @@
         "cost_usd": 0.0
       },
       "attributes": {
-        "environment": "production"
+        "environment": "production",
+        "archetype_id": "failing-tool"
       },
       "outcome": "failure",
       "request_body": {
@@ -622,7 +629,8 @@
       "payload": {},
       "metrics": {},
       "attributes": {
-        "environment": "production"
+        "environment": "production",
+        "archetype_id": "failing-tool"
       },
       "outcome": "failure",
       "request_body": null,

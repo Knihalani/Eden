@@ -29,7 +29,8 @@
       "payload": {},
       "metrics": {},
       "attributes": {
-        "environment": "production"
+        "environment": "production",
+        "archetype_id": "efficient-good"
       },
       "outcome": null,
       "request_body": null,
@@ -78,7 +79,8 @@
         "model": "gpt-4o-mini",
         "environment": "production",
         "user_id": "user_synth_42",
-        "session_id": "sess_synth_42"
+        "session_id": "sess_synth_42",
+        "archetype_id": "efficient-good"
       },
       "outcome": "success",
       "request_body": {
@@ -233,7 +235,8 @@
         "cost_usd": 0.0
       },
       "attributes": {
-        "environment": "production"
+        "environment": "production",
+        "archetype_id": "efficient-good"
       },
       "outcome": "success",
       "request_body": {
@@ -304,7 +307,8 @@
         "cost_usd": 0.0
       },
       "attributes": {
-        "environment": "production"
+        "environment": "production",
+        "archetype_id": "efficient-good"
       },
       "outcome": "success",
       "request_body": {
@@ -373,7 +377,8 @@
         "cost_usd": 0.0
       },
       "attributes": {
-        "environment": "production"
+        "environment": "production",
+        "archetype_id": "efficient-good"
       },
       "outcome": "success",
       "request_body": {
@@ -447,7 +452,8 @@
         "model": "gpt-4o-mini",
         "environment": "production",
         "user_id": "user_synth_42",
-        "session_id": "sess_synth_42"
+        "session_id": "sess_synth_42",
+        "archetype_id": "efficient-good"
       },
       "outcome": "success",
       "request_body": {
@@ -466,7 +472,7 @@
                 "type": "function",
                 "function": {
                   "name": "crm.order_lookup",
-                  "arguments": "{\"order_id\":\"4471\"}"
+                  "arguments": "{\"order_id\": \"4471\"}"
                 }
               }
             ]
@@ -686,7 +692,8 @@
       "payload": {},
       "metrics": {},
       "attributes": {
-        "environment": "production"
+        "environment": "production",
+        "archetype_id": "efficient-good"
       },
       "outcome": "success",
       "request_body": null,

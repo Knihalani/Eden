@@ -78,7 +78,7 @@ async def _gather_trace_events(
         return_exceptions=True,
     )
     out: dict[str, list[dict[str, Any]]] = {}
-    for tid, res in zip(trace_ids, results):
+    for tid, res in zip(trace_ids, results, strict=False):
         if isinstance(res, Exception):
             # Don't let one bad trace take down the whole cluster pass —
             # log and treat as empty events. Caller's loop will skip.

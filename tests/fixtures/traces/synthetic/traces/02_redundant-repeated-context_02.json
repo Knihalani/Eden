@@ -29,7 +29,8 @@
       "payload": {},
       "metrics": {},
       "attributes": {
-        "environment": "production"
+        "environment": "production",
+        "archetype_id": "redundant-repeated-context"
       },
       "outcome": null,
       "request_body": null,
@@ -78,7 +79,8 @@
         "model": "gpt-4o-mini",
         "environment": "production",
         "user_id": "user_synth_42",
-        "session_id": "sess_synth_42"
+        "session_id": "sess_synth_42",
+        "archetype_id": "redundant-repeated-context"
       },
       "outcome": "success",
       "request_body": {
@@ -86,7 +88,7 @@
         "messages": [
           {
             "role": "user",
-            "content": "Where's my $42 refund for order 4471?"
+            "content": "Where's my $18 refund for order 2218?"
           }
         ],
         "temperature": 0.0
@@ -305,13 +307,14 @@
       "name": "user.ask",
       "duration_ms": 40.0,
       "payload": {
-        "observation": "user: 8842"
+        "observation": "user: 1129"
       },
       "metrics": {
         "latency_ms": 40.0
       },
       "attributes": {
-        "environment": "production"
+        "environment": "production",
+        "archetype_id": "redundant-repeated-context"
       },
       "outcome": "success",
       "request_body": null,
@@ -360,7 +363,8 @@
         "model": "gpt-4o-mini",
         "environment": "production",
         "user_id": "user_synth_42",
-        "session_id": "sess_synth_42"
+        "session_id": "sess_synth_42",
+        "archetype_id": "redundant-repeated-context"
       },
       "outcome": "success",
       "request_body": {
@@ -368,7 +372,7 @@
         "messages": [
           {
             "role": "user",
-            "content": "Where's my $42 refund for order 4471?"
+            "content": "Where's my $18 refund for order 2218?"
           },
           {
             "role": "assistant",
@@ -376,7 +380,7 @@
           },
           {
             "role": "user",
-            "content": "8842"
+            "content": "1129"
           }
         ],
         "temperature": 0.0
@@ -397,7 +401,7 @@
                   "type": "function",
                   "function": {
                     "name": "crm.order_lookup",
-                    "arguments": "{\"order_id\": \"4471\"}"
+                    "arguments": "{\"order_id\": \"2218\"}"
                   }
                 }
               ]
@@ -417,7 +421,7 @@
           "type": "function",
           "function": {
             "name": "crm.order_lookup",
-            "arguments": "{\"order_id\": \"4471\"}"
+            "arguments": "{\"order_id\": \"2218\"}"
           }
         }
       ],
@@ -495,18 +499,19 @@
         "cost_usd": 0.0
       },
       "attributes": {
-        "environment": "production"
+        "environment": "production",
+        "archetype_id": "redundant-repeated-context"
       },
       "outcome": "success",
       "request_body": {
         "tool": "crm.order_lookup",
         "arguments": {
-          "order_id": "4471"
+          "order_id": "2218"
         }
       },
       "response_body": {
         "result": {
-          "order_id": "4471",
+          "order_id": "2218",
           "status": "cancelled"
         }
       },
@@ -517,7 +522,7 @@
           "type": "function",
           "function": {
             "name": "crm.order_lookup",
-            "arguments": "{\"order_id\": \"4471\"}"
+            "arguments": "{\"order_id\": \"2218\"}"
           }
         }
       ],
@@ -525,7 +530,7 @@
         {
           "tool_call_id": "call_crm.order_lookup_64603",
           "role": "tool",
-          "content": "{\"order_id\": \"4471\", \"status\": \"cancelled\"}"
+          "content": "{\"order_id\": \"2218\", \"status\": \"cancelled\"}"
         }
       ],
       "logprobs": null,
@@ -569,7 +574,8 @@
         "model": "gpt-4o-mini",
         "environment": "production",
         "user_id": "user_synth_42",
-        "session_id": "sess_synth_42"
+        "session_id": "sess_synth_42",
+        "archetype_id": "redundant-repeated-context"
       },
       "outcome": "success",
       "request_body": {
@@ -577,7 +583,7 @@
         "messages": [
           {
             "role": "user",
-            "content": "8842"
+            "content": "1129"
           }
         ],
         "temperature": 0.0
@@ -796,13 +802,14 @@
       "name": "user.ask",
       "duration_ms": 40.0,
       "payload": {
-        "observation": "user: 8842, I already told you"
+        "observation": "user: 1129, I already told you"
       },
       "metrics": {
         "latency_ms": 40.0
       },
       "attributes": {
-        "environment": "production"
+        "environment": "production",
+        "archetype_id": "redundant-repeated-context"
       },
       "outcome": "success",
       "request_body": null,
@@ -851,7 +858,8 @@
         "model": "gpt-4o",
         "environment": "production",
         "user_id": "user_synth_42",
-        "session_id": "sess_synth_42"
+        "session_id": "sess_synth_42",
+        "archetype_id": "redundant-repeated-context"
       },
       "outcome": "success",
       "request_body": {
@@ -859,7 +867,7 @@
         "messages": [
           {
             "role": "user",
-            "content": "8842, I already told you"
+            "content": "1129, I already told you"
           }
         ],
         "temperature": 0.0
@@ -1071,13 +1079,14 @@
       "name": "user.ask",
       "duration_ms": 40.0,
       "payload": {
-        "observation": "user: 8842!"
+        "observation": "user: 1129!"
       },
       "metrics": {
         "latency_ms": 40.0
       },
       "attributes": {
-        "environment": "production"
+        "environment": "production",
+        "archetype_id": "redundant-repeated-context"
       },
       "outcome": "success",
       "request_body": null,
@@ -1126,7 +1135,8 @@
         "model": "gpt-4o",
         "environment": "production",
         "user_id": "user_synth_42",
-        "session_id": "sess_synth_42"
+        "session_id": "sess_synth_42",
+        "archetype_id": "redundant-repeated-context"
       },
       "outcome": "success",
       "request_body": {
@@ -1134,7 +1144,7 @@
         "messages": [
           {
             "role": "user",
-            "content": "8842!"
+            "content": "1129!"
           }
         ],
         "temperature": 0.0
@@ -1353,13 +1363,14 @@
       "name": "user.ask",
       "duration_ms": 40.0,
       "payload": {
-        "observation": "user: 8842, please just check"
+        "observation": "user: 1129, please just check"
       },
       "metrics": {
         "latency_ms": 40.0
       },
       "attributes": {
-        "environment": "production"
+        "environment": "production",
+        "archetype_id": "redundant-repeated-context"
       },
       "outcome": "success",
       "request_body": null,
@@ -1402,14 +1413,15 @@
         "cost_usd": 0.0
       },
       "attributes": {
-        "environment": "production"
+        "environment": "production",
+        "archetype_id": "redundant-repeated-context"
       },
       "outcome": "success",
       "request_body": {
         "tool": "payments.refund_status",
         "arguments": {
-          "order_id": "4471",
-          "card_last4": "8842"
+          "order_id": "2218",
+          "card_last4": "1129"
         }
       },
       "response_body": {
@@ -1425,7 +1437,7 @@
           "type": "function",
           "function": {
             "name": "payments.refund_status",
-            "arguments": "{\"order_id\": \"4471\", \"card_last4\": \"8842\"}"
+            "arguments": "{\"order_id\": \"2218\", \"card_last4\": \"1129\"}"
           }
         }
       ],
@@ -1477,7 +1489,8 @@
         "model": "gpt-4o-mini",
         "environment": "production",
         "user_id": "user_synth_42",
-        "session_id": "sess_synth_42"
+        "session_id": "sess_synth_42",
+        "archetype_id": "redundant-repeated-context"
       },
       "outcome": "success",
       "request_body": {
@@ -1485,7 +1498,7 @@
         "messages": [
           {
             "role": "user",
-            "content": "8842, please just check"
+            "content": "1129, please just check"
           }
         ],
         "temperature": 0.0
@@ -1499,7 +1512,7 @@
             "finish_reason": "stop",
             "message": {
               "role": "assistant",
-              "content": "Got it \u2014 your $42 refund is queued and will land in 3 business days."
+              "content": "Got it \u2014 your $18 refund is queued and will land in 3 business days."
             }
           }
         ],
@@ -1544,7 +1557,7 @@
           ],
           [
             {
-              "token": "$42",
+              "token": "$18",
               "logprob": -0.1,
               "top_logprobs": []
             }
@@ -1652,7 +1665,8 @@
       "payload": {},
       "metrics": {},
       "attributes": {
-        "environment": "production"
+        "environment": "production",
+        "archetype_id": "redundant-repeated-context"
       },
       "outcome": "success",
       "request_body": null,

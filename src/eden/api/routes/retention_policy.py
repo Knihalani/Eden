@@ -125,7 +125,7 @@ async def put_retention_policy(
         )
     except Exception as exc:
         logger.warning(f"put_retention_policy failed: {exc}")
-        raise HTTPException(status_code=500, detail=str(exc))
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
 
     try:
         from eden.api.deps import log_audit_event

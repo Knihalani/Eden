@@ -261,7 +261,6 @@ class TenantRateLimitMiddleware(BaseHTTPMiddleware):
         allowed_int, current_count = results[0], results[1]
         allowed = bool(int(allowed_int))
 
-        allowed = bool(int(allowed_int))
         if not allowed:
             remaining = 0
             reset_ts = int(now + window)

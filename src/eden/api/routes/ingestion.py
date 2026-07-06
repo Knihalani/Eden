@@ -160,10 +160,10 @@ async def _ingest_handler(
         detail: Any = str(exc)
         if problems:
             detail = {"error": detail, "problems": problems}
-        raise HTTPException(status_code=status_code, detail=detail)
+        raise HTTPException(status_code=status_code, detail=detail) from exc
     except Exception as exc:
         logger.exception(f"ingest decode failed: {exc}")
-        raise HTTPException(status_code=500, detail="Ingestion failed")
+        raise HTTPException(status_code=500, detail="Ingestion failed") from exc
 
     # Write
     collector: TelemetryCollector = await get_telemetry_collector()
@@ -292,7 +292,7 @@ async def ingest_chunks(
     try:
         payload = ChunksIngestRequest.model_validate_json(body)
     except Exception as exc:
-        raise HTTPException(status_code=422, detail=f"Invalid body: {exc}")
+        raise HTTPException(status_code=422, detail=f"Invalid body: {exc}") from exc
 
     if not payload.chunks:
         return ChunksIngestResponse(accepted=0, rejected=0, deduplicated=0, total=0)
@@ -322,6 +322,6 @@ async def ingest_chunks(
             status_code=503,
             detail=str(exc) or "ingestion_unavailable",
             headers={"Retry-After": "5"},
-        )
+        ) from exc
     return ChunksIngestResponse(**result)
 

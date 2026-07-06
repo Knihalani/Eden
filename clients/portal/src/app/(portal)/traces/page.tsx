@@ -112,8 +112,8 @@ export default function TracesPage() {
         subtitle="Search, filter, and inspect every trace in your system"
         icon={Layers}
         actions={
-          <Button variant="outline" size="sm" onClick={loadTraces}>
-            <RefreshCw className="w-3.5 h-3.5" />
+          <Button variant="outline" size="default" onClick={loadTraces} loading={loading} aria-label="Refresh traces">
+            <RefreshCw className="w-4 h-4" />
             Refresh
           </Button>
         }

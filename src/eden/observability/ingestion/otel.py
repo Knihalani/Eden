@@ -542,7 +542,7 @@ class OtelDecoder:
             raise SchemaInvalidError(
                 f"OTel body is not valid JSON: {exc}",
                 problems=[f"json_decode_error: {exc}"],
-            )
+            ) from exc
 
         if not isinstance(payload, dict):
             raise SchemaInvalidError(

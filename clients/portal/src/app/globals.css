@@ -933,42 +933,6 @@ button:active, [role="button"]:active {
   border-radius: var(--radius-sm);
 }
 
-.nav-tooltip {
-  position: absolute;
-  left: calc(100% + 12px);
-  top: 50%;
-  transform: translateY(-50%);
-  padding: 6px 10px;
-  background: var(--bg-primary);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-sm);
-  font-size: 0.8125rem;
-  font-weight: 500;
-  color: var(--text-primary);
-  box-shadow: var(--shadow-md);
-  white-space: nowrap;
-  opacity: 0;
-  visibility: hidden;
-  transition: opacity var(--duration-fast) ease, visibility var(--duration-fast) ease;
-  z-index: 50;
-  pointer-events: none;
-}
-
-.nav-tooltip::before {
-  content: "";
-  position: absolute;
-  right: 100%;
-  top: 50%;
-  transform: translateY(-50%);
-  border: 6px solid transparent;
-  border-right-color: var(--bg-primary);
-}
-
-.sidebar.collapsed .nav-item:hover .nav-tooltip {
-  opacity: 1;
-  visibility: visible;
-}
-
 .sidebar-collapse-btn {
   opacity: 0.6;
   transition: opacity var(--duration-fast) ease, transform var(--duration-fast) ease;

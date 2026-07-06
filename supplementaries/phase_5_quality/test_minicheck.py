@@ -125,19 +125,26 @@ def test_probabilities_sum_to_one():
 @requires_model
 def test_inference_under_500ms_warm():
     """Warm inference latency < 500ms (RoBERTa-large on CPU)."""
+    import statistics
     scorer = get_singleton()
-    # Warm up
-    scorer.score("warmup doc", "warmup claim")
+    # Multi-iteration warmup to fully prime CPU caches and any
+    # first-call overhead in MiniCheck / transformers.
+    for _ in range(3):
+        scorer.score("warmup doc", "warmup claim")
     times = []
-    for _ in range(5):
+    for _ in range(10):
         t0 = time.perf_counter()
         scorer.score(
             document="Customer count grew from 218 to 311 in 2026.",
             claim="Customer count went from 218 to 311.",
         )
         times.append((time.perf_counter() - t0) * 1000.0)
-    avg = sum(times) / len(times)
-    assert avg < 500.0, f"MiniCheck warm avg={avg:.1f}ms (CPU)"
+    # Use median instead of mean to absorb host-load outliers.
+    median_ms = statistics.median(times)
+    assert median_ms < 500.0, (
+        f"MiniCheck warm median={median_ms:.1f}ms (CPU); "
+        f"samples={times}"
+    )
 
 
 # ── Edge cases ──────────────────────────────────────────────

@@ -91,7 +91,7 @@ async def create_canary(
         )
     except Exception as exc:
         logger.warning(f"canary create failed: {exc}")
-        raise HTTPException(status_code=500, detail=str(exc))
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
 
     return {
         "experiment_id": experiment_id,
@@ -195,7 +195,7 @@ async def promote_canary(
         raise
     except Exception as exc:
         logger.warning(f"canary promote failed: {exc}")
-        raise HTTPException(status_code=500, detail=str(exc))
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
 
     # Audit log
     try:
@@ -252,7 +252,7 @@ async def rollback_canary(
         )
     except Exception as exc:
         logger.warning(f"canary rollback failed: {exc}")
-        raise HTTPException(status_code=500, detail=str(exc))
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
 
     try:
         from eden.api.deps import log_audit_event

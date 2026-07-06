@@ -92,6 +92,20 @@ export interface EdenSDKOptions {
    * never break the user's call.
    */
   strict?: boolean;
+
+  /**
+   * Explicit OpenAI-compatible gateway URL. When unset,
+   * `resolvedGatewayUrl()` derives from `baseUrl + "/v1"`.
+   * Mirrors `EdenConfig.gateway_url` in the Python SDK.
+   */
+  gatewayUrl?: string;
+
+  /**
+   * Per-filter configuration applied to every gateway call via
+   * `EdenSDK.gatewayHeaders()`. Mirrors `EdenConfig.filters` in
+   * the Python SDK.
+   */
+  filters?: import("./filters.js").FilterConfig;
 }
 
 // ── Telemetry events ──────────────────────────────────────────────

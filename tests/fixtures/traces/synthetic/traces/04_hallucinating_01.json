@@ -29,7 +29,8 @@
       "payload": {},
       "metrics": {},
       "attributes": {
-        "environment": "production"
+        "environment": "production",
+        "archetype_id": "hallucinating"
       },
       "outcome": null,
       "request_body": null,
@@ -78,7 +79,8 @@
         "model": "claude-3-5-sonnet",
         "environment": "production",
         "user_id": "user_synth_42",
-        "session_id": "sess_synth_42"
+        "session_id": "sess_synth_42",
+        "archetype_id": "hallucinating"
       },
       "outcome": "success",
       "request_body": {
@@ -198,7 +200,8 @@
         "cost_usd": 0.0
       },
       "attributes": {
-        "environment": "production"
+        "environment": "production",
+        "archetype_id": "hallucinating"
       },
       "outcome": "success",
       "request_body": {
@@ -272,7 +275,8 @@
         "model": "gpt-4o",
         "environment": "production",
         "user_id": "user_synth_42",
-        "session_id": "sess_synth_42"
+        "session_id": "sess_synth_42",
+        "archetype_id": "hallucinating"
       },
       "outcome": "success",
       "request_body": {
@@ -496,7 +500,8 @@
         "model": "claude-3-5-sonnet",
         "environment": "production",
         "user_id": "user_synth_42",
-        "session_id": "sess_synth_42"
+        "session_id": "sess_synth_42",
+        "archetype_id": "hallucinating"
       },
       "outcome": "success",
       "request_body": {
@@ -709,13 +714,14 @@
         "cost_usd": 0.0
       },
       "attributes": {
-        "environment": "production"
+        "environment": "production",
+        "archetype_id": "hallucinating"
       },
       "outcome": "success",
       "request_body": {
         "tool": "kb.search",
         "arguments": {
-          "q": "Q3 2026 net retention 144 peer median"
+          "q": "Q3 2026 net retention 144% peer median"
         }
       },
       "response_body": {
@@ -731,7 +737,7 @@
           "type": "function",
           "function": {
             "name": "kb.search",
-            "arguments": "{\"q\": \"Q3 2026 net retention 144 peer median\"}"
+            "arguments": "{\"q\": \"Q3 2026 net retention 144% peer median\"}"
           }
         }
       ],
@@ -783,7 +789,8 @@
         "model": "gpt-4o",
         "environment": "production",
         "user_id": "user_synth_42",
-        "session_id": "sess_synth_42"
+        "session_id": "sess_synth_42",
+        "archetype_id": "hallucinating"
       },
       "outcome": "success",
       "request_body": {
@@ -909,7 +916,8 @@
       "payload": {},
       "metrics": {},
       "attributes": {
-        "environment": "production"
+        "environment": "production",
+        "archetype_id": "hallucinating"
       },
       "outcome": "success",
       "request_body": null,

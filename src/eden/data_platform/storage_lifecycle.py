@@ -475,11 +475,17 @@ class StorageLifecycleManager:
                             objects_to_delete.append({"Key": obj["Key"]})
 
                 if objects_to_delete and not self.dry_run:
+                    # Capture in default args — the executor runs the
+                    # lambda after the next iteration may have rebound
+                    # ``objects_to_delete``. Awaiting the executor inline
+                    # before the next iteration keeps this safe in
+                    # practice, but the default-arg binding makes the
+                    # closure explicit and silences B023.
                     await loop.run_in_executor(
                         None,
-                        lambda: s3.delete_objects(
+                        lambda objs=objects_to_delete: s3.delete_objects(
                             Bucket=bucket,
-                            Delete={"Objects": objects_to_delete},
+                            Delete={"Objects": objs},
                         ),
                     )
                     total_deleted += len(objects_to_delete)
@@ -526,10 +532,14 @@ class StorageLifecycleManager:
                 # Get bucket size via CloudWatch or ListObjectsV2 heuristic
                 # For simplicity, just list prefixes and count objects
                 for tier_prefix in ["bronze/events", "silver", "datasets", "cold"]:
+                    # Capture ``tier_prefix`` in the lambda's default
+                    # args so the closure is explicit (B023) — the
+                    # executor runs the lambda after the next iteration
+                    # would have rebound the loop variable.
                     response = await loop.run_in_executor(
                         None,
-                        lambda: s3.list_objects_v2(
-                            Bucket=bucket, Prefix=tier_prefix, MaxKeys=1000
+                        lambda pfx=tier_prefix: s3.list_objects_v2(
+                            Bucket=bucket, Prefix=pfx, MaxKeys=1000
                         ),
                     )
                     objects = response.get("Contents", [])

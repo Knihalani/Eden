@@ -29,7 +29,8 @@
       "payload": {},
       "metrics": {},
       "attributes": {
-        "environment": "production"
+        "environment": "production",
+        "archetype_id": "output-truncation"
       },
       "outcome": null,
       "request_body": null,
@@ -78,7 +79,8 @@
         "model": "claude-3-5-sonnet",
         "environment": "production",
         "user_id": "user_synth_42",
-        "session_id": "sess_synth_42"
+        "session_id": "sess_synth_42",
+        "archetype_id": "output-truncation"
       },
       "outcome": "success",
       "request_body": {
@@ -86,7 +88,7 @@
         "messages": [
           {
             "role": "user",
-            "content": "Explain the Cap theorem."
+            "content": "Explain the CAP theorem."
           }
         ],
         "temperature": 0.0
@@ -205,7 +207,8 @@
         "cost_usd": 0.0
       },
       "attributes": {
-        "environment": "production"
+        "environment": "production",
+        "archetype_id": "output-truncation"
       },
       "outcome": "success",
       "request_body": {
@@ -217,7 +220,7 @@
       "response_body": {
         "result": {
           "hit_id": "kb_9931",
-          "text": "CAP: Consistency, Availability, Partition tolerance."
+          "text": "CAP theorem: Consistency, Availability, Partition tolerance."
         }
       },
       "reasoning": null,
@@ -235,7 +238,7 @@
         {
           "tool_call_id": "call_kb.search_4894",
           "role": "tool",
-          "content": "{\"hit_id\": \"kb_9931\", \"text\": \"CAP: Consistency, Availability, Partition tolerance.\"}"
+          "content": "{\"hit_id\": \"kb_9931\", \"text\": \"CAP theorem: Consistency, Availability, Partition tolerance.\"}"
         }
       ],
       "logprobs": null,
@@ -279,7 +282,8 @@
         "model": "gpt-4o",
         "environment": "production",
         "user_id": "user_synth_42",
-        "session_id": "sess_synth_42"
+        "session_id": "sess_synth_42",
+        "archetype_id": "output-truncation"
       },
       "outcome": "success",
       "request_body": {
@@ -287,12 +291,12 @@
         "messages": [
           {
             "role": "user",
-            "content": "Explain the Cap theorem."
+            "content": "Explain the CAP theorem."
           },
           {
             "role": "tool",
             "tool_call_id": "call_k_0001",
-            "content": "CAP: Consistency, Availability, Partition tolerance."
+            "content": "CAP theorem: Consistency, Availability, Partition tolerance."
           }
         ],
         "temperature": 0.0
@@ -306,7 +310,7 @@
             "finish_reason": "length",
             "message": {
               "role": "assistant",
-              "content": "The CAP theorem, formulated by Eric Brewer in 2000, states that any distributed data store can offer at most two of the following three guarantees simultaneously. First, Consistency \u2014 meaning every read receives the most recent write or an error. Second, Availability \u2014 meaning every request receives a response, without guarantee that it contains the most recent write. Third, Partition tolerance \u2014 meaning the system continues to operate despite arbitrary message loss between nodes. In practice, partitions are inevitable in distributed systems, so the real trade-off is between Consistency and Availabil"
+              "content": "The CAP theorem, formulated as a foundational principle in distributed systems, explains how any distributed data store can offer at most two guarantees simultaneously. Consistency, Availability, Partition tolerance. In practice, the trade-off is between Consistency and Availabil"
             }
           }
         ],
@@ -351,21 +355,28 @@
           ],
           [
             {
-              "token": "by",
+              "token": "as",
               "logprob": -0.1,
               "top_logprobs": []
             }
           ],
           [
             {
-              "token": "Eric",
+              "token": "a",
               "logprob": -0.1,
               "top_logprobs": []
             }
           ],
           [
             {
-              "token": "Brewer",
+              "token": "foundational",
+              "logprob": -0.1,
+              "top_logprobs": []
+            }
+          ],
+          [
+            {
+              "token": "principle",
               "logprob": -0.1,
               "top_logprobs": []
             }
@@ -379,21 +390,28 @@
           ],
           [
             {
-              "token": "2000,",
+              "token": "distributed",
               "logprob": -0.1,
               "top_logprobs": []
             }
           ],
           [
             {
-              "token": "states",
+              "token": "systems,",
               "logprob": -0.1,
               "top_logprobs": []
             }
           ],
           [
             {
-              "token": "that",
+              "token": "explains",
+              "logprob": -0.1,
+              "top_logprobs": []
+            }
+          ],
+          [
+            {
+              "token": "how",
               "logprob": -0.1,
               "top_logprobs": []
             }
@@ -446,20 +464,6 @@
               "logprob": -0.1,
               "top_logprobs": []
             }
-          ],
-          [
-            {
-              "token": "most",
-              "logprob": -0.1,
-              "top_logprobs": []
-            }
-          ],
-          [
-            {
-              "token": "two",
-              "logprob": -0.1,
-              "top_logprobs": []
-            }
           ]
         ]
       },
@@ -494,7 +498,8 @@
       "payload": {},
       "metrics": {},
       "attributes": {
-        "environment": "production"
+        "environment": "production",
+        "archetype_id": "output-truncation"
       },
       "outcome": "success",
       "request_body": null,

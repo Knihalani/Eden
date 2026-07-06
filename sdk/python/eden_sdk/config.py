@@ -15,7 +15,10 @@ import logging
 import os
 import threading
 from dataclasses import dataclass, field
-from typing import Optional
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from eden_sdk.filters import FilterConfig
 
 logger = logging.getLogger("eden_sdk.config")
 
@@ -66,9 +69,15 @@ class EdenConfig:
         Additional headers to send on every request (e.g. routing tags).
     """
 
-    org_id: Optional[str] = None
-    api_key: Optional[str] = None
+    org_id: str | None = None
+    api_key: str | None = None
     base_url: str = "http://localhost:8000"
+    # Convenience alias for the OpenAI-compatible gateway. Defaults
+    # to ``"{base_url}/v1"`` when not set, so customers can call
+    # ``EdenConfig(base_url="https://api.eden.ai")`` and have
+    # :meth:`gateway_headers` + :meth:`openai_client` do the right
+    # thing without a second URL.
+    gateway_url: str | None = None
     project_id: str = "default"
     batch_size: int = 32
     flush_interval_ms: int = 250
@@ -77,6 +86,12 @@ class EdenConfig:
     disabled: bool = False
     max_queue: int = 4096
     extra_headers: dict[str, str] = field(default_factory=dict)
+    # Per-filter configuration. When unset, the gateway applies
+    # the tenant's :class:`org_pii_policies` defaults. When set,
+    # the values override the tenant policy on a per-call basis
+    # (rendered as ``X-PII-Mode`` / ``X-PII-Disabled-Categories``
+    # headers).
+    filters: FilterConfig | None = None
 
     @property
     def enabled(self) -> bool:
@@ -112,11 +127,74 @@ class EdenConfig:
         headers.update(self.extra_headers)
         return headers
 
+    def gateway_headers(
+        self,
+        *,
+        upstream_base_url: str | None = None,
+        upstream_api_key: str | None = None,
+        upstream_provider: str | None = None,
+        pii_bypass: bool | None = None,
+        filters: FilterConfig | None = None,
+    ) -> dict[str, str]:
+        """Headers for talking to the OpenAI-compatible gateway.
+
+        Returned headers include the standard Eden auth headers
+        (``X-Org-Api-Key``) plus the optional per-request upstream
+        routing headers (``X-Upstream-Base-Url``,
+        ``X-Upstream-Api-Key``, ``X-Upstream-Provider``) and the
+        per-filter configuration headers (``X-PII-Mode``,
+        ``X-PII-Disabled-Categories``). Pass the result as
+        ``default_headers`` to the OpenAI SDK so any call through
+        the gateway lands on the chosen upstream.
+
+        The gateway strips the credentials (``X-Upstream-Api-Key``,
+        ``X-Org-Api-Key``, ``X-Org-Id``) before forwarding to the
+        upstream so they never leak to a third-party provider.
+
+        ``pii_bypass=True`` sets ``X-PII-Bypass: true``, which
+        tells the gateway to skip PII redaction for this request —
+        use when your system is designed to use the raw PII values
+        (e.g. an internal credential-management flow that needs the
+        API key to authenticate downstream). Pass ``False`` (or
+        omit) to use the tenant's configured PII policy.
+
+        ``filters`` overrides ``self.filters`` for this call. Use
+        the ``EdenConfig.filters`` field for a process-wide default
+        and pass ``filters=...`` here for one-off overrides.
+        """
+        headers = self.auth_headers()
+        if upstream_base_url:
+            headers["X-Upstream-Base-Url"] = upstream_base_url
+        if upstream_api_key:
+            headers["X-Upstream-Api-Key"] = upstream_api_key
+        if upstream_provider:
+            headers["X-Upstream-Provider"] = upstream_provider
+        if pii_bypass is not None:
+            headers["X-PII-Bypass"] = "true" if pii_bypass else "false"
+        active_filters = filters if filters is not None else self.filters
+        if active_filters is not None:
+            headers.update(active_filters.to_headers())
+        return headers
+
+    def resolved_gateway_url(self) -> str:
+        """Return the OpenAI-compatible gateway URL.
+
+        Falls back to ``"{base_url}/v1"`` when ``gateway_url`` is
+        unset. The default ``base_url`` of ``http://localhost:8000``
+        therefore resolves to ``http://localhost:8000/v1``.
+        """
+        if self.gateway_url:
+            return self.gateway_url
+        base = self.base_url.rstrip("/")
+        if base.endswith("/v1"):
+            return base
+        return f"{base}/v1"
+
 
 # ── Singleton management ──────────────────────────────────────────────
 
 _lock = threading.Lock()
-_config: Optional[EdenConfig] = None
+_config: EdenConfig | None = None
 
 
 def _from_env() -> EdenConfig:
@@ -134,16 +212,16 @@ def _from_env() -> EdenConfig:
 
 
 def configure(
-    org_id: Optional[str] = None,
-    api_key: Optional[str] = None,
-    base_url: Optional[str] = None,
-    project_id: Optional[str] = None,
-    batch_size: Optional[int] = None,
-    flush_interval_ms: Optional[int] = None,
-    disabled: Optional[bool] = None,
-    dry_run: Optional[bool] = None,
-    max_queue: Optional[int] = None,
-    extra_headers: Optional[dict[str, str]] = None,
+    org_id: str | None = None,
+    api_key: str | None = None,
+    base_url: str | None = None,
+    project_id: str | None = None,
+    batch_size: int | None = None,
+    flush_interval_ms: int | None = None,
+    disabled: bool | None = None,
+    dry_run: bool | None = None,
+    max_queue: int | None = None,
+    extra_headers: dict[str, str] | None = None,
     **overrides: object,
 ) -> EdenConfig:
     """Update the global config and return it.

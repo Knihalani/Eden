@@ -289,7 +289,7 @@ export default function InvitePage() {
             </Link>
           </p>
 
-          <p className="text-xs text-center text-[var(--text-faint)] mt-2">
+          <p className="text-xs text-center text-[var(--text-muted)] mt-2">
             <Link
               href="/"
               className="inline-flex items-center gap-1 hover:text-[var(--text-muted)] transition-colors"

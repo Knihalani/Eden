@@ -1,10 +1,10 @@
 {
   "trace_id": "trace_hallucinating_01",
   "archetype_id": "hallucinating",
-  "expected_TAS": 67,
+  "expected_TAS": 72,
   "expected_intervention": "warn",
   "expected_loop_detected": false,
   "expected_hallucination_detected": true,
   "expected_redundancy_pct": 0.0,
-  "notes": "LLM invents '144% NRR (top decile)' \u2014 source only says 122%. Grounding check MUST flag. Warn intervention: tag the response as unverified and require human review before board send."
+  "notes": "LLM invents '144% NRR (top decile)' \u2014 source only says 122%%. Grounding check MUST flag. Warn intervention: tag the response as unverified and require human review before board send."
 }

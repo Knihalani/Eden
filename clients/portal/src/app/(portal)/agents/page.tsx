@@ -22,6 +22,7 @@ import {
   Search,
   Filter,
   Clock,
+  X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -128,12 +129,12 @@ export default function AgentsPage() {
             <Button
               onClick={load}
               variant="outline"
-              size="sm"
+              size="default"
               disabled={loading}
               loading={loading}
               aria-label="Refresh agents"
             >
-              <RefreshCw className="h-3.5 w-3.5" /> Refresh
+              <RefreshCw className="h-4 w-4" /> Refresh
             </Button>
           </div>
         }
@@ -144,8 +145,8 @@ export default function AgentsPage() {
           title="Could not load agents"
           message={error}
           action={
-            <Button onClick={load} variant="outline" size="sm" disabled={loading} loading={loading}>
-              <RefreshCw className="h-3.5 w-3.5" /> Try again
+            <Button onClick={load} variant="outline" size="default" disabled={loading} loading={loading}>
+              <RefreshCw className="h-4 w-4" /> Try again
             </Button>
           }
         />
@@ -164,8 +165,18 @@ export default function AgentsPage() {
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search by name, framework, or repo…"
               aria-label="Search agents by name, framework, or repo"
-              className="w-full pl-9 pr-3 py-2 bg-[var(--bg-secondary)] border border-[var(--border-default)] rounded-lg text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--accent)]/40"
+              className="w-full pl-9 pr-9 py-2 bg-[var(--bg-secondary)] border border-[var(--border-default)] rounded-lg text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--accent)]/40"
             />
+            {search && (
+              <button
+                type="button"
+                onClick={() => setSearch("")}
+                aria-label="Clear search"
+                className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)] focus:outline-none focus:ring-2 focus:ring-[var(--accent)]/40"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
           </div>
           {frameworks.length > 1 && (
             <div className="relative">

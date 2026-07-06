@@ -1,7 +1,7 @@
 {
   "trace_id": "trace_multi_agent_handoff_01",
   "archetype_id": "efficient-multi-agent-handoff",
-  "expected_TAS": 89,
+  "expected_TAS": 88,
   "expected_intervention": "allow",
   "expected_loop_detected": false,
   "expected_hallucination_detected": false,

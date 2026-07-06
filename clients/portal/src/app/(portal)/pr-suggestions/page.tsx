@@ -24,7 +24,7 @@ import {
   Square,
   Zap } from "lucide-react";
 import { useOrg } from "@/hooks/use-org";
-import { prSuggestionApi } from "@/lib/api";
+import { disciplineApi, prSuggestionApi } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { StatCard } from "@/components/ui/stat-card";
 import { Badge } from "@/components/ui/badge";
@@ -35,6 +35,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/components/ui/toast";
 import { EmptyState } from "@/components/ui/empty-state";
 import { PageHeader } from "@/components/layout/page-header";
+import { PageContent } from "@/components/layout/page-content";
 import type {
   PRSuggestion,
   PRSuggestionStatus,
@@ -490,6 +491,125 @@ function BulkActionBar({
 
 // ── Main page ──────────────────────────────────────────────────
 
+// ── Discipline state (Cat 23 v1.7) ───────────────────────────────
+//
+// Surfaces the breaker / rate-limit / repo-graph state
+// in a single compact card so the user can see at a
+// glance *why* Eden is or isn't opening PRs.
+function DisciplineStateCard() {
+  const { currentOrg } = useOrg();
+  const [breaker, setBreaker] = useState<{
+    state: string;
+    failure_count: number;
+    rejection_count: number;
+  } | null>(null);
+  const [rateLimit, setRateLimit] = useState<{
+    allowed: boolean;
+    per_repo_per_day: { remaining_today: number; max: number };
+    per_org_per_day: { remaining_today: number; max: number };
+  } | null>(null);
+  const [graph, setGraph] = useState<{
+    graph_provider: string;
+    status?: { indexed: boolean; latest_sha: string } | null;
+    repo_full_name?: string;
+  } | null>(null);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    if (!currentOrg) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const [br, rl, gs] = await Promise.allSettled([
+          disciplineApi.breakerStatus(currentOrg.id),
+          disciplineApi.rateLimit(currentOrg.id),
+          disciplineApi.graphStatus(currentOrg.id),
+        ]);
+        if (cancelled) return;
+        if (br.status === "fulfilled") {
+          setBreaker(br.value.data.breaker);
+        }
+        if (rl.status === "fulfilled") {
+          setRateLimit(rl.value.data.rate_limit);
+        }
+        if (gs.status === "fulfilled") {
+          setGraph(gs.value.data);
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setError(err instanceof Error ? err.message : "");
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [currentOrg]);
+
+  // Hide the card when there's no data — the user shouldn't
+  // see a confusing empty panel.
+  if (!breaker && !rateLimit && !graph && !error) return null;
+
+  return (
+    <Card className="border-[var(--border-default)] bg-[var(--bg-base)]">
+      <div className="p-3 flex flex-wrap items-center gap-4 text-xs">
+        <span className="font-medium text-[var(--text-secondary)]">
+          PR automation
+        </span>
+        {breaker && (
+          <span
+            className={cn(
+              "inline-flex items-center gap-1.5 rounded-md border px-2 py-0.5",
+              breaker.state === "open"
+                ? "border-[var(--error)]/30 bg-[var(--error)]/10 text-[var(--error)]"
+                : breaker.state === "half_open"
+                  ? "border-[var(--warning)]/30 bg-[var(--warning)]/10 text-[var(--warning)]"
+                  : "border-[var(--success)]/30 bg-[var(--success)]/10 text-[var(--success)]",
+            )}
+            aria-label={`Circuit breaker ${breaker.state}`}
+          >
+            <span
+              className={cn(
+                "h-1.5 w-1.5 rounded-full",
+                breaker.state === "open"
+                  ? "bg-[var(--error)]"
+                  : breaker.state === "half_open"
+                    ? "bg-[var(--warning)]"
+                    : "bg-[var(--success)]",
+              )}
+            />
+            Breaker {breaker.state}
+          </span>
+        )}
+        {rateLimit && (
+          <span className="text-[var(--text-muted)]">
+            {rateLimit.per_org_per_day.remaining_today} /{" "}
+            {rateLimit.per_org_per_day.max} PRs remaining today
+          </span>
+        )}
+        {graph && (
+          <span className="text-[var(--text-muted)]">
+            Graph:{" "}
+            <span
+              className={cn(
+                graph.status?.indexed
+                  ? "text-[var(--success)]"
+                  : "text-[var(--warning)]",
+              )}
+            >
+              {graph.status?.indexed ? "indexed" : "pending"}
+            </span>{" "}
+            ({graph.graph_provider})
+          </span>
+        )}
+        {error && (
+          <span className="text-[var(--text-muted)] italic">{error}</span>
+        )}
+      </div>
+    </Card>
+  );
+}
+
 export default function PRSuggestionsPage() {
   const router = useRouter();
   const { currentOrg } = useOrg();
@@ -645,7 +765,7 @@ export default function PRSuggestionsPage() {
   }
 
   return (
-    <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-6">
+    <PageContent size="wide">
       <PageHeader
         title="PR Suggestions"
         subtitle="Agent-proposed code changes based on observability signals"
@@ -690,6 +810,9 @@ export default function PRSuggestionsPage() {
           icon={TrendingUp}
         />
       </div>
+
+      {/* Discipline state (Cat 23 v1.7 PR revamp) */}
+      <DisciplineStateCard />
 
       {/* Create form (collapsible) */}
       <AnimatePresence>
@@ -835,6 +958,6 @@ export default function PRSuggestionsPage() {
           />
         )}
       </AnimatePresence>
-    </div>
+    </PageContent>
   );
 }

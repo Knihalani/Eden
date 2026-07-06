@@ -7,6 +7,7 @@ L2: Semantic cache (Qdrant) — embedding similarity search
 import hashlib
 import json
 import logging
+import time
 from datetime import UTC
 
 from eden.llm.client import LLMResponse

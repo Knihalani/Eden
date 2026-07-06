@@ -18,6 +18,7 @@ import {
   type StreamChunk,
   type TelemetryEvent,
 } from "./types.js";
+import { type FilterConfig } from "./filters.js";
 
 const DEFAULT_BASE_URL = "http://localhost:8000";
 const DEFAULT_REALM = "production";
@@ -36,6 +37,16 @@ export interface ResolvedConfig {
   apiKey: string | undefined;
   projectId: string;
   baseUrl: string;
+  /**
+   * Explicit OpenAI-compatible gateway URL. When unset,
+   * `resolvedGatewayUrl()` derives from `baseUrl + "/v1"`.
+   */
+  gatewayUrl: string | undefined;
+  /**
+   * Per-filter configuration applied to every gateway call.
+   * Mirrors `EdenConfig.filters` in the Python SDK.
+   */
+  filters: FilterConfig | undefined;
   realm: string;
   tags: string[];
   metadata: Record<string, unknown>;
@@ -64,6 +75,8 @@ export function resolveConfig(opts: EdenSDKOptions = {}): ResolvedConfig {
   const strict = opts.strict ?? false;
   const maxBatchSize = opts.maxBatchSize ?? DEFAULT_MAX_BATCH_SIZE;
   const flushIntervalMs = opts.flushIntervalMs ?? DEFAULT_FLUSH_INTERVAL_MS;
+  const gatewayUrl = opts.gatewayUrl ?? readEnv("EDEN_GATEWAY_URL");
+  const filters = opts.filters;
 
   if (strict && !orgId) {
     throw new Error(
@@ -76,6 +89,8 @@ export function resolveConfig(opts: EdenSDKOptions = {}): ResolvedConfig {
     apiKey,
     projectId,
     baseUrl: baseUrl.replace(/\/+$/, ""),
+    gatewayUrl,
+    filters,
     realm,
     tags: [...(opts.tags ?? [])],
     metadata: { ...(opts.metadata ?? {}) },
@@ -84,6 +99,34 @@ export function resolveConfig(opts: EdenSDKOptions = {}): ResolvedConfig {
     debug,
     strict,
   };
+}
+
+/**
+ * Build the canonical gateway URL for OpenAI-compatible calls.
+ * Falls back to `\${baseUrl}/v1` when `gatewayUrl` is unset.
+ */
+export function resolvedGatewayUrl(cfg: ResolvedConfig): string {
+  if (cfg.gatewayUrl) return cfg.gatewayUrl;
+  const base = cfg.baseUrl.replace(/\/+$/, "");
+  if (base.endsWith("/v1")) return base;
+  return `${base}/v1`;
+}
+
+/**
+ * Per-call overrides for {@link EdenSDK.gatewayHeaders}. Mirrors
+ * the kwarg shape of `EdenConfig.gateway_headers()` in the Python SDK.
+ */
+export interface GatewayHeadersOptions {
+  /** Override the upstream base URL for this call (e.g. OpenRouter, Anthropic). */
+  upstreamBaseUrl?: string;
+  /** Override the upstream API key for this call. Stripped before forwarding. */
+  upstreamApiKey?: string;
+  /** Optional provider hint for telemetry labelling (openai/openrouter/anthropic/...). */
+  upstreamProvider?: string;
+  /** Per-request PII bypass. Wins over the process-wide filter config. */
+  piiBypass?: boolean;
+  /** Per-call filter overrides. When unset, uses `config.filters`. */
+  filters?: FilterConfig;
 }
 
 // ── Client ────────────────────────────────────────────────────────
@@ -120,6 +163,49 @@ export class EdenSDK {
   /** Returns the resolved config (read-only snapshot). */
   getConfig(): Readonly<ResolvedConfig> {
     return this.config;
+  }
+
+  /**
+   * Resolve the OpenAI-compatible gateway URL. Falls back to
+   * `\${baseUrl}/v1` when `gatewayUrl` is unset. Mirrors
+   * `EdenConfig.resolved_gateway_url()` in the Python SDK.
+   */
+  resolvedGatewayUrl(): string {
+    return resolvedGatewayUrl(this.config);
+  }
+
+  /**
+   * Build the headers for a single OpenAI-compatible gateway call.
+   *
+   * Includes standard Eden auth headers (X-Org-Id, X-Org-Api-Key,
+   * X-Project-Id) plus any per-request upstream overrides and the
+   * per-filter configuration. The gateway strips
+   * X-Upstream-Api-Key + X-Org-Api-Key before forwarding to the
+   * upstream so credentials never leak to a third-party provider.
+   *
+   * Mirrors `EdenConfig.gateway_headers()` in the Python SDK.
+   */
+  gatewayHeaders(
+    opts: GatewayHeadersOptions = {},
+  ): Record<string, string> {
+    const headers: Record<string, string> = this.buildHeaders();
+    if (opts.upstreamBaseUrl) {
+      headers["X-Upstream-Base-Url"] = opts.upstreamBaseUrl;
+    }
+    if (opts.upstreamApiKey) {
+      headers["X-Upstream-Api-Key"] = opts.upstreamApiKey;
+    }
+    if (opts.upstreamProvider) {
+      headers["X-Upstream-Provider"] = opts.upstreamProvider;
+    }
+    if (opts.piiBypass !== undefined) {
+      headers["X-PII-Bypass"] = opts.piiBypass ? "true" : "false";
+    }
+    const activeFilters = opts.filters ?? this.config.filters;
+    if (activeFilters !== undefined) {
+      Object.assign(headers, activeFilters.toHeaders());
+    }
+    return headers;
   }
 
   /**

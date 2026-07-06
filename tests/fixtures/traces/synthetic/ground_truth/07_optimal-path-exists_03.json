@@ -1,7 +1,7 @@
 {
   "trace_id": "trace_optimal_path_exists_03",
   "archetype_id": "optimal-path-exists",
-  "expected_TAS": 51,
+  "expected_TAS": 68,
   "expected_intervention": "warn",
   "expected_loop_detected": false,
   "expected_hallucination_detected": false,

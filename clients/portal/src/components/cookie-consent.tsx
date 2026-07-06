@@ -31,6 +31,22 @@ export function CookieConsent() {
   const [visible, setVisible] = useState(false);
 
   useEffect(() => {
+    // F3: don't show the banner on auth routes — the cookie choice
+    // belongs to the portal, not the sign-in/sign-up surface.
+    if (typeof window !== "undefined") {
+      const p = window.location.pathname;
+      if (
+        p.startsWith("/sign-in") ||
+        p.startsWith("/sign-up") ||
+        p.startsWith("/login") ||
+        p.startsWith("/signup") ||
+        p.startsWith("/forgot-password") ||
+        p.startsWith("/reset-password") ||
+        p.startsWith("/invite")
+      ) {
+        return;
+      }
+    }
     try {
       const stored = window.localStorage.getItem(STORAGE_KEY);
       if (!stored) {

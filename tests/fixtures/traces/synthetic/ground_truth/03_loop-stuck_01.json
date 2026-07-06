@@ -1,10 +1,10 @@
 {
   "trace_id": "trace_loop_stuck_01",
   "archetype_id": "loop-stuck",
-  "expected_TAS": 19,
+  "expected_TAS": 10,
   "expected_intervention": "block",
   "expected_loop_detected": true,
   "expected_hallucination_detected": false,
   "expected_redundancy_pct": 0.0,
-  "notes": "7 consecutive weather.lookup attempts with paraphrased arguments. Loop detector MUST fire. Block intervention recommended: agent should give up after 2 identical-tool failures."
+  "notes": "7 consecutive weather.lookup attempts for Tokyo with paraphrased arguments. Loop detector MUST fire. Block intervention recommended: agent should give up after 2 identical-tool failures."
 }

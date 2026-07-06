@@ -92,7 +92,7 @@ class HeliconeDecoder:
             raise SchemaInvalidError(
                 f"Helicone body is not valid JSON: {exc}",
                 problems=[f"json_decode_error: {exc}"],
-            )
+            ) from exc
 
         # Helicone sends a single request log at a time, but accept a
         # list for symmetry with other decoders.

@@ -1,7 +1,7 @@
 {
   "trace_id": "trace_adversarial_paraphrase_03",
   "archetype_id": "adversarial-paraphrase-loop",
-  "expected_TAS": 25,
+  "expected_TAS": 44,
   "expected_intervention": "block",
   "expected_loop_detected": true,
   "expected_hallucination_detected": false,

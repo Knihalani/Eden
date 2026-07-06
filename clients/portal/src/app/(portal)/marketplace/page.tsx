@@ -346,7 +346,7 @@ function CardTile({ card, featured = false }: { card: EnvCardSummary; featured?:
             </span>
           ))}
           {(card.tags ?? []).length > 3 && (
-            <span className="text-[10px] text-[var(--text-faint)]">+{(card.tags ?? []).length - 3}</span>
+            <span className="text-[10px] font-semibold text-[var(--text-muted)]">+{(card.tags ?? []).length - 3}</span>
           )}
         </div>
       )}

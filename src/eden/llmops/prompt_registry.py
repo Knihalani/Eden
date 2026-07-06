@@ -194,7 +194,7 @@ class PromptRegistry:
             )
             return jinja_tpl.render(**variables)
         except Exception as e:
-            raise ValueError(f"Template rendering failed for {prompt_name}: {e}")
+            raise ValueError(f"Template rendering failed for {prompt_name}: {e}") from e
 
     def promote_ab_winner(self, test_id: str) -> PromptTemplate | None:
         """Promote the winning A/B test variant to default."""

@@ -874,3 +874,145 @@ class TestMigration:
         m = self._load_migration()
         assert callable(m.upgrade)
         assert callable(m.downgrade)
+
+
+# ─── 4. Cat 23 v1.7 PR-discipline routes (added 2026-07-05) ──────
+
+
+class TestDisciplineRouteEnvelopes:
+    """The Cat 23 v1.7 discipline routes return the live envelope."""
+
+    @pytest.mark.asyncio
+    async def test_discipline_decide_allows_high_confidence(self) -> None:
+        from eden.code_change.discipline import ConfidenceGate, Trigger
+
+        gate = ConfidenceGate()
+        envelope = await gate.evaluate(
+            Trigger(
+                kind="incident",
+                identifier="clu_001",
+                summary="High-confidence issue",
+            ),
+            rca_confidence=0.9,
+            quality_score=0.85,
+            blast_radius_score=0.1,
+            evidence_count=5,
+            fix_area_localized=True,
+            can_validate=True,
+        )
+        assert envelope["status"] == "ok"
+        assert envelope["live"] is True
+        assert envelope["data"]["allowed"] is True
+        assert envelope["data"]["score"] >= 0.65
+
+    @pytest.mark.asyncio
+    async def test_discipline_decide_denies_low_confidence(self) -> None:
+        from eden.code_change.discipline import ConfidenceGate, Trigger
+
+        gate = ConfidenceGate()
+        envelope = await gate.evaluate(
+            Trigger(
+                kind="incident",
+                identifier="clu_002",
+                summary="Low-confidence issue",
+            ),
+            rca_confidence=0.1,
+            quality_score=0.2,
+            blast_radius_score=0.6,
+            evidence_count=0,
+            fix_area_localized=False,
+            can_validate=False,
+        )
+        assert envelope["status"] == "ok"
+        assert envelope["data"]["allowed"] is False
+
+    def test_discipline_package_exports(self) -> None:
+        from eden.code_change import discipline
+        for name in (
+            "Action",
+            "CircuitBreaker",
+            "ConfidenceGate",
+            "Decision",
+            "DedupeIndex",
+            "RateLimiter",
+            "Trigger",
+            "compute_decision",
+            "fingerprint_trigger",
+            "record_outcome",
+        ):
+            assert name in discipline.__all__, name
+
+    def test_graph_package_exports(self) -> None:
+        from eden.code_change import graph
+        for name in (
+            "AffectedArea",
+            "GreptileRepoGraph",
+            "GraphQueryResult",
+            "IndexStatus",
+            "LocalRepoGraph",
+            "RepoGraphClient",
+            "get_default_repo_graph",
+        ):
+            assert name in graph.__all__, name
+
+    def test_agent_package_exports(self) -> None:
+        from eden.code_change import agent
+        for name in (
+            "LocalPRAgent",
+            "OpenHandsPRAgent",
+            "PRAgent",
+            "PRCandidate",
+            "PRResult",
+            "get_default_pr_agent",
+        ):
+            assert name in agent.__all__, name
+
+    def test_triggers_package_exports(self) -> None:
+        from eden.code_change import triggers
+        for name in ("incident_trigger", "scheduled_trigger"):
+            assert name in triggers.__all__, name
+
+    def test_route_layer_wires_discipline_routes(self) -> None:
+        """The discipline endpoints are registered on the FastAPI app."""
+        from eden.api.app import app
+
+        paths = [
+            r.path for r in app.routes
+            if hasattr(r, "path") and "discipline" in r.path
+        ]
+        assert any("decide" in p for p in paths), paths
+        assert any("breaker-status" in p for p in paths), paths
+        assert any("rate-limit" in p for p in paths), paths
+
+    def test_route_layer_wires_graph_status(self) -> None:
+        """The graph-status endpoint is registered on the FastAPI app."""
+        from eden.api.app import app
+
+        paths = [
+            r.path for r in app.routes
+            if hasattr(r, "path") and "graph-status" in r.path
+        ]
+        assert any("graph-status" in p for p in paths), paths
+
+    @pytest.mark.asyncio
+    async def test_local_fallback_graph_returns_indexed(self) -> None:
+        from eden.code_change.graph import LocalRepoGraph
+
+        graph = LocalRepoGraph()
+        status = await graph.status("acme/agent")
+        assert status is not None
+        assert status["indexed"] is True
+
+    @pytest.mark.asyncio
+    async def test_local_fallback_agent_returns_report_only(self) -> None:
+        from eden.code_change.agent import LocalPRAgent, PRCandidate
+
+        agent = LocalPRAgent()
+        result = await agent.run(
+            PRCandidate(
+                repo_full_name="acme/agent",
+                incident_summary="Test",
+            ),
+        )
+        assert result is not None
+        assert result.kind == "report_only"

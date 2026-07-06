@@ -290,6 +290,7 @@ function DiffViewer({
         <div className="inline-flex bg-[var(--bg-base)] border border-[var(--border-default)] rounded-md p-0.5">
           <button
             onClick={() => onModeChange("unified")}
+            aria-pressed={diffMode === "unified"}
             className={cn(
               "px-2.5 py-1 text-xs rounded flex items-center gap-1.5",
               diffMode === "unified"
@@ -302,6 +303,7 @@ function DiffViewer({
           </button>
           <button
             onClick={() => onModeChange("split")}
+            aria-pressed={diffMode === "split"}
             className={cn(
               "px-2.5 py-1 text-xs rounded flex items-center gap-1.5",
               diffMode === "split"

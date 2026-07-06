@@ -29,7 +29,8 @@
       "payload": {},
       "metrics": {},
       "attributes": {
-        "environment": "production"
+        "environment": "production",
+        "archetype_id": "efficient-good"
       },
       "outcome": null,
       "request_body": null,
@@ -78,7 +79,8 @@
         "model": "gpt-4o-mini",
         "environment": "production",
         "user_id": "user_synth_42",
-        "session_id": "sess_synth_42"
+        "session_id": "sess_synth_42",
+        "archetype_id": "efficient-good"
       },
       "outcome": "success",
       "request_body": {
@@ -86,7 +88,7 @@
         "messages": [
           {
             "role": "user",
-            "content": "Hi, I cancelled my order #4471 on May 14 and was told I'd get a $42.00 refund. I still don't see it on my Visa ending 8842."
+            "content": "Hi, I cancelled my order #9053 on May 14 and was told I'd get a $75.99 refund. I still don't see it on my Visa ending 6670."
           }
         ],
         "temperature": 0.0
@@ -107,7 +109,7 @@
                   "type": "function",
                   "function": {
                     "name": "crm.order_lookup",
-                    "arguments": "{\"order_id\": \"4471\"}"
+                    "arguments": "{\"order_id\": \"9053\"}"
                   }
                 }
               ]
@@ -127,7 +129,7 @@
           "type": "function",
           "function": {
             "name": "crm.order_lookup",
-            "arguments": "{\"order_id\": \"4471\"}"
+            "arguments": "{\"order_id\": \"9053\"}"
           }
         }
       ],
@@ -233,22 +235,23 @@
         "cost_usd": 0.0
       },
       "attributes": {
-        "environment": "production"
+        "environment": "production",
+        "archetype_id": "efficient-good"
       },
       "outcome": "success",
       "request_body": {
         "tool": "crm.order_lookup",
         "arguments": {
-          "order_id": "4471"
+          "order_id": "9053"
         }
       },
       "response_body": {
         "result": {
-          "order_id": "4471",
+          "order_id": "9053",
           "status": "cancelled",
-          "refund_promised_cents": 4200,
+          "refund_promised_cents": 7598,
           "currency": "USD",
-          "customer_card_last4": "8842"
+          "customer_card_last4": "6670"
         }
       },
       "reasoning": null,
@@ -258,7 +261,7 @@
           "type": "function",
           "function": {
             "name": "crm.order_lookup",
-            "arguments": "{\"order_id\": \"4471\"}"
+            "arguments": "{\"order_id\": \"9053\"}"
           }
         }
       ],
@@ -266,7 +269,7 @@
         {
           "tool_call_id": "call_crm.order_lookup_70308",
           "role": "tool",
-          "content": "{\"order_id\": \"4471\", \"status\": \"cancelled\", \"refund_promised_cents\": 4200, \"currency\": \"USD\", \"customer_card_last4\": \"8842\"}"
+          "content": "{\"order_id\": \"9053\", \"status\": \"cancelled\", \"refund_promised_cents\": 7598, \"currency\": \"USD\", \"customer_card_last4\": \"6670\"}"
         }
       ],
       "logprobs": null,
@@ -304,13 +307,14 @@
         "cost_usd": 0.0
       },
       "attributes": {
-        "environment": "production"
+        "environment": "production",
+        "archetype_id": "efficient-good"
       },
       "outcome": "success",
       "request_body": {
         "tool": "payments.refund_status",
         "arguments": {
-          "order_id": "4471"
+          "order_id": "9053"
         }
       },
       "response_body": {
@@ -327,7 +331,7 @@
           "type": "function",
           "function": {
             "name": "payments.refund_status",
-            "arguments": "{\"order_id\": \"4471\"}"
+            "arguments": "{\"order_id\": \"9053\"}"
           }
         }
       ],
@@ -373,7 +377,8 @@
         "cost_usd": 0.0
       },
       "attributes": {
-        "environment": "production"
+        "environment": "production",
+        "archetype_id": "efficient-good"
       },
       "outcome": "success",
       "request_body": {
@@ -447,7 +452,8 @@
         "model": "gpt-4o-mini",
         "environment": "production",
         "user_id": "user_synth_42",
-        "session_id": "sess_synth_42"
+        "session_id": "sess_synth_42",
+        "archetype_id": "efficient-good"
       },
       "outcome": "success",
       "request_body": {
@@ -455,7 +461,7 @@
         "messages": [
           {
             "role": "user",
-            "content": "Hi, I cancelled my order #4471 on May 14 and was told I'd get a $42.00 refund. I still don't see it on my Visa ending 8842."
+            "content": "Hi, I cancelled my order #9053 on May 14 and was told I'd get a $75.99 refund. I still don't see it on my Visa ending 6670."
           },
           {
             "role": "assistant",
@@ -466,7 +472,7 @@
                 "type": "function",
                 "function": {
                   "name": "crm.order_lookup",
-                  "arguments": "{\"order_id\":\"4471\"}"
+                  "arguments": "{\"order_id\": \"9053\"}"
                 }
               }
             ]
@@ -474,7 +480,7 @@
           {
             "role": "tool",
             "tool_call_id": "call_lookup_0001",
-            "content": "{\"order_id\": \"4471\", \"status\": \"cancelled\", \"refund_promised_cents\": 4200}"
+            "content": "{\"order_id\": \"9053\", \"status\": \"cancelled\", \"refund_promised_cents\": 7598}"
           },
           {
             "role": "tool",
@@ -498,7 +504,7 @@
             "finish_reason": "stop",
             "message": {
               "role": "assistant",
-              "content": "Your $42.00 refund is queued and per our policy will land on your Visa ending 8842 within 3 business days. Is there anything else I can help with?"
+              "content": "Your $75.99 refund is queued and per our policy will land on your Visa ending 6670 within 3 business days. Is there anything else I can help with?"
             }
           }
         ],
@@ -522,7 +528,7 @@
           ],
           [
             {
-              "token": "$42.00",
+              "token": "$75.99",
               "logprob": -0.1,
               "top_logprobs": []
             }
@@ -620,7 +626,7 @@
           ],
           [
             {
-              "token": "8842",
+              "token": "6670",
               "logprob": -0.1,
               "top_logprobs": []
             }
@@ -686,7 +692,8 @@
       "payload": {},
       "metrics": {},
       "attributes": {
-        "environment": "production"
+        "environment": "production",
+        "archetype_id": "efficient-good"
       },
       "outcome": "success",
       "request_body": null,

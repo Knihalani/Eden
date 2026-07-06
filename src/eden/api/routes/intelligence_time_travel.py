@@ -26,7 +26,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, Body, Depends, Path, Query
+from fastapi import APIRouter, Body, Depends, HTTPException, Path, Query
 from pydantic import BaseModel, Field
 
 from eden.api.deps import get_current_user, require_feature_flag
@@ -126,6 +126,11 @@ async def record_snapshot(
         """,
         snapshot_id, org_id, body.trace_id, body.label,
     )
+    if row is None:
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to create time-travel snapshot",
+        )
     created_at = row["created_at"]
     return {
         "snapshot_id": str(row["id"]),

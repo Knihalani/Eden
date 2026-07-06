@@ -148,7 +148,7 @@ async def run_etl(
         try:
             since_dt = datetime.fromisoformat(request.since.replace("Z", "+00:00"))
         except ValueError:
-            raise HTTPException(status_code=400, detail="Invalid since datetime format")
+            raise HTTPException(status_code=400, detail="Invalid since datetime format") from None
 
     etl = SilverETLPipeline()
     report = await etl.run_from_bronze(since=since_dt, limit=request.limit)
@@ -427,7 +427,7 @@ async def export_lineage(
         try:
             since_dt = datetime.fromisoformat(since.replace("Z", "+00:00"))
         except ValueError:
-            raise HTTPException(status_code=400, detail="Invalid since datetime format")
+            raise HTTPException(status_code=400, detail="Invalid since datetime format") from None
 
     events = await tracker.export_openlineage(since=since_dt, limit=limit)
     return {

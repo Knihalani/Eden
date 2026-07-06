@@ -295,7 +295,7 @@ class InsightsDetectorLoop:
                 ),
                 return_exceptions=True,
             )
-            for insight, result in zip(insights, persist_results):
+            for insight, result in zip(insights, persist_results, strict=False):
                 if isinstance(result, Exception):
                     logger.debug(
                         f"insights loop: persist failed for "

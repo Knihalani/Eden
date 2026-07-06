@@ -542,7 +542,7 @@ class geExpectationFactory:
             raise RuntimeError(
                 "great_expectations is not installed. "
                 "Run `pip install great_expectations`."
-            )
+            ) from None
 
     def not_null(self, **kw):  # type: ignore[no-untyped-def]
         return self._gx().ExpectColumnValuesToNotBeNull(**kw)
