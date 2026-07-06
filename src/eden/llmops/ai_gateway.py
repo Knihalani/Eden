@@ -244,6 +244,14 @@ class ModelRequest:
     # Per-request opt-out for the default PII filter. Defaults to True
     # (i.e. "scrub PII") to match the pre-registry behavior.
     pii_filter_enabled: bool = True
+    cache_read_tokens: int = 0
+    """Tokens served from cache (Anthropic / OpenAI prompt cache /
+    Gemini implicit cache). Used by the cost engine to apply the
+    cache-read discount instead of the full input rate."""
+    cache_write_tokens: int = 0
+    """Tokens written into cache (Anthropic cache writes, OpenAI
+    prompt-cache writes). Used by the cost engine to apply the
+    cache-write rate."""
 
     @property
     def prompt_hash(self) -> str:
@@ -271,6 +279,19 @@ class ModelResponse:
     """Git sha or release tag of the PricingCatalog seed that
     produced this cost. Empty string means the seed has never
     been refreshed (e.g. before any OpenRouter fetch)."""
+    cache_read_tokens: int = 0
+    """Tokens served from cache. Surfaced in telemetry so cost
+    analytics can show the cache savings vs the no-cache bill."""
+    cache_write_tokens: int = 0
+    """Tokens written into cache. Surfaced in telemetry so cost
+    analytics can show the cache amortisation."""
+    cache_cost_usd: float = 0.0
+    """USD spent on cache reads + writes (subset of ``cost_usd``).
+    ``cost_usd - cache_cost_usd`` is the no-cache bill; the gap
+    is the cache discount applied to this request."""
+    cost_no_cache_usd: float = 0.0
+    """What this request would have cost without cache - useful
+    for the "you saved $X via caching" widget in the portal."""
 
 
 
@@ -897,8 +918,23 @@ class AIGateway:
         model_version: str = "",
         *,
         org_id: str | None = None,
-    ) -> tuple[float, str]:
-        """Async cost lookup that returns ``(cost_usd, source)``.
+        cache_read_tokens: int = 0,
+        cache_write_tokens: int = 0,
+    ) -> tuple[float, str, float, float]:
+        """Async cost lookup with cache-aware billing.
+
+        Returns ``(cost_usd, source, no_cache_cost_usd, cache_cost_usd)``
+        where:
+
+        * ``cost_usd`` — what the customer is billed, with cache
+          discounts applied (Anthropic 10%/25%, OpenAI 50%/full,
+          Gemini 0% etc.).
+        * ``source`` — provenance ("override", "openrouter",
+          "models_dev", "static", "unknown", "self_hosted").
+        * ``no_cache_cost_usd`` — what the same request would have
+          cost without cache. Useful for the "you saved $X" widget.
+        * ``cache_cost_usd`` — USD spent on cache reads + writes
+          (subset of ``cost_usd``).
 
         Use this from request handlers where the org_id is in
         scope and you want the full provenance for telemetry.
@@ -907,20 +943,53 @@ class AIGateway:
         """
         spec = PROVIDER_SPECS.get(provider)
         if spec is not None and (spec.cost_per_1k_input == 0.0 and spec.cost_per_1k_output == 0.0):
-            return 0.0, "self_hosted"
+            return 0.0, "self_hosted", 0.0, 0.0
+        has_cache = bool(cache_read_tokens or cache_write_tokens)
         if self.cost_resolver is not None and model_version:
             res = await self.cost_resolver.resolve(
                 org_id=org_id,
                 provider=provider.value,
                 model_id=model_version,
             )
-            return float(res.estimate(input_tokens, output_tokens)), res.source
+            # Always compute the no-cache figure so callers can
+            # surface the cache discount in telemetry.
+            no_cache = float(res.estimate(input_tokens, output_tokens))
+            if has_cache:
+                cost = float(
+                    res.estimate_with_cache(
+                        input_tokens=input_tokens,
+                        output_tokens=output_tokens,
+                        cache_read_tokens=cache_read_tokens,
+                        cache_write_tokens=cache_write_tokens,
+                    )
+                )
+                cache_cost = no_cache - cost
+                return cost, res.source, no_cache, max(0.0, cache_cost)
+            return no_cache, res.source, no_cache, 0.0
         # No resolver or no model_version: fall back to the
         # synchronous path. Wrapped so the source reflects the
         # catalog seed vs legacy table distinction.
         cost = self._estimate_cost(
             provider, input_tokens, output_tokens, model_version,
         )
+        # If we have cache info, try to apply the cache-aware
+        # estimate from the catalog row directly.
+        no_cache = cost
+        cache_cost = 0.0
+        if has_cache and model_version:
+            row = self.pricing.lookup(model_version)
+            if row is not None:
+                no_cache = (
+                    (input_tokens / 1000.0) * row.cost_per_1k_input
+                    + (output_tokens / 1000.0) * row.cost_per_1k_output
+                )
+                cost = row.cost_for_request(
+                    input_tokens=input_tokens,
+                    output_tokens=output_tokens,
+                    cache_read_tokens=cache_read_tokens,
+                    cache_write_tokens=cache_write_tokens,
+                )
+                cache_cost = max(0.0, no_cache - cost)
         if model_version and self.pricing.lookup(model_version) is not None:
             row_source = self.pricing.lookup(model_version).source
             if row_source == "openrouter":
@@ -933,7 +1002,7 @@ class AIGateway:
                 source = "static"
         else:
             source = "unknown"
-        return cost, source
+        return cost, source, no_cache, cache_cost
 
     async def _execute_provider(self, provider: Provider, request: ModelRequest) -> ModelResponse:
         client = self._providers.get(provider)
@@ -968,13 +1037,19 @@ class AIGateway:
         # the cost_source + pricing_version for downstream
         # telemetry. ``request.tenant_id`` is the org id the
         # request was scoped to (matches the resolver's org_id
-        # parameter).
-        cost, cost_source = await self.resolve_cost(
+        # parameter). The new return tuple also carries the
+        # cache-aware bill so the response can surface
+        # "saved $X via caching" in the portal.
+        cache_read = int(raw.get("cache_read_tokens", 0) or request.cache_read_tokens)
+        cache_write = int(raw.get("cache_write_tokens", 0) or request.cache_write_tokens)
+        cost, cost_source, no_cache_cost, cache_cost = await self.resolve_cost(
             provider,
             raw.get("input_tokens", 0),
             raw.get("output_tokens", 0),
             model_version=request.model_version,
             org_id=request.tenant_id or None,
+            cache_read_tokens=cache_read,
+            cache_write_tokens=cache_write,
         )
 
         return ModelResponse(
@@ -987,6 +1062,10 @@ class AIGateway:
             model=request.model_version,
             cost_source=cost_source,
             pricing_version=self._pricing_version,
+            cache_read_tokens=cache_read,
+            cache_write_tokens=cache_write,
+            cache_cost_usd=cache_cost,
+            cost_no_cache_usd=no_cache_cost,
         )
 
     def _record_metrics(

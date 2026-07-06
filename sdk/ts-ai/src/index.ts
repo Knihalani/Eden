@@ -17,6 +17,19 @@ export { trace, traceAgent, configure, type TraceContext } from "./trace.js";
 export { FilterConfig, PIIConfig, FILTER_NAMES, type FilterName, type PIIMode, type PIIConfigOptions, type FilterConfigOptions } from "./filters.js";
 export { openaiClient, type OpenAIClientOptions } from "./gateway_session.js";
 export {
+  ModelAdvisor,
+  ModelAdvisorError,
+  type ModelAdvisorOptions,
+  type ModelComparison,
+  type ModelRef,
+  type ModelSpec,
+  type ProjectOptions,
+  type Recommendation,
+  type RecommendOptions,
+  type RunnerUp,
+  type SwitchProjection,
+} from "./model_advisor.js";
+export {
   SOURCE_FORMATS,
   type EdenSDKOptions,
   type TelemetryEvent,

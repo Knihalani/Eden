@@ -703,3 +703,278 @@ def test_models_dev_overlay_coverage_exceeds_static_seed():
     )
     catalog._merge_models_dev_rows(payload)
     assert len(catalog) == pre_count + 3
+
+# ─────────────────────────────────────────────────────────────────────
+# Cache-discount rates (models.dev / OpenRouter / seed)
+# ─────────────────────────────────────────────────────────────────────
+
+
+def test_pricingrow_cost_for_request_no_cache():
+    """Without cache tokens, cost is the standard input + output."""
+    row = PricingRow(
+        model_id="gpt-4o",
+        quality=0.93, latency_p95_ms=700,
+        cost_per_1k_input=0.0025, cost_per_1k_output=0.010,
+        reliability=0.998,
+        cost_per_1k_cache_read=0.00125,  # 50% of input
+        cost_per_1k_cache_write=None,
+    )
+    cost = row.cost_for_request(input_tokens=1000, output_tokens=500)
+    assert cost == pytest.approx(0.0025 + 0.005)
+
+
+def test_pricingrow_cost_for_request_with_cache_read():
+    """Anthropic-style 10% cache-read discount on cached portion."""
+    row = PricingRow(
+        model_id="claude-sonnet-4-6",
+        quality=0.94, latency_p95_ms=900,
+        cost_per_1k_input=0.003, cost_per_1k_output=0.015,
+        reliability=0.999,
+        cost_per_1k_cache_read=0.0003,  # 10% of input
+        cost_per_1k_cache_write=0.00375,  # 125% of input
+    )
+    # 8000 tokens total, 5000 from cache, 3000 fresh + 1000 out.
+    cost = row.cost_for_request(
+        input_tokens=8000, output_tokens=1000,
+        cache_read_tokens=5000,
+    )
+    # 5000/1000 * 0.0003 + 3000/1000 * 0.003 + 1000/1000 * 0.015
+    expected = 5 * 0.0003 + 3 * 0.003 + 1 * 0.015
+    assert cost == pytest.approx(expected)
+
+
+def test_pricingrow_cost_for_request_with_cache_write():
+    """Cache writes use the write rate, not the input rate."""
+    row = PricingRow(
+        model_id="claude-opus-4-5",
+        quality=0.97, latency_p95_ms=1500,
+        cost_per_1k_input=0.015, cost_per_1k_output=0.075,
+        reliability=0.998,
+        cost_per_1k_cache_read=0.0015,
+        cost_per_1k_cache_write=0.01875,
+    )
+    cost = row.cost_for_request(
+        input_tokens=5000, output_tokens=2000,
+        cache_read_tokens=1000,
+        cache_write_tokens=4000,
+    )
+    # 1000 read at 0.0015, 4000 write at 0.01875, 0 fresh, 2000 out at 0.075
+    expected = 1 * 0.0015 + 4 * 0.01875 + 0 + 2 * 0.075
+    assert cost == pytest.approx(expected)
+
+
+def test_pricingrow_cache_fallback_to_input_rate():
+    """When cache_read/cache_write is None, fall back to input rate."""
+    row = PricingRow(
+        model_id="no-cache-model",
+        quality=0.8, latency_p95_ms=500,
+        cost_per_1k_input=0.001, cost_per_1k_output=0.002,
+        reliability=0.99,
+        # Both None - no cache discount published.
+    )
+    cost = row.cost_for_request(
+        input_tokens=1000, output_tokens=500,
+        cache_read_tokens=1000,  # would be free if discount applied
+    )
+    # Falls back to full input rate: 1 * 0.001 + 0.5 * 0.002
+    assert cost == pytest.approx(0.001 + 0.001)
+
+
+def test_pricingrow_cache_does_not_overcount_fresh():
+    """fresh = max(0, input - cache_read - cache_write)."""
+    row = PricingRow(
+        model_id="edge-case",
+        quality=0.85, latency_p95_ms=500,
+        cost_per_1k_input=0.001, cost_per_1k_output=0.002,
+        reliability=0.99,
+        cost_per_1k_cache_read=0.0005,
+        cost_per_1k_cache_write=0.001,
+    )
+    # cache_read + cache_write > input_tokens: must not go negative.
+    cost = row.cost_for_request(
+        input_tokens=1000, output_tokens=500,
+        cache_read_tokens=800, cache_write_tokens=500,
+    )
+    # fresh = max(0, 1000 - 800 - 500) = 0
+    expected = 0.8 * 0.0005 + 0.5 * 0.001 + 0 + 0.5 * 0.002
+    assert cost == pytest.approx(expected)
+
+
+def test_seed_openai_models_have_cache_read_rates():
+    """Every OpenAI model in the seed carries the 50% cache-read rate.
+
+    OpenAI prompt-cache is universal across all flagship models;
+    the seed must reflect it.
+    """
+    seed = default_seed_rows()
+    for model_id in (
+        "gpt-5", "gpt-5-mini", "gpt-5-nano",
+        "gpt-4o", "gpt-4o-mini",
+        "o1", "o1-mini", "o3", "o3-mini",
+    ):
+        row = seed[model_id]
+        assert row.cost_per_1k_cache_read is not None, model_id
+        # 50% of input.
+        assert row.cost_per_1k_cache_read == pytest.approx(
+            row.cost_per_1k_input * 0.5
+        ), model_id
+
+
+def test_seed_anthropic_models_have_cache_read_and_write_rates():
+    """Anthropic: 10% cache_read, 125% cache_write (1.25x input)."""
+    seed = default_seed_rows()
+    for model_id in (
+        "claude-sonnet-4-6", "claude-sonnet-4",
+        "claude-haiku-4-5", "claude-haiku",
+        "claude-opus-4-5", "claude-opus-4",
+    ):
+        row = seed[model_id]
+        assert row.cost_per_1k_cache_read is not None, model_id
+        assert row.cost_per_1k_cache_write is not None, model_id
+        # 10% of input.
+        assert row.cost_per_1k_cache_read == pytest.approx(
+            row.cost_per_1k_input * 0.1
+        ), model_id
+        # 125% of input (5-min cache; 1-hour cache is 2x base write).
+        assert row.cost_per_1k_cache_write == pytest.approx(
+            row.cost_per_1k_input * 1.25
+        ), model_id
+
+
+def test_seed_gemini_cache_read_is_free():
+    """Gemini implicit cache: cached hits are billed at $0."""
+    seed = default_seed_rows()
+    for model_id in (
+        "gemini-3-pro", "gemini-3-flash",
+        "gemini-2.5-pro", "gemini-2.5-flash",
+    ):
+        row = seed[model_id]
+        assert row.cost_per_1k_cache_read == 0.0, model_id
+
+
+def test_seed_self_hosted_models_have_no_cache_rates():
+    """Self-hosted rows have no cache discount - falls back to 0 cost."""
+    seed = default_seed_rows()
+    for model_id in ("llama3.1:8b", "qwen2.5:7b"):
+        row = seed[model_id]
+        assert row.cost_per_1k_input == 0.0
+        # Self-hosted cost is 0 regardless of cache attrs.
+        assert row.cost_for_request(
+            input_tokens=1000, output_tokens=500,
+            cache_read_tokens=500,
+        ) == 0.0
+
+
+def test_openrouter_parser_captures_cache_rates():
+    """refresh_from_openrouter carries input_cache_read/write through."""
+    cat = PricingCatalog.from_seed({})
+    payload = [
+        {
+            "id": "anthropic/claude-sonnet-4.6",
+            "context_length": 200000,
+            "pricing": {
+                "prompt": "0.000003",
+                "completion": "0.000015",
+                "input_cache_read": "0.0000003",  # 10% of prompt
+                "input_cache_write": "0.00000375",  # 125% of prompt
+            },
+        },
+        {
+            "id": "openai/gpt-4o",
+            "context_length": 128000,
+            "pricing": {
+                "prompt": "0.0000025",
+                "completion": "0.000010",
+                "input_cache_read": "0.00000125",  # 50% of prompt
+                "input_cache_write": "0",
+            },
+        },
+        {
+            "id": "openai/gpt-4o-no-cache",
+            "context_length": 128000,
+            "pricing": {
+                "prompt": "0.0000025",
+                "completion": "0.000010",
+                # No input_cache_read / write at all.
+            },
+        },
+    ]
+    updated = cat._merge_openrouter_rows(payload)
+    assert updated == 3
+    sonnet = cat.rows["anthropic/claude-sonnet-4.6"]
+    assert sonnet.cost_per_1k_cache_read == pytest.approx(0.0003)
+    assert sonnet.cost_per_1k_cache_write == pytest.approx(0.00375)
+    gpt = cat.rows["openai/gpt-4o"]
+    assert gpt.cost_per_1k_cache_read == pytest.approx(0.00125)
+    # "0" cache_write -> falls back to None (no fee).
+    assert gpt.cost_per_1k_cache_write is None
+    no_cache = cat.rows["openai/gpt-4o-no-cache"]
+    assert no_cache.cost_per_1k_cache_read is None
+    assert no_cache.cost_per_1k_cache_write is None
+
+
+def test_openrouter_cache_rates_preserve_existing_when_missing():
+    """If OpenRouter omits cache_read/write, keep what the seed had."""
+    seed_row = PricingRow(
+        model_id="gpt-4o",
+        quality=0.93, latency_p95_ms=700,
+        cost_per_1k_input=0.0025, cost_per_1k_output=0.010,
+        reliability=0.998,
+        cost_per_1k_cache_read=0.00125,  # seed says 50%
+        cost_per_1k_cache_write=None,
+    )
+    cat = PricingCatalog.from_seed({"gpt-4o": seed_row})
+    payload = [{
+        "id": "gpt-4o",
+        "context_length": 128000,
+        "pricing": {
+            "prompt": "0.000003",
+            "completion": "0.000012",
+            # OpenRouter did NOT publish cache rates for this
+            # snapshot, so the seed's rates must survive.
+        },
+    }]
+    cat._merge_openrouter_rows(payload)
+    merged = cat.rows["gpt-4o"]
+    assert merged.cost_per_1k_input == pytest.approx(0.003)  # OR's new rate
+    assert merged.cost_per_1k_cache_read == pytest.approx(0.00125)  # seed preserved
+    assert merged.cost_per_1k_cache_write is None  # seed had None
+
+
+def test_models_dev_parser_captures_cache_rates():
+    """refresh_from_models_dev carries cache_read / cache_write through."""
+    cat = PricingCatalog.from_seed({})
+    payload = {
+        "openai": {
+            "name": "OpenAI",
+            "models": {
+                "gpt-4o": {
+                    "id": "gpt-4o",
+                    "limit": {"context": 128000},
+                    "cost": {"input": 2.5, "output": 10, "cache_read": 1.25},
+                },
+            },
+        },
+        "anthropic": {
+            "name": "Anthropic",
+            "models": {
+                "claude-sonnet-4-6": {
+                    "id": "claude-sonnet-4-6",
+                    "limit": {"context": 200000},
+                    "cost": {
+                        "input": 3, "output": 15,
+                        "cache_read": 0.3,
+                        "cache_write": 3.75,
+                    },
+                },
+            },
+        },
+    }
+    cat._merge_models_dev_rows(payload)
+    gpt = cat.rows["gpt-4o"]
+    # Per-million source: 1.25 USD per 1M -> 0.00125 per 1K
+    assert gpt.cost_per_1k_cache_read == pytest.approx(0.00125)
+    assert gpt.cost_per_1k_cache_write is None
+    claude = cat.rows["claude-sonnet-4-6"]
+    assert claude.cost_per_1k_cache_read == pytest.approx(0.0003)
+    assert claude.cost_per_1k_cache_write == pytest.approx(0.00375)

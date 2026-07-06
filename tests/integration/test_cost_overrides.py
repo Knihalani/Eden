@@ -49,18 +49,34 @@ class FakeOverrideStore:
         ]
         # Order: exact provider match first, then effective_from DESC.
         candidates.sort(key=lambda r: (r["provider"] != provider, -r["effective_from"].timestamp()))
-        return candidates[0] if candidates else None
+        # Mirror the SELECT column list in the real resolver
+        # (cost_per_1k_cache_read / write may be None for older
+        # rows pre-dating migration 082).
+        if candidates:
+            row = candidates[0]
+            return {
+                "cost_per_1k_input": row["cost_per_1k_input"],
+                "cost_per_1k_output": row["cost_per_1k_output"],
+                "cost_per_1k_cache_read": row.get("cost_per_1k_cache_read"),
+                "cost_per_1k_cache_write": row.get("cost_per_1k_cache_write"),
+                "currency": row["currency"],
+                "source": row["source"],
+                "effective_from": row["effective_from"],
+                "notes": row["notes"],
+            }
+        return None
 
     def insert_returning(self, args: list[Any]) -> dict[str, Any]:
         # The route passes (override_id, org_id, provider, model_id,
-        # cost_in, cost_out, currency, source, eff_from, eff_until,
-        # notes, created_by). We mirror the column order from the
-        # real INSERT.
+        # cost_in, cost_out, cost_cache_read, cost_cache_write,
+        # currency, source, eff_from, eff_until, notes, created_by).
+        # We mirror the column order from the real INSERT.
         cols = [
             "override_id", "org_id", "provider", "model_id",
-            "cost_per_1k_input", "cost_per_1k_output", "currency",
-            "source", "effective_from", "effective_until", "notes",
-            "created_by", "created_at", "updated_at",
+            "cost_per_1k_input", "cost_per_1k_output",
+            "cost_per_1k_cache_read", "cost_per_1k_cache_write",
+            "currency", "source", "effective_from", "effective_until",
+            "notes", "created_by", "created_at", "updated_at",
         ]
         row = dict(zip(cols, args, strict=False))
         if row["effective_from"] is None:
@@ -82,6 +98,8 @@ class FakeOverrideStore:
             "model_id": row["model_id"],
             "cost_per_1k_input": row["cost_per_1k_input"],
             "cost_per_1k_output": row["cost_per_1k_output"],
+            "cost_per_1k_cache_read": row.get("cost_per_1k_cache_read"),
+            "cost_per_1k_cache_write": row.get("cost_per_1k_cache_write"),
             "currency": row["currency"],
             "source": row["source"],
             "effective_from": row["effective_from"],

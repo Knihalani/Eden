@@ -80,6 +80,7 @@ from eden.api.routes import (
     llmops,
     marketplace,
     media,
+    model_compare,
     multi_agent,
     notifications,
     observability,
@@ -623,6 +624,7 @@ app.include_router(evaluation.router)  # /evaluation (gated)
 app.include_router(multi_agent.router)  # /orgs/{org_id}/multi-agent (gated)
 app.include_router(notifications.router)  # /notifications (user-scoped feed; June 2026 Cat 5 mount fix)
 app.include_router(marketplace.router)  # /marketplace (gated)
+app.include_router(model_compare.router)  # /orgs/{org_id}/models/{compare,recommend,project} (Phase 7.6)
 app.include_router(integrations_helicone.router)  # /integrations/helicone (gated)
 app.include_router(intelligence_code_change.router)  # /orgs/{org_id}/intelligence/code-change (Cat 23, gated by intelligence_gap_v0)
 # Intelligence gap surface — Cat 4/5/6/8/9/10/11/12/13/14/18/19/20/22

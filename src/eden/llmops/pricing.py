@@ -51,6 +51,7 @@ Each row is a :class:`PricingRow`::
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
 import os
 import time
@@ -78,6 +79,24 @@ class PricingRow:
     in-tree seed (training-data estimates); ``"openrouter"`` rows
     were fetched live; ``"merged"`` means OpenRouter refreshed the
     cost columns on top of a static row.
+
+    Cache-discount rates
+    --------------------
+    ``cost_per_1k_cache_read`` and ``cost_per_1k_cache_write`` are
+    the rates providers charge for cached prompts. They are
+    vendor-specific:
+
+    * OpenAI prompt cache: cache reads are 50% of input, writes
+      depend on the model.
+    * Anthropic prompt cache: cache reads are 10% of input,
+      writes are 25% above the base input rate.
+    * Google Gemini implicit cache: free for hits < ~12k tokens,
+      no separate write fee.
+
+    When a row is missing these fields (the common case for
+    self-hosted or no-cache models) the cost engine falls back to
+    the standard input rate. The :meth:`cost_for_request` helper
+    applies the right rate per the usage report.
     """
 
     model_id: str
@@ -88,6 +107,16 @@ class PricingRow:
     reliability: float
     context_window: int = 0
     source: PricingSource = "static"
+    cost_per_1k_cache_read: float | None = None
+    """USD per 1K tokens served from cache (read). ``None`` means
+    the model has no published cache-discount rate; cost engine
+    falls back to :attr:`cost_per_1k_input`."""
+    cost_per_1k_cache_write: float | None = None
+    """USD per 1K tokens written into cache (Anthropic 1h / 5min
+    cache writes, OpenAI prompt-cache write fee). ``None`` means
+    no write fee; cost engine assumes writes are billed at the
+    regular input rate for any tokens that the usage report marks
+    as cache-write."""
 
     @property
     def cost_per_1k_blended(self) -> float:
@@ -98,6 +127,59 @@ class PricingRow:
         :attr:`cost_per_1k_output` separately.
         """
         return (self.cost_per_1k_input + self.cost_per_1k_output) / 2.0
+
+    def cost_for_request(
+        self,
+        *,
+        input_tokens: int,
+        output_tokens: int,
+        cache_read_tokens: int = 0,
+        cache_write_tokens: int = 0,
+    ) -> float:
+        """Compute USD cost for a request, honouring cache discounts.
+
+        Splits ``input_tokens`` into three buckets - cache_read,
+        cache_write, and "fresh" - and applies the right rate to
+        each. ``output_tokens`` are billed at the output rate.
+
+        For self-hosted rows (cost_in == cost_out == 0) this is
+        always 0.0 regardless of the cache split.
+
+        Parameters
+        ----------
+        input_tokens:
+            Total input tokens the upstream billed us for. Must be
+            >= ``cache_read_tokens + cache_write_tokens``; the
+            remainder is "fresh" input.
+        output_tokens:
+            Generated tokens. Billed at :attr:`cost_per_1k_output`.
+        cache_read_tokens:
+            Tokens served from cache. Billed at
+            :attr:`cost_per_1k_cache_read` (falling back to
+            :attr:`cost_per_1k_input` if ``None``).
+        cache_write_tokens:
+            Tokens written into cache. Billed at
+            :attr:`cost_per_1k_cache_write` (falling back to
+            :attr:`cost_per_1k_input` if ``None``).
+        """
+        fresh = max(0, input_tokens - cache_read_tokens - cache_write_tokens)
+        read_rate = (
+            self.cost_per_1k_cache_read
+            if self.cost_per_1k_cache_read is not None
+            else self.cost_per_1k_input
+        )
+        write_rate = (
+            self.cost_per_1k_cache_write
+            if self.cost_per_1k_cache_write is not None
+            else self.cost_per_1k_input
+        )
+        in_cost = (
+            (cache_read_tokens / 1000.0) * read_rate
+            + (cache_write_tokens / 1000.0) * write_rate
+            + (fresh / 1000.0) * self.cost_per_1k_input
+        )
+        out_cost = (output_tokens / 1000.0) * self.cost_per_1k_output
+        return in_cost + out_cost
 
 
 @dataclass
@@ -344,6 +426,20 @@ class PricingCatalog:
                     cost_out = float(completion_raw) * _PER_TOKEN_TO_PER_1K
                 except (TypeError, ValueError):
                     continue
+            # Cache rates (optional). OpenRouter publishes
+            # ``input_cache_read`` / ``input_cache_write`` in USD per
+            # token. Missing entries stay ``None`` so the cost engine
+            # falls back to the regular input rate.
+            cache_read_rate: float | None = None
+            cache_write_rate: float | None = None
+            raw_read = pricing.get("input_cache_read")
+            if isinstance(raw_read, str) and raw_read not in ("", "0"):
+                with contextlib.suppress(TypeError, ValueError):
+                    cache_read_rate = float(raw_read) * _PER_TOKEN_TO_PER_1K
+            raw_write = pricing.get("input_cache_write")
+            if isinstance(raw_write, str) and raw_write not in ("", "0"):
+                with contextlib.suppress(TypeError, ValueError):
+                    cache_write_rate = float(raw_write) * _PER_TOKEN_TO_PER_1K
             context_window = int(entry.get("context_length") or 0)
 
             existing = self.rows.get(model_id)
@@ -358,6 +454,16 @@ class PricingCatalog:
                     cost_per_1k_output=cost_out,
                     reliability=existing.reliability,
                     context_window=context_window or existing.context_window,
+                    cost_per_1k_cache_read=(
+                        cache_read_rate
+                        if cache_read_rate is not None
+                        else existing.cost_per_1k_cache_read
+                    ),
+                    cost_per_1k_cache_write=(
+                        cache_write_rate
+                        if cache_write_rate is not None
+                        else existing.cost_per_1k_cache_write
+                    ),
                     source="merged",
                 )
             else:
@@ -372,6 +478,8 @@ class PricingCatalog:
                     cost_per_1k_output=cost_out,
                     reliability=0.99,
                     context_window=context_window,
+                    cost_per_1k_cache_read=cache_read_rate,
+                    cost_per_1k_cache_write=cache_write_rate,
                     source="openrouter",
                 )
             updated += 1
@@ -492,6 +600,18 @@ class PricingCatalog:
                     except (TypeError, ValueError):
                         continue
 
+                # Cache rates (per-million in the source). models.dev
+                # exposes ``cache_read`` and ``cache_write`` on the
+                # ``cost`` block when the vendor publishes them.
+                cache_read_rate: float | None = None
+                cache_write_rate: float | None = None
+                raw_read = cost.get("cache_read")
+                if isinstance(raw_read, (int, float)) and raw_read != 0:
+                    cache_read_rate = float(raw_read) * per_m_to_per_1k
+                raw_write = cost.get("cache_write")
+                if isinstance(raw_write, (int, float)) and raw_write != 0:
+                    cache_write_rate = float(raw_write) * per_m_to_per_1k
+
                 limit = model_entry.get("limit") or {}
                 context_window = int(limit.get("context") or 0)
 
@@ -507,6 +627,16 @@ class PricingCatalog:
                         cost_per_1k_output=cost_out,
                         reliability=existing.reliability,
                         context_window=context_window or existing.context_window,
+                        cost_per_1k_cache_read=(
+                            cache_read_rate
+                            if cache_read_rate is not None
+                            else existing.cost_per_1k_cache_read
+                        ),
+                        cost_per_1k_cache_write=(
+                            cache_write_rate
+                            if cache_write_rate is not None
+                            else existing.cost_per_1k_cache_write
+                        ),
                         source="merged",
                     )
                 else:
@@ -522,6 +652,8 @@ class PricingCatalog:
                         cost_per_1k_output=cost_out,
                         reliability=0.99,
                         context_window=context_window,
+                        cost_per_1k_cache_read=cache_read_rate,
+                        cost_per_1k_cache_write=cache_write_rate,
                         source="models_dev",
                     )
                 updated += 1
@@ -560,6 +692,8 @@ def default_seed_rows() -> dict[str, PricingRow]:
         latency_p95_ms: int,
         reliability: float = 0.998,
         context_window: int = 0,
+        cost_cache_read: float | None = None,
+        cost_cache_write: float | None = None,
     ) -> None:
         rows[model_id] = PricingRow(
             model_id=model_id,
@@ -569,33 +703,64 @@ def default_seed_rows() -> dict[str, PricingRow]:
             cost_per_1k_output=cost_out,
             reliability=reliability,
             context_window=context_window,
+            cost_per_1k_cache_read=cost_cache_read,
+            cost_per_1k_cache_write=cost_cache_write,
             source="static",
         )
 
     # ── OpenAI (per api.openai.com pricing page) ────────────────────
-    add("gpt-5", cost_in=0.00125, cost_out=0.010, quality=0.95, latency_p95_ms=800)
-    add("gpt-5-mini", cost_in=0.00025, cost_out=0.002, quality=0.90, latency_p95_ms=400)
-    add("gpt-5-nano", cost_in=0.00005, cost_out=0.0004, quality=0.85, latency_p95_ms=250)
-    add("gpt-4o", cost_in=0.0025, cost_out=0.010, quality=0.93, latency_p95_ms=700)
-    add("gpt-4o-mini", cost_in=0.00015, cost_out=0.0006, quality=0.85, latency_p95_ms=350)
-    add("o1", cost_in=0.015, cost_out=0.060, quality=0.95, latency_p95_ms=5000)
-    add("o1-mini", cost_in=0.003, cost_out=0.012, quality=0.88, latency_p95_ms=2000)
-    add("o3", cost_in=0.010, cost_out=0.040, quality=0.96, latency_p95_ms=8000)
-    add("o3-mini", cost_in=0.0011, cost_out=0.0044, quality=0.90, latency_p95_ms=3000)
+    # Prompt-cache read discount is 50% of input price on every model.
+    # GPT-5+ added a write surcharge equal to the base input rate;
+    # GPT-4o / o-series caches have no separate write fee.
+    add("gpt-5", cost_in=0.00125, cost_out=0.010, quality=0.95, latency_p95_ms=800,
+        cost_cache_read=0.000625, cost_cache_write=0.00125)
+    add("gpt-5-mini", cost_in=0.00025, cost_out=0.002, quality=0.90, latency_p95_ms=400,
+        cost_cache_read=0.000125, cost_cache_write=0.00025)
+    add("gpt-5-nano", cost_in=0.00005, cost_out=0.0004, quality=0.85, latency_p95_ms=250,
+        cost_cache_read=0.000025, cost_cache_write=0.00005)
+    add("gpt-4o", cost_in=0.0025, cost_out=0.010, quality=0.93, latency_p95_ms=700,
+        cost_cache_read=0.00125)
+    add("gpt-4o-mini", cost_in=0.00015, cost_out=0.0006, quality=0.85, latency_p95_ms=350,
+        cost_cache_read=0.000075)
+    add("o1", cost_in=0.015, cost_out=0.060, quality=0.95, latency_p95_ms=5000,
+        cost_cache_read=0.0075)
+    add("o1-mini", cost_in=0.003, cost_out=0.012, quality=0.88, latency_p95_ms=2000,
+        cost_cache_read=0.0015)
+    add("o3", cost_in=0.010, cost_out=0.040, quality=0.96, latency_p95_ms=8000,
+        cost_cache_read=0.005)
+    add("o3-mini", cost_in=0.0011, cost_out=0.0044, quality=0.90, latency_p95_ms=3000,
+        cost_cache_read=0.00055)
 
     # ── Anthropic (per api.anthropic.com pricing page) ──────────────
-    add("claude-sonnet-4-6", cost_in=0.003, cost_out=0.015, quality=0.94, latency_p95_ms=900)
-    add("claude-sonnet-4", cost_in=0.003, cost_out=0.015, quality=0.94, latency_p95_ms=900)
-    add("claude-haiku-4-5", cost_in=0.001, cost_out=0.005, quality=0.88, latency_p95_ms=350)
-    add("claude-haiku", cost_in=0.001, cost_out=0.005, quality=0.87, latency_p95_ms=250)
-    add("claude-opus-4-5", cost_in=0.015, cost_out=0.075, quality=0.97, latency_p95_ms=1500)
-    add("claude-opus-4", cost_in=0.015, cost_out=0.075, quality=0.96, latency_p95_ms=1500)
+    # Anthropic prompt cache: cache_read is 10% of input, cache_write
+    # is base input * 1.25 (5-min cache). The 1-hour cache is the same
+    # write rate but 2x more expensive to read (still 10% of base input
+    # actually, just a longer TTL window).
+    add("claude-sonnet-4-6", cost_in=0.003, cost_out=0.015, quality=0.94, latency_p95_ms=900,
+        cost_cache_read=0.0003, cost_cache_write=0.00375)
+    add("claude-sonnet-4", cost_in=0.003, cost_out=0.015, quality=0.94, latency_p95_ms=900,
+        cost_cache_read=0.0003, cost_cache_write=0.00375)
+    add("claude-haiku-4-5", cost_in=0.001, cost_out=0.005, quality=0.88, latency_p95_ms=350,
+        cost_cache_read=0.0001, cost_cache_write=0.00125)
+    add("claude-haiku", cost_in=0.001, cost_out=0.005, quality=0.87, latency_p95_ms=250,
+        cost_cache_read=0.0001, cost_cache_write=0.00125)
+    add("claude-opus-4-5", cost_in=0.015, cost_out=0.075, quality=0.97, latency_p95_ms=1500,
+        cost_cache_read=0.0015, cost_cache_write=0.01875)
+    add("claude-opus-4", cost_in=0.015, cost_out=0.075, quality=0.96, latency_p95_ms=1500,
+        cost_cache_read=0.0015, cost_cache_write=0.01875)
 
     # ── Google Gemini (per ai.google.dev pricing page) ──────────────
-    add("gemini-3-pro", cost_in=0.00125, cost_out=0.010, quality=0.95, latency_p95_ms=1100)
-    add("gemini-3-flash", cost_in=0.0001, cost_out=0.0004, quality=0.88, latency_p95_ms=450)
-    add("gemini-2.5-pro", cost_in=0.00125, cost_out=0.010, quality=0.93, latency_p95_ms=1200)
-    add("gemini-2.5-flash", cost_in=0.000075, cost_out=0.0003, quality=0.86, latency_p95_ms=500)
+    # Gemini implicit cache: hits are FREE for prompts under the
+    # implicit-cache threshold (~12k tokens for 2.5, ~32k for 3.x).
+    # Above that the cache hit is billed at base input rate.
+    add("gemini-3-pro", cost_in=0.00125, cost_out=0.010, quality=0.95, latency_p95_ms=1100,
+        cost_cache_read=0.0)
+    add("gemini-3-flash", cost_in=0.0001, cost_out=0.0004, quality=0.88, latency_p95_ms=450,
+        cost_cache_read=0.0)
+    add("gemini-2.5-pro", cost_in=0.00125, cost_out=0.010, quality=0.93, latency_p95_ms=1200,
+        cost_cache_read=0.0)
+    add("gemini-2.5-flash", cost_in=0.000075, cost_out=0.0003, quality=0.86, latency_p95_ms=500,
+        cost_cache_read=0.0)
 
     # ── OpenRouter placeholders (live refresh overwrites these) ─────
     # OpenRouter re-labels native models with vendor prefixes - the

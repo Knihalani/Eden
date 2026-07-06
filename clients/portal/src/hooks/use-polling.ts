@@ -133,6 +133,15 @@ export function usePolling(
     let currentDelay = intervalMs;
     let authFailed = false;
     let paused = false;
+    // Jul 2026 fix: track the moment of the last rate-limit response
+    // so the next tick waits for the cooldown to elapse. Without this
+    // guard a single 429 immediately re-fired on the next interval
+    // tick (or on every state-driven re-arm of the effect) and tripped
+    // the upstream's limiter again. The poll state machine used to
+    // only know about auth errors and "generic failures"; 429 is its
+    // own failure class because the right action is *wait*, not
+    // *escalate or bail*.
+    let rateLimitedUntilMs = 0;
 
     const isAuthError = (err: unknown): boolean => {
       // Cheap shape check — the caller's fetchApi throws
@@ -143,8 +152,26 @@ export function usePolling(
       return /401|403|not\s*authenticated|session\s*expired|unauthorized/i.test(msg);
     };
 
+    const isRateLimitError = (err: unknown): boolean => {
+      const msg = err instanceof Error ? err.message : String(err);
+      return /429|rate\s*limit|too\s*many\s*requests/i.test(msg);
+    };
+
     const tick = async () => {
       if (paused || authFailed) return;
+      // Honour a still-active rate-limit cooldown before doing
+      // anything. The original code would reschedule the next tick
+      // on every effect re-arm (e.g. org.length flipped from 1 → 0
+      // → 1) and immediately fire a new request to an upstream that
+      // had just told us to back off — the exact loop the user
+      // reported ("auth requests are being spammed, retry behaviour
+      // has no backoff or delay like it should"). Re-arm into the
+      // pause window so we wait the rest of the cooldown.
+      const now = Date.now();
+      if (rateLimitedUntilMs > now) {
+        schedule(rateLimitedUntilMs - now);
+        return;
+      }
       try {
         await fetchRef.current?.();
         currentDelay = intervalMs; // reset backoff on success
@@ -157,6 +184,20 @@ export function usePolling(
           onAuthError?.(err);
           onAuthErrorRef.current?.(err);
           stop();
+          return;
+        }
+        if (isRateLimitError(err)) {
+          // Rate-limited. Pause the poll for the upstream's
+          // advertised cooldown (or a safe 30s default if it didn't
+          // send one) and re-schedule. Exponential backoff on top so
+          // a sustained throttle doesn't hammer the limiter again on
+          // the very next tick. The hook's calling code can surface
+          // a banner via the error it catches in `fetch`; this loop
+          // just keeps the request cadence polite.
+          const fallbackMs = 30_000;
+          rateLimitedUntilMs = Math.max(rateLimitedUntilMs, now + fallbackMs);
+          currentDelay = Math.min(currentDelay * 2, maxBackoffMs);
+          schedule(Math.max(currentDelay, fallbackMs));
           return;
         }
         // Exponential backoff with cap, then full-jitter. Doubles on

@@ -93,6 +93,12 @@ class CostResolution:
     cached: bool
     as_of: datetime
     notes: str | None = None
+    cost_per_1k_cache_read: Decimal | None = None
+    """USD per 1K cached-input tokens. ``None`` means no published
+    discount - estimator falls back to :attr:`cost_per_1k_input`."""
+    cost_per_1k_cache_write: Decimal | None = None
+    """USD per 1K cache-write tokens. ``None`` means no separate
+    write fee - estimator falls back to :attr:`cost_per_1k_input`."""
 
     @property
     def cost_per_1k_blended(self) -> Decimal:
@@ -100,14 +106,56 @@ class CostResolution:
         return (self.cost_per_1k_input + self.cost_per_1k_output) / 2
 
     def estimate(self, input_tokens: int, output_tokens: int) -> Decimal:
-        """Compute the dollar cost for a request.
+        """Compute the dollar cost for a request, ignoring cache.
 
-        ``Decimal`` throughout so we never lose precision on
-        rounding - the input rate is in USD per 1K tokens and we
-        multiply by tokens / 1000, which can produce ugly floats
-        if done in IEEE-754.
+        Use :meth:`estimate_with_cache` when the upstream's usage
+        report carries ``cache_read_tokens`` / ``cache_write_tokens``
+        (Anthropic, OpenAI prompt cache, Gemini implicit cache).
+        Billing accuracy is materially better with cache-aware
+        estimates - Anthropic cache reads are 10% of input,
+        OpenAI cache reads are 50% of input, Gemini hits are free.
         """
         in_cost = (Decimal(input_tokens) / Decimal(1000)) * self.cost_per_1k_input
+        out_cost = (Decimal(output_tokens) / Decimal(1000)) * self.cost_per_1k_output
+        return in_cost + out_cost
+
+    def estimate_with_cache(
+        self,
+        *,
+        input_tokens: int,
+        output_tokens: int,
+        cache_read_tokens: int = 0,
+        cache_write_tokens: int = 0,
+    ) -> Decimal:
+        """Cache-aware cost estimate, in USD.
+
+        Splits ``input_tokens`` into three buckets - cache_read,
+        cache_write, and "fresh" - and applies the right rate to
+        each. ``output_tokens`` are billed at the output rate.
+
+        Decimal throughout so we never lose precision on rounding.
+        Same accuracy as :meth:`eden.llmops.pricing.PricingRow.cost_for_request`
+        but Decimal-typed for billing.
+        """
+        read_rate = (
+            self.cost_per_1k_cache_read
+            if self.cost_per_1k_cache_read is not None
+            else self.cost_per_1k_input
+        )
+        write_rate = (
+            self.cost_per_1k_cache_write
+            if self.cost_per_1k_cache_write is not None
+            else self.cost_per_1k_input
+        )
+        fresh = max(
+            Decimal(0),
+            Decimal(input_tokens) - Decimal(cache_read_tokens) - Decimal(cache_write_tokens),
+        )
+        in_cost = (
+            (Decimal(cache_read_tokens) / Decimal(1000)) * read_rate
+            + (Decimal(cache_write_tokens) / Decimal(1000)) * write_rate
+            + (fresh / Decimal(1000)) * self.cost_per_1k_input
+        )
         out_cost = (Decimal(output_tokens) / Decimal(1000)) * self.cost_per_1k_output
         return in_cost + out_cost
 
@@ -303,6 +351,15 @@ class CostResolver:
                 src = "openrouter"
             else:
                 src = "static"
+            # Carry cache-discount rates through so callers can
+            # use estimate_with_cache() for accurate billing on
+            # Anthropic / OpenAI / Gemini traffic.
+            cache_read: Decimal | None = None
+            if row.cost_per_1k_cache_read is not None:
+                cache_read = Decimal(str(row.cost_per_1k_cache_read))
+            cache_write: Decimal | None = None
+            if row.cost_per_1k_cache_write is not None:
+                cache_write = Decimal(str(row.cost_per_1k_cache_write))
             return CostResolution(
                 cost_per_1k_input=Decimal(str(row.cost_per_1k_input)),
                 cost_per_1k_output=Decimal(str(row.cost_per_1k_output)),
@@ -314,6 +371,8 @@ class CostResolver:
                 if self.catalog.last_refresh
                 else datetime.now(UTC),
                 notes=f"catalog:{row.source}",
+                cost_per_1k_cache_read=cache_read,
+                cost_per_1k_cache_write=cache_write,
             )
         # Tier 4: unknown. Returning Decimal("0") instead of None
         # makes downstream cost arithmetic safe; the ``source``
@@ -350,8 +409,9 @@ class CostResolver:
                 return None
             row = await client.fetchrow(
                 """
-                SELECT cost_per_1k_input, cost_per_1k_output, currency,
-                       source, effective_from, notes
+                SELECT cost_per_1k_input, cost_per_1k_output,
+                       cost_per_1k_cache_read, cost_per_1k_cache_write,
+                       currency, source, effective_from, notes
                 FROM org_cost_overrides
                 WHERE org_id = $1
                   AND provider IN ($2, '*')
@@ -372,6 +432,16 @@ class CostResolver:
         if row is None:
             return None
 
+        # Optional cache-discount columns. Older override rows
+        # predating the cache fields will return None; the cost
+        # engine then falls back to the catalog rates for cache.
+        cache_read: Decimal | None = None
+        if row.get("cost_per_1k_cache_read") is not None:
+            cache_read = Decimal(str(row["cost_per_1k_cache_read"]))
+        cache_write: Decimal | None = None
+        if row.get("cost_per_1k_cache_write") is not None:
+            cache_write = Decimal(str(row["cost_per_1k_cache_write"]))
+
         return CostResolution(
             cost_per_1k_input=Decimal(str(row["cost_per_1k_input"])),
             cost_per_1k_output=Decimal(str(row["cost_per_1k_output"])),
@@ -381,6 +451,8 @@ class CostResolver:
             cached=False,
             as_of=row["effective_from"],
             notes=f"override:{row.get('source') or 'manual'} | {row.get('notes') or ''}".rstrip(" |"),
+            cost_per_1k_cache_read=cache_read,
+            cost_per_1k_cache_write=cache_write,
         )
 
 

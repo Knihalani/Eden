@@ -9,11 +9,13 @@ import { routing } from "@/i18n/routing";
 //
 // /api/health is a public, unauthenticated health probe so uptime
 // monitors and the auth-card status badge can call it without
-// needing a Clerk session. /api/auth/me and /api/auth/refresh are
-// the proxy's own Clerk-aware endpoints — they accept ANY token
-// (Clerk JWT, Eden cookie, anonymous) and decide themselves, so
-// they must NOT be gated by Clerk middleware. /api/auth/login + /signup
-// are the legacy Eden cookie flow, also unauthenticated.
+// needing a Clerk session. The catch-all proxy at
+// ``/api/proxy/(.*)`` is the canonical auth-aware surface — it
+// forwards ``Authorization: Bearer`` + cookies to FastAPI and is
+// the only auth-related route the client calls. Every dedicated
+// ``/api/auth/*`` route was removed in F37 (July 2026) because
+// the catch-all proxy covers them all with stricter Bearer +
+// cookie handling.
 const isPublicRoute = createRouteMatcher([
   "/",
   "/login(.*)",
@@ -37,12 +39,6 @@ const isPublicRoute = createRouteMatcher([
   "/api/proxy/(.*)",  // explicit / after proxy so the matcher sees
                         // segments, not just a trailing string
   "/api/health",
-  "/api/auth/me",
-  "/api/auth/refresh",
-  "/api/auth/me/debug",
-  "/api/auth/login",
-  "/api/auth/signup",
-  "/api/auth/logout",
   // ai-insights routes are pass-through proxies that forward the
   // request cookie + Clerk Bearer to FastAPI, which does its own
   // auth (returns 401 on bad/missing token). Letting Clerk's

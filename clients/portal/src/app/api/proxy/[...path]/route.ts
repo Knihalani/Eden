@@ -18,7 +18,7 @@
  */
 import { type NextRequest, NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
-import { forwardToBackend, proxyError } from "@/lib/proxy";
+import { forwardToBackend, proxyError, retryAfterMs, RETRY_AFTER_DEFAULT_MS } from "@/lib/proxy";
 
 const FORWARDED_REQUEST_HEADERS = [
   "accept",
@@ -141,18 +141,61 @@ async function handle(
     if (accept.includes("text/event-stream")) {
       const FASTAPI_URL =
         process.env.API_INTERNAL_URL || "http://localhost:8000";
-      const upstream = await fetch(
-        `${FASTAPI_URL}${upstreamPath}${search}`,
-        {
-          method: request.method as "GET" | "POST" | "PUT" | "PATCH" | "DELETE",
-          headers,
-          body: body as BodyInit | null | undefined,
-        },
-      );
+
+      // F36 fix (July 2026). The previous SSE branch waited for
+      // the upstream response and then either piped bytes through
+      // or 502'd on a non-2xx. That was correct for "happy path",
+      // but during a throttle window the upstream returns
+      // ``429 Too Many Requests`` BEFORE the stream opens — the
+      // client ``EventSource`` would then re-dial immediately and
+      // the gateway would 429 every time. The same
+      // ``Retry-After`` + 5 s default policy the regular fetch
+      // path uses (F31/F32) now also applies to the SSE
+      // handshake: wait the cooldown, dial the upstream once more,
+      // and only fall through to the streaming pipe if the second
+      // attempt is 2xx. Once the body has started flowing we
+      // never retry — tearing down a live SSE would corrupt the
+      // consumer.
+      const dialUpstream = async () => {
+        return fetch(
+          `${FASTAPI_URL}${upstreamPath}${search}`,
+          {
+            method: request.method as "GET" | "POST" | "PUT" | "PATCH" | "DELETE",
+            headers,
+            body: body as BodyInit | null | undefined,
+          },
+        );
+      };
+
+      let upstream = await dialUpstream();
+      if (upstream.status === 429) {
+        const wait = retryAfterMs(upstream) ?? RETRY_AFTER_DEFAULT_MS;
+        await new Promise((r) => setTimeout(r, wait));
+        upstream = await dialUpstream();
+      }
+
       if (!upstream.ok || !upstream.body) {
-        return new Response("Upstream stream error", {
-          status: upstream.status || 502,
-        });
+        // Hard failure after the single permitted handshake
+        // retry. Surface the upstream status (429, 502, 503,
+        // …) verbatim with a small JSON envelope so client-side
+        // SSE consumers see a structured error instead of a bare
+        // text body. ``EventSource`` will only auto-reconnect on
+        // a status we explicitly opt out of by setting
+        // ``readyState`` ourselves — the consumer-side reconnect
+        // policy is owned by the SSE hook, not the proxy.
+        return new Response(
+          JSON.stringify({
+            detail: "Upstream stream error",
+            upstream_status: upstream.status,
+          }),
+          {
+            status: upstream.status || 502,
+            headers: {
+              "Content-Type": "application/json",
+              "Cache-Control": "no-store",
+            },
+          },
+        );
       }
       // Pipe upstream.body through unchanged. No buffering, no
       // transform — the SSE protocol is byte-stable and any

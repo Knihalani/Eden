@@ -103,7 +103,7 @@ export function IntelligenceGrid() {
 
   return (
     <section>
-      <div className="flex items-center justify-between mb-3 sm:mb-4">
+      <div className="flex items-center justify-between mb-4 sm:mb-6">
         <div>
           <h2 className="text-base sm:text-lg font-semibold text-[var(--text-primary)] tracking-tight">
             Intelligence at a glance
@@ -113,16 +113,99 @@ export function IntelligenceGrid() {
           </p>
         </div>
       </div>
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4">
-        {CARDS.map((card) => {
-          const raw = values[card.key];
+      <div className="space-y-4 sm:space-y-6">
+        {CATEGORIES.map((category) => (
+          <CategoryRow
+            key={category.key}
+            category={category}
+            values={values}
+            loading={loading}
+          />
+        ))}
+      </div>
+    </section>
+  );
+}
+
+/**
+ * Renders one category as: 1 hero card + N micro cards in a grid.
+ * ui-audit 2026-07-06 M2: breaks the 17-uniform-tile template by
+ * varying tile size per intent — hero for actionable counts,
+ * micro for secondary counts.
+ */
+function CategoryRow({
+  category,
+  values,
+  loading,
+}: {
+  category: Category;
+  values: Record<string, unknown>;
+  loading: boolean;
+}) {
+  const cardMap = new Map(CARDS.map((c) => [c.key, c]));
+  return (
+    <div>
+      {/* Category eyebrow — terminal micro-label pattern */}
+      <div className="flex items-baseline gap-2 mb-2">
+        <span className="text-[10px] font-mono uppercase tracking-[0.18em] text-[var(--accent)]">
+          {category.label}
+        </span>
+        <span className="text-[10px] text-[var(--text-muted)] truncate">
+          {category.description}
+        </span>
+      </div>
+
+      {/* Hero tile: 2/3 width on desktop, full width on mobile */}
+      {(() => {
+        const hero = cardMap.get(category.heroKey);
+        if (!hero) return null;
+        const raw = values[hero.key];
+        const ready = !loading;
+        const value = ready ? hero.pick(raw) : null;
+        const subtitle = ready ? hero.pickSubtitle?.(raw) ?? null : null;
+        const isEmpty = ready && (value === null || value === undefined);
+        return (
+          <div className="mb-3">
+            <StatCard
+              title={hero.title}
+              value={value ?? "—"}
+              subtitle={subtitle ?? undefined}
+              icon={hero.icon}
+              iconClassName={hero.iconClassName}
+              loading={loading}
+              href={hero.href}
+              empty={isEmpty}
+              emptyText={hero.emptyText}
+              trend={ready ? hero.trend ?? null : null}
+              trendValue={hero.trendValue}
+              trendIsGood={hero.trendIsGood}
+              // ui-audit M2: hero gets visual weight via an opaque
+              // elevated surface + thicker border + top accent line.
+              // No gradients (anti-pattern) and no glow rings
+              // (anti-pattern). The StatCard base already renders a
+              // border + bg; we override to --bg-secondary (one
+              // step deeper than the default --bg-primary) and add
+              // a 2px top accent that reads as "featured" without
+              // looking decorative.
+              className="bg-[var(--bg-secondary)] border-[var(--border-strong)] border-t-2 border-t-[var(--accent)] shadow-md"
+            />
+          </div>
+        );
+      })()}
+
+      {/* Micro tiles: 2-3 col grid */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2 sm:gap-3">
+        {category.microKeys.map((key) => {
+          const card = cardMap.get(key);
+          if (!card) return null;
+          const raw = values[key];
           const ready = !loading;
           const value = ready ? card.pick(raw) : null;
           const subtitle = ready ? card.pickSubtitle?.(raw) ?? null : null;
           const isEmpty = ready && (value === null || value === undefined);
           return (
             <StatCard
-              key={card.key}
+              key={key}
               title={card.title}
               value={value ?? "—"}
               subtitle={subtitle ?? undefined}
@@ -139,7 +222,7 @@ export function IntelligenceGrid() {
           );
         })}
       </div>
-    </section>
+    </div>
   );
 }
 
@@ -478,5 +561,56 @@ const CARDS: CardSpec[] = [
     },
     pickSubtitle: () => "decision replays",
     emptyText: "No replay sessions",
+  },
+];
+
+// ── Categories — ui-audit 2026-07-06 M2 ─────────────────────────────
+//
+// Group CARDS into intent-based categories. Each category has ONE
+// hero tile (the most actionable signal) and several micro tiles
+// (secondary counts). The grid renders one row per category with
+// a hero + micro sub-grid, breaking the 17-uniform-tile template
+// that the audit flagged as templated.
+//
+// To re-categorize: change the `category` field on a CardSpec.
+// Cards not listed in any category render in a fallback row at
+// the end (defensive — every card should belong somewhere).
+
+type Category = {
+  key: string;
+  label: string;
+  description: string;
+  heroKey: string;
+  microKeys: string[];
+};
+
+const CATEGORIES: Category[] = [
+  {
+    key: "operate",
+    label: "Operate",
+    description: "Live system health — incidents, risk, drift",
+    heroKey: "incidents",
+    microKeys: ["risk", "drift", "replay_sessions"],
+  },
+  {
+    key: "quality",
+    label: "Quality",
+    description: "Outcomes + ROI + agent performance",
+    heroKey: "roi",
+    microKeys: ["user_satisfaction", "agents_fleet", "tools", "eval_versions"],
+  },
+  {
+    key: "knowledge",
+    label: "Knowledge",
+    description: "Retrieval coverage + memory hygiene",
+    heroKey: "retrieval_gaps",
+    microKeys: ["memory_reaver", "custom_metrics"],
+  },
+  {
+    key: "optimize",
+    label: "Optimize",
+    description: "Cost, APM sampling, experiments",
+    heroKey: "cost_efficiency",
+    microKeys: ["apm_sampling", "experiments", "guardrails", "governance", "closed_loop", "recommendations"],
   },
 ];

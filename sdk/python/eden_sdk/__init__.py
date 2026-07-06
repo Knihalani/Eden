@@ -33,6 +33,15 @@ from eden_sdk.client import EdenClient, get_default_client
 from eden_sdk.config import EdenConfig, configure, get_config, reset_config
 from eden_sdk.filters import FilterConfig, PIIConfig
 from eden_sdk.gateway_session import chat_completion, openai_client
+from eden_sdk.model_advisor import (
+    ModelAdvisor,
+    ModelAdvisorError,
+    ModelComparison,
+    ModelSpec,
+    Recommendation,
+    RunnerUp,
+    SwitchProjection,
+)
 from eden_sdk.trace import (
     Span,
     TraceContext,
@@ -67,6 +76,14 @@ __all__ = [
     # High-level gateway helpers
     "openai_client",
     "chat_completion",
+    # Model comparison + recommendation
+    "ModelAdvisor",
+    "ModelAdvisorError",
+    "ModelComparison",
+    "ModelSpec",
+    "Recommendation",
+    "RunnerUp",
+    "SwitchProjection",
 ]
 
 __version__ = "0.1.0"

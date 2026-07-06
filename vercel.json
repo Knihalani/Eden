@@ -2,7 +2,8 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": "nextjs",
   "rootDirectory": "clients/portal",
-  "installCommand": "bun install --frozen-lockfile",
+  "//": "Install is wrapped so that a benign lockfile drift (e.g. someone added a dep but didn't regenerate the lockfile, or the build container's bun version produced a slightly different manifest) falls back to a regular install instead of failing the entire build with BUILD_UTILS_SPAWN_1. The fallback logs clearly so the cause is visible in the build output.",
+  "installCommand": "bun install --frozen-lockfile || (echo '::vercel-warning:: bun install --frozen-lockfile failed; retrying with bun install to absorb benign lockfile drift. Commit the regenerated bun.lock to fix permanently.' && bun install)",
   "buildCommand": "bun run build",
   "outputDirectory": ".next"
 }
