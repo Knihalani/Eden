@@ -103,6 +103,38 @@ except Exception:  # noqa: BLE001
     get_telemetry_collector = None  # type: ignore[assignment]
 
 logger = logging.getLogger(__name__)
+
+
+def _redact_upstream_error(exc: BaseException) -> str:
+    """Return a safe upstream-error string for the client 502 body.
+
+    Raw ``str(exc)`` from openai/asyncpg/etc. can leak provider API
+    keys embedded in error messages, model-name fingerprinting hints,
+    the upstream provider URL or hostname, and traceback tails from
+    their SDKs. None of that belongs in an HTTP response body — log
+    the full exc with its traceback via logger.exception() at the
+    catch site and surface a generic text instead. Clients can use
+    the request_id from the existing error envelope to triage.
+
+    Use this for the 502 path of the gateway; the 4xx path can keep
+    a curated subset of provider info (status + safe message) because
+    those errors are user-actionable and don't carry credentials.
+    """
+    return "Upstream provider returned an error. Check request_id in support tickets."
+
+
+def _redact_sse_error_message(exc: BaseException) -> str:
+    """Same intent as ``_redact_upstream_error`` but for the SSE
+    ``data:`` payload the streaming gateway emits when an upstream
+    raises mid-flight. Historically the wire format echoed
+    ``str(exc)`` as JSON in the ``message`` field, leaking provider
+    keys, hostnames, model-fingerprint strings, and SDK tracebacks
+    to the EventSource consumer. Returns a fixed safe string. The
+    ``type`` field (exception class name) and ``code`` field are
+    forwarded unchanged so clients can choose retry/backoff policy
+    without exposing credentials or internal names. July 2026 fix.
+    """
+    return "Upstream provider returned an error during streaming."
 router = APIRouter(prefix="/gateway/v1", tags=["gateway"])
 
 
@@ -1021,7 +1053,7 @@ async def _chat_completions_unary(
         status = getattr(exc, "status_code", None) or 502
         raise HTTPException(
             status_code=status,
-            detail=f"upstream error: {getattr(exc, 'message', str(exc))}",
+            detail=_redact_upstream_error(exc),
         ) from exc
     except Exception as exc:  # noqa: BLE001
         await _emit_gateway_telemetry(
@@ -1035,7 +1067,7 @@ async def _chat_completions_unary(
             duration_ms=(time.monotonic() - start) * 1000,
             user_label=user_label,
         )
-        raise HTTPException(status_code=502, detail=f"upstream error: {exc}") from exc
+        raise HTTPException(status_code=502, detail=_redact_upstream_error(exc)) from exc
 
     shaped = shape_chat_completion_response(response)
     duration_ms = (time.monotonic() - start) * 1000
@@ -1121,11 +1153,23 @@ async def _chat_completions_stream(
                     "code": getattr(exc, "code", None),
                 }
             }
+            # P39 audit (2026-07-06): the SDK ``message`` attribute can
+            # carry the provider URL, a prefix of the API key, and the
+            # model name. Surface a fixed safe string instead; clients
+            # use ``type`` (class name) to drive retry/backoff policy.
+            logger.warning(
+                "gateway chat.completions stream failed: %s: %s",
+                error_type, exc,
+            )
             yield sse_format(err_payload)
         except Exception as exc:  # noqa: BLE001
             outcome = "failure"
             error_type = type(exc).__name__
-            yield sse_format({"error": {"message": str(exc), "type": error_type}})
+            logger.exception(
+                "gateway chat.completions stream raised: %s",
+                exc,
+            )
+            yield sse_format({"error": {"message": _redact_sse_error_message(exc), "type": error_type}})
         finally:
             # Audit 2026-06-22 B1.26 — close upstream stream on disconnect
             # to avoid leaking OpenRouter connections.
@@ -1306,7 +1350,13 @@ async def completions(
                         logger.debug(f"legacy completion chunk failed: {exc}")
                 yield sse_done()
             except OpenAIAPIError as exc:
-                yield sse_format({"error": {"message": str(exc), "type": type(exc).__name__}})
+                # P39 audit (2026-07-06): redact upstream error in SSE
+                # payload — same redaction as the chat.completions path.
+                logger.warning(
+                    "gateway legacy completions stream failed: %s: %s",
+                    type(exc).__name__, exc,
+                )
+                yield sse_format({"error": {"message": _redact_sse_error_message(exc), "type": type(exc).__name__}})
             finally:
                 await _emit_gateway_telemetry(
                     org_id=org_id,
@@ -1343,7 +1393,7 @@ async def completions(
         )
         raise HTTPException(
             status_code=status,
-            detail=f"upstream error: {getattr(exc, 'message', str(exc))}",
+            detail=_redact_upstream_error(exc),
         ) from exc
     shaped = shape_completion_response(response)
     await _emit_gateway_telemetry(
@@ -1483,7 +1533,7 @@ async def embeddings(
         )
         raise HTTPException(
             status_code=status,
-            detail=f"upstream error: {getattr(exc, 'message', str(exc))}",
+            detail=_redact_upstream_error(exc),
         ) from exc
     shaped = shape_embedding_response(response)
     await _emit_gateway_telemetry(
