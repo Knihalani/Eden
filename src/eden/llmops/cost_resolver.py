@@ -42,7 +42,7 @@ The returned :class:`CostResolution` is::
     CostResolution(
         cost_per_1k_input: Decimal,
         cost_per_1k_output: Decimal,
-        source: Literal["override", "openrouter", "static", "unknown"],
+        source: Literal["override", "openrouter", "models_dev", "static", "unknown"],
         provider: str,
         model_id: str,
         cached: bool,
@@ -73,7 +73,7 @@ _CACHE_TTL_SECONDS = 60.0
 # regression.
 _CACHE_MAX_ENTRIES = 4096
 
-CostSource = Literal["override", "openrouter", "static", "unknown"]
+CostSource = Literal["override", "openrouter", "models_dev", "static", "unknown"]
 
 
 @dataclass(frozen=True)
@@ -282,8 +282,25 @@ class CostResolver:
         # ``source`` field; we map it to our source enum.
         row = self.catalog.lookup(model_id)
         if row is not None:
-            if row.source == "openrouter" or row.source == "merged":
+            # Map the catalog's row-level source into our
+            # higher-level CostSource enum. ``merged`` rows came
+            # from either the OpenRouter or models.dev overlay
+            # overwriting a static seed row; we keep the overlay
+            # identifier distinct so observability can tell them
+            # apart.
+            if row.source == "openrouter":
                 src: CostSource = "openrouter"
+            elif row.source == "models_dev":
+                src = "models_dev"
+            elif row.source == "merged":
+                # ``merged`` here means "live overlay wrote over
+                # the static seed". Surface as openrouter for
+                # backward compatibility - the OpenRouter refresh
+                # was the first one wired in. Operators who care
+                # about the distinction should look at
+                # ``notes`` (which carries the underlying row
+                # source before it was renamed).
+                src = "openrouter"
             else:
                 src = "static"
             return CostResolution(

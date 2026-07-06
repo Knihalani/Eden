@@ -158,16 +158,20 @@ def get_ai_gateway() -> AIGateway:
     if _gateway is None:
         _gateway = AIGateway()
         # Schedule a background refresh; safe to fire-and-forget
-        # because ``refresh_pricing`` deduplicates concurrent calls
+        # because both refresh helpers deduplicate concurrent calls
         # via the catalog's in-flight task. We swallow any exception
-        # at the edge (logging happens inside ``refresh_pricing``).
+        # at the edge (logging happens inside the refresh methods).
+        # Two parallel fetches - models.dev for native vendor pricing,
+        # OpenRouter for the router-specific markup. Each has its
+        # own TTL so they don't fight over the inflight slot.
         try:
             import asyncio as _asyncio
             _loop = _asyncio.get_event_loop()
             if _loop.is_running():
+                _asyncio.create_task(_gateway.refresh_pricing_from_models_dev())
                 _asyncio.create_task(_gateway.refresh_pricing())
             else:
-                # Synchronous startup path (rare): just skip — the
+                # Synchronous startup path (rare): just skip - the
                 # next request will trigger it via ``refresh_pricing``.
                 pass
         except RuntimeError:

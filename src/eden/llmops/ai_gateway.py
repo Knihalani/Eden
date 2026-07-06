@@ -513,6 +513,39 @@ class AIGateway:
             api_key=api_key, base_url=base_url, force=force,
         )
 
+    async def refresh_pricing_from_models_dev(
+        self,
+        *,
+        url: str = "https://models.dev/api.json",
+        force: bool = False,
+    ) -> int:
+        """Refresh the live pricing catalog from models.dev.
+
+        models.dev is the higher-trust overlay - it carries pricing
+        for native vendor endpoints (OpenAI / Anthropic / Google /
+        MiniMax / Mistral / DeepSeek / xAI / Cohere) sourced from
+        each vendor's public pricing page. OpenRouter's overlay is
+        kept separately because it carries the routing markup that
+        ``openrouter/<vendor>/<model>`` rows actually bill at.
+
+        The resolver in :mod:`eden.llmops.cost_resolver` prefers
+        models.dev over the static seed for native vendor rows but
+        defers to OpenRouter's overlay for ``openrouter/``-prefixed
+        ids.
+
+        Returns the number of rows updated. Failures are logged
+        but never raised - the static seed is the fallback.
+        """
+        # Reuse the catalog's in-flight dedup so we don't double-
+        # fetch when the OpenRouter refresh just ran.
+        if not force and self.pricing.is_fresh():
+            return 0
+        try:
+            return await self.pricing.refresh_from_models_dev(url=url)
+        except Exception as exc:  # noqa: BLE001 - never propagate
+            logger.warning(f"models.dev pricing refresh failed: {exc!r}")
+            return 0
+
     def pricing_summary(self) -> dict[str, Any]:
         """Diagnostic snapshot of the pricing catalog.
 
@@ -889,7 +922,15 @@ class AIGateway:
             provider, input_tokens, output_tokens, model_version,
         )
         if model_version and self.pricing.lookup(model_version) is not None:
-            source = "openrouter" if self.pricing.lookup(model_version).source in ("openrouter", "merged") else "static"
+            row_source = self.pricing.lookup(model_version).source
+            if row_source == "openrouter":
+                source = "openrouter"
+            elif row_source == "models_dev":
+                source = "models_dev"
+            elif row_source == "merged":
+                source = "openrouter"  # legacy: merged -> openrouter
+            else:
+                source = "static"
         else:
             source = "unknown"
         return cost, source
