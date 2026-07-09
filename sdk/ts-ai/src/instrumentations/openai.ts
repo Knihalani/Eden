@@ -16,6 +16,7 @@
  */
 
 import { getDefaultClient } from "../client.js";
+import { randomId } from "../ids.js";
 import { extractUsage, normalizeModelName } from "../tokens.js";
 import {
   SOURCE_FORMATS,
@@ -389,13 +390,4 @@ function _emitCompletion(args: {
     environmentId: args.opts.environmentId,
     durationMs: args.durationMs,
   });
-}
-
-function randomId(): string {
-  // Compact random id (24 chars) — matches Python SDK's
-  // ``f"auto_{provider}_{int(time.time() * 1_000_000)}"`` in
-  // uniqueness while staying URL-safe.
-  const ts = Date.now().toString(36);
-  const rand = Math.random().toString(36).slice(2, 10);
-  return `${ts}${rand}`.slice(0, 24);
 }

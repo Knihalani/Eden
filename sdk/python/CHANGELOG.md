@@ -4,6 +4,33 @@ All notable changes to the Eden Python SDK are documented here. The
 format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## 0.2.12 — 2026-07-09
+
+Bug-fix + parity release.
+
+### Fixed
+- `instrumentations.langchain._safe_llm_response`: walk the
+  ``LLMResult.generations`` and extract ``usage_metadata`` +
+  per-generation ``response_metadata`` from each
+  ``AIMessage``. Modern LangChain (0.1+) does NOT carry usage
+  in ``LLMResult.llm_output.token_usage`` (that field is
+  empty for modern chains), so the previous implementation
+  had no ``input_tokens`` /
+  ``cache_read_input_tokens`` /
+  ``cache_creation_input_tokens`` / ``model`` on the wire for
+  every non-streaming modern LangChain call — pricing
+  roll-ups missed every modern chain. The new path uses
+  ``setdefault`` semantics so the legacy path (which wins on
+  older LangChain versions where ``llm_output`` IS populated)
+  is not clobbered.
+
+### Tests
+- 2 new tests in `test_instrumentations.py` pinning the
+  modern + legacy paths (modern path surfaces
+  ``input_tokens`` / ``output_tokens`` / ``model`` from
+  ``usage_metadata`` + per-generation ``response_metadata``;
+  legacy path still wins when both are populated).
+
 ## 0.2.11 — 2026-07-09
 
 Bug-fix + parity release.

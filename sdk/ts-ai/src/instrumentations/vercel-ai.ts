@@ -17,6 +17,7 @@
  */
 
 import { getDefaultClient } from "../client.js";
+import { randomId } from "../ids.js";
 import {
   SOURCE_FORMATS,
   type StreamChunk,
@@ -339,8 +340,3 @@ function _finishCall(
   });
 }
 
-function randomId(): string {
-  const ts = Date.now().toString(36);
-  const rand = Math.random().toString(36).slice(2, 10);
-  return `${ts}${rand}`.slice(0, 24);
-}
