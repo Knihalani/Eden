@@ -159,6 +159,155 @@ async def _is_same_file_in_24h_cooldown(
     return bool(rows)
 
 
+# ── F58 batched cooldown lookup ───────────────────────────────────
+#
+# ``_cluster_passes_pre_filters`` originally issued two
+# ``SELECT`` queries per cluster for the file-path cooldowns
+# (``proposed_patches`` 24h + ``pr_rejection_memory``).
+# With N clusters per org and a 15-min cadence, that is
+# ``2 * N * active_orgs`` round-trips per tick — measurable on
+# tenants with many small clusters.  The fix is to fetch each
+# cooldown set once per org, then filter per-cluster in
+# process. ``_CooldownView`` is the typed return shape so the
+# per-cluster helper doesn't have to know how the data was
+# fetched. ``evaluate_pending_clusters`` builds it once per
+# org and passes it through; the per-cluster path still works
+# when no view is supplied (existing tests + ad-hoc callers).
+
+
+class _CooldownView:
+    """In-process snapshot of the org's cooldown state.
+
+    * ``recent_24h_files`` — set of file paths touched by any
+      ``proposed_patches`` row created in the last 24h for
+      this org.
+    * ``rejection_cooldowns`` — set of ``(file_path,
+      title_hash)`` tuples with an active ``pr_rejection_memory``
+      row (``expires_at > NOW()``).
+
+    Empty containers mean "no active cooldown" — the same
+    semantics as the per-cluster helper returning ``False``.
+    """
+
+    __slots__ = ("recent_24h_files", "rejection_cooldowns")
+
+    def __init__(
+        self,
+        recent_24h_files: set[str] | None = None,
+        rejection_cooldowns: set[tuple[str, str]] | None = None,
+    ) -> None:
+        self.recent_24h_files: set[str] = recent_24h_files or set()
+        self.rejection_cooldowns: set[tuple[str, str]] = (
+            rejection_cooldowns or set()
+        )
+
+    def is_in_24h_cooldown(self, file_path: str) -> bool:
+        return bool(file_path) and file_path in self.recent_24h_files
+
+    def is_in_rejection_cooldown(
+        self, file_path: str, title_hash: str
+    ) -> bool:
+        if not file_path or not title_hash:
+            return False
+        return (file_path, title_hash) in self.rejection_cooldowns
+
+
+def _cooldown_view_from_rows(
+    *,
+    recent_24h_rows: list[dict[str, Any]],
+    rejection_rows: list[dict[str, Any]],
+) -> _CooldownView:
+    """Build a :class:`_CooldownView` from pre-fetched rows.
+
+    Extracted from :func:`_build_org_cooldown_view` so tests can
+    exercise the projection without touching Postgres.
+    ``recent_24h_rows`` is the ``proposed_patches`` rows for the
+    last 24h; ``rejection_rows`` is the active
+    ``pr_rejection_memory`` rows. Empty lists produce an empty
+    view (== "no cooldowns"), which is what an org with no
+    history should always look like.
+    """
+    recent_files: set[str] = set()
+    for r in recent_24h_rows:
+        files = r.get("blast_radius_affected_ids") or []
+        if isinstance(files, list):
+            for f in files:
+                if isinstance(f, str):
+                    recent_files.add(f)
+    cooldowns: set[tuple[str, str]] = set()
+    for r in rejection_rows:
+        fp = r.get("file_path")
+        th = r.get("title_hash")
+        if isinstance(fp, str) and isinstance(th, str):
+            cooldowns.add((fp, th))
+    return _CooldownView(recent_24h_files=recent_files,
+                          rejection_cooldowns=cooldowns)
+
+
+async def _build_org_cooldown_view(
+    org_id: str,
+    *,
+    pg: Any | None = None,
+) -> _CooldownView:
+    """Load the org's cooldown state in two queries, not 2N.
+
+    Uses a single connection from the pool so the two reads
+    are fetched serially on the same connection (avoids the
+    pgbouncer stub-connection hazard — see
+    ``src/eden/storage/postgres`` for the rationale).
+
+    A ``None`` postgres client (e.g. during a DB outage) or a
+    transient query failure yields an empty view — the
+    caller treats the empty view as "no cooldowns", which is
+    a conservative fail-open stance (we'd rather generate a
+    duplicate patch than skip a legitimate one during an
+    outage).
+    """
+    if pg is None:
+        try:
+            from eden.storage.postgres import get_postgres_client
+            pg = await get_postgres_client()
+        except Exception as exc:  # pragma: no cover - defensive
+            logger.debug(
+                "scheduler._build_org_cooldown_view: "
+                "get_postgres_client failed: %s",
+                exc,
+            )
+            return _CooldownView()
+    if pg is None:
+        return _CooldownView()
+    try:
+        async with pg.acquire() as conn:
+            recent = await conn.fetch(
+                "SELECT blast_radius_affected_ids "
+                "FROM proposed_patches "
+                "WHERE org_id = $1::text "
+                "  AND created_at > NOW() - INTERVAL '1 day' "
+                "ORDER BY created_at DESC "
+                "LIMIT 2000",
+                org_id,
+            )
+            rejections = await conn.fetch(
+                "SELECT file_path, title_hash "
+                "FROM pr_rejection_memory "
+                "WHERE org_id = $1::text "
+                "  AND expires_at > NOW() "
+                "ORDER BY file_path, title_hash "
+                "LIMIT 2000",
+                org_id,
+            )
+    except Exception as exc:
+        logger.debug(
+            "scheduler._build_org_cooldown_view: query failed: %s",
+            exc,
+        )
+        return _CooldownView()
+    return _cooldown_view_from_rows(
+        recent_24h_rows=[dict(r) for r in recent],
+        rejection_rows=[dict(r) for r in rejections],
+    )
+
+
 async def _list_active_orgs() -> list[str]:
     """List org ids that have at least one repo_connection.
 
@@ -315,6 +464,7 @@ async def _cluster_passes_pre_filters(
     count_today: int,
     count_week: int,
     settings: Any,
+    cooldown_view: _CooldownView | None = None,
 ) -> tuple[bool, str]:
     """Run all pre-filters against a cluster.
 
@@ -354,9 +504,28 @@ async def _cluster_passes_pre_filters(
     file_path = cluster.get("category") or cluster.get("primary_file") or ""
     title_hash = cluster.get("id") or cluster.get("name") or ""
     if file_path:
-        if await _is_same_file_in_24h_cooldown(org_id, file_path):
+        # F58: prefer the org-level cooldown snapshot when it
+        # was supplied by :func:`evaluate_pending_clusters`.
+        # Otherwise fall back to the per-cluster helpers (this
+        # is the pre-F58 path — kept for the existing test
+        # suite + ad-hoc callers).
+        if cooldown_view is not None:
+            if_24h = cooldown_view.is_in_24h_cooldown(file_path)
+        else:
+            if_24h = await _is_same_file_in_24h_cooldown(
+                org_id, file_path,
+            )
+        if if_24h:
             return False, f"file {file_path} in 24h cooldown"
-        if await _is_in_rejection_cooldown(org_id, file_path, title_hash):
+        if cooldown_view is not None:
+            if_rej = cooldown_view.is_in_rejection_cooldown(
+                file_path, title_hash,
+            )
+        else:
+            if_rej = await _is_in_rejection_cooldown(
+                org_id, file_path, title_hash,
+            )
+        if if_rej:
             return False, (
                 f"file {file_path} title_hash={title_hash} "
                 "in rejection_memory cooldown"
@@ -448,6 +617,13 @@ async def evaluate_pending_clusters(
             org_id, min_size=settings.patch_cluster_min_size,
         )
         summary["clusters_found"] += len(clusters)
+        # F58: build the org's cooldown snapshot once before the
+        # per-cluster loop. This reduces the 24h + rejection-memory
+        # checks from ``2 * N`` round-trips to ``2`` round-trips
+        # for the whole tick (and the snapshot is read in-process
+        # thereafter). An empty snapshot is fail-open for both
+        # checks; see :class:`_CooldownView`.
+        cooldown_view = await _build_org_cooldown_view(org_id)
         for cluster in clusters:
             passed, reason = await _cluster_passes_pre_filters(
                 org_id,
@@ -457,6 +633,7 @@ async def evaluate_pending_clusters(
                 count_today=count_today,
                 count_week=count_week,
                 settings=settings,
+                cooldown_view=cooldown_view,
             )
             if not passed:
                 pf_counts[reason] = pf_counts.get(reason, 0) + 1

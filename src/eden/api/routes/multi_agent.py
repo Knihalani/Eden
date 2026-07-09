@@ -8,6 +8,7 @@ Ref: eden-multi-agent-orchestration-architecture.md §2–10
 
 from __future__ import annotations
 
+import contextlib
 import logging
 import time
 from typing import Any
@@ -54,6 +55,94 @@ _role_systems: dict[str, RoleSystem] = {}
 _memory_services: dict[str, MemoryService] = {}
 _hitl_managers: dict[str, HITLManager] = {}
 _test_suites: dict[str, dict[str, Any]] = {}
+
+# F61 — the four in-memory state dicts above were unbounded.
+# A long-running pod could accumulate tens of thousands of
+# environments (each with four auxiliary objects) via the
+# public POST ``/environments`` endpoint — with no LRU,
+# TTL, or hard cap, the only way state was reclaimed was
+# the explicit DELETE endpoint. This route is marked
+# ``(production -> database)`` so the proper fix is a
+# Postgres-backed store; until that lands we enforce
+# defense-in-depth limits in-process.
+#
+# * ``_ENV_TTL_SECONDS`` — environments with no observed
+#   activity for this many seconds are reaped on the next
+#   ``_evict_stale`` call.
+# * ``_MAX_ENVIRONMENTS`` — hard cap on the size of
+#   ``_environments``; once exceeded, the
+#   least-recently-touched env is dropped at insertion
+#   time.
+# * ``_env_last_seen`` — monotonic-clock timestamp of the
+#   most recent access (read OR write) per env_id.
+
+_ENV_TTL_SECONDS: float = 3600.0
+_MAX_ENVIRONMENTS: int = 1024
+
+_env_last_seen: dict[str, float] = {}
+
+
+def _touch_env(env_id: str) -> None:
+    """Bump the LRU timestamp for an environment.
+
+    Called from every read/write path that operates on a
+    known env_id. Pure housekeeping. Best-effort: any
+    exception inside ``_env_last_seen`` assignment is
+    silently dropped so a transient dict-write issue
+    cannot break a paying customer's API call."""
+    with contextlib.suppress(Exception):
+        _env_last_seen[env_id] = time.monotonic()
+
+
+def _evict_stale() -> None:
+    """Drop environments older than ``_ENV_TTL_SECONDS``.
+
+    Pre-F61 nothing reaped old state; a tenant that
+    created an env, walked away, and never came back
+    would leave four module-level dicts hot in memory
+    until the next pod restart."""
+    now = time.monotonic()
+    cutoff = now - _ENV_TTL_SECONDS
+    stale = [
+        env_id
+        for env_id, ts in _env_last_seen.items()
+        if ts < cutoff
+    ]
+    for env_id in stale:
+        _purge_env(env_id)
+
+
+def _purge_env(env_id: str) -> None:
+    """Drop all per-env state. Internal helper."""
+    _environments.pop(env_id, None)
+    _role_systems.pop(env_id, None)
+    _memory_services.pop(env_id, None)
+    _hitl_managers.pop(env_id, None)
+    _test_suites.pop(env_id, None)
+    # F61: drop the LRU timestamp alongside the
+    # other per-env dicts.
+    _env_last_seen.pop(env_id, None)
+
+
+def _enforce_cap_on_insert(env_id: str) -> None:
+    """Enforce the hard cap on ``_environments``.
+
+    Drops the least-recently-touched env until the size
+    is back under the limit. The new env always
+    succeeds — only older ones are evicted."""
+    while len(_environments) >= _MAX_ENVIRONMENTS:
+        victim: str | None = None
+        oldest_ts: float | None = None
+        for k, ts in _env_last_seen.items():
+            if oldest_ts is None or ts < oldest_ts:
+                oldest_ts = ts
+                victim = k
+        if victim is None or victim == env_id:
+            # No victim distinct from the new env — break
+            # to prevent an infinite loop in degenerate
+            # states (e.g. cap=1 in tests).
+            break
+        _purge_env(victim)
 
 
 def _check_org_access(user: dict, org_id: str) -> bool:
@@ -168,6 +257,13 @@ async def create_environment(
     else:
         env = MessagePassingEnvironment()
 
+    # F61: enforce hard cap + TTL before allocating state.
+    # The cap evicts the least-recently-touched env; this
+    # never fails the new request — it only reclaims
+    # older state that the caller is no longer using.
+    _evict_stale()
+    _enforce_cap_on_insert(env_id)
+
     _environments[env_id] = {
         "env_id": env_id,
         "name": req.name,
@@ -181,6 +277,9 @@ async def create_environment(
     _role_systems[env_id] = RoleSystem()
     _memory_services[env_id] = MemoryService()
     _hitl_managers[env_id] = HITLManager()
+    # F61: record the first access timestamp so the cap
+    # knows how to order future evictions.
+    _touch_env(env_id)
 
     return {
         "env_id": env_id,
@@ -220,6 +319,9 @@ async def get_environment(env_id: str, org_id: str, user: dict = Depends(get_cur
     env = _environments.get(env_id)
     if not env or env["org_id"] != org_id:
         raise HTTPException(status_code=404, detail="Environment not found")
+    # F61: bump the LRU timestamp on read so an active
+    # env isn't reaped by an unrelated tenant's evict pass.
+    _touch_env(env_id)
 
     role_system = _role_systems.get(env_id)
     memory_service = _memory_services.get(env_id)
@@ -246,12 +348,14 @@ async def delete_environment(env_id: str, org_id: str, user: dict = Depends(get_
     env = _environments.get(env_id)
     if not env or env["org_id"] != org_id:
         raise HTTPException(status_code=404, detail="Environment not found")
+    # F61: LRU bump on every env_id-keyed handler so an
+    # active tenant's env isn't reaped by an unrelated
+    # tenant's evict pass.
+    _touch_env(env_id)
 
-    _environments.pop(env_id, None)
-    _role_systems.pop(env_id, None)
-    _memory_services.pop(env_id, None)
-    _hitl_managers.pop(env_id, None)
-    _test_suites.pop(env_id, None)
+    # F61: drop all per-env state in one call (single
+    # source of truth). Adds the LRU timestamp too.
+    _purge_env(env_id)
 
     return {"message": "Environment deleted", "env_id": env_id}
 
@@ -273,6 +377,10 @@ async def send_message(
     env = _environments.get(env_id)
     if not env or env["org_id"] != org_id:
         raise HTTPException(status_code=404, detail="Environment not found")
+    # F61: LRU bump on every env_id-keyed handler so an
+    # active tenant's env isn't reaped by an unrelated
+    # tenant's evict pass.
+    _touch_env(env_id)
 
     env_obj = env["environment"]
     msg_type = req.msg_type
@@ -314,6 +422,8 @@ async def get_messages(
     env = _environments.get(env_id)
     if not env or env["org_id"] != org_id:
         raise HTTPException(status_code=404, detail="Environment not found")
+    # F61: LRU bump on message read.
+    _touch_env(env_id)
 
     env_obj = env["environment"]
     if hasattr(env_obj, "message_bus"):
@@ -336,6 +446,10 @@ async def broadcast_message(
     env = _environments.get(env_id)
     if not env or env["org_id"] != org_id:
         raise HTTPException(status_code=404, detail="Environment not found")
+    # F61: LRU bump on every env_id-keyed handler so an
+    # active tenant's env isn't reaped by an unrelated
+    # tenant's evict pass.
+    _touch_env(env_id)
 
     env_obj = env["environment"]
     if hasattr(env_obj, "broadcast"):
@@ -353,6 +467,10 @@ async def get_communication_stats(env_id: str, org_id: str, user: dict = Depends
     env = _environments.get(env_id)
     if not env or env["org_id"] != org_id:
         raise HTTPException(status_code=404, detail="Environment not found")
+    # F61: LRU bump on every env_id-keyed handler so an
+    # active tenant's env isn't reaped by an unrelated
+    # tenant's evict pass.
+    _touch_env(env_id)
 
     env_obj = env["environment"]
     if hasattr(env_obj, "message_bus"):
@@ -380,6 +498,10 @@ async def write_blackboard(
     env = _environments.get(env_id)
     if not env or env["org_id"] != org_id:
         raise HTTPException(status_code=404, detail="Environment not found")
+    # F61: LRU bump on every env_id-keyed handler so an
+    # active tenant's env isn't reaped by an unrelated
+    # tenant's evict pass.
+    _touch_env(env_id)
 
     env_obj = env["environment"]
     if not hasattr(env_obj, "blackboard"):
@@ -410,6 +532,10 @@ async def read_blackboard(
     env = _environments.get(env_id)
     if not env or env["org_id"] != org_id:
         raise HTTPException(status_code=404, detail="Environment not found")
+    # F61: LRU bump on every env_id-keyed handler so an
+    # active tenant's env isn't reaped by an unrelated
+    # tenant's evict pass.
+    _touch_env(env_id)
 
     env_obj = env["environment"]
     if not hasattr(env_obj, "blackboard"):
@@ -433,6 +559,10 @@ async def search_blackboard(
     env = _environments.get(env_id)
     if not env or env["org_id"] != org_id:
         raise HTTPException(status_code=404, detail="Environment not found")
+    # F61: LRU bump on every env_id-keyed handler so an
+    # active tenant's env isn't reaped by an unrelated
+    # tenant's evict pass.
+    _touch_env(env_id)
 
     env_obj = env["environment"]
     if not hasattr(env_obj, "blackboard"):
@@ -459,6 +589,8 @@ async def create_role_config(
     env = _environments.get(env_id)
     if not env or env["org_id"] != org_id:
         raise HTTPException(status_code=404, detail="Environment not found")
+    # F61: bump the LRU timestamp on read.
+    _touch_env(env_id)
 
     role_system = _role_systems.get(env_id)
     if not role_system:
@@ -512,6 +644,10 @@ async def list_role_configs(env_id: str, org_id: str, user: dict = Depends(get_c
     env = _environments.get(env_id)
     if not env or env["org_id"] != org_id:
         raise HTTPException(status_code=404, detail="Environment not found")
+    # F61: LRU bump on every env_id-keyed handler so an
+    # active tenant's env isn't reaped by an unrelated
+    # tenant's evict pass.
+    _touch_env(env_id)
 
     role_system = _role_systems.get(env_id)
     if not role_system:
@@ -534,6 +670,10 @@ async def assign_role(
     env = _environments.get(env_id)
     if not env or env["org_id"] != org_id:
         raise HTTPException(status_code=404, detail="Environment not found")
+    # F61: LRU bump on every env_id-keyed handler so an
+    # active tenant's env isn't reaped by an unrelated
+    # tenant's evict pass.
+    _touch_env(env_id)
 
     role_system = _role_systems.get(env_id)
     if not role_system:
@@ -551,6 +691,10 @@ async def list_roles(env_id: str, org_id: str, user: dict = Depends(get_current_
     env = _environments.get(env_id)
     if not env or env["org_id"] != org_id:
         raise HTTPException(status_code=404, detail="Environment not found")
+    # F61: LRU bump on every env_id-keyed handler so an
+    # active tenant's env isn't reaped by an unrelated
+    # tenant's evict pass.
+    _touch_env(env_id)
 
     role_system = _role_systems.get(env_id)
     if not role_system:
@@ -572,6 +716,10 @@ async def delegate_task(
     env = _environments.get(env_id)
     if not env or env["org_id"] != org_id:
         raise HTTPException(status_code=404, detail="Environment not found")
+    # F61: LRU bump on every env_id-keyed handler so an
+    # active tenant's env isn't reaped by an unrelated
+    # tenant's evict pass.
+    _touch_env(env_id)
 
     role_system = _role_systems.get(env_id)
     if not role_system:
@@ -589,6 +737,10 @@ async def get_team_members(env_id: str, org_id: str, team_id: str, user: dict = 
     env = _environments.get(env_id)
     if not env or env["org_id"] != org_id:
         raise HTTPException(status_code=404, detail="Environment not found")
+    # F61: LRU bump on every env_id-keyed handler so an
+    # active tenant's env isn't reaped by an unrelated
+    # tenant's evict pass.
+    _touch_env(env_id)
 
     role_system = _role_systems.get(env_id)
     if not role_system:
@@ -615,6 +767,10 @@ async def set_hitl_rule(
     env = _environments.get(env_id)
     if not env or env["org_id"] != org_id:
         raise HTTPException(status_code=404, detail="Environment not found")
+    # F61: LRU bump on every env_id-keyed handler so an
+    # active tenant's env isn't reaped by an unrelated
+    # tenant's evict pass.
+    _touch_env(env_id)
 
     hitl = _hitl_managers.get(env_id)
     if not hitl:
@@ -637,6 +793,10 @@ async def get_hitl_rules(env_id: str, org_id: str, user: dict = Depends(get_curr
     env = _environments.get(env_id)
     if not env or env["org_id"] != org_id:
         raise HTTPException(status_code=404, detail="Environment not found")
+    # F61: LRU bump on every env_id-keyed handler so an
+    # active tenant's env isn't reaped by an unrelated
+    # tenant's evict pass.
+    _touch_env(env_id)
 
     hitl = _hitl_managers.get(env_id)
     if not hitl:
@@ -658,6 +818,10 @@ async def check_hitl_action(
     env = _environments.get(env_id)
     if not env or env["org_id"] != org_id:
         raise HTTPException(status_code=404, detail="Environment not found")
+    # F61: LRU bump on every env_id-keyed handler so an
+    # active tenant's env isn't reaped by an unrelated
+    # tenant's evict pass.
+    _touch_env(env_id)
 
     hitl = _hitl_managers.get(env_id)
     if not hitl:
@@ -680,6 +844,10 @@ async def get_pending_approvals(env_id: str, org_id: str, user: dict = Depends(g
     env = _environments.get(env_id)
     if not env or env["org_id"] != org_id:
         raise HTTPException(status_code=404, detail="Environment not found")
+    # F61: LRU bump on every env_id-keyed handler so an
+    # active tenant's env isn't reaped by an unrelated
+    # tenant's evict pass.
+    _touch_env(env_id)
 
     hitl = _hitl_managers.get(env_id)
     if not hitl:
@@ -702,6 +870,10 @@ async def resolve_approval(
     env = _environments.get(env_id)
     if not env or env["org_id"] != org_id:
         raise HTTPException(status_code=404, detail="Environment not found")
+    # F61: LRU bump on every env_id-keyed handler so an
+    # active tenant's env isn't reaped by an unrelated
+    # tenant's evict pass.
+    _touch_env(env_id)
 
     hitl = _hitl_managers.get(env_id)
     if not hitl:
@@ -727,6 +899,10 @@ async def add_observation(
     env = _environments.get(env_id)
     if not env or env["org_id"] != org_id:
         raise HTTPException(status_code=404, detail="Environment not found")
+    # F61: LRU bump on every env_id-keyed handler so an
+    # active tenant's env isn't reaped by an unrelated
+    # tenant's evict pass.
+    _touch_env(env_id)
 
     memory_service = _memory_services.get(env_id)
     if not memory_service:
@@ -759,6 +935,10 @@ async def query_memory(
     env = _environments.get(env_id)
     if not env or env["org_id"] != org_id:
         raise HTTPException(status_code=404, detail="Environment not found")
+    # F61: LRU bump on every env_id-keyed handler so an
+    # active tenant's env isn't reaped by an unrelated
+    # tenant's evict pass.
+    _touch_env(env_id)
 
     memory_service = _memory_services.get(env_id)
     if not memory_service:
@@ -782,6 +962,10 @@ async def consolidate_memories(
     env = _environments.get(env_id)
     if not env or env["org_id"] != org_id:
         raise HTTPException(status_code=404, detail="Environment not found")
+    # F61: LRU bump on every env_id-keyed handler so an
+    # active tenant's env isn't reaped by an unrelated
+    # tenant's evict pass.
+    _touch_env(env_id)
 
     memory_service = _memory_services.get(env_id)
     if not memory_service:
@@ -799,6 +983,10 @@ async def get_memory_stats(env_id: str, org_id: str, user: dict = Depends(get_cu
     env = _environments.get(env_id)
     if not env or env["org_id"] != org_id:
         raise HTTPException(status_code=404, detail="Environment not found")
+    # F61: LRU bump on every env_id-keyed handler so an
+    # active tenant's env isn't reaped by an unrelated
+    # tenant's evict pass.
+    _touch_env(env_id)
 
     memory_service = _memory_services.get(env_id)
     if not memory_service:
@@ -824,6 +1012,10 @@ async def learn_fact(
     env = _environments.get(env_id)
     if not env or env["org_id"] != org_id:
         raise HTTPException(status_code=404, detail="Environment not found")
+    # F61: LRU bump on every env_id-keyed handler so an
+    # active tenant's env isn't reaped by an unrelated
+    # tenant's evict pass.
+    _touch_env(env_id)
 
     memory_service = _memory_services.get(env_id)
     if not memory_service:
@@ -889,6 +1081,10 @@ async def run_episode(
     env = _environments.get(env_id)
     if not env or env["org_id"] != org_id:
         raise HTTPException(status_code=404, detail="Environment not found")
+    # F61: LRU bump on every env_id-keyed handler so an
+    # active tenant's env isn't reaped by an unrelated
+    # tenant's evict pass.
+    _touch_env(env_id)
 
     # Create dummy agents dict for the framework
     agents = dict.fromkeys(req.agent_ids)
@@ -930,6 +1126,10 @@ async def run_tests(
     env = _environments.get(env_id)
     if not env or env["org_id"] != org_id:
         raise HTTPException(status_code=404, detail="Environment not found")
+    # F61: LRU bump on every env_id-keyed handler so an
+    # active tenant's env isn't reaped by an unrelated
+    # tenant's evict pass.
+    _touch_env(env_id)
 
     suite = MultiAgentTestSuite()
     results = suite.run_all(agent_count=req.agent_count, action_count=req.action_count)
@@ -963,6 +1163,10 @@ async def run_benchmark(
     env = _environments.get(env_id)
     if not env or env["org_id"] != org_id:
         raise HTTPException(status_code=404, detail="Environment not found")
+    # F61: LRU bump on every env_id-keyed handler so an
+    # active tenant's env isn't reaped by an unrelated
+    # tenant's evict pass.
+    _touch_env(env_id)
 
     suite = MultiAgentTestSuite()
     return suite.benchmark_performance(

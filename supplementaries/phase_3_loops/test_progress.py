@@ -220,6 +220,23 @@ def test_loop_stuck_classified_as_stuck():
     assert n_stuck >= 1, "loop-stuck should show as stuck"
 
 
+def _real_embeddings_available() -> bool:
+    try:
+        from supplementaries.phase_3_loops.real_embeddings import (
+            HAS_SENTENCE_TRANSFORMERS,
+        )
+        return HAS_SENTENCE_TRANSFORMERS
+    except ImportError:
+        return False
+
+
+requires_real_embeddings = pytest.mark.skipif(
+    not _real_embeddings_available(),
+    reason="sentence-transformers not installed",
+)
+
+
+@requires_real_embeddings
 def test_progress_filter_reduces_FP_on_synthetic():
     """End-to-end: cosine flags redundant traces as loops, but the
     progress filter correctly excludes them.

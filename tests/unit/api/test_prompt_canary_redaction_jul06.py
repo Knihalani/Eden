@@ -22,7 +22,7 @@ doesn't echo back the original exception text.
 
 from __future__ import annotations
 
-from eden.api.routes.prompt_canary import _safe_detail
+from eden.api.utils.safe_error import safe_detail as _safe_detail
 
 
 def test_safe_detail_does_not_leak_table_name():

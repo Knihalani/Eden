@@ -2,10 +2,14 @@
 
 import logging
 
-from fastapi import APIRouter, Cookie, Header, Query
+from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel
 
-from eden.api.deps import require_org_permission
+from eden.api.deps import (
+    # Audit (2026-07-06) — re-exported for tests that patch the legacy name.
+    # Same callable — rename kept for the patch target in test_audit_tamper.py.
+    require_org_permission_dep as require_org_permission,
+)
 from eden.storage.postgres import get_postgres_client
 
 logger = logging.getLogger(__name__)
@@ -62,16 +66,14 @@ async def get_audit_log(
     to_date: str | None = Query(None, description="Filter to date (ISO format)"),
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
-    x_org_id: str | None = Header(None, alias="X-Org-Id"),
-    authorization: str | None = Cookie(None),
+    _check: dict = Depends(require_org_permission("audit:view")),
 ):
     """Get audit log for an organization.
 
     Returns paginated audit log entries ordered by creation time (newest first).
     Requires audit:view permission (owner and admin only).
     """
-    # Require audit:view permission
-    await require_org_permission("audit:view", org_id, authorization)
+    # audit:view permission is enforced by the ``_check`` dependency above.
 
     client = await get_postgres_client()
 
@@ -150,8 +152,7 @@ async def get_audit_log(
 @router.get("/{org_id}/audit-log/verify-chain", response_model=ChainVerifyResponse)
 async def verify_audit_chain(
     org_id: str,
-    x_org_id: str | None = Header(None, alias="X-Org-Id"),
-    authorization: str | None = Cookie(None),
+    _check: dict = Depends(require_org_permission("audit:view")),
 ):
     """§6.4 — verify the audit-log hash chain for tamper-evidence.
 
@@ -160,7 +161,6 @@ async def verify_audit_chain(
     not been applied, ``client.fetch`` will raise and we surface a
     zero-state so the portal can render a "needs migration" banner.
     """
-    await require_org_permission("audit:view", org_id, authorization)
     client = await get_postgres_client()
     try:
         rows = await client.fetch(
@@ -188,8 +188,7 @@ async def export_audit_log(
     format: str = Query("jsonl", pattern="^(jsonl|csv)$"),
     from_date: str | None = Query(None),
     to_date: str | None = Query(None),
-    x_org_id: str | None = Header(None, alias="X-Org-Id"),
-    authorization: str | None = Cookie(None),
+    _check: dict = Depends(require_org_permission("audit:view")),
 ):
     """§6.4 — streaming export of the audit log as JSONL or CSV.
 
@@ -202,15 +201,13 @@ async def export_audit_log(
     import json as _json
 
     from fastapi.responses import StreamingResponse
-
-    await require_org_permission("audit:view", org_id, authorization)
     client = await get_postgres_client()
     # Use ``fetchiter`` (async iterator) so we don't materialise the
     # full audit log in memory for a multi-year export.
     rows = client.fetchiter(
         "SELECT id, user_id, user_email, action, target_type, target_id, "
         "metadata, ip_address, user_agent, created_at, prev_hash, entry_hash "
-        "FROM audit_log WHERE org_id = %s "
+        "FROM audit_log WHERE org_id = $1 "
         "ORDER BY created_at",
         org_id,
     )

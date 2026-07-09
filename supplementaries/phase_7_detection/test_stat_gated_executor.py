@@ -13,8 +13,25 @@ from supplementaries.phase_7_detection.stat_gated_executor import (
 
 
 def _run(coro):
-    """Helper to run async coroutine in tests."""
-    return asyncio.get_event_loop().run_until_complete(coro)
+    """Helper to run async coroutine in tests.
+
+    Creates a fresh event loop and installs it as the current loop
+    for the duration of the call. ``asyncio.get_event_loop()`` is
+    deprecated when no loop is running (and on Python 3.12+ raises
+    ``RuntimeError`` instead of implicitly creating one), so we
+    build + set + close the loop explicitly to keep the helper
+    usable from any test, including ones that ran after pytest-asyncio
+    has torn down its own loop policy.
+    """
+    loop = asyncio.new_event_loop()
+    try:
+        asyncio.set_event_loop(loop)
+        return loop.run_until_complete(coro)
+    finally:
+        try:
+            loop.close()
+        finally:
+            asyncio.set_event_loop(None)
 
 
 # ── Result type ──────────────────────────────────────────────────

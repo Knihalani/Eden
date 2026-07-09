@@ -22,6 +22,7 @@ from typing import Any
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
+from eden.api.utils.redact import redact_all
 from eden.storage.postgres import get_postgres_client
 from eden.storage.redis import get_redis_client
 
@@ -100,7 +101,7 @@ async def _role_cache_get_async(key: tuple[str, str]) -> bool | None:
             return raw == "1"
         except Exception as exc:
             logger.debug(
-                "hilt role cache Redis GET failed; using local: %s", exc,
+                "hilt role cache Redis GET failed; using local: %s", redact_all(str(exc)),
             )
     return _role_cache_get_local(key)
 
@@ -126,7 +127,7 @@ async def _role_cache_set_async(key: tuple[str, str], value: bool) -> None:
             )
         except Exception as exc:
             logger.debug(
-                "hilt role cache Redis SET failed (local-only): %s", exc,
+                "hilt role cache Redis SET failed (local-only): %s", redact_all(str(exc)),
             )
 
 

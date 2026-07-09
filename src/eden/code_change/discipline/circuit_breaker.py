@@ -265,11 +265,75 @@ class CircuitBreaker:
         * ``"manual_reset"`` — force the breaker closed.
 
         Returns the updated :class:`Record`.
+
+        F45: this method previously did
+        ``read → mutate in Python → write`` outside any
+        transaction. Concurrent calls would all read the
+        same ``failure_count=0``, all bump to 1, and the
+        last ``ON CONFLICT DO UPDATE`` would write 1 — the
+        other N-1 increments were silently lost. The fix
+        wraps the read+mutate+write in a single transaction
+        with ``SELECT ... FOR UPDATE`` so concurrent
+        callers serialize on the row.
         """
-        record = await self._read(org_id)
-        record = self._maybe_expire_window(record)
-        if outcome == "success":
-            record = Record(state="closed")
+        if outcome not in ("success", "failure", "rejection", "manual_reset"):
+            if outcome:
+                logger.debug(
+                    "circuit_breaker.record_outcome: unknown outcome %r",
+                    outcome,
+                )
+            return await self._read(org_id)
+        try:
+            from eden.storage.postgres import get_postgres_client
+            client = await get_postgres_client()
+            if client is None:
+                return Record()
+            async with client.acquire() as conn, conn.transaction():
+                # FOR UPDATE serializes concurrent
+                # ``record_outcome`` calls on the same
+                # (org_id, breaker_name) row.
+                row = await conn.fetchrow(
+                    f"SELECT state, failure_count, "
+                    f"rejection_count, opened_at, "
+                    f"window_started_at "
+                    f"FROM {self._table} "
+                    f"WHERE org_id = $1 "
+                    f"  AND breaker_name = $2 "
+                    f"FOR UPDATE",
+                    org_id,
+                    self.breaker_name,
+                )
+                record = self._row_to_record(row)
+                record = self._maybe_expire_window(record)
+                self._apply_outcome(record, outcome)
+                await self._write_locked(
+                    conn, org_id, record,
+                )
+                return record
+        except Exception as exc:
+            logger.debug(
+                "circuit_breaker.record_outcome: %s "
+                "(failing closed-by-default)",
+                exc,
+            )
+            return Record()
+
+    def _apply_outcome(
+        self, record: Record, outcome: str,
+    ) -> None:
+        """Mutate ``record`` in place to reflect a new outcome.
+
+        Split out from :meth:`record_outcome` so the
+        transaction body reads as ``read → apply → write``
+        and the mutation logic can be tested in isolation.
+        """
+        if outcome == "success" or outcome == "manual_reset":
+            # success: half_open probe passed → close + reset
+            # manual_reset: operator override → close + reset
+            record.state = "closed"
+            record.failure_count = 0
+            record.rejection_count = 0
+            record.opened_at = ""
         elif outcome == "failure":
             record.failure_count += 1
             if (
@@ -289,18 +353,63 @@ class CircuitBreaker:
             ):
                 record.state = "open"
                 record.opened_at = datetime.now(UTC).isoformat()
-        elif outcome == "manual_reset":
-            record = Record(state="closed")
-        # else: unknown outcomes are ignored (logged) — the
-        # breaker should not be flipped by an unrecognised
-        # signal.
-        elif outcome:
-            logger.debug(
-                "circuit_breaker.record_outcome: unknown outcome %r",
-                outcome,
+
+    def _row_to_record(self, row: Any) -> Record:
+        """Build a :class:`Record` from a fetched row (or
+        ``None`` for the no-row-yet case).
+        """
+        if row is None:
+            return Record()
+        try:
+            state = str(row.get("state") or "closed")
+            if state not in ("closed", "open", "half_open"):
+                state = "closed"
+            return Record(
+                state=state,  # type: ignore[arg-type]
+                failure_count=int(row.get("failure_count") or 0),
+                rejection_count=int(row.get("rejection_count") or 0),
+                opened_at=str(row.get("opened_at") or ""),
+                window_started_at=str(
+                    row.get("window_started_at") or ""
+                ),
             )
-        await self._write(org_id, record)
-        return record
+        except Exception:
+            return Record()
+
+    async def _write_locked(
+        self, conn: Any, org_id: str, record: Record,
+    ) -> None:
+        """Write a :class:`Record` using the same connection
+        that's holding the FOR UPDATE row lock.
+
+        Same SQL as :meth:`_write` but takes an open
+        connection (avoids re-acquiring from the pool, which
+        would lose the row lock). The ``INSERT ... ON
+        CONFLICT DO UPDATE`` form is the same so the
+        row-not-yet-existing case still creates it.
+        """
+        await conn.execute(
+            f"INSERT INTO {self._table} "
+            f"(org_id, breaker_name, state, failure_count, "
+            f"rejection_count, opened_at, window_started_at, "
+            f"updated_at) "
+            f"VALUES ($1, $2, $3, $4, $5, $6, $7, NOW()) "
+            f"ON CONFLICT (org_id, breaker_name) DO UPDATE SET "
+            f"state = EXCLUDED.state, "
+            f"failure_count = EXCLUDED.failure_count, "
+            f"rejection_count = EXCLUDED.rejection_count, "
+            f"opened_at = EXCLUDED.opened_at, "
+            f"window_started_at = EXCLUDED.window_started_at, "
+            f"updated_at = NOW()",
+            org_id,
+            self.breaker_name,
+            record.state,
+            int(record.failure_count),
+            int(record.rejection_count),
+            record.opened_at or None,
+            record.window_started_at
+            or datetime.now(UTC).isoformat(),
+        )
 
     async def status(self, org_id: str) -> dict[str, Any]:
         """Return the current breaker state for an org (read-only)."""

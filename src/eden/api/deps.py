@@ -167,7 +167,7 @@ async def check_resource_permission(
     role_row = await client.fetchrow(
         """
         SELECT role
-        FROM organization_members
+        FROM org_members
         WHERE user_id = $1 AND org_id = $2
         LIMIT 1
         """,

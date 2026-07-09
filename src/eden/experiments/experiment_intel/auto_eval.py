@@ -224,12 +224,20 @@ class AutoEvaluator:
             variant = str(row.get("variant") or "")
             if not judge or not variant:
                 continue
+            # Audit 2026-07-07: use ``is None`` rather than ``or None``
+            # so a legitimate 0.0 median/p5/p95 isn't collapsed to
+            # ``None`` (the previous pattern confused "zero" with
+            # "absent"). _safe_float already returns the default
+            # (0.0) when the DB column is NULL — we want to
+            # propagate that 0.0 as-is.
+            median = _safe_float(row.get("score_median"), 0.0)
+            p5 = _safe_float(row.get("score_p5"), 0.0)
+            p95 = _safe_float(row.get("score_p95"), 0.0)
             per_judge.setdefault(judge, {})[variant] = {
                 "n": int(row.get("n") or 0),
-                "median": _safe_float(row.get("score_median"), 0.0)
-                or None,
-                "p5": _safe_float(row.get("score_p5"), 0.0) or None,
-                "p95": _safe_float(row.get("score_p95"), 0.0) or None,
+                "median": None if row.get("score_median") is None else median,
+                "p5": None if row.get("score_p5") is None else p5,
+                "p95": None if row.get("score_p95") is None else p95,
             }
         return ok_envelope(
             self.name,

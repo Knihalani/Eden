@@ -42,6 +42,8 @@ import logging
 
 from starlette.types import ASGIApp, Receive, Scope, Send
 
+from eden.api.middleware.security_headers import apply_security_headers
+
 logger = logging.getLogger(__name__)
 
 
@@ -80,6 +82,27 @@ DEFAULT_PUBLIC_PREFIXES: tuple[str, ...] = (
     "/gateway",
     # Internal ops surface (further gated by InternalOnlyMiddleware)
     "/v1/internal",
+    # GDPR Art. 28 — public list of sub-processors. Required by
+    # the §1.5 compliance checklist. The endpoint returns a static
+    # list (no per-org or per-user data) so it MUST be reachable
+    # without authentication — auditors and prospective customers
+    # visit it before signing up. The audit was missing this
+    # exemption (F77 audit, 2026-07-08).
+    "/subprocessors",
+)
+
+
+# Audit 2026-07-06 — pre-compute two data structures from the
+# prefix list:
+#   _PUBLIC_PREFIX_SET  — exact-match frozenset (O(1) ``in``)
+#   _PUBLIC_PREFIX_SLASH_TUPLE — slash-suffixed tuple for
+#     ``str.startswith(tuple)`` (CPython's C fast path). The
+#     slash suffix is required to prevent false positives
+#     (``/healthcheck`` would match ``/health`` without it).
+_BARE_PREFIXES: tuple[str, ...] = DEFAULT_PUBLIC_PREFIXES
+_PUBLIC_PREFIX_SET: frozenset[str] = frozenset(_BARE_PREFIXES)
+_PUBLIC_PREFIX_SLASH_TUPLE: tuple[str, ...] = tuple(
+    p + "/" for p in _BARE_PREFIXES
 )
 
 
@@ -88,16 +111,35 @@ DEFAULT_PUBLIC_PREFIXES: tuple[str, ...] = (
 _AUTH_HEADER_NAMES_LOWER: frozenset[str] = frozenset(
     {"x-org-api-key", "x-clerk-auth", "x-api-key"}
 )
+# Audit 2026-07-06 — pre-compute the bytes form of the auth header
+# names. The middleware calls ``name.encode()`` on every request
+# (was a hot allocation on the per-request path).
+_AUTH_HEADER_NAMES_LOWER_BYTES: frozenset[bytes] = frozenset(
+    n.encode("latin1") for n in _AUTH_HEADER_NAMES_LOWER
+)
 _COOKIE_NAME = "authorization"
 _BEARER_HEADER = "authorization"
+_COOKIE_HEADER_BYTES = _COOKIE_NAME.encode("latin1")
+_BEARER_HEADER_BYTES = _BEARER_HEADER.encode("latin1")
 
 
 def _is_public(path: str) -> bool:
-    """True if ``path`` is on the public allow-list."""
-    for prefix in DEFAULT_PUBLIC_PREFIXES:
-        if path in (prefix, prefix) or path.startswith(prefix + "/"):
-            return True
-    return False
+    """True if ``path`` is on the public allow-list.
+
+    Audit 2026-07-06 — was a Python for-loop with N string
+    comparisons in the worst case. Now:
+      1. Exact match against the bare prefix set (O(1) tuple
+         membership check) — catches the ``/health`` case.
+      2. ``str.startswith(tuple)`` (CPython's C fast path)
+         against the slash-suffixed prefix set — catches
+         ``/health/x`` and any other subpath.
+
+    The slash-suffix form is required to prevent false positives
+    like ``/healthcheck`` matching ``/health``.
+    """
+    if path in _PUBLIC_PREFIX_SET:
+        return True
+    return path.startswith(_PUBLIC_PREFIX_SLASH_TUPLE)
 
 
 def _scope_has_credential(scope: Scope) -> bool:
@@ -110,7 +152,9 @@ def _scope_has_credential(scope: Scope) -> bool:
     headers_lc = {h[0].lower(): h[1] for h in headers}
 
     # 1. Bearer header.
-    bearer = headers_lc.get(_BEARER_HEADER.encode(), b"")
+    # Audit 2026-07-06 — pre-computed bytes form avoids the
+    # per-request ``.encode()`` allocation.
+    bearer = headers_lc.get(_BEARER_HEADER_BYTES, b"")
     if bearer.lower().startswith(b"bearer "):
         return True
     # 2. Cookie.
@@ -118,8 +162,10 @@ def _scope_has_credential(scope: Scope) -> bool:
     if f"{_COOKIE_NAME}=" in cookie:
         return True
     # 3. Custom auth headers (X-Org-Api-Key, X-Clerk-Auth, X-Api-Key).
-    for name_lower in _AUTH_HEADER_NAMES_LOWER:
-        if headers_lc.get(name_lower.encode()):
+    # Audit 2026-07-06 — pre-computed bytes form avoids the
+    # per-request ``.encode()`` allocation.
+    for name_bytes in _AUTH_HEADER_NAMES_LOWER_BYTES:
+        if headers_lc.get(name_bytes):
             return True
     # 4. ``?token=`` query param — WS routes use this; deprecated but
     # accepted for backwards compatibility with the live client SDK.
@@ -168,6 +214,23 @@ class DefaultDenyAuthMiddleware:
         self, scope: Scope, receive: Receive, send: Send
     ) -> None:
         path = scope.get("path", "")
+        method = scope.get("method", "GET")
+        # F74 — pass CORS preflight through to CORSMiddleware.
+        # The browser sends a credential-less OPTIONS request
+        # (with ``Origin`` + ``Access-Control-Request-Method``
+        # but no auth) to discover what the server allows.
+        # Pre-F74 this middleware returned 401 to every
+        # preflight, breaking CORS for every cross-origin fetch
+        # call. The preflight is NEVER supposed to carry a
+        # credential (browsers forbid it), so it's safe to
+        # forward — the actual CORS check happens in
+        # CORSMiddleware, which sits INSIDE this middleware in
+        # the chain. SecurityHeadersMiddleware (outermost) still
+        # fires, so the preflight response carries HSTS + CSP
+        # + X-Frame-Options + the rest of the OWASP block.
+        if method == "OPTIONS":
+            await self.app(scope, receive, send)
+            return
         if _is_public(path) or _scope_has_credential(scope):
             await self.app(scope, receive, send)
             return
@@ -206,5 +269,11 @@ class DefaultDenyAuthMiddleware:
                 "detail": "Authentication required",
                 "request_id": request_id,
             },
+            # F69 — apply OWASP security headers to the 401 envelope.
+            # The middleware is OUTSIDE ServerErrorMiddleware so our
+            # SecurityHeadersMiddleware sees this response, but we
+            # also set the headers here as defense-in-depth in case
+            # a future refactor moves the middleware order.
+            headers=apply_security_headers(),
         )
         await response(scope, receive, send)

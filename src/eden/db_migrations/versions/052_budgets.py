@@ -7,12 +7,12 @@ Create Date: 2026-06-24
 Three new tables:
 
 * ``budgets`` — per-org cost guardrail config. One row per
-  (org_id, window). The middleware reads from this table to
+  (org_id, "window"). The middleware reads from this table to
   check the monthly / daily / per-request cap.
 
 * ``budget_consumption`` — rolling aggregation of cost
   (USD) per (org_id, window_start). Updated on every
-  gateway ingest. Reads are O(1) for the active window.
+  gateway ingest. Reads are O(1) for the active "window".
 
 * ``budget_actions`` — append-only audit log of every
   threshold_breached / exceeded event the middleware
@@ -58,7 +58,7 @@ def upgrade() -> None:
         """
         id                            VARCHAR(64) PRIMARY KEY,
         org_id                        VARCHAR(128) NOT NULL,
-        window                        VARCHAR(16) NOT NULL DEFAULT 'monthly',
+        "window"                      VARCHAR(16) NOT NULL DEFAULT 'monthly',
         cost_soft_limit_usd           DOUBLE PRECISION NOT NULL DEFAULT 0.80,
         cost_hard_limit_usd           DOUBLE PRECISION NOT NULL DEFAULT 1.00,
         enforcement_enabled           BOOLEAN NOT NULL DEFAULT FALSE,
@@ -68,7 +68,7 @@ def upgrade() -> None:
         updated_at                    TIMESTAMPTZ NOT NULL DEFAULT NOW()
         """,
         "CREATE UNIQUE INDEX IF NOT EXISTS idx_budgets_org_window "
-        "ON budgets (org_id, window) "
+        "ON budgets (org_id, \"window\") "
         "WHERE enforcement_enabled = TRUE",
     )
 
@@ -78,7 +78,7 @@ def upgrade() -> None:
         """
         id                    UUID PRIMARY KEY,
         org_id                VARCHAR(128) NOT NULL,
-        window                VARCHAR(16) NOT NULL,
+        "window"                VARCHAR(16) NOT NULL,
         window_start          TIMESTAMPTZ NOT NULL,
         window_end            TIMESTAMPTZ NOT NULL,
         cost_usd              DOUBLE PRECISION NOT NULL DEFAULT 0.0,
@@ -88,8 +88,7 @@ def upgrade() -> None:
         updated_at            TIMESTAMPTZ NOT NULL DEFAULT NOW()
         """,
         "CREATE UNIQUE INDEX IF NOT EXISTS idx_budget_consumption_active "
-        "ON budget_consumption (org_id, window, window_start) "
-        "WHERE window_end > NOW()",
+        "ON budget_consumption (org_id, \"window\", window_start)",
     )
 
     # ── 3. budget_actions — append-only audit log ─────────────────

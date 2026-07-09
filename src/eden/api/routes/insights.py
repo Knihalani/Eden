@@ -390,11 +390,14 @@ async def export_dataset(
     if req.split_ratio and (req.split_ratio[0] + req.split_ratio[1]) <= 0:
         raise HTTPException(status_code=400, detail="split_ratio components must sum to a positive value")
     service = _get_service()
-    return service.export_dataset(
-        dataset_id,
-        format_type=req.format_type,
-        split_ratio=req.split_ratio,
-    )
+    try:
+        return service.export_dataset(
+            dataset_id,
+            format_type=req.format_type,
+            split_ratio=req.split_ratio,
+        )
+    except (KeyError, ValueError) as e:
+        raise HTTPException(status_code=404, detail=str(e) or "Dataset not found") from e
 
 
 @router.get("/insights/datasets/stats", response_model=dict[str, Any])

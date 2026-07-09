@@ -20,6 +20,7 @@ from fastapi import APIRouter, Body, Depends, HTTPException, Path, Query
 from pydantic import BaseModel, Field
 
 from eden.api.deps import get_current_user, require_org_member
+from eden.api.utils.redact import redact_all
 from eden.observability.telemetry_collector import (  # noqa: F401
     TelemetryCollector,
     TelemetryEvent,
@@ -269,7 +270,7 @@ async def list_traces(
         from eden.storage import postgres as _pg_module
         client = await _pg_module.get_postgres_client()
     except Exception as exc:
-        logger.warning("list_traces: postgres unavailable: %s", exc)
+        logger.warning("list_traces: postgres unavailable: %s", redact_all(str(exc)))
         return TraceListResponse(traces=[], total=0, limit=limit, offset=offset)
     if client is None:
         return TraceListResponse(traces=[], total=0, limit=limit, offset=offset)
@@ -331,7 +332,7 @@ async def list_traces(
         )
         rows, total = await asyncio.gather(rows_coro, total_coro)
     except Exception as exc:
-        logger.warning("list_traces: query failed: %s", exc)
+        logger.warning("list_traces: query failed: %s", redact_all(str(exc)))
         return TraceListResponse(traces=[], total=0, limit=limit, offset=offset)
 
     items = [

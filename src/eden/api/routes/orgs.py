@@ -18,6 +18,7 @@ from eden.api.deps import (
     require_org_permission_dep,
 )
 from eden.api.routes.billing import check_limit
+from eden.api.utils.redact import redact_all
 from eden.config import get_settings
 from eden.services.invitation_service import (
     accept_invitation,
@@ -161,11 +162,11 @@ async def create_org(
     except ClerkAPIError as exc:
         logger.warning(
             "Clerk org create failed for slug=%s: %s; continuing with backend-only org",
-            slug, exc,
+            slug, redact_all(str(exc)),
         )
         degraded = True
     except Exception as exc:  # noqa: BLE001 — defensive
-        logger.exception("Unexpected Clerk error on create_org slug=%s: %s", slug, exc)
+        logger.exception("Unexpected Clerk error on create_org slug=%s: %s", slug, redact_all(str(exc)))
         degraded = True
 
     # Create org (Eden row). We write the clerk_org_id we got from
@@ -188,7 +189,7 @@ async def create_org(
         logger.exception(
             "Failed to write Eden org row after Clerk create "
             "(org_id=%s clerk_org_id=%s): %s",
-            org_id, clerk_org_id, exc,
+            org_id, clerk_org_id, redact_all(str(exc)),
         )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

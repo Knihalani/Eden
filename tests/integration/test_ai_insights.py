@@ -109,24 +109,27 @@ class TestToolRegistry:
         """A tool_use block the LLM hallucinates should not crash the
         chat — it should bubble back as an error envelope so Claude
         can see it on the next iteration."""
-        result = await_dispatch_tool_call("nonsense_tool", {})
-        # Run async via a simple wrapper because the function is async.
         import asyncio
-        result = asyncio.get_event_loop().run_until_complete(
-            insights_tools.dispatch_tool_call(
-                org_id="00000000-0000-0000-0000-000000000000",
-                name="nonsense_tool",
-                input_json={},
+        # ``asyncio.new_event_loop``/``new_event_loop().run_until_complete``
+        # is intentional — ``asyncio.get_event_loop`` is deprecated in
+        # Python 3.12+ when no loop is running in the current thread,
+        # and pytest-asyncio may have torn down the loop the test
+        # process was sharing with the rest of the suite. Creating a
+        # fresh loop and closing it keeps this test order-independent.
+        loop = asyncio.new_event_loop()
+        try:
+            result = loop.run_until_complete(
+                insights_tools.dispatch_tool_call(
+                    org_id="00000000-0000-0000-0000-000000000000",
+                    name="nonsense_tool",
+                    input_json={},
+                )
             )
-        )
+        finally:
+            loop.close()
         assert result["status"] == "error"
         assert "nonsense_tool" in result["output"]
 
-
-def await_dispatch_tool_call(name: str, input_json: dict[str, Any]) -> dict[str, Any]:
-    """Sync shim — the real function is async. Kept to silence the
-    linter about an unused argument."""
-    return {"name": name, "input": input_json}  # pragma: no cover
 
 
 # ============================================================================
@@ -423,9 +426,11 @@ class TestAiInsightsDefensiveDB:
         _patch_blip(monkeypatch, ai_mod)
 
         org = {"user_id": "00000000-0000-0000-0000-000000000001"}
+        user = {"user_id": "00000000-0000-0000-0000-000000000001"}
         result = await ai_mod.list_sessions(
             org_id="00000000-0000-0000-0000-000000000002",
             org=org,
+            user=user,
             limit=10,
         )
         assert result == {"sessions": []}

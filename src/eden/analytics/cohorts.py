@@ -101,26 +101,52 @@ async def cohort_retention(org_id: str, *, weeks: int = 8) -> list[CohortRow]:
     if not cohorts:
         return []
 
-    # For each cohort, count distinct users active in the w-th week.
+    # Audit 2026-07-07 — collapsed the N cohorts × W weeks = O(N*W)
+    # sequential fetchrow round-trips into a single grouped query
+    # plus a Python-side bucketing step. Pre-fix the inner loop ran
+    # ``await client.fetchrow(...)`` for every (cohort, week) cell,
+    # so a 8-week view of 8 cohorts cost 64 sequential round-trips.
     from eden.storage.postgres import get_postgres_client
     client = await get_postgres_client()
+    if client is None:
+        return []
+
+    # Earliest cohort start; we walk forward ``weeks`` windows from
+    # each. Pull the full window of activity in one query rather than
+    # one query per cohort-week pair.
+    earliest = min(c.start_date for c in cohorts)
+    latest = max(c.start_date for c in cohorts) + timedelta(weeks=weeks)
+    sql_rows = await client.fetch(
+        """
+        SELECT
+            date_trunc('week', created_at)::date AS activity_week,
+            user_id
+        FROM jobs
+        WHERE org_id = $1
+          AND created_at >= $2
+          AND created_at < $3
+        GROUP BY activity_week, user_id
+        """,
+        org_id,
+        earliest,
+        latest,
+    )
+
+    # Bucket users by (activity_week). A user counts toward cohort
+    # C, week W if their ``activity_week`` equals
+    # ``C + timedelta(weeks=W)`` (Postgres ``date_trunc('week', ...)``
+    # and Python ``start_date + timedelta(weeks=W)`` align to the
+    # same Monday-anchored bucket).
+    activity_by_week: dict[object, set[object]] = {}
+    for r in sql_rows:
+        activity_by_week.setdefault(r["activity_week"], set()).add(r["user_id"])
+
     rows_out: list[CohortRow] = []
     for cohort in cohorts:
         retention: dict[int, float] = {}
         for w in range(weeks):
             start = cohort.start_date + timedelta(weeks=w)
-            end = start + timedelta(weeks=1)
-            active_row = await client.fetchrow(
-                """
-                SELECT count(DISTINCT user_id)::int AS n
-                FROM jobs
-                WHERE org_id = $1 AND created_at >= $2 AND created_at < $3
-                """,
-                org_id,
-                start,
-                end,
-            )
-            n = int(active_row["n"]) if active_row else 0
+            n = len(activity_by_week.get(start, ()))
             retention[w] = n / max(cohort.size, 1)
         rows_out.append(
             CohortRow(

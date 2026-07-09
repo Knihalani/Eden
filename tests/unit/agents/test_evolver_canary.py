@@ -49,17 +49,31 @@ def mock_postgres():
     """Mock PostgresClient used by the audit logger."""
     client = MagicMock()
     client.fetchval = AsyncMock(side_effect=_fetchval_dispatch)
+    client.fetchrow = AsyncMock(
+        return_value={"quality_metrics": json.dumps({"org_id": "00000000-0000-0000-0000-000000000aaa"})}
+    )
     client.execute = AsyncMock(return_value="INSERT 0 1")
     return client
 
 
 async def _fetchval_dispatch(query: str, *args):
-    """Return plausible org/user ids for the SELECTs the audit logger
-    runs against the orgs + users tables."""
+    """Return plausible values for the SELECTs the audit logger
+    runs. Audit 2026-07-07: the canary-creation audit path now
+    resolves org_id from ``prompt_versions.quality_metrics``
+    (instead of the previous ``SELECT id FROM organizations
+    LIMIT 1`` cross-tenant leak) and the system-user from
+    ``users WHERE clerk_id = 'system'``.
+    """
     q = " ".join(query.split()).lower()
-    if "from organizations" in q:
-        return "00000000-0000-0000-0000-000000000aaa"
-    if "from users" in q:
+    if "from prompt_versions" in q and "quality_metrics" in q:
+        # Audit 2026-07-07 — pre-fix the audit path used a
+        # LIMIT 1 query on the organizations table; the fix
+        # recovers org_id from the prompt_versions row's own
+        # quality_metrics JSONB. We pretend the row carries
+        # org_id so the test continues to exercise the audit
+        # path end-to-end.
+        return json.dumps({"org_id": "00000000-0000-0000-0000-000000000aaa"})
+    if "from users" in q and "clerk_id" in q:
         return "00000000-0000-0000-0000-000000000bbb"
     return None
 
@@ -291,3 +305,115 @@ class TestHandleDegradationWiring:
 
         assert created == 0
         evolver._auto_create_canary.assert_not_called()
+
+
+# ─── Audit 2026-07-07: cross-tenant audit attribution fix ──────────
+
+
+class TestAuditAttributionTenantSafety:
+    """Audit 2026-07-07 — pre-fix the audit log insert ran
+    ``SELECT id FROM organizations LIMIT 1`` / ``SELECT id FROM
+    users LIMIT 1``, attributing every canary-creation event to
+    whichever org/user happened to be at the top of the table.
+    That is a tenant-isolation bug in the audit log: Org A's
+    evolver would appear to have created a canary for Org B's
+    agent. These tests lock in the fix: when ``org_id`` cannot
+    be resolved from the prompt_versions row, the audit insert
+    is skipped and the canary is still created.
+    """
+
+    @pytest.mark.asyncio
+    async def test_skips_audit_when_org_id_cannot_be_resolved(
+        self, evolver, mock_postgres
+    ):
+        """No quality_metrics row → no org_id → skip audit."""
+        mock_postgres.fetchrow = AsyncMock(return_value=None)
+
+        with patch(
+            "eden.agents.evolution.components.settings"
+        ) as mock_settings:
+            mock_settings.evolver_auto_canary_pct = 5
+            with patch(
+                "eden.storage.postgres.get_postgres_client",
+                AsyncMock(return_value=mock_postgres),
+            ):
+                result = await evolver._auto_create_canary("planner", 2, 1)
+
+        # The canary was still created even though the audit
+        # insert was skipped — we don't want a tenant-safety
+        # improvement to break the canary itself.
+        assert result is True
+        evolver.prompt_versions.update_quality_metrics.assert_awaited_once()
+        # Critical: the audit INSERT must NOT have been called.
+        # Pre-fix it would have been called with the top-of-table
+        # org/user ids, attributing the canary to the wrong tenant.
+        mock_postgres.execute.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_skips_audit_when_no_system_user(
+        self, evolver, mock_postgres
+    ):
+        """org_id resolved but no system user → skip audit.
+
+        The audit table requires user_id NOT NULL per migration 008.
+        The canary-creation worker has no authenticated user, so we
+        fall back to a 'system' placeholder. If it has not been
+        provisioned, we skip the audit rather than blame an
+        arbitrary user.
+        """
+
+        async def fetchval_no_system(query, *args):
+            q = " ".join(query.split()).lower()
+            if "from users" in q and "clerk_id" in q:
+                return None  # no system user
+            if "from prompt_versions" in q:
+                return json.dumps(
+                    {"org_id": "00000000-0000-0000-0000-000000000aaa"}
+                )
+            return None
+
+        mock_postgres.fetchval = AsyncMock(side_effect=fetchval_no_system)
+
+        with patch(
+            "eden.agents.evolution.components.settings"
+        ) as mock_settings:
+            mock_settings.evolver_auto_canary_pct = 5
+            with patch(
+                "eden.storage.postgres.get_postgres_client",
+                AsyncMock(return_value=mock_postgres),
+            ):
+                result = await evolver._auto_create_canary("planner", 2, 1)
+
+        assert result is True
+        mock_postgres.execute.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_audit_does_not_use_limit_one_on_organizations(
+        self, evolver, mock_postgres
+    ):
+        """Regression guard: the production code must never issue
+        ``SELECT id FROM organizations LIMIT 1`` to attribute an
+        audit row — that's the cross-tenant leak we're fixing.
+        """
+        queries_seen: list[str] = []
+
+        async def capture_execute(query, *args):
+            queries_seen.append(query)
+            return "INSERT 0 1"
+
+        mock_postgres.execute = AsyncMock(side_effect=capture_execute)
+
+        with patch(
+            "eden.agents.evolution.components.settings"
+        ) as mock_settings:
+            mock_settings.evolver_auto_canary_pct = 5
+            with patch(
+                "eden.storage.postgres.get_postgres_client",
+                AsyncMock(return_value=mock_postgres),
+            ):
+                await evolver._auto_create_canary("planner", 2, 1)
+
+        for q in queries_seen:
+            assert "FROM organizations LIMIT 1" not in q.upper(), (
+                f"Cross-tenant audit attribution: {q!r}"
+            )

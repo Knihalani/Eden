@@ -189,3 +189,46 @@ func TestConfigureAndClear(t *testing.T) {
 		t.Fatal("Client() should be nil after SetClient(nil)")
 	}
 }
+
+func TestTraceFuncDurationIsMeasured(t *testing.T) {
+	// Regression: TraceFunc used to record duration_ms as 0 because
+	// it measured time.Since(time.Now()). The fix captures a start
+	// time before invoking the user function.
+	var mu sync.Mutex
+	var lastEvent Event
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		var ev Event
+		_ = json.Unmarshal(body, &ev)
+		mu.Lock()
+		lastEvent = ev
+		mu.Unlock()
+		w.WriteHeader(http.StatusAccepted)
+	}))
+	defer srv.Close()
+	Configure(Config{BaseURL: srv.URL, OrgID: "o", APIKey: "k"})
+	defer SetClient(nil)
+	_, err := TraceFunc(context.Background(), "compute", func() (int, error) {
+		time.Sleep(30 * time.Millisecond)
+		return 0, nil
+	})
+	if err != nil {
+		t.Fatalf("err: %v", err)
+	}
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		mu.Lock()
+		ready := lastEvent.EventID != ""
+		mu.Unlock()
+		if ready {
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	dur, _ := lastEvent.Payload["duration_ms"].(float64)
+	if dur < 25 {
+		t.Errorf("duration_ms = %v, want >= 25ms", dur)
+	}
+}

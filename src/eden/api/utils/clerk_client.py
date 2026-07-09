@@ -28,7 +28,23 @@ import logging
 import time
 from typing import Any
 
+import httpx
+
+from eden.api.utils.redact import redact_all
 from eden.config import get_settings
+
+# Module-level singleton httpx client (mirrors the F42 pattern in
+# ``eden.providers.pr``). The Clerk Backend SDK fires 2-3 requests
+# per ``get_user`` / ``list_users`` call, so the keep-alive pool
+# win is real for the portal's user-management pages.
+_HTTPX: httpx.AsyncClient | None = None
+
+
+def _shared_httpx(timeout: float) -> httpx.AsyncClient:
+    global _HTTPX
+    if _HTTPX is None:
+        _HTTPX = httpx.AsyncClient(timeout=timeout)
+    return _HTTPX
 
 logger = logging.getLogger(__name__)
 
@@ -75,7 +91,7 @@ async def _post(path: str, body: dict[str, Any], *, timeout: float = 10.0) -> di
         "Content-Type": "application/json",
     }
     try:
-        async with httpx.AsyncClient(timeout=timeout) as client:
+        async with _shared_httpx(timeout) as client:
             response = await client.post(url, json=body, headers=headers)
     except httpx.TimeoutException as exc:
         raise ClerkAPIError(f"Clerk timeout: {path}") from exc
@@ -110,7 +126,7 @@ async def _get(path: str, *, timeout: float = 5.0) -> dict[str, Any]:
         "Authorization": f"Bearer {settings.clerk_secret_key}",
     }
     try:
-        async with httpx.AsyncClient(timeout=timeout) as client:
+        async with _shared_httpx(timeout) as client:
             response = await client.get(url, headers=headers)
     except httpx.TimeoutException as exc:
         raise ClerkAPIError(f"Clerk timeout: {path}") from exc
@@ -165,7 +181,16 @@ async def get_user(clerk_id: str) -> dict[str, Any] | None:
         try:
             payload = await _get(f"/users/{clerk_id}")
         except ClerkAPIError as exc:
-            logger.warning("get_user(%s) failed: %s", clerk_id, exc)
+            # F70 — defensive redaction. ``ClerkAPIError`` on a 4xx
+            # contains ``response.text[:300]`` which Clerk often fills
+            # with the user's email + their internal id. Wrap the
+            # ``exc`` through ``redact_all`` so neither leaks into our
+            # log stream even if Clerk's error format changes.
+            logger.warning(
+                "get_user(%s) failed: %s",
+                clerk_id,
+                redact_all(str(exc)),
+            )
             return None
         if payload is not None:
             _USER_CACHE[clerk_id] = (time.monotonic() + _USER_CACHE_TTL_SECONDS, payload)

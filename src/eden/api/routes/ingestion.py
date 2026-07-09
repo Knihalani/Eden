@@ -31,7 +31,7 @@ from __future__ import annotations
 
 import logging
 import time
-from collections import defaultdict, deque
+from collections import OrderedDict, deque
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Request
@@ -60,8 +60,83 @@ router = APIRouter(prefix="/orgs/{org_id}/ingest", tags=["ingestion"])
 # Redis-backed ``SlidingWindowRateLimiter`` in Phase 3 when RBAC +
 # multi-instance arrive. Keyed by tenant; the global middleware also
 # runs and may additionally cap by tier or API-key.
+#
+# F63 — ``_rate_buckets`` is now an ``OrderedDict`` keyed by
+# ``org_id`` with a hard cap and a TTL.
+#
+# Pre-F63 the dict grew unbounded against unique-tenant traffic. The
+# sliding-window ``deque`` values are cheap (~hundreds of bytes
+# each) but a malicious caller spamming unique ``X-Org-Id`` headers
+# (or just churning a long tail of one-shot tenants) could multiply
+# the API's resident set size with no upper bound. Worse: every
+# entry lived for the lifetime of the pod because the only way to
+# drop a bucket was to wait the full 60s window AND have it
+# organically empty.
+#
+# * ``_MAX_RATE_BUCKETS`` — hard cap on the number of tenant
+#   entries. Once exceeded, the least-recently-touched org_id is
+#   dropped at insertion time. Sized for healthy multi-tenant
+#   traffic; a busy multi-tenant API process sees < 100 entries.
+# * ``_evict_idle_buckets`` — sweep helper that drops buckets
+#   whose sliding window is empty AND whose last access is older
+#   than the rate-limit window. Defends against parked tenants
+#   who walked away.
+# * ``_touch_bucket`` — bumps the LRU position of an existing
+#   bucket on every ``_check_rate_limit`` call. Active tenants
+#   always survive eviction; cold tenants get reaped first.
 
-_rate_buckets: dict[str, deque[float]] = defaultdict(deque)
+_rate_buckets: OrderedDict[str, deque[float]] = OrderedDict()
+_MAX_RATE_BUCKETS: int = 4096
+_RATE_WINDOW_SECONDS: float = 60.0
+
+
+def _touch_bucket(org_id: str) -> None:
+    """Bump the LRU position for an org's rate-limit bucket.
+
+    Pure housekeeping. Best-effort: any exception inside the
+    OrderedDict rewrite is silently dropped so a transient
+    bookkeeping issue cannot break a paying customer's API
+    call. Mirrors ``multi_agent._touch_env`` (F61) and
+    ``gateway._upstream_client_cache.move_to_end`` (F62)."""
+    try:
+        if org_id in _rate_buckets:
+            _rate_buckets.move_to_end(org_id)
+    except Exception:
+        pass
+
+
+def _evict_idle_buckets(now: float) -> None:
+    """Drop buckets whose sliding window is empty AND whose
+    last access predates ``now - _RATE_WINDOW_SECONDS``.
+
+    Pre-F63 nothing reaped idle tenants — the deque values
+    auto-collapsed to empty on a window-expiry, but the key
+    itself lived in the dict forever. A long-running pod would
+    accumulate stale org_id keys for every tenant who ever sent
+    a single event. F63 walks the dict on every rate-limit
+    check and drops the empty, idle entries."""
+    cutoff = now - _RATE_WINDOW_SECONDS
+    # Collect first to avoid mutating during iteration.
+    stale: list[str] = []
+    for org_id, bucket in _rate_buckets.items():
+        if not bucket or bucket[-1] < cutoff:
+            stale.append(org_id)
+    for org_id in stale:
+        _rate_buckets.pop(org_id, None)
+
+
+def _enforce_rate_buckets_cap(org_id: str) -> None:
+    """Enforce the hard cap on ``_rate_buckets``.
+
+    Drops the least-recently-touched org until the size is
+    back under the limit. The new org always succeeds — only
+    older ones are evicted. Mirrors
+    ``multi_agent._enforce_cap_on_insert`` (F61)."""
+    while len(_rate_buckets) >= _MAX_RATE_BUCKETS:
+        try:
+            _rate_buckets.popitem(last=False)
+        except KeyError:
+            break
 
 
 def _check_rate_limit(org_id: str) -> None:
@@ -70,8 +145,19 @@ def _check_rate_limit(org_id: str) -> None:
     if cap <= 0:
         return
     now = time.monotonic()
-    window = 60.0
-    bucket = _rate_buckets[org_id]
+    window = _RATE_WINDOW_SECONDS
+    # F63: opportunistic housekeeping on the hot path. Both
+    # sweeps are O(buckets) and run in microseconds for the
+    # healthy multi-tenant case (< 100 entries). They are
+    # *not* on the latency-critical path of any single
+    # request because they only iterate the dict — they do
+    # not touch Postgres, Redis, or the network.
+    _evict_idle_buckets(now)
+    _enforce_rate_buckets_cap(org_id)
+    bucket = _rate_buckets.get(org_id)
+    if bucket is None:
+        bucket = deque()
+        _rate_buckets[org_id] = bucket
     # Drop entries outside the window.
     while bucket and bucket[0] < now - window:
         bucket.popleft()
@@ -86,6 +172,9 @@ def _check_rate_limit(org_id: str) -> None:
             headers={"Retry-After": str(retry_after)},
         )
     bucket.append(now)
+    # F63: bump LRU so an active tenant survives the cap
+    # eviction triggered by a churning one-shot tenant.
+    _touch_bucket(org_id)
 
 
 # ── Response schema ──────────────────────────────────────────────────
@@ -309,19 +398,33 @@ async def ingest_chunks(
             ),
         )
 
+    from eden.observability.errors import IngestionUnavailable
     from eden.observability.telemetry_collector import get_telemetry_collector
     collector = await get_telemetry_collector()
     try:
         result = await collector.record_stream_chunks(
             org_id, payload.chunks, settings=settings
         )
-    except Exception as exc:  # ponytail: IngestionUnavailable + future backend-down signals
+    except IngestionUnavailable as exc:
         # DL-3: surface Postgres-unavailable as 503 + Retry-After so
         # the SDK buffers and retries.
         raise HTTPException(
             status_code=503,
-            detail=str(exc) or "ingestion_unavailable",
+            detail=str(exc.message) if hasattr(exc, "message") else str(exc),
             headers={"Retry-After": "5"},
         ) from exc
+    except Exception:
+        # Any other exception is an internal fault — log full
+        # traceback server-side and return a generic 503 with no
+        # leak of the raw error text. The SDK retries either way.
+        from eden.api.utils.safe_error import safe_detail
+        raise HTTPException(
+            status_code=503,
+            detail=safe_detail(
+                Exception("Ingestion temporarily unavailable"),
+                fallback="Ingestion temporarily unavailable; retry after backoff",
+            ),
+            headers={"Retry-After": "5"},
+        ) from None
     return ChunksIngestResponse(**result)
 

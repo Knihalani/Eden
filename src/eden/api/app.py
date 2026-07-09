@@ -14,6 +14,10 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from eden.api.middleware.internal_only import InternalOnlyMiddleware
 from eden.api.middleware.quota_enforcement import QuotaEnforcementMiddleware
+from eden.api.middleware.security_headers import (
+    SecurityHeadersMiddleware,
+    apply_security_headers,
+)
 from eden.api.middleware.tenant_rate_limit import TenantRateLimitMiddleware
 from eden.api.routes import (
     agent_pr_suggestions,
@@ -106,7 +110,6 @@ from eden.api.routes import (
     references,
     region,
     replay,
-    retention_policy,
     scim,
     sessions,
     sharing,
@@ -350,29 +353,93 @@ async def lifespan(app: FastAPI):
 
     yield
 
-    # Cleanup
+    # F59 — orderly shutdown. The order matters: drain the
+    # background tasks that own live Postgres rows first (so
+    # the final flush completes against a live pool), then
+    # close the sink clients that don't depend on the
+    # Postgres pool, then close Postgres last. Pre-F59
+    # ``close_redis_client`` / ``close_otel_dual_exporter``
+    # / ``shutdown_trace_quality`` / ``close_telemetry_collector``
+    # were never called from the lifespan, so the process
+    # leaked their aiohttp / asyncio transports across
+    # every pod restart (F57 already closed the httpx
+    # pool; this closes the rest).
+
+    # ── 1. background-task drainers (use Postgres) ──
     if insights_loop:
         try:
             from eden.insights.detector_loop import stop_insights_detector_loop
 
             await stop_insights_detector_loop()
-        except Exception as e:
+        except Exception as e:  # pragma: no cover - defensive
             logger.warning(f"Insights detector loop stop failed: {e}")
 
-    from eden.storage.postgres import close_postgres_client
+    try:
+        from eden.observability.trace_quality.hooks import (
+            shutdown_trace_quality,
+        )
 
-    await close_postgres_client()
+        await shutdown_trace_quality()
+    except Exception as e:  # pragma: no cover - defensive
+        logger.warning(f"trace_quality shutdown failed: {e}")
 
-    # B-6 follow-up — release the shared ``httpx.AsyncClient`` used
-    # by ``clerk_auth._fetch_jwks`` so the underlying SSL transport
-    # pool is closed cleanly. Pre-fix the module-global client was
-    # created lazily and never closed across pod restarts.
+    # ── 2. sink clients (independent of Postgres) ──
+    try:
+        from eden.observability.otel_exporter import (
+            close_otel_dual_exporter,
+        )
+
+        await close_otel_dual_exporter()
+    except Exception as e:  # pragma: no cover - defensive
+        logger.warning(f"otel_exporter shutdown failed: {e}")
+
+    try:
+        from eden.storage.redis import close_redis_client
+
+        await close_redis_client()
+    except Exception as e:  # pragma: no cover - defensive
+        logger.warning(f"redis shutdown failed: {e}")
+
+    try:
+        from eden.observability.telemetry_collector import (
+            close_telemetry_collector,
+        )
+
+        await close_telemetry_collector()
+    except Exception as e:  # pragma: no cover - defensive
+        logger.warning(f"telemetry_collector shutdown failed: {e}")
+
+    # ── 3. httpx pools ──
+    # B-6 follow-up — release the shared ``httpx.AsyncClient``
+    # used by ``clerk_auth._fetch_jwks`` so the underlying SSL
+    # transport pool is closed cleanly.
     try:
         from eden.api.utils.clerk_auth import shutdown_clerk_auth
 
         await shutdown_clerk_auth()
     except Exception as e:
         logger.warning(f"clerk_auth shutdown failed: {e}")
+
+    # F57 — release the ``WebhookDeliveryService`` singleton's
+    # keep-alive HTTP pool.
+    try:
+        from eden.services.webhook_delivery import (
+            get_webhook_delivery_service,
+        )
+
+        await get_webhook_delivery_service().aclose()
+    except Exception as e:
+        logger.warning(
+            f"webhook_delivery shutdown failed: {e}"
+        )
+
+    # ── 4. Postgres pool, last ──
+    try:
+        from eden.storage.postgres import close_postgres_client
+
+        await close_postgres_client()
+    except Exception as e:
+        logger.warning(f"postgres shutdown failed: {e}")
 
     logger.info("Shutting down Eden API...")
 
@@ -481,6 +548,50 @@ if getattr(settings, "rate_limit_enabled", True):
 # minimum_size=500 skips compressing tiny JSON like {"ok": true}.
 app.add_middleware(GZipMiddleware, minimum_size=500)
 
+# Audit 2026-07-06 — pre-existing bug fix. Both middlewares were
+# implemented and unit-tested but never registered on the app.
+# Wire them now so:
+#   - LatencyMiddleware populates the §11.4 latency histogram that
+#     /metrics + the alerts engine read from
+#   - CorrelationIdMiddleware sets the request contextvar that
+#     api_version / bronze_sink read for log correlation
+#   - Both are no-op for cost (contextvar + perf_counter per
+#     request, ~µs each on the hot path)
+from eden.api.middleware.api_version import APIVersionMiddleware
+from eden.api.middleware.correlation_id import CorrelationIdMiddleware
+from eden.api.middleware.latency import LatencyMiddleware
+
+# Registered first so the histogram and correlation_id are
+# populated for the entire downstream chain (including the
+# 401 path of DefaultDenyAuthMiddleware below).
+app.add_middleware(LatencyMiddleware)
+app.add_middleware(CorrelationIdMiddleware)
+
+# Pre-existing bug #4 — APIVersionMiddleware was implemented and
+# the ``envelope.py`` schemas reference ``api_version``, but the
+# middleware was never ``add_middleware``'d. As a result the
+# ``X-API-Version`` header was never echoed on responses, and the
+# version-validation 400 was never returned for clients that
+# passed an unknown ``X-API-Version``. Wiring it here activates
+# both behaviours for every ``/v1/*`` request.
+app.add_middleware(APIVersionMiddleware)
+
+# F67 — security headers (OWASP Secure Headers Project).
+# Pure-ASGI middleware registered LAST in the chain so it
+# becomes the OUTERMOST user middleware (FastAPI's
+# ``add_middleware`` does ``insert(0, ...)``; the last
+# registered is at index 0 → wrapped LAST in Starlette's
+# ``reversed()`` build loop → outermost). Every response —
+# CORS preflight, 401 from DefaultDenyAuth, 503 from
+# health-probe, 429 from rate-limit, and the route's own
+# 200/4xx — goes through this middleware on the way out.
+# The ``ServerErrorMiddleware`` outside us still handles
+# uncaught exceptions (500 envelope) so the global
+# ``@app.exception_handler(Exception)`` applies the same
+# headers via ``apply_security_headers()`` (helper in
+# ``eden.api.middleware.security_headers``).
+app.add_middleware(SecurityHeadersMiddleware)
+
 
 # ============================================================================
 # Global exception handlers (Site-wide fix — July 2026)
@@ -511,6 +622,10 @@ async def _unhandled_exception(request: Request, exc: Exception):
         "unhandled exception [request_id=%s] %s %s",
         rid, request.method, request.url.path,
     )
+    # F67 — apply OWASP security headers to the 500 envelope.
+    # ``ServerErrorMiddleware`` is the outermost wrapper, so our
+    # SecurityHeadersMiddleware doesn't see this response. The
+    # exception handler is the right place to set them.
     return JSONResponse(
         status_code=500,
         content={
@@ -518,6 +633,7 @@ async def _unhandled_exception(request: Request, exc: Exception):
             "detail": "An unexpected error occurred",
             "request_id": rid,
         },
+        headers=apply_security_headers(),
     )
 
 
@@ -558,10 +674,14 @@ async def _http_exception(request: Request, exc: StarletteHTTPException):
     else:
         err = "http_error"
         detail = exc.detail if isinstance(exc.detail, (str, dict)) else "Request failed"
+    # F67 — apply OWASP security headers to the 4xx/5xx envelope.
+    # Preserves the upstream ``exc.headers`` (set by raise-for-status
+    # flows that pass Retry-After, Allow, etc.) and merges our
+    # security headers on top.
     return JSONResponse(
         status_code=status,
         content={"error": err, "detail": detail, "request_id": rid},
-        headers=exc.headers or {},
+        headers=apply_security_headers(exc.headers or {}),
     )
 
 # Include route modules

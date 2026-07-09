@@ -594,23 +594,22 @@ class GitHubPRProvider:
         self, branch: str, from_sha: str | None = None,
     ) -> None:
         """Create a branch via POST /repos/.../git/refs."""
-        import httpx as _httpx
         if not from_sha:
             from_sha = await self._get_default_branch_sha()
-        async with _httpx.AsyncClient(timeout=30.0) as client:
-            r = await client.post(
-                f"https://api.github.com/repos/{self.repo}/git/refs",
-                headers=self._headers,
-                json={"ref": f"refs/heads/{branch}", "sha": from_sha},
+        client = _shared_httpx()
+        r = await client.post(
+            f"https://api.github.com/repos/{self.repo}/git/refs",
+            headers=self._headers,
+            json={"ref": f"refs/heads/{branch}", "sha": from_sha},
+        )
+        # 422 = ref already exists. We treat that as success
+        # (the onboarding flow retries with the same branch name
+        # for idempotency).
+        if r.status_code not in (200, 201, 422):
+            logger.warning(
+                "GitHubPRProvider.create_branch %s: %s",
+                r.status_code, r.text[:200],
             )
-            # 422 = ref already exists. We treat that as success
-            # (the onboarding flow retries with the same branch name
-            # for idempotency).
-            if r.status_code not in (200, 201, 422):
-                logger.warning(
-                    "GitHubPRProvider.create_branch %s: %s",
-                    r.status_code, r.text[:200],
-                )
 
     async def commit_files(
         self,
@@ -623,84 +622,97 @@ class GitHubPRProvider:
         Steps:
             1. Get the branch's current SHA.
             2. Read the parent tree SHA.
-            3. POST one blob per file (base64 content).
+            3. POST one blob per file (base64 content) — fired
+               in parallel via ``asyncio.gather`` so N files
+               take one round-trip's worth of latency, not N.
             4. POST a new tree referencing the blobs.
             5. POST a new commit pointing at the tree.
             6. PATCH the branch ref to the new commit.
         """
         import base64 as _base64
 
-        import httpx as _httpx
-        async with _httpx.AsyncClient(timeout=30.0) as client:
-            # 1. Branch SHA
-            ref_r = await client.get(
-                f"https://api.github.com/repos/{self.repo}/git/ref/heads/{branch}",
-                headers=self._headers,
-            )
-            if ref_r.status_code != 200:
-                logger.warning("GitHubPRProvider commit_files ref: %s", ref_r.text[:200])
-                return CommitInfo(sha="", message=message, author="", timestamp=datetime.now(UTC))
-            parent_sha = ref_r.json()["object"]["sha"]
-            # 2. Parent commit + tree SHA
-            commit_r = await client.get(
-                f"https://api.github.com/repos/{self.repo}/git/commits/{parent_sha}",
-                headers=self._headers,
-            )
-            if commit_r.status_code != 200:
-                return CommitInfo(sha="", message=message, author="", timestamp=datetime.now(UTC))
-            base_tree_sha = commit_r.json()["tree"]["sha"]
-            # 3. Blob per file
-            tree_entries: list[dict] = []
-            for f in files:
-                blob_r = await client.post(
+        client = _shared_httpx()
+        # 1. Branch SHA
+        ref_r = await client.get(
+            f"https://api.github.com/repos/{self.repo}/git/ref/heads/{branch}",
+            headers=self._headers,
+        )
+        if ref_r.status_code != 200:
+            logger.warning("GitHubPRProvider commit_files ref: %s", ref_r.text[:200])
+            return CommitInfo(sha="", message=message, author="", timestamp=datetime.now(UTC))
+        parent_sha = ref_r.json()["object"]["sha"]
+        # 2. Parent commit + tree SHA
+        commit_r = await client.get(
+            f"https://api.github.com/repos/{self.repo}/git/commits/{parent_sha}",
+            headers=self._headers,
+        )
+        if commit_r.status_code != 200:
+            return CommitInfo(sha="", message=message, author="", timestamp=datetime.now(UTC))
+        base_tree_sha = commit_r.json()["tree"]["sha"]
+        # 3. Blob per file — fired concurrently. The pre-fix
+        # code awaited each POST in a sequential ``for`` loop,
+        # which cost N round-trips for N files (≈10s on a
+        # warm TCP connection, ≈30s on a cold one for the
+        # onboarding flow's manifest batch). The shared
+        # client (see ``_shared_httpx``) gives us a single
+        # connection pool for all concurrent requests.
+        encoded_blobs = [
+            _base64.b64encode(f.content.encode("utf-8")).decode()
+            for f in files
+        ]
+        blob_responses = await asyncio.gather(
+            *[
+                client.post(
                     f"https://api.github.com/repos/{self.repo}/git/blobs",
                     headers=self._headers,
-                    json={
-                        "content": _base64.b64encode(f.content.encode("utf-8")).decode(),
-                        "encoding": "base64",
-                    },
+                    json={"content": b64, "encoding": "base64"},
                 )
-                if blob_r.status_code not in (200, 201):
-                    logger.warning("GitHubPRProvider blob create: %s", blob_r.text[:200])
-                    continue
-                tree_entries.append({
-                    "path": f.path,
-                    "mode": "100644",
-                    "type": "blob",
-                    "sha": blob_r.json()["sha"],
-                })
-            if not tree_entries:
-                return CommitInfo(sha="", message=message, author="", timestamp=datetime.now(UTC))
-            # 4. New tree
-            tree_r = await client.post(
-                f"https://api.github.com/repos/{self.repo}/git/trees",
-                headers=self._headers,
-                json={"base_tree": base_tree_sha, "tree": tree_entries},
-            )
-            if tree_r.status_code not in (200, 201):
-                return CommitInfo(sha="", message=message, author="", timestamp=datetime.now(UTC))
-            tree_sha = tree_r.json()["sha"]
-            # 5. New commit
-            commit_create_r = await client.post(
-                f"https://api.github.com/repos/{self.repo}/git/commits",
-                headers=self._headers,
-                json={
-                    "message": message,
-                    "tree": tree_sha,
-                    "parents": [parent_sha],
-                },
-            )
-            if commit_create_r.status_code not in (200, 201):
-                return CommitInfo(sha="", message=message, author="", timestamp=datetime.now(UTC))
-            new_sha = commit_create_r.json()["sha"]
-            # 6. Update ref
-            patch_r = await client.patch(
-                f"https://api.github.com/repos/{self.repo}/git/refs/heads/{branch}",
-                headers=self._headers,
-                json={"sha": new_sha, "force": False},
-            )
-            if patch_r.status_code != 200:
-                logger.warning("GitHubPRProvider ref patch: %s", patch_r.text[:200])
+                for b64 in encoded_blobs
+            ]
+        )
+        tree_entries: list[dict] = []
+        for f, blob_r in zip(files, blob_responses, strict=True):
+            if blob_r.status_code not in (200, 201):
+                logger.warning("GitHubPRProvider blob create: %s", blob_r.text[:200])
+                continue
+            tree_entries.append({
+                "path": f.path,
+                "mode": "100644",
+                "type": "blob",
+                "sha": blob_r.json()["sha"],
+            })
+        if not tree_entries:
+            return CommitInfo(sha="", message=message, author="", timestamp=datetime.now(UTC))
+        # 4. New tree
+        tree_r = await client.post(
+            f"https://api.github.com/repos/{self.repo}/git/trees",
+            headers=self._headers,
+            json={"base_tree": base_tree_sha, "tree": tree_entries},
+        )
+        if tree_r.status_code not in (200, 201):
+            return CommitInfo(sha="", message=message, author="", timestamp=datetime.now(UTC))
+        tree_sha = tree_r.json()["sha"]
+        # 5. New commit
+        commit_create_r = await client.post(
+            f"https://api.github.com/repos/{self.repo}/git/commits",
+            headers=self._headers,
+            json={
+                "message": message,
+                "tree": tree_sha,
+                "parents": [parent_sha],
+            },
+        )
+        if commit_create_r.status_code not in (200, 201):
+            return CommitInfo(sha="", message=message, author="", timestamp=datetime.now(UTC))
+        new_sha = commit_create_r.json()["sha"]
+        # 6. Update ref
+        patch_r = await client.patch(
+            f"https://api.github.com/repos/{self.repo}/git/refs/heads/{branch}",
+            headers=self._headers,
+            json={"sha": new_sha, "force": False},
+        )
+        if patch_r.status_code != 200:
+            logger.warning("GitHubPRProvider ref patch: %s", patch_r.text[:200])
         return CommitInfo(
             sha=new_sha,
             message=message,
@@ -715,49 +727,47 @@ class GitHubPRProvider:
         then opens the PR. Reviewers + labels are best-effort —
         failure to add a reviewer doesn't fail the whole call.
         """
-        import httpx as _httpx
-
         from .repo import _pr_info_from_github  # local import to avoid cycle
         branch = req.branch or f"eden/onboarding-{int(time.time())}"
         await self.create_branch(branch)
         commit_message = req.commit_message or req.title
         if req.files:
             await self.commit_files(branch=branch, files=req.files, message=commit_message)
-        async with _httpx.AsyncClient(timeout=30.0) as client:
-            pr_r = await client.post(
-                f"https://api.github.com/repos/{self.repo}/pulls",
-                headers=self._headers,
-                json={
-                    "title": req.title,
-                    "body": req.body,
-                    "head": branch,
-                    "base": req.base,
-                    "draft": req.draft,
-                },
+        client = _shared_httpx()
+        pr_r = await client.post(
+            f"https://api.github.com/repos/{self.repo}/pulls",
+            headers=self._headers,
+            json={
+                "title": req.title,
+                "body": req.body,
+                "head": branch,
+                "base": req.base,
+                "draft": req.draft,
+            },
+        )
+        if pr_r.status_code not in (200, 201):
+            logger.warning("GitHubPRProvider.create_pr: %s", pr_r.text[:200])
+            return PullRequestInfo(
+                number=0, title=req.title, body=req.body,
+                branch=branch, base=req.base,
+                url="", state="failed",
+                created_at=datetime.now(UTC),
             )
-            if pr_r.status_code not in (200, 201):
-                logger.warning("GitHubPRProvider.create_pr: %s", pr_r.text[:200])
-                return PullRequestInfo(
-                    number=0, title=req.title, body=req.body,
-                    branch=branch, base=req.base,
-                    url="", state="failed",
-                    created_at=datetime.now(UTC),
-                )
-            pr_payload = pr_r.json()
-            pr_number = int(pr_payload["number"])
-            # Best-effort: labels + reviewers
-            if req.labels:
-                await client.post(
-                    f"https://api.github.com/repos/{self.repo}/issues/{pr_number}/labels",
-                    headers=self._headers,
-                    json={"labels": req.labels},
-                )
-            if req.reviewers:
-                await client.post(
-                    f"https://api.github.com/repos/{self.repo}/pulls/{pr_number}/requested_reviewers",
-                    headers=self._headers,
-                    json={"reviewers": req.reviewers},
-                )
+        pr_payload = pr_r.json()
+        pr_number = int(pr_payload["number"])
+        # Best-effort: labels + reviewers
+        if req.labels:
+            await client.post(
+                f"https://api.github.com/repos/{self.repo}/issues/{pr_number}/labels",
+                headers=self._headers,
+                json={"labels": req.labels},
+            )
+        if req.reviewers:
+            await client.post(
+                f"https://api.github.com/repos/{self.repo}/pulls/{pr_number}/requested_reviewers",
+                headers=self._headers,
+                json={"reviewers": req.reviewers},
+            )
         return _pr_info_from_github(pr_payload)
 
     async def revert(self, req: PRRevertRequest) -> PullRequestInfo:
@@ -767,24 +777,22 @@ class GitHubPRProvider:
         The merge-commit revert path uses the GitHub-native git-data
         API to create a revert commit and open a new PR.
         """
-        import httpx as _httpx
-
         from .repo import _pr_info_from_github
         if req.strategy == "close_pr":
-            async with _httpx.AsyncClient(timeout=15.0) as client:
-                close_r = await client.patch(
-                    f"https://api.github.com/repos/{self.repo}/pulls/{req.pr_number}",
-                    headers=self._headers,
-                    json={"state": "closed"},
+            client = _shared_httpx()
+            close_r = await client.patch(
+                f"https://api.github.com/repos/{self.repo}/pulls/{req.pr_number}",
+                headers=self._headers,
+                json={"state": "closed"},
+            )
+            if close_r.status_code != 200:
+                logger.warning("GitHubPRProvider.revert close: %s", close_r.text[:200])
+                return PullRequestInfo(
+                    number=req.pr_number, title="", body="",
+                    branch="", base="", url="", state="failed",
+                    created_at=datetime.now(UTC),
                 )
-                if close_r.status_code != 200:
-                    logger.warning("GitHubPRProvider.revert close: %s", close_r.text[:200])
-                    return PullRequestInfo(
-                        number=req.pr_number, title="", body="",
-                        branch="", base="", url="", state="failed",
-                        created_at=datetime.now(UTC),
-                    )
-                return _pr_info_from_github(close_r.json())
+            return _pr_info_from_github(close_r.json())
         # revert_pr / revert_branch share the same path: open a new
         # PR that reverts the merge commit.
         if not req.merge_sha:
@@ -815,36 +823,34 @@ class GitHubPRProvider:
 
     async def comment(self, pr_number: int, body: str) -> None:
         """Post an issue-level comment on the PR."""
-        import httpx as _httpx
-        async with _httpx.AsyncClient(timeout=15.0) as client:
-            r = await client.post(
-                f"https://api.github.com/repos/{self.repo}/issues/{int(pr_number)}/comments",
-                headers=self._headers,
-                json={"body": body},
-            )
-            if r.status_code not in (200, 201):
-                logger.warning("GitHubPRProvider.comment: %s", r.text[:200])
+        client = _shared_httpx()
+        r = await client.post(
+            f"https://api.github.com/repos/{self.repo}/issues/{int(pr_number)}/comments",
+            headers=self._headers,
+            json={"body": body},
+        )
+        if r.status_code not in (200, 201):
+            logger.warning("GitHubPRProvider.comment: %s", r.text[:200])
 
     # ── Internal ───────────────────────────────────────────────
 
     async def _get_default_branch_sha(self) -> str:
         """Look up the default branch's HEAD sha."""
-        import httpx as _httpx
-        async with _httpx.AsyncClient(timeout=15.0) as client:
-            r = await client.get(
-                f"https://api.github.com/repos/{self.repo}",
-                headers=self._headers,
-            )
-            if r.status_code != 200:
-                return ""
-            default = r.json().get("default_branch") or "main"
-            ref_r = await client.get(
-                f"https://api.github.com/repos/{self.repo}/git/ref/heads/{default}",
-                headers=self._headers,
-            )
-            if ref_r.status_code != 200:
-                return ""
-            return ref_r.json()["object"]["sha"]
+        client = _shared_httpx()
+        r = await client.get(
+            f"https://api.github.com/repos/{self.repo}",
+            headers=self._headers,
+        )
+        if r.status_code != 200:
+            return ""
+        default = r.json().get("default_branch") or "main"
+        ref_r = await client.get(
+            f"https://api.github.com/repos/{self.repo}/git/ref/heads/{default}",
+            headers=self._headers,
+        )
+        if ref_r.status_code != 200:
+            return ""
+        return ref_r.json()["object"]["sha"]
 
 
 # ── Helpers ─────────────────────────────────────────────────────

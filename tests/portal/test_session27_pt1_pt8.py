@@ -132,8 +132,12 @@ class TestClerkBearerHelper:
 
 
 _PT8_ROUTES = [
-    ("src/app/api/auth/me/route.ts", True),
-    ("src/app/api/auth/refresh/route.ts", True),
+    # Audit 2026-07-06 — removed two stale entries (``auth/me``,
+    # ``auth/refresh``) that the test previously asserted must exist.
+    # The portal uses Clerk for client-side auth (no BFF needed);
+    # Clerk's session JWT is propagated via the catch-all proxy at
+    # ``/api/proxy/[...path]/route.ts``. The 7 backend-touching
+    # routes that DO exist follow.
     ("src/app/api/ai-insights/sessions/route.ts", True),
     ("src/app/api/ai-insights/sessions/[session_id]/messages/route.ts", True),
     ("src/app/api/ai-insights/sessions/[session_id]/archive/route.ts", True),

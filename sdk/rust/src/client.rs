@@ -181,13 +181,19 @@ impl Client {
 }
 
 fn truncate(s: &str, max: usize) -> String {
-    if s.len() <= max {
-        s.to_string()
-    } else {
-        let mut t = s[..max].to_string();
-        t.push_str("…");
-        t
+    // Use char boundaries, not byte indices, so non-ASCII
+    // bodies don't panic on a multi-byte character. The 512
+    // cap is for log readability, so the exact byte count
+    // doesn't matter.
+    if s.chars().count() <= max {
+        return s.to_string();
     }
+    let mut out = String::with_capacity(max * 4 + 4);
+    for c in s.chars().take(max) {
+        out.push(c);
+    }
+    out.push('…');
+    out
 }
 
 #[cfg(test)]
@@ -204,5 +210,21 @@ mod tests {
             client.config().ingest_url(IngestTarget::Openai),
             "http://localhost:8000/orgs/org_test/ingest/openai"
         );
+    }
+
+    #[test]
+    fn truncate_handles_non_ascii_safely() {
+        // Regression: truncate used to slice on byte boundaries,
+        // which panics if the cut falls inside a multi-byte char.
+        let body = "你好，世界！".repeat(100); // 300+ multi-byte chars
+        let out = truncate(&body, 10);
+        assert!(out.ends_with('…'));
+        assert_eq!(out.chars().count(), 11); // 10 chars + ellipsis
+    }
+
+    #[test]
+    fn truncate_returns_input_when_short() {
+        let s = "short body";
+        assert_eq!(truncate(s, 100), "short body");
     }
 }

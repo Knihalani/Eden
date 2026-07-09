@@ -264,20 +264,35 @@ class DataRetentionManager:
         return report
 
     async def _delete_from_clickhouse(self, tenant_id: str) -> int:
-        """Delete tenant data from ClickHouse metrics tables."""
+        """Delete tenant data from ClickHouse metrics tables.
+
+        The ClickHouse HTTP endpoint does not support parameterised
+        queries the way asyncpg does, so we have to interpolate
+        ``tenant_id`` into the SQL string. To prevent SQL injection
+        through the admin-only ``DELETE /gdpr/tenant`` endpoint
+        (which forwards this parameter straight from the URL
+        path), we escape single quotes using the SQL-standard
+        doubled-quote form (``''``) before substitution.
+
+        If you ever loosen this, you MUST keep the escape — and
+        ideally switch to ClickHouse's prepared-statements HTTP
+        endpoint instead of f-string interpolation.
+        """
         # ClickHouse integration is optional — if not configured, skip
         clickhouse_url = getattr(settings, "clickhouse_url", "")
         if not clickhouse_url:
             return 0
 
+        # SQL-standard string-literal escape: double the quote.
+        safe_tenant_id = tenant_id.replace("'", "''")
         try:
             import aiohttp
             async with aiohttp.ClientSession() as session:
                 # Delete from agent_performance
-                query = f"""
-                    ALTER TABLE metrics.agent_performance
-                    DELETE WHERE tenant_id = '{tenant_id}'
-                """
+                query = (
+                    "ALTER TABLE metrics.agent_performance "
+                    f"DELETE WHERE tenant_id = '{safe_tenant_id}'"
+                )
                 async with session.post(
                     clickhouse_url, data=query.encode()
                 ) as resp:

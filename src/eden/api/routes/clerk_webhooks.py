@@ -40,6 +40,7 @@ from fastapi import APIRouter, Header, HTTPException, Request
 
 from eden.api.utils.clerk_auth import clerk_role_to_eden_role
 from eden.api.utils.clerk_client import invalidate_user_cache
+from eden.api.utils.redact import redact_all
 from eden.config import get_settings
 from eden.storage.postgres import get_postgres_client
 
@@ -317,7 +318,7 @@ async def _upsert_org(data: dict[str, Any]) -> None:
         # new backend-created rows.
         logger.info(
             "_upsert_org: skipped INSERT for clerk_id=%s (likely non-UUID): %s",
-            clerk_id, exc,
+            clerk_id, redact_all(str(exc)),
         )
 
 
@@ -484,7 +485,7 @@ async def clerk_webhook(
             if clerk_id:
                 invalidate_user_cache(clerk_id)
     except Exception as exc:  # noqa: BLE001
-        logger.exception("Clerk webhook handler failed for %s: %s", event_type, exc)
+        logger.exception("Clerk webhook handler failed for %s: %s", event_type, redact_all(str(exc)))
         raise HTTPException(status_code=500, detail=f"Handler failed: {exc}") from exc
 
     return {

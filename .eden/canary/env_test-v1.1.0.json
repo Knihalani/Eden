@@ -10,28 +10,28 @@
     "confidence": 1.0,
     "metrics": {
       "error_rate": {
-        "baseline": 0.0195,
-        "candidate": 0.0063,
-        "regression_pct": -67.53,
+        "baseline": 0.0102,
+        "candidate": 0.003,
+        "regression_pct": -70.92,
         "threshold_pct": 5.0,
         "failed": false
       },
       "latency_p99": {
-        "baseline": 234.557,
-        "candidate": 235.3227,
-        "regression_pct": 0.33,
+        "baseline": 444.6906,
+        "candidate": 434.4255,
+        "regression_pct": -2.31,
         "threshold_pct": 50.0,
         "failed": false
       },
       "success_rate": {
-        "baseline": 0.9661,
-        "candidate": 0.981,
-        "regression_pct": -1.55,
+        "baseline": 0.9713,
+        "candidate": 0.9693,
+        "regression_pct": 0.21,
         "threshold_pct": 5.0,
         "failed": false
       }
     },
-    "duration_ms": 3002.2,
-    "timestamp": "2026-07-05T16:54:29.762872+00:00"
+    "duration_ms": 3002.19,
+    "timestamp": "2026-07-09T10:00:48.871489+00:00"
   }
 }

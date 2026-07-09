@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import logging
 import time
-from collections import defaultdict, deque
+from collections import OrderedDict, deque
 from datetime import datetime
 from typing import Any
 
@@ -37,8 +37,71 @@ router = APIRouter(prefix="/orgs/{org_id}/ingest", tags=["app-ingest"])
 # ── Per-tenant rate limiter ───────────────────────────────────────────
 # Higher cap than the agent ingest path because browser SDKs flush
 # events in batches; operators tune via Settings.
+#
+# F63 — ``_rate_buckets`` is now an ``OrderedDict`` keyed by
+# ``org_id`` with a hard cap and a TTL. Same pattern as the
+# agent-telemetry ingest path
+# (``eden.api.routes.ingestion._rate_buckets``). See the
+# F63 entry in ``FIXES_LOG.md`` for the full reasoning.
+#
+# Pre-F63 the dict grew unbounded against unique-tenant
+# browser-SDK traffic: a single malicious page could
+# register under a fresh ``X-Org-Id`` on every request,
+# creating a new entry with each call and never freeing
+# the old one. The deque values are cheap but the keys
+# live forever — long-running pods accumulate stale
+# org_id entries for every tenant who ever sent a single
+# event.
 
-_rate_buckets: dict[str, deque[float]] = defaultdict(deque)
+_rate_buckets: OrderedDict[str, deque[float]] = OrderedDict()
+_MAX_RATE_BUCKETS: int = 4096
+_RATE_WINDOW_SECONDS: float = 60.0
+
+
+def _touch_bucket(org_id: str) -> None:
+    """Bump the LRU position for an org's rate-limit bucket.
+
+    Pure housekeeping. Best-effort: any exception inside
+    the OrderedDict rewrite is silently dropped so a
+    transient bookkeeping issue cannot break a paying
+    customer's API call. Mirrors
+    ``ingestion._touch_bucket`` and ``multi_agent._touch_env``
+    (F61)."""
+    try:
+        if org_id in _rate_buckets:
+            _rate_buckets.move_to_end(org_id)
+    except Exception:
+        pass
+
+
+def _evict_idle_buckets(now: float) -> None:
+    """Drop buckets whose sliding window is empty AND
+    whose last access predates ``now - _RATE_WINDOW_SECONDS``.
+
+    Pre-F63 nothing reaped idle tenants — the deque
+    values auto-collapsed to empty on a window-expiry
+    but the key itself lived in the dict forever."""
+    cutoff = now - _RATE_WINDOW_SECONDS
+    stale: list[str] = []
+    for org_id, bucket in _rate_buckets.items():
+        if not bucket or bucket[-1] < cutoff:
+            stale.append(org_id)
+    for org_id in stale:
+        _rate_buckets.pop(org_id, None)
+
+
+def _enforce_rate_buckets_cap(org_id: str) -> None:
+    """Enforce the hard cap on ``_rate_buckets``.
+
+    Drops the least-recently-touched org until the size
+    is back under the limit. The new org always succeeds
+    — only older ones are evicted. Mirrors
+    ``multi_agent._enforce_cap_on_insert`` (F61)."""
+    while len(_rate_buckets) >= _MAX_RATE_BUCKETS:
+        try:
+            _rate_buckets.popitem(last=False)
+        except KeyError:
+            break
 
 
 def _check_rate_limit(org_id: str) -> None:
@@ -47,8 +110,16 @@ def _check_rate_limit(org_id: str) -> None:
     if cap <= 0:
         return
     now = time.monotonic()
-    window = 60.0
-    bucket = _rate_buckets[org_id]
+    window = _RATE_WINDOW_SECONDS
+    # F63: opportunistic housekeeping on the hot path.
+    # Both sweeps are O(buckets) and run in microseconds
+    # for the healthy multi-tenant case (< 100 entries).
+    _evict_idle_buckets(now)
+    _enforce_rate_buckets_cap(org_id)
+    bucket = _rate_buckets.get(org_id)
+    if bucket is None:
+        bucket = deque()
+        _rate_buckets[org_id] = bucket
     while bucket and bucket[0] < now - window:
         bucket.popleft()
     if len(bucket) >= cap:
@@ -62,6 +133,9 @@ def _check_rate_limit(org_id: str) -> None:
             headers={"Retry-After": str(retry_after)},
         )
     bucket.append(now)
+    # F63: bump LRU so an active tenant survives the cap
+    # eviction triggered by a churning one-shot tenant.
+    _touch_bucket(org_id)
 
 
 # ── Request / response models ──────────────────────────────────────────

@@ -62,21 +62,71 @@ import contextlib
 import logging
 import time
 import uuid
+from collections import OrderedDict
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    # Audit 2026-07-06 — only imported for type checking. The
+    # runtime value is resolved lazily via the PEP 562
+    # ``__getattr__`` on this module so the openai SDK doesn't
+    # have to be loaded at gateway import time. Importing here
+    # satisfies F821 (undefined name) for type annotations
+    # without paying the import cost.
+    from openai import AsyncOpenAI
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse, StreamingResponse
-from openai import APIError as OpenAIAPIError
-from openai import AsyncOpenAI
-from pydantic import BaseModel, Field
 
-from eden.api.deps import get_ingestion_auth
-from eden.config import get_settings
-from eden.data_platform.pii import PIIPolicy
-from eden.llmops.ai_gateway import AIGateway, ModelRequest
-from eden.llmops.openai_adapter import (
+# Audit 2026-07-06 - lazy-import the openai SDK. ``APIError`` is
+# only used in except clauses inside route handlers, and
+# ``AsyncOpenAI`` is only used in helper functions that build the
+# upstream client. PEP 562 ``__getattr__`` on this module resolves
+# the names on first attribute access so the SDK import only
+# happens on the first request.
+
+
+def __getattr__(name: str):
+    """PEP 562 - lazy openai symbol resolution.
+
+    ``OpenAIAPIError`` is the ``openai.APIError`` class used in
+    ``except`` clauses; ``AsyncOpenAI`` is the upstream client
+    builder. Both are loaded on first use and cached in the
+    module's globals so ``patch("eden.api.routes.gateway
+    .OpenAIAPIError")`` still works (mock writes to __dict__)."""
+    if name in ("OpenAIAPIError", "AsyncOpenAI"):
+        from openai import APIError, AsyncOpenAI
+        value = APIError if name == "OpenAIAPIError" else AsyncOpenAI
+        globals()[name] = value
+        return value
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+
+def _get_openai_api_error():
+    """Resolve and return ``openai.APIError`` lazily.
+
+    Python's ``except`` clause requires the caught class to
+    inherit from ``BaseException`` (see CPython compile.c), so we
+    can't use a transparent proxy. Instead, every ``except
+    OpenAIAPIError`` clause in this module was rewritten to
+    ``except _get_openai_api_error() as exc:`` so the openai
+    SDK is only loaded on the first error path that hits it.
+    The cost is one function call per error path; the win is
+    the cold-import cost of the full openai SDK (~140ms) is
+    avoided entirely on the import path of this router.
+    """
+    from openai import APIError
+    return APIError
+from pydantic import BaseModel, Field  # noqa: E402
+
+from eden.api.deps import get_ingestion_auth  # noqa: E402
+from eden.api.utils.redact import redact_all
+from eden.api.utils.safe_error import redact_upstream_error, safe_detail  # noqa: E402
+from eden.config import get_settings  # noqa: E402
+from eden.data_platform.pii import PIIPolicy  # noqa: E402
+from eden.llmops.ai_gateway import AIGateway, ModelRequest  # noqa: E402
+from eden.llmops.openai_adapter import (  # noqa: E402
     ChatCompletionRequest,
     CompletionRequest,
     EmbeddingRequest,
@@ -120,7 +170,7 @@ def _redact_upstream_error(exc: BaseException) -> str:
     a curated subset of provider info (status + safe message) because
     those errors are user-actionable and don't carry credentials.
     """
-    return "Upstream provider returned an error. Check request_id in support tickets."
+    return redact_upstream_error(exc)
 
 
 def _redact_sse_error_message(exc: BaseException) -> str:
@@ -134,7 +184,7 @@ def _redact_sse_error_message(exc: BaseException) -> str:
     forwarded unchanged so clients can choose retry/backoff policy
     without exposing credentials or internal names. July 2026 fix.
     """
-    return "Upstream provider returned an error during streaming."
+    return safe_detail(exc, fallback="Upstream provider returned an error during streaming.")
 router = APIRouter(prefix="/gateway/v1", tags=["gateway"])
 
 
@@ -347,6 +397,15 @@ def _resolve_upstream(
     test fixtures working while still exercising the new code paths
     in production.
     """
+    # Lazy-resolve AsyncOpenAI (audit 2026-07-06). The isinstance
+    # check below needs the class object, not a forward reference.
+    # Goes through the module's PEP 562 __getattr__ so the openai
+    # SDK import only happens on the first request that hits
+    # this helper.
+    import sys as _sys
+    _this_mod = _sys.modules[__name__]
+    AsyncOpenAI = getattr(_this_mod, "AsyncOpenAI")  # noqa: B009, N806
+
     # Honour test stub before doing any URL resolution.
     if _async_client is not None and not isinstance(
         _async_client, AsyncOpenAI
@@ -450,34 +509,61 @@ def _infer_provider_from_base_url(base_url: str) -> str:
     return "custom"
 
 
-def _get_or_build_upstream_client(base_url: str, api_key: str) -> AsyncOpenAI:
+# F62 — cap the per-(base_url, api_key) ``AsyncOpenAI`` client
+# cache. Pre-F62 the cache was a plain dict that grew unbounded
+# against BYOK traffic: every unique ``X-Upstream-Api-Key`` header
+# added an entry, each entry holding its own ``httpx.AsyncClient``
+# with a connection pool. A malicious caller spamming unique keys
+# could multiply the API's RSS by ~50 KB per entry. The cap is
+# generous (1024) — a healthy multi-tenant process sees < 10
+# entries total — but it bounds the worst case to a small
+# multiple of normal traffic.
+_MAX_UPSTREAM_CLIENT_CACHE = 1024
+
+
+def _get_or_build_upstream_client(base_url: str, api_key: str):
     """Cache one ``AsyncOpenAI`` per ``(base_url, api_key)`` tuple.
 
-    The cache lives at module scope; per-request clients are kept
-    forever (no TTL) because the cost of a leaked client is one TCP
-    socket per unique key combo, and a single process normally sees
-    only a handful. For long-lived pods with churning keys, the
-    caller can pass a key per request and the cache self-prunes by
-    virtue of being bounded by the unique-key count.
+    Module-level cache so a single process shares one socket pool
+    across requests. Pre-F62 the cache was unbounded; F62 caps it
+    at ``_MAX_UPSTREAM_CLIENT_CACHE`` entries with FIFO eviction.
+    Insertion order is bumped on every hit so an active provider
+    is never dropped while a stale provider with one historical
+    request gets evicted.
 
     Tests inject a stub by monkey-patching ``_async_client`` — this
     function deliberately bypasses that cache (it always builds a
-    fresh client unless the URL/key pair has been seen before) so a
-    test that sets ``base_url="https://openrouter.ai/api/v1"`` with
-    a dummy key still gets the stub. The compatibility shim is in
-    ``_get_async_client_for_legacy_tests``.
+    fresh client unless the URL/key pair has been seen before) so
+    a test that sets ``base_url="https://openrouter.ai/api/v1"``
+    with a dummy key still gets the stub. The compatibility shim
+    is in ``_get_async_client_for_legacy_tests``.
+
+    Audit 2026-07-06 — return type is a runtime-resolved class,
+    not a forward reference, so callers can isinstance() it.
     """
+    import sys as _sys
+    AsyncOpenAI = getattr(_sys.modules[__name__], "AsyncOpenAI")  # noqa: B009, N806
     cache_key = (base_url.rstrip("/"), api_key)
-    client = _upstream_client_cache.get(cache_key)
-    if client is None:
-        client = AsyncOpenAI(api_key=api_key, base_url=base_url)
-        _upstream_client_cache[cache_key] = client
+    if cache_key in _upstream_client_cache:
+        # F62: bump LRU so an active provider survives a
+        # cache-pressure-eviction sweep triggered by churning
+        # one-off keys.
+        _upstream_client_cache.move_to_end(cache_key)
+        return _upstream_client_cache[cache_key]
+    client = AsyncOpenAI(api_key=api_key, base_url=base_url)
+    _upstream_client_cache[cache_key] = client
+    # F62: enforce the cap. Evict FIFO until we're back
+    # under the limit. Fresh inserts always succeed.
+    while len(_upstream_client_cache) > _MAX_UPSTREAM_CLIENT_CACHE:
+        _upstream_client_cache.popitem(last=False)
     return client
 
 
-# Per-``(base_url, api_key)`` cache of ``AsyncOpenAI`` clients. Module-
-# level so a single process shares one socket pool across requests.
-_upstream_client_cache: dict[tuple[str, str], AsyncOpenAI] = {}
+# Per-``(base_url, api_key)`` cache of ``AsyncOpenAI`` clients.
+# Module-level so a single process shares one socket pool across
+# requests. ``OrderedDict`` so the F62 FIFO cap can drop the
+# least-recently-inserted key under pressure.
+_upstream_client_cache: OrderedDict[tuple[str, str], AsyncOpenAI] = OrderedDict()
 
 
 class _PIIFailClosedError(Exception):
@@ -574,7 +660,7 @@ def _resolve_request_pii_policy(
         logger.debug(
             "gateway: per-tenant PII policy resolver failed for "
             "org=%s: %s",
-            org_id, exc,
+            org_id, redact_all(str(exc)),
         )
 
     # 3. Apply per-request overrides on top of the tenant policy.
@@ -729,10 +815,10 @@ def _apply_pii_filter_to_messages(
         if isinstance(exc, PIIMaskingError):
             logger.info(
                 "gateway: PII fail-closed for org=%s: %s",
-                org_id, exc,
+                org_id, redact_all(str(exc)),
             )
             raise _PIIFailClosedError(str(exc)) from exc
-        logger.debug("PII redactor raised %s; passing through", exc)
+        logger.debug("PII redactor raised %s; passing through", redact_all(str(exc)))
         return messages, findings
 
     # Run the gateway filter chain on the flattened prompt so any
@@ -754,7 +840,7 @@ def _apply_pii_filter_to_messages(
             _, filter_findings = gw._filters.run(mr)
             findings.extend(filter_findings)
         except Exception as exc:  # noqa: BLE001
-            logger.debug("filter pipeline attribution failed: %s", exc)
+            logger.debug("filter pipeline attribution failed: %s", redact_all(str(exc)))
     else:
         # No redactions — still surface the resolution-path findings.
         findings = findings + redact_findings
@@ -844,11 +930,11 @@ def _apply_pii_filter_to_flat_string(
         # forwarding the credential.
         logger.info(
             "gateway: PII fail-closed for org=%s (flat): %s",
-            org_id, exc,
+            org_id, redact_all(str(exc)),
         )
         raise _PIIFailClosedError(str(exc)) from exc
     except Exception as exc:  # noqa: BLE001
-        logger.debug("PII flat-string filter pass failed: %s", exc)
+        logger.debug("PII flat-string filter pass failed: %s", redact_all(str(exc)))
         return prompt, findings
 
     if scrubbed != prompt:
@@ -1035,7 +1121,7 @@ async def _chat_completions_unary(
             **upstream_kwargs,
             stream=False,
         )
-    except OpenAIAPIError as exc:
+    except _get_openai_api_error() as exc:
         await _emit_gateway_telemetry(
             org_id=org_id,
             auth_ctx=auth_ctx,
@@ -1143,7 +1229,7 @@ async def _chat_completions_stream(
                     continue
                 yield sse_format(payload)
             yield sse_done()
-        except OpenAIAPIError as exc:
+        except _get_openai_api_error() as exc:
             outcome = "failure"
             error_type = type(exc).__name__
             err_payload = {
@@ -1159,7 +1245,7 @@ async def _chat_completions_stream(
             # use ``type`` (class name) to drive retry/backoff policy.
             logger.warning(
                 "gateway chat.completions stream failed: %s: %s",
-                error_type, exc,
+                error_type, redact_all(str(exc)),
             )
             yield sse_format(err_payload)
         except Exception as exc:  # noqa: BLE001
@@ -1167,7 +1253,7 @@ async def _chat_completions_stream(
             error_type = type(exc).__name__
             logger.exception(
                 "gateway chat.completions stream raised: %s",
-                exc,
+                redact_all(str(exc)),
             )
             yield sse_format({"error": {"message": _redact_sse_error_message(exc), "type": error_type}})
         finally:
@@ -1349,12 +1435,12 @@ async def completions(
                     except Exception as exc:  # noqa: BLE001
                         logger.debug(f"legacy completion chunk failed: {exc}")
                 yield sse_done()
-            except OpenAIAPIError as exc:
+            except _get_openai_api_error() as exc:
                 # P39 audit (2026-07-06): redact upstream error in SSE
                 # payload — same redaction as the chat.completions path.
                 logger.warning(
                     "gateway legacy completions stream failed: %s: %s",
-                    type(exc).__name__, exc,
+                    type(redact_all(str(exc))).__name__, redact_all(str(exc)),
                 )
                 yield sse_format({"error": {"message": _redact_sse_error_message(exc), "type": type(exc).__name__}})
             finally:
@@ -1380,7 +1466,7 @@ async def completions(
 
     try:
         response = await client.completions.create(**upstream_kwargs, stream=False)
-    except OpenAIAPIError as exc:
+    except _get_openai_api_error() as exc:
         status = getattr(exc, "status_code", None) or 502
         await _emit_gateway_telemetry(
             org_id=org_id,
@@ -1520,7 +1606,7 @@ async def embeddings(
     start = time.monotonic()
     try:
         response = await client.embeddings.create(**upstream_kwargs)
-    except OpenAIAPIError as exc:
+    except _get_openai_api_error() as exc:
         status = getattr(exc, "status_code", None) or 502
         await _emit_gateway_telemetry(
             org_id=org_id,

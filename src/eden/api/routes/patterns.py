@@ -16,6 +16,7 @@ from fastapi import APIRouter, Depends, HTTPException, Path, Query
 from pydantic import BaseModel
 
 from eden.api.deps import get_current_user
+from eden.api.utils.safe_error import safe_detail
 from eden.storage.postgres import get_postgres_client
 
 logger = logging.getLogger(__name__)
@@ -166,7 +167,7 @@ async def generate_env_for_pattern(
         )
     except Exception as exc:
         logger.warning(f"generate_env failed to create job: {exc}")
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
+        raise HTTPException(status_code=500, detail=safe_detail(exc, fallback="Internal error while generating environment from pattern")) from exc
     return {
         "job_id": str(job_id),
         "pattern_id": pattern_id,

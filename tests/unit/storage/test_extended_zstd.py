@@ -238,10 +238,13 @@ class TestTelemetryCollectorWiring:
         ).read_text()
 
     def test_write_path_compresses_all_six(self, write_source):
-        # Each *_zstd local must be assigned by either a direct
-        # ``= compress_jsonb(event.<base>)`` call OR via the
-        # async gather that pipes ``_compress(event.<base>)``
-        # into the unpacked tuple.
+        # Each *_zstd local must be assigned from the batch API or
+        # the previous direct / gather forms. v1.8 added the batch
+        # :func:`compress_many` dispatch and renamed the locals
+        # (they're still ``*_zstd`` so the SQL placeholders are
+        # unchanged). The pattern we look for is: ``<field>,`` in
+        # the unpacked tuple AND the corresponding ``event.<base>``
+        # inside the list passed to :func:`compress_many`.
         for field in (
             "reasoning_zstd",
             "tool_calls_full_zstd",
@@ -251,22 +254,14 @@ class TestTelemetryCollectorWiring:
             "attributes_zstd",
         ):
             base = field[:-5]
-            direct = f"{field} = compress_jsonb(event.{base})"
-            direct_paren = (
-                f"{field} = (\n                compress_jsonb(event.{base})"
+            # Match the new batch-dispatch pattern.
+            batch_unpack = f"{field},"
+            batch_input = f"event.{base},"
+            assert batch_unpack in write_source, (
+                f"_route_postgres must unpack {field} from the batch result"
             )
-            gather_unpack = f"{field},"
-            gather_call = f"_compress(event.{base})"
-            assert (
-                direct in write_source
-                or direct_paren in write_source
-                or (
-                    gather_unpack in write_source
-                    and gather_call in write_source
-                )
-            ), (
-                f"_route_postgres must compress {field} "
-                f"(direct line, parenthesised block, or gather unpack)"
+            assert batch_input in write_source, (
+                f"_route_postgres must feed event.{base} into compress_many"
             )
 
     def test_write_path_inserts_all_six(self, write_source):
@@ -284,7 +279,15 @@ class TestTelemetryCollectorWiring:
             )
 
     def test_read_path_uses_all_six(self, write_source):
-        """The 6 *_zstd columns are referenced in the row read path."""
+        """The 6 *_zstd columns are referenced in the row read path.
+
+        v1.8 batched the decompressions: ``_read_payload`` was
+        replaced by a single :func:`decompress_many` call across
+        all rows and the column names appear in the ``_zstd_cols``
+        tuple. The test checks both the new tuple and the older
+        ``_read_payload(row, "<field>", ...)`` form so a future
+        regression to the old per-row serial decompress is caught.
+        """
         for field in (
             "reasoning_zstd",
             "tool_calls_full_zstd",
@@ -293,9 +296,11 @@ class TestTelemetryCollectorWiring:
             "metrics_zstd",
             "attributes_zstd",
         ):
-            # The pattern is `_read_payload(row, "<field>", "<orig>")`
-            assert f'"{field}", "' in write_source, (
-                f"_read_payload must read {field} before falling back to JSONB"
+            old_pattern = f'"{field}", "'
+            new_pattern = f'"{field}",'
+            assert old_pattern in write_source or new_pattern in write_source, (
+                f"_route_postgres/_load_from_archive path must read {field} "
+                f"(either via _read_payload or the _zstd_cols tuple)"
             )
 
     def test_write_path_placeholder_count_updated(self, write_source):

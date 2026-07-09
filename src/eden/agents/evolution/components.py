@@ -412,13 +412,78 @@ class PromptEvolvers(EvolutionComponent):
         if not updated:
             return False
 
-        # Best-effort audit log.
+        # Best-effort audit log. The ``prompt_versions`` table is
+        # keyed by ``(agent, version)`` only — there is no
+        # ``org_id`` column, so we cannot recover the owning tenant
+        # from the schema. Audit 2026-07-07 — pre-fix the code did
+        # ``SELECT id FROM organizations LIMIT 1`` /
+        # ``SELECT id FROM users LIMIT 1``, which attributes every
+        # canary-creation event to whatever org/user happened to be
+        # at the top of the table. For a multi-tenant system that
+        # is a tenant-isolation bug in the audit log (Org A's
+        # evolver claim to have created a canary for Org B's agent
+        # because both queries return the top-of-table row). The
+        # safest fix is to skip the audit insert when we cannot
+        # resolve the correct ``org_id`` — the canary is still
+        # created, and operators see a clear log line instead of
+        # a misleading audit row. Future work: add an ``org_id``
+        # column to ``prompt_versions`` so this audit insert can be
+        # tenant-correct.
         try:
             from eden.storage.postgres import get_postgres_client
 
             pg = await _maybe_await(get_postgres_client())
-            org_id = await pg.fetchval("SELECT id FROM organizations LIMIT 1")
-            user_id = await pg.fetchval("SELECT id FROM users LIMIT 1")
+            org_id: str | None = None
+            # The ``prompt_versions`` table does not carry an
+            # ``org_id``; check whether the row's quality_metrics
+            # JSONB carries one (set by the canary-creating path).
+            # If not, we cannot reliably attribute the audit row.
+            try:
+                row = await pg.fetchrow(
+                    "SELECT quality_metrics FROM prompt_versions "
+                    "WHERE agent = $1 AND version = $2",
+                    agent,
+                    int(version),
+                )
+            except Exception:
+                row = None
+            if row:
+                qm = row.get("quality_metrics")
+                if isinstance(qm, dict):
+                    org_id = qm.get("org_id")
+                elif isinstance(qm, str):
+                    try:
+                        qm_parsed = json.loads(qm)
+                        if isinstance(qm_parsed, dict):
+                            org_id = qm_parsed.get("org_id")
+                    except (TypeError, ValueError):
+                        org_id = None
+            if not org_id:
+                logger.debug(
+                    "PromptEvolvers: cannot resolve org_id for %s v%s; "
+                    "skipping org_audit_log INSERT to avoid "
+                    "cross-tenant attribution.",
+                    agent,
+                    version,
+                )
+                return True
+            # No user context here (the evolver runs as a system
+            # worker, not as an authenticated user). Look up the
+            # "system" placeholder user; if it has not been
+            # provisioned yet, skip the audit rather than blame an
+            # arbitrary user. The audit table requires user_id NOT
+            # NULL per migration 008.
+            user_id = await pg.fetchval(
+                "SELECT id FROM users WHERE clerk_id = 'system' LIMIT 1"
+            )
+            if not user_id:
+                logger.debug(
+                    "PromptEvolvers: no system user provisioned; "
+                    "skipping org_audit_log INSERT for %s v%s.",
+                    agent,
+                    version,
+                )
+                return True
             metadata = {
                 "agent": agent,
                 "version": int(version),

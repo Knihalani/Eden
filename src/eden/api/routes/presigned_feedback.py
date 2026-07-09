@@ -22,7 +22,7 @@ from __future__ import annotations
 
 import logging
 
-from fastapi import APIRouter, HTTPException, Path
+from fastapi import APIRouter, Depends, HTTPException, Path
 from pydantic import BaseModel, Field
 
 from eden.api.deps import get_current_user
@@ -35,7 +35,7 @@ logger = logging.getLogger(__name__)
 auth_router = APIRouter(
     prefix="/orgs/{org_id}/intelligence/user/feedback",
     tags=["presigned-feedback"],
-    dependencies=[__import__("fastapi").Depends(get_current_user)],
+    dependencies=[Depends(get_current_user)],
 )
 
 

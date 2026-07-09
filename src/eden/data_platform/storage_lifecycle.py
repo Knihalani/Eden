@@ -15,6 +15,8 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os
+import re
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -133,13 +135,7 @@ DEFAULT_TRANSITIONS: list[TierTransition] = [
 #: ``apply_s3_lifecycle_rules`` omits the ``Transitions`` blocks because
 #: Impossible Cloud has a single always-hot tier — the
 #: STANDARD_IA / GLACIER_IR / GLACIER transitions are meaningless.
-import os as _os
-
-_IMPOSSIBLE_CLOUD = (
-    _os.environ.get("EDEN_STORAGE_BACKEND", "").lower() == "impossible_cloud"
-)
-
-_IMPOSSIBLE_CLOUD = _os.environ.get("EDEN_STORAGE_BACKEND", "").lower() == "impossible_cloud"
+_IMPOSSIBLE_CLOUD = os.environ.get("EDEN_STORAGE_BACKEND", "").lower() == "impossible_cloud"
 
 
 class StorageLifecycleManager:
@@ -289,9 +285,25 @@ class StorageLifecycleManager:
         Writes to S3 Standard, then deletes from PostgreSQL.
         Returns number of rows moved.
         """
+        # Whitelist the table to prevent SQL injection through the
+        # ``table`` parameter (which is reachable via the admin-only
+        # ``POST /storage/transition`` route). Postgres unquoted
+        # identifiers must match ``[A-Za-z_][A-Za-z0-9_]*``; anything
+        # else is rejected.
+        if not isinstance(table, str) or not re.match(
+            r"^[A-Za-z_][A-Za-z0-9_]*$", table
+        ):
+            raise ValueError(
+                f"Invalid table name: {table!r}. Only ASCII letters, "
+                "digits, and underscores are allowed."
+            )
         client = await self._get_postgres()
         cutoff = datetime.now(UTC) - timedelta(days=before_days)
 
+        # Pass a real datetime (with tzinfo) rather than
+        # cutoff.isoformat(): asyncpg's timestamptz codec
+        # rejects bare strings with
+        # "expected datetime.date/datetime, got str".
         query = f"""
             SELECT * FROM {table}
             WHERE timestamp < $1
@@ -300,7 +312,7 @@ class StorageLifecycleManager:
         """
         total_moved = 0
         while True:
-            rows = await client.fetch(query, cutoff.isoformat(), batch_size)
+            rows = await client.fetch(query, cutoff, batch_size)
             if not rows:
                 break
 
@@ -324,7 +336,13 @@ class StorageLifecycleManager:
                     ids.append(val)
 
             if ids:
-                placeholders = ", ".join(f"${i + 2}" for i in range(len(ids)))
+                # Placeholders start at $1 — this DELETE has no other
+                # bound parameters. The previous f"${i + 2}"
+                # formula left $1 unbound, so the DELETE raised
+                # PostgresSyntaxError: there is no parameter $1
+                # and the just-archived rows remained in Postgres,
+                # doubling data in PG *and* S3.
+                placeholders = ", ".join(f"${i + 1}" for i in range(len(ids)))
                 await client.execute(
                     f"DELETE FROM {table} WHERE {id_col} IN ({placeholders})",
                     *ids,

@@ -48,6 +48,20 @@ import httpx
 
 from eden.config import get_settings
 
+# Module-level singleton httpx client (mirrors the F42 pattern in
+# ``eden.providers.pr``). Each ``async with httpx.AsyncClient(...)``
+# opens a fresh client and discards keep-alive sockets at scope exit;
+# the singleton keeps the TCP pool warm across the 4 GitHub App API
+# calls per OAuth round-trip.
+_HTTPX: httpx.AsyncClient | None = None
+
+
+def _shared_httpx() -> httpx.AsyncClient:
+    global _HTTPX
+    if _HTTPX is None:
+        _HTTPX = httpx.AsyncClient(timeout=30.0)
+    return _HTTPX
+
 logger = logging.getLogger(__name__)
 
 # GitHub REST + JWT constants. Pinned here so the rest of the module
@@ -190,7 +204,7 @@ class GitHubOAuthClient:
         of (so we can disambiguate when one user has installed Eden
         on multiple GitHub orgs).
         """
-        async with httpx.AsyncClient(timeout=30.0) as client:
+        async with _shared_httpx() as client:
             r = await client.post(
                 f"{GITHUB_AUTH_BASE}/access_token",
                 data={
@@ -259,7 +273,7 @@ class GitHubOAuthClient:
         in-memory keyed on `installation_id` and refresh when
         :attr:`InstallationToken.expired` is True.
         """
-        async with httpx.AsyncClient(timeout=30.0) as client:
+        async with _shared_httpx() as client:
             r = await client.post(
                 f"{GITHUB_API_BASE}/app/installations/{installation_id}/access_tokens",
                 headers={
@@ -289,7 +303,7 @@ class GitHubOAuthClient:
         Used when a single user has installed Eden on multiple GitHub
         accounts; the wizard's "Choose org" step disambiguates.
         """
-        async with httpx.AsyncClient(timeout=30.0) as client:
+        async with _shared_httpx() as client:
             r = await client.get(
                 f"{GITHUB_API_BASE}/user/installations",
                 headers={
@@ -313,7 +327,7 @@ class GitHubOAuthClient:
         500 items).
         """
         repos: list[InstallationRepo] = []
-        async with httpx.AsyncClient(timeout=30.0) as client:
+        async with _shared_httpx() as client:
             for page in range(1, 6):
                 r = await client.get(
                     f"{GITHUB_API_BASE}/installation/repositories",

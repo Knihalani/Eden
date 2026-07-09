@@ -410,6 +410,48 @@ class TestAutoEvaluator:
         assert "safety" in r["data"]["judge_scores"]
         assert "control" in r["data"]["judge_scores"]["safety"]
 
+    @pytest.mark.asyncio
+    async def test_latest_preserves_legitimate_zero_score(self) -> None:
+        """Audit 2026-07-07: a legitimate 0.0 median/p5/p95 must
+        not be collapsed to None. Pre-fix the
+        ``_safe_float(...) or None`` pattern returned None when
+        the value was 0.0 (or 0), silently confusing "zero
+        score" with "no data". This broke any judge whose
+        baseline was legitimately 0 (e.g. a fresh safety
+        classifier with no false-positive history).
+        """
+        from eden.experiments.experiment_intel import AutoEvaluator
+
+        with patch(
+            P_AE_FETCH_RUNS,
+            new=AsyncMock(return_value=[
+                # score_median = 0.0 (legit zero); p5/p95 also 0
+                {"judge": "safety", "variant": "control",
+                 "n": 100, "score_median": 0.0,
+                 "score_p5": 0.0, "score_p95": 0.0},
+                # None columns (no data) — should remain None
+                {"judge": "safety", "variant": "treatment",
+                 "n": 0, "score_median": None,
+                 "score_p5": None, "score_p95": None},
+            ]),
+        ):
+            r = await AutoEvaluator().latest(
+                "org_test", experiment_id="exp_zero",
+            )
+        control = r["data"]["judge_scores"]["safety"]["control"]
+        treatment = r["data"]["judge_scores"]["safety"]["treatment"]
+        # The bug-fix: a real 0.0 score stays 0.0 (not None).
+        assert control["median"] == 0.0, (
+            f"0.0 median was collapsed to {control['median']!r}"
+        )
+        assert control["p5"] == 0.0
+        assert control["p95"] == 0.0
+        # Genuine NULLs from the DB still surface as None so the
+        # UI can distinguish "no data" from "zero".
+        assert treatment["median"] is None
+        assert treatment["p5"] is None
+        assert treatment["p95"] is None
+
 
 # ─── 4. ExperimentRecommender (6 decision-tree cases) ────────────────
 

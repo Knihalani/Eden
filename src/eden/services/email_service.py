@@ -4,6 +4,7 @@ import logging
 
 import httpx
 
+from eden.api.utils.redact import redact_email
 from eden.config import get_settings
 
 logger = logging.getLogger(__name__)
@@ -44,11 +45,19 @@ class EmailService:
 
         # If no API key configured, log and return (stub mode)
         if not api_key:
+            # F65 — PII redaction. The pre-F65 log line
+            # embedded the full recipient address + email body
+            # in plaintext, which is a PII-in-logs violation
+            # under GDPR Art. 5 and CCPA §1798.150. The
+            # subject + recipient domain are still useful for
+            # diagnostics so we keep them; the local-part and
+            # the body are redacted.
+            recipient_domain = to_email.rsplit("@", 1)[-1] if "@" in to_email else "unknown"
             logger.warning(
                 "sendgrid_api_key not configured. Email not sent.\n"
-                f"  To: {to_email}\n"
+                f"  To: ***@{recipient_domain}\n"
                 f"  Subject: {subject}\n"
-                f"  Content: {text_content or html_content[:100]}..."
+                f"  Content: {redact_email(text_content or html_content[:100])}..."
             )
             return False
 
@@ -89,20 +98,40 @@ class EmailService:
                 )
 
                 if response.status_code == 202:
-                    logger.info(f"Email sent successfully to {to_email}")
+                    # F65 — recipient email is PII. Keep the
+                    # domain so the operator can still
+                    # attribute the log line, but redact the
+                    # local-part.
+                    recipient_domain = to_email.rsplit("@", 1)[-1] if "@" in to_email else "unknown"
+                    logger.info(f"Email sent successfully to ***@{recipient_domain}")
                     return True
                 else:
+                    # F65 — recipient email is PII. The
+                    # SendGrid error body is logged as-is —
+                    # SendGrid does not echo the recipient
+                    # in error bodies so it's safe to leave.
+                    recipient_domain = to_email.rsplit("@", 1)[-1] if "@" in to_email else "unknown"
                     logger.error(
-                        f"Failed to send email to {to_email}. "
+                        f"Failed to send email to ***@{recipient_domain}. "
                         f"Status: {response.status_code}, Body: {response.text}"
                     )
                     return False
 
         except httpx.TimeoutException:
-            logger.error(f"Timeout sending email to {to_email}")
+            # F65 — recipient email is PII.
+            recipient_domain = to_email.rsplit("@", 1)[-1] if "@" in to_email else "unknown"
+            logger.error(f"Timeout sending email to ***@{recipient_domain}")
             return False
         except httpx.RequestError as e:
-            logger.error(f"Request error sending email to {to_email}: {e}")
+            # F65 — recipient email is PII. The httpx
+            # RequestError exception is also run through
+            # ``redact_all`` to scrub any embedded
+            # credentials in the URL/headers.
+            from eden.api.utils.redact import redact_all
+            recipient_domain = to_email.rsplit("@", 1)[-1] if "@" in to_email else "unknown"
+            logger.error(
+                f"Request error sending email to ***@{recipient_domain}: {redact_all(str(e))}"
+            )
             return False
 
     def _html_to_text(self, html: str) -> str:

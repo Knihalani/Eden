@@ -116,6 +116,21 @@ class AssignmentResponse(BaseModel):
 # ─────────────────────────────────────────────────────────────────────────────
 
 async def _fetch_role(role_id: str, org_id: str) -> dict[str, Any]:
+    # Built-in role aliases (``admin``, ``owner``, ``member``, ``viewer``)
+    # are not custom roles and live in the static permission map in
+    # ``eden.api.deps``. Treat them as 404 here so a malformed/alias
+    # id surfaces a clean 404 instead of a 500 from asyncpg's UUID
+    # type-check.
+    if role_id in ("admin", "owner", "member", "viewer"):
+        raise HTTPException(status_code=404, detail="Role not found")
+    # Validate the id is a UUID before hitting Postgres; anything else
+    # (e.g. the literal placeholder ``{role_id}`` from a smoke test)
+    # would raise DataError otherwise.
+    try:
+        import uuid as _uuid
+        _uuid.UUID(role_id)
+    except (ValueError, AttributeError, TypeError) as err:
+        raise HTTPException(status_code=404, detail="Role not found") from err
     client = await get_postgres_client()
     row = await client.fetchrow(
         "SELECT * FROM role_definitions WHERE id = $1 AND org_id = $2",
@@ -392,12 +407,24 @@ async def delete_assignment(
 ):
     if member.role not in ("owner", "admin"):
         raise HTTPException(status_code=403, detail="Owner or admin required")
+    # Validate UUIDs up-front so the asyncpg type check (which would
+    # otherwise raise DataError → 500) never reaches Postgres.
+    try:
+        import uuid as _uuid
+        _uuid.UUID(role_id)
+        _uuid.UUID(assignment_id)
+    except (ValueError, AttributeError, TypeError) as err:
+        raise HTTPException(status_code=404, detail="Role assignment not found") from err
+    # 404 if the role doesn't exist for this org.
+    await _fetch_role(role_id, org_id)
     client = await get_postgres_client()
-    await client.execute(
+    result = await client.execute(
         "DELETE FROM role_assignments WHERE id = $1 AND role_id = $2",
         assignment_id,
         role_id,
     )
+    if result == "DELETE 0":
+        raise HTTPException(status_code=404, detail="Role assignment not found")
 
 
 # ─────────────────────────────────────────────────────────────────────────────

@@ -125,3 +125,103 @@ class TestImpossibleCloudBehavior:
         importlib.reload(storage_lifecycle)
 
         assert storage_lifecycle._IMPOSSIBLE_CLOUD is False
+
+
+
+class TestTransitionToWarmCorrectness:
+    """F41 regression tests for ``transition_to_warm``.
+
+    The pre-fix code had two bugs:
+
+    1. The DELETE placeholder formula was ``f"${i + 2}"`` instead of
+       ``f"${i + 1}"``, leaving $1 unbound. The DELETE always
+       raised ``PostgresSyntaxError: there is no parameter $1`` and
+       the just-archived rows remained in Postgres (data doubled
+       in PG *and* S3).
+    2. The SELECT passed ``cutoff.isoformat()`` (a string) for a
+       ``timestamptz`` comparison. asyncpg's ``timestamptz`` codec
+       rejects bare strings with
+       "expected datetime.date/datetime, got str".
+    """
+
+    @pytest.mark.asyncio
+    async def test_delete_uses_one_based_placeholders(
+        self, monkeypatch: pytest.MonkeyPatch
+    ):
+        """DELETE placeholders start at $1 (no other bound params)."""
+        from datetime import UTC, datetime
+        from unittest.mock import AsyncMock, MagicMock, patch
+
+        # Stub the S3 archive write to succeed so we exercise the
+        # DELETE.
+        manager = StorageLifecycleManager()
+        manager._write_warm_archive = AsyncMock(return_value=True)
+
+        fake_client = MagicMock()
+        # Two rows on the first SELECT, empty on the second
+        # (terminates the loop).
+        fake_client.fetch = AsyncMock(
+            side_effect=[
+                [
+                    {"silver_event_id": "row-1", "timestamp": datetime(2020, 1, 1, tzinfo=UTC)},
+                    {"silver_event_id": "row-2", "timestamp": datetime(2020, 1, 2, tzinfo=UTC)},
+                ],
+                [],
+            ],
+        )
+        fake_client.execute = AsyncMock(return_value="DELETE 2")
+
+        with patch(
+            "eden.storage.postgres.get_postgres_client",
+            AsyncMock(return_value=fake_client),
+        ):
+            n = await manager.transition_to_warm(
+                table="silver_events", before_days=7
+            )
+
+        assert n == 2
+        # The DELETE was issued exactly once with two parameters.
+        assert fake_client.execute.await_count == 1
+        call = fake_client.execute.await_args
+        sql = call.args[0]
+        params = call.args[1:]
+        # The DELETE should use $1 and $2, not $2 and $3.
+        assert "WHERE silver_event_id IN ($1, $2)" in sql, sql
+        # The bound parameters are the two ids in order.
+        assert list(params) == ["row-1", "row-2"]
+        # First arg to SELECT was a real datetime (not an isoformat
+        # string).
+        fetch_call = fake_client.fetch.await_args
+        first_arg = fetch_call.args[1]
+        assert isinstance(first_arg, datetime)
+        assert first_arg.tzinfo is not None
+
+    @pytest.mark.asyncio
+    async def test_select_cutoff_is_datetime_not_string(
+        self, monkeypatch: pytest.MonkeyPatch
+    ):
+        """The SELECT cutoff parameter is a real datetime, not a string.
+
+        The pre-fix code passed ``cutoff.isoformat()`` and asyncpg
+        rejected it because the ``timestamp`` column is ``timestamptz``.
+        """
+        from datetime import UTC, datetime
+        from unittest.mock import AsyncMock, MagicMock, patch
+
+        fake_client = MagicMock()
+        fake_client.fetch = AsyncMock(return_value=[])
+        fake_client.execute = AsyncMock(return_value="DELETE 0")
+
+        with patch(
+            "eden.storage.postgres.get_postgres_client",
+            AsyncMock(return_value=fake_client),
+        ):
+            manager = StorageLifecycleManager()
+            await manager.transition_to_warm(
+                table="silver_events", before_days=7,
+            )
+
+        fetch_call = fake_client.fetch.await_args
+        cutoff_arg = fetch_call.args[1]
+        assert isinstance(cutoff_arg, datetime)
+        assert cutoff_arg.tzinfo is not None

@@ -61,6 +61,12 @@ __all__ = [
     "LocalRepoGraph",
     "RepoGraphClient",
     "SymbolGraph",
+    "BUDGET_COLD_INDEX_MS",
+    "BUDGET_WARM_INDEX_MS",
+    "BUDGET_QUERY_P95_MS",
+    "BUDGET_FIND_AFFECTED_P95_MS",
+    "BUDGET_DB_BYTES",
+    "BUDGET_QUERY_LIMIT",
     "get_default_repo_graph",
 ]
 
@@ -81,6 +87,12 @@ _LAZY_IMPORTS: dict[str, tuple[str, str]] = {
     "LocalRepoGraph": (".local", "LocalRepoGraph"),
     "RepoGraphClient": (".protocol", "RepoGraphClient"),
     "SymbolGraph": (".symbol_graph", "SymbolGraph"),
+    "BUDGET_COLD_INDEX_MS": (".symbol_graph", "BUDGET_COLD_INDEX_MS"),
+    "BUDGET_WARM_INDEX_MS": (".symbol_graph", "BUDGET_WARM_INDEX_MS"),
+    "BUDGET_QUERY_P95_MS": (".symbol_graph", "BUDGET_QUERY_P95_MS"),
+    "BUDGET_FIND_AFFECTED_P95_MS": (".symbol_graph", "BUDGET_FIND_AFFECTED_P95_MS"),
+    "BUDGET_DB_BYTES": (".symbol_graph", "BUDGET_DB_BYTES"),
+    "BUDGET_QUERY_LIMIT": (".symbol_graph", "BUDGET_QUERY_LIMIT"),
     "get_default_repo_graph": (".factory", "get_default_repo_graph"),
 }
 

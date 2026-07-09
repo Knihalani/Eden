@@ -12,6 +12,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from eden.analytics import cohort_retention, funnel
+from eden.api.deps import get_current_user
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/orgs/{org_id}/analytics", tags=["analytics"])
@@ -21,7 +22,7 @@ router = APIRouter(prefix="/orgs/{org_id}/analytics", tags=["analytics"])
 async def get_cohorts(
     org_id: str,
     weeks: int = Query(default=8, ge=1, le=52),
-    user: dict[str, Any] = Depends(__import__("eden.api.deps", fromlist=["get_current_user"]).get_current_user),
+    user: dict[str, Any] = Depends(get_current_user),
 ) -> dict[str, Any]:
     rows = await cohort_retention(org_id, weeks=weeks)
     return {
@@ -44,7 +45,7 @@ async def get_funnel(
     org_id: str,
     steps: str = Query(..., description="Comma-separated list of step names, ordered"),
     window_days: int = Query(default=30, ge=1, le=365),
-    user: dict[str, Any] = Depends(__import__("eden.api.deps", fromlist=["get_current_user"]).get_current_user),
+    user: dict[str, Any] = Depends(get_current_user),
 ) -> dict[str, Any]:
     step_list = [s.strip() for s in steps.split(",") if s.strip()]
     if len(step_list) < 2:

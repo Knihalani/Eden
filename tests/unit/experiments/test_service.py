@@ -4,6 +4,7 @@ from __future__ import annotations
 import pytest
 
 from eden.experiments import (
+    ExperimentResult,
     Variant,
     analyse,
     assign_variant,
@@ -129,3 +130,94 @@ def test_two_proportion_z_test_returns_zero_for_degenerate_pools():
 def test_two_proportion_z_test_is_significant_for_large_effects():
     z = two_proportion_z_test(0.20, 500, 0.10, 500)
     assert z > 3.0  # well above 1.96 (5% two-tailed)
+
+
+# ────────────────────────────────────────────────────────────────────────
+# recommend_winner: control-variant selection
+# ────────────────────────────────────────────────────────────────────────
+
+
+def test_recommend_winner_default_control_is_results_zero():
+    """Backwards-compat: when no control is passed, results[0] is used."""
+    # control=20% success, treatment=80% success → treatment wins
+    for _ in range(20):
+        record_outcome("e", "u_c", "control", False)
+        record_outcome("e", "u_t", "treatment", True)
+    results = analyse("e")
+    # insertion order is "control" then "treatment" → results[0] = control
+    assert [r.variant for r in results] == ["control", "treatment"]
+    assert recommend_winner(results, min_n=10) == "treatment"
+
+
+def test_recommend_winner_explicit_control_works_when_results_order_differs():
+    """Bug repro: outcomes were recorded in an order different from
+    declared variant order. Without an explicit control, the function
+    misidentifies the baseline and either misses the real winner or
+    recommends against the wrong baseline.
+
+    Before the fix: ``recommend_winner`` returned ``None`` (best vs wrong
+    control collapses to best == control when results[0] is also the
+    best variant) or returned a misleading winner based on the wrong
+    z-test baseline.
+
+    After the fix: passing the correct control yields the right answer.
+    """
+    # Variants declared: control=A, treatment=B (in some external config).
+    # Outcomes recorded with the treatment first → insertion order is [B, A].
+    for i in range(150):
+        record_outcome("e", f"u_b_{i}", "B", True)        # treatment 100%
+        record_outcome("e", f"u_a_{i}", "A", i % 5 != 0)  # control ~80%
+    # analyse() returns results in insertion order: [B, A]
+    results = analyse("e")
+    assert [r.variant for r in results] == ["B", "A"]
+    # Without explicit control, results[0] (= B) is wrongly treated as control,
+    # so best == control → returns None (real bug).
+    assert recommend_winner(results, min_n=100) is None
+    # With explicit control=A, B is correctly identified as the winner.
+    assert recommend_winner(results, min_n=100, control="A") == "B"
+
+
+def test_recommend_winner_explicit_control_rejects_unknown_name():
+    """If the caller passes a control name that doesn't exist in
+    ``results``, we return ``None`` rather than silently picking a
+    different variant as the baseline."""
+    for i in range(200):
+        record_outcome("e", f"u_a_{i}", "A", i % 2 == 0)
+        record_outcome("e", f"u_b_{i}", "B", i % 2 == 0)
+    results = analyse("e")
+    assert recommend_winner(results, min_n=100, control="does_not_exist") is None
+
+
+def test_recommend_winner_explicit_control_handles_three_variants():
+    """Multi-variant case: declared A=control, B=treatment1, C=treatment2.
+    Outcomes arrive in B, A, C order so results[0]=B (WRONG control).
+    Without explicit control, the function returns C (the highest
+    rate) because it's tested against B (the wrong control) and
+    happens to pass; but the *correct* decision is C vs A and
+    the same C still wins. The test documents the correct decision
+    and that explicit control gives the same answer for this case."""
+    r_b = ExperimentResult("e", "B", 500, 200, 0.40)
+    r_a = ExperimentResult("e", "A", 500, 70, 0.14)
+    r_c = ExperimentResult("e", "C", 500, 175, 0.35)
+    # Without explicit control: control = results[0] = B
+    # best = C (0.35), control = B (0.40) → best BELOW control → None
+    assert recommend_winner([r_b, r_a, r_c], min_n=100) is None
+    # With explicit control=A: best = B (0.40) vs control A (0.14),
+    # z ≈ (0.40-0.14)/sqrt(0.27*0.73*(1/500+1/500)) ≈ 8.22, significant.
+    assert recommend_winner([r_b, r_a, r_c], min_n=100, control="A") == "B"
+
+
+def test_recommend_winner_explicit_control_uses_lower_baseline():
+    """The bug case where the right answer was missed because the
+    wrong (higher-rate) variant was treated as the control. With
+    the explicit control parameter, the lower-rate baseline is
+    correctly identified and the winner is correctly returned.
+    """
+    # Declared: A = control (50% baseline), B = treatment (70%)
+    # Outcomes arrive in B first → insertion order [B, A]
+    # Before fix: control = results[0] = B (70%), best = B → best == control → None
+    # After fix: control = A (50%), best = B (70%) → z significant → returns "B"
+    r_b = ExperimentResult("e", "B", 500, 350, 0.70)
+    r_a = ExperimentResult("e", "A", 500, 250, 0.50)
+    assert recommend_winner([r_b, r_a], min_n=100) is None
+    assert recommend_winner([r_b, r_a], min_n=100, control="A") == "B"

@@ -22,6 +22,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse, Response
 
 from eden.api.middleware.correlation_id import get_correlation_id
+from eden.api.middleware.security_headers import apply_security_headers
 from eden.config import get_settings
 from eden.storage.redis import get_redis_client
 
@@ -83,6 +84,8 @@ class IdempotencyMiddleware(BaseHTTPMiddleware):
                     "detail": f"Idempotency-Key header is required for {method} requests",
                     "hint": "Include a unique Idempotency-Key header (UUIDv4 recommended) to safely retry this request",
                 },
+                # F69 — apply OWASP security headers to the 400 envelope.
+                headers=apply_security_headers(),
             )
 
         # Sanitize key
@@ -240,8 +243,15 @@ class IdempotencyMiddleware(BaseHTTPMiddleware):
         return JSONResponse(
             status_code=status_code,
             content=body,
-            headers={
-                _IDEMPOTENCY_REPLAY_HEADER: "true",
-                "X-Request-ID": get_correlation_id(),
-            },
+            # F69 — apply OWASP security headers to the replayed
+            # response. The ``headers=`` argument merges: our
+            # security block is added, the existing
+            # ``_IDEMPOTENCY_REPLAY_HEADER`` + ``X-Request-ID`` are
+            # preserved (apply_security_headers returns the union).
+            headers=apply_security_headers(
+                {
+                    _IDEMPOTENCY_REPLAY_HEADER: "true",
+                    "X-Request-ID": get_correlation_id(),
+                }
+            ),
         )

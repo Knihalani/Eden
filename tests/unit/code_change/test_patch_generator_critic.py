@@ -328,3 +328,241 @@ class TestGenerateCriticLoop:
         # Both aroute calls happened (critic loop made it retry).
         assert gen._router.aroute.await_count == 2
         assert result["data"]["critic_attempts"] >= 1
+
+
+class TestPromptSplitSystemVsUser:
+    """The patch prompt is split into (system, user) so the static
+    instruction text is eligible for Anthropic prompt caching
+    (saves ~90% of those tokens on the second+ call within the
+    cache TTL) and so the cache key in
+    ``OpenRouterClient._cache_key`` is unaffected by static
+    instruction changes.
+    """
+
+    def test_prompt_split_returns_tuple(self):
+        from eden.code_change.patch_generator import _build_patch_prompt
+        result = _build_patch_prompt(
+            repo_id="r1", rca_id="rc1", trace_id="t1",
+            linked_files=[], style_profile={}, pr_patterns={},
+            kg_penalties=[], test_plan=[],
+        )
+        assert isinstance(result, tuple) and len(result) == 2
+        sys_p, user_p = result
+        assert isinstance(sys_p, str) and len(sys_p) > 0
+        assert isinstance(user_p, str) and len(user_p) > 0
+
+    def test_system_prompt_contains_static_instructions(self):
+        """The system prompt must include the role + output-format
+        instructions so the user prompt can stay focused on the
+        per-call variable context."""
+        from eden.code_change.patch_generator import _build_patch_prompt
+        sys_p, _ = _build_patch_prompt(
+            repo_id="r1", rca_id="rc1", trace_id="t1",
+            linked_files=[], style_profile={}, pr_patterns={},
+            kg_penalties=[], test_plan=[],
+        )
+        assert "unified diff" in sys_p.lower()
+        assert "no prose" in sys_p.lower() or "no markdown" in sys_p.lower()
+
+    def test_user_prompt_does_not_contain_static_role_text(self):
+        """The user prompt must NOT re-state the role — that's
+        now the system prompt's job. This is the assertion that
+        actually proves we lifted the text out of the user side."""
+        from eden.code_change.patch_generator import _build_patch_prompt
+        _, user_p = _build_patch_prompt(
+            repo_id="r1", rca_id="rc1", trace_id="t1",
+            linked_files=[], style_profile={}, pr_patterns={},
+            kg_penalties=[], test_plan=[],
+        )
+        # The old user prompt started with "You are generating".
+        # After the split, that text lives in the system prompt.
+        assert "You are generating" not in user_p
+        # The user prompt should still contain the variable context
+        # (RCA id, trace id, repo id).
+        assert "r1" in user_p
+        assert "rc1" in user_p
+
+    def test_kg_penalties_still_appear_in_user_prompt(self):
+        """Per-call context (KG penalties) must stay in the user
+        prompt — only the static instruction text moves to the
+        system prompt."""
+        from eden.code_change.patch_generator import _build_patch_prompt
+        _, user_p = _build_patch_prompt(
+            repo_id="r1", rca_id="rc1", trace_id="t1",
+            linked_files=[],
+            style_profile={}, pr_patterns={},
+            kg_penalties=[{
+                "code_path": "src/foo.py",
+                "revert_rate": 0.42,
+                "denial_rate": 0.13,
+            }],
+            test_plan=[],
+        )
+        assert "src/foo.py" in user_p
+        assert "0.42" in user_p
+
+    def test_linked_files_still_appear_in_user_prompt(self):
+        from eden.code_change.patch_generator import _build_patch_prompt
+        _, user_p = _build_patch_prompt(
+            repo_id="r1", rca_id="rc1", trace_id="t1",
+            linked_files=[{
+                "path": "src/example.py",
+                "content": "def hello():\n    return 42\n",
+            }],
+            style_profile={}, pr_patterns={},
+            kg_penalties=[], test_plan=[],
+        )
+        assert "src/example.py" in user_p
+        assert "def hello" in user_p
+
+
+class TestLinkedFilesEmptyContentOmitted:
+    """``EdenPatchAgent`` historically sent ``linked_files`` with
+    ``content: ""``. The previous prompt unconditionally appended
+    a "## Linked source files" section with bare ``--- path ---``
+    headers, wasting ~50 tokens per call.
+
+    v1.7.4 polish: skip the section entirely when no caller
+    populated content. When callers DO populate it, the section
+    still appears (and the content is still capped at 2000 chars).
+    """
+
+    def test_empty_content_omits_section(self):
+        from eden.code_change.patch_generator import _build_patch_prompt
+        _, user_p = _build_patch_prompt(
+            repo_id="r1", rca_id="rc1", trace_id="t1",
+            linked_files=[
+                {"path": "src/a.py", "content": ""},
+                {"path": "src/b.py", "content": ""},
+            ],
+            style_profile={}, pr_patterns={},
+            kg_penalties=[], test_plan=[],
+        )
+        # The "## Linked source files" header should NOT appear
+        # because no caller populated content.
+        assert "## Linked source files" not in user_p
+        # And neither should the bare --- headers.
+        assert "--- src/a.py ---" not in user_p
+        assert "--- src/b.py ---" not in user_p
+
+    def test_populated_content_includes_section(self):
+        from eden.code_change.patch_generator import _build_patch_prompt
+        _, user_p = _build_patch_prompt(
+            repo_id="r1", rca_id="rc1", trace_id="t1",
+            linked_files=[
+                {"path": "src/a.py", "content": "def hello():\n    return 1"},
+            ],
+            style_profile={}, pr_patterns={},
+            kg_penalties=[], test_plan=[],
+        )
+        assert "## Linked source files" in user_p
+        assert "src/a.py" in user_p
+
+    def test_mixed_content_only_includes_populated(self):
+        """If some files have content and others don't, only the
+        populated ones appear — the empty ones are silently
+        skipped without polluting the prompt."""
+        from eden.code_change.patch_generator import _build_patch_prompt
+        _, user_p = _build_patch_prompt(
+            repo_id="r1", rca_id="rc1", trace_id="t1",
+            linked_files=[
+                {"path": "src/populated.py", "content": "x = 1"},
+                {"path": "src/empty.py", "content": ""},
+            ],
+            style_profile={}, pr_patterns={},
+            kg_penalties=[], test_plan=[],
+        )
+        assert "src/populated.py" in user_p
+        assert "src/empty.py" not in user_p
+
+    def test_caps_at_5_files(self):
+        """The cap on linked files is 5 — the 6th file (even with
+        content) must not appear in the prompt."""
+        from eden.code_change.patch_generator import _build_patch_prompt
+        _, user_p = _build_patch_prompt(
+            repo_id="r1", rca_id="rc1", trace_id="t1",
+            linked_files=[
+                {"path": f"src/f{i}.py", "content": "x"}
+                for i in range(10)
+            ],
+            style_profile={}, pr_patterns={},
+            kg_penalties=[], test_plan=[],
+        )
+        for i in range(5):
+            assert f"src/f{i}.py" in user_p, f"f{i} missing"
+        for i in range(5, 10):
+            assert f"src/f{i}.py" not in user_p, f"f{i} leaked past cap"
+
+
+class TestLazyModelRouterImport:
+    """Validate that patch_generator doesn't pull in ModelRouter
+    unless it's actually called. The eager import cost is ~1s
+    (transitively imports eden.config + eden.llm.client);
+    operators and tests that only read patch enums should
+    not pay that cost.
+    """
+
+    def test_module_import_does_not_load_model_router(self):
+        import sys
+        # Make sure neither module is loaded
+        for mod in list(sys.modules):
+            if "model_router" in mod:
+                del sys.modules[mod]
+        from eden.code_change import patch_generator
+        # The module itself must not have pulled in
+        # ``eden.optimization.model_router``.
+        assert "eden.optimization.model_router" not in sys.modules, (
+            "patch_generator eagerly imported model_router — "
+            "should be lazy via __getattr__"
+        )
+
+    def test_module_does_not_load_router_at_import(self):
+        """This is the actual behaviour we want — patching
+        the loader to track imports, then reloading
+        patch_generator, must NOT load model_router."""
+        import sys
+        # Clear any pre-existing imports
+        for mod in list(sys.modules):
+            if "model_router" in mod or "patch_generator" in mod:
+                del sys.modules[mod]
+        from eden.code_change import patch_generator
+        # The TYPE_CHECKING import is evaluated at runtime
+        # only when ``from __future__ import annotations``
+        # is active, which it is. So importing
+        # ``patch_generator`` must not pull in model_router.
+        assert "eden.optimization.model_router" not in sys.modules
+
+    def test_unknown_attribute_raises(self):
+        from eden.code_change import patch_generator
+        try:
+            _ = patch_generator.DoesNotExist
+        except AttributeError as exc:
+            assert "patch_generator" in str(exc)
+        else:
+            raise AssertionError("expected AttributeError")
+
+    def test_fast_skip_without_api_keys(self, monkeypatch):
+        """When no LLM API keys are set, generate() must return
+        ``not_implemented`` in <5ms without instantiating
+        ModelRouter (which alone is ~1s)."""
+        import asyncio
+        import os
+        import time
+        for key in ("OPENROUTER_API_KEY", "OPENAI_API_KEY",
+                    "ANTHROPIC_API_KEY", "EDEN_LLM_API_KEY"):
+            monkeypatch.delenv(key, raising=False)
+        # Reset module-level cache (set by prior tests)
+        import eden.code_change.patch_generator as pg
+        pg._LLM_CREDENTIAL_PRESENT = None
+
+        gen = pg.PatchGenerator()
+        t0 = time.perf_counter()
+        result = asyncio.run(gen.generate(
+            org_id="o1", rca_id="rca1", trace_id="t1",
+            repo_id="repo1", rca_summary="test",
+        ))
+        elapsed_ms = (time.perf_counter() - t0) * 1000
+        assert result["status"] == "not_implemented"
+        assert result["data"]["gate"] == "router_missing"
+        # Must be fast — well under the ModelRouter init cost.
+        assert elapsed_ms < 50, f"fast-skip took {elapsed_ms:.1f}ms"

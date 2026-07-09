@@ -34,6 +34,7 @@ from eden.api.deps import (
     require_org_admin,
     require_org_member,
 )
+from eden.api.utils.redact import redact_all
 from eden.services.onboarding import (
     ONBOARDING_STEPS,
     get_state_machine,
@@ -111,7 +112,7 @@ async def get_state(
             "steps": [s.value for s in ONBOARDING_STEPS],
         }
     except Exception as exc:
-        logger.warning("onboarding: get_state fallback for org=%s: %s", org_id, exc)
+        logger.warning("onboarding: get_state fallback for org=%s: %s", org_id, redact_all(str(exc)))
         return {
             "status": "ok",
             "feature": "onboarding",

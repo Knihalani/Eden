@@ -46,6 +46,33 @@ jobs:
       - name: Check pyproject vs uv.lock
         run: uv lock --check
 
+  audit:
+    name: pip-audit (runtime deps)
+    # Runs ``pip-audit`` against the resolved runtime dep tree
+    # (excludes the [dev] extra so it doesn't flag test-only deps).
+    # Replaces the in-repo ``safety check`` call that the 2026-07-07
+    # dep audit retired — ``safety``'s free DB tier no longer covers
+    # most recent CVEs and the ``check`` subcommand is unsupported
+    # past June 2024.
+    runs-on: ubuntu-latest
+    needs: lock-check
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v3
+        with:
+          version: "latest"
+      - name: Export runtime deps
+        # Mirrors the production `uv sync --no-dev` tree so the audit
+        # only checks what actually ships to prod.
+        run: uv export --no-hashes --format requirements-txt --no-dev > /tmp/runtime-reqs.txt
+      - name: pip-audit (fail on any known vuln)
+        # ``pip-audit`` is the upstream-maintained replacement for
+        # ``safety``: it pulls from the PyPI Advisory DB and OSV.
+        # The strict mode blocks the build on any known vulnerability.
+        # ``--no-deps`` skips pip resolution inside the container
+        # (the resolved tree is already pinned by uv.lock).
+        run: uvx pip-audit --strict --no-deps --disable-pip -r /tmp/runtime-reqs.txt
+
   lint:
     name: ruff + mypy
     runs-on: ubuntu-latest
@@ -69,7 +96,7 @@ jobs:
   test:
     name: pytest
     runs-on: ubuntu-latest
-    needs: lock-check
+    needs: [lock-check, audit]
     services:
       postgres:
         # Use the TimescaleDB HA image rather than plain postgres:16 —
@@ -120,7 +147,7 @@ jobs:
   build:
     name: docker build (Northflank shape)
     runs-on: ubuntu-latest
-    needs: lock-check
+    needs: [lock-check, audit]
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-buildx-action@v3

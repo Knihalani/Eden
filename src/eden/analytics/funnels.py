@@ -34,7 +34,6 @@ async def _funnel_clickhouse(org_id: str, steps: list[str], *, window_days: int)
         engine = get_engine()
     except Exception:
         return None
-    ", ".join(f"%(step_{i})s AS step_{i}" for i in range(len(steps)))
     sql = f"""
         WITH events AS (
             SELECT user_id, event_name
@@ -83,23 +82,29 @@ async def funnel(org_id: str, steps: list[str], *, window_days: int = 30) -> Fun
     ch = await _funnel_clickhouse(org_id, steps, window_days=window_days)
     if ch is not None:
         return ch
-    # Postgres fallback: count distinct user_ids for each step in turn.
+    # Postgres fallback — collapsed the per-step sequential
+    # fetchrow round-trips into a single grouped query (one
+    # round-trip instead of ``len(steps)``). Audit 2026-07-07.
     from eden.storage.postgres import get_postgres_client
     client = await get_postgres_client()
+    rows = await client.fetch(
+        """
+        SELECT action, count(DISTINCT user_id)::int AS n
+        FROM audit_log
+        WHERE org_id = $1
+          AND action = ANY($2::text[])
+          AND created_at >= NOW() - ($3::int || ' days')::interval
+        GROUP BY action
+        """,
+        org_id,
+        list(steps),
+        window_days,
+    )
+    counts = {r["action"]: int(r["n"]) for r in rows}
     funnel_steps: list[FunnelStep] = []
     previous: int | None = None
     for s in steps:
-        row = await client.fetchrow(
-            """
-            SELECT count(DISTINCT user_id)::int AS n
-            FROM audit_log
-            WHERE org_id = $1 AND action = $2 AND created_at >= NOW() - ($3::int || ' days')::interval
-            """,
-            org_id,
-            s,
-            window_days,
-        )
-        n = int(row["n"]) if row and row["n"] else 0
+        n = counts.get(s, 0)
         conv = 1.0 if previous is None or previous == 0 else n / previous
         funnel_steps.append(FunnelStep(name=s, count=n, conversion_from_previous=conv))
         previous = n

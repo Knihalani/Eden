@@ -338,7 +338,7 @@ async def _delete_then_insert(
     # else (whitespace, quotes, semicolons) is rejected so a caller
     # can't smuggle SQL through a column list.
     import re as _re
-    _IDENT = _re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+    _IDENT = _re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")  # noqa: N806
     for ident_name, ident_value in (
         ("table", table), ("key_col", key_col), *((f"column[{i}]", c) for i, c in enumerate(columns)),
     ):
@@ -388,7 +388,25 @@ async def _insert_row(
     id (the ``_new_id`` shape) so re-runs with the same id
     are idempotent at the application layer. Best-effort like
     :func:`_delete_then_insert`.
+
+    Defence-in-depth: ``table`` and ``columns`` are interpolated
+    raw into SQL below. Today every caller passes hardcoded
+    strings, but we still validate at the function boundary so a
+    future caller can't smuggle SQL via a column list that came
+    from request input.
     """
+    import re as _re
+    _IDENT = _re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")  # noqa: N806
+    if not isinstance(table, str) or not _IDENT.match(table):
+        raise ValueError(
+            f"_insert_row: invalid SQL identifier table={table!r}"
+        )
+    for i, c in enumerate(columns):
+        if not isinstance(c, str) or not _IDENT.match(c):
+            raise ValueError(
+                f"_insert_row: invalid SQL identifier column[{i}]={c!r}"
+            )
+
     try:
         from eden.storage.postgres import get_postgres_client
     except Exception as exc:  # pragma: no cover - defensive
@@ -431,7 +449,29 @@ async def _select_rows(
     rather than an exception. The WHERE clause is the caller's
     responsibility; only the ``org_id`` filter is appended
     automatically so callers cannot accidentally cross tenants.
+
+    Defence-in-depth: ``table``/``where``/``order_by`` are
+    interpolated raw into SQL below. Today every caller passes
+    hardcoded strings, but we still validate at the function
+    boundary so a future caller can't smuggle SQL via a column
+    list or WHERE fragment that came from request input.
     """
+    import re as _re
+    _IDENT = _re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")  # noqa: N806
+    _FORBIDDEN_SQL = _re.compile(r""";|--|/\*|\*/|\\""")  # noqa: N806
+    if not isinstance(table, str) or not _IDENT.match(table):
+        raise ValueError(
+            f"_select_rows: invalid SQL identifier table={table!r}"
+        )
+    if where and (not isinstance(where, str) or _FORBIDDEN_SQL.search(where)):
+        raise ValueError(
+            f"_select_rows: where clause contains forbidden characters: {where!r}"
+        )
+    if not isinstance(order_by, str) or _FORBIDDEN_SQL.search(order_by):
+        raise ValueError(
+            f"_select_rows: order_by contains forbidden characters: {order_by!r}"
+        )
+
     try:
         from eden.storage.postgres import get_postgres_client
     except Exception as exc:  # pragma: no cover - defensive
@@ -500,7 +540,24 @@ async def _update_row(
     otherwise. Used by approval flows to flip patch status and by
     disconnect to flip repo status. Same error-swallow semantics
     as :func:`_insert_row` — DB errors return ``False``.
+
+    Defence-in-depth: ``table``/``where_col``/``set_col`` are
+    interpolated raw into SQL below. Today every caller passes
+    hardcoded strings, but we still validate at the function
+    boundary so a future caller can't smuggle SQL via a column
+    name that came from request input.
     """
+    import re as _re
+    _IDENT = _re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")  # noqa: N806
+    for ident_name, ident_value in (
+        ("table", table), ("where_col", where_col), ("set_col", set_col),
+    ):
+        if not isinstance(ident_value, str) or not _IDENT.match(ident_value):
+            raise ValueError(
+                f"_update_row: invalid SQL identifier "
+                f"{ident_name}={ident_value!r}"
+            )
+
     try:
         from eden.storage.postgres import get_postgres_client
     except Exception as exc:  # pragma: no cover - defensive

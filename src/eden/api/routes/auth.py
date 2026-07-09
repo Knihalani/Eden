@@ -21,6 +21,7 @@ from eden.api.deps import (
     log_audit_event,
     require_org_admin,
 )
+from eden.api.middleware.security_headers import apply_security_headers
 from eden.api.utils.auth import (
     create_access_token,
     hash_password,
@@ -43,6 +44,7 @@ from eden.api.utils.rate_limit import (
     totp_setup_limiter,
     totp_verify_limiter,
 )
+from eden.api.utils.redact import redact_all, redact_email
 from eden.api.utils.validation import PasswordValidationError, validate_password_strength
 from eden.config import get_settings
 from eden.services.invitation_service import (
@@ -214,10 +216,17 @@ async def signup(request: SignupRequest, response: Response, req: Request):
     # user gets, but skip the database write — the bot can't tell
     # it was caught.
     if request.website:
+        # F66 — PII redaction. Pre-F66 this log line
+        # embedded the requester's plaintext email AND
+        # IP, a CCPA + GDPR violation. The IP is needed
+        # for the honeypot diagnostic (so the operator
+        # can block the bot) but the email is straight
+        # PII and must be redacted. We keep the IP for
+        # the security diagnostic.
         logger.info(
             "signup honeypot triggered from ip=%s email=%s",
             _client_ip(req),
-            request.email,
+            redact_email(request.email),
         )
         from fastapi.responses import JSONResponse
         return JSONResponse(
@@ -229,6 +238,8 @@ async def signup(request: SignupRequest, response: Response, req: Request):
                     "signing in."
                 ),
             },
+            # F69 — apply OWASP security headers (defense-in-depth).
+            headers=apply_security_headers(),
         )
 
     # Enforce password strength policy before hitting the DB. The
@@ -268,6 +279,8 @@ async def signup(request: SignupRequest, response: Response, req: Request):
                     "signing in."
                 ),
             },
+            # F69 — apply OWASP security headers (defense-in-depth).
+            headers=apply_security_headers(),
         )
 
     # Create user
@@ -305,7 +318,10 @@ async def signup(request: SignupRequest, response: Response, req: Request):
         from eden.services.email_service import send_verification_email
         await send_verification_email(to_email=request.email, token=verify_token)
     except Exception as exc:
-        logger.warning(f"verification email dispatch failed: {exc}")
+        # F66 — defensive PII redaction. The upstream
+        # email service error can include the request
+        # email in the message; scrub it defensively.
+        logger.warning(f"verification email dispatch failed: {redact_email(str(exc))}")
 
     # Audit 2026-06-22 B1.23 — return 202; no session cookie until verified.
     # Security audit (enumeration): use the same generic message as the
@@ -320,6 +336,8 @@ async def signup(request: SignupRequest, response: Response, req: Request):
                 "signing in."
             ),
         },
+        # F69 — apply OWASP security headers (defense-in-depth).
+        headers=apply_security_headers(),
     )
 
 
@@ -472,7 +490,15 @@ async def login(request: LoginRequest, response: Response, req: Request):
                 user_id,
             )
         except Exception:  # noqa: BLE001 — best-effort, never block login
-            logger.warning("Password rehash failed for user %s", user_id, exc_info=True)
+            # F70 — defensive redaction. ``user_id`` is an
+            # internal UUID (not PII), but ``redact_all`` is a
+            # no-op on UUIDs and a defense-in-depth scrub in case
+            # the id format ever changes.
+            logger.warning(
+                "Password rehash failed for user %s",
+                redact_all(user_id),
+                exc_info=True,
+            )
 
     # Create JWT and set cookie. Token is bound to the user's
     # post-login token_version so any pre-login JWTs are rejected
@@ -754,7 +780,7 @@ async def logout(
     except Exception as exc:  # noqa: BLE001
         # Logged but not re-raised: the user is logging out, we
         # still clear the cookie so the next request bounces.
-        logger.warning("logout token_version bump failed: %s", exc)
+        logger.warning("logout token_version bump failed: %s", redact_all(str(exc)))
 
     response.delete_cookie(
         key=COOKIE_NAME,
@@ -907,7 +933,7 @@ async def get_me(user: dict = Depends(get_current_user)):
             except Exception as exc:
                 logger.warning(
                     "auto-provision /auth/me attempt %d failed for clerk_id=%s: %s",
-                    attempt + 1, clerk_id, exc,
+                    attempt + 1, clerk_id, redact_all(str(exc)),
                 )
                 if attempt < 2:
                     import asyncio
@@ -1001,7 +1027,7 @@ async def get_me(user: dict = Depends(get_current_user)):
                     logger.error(
                         "auto-provision /auth/me bare-minimum INSERT "
                         "FAILED for clerk_id=%s: %s",
-                        clerk_id, exc,
+                        clerk_id, redact_all(str(exc)),
                     )
 
         if not db_user:
@@ -1844,10 +1870,12 @@ async def forgot_password(
                 from eden.services.email_service import send_password_reset_email
                 await send_password_reset_email(to_email=request.email, token=token)
             except Exception as exc:
-                logger.warning(f"password reset email dispatch failed: {exc}")
+                # F66 — defensive PII redaction.
+                logger.warning(f"password reset email dispatch failed: {redact_email(str(exc))}")
     except Exception as exc:
         # Don't leak DB errors to the caller.
-        logger.warning(f"forgot-password dispatch failed: {exc}")
+        # F66 — defensive PII redaction.
+        logger.warning(f"forgot-password dispatch failed: {redact_email(str(exc))}")
     return {
         "message": (
             "If an account exists for that email, a password reset "

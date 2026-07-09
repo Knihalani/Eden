@@ -3,23 +3,81 @@
 ## Overview
 
 Eden is an observability + improvement platform for AI agents and LLM apps.
-Three deployable surfaces share a single backend:
+Three deployable surfaces share a single backend. The diagram below shows the
+request and data flow between every component; arrows are labelled with the
+primary protocol or auth method.
 
-```
-┌──────────────────┐    Clerk OAuth    ┌──────────────────┐
-│  Portal (Next.js)│ ────────────────► │  Backend         │
-│  edenobservability.com                 │  (FastAPI)        │
-└──────────────────┘                   │  api.edenobservability.com
-                                        │
-                                        ▼
-                          ┌──────────────────────────────┐
-                          │  Postgres (Neon)             │
-                          │  Redis (dedup, rate-limit)   │
-                          │  ClickHouse / Tinybird       │
-                          │  S3-compatible (Impossible)  │
-                          │  Qdrant Cloud                │
-                          │  OpenRouter (LLMs)           │
-                          └──────────────────────────────┘
+```mermaid
+flowchart LR
+    %% ── Edge ────────────────────────────────────────────────
+    User([End user])
+    subgraph Edge["Edge / CDN"]
+        Portal[Portal · Next.js 16<br/>edenobservability.com]
+        Clerk[Clerk<br/>session JWT + JWKS]
+        Vercel[Vercel<br/>edge middleware]
+    end
+    subgraph BE["Backend (FastAPI on Northflank)"]
+        API[api.edenobservability.com<br/>FastAPI · 743 routes]
+        AuthMW[Auth middleware<br/>Clerk JWT verify]
+        RateMW[Tenant rate limit<br/>Redis token bucket]
+        Ingest[TelemetryCollector]
+        Judge[JudgeRunner<br/>OpenRouter T1]
+        Webhook[Webhook delivery<br/>SSRF-guarded + HMAC]
+        Budget[BudgetService<br/>record_usage]
+    end
+    subgraph Storage["Data plane"]
+        PG[(Postgres 16 · Neon<br/>RLS-enforced)]
+        Redis[(Redis 7 · Upstash<br/>dedup · rate-limit · SSE)]
+        CH[(ClickHouse / Tinybird<br/>columnar rollups)]
+        S3[(S3 · Impossible Cloud<br/>bronze tier)]
+        Qdrant[(Qdrant Cloud<br/>KB embeddings)]
+        Typesense[(Typesense<br/>full-text search)]
+    end
+    subgraph External["3rd-party"]
+        OR[OpenRouter<br/>Anthropic / OpenAI / Google]
+        Resend[Resend<br/>email]
+        Sentry[Sentry<br/>errors]
+        PostHog[PostHog<br/>opt-in analytics]
+    end
+
+    %% ── User → Portal ─────────────────────────────────────
+    User -- "browser" --> Portal
+    Portal -- "OAuth" --> Clerk
+    Clerk -- "session JWT<br/>__session cookie" --> Portal
+    Portal -- "catch-all proxy<br/>Authorization: Bearer" --> API
+    Portal -. "edge functions" .- Vercel
+
+    %% ── API request chain ─────────────────────────────────
+    API --> AuthMW --> RateMW
+    AuthMW -- "JWKS lookup" --> Clerk
+    RateMW -- "token bucket" --> Redis
+
+    %% ── Ingest path ───────────────────────────────────────
+    API -- "POST /orgs/{id}/ingest" --> Ingest
+    Ingest -- "INSERT telemetry_events" --> PG
+    Ingest -- "columnar copy" --> CH
+    Ingest -- "embed KB chunks" --> Qdrant
+    Ingest -- "search index" --> Typesense
+
+    %% ── Judge pipeline ────────────────────────────────────
+    Ingest -- "trigger judge_runner" --> Judge
+    Judge -- "ChatCompletion<br/>(T1 tier)" --> OR
+    Judge -- "INSERT judge_scores" --> PG
+
+    %% ── Webhook delivery ──────────────────────────────────
+    API -- "POST /webhooks" --> Webhook
+    Webhook -- "signed POST<br/>(HMAC-SHA256 v1)" --> External["Customer HTTPS endpoint"]
+    Webhook -- "DLQ on exhaustion" --> PG
+
+    %% ── Budget / closed loop ──────────────────────────────
+    API -- "record_usage" --> Budget
+    Budget -- "over cap → 429 + on_budget_exceeded" --> Webhook
+
+    %% ── Async / exports ──────────────────────────────────
+    API -- "DSAR / data export" --> S3
+    API -- "DSAR / verification" --> Resend
+    API -- "errors" --> Sentry
+    Portal -- "page view / sign up" --> PostHog
 ```
 
 ## Components

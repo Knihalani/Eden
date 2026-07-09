@@ -394,7 +394,7 @@ async def compute_trace_reports(
             return {
                 "count": sum(1 for s in severities if s != "ok"),
                 "high_severity_count": sum(1 for s in severities if s == "high"),
-                "ids": [name for name, s in zip(_DETECTION_FIELDS, severities) if s != "ok"][:8],
+                "ids": [name for name, s in zip(_DETECTION_FIELDS, severities, strict=True) if s != "ok"][:8],
             }
         except Exception as exc:
             metrics.step_duration.labels(step="detection").observe(

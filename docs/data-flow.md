@@ -1,8 +1,35 @@
 # Eden — Data Flow
 
-End-to-end traces of the most important data paths.
+End-to-end traces of the most important data paths. The sequence diagrams
+below show the request/response choreography between services; the ASCII
+trees below them give the per-component internals.
 
 ## 1. Trace ingest → judge → dashboard
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant SDK
+    participant API as FastAPI ingest
+    participant TC as TelemetryCollector
+    participant PG as Postgres
+    participant JR as JudgeRunner
+    participant OR as OpenRouter
+    participant CH as ClickHouse
+    participant Portal
+
+    SDK->>API: POST /orgs/{id}/ingest/{format}
+    API->>API: PII pre-mask · format decode
+    API->>TC: ingest_batch(events)
+    TC->>PG: INSERT telemetry_events
+    TC->>CH: columnar copy (async)
+    PG-->>JR: NOTIFY new telemetry
+    JR->>OR: ChatCompletion (T1 tier)
+    OR-->>JR: JudgeScore
+    JR->>PG: INSERT judge_scores
+    Portal->>API: GET /observability/sse
+    API-->>Portal: SSE tail (Redis pub/sub)
+```
 
 ```
 SDK (browser / server)
@@ -63,6 +90,35 @@ webhook_dlq (manual replay via portal)
 ```
 
 ## 3. Budget gate → record_usage → hard-limit block
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant Client
+    participant GW as AIGateway
+    participant BS as BudgetService
+    participant PG as Postgres
+    participant LLM as OpenRouter
+    participant HK as WebhookBus
+
+    Client->>GW: ChatCompletionRequest
+    GW->>BS: preflight_check(org_id, est_cost)
+    BS->>PG: SELECT current_usd FROM org_budgets
+    PG-->>BS: row
+    alt over budget
+        BS-->>GW: ValueError(budget_exceeded)
+        GW-->>Client: 429 + Retry-After
+    else within budget
+        GW->>LLM: ChatCompletion
+        LLM-->>GW: response + usage
+        GW->>BS: record_usage(org_id, cost)
+        BS->>PG: UPDATE org_budgets SET current_usd = current_usd + $cost
+        alt over hard limit
+            BS->>HK: emit(on_budget_exceeded)
+            HK-->>Client: 429 on next request
+        end
+    end
+```
 
 ```
 LLM call

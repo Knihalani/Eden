@@ -8,7 +8,7 @@ Per spec §B.4 (D.12.1):
 
     -- MCP data lives in telemetry_events.attributes->'mcp' (JSONB)
     CREATE VIEW mcp_traces_v AS
-        SELECT id AS trace_id,
+        SELECT event_id AS trace_id,
                (attributes->'mcp'->>'server_name') AS mcp_server_name,
                (attributes->'mcp'->>'tool_name')   AS mcp_tool_name,
                (attributes->'mcp'->>'resource_uri') AS mcp_resource_uri,
@@ -54,8 +54,8 @@ def upgrade() -> None:
         """
         CREATE OR REPLACE VIEW mcp_traces_v AS
         SELECT
-            id                                         AS trace_id,
-            org_id                                     AS org_id,
+            event_id                                   AS trace_id,
+            tenant_id                                  AS org_id,
             (attributes->'mcp'->>'server_name')        AS mcp_server_name,
             (attributes->'mcp'->>'tool_name')          AS mcp_tool_name,
             (attributes->'mcp'->>'resource_uri')       AS mcp_resource_uri,

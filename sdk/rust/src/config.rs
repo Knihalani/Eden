@@ -8,9 +8,10 @@ use std::env;
 /// Mirrors the path segment used by the multi-format ingest route
 /// (`POST /orgs/{org_id}/ingest/{format}`). The default (`Openai`) is the
 /// canonical happy path for LLM completion traces.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub enum IngestTarget {
     /// `openai` — full ChatCompletion responses or usage events.
+    #[default]
     Openai,
     /// `anthropic` — Messages API responses.
     Anthropic,
@@ -29,12 +30,6 @@ impl IngestTarget {
             IngestTarget::Otel => "otel",
             IngestTarget::Webhook => "webhook",
         }
-    }
-}
-
-impl Default for IngestTarget {
-    fn default() -> Self {
-        IngestTarget::Openai
     }
 }
 
