@@ -23,9 +23,28 @@ Eden **already has** StatGate + ETEC — uniquely among competitors. N08 **opera
 
 ---
 
-## 2. Target behavior
+## 2. Eden current state (codebase-accurate)
 
-### 2.1 StatGate Incident Scorer
+| Component | Path | Status |
+|---|---|---|
+| StatGate 5-check gate | `supplementaries/phase_6_stat_gate/gate.py` | **SHIPPED** |
+| StatGate-gated executor | `supplementaries/phase_7_detection/stat_gated_executor.py` | **SHIPPED** |
+| Cat 17 StatGate on apply | `trace_quality/wiring.py:50–155` | **SHIPPED**, requires **N14** `install_all()` |
+| Hot-path loop guard | `trace_quality/hooks.py:164–200` | **SHIPPED** |
+| ETEC composite | `supplementaries/phase_2_efficiency/composite.py` | **SHIPPED** |
+| Quality worker | `quality_pipeline/worker.py` | **NOT started** in lifespan |
+| A2A links | `services/observability/a2a_links.py` | **SHIPPED** |
+| Cat 6 handoff analyzer | `agents/agent_intel/performance.py` | **SHIPPED** |
+| `StatGateIncidentScorer` | `src/eden/issues/statgate_scorer.py` | **MISSING** (new) |
+| F28/F29 issue layer | `src/eden/issues/` | **MISSING** (new) |
+
+See [`CODEBASE-GROUND-TRUTH.md`](../CODEBASE-GROUND-TRUTH.md).
+
+---
+
+## 3. Target behavior
+
+### 3.1 StatGate Incident Scorer
 
 On F28 stumble write, run StatGate suite **before** LLM triage:
 
@@ -45,7 +64,7 @@ class StatGateVerdict:
 | Delegation break | Sub-agent error propagates uncaught |
 | Cost spike | Trace cost >3σ for agent |
 
-### 2.2 Delegation trust graph
+### 3.2 Delegation trust graph
 
 For multi-agent traces (Cat 22):
 - Map parent → child agent calls
@@ -65,7 +84,7 @@ CREATE TABLE delegation_trust_scores (
 );
 ```
 
-### 2.3 Incident response playbook
+### 3.3 Incident response playbook
 
 StatGate P0 → skip LLM triage queue → immediate:
 1. F47 Slack alert with evidence blocks (not LLM summary)
@@ -75,7 +94,7 @@ StatGate P0 → skip LLM triage queue → immediate:
 
 ---
 
-## 3. Why non-LLM matters (market)
+## 4. Why non-LLM matters (market)
 
 - **Latency:** StatGate runs in <100ms; LLM triage 30-90s
 - **Cost:** No tokens for severity classification
@@ -86,7 +105,7 @@ Braintrust/Langfuse focus LLM eval; **deterministic trace quality** is Eden diff
 
 ---
 
-## 4. F30 triage integration
+## 5. F30 triage integration
 
 ```python
 async def triage_issue(issue_id: str) -> TriageResult:
@@ -107,13 +126,34 @@ async def triage_issue(issue_id: str) -> TriageResult:
 
 ---
 
-## 5. MCP exposure (F04)
+## 6. Performance & cost optimization
+
+| Path | Latency | Cost |
+|---|---|---|
+| StatGate score (deterministic) | p95 <80ms | **$0** |
+| ETEC read from quality report | p95 <50ms | **$0** |
+| Delegation trust (A2A + Cat 6) | p95 <200ms async | **$0** |
+| LLM triage skipped on P0 | saves 30–90s | saves $0.03–0.08/issue |
+
+**Implementation:** Wrap `supplementaries/phase_6_stat_gate/gate.py` — do not reimplement checks.
+
+### Monitoring
+
+```
+eden_statgate_incident_score_duration_seconds
+eden_statgate_p0_escalation_total
+eden_triage_llm_skipped_total{reason=statgate}
+```
+
+---
+
+## 7. MCP exposure (F04)
 
 `get_statgate_verdict(trace_id)` — coding agent sees deterministic quality report before LLM speculation.
 
 ---
 
-## 6. Acceptance criteria
+## 8. Acceptance criteria
 
 - [ ] ETEC loop trace → P0 stumble + issue without LLM call
 - [ ] StatGate evidence attached to all F30 triage results

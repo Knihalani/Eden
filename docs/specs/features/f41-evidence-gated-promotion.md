@@ -21,13 +21,18 @@ Bento's shadow→promote lifecycle; Eden makes it **auditable and deterministic*
 
 ---
 
-## 2. Eden current state
+## 2. Eden current state (codebase-accurate)
 
-| Component | Gap |
-|---|---|
-| StatGate (trace quality spec) | Per-trace only, not promotion lifecycle |
-| Cat 23 promotion hooks | Disconnected from nudges |
-| F39 nudges | Designed for F41 but not wired |
+| Component | Path | Status |
+|---|---|---|
+| StatGate 5-check gate | `supplementaries/phase_6_stat_gate/gate.py` | **SHIPPED** |
+| StatGate on closed-loop apply | `trace_quality/wiring.py:50–155` | **SHIPPED**, needs **N14** |
+| `ClosedLoopExecutor.apply_approved` | `llmops/closed_loop_executor.py` | **PARTIAL** — v0 advisory |
+| `promotion_candidates` table | — | **MISSING** (F41 greenfield) |
+| `EvidenceGate` service | `src/eden/promotion/evidence_gate.py` | **MISSING** (F41 greenfield) |
+| HookBus + PromotionHook | `promotion_hooks.py`, `hooks_bus.py` | **SHIPPED** |
+| Eval→guardrail link | `eval_intel/integration.py` | **SHIPPED** — see **N15** |
+| Nudge / PR / prompt promotion | F39, F22, N18 | **MISSING** wiring |
 
 ---
 

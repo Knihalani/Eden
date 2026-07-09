@@ -151,7 +151,7 @@ We deleted 24 specs that were **low incremental value** vs MCP-first strategy:
 | Per-framework integrations | F13–F16, F24, F25 | OTel auto-instrument + docs beat N one-liners |
 | Signal polish | F07, F08, F36, F43 | Folded into F06/F20 or deferred |
 | UI polish | F17–F19, F31, F38 | Portal iteration, not gap-closing |
-| Infra optimization | F11 | Premature; no customer demand signal |
+| Infra optimization | F11 | Restored as **N09** |
 | Duplicates | F02, F37, F45 | Merged into F01, F04, F39 |
 | Docs-only | F27 | Absorbed into F04 MCP quickstart |
 
@@ -181,8 +181,8 @@ Capstone F46 closed-loop orchestrator
 | OSS Workshop (F32) | Maintenance burden; MCP + portal sufficient |
 | Interactive Slack bot (F31) | F47 Block Kit alerts higher ROI |
 | LangGraph viz (F19) | Niche; generic workflow graph enough |
-| Trace dedupe (F11) | Cost optimization before product-market fit on loop |
-| Deep search classifier (F36) | F06 + F34 cover path with less UX surface |
+| Trace dedupe (F11) | Restored as N09 — required at scale |
+| Deep search classifier (F36) | Restored as N10 |
 
 ---
 
