@@ -374,6 +374,15 @@ export class EdenSDK {
         this.chunkTimer = null;
         void this.flushChunks();
       }, this.config.flushIntervalMs);
+      // ``.unref()`` lets the timer exit with the process.
+      // Without this, a short-lived script that armed a
+      // chunk timer (and then finished its work) would
+      // hang for ``flushIntervalMs`` (default 250ms) after
+      // the last user code ran -- a real problem in CLI
+      // tools and short-lived scripts.
+      if (typeof this.chunkTimer.unref === "function") {
+        this.chunkTimer.unref();
+      }
     }
   }
 
@@ -439,6 +448,12 @@ export class EdenSDK {
       this.flushTimer = null;
       void this.flush();
     }, this.config.flushIntervalMs);
+    // ``.unref()`` so a short-lived script doesn't hang on
+    // the last arm'd timer. See the matching comment in
+    // ``bufferChunk`` for the full rationale.
+    if (typeof this.flushTimer.unref === "function") {
+      this.flushTimer.unref();
+    }
   }
 
   /**
@@ -507,6 +522,9 @@ export class EdenSDK {
         this.chunkTimer = null;
         void this.flushChunks();
       }, this.config.flushIntervalMs);
+      if (typeof this.chunkTimer.unref === "function") {
+        this.chunkTimer.unref();
+      }
     }
   }
 

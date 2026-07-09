@@ -370,3 +370,58 @@ describe("trace() wire contract", () => {
     },
   );
 });
+
+
+describe("trace() recordError non-Error shapes", () => {
+  it("captures a thrown string with full text (regression)", () => {
+    // Regression: ``String(err)`` on a thrown string returns
+    // the string unchanged, which is fine, but on a thrown
+    // *object* it returned ``"[object Object]"`` and silently
+    // dropped every payload field. The previous code also
+    // crashed the JSON-stringify fallback for circular refs;
+    // the new helper now falls back to a class-name summary
+    // so the wire never carries a misleading literal.
+    const cases: Array<{ input: unknown; expectContains?: string; expectEquals?: string }> = [
+      { input: "boom", expectEquals: "boom" },
+      { input: 42, expectEquals: "42" },
+      { input: null, expectEquals: "null" },
+      { input: undefined, expectEquals: "undefined" },
+      { input: { code: "X", detail: "y" }, expectContains: '"code":"X"' },
+      { input: [1, 2, 3], expectContains: "[1,2,3]" },
+    ];
+    for (const c of cases) {
+      const ctrl = trace("probe-nonerr", {});
+      ctrl.recordError(c.input);
+      // The split in finishTrace uses ": " -- non-Error
+      // shapes are passed through unchanged.
+      if (c.expectContains) {
+        expect(ctrl.error).toContain(c.expectContains);
+      }
+      if (c.expectEquals) {
+        expect(ctrl.error).toBe(c.expectEquals);
+      }
+    }
+  });
+
+  it("captures the full message on Error instances (regression)", () => {
+    const ctrl = trace("probe-err", {});
+    ctrl.recordError(new RangeError("async-boom"));
+    expect(ctrl.error).toBe("RangeError: async-boom");
+  });
+
+  it("falls back to Object.prototype.toString for circular refs", () => {
+    // JSON.stringify throws on a self-referencing object;
+    // the helper must not propagate that into the wire
+    // shape. Fall back to ``[object Object]`` (matches the
+    // pre-fix behaviour) so the user gets a recognisable
+    // placeholder instead of an empty string.
+    const circ: Record<string, unknown> = {};
+    circ.self = circ;
+    const ctrl = trace("probe-circ", {});
+    ctrl.recordError(circ);
+    // Don't assert an exact value -- the fallback just
+    // needs to be non-empty.
+    expect(ctrl.error).toBeTruthy();
+    expect(typeof ctrl.error).toBe("string");
+  });
+});

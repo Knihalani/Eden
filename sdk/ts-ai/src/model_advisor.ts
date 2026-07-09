@@ -346,6 +346,21 @@ export class ModelAdvisor {
       }
       throw new ModelAdvisorError(resp.status, reason, parsed);
     }
+    // A 200 with an empty body is almost always a proxy/gateway
+    // misconfiguration (interrupted chunked response, missing
+    // ``Content-Type``, or backend that swallowed the reply).
+    // Returning ``null`` here makes the caller's
+    // ``comparisonFromApi(null)`` blow up later with a cryptic
+    // ``Cannot read property 'current' of null``. Fail loud
+    // here with a clear, typed error so the caller can surface
+    // a useful message.
+    if (parsed === null && text === "") {
+      throw new ModelAdvisorError(
+        resp.status,
+        "empty response body",
+        null,
+      );
+    }
     return parsed as T;
   }
 
