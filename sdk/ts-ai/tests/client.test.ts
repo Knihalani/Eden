@@ -460,7 +460,7 @@ describe("EdenSDK User-Agent header", () => {
     });
     return sdk.flush().then(() => {
       expect(captured.length).toBe(1);
-      expect(captured[0].headers["User-Agent"]).toBe("@eden-ai/sdk/0.2.20");
+      expect(captured[0].headers["User-Agent"]).toBe("@eden-ai/sdk/0.2.21");
     });
   });
 });

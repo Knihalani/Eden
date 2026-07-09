@@ -4,6 +4,47 @@ All notable changes to the Eden Python SDK are documented here. The
 format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## 0.2.11 — 2026-07-09
+
+Bug-fix + parity release.
+
+### Fixed
+- `instrumentations.langchain`: implemented
+  `on_llm_new_token` callback to push per-token chunks to
+  `client._chunk_buffer` (parity with the OpenAI + Anthropic
+  streaming instrumentations). The previous implementation
+  never read this callback, so streaming LangChain calls
+  emitted only the aggregate framework event and the
+  per-chunk TTFT / ITL / TPOT dashboards rendered empty
+  for every LangChain stream.
+- `instrumentations.langchain`: extract `usage_metadata` and
+  `response_metadata` from the per-chunk `AIMessageChunk` (the
+  `chunk` kwarg on `on_llm_new_token`) so `input_tokens`,
+  `cache_read_input_tokens`, `cache_creation_input_tokens`,
+  and `model` are surfaced on the wire. The aggregate
+  framework event now carries these fields. The streaming
+  state is hoisted onto the framework event in `on_llm_end`
+  (and cleared in `on_llm_error` so a mid-flight error does
+  not leak the per-run dict).
+- `instrumentations.langchain`: `_record_end`'s hoist list
+  now also promotes `model` to the top-level framework
+  event. Previously the payload dict had both `model` and
+  `model_normalized` (from `_safe_llm_response`'s
+  `response_metadata` walk) but the top-level event only
+  carried `model_normalized`. Callers reading the raw
+  provider model id off the framework event were always
+  seeing `None`.
+
+### Tests
+- 3 new tests in `test_instrumentations.py` pinning the
+  new `on_llm_new_token` callback (per-chunk push to
+  `client._chunk_buffer`; same `trace_id` family +
+  incrementing `chunk_index`; non-null ITL/TPOT after the
+  first chunk; the framework event carries the model +
+  input_tokens the streaming state captured; state cleanup
+  on `on_llm_error` so a mid-flight error does not leak
+  the per-run dict).
+
 ## 0.2.10 — 2026-07-09
 
 Bug-fix + consistency release.
