@@ -226,7 +226,7 @@ function finishTrace(
       projectId: config.projectId,
       traceId: ctx.traceId,
       realm: config.realm,
-      eventType: "agent_call",
+      eventType: "agent.run",
       timestamp: new Date().toISOString(),
       sourceFormat: SOURCE_FORMATS.TRACE_AGENT,
       payload: {
@@ -276,8 +276,13 @@ function _activeContext(): TraceContext | undefined {
 // ── traceAgent decorator ─────────────────────────────────────────────
 
 /**
- * Build a wrapped method that emits one `agent_call` event per
- * invocation.
+ * Build a wrapped method that emits one `agent.run` event per
+ * invocation. The wire value MUST be ``"agent.run"`` to match
+ * the gateway's SQL filter (``WHERE event_type = 'agent.run'``
+ * in ``src/eden/llmops/promotion.py``). The previous
+ * ``"agent_call"`` value silently dropped every TS-traced
+ * agent run from the promotion / cost-savings roll-ups
+ * because the filter never matched.
  */
 function makeWrappedMethod(
   propertyKey: string,
