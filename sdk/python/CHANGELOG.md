@@ -4,6 +4,25 @@ All notable changes to the Eden Python SDK are documented here. The
 format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## 0.2.10 — 2026-07-09
+
+Bug-fix + consistency release.
+
+### Fixed
+- `model_advisor.ModelAdvisor._headers()`: the `User-Agent`
+  was hardcoded to `"eden-sdk/python"` (no version), so
+  version attribution for advisor traffic was permanently
+  pinned to a literal. The advisor now reuses the same
+  `_USER_AGENT` constant the telemetry client emits on every
+  ingestion POST (`"eden-sdk/<version> (python)"`), so the
+  advisor and the auto-instrumentation paths always report
+  the same version.
+
+### Tests
+- 1 new test in `test_model_advisor.py` pinning the
+  `User-Agent` to the SDK-versioned constant (parity with
+  the client).
+
 ## 0.2.9 — 2026-07-09
 
 Bug-fix + parity release.

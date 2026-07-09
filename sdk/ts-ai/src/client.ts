@@ -183,6 +183,14 @@ export class EdenSDK {
   private flushTimer: ReturnType<typeof setTimeout> | null = null;
   private chunkTimer: ReturnType<typeof setTimeout> | null = null;
   private inflight = false;
+  // Promise tracked for the current in-flight batch POST so
+  // ``dispose()`` can wait for the in-flight HTTP to finish
+  // BEFORE releasing ``this.inflight``. Without this,
+  // ``dispose()`` released the flag while a real POST was
+  // still in flight and its subsequent ``flush()`` call
+  // grabbed the same slot and started a second concurrent
+  // POST — racing the first one for the same batch.
+  private inflightPromise: Promise<void> | null = null;
   // Separate inflight flag for the chunk flush path.
   // Concurrent `flushChunks()` calls would otherwise both grab
   // the same buffer and double-POST chunks.
@@ -325,20 +333,28 @@ export class EdenSDK {
     }
     const batch = this.queue;
     this.queue = [];
-    try {
-      await this.postBatch(batch);
-    } catch (err) {
-      if (this.config.debug) {
-        // eslint-disable-next-line no-console
-        console.debug("[eden-ai] flush failed (swallowed)", err);
+    // Track the in-flight POST so ``dispose()`` can await it
+    // before releasing ``this.inflight``. Without this the
+    // ``dispose() → flush()`` chain could start a second
+    // concurrent POST while the first was still in flight.
+    this.inflightPromise = (async () => {
+      try {
+        await this.postBatch(batch);
+      } catch (err) {
+        if (this.config.debug) {
+          // eslint-disable-next-line no-console
+          console.debug("[eden-ai] flush failed (swallowed)", err);
+        }
+      } finally {
+        this.inflight = false;
+        this.inflightPromise = null;
+        // Re-arm the timer if events accumulated while we were
+        // in-flight; otherwise a callback that runs synchronously
+        // after a flush would sit in the queue forever.
+        this.scheduleFlush();
       }
-    } finally {
-      this.inflight = false;
-      // Re-arm the timer if events accumulated while we were
-      // in-flight; otherwise a callback that runs synchronously
-      // after a flush would sit in the queue forever.
-      this.scheduleFlush();
-    }
+    })();
+    await this.inflightPromise;
   }
 
   /**
@@ -436,7 +452,19 @@ export class EdenSDK {
     if (this.chunkTimer !== null) clearTimeout(this.chunkTimer);
     this.flushTimer = null;
     this.chunkTimer = null;
-    this.inflight = false;
+    // Wait for the in-flight batch POST (if any) to finish
+    // BEFORE releasing the inflight slot. The previous code
+    // released the slot here, then ``await this.flush()``
+    // immediately grabbed it again — and a real POST was
+    // still in flight on the first one. Awaiting the
+    // tracked promise keeps the slot held until the in-flight
+    // POST resolves, so the subsequent ``flush()`` call sees
+    // an empty queue (the batch was already shipped) and
+    // returns. Mirrors the chunk-path handling just below.
+    if (this.inflightPromise) {
+      await this.inflightPromise;
+      this.inflightPromise = null;
+    }
     this.chunkInflight = false;
     if (this.chunkInflightPromise) {
       await this.chunkInflightPromise;

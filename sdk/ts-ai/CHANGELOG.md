@@ -4,6 +4,55 @@ All notable changes to the Eden TypeScript SDK are documented here. The
 format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## 0.2.20 — 2026-07-09
+
+Bug-fix + parity release.
+
+### Fixed
+- `ModelAdvisor` constructor: did NOT read `apiKey`, `orgId` or
+  `baseUrl` from the SDK config singleton, so a caller that did
+  `configure({ orgId, apiKey })` and then `new ModelAdvisor()`
+  ended up with an empty `Authorization` header and 401s on
+  every call. The advisor now falls back to the SDK config for
+  all three fields (mirrors `ModelAdvisor.__init__` in the
+  Python SDK). An explicit `opts` value always wins — the
+  explicit path is the documented escape hatch for customers
+  running their own Eden instance.
+- `wrapVercelAI` streaming: the per-chunk buffer was missing.
+  Vercel AI streams were emitting only the aggregate
+  `llm_completion_stream` event and never pushing individual
+  chunks to `/ingest/chunks`, so the per-chunk TTFT / ITL /
+  TPOT dashboards rendered empty for every Vercel AI stream.
+  The OpenAI + Anthropic TS paths and the Python SDK all
+  already do this; Vercel AI was the odd one out. The fix
+  mirrors the OpenAI streaming path: every chunk is appended
+  to a `chunkBuffer` and flushed via `client.bufferChunk(...)`
+  on the same tick as the aggregate emit, with the same
+  per-chunk TPOT arithmetic.
+- `EdenSDK.dispose()` race: released the `inflight` flag
+  unconditionally, then called `flush()` immediately. If a
+  real flush was in flight at that moment, the second
+  `flush()` grabbed the same slot and started a SECOND
+  concurrent POST — racing the first one for the same batch.
+  The dispose path now tracks the in-flight POST promise
+  (mirroring the chunk-path handling) and awaits it before
+  releasing the inflight slot, so the subsequent `flush()`
+  sees an empty queue and returns.
+
+### Tests
+- 2 new tests in `model_advisor.test.ts` pinning the SDK
+  config fallback (apiKey + orgId + baseUrl populated from
+  the SDK config when not explicit; explicit `opts` always
+  wins).
+- 1 new test in `instrumentations.test.ts` pinning the
+  Vercel AI per-chunk emission (2 text-delta events → 2
+  chunk-buffer pushes; same `trace_id`, incrementing
+  `chunk_index`).
+- 1 new test in `client.test.ts` pinning the `dispose()`
+  inflight race (a dispose() called while a POST is in
+  flight must await the in-flight POST before its final
+  flush, so only 1 POST ships for a single emit).
+
 ## 0.2.19 — 2026-07-09
 
 Bug-fix + consistency release.

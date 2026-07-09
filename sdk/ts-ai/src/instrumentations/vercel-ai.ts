@@ -17,7 +17,11 @@
  */
 
 import { getDefaultClient } from "../client.js";
-import { SOURCE_FORMATS, type TraceOptions } from "../types.js";
+import {
+  SOURCE_FORMATS,
+  type StreamChunk,
+  type TraceOptions,
+} from "../types.js";
 
 type AnyModule = Record<string, unknown>;
 
@@ -120,6 +124,7 @@ function _wrapHelper(
 
 interface _CallCtx {
   traceId: string;
+  eventId: string;
   helper: string;
   model: string | undefined;
   start: number;
@@ -132,6 +137,15 @@ interface _CallCtx {
   status: "success" | "error";
   errorType: string | undefined;
   finishReason: string | undefined;
+  /**
+   * Per-chunk buffer of ``StreamChunk`` events. Flushed to
+   * ``/ingest/chunks`` on stream completion so the per-chunk
+   * TTFT / ITL / TPOT dashboards render for Vercel AI streams
+   * too — previously only the aggregate event was emitted and
+   * the per-chunk dashboards were always empty for the
+   * Vercel AI source format.
+   */
+  chunkBuffer: StreamChunk[];
 }
 
 function _beginCall(
@@ -139,8 +153,10 @@ function _beginCall(
   args: any[],
   opts: TraceOptions,
 ): _CallCtx {
+  const traceId = randomId();
   return {
-    traceId: randomId(),
+    traceId,
+    eventId: `stream_vercel_ai_${traceId}`,
     helper,
     model: _extractModel(args),
     start: Date.now(),
@@ -153,6 +169,7 @@ function _beginCall(
     status: "success",
     errorType: undefined,
     finishReason: undefined,
+    chunkBuffer: [],
   };
 }
 
@@ -180,26 +197,66 @@ function _wrapVercelStream(result: unknown, ctx: _CallCtx): unknown {
 
   // Try to attach a hidden consumer that drains the stream and
   // records per-chunk timing. The user still gets back the
-  // original object so their iteration is unchanged.
+  // original object so their iteration is unchanged. Every
+  // chunk is also pushed to ``ctx.chunkBuffer`` so the
+  // ``/ingest/chunks`` endpoint sees the same per-chunk TTFT /
+  // ITL / TPOT data the OpenAI and Anthropic streaming
+  // instrumentations already produce. Without this, the
+  // per-chunk dashboards rendered empty for every Vercel AI
+  // stream — only the aggregate event was emitted.
   const fullStream = stream.fullStream ?? stream.textStream;
   if (fullStream && typeof fullStream[Symbol.asyncIterator] === "function") {
+    const client = getDefaultClient();
     const consumer = (async () => {
       try {
         for await (const chunk of fullStream) {
           ctx.chunkCount += 1;
           const now = Date.now();
+          // Capture the interval to the previous chunk BEFORE
+          // updating ``tPrev`` — otherwise the per-chunk ITL /
+          // TPOT readings collapse to 0 for chunks that share
+          // a tick. Mirrors the OpenAI + Anthropic streaming
+          // paths so Vercel AI's per-chunk metrics use the
+          // exact same arithmetic.
+          const prev = ctx.tPrev;
           ctx.tLast = now;
           if (ctx.tFirst === null) ctx.tFirst = now;
-          else if (ctx.tPrev !== null) {
+          else if (prev !== null) {
             // itl sum/avg computed in finish
           }
           ctx.tPrev = now;
           const text = _extractTextFromVercelChunk(chunk);
           if (text) ctx.outputTokens += Math.max(1, Math.floor(text.length / 4));
+          // Per-chunk TPOT (time per output token) is the
+          // time spent generating THIS chunk's tokens
+          // divided by the token count for this chunk
+          // (approximated as ``ceil(len/4)`` to match the
+          // aggregate ``output_tokens`` heuristic). Chunks
+          // with no text (finish_reason / usage chunks)
+          // emit ``null`` rather than a misleading zero.
+          const tpotMs =
+            text && text.length > 0 && prev !== null && now > prev
+              ? (now - prev) / Math.max(1, Math.ceil(text.length / 4))
+              : null;
+          ctx.chunkBuffer.push({
+            eventId: ctx.eventId,
+            traceId: ctx.traceId,
+            chunkIndex: ctx.chunkCount - 1,
+            deltaText: text ?? null,
+            ttftMs: ctx.tFirst !== null ? ctx.tFirst - ctx.start : null,
+            itlMs: prev !== null ? now - prev : null,
+            tpotMs,
+            receivedAtClientMs: Date.now(),
+          });
         }
         _finishCall(ctx, { status: "success" });
       } catch (err) {
         _finishCall(ctx, { status: "error", errorType: err });
+      } finally {
+        // Per-chunk replay — mirrors the OpenAI + Anthropic
+        // streaming paths so ``/ingest/chunks`` receives the
+        // full per-chunk series for Vercel AI streams.
+        for (const c of ctx.chunkBuffer) client.bufferChunk(c);
       }
     })();
     // Best-effort: keep the consumer alive; unhandled rejection

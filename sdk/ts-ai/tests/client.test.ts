@@ -460,7 +460,7 @@ describe("EdenSDK User-Agent header", () => {
     });
     return sdk.flush().then(() => {
       expect(captured.length).toBe(1);
-      expect(captured[0].headers["User-Agent"]).toBe("@eden-ai/sdk/0.2.19");
+      expect(captured[0].headers["User-Agent"]).toBe("@eden-ai/sdk/0.2.20");
     });
   });
 });
@@ -558,5 +558,83 @@ describe("EdenSDK flushChunks waits for in-flight POST", () => {
       return acc + (b.chunks?.length ?? 0);
     }, 0);
     expect(totalChunks).toBe(3);
+  });
+});
+
+
+// ── New: dispose() must await in-flight POST ────────────────────────
+
+describe("EdenSDK dispose() inflight race", () => {
+  it("dispose() awaits the in-flight batch POST before its final flush", async () => {
+    // Regression: the previous ``dispose()`` released the
+    // ``inflight`` flag unconditionally and then called
+    // ``flush()`` immediately. If a real flush was in flight at
+    // that moment, the second ``flush()`` grabbed the same slot
+    // and started a SECOND concurrent POST — racing the first
+    // one for the same batch. The fix tracks the in-flight POST
+    // promise (mirroring the chunk-path handling) and awaits it
+    // before releasing the inflight slot. This test pins that
+    // behaviour: a dispose() that returns before the in-flight
+    // POST resolves would let a second POST start, which would
+    // push ``postCount`` above 1 for the same single emit.
+    let release: (() => void) | null = null;
+    const inflight = new Promise<void>((resolve) => { release = resolve; });
+    let postCount = 0;
+    let lastBodyLen = 0;
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = (async (_input: RequestInfo | URL, init?: RequestInit) => {
+      postCount += 1;
+      const body = init?.body ? JSON.parse(init.body as string) : null;
+      lastBodyLen = Array.isArray(body) ? body.length : 0;
+      await inflight;
+      return new Response("{}", { status: 200 });
+    }) as unknown as typeof fetch;
+
+    try {
+      const { EdenSDK, resetDefaultClient } = await import("../src/client.js");
+      resetDefaultClient();
+      const sdk = new EdenSDK({ orgId: "o", apiKey: "k", flushIntervalMs: 60000 });
+      sdk.emit({
+        eventId: "e1",
+        tenantId: "o",
+        projectId: "default",
+        traceId: "t1",
+        realm: "production",
+        eventType: "agent_call",
+        timestamp: new Date().toISOString(),
+        sourceFormat: "openai",
+        payload: { x: 1 },
+      });
+
+      // Kick off a flush. The POST is now in flight and
+      // blocked on the gate.
+      const first = sdk.flush();
+      // Yield so the fetch is actually called.
+      await new Promise((r) => setTimeout(r, 5));
+      expect(postCount).toBe(1);
+      // Now call dispose(). With the bug, dispose() would
+      // release the inflight slot and the final flush() it
+      // triggers would see a non-empty queue and start a
+      // SECOND POST. With the fix, dispose() awaits the
+      // in-flight POST before releasing the slot, so the
+      // final flush() returns immediately.
+      const disposeP = sdk.dispose();
+      // Yield to let dispose() get past the early awaits.
+      await new Promise((r) => setTimeout(r, 5));
+      // At this point dispose() is still waiting on the
+      // in-flight POST (which is still gated). The count
+      // must still be 1.
+      expect(postCount).toBe(1);
+      // Release the gate. The first POST resolves; dispose()
+      // unblocks; the final flush() sees an empty queue and
+      // returns without a second POST.
+      release!();
+      await disposeP;
+      await first;
+      expect(postCount).toBe(1);
+      expect(lastBodyLen).toBe(1);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
   });
 });
