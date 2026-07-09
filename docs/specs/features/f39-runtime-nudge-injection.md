@@ -52,7 +52,7 @@ class Nudge:
     evidence: dict       # promotion stats
 ```
 
-**Customer repo export (F45):** `eden-nudges/{agent_id}/{nudge_id}.yaml`
+**Customer repo export (absorbed F45):** `eden-nudges/{agent_id}/{nudge_id}.yaml` — version-controlled nudges in customer repo; CI can diff on PR
 
 ---
 
@@ -187,4 +187,48 @@ CREATE TABLE nudge_outcomes (
 
 ---
 
+---
+
+## 11. Repo export workflow (absorbed F45)
+
+Previously spec'd as standalone F45; merged here because export is part of nudge lifecycle, not a separate product surface.
+
+### 11.1 Export format
+
+```yaml
+# eden-nudges/checkout-agent/bash-python3.yaml
+apiVersion: eden.ai/v1
+kind: Nudge
+metadata:
+  agent_id: checkout-agent
+  source_issue_id: "..."
+spec:
+  trigger:
+    all:
+      - event: tool_result
+        tool_name: bash
+        result_contains: "command not found"
+  action_type: system_append
+  content: |
+    On macOS use python3 instead of python.
+  mode: promoted
+```
+
+### 11.2 Sync modes
+
+| Mode | Behavior |
+|---|---|
+| **Pull** | `POST /nudges/export` → zip for git commit |
+| **Git sync** | GitHub App watches `eden-nudges/**` → upsert nudges in Eden |
+| **MCP** | F04 `export_nudges(agent_id)` for coding-agent workflow |
+
+### 11.3 Safety
+
+- Import always lands in **shadow** mode until F41 EvidenceGate promotes
+- Git PR changing nudge triggers N04 impact preview (optional)
+
+---
+
 *Bento FAQ parity: "Run 101 measurably better" — measure via A/B on issue stumble rate with nudges enabled vs disabled.*
+
+*See [DELETED-FEATURES.md](./DELETED-FEATURES.md) for F45 merge rationale.*
