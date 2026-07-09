@@ -567,6 +567,70 @@ def _safe_llm_response(response: Any) -> dict[str, Any]:
                 text = getattr(first, "text", None)
                 if text:
                     out["first_text"] = text[:512]
+        # Modern LangChain (0.1+) attaches ``usage_metadata`` to
+        # the ``AIMessage`` on each generation, NOT to the
+        # ``LLMResult.llm_output`` (which only carries the legacy
+        # ``token_usage``). The previous implementation never
+        # walked the generations, so non-streaming LangChain calls
+        # for modern chains had no ``input_tokens`` /
+        # ``cache_read_input_tokens`` / ``cache_creation_input_tokens``
+        # on the wire — pricing roll-ups missed every modern
+        # chain. Walk the generations and merge usage +
+        # response_metadata using ``setdefault`` so the legacy
+        # path (which wins on older LangChain versions) is not
+        # clobbered.
+        if gens:
+            for chain_gens in gens:
+                if not chain_gens:
+                    continue
+                for gen in chain_gens:
+                    if gen is None:
+                        continue
+                    # ``gen.message`` is the modern AIMessage
+                    # shape. Fall back to the generation itself
+                    # for older LangChain where generation_info
+                    # held the metadata.
+                    msg = getattr(gen, "message", None) or gen
+                    usage_meta = getattr(msg, "usage_metadata", None)
+                    if usage_meta is None and isinstance(msg, Mapping):
+                        usage_meta = msg.get("usage_metadata")
+                    if isinstance(usage_meta, Mapping):
+                        u = extract_usage(usage_meta)
+                        if "input_tokens" not in out and u["input_tokens"] is not None:
+                            out["input_tokens"] = u["input_tokens"]
+                        if "output_tokens" not in out and u["output_tokens"] is not None:
+                            out["output_tokens"] = u["output_tokens"]
+                        if "cache_read_input_tokens" not in out and u["cache_read_tokens"] is not None:
+                            out["cache_read_input_tokens"] = u["cache_read_tokens"]
+                        if "cache_creation_input_tokens" not in out and u["cache_creation_tokens"] is not None:
+                            out["cache_creation_input_tokens"] = u["cache_creation_tokens"]
+                    # Per-generation ``response_metadata`` is
+                    # where modern LangChain stashes the model
+                    # name when ``LLMResult.response_metadata`` is
+                    # empty (a common case for chat models).
+                    response_meta = getattr(msg, "response_metadata", None)
+                    if response_meta is None and isinstance(msg, Mapping):
+                        response_meta = msg.get("response_metadata")
+                    if isinstance(response_meta, Mapping) and "model" not in out:
+                        for key in ("model_name", "model", "model_id"):
+                            m = response_meta.get(key)
+                            if isinstance(m, str):
+                                out["model"] = m
+                                out["model_normalized"] = normalize_model_name(m)
+                                break
+                    # One generation is enough — subsequent
+                    # generations share the same model and the
+                    # usage totals are already merged by LangChain
+                    # when the API returns them per-request.
+                    if (
+                        "input_tokens" in out
+                        or "output_tokens" in out
+                        or "model" in out
+                    ):
+                        break
+                else:
+                    continue
+                break
     except Exception as exc:  # noqa: BLE001
         # Surface extraction failures at DEBUG so users can opt
         # into seeing them without the SDK spamming warnings by
