@@ -1,6 +1,6 @@
 {
   "name": "@eden-ai/sdk",
-  "version": "0.2.20",
+  "version": "0.2.21",
   "description": "Eden TypeScript runtime SDK \u2014 auto-instrumentation for OpenAI, Anthropic, Vercel AI, and LangChain with fire-and-forget telemetry to the Eden gateway.",
   "type": "module",
   "main": "./dist/index.js",

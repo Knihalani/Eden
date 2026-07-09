@@ -440,6 +440,127 @@ describe("wrapLangChain", () => {
     expect(stream_?.payload.method).toBe("stream");
     expect(stream_?.payload.chunk_count).toBe(2);
   });
+
+  it("streaming emit buffers per-chunk events to /ingest/chunks + extracts usage + model", async () => {
+    // Regression: the previous LangChain streaming path
+    // (a) never pushed per-chunk events to ``/ingest/chunks``
+    //     — only the aggregate ``llm_completion_stream``
+    //     event was emitted, so the per-chunk TTFT / ITL /
+    //     TPOT dashboards rendered empty for every LangChain
+    //     stream (parity with the OpenAI + Anthropic +
+    //     Vercel AI streaming paths that DO push per-chunk
+    //     events).
+    // (b) never read ``usage_metadata`` or ``response_metadata``
+    //     off the chunks, so ``input_tokens`` and ``model``
+    //     were always missing on the wire. Pricing lookups
+    //     could not roll up streaming LangChain events.
+    // Capture locally so the test only sees the requests this
+    // case generates; also push into the outer ``captured``
+    // so ``_flattenEvents()`` can read the aggregate too.
+    const localCaptured: Array<{ url: string; body: any }> = [];
+    globalThis.fetch = (async (url: RequestInfo | URL, init?: RequestInit) => {
+      const u = String(url);
+      let body: any = {};
+      try { body = init?.body ? JSON.parse(init.body as string) : {}; } catch {}
+      localCaptured.push({ url: u, body });
+      captured.push({ url: u, body });
+      return new Response("{}", { status: 200 });
+    }) as unknown as typeof fetch;
+
+    async function* stream() {
+      // LangChain 0.1+ AIMessageChunk shape: ``content`` +
+      // ``usage_metadata`` + ``response_metadata``. The
+      // wrapper must surface ``usage_metadata.input_tokens``,
+      // ``usage_metadata.output_tokens`` and
+      // ``response_metadata.model_name`` on the wire.
+      yield {
+        content: "Hi",
+        usage_metadata: { input_tokens: 10, output_tokens: 1 },
+        response_metadata: { model_name: "gpt-4o" },
+      };
+      yield {
+        content: " there",
+        usage_metadata: { input_tokens: 10, output_tokens: 2 },
+        response_metadata: { model_name: "gpt-4o" },
+      };
+    }
+    const fakeModel = { stream: async () => stream() };
+    const wrapped = wrapLangChain(fakeModel);
+    const s = await wrapped.stream("hi");
+    const collected: unknown[] = [];
+    for await (const chunk of s) collected.push(chunk);
+    expect(collected.length).toBe(2);
+    await new Promise((r) => setTimeout(r, 20));
+    await getDefaultClient().flush();
+    await getDefaultClient().flushChunks();
+    await new Promise((r) => setTimeout(r, 50));
+
+    // Per-chunk replay: 2 chunks → 2 chunk-buffer pushes.
+    const chunkPosts = localCaptured.filter(
+      (c) => c.url.includes("/ingest/chunks") && Array.isArray(c.body?.chunks)
+    );
+    const allChunks = chunkPosts.flatMap((c) => c.body.chunks);
+    expect(allChunks.length).toBe(2);
+    expect(allChunks[0].delta_text).toBe("Hi");
+    expect(allChunks[1].delta_text).toBe(" there");
+    // Same ``trace_id`` family, incrementing ``chunk_index``.
+    expect(new Set(allChunks.map((c: any) => c.trace_id)).size).toBe(1);
+    expect(allChunks.map((c: any) => c.chunk_index)).toEqual([0, 1]);
+
+    // Aggregate event now carries ``model`` and ``input_tokens``
+    // (extracted from the chunks' usage_metadata +
+    // response_metadata). Previously both were always
+    // undefined on the wire.
+    const events = _flattenEvents();
+    const stream_ = events.find((e) => e.eventType === "llm_completion_stream");
+    expect(stream_?.sourceFormat).toBe("langchain");
+    expect(stream_?.payload.method).toBe("stream");
+    expect(stream_?.modelNormalized).toBe("gpt-4o");
+    expect(stream_?.metrics.input_tokens).toBe(10);
+    expect(stream_?.metrics.output_tokens).toBe(2);
+  });
+
+  it("streaming emit flushes partial chunk buffer on early break (return)", async () => {
+    // Regression: when the caller breaks out of a stream
+    // loop, the iterator's ``return()`` short-circuits the
+    // normal ``done: true`` path so there is no aggregate
+    // emit and no per-chunk flush. The buffered chunks must
+    // still be flushed to ``/ingest/chunks`` so a partial
+    // series still reaches the per-chunk dashboards.
+    const localCaptured: Array<{ url: string; body: any }> = [];
+    globalThis.fetch = (async (url: RequestInfo | URL, init?: RequestInit) => {
+      const u = String(url);
+      let body: any = {};
+      try { body = init?.body ? JSON.parse(init.body as string) : {}; } catch {}
+      localCaptured.push({ url: u, body });
+      return new Response("{}", { status: 200 });
+    }) as unknown as typeof fetch;
+
+    async function* stream() {
+      yield { content: "Hello" };
+      yield { content: " world" };
+      yield { content: " done" };
+    }
+    const fakeModel = { stream: async () => stream() };
+    const wrapped = wrapLangChain(fakeModel);
+    const s = await wrapped.stream("hi");
+    for await (const _chunk of s) {
+      // break out after the first chunk — exercises the
+      // ``return()`` path.
+      break;
+    }
+    await new Promise((r) => setTimeout(r, 20));
+    await getDefaultClient().flushChunks();
+    await new Promise((r) => setTimeout(r, 50));
+
+    const chunkPosts = localCaptured.filter(
+      (c) => c.url.includes("/ingest/chunks") && Array.isArray(c.body?.chunks)
+    );
+    const allChunks = chunkPosts.flatMap((c) => c.body.chunks);
+    // 1 chunk consumed before break → 1 chunk pushed.
+    expect(allChunks.length).toBe(1);
+    expect(allChunks[0].delta_text).toBe("Hello");
+  });
 });
 
 // ── Helpers ───────────────────────────────────────────────────────

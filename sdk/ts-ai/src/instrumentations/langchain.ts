@@ -19,8 +19,12 @@
  */
 
 import { getDefaultClient } from "../client.js";
-import { normalizeModelName } from "../tokens.js";
-import { SOURCE_FORMATS, type TraceOptions } from "../types.js";
+import { extractUsage, normalizeModelName } from "../tokens.js";
+import {
+  SOURCE_FORMATS,
+  type StreamChunk,
+  type TraceOptions,
+} from "../types.js";
 
 const _wrapped = new WeakSet<object>();
 const WRAP_MARKER = Symbol.for("@eden-ai/sdk.wrapLangChain");
@@ -74,6 +78,7 @@ function _wrapMethod(
     return function (this: unknown, ...args: any[]) {
       const start = Date.now();
       const traceId = randomId();
+      const eventId = `stream_langchain_${traceId}`;
       let tFirst: number | null = null;
       let tPrev: number | null = null;
       let tLast = start;
@@ -81,6 +86,21 @@ function _wrapMethod(
       let outputTokens = 0;
       let status: "success" | "error" = "success";
       let errorType: string | undefined;
+      // Per-chunk usage + model. LangChain 0.1+ ``AIMessageChunk``
+      // surfaces billing fields on ``usage_metadata`` and the model
+      // name on ``response_metadata``. The previous implementation
+      // never read these, so streaming LangChain events had no
+      // ``input_tokens`` / ``model`` on the wire — pricing
+      // lookups could not roll them up.
+      let inputTokens: number | null = null;
+      let cacheReadTokens: number | null = null;
+      let cacheCreationTokens: number | null = null;
+      let modelName: string | undefined;
+      // Per-chunk buffer for ``/ingest/chunks``. Mirrors the
+      // OpenAI + Anthropic + Vercel AI streaming paths so the
+      // per-chunk TTFT / ITL / TPOT dashboards render for
+      // LangChain streams too.
+      const chunkBuffer: StreamChunk[] = [];
 
       // `original` may be sync or async. We need an AsyncIterable
       // to wrap. If sync, `callResult` is the iterable; if async,
@@ -143,8 +163,13 @@ function _wrapMethod(
                     completionDurationMs: Date.now() - start,
                     status,
                     errorType,
+                    inputTokens: inputTokens ?? undefined,
+                    cacheReadTokens: cacheReadTokens ?? undefined,
+                    cacheCreationTokens: cacheCreationTokens ?? undefined,
+                    model: modelName,
                     opts,
                   });
+                  _flushChunks(chunkBuffer);
                   throw pendingError;
                 }
                 if (!inner) {
@@ -163,8 +188,16 @@ function _wrapMethod(
                   chunkCount += 1;
                   const now = Date.now();
                   tLast = now;
+                  // Capture the interval to the previous chunk
+                  // BEFORE updating ``tPrev`` — otherwise the
+                  // per-chunk ITL/TPOT readings collapse to 0 for
+                  // chunks that share a tick. Mirrors the OpenAI
+                  // + Anthropic + Vercel AI streaming paths so
+                  // LangChain's per-chunk metrics use the same
+                  // arithmetic.
+                  const prev = tPrev;
                   if (tFirst === null) tFirst = now;
-                  else if (tPrev !== null) {
+                  else if (prev !== null) {
                     // itl avg computed in finish
                   }
                   tPrev = now;
@@ -174,6 +207,68 @@ function _wrapMethod(
                       1,
                       Math.floor(text.length / 4),
                     );
+                  // Extract usage_metadata and response_metadata
+                  // from the chunk. ``usage_metadata`` is the
+                  // canonical LangChain 0.1+ field; older shapes
+                  // (``usage`` / ``usage_kwargs``) are accepted
+                  // for completeness. The model name lives on
+                  // ``response_metadata.model_name``.
+                  const chunkObj = r.value as
+                    | Record<string, unknown>
+                    | null
+                    | undefined;
+                  if (chunkObj && typeof chunkObj === "object") {
+                    const usageMeta =
+                      (chunkObj.usage_metadata ??
+                        chunkObj.usage ??
+                        chunkObj.usage_kwargs) as unknown;
+                    if (usageMeta && typeof usageMeta === "object") {
+                      const u = extractUsage(usageMeta);
+                      if (u.inputTokens !== null) inputTokens = u.inputTokens;
+                      if (u.outputTokens !== null)
+                        outputTokens = u.outputTokens;
+                      if (u.cacheReadTokens !== null)
+                        cacheReadTokens = u.cacheReadTokens;
+                      if (u.cacheCreationTokens !== null)
+                        cacheCreationTokens = u.cacheCreationTokens;
+                    }
+                    if (modelName === undefined) {
+                      const responseMeta = chunkObj.response_metadata as
+                        | Record<string, unknown>
+                        | null
+                        | undefined;
+                      if (
+                        responseMeta &&
+                        typeof responseMeta === "object" &&
+                        typeof responseMeta.model_name === "string"
+                      ) {
+                        modelName = responseMeta.model_name;
+                      } else if (typeof chunkObj.name === "string") {
+                        modelName = chunkObj.name;
+                      }
+                    }
+                  }
+                  // Per-chunk TPOT (time per output token) is the
+                  // time spent generating THIS chunk's tokens
+                  // divided by the token count for this chunk
+                  // (approximated as ``ceil(len/4)`` to match the
+                  // aggregate ``output_tokens`` heuristic). Chunks
+                  // with no text emit ``null`` rather than a
+                  // misleading zero.
+                  const tpotMs =
+                    text && text.length > 0 && prev !== null && now > prev
+                      ? (now - prev) / Math.max(1, Math.ceil(text.length / 4))
+                      : null;
+                  chunkBuffer.push({
+                    eventId,
+                    traceId,
+                    chunkIndex: chunkCount - 1,
+                    deltaText: text ?? null,
+                    ttftMs: tFirst !== null ? tFirst - start : null,
+                    itlMs: prev !== null ? now - prev : null,
+                    tpotMs,
+                    receivedAtClientMs: Date.now(),
+                  });
                 } else {
                   const ttftMs = tFirst !== null ? tFirst - start : 0;
                   const completionDurationMs = tLast - start;
@@ -197,8 +292,13 @@ function _wrapMethod(
                     completionDurationMs,
                     status,
                     errorType,
+                    inputTokens: inputTokens ?? undefined,
+                    cacheReadTokens: cacheReadTokens ?? undefined,
+                    cacheCreationTokens: cacheCreationTokens ?? undefined,
+                    model: modelName,
                     opts,
                   });
+                  _flushChunks(chunkBuffer);
                 }
                 return r;
               } catch (err) {
@@ -216,8 +316,13 @@ function _wrapMethod(
                   completionDurationMs: Date.now() - start,
                   status,
                   errorType,
+                  inputTokens: inputTokens ?? undefined,
+                  cacheReadTokens: cacheReadTokens ?? undefined,
+                  cacheCreationTokens: cacheCreationTokens ?? undefined,
+                  model: modelName,
                   opts,
                 });
+                _flushChunks(chunkBuffer);
                 throw err;
               }
             },
@@ -226,6 +331,14 @@ function _wrapMethod(
               if (it && typeof it.return === "function") {
                 await it.return();
               }
+              // ``return`` short-circuits the stream without
+              // reaching the ``done: true`` branch above, so
+              // there is no aggregate emit and no per-chunk
+              // flush. Flush the buffered chunks now so a
+              // caller that breaks out of the loop early still
+              // ships the partial series.
+              const client = getDefaultClient();
+              for (const c of chunkBuffer) client.bufferChunk(c);
               return { value: undefined, done: true };
             },
             async throw(err: unknown): Promise<IteratorResult<unknown>> {
@@ -351,6 +464,16 @@ function _emit(args: {
     environmentId: args.opts.environmentId,
     durationMs: args.durationMs,
   });
+}
+
+function _flushChunks(chunks: StreamChunk[]): void {
+  // Per-chunk replay to ``/ingest/chunks`` — mirrors the OpenAI
+  // + Anthropic + Vercel AI streaming paths so the per-chunk
+  // TTFT / ITL / TPOT dashboards render for LangChain streams
+  // too. Called from the stream-method's success and error
+  // paths, which hold the buffer as a closure local.
+  const client = getDefaultClient();
+  for (const c of chunks) client.bufferChunk(c);
 }
 
 function _emitStream(args: {

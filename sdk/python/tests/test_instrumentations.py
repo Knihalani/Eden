@@ -549,3 +549,255 @@ def test_openai_per_chunk_tpot_itl_semantics(fake_streaming_openai):
     assert len(non_text) == 1
     assert non_text[0]["tpot_ms"] is None
 
+
+
+# ── LangChain streaming (on_llm_new_token) ──────────────────────────
+
+
+def test_langchain_streaming_emits_per_chunk_events(fake_langchain):
+    """``on_llm_new_token`` should push a per-token dict to
+    ``client._chunk_buffer`` so the per-chunk TTFT / ITL /
+    TPOT dashboards render for LangChain streams (parity with
+    the OpenAI + Anthropic streaming instrumentations).
+
+    The previous implementation never implemented
+    ``on_llm_new_token`` at all — streaming LangChain calls
+    emitted only the aggregate framework event with no model
+    or input_tokens on the wire. Pricing lookups could not
+    roll them up.
+    """
+    from langchain_core.callbacks import BaseCallbackHandler
+    import langchain_core.callbacks as _callbacks
+
+    eden.instrument("langchain")
+    mgr = _callbacks.get_callback_manager()
+    handler = next(h for h in mgr.handlers if isinstance(h, BaseCallbackHandler))
+
+    client = get_default_client()
+    # The streaming instrumentation pushes directly to the
+    # client buffer; snapshot it for assertion.
+    pinned_buffer = client._chunk_buffer
+
+    run_id = "lc-stream-1"
+    parent_id = None
+    handler.on_llm_start(
+        serialized={"name": "openai-llm"},
+        prompts=["Tell me about Eden."],
+        run_id=run_id,
+        parent_run_id=parent_id,
+        tags=[],
+        metadata={},
+    )
+    # Three tokens. The first one is the TTFT sample; the
+    # second + third produce a real ITL/TPOT reading.
+    handler.on_llm_new_token(token="Eden", run_id=run_id)
+    handler.on_llm_new_token(token=" is", run_id=run_id)
+    handler.on_llm_new_token(token=" great", run_id=run_id)
+    # End the run with an LLMResult carrying usage + model
+    # metadata (modern LangChain shape).
+    handler.on_llm_end(
+        response=types.SimpleNamespace(
+            llm_output={"token_usage": {"prompt_tokens": 8, "completion_tokens": 3}},
+            response_metadata={"model_name": "gpt-4o-mini"},
+            generations=[[types.SimpleNamespace(text="Eden is great")]],
+        ),
+        run_id=run_id,
+        parent_run_id=parent_id,
+    )
+
+    # 3 tokens → 3 chunk-buffer pushes.
+    assert len(pinned_buffer) == 3, f"expected 3 chunk pushes, got {len(pinned_buffer)}"
+    # All three carry the same trace_id + a sequential
+    # ``chunk_index`` from 0.
+    trace_ids = {c["trace_id"] for c in pinned_buffer}
+    assert len(trace_ids) == 1, f"chunks should share a trace_id, got {trace_ids!r}"
+    assert [c["chunk_index"] for c in pinned_buffer] == [0, 1, 2]
+    # delta_text preserved verbatim on every chunk.
+    assert [c["delta_text"] for c in pinned_buffer] == ["Eden", " is", " great"]
+    # First chunk has TTFT but no ITL/TPOT (no prior chunk).
+    assert pinned_buffer[0]["ttft_ms"] is not None
+    assert pinned_buffer[0]["ttft_ms"] >= 0
+    assert pinned_buffer[0]["itl_ms"] is None
+    assert pinned_buffer[0]["tpot_ms"] is None
+    # Second + third chunks have non-null ITL + TPOT.
+    for c in pinned_buffer[1:]:
+        assert c["itl_ms"] is not None
+        assert c["itl_ms"] >= 0
+        # ``tpot_ms`` is per-chunk (time for THIS chunk's
+        # tokens / THIS chunk's token count). It must be a
+        # finite non-negative number.
+        assert c["tpot_ms"] is not None
+        assert c["tpot_ms"] >= 0
+
+    # Aggregate event: the per-run streaming state is
+    # popped in ``on_llm_end`` and its fields are surfaced
+    # on the framework event payload (``model`` +
+    # ``input_tokens``). We don't ship the event (the test
+    # transport would have to be a MockTransport, and this
+    # test focuses on the buffer + state hoisting). Instead
+    # we directly assert that ``on_llm_end`` left the
+    # streaming state behind the right fields by checking
+    # the public enqueue path: the ``_record_end`` helper
+    # runs at the end of ``on_llm_end`` and emits a
+    # framework event with ``kind="llm.end"`` to the
+    # client queue. We can verify the enqueue happened
+    # via the queue size and the on-wire fields by
+    # inspecting the payload dict we just produced.
+    # Easier and more targeted: the per-run state has been
+    # popped by ``on_llm_end`` (asserted below) AND the
+    # aggregate framework event was enqueued — we use the
+    # ``_record_end``-emitted ``event_id`` to confirm the
+    # end path ran. The most targeted thing to assert is
+    # that the streaming state is gone and the aggregate
+    # fields were built correctly, so we look at the
+    # event that ``_record_end`` would have built.
+    # (The buffer + state cleanup is the real bug pin;
+    # the aggregate-on-the-wire assertion belongs in a
+    # separate end-to-end test with a mock transport.)
+    assert run_id not in handler._stream_state
+
+
+def test_langchain_streaming_aggregate_event_carries_model_and_usage(fake_langchain, monkeypatch):
+    """The aggregate ``llm.end`` framework event must carry the
+    model name + input_tokens that ``on_llm_new_token``
+    captured. Previously the framework event had no model or
+    input_tokens on the wire even when the streaming callback
+    had them — pricing lookups could not roll up LangChain
+    streams.
+
+    Uses a ``MockTransport`` so we can assert on the actual
+    JSON the sender thread ships.
+    """
+    import json
+    from langchain_core.callbacks import BaseCallbackHandler
+    import httpx
+
+    # Install a mock transport on the default client so we
+    # can capture the wire body the SDK actually ships.
+    from eden_sdk.client import EdenClient, TraceEvent
+    from eden_sdk.config import EdenConfig
+
+    captured: list[dict] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        body = request.content.decode("utf-8")
+        try:
+            captured.append(json.loads(body))
+        except Exception:
+            captured.append({"raw": body})
+        return httpx.Response(202, json={"ok": True}, request=request)
+
+    transport = httpx.MockTransport(handler)
+    real_client = EdenClient(
+        EdenConfig(
+            org_id="o",
+            api_key="k",
+            base_url="http://test.invalid",
+            dry_run=False,
+            flush_interval_ms=50,
+        ),
+        transport=transport,
+    )
+    real_client.start()
+    monkeypatch.setattr(
+        "eden_sdk.instrumentations.langchain.get_default_client",
+        lambda: real_client,
+    )
+
+    eden.instrument("langchain")
+    from langchain_core.callbacks import get_callback_manager
+    mgr = get_callback_manager()
+    handler_obj = next(h for h in mgr.handlers if isinstance(h, BaseCallbackHandler))
+
+    run_id = "lc-stream-agg"
+    handler_obj.on_llm_start(
+        serialized={"name": "openai-llm"},
+        prompts=["hi"],
+        run_id=run_id,
+        parent_run_id=None,
+        tags=[],
+        metadata={},
+    )
+    handler_obj.on_llm_new_token(token="Eden", run_id=run_id)
+    # Modern LangChain supplies the per-chunk AIMessageChunk
+    # on the ``chunk`` kwarg. Simulate one with usage +
+    # response_metadata so the callback extracts them.
+    handler_obj.on_llm_new_token(
+        token=" is",
+        run_id=run_id,
+        chunk={
+            "usage_metadata": {"input_tokens": 7, "output_tokens": 2},
+            "response_metadata": {"model_name": "gpt-4o-mini"},
+        },
+    )
+    handler_obj.on_llm_end(
+        response=types.SimpleNamespace(
+            llm_output={"token_usage": {"prompt_tokens": 7, "completion_tokens": 2}},
+            response_metadata={"model_name": "gpt-4o-mini"},
+            generations=[[types.SimpleNamespace(text="Eden is")]],
+        ),
+        run_id=run_id,
+        parent_run_id=None,
+    )
+    real_client.flush(timeout=2.0)
+    real_client.shutdown(timeout=2.0)
+
+    # Find the framework event in the captured batches.
+    framework_events: list[dict] = []
+    for body in captured:
+        for ev in body if isinstance(body, list) else [body]:
+            if isinstance(ev, dict) and ev.get("event_type") == "framework.callback":
+                framework_events.append(ev)
+    assert framework_events, f"no framework events captured: {captured!r}"
+    # At least one of the captured framework events is the
+    # ``llm.end`` (kind="llm.end") with model + input_tokens
+    # hoisted from the streaming state.
+    llm_end = next(
+        (e for e in framework_events
+         if e.get("attributes", {}).get("langchain.kind") == "llm.end"),
+        None,
+    )
+    assert llm_end is not None
+    assert llm_end.get("model") == "gpt-4o-mini", (
+        f"model not hoisted on llm.end; got {llm_end!r}"
+    )
+    assert llm_end.get("input_tokens") == 7, (
+        f"input_tokens not hoisted on llm.end; got {llm_end!r}"
+    )
+    assert llm_end.get("output_tokens") == 2
+
+
+def test_langchain_streaming_state_cleaned_on_error(fake_langchain):
+    """``on_llm_error`` must drop the per-run streaming state
+    so a stream that errors mid-flight does not leak the
+    ``_stream_state`` dict forever. The chunks already
+    pushed still ship — the test only pins the cleanup.
+    """
+    from langchain_core.callbacks import BaseCallbackHandler
+
+    eden.instrument("langchain")
+    from langchain_core.callbacks import get_callback_manager
+    mgr = get_callback_manager()
+    handler = next(h for h in mgr.handlers if isinstance(h, BaseCallbackHandler))
+
+    run_id = "lc-stream-err"
+    handler.on_llm_start(
+        serialized={"name": "openai-llm"},
+        prompts=["hi"],
+        run_id=run_id,
+        parent_run_id=None,
+        tags=[],
+        metadata={},
+    )
+    assert run_id in handler._stream_state
+    handler.on_llm_new_token(token="half", run_id=run_id)
+    assert handler._stream_state[run_id]["chunk_count"] == 1
+    handler.on_llm_error(
+        error=RuntimeError("upstream timeout"),
+        run_id=run_id,
+        parent_run_id=None,
+    )
+    # State for the run must be gone (no leak).
+    assert run_id not in handler._stream_state
+
+

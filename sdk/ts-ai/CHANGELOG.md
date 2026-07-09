@@ -4,6 +4,41 @@ All notable changes to the Eden TypeScript SDK are documented here. The
 format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## 0.2.21 — 2026-07-09
+
+Bug-fix + parity release.
+
+### Fixed
+- `wrapLangChain` streaming: the per-chunk buffer was missing
+  and the `_emitStream` call sites never passed `model`,
+  `inputTokens`, `cacheReadTokens`, or `cacheCreationTokens`.
+  The previous implementation only emitted the aggregate
+  `llm_completion_stream` event with no model or input
+  tokens on the wire, so the per-chunk TTFT / ITL / TPOT
+  dashboards rendered empty for every LangChain stream and
+  pricing lookups could not roll them up. The fix mirrors
+  the OpenAI + Anthropic + Vercel AI streaming paths: every
+  chunk is appended to a `chunkBuffer` and flushed via
+  `client.bufferChunk(...)` on the same tick as the
+  aggregate emit; the aggregate now carries the model +
+  token-count fields extracted from the chunks' modern
+  `usage_metadata` + `response_metadata` (with the legacy
+  `usage` / `usage_kwargs` keys also accepted). The
+  iterator's `return()` also flushes a partial chunk buffer
+  so a caller that breaks out of a stream loop still ships
+  the partial series.
+
+### Tests
+- 2 new tests in `instrumentations.test.ts` pinning the
+  Vercel-OpenAI-style per-chunk emission (2 text-delta
+  events → 2 chunk-buffer pushes; same `trace_id`,
+  incrementing `chunk_index`) + the new `model` /
+  `input_tokens` extraction on the aggregate event.
+- 1 new test in `instrumentations.test.ts` pinning the
+  partial-chunk-buffer flush on `iterator.return()`
+  (breaking out of a stream after the first chunk still
+  ships that chunk to `/ingest/chunks`).
+
 ## 0.2.20 — 2026-07-09
 
 Bug-fix + parity release.
