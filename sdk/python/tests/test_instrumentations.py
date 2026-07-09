@@ -801,3 +801,133 @@ def test_langchain_streaming_state_cleaned_on_error(fake_langchain):
     assert run_id not in handler._stream_state
 
 
+
+
+# ── LangChain non-streaming modern usage_metadata ─────────────────
+
+
+def test_langchain_non_streaming_extracts_usage_metadata_per_generation(fake_langchain):
+    """Modern LangChain (0.1+) attaches ``usage_metadata`` to
+    each ``AIMessage`` in ``LLMResult.generations[i][j].message``
+    and ``response_metadata`` per generation. The legacy
+    ``LLMResult.llm_output.token_usage`` path is empty for these
+    chains — the previous implementation only read the legacy
+    path, so non-streaming LangChain events had no
+    ``input_tokens`` / ``cache_read_input_tokens`` /
+    ``cache_creation_input_tokens`` / ``model`` on the wire.
+
+    Pin that the modern path is now read (the
+    ``usage_metadata`` + per-generation ``response_metadata``
+    flow into the framework event).
+    """
+    from langchain_core.callbacks import BaseCallbackHandler
+    import langchain_core.callbacks as _callbacks
+
+    eden.instrument("langchain")
+    mgr = _callbacks.get_callback_manager()
+    handler = next(h for h in mgr.handlers if isinstance(h, BaseCallbackHandler))
+
+    run_id = "lc-modern-1"
+    handler.on_llm_start(
+        serialized={"name": "openai-llm"},
+        prompts=["hi"],
+        run_id=run_id,
+        parent_run_id=None,
+        tags=[],
+        metadata={},
+    )
+    # Simulate a modern LangChain LLMResult: llm_output is
+    # empty (no legacy token_usage), but each Generation's
+    # AIMessage carries usage_metadata + response_metadata.
+    mock_message = types.SimpleNamespace(
+        usage_metadata={
+            "input_tokens": 12,
+            "output_tokens": 7,
+            "total_tokens": 19,
+        },
+        response_metadata={"model_name": "gpt-4o-mini"},
+        content="hello",
+    )
+    mock_generation = types.SimpleNamespace(
+        text="hello",
+        message=mock_message,
+    )
+    handler.on_llm_end(
+        response=types.SimpleNamespace(
+            llm_output={},  # empty: legacy path is a no-op
+            generations=[[mock_generation]],
+        ),
+        run_id=run_id,
+        parent_run_id=None,
+    )
+
+    # The framework event must carry input_tokens, the cache
+    # fields, AND the model — all from the modern
+    # ``usage_metadata`` / ``response_metadata`` shape. Without
+    # the fix these were all absent on the wire for modern
+    # LangChain.
+    client = get_default_client()
+    # Inspect the queue directly (the sender thread is not
+    # started in this test fixture, so enqueue only stages the
+    # event). We pop the framework event off the queue and
+    # check its fields.
+    framework_ev = None
+    while not client._queue.empty():
+        ev = client._queue.get_nowait()
+        if ev.source_format == "framework":
+            framework_ev = ev.payload
+            break
+    assert framework_ev is not None, "no framework event enqueued"
+    assert framework_ev.get("input_tokens") == 12
+    assert framework_ev.get("output_tokens") == 7
+    assert framework_ev.get("model") == "gpt-4o-mini"
+    assert framework_ev.get("model_normalized") == "gpt-4o-mini"
+
+
+def test_langchain_non_streaming_legacy_path_still_works(fake_langchain):
+    """The fix must not break the legacy ``llm_output.token_usage``
+    path used by older LangChain versions. The legacy fields
+    are still hoisted (and win, because we use ``setdefault``
+    on the top-level fields).
+    """
+    from langchain_core.callbacks import BaseCallbackHandler
+    import langchain_core.callbacks as _callbacks
+
+    eden.instrument("langchain")
+    mgr = _callbacks.get_callback_manager()
+    handler = next(h for h in mgr.handlers if isinstance(h, BaseCallbackHandler))
+
+    run_id = "lc-legacy-1"
+    handler.on_llm_start(
+        serialized={"name": "openai-llm"},
+        prompts=["hi"],
+        run_id=run_id,
+        parent_run_id=None,
+        tags=[],
+        metadata={},
+    )
+    # Legacy LLMResult: llm_output carries token_usage, no
+    # modern usage_metadata on the generation.
+    handler.on_llm_end(
+        response=types.SimpleNamespace(
+            llm_output={"token_usage": {"prompt_tokens": 5, "completion_tokens": 3}},
+            response_metadata={"model_name": "gpt-3.5-turbo"},
+            generations=[
+                [types.SimpleNamespace(text="legacy hello", message=types.SimpleNamespace())]
+            ],
+        ),
+        run_id=run_id,
+        parent_run_id=None,
+    )
+
+    client = get_default_client()
+    framework_ev = None
+    while not client._queue.empty():
+        ev = client._queue.get_nowait()
+        if ev.source_format == "framework":
+            framework_ev = ev.payload
+            break
+    assert framework_ev is not None
+    assert framework_ev.get("input_tokens") == 5
+    assert framework_ev.get("output_tokens") == 3
+    assert framework_ev.get("model") == "gpt-3.5-turbo"
