@@ -7,6 +7,7 @@ import { useOrg } from "@/hooks/use-org";
 import { usePermissions } from "@/hooks/use-permissions";
 import { useToast } from "@/components/ui/toast";
 import { cn } from "@/lib/utils";
+import { Card } from "@/components/ui/card";
 
 const TABLES: Array<{ id: string; label: string; description: string }> = [
   { id: "raw_traces", label: "Raw traces", description: "Pre-aggregation ingestion events" },
@@ -206,7 +207,7 @@ export function RetentionPolicyTab() {
         </div>
       )}
 
-      <div className="p-4 bg-[var(--bg-primary)] rounded-xl border border-[var(--border-default)]">
+      <Card padding="md">
         <div className="flex items-center gap-2 mb-2">
           <Trash2 className="w-4 h-4 text-[var(--text-muted)]" />
           <h3 className="text-sm font-semibold text-[var(--text-primary)]">PII scrub after (days)</h3>
@@ -231,10 +232,9 @@ export function RetentionPolicyTab() {
               PII will be retained indefinitely
             </span>
           )}
-        </div>
-      </div>
+        </div></Card>
 
-      <div className="p-4 bg-[var(--bg-primary)] rounded-xl border border-[var(--border-default)]">
+      <Card padding="md">
         <div className="flex items-center justify-between mb-4">
           <div>
             <h3 className="text-sm font-semibold text-[var(--text-primary)]">Per-table overrides</h3>
@@ -344,8 +344,7 @@ export function RetentionPolicyTab() {
               </div>
             );
           })}
-        </div>
-      </div>
+        </div></Card>
 
       {canEdit && (
         <div className="flex items-center justify-end gap-3 pt-2">

@@ -15,6 +15,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Card } from "@/components/ui/card";
 
 type QuickLinkItem = {
   label: string;
@@ -197,7 +198,7 @@ function MicroTile({ item }: { item: QuickLinkItem }) {
 
 export function QuickLinks() {
   return (
-    <div className="bg-[var(--bg-primary)] rounded-xl p-5 border border-[var(--border-default)]">
+    <Card padding="lg">
       <div className="flex items-center justify-between mb-4">
         <div>
           <h2 className="text-base font-semibold text-[var(--text-primary)]">Quick links</h2>
@@ -235,6 +236,6 @@ export function QuickLinks() {
           );
         })}
       </div>
-    </div>
+    </Card>
   );
 }

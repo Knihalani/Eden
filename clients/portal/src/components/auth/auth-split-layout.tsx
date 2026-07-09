@@ -33,6 +33,22 @@ export function AuthSplitLayout({ brandPanel, children }: AuthSplitLayoutProps) 
     // height on desktop but doesn't force the row taller than the
     // form content on mobile.
     <div className="grid min-h-dvh grid-cols-1 bg-[var(--bg-secondary)] md:grid-cols-[55%_1fr]">
+      {/* Skip-to-content link — visible only on keyboard focus.
+        * With a split layout the brand panel is a substantial
+        * amount of content before the form; tabbing through
+        * every nav link in the brand panel to reach the first
+        * input is a real keyboard-user cost. The link is the
+        * very first focusable element on the page so the
+        * keyboard user can jump straight to the form column.
+        * ``focus:not-sr-only`` reveals it; ``focus:fixed`` keeps
+        * it pinned to the top-left of the viewport so it never
+        * gets clipped by the brand panel. */}
+      <a
+        href="#auth-form"
+        className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-50 focus:rounded-md focus:border focus:border-[var(--accent)] focus:bg-[var(--bg-elevated)] focus:px-3 focus:py-2 focus:text-sm focus:font-medium focus:text-[var(--accent)] focus:shadow-lg"
+      >
+        Skip to form
+      </a>
       {/* Left: Brand panel — hidden on mobile (compact header above replaces it) */}
       <div className="relative hidden md:block md:min-h-dvh">{brandPanel}</div>
 
@@ -55,9 +71,13 @@ export function AuthSplitLayout({ brandPanel, children }: AuthSplitLayoutProps) 
           ``items-start md:items-center`` so mobile users land at the
           top of the form (no need to scroll to reach the first
           input) while desktop centers the form vertically within
-          the viewport. */}
+          the viewport. The wrapper has tabindex=-1 so the skip
+          link target can be focused programmatically without
+          disrupting the document's tab order. */}
       <div className="flex items-start justify-center bg-[var(--bg-secondary)] px-6 py-10 md:items-center md:p-8 md:py-12">
-        {children}
+        <div id="auth-form" tabIndex={-1} className="w-full">
+          {children}
+        </div>
       </div>
     </div>
   );

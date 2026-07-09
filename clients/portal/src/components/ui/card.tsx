@@ -32,14 +32,22 @@ export interface CardProps
   extends React.HTMLAttributes<HTMLDivElement>,
     VariantProps<typeof cardVariants> {}
 
-const Card = React.forwardRef<HTMLDivElement, CardProps>(
-  ({ className, variant, padding, ...props }, ref) => (
-    <div
-      ref={ref}
-      className={cn(cardVariants({ variant, padding }), className)}
-      {...props}
-    />
-  )
+/**
+ * Card — supports the `as` prop so semantic-rooted wrappers
+ * (e.g. `<Card as="section">` for settings section roots) keep their
+ * element type. Falls back to a div. June 2026 polish round.
+ */
+const Card = React.forwardRef<HTMLElement, CardProps & { as?: React.ElementType }>(
+  ({ className, variant, padding, as: As = "div", ...props }, ref) => {
+    const AsComponent = As as React.ElementType;
+    return (
+      <AsComponent
+        ref={ref as React.Ref<HTMLElement>}
+        className={cn(cardVariants({ variant, padding }), className)}
+        {...props}
+      />
+    );
+  }
 );
 Card.displayName = "Card";
 

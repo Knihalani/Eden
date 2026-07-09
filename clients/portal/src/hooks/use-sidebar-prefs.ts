@@ -35,7 +35,7 @@ export interface SidebarPrefs {
 export const DEFAULT_PREFS: SidebarPrefs = {
   pinned: [],
   hidden: [],
-  groupOrder: ["build", "observe", "optimize", "automate", "admin"],
+  groupOrder: ["build", "observe", "optimize", "automate", "workspace"],
   density: "comfortable",
 };
 

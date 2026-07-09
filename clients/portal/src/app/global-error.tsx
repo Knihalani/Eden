@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import Link from "next/link";
 import { AlertTriangle, RefreshCw, Home } from "lucide-react";
 
 /** Global 500 — ponytail: matches (portal)/error.tsx styling but lives
@@ -58,13 +59,13 @@ export default function GlobalError({
                 <RefreshCw className="w-4 h-4" />
                 Reload
               </button>
-              <a
+              <Link
                 href="/dashboard"
                 className="inline-flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-[var(--text-primary)] bg-[var(--bg-primary)] hover:bg-[var(--bg-tertiary)] border border-[var(--border-default)] rounded-xl transition-colors"
               >
                 <Home className="w-4 h-4" />
                 Dashboard
-              </a>
+              </Link>
             </div>
           </div>
         </div>

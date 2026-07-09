@@ -201,7 +201,9 @@ export interface OutcomeDescriptor {
 
 export const STATUS_COLORS: Record<string, string> = {
   pending: "bg-[var(--bg-tertiary)] text-[var(--text-secondary)]",
-  running: "bg-[var(--accent-faint)] text-[var(--accent)]",
+  // running now uses --status-running (sky) instead of --accent
+  // (CTA blue) so a "Running" pill no longer looks like a button.
+  running: "bg-[var(--status-running-bg)] text-[var(--status-running)]",
   completed: "bg-[var(--terminal-faint)] text-[var(--terminal)]",
   failed: "bg-[var(--error-dim)] text-[var(--error)]",
   human_review: "bg-[var(--warning-bg)] text-[var(--warning)]",

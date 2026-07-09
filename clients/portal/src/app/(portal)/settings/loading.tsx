@@ -1,10 +1,9 @@
 "use client";
 
 import { Skeleton } from "@/components/ui/skeleton";
-
+import { Card } from "@/components/ui/card";
 export default function SettingsLoading() {
-  return (
-    <div className="p-6 space-y-8 max-w-5xl">
+  return <div className="p-6 space-y-8 max-w-5xl">
       {/* Page header */}
       <div className="space-y-2">
         <Skeleton className="h-8 w-40" />
@@ -13,15 +12,15 @@ export default function SettingsLoading() {
 
       {/* Tabs */}
       <div className="flex items-center gap-1 border-b border-[var(--border)]">
-        {Array.from({ length: 5 }).map((_, i) => (
-          <Skeleton key={i} className="h-10 w-28 rounded-t-lg" />
-        ))}
+        {Array.from({
+        length: 5
+      }).map((_, i) => <Skeleton key={i} className="h-10 w-28 rounded-t-lg" />)}
       </div>
 
       {/* Tab content */}
       <div className="space-y-6">
         {/* Section */}
-        <div className="bg-[var(--bg-primary)] border border-[var(--border)] rounded-xl p-6 space-y-5">
+        <Card padding="xl" className="space-y-5">
           <div className="space-y-2">
             <Skeleton className="h-6 w-40" />
             <Skeleton className="h-4 w-72" />
@@ -47,26 +46,25 @@ export default function SettingsLoading() {
             <Skeleton className="h-10 w-24 rounded-lg" />
             <Skeleton className="h-10 w-32 rounded-lg" />
           </div>
-        </div>
+        </Card>
 
         {/* Another section */}
-        <div className="bg-[var(--bg-primary)] border border-[var(--border)] rounded-xl p-6 space-y-5">
+        <Card padding="xl" className="space-y-5">
           <div className="space-y-2">
             <Skeleton className="h-6 w-48" />
             <Skeleton className="h-4 w-80" />
           </div>
 
-          {Array.from({ length: 3 }).map((_, i) => (
-            <div key={i} className="flex items-center justify-between py-3 border-b border-[var(--border-subtle)] last:border-0">
+          {Array.from({
+          length: 3
+        }).map((_, i) => <div key={i} className="flex items-center justify-between py-3 border-b border-[var(--border-subtle)] last:border-0">
               <div className="space-y-1.5">
                 <Skeleton className="h-4 w-40" />
                 <Skeleton className="h-3 w-56" />
               </div>
               <Skeleton className="h-9 w-20 rounded-lg" />
-            </div>
-          ))}
-        </div>
+            </div>)}
+        </Card>
       </div>
-    </div>
-  );
+    </div>;
 }

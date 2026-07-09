@@ -3,6 +3,7 @@
 import { Loader2, Activity, ArrowUpRight, ArrowDownRight } from "lucide-react";
 import { AreaChart, Area, ResponsiveContainer, YAxis } from "recharts";
 import { cn } from "@/lib/utils";
+import { Card } from "@/components/ui/card";
 
 interface ThroughputCardProps {
   loading: boolean;
@@ -29,8 +30,9 @@ export function ThroughputCard({
   return (
     <a
       href={href}
-      className="block bg-[var(--bg-primary)] rounded-xl p-5 border border-[var(--border-default)] transition-shadow hover:shadow-md"
+      className="block transition-shadow hover:shadow-md"
     >
+      <Card variant="interactive" padding="lg" className="h-full">
       <div className="flex items-start justify-between mb-2">
         <div className="flex items-center gap-2.5">
           <div className="p-2.5 rounded-lg bg-[var(--accent-light)] text-[var(--accent)]">
@@ -109,6 +111,6 @@ export function ThroughputCard({
           </div>
         )}
       </div>
-    </a>
+    </Card></a>
   );
 }

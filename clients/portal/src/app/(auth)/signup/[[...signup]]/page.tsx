@@ -1,5 +1,5 @@
 import { SignUp } from "@clerk/nextjs";
-import { AuthSplitLayout, AuthBrandPanel } from "@/components/auth";
+import { AuthSplitLayout, AuthBrandPanel, ClerkAuthFallback } from "@/components/auth";
 import { clerkAppearance } from "@/components/auth/clerk-theme";
 
 // Catch-all so Clerk's internal sub-flows (factor-one, verify-email,
@@ -8,6 +8,10 @@ import { clerkAppearance } from "@/components/auth/clerk-theme";
 //
 // Same chrome + theme as /login — see (auth)/login/[[...login]]/page.tsx
 // for the rationale.
+//
+// ClerkAuthFallback wraps the <SignUp /> component. If the Clerk
+// SDK fails to mount, the fallback shows a designed empty state
+// instead of a blank right column.
 export default function SignupPage() {
   return (
     <AuthSplitLayout brandPanel={<AuthBrandPanel />}>
@@ -25,19 +29,21 @@ export default function SignupPage() {
             Spin up an Eden workspace in under a minute
           </p>
         </div>
-        <SignUp
-          path="/signup"
-          routing="path"
-          signInUrl="/login"
-          // After a successful signup, land on the onboarding wizard
-          // instead of the dashboard. New users always need the
-          // org step; routing them straight to /onboarding gets
-          // them to a productive state in one click. Mirrors the
-          // /sign-up route so both paths behave identically.
-          fallbackRedirectUrl="/onboarding"
-          signInForceRedirectUrl="/dashboard"
-          appearance={clerkAppearance}
-        />
+        <ClerkAuthFallback formLabel="sign-up">
+          <SignUp
+            path="/signup"
+            routing="path"
+            signInUrl="/login"
+            // After a successful signup, land on the onboarding wizard
+            // instead of the dashboard. New users always need the
+            // org step; routing them straight to /onboarding gets
+            // them to a productive state in one click. Mirrors the
+            // /sign-up route so both paths behave identically.
+            fallbackRedirectUrl="/onboarding"
+            signInForceRedirectUrl="/dashboard"
+            appearance={clerkAppearance}
+          />
+        </ClerkAuthFallback>
       </div>
     </AuthSplitLayout>
   );

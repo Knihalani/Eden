@@ -10,6 +10,7 @@ import {
   ArrowRight,
 } from "lucide-react";
 import { Logo } from "@/components/brand/logo";
+import { CodeChip } from "@/components/ui/code-chip";
 import { PRODUCT_VERSION, HEALTH_REFRESH_INTERVAL_MS } from "@/lib/constants";
 
 type HealthState = "ok" | "degraded" | "down" | "unknown";
@@ -162,9 +163,7 @@ export function AuthBrandPanel() {
             <p className="text-[15px] text-[var(--text-secondary)] leading-relaxed max-w-md">
               Every LLM call through Eden&apos;s gateway, every trace queryable in your
               workspace, every regression turned into a shipped PR by{" "}
-              <code className="font-mono text-[var(--text-primary)] bg-[var(--bg-tertiary)] px-1.5 py-0.5 rounded text-[13px]">
-                /eden-improve
-              </code>
+              <CodeChip size="md">/eden-improve</CodeChip>
               .
             </p>
           </div>

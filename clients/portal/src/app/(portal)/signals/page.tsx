@@ -107,6 +107,35 @@ export default function SignalsPage() {
             emptyTitle="No signals yet"
             emptyDescription="Create a signal from the CLI: `eden signals add` — they'll appear here once compiled."
             emptyIcon={Activity}
+            emptyVariant="terminal"
+            emptyTerminal={
+              <div className="rounded-lg overflow-hidden border border-[var(--border-default)] bg-[var(--bg-base)] text-left shadow-[0_24px_60px_-24px_rgba(0,0,0,0.6)]">
+                <div className="flex items-center gap-1.5 px-3 py-1.5 bg-[var(--bg-secondary)] border-b border-[var(--border-subtle)]">
+                  <span className="w-2 h-2 rounded-full bg-[var(--traffic-close)]" />
+                  <span className="w-2 h-2 rounded-full bg-[var(--traffic-minimize)]" />
+                  <span className="w-2 h-2 rounded-full bg-[var(--traffic-zoom)]" />
+                  <span className="ml-2 text-[10px] font-mono text-[var(--text-muted)] tracking-wider">
+                    signal.preview
+                  </span>
+                  <span className="ml-auto inline-flex items-center gap-1 text-[10px] font-mono uppercase tracking-[0.18em] text-[var(--terminal)]">
+                    <span className="w-1 h-1 rounded-full bg-[var(--terminal)]" />
+                    compiled
+                  </span>
+                </div>
+                <div className="p-4 space-y-2 font-mono text-xs">
+                  <div className="flex items-center gap-2 text-[var(--text-muted)]">
+                    <span className="text-[var(--accent)]">$</span>
+                    <span>eden signals add &quot;p95 latency by tool&quot;</span>
+                  </div>
+                  <div className="pl-4 text-[var(--text-secondary)]">
+                    → sql/tools/p95_latency_by_tool.sql
+                  </div>
+                  <div className="pl-4 text-[var(--terminal)]">
+                    ✓ compiled · 142 traces · last run 3m ago
+                  </div>
+                </div>
+              </div>
+            }
             columns={[
               { key: "name", header: "Name", sortable: true },
               { key: "description", header: "Description" },

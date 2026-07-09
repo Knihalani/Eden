@@ -107,12 +107,16 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
 
   useEffect(() => {
     const down = (e: KeyboardEvent) => {
-      if (e.key === "k" && (e.metaKey || e.ctrlKey)) {
-        e.preventDefault();
-        onOpenChange(!open);
-        return;
-      }
-      // Escape closes the palette from anywhere on the page.
+      // Cmd/Ctrl+K toggling is owned by the (portal) layout
+      // (so it lives next to the other global shortcuts like
+      // Cmd/Ctrl+B and \). Re-implementing it here would
+      // double-fire on every keystroke — the layout's
+      // setCommandPaletteOpen((prev) => !prev) and the palette's
+      // stale-closure onOpenChange(!open) both reach for the
+      // same toggle and race. The palette only owns its own
+      // Escape-close path because that's intrinsic to the
+      // popover — pressing Esc inside the input needs to bubble
+      // here even when the layout isn't paying attention.
       if (e.key === "Escape" && open) {
         e.preventDefault();
         onOpenChange(false);

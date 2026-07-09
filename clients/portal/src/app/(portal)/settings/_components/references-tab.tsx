@@ -13,6 +13,7 @@ import { useConfirm } from "@/hooks/use-confirm";
 import { api } from "@/lib/api";
 import { SettingsCard } from "@/components/settings/settings-card";
 import { FilterBar } from "@/components/ui/filter-bar";
+import { Card } from "@/components/ui/card";
 
 interface ReferencesTabProps {
   org: { id: string; name: string; role: string } | null;
@@ -184,9 +185,10 @@ export function ReferencesTab({ org }: ReferencesTabProps) {
 
       <div className="grid gap-3">
         {references.map((ref) => (
-          <div
+          <Card
             key={ref.id}
-            className="p-4 bg-[var(--bg-primary)] rounded-xl border border-[var(--border-default)] flex items-center justify-between"
+            padding="md"
+            className="flex items-center justify-between"
           >
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2">
@@ -215,7 +217,7 @@ export function ReferencesTab({ org }: ReferencesTabProps) {
                 <Trash2 className="w-4 h-4" />
               </button>
             )}
-          </div>
+          </Card>
         ))}
         {references.length === 0 && !loading && (
           <div className="text-center py-12 text-[var(--text-secondary)]">

@@ -11,7 +11,7 @@ import { useToast } from "@/components/ui/toast";
 import { useConfirm } from "@/hooks/use-confirm";
 import { Check, X, Play, AlertCircle, Loader2, Inbox, History, BarChart3 } from "lucide-react";
 import { PageHeader } from "@/components/layout/page-header";
-
+import { Card } from "@/components/ui/card";
 type Action = {
   action_id: string;
   hook: string;
@@ -19,7 +19,6 @@ type Action = {
   created_at: string;
   payload: Record<string, unknown>;
 };
-
 type Dashboard = {
   pending: number;
   approved: number;
@@ -27,11 +26,15 @@ type Dashboard = {
   applied_today: number;
   by_hook: Record<string, number>;
 };
-
 export default function ClosedLoopPage() {
-  const { currentOrg } = useOrg();
+  const {
+    currentOrg
+  } = useOrg();
   const toast = useToast();
-  const { confirm, ConfirmDialog } = useConfirm();
+  const {
+    confirm,
+    ConfirmDialog
+  } = useConfirm();
   const [tab, setTab] = useState<"pending" | "history" | "dashboard">("pending");
   const [pending, setPending] = useState<Action[]>([]);
   const [history, setHistory] = useState<Action[]>([]);
@@ -39,17 +42,18 @@ export default function ClosedLoopPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [busyActionId, setBusyActionId] = useState<string | null>(null);
-
   const loadAll = useCallback(async () => {
     if (!currentOrg) return;
     setLoading(true);
     setError(null);
     try {
-      const [pendingRes, allRes, dashRes] = await Promise.all([
-        closedLoopApi.listActions(currentOrg.id, { status: "pending" }).catch(() => ({ actions: [] })),
-        closedLoopApi.listActions(currentOrg.id).catch(() => ({ actions: [] })),
-        closedLoopApi.dashboard(currentOrg.id).catch(() => null),
-      ]);
+      const [pendingRes, allRes, dashRes] = await Promise.all([closedLoopApi.listActions(currentOrg.id, {
+        status: "pending"
+      }).catch(() => ({
+        actions: []
+      })), closedLoopApi.listActions(currentOrg.id).catch(() => ({
+        actions: []
+      })), closedLoopApi.dashboard(currentOrg.id).catch(() => null)]);
       setPending(pendingRes.actions ?? []);
       setHistory(allRes.actions ?? []);
       setDashboard(dashRes);
@@ -59,11 +63,9 @@ export default function ClosedLoopPage() {
       setLoading(false);
     }
   }, [currentOrg]);
-
   useEffect(() => {
     loadAll();
   }, [loadAll]);
-
   const handleApprove = async (actionId: string) => {
     if (!currentOrg) return;
     setBusyActionId(actionId);
@@ -77,7 +79,6 @@ export default function ClosedLoopPage() {
       setBusyActionId(null);
     }
   };
-
   const handleDeny = async (actionId: string) => {
     if (!currentOrg) return;
     // ponytail: window.prompt retained as a minimal-but-native way to
@@ -86,7 +87,9 @@ export default function ClosedLoopPage() {
     const reason = window.prompt("Optional reason for denial:") ?? undefined;
     setBusyActionId(actionId);
     try {
-      await closedLoopApi.denyAction(currentOrg.id, actionId, { reason });
+      await closedLoopApi.denyAction(currentOrg.id, actionId, {
+        reason
+      });
       toast.success("Action denied");
       await loadAll();
     } catch (err) {
@@ -95,14 +98,13 @@ export default function ClosedLoopPage() {
       setBusyActionId(null);
     }
   };
-
   const handleApply = async (actionId: string) => {
     if (!currentOrg) return;
     const ok = await confirm({
       title: "Apply this action?",
       description: "This will execute the underlying change. Are you sure?",
       confirmLabel: "Apply",
-      variant: "destructive",
+      variant: "destructive"
     });
     if (!ok) return;
     setBusyActionId(actionId);
@@ -116,62 +118,34 @@ export default function ClosedLoopPage() {
       setBusyActionId(null);
     }
   };
-
   if (!currentOrg) {
     return <NoOrgState feature="Closed-Loop Actions" icon={Inbox} description="Select an organization to review automated promotion recommendations" />;
   }
-
-  return (
-    <div className="p-4 sm:p-6 lg:p-8 max-w-6xl space-y-6">
-      <PageHeader
-        title="Closed-Loop Actions"
-        subtitle="Review and act on automated recommendations from the promotion loop, judge regressions, drift alerts, and experiment winners."
-        icon={Inbox}
-      />
+  return <div className="p-4 sm:p-6 lg:p-8 max-w-6xl space-y-6">
+      <PageHeader title="Closed-Loop Actions" subtitle="Review and act on automated recommendations from the promotion loop, judge regressions, drift alerts, and experiment winners." icon={Inbox} />
 
       {/* Dashboard summary cards */}
-      {dashboard && (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
+      {dashboard && <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
           <SummaryCard label="Pending" value={dashboard.pending} icon={Inbox} />
           <SummaryCard label="Approved" value={dashboard.approved} icon={Check} />
           <SummaryCard label="Denied" value={dashboard.denied} icon={X} />
           <SummaryCard label="Applied today" value={dashboard.applied_today} icon={Play} />
-        </div>
-      )}
+        </div>}
 
       {/* Tab strip */}
       <div role="tablist" aria-label="Closed-loop views" className="flex items-center gap-1 mb-4 border-b border-[var(--border-default)]">
-        <TabButton
-          active={tab === "pending"}
-          onClick={() => setTab("pending")}
-          icon={Inbox}
-          ariaLabel={`Pending actions (${pending.length})`}
-        >
+        <TabButton active={tab === "pending"} onClick={() => setTab("pending")} icon={Inbox} ariaLabel={`Pending actions (${pending.length})`}>
           Pending ({pending.length})
         </TabButton>
-        <TabButton
-          active={tab === "history"}
-          onClick={() => setTab("history")}
-          icon={History}
-          ariaLabel="Action history"
-        >
+        <TabButton active={tab === "history"} onClick={() => setTab("history")} icon={History} ariaLabel="Action history">
           History
         </TabButton>
-        <TabButton
-          active={tab === "dashboard"}
-          onClick={() => setTab("dashboard")}
-          icon={BarChart3}
-          ariaLabel="Action dashboard"
-        >
+        <TabButton active={tab === "dashboard"} onClick={() => setTab("dashboard")} icon={BarChart3} ariaLabel="Action dashboard">
           Dashboard
         </TabButton>
       </div>
 
-      {error && (
-        <div
-          role="alert"
-          className="mb-4 flex items-start justify-between gap-2 rounded-lg border border-[var(--error)] bg-[var(--error-bg)] p-3 text-sm text-[var(--error)]"
-        >
+      {error && <div role="alert" className="mb-4 flex items-start justify-between gap-2 rounded-lg border border-[var(--error)] bg-[var(--error-bg)] p-3 text-sm text-[var(--error)]">
           <div className="flex items-start gap-2">
             <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
             <div>
@@ -179,47 +153,27 @@ export default function ClosedLoopPage() {
               <p className="text-xs mt-1 opacity-80">{error}</p>
             </div>
           </div>
-          <button
-            onClick={loadAll}
-            disabled={loading}
-            className="text-xs font-medium underline underline-offset-2 hover:opacity-80 disabled:opacity-50 shrink-0"
-          >
+          <button onClick={loadAll} disabled={loading} className="text-xs font-medium underline underline-offset-2 hover:opacity-80 disabled:opacity-50 shrink-0">
             Retry
           </button>
-        </div>
-      )}
+        </div>}
 
-      {loading ? (
-        <div
-          role="status"
-          aria-live="polite"
-          aria-busy="true"
-          className="flex items-center justify-center p-12 text-sm text-[var(--text-muted)]"
-        >
+      {loading ? <div role="status" aria-live="polite" aria-busy="true" className="flex items-center justify-center p-12 text-sm text-[var(--text-muted)]">
           <Loader2 className="h-4 w-4 mr-2 animate-spin" /> Loading…
-        </div>
-      ) : tab === "pending" ? (
-        <ActionList
-          actions={pending}
-          busyActionId={busyActionId}
-          onApprove={handleApprove}
-          onDeny={handleDeny}
-          onApply={handleApply}
-          emptyMessage="No pending actions — the promotion loop is up to date."
-        />
-      ) : tab === "history" ? (
-        <ActionList actions={history} readOnly emptyMessage="No historical actions yet." />
-      ) : (
-        <DashboardView dashboard={dashboard} />
-      )}
+        </div> : tab === "pending" ? <ActionList actions={pending} busyActionId={busyActionId} onApprove={handleApprove} onDeny={handleDeny} onApply={handleApply} emptyMessage="No pending actions — the promotion loop is up to date." /> : tab === "history" ? <ActionList actions={history} readOnly emptyMessage="No historical actions yet." /> : <DashboardView dashboard={dashboard} />}
       {ConfirmDialog}
-    </div>
-  );
+    </div>;
 }
-
-function SummaryCard({ label, value, icon: Icon }: { label: string; value: number; icon: typeof Inbox }) {
-  return (
-    <div className="rounded-lg border border-[var(--border-default)] bg-[var(--bg-primary)] p-4">
+function SummaryCard({
+  label,
+  value,
+  icon: Icon
+}: {
+  label: string;
+  value: number;
+  icon: typeof Inbox;
+}) {
+  return <div className="rounded-lg border border-[var(--border-default)] bg-[var(--bg-primary)] p-4">
       <div className="flex items-center justify-between">
         <div>
           <p className="text-xs uppercase tracking-wide text-[var(--text-muted)]">{label}</p>
@@ -227,16 +181,14 @@ function SummaryCard({ label, value, icon: Icon }: { label: string; value: numbe
         </div>
         <Icon className="h-5 w-5 text-[var(--text-muted)]" />
       </div>
-    </div>
-  );
+    </div>;
 }
-
 function TabButton({
   active,
   onClick,
   icon: Icon,
   children,
-  ariaLabel,
+  ariaLabel
 }: {
   active: boolean;
   onClick: () => void;
@@ -244,25 +196,11 @@ function TabButton({
   children: React.ReactNode;
   ariaLabel?: string;
 }) {
-  return (
-    <button
-      onClick={onClick}
-      role="tab"
-      aria-selected={active}
-      aria-label={ariaLabel}
-      className={cn(
-        "flex items-center gap-2 px-3 py-2 text-sm font-medium border-b-2 -mb-px transition-colors",
-        active
-          ? "border-[var(--accent)] text-[var(--text-primary)]"
-          : "border-transparent text-[var(--text-muted)] hover:text-[var(--text-primary)]"
-      )}
-    >
+  return <button onClick={onClick} role="tab" aria-selected={active} aria-label={ariaLabel} className={cn("flex items-center gap-2 px-3 py-2 text-sm font-medium border-b-2 -mb-px transition-colors", active ? "border-[var(--accent)] text-[var(--text-primary)]" : "border-transparent text-[var(--text-muted)] hover:text-[var(--text-primary)]")}>
       <Icon className="h-4 w-4" />
       {children}
-    </button>
-  );
+    </button>;
 }
-
 function ActionList({
   actions,
   busyActionId,
@@ -270,7 +208,7 @@ function ActionList({
   onDeny,
   onApply,
   readOnly,
-  emptyMessage,
+  emptyMessage
 }: {
   actions: Action[];
   busyActionId?: string | null;
@@ -281,19 +219,12 @@ function ActionList({
   emptyMessage: string;
 }) {
   if (actions.length === 0) {
-    return (
-      <div className="bg-[var(--bg-primary)] border border-[var(--border-default)] border-dashed rounded-xl">
+    return <Card padding="lg" className="-dashed">
         <EmptyState icon={Inbox} title={emptyMessage} description="Actions will appear here once the promotion loop fires" />
-      </div>
-    );
+      </Card>;
   }
-  return (
-    <div className="space-y-3">
-      {actions.map((a) => (
-        <div
-          key={a.action_id}
-          className="rounded-lg border border-[var(--border-default)] bg-[var(--bg-primary)] p-4"
-        >
+  return <div className="space-y-3">
+      {actions.map(a => <div key={a.action_id} className="rounded-lg border border-[var(--border-default)] bg-[var(--bg-primary)] p-4">
           <div className="flex items-start justify-between gap-3">
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
@@ -308,95 +239,59 @@ function ActionList({
               <p className="mt-2 text-xs font-mono text-[var(--text-muted)] break-all">
                 {a.action_id}
               </p>
-              {a.payload && Object.keys(a.payload).length > 0 && (
-                <pre className="mt-2 p-2 rounded bg-[var(--bg-tertiary)] text-[11px] font-mono text-[var(--text-secondary)] overflow-x-auto">
+              {a.payload && Object.keys(a.payload).length > 0 && <pre className="mt-2 p-2 rounded bg-[var(--bg-tertiary)] text-[11px] font-mono text-[var(--text-secondary)] overflow-x-auto">
                   {JSON.stringify(a.payload, null, 2)}
-                </pre>
-              )}
+                </pre>}
             </div>
-            {!readOnly && onApprove && onDeny && (
-              <div className="flex flex-col gap-2 shrink-0">
-                <Button
-                  size="sm"
-                  variant="default"
-                  disabled={busyActionId === a.action_id}
-                  onClick={() => onApprove(a.action_id)}
-                >
+            {!readOnly && onApprove && onDeny && <div className="flex flex-col gap-2 shrink-0">
+                <Button size="sm" variant="default" disabled={busyActionId === a.action_id} onClick={() => onApprove(a.action_id)}>
                   <Check className="h-3 w-3 mr-1" /> Approve
                 </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  disabled={busyActionId === a.action_id}
-                  onClick={() => onDeny(a.action_id)}
-                >
+                <Button size="sm" variant="outline" disabled={busyActionId === a.action_id} onClick={() => onDeny(a.action_id)}>
                   <X className="h-3 w-3 mr-1" /> Deny
                 </Button>
-                {onApply && a.status === "approved" && (
-                  <Button
-                    size="sm"
-                    variant="secondary"
-                    disabled={busyActionId === a.action_id}
-                    onClick={() => onApply(a.action_id)}
-                  >
+                {onApply && a.status === "approved" && <Button size="sm" variant="secondary" disabled={busyActionId === a.action_id} onClick={() => onApply(a.action_id)}>
                     <Play className="h-3 w-3 mr-1" /> Apply
-                  </Button>
-                )}
-              </div>
-            )}
+                  </Button>}
+              </div>}
           </div>
-        </div>
-      ))}
-    </div>
-  );
+        </div>)}
+    </div>;
 }
-
-function StatusBadge({ status }: { status: string }) {
+function StatusBadge({
+  status
+}: {
+  status: string;
+}) {
   const colorMap: Record<string, string> = {
     pending: "bg-[var(--warning)]/20 text-[var(--warning)] border-[var(--warning)]/30",
     approved: "bg-[var(--terminal)]/20 text-[var(--terminal)] border-[var(--terminal)]/30",
     denied: "bg-[var(--error)]/20 text-[var(--error)] border-[var(--error)]/30",
-    applied: "bg-[var(--accent)]/20 text-[var(--accent)] border-[var(--accent)]/30",
+    applied: "bg-[var(--accent)]/20 text-[var(--accent)] border-[var(--accent)]/30"
   };
-  return (
-    <span
-      className={cn(
-        "inline-flex items-center text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded border",
-        colorMap[status] ?? "bg-[var(--bg-tertiary)] text-[var(--text-muted)] border-[var(--border-subtle)]"
-      )}
-    >
+  return <span className={cn("inline-flex items-center text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded border", colorMap[status] ?? "bg-[var(--bg-tertiary)] text-[var(--text-muted)] border-[var(--border-subtle)]")}>
       {status}
-    </span>
-  );
+    </span>;
 }
-
-function DashboardView({ dashboard }: { dashboard: Dashboard | null }) {
+function DashboardView({
+  dashboard
+}: {
+  dashboard: Dashboard | null;
+}) {
   if (!dashboard) {
-    return (
-      <div className="rounded-lg border border-dashed border-[var(--border-default)] bg-[var(--bg-primary)] p-12 text-center text-sm text-[var(--text-muted)]">
+    return <div className="rounded-lg border border-dashed border-[var(--border-default)] bg-[var(--bg-primary)] p-12 text-center text-sm text-[var(--text-muted)]">
         Dashboard data unavailable.
-      </div>
-    );
+      </div>;
   }
-  return (
-    <div className="space-y-4">
+  return <div className="space-y-4">
       <div className="rounded-lg border border-[var(--border-default)] bg-[var(--bg-primary)] p-4">
         <h3 className="text-sm font-semibold text-[var(--text-primary)] mb-3">Actions by hook</h3>
-        {Object.keys(dashboard.by_hook).length === 0 ? (
-          <p className="text-sm text-[var(--text-muted)]">No actions recorded yet.</p>
-        ) : (
-          <ul className="space-y-2">
-            {Object.entries(dashboard.by_hook)
-              .sort(([, a], [, b]) => b - a)
-              .map(([hook, count]) => (
-                <li key={hook} className="flex items-center justify-between text-sm">
+        {Object.keys(dashboard.by_hook).length === 0 ? <p className="text-sm text-[var(--text-muted)]">No actions recorded yet.</p> : <ul className="space-y-2">
+            {Object.entries(dashboard.by_hook).sort(([, a], [, b]) => b - a).map(([hook, count]) => <li key={hook} className="flex items-center justify-between text-sm">
                   <span className="font-mono text-[var(--text-secondary)]">{hook}</span>
                   <span className="text-[var(--text-muted)]">{count}</span>
-                </li>
-              ))}
-          </ul>
-        )}
+                </li>)}
+          </ul>}
       </div>
-    </div>
-  );
+    </div>;
 }

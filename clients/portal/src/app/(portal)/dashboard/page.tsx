@@ -235,7 +235,7 @@ export default function DashboardPage() {
             : "Live signals from your agents and pipelines."
         }
         icon={LayoutDashboard}
-        greeting={currentOrg ? `Welcome back · ${currentOrg.name}` : undefined}
+        greeting={currentOrg ? `Welcome back to ${currentOrg.name}.` : undefined}
         actions={
           canConnect ? (
             <Link
@@ -254,7 +254,17 @@ export default function DashboardPage() {
       />
 
       {error && (
-        <div className="mb-6 p-4 rounded-lg border border-[var(--error)] bg-[var(--error-bg)] text-[var(--error-strong)] text-sm">
+        // Status ladder uses --error / --error-bg / --error-strong
+        // (June 2026 status ladder refinement) — but inverting the
+        // foreground color (use --error on --error-bg instead of
+        // --error-strong) was wrong because error-strong is
+        // significantly darker. This banner intentionally uses
+        // --error-strong on --error-bg because the banner is a
+        // callout, not a status pill.
+        <div
+          role="alert"
+          className="mb-6 p-4 rounded-xl border border-[var(--error)]/40 bg-[var(--error-bg)] text-[var(--error)] text-sm"
+        >
           <p className="font-medium">Could not load some telemetry.</p>
           <p className="text-xs mt-1 opacity-80">{error}</p>
         </div>

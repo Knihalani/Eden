@@ -1,6 +1,5 @@
 import type { NextConfig } from "next";
 import createNextIntlPlugin from "next-intl/plugin";
-import path from "node:path";
 
 // next-intl plugin wires `src/i18n/request.ts` into the build so the
 // message bundle is loaded server-side for every render. Without
@@ -8,26 +7,22 @@ import path from "node:path";
 // builds because the bundler tree-shakes the JSON imports.
 const withNextIntl = createNextIntlPlugin("./src/i18n/request.ts");
 
-// Pin Turbopack's workspace root to this package directory.
-//
-// Next.js 16 walks upward from CWD looking for lockfiles. When it
-// finds multiple (e.g. a stray `pnpm-lock.yaml` in the user's home
-// directory or another package's `bun.lock` higher up the tree) it
-// picks one and emits a "multiple lockfiles detected" warning —
-// and on the build server can pick the wrong one, causing
-// `bun install --frozen-lockfile` to fail with `LOCKFILE_DRIFT`.
-//
-// Locking the root to the absolute path of this config's directory
-// eliminates both the warning and the failure mode. See:
-// https://nextjs.org/docs/app/api-reference/config/next-config-js/turbopack#root-directory
-const portalRoot = path.resolve(process.cwd());
-
-// We intentionally do NOT set `outputFileTracingRoot` here. Setting it
-// to a string conflicts with Next 16's Turbopack trace logic on Vercel
-// and surfaces as
+// We intentionally do NOT set `turbopack.root` OR `outputFileTracingRoot`.
+// Setting either creates a path mismatch with Vercel's auto-injected
+// `outputFileTracingRoot=/vercel/path0`, which surfaces as:
 //
 //   ENOENT: no such file or directory, lstat
 //   '/vercel/path0/.next/routes-manifest-deterministic.json'
+//
+// AND silently drops routes from the build output (e.g. /docs, /tools,
+// /prompts) — Next.js prints the route table for static analysis but
+// the lambdas Vercel ships are missing them. The earlier fix on
+// 2026-07-06 (commit 175e3b7c) only removed `outputFileTracingRoot`
+// but kept `turbopack.root: portalRoot`, which still mismatches
+// Vercel's auto-injected value at deploy time. Removing both lets
+// Vercel's default `outputFileTracingRoot` win and keeps the route
+// table complete. Local dev and CI builds work the same without an
+// override.
 //
 // See https://github.com/vercel/vercel/issues/12415 — Vercel's build
 // worker expects the routes-manifest-deterministic.json to be written
@@ -37,9 +32,6 @@ const portalRoot = path.resolve(process.cwd());
 
 const nextConfig: NextConfig = {
   /* config options here */
-  turbopack: {
-    root: portalRoot,
-  },
   async redirects() {
     return [
       // Legacy /jobs URL renamed to /eval-harnesses.

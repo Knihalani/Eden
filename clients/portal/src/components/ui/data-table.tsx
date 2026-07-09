@@ -74,6 +74,11 @@ export interface DataTableProps<T> {
   emptyIcon?: LucideIcon;
   /** CTA rendered inside the empty state (e.g. "Create", "Run clustering"). */
   emptyAction?: React.ReactNode;
+  /** Forwarded to EmptyState. The `terminal` variant replaces the icon
+   *  with a "what data would look like" preview slot. */
+  emptyVariant?: "panel" | "plain" | "terminal";
+  /** Forwarded to EmptyState — mock log line, sparkline preview, etc. */
+  emptyTerminal?: React.ReactNode;
   // Sort
   defaultSort?: { key: string; direction: "asc" | "desc" };
   onSortChange?: (sort: { key: string; direction: "asc" | "desc" } | null) => void;
@@ -119,6 +124,8 @@ export function DataTable<T>({
   emptyDescription = "Nothing to show here yet.",
   emptyIcon,
   emptyAction,
+  emptyVariant,
+  emptyTerminal,
   defaultSort,
   onSortChange,
   pageSize = 25,
@@ -304,6 +311,8 @@ export function DataTable<T>({
                     description={emptyDescription}
                     size="sm"
                     action={emptyAction}
+                    variant={emptyVariant}
+                    terminal={emptyTerminal}
                     className="m-6"
                   />
                 </td>

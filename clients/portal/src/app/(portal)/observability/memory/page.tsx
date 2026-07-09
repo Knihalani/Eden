@@ -8,92 +8,68 @@ import { Alert } from "@/components/ui/alert";
 import { EmptyState } from "@/components/ui/empty-state";
 import { NoOrgState } from "@/components/ui/no-org-state";
 import { PageHeader } from "@/components/layout/page-header";
-import {
-  Tabs,
-  TabsList,
-  TabsTrigger,
-  TabsContent,
-} from "@/components/ui/tabs";
-import {
-  Archive,
-  Brain,
-  Combine,
-  Loader2,
-  Search,
-  TrendingDown,
-  Zap,
-} from "lucide-react";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { Archive, Brain, Combine, Loader2, Search, TrendingDown, Zap } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { DataTable } from "@/components/ui/data-table";
-
+import { Card } from "@/components/ui/card";
 const memoryApi = {
-  attribute: (orgId: string, traceId: string) =>
-    api.post<{ trace_id: string; memories: Array<{ memory_id: string; influence: number }>; }>(`/orgs/${orgId}/intelligence/memory/${traceId}/attribute`),
-  impact: (orgId: string, traceId: string) =>
-    api.post<{ trace_id: string; impact_score: number; components: Record<string, number>; }>(`/orgs/${orgId}/intelligence/memory/${traceId}/impact`),
-  reaverSuggest: (orgId: string) =>
-    api.post<{ suggestions: Array<{ memory_id: string; action: "merge" | "archive" | "demote"; reason: string }>; }>(`/orgs/${orgId}/intelligence/memory/reaver/suggest`),
+  attribute: (orgId: string, traceId: string) => api.post<{
+    trace_id: string;
+    memories: Array<{
+      memory_id: string;
+      influence: number;
+    }>;
+  }>(`/orgs/${orgId}/intelligence/memory/${traceId}/attribute`),
+  impact: (orgId: string, traceId: string) => api.post<{
+    trace_id: string;
+    impact_score: number;
+    components: Record<string, number>;
+  }>(`/orgs/${orgId}/intelligence/memory/${traceId}/impact`),
+  reaverSuggest: (orgId: string) => api.post<{
+    suggestions: Array<{
+      memory_id: string;
+      action: "merge" | "archive" | "demote";
+      reason: string;
+    }>;
+  }>(`/orgs/${orgId}/intelligence/memory/reaver/suggest`)
 };
-
 type SubTab = "attribution" | "impact" | "reaver";
-
 interface AttributionResult {
   trace_id: string;
-  memories: Array<{ memory_id: string; influence: number }>;
+  memories: Array<{
+    memory_id: string;
+    influence: number;
+  }>;
 }
-
 interface ImpactResult {
   trace_id: string;
   impact_score: number;
   components: Record<string, number>;
 }
-
 interface ReaverSuggestion {
   memory_id: string;
   action: "merge" | "archive" | "demote";
   reason: string;
 }
-
 export default function MemoryIntelligencePage() {
-  const { currentOrg } = useOrg();
+  const {
+    currentOrg
+  } = useOrg();
   const [activeTab, setActiveTab] = useState<SubTab>("attribution");
   const [error, setError] = useState("");
-
   if (!currentOrg) {
-    return (
-      <NoOrgState
-        icon={Brain}
-        feature="Memory Intelligence"
-        description="Memory attribution, impact scoring, and reweaver suggestions will appear once your organization is configured."
-      />
-    );
+    return <NoOrgState icon={Brain} feature="Memory Intelligence" description="Memory attribution, impact scoring, and reweaver suggestions will appear once your organization is configured." />;
   }
+  return <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-6">
+      <PageHeader title="Memory" subtitle="Episodic + semantic memory attribution and reweaving" icon={Brain} eyebrow="Observe" />
 
-  return (
-    <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-6">
-      <PageHeader
-        title="Memory"
-        subtitle="Episodic + semantic memory attribution and reweaving"
-        icon={Brain}
-        eyebrow="Observe"
-      />
+      {error && <Alert variant="error" title="Request failed" description={error} onDismiss={() => setError("")} />}
 
-      {error && (
-        <Alert
-          variant="error"
-          title="Request failed"
-          description={error}
-          onDismiss={() => setError("")}
-        />
-      )}
-
-      <Tabs
-        value={activeTab}
-        onValueChange={(v) => {
-          setActiveTab(v as SubTab);
-          setError("");
-        }}
-      >
+      <Tabs value={activeTab} onValueChange={v => {
+      setActiveTab(v as SubTab);
+      setError("");
+    }}>
         <TabsList variant="underline" className="border-b border-[var(--border-default)] w-full justify-start">
           <TabsTrigger value="attribution" variant="underline" className="flex items-center gap-2">
             <Search className="w-4 h-4" />
@@ -110,13 +86,18 @@ export default function MemoryIntelligencePage() {
         </TabsList>
 
         <AnimatePresence mode="wait">
-          <motion.div
-            key={activeTab}
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -6 }}
-            transition={{ duration: 0.2 }}
-          >
+          <motion.div key={activeTab} initial={{
+          opacity: 0,
+          y: 8
+        }} animate={{
+          opacity: 1,
+          y: 0
+        }} exit={{
+          opacity: 0,
+          y: -6
+        }} transition={{
+          duration: 0.2
+        }}>
             <TabsContent value="attribution" className="mt-6">
               <AttributionTab orgId={currentOrg.id} setError={setError} />
             </TabsContent>
@@ -129,13 +110,11 @@ export default function MemoryIntelligencePage() {
           </motion.div>
         </AnimatePresence>
       </Tabs>
-    </div>
-  );
+    </div>;
 }
-
 function AttributionTab({
   orgId,
-  setError,
+  setError
 }: {
   orgId: string;
   setError: (e: string) => void;
@@ -143,7 +122,6 @@ function AttributionTab({
   const [traceId, setTraceId] = useState("");
   const [result, setResult] = useState<AttributionResult | null>(null);
   const [loading, setLoading] = useState(false);
-
   async function handleRun() {
     if (!traceId.trim()) return;
     setLoading(true);
@@ -158,99 +136,66 @@ function AttributionTab({
       setLoading(false);
     }
   }
-
-  return (
-    <div className="space-y-4">
-      <div className="bg-[var(--bg-primary)] border border-[var(--border-default)] rounded-xl p-5">
+  return <div className="space-y-4">
+      <Card padding="lg">
         <h3 className="text-sm font-semibold text-[var(--text-primary)] mb-3 flex items-center gap-2">
           <Search className="w-4 h-4 text-[var(--accent)]" />
           Trace attribution
         </h3>
         <div className="flex flex-col sm:flex-row gap-3">
-          <input
-            type="text"
-            value={traceId}
-            onChange={(e) => setTraceId(e.target.value)}
-            placeholder="Enter trace ID..."
-            className="flex-1 px-3 py-2 bg-[var(--bg-secondary)] border border-[var(--border-default)] rounded-lg text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)]"
-          />
-          <button
-            onClick={handleRun}
-            disabled={loading || !traceId.trim()}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-[var(--accent)] text-[var(--bg-base)] rounded-lg text-sm font-medium hover:bg-[var(--accent-hover)] disabled:opacity-50 transition-colors"
-          >
+          <input type="text" value={traceId} onChange={e => setTraceId(e.target.value)} placeholder="Enter trace ID..." className="flex-1 px-3 py-2 bg-[var(--bg-secondary)] border border-[var(--border-default)] rounded-lg text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)]" />
+          <button onClick={handleRun} disabled={loading || !traceId.trim()} className="inline-flex items-center gap-2 px-4 py-2 bg-[var(--accent)] text-[var(--bg-base)] rounded-lg text-sm font-medium hover:bg-[var(--accent-hover)] disabled:opacity-50 transition-colors">
             {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Brain className="w-4 h-4" />}
             Attribute
           </button>
         </div>
-      </div>
+      </Card>
 
-      {loading && (
-        <div className="flex items-center justify-center py-12">
+      {loading && <div className="flex items-center justify-center py-12">
           <Loader2 className="w-6 h-6 animate-spin text-[var(--accent)]" />
-        </div>
-      )}
+        </div>}
 
-      {result && (
-        <motion.div
-          initial={{ opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="space-y-3"
-        >
-          <div className="bg-[var(--bg-primary)] border border-[var(--border-default)] rounded-xl p-5">
+      {result && <motion.div initial={{
+      opacity: 0,
+      y: 8
+    }} animate={{
+      opacity: 1,
+      y: 0
+    }} className="space-y-3">
+          <Card padding="lg">
             <h3 className="text-sm font-semibold text-[var(--text-primary)] mb-3">
               Memories that influenced this trace
             </h3>
-            {result.memories.length === 0 ? (
-              <p className="text-xs text-[var(--text-muted)]">
+            {result.memories.length === 0 ? <p className="text-xs text-[var(--text-muted)]">
                 No memories influenced this trace.
-              </p>
-            ) : (
-              <ul className="space-y-2">
-                {result.memories.map((m) => (
-                  <li
-                    key={m.memory_id}
-                    className="flex items-center gap-3 p-2.5 rounded-lg bg-[var(--bg-secondary)]"
-                  >
+              </p> : <ul className="space-y-2">
+                {result.memories.map(m => <li key={m.memory_id} className="flex items-center gap-3 p-2.5 rounded-lg bg-[var(--bg-secondary)]">
                     <span className="font-mono text-xs text-[var(--text-primary)] flex-1 truncate">
                       {m.memory_id}
                     </span>
                     <div className="w-40 flex-shrink-0">
                       <div className="h-2 bg-[var(--bg-tertiary)] rounded-full overflow-hidden">
-                        <div
-                          className="h-full bg-[var(--accent)] rounded-full"
-                          style={{ width: `${Math.max(0, Math.min(1, m.influence)) * 100}%` }}
-                        />
+                        <div className="h-full bg-[var(--accent)] rounded-full" style={{
+                  width: `${Math.max(0, Math.min(1, m.influence)) * 100}%`
+                }} />
                       </div>
                     </div>
                     <span className="text-xs text-[var(--text-muted)] w-12 text-right tabular-nums">
                       {(m.influence * 100).toFixed(0)}%
                     </span>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-        </motion.div>
-      )}
+                  </li>)}
+              </ul>}
+          </Card>
+        </motion.div>}
 
-      {!result && !loading && (
-        <div className="bg-[var(--bg-primary)] border border-[var(--border-default)] rounded-xl">
-          <EmptyState
-            icon={Brain}
-            title="Enter a trace ID"
-            description="See which memories contributed to a response"
-            size="md"
-          />
-        </div>
-      )}
-    </div>
-  );
+      {!result && !loading && <Card padding="lg">
+          <EmptyState icon={Brain} title="Enter a trace ID" description="See which memories contributed to a response" size="md" />
+        </Card>}
+    </div>;
 }
-
 function ImpactTab({
   orgId,
-  setError,
+  setError
 }: {
   orgId: string;
   setError: (e: string) => void;
@@ -258,7 +203,6 @@ function ImpactTab({
   const [traceId, setTraceId] = useState("");
   const [result, setResult] = useState<ImpactResult | null>(null);
   const [loading, setLoading] = useState(false);
-
   async function handleRun() {
     if (!traceId.trim()) return;
     setLoading(true);
@@ -273,137 +217,88 @@ function ImpactTab({
       setLoading(false);
     }
   }
-
-  const componentEntries = result
-    ? Object.entries(result.components).sort((a, b) => b[1] - a[1])
-    : [];
-
-  return (
-    <div className="space-y-4">
-      <div className="bg-[var(--bg-primary)] border border-[var(--border-default)] rounded-xl p-5">
+  const componentEntries = result ? Object.entries(result.components).sort((a, b) => b[1] - a[1]) : [];
+  return <div className="space-y-4">
+      <Card padding="lg">
         <h3 className="text-sm font-semibold text-[var(--text-primary)] mb-3 flex items-center gap-2">
           <Zap className="w-4 h-4 text-[var(--accent)]" />
           Trace impact score
         </h3>
         <div className="flex flex-col sm:flex-row gap-3">
-          <input
-            type="text"
-            value={traceId}
-            onChange={(e) => setTraceId(e.target.value)}
-            placeholder="Enter trace ID..."
-            className="flex-1 px-3 py-2 bg-[var(--bg-secondary)] border border-[var(--border-default)] rounded-lg text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)]"
-          />
-          <button
-            onClick={handleRun}
-            disabled={loading || !traceId.trim()}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-[var(--accent)] text-[var(--bg-base)] rounded-lg text-sm font-medium hover:bg-[var(--accent-hover)] disabled:opacity-50 transition-colors"
-          >
+          <input type="text" value={traceId} onChange={e => setTraceId(e.target.value)} placeholder="Enter trace ID..." className="flex-1 px-3 py-2 bg-[var(--bg-secondary)] border border-[var(--border-default)] rounded-lg text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)]" />
+          <button onClick={handleRun} disabled={loading || !traceId.trim()} className="inline-flex items-center gap-2 px-4 py-2 bg-[var(--accent)] text-[var(--bg-base)] rounded-lg text-sm font-medium hover:bg-[var(--accent-hover)] disabled:opacity-50 transition-colors">
             {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Zap className="w-4 h-4" />}
             Score
           </button>
         </div>
-      </div>
+      </Card>
 
-      {loading && (
-        <div className="flex items-center justify-center py-12">
+      {loading && <div className="flex items-center justify-center py-12">
           <Loader2 className="w-6 h-6 animate-spin text-[var(--accent)]" />
-        </div>
-      )}
+        </div>}
 
-      {result && (
-        <motion.div
-          initial={{ opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="space-y-4"
-        >
-          <div className="bg-[var(--bg-primary)] border border-[var(--border-default)] rounded-xl p-5">
+      {result && <motion.div initial={{
+      opacity: 0,
+      y: 8
+    }} animate={{
+      opacity: 1,
+      y: 0
+    }} className="space-y-4">
+          <Card padding="lg">
             <div className="flex items-center justify-between mb-3">
               <h3 className="text-sm font-semibold text-[var(--text-primary)]">
                 Impact score
               </h3>
-              <span
-                className={cn(
-                  "text-2xl font-bold",
-                  result.impact_score > 0.7
-                    ? "text-[var(--terminal)]"
-                    : result.impact_score > 0.4
-                      ? "text-[var(--warning)]"
-                      : "text-[var(--text-muted)]"
-                )}
-              >
+              <span className={cn("text-2xl font-bold", result.impact_score > 0.7 ? "text-[var(--terminal)]" : result.impact_score > 0.4 ? "text-[var(--warning)]" : "text-[var(--text-muted)]")}>
                 {(result.impact_score * 100).toFixed(1)}%
               </span>
             </div>
             <div className="h-3 bg-[var(--bg-tertiary)] rounded-full overflow-hidden">
-              <div
-                className={cn(
-                  "h-full rounded-full transition-all",
-                  result.impact_score > 0.7
-                    ? "bg-[var(--terminal)]"
-                    : result.impact_score > 0.4
-                      ? "bg-[var(--warning)]"
-                      : "bg-[var(--text-muted)]"
-                )}
-                style={{ width: `${Math.max(0, Math.min(1, result.impact_score)) * 100}%` }}
-              />
+              <div className={cn("h-full rounded-full transition-all", result.impact_score > 0.7 ? "bg-[var(--terminal)]" : result.impact_score > 0.4 ? "bg-[var(--warning)]" : "bg-[var(--text-muted)]")} style={{
+            width: `${Math.max(0, Math.min(1, result.impact_score)) * 100}%`
+          }} />
             </div>
-          </div>
+          </Card>
 
-          {componentEntries.length > 0 && (
-            <div className="bg-[var(--bg-primary)] border border-[var(--border-default)] rounded-xl p-5">
+          {componentEntries.length > 0 && <Card padding="lg">
               <h3 className="text-sm font-semibold text-[var(--text-primary)] mb-3">
                 Component breakdown
               </h3>
               <ul className="space-y-2">
                 {componentEntries.map(([name, value]) => {
-                  const pct = Math.max(0, Math.min(1, value));
-                  return (
-                    <li key={name} className="flex items-center gap-3">
+            const pct = Math.max(0, Math.min(1, value));
+            return <li key={name} className="flex items-center gap-3">
                       <span className="text-xs text-[var(--text-secondary)] w-32 flex-shrink-0 truncate">
                         {name.replace(/_/g, " ")}
                       </span>
                       <div className="flex-1 h-2.5 bg-[var(--bg-tertiary)] rounded-full overflow-hidden">
-                        <div
-                          className="h-full bg-[var(--accent)] rounded-full"
-                          style={{ width: `${pct * 100}%` }}
-                        />
+                        <div className="h-full bg-[var(--accent)] rounded-full" style={{
+                  width: `${pct * 100}%`
+                }} />
                       </div>
                       <span className="text-xs text-[var(--text-muted)] w-12 text-right tabular-nums">
                         {(pct * 100).toFixed(0)}%
                       </span>
-                    </li>
-                  );
-                })}
+                    </li>;
+          })}
               </ul>
-            </div>
-          )}
-        </motion.div>
-      )}
+            </Card>}
+        </motion.div>}
 
-      {!result && !loading && (
-        <div className="bg-[var(--bg-primary)] border border-[var(--border-default)] rounded-xl">
-          <EmptyState
-            icon={Zap}
-            title="Enter a trace ID"
-            description="See the composite impact score and component breakdown for a trace"
-            size="md"
-          />
-        </div>
-      )}
-    </div>
-  );
+      {!result && !loading && <Card padding="lg">
+          <EmptyState icon={Zap} title="Enter a trace ID" description="See the composite impact score and component breakdown for a trace" size="md" />
+        </Card>}
+    </div>;
 }
-
 function ReaverTab({
   orgId,
-  setError,
+  setError
 }: {
   orgId: string;
   setError: (e: string) => void;
 }) {
   const [suggestions, setSuggestions] = useState<ReaverSuggestion[]>([]);
   const [loading, setLoading] = useState(false);
-
   const load = useCallback(async () => {
     setLoading(true);
     setError("");
@@ -416,94 +311,70 @@ function ReaverTab({
       setLoading(false);
     }
   }, [orgId, setError]);
-
   useEffect(() => {
     load();
   }, [load]);
-
-  return (
-    <div className="space-y-4">
+  return <div className="space-y-4">
       <div className="flex items-center justify-between">
         <p className="text-xs text-[var(--text-muted)]">
           Reweaver suggestions — merge duplicates, archive dead memories, demote low-influence ones
         </p>
-        <button
-          onClick={load}
-          disabled={loading}
-          className="inline-flex items-center gap-2 px-3 py-1.5 bg-[var(--bg-tertiary)] text-[var(--text-primary)] rounded-lg text-xs font-medium hover:bg-[var(--border-default)] disabled:opacity-50 transition-colors"
-        >
+        <button onClick={load} disabled={loading} className="inline-flex items-center gap-2 px-3 py-1.5 bg-[var(--bg-tertiary)] text-[var(--text-primary)] rounded-lg text-xs font-medium hover:bg-[var(--border-default)] disabled:opacity-50 transition-colors">
           {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Combine className="w-3.5 h-3.5" />}
           Refresh
         </button>
       </div>
 
-      {loading && suggestions.length === 0 ? (
-        <div className="flex items-center justify-center py-20">
+      {loading && suggestions.length === 0 ? <div className="flex items-center justify-center py-20">
           <Loader2 className="w-8 h-8 animate-spin text-[var(--accent)]" />
-        </div>
-      ) : (
-        <div className="bg-[var(--bg-primary)] border border-[var(--border-default)] rounded-xl overflow-hidden">
-          <DataTable
-            columns={[
-              {
-                key: "memory_id",
-                header: "Memory ID",
-                sortable: true,
-                cell: (s) => <span className="font-mono text-xs text-[var(--text-primary)]">{s.memory_id}</span>,
-              },
-              {
-                key: "action",
-                header: "Action",
-                sortable: true,
-                cell: (s) => <ActionBadge action={s.action} />,
-              },
-              {
-                key: "reason",
-                header: "Reason",
-                cell: (s) => <span className="text-[var(--text-secondary)] text-xs">{s.reason}</span>,
-              },
-            ]}
-            rows={suggestions}
-            rowKey={(s) => s.memory_id}
-            loading={loading}
-            defaultSort={{ key: "action", direction: "asc" }}
-            emptyTitle="No reweaver suggestions"
-            emptyDescription="Your memory store is already clean — nothing to merge, archive, or demote"
-            emptyIcon={Combine}
-            pageSize={25}
-          />
-        </div>
-      )}
-    </div>
-  );
+        </div> : <Card padding="lg" className="overflow-hidden">
+          <DataTable columns={[{
+        key: "memory_id",
+        header: "Memory ID",
+        sortable: true,
+        cell: s => <span className="font-mono text-xs text-[var(--text-primary)]">{s.memory_id}</span>
+      }, {
+        key: "action",
+        header: "Action",
+        sortable: true,
+        cell: s => <ActionBadge action={s.action} />
+      }, {
+        key: "reason",
+        header: "Reason",
+        cell: s => <span className="text-[var(--text-secondary)] text-xs">{s.reason}</span>
+      }]} rows={suggestions} rowKey={s => s.memory_id} loading={loading} defaultSort={{
+        key: "action",
+        direction: "asc"
+      }} emptyTitle="No reweaver suggestions" emptyDescription="Your memory store is already clean — nothing to merge, archive, or demote" emptyIcon={Combine} pageSize={25} />
+        </Card>}
+    </div>;
 }
-
-function ActionBadge({ action }: { action: ReaverSuggestion["action"] }) {
-  const map: Record<ReaverSuggestion["action"], { classes: string; icon: typeof Combine }> = {
+function ActionBadge({
+  action
+}: {
+  action: ReaverSuggestion["action"];
+}) {
+  const map: Record<ReaverSuggestion["action"], {
+    classes: string;
+    icon: typeof Combine;
+  }> = {
     merge: {
       classes: "bg-[var(--accent-faint)] text-[var(--accent)]",
-      icon: Combine,
+      icon: Combine
     },
     archive: {
       classes: "bg-[var(--bg-tertiary)] text-[var(--text-secondary)]",
-      icon: Archive,
+      icon: Archive
     },
     demote: {
       classes: "bg-[var(--warning-bg)] text-[var(--warning)]",
-      icon: TrendingDown,
-    },
+      icon: TrendingDown
+    }
   };
   const cfg = map[action] || map.archive;
   const Icon = cfg.icon;
-  return (
-    <span
-      className={cn(
-        "inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full font-medium",
-        cfg.classes
-      )}
-    >
+  return <span className={cn("inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full font-medium", cfg.classes)}>
       <Icon className="w-3 h-3" />
       {action}
-    </span>
-  );
+    </span>;
 }
