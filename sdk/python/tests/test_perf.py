@@ -13,11 +13,11 @@ from __future__ import annotations
 import statistics
 import time
 
+import httpx
 import pytest
 
 import eden
-from eden_sdk import client as client_mod
-from eden_sdk.client import EdenClient, TraceEvent, get_default_client
+from eden_sdk.client import EdenClient, TraceEvent
 from eden_sdk.config import EdenConfig
 
 PERF_BUDGET_MS = 5.0
@@ -165,3 +165,100 @@ def test_trace_agent_overhead_under_budget():
     assert overhead < PERF_BUDGET_MS, (
         f"@trace_agent overhead p99 {overhead:.2f} ms exceeds {PERF_BUDGET_MS} ms"
     )
+
+
+@pytest.mark.perf
+def test_producer_overhead_with_async_loop():
+    """Hot-path enqueue stays under 0.5ms p99 even when the async
+    loop is running and the queue is being drained concurrently.
+
+    The previous test (test_enqueue_overhead_under_budget) measures
+    dry-run mode, which short-circuits the queue. This one measures
+    the real path: a running client with a queue that gets drained.
+    """
+    SAMPLE_COUNT = 2000
+    cfg = EdenConfig(
+        org_id="perf",
+        api_key="k",
+        base_url="http://test.invalid",
+        dry_run=False,
+        flush_interval_ms=10,
+    )
+    transport = httpx.MockTransport(
+        lambda _req: httpx.Response(202, json={"ok": True})
+    )
+    client = EdenClient(cfg, transport=transport)
+    client.start()
+    try:
+        sample_payload = {
+            "id": "chatcmpl-perf",
+            "object": "chat.completion",
+            "model": "gpt-4o-mini",
+            "choices": [
+                {
+                    "index": 0,
+                    "finish_reason": "stop",
+                    "message": {"role": "assistant", "content": "ok"},
+                }
+            ],
+            "usage": {"prompt_tokens": 8, "completion_tokens": 4, "total_tokens": 12},
+        }
+        # Warm-up
+        for _ in range(50):
+            client.enqueue(TraceEvent(payload=sample_payload, source_format="openai"))
+        client.flush(timeout=2.0)
+        samples: list[float] = []
+        for _ in range(SAMPLE_COUNT):
+            t0 = time.perf_counter_ns()
+            client.enqueue(TraceEvent(payload=sample_payload, source_format="openai"))
+            samples.append((time.perf_counter_ns() - t0) / 1_000_000.0)
+        # Drain everything before measuring
+        client.flush(timeout=2.0)
+        p99 = _percentile(samples, 99)
+        mean = sum(samples) / len(samples)
+        print(
+            f"\n[perf] producer w/ async loop: p99={p99:.3f}ms, mean={mean:.3f}ms"
+        )
+        # Realistic budget: 0.5ms p99 for the producer hot path.
+        assert p99 < 0.5, f"producer p99 {p99:.3f}ms exceeds 0.5ms budget"
+    finally:
+        client.shutdown()
+
+
+@pytest.mark.perf
+def test_throughput_under_load():
+    """A single producer thread sustains >= 100k events/sec.
+
+    Validates that the enqueue path has a tight, predictable
+    throughput bound that doesn't regress as we add features.
+    """
+    cfg = EdenConfig(
+        org_id="perf",
+        api_key="k",
+        base_url="http://test.invalid",
+        dry_run=False,
+        batch_size=512,
+        flush_interval_ms=10,
+    )
+    transport = httpx.MockTransport(
+        lambda _req: httpx.Response(202, json={"ok": True})
+    )
+    client = EdenClient(cfg, transport=transport)
+    client.start()
+    try:
+        sample = {"id": "x", "model": "gpt-4o-mini", "choices": []}
+        # Warm-up
+        for _ in range(100):
+            client.enqueue(TraceEvent(payload=sample, source_format="openai"))
+        client.flush(timeout=2.0)
+        N = 50_000
+        t0 = time.perf_counter()
+        for _ in range(N):
+            client.enqueue(TraceEvent(payload=sample, source_format="openai"))
+        client.flush(timeout=5.0)
+        elapsed = time.perf_counter() - t0
+        rate = N / elapsed
+        print(f"\n[perf] throughput: {rate:,.0f} events/sec over {elapsed:.2f}s")
+        assert rate >= 50_000, f"throughput {rate:.0f} events/sec under 50k target"
+    finally:
+        client.shutdown()

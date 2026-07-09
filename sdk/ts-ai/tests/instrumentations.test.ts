@@ -9,6 +9,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+import { wireToEvent } from "../src/wire.js";
 import { resetDefaultClient, getDefaultClient } from "../src/client.js";
 import { configure } from "../src/trace.js";
 import { wrapOpenAI } from "../src/instrumentations/openai.js";
@@ -80,6 +81,12 @@ describe("wrapOpenAI", () => {
     expect(completion?.payload.provider).toBe("openai");
     expect(completion?.payload.model).toBe("gpt-4o-mini");
     expect(completion?.payload.status).toBe("success");
+    // Non-streaming should normalize usage into the metrics block
+    // the same way the streaming path does.
+    const metrics = (completion?.metrics ?? {}) as Record<string, number>;
+    expect(metrics.input_tokens).toBe(5);
+    expect(metrics.output_tokens).toBe(1);
+    expect(completion?.modelNormalized).toBe("gpt-4o-mini");
   });
 
   it("emits llm_completion_stream for streaming calls", async () => {
@@ -167,6 +174,145 @@ describe("wrapAnthropic", () => {
     expect(completion?.sourceFormat).toBe("anthropic");
     expect(completion?.payload.provider).toBe("anthropic");
   });
+
+  it("non-streaming emit captures usage into metrics (input/output/cache tokens)", async () => {
+    // Regression: the Anthropic non-streaming path used to
+    // emit a payload with only ``model`` + ``duration_ms`` and
+    // no usage metrics, so callers saw ``null`` token counts on
+    // every non-streaming call. The OpenAI fix shipped in 0.2.14
+    // was never mirrored on Anthropic.
+    const fakeClient = _fakeAnthropicClient({
+      message: {
+        id: "msg_usage",
+        model: "claude-3-5-sonnet-20241022",
+        content: [{ type: "text", text: "ok" }],
+        stop_reason: "end_turn",
+        usage: {
+          input_tokens: 17,
+          output_tokens: 9,
+          cache_read_input_tokens: 200,
+          cache_creation_input_tokens: 100,
+        },
+      },
+    });
+    const wrapped = wrapAnthropic(fakeClient);
+    await wrapped.messages.create({
+      model: "claude-3-5-sonnet-20241022",
+      max_tokens: 64,
+      messages: [{ role: "user", content: "u" }],
+    });
+    await getDefaultClient().flush();
+    const events = _flattenEvents();
+    const completion = events.find((e) => e.eventType === "llm_completion");
+    expect(completion).toBeDefined();
+    const metrics = (completion as any).metrics ?? {};
+    expect(metrics.input_tokens).toBe(17);
+    expect(metrics.output_tokens).toBe(9);
+    expect(metrics.cache_read_input_tokens).toBe(200);
+    expect(metrics.cache_creation_input_tokens).toBe(100);
+  });
+
+  it("non-streaming emit sets modelNormalized from the request model", async () => {
+    // Regression: the Anthropic non-streaming path didn't set
+    // ``modelNormalized`` (only the streaming path did). Pricing
+    // rollups depend on this field being populated for every emit.
+    const fakeClient = _fakeAnthropicClient({
+      message: {
+        id: "msg_norm",
+        model: "claude-3-5-sonnet-20241022",
+        content: [{ type: "text", text: "ok" }],
+        stop_reason: "end_turn",
+        usage: { input_tokens: 1, output_tokens: 1 },
+      },
+    });
+    const wrapped = wrapAnthropic(fakeClient);
+    await wrapped.messages.create({
+      model: "claude-3-5-sonnet-20241022",
+      max_tokens: 64,
+      messages: [{ role: "user", content: "u" }],
+    });
+    await getDefaultClient().flush();
+    const events = _flattenEvents();
+    const completion = events.find((e) => e.eventType === "llm_completion");
+    expect((completion as any)?.modelNormalized).toBe("claude-3-5-sonnet");
+  });
+
+  it("streaming emit buffers per-chunk events to /ingest/chunks (parity with OpenAI)", async () => {
+    // Regression: the TS Anthropic streaming path used to only
+    // emit the aggregate ``llm_completion_stream`` event and
+    // never push per-chunk events to ``/ingest/chunks``. The
+    // OpenAI path does (see wrapOpenAI per-chunk test below),
+    // and the Python SDK does — so TS Anthropic was the odd one
+    // out, and the per-chunk TPOT / ITL dashboards rendered
+    // empty for every Anthropic stream.
+    const localCaptured: Array<{ url: string; body: any }> = [];
+    globalThis.fetch = (async (url: RequestInfo | URL, init?: RequestInit) => {
+      const u = String(url);
+      let body: any = {};
+      try { body = init?.body ? JSON.parse(init.body as string) : {}; } catch {}
+      localCaptured.push({ url: u, body });
+      return new Response("{}", { status: 200 });
+    }) as unknown as typeof fetch;
+
+    // Fake Anthropic streaming client: emits a ``message_start``,
+    // two ``content_block_delta``s with text, and a
+    // ``message_delta`` with stop_reason. The wrapper should
+    // buffer every event into ``chunkBuffer`` and flush them to
+    // ``/ingest/chunks`` on the same tick as the aggregate emit.
+    const fakeClient: any = {
+      messages: {
+        create: async (_args: any) => {
+          return (async function* () {
+            yield { type: "message_start", message: { model: "claude-3-5-sonnet-20241022", usage: { input_tokens: 4 } } };
+            yield {
+              type: "content_block_delta",
+              index: 0,
+              delta: { type: "text_delta", text: "Hi" },
+            };
+            yield {
+              type: "content_block_delta",
+              index: 0,
+              delta: { type: "text_delta", text: " there" },
+            };
+            yield {
+              type: "message_delta",
+              delta: { stop_reason: "end_turn" },
+              usage: { output_tokens: 2 },
+            };
+          })();
+        },
+      },
+    };
+    const wrapped = wrapAnthropic(fakeClient);
+    const stream = await wrapped.messages.create({
+      model: "claude-3-5-sonnet-20241022",
+      max_tokens: 64,
+      messages: [{ role: "user", content: "hi" }],
+      stream: true,
+    });
+    for await (const _ of stream) { /* drain */ }
+    await getDefaultClient().flush();
+    await getDefaultClient().flushChunks();
+    await new Promise((r) => setTimeout(r, 50));
+
+    const chunkPosts = localCaptured.filter(
+      (c) => c.url.includes("/ingest/chunks") && Array.isArray(c.body?.chunks)
+    );
+    const allChunks = chunkPosts.flatMap((c) => c.body.chunks);
+    // 4 events → 4 chunk-buffer pushes.
+    expect(allChunks.length).toBe(4);
+    // text_delta chunks expose ``delta_text``; non-text events
+    // push null (the wrapper still buffers them so the gateway
+    // can reconstruct timing).
+    const textChunks = allChunks.filter((c: any) => c.delta_text);
+    expect(textChunks.length).toBe(2);
+    expect(textChunks[0].delta_text).toBe("Hi");
+    expect(textChunks[1].delta_text).toBe(" there");
+    // Every chunk is in the same ``trace_id`` family and has an
+    // incrementing ``chunk_index`` from 0.
+    expect(new Set(allChunks.map((c: any) => c.trace_id)).size).toBe(1);
+    expect(allChunks.map((c: any) => c.chunk_index)).toEqual([0, 1, 2, 3]);
+  });
 });
 
 // ── Vercel AI ─────────────────────────────────────────────────────
@@ -252,7 +398,11 @@ function _flattenEvents(): TelemetryEvent[] {
   const events: TelemetryEvent[] = [];
   for (const req of captured) {
     if (Array.isArray(req.body)) {
-      events.push(...(req.body as TelemetryEvent[]));
+      // The client translates the TS SDK's camelCase types to the
+      // server's snake_case schema at the wire boundary. Translate
+      // back to camelCase here so the test assertions can keep
+      // matching the SDK's internal type names.
+      events.push(...(req.body as Record<string, unknown>[]).map((w) => wireToEvent(w) as unknown as TelemetryEvent));
     } else if (req.body && typeof req.body === "object") {
       const b = req.body as { chunks?: unknown };
       if (b.chunks) {
@@ -294,3 +444,107 @@ function _fakeAnthropicClient(opts: { message?: any }): any {
     },
   };
 }
+
+
+describe("wrapOpenAI per-chunk tpotMs semantics", () => {
+  // Regression: tpotMs used to be ``(now - start) / chunkCount``,
+  // which is actually the average inter-chunk arrival time. The
+  // server's ``tpot_ms_p50`` / ``tpot_ms_p95`` percentile dashboards
+  // read the per-chunk value directly, so a mislabel propagated
+  // into the dashboard. The fix sets tpotMs to the actual time
+  // per output token for the chunk (inter-chunk time divided by
+  // tokens in the chunk, approximated as ``ceil(len/4)``), and
+  // emits ``null`` for chunks with no text (finish_reason /
+  // usage chunks).
+  it("text chunks emit tpotMs as ms per token, non-text chunks emit null", async () => {
+    // Override the default capture (set by beforeEach) with one
+    // that ALSO returns a streaming response for /chat/completions.
+    const localCaptured: Array<{ url: string; body: any }> = [];
+    globalThis.fetch = (async (url: RequestInfo | URL, init?: RequestInit) => {
+      const u = String(url);
+      let body: any = {};
+      try { body = init?.body ? JSON.parse(init.body as string) : {}; } catch {}
+      localCaptured.push({ url: u, body });
+      if (u.includes("/chat/completions") && init?.method === "POST") {
+        const stream = [
+          'data: {"id":"a","choices":[{"index":0,"delta":{"content":"Hi"}}]}\n\n',
+          'data: {"id":"b","choices":[{"index":0,"delta":{"content":" there"}}]}\n\n',
+          'data: {"id":"c","choices":[{"index":0,"delta":{},"finish_reason":"stop"}],"usage":{"prompt_tokens":1,"completion_tokens":2}}\n\n',
+          'data: [DONE]\n\n',
+        ].join("");
+        return new Response(stream, {
+          status: 200,
+          headers: { "content-type": "text/event-stream" },
+        });
+      }
+      return new Response("{}", { status: 200 });
+    }) as unknown as typeof fetch;
+
+    // Use a fake OpenAI client (avoids needing real OpenAI SDK
+    // streaming parsing — the fake just hands back the stream
+    // response directly to the wrapper).
+    const fakeClient = {
+      chat: {
+        completions: {
+          create: async (..._args: any[]) => {
+            // Return a fetch-response-like object that the
+            // openai SDK streaming parser would normally turn
+            // into a Stream. To keep this test minimal we instead
+            // exercise the wrapper at the point it iterates the
+            // stream — so return an async iterable directly.
+            return (async function* () {
+              // Realistic streaming has ms between chunks. Without
+              // these delays ``Date.now()`` reports the same value
+              // across synchronous yields and the per-chunk TPOT
+              // (ms-per-token) collapses to 0 — which is not what
+              // a real provider does. The delays keep the fake
+              // generator faithful to the timing semantics the
+              // tpotMs regression test is guarding.
+              yield { id: "a", choices: [{ index: 0, delta: { content: "Hi" } }] };
+              await new Promise((r) => setTimeout(r, 2));
+              yield { id: "b", choices: [{ index: 0, delta: { content: " there" } }] };
+              await new Promise((r) => setTimeout(r, 2));
+              yield {
+                id: "c",
+                choices: [{ index: 0, delta: {}, finish_reason: "stop" }],
+                usage: { prompt_tokens: 1, completion_tokens: 2 },
+              };
+            })();
+          },
+        },
+      },
+    };
+    const wrapped = wrapOpenAI(fakeClient);
+    const stream = await wrapped.chat.completions.create({
+      model: "gpt-4o", messages: [{ role: "user", content: "x" }], stream: true,
+    });
+    for await (const _ of stream) { /* drain */ }
+    await getDefaultClient().flush();
+    await getDefaultClient().flushChunks();
+    await new Promise((r) => setTimeout(r, 50));
+
+    const chunkPosts = localCaptured.filter(
+      (c) => c.url.includes("/ingest/chunks") && Array.isArray(c.body?.chunks)
+    );
+    const allChunks = chunkPosts.flatMap((c) => c.body.chunks);
+    expect(allChunks.length).toBe(3);
+    // Wire body is snake_case (translation happens in postChunks).
+    const textChunks = allChunks.filter((c: any) => c.delta_text);
+    expect(textChunks.length).toBe(2);
+    // First text chunk has no prior chunk to compute interval
+    // from — ``tpotMs`` is legitimately ``null``. Every subsequent
+    // text chunk must be a positive ms-per-token number (the
+    // regression being guarded: the old code emitted ``0`` or the
+    // average inter-chunk arrival time, never a real per-token ms).
+    expect(textChunks[0].tpot_ms).toBeNull();
+    for (const c of textChunks.slice(1)) {
+      expect(typeof c.tpot_ms).toBe("number");
+      expect(c.tpot_ms).toBeGreaterThan(0);
+    }
+    // Finish-reason / usage chunks have no delta text — tpotMs
+    // must be null, not a misleading zero or aggregate value.
+    const noTextChunks = allChunks.filter((c: any) => !c.delta_text);
+    expect(noTextChunks.length).toBe(1);
+    expect(noTextChunks[0].tpot_ms).toBeNull();
+  });
+});

@@ -193,3 +193,217 @@ describe("resolvedGatewayUrl", () => {
 afterEach(() => {
   resetDefaultClient();
 });
+
+// ── Client-side safety-net redactor ───────────────────────────────
+
+import { redactPayload } from "../src/filters.js";
+
+describe("redactPayload", () => {
+  it("redacts emails", () => {
+    const out = redactPayload("contact alice@example.com today") as string;
+    expect(out).toBe("contact [REDACTED] today");
+  });
+
+  it("redacts US phone numbers", () => {
+    const out = redactPayload("call (415) 555-2671 anytime") as string;
+    expect(out).toBe("call [REDACTED] anytime");
+  });
+
+  it("redacts SSNs", () => {
+    const out = redactPayload("SSN 123-45-6789 was on file") as string;
+    expect(out).toBe("SSN [REDACTED] was on file");
+  });
+
+  it("redacts credit cards", () => {
+    const out = redactPayload("card 4111 1111 1111 1111 used") as string;
+    expect(out).toContain("[REDACTED]");
+    expect(out).not.toContain("4111 1111 1111 1111");
+  });
+
+  it("recurses into nested structures", () => {
+    const payload = {
+      messages: [
+        { role: "user", content: "ping alice@example.com" },
+        { role: "assistant", content: "ok" },
+      ],
+      metadata: { notes: "ssn 111-22-3333" },
+    };
+    const out = redactPayload(payload) as typeof payload;
+    expect(out.messages[0].content).toBe("ping [REDACTED]");
+    expect(out.messages[0].role).toBe("user");
+    expect(out.metadata.notes).toBe("ssn [REDACTED]");
+  });
+
+  it("does not mutate the original", () => {
+    const original = { text: "alice@example.com" };
+    redactPayload(original);
+    expect(original.text).toBe("alice@example.com");
+  });
+
+  it("leaves non-string scalars unchanged", () => {
+    const out = redactPayload({ n: 42, f: 3.14, b: true, none: null });
+    expect(out).toEqual({ n: 42, f: 3.14, b: true, none: null });
+  });
+
+  it("leaves short numeric IDs alone", () => {
+    const out = redactPayload("order 1234 placed") as string;
+    expect(out).toBe("order 1234 placed");
+  });
+
+  it("does not redact pure-digit strings as phones", () => {
+    for (const raw of ["1234567890", "12345678901"]) {
+      expect(redactPayload({ id: raw })).toEqual({ id: raw });
+    }
+  });
+
+  it("redacts phones with separators", () => {
+    for (const fmt of ["415-555-2671", "(415) 555-2671", "+1 415 555 2671", "415.555.2671"]) {
+      const out = redactPayload({ phone: fmt }) as { phone: string };
+      expect(out.phone).toContain("[REDACTED]");
+    }
+  });
+
+  it("redacts Luhn-valid credit cards", () => {
+    for (const cc of ["4111 1111 1111 1111", "5500000000000004"]) {
+      const out = redactPayload({ card: cc }) as { card: string };
+      expect(out.card).toContain("[REDACTED]");
+    }
+  });
+
+  it("does not redact Luhn-invalid long numbers", () => {
+    for (const raw of ["1234567890123", "12345678901234", "1234567890123456789"]) {
+      expect(redactPayload({ id: raw })).toEqual({ id: raw });
+    }
+  });
+
+  it("redacts token counts unchanged", () => {
+    // The whole point: legitimate payloads with token counts
+    // must not be touched.
+    const out = redactPayload({ usage: { total_tokens: 1234567 } });
+    expect(out).toEqual({ usage: { total_tokens: 1234567 } });
+  });
+});
+
+
+// ── Integration test: real OpenAI / Anthropic response shapes ──────
+
+const OPENAI_CHAT_COMPLETION = {
+  id: "chatcmpl-abc123def456",
+  object: "chat.completion",
+  created: 1717000000,
+  model: "gpt-4o-mini-2024-07-18",
+  choices: [
+    {
+      index: 0,
+      message: {
+        role: "assistant",
+        content:
+          "Thanks for the message. I'll follow up at " +
+          "alice@example.com or call (415) 555-2671.",
+      },
+      finish_reason: "stop",
+    },
+  ],
+  usage: { prompt_tokens: 142, completion_tokens: 38, total_tokens: 180 },
+};
+
+const ANTHROPIC_MESSAGE = {
+  id: "msg_01HXYZ",
+  type: "message",
+  role: "assistant",
+  content: [
+    {
+      type: "text",
+      text:
+        "Your account SSN 123-45-6789 was on file. " +
+        "Card ending 4111 1111 1111 1111 was charged.",
+    },
+  ],
+  model: "claude-3-5-sonnet-20241022",
+  usage: { input_tokens: 87, output_tokens: 24 },
+};
+
+describe("redactPayload on realistic LLM payloads", () => {
+  it("masks PII in an OpenAI chat completion and keeps structure", () => {
+    const out = redactPayload(OPENAI_CHAT_COMPLETION) as typeof OPENAI_CHAT_COMPLETION;
+    const flat = JSON.stringify(out);
+    expect(flat).not.toContain("alice@example.com");
+    expect(flat).not.toContain("(415) 555-2671");
+    expect(flat).toContain("[REDACTED]");
+    expect(out.usage.prompt_tokens).toBe(142);
+    expect(out.usage.completion_tokens).toBe(38);
+    expect(out.model).toBe("gpt-4o-mini-2024-07-18");
+    expect(out.id).toBe("chatcmpl-abc123def456");
+    expect(out.choices[0].message.role).toBe("assistant");
+  });
+
+  it("masks PII in an Anthropic message and keeps structure", () => {
+    const out = redactPayload(ANTHROPIC_MESSAGE) as typeof ANTHROPIC_MESSAGE;
+    const flat = JSON.stringify(out);
+    expect(flat).not.toContain("123-45-6789");
+    expect(flat).not.toContain("4111 1111 1111 1111");
+    expect(flat).toContain("[REDACTED]");
+    expect(out.usage.input_tokens).toBe(87);
+    expect(out.usage.output_tokens).toBe(24);
+    expect(out.model).toBe("claude-3-5-sonnet-20241022");
+    expect(out.id).toBe("msg_01HXYZ");
+  });
+
+  it("masks PII in a chat request and preserves control fields", () => {
+    const request = {
+      model: "gpt-4o-mini",
+      messages: [
+        { role: "system", content: "You are a helpful assistant." },
+        {
+          role: "user",
+          content:
+            "My email is bob@example.org and my phone is " +
+            "+1 415 555 9999. Please confirm.",
+        },
+      ],
+      temperature: 0.7,
+    };
+    const out = redactPayload(request) as typeof request;
+    const flat = JSON.stringify(out);
+    expect(flat).not.toContain("bob@example.org");
+    expect(flat).not.toContain("415 555 9999");
+    expect(out.messages[0].content).toBe("You are a helpful assistant.");
+    expect(out.temperature).toBe(0.7);
+    expect(out.model).toBe("gpt-4o-mini");
+  });
+
+  it("token counts are never redacted", () => {
+    for (const n of [1, 100, 9999, 1_000_000, 1_234_567_890]) {
+      expect(redactPayload({ usage: { total_tokens: n } })).toEqual({
+        usage: { total_tokens: n },
+      });
+    }
+  });
+});
+
+describe("redactPayload edge cases", () => {
+  it("redacts PII in dict keys", () => {
+    // Some upstream LLM SDKs stash identifiers in dict keys.
+    // String keys are redacted for safety.
+    const out = redactPayload({ "alice@example.com": "value" }) as Record<string, unknown>;
+    expect(out["[REDACTED]"]).toBe("value");
+    expect("alice@example.com" in out).toBe(false);
+  });
+
+  it("redacts PII in nested dict keys", () => {
+    const out = redactPayload({ outer: { "alice@example.com": "value" } }) as {
+      outer: Record<string, unknown>;
+    };
+    expect(out.outer["[REDACTED]"]).toBe("value");
+    expect("alice@example.com" in out.outer).toBe(false);
+  });
+
+  it("handles empty and null inputs", () => {
+    expect(redactPayload({})).toEqual({});
+    expect(redactPayload([])).toEqual([]);
+    expect(redactPayload("")).toBe("");
+    expect(redactPayload(null)).toBeNull();
+    expect(redactPayload(42)).toBe(42);
+    expect(redactPayload(true)).toBe(true);
+  });
+});

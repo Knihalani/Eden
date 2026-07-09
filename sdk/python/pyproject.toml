@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "eden-sdk"
-version = "0.1.0"
+version = "0.2.8"
 description = "Eden runtime SDK — auto-instrumentation, tracing, and fire-and-forget telemetry for LLM applications."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -24,8 +24,15 @@ classifiers = [
     "Topic :: Software Development :: Libraries :: Python Modules",
 ]
 dependencies = [
+    # httpx is the only required runtime dep — the SDK is a fire-and-forget
+    # telemetry sender that doesn't need pydantic/dataclasses-json/etc.
+    # Earlier versions declared pydantic as a dep "in case a future
+    # release uses it" but no SDK code actually imports it. Removing it
+    # slashes the installed footprint (pydantic pulls in a sizeable dep
+    # tree including annotated-types, typing-extensions, and email-validator
+    # transitively). Users who want pydantic models in their own code
+    # can install it separately — the SDK doesn't depend on it.
     "httpx>=0.27",
-    "pydantic>=2.6",
 ]
 
 [project.optional-dependencies]

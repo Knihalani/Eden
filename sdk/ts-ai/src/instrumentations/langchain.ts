@@ -19,6 +19,7 @@
  */
 
 import { getDefaultClient } from "../client.js";
+import { normalizeModelName } from "../tokens.js";
 import { SOURCE_FORMATS, type TraceOptions } from "../types.js";
 
 const _wrapped = new WeakSet<object>();
@@ -357,6 +358,10 @@ function _emitStream(args: {
   method: MethodName;
   chunkCount: number;
   outputTokens: number;
+  inputTokens?: number;
+  cacheReadTokens?: number;
+  cacheCreationTokens?: number;
+  model?: string;
   ttftMs: number;
   itlMsAvg: number;
   tpotMs: number;
@@ -390,7 +395,11 @@ function _emitStream(args: {
       tpot_ms: args.tpotMs,
       completion_duration_ms: args.completionDurationMs,
       output_tokens: args.outputTokens,
+      ...(typeof args.inputTokens === "number" ? { input_tokens: args.inputTokens } : {}),
+      ...(typeof args.cacheReadTokens === "number" ? { cache_read_input_tokens: args.cacheReadTokens } : {}),
+      ...(typeof args.cacheCreationTokens === "number" ? { cache_creation_input_tokens: args.cacheCreationTokens } : {}),
     },
+    modelNormalized: args.model ? (normalizeModelName(args.model) ?? undefined) : undefined,
     tags: [...(args.opts.tags ?? []), "auto_instrument", "streaming"],
     environmentId: args.opts.environmentId,
     durationMs: args.completionDurationMs,

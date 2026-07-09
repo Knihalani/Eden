@@ -161,3 +161,239 @@ class TestGatewayURL:
             base_url="https://api.example.com/",
         )
         assert cfg.resolved_gateway_url() == "https://api.example.com/v1"
+
+
+# ── Client-side safety-net redactor ────────────────────────────────
+
+
+from eden_sdk.filters import redact_payload  # noqa: E402
+
+
+class TestRedactPayload:
+    """The client-side PII safety net runs over outgoing payloads."""
+
+    def test_redacts_email(self) -> None:
+        out = redact_payload({"text": "contact alice@example.com today"})
+        assert out == {"text": "contact [REDACTED] today"}
+
+    def test_redacts_us_phone(self) -> None:
+        out = redact_payload("call (415) 555-2671 anytime")
+        assert out == "call [REDACTED] anytime"
+
+    def test_redacts_ssn(self) -> None:
+        out = redact_payload("SSN 123-45-6789 was on file")
+        assert out == "SSN [REDACTED] was on file"
+
+    def test_redacts_credit_card(self) -> None:
+        out = redact_payload("card 4111 1111 1111 1111 used")
+        assert "[REDACTED]" in out
+        assert "4111 1111 1111 1111" not in out
+
+    def test_recurses_into_nested_structures(self) -> None:
+        payload = {
+            "messages": [
+                {"role": "user", "content": "ping alice@example.com"},
+                {"role": "assistant", "content": "ok"},
+            ],
+            "metadata": {"notes": "ssn 111-22-3333"},
+        }
+        out = redact_payload(payload)
+        assert "alice@example.com" not in str(out)
+        assert "111-22-3333" not in str(out)
+        # The role field is unchanged.
+        assert out["messages"][0]["role"] == "user"
+
+    def test_does_not_mutate_original(self) -> None:
+        original = {"text": "alice@example.com"}
+        _ = redact_payload(original)
+        # The caller still sees the unredacted string locally —
+        # redaction only touches the wire copy.
+        assert original["text"] == "alice@example.com"
+
+    def test_leaves_non_strings_unchanged(self) -> None:
+        out = redact_payload({"n": 42, "f": 3.14, "b": True, "none": None})
+        assert out == {"n": 42, "f": 3.14, "b": True, "none": None}
+
+    def test_does_not_redact_short_numeric_ids(self) -> None:
+        # 4-digit IDs are not phone numbers.
+        out = redact_payload("order 1234 placed")
+        assert out == "order 1234 placed"
+
+    def test_does_not_redact_pure_digit_strings_as_phones(self) -> None:
+        # 10-11 digit strings without separators are NOT phone
+        # numbers — they're far more likely to be numeric IDs,
+        # Unix timestamps, or order numbers.
+        for raw in ("1234567890", "12345678901"):
+            assert redact_payload({"id": raw}) == {"id": raw}
+
+    def test_redacts_phones_with_separators(self) -> None:
+        # Real phone formats (parentheses, hyphens, dots, spaces)
+        # must still be caught.
+        for fmt, expected in [
+            ("415-555-2671", "[REDACTED]"),
+            ("(415) 555-2671", "(415) [REDACTED]"),
+            ("+1 415 555 2671", "+1 [REDACTED]"),
+            ("415.555.2671", "[REDACTED]"),
+        ]:
+            out = redact_payload({"phone": fmt})["phone"]
+            assert "[REDACTED]" in out, f"{fmt!r} should be redacted, got {out!r}"
+
+    def test_redacts_luhn_valid_credit_cards(self) -> None:
+        # Known Luhn-valid test card numbers.
+        for cc in ("4111 1111 1111 1111", "5500000000000004"):
+            out = redact_payload({"card": cc})["card"]
+            assert "[REDACTED]" in out, f"{cc!r} should be redacted, got {out!r}"
+
+    def test_does_not_redact_luhn_invalid_long_numbers(self) -> None:
+        # 13-19 digit runs that fail Luhn are far more likely to
+        # be timestamps, hashes, or arbitrary IDs than credit
+        # cards. Must not be redacted.
+        for raw in ("1234567890123", "12345678901234", "1234567890123456789"):
+            assert redact_payload({"id": raw}) == {"id": raw}
+
+    def test_redacts_token_counts(self) -> None:
+        # The whole point: legitimate payloads with token counts
+        # must not be touched.
+        out = redact_payload({"usage": {"total_tokens": 1234567}})
+        assert out == {"usage": {"total_tokens": 1234567}}
+
+
+
+# ── Integration test: real OpenAI / Anthropic response shapes ──────
+
+
+class TestRedactOnRealisticPayloads:
+    """The safety net must work on real-shaped LLM responses, not just
+    synthetic strings.  These fixtures mirror the JSON the SDK actually
+    ships to the gateway — request messages, response choices, and
+    usage blocks — and assert that the obvious PII in them is masked
+    while the surrounding structure (token counts, model names, IDs) is
+    preserved.
+    """
+
+    OPENAI_CHAT_COMPLETION = {
+        "id": "chatcmpl-abc123def456",
+        "object": "chat.completion",
+        "created": 1717000000,
+        "model": "gpt-4o-mini-2024-07-18",
+        "choices": [
+            {
+                "index": 0,
+                "message": {
+                    "role": "assistant",
+                    "content": (
+                        "Thanks for the message. I'll follow up at "
+                        "alice@example.com or call (415) 555-2671."
+                    ),
+                },
+                "finish_reason": "stop",
+            }
+        ],
+        "usage": {
+            "prompt_tokens": 142,
+            "completion_tokens": 38,
+            "total_tokens": 180,
+        },
+    }
+
+    ANTHROPIC_MESSAGE = {
+        "id": "msg_01HXYZ",
+        "type": "message",
+        "role": "assistant",
+        "content": [
+            {
+                "type": "text",
+                "text": (
+                    "Your account SSN 123-45-6789 was on file. "
+                    "Card ending 4111 1111 1111 1111 was charged."
+                ),
+            }
+        ],
+        "model": "claude-3-5-sonnet-20241022",
+        "usage": {
+            "input_tokens": 87,
+            "output_tokens": 24,
+        },
+    }
+
+    def test_openai_response_masks_pii_keeps_structure(self) -> None:
+        out = redact_payload(self.OPENAI_CHAT_COMPLETION)
+        # PII is gone.
+        assert "alice@example.com" not in str(out)
+        assert "(415) 555-2671" not in str(out)
+        assert "[REDACTED]" in str(out)
+        # Structure is preserved (token counts, model, IDs).
+        assert out["usage"]["prompt_tokens"] == 142
+        assert out["usage"]["completion_tokens"] == 38
+        assert out["model"] == "gpt-4o-mini-2024-07-18"
+        assert out["id"] == "chatcmpl-abc123def456"
+        # The PII lives inside a deeply-nested string.
+        assert out["choices"][0]["message"]["role"] == "assistant"
+
+    def test_anthropic_response_masks_pii_keeps_structure(self) -> None:
+        out = redact_payload(self.ANTHROPIC_MESSAGE)
+        assert "123-45-6789" not in str(out)
+        assert "4111 1111 1111 1111" not in str(out)
+        assert "[REDACTED]" in str(out)
+        assert out["usage"]["input_tokens"] == 87
+        assert out["usage"]["output_tokens"] == 24
+        assert out["model"] == "claude-3-5-sonnet-20241022"
+        assert out["id"] == "msg_01HXYZ"
+
+    def test_request_payload_with_user_message_is_masked(self) -> None:
+        """A typical chat.completion.create request body."""
+        request = {
+            "model": "gpt-4o-mini",
+            "messages": [
+                {"role": "system", "content": "You are a helpful assistant."},
+                {
+                    "role": "user",
+                    "content": (
+                        "My email is bob@example.org and my phone is "
+                        "+1 415 555 9999. Please confirm."
+                    ),
+                },
+            ],
+            "temperature": 0.7,
+        }
+        out = redact_payload(request)
+        assert "bob@example.org" not in str(out)
+        assert "415 555 9999" not in str(out)
+        # System prompt + control fields untouched.
+        assert out["messages"][0]["content"] == "You are a helpful assistant."
+        assert out["temperature"] == 0.7
+        assert out["model"] == "gpt-4o-mini"
+
+    def test_token_counts_never_redacted(self) -> None:
+        """Even huge token counts must survive the pass intact."""
+        for n in (1, 100, 9999, 1_000_000, 1_234_567_890):
+            out = redact_payload({"usage": {"total_tokens": n}})
+            assert out == {"usage": {"total_tokens": n}}
+
+
+    def test_redacts_pii_in_dict_keys(self) -> None:
+        # Some upstream LLM SDKs stash identifiers in dict keys.
+        # String keys are redacted for safety.
+        out = redact_payload({"alice@example.com": "value"})
+        assert "alice@example.com" not in out
+        assert "[REDACTED]" in out
+        assert out["[REDACTED]"] == "value"
+
+    def test_redacts_pii_in_nested_dict_keys(self) -> None:
+        out = redact_payload({"outer": {"alice@example.com": "value"}})
+        assert "alice@example.com" not in str(out)
+        assert out["outer"]["[REDACTED]"] == "value"
+
+    def test_does_not_redact_non_string_keys(self) -> None:
+        # Integer keys must not be touched (they can't be PII).
+        out = redact_payload({42: "value", "model": "gpt-4"})
+        assert out[42] == "value"
+        assert out["model"] == "gpt-4"
+
+    def test_handles_empty_and_null_inputs(self) -> None:
+        assert redact_payload({}) == {}
+        assert redact_payload([]) == []
+        assert redact_payload("") == ""
+        assert redact_payload(None) is None
+        assert redact_payload(42) == 42
+        assert redact_payload(True) is True

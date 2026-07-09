@@ -5,10 +5,12 @@ For every call we build a payload shaped like the OpenAI ChatCompletion
 response (plus the original request via ``request_payload``) and
 enqueue it for the ``openai`` ingestion endpoint.
 
-We deliberately do NOT inspect streaming responses token-by-token —
-that lives in the streaming chunks endpoint (``/ingest/chunks``) and
-the user is expected to wire it up explicitly. The patch is best-effort:
-failures inside the instrumentation never propagate into user code.
+Streaming calls (``stream=True``) are wrapped so each chunk is
+buffered to ``/ingest/chunks`` (TTFT, ITL, TPOT, output-token
+estimates) and a single ``llm_completion_stream`` event lands at the
+``openai`` endpoint when the iterator exhausts — matching the
+TypeScript SDK's behaviour. The patch is best-effort: failures inside
+the instrumentation never propagate into user code.
 """
 
 from __future__ import annotations
@@ -16,8 +18,9 @@ from __future__ import annotations
 import functools
 import logging
 import time
-from typing import Any, Optional
+from typing import Any
 
+from eden_sdk._tokens import extract_usage, normalize_model_name
 from eden_sdk.client import TraceEvent, get_default_client
 from eden_sdk.config import get_config
 from eden_sdk.trace import TraceContext, current_trace
@@ -25,8 +28,8 @@ from eden_sdk.trace import TraceContext, current_trace
 logger = logging.getLogger("eden_sdk.instrumentation.openai")
 
 _installed = False
-_original_sync_create: Optional[Any] = None
-_original_async_create: Optional[Any] = None
+_original_sync_create: Any | None = None
+_original_async_create: Any | None = None
 
 
 def install() -> None:
@@ -82,6 +85,8 @@ def _wrap_sync(original):  # type: ignore[no-untyped-def]
         cfg = get_config()
         if not cfg.enabled:
             return original(self, *args, **kwargs)
+        if _is_stream_request(args, kwargs):
+            return _wrap_sync_stream(original, self, args, kwargs)
         t0 = time.perf_counter()
         request_payload = _build_request_payload(args, kwargs)
         try:
@@ -113,6 +118,8 @@ def _wrap_async(original):  # type: ignore[no-untyped-def]
         cfg = get_config()
         if not cfg.enabled:
             return await original(self, *args, **kwargs)
+        if _is_stream_request(args, kwargs):
+            return _wrap_async_stream(original, self, args, kwargs)
         t0 = time.perf_counter()
         request_payload = _build_request_payload(args, kwargs)
         try:
@@ -185,9 +192,9 @@ def _to_dict(obj: Any) -> Any:
 
 def _enqueue_openai_event(
     request_payload: dict[str, Any],
-    response_payload: Optional[dict[str, Any]],
+    response_payload: dict[str, Any] | None,
     duration_ms: float,
-    error: Optional[str],
+    error: str | None,
 ) -> None:
     cfg = get_config()
     if not cfg.enabled:
@@ -202,9 +209,355 @@ def _enqueue_openai_event(
         payload.update(response_payload)
         # Attach request for the decoder.
         payload.setdefault("request_payload", request_payload)
+        # Promote a normalized model name so pricing lookups hit a
+        # single row regardless of the alias the caller used
+        # ("gpt-4o-2024-08-06" vs "gpt-4o").
+        m = payload.get("model")
+        if isinstance(m, str):
+            payload["model_normalized"] = normalize_model_name(m)
 
-    trace_ctx: Optional[TraceContext] = current_trace()
+    trace_ctx: TraceContext | None = current_trace()
     if trace_ctx is not None:
         payload.setdefault("trace_id", trace_ctx.trace_id)
 
     get_default_client().enqueue(TraceEvent(payload=payload, source_format="openai"))
+
+
+# ── Streaming ─────────────────────────────────────────────────────────
+
+
+def _is_stream_request(args: tuple, kwargs: dict) -> bool:
+    """Return True when the caller asked for a streaming response."""
+    if kwargs.get("stream"):
+        return True
+    if args and isinstance(args[0], dict) and args[0].get("stream"):
+        return True
+    return False
+
+
+def _wrap_sync_stream(original, self, args, kwargs):
+    """Wrap a sync streaming ``create`` call.
+
+    Returns a generator that yields upstream chunks while buffering
+    per-chunk metrics into ``/ingest/chunks``. On iterator exhaustion
+    one ``llm_completion_stream`` event is enqueued for the
+    ``openai`` endpoint with TTFT/ITL/TPOT/output-token estimates.
+    """
+    import uuid as _uuid
+    start = time.perf_counter()
+    trace_id = _trace_id_or_random()
+    stream_event_id = f"stream_openai_{_uuid.uuid4().hex[:16]}"
+    client = get_default_client()
+    buffer = client._chunk_buffer if hasattr(client, "_chunk_buffer") else None
+
+    def _gen():
+        model = _extract_model(kwargs)
+        t_first = None
+        t_prev = None
+        t_last = start
+        itl_sum = 0.0
+        itl_count = 0
+        chunk_count = 0
+        output_tokens = 0
+        usage_output_tokens = None
+        usage_input_tokens = None
+        usage_cache_read = None
+        usage_cache_write = None
+        finish_reason = None
+        status = "success"
+        error_type = None
+        try:
+            upstream = original(self, *args, **kwargs)
+            for chunk in upstream:
+                chunk_count += 1
+                now = time.perf_counter()
+                t_last = now
+                # Capture the interval to the previous chunk BEFORE
+                # updating ``t_prev`` — otherwise both the ITL
+                # accumulator and the per-chunk ITL/TPOT readings
+                # collapse to 0 for chunks that share a tick.
+                prev = t_prev
+                if t_first is None:
+                    t_first = now
+                elif prev is not None:
+                    itl_sum += now - prev
+                    itl_count += 1
+                t_prev = now
+                # OpenAI ChatCompletionChunk shape: {choices: [{delta: {content: ...}, finish_reason: ...}], model, usage}
+                choices = _get_attr(chunk, "choices") or []
+                if choices:
+                    first = choices[0]
+                    delta = _get_attr(first, "delta") or {}
+                    text = _get_attr(delta, "content")
+                    if isinstance(text, str) and text:
+                        output_tokens += max(1, len(text) // 4)
+                    fr = _get_attr(first, "finish_reason")
+                    if fr:
+                        finish_reason = fr
+                if not model:
+                    m = _get_attr(chunk, "model")
+                    if isinstance(m, str):
+                        model = m
+                usage = _get_attr(chunk, "usage")
+                if usage is not None:
+                    u = extract_usage(usage)
+                    if u["output_tokens"] is not None and u["output_tokens"] > 0:
+                        usage_output_tokens = u["output_tokens"]
+                    if u["input_tokens"] is not None:
+                        usage_input_tokens = u["input_tokens"]
+                    if u["cache_read_tokens"] is not None:
+                        usage_cache_read = u["cache_read_tokens"]
+                    if u["cache_creation_tokens"] is not None:
+                        usage_cache_write = u["cache_creation_tokens"]
+                # Buffer chunk for /ingest/chunks if the client supports it.
+                if buffer is not None:
+                    # Per-chunk TPOT (time per output token) is the
+                    # time spent generating THIS chunk's tokens
+                    # divided by the token count for this chunk
+                    # (approximated as ``ceil(len/4)`` to match the
+                    # aggregate ``output_tokens`` heuristic). Chunks
+                    # with no text (finish_reason / usage chunks)
+                    # emit ``None`` rather than a misleading zero.
+                    #
+                    # The previous implementation set ``tpot_ms =
+                    # (now - start) / chunk_count`` which is the
+                    # *average inter-chunk arrival time*, NOT time
+                    # per token — that mislabel propagated into the
+                    # server's ``tpot_ms_p50`` / ``tpot_ms_p95``
+                    # percentile dashboards.
+                    tpot_ms = None
+                    if (
+                        prev is not None
+                        and isinstance(text, str)
+                        and text
+                    ):
+                        tpot_ms = ((now - prev) * 1000.0) / max(
+                            1, (len(text) + 3) // 4
+                        )
+                    buffer.append({
+                        "event_id": stream_event_id,
+                        "trace_id": trace_id,
+                        "chunk_index": chunk_count - 1,
+                        "delta_text": text if isinstance(text, str) else None,
+                        "ttft_ms": (t_first - start) * 1000.0 if t_first is not None else None,
+                        "itl_ms": (now - prev) * 1000.0 if prev is not None else None,
+                        "tpot_ms": tpot_ms,
+                        "received_at_client_ms": int(time.time() * 1000),
+                    })
+                yield chunk
+        except Exception as exc:
+            status = "error"
+            error_type = type(exc).__name__
+            raise
+        finally:
+            if isinstance(usage_output_tokens, int):
+                output_tokens = usage_output_tokens
+            ttft_ms = (t_first - start) * 1000.0 if t_first is not None else 0.0
+            completion_ms = (t_last - start) * 1000.0
+            itl_avg = (itl_sum / itl_count * 1000.0) if itl_count > 0 else 0.0
+            tpot = ((completion_ms - ttft_ms) / (output_tokens - 1)) if output_tokens > 1 else 0.0
+            payload = {
+                "event_id": stream_event_id,
+                "trace_id": trace_id,
+                "duration_ms": completion_ms,
+                "request_payload": _build_request_payload(args, kwargs),
+                "stream": True,
+                "chunk_count": chunk_count,
+                "ttft_ms": ttft_ms,
+                "itl_ms_avg": itl_avg,
+                "tpot_ms": tpot,
+                "completion_duration_ms": completion_ms,
+                "output_tokens": output_tokens,
+                "input_tokens": usage_input_tokens,
+                "cache_read_input_tokens": usage_cache_read,
+                "cache_creation_input_tokens": usage_cache_write,
+                "finish_reason": finish_reason,
+                "model": model,
+                "model_normalized": normalize_model_name(model),
+                "outcome": status,
+                "error_type": error_type,
+            }
+            cfg = get_config()
+            if cfg.enabled:
+                get_default_client().enqueue(
+                    TraceEvent(
+                        payload=payload,
+                        source_format="openai",
+                    )
+                )
+
+    return _gen()
+
+
+def _wrap_async_stream(original, self, args, kwargs):
+    """Async-streaming variant of :func:`_wrap_sync_stream`.
+
+    Returns the wrapped async generator directly — the caller
+    awaits the OpenAI async ``create`` (which the wrapping layer
+    also awaits) and then iterates the returned async generator.
+    """
+    import uuid as _uuid
+    start = time.perf_counter()
+    trace_id = _trace_id_or_random()
+    stream_event_id = f"stream_openai_{_uuid.uuid4().hex[:16]}"
+    client = get_default_client()
+    buffer = client._chunk_buffer if hasattr(client, "_chunk_buffer") else None
+
+    async def _agen():
+        model = _extract_model(kwargs)
+        t_first = None
+        t_prev = None
+        t_last = start
+        itl_sum = 0.0
+        itl_count = 0
+        chunk_count = 0
+        output_tokens = 0
+        usage_output_tokens = None
+        usage_input_tokens = None
+        usage_cache_read = None
+        usage_cache_write = None
+        finish_reason = None
+        status = "success"
+        error_type = None
+        try:
+            upstream = await original(self, *args, **kwargs)
+            async for chunk in upstream:
+                chunk_count += 1
+                now = time.perf_counter()
+                t_last = now
+                # Capture the interval to the previous chunk BEFORE
+                # updating ``t_prev`` — otherwise the per-chunk
+                # ITL/TPOT readings collapse to 0 for chunks that
+                # share a tick.
+                prev = t_prev
+                if t_first is None:
+                    t_first = now
+                elif prev is not None:
+                    itl_sum += now - prev
+                    itl_count += 1
+                t_prev = now
+                choices = _get_attr(chunk, "choices") or []
+                if choices:
+                    first = choices[0]
+                    delta = _get_attr(first, "delta") or {}
+                    text = _get_attr(delta, "content")
+                    if isinstance(text, str) and text:
+                        output_tokens += max(1, len(text) // 4)
+                    fr = _get_attr(first, "finish_reason")
+                    if fr:
+                        finish_reason = fr
+                if not model:
+                    m = _get_attr(chunk, "model")
+                    if isinstance(m, str):
+                        model = m
+                usage = _get_attr(chunk, "usage")
+                if usage is not None:
+                    u = extract_usage(usage)
+                    if u["output_tokens"] is not None and u["output_tokens"] > 0:
+                        usage_output_tokens = u["output_tokens"]
+                    if u["input_tokens"] is not None:
+                        usage_input_tokens = u["input_tokens"]
+                    if u["cache_read_tokens"] is not None:
+                        usage_cache_read = u["cache_read_tokens"]
+                    if u["cache_creation_tokens"] is not None:
+                        usage_cache_write = u["cache_creation_tokens"]
+                if buffer is not None:
+                    # Per-chunk TPOT (time per output token) is the
+                    # time spent generating THIS chunk's tokens
+                    # divided by the token count for this chunk
+                    # (approximated as ``ceil(len/4)`` to match the
+                    # aggregate ``output_tokens`` heuristic). Chunks
+                    # with no text (finish_reason / usage chunks)
+                    # emit ``None`` rather than a misleading zero.
+                    #
+                    # The previous implementation set ``tpot_ms =
+                    # (now - start) / chunk_count`` which is the
+                    # *average inter-chunk arrival time*, NOT time
+                    # per token — that mislabel propagated into the
+                    # server's ``tpot_ms_p50`` / ``tpot_ms_p95``
+                    # percentile dashboards.
+                    tpot_ms = None
+                    if (
+                        prev is not None
+                        and isinstance(text, str)
+                        and text
+                    ):
+                        tpot_ms = ((now - prev) * 1000.0) / max(
+                            1, (len(text) + 3) // 4
+                        )
+                    buffer.append({
+                        "event_id": stream_event_id,
+                        "trace_id": trace_id,
+                        "chunk_index": chunk_count - 1,
+                        "delta_text": text if isinstance(text, str) else None,
+                        "ttft_ms": (t_first - start) * 1000.0 if t_first is not None else None,
+                        "itl_ms": (now - prev) * 1000.0 if prev is not None else None,
+                        "tpot_ms": tpot_ms,
+                        "received_at_client_ms": int(time.time() * 1000),
+                    })
+                yield chunk
+        except Exception as exc:
+            status = "error"
+            error_type = type(exc).__name__
+            raise
+        finally:
+            if isinstance(usage_output_tokens, int):
+                output_tokens = usage_output_tokens
+            ttft_ms = (t_first - start) * 1000.0 if t_first is not None else 0.0
+            completion_ms = (t_last - start) * 1000.0
+            itl_avg = (itl_sum / itl_count * 1000.0) if itl_count > 0 else 0.0
+            tpot = ((completion_ms - ttft_ms) / (output_tokens - 1)) if output_tokens > 1 else 0.0
+            payload = {
+                "event_id": stream_event_id,
+                "trace_id": trace_id,
+                "duration_ms": completion_ms,
+                "request_payload": _build_request_payload(args, kwargs),
+                "stream": True,
+                "chunk_count": chunk_count,
+                "ttft_ms": ttft_ms,
+                "itl_ms_avg": itl_avg,
+                "tpot_ms": tpot,
+                "completion_duration_ms": completion_ms,
+                "output_tokens": output_tokens,
+                "input_tokens": usage_input_tokens,
+                "cache_read_input_tokens": usage_cache_read,
+                "cache_creation_input_tokens": usage_cache_write,
+                "finish_reason": finish_reason,
+                "model": model,
+                "model_normalized": normalize_model_name(model),
+                "outcome": status,
+                "error_type": error_type,
+            }
+            cfg = get_config()
+            if cfg.enabled:
+                get_default_client().enqueue(
+                    TraceEvent(
+                        payload=payload,
+                        source_format="openai",
+                    )
+                )
+
+    return _agen()
+
+
+def _extract_model(kwargs: dict) -> str | None:
+    m = kwargs.get("model")
+    return m if isinstance(m, str) else None
+
+
+def _get_attr(obj: Any, name: str) -> Any:
+    if obj is None:
+        return None
+    if isinstance(obj, dict):
+        return obj.get(name)
+    return getattr(obj, name, None)
+
+
+def _trace_id_or_random() -> str:
+    """Return the active trace id, or a fresh random one."""
+    from eden_sdk.trace import current_trace as _ct
+    ctx = _ct()
+    if ctx is not None:
+        return ctx.trace_id
+    import uuid
+    return uuid.uuid4().hex

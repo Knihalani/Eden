@@ -133,3 +133,84 @@ export class FilterConfig {
 export interface FilterConfigOptions {
   pii?: PIIConfig;
 }
+
+
+// ── Client-side safety-net redactor ───────────────────────────────
+//
+// Mirrors the Python SDK's `redact_payload`. Conservative regex
+// pass over outgoing payloads to mask obvious PII when the
+// gateway is down, misconfigured, or absent (local dev). The
+// gateway remains the authoritative redaction layer; this is a
+// belt-and-suspenders safety net only.
+
+const EMAIL_RE = /\b[\w.+-]+@[\w-]+\.[\w.-]+\b/g;
+// US-style phone numbers: must look like a phone (parenthesised
+// area code ``(415) 555-2671`` or separators between the 3-3-4
+// groups).  Pure-digit 10-11 char runs are intentionally NOT
+// matched here — they're far more likely to be numeric IDs,
+// token counts, or Unix timestamps than phone numbers.
+const PHONE_RE = new RegExp(
+  "(?<!\\d)" +
+  "(?:\\+?1[-.\\s]?)?" +
+  "(?:" +
+  "\\(\\d{3}\\)\\s*[-.]?\\s*\\d{3}[-.\\s]?\\d{4}" +
+  "|\\d{3}[-.\\s]\\d{3}[-.\\s]\\d{4}" +
+  ")" +
+  "(?!\\d)",
+  "g",
+);
+const SSN_RE = /(?<!\d)\d{3}-\d{2}-\d{4}(?!\d)/g;
+// Credit cards: 13-19 digits with optional spaces or hyphens.
+// We also require the candidate to pass a Luhn checksum, which
+// dramatically reduces false positives on long-numeric IDs.
+const CC_RE = /(?<!\d)(?:\d[ -]?){12,18}\d(?!\d)/g;
+const MASK = "[REDACTED]";
+
+function luhnOk(digits: string): boolean {
+  if (digits.length < 13 || digits.length > 19) return false;
+  let total = 0;
+  const parity = digits.length % 2;
+  for (let i = 0; i < digits.length; i++) {
+    let d = digits.charCodeAt(i) - 48;
+    if (i % 2 === parity) {
+      d *= 2;
+      if (d > 9) d -= 9;
+    }
+    total += d;
+  }
+  return total % 10 === 0;
+}
+
+export function redactString(s: string): string {
+  let out = s;
+  out = out.replace(EMAIL_RE, MASK);
+  out = out.replace(PHONE_RE, MASK);
+  out = out.replace(SSN_RE, MASK);
+  // CC pass: replace only when the matched run passes Luhn. We
+  // walk matches manually because we need access to ``m[0]`` to
+  // strip separators before validation.
+  out = out.replace(CC_RE, (match) => {
+    const digits = match.replace(/[ -]/g, "");
+    return luhnOk(digits) ? MASK : match;
+  });
+  return out;
+}
+
+/**
+ * Recursively walk a JSON-ish value, redacting strings in place.
+ * Returns a new structure; the original is not mutated.
+ */
+export function redactPayload(value: unknown): unknown {
+  if (typeof value === "string") return redactString(value);
+  if (Array.isArray(value)) return value.map(redactPayload);
+  if (value !== null && typeof value === "object") {
+    // String keys are redacted too — some upstream LLM SDKs stash
+    // identifiers in keys, and we want to be safe-by-default.
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+      out[redactString(k)] = redactPayload(v);
+    }
+    return out;
+  }
+  return value;
+}

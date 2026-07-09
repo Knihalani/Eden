@@ -1,13 +1,16 @@
 /**
  * Eden TypeScript runtime SDK — `trace()` and `traceAgent()`.
  *
- * Mirrors the Python SDK's `trace_agent` decorator:
+ * Mirrors the Python SDK's `trace_agent` decorator and `trace()`
+ * context manager:
  *
- *   - `traceAgent(opts)` — class-method decorator (TS equivalent of
+ *   - `traceAgent(options)` — class-method decorator (TS equivalent of
  *     Python's `@trace_agent(...)`).
- *   - `trace(name, fn, opts)` — async helper that returns the
- *     function's result while emitting a single
- *     `agent_call` event with timing + status.
+ *   - `trace(name, options?)` — returns a TraceController you can use
+ *     as a context manager (`using` / `await using` / manual `.end()`)
+ *     OR pass a callback to the legacy `traceFn` form. The controller
+ *     mirrors Python's Span: `.setInput() / .setOutput() / .setTag() /
+ *     .setStatus() / .end()`.
  *
  * Tracing never breaks the wrapped function. All errors from the
  * telemetry path are caught and logged at debug level.
@@ -18,136 +21,290 @@ import { getDefaultClient } from "./client.js";
 import { SOURCE_FORMATS, type TraceOptions } from "./types.js";
 
 /**
- * Public trace context — same shape as the Python SDK's
- * `TraceContext` dataclass.
+ * Public trace context — same shape as the Python SDK's `Span` (the
+ * Python SDK's `trace()` now yields a Span, not a TraceContext, so
+ * the two SDKs are aligned).
  */
 export interface TraceContext {
   traceId: string;
   spanId: string;
+  parentSpanId?: string;
   startMs: number;
-}
+  /** Set by `.end()`. While the trace is open this is `null`. */
+  endMs: number | null;
+  /** Span name (used as `event_type` on the wire). */
+  name: string;
+  /** Tags added via `.setTag()`. */
+  tags: string[];
+  /** Input attached via `.setInput()`. */
+  input: unknown;
+  /** Output attached via `.setOutput()`. */
+  output: unknown;
+  /** Status attached via `.setStatus()`. */
+  status: "ok" | "error" | "unset" | null;
+  /** Error attached via `.setStatus("error", { error })`. */
+  error: string | null;
 
-function newContext(): TraceContext {
-  return {
-    traceId: randomUUID().slice(0, 24),
-    spanId: randomUUID().slice(0, 16),
-    startMs: Date.now(),
-  };
-}
-
-function finishTrace(
-  ctx: TraceContext,
-  start: number,
-  payload: Record<string, unknown>,
-  options: TraceOptions,
-): void {
-  const client = getDefaultClient();
-  const config = client.getConfig();
-  const durationMs = Date.now() - start;
-  client.emit({
-    eventId: ctx.traceId,
-    tenantId: config.orgId ?? "default",
-    projectId: config.projectId,
-    traceId: ctx.traceId,
-    realm: config.realm,
-    eventType: "agent_call",
-    timestamp: new Date().toISOString(),
-    sourceFormat: SOURCE_FORMATS.TRACE_AGENT,
-    payload: {
-      ...payload,
-      environment_id: options.environmentId,
-      ...options.metadata,
-    },
-    metrics: { duration_ms: durationMs },
-    tags: [...config.tags, ...(options.tags ?? [])],
-    environmentId: options.environmentId,
-    spanId: ctx.spanId,
-    name: payload.function as string | undefined,
-    durationMs,
-  });
+  /** Mutate the trace — chainable. */
+  setInput(value: unknown): TraceContext;
+  setOutput(value: unknown): TraceContext;
+  setTag(...tags: string[]): TraceContext;
+  setStatus(
+    status: "ok" | "error" | "unset",
+    opts?: { error?: string },
+  ): TraceContext;
+  /** Mark the trace as errored with a thrown error. */
+  recordError(err: unknown): TraceContext;
+  /** Close the trace and emit the framework event. Idempotent. */
+  end(opts?: { status?: "ok" | "error" | "unset"; error?: string }): void;
 }
 
 /**
- * Async helper that traces a single function invocation.
- *
- * ```ts
- * const result = await trace("myAgent", async (ctx) => {
- *   return await llm.chat.completions.create(...);
- * }, { tags: ["prod"] });
- * ```
+ * Legacy form: `await trace("name", async (ctx) => { ... })`.
+ * Kept for backwards compatibility — internally it just builds a
+ * TraceController, runs the callback, then ends the trace.
  */
 export async function trace<T>(
   name: string,
   fn: (ctx: TraceContext) => Promise<T>,
-  opts: TraceOptions = {},
-): Promise<T> {
-  const ctx = newContext();
-  const start = ctx.startMs;
-  let status: "success" | "error" = "success";
-  let errorType: string | undefined;
-  let resultType: string | undefined;
-  try {
-    const result = await fn(ctx);
-    if (result === null) {
-      resultType = "null";
-    } else {
-      resultType = typeof result;
-      if (result && typeof result === "object") {
-        resultType = (result as { constructor?: { name?: string } })
-          .constructor?.name ?? "object";
-      }
+  opts?: TraceOptions,
+): Promise<T>;
+/**
+ * Context-manager form (preferred):
+ *   ```ts
+ *   using t = trace("name");
+ *   t.setInput({ q: "hi" });
+ *   const out = doWork();
+ *   t.setOutput(out).end();
+ *   ```
+ */
+export function trace(name: string, opts?: TraceOptions): TraceContext;
+export function trace<T>(
+  name: string,
+  fnOrOpts?: ((ctx: TraceContext) => Promise<T>) | TraceOptions,
+  maybeOpts?: TraceOptions,
+): unknown {
+  // Legacy callback form: `await trace("name", async (ctx) => ...)`.
+  if (typeof fnOrOpts === "function") {
+    const opts = maybeOpts ?? {};
+    const fn = fnOrOpts as (ctx: TraceContext) => Promise<T>;
+    return _traceCallback(name, fn, opts);
+  }
+  // Context-manager form.
+  return _traceController(name, fnOrOpts ?? {});
+}
+
+// ── Implementation ──────────────────────────────────────────────────
+
+class TraceController implements TraceContext {
+  public readonly traceId: string;
+  public readonly spanId: string;
+  public readonly parentSpanId?: string;
+  public readonly startMs: number;
+  public endMs: number | null = null;
+  public readonly name: string;
+  public readonly tags: string[] = [];
+  public input: unknown = undefined;
+  public output: unknown = undefined;
+  public status: "ok" | "error" | "unset" | null = null;
+  public error: string | null = null;
+  private readonly options: TraceOptions;
+  private ended = false;
+
+  constructor(name: string, options: TraceOptions, parent?: TraceContext) {
+    this.name = name;
+    this.options = options;
+    this.startMs = Date.now();
+    this.traceId = parent?.traceId ?? randomUUID().slice(0, 24);
+    this.spanId = randomUUID().slice(0, 16);
+    this.parentSpanId = parent?.spanId;
+    // Pre-seed tags from the config + options.
+    const client = getDefaultClient();
+    const cfg = client.getConfig();
+    this.tags.push(...(cfg.tags ?? []), ...(options.tags ?? []));
+  }
+
+  setInput(value: unknown): this {
+    this.input = value;
+    return this;
+  }
+  setOutput(value: unknown): this {
+    this.output = value;
+    return this;
+  }
+  setTag(...tags: string[]): this {
+    for (const t of tags) {
+      if (t && !this.tags.includes(t)) this.tags.push(t);
     }
-    return result;
-  } catch (err) {
-    status = "error";
-    errorType = err instanceof Error ? err.constructor.name : "Error";
-    throw err;
-  } finally {
-    finishTrace(
-      ctx,
-      start,
-      { name, status, error_type: errorType, result_type: resultType },
-      opts,
-    );
+    return this;
+  }
+  setStatus(
+    status: "ok" | "error" | "unset",
+    opts: { error?: string } = {},
+  ): this {
+    this.status = status;
+    if (opts.error !== undefined) this.error = opts.error;
+    return this;
+  }
+  recordError(err: unknown): this {
+    this.status = "error";
+    this.error = err instanceof Error ? `${err.constructor.name}: ${err.message}` : String(err);
+    return this;
+  }
+  end(opts: { status?: "ok" | "error" | "unset"; error?: string } = {}): void {
+    if (this.ended) return;
+    this.ended = true;
+    if (opts.status !== undefined) this.status = opts.status;
+    if (opts.error !== undefined) this.error = opts.error;
+    this.endMs = Date.now();
+    finishTrace(this, this.options);
+    // Pop from the active-context stack. ``findIndex`` lets nested
+    // contexts be popped in the right order even if a parent is
+    // ended before its child (defensive — under normal flow the
+    // child ends first). Without this pop the stack grows
+    // unboundedly and ``_activeContext`` keeps returning the
+    // deepest dead span as the new parent.
+    const idx = _activeContextStack.indexOf(this);
+    if (idx >= 0) _activeContextStack.splice(idx, 1);
   }
 }
 
-// ── traceAgent decorator ─────────────────────────────────────────
+function _traceController(name: string, opts: TraceOptions): TraceContext {
+  const parent = _activeContext();
+  const controller = new TraceController(name, opts, parent);
+  _activeContextStack.push(controller);
+  return controller;
+}
+
+async function _traceCallback<T>(
+  name: string,
+  fn: (ctx: TraceContext) => Promise<T>,
+  opts: TraceOptions,
+): Promise<T> {
+  const controller = _traceController(name, opts) as TraceController;
+  let result: T;
+  try {
+    result = await fn(controller);
+    if (controller.status === null) controller.status = "ok";
+  } catch (err) {
+    controller.recordError(err);
+    throw err;
+  } finally {
+    controller.end();
+  }
+  return result;
+}
+
+function finishTrace(
+  ctx: TraceContext,
+  options: TraceOptions,
+): void {
+  const client = getDefaultClient();
+  const config = client.getConfig();
+  const durationMs = (ctx.endMs ?? Date.now()) - ctx.startMs;
+  const outcome =
+    ctx.status === "error" ? "error" : ctx.status === "unset" ? "unset" : "success";
+  // Split ``ctx.error`` into a constructor name + message. The legacy
+  // shape the TS tests expect is ``error_type: "Error"`` with the
+  // message dropped — split on the first ":" so callers that want the
+  // class name get it cleanly while ``error`` keeps the full repr.
+  let errorType: string | null = null;
+  let errorMessage: string | null = null;
+  if (ctx.error) {
+    const colonIdx = ctx.error.indexOf(": ");
+    if (colonIdx > 0) {
+      errorType = ctx.error.slice(0, colonIdx);
+      errorMessage = ctx.error.slice(colonIdx + 2);
+    } else {
+      errorType = ctx.error;
+    }
+  }
+  try {
+    client.emit({
+      eventId: ctx.traceId,
+      tenantId: config.orgId ?? "default",
+      projectId: config.projectId,
+      traceId: ctx.traceId,
+      realm: config.realm,
+      eventType: "agent_call",
+      timestamp: new Date().toISOString(),
+      sourceFormat: SOURCE_FORMATS.TRACE_AGENT,
+      payload: {
+        // ``function`` is the legacy field name (used by the TS tests
+        // and the portal's trace agent view). Keep emitting it as an
+        // alias for ``name`` so existing consumers don't break.
+        function: ctx.name,
+        name: ctx.name,
+        status: outcome,
+        duration_ms: durationMs,
+        error_type: errorType,
+        error_message: errorMessage,
+        input: ctx.input,
+        output: ctx.output,
+        ...options.metadata,
+      },
+      metrics: { duration_ms: durationMs },
+      tags: ctx.tags,
+      attributes: {
+        "eden.span_id": ctx.spanId,
+        "eden.trace_name": ctx.name,
+      },
+      environmentId: options.environmentId,
+      spanId: ctx.spanId,
+      parentSpanId: ctx.parentSpanId,
+      name: ctx.name,
+      durationMs,
+    });
+  } catch (err) {
+    if (config.debug) {
+      // eslint-disable-next-line no-console
+      console.debug("[eden-ai] trace emit failed", err);
+    }
+  }
+}
+
+// ── Active-trace contextvar so nested traces correlate ───────────────
+
+// Simple module-level stack for nested-trace correlation. Not safe
+// across worker threads, but matches the Python SDK's behaviour
+// (ContextVars in Python don't cross threads either).
+const _activeContextStack: TraceContext[] = [];
+function _activeContext(): TraceContext | undefined {
+  return _activeContextStack[_activeContextStack.length - 1];
+}
+
+// ── traceAgent decorator ─────────────────────────────────────────────
 
 /**
  * Build a wrapped method that emits one `agent_call` event per
- * invocation. Shared between Stage-2 and Stage-3 decorator paths.
+ * invocation.
  */
 function makeWrappedMethod(
   propertyKey: string,
-  original: (...a: any[]) => any,
+  original: (...a: unknown[]) => unknown,
   options: TraceOptions,
-): (...a: any[]) => any {
-  return function (this: unknown, ...args: any[]): unknown {
-    const ctx = newContext();
-    const start = ctx.startMs;
-    const fnName = `${(this as { constructor?: { name?: string } })?.constructor?.name ?? "Anon"}.${propertyKey}`;
-
+): (...a: unknown[]) => unknown {
+  return function (this: unknown, ...args: unknown[]): unknown {
+    const controller = _traceController(
+      `${(this as { constructor?: { name?: string } })?.constructor?.name ?? "Anon"}.${propertyKey}`,
+      options,
+    ) as TraceController;
     let status: "success" | "error" = "success";
     let errorType: string | undefined;
 
     const finish = () => {
-      finishTrace(
-        ctx,
-        start,
-        { function: fnName, status, error_type: errorType, arg_count: args.length },
-        options,
-      );
+      controller.setStatus(status === "error" ? "error" : "ok");
+      if (errorType) controller.error = errorType;
+      controller.end();
     };
 
     try {
       const result = original.apply(this, args);
       if (result instanceof Promise) {
         return result
-          .catch((err) => {
+          .catch((err: unknown) => {
             status = "error";
-            errorType =
-              err instanceof Error ? err.constructor.name : "Error";
+            errorType = err instanceof Error ? err.constructor.name : "Error";
             throw err;
           })
           .finally(finish);
@@ -163,99 +320,37 @@ function makeWrappedMethod(
   };
 }
 
-const __wrappedFlag = Symbol.for("@eden-ai/sdk.traceAgent.wrapped");
-
 /**
- * Class-method decorator that auto-traces a function. Mirrors
- * the Python `@trace_agent()` decorator semantics: returns a
- * wrapped method that emits one `agent_call` event per call.
- *
- * Supports both legacy (Stage 2) and current (Stage 3) decorator
- * proposals. Bun's transpiler uses Stage 3 — in that case the
- * descriptor is `undefined` and we install the wrapped method
- * via the `addInitializer` hook.
+ * Class-method decorator.
  *
  * ```ts
  * class MyAgent {
  *   @traceAgent({ tags: ["prod"] })
- *   async run(query: string) {
- *     return await openai.chat.completions.create({ ... });
- *   }
+ *   async run(q: string) { ... }
  * }
  * ```
  */
 export function traceAgent(options: TraceOptions = {}) {
-  return function (
-    _targetOrValue: unknown,
-    propertyKeyOrContext: string | undefined,
-    descriptor: TypedPropertyDescriptor<(...a: any[]) => any> | undefined,
-  ): any {
-    // Detect which proposal we're running under.
-    // - Stage 2 (legacy):  (target, key, descriptor)
-    // - Stage 3 (TC39):    (value, context)  — context has `kind`,
-    //                      `name`, `addInitializer`, etc.
-    const stage3Context =
-      propertyKeyOrContext &&
-      typeof propertyKeyOrContext === "object" &&
-      "addInitializer" in (propertyKeyOrContext as object)
-        ? (propertyKeyOrContext as unknown as {
-            kind: string;
-            name: string;
-            addInitializer?: (fn: () => void) => void;
-            static?: boolean;
-            private?: boolean;
-          })
-        : undefined;
-    const stage2Descriptor =
-      !stage3Context &&
-      descriptor &&
-      typeof (descriptor as TypedPropertyDescriptor<(...a: any[]) => any>).value === "function"
-        ? (descriptor as TypedPropertyDescriptor<(...a: any[]) => any>)
-        : undefined;
-
-    const propertyKey = stage3Context
-      ? stage3Context.name
-      : (propertyKeyOrContext as string);
-
-    if (stage2Descriptor) {
-      // Stage 2 (legacy) — descriptor.value is the original fn.
-      const original = stage2Descriptor.value!;
-      stage2Descriptor.value = makeWrappedMethod(propertyKey, original, options);
-      return stage2Descriptor;
-    }
-
-    if (stage3Context && typeof stage3Context.addInitializer === "function") {
-      if (stage3Context.private === true) return; // unsupported
-      const isStatic = stage3Context.static === true;
-      stage3Context.addInitializer(function (this: any) {
-        // Bun binds `this` to the prototype (for instance methods)
-        // and to the constructor (for static methods). The
-        // canonical TC39 spec says `this` is the class. Handle
-        // both: if the value has a `prototype` property, use it
-        // as the class; otherwise treat it as the prototype.
-        const target: Record<string, any> = isStatic
-          ? this
-          : this && typeof this === "object" && "prototype" in this
-            ? (this as { prototype: Record<string, any> }).prototype
-            : this;
-        const original = (target as Record<string, any>)[propertyKey];
-        if (typeof original !== "function") return;
-        if ((original as any)[__wrappedFlag] === true) return;
-        const wrapped = makeWrappedMethod(propertyKey, original, options);
-        (wrapped as any)[__wrappedFlag] = true;
-        (target as Record<string, any>)[propertyKey] = wrapped;
-      });
-      return;
-    }
-
-    return;
+  return function decorate<This, Args extends unknown[], R>(
+    _target: (this: This, ...args: Args) => R,
+    context: ClassMemberDecoratorContext,
+  ): (this: This, ...args: Args) => R {
+    const propertyKey = String(context.name);
+    return function (this: This, ...args: Args): R {
+      // Wrap at call time so each call gets a fresh TraceController.
+      // (Class-member decorators don't have a clean way to bind `this`.)
+      const fn = _target as unknown as (...a: unknown[]) => unknown;
+      return makeWrappedMethod(propertyKey, fn, options).call(
+        this,
+        ...(args as unknown[]),
+      ) as R;
+    };
   };
 }
 
-/**
- * Configure the default SDK client. Convenience wrapper that
- * sets options on the singleton returned by `getDefaultClient()`.
- */
-export function configure(opts: import("./types.js").EdenSDKOptions): void {
-  getDefaultClient().configure(opts);
-}
+
+// Re-export `configure` from the client module so callers can do
+// `import { configure } from "@eden-ai/sdk"` without having to
+// know which internal module owns it. Tests in this package import
+// it directly from `../src/trace.js` for the same reason.
+export { configure } from "./client.js";

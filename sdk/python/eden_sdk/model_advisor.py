@@ -49,6 +49,7 @@ fall back, retry, or abort.
 from __future__ import annotations
 
 import logging
+import threading
 from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import Any
@@ -297,10 +298,19 @@ class ModelAdvisor:
         self.org_id = getattr(cfg, "org_id", "") or ""
         self.timeout = timeout
         # Caller can pass a pre-built httpx.Client to reuse
-        # connection pooling across calls; otherwise we build one
-        # per request (cheap, fine for SDK use).
-        self._client = client
-        self._owns_client = client is None
+        # connection pooling across calls; otherwise we lazily
+        # build one on first use and reuse it. Building per
+        # request would defeat HTTP keep-alive and add ~10ms
+        # of TLS handshake per call.
+        if client is not None:
+            self._client = client
+            self._owns_client = False
+        else:
+            self._client = None
+            self._owns_client = True
+        # Guards lazy client creation so two threads don't
+        # both build their own connection pool.
+        self._client_lock = threading.Lock()
 
     def _headers(self) -> dict[str, str]:
         h = {"Content-Type": "application/json", "User-Agent": "eden-sdk/python"}
@@ -310,17 +320,21 @@ class ModelAdvisor:
 
     def _post(self, path: str, body: dict[str, Any]) -> dict[str, Any]:
         url = f"{self.base_url}{path}"
-        client = self._client or httpx.Client(timeout=self.timeout)
+        # Lazily create a persistent client on first use so the
+        # connection pool survives across calls. The client is
+        # closed in :meth:`close` or via the context manager.
+        # Double-checked locking so the fast path stays lock-free.
+        if self._client is None:
+            with self._client_lock:
+                if self._client is None and self._owns_client:
+                    self._client = httpx.Client(timeout=self.timeout)
         try:
-            r = client.post(url, json=body, headers=self._headers())
+            r = self._client.post(url, json=body, headers=self._headers())
         except httpx.HTTPError as exc:
             raise ModelAdvisorError(
                 status_code=0,
                 reason=f"transport error: {exc!r}",
             ) from exc
-        finally:
-            if self._owns_client:
-                client.close()
         if r.status_code >= 400:
             # Try to surface the API's detail message.
             try:
@@ -420,6 +434,14 @@ class ModelAdvisor:
         if self._owns_client and self._client is not None:
             self._client.close()
             self._client = None
+
+    def __enter__(self) -> ModelAdvisor:
+        """Context-manager support: ``with ModelAdvisor() as advisor: ...``."""
+        return self
+
+    def __exit__(self, *exc: object) -> None:
+        """Release the underlying httpx client on context exit."""
+        self.close()
 
 
 __all__ = [

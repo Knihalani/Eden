@@ -1,0 +1,293 @@
+# Changelog — eden-sdk (Python)
+
+All notable changes to the Eden Python SDK are documented here. The
+format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/).
+
+## 0.2.8 — 2026-07-09
+
+Bug-fix + observability release.
+
+### Fixed
+- `@trace_agent` decorator: stop writing `eden.tags` as a
+  comma-joined string. The emitter did
+  `["eden-sdk", "framework", *extra_tags]`; when `extra_tags`
+  was a string the `*` spread it into per-character entries
+  on the wire (e.g. `['e','n','v',':','p','r','o','d',',',...]`
+  for `tags=["env:prod"]`). Decorator now writes a list and
+  the emitter coerces legacy string attributes defensively.
+  `Span.set_tag()` similarly tolerates pre-existing string or
+  list attributes instead of `list(...)` on the raw value.
+- `_from_env`: introduce `EDEN_DRY_RUN` as the canonical env
+  var for opt-in dry-run mode. `EDEN_DEBUG` is preserved as a
+  back-compat alias (the older README documented it). When
+  both are set, `EDEN_DRY_RUN` wins — a user that explicitly
+  sets `EDEN_DRY_RUN=0` does not have their intent
+  overridden by a stale `EDEN_DEBUG=1`.
+- `Span.set_status("ok", error="boom")` previously wrote
+  `eden.status = "success"` BEFORE the error override, so
+  the public `eden.status` field said `"success"` while
+  `outcome` was `"error"`. The two fields now agree.
+- `_coerce_int` rejected all floats; a JSON-decoded
+  `{"prompt_tokens": 1.0}` was dropped on the floor.
+  Accepts whole-number floats (`1.0` → `1`) and float
+  strings (`"1.0"` → `1`); rejects NaN, infinity, and
+  fractional floats (`0.7`) so a partial-token count is
+  never silently rounded down to 0 and under-billed.
+
+### Added
+- `User-Agent: eden-sdk/<version> (python)` header on every
+  ingestion POST (regular batch + `/ingest/chunks`). The
+  Python SDK was shipping without a User-Agent — version
+  drift across the fleet was invisible. The TS SDK already
+  ships one via `SDK_USER_AGENT`; this brings Python to
+  parity.
+
+### Tests
+- 6 new tests in `test_trace.py` pinning the tag-list wire
+  contract (decorator sync + async emit a list, `set_tag`
+  handles string / list / missing attribute without
+  per-character spread) + the `set_status` /
+  `eden.status` field agreement.
+- 3 new tests in `test_config.py` pinning the
+  `EDEN_DRY_RUN` / `EDEN_DEBUG` precedence rules.
+- 2 new tests in `test_client.py` pinning the new
+  `User-Agent` header on the batch and chunk ingest paths.
+- 6 new tests in `test_tokens.py` pinning the new
+  whole-number float / float-string acceptance and the
+  NaN / infinity / fractional rejection.
+
+## 0.2.7 — 2026-07-09
+
+Bug-fix release.
+
+- `normalize_model_name`: fix ordering so `claude-sonnet-4-5-20250929-latest`
+  no longer leaves the date stamp stranded in the output (the bare
+  `-latest` strip used to run AFTER the date regexes, which never
+  matched `-YYYYMMDD-latest`). Now matches `-DATE-latest` as a
+  single compound suffix.
+- Client retry list now treats `408 Request Timeout` as retryable
+  (was previously failing fast alongside the other non-5xx 4xx).
+
+## [0.2.6] — 2026-07-08
+
+### Added
+- New `eden_sdk._tokens` module: shared `extract_usage()` and
+  `normalize_model_name()` helpers used by every instrumentation.
+  Both providers (Anthropic, OpenAI) and every framework adapter
+  (LangChain, LlamaIndex, CrewAI, AutoGen, Vercel AI) now emit
+  the same field names on the wire:
+    * `input_tokens`, `output_tokens`
+    * `cache_read_input_tokens`, `cache_creation_input_tokens`
+    * `model_normalized` — strips dated suffixes
+      (`gpt-4o-2024-08-06` → `gpt-4o`,
+      `claude-3-5-sonnet-20241022` → `claude-3-5-sonnet`) and the
+      `-latest` alias (`claude-3-5-sonnet-latest` →
+      `claude-3-5-sonnet`) so pricing lookups hit a single row.
+- `EdenConfig.validate()`: raises `ValueError` if `org_id` is
+  unset on a non-`disabled`, non-`dry_run` config. Wired into
+  `configure()` so misconfigured startup fails loudly instead of
+  silently dropping events for the lifetime of the process.
+  Logs a warning when `api_key` is missing on a shipping config.
+
+### Changed
+- OpenAI + Anthropic streaming paths now capture the
+  `cache_read_input_tokens` / `cache_creation_input_tokens` fields
+  when the provider returns them. Cache pricing is significant on
+  Anthropic (90% discount on cache reads) so the SDK now hands
+  the signal to the server instead of silently dropping it.
+- LangChain instrumentation promotes `token_usage.input_tokens` /
+  `token_usage.output_tokens` to the top-level event payload
+  (instead of nesting under `attributes.langchain.payload.*`).
+  Adds `model_normalized` so the pricing lookup matches what the
+  server-side normalizer does for OpenAI/Anthropic payloads.
+- `_send_batch` no longer crashes with `UnboundLocalError` if
+  `ingest_url()` raises (e.g. `org_id` not configured). The
+  `count` local is initialized at the top of the group loop so
+  the outermost `except` can always increment the failure
+  counter safely.
+
+### Tests
+- 14 new tests in `test_tokens.py` for `extract_usage()` and
+  `normalize_model_name()` (Anthropic flat dict, OpenAI pydantic
+  with nested `cached_tokens`, camelCase aliases, null / partial /
+  bool / string-coerced / unknown-shape inputs, dated + `-latest`
+  suffix stripping).
+- 6 new tests in `test_config.py` for `EdenConfig.validate()`
+  (raises without `org_id`, no-ops when disabled / dry_run,
+  passes when configured, warns without `api_key`, propagates
+  through `configure()`).
+- Existing 133 tests still pass.
+
+## [0.2.0] — 2026-07-08
+
+### Added
+- New `Span` API for tracing: `set_input()`, `set_output()`,
+  `set_tag()`, `set_status()` are now first-class methods on the
+  `Span` yielded by `trace()`. Input, output, status, and tags are
+  hoisted to top-level fields on the emitted trace payload (in
+  addition to being mirrored into the legacy nested shape).
+- Retry with exponential backoff for transient gateway failures
+  in `EdenClient._send_batch`. Honours the `Retry-After` response
+  header (capped at 30 s). 3 attempts total; 4xx other than
+  408/429 are treated as permanent and are not retried.
+- New tests for the Span API and retry behaviour (10 in
+  `test_trace.py`, 12 in `test_client.py`).
+
+### Changed
+- `eden.instrument("mastra")` now emits a `WARNING` (instead of
+  silently logging at `DEBUG`) when called on the Python SDK, which
+  has no Mastra integration. The TS SDK is the supported path.
+
+## [0.1.0] — 2026-06-19
+
+- Initial public release.
+
+## [0.2.1] — 2026-07-08
+
+### Added
+- **Client-side PII safety net.** `redact_payload()` is exported
+  from both `eden_sdk.filters` and the top-level `eden` namespace.
+  A small regex pass masks obvious emails, US phone numbers,
+  US SSNs, and credit-card numbers in every outgoing payload.
+  Enabled by default via `EdenConfig(redact_on_client=True)`;
+  set to `False` when the gateway is your trusted redaction
+  point. The gateway remains the authoritative redaction layer.
+
+### Added
+- `eden.autoInstrument()` / `eden.detect_installed_frameworks()` —
+  mirror the TypeScript SDK's detection helpers. Reports all
+  seven supported framework keys (openai, anthropic, langchain,
+  llama_index, crewai, autogen, mastra) with `True`/`False`
+  values for whether each is importable.
+
+### Added
+- `examples/05_crewai.py`, `examples/06_autogen.py`,
+  `examples/07_llamaindex.py` — mirror the existing
+  `02_langchain.py` shape and exercise the corresponding
+  auto-instrumentation.
+
+### Fixed
+- `eden.instrument("mastra")` now logs at WARNING (was DEBUG)
+  to make the no-op visible to operators.
+
+## [0.2.2] — 2026-07-08
+
+### Fixed
+- The client-side `redact_payload` PII safety net no longer
+  false-positives on pure-digit numeric IDs (10-11 char strings
+  like timestamps and order numbers). The phone regex now
+  requires an actual phone format (parentheses, hyphens, dots,
+  or spaces between the 3-3-4 groups) before flagging a match.
+- The credit-card regex now runs the candidate through a Luhn
+  checksum before redacting. 13-19 digit runs that fail Luhn
+  (timestamps, hashes, system IDs) are no longer touched.
+- `redact_payload` is now exported from the top-level `eden`
+  namespace as well as `eden_sdk.filters`, matching the
+  TypeScript SDK's public surface.
+
+## [0.2.1] — 2026-07-08
+
+### Added
+- Client-side PII safety net. `redact_payload()` masks obvious
+  emails, US phone numbers, US SSNs, and credit-card numbers
+  in every outgoing payload.  Enabled by default via
+  `EdenConfig(redact_on_client=True)`.  The gateway remains the
+  authoritative redaction layer.
+- `eden.autoInstrument()` and `eden.detect_installed_frameworks()`
+  for detection parity with the TypeScript SDK. Reports all
+  seven supported framework keys.
+- `examples/05_crewai.py`, `06_autogen.py`, `07_llamaindex.py`.
+
+### Fixed
+- `eden.instrument("mastra")` now logs at WARNING (was DEBUG).
+
+## [0.2.3] — 2026-07-08
+
+### Added
+- `examples/08_auto_detect.py` — uses `detect_installed_frameworks`
+  to selectively instrument whichever LLM SDKs are importable.
+- 4 new integration tests in `test_filters.py` exercise the
+  redactor against realistic OpenAI / Anthropic response shapes
+  (id, model, usage block, deeply-nested choices.content) and
+  assert that PII is masked while structure and token counts
+  are preserved.
+
+## [0.2.2] — 2026-07-08
+
+### Fixed
+- The client-side `redact_payload` PII safety net no longer
+  false-positives on pure-digit numeric IDs (10-11 char strings
+  like timestamps and order numbers). The phone regex now
+  requires an actual phone format (parentheses, hyphens, dots,
+  or spaces between the 3-3-4 groups) before flagging a match.
+- The credit-card regex now runs the candidate through a Luhn
+  checksum before redacting. 13-19 digit runs that fail Luhn
+  (timestamps, hashes, system IDs) are no longer touched.
+- `redact_payload` is now exported from the top-level `eden`
+  namespace as well as `eden_sdk.filters`.
+
+## [0.2.4] — 2026-07-08
+
+### Fixed
+- The client-side `redact_payload` PII safety net now also
+  redacts string keys in dicts. Some upstream LLM SDKs (and
+  application code) stash identifiers in dict keys; without
+  this, an email-keyed dict would leak through unmasked.
+- `eden.redact_payload` is now re-exported from the canonical
+  `eden_sdk` package as well as the `eden` shim and
+  `eden_sdk.filters`.
+- `__version__` is now in the `__all__` list of `eden_sdk` for
+  consistency with the `eden` shim.
+- New `scripts/redactor_smoke.py` exercises the redactor
+  against 14 curated inputs (PII + non-PII false-positive
+  cases) and exits 1 on any regression.
+
+## [0.2.3] — 2026-07-08
+
+### Added
+- `examples/08_auto_detect.py` — uses `detect_installed_frameworks`
+  to selectively instrument whichever LLM SDKs are importable.
+- 4 new integration tests in `test_filters.py` exercise the
+  redactor against realistic OpenAI / Anthropic response shapes
+  and assert that PII is masked while structure and token counts
+  are preserved.
+
+## [0.2.2] — 2026-07-08
+
+### Fixed
+- The client-side `redact_payload` PII safety net no longer
+  false-positives on pure-digit numeric IDs. Phone now requires
+  an actual phone format; CC runs the candidate through Luhn.
+- `redact_payload` is now exported from the top-level `eden`
+  namespace as well as `eden_sdk.filters`.
+
+## [0.2.5] — 2026-07-08
+
+### Added
+- 3 new tests in `test_config.py` cover the `redact_on_client`
+  config flag: default is `True`, can be disabled via
+  `configure(redact_on_client=False)`, and is incrementally
+  updatable across multiple `configure()` calls.
+
+## [0.2.6] — 2026-07-08
+
+### Fixed
+- The streaming `/ingest/chunks` path now applies the client-side
+  PII safety net to every chunk's `delta_text` before it leaves
+  the process. Without this, model-echoed PII (an email the
+  user put in the prompt that the model then repeated in its
+  reply) would leak to the gateway unmasked via the streaming
+  route, bypassing the batched redaction in `_send_batch`.
+- 2 new tests in `test_client.py` cover the chunk redaction:
+  PII is masked when `redact_on_client=True` (default) and
+  `delta_text` passes through unchanged when
+  `redact_on_client=False`.
+
+## [0.2.5] — 2026-07-08
+
+### Added
+- 3 new tests in `test_config.py` cover the `redact_on_client`
+  config flag: default is `True`, can be disabled via
+  `configure(redact_on_client=False)`, and is incrementally
+  updatable across multiple `configure()` calls.
