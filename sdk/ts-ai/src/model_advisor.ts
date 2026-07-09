@@ -22,6 +22,8 @@
  * ```
  */
 
+import { SDK_USER_AGENT } from "./version.js";
+
 // ─────────────────────────────────────────────────────────────────────
 // Types
 // ─────────────────────────────────────────────────────────────────────
@@ -287,7 +289,11 @@ export class ModelAdvisor {
   private headers(): Record<string, string> {
     const h: Record<string, string> = {
       "Content-Type": "application/json",
-      "User-Agent": "eden-sdk/typescript",
+      // Use the same ``SDK_USER_AGENT`` constant the
+      // telemetry client emits on every ingestion POST so
+      // version attribution is consistent across the
+      // advisor and the auto-instrumentation paths.
+      "User-Agent": SDK_USER_AGENT,
     };
     if (this.apiKey) h["Authorization"] = `Bearer ${this.apiKey}`;
     return h;

@@ -226,3 +226,33 @@ def test_extract_usage_accepts_whole_number_float_tokens() -> None:
     out = extract_usage({"prompt_tokens": 1.0, "completion_tokens": 2.0})
     assert out["input_tokens"] == 1
     assert out["output_tokens"] == 2
+
+
+# ── _extract_usage camelCase / top-level aliases ─────────────────────
+#
+# The Python SDK previously only checked the nested OpenAI
+# ``prompt_tokens_details.cached_tokens`` for cache-read
+# tokens. Some OpenAI-compatible gateways (and older OpenAI
+# SDK responses) expose the same value as a top-level
+# ``cached_tokens`` (snake_case) or ``cachedTokens``
+# (camelCase) field. The TypeScript SDK already accepts
+# both — bring the Python SDK to parity.
+
+
+def test_extract_usage_accepts_top_level_cached_tokens_snake() -> None:
+    from eden_sdk._tokens import extract_usage
+    out = extract_usage({"cached_tokens": 17, "input_tokens": 100})
+    assert out["cache_read_tokens"] == 17
+    assert out["input_tokens"] == 100
+
+
+def test_extract_usage_accepts_top_level_cached_tokens_camel() -> None:
+    from eden_sdk._tokens import extract_usage
+    out = extract_usage({"cachedTokens": 22, "input_tokens": 50})
+    assert out["cache_read_tokens"] == 22
+
+
+def test_extract_usage_accepts_camel_prompt_tokens_details() -> None:
+    from eden_sdk._tokens import extract_usage
+    out = extract_usage({"promptTokensDetails": {"cached_tokens": 31}})
+    assert out["cache_read_tokens"] == 31

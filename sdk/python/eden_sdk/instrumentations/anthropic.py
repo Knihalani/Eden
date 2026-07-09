@@ -249,12 +249,22 @@ def _wrap_sync_stream(original, self, args, kwargs):
                         if u["cache_read_tokens"] is not None:
                             usage_cache_read = u["cache_read_tokens"]
                 elif etype == "message_start":
-                    msg = _get_attr(event, "message") or {}
-                    if isinstance(msg, dict):
-                        m = msg.get("model")
+                    # Anthropic SDKs return ``message`` as a
+                    # Pydantic model in modern versions (1.x) and
+                    # as a plain dict in older versions and
+                    # anthropic-compatible gateways. The previous
+                    # implementation only handled the dict shape
+                    # (``isinstance(msg, dict)``), so on the
+                    # modern SDK the model name + input token
+                    # count were silently dropped on every
+                    # Anthropic stream. Use :func:`_get_attr`,
+                    # which dispatches on the actual shape.
+                    msg = _get_attr(event, "message")
+                    if msg is not None:
+                        m = _get_attr(msg, "model")
                         if isinstance(m, str):
                             model = m
-                        usage = msg.get("usage")
+                        usage = _get_attr(msg, "usage")
                         if usage is not None:
                             u = extract_usage(usage)
                             if u["input_tokens"] is not None:
@@ -404,12 +414,22 @@ def _wrap_async_stream(original, self, args, kwargs):
                         if u["cache_read_tokens"] is not None:
                             usage_cache_read = u["cache_read_tokens"]
                 elif etype == "message_start":
-                    msg = _get_attr(event, "message") or {}
-                    if isinstance(msg, dict):
-                        m = msg.get("model")
+                    # Anthropic SDKs return ``message`` as a
+                    # Pydantic model in modern versions (1.x) and
+                    # as a plain dict in older versions and
+                    # anthropic-compatible gateways. The previous
+                    # implementation only handled the dict shape
+                    # (``isinstance(msg, dict)``), so on the
+                    # modern SDK the model name + input token
+                    # count were silently dropped on every
+                    # Anthropic stream. Use :func:`_get_attr`,
+                    # which dispatches on the actual shape.
+                    msg = _get_attr(event, "message")
+                    if msg is not None:
+                        m = _get_attr(msg, "model")
                         if isinstance(m, str):
                             model = m
-                        usage = msg.get("usage")
+                        usage = _get_attr(msg, "usage")
                         if usage is not None:
                             u = extract_usage(usage)
                             if u["input_tokens"] is not None:

@@ -206,9 +206,35 @@ export function redactPayload(value: unknown): unknown {
   if (value !== null && typeof value === "object") {
     // String keys are redacted too — some upstream LLM SDKs stash
     // identifiers in keys, and we want to be safe-by-default.
+    //
+    // Collision handling: when two distinct keys redact to the
+    // same value (e.g. ``"a@example.com"`` and
+    // ``"b@example.com"`` both become ``"[REDACTED]"``), the
+    // naive object-comprehension silently overwrites the first
+    // entry. That dropped one of the values on every payload
+    // that carried multiple PII keys (e.g.
+    // ``{"alice@...": 5, "bob@...": 3}`` would collapse to
+    // ``{"[REDACTED]": 3}`` and lose Alice's value). We now
+    // disambiguate by appending a numeric suffix on collision
+    // (``[REDACTED]``, ``[REDACTED]_2``, ``[REDACTED]_3`` …).
+    // The collision only happens when the user has legitimately
+    // different keys that happen to redact to the same string,
+    // so the disambiguator is rare in practice and the cost is
+    // O(n) on the dict's key set.
     const out: Record<string, unknown> = {};
     for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
-      out[redactString(k)] = redactPayload(v);
+      const newKey = redactString(k);
+      if (Object.prototype.hasOwnProperty.call(out, newKey)) {
+        let i = 2;
+        let suffixed = `${newKey}_${i}`;
+        while (Object.prototype.hasOwnProperty.call(out, suffixed)) {
+          i += 1;
+          suffixed = `${newKey}_${i}`;
+        }
+        out[suffixed] = redactPayload(v);
+      } else {
+        out[newKey] = redactPayload(v);
+      }
     }
     return out;
   }

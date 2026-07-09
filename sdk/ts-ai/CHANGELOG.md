@@ -4,6 +4,33 @@ All notable changes to the Eden TypeScript SDK are documented here. The
 format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## 0.2.19 — 2026-07-09
+
+Bug-fix + consistency release.
+
+### Fixed
+- `redactPayload` (PII redaction): two distinct keys that redact to
+  the same value (e.g. `"alice@..."` and `"bob@..."` both becoming
+  `"[REDACTED]"`) silently overwrote each other under the previous
+  object-comprehension, dropping one entry on every payload that
+  carried multiple PII keys. The redacted object now disambiguates
+  by appending a numeric suffix on collision (`[REDACTED]`, then
+  `[REDACTED]_2`, `[REDACTED]_3`, …) so per-user metrics keyed by
+  email are no longer collapsed to a single entry. The
+  disambiguator is a no-op for distinct redacted values, which
+  is the common case.
+- `ModelAdvisor.headers()`: the `User-Agent` was hardcoded to
+  `"eden-sdk/typescript"` (no version), so version attribution for
+  advisor traffic was permanently pinned to the literal string.
+  Now uses the same `SDK_USER_AGENT` constant the telemetry
+  client emits on every ingestion POST, so the advisor and the
+  auto-instrumentation paths always report the same version.
+
+### Tests
+- 3 new tests in `filters.test.ts` pinning the new key-collision
+  disambiguator (two- and three-way PII key collisions, plus a
+  non-colliding passthrough).
+
 ## 0.2.18 — 2026-07-09
 
 Bug-fix release.

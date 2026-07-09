@@ -230,10 +230,32 @@ def _redact_value(v: Any) -> Any:
     if isinstance(v, str):
         return _redact_string(v)
     if isinstance(v, dict):
-        return {
-            _redact_string(k) if isinstance(k, str) else k: _redact_value(val)
-            for k, val in v.items()
-        }
+        # When two distinct keys redact to the same value
+        # (e.g. ``"a@example.com"`` and ``"b@example.com"`` both
+        # become ``"[REDACTED]"``), a naive dict-comprehension
+        # silently overwrites the first entry. The earlier
+        # implementation was dropping one of the values on
+        # every payload that carried multiple PII keys —
+        # so an event with a per-user metrics dict would
+        # collapse ``{"alice@...": 5, "bob@...": 3}`` to
+        # ``{"[REDACTED]": 3}`` and lose Alice's value. We now
+        # disambiguate by appending a numeric suffix on
+        # collision (``[REDACTED]``, ``[REDACTED]_2``,
+        # ``[REDACTED]_3`` …). The collision only happens when
+        # the user has *legitimately* different keys that
+        # happen to redact to the same string, so the
+        # disambiguator is rare in practice and the cost is
+        # O(n) on the dict's key set.
+        out: dict[Any, Any] = {}
+        for k, val in v.items():
+            new_key = _redact_string(k) if isinstance(k, str) else k
+            if new_key in out:
+                i = 2
+                while f"{new_key}_{i}" in out:
+                    i += 1
+                new_key = f"{new_key}_{i}"
+            out[new_key] = _redact_value(val)
+        return out
     if isinstance(v, list):
         return [_redact_value(item) for item in v]
     if isinstance(v, tuple):
