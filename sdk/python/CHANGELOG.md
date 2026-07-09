@@ -4,6 +4,18 @@ All notable changes to the Eden Python SDK are documented here. The
 format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## 0.2.16 — 2026-07-09
+
+No SDK changes; tracks the parallel TypeScript SDK
+release (0.2.25). The TS SDK fixes a wire-contract
+regression where the ``@traceAgent`` / ``trace()`` path
+was emitting ``event_type: "agent_call"`` while the
+gateway's SQL filter expects ``agent.run`` (matching the
+Python SDK's existing value). Now both SDKs agree on
+``"agent.run"`` on the wire.
+
+209/209 Python tests still pass.
+
 ## 0.2.15 — 2026-07-09
 
 No SDK changes; this release bumps the version to track

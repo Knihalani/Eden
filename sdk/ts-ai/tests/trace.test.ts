@@ -65,7 +65,7 @@ describe("trace()", () => {
     await trace("happy", async () => "ok");
     await getDefaultClient().flush();
     const events = _flattenEvents();
-    const call = events.find((e) => e.eventType === "agent_call");
+    const call = events.find((e) => e.eventType === "agent.run");
     expect(call).toBeDefined();
     expect(call?.payload.status).toBe("success");
     expect(call?.payload.name).toBe("happy");
@@ -79,7 +79,7 @@ describe("trace()", () => {
       }),
     ).rejects.toThrow("kaboom");
     await getDefaultClient().flush();
-    const call = _flattenEvents().find((e) => e.eventType === "agent_call");
+    const call = _flattenEvents().find((e) => e.eventType === "agent.run");
     expect(call?.payload.status).toBe("error");
     expect(call?.payload.error_type).toBe("Error");
   });
@@ -108,7 +108,7 @@ describe("traceAgent()", () => {
     const result = await agent.run("world");
     expect(result).toBe("hello world");
     await getDefaultClient().flush();
-    const call = _flattenEvents().find((e) => e.eventType === "agent_call");
+    const call = _flattenEvents().find((e) => e.eventType === "agent.run");
     expect(call?.payload.function).toBe("MyAgent.run");
     expect(call?.payload.status).toBe("success");
   });
@@ -123,7 +123,7 @@ describe("traceAgent()", () => {
     const r = new Sync();
     expect(r.add(2, 3)).toBe(5);
     await getDefaultClient().flush();
-    const call = _flattenEvents().find((e) => e.eventType === "agent_call");
+    const call = _flattenEvents().find((e) => e.eventType === "agent.run");
     expect(call?.payload.status).toBe("success");
   });
 
@@ -136,7 +136,7 @@ describe("traceAgent()", () => {
     }
     expect(() => new Throwy().bad()).toThrow("nope");
     await getDefaultClient().flush();
-    const call = _flattenEvents().find((e) => e.eventType === "agent_call");
+    const call = _flattenEvents().find((e) => e.eventType === "agent.run");
     expect(call?.payload.status).toBe("error");
     expect(call?.payload.error_type).toBe("Error");
   });
@@ -169,7 +169,7 @@ describe("traceAgent()", () => {
       expect((caught as Error).message).toBe("kaboom");
       await getDefaultClient().flush();
       const call = _flattenEvents().find(
-        (e) => e.eventType === "agent_call" && e.payload.error_type === "TypeError",
+        (e) => e.eventType === "agent.run" && e.payload.error_type === "TypeError",
       );
       expect(call?.payload.status).toBe("error");
       expect(call?.payload.error_type).toBe("TypeError");
@@ -198,7 +198,7 @@ describe("traceAgent()", () => {
       expect((caught as Error).message).toBe("async-boom");
       await getDefaultClient().flush();
       const call = _flattenEvents().find(
-        (e) => e.eventType === "agent_call" && e.payload.error_type === "RangeError",
+        (e) => e.eventType === "agent.run" && e.payload.error_type === "RangeError",
       );
       expect(call?.payload.status).toBe("error");
       expect(call?.payload.error_type).toBe("RangeError");
@@ -249,7 +249,7 @@ describe("trace() context-manager form", () => {
     await getDefaultClient().flush();
     await new Promise((r) => setTimeout(r, 50));
     const events = _flattenEvents();
-    const root = events.find((e) => (e.name === "qa-pipeline" || e.payload?.name === "qa-pipeline") && e.eventType === "agent_call");
+    const root = events.find((e) => (e.name === "qa-pipeline" || e.payload?.name === "qa-pipeline") && e.eventType === "agent.run");
     expect(root).toBeDefined();
     expect((root?.payload as Record<string, unknown>).input).toEqual({ q: "hi" });
     expect((root?.payload as Record<string, unknown>).output).toEqual({ final: "ok" });
@@ -265,7 +265,7 @@ describe("trace() context-manager form", () => {
     // t.outcome not exposed; status is the public field.
     await getDefaultClient().flush();
     await new Promise((r) => setTimeout(r, 50));
-    const ev = _flattenEvents().find((e) => (e.name === "error-path" || e.payload?.name === "error-path") && e.eventType === "agent_call");
+    const ev = _flattenEvents().find((e) => (e.name === "error-path" || e.payload?.name === "error-path") && e.eventType === "agent.run");
     expect(ev).toBeDefined();
     expect((ev!.payload as Record<string, unknown>).status).toBe("error");
     expect((ev?.payload as Record<string, unknown>).error_type).toBe("boom");
@@ -327,4 +327,46 @@ describe("active-context stack hygiene", () => {
     await client.flush();
     expect(captured.length).toBeGreaterThanOrEqual(1);
   });
+});
+
+
+
+// ── Wire-contract regression: event_type must be "agent.run" ──────────
+
+describe("trace() wire contract", () => {
+  it(
+    "emits event_type='agent.run' on the wire (matches the gateway SQL filter)",
+    async () => {
+      // Regression: the TS @traceAgent / trace() path used to
+      // emit ``eventType: "agent_call"``. The gateway's
+      // promotion roll-ups query ``WHERE event_type =
+      // 'agent.run'`` (``src/eden/llmops/promotion.py:161``),
+      // so the previous value silently dropped every
+      // TS-traced agent run from the cost-savings widgets.
+      // Pin the wire shape end-to-end through the actual
+      // emit path.
+      const t = trace("probe", { tags: ["contract"] });
+      t.end();
+      await getDefaultClient().flush();
+      // The fetch interceptor above captures the wire
+      // request as a snake_case ``event_type`` field.
+      const wireEvents = captured
+        .map((c) => c.body)
+        .filter((b): b is Record<string, unknown>[] =>
+          Array.isArray(b),
+        )
+        .flat();
+      const runEvents = wireEvents.filter(
+        (e) => e.event_type === "agent.run",
+      );
+      expect(runEvents.length).toBe(1);
+      // And explicitly assert the old (wrong) value is
+      // never on the wire — would catch a future
+      // regression that restored the typo.
+      const stale = wireEvents.filter(
+        (e) => e.event_type === "agent_call",
+      );
+      expect(stale.length).toBe(0);
+    },
+  );
 });

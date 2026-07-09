@@ -345,7 +345,7 @@ describe("EdenSDK postJson retry behaviour", () => {
     const sdk = new EdenSDK({ orgId: "o", apiKey: "k_retry", flushIntervalMs: 60000 });
     sdk.emit({
       eventId: "e1", tenantId: "o", projectId: "default", traceId: "t1",
-      realm: "production", eventType: "agent_call",
+      realm: "production", eventType: "agent.run",
       timestamp: new Date().toISOString(), sourceFormat: "openai",
       payload: { x: 1 },
     });
@@ -366,7 +366,7 @@ describe("EdenSDK postJson retry behaviour", () => {
     const sdk = new EdenSDK({ orgId: "o", apiKey: "k_retry", flushIntervalMs: 60000 });
     sdk.emit({
       eventId: "e1", tenantId: "o", projectId: "default", traceId: "t1",
-      realm: "production", eventType: "agent_call",
+      realm: "production", eventType: "agent.run",
       timestamp: new Date().toISOString(), sourceFormat: "openai",
       payload: { x: 1 },
     });
@@ -393,7 +393,7 @@ describe("EdenSDK postJson retry behaviour", () => {
     const sdk = new EdenSDK({ orgId: "o", apiKey: "k_retry", flushIntervalMs: 60000 });
     sdk.emit({
       eventId: "e1", tenantId: "o", projectId: "default", traceId: "t1",
-      realm: "production", eventType: "agent_call",
+      realm: "production", eventType: "agent.run",
       timestamp: new Date().toISOString(), sourceFormat: "openai",
       payload: { x: 1 },
     });
@@ -460,7 +460,7 @@ describe("EdenSDK User-Agent header", () => {
     });
     return sdk.flush().then(() => {
       expect(captured.length).toBe(1);
-      expect(captured[0].headers["User-Agent"]).toBe("@eden-ai/sdk/0.2.24");
+      expect(captured[0].headers["User-Agent"]).toBe("@eden-ai/sdk/0.2.25");
     });
   });
 });
@@ -600,7 +600,7 @@ describe("EdenSDK dispose() inflight race", () => {
         projectId: "default",
         traceId: "t1",
         realm: "production",
-        eventType: "agent_call",
+        eventType: "agent.run",
         timestamp: new Date().toISOString(),
         sourceFormat: "openai",
         payload: { x: 1 },
@@ -716,7 +716,7 @@ describe("EdenSDK postJson HTTP-date Retry-After", () => {
       });
       sdk.emit({
         eventId: "e1", tenantId: "o", projectId: "default", traceId: "t1",
-        realm: "production", eventType: "agent_call",
+        realm: "production", eventType: "agent.run",
         timestamp: new Date().toISOString(), sourceFormat: "openai",
         payload: { x: 1 },
       });

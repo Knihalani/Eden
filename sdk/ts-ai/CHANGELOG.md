@@ -4,6 +4,35 @@ All notable changes to the Eden TypeScript SDK are documented here. The
 format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## 0.2.25 — 2026-07-09
+
+Bug-fix release.
+
+### Fixed
+- `trace.TraceController` (the `@traceAgent` / `trace()`
+  path) used to emit ``eventType: "agent_call"`` on the
+  wire. The gateway's promotion / cost-savings roll-ups
+  query ``WHERE event_type = 'agent.run'``
+  (``src/eden/llmops/promotion.py:161``), so the previous
+  value silently dropped **every TS-traced agent run**
+  from the cost-savings widgets and the monthly report
+  emails. The Python SDK already emits
+  ``event_type: "agent.run"``, so this was a wire-contract
+  regression introduced in 0.2.18 (commit ``aaab8f63``).
+  Now the TS SDK emits the canonical ``"agent.run"`` and
+  the gateway filters match.
+
+### Tests
+- 1 new test in `tests/trace.test.ts`: end-to-end wire
+  contract regression — runs a real `trace()` emit and
+  pins that the wire body has exactly one event with
+  ``event_type === "agent.run"`` and zero events with
+  the old ``"agent_call"`` value.
+- Updated 9 test assertions across `tests/trace.test.ts`,
+  `tests/wire.test.ts`, `tests/edge.test.ts`, and
+  `tests/client.test.ts` to assert against the new value.
+- TS: 167/167 tests pass; `tsc --noEmit` clean.
+
 ## 0.2.24 — 2026-07-09
 
 Bug-fix + resilience release.
