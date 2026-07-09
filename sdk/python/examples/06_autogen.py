@@ -10,7 +10,7 @@ Run:
     python examples/06_autogen.py
 
 Expected:
-    A ``framework.callback`` event is emitted for every reply on
+    A ``agent.run`` event is emitted for every reply on
     each ``ConversableAgent`` plus the underlying ``llm_completion``
     events for the OpenAI calls.  All events share the same
     ``trace_id`` so the chat shows up as one trace in the portal.

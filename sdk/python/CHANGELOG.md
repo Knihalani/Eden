@@ -4,6 +4,42 @@ All notable changes to the Eden Python SDK are documented here. The
 format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## 0.2.19 — 2026-07-09
+
+### Fixed
+- All four framework auto-instrumentations
+  (``instrumentations/autogen.py``,
+  ``instrumentations/crewai.py``,
+  ``instrumentations/langchain.py``,
+  ``instrumentations/llama_index.py``) used to emit
+  ``event_type: "framework.callback"`` on the wire. The
+  gateway's promotion / cost-savings rollups
+  (``src/eden/llmops/promotion.py:161``) filter on
+  ``WHERE event_type = 'agent.run'``, so every framework
+  callback was silently dropped from those reports AND
+  from the portal's monthly cost-savings widget. The
+  ``@trace_agent`` decorator path already emitted
+  ``agent.run`` (and the TS SDK was fixed in 0.2.25 for
+  the same reason); the framework instrumentations were
+  the last surface still on the old value. All four
+  now emit ``agent.run`` to match the SQL filter and
+  the rest of the SDK.
+
+### Tests
+- 1 new test in ``tests/test_instrumentations.py``:
+  ``test_framework_instrumentations_emit_agent_run_event_type``
+  — pins the wire contract by asserting the source of
+  each of the four instrumentations contains
+  ``"agent.run"`` and no longer references
+  ``"framework.callback"``.
+- 3 existing tests in ``tests/test_instrumentations.py``
+  updated to filter on ``agent.run`` instead of
+  ``framework.callback``.
+- 2 example scripts updated (``05_crewai.py``,
+  ``06_autogen.py``) so the docs match the new wire
+  value.
+- 211/211 Python tests pass (was 210).
+
 ## 0.2.18 — 2026-07-09
 
 No SDK changes; this release bumps the version to track

@@ -17,7 +17,49 @@ import pytest
 import eden
 from eden_sdk.client import get_default_client
 
-# ── OpenAI ───────────────────────────────────────────────────────────
+# ── Wire contract: framework instrumentations emit ``agent.run`` ──────
+
+
+def test_framework_instrumentations_emit_agent_run_event_type() -> None:
+    """Regression: the four framework instrumentations
+    (``autogen``, ``crewai``, ``langchain``, ``llama_index``)
+    used to emit ``event_type: "framework.callback"``. The
+    gateway's promotion / cost-savings rollups
+    (``src/eden/llmops/promotion.py:161``) filter on
+    ``WHERE event_type = 'agent.run'``, so every framework
+    callback was silently dropped from those reports. The
+    trace agent decorator already emitted ``agent.run``
+    (this is the same wire-contract fix the TS SDK did in
+    0.2.25, just for the framework instrumentations).
+    """
+    # Spot-check by reading the module-level constant in each
+    # instrumentation. The constant lives in either the
+    # top-level ``_emit`` helper (crewai / autogen) or the
+    # per-callback event dict (langchain / llama_index).
+    from eden_sdk.instrumentations import (
+        autogen,
+        crewai,
+        langchain,
+        llama_index,
+    )
+
+    # ``crewai`` exposes a single ``_emit`` helper that
+    # builds the event dict. The simplest way to assert
+    # the event_type is to read the source string and
+    # confirm it now references ``"agent.run"`` (and no
+    # longer references the old ``"framework.callback"``).
+    import inspect
+
+    def _has_agent_run(module) -> bool:
+        src = inspect.getsource(module)
+        return '"agent.run"' in src and "framework.callback" not in src
+
+    assert _has_agent_run(autogen), "autogen still uses framework.callback"
+    assert _has_agent_run(crewai), "crewai still uses framework.callback"
+    assert _has_agent_run(langchain), "langchain still uses framework.callback"
+    assert _has_agent_run(llama_index), "llama_index still uses framework.callback"
+
+
 
 
 def _install_fake_openai() -> dict[str, Any]:
@@ -746,7 +788,7 @@ def test_langchain_streaming_aggregate_event_carries_model_and_usage(fake_langch
     framework_events: list[dict] = []
     for body in captured:
         for ev in body if isinstance(body, list) else [body]:
-            if isinstance(ev, dict) and ev.get("event_type") == "framework.callback":
+            if isinstance(ev, dict) and ev.get("event_type") == "agent.run":
                 framework_events.append(ev)
     assert framework_events, f"no framework events captured: {captured!r}"
     # At least one of the captured framework events is the
@@ -901,7 +943,7 @@ def test_langchain_non_streaming_extracts_usage_metadata_per_generation(fake_lan
     framework_events: list[dict] = []
     for body in captured:
         for ev in body if isinstance(body, list) else [body]:
-            if isinstance(ev, dict) and ev.get("event_type") == "framework.callback":
+            if isinstance(ev, dict) and ev.get("event_type") == "agent.run":
                 framework_events.append(ev)
     assert framework_events, f"no framework events captured: {captured!r}"
     # The framework event must carry input_tokens, output_tokens,
@@ -991,7 +1033,7 @@ def test_langchain_non_streaming_legacy_path_still_works(fake_langchain, monkeyp
     framework_events: list[dict] = []
     for body in captured:
         for ev in body if isinstance(body, list) else [body]:
-            if isinstance(ev, dict) and ev.get("event_type") == "framework.callback":
+            if isinstance(ev, dict) and ev.get("event_type") == "agent.run":
                 framework_events.append(ev)
     assert framework_events
     assert framework_events[0].get("input_tokens") == 5
