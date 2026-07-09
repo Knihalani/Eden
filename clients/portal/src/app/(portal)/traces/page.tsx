@@ -16,7 +16,7 @@
  * component and reused here.
  */
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState , Suspense} from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { Layers } from "lucide-react";
 import { PageHeader } from "@/components/layout/page-header";
@@ -32,7 +32,7 @@ import { api } from "@/lib/api";
 import { TraceExportModal } from "../observability/_components/TraceExportModal";
 import { RefreshCw } from "lucide-react";
 
-export default function TracesPage() {
+function TracesPageInner() {
   const { currentOrg } = useOrg();
   const toast = useToast();
   const router = useRouter();
@@ -102,13 +102,13 @@ export default function TracesPage() {
     if (currentOrg) loadTraces();
   }, [currentOrg, loadTraces]);
 
-  if (!currentOrg) return <NoOrgState feature="Trace Explorer" />;
+  if (!currentOrg) return <NoOrgState feature="Traces" />;
 
   return (
     <>
       <PageHeader
         eyebrow="Observe"
-        title="Trace Explorer"
+        title="Traces"
         subtitle="Search, filter, and inspect every trace in your system"
         icon={Layers}
         actions={
@@ -145,5 +145,19 @@ export default function TracesPage() {
         traceId={annotateTraceId}
       />
     </>
+  );
+}
+
+
+// Wrap TracesPageInner in a Suspense boundary because it reads
+// ``useSearchParams()``. Without the boundary Next.js cannot
+// statically optimise the page and the RSC prefetch
+// (``?._rsc=...``) returns a partial / erroring payload, which
+// surfaces in the browser console as a 404.
+export default function TracesPage() {
+  return (
+    <Suspense fallback={null}>
+      <TracesPageInner />
+    </Suspense>
   );
 }

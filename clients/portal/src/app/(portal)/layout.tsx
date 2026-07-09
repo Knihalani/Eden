@@ -39,17 +39,25 @@ import {
   
   
   AlertTriangle,
-  ArrowRight } from "lucide-react";
+  ArrowRight,
+  Database,
+  FileSpreadsheet,
+  Tag,
+  FlaskConical } from "lucide-react";
 import { cn } from "@/lib/utils";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { CommandPalette } from "@/components/ui/command-palette";
 import { ChatSidebar } from "@/components/ai-insights/ChatSidebar";
 import { Logo } from "@/components/brand/logo";
+import { SidebarSearch } from "@/components/layout/sidebar-search";
 import { buildBreadcrumbs } from "@/lib/breadcrumbs";
+import { PageHelpHint } from "@/components/layout/page-help-hint";
 import { ErrorBoundary } from "@/components/ui/error-boundary";
 import { OnboardingBanner } from "@/components/onboarding-banner";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
+import { DEFAULT_SIDEBAR } from "@/lib/sidebar-config";
+import { isKnownPortalPath } from "@/lib/portal-routes";
 
 const SIDEBAR_EXPANDED_WIDTH = 260;
 const SIDEBAR_COLLAPSED_WIDTH = 64;
@@ -307,6 +315,14 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
     }
   }, [loading, user, currentOrg, pathname, router]);
 
+  // Unknown portal URL (e.g. a typo): bypass the auth gate entirely
+  // so the catch-all's notFound() can render the 404 immediately.
+  // Without this, Clerk auth hangs (or fails on a non-allowed
+  // domain during local dev) and the user sees a permanent "Loading…"
+  // skeleton instead of the 404. July 2026 ui-audit fix.
+  if (loading && !isKnownPortalPath(pathname)) {
+    return <>{children}</>;
+  }
   if (loading) {
     // Show a chrome skeleton instead of a blank centred spinner so
     // the user can see the portal is rendering while Clerk and the
@@ -503,6 +519,29 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
             past the viewport. `overscroll-contain` keeps the
             wheel-chained scroll inside the sidebar from scrolling
             the document under it. */}
+        {/* ui-audit 2026-07-06: Sidebar-local search.
+            With ~30 routes across 5 groups, scanning takes a beat.
+            The Cmd+K palette covers actions + routes globally; this
+            inline filter is the fast path for sidebar-narrowed route
+            discovery. Hidden when collapsed so it doesn't fight the
+            icon rail. */}
+        {!collapsed && (
+          <SidebarSearch
+            items={DEFAULT_SIDEBAR.flatMap((g) => g.items)}
+            hiddenIds={
+              advancedCollapsed
+                ? new Set(
+                    DEFAULT_SIDEBAR.flatMap((g) =>
+                      g.items
+                        .filter((it) => it.category === "advanced")
+                        .map((it) => it.id)
+                    )
+                )
+                : undefined
+            }
+          />
+        )}
+
         <nav
           className="relative flex-1 min-h-0 p-3 space-y-5 overflow-y-auto overscroll-contain"
           aria-label="Main navigation"
@@ -515,6 +554,7 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
                   href={item.href}
                   icon={item.icon}
                   label={item.label}
+                  description={item.description}
                   collapsed={collapsed}
                   onClick={() => setSidebarOpen(false)}
                   pinned
@@ -534,6 +574,7 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
                     href={item.href}
                     icon={item.icon}
                     label={item.label}
+                    description={item.description}
                     badge={item.badge}
                     collapsed={collapsed}
                     onClick={() => setSidebarOpen(false)}
@@ -545,6 +586,7 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
                         key={child.id}
                         href={child.href}
                         label={child.label}
+                        description={child.description}
                         onClick={() => setSidebarOpen(false)}
                       />
                     ))}
@@ -755,6 +797,15 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
                 });
               })()}
             </nav>
+
+            {/* Page-help hint — auto-renders an info chip on every
+             *  portal page with a one-line "what is this for"
+             *  tooltip. With ~30 routes the sidebar isn't enough
+             *  context for a new user; this gives them an in-page
+             *  way to learn the IA without clicking around. The
+             *  component itself is a no-op for paths without a
+             *  description in page-descriptions.ts. */}
+            <PageHelpHint />
 
             {/* Right: Search + Notifications */}
             <div className="flex items-center gap-2">
@@ -1089,14 +1140,20 @@ function isActivePath(pathname: string, href: string): boolean {
 function NavSubItem({
   href,
   label,
+  description,
   onClick }: {
   href: string;
   label: string;
+  /** One-line "what is this" hint shown in the hover tooltip.
+   *  Sub-items in the sidebar are advanced surfaces (APM tracing,
+   *  Retrieval, Decisions) that most users don't recognise from
+   *  the icon alone. */
+  description?: string;
   onClick?: () => void;
 }) {
   const pathname = usePathname();
   const active = isActivePath(pathname, href);
-  return (
+  const link = (
     <Link
       href={href}
       onClick={onClick}
@@ -1118,12 +1175,25 @@ function NavSubItem({
       <span className="truncate">{label}</span>
     </Link>
   );
+  if (!description) return link;
+  return (
+    <Tooltip delayDuration={200}>
+      <TooltipTrigger asChild>{link}</TooltipTrigger>
+      <TooltipContent side="right" sideOffset={6} className="max-w-[240px]">
+        <div className="font-medium text-[var(--text-primary)]">{label}</div>
+        <div className="mt-0.5 text-xs text-[var(--text-secondary)] leading-snug">
+          {description}
+        </div>
+      </TooltipContent>
+    </Tooltip>
+  );
 }
 
 function NavItem({
   href,
   icon: Icon,
   label,
+  description,
   collapsed,
   onClick,
   children,
@@ -1133,6 +1203,11 @@ function NavItem({
   href: string;
   icon: typeof LayoutDashboard;
   label: string;
+  /** One-line "what is this" hint shown in the tooltip on hover.
+   *  Critical for navigation clarity — the sidebar has ~30 routes
+   *  and many icons look identical at small sizes (Brain, Sparkles,
+   *  Compass). A short hover hint tells the user which is which. */
+  description?: string;
   collapsed: boolean;
   onClick?: () => void;
   children?: React.ReactNode;
@@ -1218,17 +1293,32 @@ function NavItem({
             )}
           </Link>
         );
-        if (collapsed) {
-          return (
-            <Tooltip delayDuration={120}>
-              <TooltipTrigger asChild>{link}</TooltipTrigger>
-              <TooltipContent side="right" sideOffset={8}>
-                {label}
-              </TooltipContent>
-            </Tooltip>
-          );
-        }
-        return link;
+        // Tooltip with description is shown even when the sidebar is
+        // expanded — the label alone ("Traces", "Insights", "Tools")
+        // doesn't tell the user what the page does. The description
+        // keeps the same one-line voice as the IA comments in
+        // sidebar-config.ts so the user can scan the whole nav
+        // without clicking into each page. Collapsed and expanded
+        // both get the rich tooltip; expanded just renders the
+        // label inline as well so the user can scan the rail fast.
+        const richTooltip = description ? (
+          <TooltipContent side="right" sideOffset={8} className="max-w-[260px]">
+            <div className="font-medium text-[var(--text-primary)]">{label}</div>
+            <div className="mt-0.5 text-xs text-[var(--text-secondary)] leading-snug">
+              {description}
+            </div>
+          </TooltipContent>
+        ) : (
+          <TooltipContent side="right" sideOffset={8}>{label}</TooltipContent>
+        );
+        const tooltipNode = (
+          <Tooltip delayDuration={150}>
+            <TooltipTrigger asChild>{link}</TooltipTrigger>
+            {richTooltip}
+          </Tooltip>
+        );
+        if (collapsed) return tooltipNode;
+        return tooltipNode;
       })()}
       {hasChildren && (
         <div className="mt-0.5 space-y-0.5">{children}</div>

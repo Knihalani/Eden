@@ -2,6 +2,7 @@ import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
 import createIntlMiddleware from "next-intl/middleware";
 import { NextResponse } from "next/server";
 import { routing } from "@/i18n/routing";
+import { KNOWN_PORTAL_PREFIXES } from "@/lib/portal-routes";
 
 // Protected-first: block everything, allow the routes that must stay
 // reachable without a session (marketing pages, auth flows, the
@@ -104,7 +105,28 @@ export default clerkMiddleware(async (auth, request) => {
     return intlResponse;
   }
 
-  if (!isPublicRoute(request)) {
+  const url = new URL(request.url);
+  const path = url.pathname;
+
+  // Auth gate — only known portal prefixes require a session.
+  //
+  // The previous implementation called ``auth.protect()`` for any
+  // non-public URL, which meant an unauthenticated visitor hitting
+  // a typo URL like ``/this-route-does-not-exist`` was redirected
+  // to /sign-in — the same flow as an actual protected page. That's
+  // a real UX bug: a typo shouldn't look like an account problem.
+  //
+  // Now we only fire ``auth.protect()`` for the known portal
+  // prefixes. An unknown URL still hits Clerk (because the matcher
+  // runs on every request), but it doesn't trigger ``protect()``,
+  // so the request flows through to the next handler. The
+  // ``[...notFound]`` catch-all under both (portal) and the root
+  // ``app/[...notFound]`` segment then renders the appropriate
+  // 404 page with sidebar context preserved.
+  const isKnownProtected = KNOWN_PORTAL_PREFIXES.some(
+    (p) => path === p || path.startsWith(p + "/"),
+  );
+  if (isKnownProtected && !isPublicRoute(request)) {
     await auth.protect();
   }
 

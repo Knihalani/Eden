@@ -130,6 +130,15 @@ export function ChatSidebar() {
     setLoadingSessions(true);
     fetch(`/api/ai-insights/sessions?org_id=${orgId}`, { credentials: "include" })
       .then(async (r) => {
+        // 5xx: backend hiccup — log once and treat as empty list so
+        // the sidebar still renders ("no sessions yet"). Without this
+        // branch the original code threw on every 500 and the user
+        // saw "ai-insights: list sessions failed Error: HTTP 500" in
+        // the console on every page load.
+        if (r.status >= 500) {
+          console.warn(`ai-insights: list sessions unavailable (HTTP ${r.status}) — using empty list`);
+          return { sessions: [] };
+        }
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
         return (await r.json()) as { sessions: Session[] };
       })
