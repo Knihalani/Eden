@@ -28,6 +28,8 @@ import uuid
 from dataclasses import dataclass, field
 from typing import Any
 
+from eden.api.utils.redact import redact_all
+
 logger = logging.getLogger(__name__)
 
 
@@ -257,7 +259,7 @@ class StreamingTokenCapture:
                 )
                 return True
             except Exception as exc:
-                logger.debug("streaming: write_token failed: %s", exc)
+                logger.debug("streaming: write_token failed: %s", redact_all(str(exc)))
                 return False
 
         results = await asyncio.gather(
@@ -321,7 +323,7 @@ class StreamingTokenCapture:
                     int(limit),
                 )
         except Exception as exc:
-            logger.debug("streaming: list_tokens failed: %s", exc)
+            logger.debug("streaming: list_tokens failed: %s", redact_all(str(exc)))
             return []
         out: list[dict[str, Any]] = []
         for row in rows:

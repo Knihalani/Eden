@@ -38,9 +38,7 @@ async def test_verify_chain_empty_state_when_migration_missing():
     with patch("eden.api.routes.audit.get_postgres_client", side_effect=_client), \
          patch("eden.api.routes.audit.require_org_permission", new=AsyncMock()):
         resp = await verify_audit_chain(
-            org_id="00000000-0000-0000-0000-000000000002",
-            x_org_id=None,
-            authorization="Bearer test",
+            org_id="00000000-0000-0000-0000-000000000002"
         )
     assert resp.total_rows == 0
     assert resp.ok_rows == 0
@@ -70,9 +68,7 @@ async def test_verify_chain_returns_ok_for_unchained_log():
     with patch("eden.api.routes.audit.get_postgres_client", side_effect=_client), \
          patch("eden.api.routes.audit.require_org_permission", new=AsyncMock()):
         resp = await verify_audit_chain(
-            org_id="00000000-0000-0000-0000-000000000002",
-            x_org_id=None,
-            authorization="Bearer test",
+            org_id="00000000-0000-0000-0000-000000000002"
         )
     assert resp.total_rows == 2
     assert resp.ok_rows == 2
@@ -100,9 +96,7 @@ async def test_verify_chain_detects_tampered_row():
     with patch("eden.api.routes.audit.get_postgres_client", side_effect=_client), \
          patch("eden.api.routes.audit.require_org_permission", new=AsyncMock()):
         resp = await verify_audit_chain(
-            org_id="00000000-0000-0000-0000-000000000002",
-            x_org_id=None,
-            authorization="Bearer test",
+            org_id="00000000-0000-0000-0000-000000000002"
         )
     assert resp.total_rows == 2
     assert resp.ok_rows == 1
@@ -152,9 +146,7 @@ async def test_export_jsonl_yields_one_record_per_line():
             org_id="00000000-0000-0000-0000-000000000099",
             format="jsonl",
             from_date=None,
-            to_date=None,
-            x_org_id=None,
-            authorization="Bearer test",
+            to_date=None
         )
 
     # StreamingResponse wraps a generator; consume it
@@ -205,9 +197,7 @@ async def test_export_csv_has_header_and_one_row_per_record():
             org_id="00000000-0000-0000-0000-000000000099",
             format="csv",
             from_date=None,
-            to_date=None,
-            x_org_id=None,
-            authorization="Bearer test",
+            to_date=None
         )
 
     body = b""

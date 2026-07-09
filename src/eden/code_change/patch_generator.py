@@ -57,7 +57,7 @@ import hashlib
 import json
 import logging
 import re
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from eden.code_change._common import (
     _insert_row,
@@ -66,9 +66,56 @@ from eden.code_change._common import (
     diff_hunk_count,
     diff_line_count,
 )
-from eden.optimization.model_router import ModelRouter, PipelineTask
 
 from ._common import _error_envelope, _new_id, _not_implemented_envelope, _ok_envelope
+
+if TYPE_CHECKING:
+    # Only needed for static type checkers. The real import is
+    # lazy in ``__getattr__`` below so importing this module
+    # doesn't pull in the full ModelRouter pipeline (~1s of
+    # ``eden.config`` + ``eden.llm.client`` init).
+    from eden.optimization.model_router import ModelRouter  # noqa: F401
+
+
+def __getattr__(name: str):
+    """PEP 562 lazy import.
+
+    ``eden.optimization.model_router`` transitively imports
+    ``eden.config`` and ``eden.llm.client``, which alone account
+    for ~1 second of cold import time on this module. Tests and
+    read-only callers that never run patch generation should
+    not pay that cost. We re-export ``ModelRouter`` and
+    ``PipelineTask`` from this module so existing imports
+    (``from eden.code_change.patch_generator import ModelRouter``)
+    keep working without the eager import.
+    """
+    if name in {"ModelRouter", "PipelineTask"}:
+        from eden.optimization import model_router
+        return getattr(model_router, name)
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+# Cache the credential check — it's pure env-var reads and
+# stays constant for the process lifetime. ``os.getenv`` is
+# cheap but we still avoid the call on every PatchGenerator
+# invocation when the agent runs in a hot loop.
+_LLM_CREDENTIAL_PRESENT: bool | None = None
+
+
+def _has_llm_credentials() -> bool:
+    """Return True if any standard LLM provider env var is set."""
+    global _LLM_CREDENTIAL_PRESENT
+    if _LLM_CREDENTIAL_PRESENT is not None:
+        return _LLM_CREDENTIAL_PRESENT
+    import os
+    keys = (
+        "OPENROUTER_API_KEY",
+        "OPENAI_API_KEY",
+        "ANTHROPIC_API_KEY",
+        "EDEN_LLM_API_KEY",
+    )
+    _LLM_CREDENTIAL_PRESENT = any(os.getenv(k) for k in keys)
+    return _LLM_CREDENTIAL_PRESENT
+
 
 logger = logging.getLogger(__name__)
 
@@ -77,6 +124,20 @@ logger = logging.getLogger(__name__)
 # (``+++ b/...``) and at least one hunk marker (``@@``).
 _DIFF_HEADER_RE = re.compile(r"^\+\+\+\s+\S+", re.MULTILINE)
 _DIFF_HUNK_RE = re.compile(r"^@@", re.MULTILINE)
+
+
+# System-prompt fragment reused on every patch-generation call. Lifted
+# out of the per-call user prompt so the static instruction text is
+# cacheable by Anthropic prompt caching (saves ~90% of those tokens
+# on the second+ call within the cache TTL) and so changes to the
+# instructions don't churn the user-side cache key.
+_PATCH_GEN_SYSTEM_PROMPT = (
+    "You are an expert software engineer generating a unified-diff patch. "
+    "Return ONLY a unified diff — no prose, no markdown fences. "
+    "The diff must apply cleanly to the linked files and pass the test "
+    "plan. Match the style profile and follow the PR patterns. Avoid "
+    "the same-file history penalties."
+)
 
 
 def _build_patch_prompt(
@@ -90,11 +151,16 @@ def _build_patch_prompt(
     kg_penalties: list[dict[str, Any]],
     test_plan: list[str],
     rca_summary: str = "",
-) -> str:
-    """Build the T2 generation prompt with style + KG context."""
+) -> tuple[str, str]:
+    """Build the T2 generation (system_prompt, user_prompt) pair.
+
+    The static instruction text lives in the system prompt so it is
+    eligible for Anthropic prompt caching and never gets re-billed on
+    the second+ call. Variable context (the RCA, files, test plan)
+    stays in the user message.
+    """
     parts = [
-        f"You are generating a unified-diff patch for repo={repo_id} "
-        f"in response to RCA={rca_id} (trace={trace_id}).\n\n",
+        f"## Target\nrepo={repo_id} RCA={rca_id} trace={trace_id}\n\n",
         f"## RCA summary\n{rca_summary or '(see attached RCA)'}\n\n",
         "## Style profile (must match)\n",
         json.dumps(style_profile, indent=2),
@@ -114,15 +180,17 @@ def _build_patch_prompt(
     parts.append("\n## Test plan to satisfy\n")
     for t in test_plan[:10]:
         parts.append(f"- {t}\n")
-    parts.append("\n## Linked source files\n")
-    for f in linked_files[:5]:
-        parts.append(f"--- {f['path']} ---\n{f['content'][:2000]}\n\n")
-    parts.append(
-        "\n## Output format\n"
-        "Return ONLY a unified diff (no prose, no markdown fences). "
-        "The diff must apply cleanly to the linked files above.\n"
-    )
-    return "".join(parts)
+    # Only include the file section if at least one caller actually
+    # populated ``content`` — ``EdenPatchAgent`` historically passed
+    # empty strings, which just bloat the prompt with 5 bare headers
+    # (``--- path ---``) and no useful content. Saves ~50 tokens per
+    # call in that mode.
+    files_with_content = [f for f in linked_files[:5] if f.get("content")]
+    if files_with_content:
+        parts.append("\n## Linked source files\n")
+        for f in files_with_content:
+            parts.append(f"--- {f['path']} ---\n{f['content'][:2000]}\n\n")
+    return _PATCH_GEN_SYSTEM_PROMPT, "".join(parts)
 
 
 def _is_valid_diff(content: str) -> bool:
@@ -299,6 +367,8 @@ async def _critic_review(
     (over-permissive) are preferable to false positives when
     the critic is itself unreliable.
     """
+    # Lazy import — see module-level __getattr__.
+    from eden.optimization.model_router import PipelineTask
     task = PipelineTask(
         agent="patch_critic",
         description="Critic review of generated patch",
@@ -306,21 +376,24 @@ async def _critic_review(
         output_type="format",
         expected_min_length=4,
     )
+    # Static critic instructions live in the system prompt so they
+    # are eligible for Anthropic prompt caching; the variable diff +
+    # RCA are in the user prompt.
+    critic_system = (
+        "You are the Eden patch critic. Review a unified diff and "
+        "decide whether it should be queued for human review. "
+        "Return EXACTLY one line: 'PASS: <reason>' or 'FAIL: <reason>'."
+    )
     prompt = (
-        "Review this unified diff and decide whether it should be "
-        "queued for human review.\n\n"
         "## RCA\n"
         f"{rca_summary or '(see attached RCA)'}\n\n"
         "## Diff (first 2000 chars)\n"
-        f"{(diff or '')[:2000]}\n\n"
-        "## Verdict\n"
-        "Return EXACTLY one line in the form:\n"
-        "  PASS: <one-sentence reason>\n"
-        "or:\n"
-        "  FAIL: <one-sentence reason>\n"
+        f"{(diff or '')[:2000]}\n"
     )
     try:
-        response = await router.aroute(task, prompt, max_tokens=64)
+        response = await router.aroute(
+            task, prompt, system_prompt=critic_system, max_tokens=64,
+        )
         raw = (response.content or "").strip()
         first_line = raw.splitlines()[0] if raw else ""
         if first_line.upper().startswith("FAIL"):
@@ -385,6 +458,27 @@ class PatchGenerator:
         returns an envelope that names the gate so the caller
         knows what to do next.
         """
+        # Fast-skip: if no LLM provider is configured, skip
+        # the entire pipeline without spinning up ModelRouter
+        # (which alone imports ~1s of eden.config + eden.llm.client).
+        # We check the standard env vars that ``ModelRouter`` looks
+        # at so this stays in sync with the production config.
+        if self._router is None and not _has_llm_credentials():
+            return _not_implemented_envelope(
+                self.name,
+                message=(
+                    "No LLM provider is configured (set "
+                    "OPENROUTER_API_KEY / OPENAI_API_KEY / "
+                    "ANTHROPIC_API_KEY to enable patch generation)."
+                ),
+                gate="router_missing",
+                data={
+                    "4a_blocked_alias": True,
+                    "patch_id": _new_id("patch"),
+                    "router_missing": True,
+                },
+            )
+
         # Fall back to the platform's default router if none was
         # injected. The endpoint always runs the full pipeline; only
         # catastrophic config errors (no router at all) return a
@@ -392,6 +486,8 @@ class PatchGenerator:
         # behaviour).
         if self._router is None:
             try:
+                # Lazy import — see module-level __getattr__.
+                from eden.optimization.model_router import ModelRouter
                 self._router = ModelRouter()
             except Exception as exc:
                 # Audit 2026-07-02 — router_missing is functionally
@@ -470,7 +566,7 @@ class PatchGenerator:
             except Exception as exc:
                 logger.debug("patch_gen: KG load failed: %s", exc)
 
-        prompt = _build_patch_prompt(
+        system_prompt, prompt = _build_patch_prompt(
             repo_id=repo_id,
             rca_id=rca_id,
             trace_id=trace_id,
@@ -482,6 +578,8 @@ class PatchGenerator:
             rca_summary=rca_summary,
         )
 
+        # Lazy import — see module-level __getattr__.
+        from eden.optimization.model_router import PipelineTask
         task = PipelineTask(
             agent="patch_generator",
             description=f"Generate unified diff for {rca_id} in {repo_id}",
@@ -514,6 +612,7 @@ class PatchGenerator:
                 response = await self._router.aroute(
                     task,
                     prompt,
+                    system_prompt=system_prompt,
                     org_id=org_id,
                     user_id=None,
                     max_tokens=4096,

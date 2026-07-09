@@ -43,8 +43,23 @@ def _build_app(allowed_ips: str | None = None) -> FastAPI:
 
 
 @pytest.fixture
-def app() -> FastAPI:
-    return _build_app(allowed_ips="testclient")
+def app() -> "typing.Iterator[FastAPI]":
+    # Audit 2026-07-06 — env-var-mutating fixture MUST restore the
+    # prior value via a finalizer. Previously this fixture wrote
+    # ``os.environ["INTERNAL_ALLOWED_IPS"] = "testclient"`` and
+    # never cleaned it up, which leaked into
+    # ``tests/unit/api/test_middleware_perf.py`` run order and
+    # caused 2 spurious failures (those tests assert the default
+    # loopback-only allow-list behaviour).
+    import os as _os
+    _prior = _os.environ.get("INTERNAL_ALLOWED_IPS", None)
+    built = _build_app(allowed_ips="testclient")
+    try:
+        yield built
+    finally:
+        _os.environ.pop("INTERNAL_ALLOWED_IPS", None)
+        if _prior is not None:
+            _os.environ["INTERNAL_ALLOWED_IPS"] = _prior
 
 
 @pytest.fixture

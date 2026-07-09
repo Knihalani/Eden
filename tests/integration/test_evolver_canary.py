@@ -43,15 +43,32 @@ def evolver():
 
 @pytest.fixture
 def fake_pg():
-    """Mock PostgresClient that returns deterministic org/user ids."""
+    """Mock PostgresClient that returns deterministic org/user ids.
+
+    Audit 2026-07-07: the canary-creation audit path now resolves
+    ``org_id`` from ``prompt_versions.quality_metrics`` JSONB
+    (instead of the previous ``SELECT id FROM organizations LIMIT 1``
+    cross-tenant leak). We mock ``fetchrow`` to return a row whose
+    ``quality_metrics`` carries the owning ``org_id`` so the test
+    continues to exercise the audit path end-to-end with the
+    correct, tenant-isolated org attribution.
+    """
     pg = MagicMock()
-    pg.fetchval = AsyncMock(side_effect=lambda q, *a: (
-        "00000000-0000-0000-0000-000000000aaa"
-        if "from organizations" in q
-        else "00000000-0000-0000-0000-000000000bbb"
-        if "from users" in q
-        else None
-    ))
+
+    async def _fetchval_dispatch(q: str, *args):
+        ql = " ".join(q.split()).lower()
+        if "from users" in ql and "clerk_id" in ql:
+            return "00000000-0000-0000-0000-000000000bbb"
+        return None
+
+    pg.fetchval = AsyncMock(side_effect=_fetchval_dispatch)
+    pg.fetchrow = AsyncMock(
+        return_value={
+            "quality_metrics": json.dumps(
+                {"org_id": "00000000-0000-0000-0000-000000000aaa"}
+            )
+        }
+    )
     pg.execute = AsyncMock(return_value="INSERT 0 1")
     return pg
 

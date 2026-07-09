@@ -18,13 +18,11 @@ exact (no CIDR ranges yet — ponytail).
 
 from __future__ import annotations
 
+import json
 import logging
 import os
-from collections.abc import Awaitable, Callable
 
-from fastapi import Request, Response
-from fastapi.responses import JSONResponse
-from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.types import ASGIApp, Receive, Scope, Send
 
 logger = logging.getLogger(__name__)
 
@@ -43,37 +41,50 @@ def _get_allowed_ips() -> tuple[str, ...]:
     return tuple(ip.strip() for ip in raw.split(",") if ip.strip())
 
 
-class InternalOnlyMiddleware(BaseHTTPMiddleware):
-    """403 any non-allow-listed caller to ``/v1/internal/*``."""
+class InternalOnlyMiddleware:
+    """Pure-ASGI 403 gate on ``/v1/internal/health/*``.
 
-    def __init__(self, app: object) -> None:
-        super().__init__(app)  # type: ignore[arg-type]
+    Audit 2026-07-06 v2.0 — converted from
+    :class:`starlette.middleware.base.BaseHTTPMiddleware` to pure
+    ASGI. The dispatch path is now byte-comparison + direct
+    header walk; no ``Request`` reconstruction. Behaviour
+    preserved:
+
+      * Only the ``/v1/internal/health/*`` subtree is gated. The
+        rest of ``/v1/internal/*`` (portal-proxied endpoints) has
+        its own Clerk-based auth and is left alone.
+      * IP allow-list is checked on ``scope["client"][0]`` first;
+        ``X-Forwarded-For`` is honoured only when the TCP source
+        is itself allow-listed (so remote callers can't spoof loopback).
+      * Non-allow-listed callers get a 403 JSON envelope.
+
+    The 403 body is built inline as ASGI ``http.response.start`` +
+    ``http.response.body`` rather than via ``JSONResponse.__call__``.
+    """
+
+    def __init__(self, app: ASGIApp) -> None:
+        self.app = app
         self.allowed_ips = _get_allowed_ips()
 
-    async def dispatch(
-        self,
-        request: Request,
-        call_next: Callable[[Request], Awaitable[Response]],
-    ) -> Response:
-        # The middleware only gates the ops dashboard surface
-        # (``/v1/internal/health/*``). The other ``/v1/internal/*``
-        # namespaces (e.g. ``/v1/internal/onboarding/*``) are
-        # internal API routes called via the portal proxy — they
-        # have their own Clerk-based auth and don't need an
-        # allow-list gate.
-        if not request.url.path.startswith("/v1/internal/health"):
-            return await call_next(request)
+    async def __call__(
+        self, scope: Scope, receive: Receive, send: Send
+    ) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
 
-        # IP resolution order:
-        #   1. ``request.client.host`` (TCP source — cannot be spoofed
-        #      by a remote attacker).
-        #   2. ``X-Forwarded-For`` — ONLY honoured when the TCP source
-        #      matches one of the trusted proxies (so an attacker
-        #      cannot inject a fake XFF and bypass the allow-list).
-        # Pre-fix, XFF was the *primary* source with no trust check,
-        # so any remote caller could set the header to ``127.0.0.1``
-        # and walk into ``/v1/internal/health/*``.
-        client_ip = request.client.host if request.client else ""
+        # The middleware only gates the ops dashboard surface
+        # (``/v1/internal/health/*``). All other ``/v1/internal/*``
+        # namespaces are portal-proxied endpoints with their own
+        # Clerk-based auth.
+        path = scope.get("path", "")
+        if not path.startswith("/v1/internal/health"):
+            await self.app(scope, receive, send)
+            return
+
+        # IP resolution — direct scope fields, no Request construction.
+        client = scope.get("client") or ("", 0)
+        client_ip = client[0] if client else ""
 
         if client_ip not in self.allowed_ips:
             # Caller isn't directly in the allow-list. They could
@@ -82,30 +93,42 @@ class InternalOnlyMiddleware(BaseHTTPMiddleware):
             # TCP source is itself allow-listed.
             trusted_proxy = client_ip in self.allowed_ips
             if trusted_proxy:
-                forwarded = request.headers.get("x-forwarded-for", "")
-                xff = forwarded.split(",")[0].strip() if forwarded else ""
-                if xff:
-                    client_ip = xff
+                # Walk scope headers for XFF (lowercase ASCII).
+                for name, value in scope.get("headers") or ():
+                    if name.lower() == b"x-forwarded-for":
+                        xff_raw = value.decode("latin1", errors="ignore")
+                        xff = xff_raw.split(",")[0].strip() if xff_raw else ""
+                        if xff:
+                            client_ip = xff
+                        break
 
         if client_ip not in self.allowed_ips:
             logger.warning(
                 "internal_only: blocked %s from %s",
-                request.url.path,
+                path,
                 client_ip or "(unknown)",
             )
-            return JSONResponse(
-                {
-                    "status": "forbidden",
-                    "message": (
-                        "The /v1/internal/health/* surface is allow-listed. "
-                        "Set INTERNAL_ALLOWED_IPS to grant access."
-                    ),
-                    "client_ip": client_ip or None,
-                },
-                status_code=403,
-            )
+            body = json.dumps({
+                "status": "forbidden",
+                "message": (
+                    "The /v1/internal/health/* surface is allow-listed. "
+                    "Set INTERNAL_ALLOWED_IPS to grant access."
+                ),
+                "client_ip": client_ip or None,
+            }).encode("latin1")
+            await send({
+                "type": "http.response.start",
+                "status": 403,
+                "headers": [
+                    (b"content-type", b"application/json"),
+                    (b"content-length", str(len(body)).encode("latin1")),
+                ],
+            })
+            await send({
+                "type": "http.response.body",
+                "body": body,
+                "more_body": False,
+            })
+            return
 
-        return await call_next(request)
-
-
-__all__ = ["DEFAULT_ALLOWED_IPS", "InternalOnlyMiddleware"]
+        await self.app(scope, receive, send)

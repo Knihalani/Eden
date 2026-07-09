@@ -36,6 +36,19 @@ import httpx
 
 from .protocol import AffectedArea, GraphQueryResult
 
+# Module-level singleton httpx client (mirrors the F42 pattern in
+# ``eden.providers.pr``). Each ``async with httpx.AsyncClient(...)`` opens
+# a fresh client and discards keep-alive sockets at scope exit; the
+# singleton keeps the TCP pool warm across calls.
+_HTTPX: httpx.AsyncClient | None = None
+
+
+def _shared_httpx(timeout: float) -> httpx.AsyncClient:
+    global _HTTPX
+    if _HTTPX is None:
+        _HTTPX = httpx.AsyncClient(timeout=timeout)
+    return _HTTPX
+
 logger = logging.getLogger(__name__)
 
 
@@ -106,7 +119,7 @@ class GreptileRepoGraph:
         We map it to the discipline surface shape.
         """
         try:
-            async with httpx.AsyncClient(timeout=self._timeout) as client:
+            async with _shared_httpx(self._timeout) as client:
                 r = await client.get(
                     f"{self._base_url}/v2/repositories/{repo_full_name}",
                     headers=_headers(self._api_key),
@@ -149,7 +162,7 @@ class GreptileRepoGraph:
         parameter exists to match the protocol.
         """
         try:
-            async with httpx.AsyncClient(timeout=self._timeout) as client:
+            async with _shared_httpx(self._timeout) as client:
                 r = await client.post(
                     f"{self._base_url}/v2/repositories",
                     headers=_headers(self._api_key),
@@ -179,7 +192,7 @@ class GreptileRepoGraph:
     ) -> GraphQueryResult | None:
         """Run a natural-language query against the indexed graph."""
         try:
-            async with httpx.AsyncClient(timeout=self._timeout) as client:
+            async with _shared_httpx(self._timeout) as client:
                 r = await client.post(
                     f"{self._base_url}/v2/query",
                     headers=_headers(self._api_key),

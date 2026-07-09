@@ -141,10 +141,22 @@ def two_proportion_z_test(p1: float, n1: int, p2: float, n2: int) -> float:
     return (p1 - p2) / se
 
 
-def recommend_winner(results: list[ExperimentResult], *, min_n: int = 100) -> str | None:
+def recommend_winner(
+    results: list[ExperimentResult],
+    *,
+    min_n: int = 100,
+    control: str | None = None,
+) -> str | None:
     """Return the variant with the highest success rate that is
-    significantly better than the control (the first variant) and
-    has at least ``min_n`` observations.
+    significantly better than the control and has at least
+    ``min_n`` observations.
+
+    The control variant defaults to the first variant in ``results``
+    for backwards compatibility. Callers that record outcomes in
+    an order different from the declared variant order should pass
+    ``control`` explicitly so the z-test compares the winning
+    treatment against the right baseline (the original control,
+    not whatever variant happened to be recorded first).
 
     Returns ``None`` when no variant meets the bar.
     """
@@ -152,10 +164,23 @@ def recommend_winner(results: list[ExperimentResult], *, min_n: int = 100) -> st
         return None
     results_sorted = sorted(results, key=lambda r: r.rate, reverse=True)
     best = results_sorted[0]
-    control = results[0]  # the first declared variant is the control
-    if best.n < min_n or control.n < min_n or best.variant == control.variant:
+    if control is not None:
+        control_result = next((r for r in results if r.variant == control), None)
+        if control_result is None:
+            return None
+    else:
+        # Backwards-compat default: assume results[0] is the control.
+        # This is correct only when record_outcome() was called in the
+        # same order the variants were declared; otherwise the caller
+        # should pass ``control`` explicitly.
+        control_result = results[0]
+    if (
+        best.n < min_n
+        or control_result.n < min_n
+        or best.variant == control_result.variant
+    ):
         return None
-    z = two_proportion_z_test(best.rate, best.n, control.rate, control.n)
+    z = two_proportion_z_test(best.rate, best.n, control_result.rate, control_result.n)
     if z >= 1.96:
         return best.variant
     return None

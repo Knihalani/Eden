@@ -56,6 +56,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
+from collections import OrderedDict
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from decimal import Decimal
@@ -182,7 +183,7 @@ class CostResolver:
         self.cache_max_entries = cache_max_entries
         # ``dict`` is insertion-ordered; we evict the oldest entry
         # when we exceed the cap.
-        self._cache: dict[tuple[str, str, str], tuple[float, CostResolution]] = {}
+        self._cache: OrderedDict[tuple[str, str, str], tuple[float, CostResolution]] = OrderedDict()
         self._lock = asyncio.Lock()
 
     @staticmethod
@@ -290,6 +291,16 @@ class CostResolver:
         if time.monotonic() >= expires_at:
             del self._cache[key]
             return None
+        # Audit 2026-07-07 — bump the entry to the end of the
+        # insertion-ordered dict so the eviction order tracks
+        # access time (true LRU), not insertion time (FIFO).
+        # Pre-fix the comment said "LRU" but the code didn't
+        # ``move_to_end``, so a hot key that survived a cache
+        # sweep could still be evicted before a cold key inserted
+        # after it. Skipping the bump when the key is already the
+        # most-recent (common case) keeps the per-hit cost at one
+        # dict re-insert.
+        self._cache.move_to_end(key)
         # Mark as cached without re-resolving.
         return CostResolution(
             cost_per_1k_input=resolution.cost_per_1k_input,
@@ -304,7 +315,9 @@ class CostResolver:
 
     def _cache_put(self, key: tuple[str, str, str], resolution: CostResolution) -> None:
         # Bounded LRU via insertion-order dict: drop the oldest
-        # entry when we exceed the cap.
+        # entry when we exceed the cap. ``_cache_get`` bumps
+        # touched entries to the end so the oldest remaining entry
+        # here is genuinely the least-recently-used.
         if len(self._cache) >= self.cache_max_entries:
             oldest_key = next(iter(self._cache))
             del self._cache[oldest_key]

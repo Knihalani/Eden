@@ -567,18 +567,34 @@ class TestDl8ReplayCap:
         service = WebhookDeliveryService()
 
         # replay_count = 3 (already at the cap).
-        mock_postgres_client.fetchrow = AsyncMock(
-            return_value={
-                "id": "dlq-1",
-                "webhook_id": "wh-1",
-                "event_type": "job.completed",
-                "payload": "{}",
-                "replay_count": 3,
-                "signature_v1": "t=1,v1=x",
-                "last_replayed_at": None,
-                "seconds_since_last_replay": None,
-            }
-        )
+        # F43: the new flow does
+        #   1. SELECT (initial read)
+        #   2. UPDATE ... RETURNING (atomic claim; returns None when cap hit)
+        #   3. SELECT (re-read to report status)
+        cap_row = {
+            "id": "dlq-1",
+            "webhook_id": "wh-1",
+            "event_type": "job.completed",
+            "payload": "{}",
+            "replay_count": 3,
+            "signature_v1": "t=1,v1=x",
+            "last_replayed_at": None,
+            "seconds_since_last_replay": None,
+        }
+        call_count = {"n": 0}
+
+        async def _fetchrow(sql, *args):
+            call_count["n"] += 1
+            # 1. Initial SELECT
+            if call_count["n"] == 1:
+                return cap_row
+            # 2. UPDATE...RETURNING with cap=3, row already at 3 → no update
+            if call_count["n"] == 2:
+                return None
+            # 3. Re-read for status reporting
+            return cap_row
+
+        mock_postgres_client.fetchrow = AsyncMock(side_effect=_fetchrow)
 
         result = await service.replay_dlq("dlq-1")
 
@@ -597,18 +613,32 @@ class TestDl8ReplayCap:
         service = WebhookDeliveryService()
 
         # replay_count = 1, only 5s since last replay (under 60s).
-        mock_postgres_client.fetchrow = AsyncMock(
-            return_value={
-                "id": "dlq-2",
-                "webhook_id": "wh-1",
-                "event_type": "job.completed",
-                "payload": "{}",
-                "replay_count": 1,
-                "signature_v1": "t=1,v1=x",
-                "last_replayed_at": "2026-06-27T00:00:00Z",
-                "seconds_since_last_replay": 5.0,
-            }
-        )
+        # F43: same 3-step flow as the cap test. The atomic UPDATE
+        # is rejected by the gap clause (< 60s), so the claim
+        # returns None and the second SELECT reports the gap.
+        gap_row = {
+            "id": "dlq-2",
+            "webhook_id": "wh-1",
+            "event_type": "job.completed",
+            "payload": "{}",
+            "replay_count": 1,
+            "signature_v1": "t=1,v1=x",
+            "last_replayed_at": "2026-06-27T00:00:00Z",
+            "seconds_since_last_replay": 5.0,
+        }
+        call_count = {"n": 0}
+
+        async def _fetchrow(sql, *args):
+            call_count["n"] += 1
+            if call_count["n"] == 1:
+                return gap_row
+            # Atomic UPDATE with gap < 60s → no row updated
+            if call_count["n"] == 2:
+                return None
+            # Re-read for status reporting
+            return gap_row
+
+        mock_postgres_client.fetchrow = AsyncMock(side_effect=_fetchrow)
 
         result = await service.replay_dlq("dlq-2")
 
@@ -627,8 +657,9 @@ class TestDl8ReplayCap:
 
         service = WebhookDeliveryService()
 
-        # First fetchrow returns the DLQ row.
-        # Second fetchrow returns the webhook.
+        # F43: 3-step flow — initial SELECT, atomic UPDATE...RETURNING,
+        # webhook lookup. The UPDATE returns the new (post-increment)
+        # replay_count, which the function surfaces to the caller.
         call_count = {"n": 0}
 
         async def _fetchrow(sql, *args):
@@ -644,6 +675,9 @@ class TestDl8ReplayCap:
                     "last_replayed_at": None,
                     "seconds_since_last_replay": None,
                 }
+            if call_count["n"] == 2:
+                # Atomic UPDATE...RETURNING: replay_count goes 0 → 1
+                return {"replay_count": 1}
             return {
                 "url": "https://example.com/hook",
                 "secret": "secret",
@@ -672,3 +706,198 @@ class TestDl8ReplayCap:
         result = await service.replay_dlq("dlq-missing")
         assert result["status"] == "not_found"
         assert result["dlq_id"] == "dlq-missing"
+
+
+class TestF43ReplayDlqAtomicCas:
+    """F43 regression tests for ``replay_dlq`` TOCTOU race.
+
+    Pre-fix, ``replay_dlq`` did:
+
+        row = SELECT (read replay_count, last_replayed_at)
+        if replay_count >= cap: return cap_reached
+        if seconds_since < gap: return rate_limited
+        UPDATE replay_count = replay_count + 1
+
+    Two concurrent calls for the same DLQ row would both
+    see ``replay_count = 2``, both pass the cap check
+    (both see < 3), and both increment, ending at 3
+    (or higher under more contention). The cap was a
+    soft check that could be violated by concurrency.
+
+    The fix makes the cap+gap enforcement an atomic
+    ``UPDATE ... WHERE replay_count < cap AND <gap>
+    RETURNING replay_count``: only one concurrent caller
+    can claim the slot, and the database itself enforces
+    the cap.
+
+    The unit test simulates the race by counting how many
+    concurrent calls actually returned ``status="ok"`` —
+    pre-fix would be 2 (both saw cap not hit); with the
+    fix the second call is correctly rate-limited or
+    cap-reached because the first call's UPDATE bumped
+    the count.
+    """
+
+    @pytest.mark.asyncio
+    async def test_concurrent_replays_cannot_exceed_cap(
+        self, mock_postgres_client: MagicMock,
+    ) -> None:
+        """Two concurrent replays against replay_count=2 must not
+        both return ok — the atomic UPDATE enforces the cap=3.
+
+        Pre-fix, both would pass the ``replay_count >= 3`` check
+        (both see 2), both would increment, and both would
+        return ``status="ok"`` — the cap is silently violated.
+        """
+        import asyncio
+
+        from eden.services.webhook_delivery import (
+            WebhookDeliveryService,
+        )
+
+        service = WebhookDeliveryService()
+
+        # The DB row starts at replay_count=2 (one slot left).
+        # The atomic UPDATE bumps it to 3 on the first claim;
+        # the second concurrent claim must see 3 and be denied.
+        # We track how many UPDATE...RETURNING calls return a
+        # row vs None across the two concurrent invocations.
+        initial_row = {
+            "id": "dlq-race",
+            "webhook_id": "wh-1",
+            "event_type": "job.completed",
+            "payload": "{}",
+            "replay_count": 2,  # one slot left
+            "signature_v1": "t=1,v1=x",
+            "last_replayed_at": None,
+            "seconds_since_last_replay": None,
+        }
+        # After the first claim, replay_count = 3.
+        cap_reached_row = dict(initial_row, replay_count=3)
+
+        # State shared across the two concurrent replays.
+        # A primitive counter + a lock is enough to model the
+        # atomic DB row.
+        claimed_count = {"v": 0}
+        claimed_lock = asyncio.Lock()
+
+        async def _fetchrow(sql, *args):
+            sql_lower = sql.lower()
+            if "update webhook_dlq" in sql_lower:
+                # Atomic UPDATE...RETURNING — only one caller
+                # can claim the slot.
+                async with claimed_lock:
+                    if claimed_count["v"] >= 1:
+                        # Cap is hit — no row updated.
+                        return None
+                    claimed_count["v"] += 1
+                return {"replay_count": 3}
+            if "from webhooks" in sql_lower:
+                return {
+                    "url": "https://example.com/hook",
+                    "secret": "secret",
+                }
+            # SELECT (initial read or re-read on deny)
+            if claimed_count["v"] == 0:
+                return initial_row
+            return cap_reached_row
+
+        mock_postgres_client.fetchrow = AsyncMock(side_effect=_fetchrow)
+        mock_postgres_client.execute = AsyncMock()
+
+        # Fire two replays concurrently.
+        results = await asyncio.gather(
+            service.replay_dlq("dlq-race"),
+            service.replay_dlq("dlq-race"),
+        )
+
+        ok_results = [r for r in results if r["status"] == "ok"]
+        denied_results = [
+            r for r in results if r["status"] != "ok"
+        ]
+        # Exactly one replay should succeed; the other must be
+        # blocked (cap_reached). Pre-fix would have both
+        # returning "ok" because the cap check raced.
+        assert len(ok_results) == 1, (
+            f"Expected exactly 1 successful replay (cap=3), "
+            f"got {len(ok_results)}: {results}"
+        )
+        assert len(denied_results) == 1
+        # The denied one should be cap_reached, not rate_limited
+        # (the gap check passes — only the cap is hit).
+        assert denied_results[0]["status"] == "replay_cap_reached"
+        assert denied_results[0]["replay_count"] == 3
+
+    @pytest.mark.asyncio
+    async def test_atomic_update_uses_where_clauses_for_cap_and_gap(
+        self, mock_postgres_client: MagicMock,
+    ) -> None:
+        """The atomic UPDATE must enforce BOTH the cap and the gap
+        in its WHERE clause — not just the cap.
+
+        This locks in the SQL contract: a future refactor can't
+        silently drop the gap check from the atomic UPDATE and
+        reintroduce the race.
+        """
+        from eden.services.webhook_delivery import (
+            WebhookDeliveryService,
+        )
+
+        service = WebhookDeliveryService()
+        captured_sqls: list[str] = []
+
+        async def _fetchrow(sql, *args):
+            sql_lower = sql.lower()
+            captured_sqls.append(sql_lower)
+            if "update webhook_dlq" in sql_lower:
+                # Atomic UPDATE succeeded.
+                return {"replay_count": 1}
+            if "from webhooks" in sql_lower:
+                return {
+                    "url": "https://example.com/hook",
+                    "secret": "secret",
+                }
+            return {
+                "id": "dlq-sql",
+                "webhook_id": "wh-1",
+                "event_type": "job.completed",
+                "payload": "{}",
+                "replay_count": 0,
+                "signature_v1": "t=1,v1=x",
+                "last_replayed_at": None,
+                "seconds_since_last_replay": None,
+            }
+
+        mock_postgres_client.fetchrow = AsyncMock(side_effect=_fetchrow)
+        mock_postgres_client.execute = AsyncMock()
+
+        await service.replay_dlq("dlq-sql")
+
+        # Find the atomic UPDATE.
+        atomic_updates = [
+            sql for sql in captured_sqls
+            if "update webhook_dlq" in sql
+        ]
+        assert len(atomic_updates) == 1, (
+            f"Expected exactly 1 atomic UPDATE on webhook_dlq, "
+            f"got {len(atomic_updates)}: {atomic_updates}"
+        )
+        update_sql = atomic_updates[0]
+        # The cap check must be in the WHERE clause.
+        assert "replay_count <" in update_sql, (
+            f"Atomic UPDATE missing cap check: {update_sql}"
+        )
+        # The gap check must also be in the WHERE clause.
+        assert "last_replayed_at" in update_sql, (
+            f"Atomic UPDATE missing gap check: {update_sql}"
+        )
+        # And it must use EXTRACT(EPOCH FROM ...) for the gap math.
+        assert "extract(epoch" in update_sql, (
+            f"Atomic UPDATE missing EXTRACT(EPOCH FROM ...): {update_sql}"
+        )
+        # And it must RETURN the new replay_count for the
+        # caller to surface.
+        assert "returning" in update_sql, (
+            f"Atomic UPDATE missing RETURNING clause: {update_sql}"
+        )
+

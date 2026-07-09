@@ -113,8 +113,9 @@ func Trace(ctx context.Context, name string, payload map[string]any, opts ...Tra
 //	}, eden.TraceOptions{Tags: []string{"db"}})
 func TraceFunc[T any](ctx context.Context, name string, fn func() (T, error), opts ...TraceOptions) (T, error) {
 	var (
-		out T
-		err error
+		out   T
+		err   error
+		start = time.Now()
 	)
 	func() {
 		defer func() {
@@ -131,9 +132,13 @@ func TraceFunc[T any](ctx context.Context, name string, fn func() (T, error), op
 		if len(opts) > 0 {
 			o = opts[0]
 		}
+		// Use a monotonic start captured before the call so
+		// duration_ms reflects the actual elapsed time, not a
+		// near-zero value from time.Since(time.Now()).
+		_ = ctx
 		payload := map[string]any{
-			"function":   name,
-			"duration_ms": time.Since(startTimeFromContext(ctx)).Milliseconds(),
+			"function":    name,
+			"duration_ms": time.Since(start).Milliseconds(),
 		}
 		if err != nil {
 			payload["error"] = err.Error()
@@ -197,9 +202,10 @@ func orDefault(s, def string) string {
 	return s
 }
 
-// startTimeFromContext is a no-op for now — context carries no
-// monotonic start time. We use time.Now() so TraceFunc durations are
-// measured from call to return, not from any upstream timestamp.
+// startTimeFromContext is retained for backward-compatibility with
+// callers that wired context-stored start times; today it just
+// returns time.Now(). New code should capture a start time
+// directly.
 func startTimeFromContext(ctx context.Context) time.Time {
 	_ = ctx
 	return time.Now()

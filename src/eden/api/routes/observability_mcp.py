@@ -35,6 +35,7 @@ from eden.api.deps import (
     require_org_admin,
     require_org_member,
 )
+from eden.api.utils.redact import redact_all
 from eden.services.observability import get_mcp_service
 
 logger = logging.getLogger(__name__)
@@ -141,7 +142,7 @@ async def record_auth_failure(
             failure_id=failure_id,
         )
     except Exception as exc:
-        logger.debug("mcp route: hook fire failed: %s", exc)
+        logger.debug("mcp route: hook fire failed: %s", redact_all(str(exc)))
     return {
         "status": "ok",
         "feature": "mcp_auth_failures",

@@ -39,6 +39,7 @@ from pydantic import BaseModel, Field
 
 from eden.agent import PRSuggester
 from eden.api.deps import get_current_user, require_feature_flag
+from eden.api.utils.redact import redact_all
 from eden.providers import (
     PRCreateRequest,
     PRProvider,
@@ -286,7 +287,7 @@ async def open_pr(
             },
         }
     except Exception as exc:
-        logger.exception("open_pr failed: %s", exc)
+        logger.exception("open_pr failed: %s", redact_all(str(exc)))
         return {
             "status": "error",
             "feature": "pr_suggester",

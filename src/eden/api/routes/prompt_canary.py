@@ -17,22 +17,11 @@ from fastapi import APIRouter, Depends, HTTPException, Path
 from pydantic import BaseModel, Field
 
 from eden.api.deps import get_current_user
+from eden.api.utils.safe_error import safe_detail
 from eden.storage.postgres import get_postgres_client
 
 logger = logging.getLogger(__name__)
 
-
-def _safe_detail(exc: BaseException) -> str:
-    """Return a non-leaking error detail for client 5xx responses.
-
-    Internal exception text can contain database schema names, SQL
-    fragments, foreign-key table names, Asyncpg column references,
-    and connection-string hostnames. None of that belongs in a
-    500 response body. Log the full exception server-side; surface
-    a generic message + a request_id the caller can quote in a
-    support ticket. July 2026 site-wide fix (was: ``detail=str(exc)``).
-    """
-    return "Internal error while persisting canary experiment"
 
 router = APIRouter(prefix="/orgs/{org_id}/prompts", tags=["prompts"])
 
@@ -104,7 +93,7 @@ async def create_canary(
         )
     except Exception as exc:
         logger.warning(f"canary create failed: {exc}")
-        raise HTTPException(status_code=500, detail=_safe_detail(exc)) from exc
+        raise HTTPException(status_code=500, detail=safe_detail(exc, fallback="Internal error while persisting canary experiment")) from exc
 
     return {
         "experiment_id": experiment_id,
@@ -208,7 +197,7 @@ async def promote_canary(
         raise
     except Exception as exc:
         logger.warning(f"canary promote failed: {exc}")
-        raise HTTPException(status_code=500, detail=_safe_detail(exc)) from exc
+        raise HTTPException(status_code=500, detail=safe_detail(exc, fallback="Internal error while persisting canary experiment")) from exc
 
     # Audit log
     try:
@@ -265,7 +254,7 @@ async def rollback_canary(
         )
     except Exception as exc:
         logger.warning(f"canary rollback failed: {exc}")
-        raise HTTPException(status_code=500, detail=_safe_detail(exc)) from exc
+        raise HTTPException(status_code=500, detail=safe_detail(exc, fallback="Internal error while persisting canary experiment")) from exc
 
     try:
         from eden.api.deps import log_audit_event

@@ -1,0 +1,175 @@
+{
+  "started_at": "2026-07-06T17:45:13Z",
+  "suites": {
+    "api_latency": [
+      {
+        "name": "api:GET /health",
+        "n": 200,
+        "p50_ms": 6.284,
+        "p95_ms": 6.315,
+        "p99_ms": 6.316,
+        "mean_ms": 6.245,
+        "max_ms": 6.319,
+        "extras": {
+          "concurrency": 10
+        }
+      },
+      {
+        "name": "api:GET /v1/jobs",
+        "n": 200,
+        "p50_ms": 6.298,
+        "p95_ms": 6.321,
+        "p99_ms": 6.332,
+        "mean_ms": 6.262,
+        "max_ms": 6.333,
+        "extras": {
+          "concurrency": 10
+        }
+      },
+      {
+        "name": "api:GET /v1/environments",
+        "n": 200,
+        "p50_ms": 6.301,
+        "p95_ms": 6.32,
+        "p99_ms": 6.332,
+        "mean_ms": 6.295,
+        "max_ms": 6.333,
+        "extras": {
+          "concurrency": 10
+        }
+      },
+      {
+        "name": "api:GET /v1/benchmarks",
+        "n": 200,
+        "p50_ms": 6.281,
+        "p95_ms": 6.317,
+        "p99_ms": 6.318,
+        "mean_ms": 6.24,
+        "max_ms": 6.319,
+        "extras": {
+          "concurrency": 10
+        }
+      }
+    ],
+    "llm_provider": [
+      {
+        "name": "llm:openai",
+        "n": 30,
+        "p50_ms": 247.345,
+        "p95_ms": 291.512,
+        "p99_ms": 297.435,
+        "mean_ms": 252.809,
+        "max_ms": 298.168,
+        "extras": {
+          "concurrency": 4
+        },
+        "errors": 0,
+        "total": 30,
+        "error_rate": 0.0
+      },
+      {
+        "name": "llm:anthropic",
+        "n": 30,
+        "p50_ms": 324.726,
+        "p95_ms": 380.421,
+        "p99_ms": 382.858,
+        "mean_ms": 323.301,
+        "max_ms": 383.843,
+        "extras": {
+          "concurrency": 4
+        },
+        "errors": 0,
+        "total": 30,
+        "error_rate": 0.0
+      },
+      {
+        "name": "llm:openrouter",
+        "n": 30,
+        "p50_ms": 395.432,
+        "p95_ms": 470.796,
+        "p99_ms": 477.242,
+        "mean_ms": 401.82,
+        "max_ms": 479.544,
+        "extras": {
+          "concurrency": 4
+        },
+        "errors": 0,
+        "total": 30,
+        "error_rate": 0.0
+      }
+    ],
+    "kb_retrieval": [
+      {
+        "name": "kb_retrieval:L1",
+        "n": 85,
+        "p50_ms": 1.273,
+        "p95_ms": 1.302,
+        "p99_ms": 1.324,
+        "mean_ms": 1.232,
+        "max_ms": 1.359,
+        "extras": {
+          "tier": "L1",
+          "concurrency": 8
+        },
+        "hit_rate": 0.425
+      },
+      {
+        "name": "kb_retrieval:L2",
+        "n": 93,
+        "p50_ms": 30.959,
+        "p95_ms": 32.069,
+        "p99_ms": 32.097,
+        "mean_ms": 31.107,
+        "max_ms": 32.099,
+        "extras": {
+          "tier": "L2",
+          "concurrency": 8
+        },
+        "hit_rate": 0.465
+      },
+      {
+        "name": "kb_retrieval:DB",
+        "n": 22,
+        "p50_ms": 80.278,
+        "p95_ms": 82.067,
+        "p99_ms": 82.082,
+        "mean_ms": 80.922,
+        "max_ms": 82.085,
+        "extras": {
+          "tier": "DB",
+          "concurrency": 8
+        },
+        "hit_rate": 0.11
+      }
+    ],
+    "repo_graph": {
+      "budgets": {
+        "cold_index_met": true,
+        "warm_index_met": true,
+        "query_p95_met": true,
+        "find_affected_p95_met": true,
+        "db_bytes_met": true
+      },
+      "targets": {
+        "cold_index_ms": 10000.0,
+        "warm_index_ms": 200.0,
+        "query_p95_ms": 50.0,
+        "find_affected_p95_ms": 80.0,
+        "db_bytes": 104857600
+      },
+      "measurements": {
+        "cold_index_ms": 6225.75,
+        "warm_index_ms": 0.55,
+        "query_p50_ms": 0.532,
+        "query_p95_ms": 0.656,
+        "query_p99_ms": 0.661,
+        "find_affected_p95_ms": 0.26,
+        "file_count": 1599,
+        "symbol_count": 53004,
+        "db_bytes": 72769536
+      }
+    }
+  },
+  "duration_s": 15.37,
+  "finished_at": "2026-07-06T17:45:28Z"
+}

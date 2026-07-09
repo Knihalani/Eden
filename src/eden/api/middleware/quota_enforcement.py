@@ -27,6 +27,7 @@ from fastapi import Request
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse, Response
 
+from eden.api.middleware.security_headers import apply_security_headers
 from eden.api.utils.auth import decode_access_token
 from eden.services.usage_service import UsageService
 
@@ -212,7 +213,10 @@ class QuotaEnforcementMiddleware(BaseHTTPMiddleware):
                             "detail": cached_detail,
                             "type": "quota_exceeded",
                         },
-                        headers=quota_headers,
+                        # F69 — apply OWASP security headers; merge
+                        # with the existing ``quota_headers`` so the
+                        # rate-limit policy + retry-after are preserved.
+                        headers=apply_security_headers(quota_headers),
                     )
                 try:
                     blocked, detail = await self._check_hard_limits(org_id, resources)
@@ -223,7 +227,8 @@ class QuotaEnforcementMiddleware(BaseHTTPMiddleware):
                                 "detail": detail,
                                 "type": "quota_exceeded",
                             },
-                            headers=quota_headers,
+                            # F69 — apply OWASP security headers.
+                            headers=apply_security_headers(quota_headers),
                         )
                 except Exception as exc:
                     # Live check failed but cache says we're under the

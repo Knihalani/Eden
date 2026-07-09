@@ -41,6 +41,20 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Protocol
 
+# Module-level singleton httpx client. ``async with httpx.AsyncClient(...)``
+# opens a fresh client (separate connection pool) and discards keep-alive
+# sockets at scope exit; a module-level singleton keeps the underlying TCP
+# connections warm across calls — material win for repeated GitHub API hits.
+_HTTPX: "httpx.AsyncClient | None" = None  # noqa: UP037, F821
+
+
+def _shared_httpx() -> "httpx.AsyncClient":  # noqa: UP037, F821
+    global _HTTPX
+    if _HTTPX is None:
+        import httpx
+        _HTTPX = httpx.AsyncClient(timeout=30.0)
+    return _HTTPX
+
 logger = logging.getLogger(__name__)
 
 
@@ -500,9 +514,9 @@ class GitHubRepoProvider:
         ``"requirements.txt"`` / ``"pyproject.toml"`` / ``"package.json"``
         directly via :meth:`read_file` and skips this method.
         """
-        import httpx as _httpx
+        client = _shared_httpx()
         default_branch = await self.get_default_branch()
-        async with _httpx.AsyncClient(timeout=30.0) as client:
+        async with client:
             r = await client.get(
                 f"https://api.github.com/repos/{self.repo}/git/trees/{default_branch}",
                 headers=self._headers,
@@ -523,8 +537,8 @@ class GitHubRepoProvider:
         """Read a file via the Contents API. Returns ``""`` on miss."""
         import base64 as _base64
 
-        import httpx as _httpx
-        async with _httpx.AsyncClient(timeout=30.0) as client:
+        client = _shared_httpx()
+        async with client:
             r = await client.get(
                 f"https://api.github.com/repos/{self.repo}/contents/{path}",
                 headers=self._headers,
@@ -549,8 +563,8 @@ class GitHubRepoProvider:
 
     async def get_default_branch(self) -> str:
         """Read the default branch from the repo metadata."""
-        import httpx as _httpx
-        async with _httpx.AsyncClient(timeout=15.0) as client:
+        client = _shared_httpx()
+        async with client:
             r = await client.get(
                 f"https://api.github.com/repos/{self.repo}",
                 headers=self._headers,
@@ -563,8 +577,8 @@ class GitHubRepoProvider:
         self, limit: int = 10,
     ) -> list[CommitInfo]:
         """List recent commits on the default branch."""
-        import httpx as _httpx
-        async with _httpx.AsyncClient(timeout=30.0) as client:
+        client = _shared_httpx()
+        async with client:
             r = await client.get(
                 f"https://api.github.com/repos/{self.repo}/commits",
                 headers=self._headers,
@@ -594,8 +608,8 @@ class GitHubRepoProvider:
         self, number: int,
     ) -> PullRequestInfo | None:
         """Fetch one PR by number."""
-        import httpx as _httpx
-        async with _httpx.AsyncClient(timeout=15.0) as client:
+        client = _shared_httpx()
+        async with client:
             r = await client.get(
                 f"https://api.github.com/repos/{self.repo}/pulls/{int(number)}",
                 headers=self._headers,
@@ -610,11 +624,11 @@ class GitHubRepoProvider:
         self, state: str = "open", limit: int = 50,
     ) -> list[PullRequestInfo]:
         """List PRs filtered by state ('open'|'closed'|'all')."""
-        import httpx as _httpx
+        client = _shared_httpx()
         gh_state = "all" if state == "all" else (
             "closed" if state in ("merged", "closed") else "open"
         )
-        async with _httpx.AsyncClient(timeout=30.0) as client:
+        async with client:
             r = await client.get(
                 f"https://api.github.com/repos/{self.repo}/pulls",
                 headers=self._headers,

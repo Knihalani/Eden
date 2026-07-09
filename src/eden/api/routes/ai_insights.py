@@ -53,7 +53,9 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 from sse_starlette.sse import EventSourceResponse
 
-from eden.api.deps import log_audit_event, require_org_member
+from eden.api.deps import get_current_user, log_audit_event, require_org_member
+from eden.api.utils.redact import redact_all
+from eden.api.utils.safe_error import safe_detail
 from eden.config import get_settings
 from eden.llm.client import get_llm_client
 from eden.llmops.insights_tools import dispatch_tool_call, list_tools
@@ -270,7 +272,7 @@ async def _load_session(org_id: str, user_id: str, session_id: str) -> dict[str,
     except Exception as exc:
         logger.warning(
             "ai_insights: _load_session failed for user=%s org=%s session=%s: %s",
-            user_id, org_id, session_id, exc,
+            user_id, org_id, session_id, redact_all(str(exc)),
         )
         return None
 
@@ -314,7 +316,7 @@ async def _append_message(session_id: str, role: str, content: list[dict[str, An
     except Exception as exc:
         logger.warning(
             "ai_insights: _append_message failed for session=%s role=%s: %s",
-            session_id, role, exc,
+            session_id, role, redact_all(str(exc)),
         )
 
 
@@ -343,7 +345,7 @@ async def _touch_session(session_id: str, title: str | None = None) -> None:
     except Exception as exc:
         logger.warning(
             "ai_insights: _touch_session failed for session=%s: %s",
-            session_id, exc,
+            session_id, redact_all(str(exc)),
         )
 
 
@@ -370,7 +372,7 @@ async def _load_history(session_id: str) -> list[dict[str, Any]]:
     except Exception as exc:
         logger.warning(
             "ai_insights: _load_history failed for session=%s: %s",
-            session_id, exc,
+            session_id, redact_all(str(exc)),
         )
         return []
     messages: list[dict[str, Any]] = []
@@ -493,7 +495,7 @@ async def _stream_chat(
                 logger.exception(f"ai_insights: all models failed: {exc}")
                 yield {
                     "type": "error",
-                    "message": f"All model tiers failed: {exc}",
+                    "message": safe_detail(exc, fallback="All model tiers failed"),
                 }
                 return
 
@@ -578,7 +580,7 @@ async def _stream_chat(
         }
     except Exception as exc:  # noqa: BLE001 — last-resort guard
         logger.exception(f"ai_insights chat failed: {exc}")
-        yield {"type": "error", "message": f"{type(exc).__name__}: {exc}"}
+        yield {"type": "error", "message": safe_detail(exc, fallback=f"{type(exc).__name__}: chat failed")}
 
 
 def _summarize_tool_result(name: str, result: dict[str, Any]) -> str:
@@ -607,13 +609,14 @@ async def chat(
     org_id: str,
     body: ChatRequest,
     org: dict = Depends(require_org_member),
+    user: dict = Depends(get_current_user),
 ):
     """Stream a chat turn as Server-Sent Events.
 
     The first message of a new session also writes an audit-log
     entry so the org's compliance view can see AI usage.
     """
-    user_id = org["user_id"]
+    user_id = user["user_id"]
 
     # Find or create the session.
     if body.session_id:
@@ -678,6 +681,7 @@ async def chat(
 async def list_sessions(
     org_id: str,
     org: dict = Depends(require_org_member),
+    user: dict = Depends(get_current_user),
     limit: int = 50,
 ):
     """List the current user's chat sessions (newest first, archived last).
@@ -689,7 +693,7 @@ async def list_sessions(
     2026 site-wide fix.
     """
     limit = max(1, min(int(limit), 200))
-    user_id = org["user_id"]
+    user_id = user["user_id"]
     try:
         client = await get_postgres_client()
         rows = await client.fetch(
@@ -705,7 +709,7 @@ async def list_sessions(
     except Exception as exc:
         logger.warning(
             "ai_insights: list_sessions failed for user=%s org=%s: %s",
-            user_id, org_id, exc,
+            user_id, org_id, redact_all(str(exc)),
         )
         return {"sessions": []}
     return {
@@ -727,6 +731,7 @@ async def list_messages(
     org_id: str,
     session_id: str,
     org: dict = Depends(require_org_member),
+    user: dict = Depends(get_current_user),
 ):
     """Replay all messages in a session (for sidebar rehydration).
 
@@ -737,7 +742,7 @@ async def list_messages(
     to title the conversation and we 404 instead. July 2026
     site-wide hardening (companion to the list_sessions
     try/except)."""
-    user_id = org["user_id"]
+    user_id = user["user_id"]
     existing = await _load_session(org_id, user_id, session_id)
     if not existing:
         raise HTTPException(
@@ -758,7 +763,7 @@ async def list_messages(
     except Exception as exc:
         logger.warning(
             "ai_insights: list_messages failed for user=%s org=%s session=%s: %s",
-            user_id, org_id, session_id, exc,
+            user_id, org_id, session_id, redact_all(str(exc)),
         )
         rows = []
     return {
@@ -781,6 +786,7 @@ async def archive_session(
     org_id: str,
     session_id: str,
     org: dict = Depends(require_org_member),
+    user: dict = Depends(get_current_user),
 ):
     """Soft-delete a session (sets ``archived_at``).
 
@@ -788,7 +794,7 @@ async def archive_session(
     project's standard error envelope rather than 500. The
     session-row check before is already defensive via
     ``_load_session``. July 2026 site-wide hardening."""
-    user_id = org["user_id"]
+    user_id = user["user_id"]
     existing = await _load_session(org_id, user_id, session_id)
     if not existing:
         raise HTTPException(
@@ -804,7 +810,7 @@ async def archive_session(
     except Exception as exc:
         logger.warning(
             "ai_insights: archive_session failed for user=%s org=%s session=%s: %s",
-            user_id, org_id, session_id, exc,
+            user_id, org_id, session_id, redact_all(str(exc)),
         )
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -817,6 +823,7 @@ async def archive_session(
 async def health(
     org_id: str,
     org: dict = Depends(require_org_member),
+    user: dict = Depends(get_current_user),
 ):
     """Probe endpoint: returns whether AI Insights is configured."""
     settings = get_settings()

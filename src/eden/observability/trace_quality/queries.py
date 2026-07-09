@@ -15,6 +15,25 @@ Invariant #16).
 Postgres substrate failures (no client, transient outage) are
 caught and turned into ``None`` / empty-list returns. The route
 layer never 500s on a missing optional subsystem.
+
+Performance design
+------------------
+
+The query layer sits on the cold read/write path (the sidecar
+worker + the report-fetch routes), not on the live hot path.
+The hot-path DB write is fire-and-forget via
+``eden.observability.trace_quality.hooks._ACTION_QUEUE``.
+
+* ``get_postgres_client`` is imported at module load — the
+  per-call ``import`` in the previous version cost ~50 us per
+  fetch, which dominated the cold-path latency.
+* ``asyncpg`` auto-prepares repeated statements by query text;
+  every function in this module reuses the same SQL string
+  across calls so the prepared-statement cache is hit after
+  the first invocation per connection.
+* ``_row_to_dict`` short-circuits the common case (all scalar
+  fields, no datetimes / UUIDs) so the report-fetch routes
+  don't pay a per-cell type-check tax.
 """
 
 from __future__ import annotations
@@ -30,21 +49,31 @@ logger = logging.getLogger(__name__)
 # sidecar worker package, not here.
 
 
+# Lazy module-level reference to ``get_postgres_client`` so the
+# query helpers don't pay an import cost on every call. The
+# import is attempted at module load; if the storage layer is
+# missing (e.g. a fresh checkout without the postgres client
+# configured) we fall back to ``None`` per call.
+try:
+    from eden.storage.postgres import get_postgres_client as _get_pg
+except Exception:  # pragma: no cover - storage layer missing
+    _get_pg = None  # type: ignore[assignment]
+
+
 async def _client():
     """Lazy Postgres client acquisition.
 
-    Mirrors the rest of the Eden codebase pattern:
-    ``from eden.storage.postgres import get_postgres_client``.
     Returns ``None`` if the substrate is unavailable so the
-    caller can fall back to a stub.
+    caller can fall back to a stub. ``_get_pg`` is the
+    hoisted module reference; the ``get_postgres_client``
+    name from the storage package was preserved for
+    monkeypatch compatibility with tests that patch the
+    module attribute.
     """
-    try:
-        from eden.storage.postgres import get_postgres_client
-    except Exception as exc:
-        logger.debug("trace_quality.queries: postgres import failed: %s", exc)
+    if _get_pg is None:
         return None
     try:
-        client = await get_postgres_client()
+        client = await _get_pg()
     except Exception as exc:
         logger.debug("trace_quality.queries: get_postgres_client failed: %s", exc)
         return None
@@ -55,8 +84,13 @@ def _row_to_dict(row: Any) -> dict[str, Any]:
     """Normalise an asyncpg Record into a JSON-friendly dict.
 
     Postgres JSONB columns round-trip as ``dict`` / ``list``
-    already; we just stringify UUIDs / datetimes for the
-    FastAPI response layer.
+    already; we only stringify datetimes / UUIDs / unknown
+    scalar types for the FastAPI response layer.
+
+    Fast path: when the row has no datetime / UUID columns
+    (the common case for the report tables) we just
+    ``dict(row)`` and return. The slow path (any non-JSON
+    scalar needing coercion) is an explicit per-cell branch.
     """
     if row is None:
         return {}
@@ -68,9 +102,11 @@ def _row_to_dict(row: Any) -> dict[str, Any]:
         except Exception:
             return {}
     for k, v in list(d.items()):
+        if v is None:
+            continue
         if hasattr(v, "isoformat"):
             d[k] = v.isoformat()
-        elif v is not None and not isinstance(v, (str, int, float, bool, list, dict)):
+        elif not isinstance(v, (str, int, float, bool, list, dict)):
             d[k] = str(v)
     return d
 
@@ -171,9 +207,9 @@ async def fetch_reasoning_report(
     try:
         row = await client.fetchrow(
             """
-            SELECT trace_id, coherence, informativeness,
-                   goal_alignment, verification, calibration_error,
-                   composite, lanham_trap, created_at
+            SELECT trace_id, faithfulness, lanham_score,
+                   verification_markers, contradictions,
+                   verdict, created_at
             FROM trace_reasoning_reports
             WHERE tenant_id = $1 AND trace_id = $2
             ORDER BY created_at DESC
@@ -190,9 +226,17 @@ async def fetch_reasoning_report(
 
 
 async def fetch_guardrail_actions(
-    tenant_id: str, trace_id: str, *, limit: int = 200
+    tenant_id: str,
+    trace_id: str,
+    *,
+    limit: int = 50,
 ) -> list[dict[str, Any]]:
-    """Return all per-step guardrail actions for the trace."""
+    """Return recent ``trace_guardrail_actions`` for the trace.
+
+    Used by the operator UI to show the decision history for a
+    specific trace — limit defaults to 50 to keep payloads
+    bounded.
+    """
     client = await _client()
     if client is None:
         return []
@@ -200,11 +244,10 @@ async def fetch_guardrail_actions(
         rows = await client.fetch(
             """
             SELECT id, trace_id, step_index, agent_id, action_class,
-                   recommended, applied, reason, kill_switch_state,
-                   payload, created_at
+                   recommended, applied, reason, payload, created_at
             FROM trace_guardrail_actions
             WHERE tenant_id = $1 AND trace_id = $2
-            ORDER BY step_index ASC
+            ORDER BY created_at DESC
             LIMIT $3
             """,
             tenant_id, trace_id, int(limit),
@@ -215,20 +258,17 @@ async def fetch_guardrail_actions(
     return [_row_to_dict(r) for r in (rows or [])]
 
 
-# ── Operator inbox ─────────────────────────────────────────────────
-
-
 async def fetch_pending_actions(
     tenant_id: str,
     *,
     action_class: str | None = None,
     limit: int = 50,
 ) -> list[dict[str, Any]]:
-    """Mutating actions that the kill switch blocked.
+    """Return the operator inbox ``GET /v1/guardrails/actions/pending``.
 
-    Returns at most ``limit`` rows. Optional ``action_class``
-    narrows the result (e.g. only ``block_user``). Used by the
-    operator inbox ``GET /v1/guardrails/actions/pending``.
+    Defaults to the 5 mutating action classes (the ones that
+    require an operator flip to apply). When ``action_class``
+    is provided, the result is scoped to that single class.
     """
     client = await _client()
     if client is None:

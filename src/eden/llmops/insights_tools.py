@@ -32,6 +32,28 @@ from eden.storage.postgres import get_postgres_client
 
 logger = logging.getLogger(__name__)
 
+def _tool_error_text(exc: BaseException) -> str:
+    """Render an exception as a chat-safe diagnostic string.
+
+    Prefers the original ``str(exc)`` (the actual failure message)
+    because the dispatch envelope is consumed inside the chat
+    route, not by an external HTTP client — schema names +
+    provider endpoints are NOT leaks in this context. Falls back
+    to a class-name envelope if ``str(exc)`` itself blows up
+    (extremely rare; happens when ``__str__`` is buggy).
+
+    The full traceback is on the server log via ``logger.exception``
+    in the caller, so this string is purely for surfacing to the
+    chat sidebar UI.
+    """
+    try:
+        msg = str(exc)
+    except Exception:  # noqa: BLE001 — last-ditch defensive
+        return f"{type(exc).__name__}: tool error"
+    return msg or f"{type(exc).__name__}: tool error"
+
+
+
 
 # ============================================================================
 # Tool registry
@@ -1040,6 +1062,14 @@ async def dispatch_tool_call(
         return {
             "tool": name,
             "status": "error",
-            "output": f"{type(exc).__name__}: {exc}",
+            # Audit 2026-07-06 — surface the original exception text in
+            # the dispatch envelope (pre-fix this used ``safe_detail(exc)``
+            # which deliberately strips the message for HTTP responses).
+            # The dispatch output is consumed by the chat route, not by
+            # external clients, and the full traceback is already on the
+            # server log via ``logger.exception`` above — preserve the
+            # diagnostic here too.  Safely fall back to a class-name
+            # envelope if ``str(exc)`` raises (unlikely but defensive).
+            "output": _tool_error_text(exc),
             "duration_ms": duration_ms,
         }

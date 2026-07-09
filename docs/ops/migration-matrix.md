@@ -110,6 +110,10 @@
 | 076 | account_lockout | yes | forever | none | low | auth | Phase 4 |
 | 077 | password_reset_tokens | yes | forever | none | low | auth | Phase 4 |
 | 078 | two_factor_recovery_codes | yes | forever | none | low | auth (2FA) | Phase 4 |
+| 079 | org_pii_policies.mode | yes | forever | none | medium | D.11 PII tri-state | v3.0 |
+| 080 | pr_discipline_layer | yes | forever | none | medium | Cat 23 PR-discipline (v1.7+silencing) | v3.0 |
+| 081 | org_cost_overrides | yes | forever | none | medium | §6.1 per-tenant contract rates (D.4+) | v3.0 |
+| 082 | org_cost_overrides (cache read/write cols) | yes | forever | none | low | §6.1 cache-discount contract rates | v3.0 |
 
 ## Critical-path migrations (downgrade risk = `hard`)
 

@@ -5,39 +5,16 @@ and backend support for trace trees, heatmaps, timelines, and comparative dashbo
 
 Phase R: adds the stdlib ``logging`` shim — :func:`install` is the
 Logfire-style 5-minute time-to-first-log surface.
+
+Audit 2026-07-06 — package __init__ is lazy via PEP 562. Previously
+the eager re-exports of telemetry_collector pulled the whole
+observability subpackage (telemetry_collector + logging_shim) on
+the first ``from eden.observability import ...`` call. Now each
+submodule is imported on first attribute access; the public API
+is unchanged.
 """
 
-from eden.observability.logging_shim import (
-    EdenLoggingHandler,
-    clear_trace_context,
-    set_trace_context,
-)
-from eden.observability.logging_shim import (
-    get_handler as get_logging_handler,
-)
-from eden.observability.logging_shim import (
-    install as install_logging,
-)
-from eden.observability.logging_shim import (
-    is_installed as is_logging_shim_installed,
-)
-from eden.observability.logging_shim import (
-    uninstall as uninstall_logging,
-)
-from eden.observability.telemetry_collector import (
-    HeatmapData,
-    TelemetryCollector,
-    TelemetryEvent,
-    TimelineData,
-    TraceTree,
-    close_telemetry_collector,
-    get_telemetry_collector,
-)
-
-# Logfire-style aliases. Users can do ``from eden.observability import install``
-# — these are the same function under two names, kept for ergonomics.
-install = install_logging
-uninstall = uninstall_logging
+from __future__ import annotations
 
 __all__ = [
     "TelemetryCollector",
@@ -58,3 +35,47 @@ __all__ = [
     "set_trace_context",
     "clear_trace_context",
 ]
+
+
+_NAME_TO_MODULE = {
+    "TelemetryCollector": "telemetry_collector",
+    "get_telemetry_collector": "telemetry_collector",
+    "close_telemetry_collector": "telemetry_collector",
+    "TelemetryEvent": "telemetry_collector",
+    "TraceTree": "telemetry_collector",
+    "HeatmapData": "telemetry_collector",
+    "TimelineData": "telemetry_collector",
+    "EdenLoggingHandler": "logging_shim",
+    "install_logging": "logging_shim",
+    "uninstall_logging": "logging_shim",
+    "is_logging_shim_installed": "logging_shim",
+    "get_logging_handler": "logging_shim",
+    "set_trace_context": "logging_shim",
+    "clear_trace_context": "logging_shim",
+}
+
+
+def __getattr__(name: str):
+    """PEP 562 — lazy module attribute access."""
+    mod_name = _NAME_TO_MODULE.get(name)
+    if mod_name is None:
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+    import importlib
+    submodule = importlib.import_module(f".{mod_name}", __name__)
+    value = getattr(submodule, name)
+    globals()[name] = value
+    return value
+
+
+# Logfire-style aliases. We resolve them eagerly at the function
+# level so callers can still do ``from eden.observability import
+# install`` without going through the PEP 562 machinery for the
+# most common paths.
+def install(*args, **kwargs):
+    from eden.observability.logging_shim import install as _install
+    return _install(*args, **kwargs)
+
+
+def uninstall(*args, **kwargs):
+    from eden.observability.logging_shim import uninstall as _uninstall
+    return _uninstall(*args, **kwargs)

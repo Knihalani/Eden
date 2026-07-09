@@ -46,6 +46,8 @@ import uuid
 from datetime import UTC, datetime
 from typing import Any
 
+from eden.api.utils.redact import redact_all
+
 logger = logging.getLogger(__name__)
 
 # Audit 2026-07-02 P-17 — 1 h Redis cache TTL on the
@@ -431,7 +433,7 @@ async def _fetch_daily_token_totals(
             org_id, interval_sql,
         )
     except Exception as exc:
-        logger.debug("predictive: fetch_daily_token_totals failed: %s", exc)
+        logger.debug("predictive: fetch_daily_token_totals failed: %s", redact_all(str(exc)))
         return []
     out: list[dict[str, Any]] = []
     for r in rows:

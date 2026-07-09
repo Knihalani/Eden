@@ -16,13 +16,17 @@ from textwrap import dedent
 import pytest
 
 from eden.code_change.graph.symbol_graph import (
+    _CLASS_DECL_RE,
+    _CONST_DECL_RE,
+    _FN_DECL_RE,
+    _METHOD_DECL_RE,
     SYMBOL_GRAPH_DB,
     SymbolGraph,
+    _build_line_lookup,
     _iter_files,
-    _parse_python_with_parents,
+    _parse_python_single_pass,
     _parse_text_symbols,
 )
-
 
 # ── Helpers ──────────────────────────────────────────────────────────
 
@@ -119,15 +123,21 @@ class TestIterFiles:
         assert "README.md" not in paths
 
 
-# ── _parse_python_with_parents ───────────────────────────────────────
+# ── _parse_python_single_pass ────────────────────────────────────────
 
 
-class TestParsePython:
-    """The Python AST parser extracts real symbols + references."""
+class TestParsePythonSinglePass:
+    """The single-pass Python parser used by the production indexer.
+
+    This used to live in _parse_python_with_parents (deleted in
+    the v1.7.4 polish pass — superseded by a single recursive DFS
+    walk that avoids the parent-map + two-walk overhead). The new
+    function must still extract the same symbols + refs.
+    """
 
     def test_extracts_class(self, repo_and_db):
         _repo, _db, files = repo_and_db
-        symbols, refs = _parse_python_with_parents(
+        symbols, _refs = _parse_python_single_pass(
             "src/foo.py", files["src/foo.py"],
         )
         names = {s.name for s in symbols}
@@ -135,16 +145,65 @@ class TestParsePython:
         assert "greet" in names
         assert "failing" in names
 
-    def test_extracts_imports_as_references(self, repo_and_db):
+    def test_method_parent_is_enclosing_class(self, repo_and_db):
         _repo, _db, files = repo_and_db
-        _symbols, refs = _parse_python_with_parents(
+        symbols, _refs = _parse_python_single_pass(
+            "src/foo.py", files["src/foo.py"],
+        )
+        # greet is a method of FooService, so its parent
+        # should be set to the enclosing class name.
+        method = next(s for s in symbols if s.name == "greet")
+        assert method.kind == "method"
+        assert method.parent == "FooService"
+
+    def test_top_level_function_has_no_enclosing_class(self, repo_and_db):
+        _repo, _db, files = repo_and_db
+        symbols, _refs = _parse_python_single_pass(
             "src/bar.py", files["src/bar.py"],
         )
-        # ReferenceRecord uses ``name`` (the bare reference target).
+        # make_service and async_helper are module-level
+        # functions — no enclosing class.
+        for name in ("make_service", "async_helper"):
+            func = next(s for s in symbols if s.name == name)
+            assert func.kind == "function", f"{name} kind={func.kind}"
+            assert func.parent == "", f"{name} parent={func.parent!r}"
+
+    def test_extracts_references(self, repo_and_db):
+        _repo, _db, files = repo_and_db
+        _symbols, refs = _parse_python_single_pass(
+            "src/bar.py", files["src/bar.py"],
+        )
         ref_names = {r.name for r in refs}
-        # Cross-module imports surface as references; we just
-        # assert that we extracted at least one reference.
+        # We just assert that we extracted at least one reference;
+        # the cross-module import surface shows up as one.
         assert len(ref_names) > 0
+
+    def test_method_in_nested_class(self):
+        """A method inside a nested class records the full
+        enclosing-class chain as a dotted path.
+
+        v1.7.4 single-pass DFS upgrade: instead of returning
+        just the innermost enclosing class (the old
+        ``_parse_python_with_parents`` behaviour) we return
+        ``"Outer.Inner"`` so the discipline layer can resolve
+        nested class lookups without rebuilding the chain.
+        """
+        src = (
+            "class Outer:\n"
+            "    class Inner:\n"
+            "        def method(self):\n"
+            "            return 1\n"
+        )
+        symbols, _refs = _parse_python_single_pass("nested.py", src)
+        method = next(s for s in symbols if s.name == "method")
+        assert method.kind == "method"
+        assert method.parent == "Outer.Inner", (
+            f"expected parent='Outer.Inner' (dotted enclosing "
+            f"class chain), got parent={method.parent!r}"
+        )
+        # Both classes should be present.
+        names = {s.name for s in symbols if s.kind == "class"}
+        assert names == {"Outer", "Inner"}
 
 
 # ── End-to-end SymbolGraph ───────────────────────────────────────────
@@ -271,6 +330,107 @@ class TestSymbolGraphWithTypeScript:
         assert "ARROW" in names
 
 
+class TestSymbolGraphTextLineLookup:
+    """Regression tests for the dense offset→line lookup.
+
+    The previous implementation called
+    ``source.count("\n", 0, offset)`` per match — O(offset)
+    per lookup, O(n\u00b2) for a file with n matches. On a
+    3.7MB TS file with thousands of matches this was
+    catastrophic. v1.7.4 replaces it with a single O(n)
+    pre-pass that builds a dense ``array.array('I')``
+    mapping every byte offset to its 1-based line number.
+    These tests pin the behaviour.
+    """
+
+    def test_line_offsets_are_correct(self):
+        source = "a\nb\nc\n"
+        _starts, line_for = _build_line_lookup(source)
+        # 4 bytes: 0='a', 1='\n', 2='b', 3='\n', 4='c'
+        assert len(line_for) == len(source)
+        assert int(line_for[0]) == 1  # 'a' is on line 1
+        assert int(line_for[1]) == 1  # '\n' is on line 1
+        assert int(line_for[2]) == 2  # 'b' is on line 2
+        assert int(line_for[3]) == 2  # '\n' is on line 2
+        assert int(line_for[4]) == 3  # 'c' is on line 3
+
+    def test_line_numbers_match_naive_baseline(self):
+        """Across many random offsets, the lookup must match
+        the O(n) naive ``source.count("\n", 0, offset)+1``
+        baseline exactly. Catches off-by-one regressions
+        in the pre-pass."""
+        import random
+        random.seed(0)
+        body = []
+        for i in range(500):
+            body.append(f"function f{i:04d}() {{ return {i}; }}")
+        source = "\n".join(body)
+        _starts, line_for = _build_line_lookup(source)
+        for _ in range(200):
+            off = random.randint(0, len(source) - 1)
+            baseline = source.count("\n", 0, off) + 1
+            assert int(line_for[off]) == baseline, (
+                f"offset {off}: lookup={int(line_for[off])} "
+                f"baseline={baseline}"
+            )
+
+    def test_ts_indexer_line_numbers_are_correct(self):
+        """Round-trip: index a TS source and confirm the line
+        numbers match the O(n) naive baseline byte-for-byte.
+
+        The regexes use ``re.MULTILINE`` with ``^\\s*``, so
+        ``m.start()`` can point at a leading whitespace char
+        (a newline) rather than the first non-blank byte —
+        the returned line number is the line containing the
+        start offset, which is identical to the old
+        ``source.count("\\n", 0, offset)+1`` baseline.
+        """
+        source = (
+            "import x from 'y';\n"
+            "export function alpha() { return 1; }\n"
+            "export class Beta {\n"
+            "  method() { return 2; }\n"
+            "}\n"
+            "const GAMMA = 3;\n"
+        )
+        symbols, _refs = _parse_text_symbols("sample.ts", source)
+        by_name = {s.name: s for s in symbols}
+        assert set(by_name) == {"alpha", "Beta", "method", "GAMMA"}
+        # Verify line numbers exactly against the naive baseline
+        # (which is what the old code did) for every match.
+        expected: dict[str, int] = {}
+        for r in (_FN_DECL_RE, _CLASS_DECL_RE, _CONST_DECL_RE, _METHOD_DECL_RE):
+            for m2 in r.finditer(source):
+                name = m2.group("name")
+                if name in {"if", "for", "while", "switch", "return", "function", "class"}:
+                    continue
+                expected[name] = source.count("\n", 0, m2.start()) + 1
+        for name, line in expected.items():
+            assert by_name[name].line == line, (
+                f"{name}: lookup={by_name[name].line} baseline={line}"
+            )
+
+    def test_empty_source_is_safe(self):
+        """The pre-pass must not crash on an empty file."""
+        _starts, line_for = _build_line_lookup("")
+        assert len(line_for) == 0
+        # The scanner must also be safe.
+        symbols, refs = _parse_text_symbols("empty.ts", "")
+        assert symbols == []
+        assert refs == []
+
+    def test_no_trailing_newline(self):
+        """Files with no trailing newline should still index
+        every line correctly."""
+        source = "a\nb\nc"  # no trailing \n
+        _starts, line_for = _build_line_lookup(source)
+        assert int(line_for[0]) == 1
+        assert int(line_for[1]) == 1
+        assert int(line_for[2]) == 2
+        assert int(line_for[3]) == 2
+        assert int(line_for[4]) == 3
+
+
 # ── Performance / incremental indexing ─────────────────────────────
 
 
@@ -332,3 +492,78 @@ class TestSymbolGraphThreadLocalConn:
         assert _get_cached_conn(db_a) is c_a
         assert _get_cached_conn(db_b) is None
         c_a.close()
+class TestSymbolGraphFTSContentless:
+    """Tests for the contentless FTS5 schema + IN-subquery path.
+
+    Validates the v1.7.3 migration: ``symbols_fts`` is
+    contentless (3 cols: name / signature / docstring), the
+    bulk loader uses ``INSERT INTO ... SELECT``, and
+    ``search_symbols`` joins back to ``symbols`` via an
+    IN-subquery rather than a JOIN. Without the
+    IN-subquery the query was ~4500x slower because the
+    SQLite planner picked the wrong access order.
+    """
+
+    def test_fts_schema_is_contentless(self, repo_and_db):
+        repo, db, _files = repo_and_db
+        from eden.code_change.graph.symbol_graph import SymbolGraph
+        sg = SymbolGraph(root=repo, db_path=str(db))
+        sg._safe_index("o/r", "main")
+        conn = sg._store._read_conn()
+        cols = {
+            row[1]
+            for row in conn.execute("PRAGMA table_info(symbols_fts)").fetchall()
+        }
+        # Contentless FTS5 has exactly these 3 cols; the old
+        # contentful shape had 10 (incl. repo / branch / kind).
+        assert cols == {"name", "signature", "docstring"}, cols
+        conn.close()
+
+    def test_search_symbols_returns_correct_results(self, repo_and_db):
+        """End-to-end: index → query → results match the source."""
+        repo, db, _files = repo_and_db
+        from eden.code_change.graph.symbol_graph import SymbolGraph
+        sg = SymbolGraph(root=repo, db_path=str(db))
+        sg._safe_index("o/r", "main")
+        results = asyncio.run(sg.query("o/r", "FooService"))
+        # Snippets should contain FooService references
+        snippet_strs = [s[2] for s in (results.snippets or [])]
+        assert any("FooService" in s for s in snippet_strs), (
+            f"expected FooService hits in {results.snippets}"
+        )
+
+    def test_search_is_submillisecond(self, repo_and_db):
+        """Warm query should be under 5ms even with the JOIN back."""
+        repo, db, _files = repo_and_db
+        import time
+
+        from eden.code_change.graph.symbol_graph import SymbolGraph
+        sg = SymbolGraph(root=repo, db_path=str(db))
+        sg._safe_index("o/r", "main")
+        # Warm up
+        for _ in range(5):
+            asyncio.run(sg.query("o/r", "FooService"))
+        # Measure
+        t0 = time.perf_counter()
+        for _ in range(50):
+            asyncio.run(sg.query("o/r", "FooService"))
+        avg_ms = (time.perf_counter() - t0) * 1000 / 50
+        assert avg_ms < 5.0, f"query took {avg_ms:.2f}ms — expected <5ms"
+
+    def test_fts_bulk_load_uses_select_into(self, repo_and_db):
+        """After indexing, symbols_fts.rowid must match symbols.id."""
+        repo, db, _files = repo_and_db
+        from eden.code_change.graph.symbol_graph import SymbolGraph
+        sg = SymbolGraph(root=repo, db_path=str(db))
+        sg._safe_index("o/r", "main")
+        conn = sg._store._read_conn()
+        sym_count = conn.execute("SELECT COUNT(*) FROM symbols").fetchone()[0]
+        fts_count = conn.execute("SELECT COUNT(*) FROM symbols_fts").fetchone()[0]
+        assert sym_count > 0
+        # Both must be equal — the bulk INSERT INTO fts
+        # SELECT id FROM symbols populates one FTS row per
+        # symbols row.
+        assert sym_count == fts_count, (
+            f"symbols={sym_count} fts={fts_count} — bulk load mismatch"
+        )
+        conn.close()

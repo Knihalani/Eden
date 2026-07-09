@@ -33,7 +33,9 @@ def test_default_model_name():
     assert "RoBERTa" in MINICHECK_REPO or "Flan-T5" in MINICHECK_REPO
 
 
+@requires_model
 def test_dependencies_available():
+    # transformers + torch must be installed for MiniCheck to load.
     assert HAS_MINICHECK_DEPS
 
 

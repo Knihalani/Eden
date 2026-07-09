@@ -55,6 +55,15 @@ async def record(req: RecordOutcomeRequest) -> dict[str, Any]:
 class AnalyseRequest(BaseModel):
     experiment_key: str
     min_n: int = 100
+    control: str | None = Field(
+        default=None,
+        description=(
+            "Name of the control variant. When omitted, the first variant "
+            "in the results list (insertion order of recorded outcomes) is "
+            "treated as the control. Pass this explicitly if your "
+            "record_outcome calls didn't preserve the declared variant order."
+        ),
+    )
 
 
 @router.post("/analyse")
@@ -71,5 +80,7 @@ async def analyse_endpoint(req: AnalyseRequest) -> dict[str, Any]:
             }
             for r in results
         ],
-        "winner": recommend_winner(results, min_n=req.min_n),
+        "winner": recommend_winner(
+            results, min_n=req.min_n, control=req.control
+        ),
     }

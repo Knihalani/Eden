@@ -14,6 +14,7 @@ from datetime import UTC, datetime
 from fastapi import APIRouter, Depends
 
 from eden.api.deps import get_current_user
+from eden.api.utils.redact import redact_all
 
 logger = logging.getLogger(__name__)
 
@@ -47,7 +48,7 @@ async def cost_comparison(
     try:
         redis = await get_redis_client()
     except Exception as exc:  # noqa: BLE001
-        logger.warning("cost_comparison: redis unavailable: %s", exc)
+        logger.warning("cost_comparison: redis unavailable: %s", redact_all(str(exc)))
         redis = None
     if redis is not None:
         try:
@@ -56,7 +57,7 @@ async def cost_comparison(
                 f"eden:cost:{org_id}:month:{prev_key}",
             )
         except Exception as exc:  # noqa: BLE001
-            logger.warning("cost_comparison: redis mget failed: %s", exc)
+            logger.warning("cost_comparison: redis mget failed: %s", redact_all(str(exc)))
             cur_raw = prev_raw = None
         if cur_raw is not None:
             current_cents = float(cur_raw)

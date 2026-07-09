@@ -13,7 +13,6 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Upload
 
 from eden.api.deps import (
     get_current_user,
-    require_org_member,
     require_org_permission_dep,
 )
 from eden.api.routes.billing import check_limit
@@ -226,6 +225,7 @@ async def list_references(
     purpose: str | None = None,
     language: str | None = None,
     user: dict | None = None,
+    _check: dict = Depends(require_org_permission_dep("references:read")),
 ):
     """List code references in the organization.
 
@@ -233,7 +233,6 @@ async def list_references(
     - purpose: Filter by reference purpose
     - language: Filter by programming language
     """
-    await require_org_member(org_id)
 
     client = await get_postgres_client()
 
@@ -278,9 +277,23 @@ async def list_references(
 
 
 @router.get("/{ref_id}", response_model=dict)
-async def get_reference(org_id: str, ref_id: str, user: dict | None = None):
+async def get_reference(
+    org_id: str, ref_id: str,
+    user: dict | None = None,
+    _check: dict = Depends(require_org_permission_dep("references:read")),
+):
     """Get a single code reference with content."""
-    await require_org_member(org_id)
+    # A non-UUID ref_id (e.g. the literal ``{ref_id}`` placeholder
+    # from a smoke harness) would raise DataError from asyncpg's
+    # UUID type-check. 404 here instead of 500.
+    try:
+        import uuid as _uuid
+        _uuid.UUID(ref_id)
+    except (ValueError, AttributeError, TypeError) as err:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Reference not found",
+        ) from err
 
     client = await get_postgres_client()
 
@@ -309,6 +322,66 @@ async def get_reference(org_id: str, ref_id: str, user: dict | None = None):
         "created_at": row["created_at"].isoformat() if row.get("created_at") else None,
     }
 
+@router.get("/search/by-text", response_model=list[dict])
+async def search_references(
+    org_id: str,
+    # Audit 2026-06-22 B1.14 — cap query length to prevent 1MB embedding requests.
+    q: str = Query(..., max_length=2_000),
+    user: dict = Depends(get_current_user),
+    _check: dict = Depends(require_org_permission_dep("references:read")),
+):
+    """Search code references by text similarity.
+
+    Uses embedding-based semantic search.
+    """
+
+    client = await get_postgres_client()
+
+    # Generate embedding for query
+    query_embedding = await generate_embedding(q)
+
+    # Search using vector similarity
+    query = """
+        SELECT id, name, description, purpose, filename, language,
+               1 - (embedding <=> $1) as similarity
+        FROM code_references
+        WHERE org_id = $2 AND embedding IS NOT NULL
+        ORDER BY embedding <=> $1
+        LIMIT 10
+    """
+    rows = await client.fetch(query, query_embedding, org_id)
+
+    return [
+        {
+            "id": str(r["id"]),
+            "name": r["name"],
+            "description": r["description"],
+            "purpose": r["purpose"],
+            "filename": r["filename"],
+            "language": r["language"],
+            "similarity": round(r["similarity"], 3),
+        }
+        for r in rows
+    ]
+
+@router.get("/purposes", response_model=list[str])
+async def list_purposes(
+    org_id: str,
+    user: dict | None = None,
+    _check: dict = Depends(require_org_permission_dep("references:read")),
+):
+    """List all unique purpose labels in the organization."""
+
+    client = await get_postgres_client()
+
+    query = """
+        SELECT DISTINCT purpose FROM code_references
+        WHERE org_id = $1
+        ORDER BY purpose
+    """
+    rows = await client.fetch(query, org_id)
+
+    return [r["purpose"] for r in rows]
 
 @router.delete("/{ref_id}", response_model=dict)
 async def delete_reference(org_id: str, ref_id: str, user: dict = Depends(get_current_user),
@@ -343,61 +416,4 @@ async def delete_reference(org_id: str, ref_id: str, user: dict = Depends(get_cu
     return {"message": "Reference deleted"}
 
 
-@router.get("/search/by-text", response_model=list[dict])
-async def search_references(
-    org_id: str,
-    # Audit 2026-06-22 B1.14 — cap query length to prevent 1MB embedding requests.
-    q: str = Query(..., max_length=2_000),
-    user: dict = Depends(get_current_user),
-):
-    """Search code references by text similarity.
 
-    Uses embedding-based semantic search.
-    """
-    await require_org_member(org_id)
-
-    client = await get_postgres_client()
-
-    # Generate embedding for query
-    query_embedding = await generate_embedding(q)
-
-    # Search using vector similarity
-    query = """
-        SELECT id, name, description, purpose, filename, language,
-               1 - (embedding <=> $1) as similarity
-        FROM code_references
-        WHERE org_id = $2 AND embedding IS NOT NULL
-        ORDER BY embedding <=> $1
-        LIMIT 10
-    """
-    rows = await client.fetch(query, query_embedding, org_id)
-
-    return [
-        {
-            "id": str(r["id"]),
-            "name": r["name"],
-            "description": r["description"],
-            "purpose": r["purpose"],
-            "filename": r["filename"],
-            "language": r["language"],
-            "similarity": round(r["similarity"], 3),
-        }
-        for r in rows
-    ]
-
-
-@router.get("/purposes", response_model=list[str])
-async def list_purposes(org_id: str, user: dict | None = None):
-    """List all unique purpose labels in the organization."""
-    await require_org_member(org_id)
-
-    client = await get_postgres_client()
-
-    query = """
-        SELECT DISTINCT purpose FROM code_references
-        WHERE org_id = $1
-        ORDER BY purpose
-    """
-    rows = await client.fetch(query, org_id)
-
-    return [r["purpose"] for r in rows]

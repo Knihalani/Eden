@@ -22,6 +22,10 @@ function remarkEscapeBareLt() {
   return (tree) => {
     visit(tree, (node) => {
       if (typeof node.value === 'string') {
+        // Escape `<` followed by anything that isn't a tag-start
+        // (letter, !, ?, /) so MDX doesn't choke on `<10s`,
+        // `<200ms`, etc. Used in prose AND in table cells
+        // (after remark-gfm has parsed the table).
         node.value = node.value.replace(/<(?![a-zA-Z!?/])/g, '\\<');
       }
     });
@@ -114,8 +118,15 @@ const config = {
           sidebarPath: 'sidebars.js',
           remarkPlugins: [remarkEscapeBareLt],
           exclude: [
-            'docs/observability/**',
-            'docs/operations/**',
+            // Patterns are matched against the path RELATIVE to the
+            // `path` setting above (which is ``docs``), so the
+            // prefix is ``observability/`` not ``docs/observability/``.
+            // F76 (2026-07-08): the previous ``docs/observability/**``
+            // pattern didn't match anything — cat23-redteam-report.md
+            // was being included in the build, where its bare
+            // ``<10s`` table cell tripped MDX's JSX parser.
+            'observability/**',
+            'operations/**',
             '**/gap-roadmap.md',
             '**/judge-v2-plan.md',
             '**/40-dataset-spreadsheet.md',
@@ -127,6 +138,29 @@ const config = {
         theme: { customCss: 'src/css/custom.css' },
       }),
     ],
+  ],
+
+  // F68 — Mermaid diagrams for architecture + data-flow docs.
+  // The plugin is registered under ``themes:`` (Docusaurus 3.x
+  // requires the explicit theme to render the diagrams); the
+  // ``markdown.mermaid: true`` flag tells the MDX loader to
+  // parse ```mermaid code blocks into the Mermaid code-block
+  // node that the theme renders.
+  themes: [require.resolve('@docusaurus/theme-mermaid')],
+
+  markdown: {
+    mermaid: true,
+  },
+
+  // F68 — Mermaid init script. The theme-mermaid plugin ships
+  // a runtime that lazy-loads mermaid on first code-block mount;
+  // we also pin the CDN version so first paint of the diagrams
+  // is deterministic.
+  scripts: [
+    {
+      src: 'https://unpkg.com/mermaid@10/dist/mermaid.min.js',
+      async: true,
+    },
   ],
 
   themeConfig:

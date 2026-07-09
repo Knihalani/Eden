@@ -12,9 +12,6 @@ import logging
 import time
 from collections import OrderedDict
 
-from eden.config import get_settings
-
-settings = get_settings()
 logger = logging.getLogger(__name__)
 
 # ponytail: global cap on tracked keys; under attack, oldest unpoked

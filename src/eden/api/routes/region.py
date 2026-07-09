@@ -15,6 +15,7 @@ from fastapi import APIRouter, Depends, HTTPException, Path
 from pydantic import BaseModel, Field
 
 from eden.api.deps import get_current_user
+from eden.api.utils.safe_error import safe_detail
 from eden.storage.postgres import get_postgres_client
 
 logger = logging.getLogger(__name__)
@@ -52,7 +53,7 @@ async def get_region(
     if not client:
         raise HTTPException(status_code=503, detail="Database unavailable")
     row = await client.fetchrow(
-        "SELECT region FROM organizations WHERE org_id = $1",
+        "SELECT region FROM organizations WHERE id = $1",
         org_id,
     )
     if not row:
@@ -79,12 +80,12 @@ async def put_region(
         raise HTTPException(status_code=503, detail="Database unavailable")
     try:
         await client.execute(
-            "UPDATE organizations SET region = $1 WHERE org_id = $2",
+            "UPDATE organizations SET region = $1 WHERE id = $2",
             body.region, org_id,
         )
     except Exception as exc:
         logger.warning(f"put_region failed: {exc}")
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
+        raise HTTPException(status_code=500, detail=safe_detail(exc, fallback="Internal error while updating region")) from exc
 
     # Audit log
     try:

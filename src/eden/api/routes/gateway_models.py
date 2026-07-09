@@ -29,6 +29,7 @@ from fastapi import APIRouter, Depends, HTTPException, Path
 from pydantic import BaseModel, Field
 
 from eden.api.deps import OrgMember, get_current_org_member, log_audit_event
+from eden.api.utils.redact import redact_all
 from eden.llmops import registry_store
 from eden.llmops.registry_store import (
     SUPPORTED_PROVIDERS,
@@ -184,7 +185,7 @@ async def create_gateway_model(
                 status_code=400,
                 detail="Unknown organization",
             ) from exc
-        logger.warning("create_gateway_model failed: %s", exc)
+        logger.warning("create_gateway_model failed: %s", redact_all(str(exc)))
         raise HTTPException(status_code=500, detail="Failed to register model") from exc
 
     # Audit
@@ -207,7 +208,7 @@ async def create_gateway_model(
             },
         )
     except Exception as exc:  # noqa: BLE001
-        logger.warning("audit log failed for gateway_model.create: %s", exc)
+        logger.warning("audit log failed for gateway_model.create: %s", redact_all(str(exc)))
 
     return _to_out(cfg)
 
@@ -286,7 +287,7 @@ async def update_gateway_model(
                 metadata=changed,
             )
         except Exception as exc:  # noqa: BLE001
-            logger.warning("audit log failed for gateway_model.update: %s", exc)
+            logger.warning("audit log failed for gateway_model.update: %s", redact_all(str(exc)))
 
     return _to_out(cfg)
 
@@ -324,7 +325,7 @@ async def delete_gateway_model(
             },
         )
     except Exception as exc:  # noqa: BLE001
-        logger.warning("audit log failed for gateway_model.delete: %s", exc)
+        logger.warning("audit log failed for gateway_model.delete: %s", redact_all(str(exc)))
 
     return {"message": "Model deleted", "model_id": model_id}
 

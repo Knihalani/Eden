@@ -6,12 +6,13 @@ Provides hybrid dense+sparse vector search for semantic memory retrieval.
 import logging
 import re
 from dataclasses import dataclass
+from typing import Any
 
 from qdrant_client import QdrantClient
 from qdrant_client.http import models
 from qdrant_client.http.exceptions import UnexpectedResponse
 
-from eden.config import get_settings
+from eden.config import get_settings  # noqa: F401  # used by _get_settings()
 
 logger = logging.getLogger(__name__)
 
@@ -31,7 +32,15 @@ _DENIED_KEYS: frozenset[str] = frozenset(
 # Filter operator allowlist. Anything outside this set is dropped
 # silently (the search behaves as if the condition was never sent).
 _ALLOWED_OPERATORS: frozenset[str] = frozenset({"$eq", "$ne", "$in"})
-settings = get_settings()
+settings = None
+
+def _get_settings():
+    global settings
+    if settings is None:
+        from eden.config import get_settings as _gs
+        settings = _gs()
+    return settings
+
 
 
 @dataclass
@@ -66,8 +75,8 @@ class QdrantClientWrapper:
         port: int | None = None,
         collection_prefix: str = "eden_",
     ):
-        self.host = host or settings.qdrant_host
-        self.port = port or settings.qdrant_port
+        self.host = host or _get_settings().qdrant_host
+        self.port = port or _get_settings().qdrant_port
         self.collection_prefix = collection_prefix
         self._client: QdrantClient | None = None
 
@@ -83,11 +92,11 @@ class QdrantClientWrapper:
         avoids that and matches the qdrant-client docs' Cloud recipe.
         """
         if self._client is None:
-            if settings.qdrant_https and settings.qdrant_api_key:
+            if _get_settings().qdrant_https and _get_settings().qdrant_api_key:
                 url = f"https://{self.host}:{self.port}"
                 self._client = QdrantClient(
                     url=url,
-                    api_key=settings.qdrant_api_key,
+                    api_key=_get_settings().qdrant_api_key,
                 )
             else:
                 # Legacy path: plain HTTP Qdrant on host/port (local dev).
@@ -376,6 +385,11 @@ class QdrantClientWrapper:
         scored.sort(key=lambda x: x.score, reverse=True)
         return scored
 
+    # Qdrant's recommended per-call batch size. Larger batches time
+    # out the request on big payloads (10-50 KB each); 256 is the
+    # safe middle-ground that fits the Eden payload shapes.
+    _UPSERT_BATCH_SIZE = 256
+
     def upsert(
         self,
         collection: str,
@@ -389,22 +403,73 @@ class QdrantClientWrapper:
 
         Returns:
             True if successful
+
+        v1.8 (storage-optimisation pass): chunks the call to
+        ``_UPSERT_BATCH_SIZE`` so a 10K-point batch doesn't time
+        out the Qdrant request. Each chunk is its own HTTP call;
+        a failure in chunk N aborts the remaining chunks (the
+        caller can retry the whole batch — Qdrant's upsert is
+        idempotent on the same point id).
+        """
+        if not points:
+            return True
+        client = self._get_client()
+        collection_name = f"{self.collection_prefix}{collection}"
+        for i in range(0, len(points), self._UPSERT_BATCH_SIZE):
+            chunk = points[i : i + self._UPSERT_BATCH_SIZE]
+            qdrant_points = [
+                models.PointStruct(
+                    id=p["id"],
+                    vector=p["vector"],
+                    payload=p.get("payload", {}),
+                )
+                for p in chunk
+            ]
+            client.upsert(collection_name=collection_name, points=qdrant_points)
+        logger.debug(f"Upserted {len(points)} points to {collection_name}")
+        return True
+
+    def scroll_all(
+        self,
+        collection: str,
+        *,
+        limit: int = 256,
+        with_vectors: bool = False,
+        with_payload: bool = True,
+    ) -> list[dict]:
+        """Scroll every point in a collection.
+
+        Returns a list of point dicts (id, vector?, payload?). Uses
+        Qdrant's server-side cursor (``offset`` parameter) so a
+        10M-point collection scrolls without loading the whole
+        result set into memory.
+
+        Mirrors the ``tests/unit/storage/test_qdrant_quantization.py::
+        TestScrollAll`` shape so callers can rely on a uniform API
+        across the SDK.
         """
         client = self._get_client()
         collection_name = f"{self.collection_prefix}{collection}"
-
-        qdrant_points = [
-            models.PointStruct(
-                id=p["id"],
-                vector=p["vector"],
-                payload=p.get("payload", {}),
+        out: list[dict] = []
+        offset: Any = None
+        while True:
+            points, next_offset = client.scroll(
+                collection_name=collection_name,
+                limit=limit,
+                offset=offset,
+                with_vectors=with_vectors,
+                with_payload=with_payload,
             )
-            for p in points
-        ]
-
-        client.upsert(collection_name=collection_name, points=qdrant_points)
-        logger.debug(f"Upserted {len(points)} points to {collection_name}")
-        return True
+            for p in points:
+                out.append({
+                    "id": str(p.id),
+                    "vector": getattr(p, "vector", None) if with_vectors else None,
+                    "payload": p.payload or {},
+                })
+            if next_offset is None or not points:
+                break
+            offset = next_offset
+        return out
 
     def delete(self, collection: str, point_ids: list[str]) -> bool:
         """Delete points from a collection."""

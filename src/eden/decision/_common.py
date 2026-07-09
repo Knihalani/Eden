@@ -204,7 +204,27 @@ async def _delete_then_insert(
     Best-effort: any exception is logged and swallowed so the
     caller can still return the live envelope with the in-memory
     data. Persistence is a side-effect, not the contract.
+
+    Defence-in-depth: ``table`` and ``columns`` are interpolated
+    raw into SQL below. Today every caller passes hardcoded
+    strings, but we still validate at the function boundary so a
+    future caller can't smuggle SQL via a column list that came
+    from request input.
     """
+    import re as _re
+    _IDENT = _re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")  # noqa: N806
+    if not isinstance(table, str) or not _IDENT.match(table):
+        raise ValueError(
+            f"decision._delete_then_insert: invalid SQL identifier "
+            f"table={table!r}"
+        )
+    for i, c in enumerate(columns):
+        if not isinstance(c, str) or not _IDENT.match(c):
+            raise ValueError(
+                f"decision._delete_then_insert: invalid SQL identifier "
+                f"column[{i}]={c!r}"
+            )
+
     try:
         from eden.storage.postgres import get_postgres_client
     except Exception as exc:  # pragma: no cover - defensive
@@ -252,7 +272,27 @@ async def _insert_rows(
     ``decision_alternatives``).
 
     Best-effort like :func:`_delete_then_insert`.
+
+    Defence-in-depth: ``table``/``columns`` are interpolated raw
+    into SQL below. Today every caller passes hardcoded strings,
+    but we still validate at the function boundary so a future
+    caller can't smuggle SQL via a column list that came from
+    request input.
     """
+    import re as _re
+    _IDENT = _re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")  # noqa: N806
+    if not isinstance(table, str) or not _IDENT.match(table):
+        raise ValueError(
+            f"decision._insert_rows: invalid SQL identifier "
+            f"table={table!r}"
+        )
+    for i, c in enumerate(columns):
+        if not isinstance(c, str) or not _IDENT.match(c):
+            raise ValueError(
+                f"decision._insert_rows: invalid SQL identifier "
+                f"column[{i}]={c!r}"
+            )
+
     if not rows:
         return
     try:

@@ -11,8 +11,14 @@ import time
 from datetime import UTC
 
 from eden.llm.client import LLMResponse
-from eden.storage.qdrant import get_qdrant_client
 from eden.storage.redis import get_redis_client
+
+
+def _get_qdrant_client():
+    """Lazy import to avoid pulling the Qdrant client (grpc + numpy)
+    into every optimization cache import. Audit 2026-07-06."""
+    from eden.storage.qdrant import get_qdrant_client
+    return get_qdrant_client
 
 logger = logging.getLogger(__name__)
 
@@ -293,7 +299,7 @@ class SemanticCache:
         """Try to get a semantically similar cached response."""
         import asyncio
         threshold = similarity_threshold or self.threshold
-        qdrant = get_qdrant_client()
+        qdrant = _get_qdrant_client()()
         loop = asyncio.get_event_loop()
 
         # Ensure collection exists (run sync Qdrant ops in executor)
@@ -371,7 +377,7 @@ class SemanticCache:
         import asyncio
         from datetime import datetime
 
-        qdrant = get_qdrant_client()
+        qdrant = _get_qdrant_client()()
         loop = asyncio.get_event_loop()
         try:
             embedding = await self._get_embedding(self._normalize(prompt))

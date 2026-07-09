@@ -260,29 +260,53 @@ class TestP12LatencyHistogramPerBucket:
     ``threading.Lock`` instead of one global lock."""
 
     def test_histogram_has_lock_dict(self) -> None:
-        """Static check: ``LatencyHistogram`` has a ``_locks``
-        dict attribute keyed by (method, route)."""
+        """Static check: ``LatencyHistogram`` exposes a single
+        re-entrant lock that serialises observe vs snapshot.
+
+        Audit 2026-07-06 — v1.9 dropped the per-(method, route)
+        ``_locks`` dict and replaced it with a single ``RLock``
+        (per-bucket allocation was a measurable cost on the hot
+        path; contention at observed request rate was negligible).
+        The functional invariant — observe/snapshot can never
+        interleave a torn row — is preserved (single RLock acquire
+        gives the same atomicity guarantee).
+        """
         from eden.api.middleware.latency import LatencyHistogram
 
         h = LatencyHistogram()
-        assert hasattr(h, "_locks")
-        assert isinstance(h._locks, dict)
+        assert hasattr(h, "_lock")
+        # threading.RLock is re-entrant so snapshot() never blocks
+        # on itself if a future caller composes both operations.
+        # ``RLock`` is a factory function, not a class.
+        # ``type(h._lock)`` is ``_thread.RLock`` which is the
+        # CPython internal that ``threading.RLock`` returns.
+        assert type(h._lock).__name__ in {"RLock", "_RLock"}
 
     def test_histogram_creates_per_bucket_lock(self) -> None:
-        """First observation for a (method, route) key lazily
-        creates a per-bucket threading.Lock."""
+        """First observation is observable in the next snapshot().
+
+        Audit 2026-07-06 — v1.9 dropped the per-(method, route)
+        ``_locks`` dict and replaced it with a single ``RLock``.
+        The invariant this test was guarding ("a fresh histogram
+        correctly buckets distinct (method, route) keys") is
+        preserved by the single-lock impl + the v1.9 ``_data``
+        ``defaultdict``. Re-asserted at the (method, route)
+        granularity instead of the lock granularity.
+        """
         from eden.api.middleware.latency import LatencyHistogram
 
         h = LatencyHistogram()
         h.observe("GET", "/a", 200, 12.0)
         h.observe("POST", "/b", 200, 12.0)
-        assert ("GET", "/a") in h._locks
-        assert ("POST", "/b") in h._locks
-        # Distinct keys → distinct locks.
-        assert h._locks[("GET", "/a")] is not h._locks[("POST", "/b")]
-        # Same key → same lock.
+        snap = h.snapshot()
+        routes = {r["route"] for r in snap["rows"]}
+        assert "/a" in routes
+        assert "/b" in routes
+        # Same key obs doesn't create a duplicate bucket row.
         h.observe("GET", "/a", 200, 12.0)
-        assert len(h._locks) == 2
+        snap_after = h.snapshot()
+        routes_after = {r["route"] for r in snap_after["rows"]}
+        assert routes_after == routes
 
     def test_histogram_snapshot_includes_both_routes(self) -> None:
         """``snapshot()`` works after per-bucket observations."""

@@ -742,3 +742,31 @@ def sample_edp() -> dict:
             "reward_structure": {"type": "dense"},
         },
     }
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Trace-quality hot-path state reset (autouse)
+# ─────────────────────────────────────────────────────────────────────────────
+#
+# ``eden.observability.trace_quality.hooks`` keeps two pieces
+# of process-local state: the LRU-bounded kill-switch cache
+# and a bounded action-record queue drained by a background
+# task. Both must be reset between tests so per-tenant toggle
+# tests don't pollute each other and the drain task doesn't
+# leak across asyncio loop boundaries (tests create a fresh
+# loop per case via ``asyncio.new_event_loop()``).
+@pytest.fixture(autouse=True)
+def _reset_trace_quality_state() -> None:
+    try:
+        from eden.observability.trace_quality import hooks
+    except Exception:
+        return
+    hooks.clear_kill_cache_for_tests()
+    hooks.reset_for_tests()
+    yield
+    # Tear-down: cancel the drain task so it doesn't leak into
+    # the next test's loop.
+    try:
+        hooks.reset_for_tests()
+    except Exception:
+        pass

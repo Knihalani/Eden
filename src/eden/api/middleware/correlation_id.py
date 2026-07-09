@@ -4,12 +4,12 @@ Provides a unique identifier for every request that propagates through
 logs, database queries, and downstream service calls.
 """
 
+import contextlib
 import contextvars
 import re
 import uuid
 
-from fastapi import Request, Response
-from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.types import ASGIApp, Receive, Scope, Send
 
 # Context variable to store the correlation ID for the current request
 CORRELATION_ID = contextvars.ContextVar("correlation_id", default="")
@@ -32,34 +32,66 @@ def _sanitize_correlation_id(raw: str | None) -> str:
     return cleaned or str(uuid.uuid4())
 
 
-class CorrelationIdMiddleware(BaseHTTPMiddleware):
-    """Middleware that assigns or propagates a correlation ID per request.
+# Audit 2026-07-06 v1.9 — pre-computed header bytes (was
+# ``response.headers[HEADER_NAME] = corr`` inside dispatch; the ASGI
+# layer speaks bytes).
+_HEADER_NAME_BYTES = b"x-request-id"
 
-    Reads the ``X-Request-ID`` header from incoming requests. If absent,
-    generates a new UUIDv4. The ID is stored in a context variable so it
-    can be accessed anywhere during the request lifecycle, and is echoed
-    back in the response headers.
+
+class CorrelationIdMiddleware:
+    """Pure-ASGI middleware that assigns or propagates a correlation
+    ID per request.
+
+    Audit 2026-07-06 v1.9 — converted from
+    :class:`starlette.middleware.base.BaseHTTPMiddleware` to a pure
+    ASGI ``__call__`` (same ``BaseHTTPMiddleware`` tax as
+    :class:`LatencyMiddleware`). Behaviour preserved:
+
+    * Reads the ``X-Request-ID`` header from incoming requests,
+      generating a UUIDv4 when absent.
+    * Stores the ID in :data:`CORRELATION_ID` so downstream code can
+      read it via :func:`get_correlation_id`.
+    * Echoes it back in the response ``X-Request-ID`` header.
+    * Resets the contextvar on both success and exception paths.
     """
 
     HEADER_NAME = "X-Request-ID"
 
-    async def dispatch(self, request: Request, call_next):
-        # Read existing correlation ID from header or generate a new one
-        raw_header = request.headers.get(self.HEADER_NAME)
+    def __init__(self, app: ASGIApp) -> None:
+        self.app = app
+
+    async def __call__(
+        self, scope: Scope, receive: Receive, send: Send
+    ) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        # Read existing correlation ID from headers or generate a new one.
+        # Manual header walk (rather than building a Starlette ``Request``)
+        # to stay in the pure-ASGI hot path.
+        raw_header: str | None = None
+        for name, value in scope.get("headers") or ():
+            if name.lower() == _HEADER_NAME_BYTES:
+                with contextlib.suppress(Exception):
+                    raw_header = value.decode("latin1")
+                break
         correlation_id = _sanitize_correlation_id(raw_header)
 
-        # Set the context variable for this request
         token = CORRELATION_ID.set(correlation_id)
-
+        # Pre-compute the bytes form so the hot path doesn't encode per
+        # request.
+        corr_bytes = correlation_id.encode("latin1")
         try:
-            # Process the request
-            response: Response = await call_next(request)
+            async def send_wrapper(message):
+                if message["type"] == "http.response.start":
+                    headers = message.get("headers") or []
+                    headers.append((_HEADER_NAME_BYTES, corr_bytes))
+                    message["headers"] = headers
+                await send(message)
 
-            # Add correlation ID to response headers
-            response.headers[self.HEADER_NAME] = correlation_id
-            return response
+            await self.app(scope, receive, send_wrapper)
         finally:
-            # Reset the context variable even if the request handler raises
             CORRELATION_ID.reset(token)
 
 

@@ -19,6 +19,7 @@ from fastapi import APIRouter, Depends, HTTPException, Path
 from pydantic import BaseModel, Field
 
 from eden.api.deps import get_current_user
+from eden.api.utils.safe_error import safe_detail
 from eden.data_platform.pii import _DEFAULT_CATEGORIES
 from eden.observability.ingestion.pii_policy import invalidate_policy
 from eden.storage.postgres import get_postgres_client
@@ -214,7 +215,7 @@ async def put_pii_policy(
                 raise
     except Exception as exc:
         logger.warning(f"put_pii_policy failed: {exc}")
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
+        raise HTTPException(status_code=500, detail=safe_detail(exc, fallback="Internal error while saving PII policy")) from exc
 
     # Drop the in-process cache so the new policy takes effect
     # immediately on the next ingest event.

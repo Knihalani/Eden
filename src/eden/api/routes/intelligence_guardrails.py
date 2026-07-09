@@ -15,6 +15,7 @@ from fastapi import APIRouter, Body, Depends, Path, Query
 from pydantic import BaseModel
 
 from eden.api.deps import get_current_user, require_feature_flag
+from eden.api.utils.redact import redact_all
 from eden.guardrails import (
     ContentPolicyEnforcer,
     EvalToGuardrailLink,
@@ -227,7 +228,7 @@ async def scan_history(
     try:
         rows = await _fetch_intervention_log(org_id, limit=limit, since=None)
     except Exception as exc:  # pragma: no cover - defensive
-        logger.debug("guardrails: scan-history fetch failed: %s", exc)
+        logger.debug("guardrails: scan-history fetch failed: %s", redact_all(str(exc)))
         rows = []
     if action_prefix:
         rows = [

@@ -39,8 +39,10 @@ import time
 from typing import Any
 
 import httpx
-from jose import JWTError, jwt
+import jwt
+from jwt import InvalidTokenError as JWTError
 
+from eden.api.utils.redact import redact_all
 from eden.config import get_settings
 
 logger = logging.getLogger(__name__)
@@ -90,7 +92,7 @@ async def shutdown_clerk_auth() -> None:
     except Exception as exc:  # pragma: no cover - defensive
         # Surface as debug, not error: shutdown should never crash
         # the process over a socket close.
-        logger.debug("clerk_auth httpx client close failed: %s", exc)
+        logger.debug("clerk_auth httpx client close failed: %s", redact_all(str(exc)))
     _HTTP_CLIENT = None
 
 
@@ -129,7 +131,7 @@ def _derive_jwks_url() -> str | None:
             if host:
                 return f"https://{host}/.well-known/jwks.json"
         except Exception as exc:
-            logger.debug("Failed to decode Clerk publishable key: %s", exc)
+            logger.debug("Failed to decode Clerk publishable key: %s", redact_all(str(exc)))
     logger.warning(
         "Clerk JWKS URL not configured and CLERK_PUBLISHABLE_KEY is "
         "missing or unparseable. Set CLERK_JWKS_URL to your Clerk "
@@ -173,7 +175,7 @@ async def _fetch_jwks() -> dict[str, Any]:
             _JWKS_CACHE["fetched_at"] = now
             return data
         except Exception as exc:
-            logger.warning("Failed to fetch Clerk JWKS from %s: %s", url, exc)
+            logger.warning("Failed to fetch Clerk JWKS from %s: %s", url, redact_all(str(exc)))
             return _JWKS_CACHE["keys"] or {"keys": []}
 
 
@@ -212,7 +214,7 @@ async def verify_clerk_token(token: str) -> dict[str, Any] | None:
                 options={"verify_aud": False},
             )
         except JWTError as exc:
-            logger.debug("Clerk JWT static-key verification failed: %s", exc)
+            logger.debug("Clerk JWT static-key verification failed: %s", redact_all(str(exc)))
             return None
 
     # Production path: JWKS lookup by ``kid``.
@@ -257,7 +259,7 @@ async def verify_clerk_token(token: str) -> dict[str, Any] | None:
                 options={"verify_aud": False},
             )
         except JWTError as exc:
-            logger.debug("Clerk JWT JWKS verification failed: %s", exc)
+            logger.debug("Clerk JWT JWKS verification failed: %s", redact_all(str(exc)))
             return None
     return None
 

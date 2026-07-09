@@ -12,6 +12,7 @@ from uuid import uuid4
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Response, status
 
 from eden.api.deps import get_current_user, require_org_admin
+from eden.api.utils.redact import redact_all
 from eden.storage.postgres import get_postgres_client
 from eden.storage.redis import get_redis_client
 
@@ -139,7 +140,7 @@ async def _check_api_key_create_rate_limit(
         except Exception as exc:
             logger.warning(
                 "apikey-create rate limit Redis path failed; "
-                "falling back to in-memory: %s", exc,
+                "falling back to in-memory: %s", redact_all(str(exc)),
             )
 
     return _check_api_key_create_rate_limit_local(org_id, user_id)
@@ -448,7 +449,7 @@ async def validate_org_api_key(org_id: str, key: str) -> dict | None:
                 row["key_id"],
             )
         except Exception as exc:
-            logger.debug("last_used_at UPDATE failed (non-fatal): %s", exc)
+            logger.debug("last_used_at UPDATE failed (non-fatal): %s", redact_all(str(exc)))
 
     return {
         "org_id": str(row["org_id"]),

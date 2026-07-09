@@ -52,6 +52,7 @@ from eden.api.deps import (
     require_org_member,
     require_org_permission,
 )
+from eden.api.utils.redact import redact_all
 from eden.config import get_settings
 from eden.integrations.framework_detector import (
     detect_framework_from_files,
@@ -314,7 +315,7 @@ async def github_callback(
             async_client_resp[0].owner if async_client_resp else "unknown"
         )
     except GitHubAPIError as exc:
-        logger.warning("github_callback installation_token failed: %s", exc)
+        logger.warning("github_callback installation_token failed: %s", redact_all(str(exc)))
         return RedirectResponse(
             url="/onboarding/connect?error=installation_token_failed",
             status_code=302,
@@ -456,7 +457,7 @@ async def list_org_repos(
             _, token = await _client_for(installation_id)
             repos = await GitHubOAuthClient().list_installation_repos(token)
         except (GitHubConfigError, GitHubAPIError) as exc:
-            logger.warning("list_org_repos installation %s: %s", installation_id, exc)
+            logger.warning("list_org_repos installation %s: %s", installation_id, redact_all(str(exc)))
             continue
         for repo in repos:
             out.append(RepoOut(
@@ -569,7 +570,7 @@ async def integrate_repo(
             run_id,
         )
     except (GitHubAPIError, GitHubConfigError) as exc:
-        logger.warning("integrate_repo GitHub error: %s", exc)
+        logger.warning("integrate_repo GitHub error: %s", redact_all(str(exc)))
         await pg.execute(
             """
             UPDATE onboarding_pr_runs
@@ -581,7 +582,7 @@ async def integrate_repo(
             run_id,
         )
     except Exception as exc:  # noqa: BLE001 — wide on purpose, last-resort
-        logger.exception("integrate_repo unexpected error: %s", exc)
+        logger.exception("integrate_repo unexpected error: %s", redact_all(str(exc)))
         await pg.execute(
             """
             UPDATE onboarding_pr_runs
@@ -784,7 +785,7 @@ async def onboarding_sample_request(
             trace_id=trace_id, llm_ok=True, detail="sample request sent"
         )
     except Exception as exc:  # noqa: BLE001
-        logger.warning("onboarding_sample_request: LLM call failed: %s", exc)
+        logger.warning("onboarding_sample_request: LLM call failed: %s", redact_all(str(exc)))
         return SampleRequestResponse(
             trace_id=trace_id,
             llm_ok=False,

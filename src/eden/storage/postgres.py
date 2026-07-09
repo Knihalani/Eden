@@ -20,6 +20,19 @@ from asyncpg.transaction import Transaction
 from eden.config import get_settings
 
 logger = logging.getLogger(__name__)
+
+
+def _dump_jsonb(value):
+    """Compact JSON serialiser used by every JSONB column in this module.
+
+    Returns ``None`` for ``None`` so the DB sees NULL. Compact
+    separators save ~10% vs the stdlib default; ``default=str``
+    matches the convention used by ``telemetry_collector._route_postgres``
+    so the round-trip is identical.
+    """
+    if value is None:
+        return None
+    return json.dumps(value, default=str, separators=(",", ":"))
 # Note: ``settings`` is intentionally NOT bound to a module-level
 # reference — every method that needs a setting calls ``get_settings()``
 # (lru_cache'd, so the cost is one dict lookup) so that tests can
@@ -277,7 +290,6 @@ class PostgresClient:
         separate columns respectively. ``None`` for either is
         encoded as a NULL.
         """
-        import json
         import uuid
 
         event_id = str(uuid.uuid4())
@@ -299,7 +311,7 @@ class PostgresClient:
                 user_id,
                 model,
                 cost_usd,
-                json.dumps(metadata) if metadata is not None else None,
+                _dump_jsonb(metadata),
                 correlation_id,
             )
             return str(row["event_id"]) if row else None
@@ -352,8 +364,18 @@ class PostgresClient:
         storage_mb_hard_limit: int | None = None,
         sandbox_seconds_soft_limit: int | None = None,
         sandbox_seconds_hard_limit: int | None = None,
+        plan_name: str | None = None,
     ) -> None:
-        """Upsert the per-org resource-limit overrides."""
+        """Upsert the per-org resource-limit overrides.
+
+        ``plan_name`` is supported (June 2026 — Cat 23 audit):
+        the call site in :mod:`eden.services.usage_service` writes
+        ``"org_free"`` when no row exists, so the migration
+        ``046_free_only_default_plan`` backfill can be skipped for
+        genuinely new orgs. Older signatures rejected the kwarg
+        with a TypeError that surfaced as a 5xx in the quota
+        header middleware.
+        """
         await self.execute(
             """
             INSERT INTO org_resource_limits (
@@ -361,9 +383,25 @@ class PostgresClient:
                 tokens_soft_limit, tokens_hard_limit,
                 storage_mb_soft_limit, storage_mb_hard_limit,
                 sandbox_seconds_soft_limit, sandbox_seconds_hard_limit,
-                updated_at
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW())
-            ON CONFLICT (org_id) DO UPDATE SET
+                plan_name, effective_from, updated_at
+            ) VALUES (
+                $1,
+                COALESCE($2, 100), COALESCE($3, 200),
+                COALESCE($4, 1000000), COALESCE($5, 2000000),
+                COALESCE($6, 1024), COALESCE($7, 5120),
+                COALESCE($8, 3600), COALESCE($9, 7200),
+                COALESCE($10, 'org_free'),
+                'epoch'::timestamptz, NOW()
+            )
+            -- The unique constraint on this table is (org_id,
+            -- effective_from), not (org_id) alone (see the
+            -- ``org_resource_limits_org_id_effective_from_key``
+            -- UNIQUE index). We pin effective_from to 'epoch'
+            -- so the conflict target is stable across calls;
+            -- the "default current" plan for the org is always
+            -- stored at effective_from = 'epoch' and subsequent
+            -- override windows live in their own distinct rows.
+            ON CONFLICT (org_id, effective_from) DO UPDATE SET
                 jobs_soft_limit = EXCLUDED.jobs_soft_limit,
                 jobs_hard_limit = EXCLUDED.jobs_hard_limit,
                 tokens_soft_limit = EXCLUDED.tokens_soft_limit,
@@ -372,6 +410,7 @@ class PostgresClient:
                 storage_mb_hard_limit = EXCLUDED.storage_mb_hard_limit,
                 sandbox_seconds_soft_limit = EXCLUDED.sandbox_seconds_soft_limit,
                 sandbox_seconds_hard_limit = EXCLUDED.sandbox_seconds_hard_limit,
+                plan_name = COALESCE(EXCLUDED.plan_name, org_resource_limits.plan_name),
                 updated_at = NOW()
             """,
             org_id,
@@ -383,6 +422,7 @@ class PostgresClient:
             storage_mb_hard_limit,
             sandbox_seconds_soft_limit,
             sandbox_seconds_hard_limit,
+            plan_name,
         )
 
     async def fetchval(self, query: str, *args: Any) -> Any:
@@ -437,7 +477,7 @@ class PostgresClient:
                 updated_at = EXCLUDED.updated_at
             RETURNING job_id
         """
-        result = await self.fetchval(query, job_id, json.dumps(request), status, current_stage, created_at, user_id)
+        result = await self.fetchval(query, job_id, _dump_jsonb(request), status, current_stage, created_at, user_id)
         return result is not None
 
     async def get_job(self, job_id: str, user_id: str | None = None) -> dict | None:
@@ -580,7 +620,7 @@ class PostgresClient:
             WHERE job_id = $1
             RETURNING job_id
         """
-        result = await self.fetchval(query, job_id, json.dumps(stage_history))
+        result = await self.fetchval(query, job_id, _dump_jsonb(stage_history))
         return result is not None
 
     # ========================================================================
@@ -597,7 +637,7 @@ class PostgresClient:
                 created_at = NOW()
             RETURNING job_id
         """
-        result = await self.fetchval(query, job_id, field, json.dumps(value))
+        result = await self.fetchval(query, job_id, field, _dump_jsonb(value))
         return result is not None
 
     async def get_checkpoint_blob(self, job_id: str, field: str) -> dict | None:
@@ -660,7 +700,7 @@ class PostgresClient:
             """,
             org_id, agent_id, code_path, entry_point, framework, language,
             file_count, total_bytes,
-            json.dumps(eval_yaml) if eval_yaml is not None else None,
+            _dump_jsonb(eval_yaml),
             uploaded_by,
         )
         if row and row.get("eval_yaml") is not None:  # noqa: SIM102
@@ -818,7 +858,7 @@ class PostgresClient:
             WHERE id = $1
             RETURNING id
             """,
-            run_id, json.dumps(results),
+            run_id, _dump_jsonb(results),
         )
         return result is not None
 

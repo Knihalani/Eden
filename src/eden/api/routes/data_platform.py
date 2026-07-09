@@ -175,10 +175,12 @@ async def get_latest_etl_report(
     row = await client.fetchrow(
         """
         SELECT * FROM data_retention_log
-        WHERE policy_name = 'silver_etl_batch'
+        WHERE org_id = $1
+          AND policy_name = 'silver_etl_batch'
         ORDER BY completed_at DESC
         LIMIT 1
-        """
+        """,
+        org_id,
     )
     if not row:
         return {"message": "No ETL reports found"}

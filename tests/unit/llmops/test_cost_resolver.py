@@ -658,3 +658,57 @@ async def test_override_can_carry_cache_rates(patch_postgres):
     assert res.source == "override"
     assert res.cost_per_1k_cache_read == Decimal("0.0001")
     assert res.cost_per_1k_cache_write == Decimal("0.00125")
+
+
+# ─── Audit 2026-07-07: true LRU cache eviction ──────────────
+
+
+@pytest.mark.asyncio
+async def test_cache_evicts_least_recently_used_not_first_inserted(patch_postgres):
+    """Pre-fix the cache was FIFO despite the comment claiming LRU.
+
+    The docstring of ``_cache_put`` said "Bounded LRU via
+    insertion-order dict" but ``_cache_get`` never called
+    ``move_to_end``, so a hot key that survived a cache sweep
+    could still be evicted before a cold key inserted after it.
+    The fix bumps accessed keys to the end so the eviction
+    order tracks access time, not insertion time.
+
+    This test exercises that contract directly: with a cache
+    cap of 3, insert 4 keys (k1, k2, k3, k4 — k1 is oldest),
+    then touch k1 so it becomes most-recent. A 5th insert
+    (k5) must evict k2 (the new least-recently-used), not
+    k1 (which was just touched).
+    """
+    from eden.llmops.cost_resolver import CostResolver
+
+    # Bypass the catalog entirely — we only test the cache.
+    resolver = CostResolver(
+        catalog=None,
+        cache_ttl_seconds=60.0,
+        cache_max_entries=3,
+    )
+    resolver._resolve_uncached = AsyncMock(
+        return_value=__import__("eden.llmops.cost_resolver", fromlist=["CostResolution"]).CostResolution(
+            cost_per_1k_input=Decimal("0.001"),
+            cost_per_1k_output=Decimal("0.002"),
+            source="static",
+            provider="openai",
+            model_id="x",
+            cached=False,
+            as_of=__import__("datetime").datetime.now(__import__("datetime").UTC),
+        )
+    )
+    # Fill the cache with 3 entries.
+    await resolver.resolve(org_id=None, provider="openai", model_id="m1")
+    await resolver.resolve(org_id=None, provider="openai", model_id="m2")
+    await resolver.resolve(org_id=None, provider="openai", model_id="m3")
+    assert len(resolver._cache) == 3
+    # Touch m1 (move to end).
+    await resolver.resolve(org_id=None, provider="openai", model_id="m1")
+    # Insert m4 — under FIFO, m1 would be evicted (oldest); under
+    # true LRU, m2 is evicted because m1 was just touched.
+    await resolver.resolve(org_id=None, provider="openai", model_id="m4")
+    keys = set(resolver._cache.keys())
+    assert ("", "openai", "m1") in keys, "m1 should NOT be evicted (just touched)"
+    assert ("", "openai", "m2") not in keys, "m2 should be evicted (LRU after touching m1)"

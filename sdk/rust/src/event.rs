@@ -16,19 +16,14 @@ use uuid::Uuid;
 /// Mirrors the canonical `realm` column on `telemetry_events`. The SDK
 /// defaults to [`Realm::Production`] for agent call sites; environment
 /// generation and benchmark runs should pass [`Realm::Environment`].
-#[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Default, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
 pub enum Realm {
     /// Generated environments / synthetic evaluation runs.
     Environment,
     /// Live agent calls in production.
+    #[default]
     Production,
-}
-
-impl Default for Realm {
-    fn default() -> Self {
-        Realm::Production
-    }
 }
 
 /// Outcome bucket — recorded as the `outcome` column.
@@ -248,6 +243,7 @@ pub type Event = EventBuilder;
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::IngestTarget;
 
     #[test]
     fn builder_serialises_with_required_fields() {
@@ -270,5 +266,44 @@ mod tests {
         // Outcomes are typed; just sanity-check the wire string form.
         assert_eq!(Outcome::Success.as_str(), "success");
         assert_eq!(Outcome::Failure.as_str(), "failure");
+    }
+
+    #[test]
+    fn realm_serialises_lowercase() {
+        // The wire format is "production" / "environment" — verify
+        // serde maps the camel-case Rust names correctly.
+        assert_eq!(
+            serde_json::to_string(&Realm::Production).unwrap(),
+            "\"production\""
+        );
+        assert_eq!(
+            serde_json::to_string(&Realm::Environment).unwrap(),
+            "\"environment\""
+        );
+    }
+
+    #[test]
+    fn realm_default_is_production() {
+        // Live agent calls are the common case; the default must
+        // be Production so callers don\'t have to specify.
+        let r: Realm = Default::default();
+        assert_eq!(r, Realm::Production);
+    }
+
+    #[test]
+    fn ingest_target_default_is_openai() {
+        // Mirrors Python\'s default — the canonical happy path.
+        let t: IngestTarget = Default::default();
+        assert_eq!(t, IngestTarget::Openai);
+    }
+
+    #[test]
+    fn ingest_target_as_path_matches_wire() {
+        // Wire path segments must match what the backend
+        // registration in providers.py expects.
+        assert_eq!(IngestTarget::Openai.as_path(), "openai");
+        assert_eq!(IngestTarget::Anthropic.as_path(), "anthropic");
+        assert_eq!(IngestTarget::Otel.as_path(), "otel");
+        assert_eq!(IngestTarget::Webhook.as_path(), "webhook");
     }
 }

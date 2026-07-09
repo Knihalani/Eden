@@ -17,6 +17,7 @@ from __future__ import annotations
 
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock
+from collections import OrderedDict
 
 import pytest
 from fastapi.testclient import TestClient
@@ -133,7 +134,15 @@ def pii_policy_auth(api_client: TestClient, mock_collector, monkeypatch):
     monkeypatch.setattr(tc_module, "get_telemetry_collector", _get)
     monkeypatch.setattr(gateway_module, "get_telemetry_collector", _get)
     monkeypatch.setattr(gateway_module, "_gateway", None)
-    monkeypatch.setattr(gateway_module, "_upstream_client_cache", {})
+    # F62 — the cache is now an OrderedDict so the cap /
+    # FIFO eviction logic can call ``move_to_end`` /
+    # ``popitem``. Use an OrderedDict() to match the
+    # module's expected type.
+    monkeypatch.setattr(
+        gateway_module,
+        "_upstream_client_cache",
+        OrderedDict(),
+    )
 
     blank = Settings(
         openrouter_api_key="",

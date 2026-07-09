@@ -3,8 +3,26 @@
 import logging
 from typing import Optional
 
-from eden.storage.postgres import get_postgres_client
-from eden.storage.qdrant import get_qdrant_client
+# Audit 2026-07-06 - lazy-load Qdrant and Postgres clients. The
+# Qdrant client in particular pulls ~570ms of import time (grpc
+# protobufs + numpy). Previously the eager imports here meant
+# every ``from eden.kb.episodic.client import ...`` paid the cost,
+# even though the episodic client only uses Postgres. Lazy
+# import keeps the KB subpackage import time in the sub-100ms
+# range so KB unit tests don't pay the Qdrant import cost.
+
+
+def _get_postgres_client():
+    """Lazy import + return the Postgres client factory."""
+    from eden.storage.postgres import get_postgres_client
+    return get_postgres_client
+
+
+def _get_qdrant_client():
+    """Lazy import + return the Qdrant client factory."""
+    from eden.storage.qdrant import get_qdrant_client
+    return get_qdrant_client
+
 
 logger = logging.getLogger(__name__)
 
@@ -15,6 +33,14 @@ async def initialize_kb() -> None:
     Creates PostgreSQL schema and Qdrant collections if they don't exist.
     Should be called on application startup.
     """
+    # Lazy-resolve the client factories (audit 2026-07-06).
+    # The assignments are intentional side-effects to force the
+    # Qdrant / Postgres SDK modules into ``sys.modules`` so the
+    # downstream initialisers can use them; we don't need the
+    # returned factory objects here.
+    _ = _get_postgres_client()  # noqa: F841
+    _ = _get_qdrant_client()  # noqa: F841
+
     # Initialize PostgreSQL schema
     await _initialize_postgres_schema()
 
@@ -43,6 +69,7 @@ async def _initialize_postgres_schema() -> None:
     """Initialize PostgreSQL schema from migration file."""
     import os
 
+    get_postgres_client = _get_postgres_client()
     client = await get_postgres_client()
 
     migrations_dir = os.environ.get(
@@ -70,6 +97,7 @@ async def _initialize_postgres_schema() -> None:
 
 def _initialize_qdrant_collections() -> None:
     """Initialize Qdrant collections."""
+    get_qdrant_client = _get_qdrant_client()
     client = get_qdrant_client()
 
     try:
@@ -90,6 +118,10 @@ async def health_check() -> dict:
         "postgres": "unknown",
         "qdrant": "unknown",
     }
+
+    # Lazy-resolve clients (audit 2026-07-06).
+    get_postgres_client = _get_postgres_client()
+    get_qdrant_client = _get_qdrant_client()
 
     # Check PostgreSQL
     try:

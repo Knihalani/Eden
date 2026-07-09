@@ -1,16 +1,55 @@
 """OpenRouter LLM client with retry logic, circuit breaker, and cost tracking."""
 
 import logging
+import os
 import time
-from collections import defaultdict, deque
+from collections import OrderedDict, defaultdict, deque
 from dataclasses import dataclass, field
 from enum import Enum
 from functools import lru_cache
 from typing import Any
 
-from openai import APIError, APITimeoutError, AsyncOpenAI, OpenAI, RateLimitError
+# Audit 2026-07-06 - lazy-import the openai SDK. Pulls in the
+# full openai.types tree (~200ms cold). We use PEP 562 module
+# __getattr__ to keep the ``from eden.llm.client import OpenAI``
+# import surface working (tests patch
+# ``eden.llm.client.OpenAI``) while only paying the import cost
+# on the first lookup.
+_OPENAI_ATTRS: dict | None = None
 
-from eden.config import get_settings
+
+def _ensure_openai():
+    """Resolve all five openai symbols we use. Cached at the
+    module level so we only pay the import cost once per process."""
+    global _OPENAI_ATTRS
+    if _OPENAI_ATTRS is None:
+        from openai import (
+            APIError,
+            APITimeoutError,
+            AsyncOpenAI,
+            OpenAI,
+            RateLimitError,
+        )
+        _OPENAI_ATTRS = {
+            "OpenAI": OpenAI,
+            "AsyncOpenAI": AsyncOpenAI,
+            "APIError": APIError,
+            "APITimeoutError": APITimeoutError,
+            "RateLimitError": RateLimitError,
+        }
+    return _OPENAI_ATTRS
+
+
+def __getattr__(name: str):
+    """PEP 562 module-level __getattr__ — resolve the openai
+    symbols lazily on first attribute access. ``patch(
+    "eden.llm.client.OpenAI")`` still works because unittest.mock
+    uses __getattr__ under the hood."""
+    if name in ("OpenAI", "AsyncOpenAI", "APIError", "APITimeoutError", "RateLimitError"):
+        return _ensure_openai()[name]
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+from eden.config import get_settings  # noqa: E402
 
 logger = logging.getLogger(__name__)
 
@@ -132,6 +171,26 @@ class OpenRouterClient:
         circuit_breaker_threshold: int = 5,
         circuit_breaker_timeout: int = 60,
     ):
+        # Resolve the openai client classes via the module's
+        # normal attribute lookup (audit 2026-07-06). The PEP 562
+        # __getattr__ on this module makes ``OpenAI`` and
+        # ``AsyncOpenAI`` lazy-evaluated on first access, so the
+        # SDK import only happens on the first client construction.
+        # ``patch("eden.llm.client.OpenAI")`` still works because
+        # unittest.mock writes to the module's __dict__ before
+        # PEP 562 __getattr__ is consulted. We use ``getattr`` on
+        # the module itself to be explicit (and to avoid shadowing
+        # the builtin ``OpenAI`` if one were ever introduced).
+        # Lazy-resolve the openai SDK (audit 2026-07-06). The
+        # bare-name lookup would force the SDK to load at module
+        # import; getattr() on the module goes through the PEP
+        # 562 ``__getattr__`` first so unittest.mock patches
+        # (``patch("eden.llm.client.OpenAI")``) still work.
+        import sys as _sys
+        _this_mod = _sys.modules[__name__]
+        OpenAI = getattr(_this_mod, "OpenAI")  # noqa: B009, N806
+        AsyncOpenAI = getattr(_this_mod, "AsyncOpenAI")  # noqa: B009, N806
+
         self.settings = get_settings()
         self.client = OpenAI(
             api_key=api_key or self.settings.openrouter_api_key,
@@ -154,6 +213,29 @@ class OpenRouterClient:
         # memory pressure. 10k entries is ~6h at the v1 steady-state
         # call rate and is plenty for cost dashboards.
         self._usage_log: deque[UsageStats] = deque(maxlen=10_000)
+        # Process-local LRU cache for LLM responses. The Redis
+        # cache in eden.optimization.cache is the cross-process
+        # L1 store; this is the L0 (in-memory) — saves the
+        # network round-trip on hot retry loops, repeated calls
+        # within one patch-generation pipeline, and identical
+        # re-runs of the same prompt. Bounded at 256 entries
+        # (~few MB) so a runaway loop can't blow up memory.
+        # Disabled by default — opt in via
+        # ``EDEN_LLM_INPROCESS_CACHE=1`` because cached
+        # responses can become stale (model upgrades, prompt
+        # refactors, etc.).
+        self._in_process_cache: "OrderedDict[str, tuple[float, LLMResponse]]" = OrderedDict()  # noqa: UP037
+        self._in_process_cache_max = int(
+            os.getenv("EDEN_LLM_INPROCESS_CACHE_MAX", "256")
+        )
+        self._in_process_cache_ttl = float(
+            os.getenv("EDEN_LLM_INPROCESS_CACHE_TTL", "300")
+        )  # 5 min default TTL
+        self._in_process_cache_enabled = (
+            os.getenv("EDEN_LLM_INPROCESS_CACHE", "0") == "1"
+        )
+        self._cache_hits = 0
+        self._cache_misses = 0
         # §11.4 — per-provider error counters split by openai vs anthropic
         # so the observability dashboard can break them out by provider.
         self._provider_errors: dict[str, int] = {}
@@ -220,79 +302,28 @@ class OpenRouterClient:
         system_prompt: str | None = None,
         **kwargs,
     ) -> LLMResponse:
-        """Async LLM call using the async OpenAI client.
+        """Async LLM call with retry and circuit breaker.
 
-        Uses :attr:`async_client` directly (not the sync
-        ``client`` wrapped in an executor) so the underlying
-        ``chat.completions.create`` is awaited natively. Retries
-        on transient errors (``APITimeoutError``,
-        ``RateLimitError``, ``APIError``) up to ``max_retries``.
+        Routes through the same :meth:`call` path (which handles
+        the in-process LRU cache, prompt caching for Claude, and
+        the canonical retry loop) by dispatching to an executor.
+        This is the simplest way to keep :meth:`acall` and
+        :meth:`call` in lock-step on cache hits + cache_control
+        behaviour — maintaining two parallel retry loops was
+        the previous source of "the cache works in tests but not
+        in production async" drift.
         """
         if self.circuit_breaker.is_open(agent):
             raise CircuitOpenError(f"Circuit breaker open for agent: {agent}")
-
-        model_config = self.MODEL_SLOTS.get(slot, self.MODEL_SLOTS["reasoning"])
-        model = model_config.primary
-        messages: list[dict] = []
-        if system_prompt:
-            messages.append({"role": "system", "content": system_prompt})
-        messages.append({"role": "user", "content": prompt})
-
-        last_exc: Exception | None = None
-        for attempt in range(self.max_retries + 1):
-            try:
-                response = await self.async_client.chat.completions.create(
-                    model=model,
-                    messages=messages,
-                    max_tokens=kwargs.get("max_tokens", model_config.max_tokens),
-                )
-                self.circuit_breaker.record_success(agent)
-                # Parse the OpenAI-style response into our LLMResponse.
-                from eden.llm.client import LLMResponse, UsageStats
-                usage = UsageStats(
-                    prompt_tokens=response.usage.prompt_tokens if response.usage else 0,
-                    completion_tokens=response.usage.completion_tokens if response.usage else 0,
-                    total_tokens=response.usage.total_tokens if response.usage else 0,
-                    cost=getattr(response.usage, "cost", None) if response.usage else None,
-                    cache_reads=getattr(response.usage, "cache_reads", 0) or 0,
-                    cache_writes=getattr(response.usage, "cache_writes", 0) or 0,
-                )
-                return LLMResponse(
-                    content=response.choices[0].message.content or "",
-                    usage=usage,
-                    model=model,
-                    finish_reason=response.choices[0].finish_reason or "unknown",
-                    raw_response=response,
-                )
-            except APITimeoutError as exc:
-                last_exc = exc
-                self.circuit_breaker.record_failure(agent)
-                if attempt < self.max_retries:
-                    import asyncio
-                    # Cap backoff at 4s so rate-limit storms don't
-                    # stall the event loop for minutes on end.
-                    await asyncio.sleep(min(2 ** attempt, 4))
-                    continue
-                raise
-            except RateLimitError as exc:
-                last_exc = exc
-                self.circuit_breaker.record_failure(agent)
-                if attempt < self.max_retries:
-                    import asyncio
-                    await asyncio.sleep(min(2 ** attempt, 4))
-                    continue
-                raise
-            except APIError as exc:
-                last_exc = exc
-                if attempt < self.max_retries:
-                    import asyncio
-                    await asyncio.sleep(min(2 ** attempt, 4))
-                    continue
-                raise
-        # Should never reach here, but for type-checker happiness:
-        if last_exc is None:
-            raise RuntimeError("LLM retry loop exited without success or exception")
-        raise last_exc
+        import asyncio
+        loop = asyncio.get_event_loop()
+        return await loop.run_in_executor(
+            None,
+            lambda: self.call(
+                agent=agent, prompt=prompt, slot=slot,
+                system_prompt=system_prompt, **kwargs,
+            ),
+        )
 
     def call(
         self,
@@ -311,6 +342,11 @@ class OpenRouterClient:
         specific model within a tier without losing the retry
         + circuit breaker wrapping.
         """
+        # Lazy-resolve openai exception types (audit 2026-07-06).
+        # The first call pays the import; subsequent calls reuse the
+        # module-level cache. Avoids ~200ms on the import path.
+        _ensure_openai()
+
         if self.circuit_breaker.is_open(agent):
             raise CircuitOpenError(f"Circuit breaker open for agent: {agent}")
 
@@ -324,6 +360,21 @@ class OpenRouterClient:
 
         if model is not None:
             all_models = [model]
+            # Even when the caller pins a specific model, we
+            # still want a sensible ``max_tokens`` default —
+            # the cache key includes it (see ``_make_request``
+            # → ``_cache_key``) so a ``None`` would hash
+            # differently from a real number and silently
+            # bypass every existing cache entry built before
+            # the model override. Pick from the slot's config
+            # so ``acall(slot="reasoning", model="anthropic/...")``
+            # and ``call(slot="reasoning", max_tokens=4096)``
+            # both hash to the same cache slot.
+            if max_tokens is None:
+                slot_config = self.MODEL_SLOTS.get(
+                    slot, self.MODEL_SLOTS["reasoning"],
+                )
+                max_tokens = slot_config.max_tokens
         else:
             model_config = self.MODEL_SLOTS.get(
                 slot, self.MODEL_SLOTS["reasoning"]
@@ -333,6 +384,18 @@ class OpenRouterClient:
                 max_tokens = model_config.max_tokens
 
         last_error = None
+        # Lazy-resolve openai exception classes (audit 2026-07-06).
+        # Bound as locals so the ``except`` clauses below can name
+        # them. The first call pays the import; subsequent calls
+        # hit the module-level cache. Uses ``getattr`` on the
+        # module so PEP 562 __getattr__ is consulted and
+        # ``patch("eden.llm.client.RateLimitError")`` is respected.
+        import sys as _sys
+        _this_mod = _sys.modules[__name__]
+        RateLimitError = getattr(_this_mod, "RateLimitError")  # noqa: B009, N806
+        APITimeoutError = getattr(_this_mod, "APITimeoutError")  # noqa: B009, N806
+        APIError = getattr(_this_mod, "APIError")  # noqa: B009, N806
+
         for model in all_models:
             for attempt in range(self.max_retries):
                 try:
@@ -391,6 +454,66 @@ class OpenRouterClient:
             f"All models failed for agent {agent} after {self.max_retries} attempts: {last_error}"
         )
 
+    def _cache_key(self, model: str, prompt: str,
+                    system_prompt: str | None,
+                    max_tokens: int,
+                    **kwargs: Any) -> str:
+        """Build a deterministic cache key for an LLM call.
+
+        Hashes (model, prompt, system_prompt, max_tokens,
+        temperature) into a SHA256 hex digest. ``temperature``
+        is included so the same prompt at two different
+        sampling temperatures gets different cache slots;
+        however the caller (``_make_request``) short-circuits
+        the cache entirely for non-zero temperatures — see
+        the inline note there for the rationale.
+        """
+        import hashlib
+        normalized_prompt = " ".join((prompt or "").split())
+        normalized_system = (
+            " ".join((system_prompt or "").split()) if system_prompt else ""
+        )
+        temp = kwargs.get("temperature", 0)
+        content = (
+            f"{model}|{normalized_prompt}|{normalized_system}|"
+            f"{max_tokens}|{temp}"
+        )
+        return hashlib.sha256(content.encode("utf-8")).hexdigest()
+
+    def _cache_get(self, key: str) -> "LLMResponse | None":
+        """Return a cached response if present and fresh.
+
+        Also handles LRU eviction: moves the accessed entry to
+        the end so it's the least-recently-used on the next
+        eviction pass.
+        """
+        if not self._in_process_cache_enabled:
+            return None
+        cached = self._in_process_cache.get(key)
+        if cached is None:
+            self._cache_misses += 1
+            return None
+        expires_at, response = cached
+        if time.monotonic() >= expires_at:
+            # Expired — drop and treat as miss.
+            self._in_process_cache.pop(key, None)
+            self._cache_misses += 1
+            return None
+        # Move to end (most-recently-used).
+        self._in_process_cache.move_to_end(key)
+        self._cache_hits += 1
+        return response
+
+    def _cache_put(self, key: str, response: "LLMResponse") -> None:
+        """Insert a response into the cache with TTL, evicting LRU."""
+        if not self._in_process_cache_enabled:
+            return
+        expires_at = time.monotonic() + self._in_process_cache_ttl
+        self._in_process_cache[key] = (expires_at, response)
+        # Evict oldest entries until we're under the size cap.
+        while len(self._in_process_cache) > self._in_process_cache_max:
+            self._in_process_cache.popitem(last=False)
+
     def _make_request(
         self,
         model: str,
@@ -400,9 +523,47 @@ class OpenRouterClient:
         **kwargs,
     ) -> LLMResponse:
         """Make a single request to OpenRouter."""
+        # In-process LRU cache: same (model, prompt, system,
+        # max_tokens, temperature) within the TTL window
+        # returns the cached response without hitting the
+        # network. Disabled by default — opt in via
+        # ``EDEN_LLM_INPROCESS_CACHE=1``.
+        #
+        # Skip caching for non-deterministic calls (temperature > 0):
+        # every call would return a different answer, so caching
+        # would just bloat the LRU with entries that can never
+        # be served. Saves memory + the SHA256 + dict-lookup
+        # cost on every stochastic call.
+        _temp = float(kwargs.get("temperature", 0) or 0)
+        _cache_eligible = self._in_process_cache_enabled and _temp == 0
+        if _cache_eligible:
+            cache_key = self._cache_key(
+                model, prompt, system_prompt, max_tokens, **kwargs,
+            )
+            cached = self._cache_get(cache_key)
+            if cached is not None:
+                return cached
+
         messages = []
         if system_prompt:
-            messages.append({"role": "system", "content": system_prompt})
+            sys_content: Any = system_prompt
+            # Anthropic prompt caching: mark the system prompt as
+            # cacheable so the second+ call within the cache TTL
+            # gets a 90% discount on prompt tokens. OpenRouter
+            # forwards ``cache_control`` to the Anthropic backend
+            # (see OpenRouter docs: prompt caching for Claude
+            # models). We only do this for Claude models because
+            # the field is a no-op on OpenAI and we don't want
+            # to leak Anthropic-specific request shapes to GPT.
+            if self._is_anthropic_model(model):
+                sys_content = [
+                    {
+                        "type": "text",
+                        "text": system_prompt,
+                        "cache_control": {"type": "ephemeral"},
+                    },
+                ]
+            messages.append({"role": "system", "content": sys_content})
         messages.append({"role": "user", "content": prompt})
 
         extra_headers = {}
@@ -426,13 +587,19 @@ class OpenRouterClient:
             cache_writes=getattr(response.usage, "cache_writes", 0) or 0,
         )
 
-        return LLMResponse(
+        result = LLMResponse(
             content=response.choices[0].message.content or "",
             usage=usage,
             model=model,
             finish_reason=response.choices[0].finish_reason or "unknown",
             raw_response=response,
         )
+        # Stash in the in-process cache for the next identical
+        # call within the TTL window. Skipped for non-deterministic
+        # (temperature > 0) calls — see _make_request.
+        if _cache_eligible:
+            self._cache_put(cache_key, result)
+        return result
 
     def _log_usage(self, response: LLMResponse) -> None:
         """Log usage for cost tracking."""

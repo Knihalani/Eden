@@ -23,6 +23,7 @@ from fastapi import APIRouter, Depends, Path
 from pydantic import BaseModel, Field
 
 from eden.api.deps import get_current_user, require_org_member
+from eden.api.utils.redact import redact_all
 from eden.storage.postgres import get_postgres_client
 
 logger = logging.getLogger(__name__)
@@ -62,7 +63,7 @@ async def get_sidebar_prefs(
     try:
         client = await get_postgres_client()
     except Exception as exc:
-        logger.warning("sidebar_prefs: postgres unavailable: %s", exc)
+        logger.warning("sidebar_prefs: postgres unavailable: %s", redact_all(str(exc)))
         return None
     if client is None:
         return None
@@ -77,7 +78,16 @@ async def get_sidebar_prefs(
             org_id,
         )
     except Exception as exc:
-        logger.warning("sidebar_prefs: fetchrow failed for user=%s org=%s: %s", user_id, org_id, exc)
+        # F70 — defensive redaction. ``user_id`` and ``org_id``
+        # are internal UUIDs (not PII), but the ``exc`` could
+        # theoretically include user data in a future refactor.
+        # ``redact_all`` is a no-op on typical Python exceptions
+        # (no email/credential patterns) but defends against
+        # the long tail.
+        logger.warning(
+            "sidebar_prefs: fetchrow failed for user=%s org=%s: %s",
+            user_id, org_id, redact_all(str(exc)),
+        )
         return None
     if row is None:
         return None
@@ -86,7 +96,7 @@ async def get_sidebar_prefs(
         try:
             return SidebarPrefs(**raw)
         except Exception as exc:
-            logger.warning("sidebar_prefs: invalid prefs shape, ignoring: %s", exc)
+            logger.warning("sidebar_prefs: invalid prefs shape, ignoring: %s", redact_all(str(exc)))
             return None
     return None
 
@@ -131,7 +141,12 @@ async def set_sidebar_prefs(
         # as 503 (the same code as "Postgres unavailable" above) so
         # the client treats it as transient and retries on the
         # next save tick. June 2026 hardening.
-        logger.warning("sidebar_prefs: upsert failed for user=%s org=%s: %s", user_id, org_id, exc)
+        # F70 — defensive redaction (same pattern as the
+        # fetchrow branch above).
+        logger.warning(
+            "sidebar_prefs: upsert failed for user=%s org=%s: %s",
+            user_id, org_id, redact_all(str(exc)),
+        )
         from fastapi import HTTPException
 
         raise HTTPException(status_code=503, detail="Sidebar prefs storage unavailable") from exc

@@ -20,6 +20,8 @@ from eden.api.deps import (
     require_org_permission,  # noqa: F401  (monkeypatched by tests/api/test_billing_routes.py)
     require_org_permission_dep,
 )
+from eden.api.utils.redact import redact_all
+from eden.api.utils.safe_error import safe_detail
 from eden.config import get_settings
 from eden.services.plan_tiers import get_plan_tier
 from eden.services.usage_service import UsageService
@@ -411,7 +413,7 @@ async def subscribe(
         logger.error(f"Stripe checkout error: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to create checkout session: {str(e)}",
+            detail=safe_detail(e, fallback="Failed to create checkout session"),
         ) from e
 
 
@@ -527,7 +529,7 @@ async def cancel_subscription(org_id: str, user: dict = Depends(get_current_user
         logger.error(f"Stripe cancel error: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to cancel subscription: {str(e)}",
+            detail=safe_detail(e, fallback="Failed to cancel subscription"),
         ) from e
 
 
@@ -612,7 +614,7 @@ async def stripe_webhook(
         logger.error(f"Stripe webhook error: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Webhook processing failed: {str(e)}",
+            detail=safe_detail(e, fallback="Webhook processing failed"),
         ) from e
 
 
@@ -777,6 +779,6 @@ async def get_payment_method(
         # Don't break the portal if Stripe is down. Log + return null
         # so the UI falls back to a "card on file unavailable" state.
         logger.warning(
-            "Stripe payment-method lookup failed for org %s: %s", org_id, exc,
+            "Stripe payment-method lookup failed for org %s: %s", org_id, redact_all(str(exc)),
         )
         return None

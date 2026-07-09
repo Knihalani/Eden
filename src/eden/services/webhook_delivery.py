@@ -326,7 +326,18 @@ class WebhookDeliveryService:
 
     async def replay_dlq(self, dlq_id: str) -> dict[str, Any]:
         """Re-fire a DLQ entry. Caps replay_count at 3 and requires
-        ≥60s since the last replay."""
+        ≥60s since the last replay.
+
+        The cap+gap enforcement is done by an atomic
+        ``UPDATE … WHERE replay_count < $2 AND <gap>`` so two
+        concurrent calls cannot both pass the cap check and
+        both increment. Pre-fix, the read-then-update flow
+        was a TOCTOU race: two workers would both see
+        ``replay_count=2``, both pass the ``>= 3`` check, and
+        both increment to 3 (or 4 under more contention),
+        exceeding the cap. The atomic UPDATE makes the
+        comparison part of the database state transition.
+        """
         pg = await get_postgres_client()
         row = await pg.fetchrow(
             "SELECT id, webhook_id, event_type, payload, "
@@ -338,23 +349,54 @@ class WebhookDeliveryService:
         )
         if row is None:
             return {"status": "not_found", "dlq_id": dlq_id}
-        replay_count = int(row["replay_count"] or 0)
-        if replay_count >= _MAX_REPLAY_COUNT:
-            return {
-                "status": "replay_cap_reached",
-                "dlq_id": dlq_id,
-                "replay_count": replay_count,
-                "max_replay_count": _MAX_REPLAY_COUNT,
-            }
-        seconds_since = row["seconds_since_last_replay"]
-        if (
-            seconds_since is not None
-            and float(seconds_since) < _MIN_REPLAY_GAP_SECONDS
-        ):
+        # Atomic cap+gap check + increment. ``RETURNING`` lets us
+        # distinguish a successful claim from a "no row updated"
+        # outcome (which means the cap or gap blocked it). We
+        # do this BEFORE the webhook lookup so a denied replay
+        # never does the URL/secret fetch.
+        claim = await pg.fetchrow(
+            "UPDATE webhook_dlq "
+            "SET replay_count = replay_count + 1, "
+            "    last_replayed_at = NOW() "
+            "WHERE id = $1 "
+            "  AND replay_count < $2 "
+            "  AND (last_replayed_at IS NULL "
+            "       OR EXTRACT(EPOCH FROM (NOW() - last_replayed_at)) >= $3) "
+            "RETURNING replay_count",
+            dlq_id,
+            _MAX_REPLAY_COUNT,
+            _MIN_REPLAY_GAP_SECONDS,
+        )
+        if claim is None:
+            # The atomic UPDATE matched zero rows — either the
+            # cap is hit or the gap is too short. Re-read the
+            # row to report which.
+            current = await pg.fetchrow(
+                "SELECT replay_count, "
+                "EXTRACT(EPOCH FROM (NOW() - last_replayed_at)) "
+                "  AS seconds_since_last_replay "
+                "FROM webhook_dlq WHERE id = $1",
+                dlq_id,
+            )
+            current_count = (
+                int(current["replay_count"]) if current else 0
+            )
+            if current_count >= _MAX_REPLAY_COUNT:
+                return {
+                    "status": "replay_cap_reached",
+                    "dlq_id": dlq_id,
+                    "replay_count": current_count,
+                    "max_replay_count": _MAX_REPLAY_COUNT,
+                }
+            seconds_since = (
+                float(current["seconds_since_last_replay"])
+                if current and current["seconds_since_last_replay"] is not None
+                else None
+            )
             return {
                 "status": "replay_rate_limited",
                 "dlq_id": dlq_id,
-                "seconds_since_last_replay": float(seconds_since),
+                "seconds_since_last_replay": seconds_since,
                 "min_replay_gap_seconds": _MIN_REPLAY_GAP_SECONDS,
             }
         wh = await pg.fetchrow(
@@ -367,13 +409,6 @@ class WebhookDeliveryService:
                 "dlq_id": dlq_id,
                 "webhook_id": row["webhook_id"],
             }
-        await pg.execute(
-            "UPDATE webhook_dlq "
-            "SET replay_count = replay_count + 1, "
-            "    last_replayed_at = NOW() "
-            "WHERE id = $1",
-            dlq_id,
-        )
         payload = row["payload"]
         if isinstance(payload, str):
             try:
@@ -389,11 +424,112 @@ class WebhookDeliveryService:
         return {
             "status": "ok",
             "dlq_id": dlq_id,
-            "replay_count": replay_count + 1,
+            "replay_count": int(claim["replay_count"]),
             "max_replay_count": _MAX_REPLAY_COUNT,
         }
 
-    # ─── shutdown / lifecycle ───────────────────────────────────────
+    async def process_pending_deliveries(
+        self, *, limit: int = 50,
+    ) -> int:
+        """Pick up rows from the ``webhook_deliveries`` outbox and
+        schedule a delivery attempt for each.
+
+        F56 worker integration: ``_webhook_drain_loop`` in
+        ``eden.workers.main`` ticks every 30s and would call this
+        method; without it, the drain loop has been silently
+        logging ``AttributeError`` on every tick and the
+        ``webhook_deliveries`` outbox has been growing unbounded.
+
+        The query is intentionally narrow:
+
+        * ``status IN ('pending', 'retrying')`` — terminal rows
+          (``succeeded`` / ``failed`` / ``dlq``) are owned by
+          ``_attempt_delivery`` and never need re-dispatch.
+        * ``next_attempt_at IS NULL OR next_attempt_at <= NOW()``
+          — backoff schedule is enforced at the SQL boundary so
+          a noisy row cannot saturate the worker on every tick.
+        * ``ORDER BY next_attempt_at NULLS FIRST`` — older
+          retries first.
+
+        Each fetched row is dispatched via :meth:`_schedule_delivery`
+        which adds the task to ``self._in_flight`` so ``drain()``
+        can wait for it on shutdown.
+
+        Returns the number of deliveries scheduled (== rows
+        claimed for dispatch). ``0`` means nothing was due.
+        ``limit`` is bounded to ``[1, 500]`` so a tick cannot
+        be wedged open by a flood of rows.
+        """
+        bounded_limit = max(1, min(int(limit), 500))
+        try:
+            pg = await get_postgres_client()
+            rows = await pg.fetch(
+                "SELECT d.id AS delivery_id, "
+                "       d.webhook_id, "
+                "       w.url AS webhook_url, "
+                "       w.secret AS webhook_secret, "
+                "       d.event_type, "
+                "       d.payload "
+                "FROM webhook_deliveries d "
+                "JOIN webhooks w ON w.id = d.webhook_id "
+                "WHERE d.status IN ('pending', 'retrying') "
+                "  AND ("
+                "    d.next_attempt_at IS NULL "
+                "    OR d.next_attempt_at <= NOW()"
+                "  ) "
+                "ORDER BY d.next_attempt_at NULLS FIRST, "
+                "         d.created_at "
+                "LIMIT $1",
+                bounded_limit,
+            )
+        except Exception as exc:
+            # Never raise — the worker loop logs and continues
+            # but we want a stable return so the caller can
+            # observe ``delivered`` counts in logs.
+            logger.warning(
+                "webhook_delivery.process_pending_deliveries: "
+                "outbox query failed: %s",
+                exc,
+            )
+            return 0
+
+        scheduled = 0
+        for row in rows:
+            url = row["webhook_url"]
+            secret = row["webhook_secret"]
+            delivery_id = row["delivery_id"]
+            payload_raw = row["payload"]
+            # Payload lives on ``webhook_deliveries.payload`` as
+            # JSONB; asyncpg returns it as a Python primitive so
+            # no extra decode needed.
+            if isinstance(payload_raw, str):
+                try:
+                    payload = json.loads(payload_raw)
+                except ValueError:
+                    payload = {}
+            else:
+                payload = payload_raw if payload_raw is not None else {}
+            try:
+                self._schedule_delivery(
+                    delivery_id=delivery_id,
+                    url=url,
+                    secret=secret,
+                    payload=payload,
+                )
+                scheduled += 1
+            except Exception as exc:
+                # A failed schedule for one row should not stop
+                # the drain — log and move on to the next row.
+                logger.warning(
+                    "webhook_delivery.process_pending_deliveries: "
+                    "schedule failed for delivery %s: %s",
+                    delivery_id,
+                    exc,
+                )
+        return scheduled
+
+
+    # ─── shutdown / lifecycle ───────────────────────────────
 
     async def drain(self, timeout: float = 30.0) -> int:
         """DL-6: wait for all in-flight deliveries to complete.
@@ -420,6 +556,27 @@ class WebhookDeliveryService:
                 remaining,
             )
             return remaining
+
+    async def aclose(self) -> None:
+        """Close the underlying HTTP connection pool.
+
+        Should be called on application shutdown (after ``drain``)
+        so the keep-alive sockets are released cleanly. Safe to
+        call when the client was never created (no-op).
+        """
+        client = self._http_client
+        if client is not None:
+            try:
+                aclose = getattr(client, "aclose", None)
+                if callable(aclose):
+                    await aclose()
+            except Exception as exc:  # noqa: BLE001 - best-effort shutdown
+                logger.debug(
+                    "webhook_delivery: aclose failed (non-fatal): %s",
+                    exc,
+                )
+            self._http_client = None
+        self._http_semaphore = None
 
     async def _ensure_http_client(self) -> tuple[Any, asyncio.Semaphore]:
         """Return a shared ``(client, semaphore)`` pair.
@@ -677,3 +834,37 @@ class WebhookDeliveryService:
                 exc,
                 exc_info=True,
             )
+
+
+# ─── module-level singleton accessor (F57) ────────────────────────
+# The ``eden-worker`` process owns its own ``WebhookDeliveryService``
+# instance (see ``eden.workers.main._webhook_drain_loop``); the API
+# process shares this singleton so ``aclose()`` on shutdown
+# releases the keep-alive socket pool. Lazily created so the
+# import path doesn't cost anything if no webhook is ever
+# delivered.
+_webhook_delivery_service: WebhookDeliveryService | None = None
+
+
+def get_webhook_delivery_service() -> WebhookDeliveryService:
+    """Return the process-wide ``WebhookDeliveryService``.
+
+    Test code that needs a fresh instance can simply
+    ``WebhookDeliveryService()`` its own — this accessor is for
+    production wiring only.
+    """
+    global _webhook_delivery_service
+    if _webhook_delivery_service is None:
+        _webhook_delivery_service = WebhookDeliveryService()
+    return _webhook_delivery_service
+
+
+def reset_webhook_delivery_service() -> None:
+    """Clear the module-level singleton. Test-only helper.
+
+    Lets a test that patches ``_http_client`` on the singleton
+    get a fresh state without restarting the interpreter. Safe
+    to call when no instance has been created yet.
+    """
+    global _webhook_delivery_service
+    _webhook_delivery_service = None

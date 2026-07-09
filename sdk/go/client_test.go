@@ -186,3 +186,24 @@ func TestFormatForEventType(t *testing.T) {
 		}
 	}
 }
+
+
+func BenchmarkSendFireAndForget(b *testing.B) {
+	// Measure the cost of a fire-and-forget Trace call. The HTTP
+	// server returns 202 immediately so the goroutine backing
+	// each Send can return quickly; we measure how long it takes
+	// to enqueue + schedule the goroutine, which is the only
+	// work the user actually pays for.
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusAccepted)
+	}))
+	defer srv.Close()
+
+	c := NewClient(Config{BaseURL: srv.URL, OrgID: "o", APIKey: "k"})
+
+	b.ResetTimer()
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		c.Send(FormatOpenAI, Event{EventID: "x", EventType: "openai.chat_completion"})
+	}
+}

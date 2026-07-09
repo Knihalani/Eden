@@ -6,12 +6,22 @@ import secrets
 from datetime import UTC, datetime, timedelta
 
 import bcrypt
-from jose import JWTError, jwt
+import jwt
+from jwt import InvalidTokenError as JWTError
 
-from eden.config import get_settings
+from eden.api.utils.redact import redact_all
+from eden.config import get_settings  # noqa: F401  # used by _get_settings()
 
 logger = logging.getLogger(__name__)
-settings = get_settings()
+settings = None
+
+def _get_settings():
+    global settings
+    if settings is None:
+        from eden.config import get_settings as _gs
+        settings = _gs()
+    return settings
+
 
 ALGORITHM = "HS256"
 
@@ -128,7 +138,7 @@ def create_access_token(
     to_encode = data.copy()
 
     expire = datetime.now(UTC) + (
-        expires_delta or timedelta(days=settings.jwt_exp_days)
+        expires_delta or timedelta(days=_get_settings().jwt_exp_days)
     )
     to_encode.update({
         "exp": expire,
@@ -139,14 +149,14 @@ def create_access_token(
     # Stamp ``aud``/``iss`` when configured. Tokens issued before
     # these settings existed are still accepted by ``decode_access_token``
     # because the validation is only enforced when the values are set.
-    if settings.jwt_audience:
-        to_encode["aud"] = settings.jwt_audience
-    if settings.jwt_issuer:
-        to_encode["iss"] = settings.jwt_issuer
+    if _get_settings().jwt_audience:
+        to_encode["aud"] = _get_settings().jwt_audience
+    if _get_settings().jwt_issuer:
+        to_encode["iss"] = _get_settings().jwt_issuer
 
     return jwt.encode(
         to_encode,
-        settings.jwt_secret,
+        _get_settings().jwt_secret,
         algorithm=ALGORITHM,
     )
 
@@ -171,25 +181,26 @@ def decode_access_token(token: str) -> dict | None:
     """
     decode_kwargs: dict = {
         "algorithms": [ALGORITHM],
-        # python-jose's options namespace. Each ``require_*`` is
-        # true → the corresponding claim MUST be present.
+        # PyJWT's options namespace. ``require`` is a list of
+        # claim names that MUST be present in the payload; each
+        # ``verify_*`` is true → that claim is validated when
+        # present (PyJWT does NOT fail on a missing-but-not-
+        # required claim by default).
         "options": {
-            "require_exp": True,
-            "require_iat": True,
-            "require_sub": True,
+            "require": ["exp", "iat", "sub"],
             "verify_exp": True,
             "verify_iat": True,
             "verify_nbf": True,
         },
     }
-    if settings.jwt_audience:
-        decode_kwargs["audience"] = settings.jwt_audience
-    if settings.jwt_issuer:
-        decode_kwargs["issuer"] = settings.jwt_issuer
+    if _get_settings().jwt_audience:
+        decode_kwargs["audience"] = _get_settings().jwt_audience
+    if _get_settings().jwt_issuer:
+        decode_kwargs["issuer"] = _get_settings().jwt_issuer
     try:
         payload = jwt.decode(
             token,
-            settings.jwt_secret,
+            _get_settings().jwt_secret,
             **decode_kwargs,
         )
         return payload
@@ -197,11 +208,11 @@ def decode_access_token(token: str) -> dict | None:
         # Signature failure against the primary key — try the
         # previous key (rotation window). If that also fails, the
         # token is invalid.
-        if settings.jwt_secret_previous:
+        if _get_settings().jwt_secret_previous:
             try:
                 payload = jwt.decode(
                     token,
-                    settings.jwt_secret_previous,
+                    _get_settings().jwt_secret_previous,
                     **decode_kwargs,
                 )
                 return payload
@@ -210,5 +221,5 @@ def decode_access_token(token: str) -> dict | None:
         # Log only at debug — invalid tokens are routine (expired
         # sessions, manual API calls) and would flood the warning
         # stream if logged higher.
-        logger.debug("decode_access_token failed: %s", exc)
+        logger.debug("decode_access_token failed: %s", redact_all(str(exc)))
         return None

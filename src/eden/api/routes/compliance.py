@@ -309,7 +309,14 @@ async def do_not_sell(body: DNSRequest) -> DNSAccepted:
     Public endpoint — the requester is by definition not yet
     known to the system.
     """
-    logger.info("compliance.do_not_sell: email=%s", body.email)
+    # F65 — recipient email is PII. The CCPA endpoint is
+    # public (the requester is by definition not yet
+    # authenticated) so logging the plaintext email would
+    # also put unauthenticated user data in the log stream.
+    # Keep the domain for operator triage, redact the
+    # local-part.
+    recipient_domain = body.email.rsplit("@", 1)[-1] if "@" in body.email else "unknown"
+    logger.info("compliance.do_not_sell: email=***@%s", recipient_domain)
     return DNSAccepted(
         status="recorded",
         email=body.email,

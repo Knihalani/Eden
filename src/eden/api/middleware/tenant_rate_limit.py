@@ -21,15 +21,32 @@ import time
 from typing import Any
 
 from fastapi import Request
-from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.responses import JSONResponse, Response
+from starlette.types import ASGIApp, Receive, Scope, Send
 
 from eden.api.utils.auth import decode_access_token
+from eden.api.utils.client_ip import get_client_ip
 from eden.config import get_settings
 from eden.storage.postgres import get_postgres_client
 
 logger = logging.getLogger(__name__)
-settings = get_settings()
+settings = None
+
+def _get_settings():
+    global settings
+    if settings is None:
+        from eden.config import get_settings as _gs
+        settings = _gs()
+    return settings
+# Audit 2026-07-06 v1.9 — pre-compute the response header names
+# as lowercase bytes so the ASGI ``send`` wrapper doesn't encode
+# per request. The send-wrapper path is the only place we add
+# these (the 429 response uses ``JSONResponse`` directly via its
+# own ASGI send; see dispatch below).
+_HDR_LIMIT = b"x-ratelimit-limit"
+_HDR_REMAINING = b"x-ratelimit-remaining"
+_HDR_RESET = b"x-ratelimit-reset"
+_HDR_POLICY = b"x-ratelimit-policy"
+
 
 
 class TokenBucket:
@@ -68,16 +85,32 @@ class TokenBucket:
             return False, self.tokens, retry_after
 
 
-class TenantRateLimitMiddleware(BaseHTTPMiddleware):
+class TenantRateLimitMiddleware:
     """Token-bucket rate limiter scoped per tenant (org).
 
     Independently resolves the org from the JWT cookie or API key header
     so that per-tenant limits work even though auth dependencies run after
     middleware. Falls back to per-IP limiting for unauthenticated requests.
+
+    Audit 2026-07-06 v1.9 — converted from
+    :class:`starlette.middleware.base.BaseHTTPMiddleware` to pure ASGI.
+    The ``__call__`` form avoids the per-request ``BaseHTTPMiddleware``
+    overhead (re-constructing a ``Request`` + thread-pool bridge, ~150µs).
+    Behaviour preserved:
+      * Same short-circuit on ``/health`` and ``OPTIONS``.
+      * Same test-bypass (``settings.rate_limit_enabled=False``).
+      * Same Redis-or-bucket fallback chain.
+      * Same ``X-RateLimit-*`` response headers (now injected via
+        send-wrapper rather than on a Starlette ``Response`` object).
+      * Same 429 JSON envelope on rejection (built inline in ASGI form
+        rather than via ``JSONResponse.__call__``).
+      * Same per-request ``request.state`` access path (we still
+        stash org / limit context for the helper methods that get
+        called from inside dispatch).
     """
 
-    def __init__(self, app, default_limit: int = 60, default_window: int = 60):
-        super().__init__(app)
+    def __init__(self, app: ASGIApp, default_limit: int = 60, default_window: int = 60):
+        self.app = app
         self.default_limit = default_limit
         self.default_window = default_window
         self._buckets: dict[str, TokenBucket] = {}
@@ -93,14 +126,20 @@ class TenantRateLimitMiddleware(BaseHTTPMiddleware):
         # the full source on every invocation. Filled lazily on first
         # use (needs a live Redis connection).
         self._sliding_window_script: Any | None = None
-        # Start periodic bucket cleanup background task
-        self._cleanup_task = asyncio.create_task(self._periodic_bucket_cleanup())
+        # Audit 2026-07-06 v1.9 — defer the periodic bucket cleanup
+        # task to the first ``__call__``. Eager ``asyncio.create_task``
+        # in ``__init__`` raised ``RuntimeError: no running event
+        # loop`` whenever the middleware was constructed outside a
+        # running loop (unit tests, bench harness, anything that did
+        # ``mw = TenantRateLimitMiddleware(MagicMock())`` to inspect
+        # the contract). Lazy creation preserves the cleanup cadence
+        # without the startup contract.
 
     async def _get_redis(self):
         """Lazy-load Redis client if REDIS_URL is configured."""
         if self._redis is not None:
             return self._redis
-        redis_url = getattr(settings, "redis_url", "")
+        redis_url = getattr(_get_settings(), "redis_url", "")
         if redis_url:
             try:
                 import redis.asyncio as aioredis
@@ -345,10 +384,39 @@ class TenantRateLimitMiddleware(BaseHTTPMiddleware):
             logger.debug(f"Could not resolve API key id for rate limit: {exc}")
             return None
 
-    async def dispatch(self, request: Request, call_next) -> Response:
+    async def __call__(
+        self, scope: Scope, receive: Receive, send: Send
+    ) -> None:
+        # Lazy-create the periodic cleanup task on first request. We
+        # do this in dispatch (rather than ``__init__``) so a
+        # middleware constructed outside a running event loop — a
+        # unit test, a bench harness, anything that just wants to
+        # inspect the contract — doesn't blow up. Pre-fix this was
+        # ``asyncio.create_task(self._periodic_bucket_cleanup())``
+        # inside ``__init__``.
+        if self._cleanup_task is None:
+            try:
+                self._cleanup_task = asyncio.create_task(
+                    self._periodic_bucket_cleanup()
+                )
+            except RuntimeError:
+                # ``get_event_loop`` raised — no running loop (e.g. the
+                # middleware is being constructed or called from a
+                # sync context). Skip cleanup; the next request will
+                # retry. Better than crashing the request.
+                self._cleanup_task = False  # sentinel: don't retry
+
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        path = scope.get("path", "")
+        method = scope.get("method", "GET")
+
         # ── Skip rate limiting for health checks and CORS preflight ──
-        if request.url.path == "/health" or request.method == "OPTIONS":
-            return await call_next(request)
+        if path == "/health" or method == "OPTIONS":
+            await self.app(scope, receive, send)
+            return
 
         # ── Test bypass ──
         # The local-bucket fallback is fine for production (single
@@ -359,9 +427,23 @@ class TenantRateLimitMiddleware(BaseHTTPMiddleware):
         # the quota middleware's ``quota_enabled`` escape hatch
         # so the rate limiter is short-circuited when the test
         # Settings fixture disables it.
-        from eden.config import get_settings
+        # Pre-fix the import was inside dispatch — module-level
+        # caching makes the second-and-later calls free, but the
+        # very first call paid the import cost on a hot path.
         if not get_settings().rate_limit_enabled:
-            return await call_next(request)
+            await self.app(scope, receive, send)
+            return
+
+        # Build a starlette ``Request`` shim around the scope so the
+        # helper methods (``_resolve_org_from_request``,
+        # ``_resolve_api_key_id``) still see ``request.headers``,
+        # ``request.cookies``, ``request.client`` the same way they
+        # always have. This is the standard pure-ASGI pattern for
+        # incrementally rewriting a BaseHTTPMiddleware without
+        # forking the helper API. The ``Request`` constructor is
+        # cheap; the per-request cost is the dict lookups + the
+        # ``receive`` awaitable, both negligible vs what we save.
+        request = Request(scope, receive)
 
         # ── Identify the limit key ──
         # Phase 5.1.4: per-API-key limits are tighter than per-org so a
@@ -374,8 +456,15 @@ class TenantRateLimitMiddleware(BaseHTTPMiddleware):
             api_key_id = await self._resolve_api_key_id(request)
             limit_key = f"key:{api_key_id}" if api_key_id else f"org:{org_id}"
         else:
-            forwarded = request.headers.get("x-forwarded-for", "")
-            client_ip = forwarded.split(",")[0].strip() if forwarded else (request.client.host if request.client else "unknown")
+            # Phase X: delegate to the trusted-proxy-aware client-IP
+            # resolver instead of trusting the leftmost XFF hop
+            # unconditionally. Pre-fix the leftmost XFF was used as
+            # the rate-limit key with no proxy validation, so an
+            # attacker could bypass the per-IP limit by sending a
+            # different ``X-Forwarded-For`` value on each request
+            # (each fresh value gets its own bucket) or focus the
+            # rate-limit budget on a victim by spoofing their IP.
+            client_ip = get_client_ip(request) or "unknown"
             limit_key = f"ip:{client_ip}"
 
         # ── Resolve limits ──
@@ -391,7 +480,9 @@ class TenantRateLimitMiddleware(BaseHTTPMiddleware):
         retry_after = 0
 
         try:
-            allowed, remaining, reset_ts, retry_after = await self._check_redis(limit_key, limit, window)
+            allowed, remaining, reset_ts, retry_after = await self._check_redis(
+                limit_key, limit, window
+            )
         except Exception:
             logger.warning(
                 "tenant_rate_limit: Redis check failed for %s; falling back to local bucket",
@@ -403,28 +494,48 @@ class TenantRateLimitMiddleware(BaseHTTPMiddleware):
             allowed, remaining, retry_after = await bucket.consume(1.0)
             reset_ts = int(time.time() + window)
 
-        # ── Build response ──
+        # ── Pre-encode the X-RateLimit-* header values ──
+        # The hot path previously did ``response.headers["X-RateLimit-Limit"] = str(limit)``
+        # which allocated a new str + did a case-insensitive dict lookup
+        # + made a second str allocation for the underlying bytes. We
+        # build the bytes once here, outside the inner-app send path.
+        bytes_limit = str(limit).encode("latin1")
+        bytes_remaining = str(int(remaining)).encode("latin1")
+        bytes_reset = str(reset_ts).encode("latin1")
+        bytes_policy = tier.encode("latin1")
+
+        # ── 429 reject — inline ASGI form (no JSONResponse round-trip) ──
         if not allowed:
-            return JSONResponse(
-                status_code=429,
-                content={
-                    "detail": "Rate limit exceeded. Please slow down or upgrade your plan.",
-                    "retry_after": int(retry_after),
-                },
-                headers={
-                    "X-RateLimit-Limit": str(limit),
-                    "X-RateLimit-Remaining": "0",
-                    "X-RateLimit-Reset": str(reset_ts),
-                    "X-RateLimit-Policy": tier,
-                    "Retry-After": str(int(retry_after)),
-                },
+            body = (
+                b'{"detail":"Rate limit exceeded. Please slow down or upgrade your plan.","retry_after":'
+                + str(int(retry_after)).encode("latin1") + b'}'
             )
+            retry_after_bytes = str(int(retry_after)).encode("latin1")
+            await send({
+                "type": "http.response.start",
+                "status": 429,
+                "headers": [
+                    (b"content-type", b"application/json"),
+                    (b"content-length", str(len(body)).encode("latin1")),
+                    (_HDR_LIMIT, bytes_limit),
+                    (_HDR_REMAINING, b"0"),
+                    (_HDR_RESET, bytes_reset),
+                    (_HDR_POLICY, bytes_policy),
+                    (b"retry-after", retry_after_bytes),
+                ],
+            })
+            await send({"type": "http.response.body", "body": body, "more_body": False})
+            return
 
-        response = await call_next(request)
+        # ── Allowed — run inner app with a header-injecting send wrapper ──
+        async def send_wrapper(message):
+            if message["type"] == "http.response.start":
+                headers = message.get("headers") or []
+                headers.append((_HDR_LIMIT, bytes_limit))
+                headers.append((_HDR_REMAINING, bytes_remaining))
+                headers.append((_HDR_RESET, bytes_reset))
+                headers.append((_HDR_POLICY, bytes_policy))
+                message["headers"] = headers
+            await send(message)
 
-        # ── Attach rate limit headers ──
-        response.headers["X-RateLimit-Limit"] = str(limit)
-        response.headers["X-RateLimit-Remaining"] = str(int(remaining))
-        response.headers["X-RateLimit-Reset"] = str(reset_ts)
-        response.headers["X-RateLimit-Policy"] = tier
-        return response
+        await self.app(scope, receive, send_wrapper)

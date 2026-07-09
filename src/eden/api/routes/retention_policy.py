@@ -17,6 +17,8 @@ from fastapi import APIRouter, Depends, HTTPException, Path
 from pydantic import BaseModel, Field
 
 from eden.api.deps import get_current_user
+from eden.api.utils.redact import redact_all
+from eden.api.utils.safe_error import safe_detail
 from eden.storage.postgres import get_postgres_client
 
 logger = logging.getLogger(__name__)
@@ -125,7 +127,7 @@ async def put_retention_policy(
         )
     except Exception as exc:
         logger.warning(f"put_retention_policy failed: {exc}")
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
+        raise HTTPException(status_code=500, detail=safe_detail(exc, fallback="Internal error while saving retention policy")) from exc
 
     try:
         from eden.api.deps import log_audit_event
@@ -147,7 +149,7 @@ async def put_retention_policy(
     except Exception as exc:
         # Audit-log failure is non-fatal (the policy is already persisted),
         # but we still want a trace so missing audit rows are not invisible.
-        logger.warning("retention_policy.audit_log_failed: %s", exc)
+        logger.warning("retention_policy.audit_log_failed: %s", redact_all(str(exc)))
 
     return RetentionPolicyOut(
         policy_id=new_id,

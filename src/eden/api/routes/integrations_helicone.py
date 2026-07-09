@@ -21,6 +21,7 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
 from pydantic import BaseModel
 
 from eden.api.deps import require_feature_flag
+from eden.api.utils.safe_error import redact_upstream_error
 from eden.integrations import INTEGRATION_API_VERSION
 from eden.integrations.helicone.sync import parse_helicone_event
 
@@ -113,4 +114,4 @@ async def helicone_test() -> dict[str, Any]:
             "integration_version": INTEGRATION_API_VERSION,
         }
     except httpx.RequestError as exc:
-        raise HTTPException(status_code=502, detail=f"Helicone upstream unreachable: {exc}") from exc
+        raise HTTPException(status_code=502, detail=redact_upstream_error(exc)) from exc

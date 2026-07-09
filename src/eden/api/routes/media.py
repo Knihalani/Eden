@@ -19,6 +19,7 @@ from fastapi import APIRouter, Depends, HTTPException, Path, Response
 from fastapi.responses import Response as FastAPIResponse
 
 from eden.api.deps import get_current_user
+from eden.api.middleware.security_headers import apply_security_headers
 from eden.observability.media_store import MediaStore, get_media_store
 from eden.storage.postgres import get_postgres_client
 
@@ -81,11 +82,19 @@ async def get_media(
     return Response(
         content=data,
         media_type=blob.content_type,
-        headers={
-            "Cache-Control": "private, max-age=86400",
-            "X-Content-Type-Options": "nosniff",
-            "X-Sha256": blob.sha256,
-        },
+        # F69 — apply OWASP security headers (HSTS, X-Frame-Options,
+        # CSP, etc.) to the blob response. ``apply_security_headers``
+        # already sets X-Content-Type-Options: nosniff; the
+        # ``headers=`` argument merges with our caller's extras
+        # (Cache-Control, X-Sha256) so the blob-serving contract
+        # is preserved.
+        headers=apply_security_headers(
+            {
+                "Cache-Control": "private, max-age=86400",
+                "X-Content-Type-Options": "nosniff",
+                "X-Sha256": blob.sha256,
+            }
+        ),
     )
 
 

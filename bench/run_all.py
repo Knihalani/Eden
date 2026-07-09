@@ -22,7 +22,7 @@ RESULTS_DIR = Path(__file__).resolve().parent / "results"
 
 
 async def main() -> int:
-    from bench import kb_retrieval, latency, llm_provider
+    from bench import kb_retrieval, latency, llm_provider, repo_graph
 
     started = time.time()
     all_results: dict = {
@@ -52,6 +52,24 @@ async def main() -> int:
     all_results["suites"]["kb_retrieval"] = kb_dicts
     for r in kb_dicts:
         print(f"  {r['name']:35s}  p50={r['p50_ms']:7.2f}ms  p95={r['p95_ms']:7.2f}ms  hit_rate={r['hit_rate']:.2f}")
+
+    print("\n== bench: repo-graph (offline-first SymbolGraph) ==")
+    rg_report = await repo_graph.bench_repo_graph(n_query=200, concurrency=8)
+    all_results["suites"]["repo_graph"] = rg_report
+    meas = rg_report["measurements"]
+    print(
+        f"  cold_index_ms={meas['cold_index_ms']:7.1f}  "
+        f"warm_index_ms={meas['warm_index_ms']:7.2f}  "
+        f"query_p95={meas['query_p95_ms']:7.2f}ms  "
+        f"find_p95={meas['find_affected_p95_ms']:7.2f}ms  "
+        f"db_bytes={meas['db_bytes']:>10}  "
+        f"files={meas['file_count']}  symbols={meas['symbol_count']}"
+    )
+    failed_budgets = [k for k, v in rg_report["budgets"].items() if not v]
+    if failed_budgets:
+        print(f"  ⚠ missed budgets: {failed_budgets}")
+    else:
+        print("  ✓ all budgets met")
 
     all_results["duration_s"] = round(time.time() - started, 2)
     all_results["finished_at"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())

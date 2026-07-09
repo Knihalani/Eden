@@ -47,7 +47,6 @@ from typing import Any
 
 from ._common import (
     BAYESIAN_PRIOR_WINDOW_DAYS,
-    BETA_PSEUDOCOUNT,
     CREDIBLE_INTERVAL_HIGH,
     CREDIBLE_INTERVAL_LOW,
     DEFAULT_EXPLICIT_WEIGHT,
@@ -394,56 +393,6 @@ async def _fetch_implicit_signals(
         ),
         "time_to_first_action_ms": d.get("time_to_first_action_ms"),
     }
-
-
-async def _fetch_per_channel_prior(
-    org_id: str, interval_sql: str
-) -> tuple[float, float]:
-    """Compute the per-channel Beta prior from the org's
-    recent feedback. Returns ``(alpha, beta)`` for the
-    Beta distribution representing the org's thumbs-up
-    rate.
-
-    If the org has fewer than 4 events in the prior
-    window, we fall back to a non-informative
-    ``Beta(1, 1)`` prior. Per the appendix, the prior
-    must be at least 30 days of feedback to be
-    meaningful; smaller windows fall back to the uniform
-    prior.
-    """
-    client = await _get_client()
-    if client is None:
-        return (BETA_PSEUDOCOUNT, BETA_PSEUDOCOUNT)
-    try:
-        row = await client.fetchrow(
-            f"""
-            SELECT
-                COALESCE(SUM(CASE WHEN thumbs = 'up' THEN 1 ELSE 0 END), 0)::int
-                    AS up_count,
-                COALESCE(SUM(CASE WHEN thumbs = 'down' THEN 1 ELSE 0 END), 0)::int
-                    AS down_count
-              FROM user_feedback
-             WHERE org_id = $1
-               AND created_at > NOW() - {interval_sql}::interval
-            """,
-            org_id,
-        )
-    except Exception as exc:
-        logger.debug("user_intel: prior fetch failed: %s", exc)
-        return (BETA_PSEUDOCOUNT, BETA_PSEUDOCOUNT)
-    if row is None:
-        return (BETA_PSEUDOCOUNT, BETA_PSEUDOCOUNT)
-    if isinstance(row, dict):
-        up = int(row.get("up_count") or 0)
-        down = int(row.get("down_count") or 0)
-    else:
-        up = int(row["up_count"] or 0)
-        down = int(row["down_count"] or 0)
-    # Require ≥ 4 events in the prior window. Below
-    # that, the Beta estimate is too noisy.
-    if up + down < 4:
-        return (BETA_PSEUDOCOUNT, BETA_PSEUDOCOUNT)
-    return (float(up) + BETA_PSEUDOCOUNT, float(down) + BETA_PSEUDOCOUNT)
 
 
 # ── Persistence ──────────────────────────────────────────────────────

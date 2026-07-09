@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+from unittest.mock import AsyncMock, MagicMock, patch
+
 import pytest
 
 from eden.code_change.discipline.circuit_breaker import (
-    CircuitBreaker,
     DEFAULT_BREAKER_POLICY,
+    CircuitBreaker,
     Record,
 )
 
@@ -108,3 +110,87 @@ def test_default_policy_keys():
     assert "window_seconds" in DEFAULT_BREAKER_POLICY
     assert "cooldown_seconds" in DEFAULT_BREAKER_POLICY
     assert "min_rejections_to_trip" in DEFAULT_BREAKER_POLICY
+
+
+class TestF45CircuitBreakerAtomicRecordOutcome:
+    """F45 regression tests for ``record_outcome`` TOCTOU race.
+
+    Pre-fix, ``record_outcome`` did:
+
+        record = await self._read(org_id)
+        record.failure_count += 1   # Python-side mutation
+        await self._write(org_id, record)  # unconditional UPDATE
+
+    N concurrent ``record_outcome("failure")`` calls would all
+    read the same ``failure_count=K`` row, all bump to K+1, and
+    the last ``ON CONFLICT DO UPDATE`` would write K+1 — the
+    other N-1 increments were silently lost. With 5 concurrent
+    failures and a ``failure_threshold=5`` policy, the breaker
+    would never trip because the final stored value is 1
+    instead of 5.
+
+    The fix wraps the read+mutate+write in a single
+    transaction with ``SELECT ... FOR UPDATE`` so concurrent
+    callers serialize on the row.
+    """
+
+    @pytest.mark.asyncio
+    async def test_record_outcome_uses_for_update(self):
+        """The transactional read+write must use
+        ``SELECT ... FOR UPDATE`` to serialize concurrent
+        callers.
+
+        Locks in the SQL contract — a future refactor can't
+        silently drop the FOR UPDATE clause and reintroduce
+        the race.
+        """
+        from eden.code_change.discipline.circuit_breaker import (
+            CircuitBreaker,
+        )
+
+        breaker = CircuitBreaker(breaker_name="test_breaker")
+
+        captured_sqls: list[str] = []
+
+        class _Conn:
+            def transaction(self):
+                cm = MagicMock()
+                cm.__aenter__ = AsyncMock(return_value=self)
+                cm.__aexit__ = AsyncMock(return_value=None)
+                return cm
+
+            async def fetchrow(self, sql, *args):
+                captured_sqls.append(sql)
+                return None  # no row yet
+
+            async def execute(self, sql, *args):
+                captured_sqls.append(sql)
+
+        class _Client:
+            def acquire(self):
+                cm = MagicMock()
+                cm.__aenter__ = AsyncMock(return_value=_Conn())
+                cm.__aexit__ = AsyncMock(return_value=None)
+                return cm
+
+        with patch(
+            "eden.storage.postgres.get_postgres_client",
+            AsyncMock(return_value=_Client()),
+        ):
+            await breaker.record_outcome(
+                "org_test", outcome="failure",
+            )
+
+        # Find the SELECT.
+        selects = [s for s in captured_sqls if "SELECT" in s]
+        assert len(selects) >= 1, (
+            f"Expected at least one SELECT, got: {captured_sqls}"
+        )
+        # The transactional read must use FOR UPDATE.
+        assert any(
+            "FOR UPDATE" in s for s in selects
+        ), (
+            f"record_outcome's SELECT must use FOR UPDATE to "
+            f"serialize concurrent callers; got: {selects}"
+        )
+

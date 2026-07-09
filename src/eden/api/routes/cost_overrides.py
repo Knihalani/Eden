@@ -33,6 +33,7 @@ from fastapi import APIRouter, Depends, HTTPException, Path
 from pydantic import BaseModel, Field
 
 from eden.api.deps import get_current_user
+from eden.api.utils.redact import redact_all
 from eden.storage.postgres import get_postgres_client
 
 logger = logging.getLogger(__name__)
@@ -209,7 +210,7 @@ async def create_cost_override(
         resolver = CostResolver()
         await resolver.invalidate(org_id=org_id)
     except Exception as exc:  # noqa: BLE001
-        logger.warning("failed to invalidate cost resolver cache after override POST: %s", exc)
+        logger.warning("failed to invalidate cost resolver cache after override POST: %s", redact_all(str(exc)))
     return _row_to_out(row)
 
 

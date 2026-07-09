@@ -217,9 +217,23 @@ async def record_usage(
             ) VALUES (
                 $1, $2, $3, $4, $5, $6, 1, NOW(), NOW(), NOW()
             )
-            ON CONFLICT (org_id, window, window_start)
-            WHERE window_end > NOW()
-            DO UPDATE SET
+            -- No WHERE on the ON CONFLICT: the unique index
+            -- ``idx_budget_consumption_active (org_id, window,
+            -- window_start)`` is a FULL unique index, not a
+            -- partial one. Postgres requires the WHERE clause
+            -- in ON CONFLICT to match a partial index's
+            -- predicate (or omit it for a full index).
+            -- The previous ``WHERE window_end > NOW()`` had no
+            -- matching partial index → Postgres raised
+            -- ``there is no unique or exclusion constraint
+            -- matching the ON CONFLICT specification`` and
+            -- record_usage silently logged the failure at
+            -- DEBUG, meaning every gateway-ingest hot-path
+            -- call was a no-op. Removing the WHERE is safe:
+            -- ``window_start`` is part of the unique key, so
+            -- a new-month row never conflicts with the prior
+            -- month's row anyway.
+            ON CONFLICT (org_id, window, window_start) DO UPDATE SET
                 cost_usd = budget_consumption.cost_usd + EXCLUDED.cost_usd,
                 requests_count = budget_consumption.requests_count + 1,
                 last_request_at = NOW(),

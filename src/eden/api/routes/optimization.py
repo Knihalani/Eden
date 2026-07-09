@@ -19,6 +19,7 @@ from eden.api.deps import (  # noqa: F401  (monkeypatched by tests)
     require_org_permission,
     require_org_permission_dep,
 )
+from eden.api.utils.redact import redact_all
 from eden.optimization import (
     BudgetExceededError,
     BudgetStatus,
@@ -303,7 +304,16 @@ async def _build_optimization_overview(org_id: str, days: int):
             # Redis blip shouldn't 500 the entire overview tile —
             # Postgres fallback will pick up the spend, and the
             # utilization % just renders blank. June 2026 hardening.
-            logger.warning("redis hget failed for org=%s month=%s: %s", org_id, month_key, exc)
+            # F70 — defensive redaction. ``org_id`` and
+            # ``month_key`` are internal IDs (not PII), but the
+            # ``exc`` could theoretically include user data in a
+            # future refactor. ``redact_all`` is a no-op on
+            # typical Python exceptions (no email/credential
+            # patterns) but defends against the long tail.
+            logger.warning(
+                "redis hget failed for org=%s month=%s: %s",
+                org_id, month_key, redact_all(str(exc)),
+            )
             current_spend = 0.0
 
     utilization = round((current_spend / hard_limit) * 100, 2) if hard_limit != float("inf") and hard_limit > 0 else 0.0
