@@ -4,6 +4,55 @@ All notable changes to the Eden TypeScript SDK are documented here. The
 format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## 0.2.24 — 2026-07-09
+
+Bug-fix + resilience release.
+
+### Fixed
+- `client.EdenSDK.bufferChunk`: cap the chunk buffer at
+  `maxChunkBuffer` (default 4096) entries and drop the
+  oldest on overflow. The TS buffer had no upper bound
+  (parallel to the Python bug fixed in 0.2.13); a
+  runaway streaming producer pushing millions of small
+  chunks would OOM the process before this. Mirrors the
+  Python SDK's `_chunk_buffer_max` from 0.2.13 so both
+  SDKs surface identical resilience guarantees on the
+  same gateway-side rate-limit configuration.
+- `client.TraceController` decorator path
+  (`@traceAgent`): the wrapped method stored only
+  `err.constructor.name` (just the class name) on
+  `controller.error` when the underlying call threw.
+  `finishTrace` splits `controller.error` on the first
+  `": "` into `error_type` + `error_message`, so the TS
+  decorator path was emitting `error_type: "TypeError"`
+  with `error_message: null` for every decorator-thrown
+  exception — silently dropping the human-readable
+  error message that the portal surfaces in the trace
+  detail view. The Python SDK's `@trace_agent` and the
+  TS callback-form `trace()` both captured the full
+  message. Now the decorator path uses
+  `controller.recordError(err)` (the same helper the
+  callback form uses) so the wire payload matches.
+
+### Added
+- `client.EdenSDKOptions.maxChunkBuffer` — new
+  constructor option (default 4096). Tunable via
+  `new EdenSDK({ maxChunkBuffer: N })`.
+
+### Tests
+- 3 new tests in `tests/client.test.ts` and
+  `tests/trace.test.ts`:
+  - `chunk buffer cap > drops oldest chunks when
+    maxChunkBuffer is exceeded` (pins the buffer
+    eviction end-to-end through `bufferChunk`).
+  - `traceAgent() > captures the error MESSAGE (not
+    just the class name) on sync throws` — regression
+    pinning the sync throw path.
+  - `traceAgent() > captures the error MESSAGE on async
+    rejects (regression)` — same for async.
+- 166/166 TS tests pass; `tsc --noEmit` clean.
+- Python SDK unchanged this turn: 209/209 still pass.
+
 ## 0.2.23 — 2026-07-09
 
 Bug-fix release.

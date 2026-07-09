@@ -460,7 +460,7 @@ describe("EdenSDK User-Agent header", () => {
     });
     return sdk.flush().then(() => {
       expect(captured.length).toBe(1);
-      expect(captured[0].headers["User-Agent"]).toBe("@eden-ai/sdk/0.2.23");
+      expect(captured[0].headers["User-Agent"]).toBe("@eden-ai/sdk/0.2.24");
     });
   });
 });
@@ -818,6 +818,47 @@ describe("EdenSDK dispose() chunk-path inflight race", () => {
       } finally {
         globalThis.fetch = originalFetch;
       }
+    },
+  );
+});
+
+
+describe("EdenSDK chunk buffer cap", () => {
+  it(
+    "drops oldest chunks when maxChunkBuffer is exceeded",
+    async () => {
+      // Regression: TS ``bufferChunk`` had no upper bound
+      // (parallel to the Python bug fixed in 0.2.13). A
+      // runaway streaming producer could OOM the process
+      // before this. With a tiny cap and 50 chunks pushed
+      // via ``bufferChunk``, the buffer should hold only
+      // the tail (8 entries) and the oldest 42 must have
+      // been evicted.
+      const sdk = new EdenSDK({
+        orgId: "o",
+        apiKey: "k",
+        flushIntervalMs: 60_000,
+        maxChunkBuffer: 8,
+        disabled: true, // don't actually POST; we only care about the buffer state.
+      });
+      for (let i = 0; i < 50; i++) {
+        sdk.bufferChunk({
+          eventId: `e${i}`,
+          traceId: "t1",
+          chunkIndex: i,
+          deltaText: `chunk-${i}`,
+          ttftMs: 1,
+          itlMs: null,
+          tpotMs: null,
+          receivedAtClientMs: 0,
+        });
+      }
+      // Access the private field via bracket for a unit
+      // test — TS doesn't enforce runtime visibility.
+      const buf = (sdk as unknown as { chunkBuffer: { chunkIndex: number }[] }).chunkBuffer;
+      expect(buf.length).toBe(8);
+      expect(buf[0].chunkIndex).toBe(42);
+      expect(buf[buf.length - 1].chunkIndex).toBe(49);
     },
   );
 });

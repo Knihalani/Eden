@@ -140,6 +140,71 @@ describe("traceAgent()", () => {
     expect(call?.payload.status).toBe("error");
     expect(call?.payload.error_type).toBe("Error");
   });
+
+  it(
+    "captures the error MESSAGE (not just the class name) on sync throws",
+    async () => {
+      // Regression: the previous decorator path stored only
+      // ``err.constructor.name`` on ``controller.error``, so the
+      // wire payload had ``error_type: "TypeError"`` with
+      // ``error_message: null`` for every decorator-thrown
+      // exception. The callback form of ``trace()`` and the
+      // Python SDK's ``@trace_agent`` both captured the full
+      // message -- so the TS decorator was a silent regression
+      // that dropped the human-readable error text the portal
+      // surfaces in the trace detail view. Pin that the
+      // message now lands on the wire.
+      class Typed {
+        @traceAgent()
+        boom(): never {
+          throw new TypeError("kaboom");
+        }
+      }
+      let caught: unknown;
+      try {
+        new Typed().boom();
+      } catch (e) {
+        caught = e;
+      }
+      expect((caught as Error).message).toBe("kaboom");
+      await getDefaultClient().flush();
+      const call = _flattenEvents().find(
+        (e) => e.eventType === "agent_call" && e.payload.error_type === "TypeError",
+      );
+      expect(call?.payload.status).toBe("error");
+      expect(call?.payload.error_type).toBe("TypeError");
+      expect(call?.payload.error_message).toBe("kaboom");
+    },
+  );
+
+  it(
+    "captures the error MESSAGE on async rejects (regression)",
+    async () => {
+      // Same regression as the sync test, but on the
+      // promise-rejection path (the more common case in
+      // modern async agents).
+      class Async {
+        @traceAgent()
+        async boom(): Promise<never> {
+          throw new RangeError("async-boom");
+        }
+      }
+      let caught: unknown;
+      try {
+        await new Async().boom();
+      } catch (e) {
+        caught = e;
+      }
+      expect((caught as Error).message).toBe("async-boom");
+      await getDefaultClient().flush();
+      const call = _flattenEvents().find(
+        (e) => e.eventType === "agent_call" && e.payload.error_type === "RangeError",
+      );
+      expect(call?.payload.status).toBe("error");
+      expect(call?.payload.error_type).toBe("RangeError");
+      expect(call?.payload.error_message).toBe("async-boom");
+    },
+  );
 });
 
 function _flattenEvents(): TelemetryEvent[] {
