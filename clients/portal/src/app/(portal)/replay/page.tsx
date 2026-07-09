@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef, useMemo } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo , Suspense} from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useOrg } from "@/hooks/use-org";
@@ -122,7 +122,7 @@ function formatTimestamp(ts: string): string {
   return d.toLocaleTimeString() + "." + String(d.getMilliseconds()).padStart(3, "0");
 }
 
-export default function ReplayPage() {
+function ReplayPageInner() {
   const { currentOrg } = useOrg();
   const toast = useToast();
   const searchParams = useSearchParams();
@@ -1025,5 +1025,19 @@ function SessionTreeView({
         })}
       </div>
     </div>
+  );
+}
+
+
+// Wrap ReplayPageInner in a Suspense boundary because it reads
+// ``useSearchParams()``. Without the boundary Next.js cannot
+// statically optimise the page and the RSC prefetch
+// (``?._rsc=...``) returns a partial / erroring payload, which
+// surfaces in the browser console as a 404.
+export default function ReplayPage() {
+  return (
+    <Suspense fallback={null}>
+      <ReplayPageInner />
+    </Suspense>
   );
 }

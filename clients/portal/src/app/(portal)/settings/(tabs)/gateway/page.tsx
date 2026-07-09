@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect , Suspense} from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Loader2 } from "lucide-react";
 
@@ -14,7 +14,7 @@ import { Loader2 } from "lucide-react";
  * redirect to ``/settings?tab=gateway`` which the page
  * interprets.
  */
-export default function GatewaySettingsRedirect() {
+function GatewaySettingsRedirectInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -38,5 +38,19 @@ export default function GatewaySettingsRedirect() {
       <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
       Redirecting to AI Gateway settings…
     </div>
+  );
+}
+
+
+// Wrap GatewaySettingsRedirectInner in a Suspense boundary because it reads
+// ``useSearchParams()``. Without the boundary Next.js cannot
+// statically optimise the page and the RSC prefetch
+// (``?._rsc=...``) returns a partial / erroring payload, which
+// surfaces in the browser console as a 404.
+export default function GatewaySettingsRedirect() {
+  return (
+    <Suspense fallback={null}>
+      <GatewaySettingsRedirectInner />
+    </Suspense>
   );
 }

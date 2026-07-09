@@ -44,6 +44,8 @@ import {
   CreditCard,
   FileText,
   User,
+  FileSpreadsheet,
+  Tag,
   type LucideIcon,
 } from "lucide-react";
 
@@ -56,6 +58,11 @@ export interface SidebarItem {
   label: string;
   /** Lucide icon component. */
   icon: LucideIcon;
+  /** Short one-line description shown in the sidebar tooltip so the
+   *  user knows "what is this page for" without clicking. Plain
+   *  language, no jargon — e.g. "See what every AI call is doing"
+   *  rather than "Distributed tracing explorer". */
+  description?: string;
   /** Optional badge text shown next to the label (e.g. "new", "beta"). */
   badge?: string;
   /** Nested items (rendered as a sub-group under the parent). */
@@ -67,54 +74,76 @@ export interface SidebarItem {
 }
 
 export interface SidebarGroup {
-  id: "build" | "observe" | "optimize" | "automate" | "admin";
+  id: "build" | "observe" | "optimize" | "automate" | "workspace";
   label: string;
   items: SidebarItem[];
 }
 
+// "Build" surfaces things you construct: dashboard, agents, the builder,
+// marketplace. Dataset / labeling tools (curate labelled eval sets) live
+// here because they're authoring actions — not analysis.
+//
+// "Observe" is the answer to "what happened" — traces, replay,
+// observability hub + advanced surfaces, alerts, incidents, the
+// derived analysis (insights, tools, inspector).
+//
+// "Optimize" is the answer to "make it cheaper / better" — cost
+// surfaces, custom metrics, guardrails.
+//
+// "Automate" is the answer to "ship the fix" — autonomous loops, PR
+// suggestions, closed-loop improvements.
+//
+// "Workspace" collects settings / members / billing / docs / profile
+// so the IA reads top-to-bottom as: build → observe → optimize →
+// automate → workspace, and the user only needs to scan 5 group labels.
 export const DEFAULT_SIDEBAR: SidebarGroup[] = [
   {
     id: "build",
     label: "Build",
     items: [
-      { id: "dashboard",   href: "/dashboard",    label: "Dashboard",     icon: LayoutDashboard },
-      { id: "agents",      href: "/agents",       label: "Agents",        icon: Bot },
-      { id: "connect",     href: "/agents/connect", label: "Connect repo", icon: GitBranch },
-      { id: "builder",     href: "/builder",      label: "Builder",       icon: Wand2 },
-      { id: "marketplace", href: "/marketplace",  label: "Marketplace",   icon: Box },
-      { id: "multi-agent", href: "/multi-agent",  label: "Multi-Agent",   icon: Network, badge: "beta" },
-      // Sandbox sidebar entry removed 2026-07-04 — subsystem retired.
+      { id: "dashboard",   href: "/dashboard",      label: "Dashboard",     icon: LayoutDashboard },
+      { id: "agents",      href: "/agents",         label: "Agents",        icon: Bot , description: "Manage AI agents: connect repos, view runs, edit prompts, and configure tools."},
+      { id: "datasets",    href: "/datasets",       label: "Datasets",      icon: FileSpreadsheet , category: "advanced", description: "Curate labelled evaluation datasets used to score and improve agents."},
+      { id: "labeling",    href: "/labeling",       label: "Labeling",      icon: Tag , category: "advanced", description: "Label traces and events to build ground truth for evals and fine-tunes."},
+      { id: "connect",     href: "/agents/connect", label: "Connect repo",  icon: GitBranch , category: "advanced", description: "Link a GitHub repo so Eden can read your code and open integration PRs."},
+      { id: "builder",     href: "/builder",        label: "Builder",       icon: Wand2 , description: "Visually design agent workflows, tool calls, and routing logic."},
+      { id: "marketplace", href: "/marketplace",    label: "Marketplace",   icon: Box , description: "Browse and install pre-built agents, tools, and integrations from the catalog."},
+      { id: "multi-agent", href: "/multi-agent",    label: "Multi-Agent",   icon: Network, badge: "beta" , category: "advanced", description: "Orchestrate multiple agents that collaborate on a shared task (beta)."},
     ],
   },
   {
     id: "observe",
     label: "Observe",
     items: [
-      { id: "traces",   href: "/traces",   label: "Trace Explorer", icon: Layers },
-      { id: "replay",   href: "/replay",   label: "Replay",         icon: PlayCircle },
+      // Renamed 2026-07-06: "Trace Explorer" → "Traces" to match the
+      // /traces URL and the user's mental model (one trace = one row).
+      // "Trace Explorer" implied a debugger that was different from the
+      // top-level /observability hub, which was confusing.
+      { id: "traces",   href: "/traces",   label: "Traces",  icon: Layers },
+      { id: "replay",   href: "/replay",   label: "Replay",  icon: PlayCircle , description: "Step through a recorded session to see exactly what the agent saw and did."},
       {
         id: "observability",
         href: "/observability",
-        label: "Observability",
+        label: "Observability hub",
         icon: Activity,
         children: [
-          { id: "obs-apm",         href: "/observability/apm",         label: "APM Tracing",     icon: GitBranch, category: "advanced" },
-          { id: "obs-cohorts",     href: "/observability/cohorts",     label: "Columnar Engine", icon: Database, category: "advanced" },
-          { id: "obs-decisions",   href: "/observability/decisions",   label: "Decisions",       icon: Compass, category: "advanced" },
-          { id: "obs-eval",        href: "/observability/eval",        label: "Eval",            icon: BarChart3, category: "advanced" },
-          { id: "obs-memory",      href: "/observability/memory",      label: "Memory",          icon: Brain, category: "advanced" },
-          { id: "obs-query",       href: "/observability/query",       label: "Query",           icon: Sparkles, category: "advanced" },
-          { id: "obs-retrieval",   href: "/observability/retrieval",   label: "Retrieval",       icon: Network, category: "advanced" },
-          { id: "obs-time-travel", href: "/observability/time-travel", label: "Time-Travel",     icon: History, category: "advanced" },
+          { id: "obs-apm",         href: "/observability/apm",         label: "APM Tracing",     icon: GitBranch, category: "advanced" , description: "Application-performance tracing across services and AI calls."},
+          { id: "obs-cohorts",     href: "/observability/cohorts",     label: "Columnar Engine", icon: Database, category: "advanced" , description: "Run fast columnar analytics over spans, traces, and decisions."},
+          { id: "obs-decisions",   href: "/observability/decisions",   label: "Decisions",       icon: Compass, category: "advanced" , description: "Inspect what an agent decided and why, with policy and prompt context."},
+          { id: "obs-eval",        href: "/observability/eval",        label: "Eval",            icon: BarChart3, category: "advanced" , description: "Score traces against evals to measure quality and regressions."},
+          { id: "obs-memory",      href: "/observability/memory",      label: "Memory",          icon: Brain, category: "advanced" , description: "Inspect the memory store an agent reads from and writes to."},
+          { id: "obs-query",       href: "/observability/query",       label: "Query",           icon: Sparkles, category: "advanced" , description: "Ad-hoc query the trace corpus with natural language or SQL."},
+          { id: "obs-retrieval",   href: "/observability/retrieval",   label: "Retrieval",       icon: Network, category: "advanced" , description: "Debug retrieval-augmented generation: chunks, scores, and grounding."},
+          { id: "obs-time-travel", href: "/observability/time-travel", label: "Time-Travel",     icon: History, category: "advanced" , description: "Reconstruct the state of an agent at any point in a past run."},
         ],
       },
-      { id: "tools",     href: "/tools",     label: "Tools",     icon: Wrench, category: "advanced" },
-      { id: "insights",  href: "/insights",  label: "Insights",  icon: Brain },
-      { id: "inspector", href: "/inspector", label: "Inspector", icon: Compass, category: "advanced" },
-      { id: "incidents", href: "/incidents", label: "Incidents", icon: AlertOctagon },
-      { id: "alerts",    href: "/alerts",    label: "Alerts",    icon: Bell },
-      { id: "llmops",    href: "/llmops",    label: "LLMOps",    icon: Cog, category: "advanced" },
-      { id: "analytics", href: "/analytics", label: "Analytics", icon: BarChart3, category: "advanced" },
+      { id: "tools",     href: "/tools",     label: "Tools",     icon: Wrench, category: "advanced" , description: "See which tools your agents call most, compare success rates, and get recommendations."},
+      { id: "insights",  href: "/insights",  label: "Insights",  icon: Brain , description: "AI-generated summaries of trends, anomalies, and what to look at next."},
+      { id: "inspector", href: "/inspector", label: "Inspector", icon: Compass, category: "advanced" , description: "Deep-dive into a single trace to debug behaviour, token usage, and tool I/O."},
+      { id: "incidents", href: "/incidents", label: "Incidents", icon: AlertOctagon , description: "Clustered failures and anomalies grouped by root cause."},
+      { id: "alerts",    href: "/alerts",    label: "Alerts",    icon: Bell , description: "Configure notifications when traces, costs, or quality cross a threshold."},
+      { id: "llmops",    href: "/llmops",    label: "LLMOps",    icon: Cog, category: "advanced" , description: "Operational controls for LLM providers, rate limits, and fallbacks."},
+      { id: "analytics", href: "/analytics", label: "Analytics", icon: BarChart3, category: "advanced" , description: "Cross-cutting analytics: usage, cost, latency, and quality over time."},
     ],
   },
   {
@@ -127,13 +156,13 @@ export const DEFAULT_SIDEBAR: SidebarGroup[] = [
         label: "Cost",
         icon: Sparkles,
         children: [
-          { id: "opt-outcomes",   href: "/optimization/outcomes",     label: "Outcomes",    icon: Compass },
-          { id: "opt-predict",    href: "/optimization/predict",      label: "Predictive",  icon: BarChart3 },
-          { id: "opt-advisor",    href: "/optimization/model-advisor", label: "Model Advisor", icon: Brain, badge: "new" },
+          { id: "opt-outcomes",   href: "/optimization/outcomes",      label: "Outcomes",     icon: Compass , category: "advanced", description: "Business-outcome attribution from agent runs to downstream results."},
+          { id: "opt-predict",    href: "/optimization/predict",       label: "Predictive",   icon: BarChart3 , category: "advanced", description: "Forecast upcoming cost and usage based on current trajectory."},
+          { id: "opt-advisor",    href: "/optimization/model-advisor", label: "Model Advisor", icon: Brain, badge: "new" , category: "advanced", description: "Get model-routing suggestions to cut cost without hurting quality (new)."},
         ],
       },
-      { id: "studio",     href: "/studio",     label: "Custom Metrics", icon: FlaskConical, category: "advanced" },
-      { id: "guardrails", href: "/guardrails", label: "Guardrails",     icon: Shield },
+      { id: "studio",     href: "/studio",     label: "Custom Metrics", icon: FlaskConical, category: "advanced" , description: "Define custom metrics and dimensions for traces and runs."},
+      { id: "guardrails", href: "/guardrails", label: "Guardrails",     icon: Shield , description: "Block unsafe prompts, PII leaks, and policy violations before they ship."},
     ],
   },
   {
@@ -141,19 +170,19 @@ export const DEFAULT_SIDEBAR: SidebarGroup[] = [
     label: "Automate",
     items: [
       { id: "autonomous",     href: "/autonomous",     label: "Autonomous",     icon: Wand2 },
-      { id: "closed-loop",    href: "/closed-loop",    label: "Closed-Loop",    icon: Inbox, category: "advanced" },
-      { id: "pr-suggestions", href: "/pr-suggestions", label: "PR Suggestions", icon: GitPullRequestArrow, badge: "new", category: "advanced" },
+      { id: "closed-loop",    href: "/closed-loop",    label: "Closed-Loop",    icon: Inbox, category: "advanced" , description: "Closed-loop improvements — events flow from detection back to deploy."},
+      { id: "pr-suggestions", href: "/pr-suggestions", label: "PR Suggestions", icon: GitPullRequestArrow, badge: "new", category: "advanced" , description: "Auto-generated PRs that fix issues Eden finds in your repo (new)."},
     ],
   },
   {
-    id: "admin",
-    label: "Admin",
+    id: "workspace",
+    label: "Workspace",
     items: [
-      { id: "settings", href: "/settings",           label: "Settings", icon: Settings },
-      { id: "users",    href: "/users",              label: "Members",  icon: Users },
-      { id: "billing",  href: "/billing",            label: "Billing",  icon: CreditCard },
-      { id: "docs",     href: "/docs",               label: "Docs",     icon: FileText },
-      { id: "profile",  href: "/profile",            label: "Profile",  icon: User },
+      { id: "settings", href: "/settings", label: "Settings", icon: Settings },
+      { id: "users",    href: "/users",    label: "Members",  icon: Users , description: "Invite teammates and manage org members and roles."},
+      { id: "billing",  href: "/billing",  label: "Billing",  icon: CreditCard , description: "Plan, invoices, payment method, and usage-based charges."},
+      { id: "docs",     href: "/docs",     label: "Docs",     icon: FileText , description: "API reference, guides, and code examples for the Eden platform."},
+      { id: "profile",  href: "/profile",  label: "Profile",  icon: User , category: "advanced", description: "Your personal account settings, sessions, and API keys."},
     ],
   },
 ];
