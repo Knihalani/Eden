@@ -146,7 +146,7 @@ export function ClerkAuthFallback({ children, formLabel }: ClerkAuthFallbackProp
             <div className="text-[var(--text-faint)]"># install the SDK</div>
             <div className="mt-1.5">
               <span className="text-[var(--accent)]">$</span>{" "}
-              <span className="text-[var(--text-primary)]">pip install eden-ai</span>
+              <span className="text-[var(--text-primary)]">pip install eden-sdk</span>
             </div>
             <div className="mt-3 text-[var(--text-faint)]"># point your OpenAI client at the gateway</div>
             <div className="mt-1.5 break-all">
@@ -155,10 +155,10 @@ export function ClerkAuthFallback({ children, formLabel }: ClerkAuthFallbackProp
                 export OPENAI_BASE_URL=https://api.eden.dev/v1/proxy
               </span>
             </div>
-            <div className="mt-3 text-[var(--text-faint)]"># ship</div>
+            <div className="mt-3 text-[var(--text-faint)]"># review a PR-suggestion</div>
             <div className="mt-1.5">
               <span className="text-[var(--accent)]">$</span>{" "}
-              <span className="text-[var(--text-primary)]">eden-improve</span>
+              <span className="text-[var(--text-primary)]">open eden://pr-suggestions</span>
             </div>
           </div>
         </div>

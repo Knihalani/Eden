@@ -82,13 +82,13 @@ const PILLARS = [
     id: "improve",
     icon: GitPullRequest,
     badge: "Improve",
-    title: "From regression to shipped PR.",
+    title: "Reviewable PR suggestions, judges, and alerts.",
     description:
-      "/eden-improve reads failing traces, hypothesises a root cause cited to trace IDs, patches your prompt or code, runs your eval suite locally, and opens a PR. The closed loop, end-to-end.",
+      "Surface regressions the moment eval scores drift, rank candidate root causes against trace evidence, and ship a human-reviewed PR. Every action stays in your org, behind RBAC, with a full audit trail.",
     bullets: [
-      "/eden-improve — read → hypothesise → patch → eval → PR",
-      "Opens a PR only if evals pass; iterates with the failure log otherwise",
-      "Gets faster every cycle — KB-grounded, never re-debugs a known regression",
+      "PR-suggestion inbox — trace-driven patch drafts, you click & open the PR",
+      "Deterministic + LLM-as-judge evals, regression alerts, golden-dataset replays",
+      "Cost budgets, PII redaction, RBAC, audit log, scheduled export",
     ],
   },
 ];
@@ -121,24 +121,33 @@ with eden.span("agent.reasoning") as span:
     span.set_eval("quality", score=0.92, evaluator="llm-judge")`,
   },
   {
-    id: "cli",
-    label: "CLI",
-    code: `# In your project repo
-$ eden
-> /eden-improve
+    id: "auto",
+    label: "Auto-instrument",
+    code: `import eden
+from openai import OpenAI
 
-# Reads failing traces → proposes fix → runs evals → opens PR`,
+eden.configure(api_key=os.environ["EDEN_API_KEY"])
+eden.instrument()  # patches openai, anthropic, langchain, vercel-ai
+
+client = OpenAI()
+resp = client.chat.completions.create(
+    model="gpt-4o-mini",
+    messages=[{"role": "user", "content": "Hello"}],
+)
+# Every call now lands in your Eden workspace, fully traced.`,
   },
 ];
 
-// Mock trace timeline shown in the hero's right panel.
+// Live trace stream shown in the hero's right panel — a realistic
+// "agent is talking to OpenAI through Eden" timeline. Each line
+// lands in cadence with the typing animation.
 const IMPROVE_LOG = [
-  { time: "00:00", msg: "Loading recent failing traces from Eden workspace…", type: "proc" },
-  { time: "00:02", msg: "Hypothesising root causes (3 candidates ranked)…", type: "proc" },
-  { time: "00:04", msg: "Candidate: prompt brittleness on tool_call.2 (conf 0.78)", type: "" },
-  { time: "00:06", msg: "Editing prompts/system.md — adding fallback for empty tool result", type: "proc" },
-  { time: "00:09", msg: "Running eden evals — smoke: pass · quality: pass", type: "ok" },
-  { time: "00:12", msg: "Opening PR #482 — 'fix: tool_call.2 prompt brittleness'", type: "ok" },
+  { time: "00:00", msg: "ingest  POST /v1/chat/completions  model=gpt-4o-mini", type: "proc" },
+  { time: "00:00", msg: "pii-scan 4 entities redacted (email, phone, name×2)", type: "" },
+  { time: "00:01", msg: "trace  span=agent.reasoning  parent=run_8a3f", type: "" },
+  { time: "00:02", msg: "llm  812 in / 318 out  $0.00042  1.18s", type: "" },
+  { time: "00:03", msg: "judge  quality=0.91  cite=0.88  tone=0.94", type: "ok" },
+  { time: "00:03", msg: "stored  trace_8a3f…d1b  portal.edenobservability.com", type: "ok" },
 ];
 
 // Sidebar assistant mock conversation.
@@ -162,12 +171,10 @@ const ASSISTANT_TURNS = [
 const HERO_METRICS = [
   // Three product-honest anchors. Unit and label share one
   // micro-label line (mono + uppercase + tracking) so the wider
-  // strings ("end-to-end", "Drop-in gateway") don't wrap on the
-  // 3-col grid at 1440px. The accent colour reserved for the
-  // unit pulls the eye to the *kind* of number, not the magnitude.
+  // strings don't wrap on the 3-col grid at 1440px.
   { kpi: "100K",   unit: "events/mo",  label: "Free tier" },
   { kpi: "1-line", unit: "swap",        label: "Drop-in gateway" },
-  { kpi: "~12s",   unit: "regression",  label: "→ shipped PR" },
+  { kpi: "<5ms",   unit: "p99",         label: "SDK overhead" },
 ];
 
 const FAQS = [
@@ -180,31 +187,29 @@ const FAQS = [
     a: "PII is masked at ingest using your redaction rules. Raw payloads can be opted out of entirely; only structured metadata is required.",
   },
   {
-    q: "How does /eden-improve decide what to change?",
-    a: "It reads your failing traces and eval records from your workspace, ranks candidate root causes against trace evidence, and proposes the smallest patch that flips the eval. PRs only open if evals pass.",
+    q: "How do PR suggestions work?",
+    a: "When a regression is detected, the PR-suggestion inbox lists a draft patch with the failing trace, the hypothesised root cause, and the eval results. A human clicks Open PR — Eden never opens a PR autonomously.",
   },
 ];
 
 /**
  * ImprovePillar — the third pillar rendered as a wide terminal
  * strip instead of another card. The shape break tells the reader
- * that the *third* step is qualitatively different: it's not a
- * dashboard, it's an autonomous action that opens a PR. The four
- * steps map to the actual command's log output, so a developer
- * who's run the CLI recognises the rhythm.
+ * that the *third* step is qualitatively different: it's a
+ * reviewable inbox, not a dashboard. The five steps map to the
+ * real PR-suggestion flow so a developer who's seen the inbox
+ * recognises the rhythm.
  *
- * Rendered server-side; no client state. The dot-pulse on the
- * final "PR opened" line is a CSS animation in globals.css
- * (`@keyframes glow-pulse`).
+ * Rendered server-side; no client state.
  */
 function ImprovePillar({ pillar }: { pillar: typeof PILLARS[number] }) {
   const Icon = pillar.icon;
   const steps = [
-    { token: "01", label: "Read failing traces", meta: "247 traces · last 6h" },
-    { token: "02", label: "Hypothesise root cause", meta: "tool_call.2 · conf 0.78" },
-    { token: "03", label: "Patch prompts/system.md", meta: "+12 / −4 lines" },
-    { token: "04", label: "Run evals locally", meta: "smoke · quality · regression" },
-    { token: "05", label: "Open PR if evals pass", meta: "eden-bot → main · PR #482" },
+    { token: "01", label: "Detect regression", meta: "judge.score drift · −0.18" },
+    { token: "02", label: "Cluster failing traces", meta: "47 traces · last 6h" },
+    { token: "03", label: "Draft patch", meta: "prompts/system.md · +12 / −4" },
+    { token: "04", label: "Run evals locally", meta: "smoke ✓ · quality ✓ · regression ✓" },
+    { token: "05", label: "Queue for review", meta: "inbox: PR-suggestions · 1 ready" },
   ];
   return (
     <article className="mt-5 relative bg-[var(--bg-base)] border border-[var(--border-default)] rounded-xl overflow-hidden">
@@ -256,7 +261,7 @@ function ImprovePillar({ pillar }: { pillar: typeof PILLARS[number] }) {
             <span className="w-2.5 h-2.5 rounded-full bg-[var(--traffic-minimize)]" />
             <span className="w-2.5 h-2.5 rounded-full bg-[var(--traffic-zoom)]" />
             <span className="ml-3 text-[11px] text-[var(--text-muted)] tracking-wider">
-              eden — /eden-improve
+              eden — pr-suggestions
             </span>
           </div>
           <ol className="relative space-y-3">
@@ -305,11 +310,11 @@ function ImprovePillar({ pillar }: { pillar: typeof PILLARS[number] }) {
           <div className="mt-5 pt-4 border-t border-[var(--border-subtle)] flex items-center gap-2 text-[12px]">
             <span className="inline-flex h-2 w-2 rounded-full bg-[var(--terminal)] animate-[glow-pulse_2.4s_ease-in-out_infinite]" />
             <span className="text-[var(--terminal)] font-semibold">
-              PR #482 ready
+              1 suggestion queued
             </span>
             <span className="text-[var(--text-muted)]">·</span>
             <span className="text-[var(--text-muted)]">
-              evals passed · awaiting review
+              evals passed · awaiting human review
             </span>
           </div>
         </div>
@@ -342,9 +347,9 @@ export default function LandingPage() {
     if (isLoaded) router.refresh();
   }, [isLoaded, router]);
 
-  const FULL_PROMPT = "/eden-improve";
+  const FULL_PROMPT = "agent.reasoning › chat › judge › store";
 
-  // Typing animation for the /eden-improve prompt in the hero.
+  // Typing animation for the trace label in the hero.
   useEffect(() => {
     if (typed.length >= FULL_PROMPT.length) return;
     const t = setTimeout(() => {
@@ -547,8 +552,8 @@ export default function LandingPage() {
       <main>
         {/* ============================== Hero ==============================
             ui-audit 2026-07-06: terminal-as-lead composition. The
-            /eden-improve terminal IS the product's identity (it
-            literally runs the regression-to-PR pipeline in 12s).
+            the live-trace panel IS the product's identity (it
+            literally runs the regression-detection → patch → eval pipeline in seconds).
             Putting it on equal footing with the headline understates
             it. New layout: copy col-span-5, terminal col-span-7.
             On mobile the terminal still leads visually because we
@@ -588,8 +593,8 @@ export default function LandingPage() {
                 and LLM apps. Capture every call through an OpenAI-compatible
                 gateway, analyse traces in a workspace with a cited AI
                 assistant, and let{" "}
-                <CodeChip>/eden-improve</CodeChip>{" "}
-                turn regressions into shipped PRs.
+                <CodeChip>trace_8a3f</CodeChip>{" "}
+                turn regressions into reviewable patch suggestions.
               </p>
 
               <div className="flex flex-wrap items-center gap-3">
@@ -647,7 +652,7 @@ export default function LandingPage() {
               </dl>
             </div>
 
-            {/* Hero right: /eden-improve terminal panel — the lead.
+            {/* Hero right: live trace panel — the lead.
                 Slightly lifted via lg:-mt-6 so the terminal chrome
                 sits a touch above the headline baseline, giving it
                 visual primacy without resorting to scale tricks. */}
@@ -659,7 +664,7 @@ export default function LandingPage() {
                   <span className="w-2.5 h-2.5 rounded-full bg-[var(--traffic-minimize)]" />
                   <span className="w-2.5 h-2.5 rounded-full bg-[var(--traffic-zoom)]" />
                   <span className="ml-3 text-[11px] font-mono text-[var(--text-muted)] tracking-wider">
-                    eden — /eden-improve
+                    eden — live trace · gpt-4o-mini
                   </span>
                   <span className="ml-auto inline-flex items-center gap-1.5 text-[10px] font-mono uppercase tracking-[0.18em] text-[var(--terminal)]">
                     <span className="relative flex h-1.5 w-1.5">
@@ -784,7 +789,7 @@ export default function LandingPage() {
                 Point your existing OpenAI SDK at the Eden gateway. Your app
                 keeps working — every call is now traced, scored, and
                 ready for{" "}
-                <CodeChip>/eden-improve</CodeChip>
+                <CodeChip>trace_8a3f</CodeChip>
                 .
               </p>
               <ul className="flex flex-col gap-2.5 text-sm">
@@ -893,7 +898,7 @@ export default function LandingPage() {
             {/* Pillar grid — varied. Capture + Analyse stay as
               * cards (compact, list-oriented). Improve becomes a
               * full-width terminal strip that mirrors the hero's
-              * /eden-improve panel and makes the loop readable at a
+              * live-trace panel and makes the loop readable at a
               * glance. The arrow ribbon stays at the bottom as the
               * sequence cue. The shape break is deliberate: three
               * identical cards would read as a feature list, not as
@@ -940,8 +945,8 @@ export default function LandingPage() {
             </div>
 
             {/* Improve strip — terminal-flavoured wide card with a
-              * four-step log that maps /eden-improve's actual
-              * sequence: read → hypothesise → patch → eval → PR.
+              * four-step log that maps the actual
+              * sequence: detect → cluster → draft → eval → review.
               * Same visual language as the hero panel, so the page
               * reads as a coherent system rather than three
               * siblings. */}
@@ -960,7 +965,7 @@ export default function LandingPage() {
           </div>
         </section>
 
-        {/* ============================== /eden-improve Spotlight ============================== */}
+        {/* ============================== PR-suggestions Spotlight ============================== */}
         <section id="improve" className="py-20 md:py-28 px-6">
           <div className="max-w-7xl mx-auto">
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 items-center">
@@ -970,25 +975,25 @@ export default function LandingPage() {
                   className="text-3xl md:text-4xl font-bold text-[var(--text-primary)] tracking-tight mb-4"
                   style={{ letterSpacing: "-0.03em", lineHeight: 1.08 }}
                 >
-                  From &ldquo;this regression&rdquo; to{" "}
+                  From &ldquo;regression detected&rdquo; to{" "}
                   <span className="text-[var(--accent)]">
-                    &ldquo;this PR&rdquo;
+                    &ldquo;patch ready for review&rdquo;
                   </span>
                 </h2>
                 <p className="text-[var(--text-secondary)] mb-5 leading-relaxed">
-                  Helicone and Langfuse show you traces. Eden ships the fix.
-                  The{" "}
-                  <CodeChip>/eden-improve</CodeChip>{" "}
-                  command reads failing traces and eval results from your
-                  workspace, proposes a patch to your prompt or code, runs
-                  your eval suite, and opens a PR.
+                  Other tools show you traces. Eden turns them into a
+                  reviewable patch. When a judge score drifts, the
+                  PR-suggestion inbox queues a draft patch with the
+                  failing traces, the hypothesised root cause, and
+                  eval results — you stay in the loop on the
+                  open-PR decision.
                 </p>
                 <ul className="flex flex-col gap-3 mb-7">
                   {[
                     "Hypothesises root causes — cited to trace IDs and eval records",
                     "Patches prompt or code, then runs your evals locally",
-                    "Opens a PR only if evals pass; iterates with the failure log otherwise",
-                    "Gets faster every cycle — KB-grounded, never re-debugs a known regression",
+                    "Queues the patch in your inbox — humans decide what ships",
+                    "Full audit trail: who saw the suggestion, who opened the PR, who merged",
                   ].map((b) => (
                     <li
                       key={b}
@@ -1003,7 +1008,7 @@ export default function LandingPage() {
                   href="/docs"
                   className="inline-flex items-center gap-2 text-sm font-medium text-[var(--accent)] hover:text-[var(--accent-hover)]"
                 >
-                  Read the /eden-improve docs
+                  Read the PR-suggestions docs
                   <ArrowRight className="w-4 h-4" />
                 </Link>
               </div>
@@ -1016,7 +1021,7 @@ export default function LandingPage() {
                     <span className="w-2.5 h-2.5 rounded-full bg-[var(--traffic-minimize)]" />
                     <span className="w-2.5 h-2.5 rounded-full bg-[var(--traffic-zoom)]" />
                     <span className="ml-3 text-[11px] font-mono text-[var(--text-muted)]">
-                      eden — PR #482 ready
+                      eden — PR-suggestion · ready for review
                     </span>
                   </div>
                   <div className="p-5 md:p-6 font-mono text-[13px]">
@@ -1024,11 +1029,11 @@ export default function LandingPage() {
                     <div className="flex items-center gap-3 pb-4 border-b border-[var(--border-subtle)]">
                       <GitPullRequest className="w-4 h-4 text-[var(--terminal)]" />
                       <span className="text-[var(--text-primary)] font-semibold">
-                        fix: tool_call.2 prompt brittleness
+                        judge.score drift · plan: tool_call.2
                       </span>
                       <span className="ml-auto inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-[var(--terminal)]/10 border border-[var(--terminal)]/30 text-[10px] font-mono uppercase tracking-wider text-[var(--terminal)]">
                         <Check className="w-3 h-3" />
-                        merged-ready
+                        awaiting review
                       </span>
                     </div>
                     {/* Timeline steps */}
@@ -1183,7 +1188,7 @@ export default function LandingPage() {
                         className="inline-flex items-center gap-1.5 text-xs text-[var(--accent)] hover:text-[var(--accent-hover)] bg-[var(--accent)]/5 border border-[var(--accent)]/20 rounded-md px-2.5 py-1.5 transition-colors"
                       >
                         <GitPullRequest className="w-3 h-3" />
-                        Open a /eden-improve run
+                        Open the PR-suggestion inbox
                         <ArrowRight className="w-3 h-3" />
                       </button>
                     </div>
@@ -1223,7 +1228,7 @@ export default function LandingPage() {
                   {[
                     { icon: Search, body: "Queries your real traces, spans, and eval records — not the public web" },
                     { icon: FileText, body: "Every answer cites the trace ID or eval record behind the claim" },
-                    { icon: Sparkles, body: "Suggests a /eden-improve run when it spots a regression you could ship a fix for" },
+                    { icon: Sparkles, body: "Suggests a PR-suggestion when it spots a regression you could ship a fix for" },
                   ].map((b) => {
                     const Icon = b.icon;
                     return (
@@ -1352,10 +1357,10 @@ export default function LandingPage() {
                   </div>
                   <ol className="space-y-3.5">
                     {[
-                      { n: 1, k: "INSTALL", v: "pip install eden-ai",         sub: "1-line proxy drop-in" },
+                      { n: 1, k: "INSTALL", v: "pip install eden-sdk",         sub: "1-line proxy drop-in" },
                       { n: 2, k: "CAPTURE",  v: "every LLM call",              sub: "traces, cost, latency" },
                       { n: 3, k: "EVAL",     v: "judge + regression suite",    sub: "runs on every commit" },
-                      { n: 4, k: "SHIP",     v: "/eden-improve opens a PR",    sub: "cited to trace IDs" },
+                      { n: 4, k: "REVIEW",   v: "open the PR",                  sub: "human-in-the-loop" },
                     ].map((step) => (
                       <li key={step.n} className="flex items-start gap-3">
                         <span

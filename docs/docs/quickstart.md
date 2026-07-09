@@ -98,58 +98,6 @@ class Greeter {
 new Greeter().greet("Say hello in five languages");
 ```
 
-### Go
-
-```go
-package main
-
-import (
-    "context"
-    "os"
-    eden "github.com/eden-ai/eden-go"
-    "github.com/eden-ai/eden-go/openai"
-    openaipkg "github.com/sashabaranov/go-openai"
-)
-
-func main() {
-    eden.Configure(eden.ConfigFromEnv())
-
-    inner := openaipkg.NewClient(os.Getenv("OPENAI_API_KEY"))
-    client := openai.Wrap(inner)
-
-    resp, err := client.CreateChatCompletion(context.Background(), openaipkg.ChatCompletionRequest{
-        Model: openaipkg.GPT4oMini,
-        Messages: []openaipkg.ChatCompletionMessage{{
-            Role: openaipkg.ChatMessageRoleUser,
-            Content: "Say hello in five languages",
-        }},
-    })
-    if err != nil {
-        panic(err)
-    }
-    println(resp.Choices[0].Message.Content)
-}
-```
-
-### Rust
-
-```rust
-use eden::{openai, Client, Config};
-
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let cfg = Config::from_env()?;
-    let client = Client::new(cfg)?;
-
-    let response = openai::wrap(&client, "gpt-4o-mini", &serde_json::json!({
-        "choices": [{"message": {"role": "assistant", "content": "Hello"}}],
-    })).await?;
-
-    println!("{response}");
-    Ok(())
-}
-```
-
 ## 4. See it in the portal
 
 Open the portal's **Traces** tab. Your trace appears within a second.

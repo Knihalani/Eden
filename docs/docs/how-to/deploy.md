@@ -147,8 +147,8 @@ The `northflank.yml` declares:
 - `eden-api` (the FastAPI service)
 - `eden-portal` (the Next.js service)
 - `eden-postgres` (the Postgres addon; if your account can't add
-  addons, swap for Neon / Supabase — see the
-  [Neon cutover notes](eden_neon_cutover_jun17_2026))
+  addons, swap for Neon / Supabase — cutover runbook lives at
+  `docs/deploy/cutover-checklist.md` in the repo)
 - `eden-jobs-runner` (background worker)
 - `eden-jobs-cron` (scheduled jobs)
 

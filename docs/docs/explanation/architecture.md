@@ -16,8 +16,8 @@ This page explains why it's shaped that way.
 ```
                                     ┌─────────────────────┐
    ┌─────────────┐                  │   Eden API (FastAPI)│
-   │ SDK (Py/TS/ │  POST /ingest    │                     │
-   │ Go/Rust)    │ ───────────────▶ │  ┌───────────────┐  │
+   │ SDK (Py/TS) │  POST /ingest    │                     │
+   │             │ ───────────────▶ │  ┌───────────────┐  │
    └─────────────┘                  │  │  Telemetry    │  │
                                     │  │  Collector    │  │
    ┌─────────────┐                  │  └───────┬───────┘  │

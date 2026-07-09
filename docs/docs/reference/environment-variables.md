@@ -39,7 +39,6 @@ CLI.
 | `EDEN_CODE_CHANGE_ENABLED` | `false` | API | Cat 23 master switch |
 | `EDEN_DEBUG` | `false` | Python SDK | Verbose logging |
 | `EDEN_ENV` | `default` | SDKs | Realm label |
-| `EDEN_FLUSH_INTERVAL_MS` | 1000 | Go SDK | |
 | `EDEN_LLM_AS_JUDGE_DEFAULT_MODEL` | `gpt-4o-mini` | API | |
 | `EDEN_LLM_AS_JUDGE_OPT_IN` | `false` | API | Off by default |
 | `EDEN_LLM_AS_JUDGE_PER_ORG_RPM` | 60 | API | |

@@ -395,9 +395,8 @@ function DocsPageInner() {
                   <p className="text-[var(--text-secondary)] leading-relaxed">
                     Eden is the observability + improvement platform for AI agents and LLM
                     apps. These docs cover the core API surface: the OpenAI-compatible
-                    gateway, the SDKs, the workspace endpoints, and the{" "}
-                    <CodeChip size="sm">/eden-improve</CodeChip>{" "}
-                    CLI agent. All endpoints require authentication via JWT cookie.
+                    gateway, the SDKs, the workspace endpoints, and the PR-suggestion
+                    inbox. All endpoints require authentication via JWT cookie.
                   </p>
                 </div>
 
@@ -413,14 +412,11 @@ function DocsPageInner() {
                     Introduction
                   </h2>
                   <p className="text-[var(--text-secondary)] leading-relaxed">
-                    Eden is delivered as three pillars: <strong>Observability</strong>{" "}
+                    Eden is delivered as two pillars: <strong>Observability</strong>{" "}
                     (OpenAI-compatible gateway + Python/TypeScript SDKs that capture every
-                    LLM call), the <strong>Web platform</strong> (org management,
-                    visualisations, data export, and a persistent AI assistant sidebar), and
-                    the <strong>CLI coding agent</strong> with the flagship{" "}
-                    <CodeChip size="sm">/eden-improve</CodeChip>{" "}
-                    command that turns failing traces into shipped PRs. The three pillars
-                    close the loop: capture, analyse, improve.
+                    LLM call) and the <strong>Web platform</strong> (org management,
+                    visualisations, data export, a persistent AI assistant sidebar, and a
+                    PR-suggestion inbox where humans review and ship proposed patches).
                   </p>
                 </div>
 
@@ -432,7 +428,7 @@ function DocsPageInner() {
                     <li>Create an account or sign in</li>
                     <li>Point your existing OpenAI SDK at Eden&apos;s gateway (one-line change)</li>
                     <li>Browse captured traces, costs, and eval scores in the portal</li>
-                    <li>Install <CodeChip size="sm">eden</CodeChip> CLI and run <CodeChip size="sm">/eden-improve</CodeChip> to ship a fix</li>
+                    <li>Open the PR-suggestion inbox to review and ship proposed patches</li>
                   </ol>
                 </div>
               </section>}

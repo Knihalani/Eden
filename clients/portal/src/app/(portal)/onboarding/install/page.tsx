@@ -20,7 +20,7 @@ type Lang = "python" | "typescript";
 
 const SNIPPETS: Record<Lang, { install: string; init: string }> = {
   python: {
-    install: "pip install eden-ai",
+    install: "pip install eden-sdk",
     init: `import os
 import eden
 
