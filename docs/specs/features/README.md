@@ -1,6 +1,7 @@
 # Feature Implementation Specs
 
 > **Master:** [`../FEATURE-GAP-MASTER.md`](../FEATURE-GAP-MASTER.md)  
+> **Autonomous model:** [`../AUTONOMOUS-MAINTENANCE.md`](../AUTONOMOUS-MAINTENANCE.md)  
 > **Performance SLAs:** [`../PERFORMANCE-COST-STANDARDS.md`](../PERFORMANCE-COST-STANDARDS.md)  
 > **Market thesis:** [`../MARKET-HYPOTHESES.md`](../MARKET-HYPOTHESES.md)
 
@@ -9,8 +10,8 @@
 | Category | Count |
 |---|---|
 | F-features (parity) | 24 |
-| N-features (differentiation + platform) | 19 |
-| **Total** | **43** |
+| N-features (differentiation + platform + autonomous) | 22 |
+| **Total** | **46** |
 
 ## Mandatory in every spec
 
@@ -18,19 +19,30 @@
 - Cost model ($/1k ops or $0 deterministic)
 - Caching & degradation modes
 - Prometheus metrics
+- Normal vs autonomous behavior where applicable (N22 tiers)
 
 ## P0 ship list
 
-**N14** (blocker), F48, F28, F29, F20, N08, N16, F04, N17, F30, F22, F39, F41, N15, N01, N07
+**N14** (blocker), **N22** (autonomy gate), F48, F28, F29, F20, N08, N16, F04, N17, F30, F22, F39, F41, N15, N01, N20, N07
 
-## New: production maintenance stand-outs (N14–N19)
+## Autonomous maintenance (N20–N22)
+
+| ID | Why it matters |
+|---|---|
+| N22 | **Graded autonomy** — T0–T4 per action, compliance presets, spend caps |
+| N20 | Issue-triggered autonomous patches (Cat 23 → F29 inbox) |
+| N21 | Self-heal execute path (rollback/reweight/cache_bust) |
+
+See [`../AUTONOMOUS-MAINTENANCE.md`](../AUTONOMOUS-MAINTENANCE.md).
+
+## Production maintenance stand-outs (N14–N19)
 
 | ID | Why it matters |
 |---|---|
 | N14 | Activates ETEC/StatGate/worker — **unblocks moats** |
 | N15 | Evals become live gateway guardrails (shipped EvalToGuardrailLink) |
 | N16 | 80% cost cut, keep all failures |
-| N17 | Single improvement queue for operators |
+| N17 | Single improvement queue (operator + autonomous columns) |
 | N18 | Auto prompt evolution + canary (shipped evolver) |
 | N19 | KB compounding with safe two-speed promotion |
 
@@ -46,11 +58,11 @@ See [`../PRODUCTION-MAINTENANCE-STANDOUT.md`](../PRODUCTION-MAINTENANCE-STANDOUT
 | N12 | F17 | Session timeline |
 | N13 | F38 | Transcript polish |
 
-## Deepened specs (second pass)
+## Spec depth (third pass — July 2026)
 
-All 37 feature specs expanded with implementation detail + performance/cost sections.
+All **46** specs expanded with implementation detail + performance/cost sections.
 
-Hand-edited priority: F01, F03, F04, F06, F09, F20, F28–F30, F22, F41, F46, F47, F48, N01–N13.
+**Fully deepened:** F01, F03, F04, F06, F09, F20, F21, F28–F30, F22, F33–F35, F39–F42, F44, F46–F48, N01–N22.
 
 ## Generator
 

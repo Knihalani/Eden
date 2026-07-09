@@ -9,7 +9,7 @@
 | **Eden status** | **MISSING** |
 | **Competitive source** | All four (capstone) |
 | **Closes gap** | 5.1 |
-| **Dependencies** | F20, F28, F29, F30, F22, F39, F41, N01, F47 |
+| **Dependencies** | F20, F28, F29, F30, F22, F39, F41, N01, F47, **N22, N20, N21, N18, N19** |
 
 ---
 
@@ -33,6 +33,8 @@ Wire disconnected hooks into one **issue state machine** that drives detect → 
 | `src/eden/issues/` | — | **MISSING** |
 
 **F46 builds orchestrator; N17 provides operator UX** — complementary, not duplicate.
+
+**Autonomous maintenance:** F46 is the **state machine** that N20/N21/N18 plug into. Every autonomous side effect passes `N22.may()` before transition. See [`AUTONOMOUS-MAINTENANCE.md`](../AUTONOMOUS-MAINTENANCE.md).
 
 ---
 
@@ -61,9 +63,26 @@ Wire disconnected hooks into one **issue state machine** that drives detect → 
        └──────┬──────┘          └───────────┘
               │ nudge author (F39) + regression case (N01)
        ┌──────▼──────┐
-       │  LEARNING   │ (optional shadow nudge)
+       │  LEARNING   │ (optional shadow nudge + N19 KB)
        └─────────────┘
 ```
+
+### 3.1 Normal (operator-led) vs autonomous transitions
+
+| Transition | Operator mode | Autonomous mode (N22 gated) |
+|---|---|---|
+| stumble → issue | Always (F29) | Same |
+| issue → triaged | F30 on demand or auto | T1+: auto F30 ReAct |
+| triaged → fix_pending | Human opens F22 fix chat | T2: N20 propose patch; T2: F04 autofix dry_run |
+| fix_pending → verifying | Human opens PR | T4: N20 auto-merge PR after N04+N01 |
+| verifying → resolved | Human confirms | T3: auto-resolve if N01+StatGate pass |
+| resolved → learning | Manual nudge/KB | T2: F39 shadow + N19 skill draft auto |
+| any → regressed | Manual or N01 fail | T3: auto-reopen + N21 rollback suggest |
+
+**Hard rules (all tiers):**
+- F41 required for gateway-impacting promotion (nudge/guardrail)
+- N06 audit log on every transition
+- `autonomous_actions_v0=false` → N21 execute blocked regardless of tier
 
 ---
 
@@ -74,27 +93,49 @@ Wire disconnected hooks into one **issue state machine** that drives detect → 
 ```python
 class ClosedLoopOrchestrator:
     async def on_event(self, event: LoopEvent) -> None:
+        policy = await autonomy_policy.resolve(event.org_id, event.agent_id)
         match event.type:
             case "stumble_created":
                 await self._ensure_issue(event)
             case "issue_created":
-                await self._schedule_triage(event)
+                await self._schedule_triage(event, policy)
                 await self._slack_alert(event)
             case "triage_completed":
-                await self._suggest_fix_actions(event)
+                await self._suggest_fix_actions(event, policy)
+                await self._maybe_autonomous_patch(event, policy)   # N20
+                await self._maybe_autonomous_heal(event, policy)    # N21
+            case "patch_proposed":
+                await self._transition(event, "fix_pending")
+                await cockpit.notify("proposed_patch", event)
             case "pr_opened":
                 await self._schedule_verify(event)
             case "verify_passed":
                 await self._resolve_issue(event)
-                await self._create_regression_case(event)  # N01
-                await self._author_nudge_shadow(event)     # F39
+                await self._create_regression_case(event, policy)  # N01
+                await self._author_nudge_shadow(event, policy)     # F39
+                await self._kb_flywheel_on_resolve(event, policy)  # N19
             case "verify_failed":
                 await self._regress_issue(event)
+                await self._maybe_rollback_heal(event, policy)     # N21
             case "new_stumble_on_resolved":
                 await self._reopen_issue(event)
+            case "statgate_p0":
+                await self._maybe_autonomous_heal(event, policy)    # N21 priority
+
+    async def _maybe_autonomous_patch(self, event, policy):
+        if not await autonomy_policy.may(policy, "code_patch"):
+            return
+        await issue_patch_trigger.on_issue_promoted(event.issue_id)
+
+    async def _maybe_autonomous_heal(self, event, policy):
+        if not await autonomy_policy.may(policy, "self_heal"):
+            return
+        await SelfHealer().heal_from_issue(event.issue_id)
 ```
 
 Event bus: Redis stream `eden.loop.events` (single consumer group per org shard).
+
+**Wire existing stubs:** Replace no-op `register_all_hooks()` body with `ClosedLoopOrchestrator.subscribe()` — N14 activation task.
 
 ---
 
@@ -214,7 +255,26 @@ Staging walkthrough <30min:
 - [ ] Kanban board reflects live state
 - [ ] Stuck issue alert fires after 24h in fix_pending
 - [ ] Loop metrics dashboard shows completion rate
+- [ ] N22 policy denies autonomous transition with audit log (N06)
+- [ ] N20 patch_proposed event transitions issue to fix_pending
+- [ ] N21 heal on StatGate P0 queues with before_state
+- [ ] N17 receives WebSocket update within 2s of transition
+- [ ] T0 org: zero autonomous transitions; operator paths only
 
 ---
 
-*Capstone wiring spec — implements no new detection, only orchestration.*
+## 12. Autonomous maintenance matrix
+
+| Event source | F46 handler | Downstream spec |
+|---|---|---|
+| F28 stumble | `_ensure_issue` | F29 |
+| F30 triage done | `_maybe_autonomous_patch/heal` | N20, N21 |
+| N08 StatGate P0 | `_maybe_autonomous_heal` | N21 |
+| N20 patch ready | `patch_proposed` → fix_pending | N17 inbox |
+| N04 impact pass + N01 pass | verify_passed (T4) | N20 auto-merge |
+| N18 canary success | promotion via F41 | N15/F39 |
+| N19 issue resolved | `_kb_flywheel_on_resolve` | KB draft |
+
+---
+
+*Capstone wiring spec — orchestrates normal + autonomous maintenance. See N22, N17, [AUTONOMOUS-MAINTENANCE.md](../AUTONOMOUS-MAINTENANCE.md).*
