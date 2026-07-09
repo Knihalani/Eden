@@ -46,10 +46,30 @@ function getPath(obj: unknown, ...path: string[]): unknown {
 function coerceInt(value: unknown): number | null {
   if (value == null) return null;
   if (typeof value === "boolean") return null;
-  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "number") {
+    // Reject NaN / infinity. Whole-number floats (the typical
+    // JSON-decoded ``1.0``) round-trip cleanly; fractional
+    // floats (``0.7``) are dropped rather than silently
+    // rounded down to ``0`` and under-billed. The previous
+    // code returned any finite number, which let
+    // ``coerceInt(0.7) === 0.7`` propagate through to
+    // ``input_tokens`` and bill a call for a fractional token.
+    // Mirrors the Python SDK's ``_coerce_int`` (which has
+    // been strict since the 0.2.9 release); the two SDKs
+    // now agree on what counts as a valid token count.
+    if (!Number.isFinite(value)) return null;
+    if (value !== Math.trunc(value)) return null;
+    return value;
+  }
   if (typeof value === "string") {
+    // Some providers serialise floats as strings
+    // (``"1.0"``); accept those but reject fractional
+    // strings (``"0.7"``) and the empty string.
+    if (value === "") return null;
     const n = Number(value);
-    return Number.isFinite(n) ? n : null;
+    if (!Number.isFinite(n)) return null;
+    if (n !== Math.trunc(n)) return null;
+    return n;
   }
   return null;
 }

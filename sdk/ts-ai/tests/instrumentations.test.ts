@@ -145,6 +145,56 @@ describe("wrapOpenAI", () => {
     const completion = events.find((e) => e.eventType === "llm_completion");
     expect(completion?.payload.status).toBe("error");
     expect(completion?.payload.error_type).toBe("Error");
+    // The error message must also be captured on the wire so
+    // the portal's trace detail view can show
+    // "Error: upstream failed" instead of just "Error". The
+    // TS SDK previously only stored the class name and
+    // dropped the message, so two distinct ``Error`` throws
+    // were indistinguishable on the wire.
+    expect(completion?.payload.error_message).toBe("upstream failed");
+  });
+
+  it("captures the error message for non-Error throws (object, primitive, string)", async () => {
+    // Mirrors the trace.recordError shapes: the shared
+    // errorClass / errorMessage helpers in ``ids.ts`` must
+    // produce a usable (class, message) pair for every
+    // throw shape so a thrown ``"rate limit"`` string or
+    // ``{ code: 500 }`` object still surfaces a meaningful
+    // entry on the portal's trace detail view.
+    // ``null`` is excluded: the fake's ``createError`` is
+    // checked truthily, so a ``null`` throw would silently
+    // succeed and the test wouldn't see an error path.
+    for (const thrown of [
+      new TypeError("rate limit"),
+      "rate limit string",
+      42,
+      { code: 500, reason: "boom" },
+    ]) {
+      const fakeClient = _fakeOpenAIClient({ createError: thrown });
+      const wrapped = wrapOpenAI(fakeClient);
+      let threw = false;
+      try {
+        await wrapped.chat.completions.create({
+          model: "gpt-4o-mini",
+          messages: [],
+        });
+      } catch {
+        threw = true;
+      }
+      expect(threw).toBe(true);
+      await getDefaultClient().flush();
+      const events = _flattenEvents();
+      // Pick the most recent completion (the fake is reused
+      // across iterations, so events from previous throws
+      // are still in the queue).
+      const completions = events.filter((e) => e.eventType === "llm_completion");
+      const completion = completions[completions.length - 1];
+      expect(completion?.payload.status).toBe("error");
+      // error_type must always be a non-empty string so the
+      // portal can group by class; never ``undefined``.
+      expect(typeof completion?.payload.error_type).toBe("string");
+      expect((completion?.payload.error_type as string).length).toBeGreaterThan(0);
+    }
   });
 });
 

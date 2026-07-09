@@ -19,7 +19,7 @@
  */
 
 import { getDefaultClient } from "../client.js";
-import { randomId } from "../ids.js";
+import { errorClass, errorMessage, randomId } from "../ids.js";
 import { extractUsage, normalizeModelName } from "../tokens.js";
 import {
   SOURCE_FORMATS,
@@ -87,6 +87,7 @@ function _wrapMethod(
       let outputTokens = 0;
       let status: "success" | "error" = "success";
       let errorType: string | undefined;
+      let errorMsg: string | undefined;
       // Per-chunk usage + model. LangChain 0.1+ ``AIMessageChunk``
       // surfaces billing fields on ``usage_metadata`` and the model
       // name on ``response_metadata``. The previous implementation
@@ -111,13 +112,15 @@ function _wrapMethod(
         callResult = original.apply(this, args);
       } catch (err) {
         status = "error";
-        errorType = err instanceof Error ? err.constructor.name : "Error";
+        errorType = errorClass(err);
+      errorMsg = errorMessage(err);
         _emit({
           traceId,
           method,
           durationMs: Date.now() - start,
           status,
           errorType,
+          errorMessage: errorMsg,
           opts,
         });
         throw err;
@@ -367,13 +370,15 @@ function _wrapMethod(
     const traceId = randomId();
     let status: "success" | "error" = "success";
     let errorType: string | undefined;
+    let errorMsg: string | undefined;
     try {
       const result = original.apply(this, args);
       if (result instanceof Promise) {
         return result
           .catch((err: unknown) => {
             status = "error";
-            errorType = err instanceof Error ? err.constructor.name : "Error";
+            errorType = errorClass(err);
+            errorMsg = errorMessage(err);
             throw err;
           })
           .then((value: unknown) => {
@@ -383,6 +388,7 @@ function _wrapMethod(
               durationMs: Date.now() - start,
               status,
               errorType,
+              errorMessage: errorMsg,
               opts,
             });
             return value;
@@ -394,18 +400,21 @@ function _wrapMethod(
         durationMs: Date.now() - start,
         status,
         errorType,
+        errorMessage: errorMsg,
         opts,
       });
       return result;
     } catch (err) {
       status = "error";
-      errorType = err instanceof Error ? err.constructor.name : "Error";
+      errorType = errorClass(err);
+      errorMsg = errorMessage(err);
       _emit({
         traceId,
         method,
         durationMs: Date.now() - start,
         status,
         errorType,
+        errorMessage: errorMsg,
         opts,
       });
       throw err;
@@ -439,6 +448,7 @@ function _emit(args: {
   durationMs: number;
   status: "success" | "error";
   errorType: string | undefined;
+  errorMessage?: string | undefined;
   opts: TraceOptions;
 }): void {
   const client = getDefaultClient();
@@ -492,6 +502,7 @@ function _emitStream(args: {
   completionDurationMs: number;
   status: "success" | "error";
   errorType: string | undefined;
+  errorMessage?: string | undefined;
   opts: TraceOptions;
 }): void {
   const client = getDefaultClient();

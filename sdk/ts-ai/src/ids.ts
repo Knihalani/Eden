@@ -37,3 +37,52 @@ export function randomId(): string {
   const rand = Math.random().toString(36).slice(2, 10);
   return `${ts}${rand}`.slice(0, 24);
 }
+
+
+/**
+ * Error-class extraction shared by every instrumentation.
+ *
+ * Mirrors the Python SDK's ``repr(exc)`` flow: the Python
+ * instrumentations always store BOTH the class name (e.g.
+ * ``"TypeError"``) AND the message (e.g. ``"boom"``) so
+ * the portal's trace-detail view can show a human-readable
+ * ``"TypeError: boom"`` row. The TS instrumentations
+ * previously only stored the class name and dropped the
+ * message, so a thrown ``new Error("rate limit exceeded")``
+ * landed on the wire as just ``error_type: "Error"`` with
+ * no message. Callers couldn't tell two distinct ``Error``
+ * throws apart. The shared helper normalises the shape so
+ * every TS source format (OpenAI, Anthropic, LangChain,
+ * Vercel AI) emits ``error_type`` + ``error_message`` the
+ * same way the Python SDK does.
+ */
+export function errorClass(err: unknown): string {
+  if (err instanceof Error) return err.constructor.name;
+  if (err === null) return "null";
+  if (err === undefined) return "undefined";
+  if (typeof err === "string") return "Error";
+  if (typeof err === "number" || typeof err === "boolean")
+    return typeof err === "number" ? "Number" : "Boolean";
+  return Object.prototype.toString.call(err).slice(8, -1) || "Object";
+}
+
+export function errorMessage(err: unknown): string | undefined {
+  if (err === null || err === undefined) return undefined;
+  if (err instanceof Error) return err.message;
+  if (typeof err === "string") return err;
+  if (typeof err === "number" || typeof err === "boolean")
+    return String(err);
+  // Objects: best-effort serialise. A ``JSON.stringify``
+  // failure (e.g. circular ref) falls back to the
+  // constructor-tag so the wire always has SOMETHING
+  // readable; ``null`` is never emitted (the field is
+  // omitted instead, matching the Python SDK's
+  // ``error=repr(exc)`` which only sets the field when
+  // an exception was actually caught).
+  try {
+    const json = JSON.stringify(err);
+    return json === undefined ? undefined : json;
+  } catch {
+    return undefined;
+  }
+}
