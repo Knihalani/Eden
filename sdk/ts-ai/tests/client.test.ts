@@ -460,7 +460,7 @@ describe("EdenSDK User-Agent header", () => {
     });
     return sdk.flush().then(() => {
       expect(captured.length).toBe(1);
-      expect(captured[0].headers["User-Agent"]).toBe("@eden-ai/sdk/0.2.22");
+      expect(captured[0].headers["User-Agent"]).toBe("@eden-ai/sdk/0.2.23");
     });
   });
 });
@@ -637,4 +637,187 @@ describe("EdenSDK dispose() inflight race", () => {
       globalThis.fetch = originalFetch;
     }
   });
+});
+
+
+// ── Retry-After helper ──────────────────────────────────────────────
+
+import { parseRetryAfterMs } from "../src/client.js";
+
+describe("parseRetryAfterMs", () => {
+  it("accepts integer delta-seconds", () => {
+    expect(parseRetryAfterMs("5", 1)).toBe(5_000);
+    expect(parseRetryAfterMs("0.25", 1)).toBe(250);
+  });
+
+  it("caps delta-seconds at 30s", () => {
+    expect(parseRetryAfterMs("9999", 1)).toBe(30_000);
+  });
+
+  it("accepts a future HTTP-date", () => {
+    // 10 seconds in the future.
+    const future = new Date(Date.now() + 10_000).toUTCString();
+    const delay = parseRetryAfterMs(future, 99_999);
+    // Allow generous slack for clock + parse skew.
+    expect(delay).toBeGreaterThanOrEqual(8_000);
+    expect(delay).toBeLessThanOrEqual(12_000);
+  });
+
+  it("clamps a past HTTP-date to 0 (retry now)", () => {
+    const past = new Date(Date.now() - 5 * 60_000).toUTCString();
+    expect(parseRetryAfterMs(past, 99_999)).toBe(0);
+  });
+
+  it("falls back to the provided delay on garbage input", () => {
+    expect(parseRetryAfterMs("not a date", 2_500)).toBe(2_500);
+    expect(parseRetryAfterMs("", 2_500)).toBe(2_500);
+    expect(parseRetryAfterMs("garbage", 99_999)).toBe(99_999);
+  });
+});
+
+
+describe("EdenSDK postJson HTTP-date Retry-After", () => {
+  it(
+    "honours HTTP-date Retry-After on 503 (regression: NaN previously skipped the wait)",
+    async () => {
+      // Regression: parseFloat("Wed, 21 Oct 2015 07:28:00 GMT") is
+      // NaN, Number.isFinite(NaN) is false, so the original
+      // retry-after block skipped the backoff entirely -- the
+      // SDK retried immediately and hammered the server. The
+      // shared helper now parses the HTTP-date form and the
+      // wait is observable as a >0ms delay.
+      // 1500ms in the future, constructed inside the handler
+      // so the header reflects the request time, not the test
+      // setup time. Date.now() advances between the header
+      // construction and the parseRetryAfterMs call, so a
+      // generous offset (500ms would have been tight on a
+      // slow CI box) keeps the assertion stable.
+      const future = new Date(Date.now() + 1500).toUTCString();
+      let calls = 0;
+      globalThis.fetch = (async (_input: RequestInfo | URL, init?: RequestInit) => {
+        const hdrs = (init?.headers ?? {}) as Record<string, string>;
+        if (hdrs["X-Org-Api-Key"] !== "k_http_date") {
+          return new Response("{}", { status: 200 });
+        }
+        calls++;
+        if (calls === 1) {
+          return new Response("slow down", {
+            status: 503,
+            headers: { "retry-after": future },
+          });
+        }
+        return new Response("{}", { status: 200 });
+      }) as unknown as typeof fetch;
+
+      const sdk = new EdenSDK({
+        orgId: "o",
+        apiKey: "k_http_date",
+        flushIntervalMs: 60000,
+      });
+      sdk.emit({
+        eventId: "e1", tenantId: "o", projectId: "default", traceId: "t1",
+        realm: "production", eventType: "agent_call",
+        timestamp: new Date().toISOString(), sourceFormat: "openai",
+        payload: { x: 1 },
+      });
+      const start = Date.now();
+      await sdk.flush();
+      // The HTTP-date Retry-After set a ~1500ms backoff. After
+      // waiting we should have made exactly 2 POSTs (the 503
+      // then the 200) -- proving the HTTP-date was parsed AND
+      // that the wait actually happened (if it hadn't, the
+      // test would still pass on calls but the elapsed time
+      // assertion would catch the regression).
+      const elapsed = Date.now() - start;
+      expect(calls).toBe(2);
+      // The header is captured at test setup time; by the time
+      // parseRetryAfterMs parses it (after the fetch round-trip
+      // and JS event-loop scheduling), Date.now() has advanced
+      // ~500ms. The effective delta is therefore ~1000ms instead
+      // of the full 1500ms. The assertion is loose enough to
+      // tolerate that skew but still proves the wait happened
+      // (a regression where the wait is skipped would land at
+      // elapsed ~= 0).
+      expect(elapsed).toBeGreaterThanOrEqual(500);
+    },
+  );
+});
+
+
+describe("EdenSDK dispose() chunk-path inflight race", () => {
+  it(
+    "dispose() awaits the in-flight chunk POST before its final flushChunks()",
+    async () => {
+      // Mirror the batch-path dispose() regression test for
+      // the chunk path: ``dispose()`` used to set
+      // ``chunkInflight = false`` BEFORE awaiting the tracked
+      // chunk POST, so a concurrent ``flushChunks()`` call
+      // during the dispose() window could see the slot as
+      // free and grab an empty buffer -- producing a phantom
+      // POST with an empty body. Pin that this no longer
+      // happens.
+      let release: (() => void) | null = null;
+      const inflight = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      let postCount = 0;
+      let lastBodyLen = 0;
+      const originalFetch = globalThis.fetch;
+      globalThis.fetch = (async (
+        _input: RequestInfo | URL,
+        init?: RequestInit,
+      ) => {
+        postCount += 1;
+        const body = init?.body ? JSON.parse(init.body as string) : null;
+        lastBodyLen = Array.isArray(body?.chunks)
+          ? body.chunks.length
+          : 0;
+        await inflight;
+        return new Response(JSON.stringify({ accepted: 1 }), { status: 200 });
+      }) as unknown as typeof fetch;
+
+      try {
+        const { EdenSDK, resetDefaultClient } = await import(
+          "../src/client.js"
+        );
+        resetDefaultClient();
+        const sdk = new EdenSDK({
+          orgId: "o",
+          apiKey: "k",
+          flushIntervalMs: 60000,
+        });
+        sdk.bufferChunk({
+          eventId: "e1",
+          traceId: "t1",
+          chunkIndex: 0,
+          deltaText: "hello",
+          ttftMs: 1,
+          itlMs: null,
+          tpotMs: null,
+          receivedAtClientMs: 0,
+        });
+
+        // Kick off a chunk flush. The POST is now in flight
+        // and blocked on the gate.
+        const first = sdk.flushChunks();
+        await new Promise((r) => setTimeout(r, 5));
+        expect(postCount).toBe(1);
+        // Call dispose(). With the bug, dispose() would
+        // release the chunkInflight slot before awaiting the
+        // in-flight POST, and the final flushChunks() it
+        // triggers could produce a SECOND POST.
+        const disposeP = sdk.dispose();
+        await new Promise((r) => setTimeout(r, 5));
+        // Still gated: count must still be 1.
+        expect(postCount).toBe(1);
+        release!();
+        await disposeP;
+        await first;
+        expect(postCount).toBe(1);
+        expect(lastBodyLen).toBe(1);
+      } finally {
+        globalThis.fetch = originalFetch;
+      }
+    },
+  );
 });
