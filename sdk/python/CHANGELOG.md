@@ -4,6 +4,38 @@ All notable changes to the Eden Python SDK are documented here. The
 format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## 0.2.14 — 2026-07-09
+
+Refactor + bug-fix release.
+
+### Fixed
+- `instrumentations.autogen`: a redundant ternary in the
+  `_reply_hook` did
+  `_trace_id_or_random() if current_trace() else uuid.uuid4().hex`.
+  The helper already returns the active trace id when one is
+  present and a fresh ``uuid4().hex`` otherwise — the inline
+  condition was a no-op that just made the code harder to
+  read. Now just `_trace_id_or_random()`.
+
+### Changed
+- New shared module ``eden_sdk._instrumentation_ids`` with
+  `_trace_id_or_random` and `_get_attr`. Previously, six
+  per-framework instrumentations (``openai``, ``anthropic``,
+  ``langchain``, ``crewai``, ``autogen``, ``llama_index``)
+  each carried their own byte-identical copy of
+  `_trace_id_or_random`, and two of them (OpenAI + Anthropic)
+  also had their own copy of `_get_attr`. Duplicated code is
+  a divergence hazard: a fix to one copy would silently
+  leave the others emitting a different ``trace_id`` on the
+  wire. Mirrors the TypeScript SDK's ``sdk/ts-ai/src/ids.ts``
+  shared module. Wire shape is unchanged.
+
+### Tests
+- 5 new tests in `test_instrumentation_ids.py` pin the wire
+  shape (``uuid4().hex`` 32 lowercase hex chars), the
+  active-context short-circuit, and ``_get_attr``'s None /
+  dict / object shapes. 209/209 Python tests pass.
+
 ## 0.2.13 — 2026-07-09
 
 Bug-fix + resilience release.

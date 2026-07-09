@@ -153,6 +153,39 @@ export function resolvedGatewayUrl(cfg: ResolvedConfig): string {
   return `${base}/v1`;
 }
 
+
+/**
+ * Parse a ``Retry-After`` response header (RFC 7231).
+ *
+ * Accepts either the delta-seconds form (``"5"``) or an
+ * HTTP-date (``"Wed, 21 Oct 2015 07:28:00 GMT"``). Returns
+ * the milliseconds to wait, capped at 30s, falling back to
+ * ``fallbackMs`` on any parse failure so a malformed header
+ * never wedges the retry loop.
+ *
+ * Mirrors :meth:`EdenClient._parse_retry_after` in the Python
+ * SDK -- the two SDKs must surface identical behaviour for
+ * both header forms so a single gateway-side retry policy
+ * drives both.
+ */
+export function parseRetryAfterMs(value: string, fallbackMs: number): number {
+  // Fast path: integer / float seconds.
+  const seconds = parseFloat(value);
+  if (Number.isFinite(seconds) && seconds >= 0) {
+    return Math.min(seconds * 1000, 30_000);
+  }
+  // Slow path: HTTP-date. ``Date.parse`` accepts the RFC 1123 /
+  // 7231 format used by every real gateway and returns NaN for
+  // anything else.
+  const ts = Date.parse(value);
+  if (!Number.isFinite(ts)) return fallbackMs;
+  const delta = ts - Date.now();
+  // Past HTTP-date means "retry now" -- clamp to 0 so we don't
+  // accidentally back off further. A far-future date is capped
+  // to keep the worker responsive.
+  if (delta <= 0) return 0;
+  return Math.min(delta, 30_000);
+}
 /**
  * Per-call overrides for {@link EdenSDK.gatewayHeaders}. Mirrors
  * the kwarg shape of `EdenConfig.gateway_headers()` in the Python SDK.
@@ -465,11 +498,20 @@ export class EdenSDK {
       await this.inflightPromise;
       this.inflightPromise = null;
     }
-    this.chunkInflight = false;
+    // Wait for the in-flight chunk POST (if any) BEFORE
+    // releasing the chunkInflight slot. Mirrors the batch
+    // path above: the previous code set the flag to false
+    // BEFORE awaiting the tracked promise, so a concurrent
+    // ``flushChunks()`` call during the ``dispose()`` window
+    // could see ``chunkInflight === false`` and grab the
+    // (already-shipped) buffer -- producing a phantom POST
+    // with an empty body. The order matters: await the POST
+    // first, then release the slot.
     if (this.chunkInflightPromise) {
       await this.chunkInflightPromise;
       this.chunkInflightPromise = null;
     }
+    this.chunkInflight = false;
     await Promise.allSettled([this.flush(), this.flushChunks()]);
   }
 
@@ -596,12 +638,19 @@ export class EdenSDK {
           }
           return;
         }
-        // Honour Retry-After (seconds) or default exponential backoff.
+        // Honour Retry-After if present. RFC 7231 allows either a
+        // delta-seconds integer ("5") or an HTTP-date
+        // ("Wed, 21 Oct 2015 07:28:00 GMT"); the previous code only
+        // handled the former (parseFloat on the HTTP-date form
+        // returned NaN, Number.isFinite(NaN) was false, so the
+        // retry skipped the wait entirely -- hammering the
+        // server instead of backing off). Delegate to the shared
+        // helper so the TS and Python SDKs surface identical
+        // behaviour for both header forms.
         const ra = res.headers.get("retry-after");
-        const delayMs = ra
-          ? Math.min(parseFloat(ra) * 1000, 30_000)
-          : Math.min(BASE_DELAY_MS * 2 ** (attempt - 1), 5_000);
-        if (Number.isFinite(delayMs) && delayMs > 0) {
+        const fallbackMs = Math.min(BASE_DELAY_MS * 2 ** (attempt - 1), 5_000);
+        const delayMs = ra ? parseRetryAfterMs(ra, fallbackMs) : fallbackMs;
+        if (delayMs > 0) {
           await new Promise((r) => setTimeout(r, delayMs));
         }
       } catch (err) {

@@ -4,6 +4,46 @@ All notable changes to the Eden TypeScript SDK are documented here. The
 format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## 0.2.23 — 2026-07-09
+
+Bug-fix release.
+
+### Fixed
+- `client.EdenSDK.postJson`: parse the `Retry-After`
+  response header per RFC 7231 — accept both the
+  delta-seconds form (`"5"`) and the HTTP-date form
+  (`"Wed, 21 Oct 2015 07:28:00 GMT"`). The previous
+  implementation did `parseFloat(retryAfter) * 1000` and
+  capped with `Number.isFinite`; on an HTTP-date
+  `parseFloat` returns `NaN`, `Math.min(NaN, 30_000)` is
+  `NaN`, `Number.isFinite(NaN)` is false — so the wait
+  was skipped entirely and the retry happened immediately,
+  hammering the server. The new ``parseRetryAfterMs``
+  helper handles both forms; past HTTP-dates clamp to 0
+  ("retry now"); far-future dates are capped at 30s to
+  keep the worker responsive. Mirrors the Python SDK's
+  `_parse_retry_after` from 0.2.13 so a single
+  gateway-side retry policy drives both SDKs identically.
+- `client.EdenSDK.dispose`: reorder the chunk-path
+  teardown so the in-flight chunk POST is awaited
+  BEFORE the ``chunkInflight`` flag is released. The
+  previous order (set flag false → await promise) left
+  a window where a concurrent ``flushChunks()`` could
+  see the slot as free and produce a phantom POST with
+  an empty body. Mirrors the batch-path handling that
+  the previous fix already got right.
+
+### Tests
+- 7 new tests in `tests/client.test.ts`:
+  - 5 unit tests for ``parseRetryAfterMs`` covering
+    delta-seconds, future HTTP-date, past HTTP-date,
+    garbage input, and the 30s cap.
+  - 1 regression test pinning the HTTP-date retry path
+    end-to-end on a 503 with an HTTP-date header.
+  - 1 regression test mirroring the existing batch-path
+    dispose() inflight test for the chunk path.
+  - 163/163 TS tests pass; ``tsc --noEmit`` clean.
+
 ## 0.2.22 — 2026-07-09
 
 Refactor release.
