@@ -397,3 +397,60 @@ class TestRedactOnRealisticPayloads:
         assert redact_payload(None) is None
         assert redact_payload(42) == 42
         assert redact_payload(True) is True
+
+
+# ── PII key-collision disambiguation ─────────────────────────────────
+#
+# The previous ``_redact_value`` used a dict-comprehension that
+# silently overwrote the first entry when two distinct keys
+# redacted to the same value. A payload carrying multiple PII
+# keys (e.g. per-user metrics keyed by email) was losing data.
+
+
+def test_redact_payload_disambiguates_colliding_pii_keys() -> None:
+    """Two distinct email keys that both redact to ``[REDACTED]``
+    must NOT collide — the second entry overwrote the first in
+    the pre-fix dict-comprehension. The values are now
+    preserved by appending a numeric suffix on collision."""
+    from eden_sdk.filters import redact_payload
+
+    out = redact_payload(
+        {"alice@example.com": 5, "bob@example.com": 3}
+    )
+    # Both values present, both keys disambiguated.
+    assert out["[REDACTED]"] == 5
+    assert out["[REDACTED]_2"] == 3
+
+
+def test_redact_payload_disambiguates_three_colliding_pii_keys() -> None:
+    """Three-way collision: the suffix counter must keep
+    incrementing past ``_2`` so no value is lost."""
+    from eden_sdk.filters import redact_payload
+
+    out = redact_payload(
+        {
+            "a@example.com": 1,
+            "b@example.com": 2,
+            "c@example.com": 3,
+        }
+    )
+    assert out["[REDACTED]"] == 1
+    assert out["[REDACTED]_2"] == 2
+    assert out["[REDACTED]_3"] == 3
+
+
+def test_redact_payload_no_collision_for_distinct_keys() -> None:
+    """Non-PII keys that don't redact to the same value must
+    pass through untouched — the disambiguator is a no-op."""
+    from eden_sdk.filters import redact_payload
+
+    assert redact_payload({"foo": 1, "bar": 2}) == {"foo": 1, "bar": 2}
+
+
+def test_redact_payload_non_string_keys_pass_through() -> None:
+    """Non-string keys (e.g. integer dict keys) must not be
+    redacted and must not trip the collision logic."""
+    from eden_sdk.filters import redact_payload
+
+    out = redact_payload({1: "a", 2: "b"})
+    assert out == {1: "a", 2: "b"}

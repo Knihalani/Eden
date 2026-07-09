@@ -105,17 +105,31 @@ def extract_usage(usage: Any) -> dict[str, int | None]:
     output_tokens = _coerce_int(_get(usage, "output_tokens", "completion_tokens", "completionTokens"))
 
     cache_read_tokens: int | None = None
-    for name in ("cache_read_tokens", "cache_read_input_tokens"):
+    # Match the TypeScript SDK's key list exactly so the two
+    # SDKs surface identical billing fields regardless of
+    # which OpenAI-shaped shape the caller hands us.
+    for name in (
+        "cache_read_tokens",
+        "cache_read_input_tokens",
+        "cached_tokens",
+        "cachedTokens",
+    ):
         v = _coerce_int(_get(usage, name))
         if v is not None:
             cache_read_tokens = v
             break
     if cache_read_tokens is None:
         # OpenAI nests cached prompt tokens inside
-        # ``prompt_tokens_details.cached_tokens``.
-        details = _get(usage, "prompt_tokens_details")
-        if details is not None:
-            cache_read_tokens = _coerce_int(_get(details, "cached_tokens"))
+        # ``prompt_tokens_details.cached_tokens``. We also
+        # accept the camelCase form (``promptTokensDetails``)
+        # for parity with the TypeScript SDK.
+        for details_name in ("prompt_tokens_details", "promptTokensDetails"):
+            details = _get(usage, details_name)
+            if details is not None:
+                v = _coerce_int(_get(details, "cached_tokens") or _get(details, "cachedTokens"))
+                if v is not None:
+                    cache_read_tokens = v
+                    break
 
     cache_creation_tokens: int | None = None
     for name in ("cache_creation_tokens", "cache_creation_input_tokens"):

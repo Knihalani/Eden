@@ -407,3 +407,35 @@ describe("redactPayload edge cases", () => {
     expect(redactPayload(true)).toBe(true);
   });
 });
+
+describe("redactPayload key-collision disambiguation", () => {
+  // Regression: the previous implementation used a naive
+  // object-comprehension that silently overwrote the first
+  // entry when two distinct keys redacted to the same value.
+  // A payload carrying multiple PII keys (e.g. per-user
+  // metrics keyed by email) lost data on every redact call.
+  it("disambiguates two colliding PII keys", () => {
+    const out = redactPayload({
+      "alice@example.com": 5,
+      "bob@example.com": 3,
+    }) as Record<string, unknown>;
+    expect(out["[REDACTED]"]).toBe(5);
+    expect(out["[REDACTED]_2"]).toBe(3);
+  });
+
+  it("disambiguates three colliding PII keys", () => {
+    const out = redactPayload({
+      "a@example.com": 1,
+      "b@example.com": 2,
+      "c@example.com": 3,
+    }) as Record<string, unknown>;
+    expect(out["[REDACTED]"]).toBe(1);
+    expect(out["[REDACTED]_2"]).toBe(2);
+    expect(out["[REDACTED]_3"]).toBe(3);
+  });
+
+  it("passes through distinct non-PII keys untouched", () => {
+    const out = redactPayload({ foo: 1, bar: 2 }) as Record<string, unknown>;
+    expect(out).toEqual({ foo: 1, bar: 2 });
+  });
+});

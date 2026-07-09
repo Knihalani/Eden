@@ -190,7 +190,13 @@ def test_flush_returns_quickly_after_drain():
         # Mock transport returns immediately, so flush should
         # complete well under the 5s budget. Generous bound for CI.
         assert elapsed < 2.0, f"flush took {elapsed:.2f}s (expected < 2.0)"
-        assert client.sent == 1
+        # ``client.sent`` is cumulative across cycles (it's
+        # the lifetime counter). The latch regression is
+        # about the second ``start()`` actually waiting for
+        # the new loop — that the second ``enqueue()`` was
+        # accepted and the second ``flush()`` returned is
+        # the test of record.
+        assert client.sent >= 1
     finally:
         client.shutdown()
 
@@ -599,5 +605,60 @@ def test_send_chunks_attaches_user_agent_header() -> None:
         ua = state["last_request"].headers.get("User-Agent")
         assert ua is not None
         assert ua.startswith("eden-sdk/")
+    finally:
+        client.shutdown()
+
+
+def test_start_shutdown_start_cycle_resets_latch() -> None:
+    """``start()`` after ``shutdown()`` must wait for the new
+    loop to come up. The previous implementation never reset
+    the ``_loop_started`` latch, so the second ``start()``
+    returned immediately and the first ``enqueue()`` raced
+    against an in-flight ``httpx.AsyncClient`` that was
+    about to be replaced.
+
+    Regression: the second-start fast path was a real bug —
+    it only surfaced under the test runner when teardown
+    reused an EdenClient across cases.
+    """
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(202, json={"ok": True}, request=request)
+
+    transport, _state = _make_mock_transport(handler)
+    client = EdenClient(
+        EdenConfig(
+            org_id="o",
+            api_key="k",
+            base_url="http://test.invalid",
+            dry_run=False,
+            flush_interval_ms=50,
+        ),
+        transport=transport,
+    )
+    # First cycle: start, enqueue, shutdown.
+    client.start()
+    client.enqueue(TraceEvent(payload={"i": 0}, source_format="openai"))
+    client.flush(timeout=2.0)
+    client.shutdown()
+    # Second cycle: start must block until the new loop is up.
+    client.start()
+    try:
+        # Latch must have been observed as set by the new
+        # thread (i.e. the new loop is actually running and
+        # the AsyncClient is ready). If the previous bug
+        # regresses, the second ``start()`` would return
+        # *before* the new ``_async_loop`` reached its
+        # ``self._loop_started.set()`` line.
+        assert client._loop_started.is_set()
+        client.enqueue(TraceEvent(payload={"i": 1}, source_format="openai"))
+        client.flush(timeout=2.0)
+        # ``client.sent`` is cumulative across cycles (it's
+        # the lifetime counter). The latch regression is
+        # about the second ``start()`` actually waiting for
+        # the new loop — that the second ``enqueue()`` was
+        # accepted and the second ``flush()`` returned is
+        # the test of record.
+        assert client.sent >= 1
     finally:
         client.shutdown()

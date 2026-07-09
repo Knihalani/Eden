@@ -45,7 +45,7 @@ from eden_sdk.filters import redact_payload
 # import time; if the package is re-installed the new value
 # takes effect. The gateway logs the SDK version on every POST
 # so version drift across the fleet is visible in one place.
-__version__ = "0.2.8"
+__version__ = "0.2.9"
 _USER_AGENT = f"eden-sdk/{__version__} (python)"
 
 logger = logging.getLogger("eden_sdk.client")
@@ -177,6 +177,14 @@ class EdenClient:
                 logger.debug("eden client disabled; not starting sender")
                 return
             self._stop.clear()
+            # Reset the start latch so a fresh ``start()`` after
+            # ``shutdown()`` actually waits for the new loop
+            # to come up. Without this, the second ``start()``
+            # returned immediately because the latch was still
+            # set from the previous run, racing ``enqueue()``
+            # against an in-flight HTTP client that's about to
+            # be re-created.
+            self._loop_started.clear()
             self._thread = threading.Thread(
                 target=self._run_loop, name="eden-sdk-sender", daemon=True
             )

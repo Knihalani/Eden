@@ -4,6 +4,57 @@ All notable changes to the Eden Python SDK are documented here. The
 format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## 0.2.9 — 2026-07-09
+
+Bug-fix + parity release.
+
+### Fixed
+- `_redact_value` (PII redaction): two distinct keys that redact to
+  the same value (e.g. `"alice@..."` and `"bob@..."` both becoming
+  `"[REDACTED]"`) silently overwrote each other under the previous
+  dict-comprehension, dropping one entry on every payload that
+  carried multiple PII keys. The redacted dict now disambiguates
+  by appending a numeric suffix on collision (`[REDACTED]`, then
+  `[REDACTED]_2`, `[REDACTED]_3`, …) so per-user metrics keyed by
+  email are no longer collapsed to a single entry. The
+  disambiguator is a no-op for distinct redacted values, which
+  is the common case.
+- `EdenClient.start()` after `shutdown()` returned immediately
+  because the `_loop_started` latch was never reset. The first
+  `enqueue()` after the second `start()` raced against an
+  in-flight `httpx.AsyncClient` that was about to be re-created
+  on the new loop. `start()` now clears the latch before
+  spawning the new sender thread, so the second `start()`
+  blocks until the new loop is actually up and the new
+  AsyncClient is ready to accept traffic.
+- `extract_usage` (cache-read tokens): only the nested OpenAI
+  `prompt_tokens_details.cached_tokens` path was recognised.
+  Some OpenAI-compatible gateways (and older OpenAI SDK
+  responses) expose the same value as a top-level
+  `cached_tokens` / `cachedTokens` field, or as the camelCase
+  `promptTokensDetails.cached_tokens`. The Python SDK now
+  accepts all four shapes — bringing it to parity with the
+  TypeScript SDK, which has always accepted them.
+- `wrapAnthropic` streaming: the `message_start` handler only
+  inspected `event.message` when it was a `dict`. Modern
+  Anthropic SDKs (1.x) hand back a Pydantic model object, so the
+  model name and `input_tokens` were silently dropped on every
+  Anthropic stream. The handler now uses `_get_attr`, which
+  dispatches on the actual shape; both sync and async
+  instrumentations are fixed.
+
+### Tests
+- 4 new tests in `test_filters.py` pinning the new key-collision
+  disambiguator (two- and three-way PII key collisions, plus
+  non-colliding and non-string-key passthrough).
+- 1 new test in `test_client.py` pinning the start-shutdown-start
+  latch reset (the second `start()` must wait for the new loop
+  to come up before the first post-`shutdown()` `enqueue()` is
+  accepted).
+- 3 new tests in `test_tokens.py` pinning the four accepted
+  cache-read token shapes (top-level snake and camel, plus the
+  camel `promptTokensDetails` wrapper).
+
 ## 0.2.8 — 2026-07-09
 
 Bug-fix + observability release.
