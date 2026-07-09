@@ -4,6 +4,73 @@ All notable changes to the Eden TypeScript SDK are documented here. The
 format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## 0.2.27 — 2026-07-09
+
+Bug-fix release.
+
+### Fixed
+- All four auto-instrumentations
+  (``openai.ts``, ``anthropic.ts``, ``langchain.ts``,
+  ``vercel-ai.ts``) used to store only the **class name**
+  of a thrown error (e.g. ``error_type: "Error"``) and
+  drop the message on the wire. The Python SDK's
+  instrumentations have always captured both
+  (``error=repr(exc)``) and the trace ``recordError`` path
+  also captures the message; a thrown
+  ``new Error("rate limit")`` from a TypeScript
+  instrumented call landed on the wire as just
+  ``error_type: "Error"`` and two distinct ``Error``
+  throws were indistinguishable in the portal's trace
+  detail view. The shared ``errorClass`` /
+  ``errorMessage`` helpers (added to ``ids.ts``) are
+  now used by every catch block, so each
+  ``llm_completion`` / ``llm_completion_stream`` event
+  also carries an ``error_message`` field on the wire.
+  Mirrors the Python SDK's existing wire shape so the
+  portal renders identical error rows for events from
+  either language.
+- ``tokens.coerceInt`` (used by ``extractUsage``) used to
+  accept any finite number, including fractional
+  floats (``coerceInt(0.7) === 0.7``). The
+  ``_coerce_int`` Python helper has been strict since
+  0.2.9 and rejects fractional values; the TS path
+  silently disagreed and let ``0.7`` propagate through
+  to ``input_tokens`` and bill a call for a fractional
+  token. The shared helper now mirrors Python's
+  behaviour: whole-number floats round-trip, but
+  fractional floats and fractional strings return
+  ``null`` (and the matching field is omitted from the
+  wire payload). NaN / infinity / empty-string inputs
+  are also rejected.
+
+### Added
+- ``ids.errorClass(err)`` and ``ids.errorMessage(err)``
+  shared helpers. The class helper always returns a
+  non-empty string for any throw shape (``Error``,
+  ``null``, ``undefined``, primitives, plain objects,
+  arrays); the message helper returns ``undefined`` for
+  ``null`` / ``undefined`` and a stringified form
+  otherwise (with a ``JSON.stringify`` fallback for
+  objects so circular refs don't crash the cleanup
+  path).
+
+### Tests
+- 1 new test in ``tests/instrumentations.test.ts``:
+  ``wrapOpenAI > captures errors without breaking the
+  call`` now also asserts the message is on the wire.
+- 1 new test in ``tests/instrumentations.test.ts``:
+  ``wrapOpenAI > captures the error message for
+  non-Error throws (object, primitive, string)`` — pins
+  the four non-``Error`` throw shapes (``TypeError``,
+  string, number, plain object) all produce a non-empty
+  ``error_type`` string.
+- 4 new tests in ``tests/tokens.test.ts``:
+  ``whole-number floats round-trip as integers``,
+  ``fractional floats are dropped``,
+  ``fractional strings are dropped``,
+  ``NaN and infinities are rejected``.
+- TS: 178/178 tests pass; ``tsc --noEmit`` clean.
+
 ## 0.2.26 — 2026-07-09
 
 Bug-fix + resilience release.

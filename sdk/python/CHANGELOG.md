@@ -4,6 +4,31 @@ All notable changes to the Eden Python SDK are documented here. The
 format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## 0.2.18 — 2026-07-09
+
+No SDK changes; this release bumps the version to track
+the parallel TypeScript SDK release (0.2.27). The TS SDK
+fixes two cross-SDK parity issues the Python SDK has
+had clean since 0.2.9 / 0.2.17:
+
+* **Error message capture in auto-instrumentations** —
+  TS instrumentations
+  (``openai``, ``anthropic``, ``langchain``, ``vercel-ai``)
+  used to emit only ``error_type`` and drop the
+  message; the Python SDK has always emitted
+  ``error=repr(exc)``. TS now captures both via the
+  shared ``errorClass`` / ``errorMessage`` helpers, so
+  the wire shape is identical regardless of which
+  language emitted the event.
+* **Fractional token count rejection** — TS
+  ``coerceInt`` used to accept fractional floats
+  (``0.7``) and bill a call for a fractional token;
+  the Python ``_coerce_int`` helper has been strict
+  since 0.2.9. TS now mirrors Python and rejects
+  fractional floats and fractional strings.
+
+210/210 Python tests still pass.
+
 ## 0.2.17 — 2026-07-09
 
 Bug-fix + resilience release.
