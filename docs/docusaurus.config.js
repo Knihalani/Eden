@@ -36,7 +36,7 @@ function remarkEscapeBareLt() {
 const config = {
   title: 'Eden Docs',
   tagline: 'Observability, evaluation, governance for AI agents',
-  favicon: 'img/favicon.ico',
+  favicon: 'img/favicon.svg',
 
   url: 'https://docs.edenobservability.com',
   baseUrl: '/',
@@ -103,7 +103,11 @@ const config = {
   ],
 
   onBrokenLinks: 'warn',
-  onBrokenMarkdownLinks: 'warn',
+  markdown: {
+    hooks: {
+      onBrokenMarkdownLinks: 'warn',
+    },
+  },
 
   i18n: { defaultLocale: 'en', locales: ['en'] },
 
@@ -230,7 +234,7 @@ const config = {
         copyright: `Copyright © ${new Date().getFullYear()} Eden contributors. Built with Docusaurus.`,
       },
       prism: {
-        additionalLanguages: ['python', 'typescript', 'bash', 'sql', 'yaml', 'json', 'rust', 'go'],
+        additionalLanguages: ['python', 'typescript', 'bash', 'sql', 'yaml', 'json'],
       },
     }),
 };

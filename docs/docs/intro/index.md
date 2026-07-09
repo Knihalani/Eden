@@ -1,4 +1,5 @@
 ---
+slug: /
 id: index
 title: Eden — observability, evaluation, governance for AI agents
 description: Drop-in observability and evals for LLM applications and AI agents. OpenTelemetry-native, auto-instrumentation, deterministic judge scores, cost intelligence.
@@ -111,8 +112,6 @@ The platform ships:
     <ul>
       <li><a href="/reference/sdk-python">Python SDK</a></li>
       <li><a href="/reference/sdk-typescript">TypeScript SDK</a></li>
-      <li><a href="/reference/sdk-go">Go SDK</a></li>
-      <li><a href="/reference/sdk-rust">Rust SDK</a></li>
       <li><a href="/reference/api">REST API</a></li>
     </ul>
   </div>
@@ -163,5 +162,4 @@ eden/
 
 The two SDKs both hit the same ingestion endpoint
 (`POST /orgs/{org_id}/ingest/{format}`); they're equivalent at the
-wire level. The Go and Rust clients are in the repo but not yet
-documented for production use.
+wire level.

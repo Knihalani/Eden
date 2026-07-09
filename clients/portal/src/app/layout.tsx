@@ -39,8 +39,8 @@ const interDisplay = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "Eden — AI Environment Generation",
-  description: "AI-native environment generation system for reinforcement learning and agent evaluation",
+  title: "Eden — Observability + improvement for AI agents",
+  description: "Drop-in observability, evaluation, and reviewable PR-suggestions for LLM applications and AI agents. OpenAI-compatible gateway, deterministic judge scores, and a human-in-the-loop patch review flow.",
   applicationName: "Eden",
   // Tell crawlers (Google, Bing, etc.) not to index the portal — the
   // app is auth-gated and indexed pages would be empty/error frames

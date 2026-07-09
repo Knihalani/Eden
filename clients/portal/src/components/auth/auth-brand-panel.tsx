@@ -31,14 +31,14 @@ function mapHealth(body: unknown): HealthState {
 }
 
 // Pipeline nodes mirror the current product surface:
-//   Gateway → Workspace → /eden-improve → Shipped PR
+//   Gateway → Workspace → PR-suggestions → Review
 // Each node uses a real pipeline-stage token from globals.css so a
 // palette swap on the design-system side propagates here.
 const PIPELINE = [
   { id: "gateway", label: "Gateway", color: "var(--stage-executing)" },
   { id: "workspace", label: "Workspace", color: "var(--stage-refining)" },
-  { id: "improve", label: "/eden-improve", color: "var(--accent)" },
-  { id: "pr", label: "Shipped PR", color: "var(--stage-verifying)" },
+  { id: "improve", label: "PR-suggestions", color: "var(--accent)" },
+  { id: "pr", label: "Review", color: "var(--stage-verifying)" },
 ] as const;
 
 const FEATURES = [
@@ -52,7 +52,7 @@ const FEATURES = [
   },
   {
     icon: GitPullRequest,
-    text: "/eden-improve turns failing traces into shipped PRs",
+    text: "PR-suggestions turn failing traces into reviewable patches",
   },
 ];
 
@@ -74,7 +74,7 @@ const FOOTER_LINKS = [
  * Left half of the auth split-layout. Renders the Eden wordmark,
  * a hero headline that matches the marketing landing page's
  * positioning, a four-node "closed loop" pipeline diagram that
- * visualises the Gateway → Workspace → /eden-improve → PR flow,
+ * visualises the Gateway → Workspace → PR-suggestions → Review flow,
  * three feature bullets aligned to the current pillars, a small
  * status pill, and a footer with legal links.
  *
@@ -162,8 +162,8 @@ export function AuthBrandPanel() {
 
             <p className="text-[15px] text-[var(--text-secondary)] leading-relaxed max-w-md">
               Every LLM call through Eden&apos;s gateway, every trace queryable in your
-              workspace, every regression turned into a shipped PR by{" "}
-              <CodeChip size="md">/eden-improve</CodeChip>
+              workspace, every regression turned into a reviewable patch via{" "}
+              <CodeChip size="md">trace_8a3f</CodeChip>
               .
             </p>
           </div>
