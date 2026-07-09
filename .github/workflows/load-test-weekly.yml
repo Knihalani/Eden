@@ -19,7 +19,7 @@ jobs:
       TOKEN: ${{ secrets.STAGING_TOKEN }}
       ORG_ID: ${{ secrets.STAGING_ORG_ID }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Run k6
         uses: grafana/k6-action@v0.3.1
         with:
