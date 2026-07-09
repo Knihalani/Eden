@@ -45,7 +45,7 @@ from eden_sdk.filters import redact_payload
 # import time; if the package is re-installed the new value
 # takes effect. The gateway logs the SDK version on every POST
 # so version drift across the fleet is visible in one place.
-__version__ = "0.2.11"
+__version__ = "0.2.12"
 _USER_AGENT = f"eden-sdk/{__version__} (python)"
 
 logger = logging.getLogger("eden_sdk.client")

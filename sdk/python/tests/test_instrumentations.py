@@ -806,7 +806,7 @@ def test_langchain_streaming_state_cleaned_on_error(fake_langchain):
 # ── LangChain non-streaming modern usage_metadata ─────────────────
 
 
-def test_langchain_non_streaming_extracts_usage_metadata_per_generation(fake_langchain):
+def test_langchain_non_streaming_extracts_usage_metadata_per_generation(fake_langchain, monkeypatch):
     """Modern LangChain (0.1+) attaches ``usage_metadata`` to
     each ``AIMessage`` in ``LLMResult.generations[i][j].message``
     and ``response_metadata`` per generation. The legacy
@@ -818,17 +818,51 @@ def test_langchain_non_streaming_extracts_usage_metadata_per_generation(fake_lan
 
     Pin that the modern path is now read (the
     ``usage_metadata`` + per-generation ``response_metadata``
-    flow into the framework event).
+    flow into the framework event). Uses a MockTransport so
+    the sender thread ships the event to a captured body
+    that the test can assert on (avoids a race with the
+    sender draining the in-memory queue).
     """
+    import json
     from langchain_core.callbacks import BaseCallbackHandler
-    import langchain_core.callbacks as _callbacks
+    import httpx
+    from eden_sdk.client import EdenClient
+    from eden_sdk.config import EdenConfig
+
+    captured: list[dict] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        body = request.content.decode("utf-8")
+        try:
+            captured.append(json.loads(body))
+        except Exception:
+            captured.append({"raw": body})
+        return httpx.Response(202, json={"ok": True}, request=request)
+
+    transport = httpx.MockTransport(handler)
+    real_client = EdenClient(
+        EdenConfig(
+            org_id="o",
+            api_key="k",
+            base_url="http://test.invalid",
+            dry_run=False,
+            flush_interval_ms=50,
+        ),
+        transport=transport,
+    )
+    real_client.start()
+    monkeypatch.setattr(
+        "eden_sdk.instrumentations.langchain.get_default_client",
+        lambda: real_client,
+    )
 
     eden.instrument("langchain")
+    import langchain_core.callbacks as _callbacks
     mgr = _callbacks.get_callback_manager()
-    handler = next(h for h in mgr.handlers if isinstance(h, BaseCallbackHandler))
+    handler_obj = next(h for h in mgr.handlers if isinstance(h, BaseCallbackHandler))
 
     run_id = "lc-modern-1"
-    handler.on_llm_start(
+    handler_obj.on_llm_start(
         serialized={"name": "openai-llm"},
         prompts=["hi"],
         run_id=run_id,
@@ -836,8 +870,8 @@ def test_langchain_non_streaming_extracts_usage_metadata_per_generation(fake_lan
         tags=[],
         metadata={},
     )
-    # Simulate a modern LangChain LLMResult: llm_output is
-    # empty (no legacy token_usage), but each Generation's
+    # Modern LangChain LLMResult: llm_output is empty
+    # (no legacy token_usage), but each Generation's
     # AIMessage carries usage_metadata + response_metadata.
     mock_message = types.SimpleNamespace(
         usage_metadata={
@@ -852,7 +886,7 @@ def test_langchain_non_streaming_extracts_usage_metadata_per_generation(fake_lan
         text="hello",
         message=mock_message,
     )
-    handler.on_llm_end(
+    handler_obj.on_llm_end(
         response=types.SimpleNamespace(
             llm_output={},  # empty: legacy path is a no-op
             generations=[[mock_generation]],
@@ -860,45 +894,72 @@ def test_langchain_non_streaming_extracts_usage_metadata_per_generation(fake_lan
         run_id=run_id,
         parent_run_id=None,
     )
+    real_client.flush(timeout=2.0)
+    real_client.shutdown(timeout=2.0)
 
-    # The framework event must carry input_tokens, the cache
-    # fields, AND the model — all from the modern
-    # ``usage_metadata`` / ``response_metadata`` shape. Without
-    # the fix these were all absent on the wire for modern
-    # LangChain.
-    client = get_default_client()
-    # Inspect the queue directly (the sender thread is not
-    # started in this test fixture, so enqueue only stages the
-    # event). We pop the framework event off the queue and
-    # check its fields.
-    framework_ev = None
-    while not client._queue.empty():
-        ev = client._queue.get_nowait()
-        if ev.source_format == "framework":
-            framework_ev = ev.payload
-            break
-    assert framework_ev is not None, "no framework event enqueued"
-    assert framework_ev.get("input_tokens") == 12
-    assert framework_ev.get("output_tokens") == 7
-    assert framework_ev.get("model") == "gpt-4o-mini"
-    assert framework_ev.get("model_normalized") == "gpt-4o-mini"
+    # Find the framework event in the captured batches.
+    framework_events: list[dict] = []
+    for body in captured:
+        for ev in body if isinstance(body, list) else [body]:
+            if isinstance(ev, dict) and ev.get("event_type") == "framework.callback":
+                framework_events.append(ev)
+    assert framework_events, f"no framework events captured: {captured!r}"
+    # The framework event must carry input_tokens, output_tokens,
+    # AND the model — all from the modern usage_metadata /
+    # response_metadata shape. Without the fix these were
+    # absent on the wire for modern LangChain.
+    assert framework_events[0].get("input_tokens") == 12
+    assert framework_events[0].get("output_tokens") == 7
+    assert framework_events[0].get("model") == "gpt-4o-mini"
+    assert framework_events[0].get("model_normalized") == "gpt-4o-mini"
 
 
-def test_langchain_non_streaming_legacy_path_still_works(fake_langchain):
+def test_langchain_non_streaming_legacy_path_still_works(fake_langchain, monkeypatch):
     """The fix must not break the legacy ``llm_output.token_usage``
     path used by older LangChain versions. The legacy fields
     are still hoisted (and win, because we use ``setdefault``
     on the top-level fields).
     """
+    import json
     from langchain_core.callbacks import BaseCallbackHandler
-    import langchain_core.callbacks as _callbacks
+    import httpx
+    from eden_sdk.client import EdenClient
+    from eden_sdk.config import EdenConfig
+
+    captured: list[dict] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        body = request.content.decode("utf-8")
+        try:
+            captured.append(json.loads(body))
+        except Exception:
+            captured.append({"raw": body})
+        return httpx.Response(202, json={"ok": True}, request=request)
+
+    transport = httpx.MockTransport(handler)
+    real_client = EdenClient(
+        EdenConfig(
+            org_id="o",
+            api_key="k",
+            base_url="http://test.invalid",
+            dry_run=False,
+            flush_interval_ms=50,
+        ),
+        transport=transport,
+    )
+    real_client.start()
+    monkeypatch.setattr(
+        "eden_sdk.instrumentations.langchain.get_default_client",
+        lambda: real_client,
+    )
 
     eden.instrument("langchain")
+    import langchain_core.callbacks as _callbacks
     mgr = _callbacks.get_callback_manager()
-    handler = next(h for h in mgr.handlers if isinstance(h, BaseCallbackHandler))
+    handler_obj = next(h for h in mgr.handlers if isinstance(h, BaseCallbackHandler))
 
     run_id = "lc-legacy-1"
-    handler.on_llm_start(
+    handler_obj.on_llm_start(
         serialized={"name": "openai-llm"},
         prompts=["hi"],
         run_id=run_id,
@@ -908,26 +969,31 @@ def test_langchain_non_streaming_legacy_path_still_works(fake_langchain):
     )
     # Legacy LLMResult: llm_output carries token_usage, no
     # modern usage_metadata on the generation.
-    handler.on_llm_end(
+    handler_obj.on_llm_end(
         response=types.SimpleNamespace(
             llm_output={"token_usage": {"prompt_tokens": 5, "completion_tokens": 3}},
             response_metadata={"model_name": "gpt-3.5-turbo"},
             generations=[
-                [types.SimpleNamespace(text="legacy hello", message=types.SimpleNamespace())]
+                [
+                    types.SimpleNamespace(
+                        text="legacy hello",
+                        message=types.SimpleNamespace(),
+                    )
+                ]
             ],
         ),
         run_id=run_id,
         parent_run_id=None,
     )
+    real_client.flush(timeout=2.0)
+    real_client.shutdown(timeout=2.0)
 
-    client = get_default_client()
-    framework_ev = None
-    while not client._queue.empty():
-        ev = client._queue.get_nowait()
-        if ev.source_format == "framework":
-            framework_ev = ev.payload
-            break
-    assert framework_ev is not None
-    assert framework_ev.get("input_tokens") == 5
-    assert framework_ev.get("output_tokens") == 3
-    assert framework_ev.get("model") == "gpt-3.5-turbo"
+    framework_events: list[dict] = []
+    for body in captured:
+        for ev in body if isinstance(body, list) else [body]:
+            if isinstance(ev, dict) and ev.get("event_type") == "framework.callback":
+                framework_events.append(ev)
+    assert framework_events
+    assert framework_events[0].get("input_tokens") == 5
+    assert framework_events[0].get("output_tokens") == 3
+    assert framework_events[0].get("model") == "gpt-3.5-turbo"

@@ -13,6 +13,7 @@
  */
 
 import { getDefaultClient } from "../client.js";
+import { randomId } from "../ids.js";
 import { extractUsage, normalizeModelName } from "../tokens.js";
 import { SOURCE_FORMATS, type StreamChunk, type TraceOptions } from "../types.js";
 
@@ -391,8 +392,3 @@ async function* _wrapAnthropicStream(
   }
 }
 
-function randomId(): string {
-  const ts = Date.now().toString(36);
-  const rand = Math.random().toString(36).slice(2, 10);
-  return `${ts}${rand}`.slice(0, 24);
-}

@@ -4,6 +4,28 @@ All notable changes to the Eden TypeScript SDK are documented here. The
 format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## 0.2.22 — 2026-07-09
+
+Refactor release.
+
+### Changed
+- Extracted the per-instrumentation `randomId()` helper into
+  a new shared module `src/ids.ts`. Each of the four
+  instrumentations (OpenAI, Anthropic, Vercel AI, LangChain)
+  previously carried its own copy of the same 6-line
+  `Date.now().toString(36) + Math.random().toString(36)`
+  function — a divergence hazard (a fix to one
+  instrumentation's id shape would silently leave the
+  others emitting a different id). The id shape on the wire
+  is unchanged, so existing consumers (the gateway's
+  per-event `trace_id` + `event_id` columns, the portal's
+  URL fragments) keep working without any contract change.
+
+### Tests
+- 3 new tests in `ids.test.ts` pinning the shared helper
+  (id length 8-24 chars, URL-safe base-36 characters,
+  unique across 1000 calls).
+
 ## 0.2.21 — 2026-07-09
 
 Bug-fix + parity release.
