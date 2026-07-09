@@ -63,7 +63,13 @@ Use this doc when writing implementation steps. Specs MUST NOT assume modules ex
 | Eval→guardrail link | `src/eden/evaluation/eval_intel/integration.py` (`EvalToGuardrailLink`) |
 | Auto dataset from failures | `AutoDatasetBridge` same file |
 | Investigation agent | `src/eden/autonomous/investigation.py` |
-| Code change + Cat 23 hook | `src/eden/code_change/`, `CodeChangeHook` |
+| **SelfHealer (queue only)** | `investigation.py:419` — rollback/reweight/cache_bust |
+| Code change scheduler (Cat 23) | `src/eden/code_change/scheduler.py` |
+| `proposed_patches` + review inbox | `code_change/inbox/review.py` |
+| DriftAlertHook | `promotion_hooks.py:1550` |
+| **Autonomy policy engine** | **MISSING** — N22 greenfield |
+| **Heal execute worker** | **MISSING** — N21 greenfield |
+| **Issue-scoped patch trigger** | **MISSING** — N20 greenfield |
 
 ### KB & env gen fragments
 
@@ -108,6 +114,23 @@ Use this doc when writing implementation steps. Specs MUST NOT assume modules ex
 3. **Gateway changes** — implement as `GatewayFilter`, not monkey-patch `complete()`
 4. **Env gen** — use `multi_agent/` + patterns job + marketplace; do not reference removed LangGraph runner
 5. **Cost claims** — cite `storage/compression.py` (15× zstd) + N09 dedupe + N16 sampling
+6. **Autonomous actions** — always gate with N22 + log to N06; `SelfHealer` and Cat 23 **queue only** today
+7. **Autonomy flags** — `autonomous_actions_v0`, `code_change_enabled`, `evolver_auto_canary_pct` in `config.py` — N22 unifies
+
+---
+
+## 5. Autonomous maintenance config (`config.py`)
+
+| Flag | Default | Spec |
+|---|---|---|
+| `autonomous_actions_v0` | gated | N21 execute |
+| `code_change_enabled` | false | N20 |
+| `evolver_auto_canary_pct` | 5 | N18 |
+| `evolver_min_samples` | 20 | N18 |
+| `patch_max_per_day` | env | N20 |
+| `patch_cluster_min_size` | env | N20 |
+
+Org override: `organizations.features.code_change_policy` JSONB.
 
 ---
 

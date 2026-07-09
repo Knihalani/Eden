@@ -6,14 +6,17 @@
 
 ---
 
-## 1. The maintenance/improvement stack (four layers)
+## 1. The maintenance/improvement stack (five layers)
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
+│ L5 AUTONOMY  N22 Policy Engine · N20 Auto Patches · N21 Self-Heal│
+│              N18 Canary · F46 Orchestrator (state machine)        │
+├─────────────────────────────────────────────────────────────────┤
 │ L4 UX        N17 Improvement Cockpit · N13 Transcript · N12 Session│
 ├─────────────────────────────────────────────────────────────────┤
-│ L3 IMPROVE   N18 Prompt Evolution · N15 Eval→Guardrail · F39    │
-│              Nudge · N19 KB Flywheel · F40 Book · F41 Evidence  │
+│ L3 IMPROVE   N15 Eval→Guardrail · F39 Nudge · N19 KB · F40 Book  │
+│              F41 Evidence · N01 Regression · N04 Impact Preview   │
 ├─────────────────────────────────────────────────────────────────┤
 │ L2 DETECT    F20/F28/F29 · N08 StatGate · N02 MCP · F06 Signals │
 ├─────────────────────────────────────────────────────────────────┤
@@ -24,7 +27,9 @@
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-**Rule:** Ship **N14 first** — otherwise L2–L3 backends are shelfware.
+**Rules:**
+1. Ship **N14 first** — otherwise L2–L3 backends are shelfware.
+2. Ship **N22 before N20/N21 execute** — graded autonomy + audit (N06).
 
 ---
 
@@ -40,7 +45,8 @@
 | Prompt auto-evolution + canary | — | — | partial | **N18** (evolver shipped) |
 | Env from prod failure | — | — | — | **N07** (unique) |
 | 80% cost cut w/ failure keep | partial | — | — | **N16** + **N09** |
-| Unified improvement queue | — | partial | partial | **N17** |
+| Unified improvement queue | — | partial | partial | **N17** (+ autonomous columns) |
+| Graded autonomous maintenance | — | partial | partial | **N22 + N20 + N21** |
 | Compliance audit packs | — | — | — | **N06** + shipped compliance |
 
 ---
@@ -86,20 +92,22 @@
 3. N16 Sampling + N09 Dedupe   ← cost architecture early
 4. F04 MCP read tools
 5. N17 Cockpit (read-only v1)  ← UX on existing hooks
-6. F30 → F22 → N01             ← fix + verify loop
+6. F30 → F22 → N01 → N04       ← fix + verify loop
 7. N15 Eval→Guardrail + F39    ← improve in production
 8. N18 Prompt evolution
-9. N07 Env repro (Phase 1)
-10. F46 Orchestrator + N19 KB flywheel
+9. N22 Autonomy policy         ← gate before autonomous execute
+10. N20 + N21 Autonomous       ← patches + self-heal
+11. N07 Env repro (Phase 1)
+12. F46 Orchestrator + N19 KB flywheel
 ```
 
 ---
 
-## 6. Full spec index (42 features)
+## 6. Full spec index (46 features)
 
-**F:** 24 parity specs · **N:** N01–N19 differentiation specs
+**F:** 24 parity specs · **N:** N01–N22 differentiation + autonomous specs
 
-See [`FEATURE-GAP-MASTER.md`](FEATURE-GAP-MASTER.md) for file list.
+See [`FEATURE-GAP-MASTER.md`](FEATURE-GAP-MASTER.md) and [`AUTONOMOUS-MAINTENANCE.md`](AUTONOMOUS-MAINTENANCE.md).
 
 ---
 
