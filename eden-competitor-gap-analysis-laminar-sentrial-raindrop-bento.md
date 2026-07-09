@@ -4,7 +4,8 @@
 > **Date:** July 9, 2026  
 > **Scope:** Deep research on four YC-backed agent observability/monitoring competitors. Documents features each competitor has that Eden lacks or where Eden is **significantly lagging** — not a full feature parity matrix.  
 > **Method:** Public product sites, YC profiles, docs, launch posts, blog posts, GitHub/README, and Eden codebase/docs cross-reference.  
-> **Implementation specs:** [`docs/specs/competitor-gaps/README.md`](docs/specs/competitor-gaps/README.md) — hyper-detailed per-gap specs + [`REVIEW.md`](docs/specs/competitor-gaps/REVIEW.md)
+> **Implementation specs:** [`docs/specs/FEATURE-GAP-MASTER.md`](docs/specs/FEATURE-GAP-MASTER.md) — **48 feature-by-feature specs** in [`docs/specs/features/`](docs/specs/features/)  
+> **Legacy (competitor-organized):** [`docs/specs/competitor-gaps/`](docs/specs/competitor-gaps/)
 
 ---
 

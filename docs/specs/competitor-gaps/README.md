@@ -1,10 +1,10 @@
-# Competitor Gap Implementation Specs
+# Competitor Gap Implementation Specs (Legacy)
 
-> **Date:** July 9, 2026  
-> **Parent analysis:** [`eden-competitor-gap-analysis-laminar-sentrial-raindrop-bento.md`](../../eden-competitor-gap-analysis-laminar-sentrial-raindrop-bento.md)  
-> **Review:** [`REVIEW.md`](./REVIEW.md)
+> **⚠️ Superseded by feature-by-feature specs:**  
+> **Master:** [`../FEATURE-GAP-MASTER.md`](../FEATURE-GAP-MASTER.md)  
+> **Canonical specs:** [`../features/`](../features/) — 48 files, one per feature
 
-This directory contains hyper-detailed implementation specifications for every individual competitive gap point identified in the Eden vs Laminar / Sentrial / Raindrop / BentoLabs analysis.
+This directory contains the earlier **competitor-organized** specs (Laminar, Sentrial, Raindrop, BentoLabs). Use [`../features/`](../features/) for implementation.
 
 ## Spec index
 
