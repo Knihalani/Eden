@@ -13,7 +13,8 @@
  */
 
 import { getDefaultClient } from "../client.js";
-import { SOURCE_FORMATS, type TraceOptions } from "../types.js";
+import { extractUsage, normalizeModelName } from "../tokens.js";
+import { SOURCE_FORMATS, type StreamChunk, type TraceOptions } from "../types.js";
 
 const _wrapped = new WeakSet<object>();
 const WRAP_MARKER = Symbol.for("@eden-ai/sdk.wrapAnthropic");
@@ -56,10 +57,18 @@ export function wrapAnthropic<T extends object>(
                   msgReceiver,
                 );
                 if (typeof original !== "function") return original;
+                // Bind the original ``create`` to the resource
+                // object (``messages``) it's attached to, not the
+                // top-level client. The Anthropic SDK internally
+                // calls ``this._client.post(...)``, so ``this``
+                // MUST be the resource or the wrapped client
+                // shape breaks (TypeError: cannot read
+                // properties of undefined).
+                const bound = original.bind(msgTarget);
                 return function (this: unknown, ...args: any[]): unknown {
                   return _instrumentedCreate(
-                    original as (...a: any[]) => any,
-                    target,
+                    bound as (...a: any[]) => any,
+                    msgTarget,
                     args,
                     opts,
                   );
@@ -98,41 +107,94 @@ function _instrumentedCreate(
   const traceId = randomId();
   let status: "success" | "error" = "success";
   let errorType: string | undefined;
+  // Captured from the upstream result so we can normalize usage
+  // into ``metrics`` on emit. Non-streaming Anthropic responses
+  // ship full usage on the ``Message`` object; the streaming path
+  // extracts from chunks instead.
+  let capturedUsage: unknown = undefined;
+  const modelFromArgs = _extractModel(args);
 
-  return Promise.resolve()
-    .then(() => originalCreate.apply(self, args))
-    .catch((err: unknown) => {
+  // Run the upstream call and emit telemetry on settle — both
+  // success and failure paths. We use a single async IIFE so the
+  // timing/emit happen at a deterministic point and the test
+  // harness's `await flush()` always sees the queued event.
+  return (async () => {
+    try {
+      const result = await originalCreate.apply(self, args);
+      // Anthropic SDK exposes ``result.usage`` on the returned
+      // ``Message`` (also present on Anthropic-compatible gateways
+      // that mirror the same shape).
+      if (result && typeof result === "object") {
+        const maybeUsage = (result as { usage?: unknown }).usage;
+        if (maybeUsage && typeof maybeUsage === "object") {
+          capturedUsage = maybeUsage;
+        }
+      }
+      return result;
+    } catch (err: unknown) {
       status = "error";
       errorType = err instanceof Error ? err.constructor.name : "Error";
       throw err;
-    })
-    .finally(() => {
+    } finally {
       const durationMs = Date.now() - start;
-      const client = getDefaultClient();
-      const config = client.getConfig();
-      client.emit({
-        eventId: traceId,
-        tenantId: config.orgId ?? "default",
-        projectId: config.projectId,
+      _emitAnthropicCompletion({
         traceId,
-        realm: config.realm,
-        eventType: "llm_completion",
-        timestamp: new Date().toISOString(),
-        sourceFormat: SOURCE_FORMATS.ANTHROPIC,
-        payload: {
-          provider: "anthropic",
-          model: _extractModel(args),
-          duration_ms: durationMs,
-          status,
-          error_type: errorType,
-          environment_id: opts.environmentId,
-        },
-        metrics: { duration_ms: durationMs },
-        tags: [...(opts.tags ?? []), "auto_instrument"],
-        environmentId: opts.environmentId,
+        model: modelFromArgs,
         durationMs,
+        status,
+        errorType,
+        opts,
+        usage: capturedUsage,
       });
-    });
+    }
+  })();
+}
+
+function _emitAnthropicCompletion(args: {
+  traceId: string;
+  model: string | undefined;
+  durationMs: number;
+  status: "success" | "error";
+  errorType: string | undefined;
+  opts: TraceOptions;
+  usage?: unknown;
+}): void {
+  const client = getDefaultClient();
+  const config = client.getConfig();
+  // Normalize usage into the same ``metrics`` shape the streaming
+  // path emits so callers see identical billing fields regardless
+  // of whether they used ``stream: true`` or not.
+  const usageFields: Record<string, number> = {};
+  if (args.usage) {
+    const u = extractUsage(args.usage);
+    if (u.inputTokens !== null) usageFields.input_tokens = u.inputTokens;
+    if (u.outputTokens !== null) usageFields.output_tokens = u.outputTokens;
+    if (u.cacheReadTokens !== null) usageFields.cache_read_input_tokens = u.cacheReadTokens;
+    if (u.cacheCreationTokens !== null) usageFields.cache_creation_input_tokens = u.cacheCreationTokens;
+  }
+  client.emit({
+    eventId: args.traceId,
+    tenantId: config.orgId ?? "default",
+    projectId: config.projectId,
+    traceId: args.traceId,
+    realm: config.realm,
+    eventType: "llm_completion",
+    timestamp: new Date().toISOString(),
+    sourceFormat: SOURCE_FORMATS.ANTHROPIC,
+    payload: {
+      provider: "anthropic",
+      model: args.model,
+      duration_ms: args.durationMs,
+      status: args.status,
+      error_type: args.errorType,
+      environment_id: args.opts.environmentId,
+    },
+    metrics: { duration_ms: args.durationMs, ...usageFields },
+    modelNormalized: args.model ? (normalizeModelName(args.model) ?? undefined) : undefined,
+    tags: [...(args.opts.tags ?? []), "auto_instrument"],
+    environmentId: args.opts.environmentId,
+    durationMs: args.durationMs,
+  });
 }
 
 function _isStreaming(args: any[]): boolean {
@@ -165,6 +227,8 @@ async function* _wrapAnthropicStream(
   let outputTokens = 0;
   let usageOutputTokens: number | undefined;
   let usageInputTokens: number | undefined;
+  let usageCacheReadTokens: number | undefined;
+  let usageCacheCreationTokens: number | undefined;
   let finishReason: string | undefined;
   let chunkCount = 0;
   let model: string | undefined;
@@ -172,43 +236,98 @@ async function* _wrapAnthropicStream(
   let errorType: string | undefined;
   const tags = [...(opts.tags ?? []), "auto_instrument", "streaming"];
 
+  // Per-chunk replay buffer. Mirrors the Python SDK's
+  // ``_wrap_async_stream`` path: every event is appended to
+  // ``chunkBuffer`` and ``client.bufferChunk(...)``-flushed on
+  // the same loop tick that emits the aggregate event. The TS
+  // SDK previously *only* emitted the aggregate event, which
+  // meant Anthropic streams had no per-chunk TPOT / ITL
+  // metrics on the wire — parity bug with the Python SDK.
+  const chunkBuffer: StreamChunk[] = [];
+  const eventId = `stream_anthropic_${traceId}`;
+
   try {
     const upstream: AsyncIterable<any> = await originalCreate.apply(self, args);
     for await (const event of upstream) {
       chunkCount += 1;
       const now = Date.now();
       tLast = now;
+      // Capture the interval to the previous chunk BEFORE
+      // updating ``tPrev`` — otherwise the per-chunk ITL/TPOT
+      // readings collapse to 0 for chunks that share a tick.
+      const prev = tPrev;
       if (tFirst === null) tFirst = now;
-      else if (tPrev !== null) {
-        itlSumMs += now - tPrev;
+      else if (prev !== null) {
+        itlSumMs += now - prev;
         itlCount += 1;
       }
       tPrev = now;
 
       const etype = event?.type;
+      // Hoist ``delta`` to function scope so the per-chunk
+      // push below can read the text. The if-else chain only
+      // assigns it on the content_block_delta path; the chunk
+      // buffer path falls back to ``undefined`` for non-text
+      // events.
+      const delta = event?.delta;
       if (etype === "content_block_delta") {
-        const delta = event?.delta;
         if (delta?.type === "text_delta" && typeof delta.text === "string") {
           outputTokens += Math.max(1, Math.floor(delta.text.length / 4));
         }
       } else if (etype === "message_delta") {
-        const delta = event?.delta;
         if (delta?.stop_reason) finishReason = delta.stop_reason;
         const usage = event?.usage;
-        if (usage && typeof usage.output_tokens === "number" && usage.output_tokens > 0) {
-          usageOutputTokens = usage.output_tokens;
+        if (usage) {
+          const u = extractUsage(usage);
+          if (u.outputTokens !== null && u.outputTokens > 0) usageOutputTokens = u.outputTokens;
+          if (u.cacheReadTokens !== null) usageCacheReadTokens = u.cacheReadTokens;
         }
       } else if (etype === "message_start") {
         const msg = event?.message;
         if (msg) {
           if (typeof msg.model === "string") model = msg.model;
           const usage = msg.usage;
-          if (usage && typeof usage.input_tokens === "number") {
-            usageInputTokens = usage.input_tokens;
+          if (usage) {
+            const u = extractUsage(usage);
+            if (u.inputTokens !== null) usageInputTokens = u.inputTokens;
+            if (u.cacheReadTokens !== null) usageCacheReadTokens = u.cacheReadTokens;
+            if (u.cacheCreationTokens !== null) usageCacheCreationTokens = u.cacheCreationTokens;
           }
         }
       }
 
+      // Per-chunk payload: only ``content_block_delta`` carries
+      // ``delta.text`` (the user-visible text token stream);
+      // other event types (``message_start`` / ``message_delta``)
+      // contribute timing but no text. Push every event so the
+      // gateway can reconstruct ITL / TTFT and replay the
+      // stream.
+      const deltaText: string | null =
+        etype === "content_block_delta" &&
+        delta?.type === "text_delta" &&
+        typeof delta.text === "string"
+          ? delta.text
+          : null;
+      // Per-chunk TPOT: time spent generating THIS chunk's
+      // tokens divided by the chunk's token count. Tokens are
+      // approximated as ``ceil(len/4)`` (same heuristic the
+      // aggregate uses). Chunks without text contribute
+      // ``null`` rather than a misleading zero — matches the
+      // OpenAI instrumentation.
+      const tpotMs =
+        deltaText && deltaText.length > 0 && prev !== null && now > prev
+          ? (now - prev) / Math.max(1, Math.ceil(deltaText.length / 4))
+          : null;
+      chunkBuffer.push({
+        eventId,
+        traceId,
+        chunkIndex: chunkCount - 1,
+        deltaText,
+        ttftMs: tFirst !== null ? tFirst - start : null,
+        itlMs: prev !== null ? now - prev : null,
+        tpotMs,
+        receivedAtClientMs: Date.now(),
+      });
       yield event;
     }
   } catch (err) {
@@ -251,11 +370,24 @@ async function* _wrapAnthropicStream(
         ...(typeof usageInputTokens === "number"
           ? { input_tokens: usageInputTokens }
           : {}),
+        ...(typeof usageCacheReadTokens === "number"
+          ? { cache_read_input_tokens: usageCacheReadTokens }
+          : {}),
+        ...(typeof usageCacheCreationTokens === "number"
+          ? { cache_creation_input_tokens: usageCacheCreationTokens }
+          : {}),
       },
+      modelNormalized: model ? (normalizeModelName(model) ?? undefined) : undefined,
       tags,
       environmentId: opts.environmentId,
       durationMs: completionDurationMs,
     });
+    // Per-chunk replay — flush the buffered events to
+    // ``/ingest/chunks`` on the same tick as the aggregate
+    // event. Mirrors the Python SDK and the OpenAI TS path.
+    for (const chunk of chunkBuffer) {
+      client.bufferChunk(chunk);
+    }
   }
 }
 

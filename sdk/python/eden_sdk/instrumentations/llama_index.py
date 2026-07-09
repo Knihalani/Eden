@@ -19,7 +19,13 @@ from eden_sdk.trace import current_trace
 
 logger = logging.getLogger("eden_sdk.instrumentation.llama_index")
 
-_handler: Optional["EdenLlamaSpanHandler"] = None
+
+def _trace_id_or_random() -> str:
+    """Return the active trace id, or a fresh random one."""
+    ctx = current_trace()
+    return ctx.trace_id if ctx is not None else uuid.uuid4().hex
+
+_handler: Optional["EdenLlamaSpanHandler"] = None  # type: ignore[name-defined]  # noqa: F821,UP037,UP045
 
 
 def install() -> None:
@@ -52,8 +58,8 @@ def install() -> None:
             self,
             id_: str,
             bound_arity: int,
-            metadata: Optional[dict[str, Any]] = None,
-            parent_id: Optional[str] = None,
+            metadata: dict[str, Any] | None = None,
+            parent_id: str | None = None,
             **kwargs: Any,
         ) -> None:
             self._starts[id_] = time.perf_counter()
@@ -62,9 +68,9 @@ def install() -> None:
             self,
             id_: str,
             bound_arity: int,
-            metadata: Optional[dict[str, Any]] = None,
-            parent_id: Optional[str] = None,
-            error: Optional[BaseException] = None,
+            metadata: dict[str, Any] | None = None,
+            parent_id: str | None = None,
+            error: BaseException | None = None,
             **kwargs: Any,
         ) -> None:
             t0 = self._starts.pop(id_, None)
@@ -78,8 +84,7 @@ def install() -> None:
             payload: dict[str, Any] = {
                 "event_id": f"eden_li_{id_}",
                 "trace_id": (
-                    current_trace().trace_id
-                    if current_trace() else uuid.uuid4().hex
+                    _trace_id_or_random()
                 ),
                 "name": str(md.get("class_name") or md.get("name") or "span"),
                 "event_type": "framework.callback",
@@ -105,8 +110,11 @@ def install() -> None:
     _handler = EdenLlamaSpanHandler()
     try:
         # Add to the global callback manager if it exists.
+        # Note: ``global_service_context`` was removed in llama-index 0.10+;
+        # ``Settings.callback_manager`` is the supported hook now. We use
+        # ``CallbackManager`` directly so the SDK works on both the old and
+        # new APIs without a hard import on either.
         from llama_index.core.callbacks.base import CallbackManager  # type: ignore
-        from llama_index.core import global_service_context  # type: ignore  # noqa: F401
         # Newer llama_index: Settings.callback_manager
         try:
             from llama_index.core import Settings  # type: ignore

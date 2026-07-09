@@ -5,11 +5,19 @@ Lightweight, fire-and-forget observability for LLM applications.
 - `@trace_agent` decorator and `with eden.trace(...)` context manager
 - One-call auto-instrumentation for **OpenAI, Anthropic, LangChain, LlamaIndex, CrewAI, AutoGen, Mastra** (no-op for TS-only frameworks)
 - Async, batched HTTP sender with a **5 ms p99 overhead budget** on the producer hot path
-- Zero required dependencies beyond `httpx` + `pydantic`
+- Zero required dependencies beyond `httpx` (zero required deps beyond)
 
 ## Install
 
 ```bash
+# From PyPI (published as eden-sdk)
+pip install eden-sdk
+
+# Optional framework integrations (auto-instrumentation):
+pip install "eden-sdk[openai,anthropic,langchain]"
+pip install "eden-sdk[all]"   # every supported framework
+
+# Or install from source (this repo):
 cd sdk/python
 pip install -e .[dev]            # core + tests
 pip install -e .[openai,anthropic,langchain]   # add instrumentations
@@ -52,13 +60,15 @@ by `eden.configure(...)`:
 
 | Env var                | Default                   | Purpose                                  |
 |------------------------|---------------------------|------------------------------------------|
-| `EDEN_ORG_ID`          | (required)                | Org the events are attributed to         |
-| `EDEN_API_KEY`         | (required)                | Programmatic key (`X-Org-Api-Key`)       |
+| `EDEN_ORG_ID`          | (required)                | Org the events are attributed to. `EDEN_DEFAULT_ORG` accepted as an alias for parity with the TypeScript SDK. |
+| `EDEN_API_KEY`         | (required)                | Programmatic key (`X-Org-Api-Key`). `EDEN_ORG_API_KEY` accepted as an alias for parity with the TypeScript SDK. |
 | `EDEN_BASE_URL`        | `http://localhost:8000`   | Gateway / ingestion base URL             |
 | `EDEN_PROJECT_ID`      | `default`                 | Multi-tenant project label               |
 | `EDEN_BATCH_SIZE`      | `32`                      | Max events per HTTP POST                 |
 | `EDEN_FLUSH_INTERVAL_MS` | `250`                   | Max time to buffer a batch               |
+| `EDEN_MAX_QUEUE`       | `4096`                    | Backpressure cap (oldest dropped first)  |
 | `EDEN_DISABLED`        | `0`                       | Turn the SDK into a complete no-op       |
+| `EDEN_DRY_RUN`        | `0`                       | Log events at DEBUG level instead of POST (was `EDEN_DEBUG`) |
 
 ## Auto-instrumentation
 
@@ -78,20 +88,102 @@ eden.uninstrument("openai")           # tear down a patch
 | autogen       | Global `register_reply_hook` on `ConversableAgent` |
 | mastra        | No-op (use the TypeScript SDK)              |
 
+## Token extraction & model normalization
+
+Every instrumentation routes through two shared helpers exposed at
+``eden_sdk._tokens``:
+
+```python
+from eden_sdk._tokens import extract_usage, normalize_model_name
+
+# Extract a normalized usage dict from any provider's usage blob
+extract_usage({
+    "prompt_tokens": 100,
+    "completion_tokens": 50,
+    "prompt_tokens_details": {"cached_tokens": 25},
+})
+# => {"input_tokens": 100, "output_tokens": 50,
+#     "cache_read_tokens": 25, "cache_creation_tokens": None}
+
+# Strip dated suffixes / -latest aliases so pricing lookups hit
+# a single row
+normalize_model_name("gpt-4o-2024-08-06")           # => "gpt-4o"
+normalize_model_name("claude-3-5-sonnet-20241022") # => "claude-3-5-sonnet"
+normalize_model_name("claude-3-5-sonnet-latest")   # => "claude-3-5-sonnet"
+```
+
+The SDK emits ``model_normalized`` on every auto-instrumented event
+so the server-side pricing lookup never has to do the stripping
+itself. Missing token counts are reported as ``None`` (never zero)
+so billing math doesn't accidentally bill free input.
+
 ## Examples
 
 ```bash
 export EDEN_ORG_ID=org_...
 export EDEN_API_KEY=sk-...
 export OPENAI_API_KEY=sk-...
-python examples/01_basic_chat.py
-python examples/02_langchain.py
-python examples/03_anthropic.py
+python examples/01_basic_chat.py      # OpenAI non-streaming
+python examples/02_langchain.py       # LangChain
+python examples/03_anthropic.py       # Anthropic
+python examples/04_streaming.py       # OpenAI streaming (TTFT/ITL/TPOT)
 ```
 
 Each example traces a real LLM call and prints the result. Verify that
 a row lands in `telemetry_events` with `source_format` matching the
 framework (`openai`, `anthropic`, or `framework` for chains).
+
+## Streaming
+
+`eden.instrument("openai")` / `eden.instrument("anthropic")` transparently
+wrap streaming responses too — no code changes are needed. For each
+`stream=True` call the SDK emits:
+
+- one `llm_completion_stream` event with `ttft_ms`, `itl_ms_avg`,
+  `tpot_ms`, `output_tokens`, `input_tokens`,
+  `cache_read_input_tokens`, `cache_creation_input_tokens`,
+  `chunk_count`, `finish_reason`, and `model_normalized`
+  (e.g. `gpt-4o` for both `gpt-4o` and `gpt-4o-2024-08-06`);
+- one row per chunk to `/ingest/chunks` with the `delta_text` and the
+  per-chunk `ttft_ms` / `itl_ms` / `tpot_ms`.
+
+Cache tokens are significant for billing — Anthropic's prompt cache
+gives a ~90% discount on cache reads, so the SDK forwards
+`cache_read_input_tokens` / `cache_creation_input_tokens` to the
+gateway when the provider returns them.
+
+`model_normalized` is the dated-suffix-stripped model alias
+(``gpt-4o-2024-08-06`` → ``gpt-4o``,
+``claude-3-5-sonnet-20241022`` → ``claude-3-5-sonnet``,
+``claude-3-5-sonnet-latest`` → ``claude-3-5-sonnet``) so the
+server-side pricing lookup hits a single row regardless of which
+alias the caller used.
+
+```python
+import eden
+from openai import OpenAI
+
+eden.configure(org_id="...", api_key="...", base_url="...")
+eden.instrument("openai")
+
+client = OpenAI()
+stream = client.chat.completions.create(
+    model="gpt-4o-mini",
+    messages=[{"role": "user", "content": "Stream a haiku."}],
+    stream=True,
+)
+for chunk in stream:
+    print(chunk.choices[0].delta.content or "", end="", flush=True)
+print()
+
+eden.get_default_client().flush()
+# → /ingest/openai  (one llm_completion_stream event)
+# → /ingest/chunks  (one row per chunk)
+```
+
+The same applies to Anthropic — `eden.instrument("anthropic")` understands
+`message_start`, `content_block_delta`, `message_delta`, and `message_stop`
+events and emits matching metrics.
 
 ## Testing
 
@@ -167,6 +259,26 @@ never leak to a third-party LLM provider. Other `X-*` headers
 (OpenRouter `HTTP-Referer` / `X-Title`, Anthropic `anthropic-version`
 / `anthropic-beta`, OpenRouter `X-OpenRouter-Beta`) flow through
 unchanged.
+
+### Client-side PII safety net
+
+In addition to the gateway's per-tenant PII policy, the SDK runs
+its own redaction pass on every payload **before it leaves the
+process**. This is a belt-and-suspenders backstop for local dev
+and for the case where the gateway is down or misconfigured.
+The default is on — to disable it (e.g. for compliance audits
+where you need to verify the SDK never modifies your data), pass
+``redact_on_client=False`` to :func:`eden.configure`:
+
+```python
+import eden
+eden.configure(org_id="...", api_key="...", redact_on_client=False)
+```
+
+The client-side pass covers emails, formatted phones, SSNs, and
+Luhn-valid credit cards in JSON string values (dict + list
+recursively walked, plus string keys). False-positive guards keep
+pure-digit IDs, hex digests, and token counts untouched.
 
 ### PII redaction
 
@@ -299,3 +411,29 @@ plus `sdk.gatewayHeaders({ filters })` and `sdk.resolvedGatewayUrl()`.
 ## License
 
 Apache 2.0
+
+## What's new in 0.2.0
+
+- **Span API.** `trace()` now yields a `Span` with first-class
+  `set_input()`, `set_output()`, `set_tag()`, and `set_status()`
+  methods. The legacy `with trace(...) as ctx: ctx.set_*` shape
+  remains supported.
+- **Retry with backoff.** `EdenClient._send_batch` retries transient
+  gateway failures (3 attempts, honours `Retry-After`, never retries
+  4xx other than 408/429).
+- **Detection helpers.** `eden.autoInstrument()` /
+  `eden.detect_installed_frameworks()` report which LLM SDKs are
+  importable, mirroring the TypeScript SDK.  All seven supported
+  framework keys are always present in the result dict.
+- **PII redaction is still the gateway's job.** The SDK now also
+  exports a `redact_on_client: bool` config flag (default `True`)
+  that, when enabled, runs a small regex pass over outgoing
+  payloads to mask obvious emails / phone numbers / SSN / credit
+  card patterns before they reach the network. This is a safety
+  net only — the gateway remains the authoritative redaction
+  layer and the source of truth for tenant policy.
+- **New examples.** `examples/05_crewai.py`, `examples/06_autogen.py`,
+  and `examples/07_llamaindex.py` mirror the LangChain example
+  shape and exercise the corresponding auto-instrumentation.
+- **CHANGELOG.md** is now shipped with the package; see
+  `sdk/python/CHANGELOG.md` for the full 0.2.0 notes.

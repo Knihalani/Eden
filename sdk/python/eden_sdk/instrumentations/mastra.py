@@ -25,7 +25,7 @@ def install() -> None:
     capture any HTTP calls your Mastra server makes through the
     gateway (``X-Mastra-*`` tags are added server-side).
     """
-    logger.debug(
+    logger.warning(
         "eden: mastra is a TypeScript framework; "
         "Python SDK install is a no-op. Use sdk/ts-ai for full support."
     )

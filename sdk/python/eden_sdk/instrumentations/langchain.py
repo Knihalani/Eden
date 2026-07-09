@@ -15,15 +15,23 @@ from __future__ import annotations
 import logging
 import time
 import uuid
+from collections.abc import Mapping
 from typing import Any, Optional
 
+from eden_sdk._tokens import extract_usage, normalize_model_name
 from eden_sdk.client import TraceEvent, get_default_client
 from eden_sdk.config import get_config
-from eden_sdk.trace import TraceContext, current_trace
+from eden_sdk.trace import current_trace
 
 logger = logging.getLogger("eden_sdk.instrumentation.langchain")
 
-_handler: Optional["EdenLangChainHandler"] = None
+
+def _trace_id_or_random() -> str:
+    """Return the active trace id, or a fresh random one."""
+    ctx = current_trace()
+    return ctx.trace_id if ctx is not None else uuid.uuid4().hex
+
+_handler: Optional["EdenLangChainHandler"] = None  # type: ignore[name-defined]  # noqa: F821,UP037,UP045
 
 
 def install() -> None:
@@ -56,9 +64,9 @@ def install() -> None:
             prompts: list[str],
             *,
             run_id: Any,
-            parent_run_id: Optional[Any] = None,
-            tags: Optional[list[str]] = None,
-            metadata: Optional[dict[str, Any]] = None,
+            parent_run_id: Any | None = None,
+            tags: list[str] | None = None,
+            metadata: dict[str, Any] | None = None,
             **kwargs: Any,
         ) -> None:
             self._record_start(run_id, parent_run_id, tags, metadata,
@@ -72,7 +80,7 @@ def install() -> None:
             response: Any,
             *,
             run_id: Any,
-            parent_run_id: Optional[Any] = None,
+            parent_run_id: Any | None = None,
             **kwargs: Any,
         ) -> None:
             payload = _safe_llm_response(response)
@@ -83,7 +91,7 @@ def install() -> None:
             error: BaseException,
             *,
             run_id: Any,
-            parent_run_id: Optional[Any] = None,
+            parent_run_id: Any | None = None,
             **kwargs: Any,
         ) -> None:
             self._record_end(run_id, payload={"error": repr(error)},
@@ -97,9 +105,9 @@ def install() -> None:
             inputs: dict[str, Any],
             *,
             run_id: Any,
-            parent_run_id: Optional[Any] = None,
-            tags: Optional[list[str]] = None,
-            metadata: Optional[dict[str, Any]] = None,
+            parent_run_id: Any | None = None,
+            tags: list[str] | None = None,
+            metadata: dict[str, Any] | None = None,
             **kwargs: Any,
         ) -> None:
             self._record_start(
@@ -115,7 +123,7 @@ def install() -> None:
             outputs: dict[str, Any],
             *,
             run_id: Any,
-            parent_run_id: Optional[Any] = None,
+            parent_run_id: Any | None = None,
             **kwargs: Any,
         ) -> None:
             self._record_end(
@@ -130,7 +138,7 @@ def install() -> None:
             error: BaseException,
             *,
             run_id: Any,
-            parent_run_id: Optional[Any] = None,
+            parent_run_id: Any | None = None,
             **kwargs: Any,
         ) -> None:
             self._record_end(run_id, payload={"error": repr(error)},
@@ -144,9 +152,9 @@ def install() -> None:
             input_str: str,
             *,
             run_id: Any,
-            parent_run_id: Optional[Any] = None,
-            tags: Optional[list[str]] = None,
-            metadata: Optional[dict[str, Any]] = None,
+            parent_run_id: Any | None = None,
+            tags: list[str] | None = None,
+            metadata: dict[str, Any] | None = None,
             **kwargs: Any,
         ) -> None:
             self._record_start(
@@ -161,7 +169,7 @@ def install() -> None:
             output: str,
             *,
             run_id: Any,
-            parent_run_id: Optional[Any] = None,
+            parent_run_id: Any | None = None,
             **kwargs: Any,
         ) -> None:
             self._record_end(run_id, payload={"output": str(output)[:512]},
@@ -172,7 +180,7 @@ def install() -> None:
             error: BaseException,
             *,
             run_id: Any,
-            parent_run_id: Optional[Any] = None,
+            parent_run_id: Any | None = None,
             **kwargs: Any,
         ) -> None:
             self._record_end(run_id, payload={"error": repr(error)},
@@ -185,7 +193,7 @@ def install() -> None:
             action: Any,
             *,
             run_id: Any,
-            parent_run_id: Optional[Any] = None,
+            parent_run_id: Any | None = None,
             **kwargs: Any,
         ) -> None:
             payload = {
@@ -199,13 +207,13 @@ def install() -> None:
         def _record_start(
             self,
             run_id: Any,
-            parent_run_id: Optional[Any],
-            tags: Optional[list[str]],
-            metadata: Optional[dict[str, Any]],
+            parent_run_id: Any | None,
+            tags: list[str] | None,
+            metadata: dict[str, Any] | None,
             *,
             name: str,
             kind: str,
-            extra: Optional[dict[str, Any]] = None,
+            extra: dict[str, Any] | None = None,
         ) -> None:
             rid = str(run_id)
             self._run_starts[rid] = time.perf_counter()
@@ -222,7 +230,7 @@ def install() -> None:
             self,
             run_id: Any,
             *,
-            payload: Optional[dict[str, Any]],
+            payload: dict[str, Any] | None,
             kind: str,
         ) -> None:
             rid = str(run_id)
@@ -234,8 +242,7 @@ def install() -> None:
             event: dict[str, Any] = {
                 "event_id": f"eden_lc_{rid}",
                 "trace_id": (
-                    current_trace().trace_id
-                    if current_trace() else uuid.uuid4().hex
+                    _trace_id_or_random()
                 ),
                 "name": meta["name"],
                 "event_type": "framework.callback",
@@ -262,6 +269,15 @@ def install() -> None:
                     {f"langchain.payload.{k}": _short(v)
                      for k, v in payload.items()}
                 )
+                # Hoist billing-critical fields to the top level so the
+                # server-side normalizer can roll them up into
+                # ``usage_events`` without walking nested attributes.
+                for key in ("input_tokens", "output_tokens",
+                            "cache_read_input_tokens",
+                            "cache_creation_input_tokens",
+                            "model_normalized"):
+                    if key in payload:
+                        event[key] = payload[key]
             cfg = get_config()
             if cfg.enabled:
                 get_default_client().enqueue(
@@ -275,7 +291,7 @@ def install() -> None:
     # 1) Set as the global default so libraries that read it pick it up.
     # 2) Append to the default manager's handlers list.
     try:
-        from langchain_core.callbacks import set_handler, get_callback_manager  # type: ignore
+        from langchain_core.callbacks import get_callback_manager, set_handler  # type: ignore
     except Exception:  # noqa: BLE001
         set_handler = None  # type: ignore
         get_callback_manager = None  # type: ignore
@@ -311,7 +327,7 @@ def uninstall() -> None:
 # ── Helpers ───────────────────────────────────────────────────────────
 
 
-def _name_from_serialized(serialized: Optional[dict[str, Any]],
+def _name_from_serialized(serialized: dict[str, Any] | None,
                           fallback: str) -> str:
     if not isinstance(serialized, dict):
         return fallback
@@ -327,7 +343,29 @@ def _safe_llm_response(response: Any) -> dict[str, Any]:
     try:
         llm_output = getattr(response, "llm_output", None)
         if llm_output:
-            out["token_usage"] = llm_output.get("token_usage")
+            tu = llm_output.get("token_usage")
+            out["token_usage"] = tu
+            # Promote to top-level usage fields so the server-side
+            # normalizer can roll them up into billing-grade
+            # usage_events without needing to know about LangChain's
+            # nested ``token_usage`` shape.
+            if isinstance(tu, Mapping):
+                u = extract_usage(tu)
+                if u["input_tokens"] is not None:
+                    out["input_tokens"] = u["input_tokens"]
+                if u["output_tokens"] is not None:
+                    out["output_tokens"] = u["output_tokens"]
+            # Modern LangChain chains stash the model name in
+            # ``response_metadata``; emit both raw + normalized so
+            # pricing lookups hit a single row.
+            meta = getattr(response, "response_metadata", None) or {}
+            if isinstance(meta, Mapping):
+                for key in ("model_name", "model", "model_id"):
+                    m = meta.get(key)
+                    if isinstance(m, str):
+                        out["model"] = m
+                        out["model_normalized"] = normalize_model_name(m)
+                        break
         gens = getattr(response, "generations", None)
         if gens:
             first_chain = gens[0] or []
@@ -336,8 +374,15 @@ def _safe_llm_response(response: Any) -> dict[str, Any]:
                 text = getattr(first, "text", None)
                 if text:
                     out["first_text"] = text[:512]
-    except Exception:  # noqa: BLE001
-        pass
+    except Exception as exc:  # noqa: BLE001
+        # Surface extraction failures at DEBUG so users can opt
+        # into seeing them without the SDK spamming warnings by
+        # default. The summary dict stays usable; we just may not
+        # have ``token_usage`` / ``model`` populated.
+        logger.debug(
+            "eden: langchain LLMResult summary extraction failed: %s",
+            exc,
+        )
     return out
 
 

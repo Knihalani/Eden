@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import logging
 import uuid
-from typing import Any, Optional
+from typing import Any
 
 from eden_sdk.client import TraceEvent, get_default_client
 from eden_sdk.config import get_config
@@ -20,17 +20,27 @@ logger = logging.getLogger("eden_sdk.instrumentation.autogen")
 _installed = False
 
 
+def _trace_id_or_random() -> str:
+    """Return the active trace id, or a fresh random one.
+
+    Centralised so callers don't have to handle the Optional
+    return type of :func:`current_trace` (mypy-friendly).
+    """
+    ctx = current_trace()
+    return ctx.trace_id if ctx is not None else uuid.uuid4().hex
+
+
 def install() -> None:
     global _installed
     if _installed:
         return
     try:
-        from autogen import ConversableAgent, Agent  # type: ignore
+        from autogen import ConversableAgent  # type: ignore
     except Exception as exc:  # noqa: BLE001
         raise RuntimeError(f"pyautogen not importable: {exc}") from exc
 
-    def _reply_hook(recipient: Any, messages: Optional[list] = None,
-                    sender: Optional[Any] = None, config: Optional[Any] = None) -> None:
+    def _reply_hook(recipient: Any, messages: list | None = None,
+                    sender: Any | None = None, config: Any | None = None) -> None:
         try:
             cfg = get_config()
             if not cfg.enabled:
@@ -40,7 +50,7 @@ def install() -> None:
             event: dict[str, Any] = {
                 "event_id": f"eden_ag_{uuid.uuid4().hex[:16]}",
                 "trace_id": (
-                    current_trace().trace_id
+                    _trace_id_or_random()
                     if current_trace() else uuid.uuid4().hex
                 ),
                 "name": name,

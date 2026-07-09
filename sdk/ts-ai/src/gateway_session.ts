@@ -82,3 +82,50 @@ export async function openaiClient(
     defaultHeaders: headers,
   });
 }
+
+
+/**
+ * One-shot chat completion through the Eden gateway — mirrors
+ * `eden.chat_completion(...)` in the Python SDK. Builds a configured
+ * OpenAI client, makes the call, returns the response. Use this when
+ * you don't need to keep a long-lived client.
+ *
+ * ```ts
+ * const reply = await chatCompletion(sdk, {
+ *   model: "gpt-4o-mini",
+ *   messages: [{ role: "user", content: "hi" }],
+ * });
+ * ```
+ */
+export async function chatCompletion(
+  sdk: EdenSDK,
+  opts: {
+    model: string;
+    messages: Array<{ role: string; content: string }>;
+    filters?: FilterConfig;
+    upstreamBaseUrl?: string;
+    upstreamApiKey?: string;
+    upstreamProvider?: string;
+    piiBypass?: boolean;
+    stream?: boolean;
+    [key: string]: unknown;
+  },
+): Promise<unknown> {
+  const client = await openaiClient(sdk, {
+    filters: opts.filters,
+    upstreamBaseUrl: opts.upstreamBaseUrl,
+    upstreamApiKey: opts.upstreamApiKey,
+    upstreamProvider: opts.upstreamProvider,
+    piiBypass: opts.piiBypass,
+  });
+  const { model, messages, stream, filters: _f, upstreamBaseUrl: _u,
+    upstreamApiKey: _k, upstreamProvider: _p, piiBypass: _b, ...rest } = opts;
+  return (client.chat.completions.create as unknown as (
+    args: Record<string, unknown>
+  ) => Promise<unknown>)({
+    model,
+    messages,
+    stream,
+    ...rest,
+  });
+}

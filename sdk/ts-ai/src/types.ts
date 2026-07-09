@@ -75,6 +75,34 @@ export interface EdenSDKOptions {
   maxBatchSize?: number;
 
   /**
+   * Hard ceiling on the in-memory queue. The oldest event is
+   * dropped when the queue exceeds this. Defaults to 4096 to
+   * match the Python SDK and prevent unbounded growth in
+   * long-lived processes.
+   */
+  maxQueueSize?: number;
+
+  /**
+   * Per-request timeout in seconds. Defaults to 5. Mirrors
+   * Python's ``timeout_s``.
+   */
+  timeoutS?: number;
+
+  /**
+   * When true, the SDK buffers events but does NOT POST them.
+   * Mirrors Python's ``disabled`` flag. Useful for local dev
+   * and shadow mode.
+   */
+  disabled?: boolean;
+
+  /**
+   * If true (default), the SDK runs a small regex pass over every
+   * outgoing payload to mask obvious PII before posting. Mirrors
+   * Python's ``redact_on_client`` flag.
+   */
+  redactOnClient?: boolean;
+
+  /**
    * Maximum time (ms) to wait before flushing a partial batch.
    * Defaults to 250.
    */
@@ -150,6 +178,13 @@ export interface TelemetryEvent {
   spanId?: string;
   name?: string;
   durationMs?: number;
+  /**
+   * Provider model alias stripped of dated suffixes / -latest
+   * suffix. e.g. ``gpt-4o-2024-08-06`` → ``gpt-4o``. Used by the
+   * server-side pricing lookup so different aliases of the same
+   * model roll up to a single rate.
+   */
+  modelNormalized?: string;
 }
 
 // ── Trace context ─────────────────────────────────────────────────

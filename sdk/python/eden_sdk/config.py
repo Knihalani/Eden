@@ -15,20 +15,39 @@ import logging
 import os
 import threading
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from eden_sdk.filters import FilterConfig
 
+# Forward reference for the optional httpx transport used in
+# tests + custom integrations.
+_HTTPX_TRANSPORT = "httpx.AsyncBaseTransport"
+
 logger = logging.getLogger("eden_sdk.config")
 
-_ENV_ORG_ID = "EDEN_ORG_ID"
-_ENV_API_KEY = "EDEN_API_KEY"
+# Org id env vars. ``EDEN_ORG_ID`` is the canonical name;
+# ``EDEN_DEFAULT_ORG`` is the TS SDK's fallback. We accept both so
+# a single .env file works for the Python and TypeScript SDKs.
+_ENV_ORG_ID_CANDIDATES = ("EDEN_ORG_ID", "EDEN_DEFAULT_ORG")
+# API key env vars. ``EDEN_ORG_API_KEY`` is the more explicit alias
+# used by the TypeScript SDK; ``EDEN_API_KEY`` remains the canonical
+# Python-side name for backwards compatibility. Both are accepted.
+_ENV_API_KEY_CANDIDATES = ("EDEN_API_KEY", "EDEN_ORG_API_KEY")
 _ENV_BASE_URL = "EDEN_BASE_URL"
 _ENV_PROJECT = "EDEN_PROJECT_ID"
 _ENV_BATCH_SIZE = "EDEN_BATCH_SIZE"
 _ENV_FLUSH_INTERVAL_MS = "EDEN_FLUSH_INTERVAL_MS"
 _ENV_DISABLED = "EDEN_DISABLED"
+# Env var for opt-in dry-run mode. The Python SDK historically
+# read EDEN_DEBUG for this — but the SDK never mirrored
+# anything to stderr (dry_run only logs at DEBUG and increments
+# a counter), so the name was a doc-vs-code mismatch that
+# confused users who set EDEN_DEBUG=1 expecting stderr
+# output. EDEN_DRY_RUN is the canonical name now; we keep
+# EDEN_DEBUG as a backward-compat alias for users that
+# copied the older README into their env file.
+_ENV_DRY_RUN = "EDEN_DRY_RUN"
 _ENV_DEBUG = "EDEN_DEBUG"
 
 
@@ -67,6 +86,15 @@ class EdenConfig:
         dropped (with a warning) to keep the SDK non-blocking.
     extra_headers
         Additional headers to send on every request (e.g. routing tags).
+    redact_on_client
+        If ``True`` (the default), the SDK runs a small regex pass
+        over every outgoing payload to mask obvious emails, phone
+        numbers, US SSNs, and credit-card numbers. This is a
+        *safety net* — the gateway is the authoritative redaction
+        layer and the source of truth for tenant policy. Disable
+        only when the gateway is configured to handle redaction
+        and you have verified the patterns the regex catches are
+        not legitimate values in your payloads.
     """
 
     org_id: str | None = None
@@ -86,12 +114,21 @@ class EdenConfig:
     disabled: bool = False
     max_queue: int = 4096
     extra_headers: dict[str, str] = field(default_factory=dict)
+    redact_on_client: bool = True
     # Per-filter configuration. When unset, the gateway applies
     # the tenant's :class:`org_pii_policies` defaults. When set,
     # the values override the tenant policy on a per-call basis
     # (rendered as ``X-PII-Mode`` / ``X-PII-Disabled-Categories``
     # headers).
     filters: FilterConfig | None = None
+    # Optional httpx async transport. When set, the EdenClient
+    # built by :func:`configure` uses this transport instead
+    # of the default network stack. Used by tests (mock
+    # transport) and by advanced integrations that need
+    # custom TLS or metrics. Mutating this field after the
+    # client is started has no effect on the in-flight
+    # AsyncClient.
+    transport: Any | None = None
 
     @property
     def enabled(self) -> bool:
@@ -190,6 +227,31 @@ class EdenConfig:
             return base
         return f"{base}/v1"
 
+    def validate(self) -> None:
+        """Raise ``ValueError`` if the config can't ship events.
+
+        Called automatically by :func:`configure` so misconfigurations
+        fail at startup rather than silently dropping the first
+        batch. A no-op when ``disabled`` or ``dry_run`` is set, since
+        both code paths discard the queue anyway.
+        """
+        if self.disabled or self.dry_run:
+            return
+        if not self.org_id:
+            raise ValueError(
+                "EdenConfig.org_id is required to send events. "
+                "Set it via EdenConfig(org_id=...) or the EDEN_ORG_ID env var. "
+                "Pass dry_run=True to capture events in-process without shipping."
+            )
+        if not self.api_key and not self.extra_headers.get("X-Org-Api-Key"):
+            # api_key is optional when the gateway uses another auth
+            # scheme (mTLS, signed URL, etc.) — but the absence is
+            # worth flagging in CI.
+            import logging as _l
+            _l.getLogger("eden_sdk.config").warning(
+                "eden sdk: api_key is not set; auth will rely on extra_headers"
+            )
+
 
 # ── Singleton management ──────────────────────────────────────────────
 
@@ -198,16 +260,37 @@ _config: EdenConfig | None = None
 
 
 def _from_env() -> EdenConfig:
-    """Build a config from environment variables, never raising."""
+    """Build a config from environment variables.
+
+    Validation is deferred to the first call to :func:`get_config`
+    because the env may not be populated at import time. The validate
+    hook is invoked there, so a missing ``EDEN_ORG_ID`` will raise
+    a clear ``ValueError`` instead of silently swallowing events.
+
+    EDEN_DRY_RUN is the canonical opt-in for dry-run mode;
+    EDEN_DEBUG is a back-compat alias (the older README
+    documented it). EDEN_DRY_RUN wins when both are set so a
+    user that explicitly sets EDEN_DRY_RUN=0 does not have
+    their intent overridden by a stale EDEN_DEBUG=1.
+    """
+    _dry_run_raw = os.getenv(_ENV_DRY_RUN)
+    if _dry_run_raw is not None:
+        dry_run = _dry_run_raw.lower() in {"1", "true", "yes"}
+    else:
+        dry_run = os.getenv(_ENV_DEBUG, "").lower() in {"1", "true", "yes"}
     return EdenConfig(
-        org_id=os.getenv(_ENV_ORG_ID) or None,
-        api_key=os.getenv(_ENV_API_KEY) or None,
+        org_id=(
+            next((v for k in _ENV_ORG_ID_CANDIDATES if (v := os.getenv(k))), None)
+        ),
+        api_key=(
+            next((v for k in _ENV_API_KEY_CANDIDATES if (v := os.getenv(k))), None)
+        ),
         base_url=os.getenv(_ENV_BASE_URL, "http://localhost:8000"),
         project_id=os.getenv(_ENV_PROJECT, "default"),
         batch_size=int(os.getenv(_ENV_BATCH_SIZE, "32")),
         flush_interval_ms=int(os.getenv(_ENV_FLUSH_INTERVAL_MS, "250")),
         disabled=os.getenv(_ENV_DISABLED, "").lower() in {"1", "true", "yes"},
-        dry_run=os.getenv(_ENV_DEBUG, "").lower() in {"1", "true", "yes"},
+        dry_run=dry_run,
     )
 
 
@@ -215,19 +298,30 @@ def configure(
     org_id: str | None = None,
     api_key: str | None = None,
     base_url: str | None = None,
+    gateway_url: str | None = None,
     project_id: str | None = None,
     batch_size: int | None = None,
     flush_interval_ms: int | None = None,
+    timeout_s: float | None = None,
     disabled: bool | None = None,
     dry_run: bool | None = None,
     max_queue: int | None = None,
     extra_headers: dict[str, str] | None = None,
+    filters: FilterConfig | None = None,
     **overrides: object,
 ) -> EdenConfig:
     """Update the global config and return it.
 
     Reads from the environment first, then applies overrides. Calling
-    this multiple times incrementally updates the config.
+    this multiple times incrementally updates the config. Pass
+    ``None`` for any kwarg you don't want to change; passing the
+    field's default value still counts as an explicit override.
+
+    Recognised keyword args (in addition to ``EdenConfig`` field
+    names via ``**overrides``):
+        org_id, api_key, base_url, gateway_url, project_id,
+        batch_size, flush_interval_ms, timeout_s, disabled,
+        dry_run, max_queue, extra_headers, filters
     """
     global _config
     with _lock:
@@ -240,12 +334,16 @@ def configure(
             _config.api_key = api_key
         if base_url is not None:
             _config.base_url = base_url
+        if gateway_url is not None:
+            _config.gateway_url = gateway_url
         if project_id is not None:
             _config.project_id = project_id
         if batch_size is not None:
             _config.batch_size = batch_size
         if flush_interval_ms is not None:
             _config.flush_interval_ms = flush_interval_ms
+        if timeout_s is not None:
+            _config.timeout_s = timeout_s
         if disabled is not None:
             _config.disabled = disabled
         if dry_run is not None:
@@ -254,14 +352,32 @@ def configure(
             _config.max_queue = max_queue
         if extra_headers is not None:
             _config.extra_headers.update(extra_headers)
+        if filters is not None:
+            _config.filters = filters
         for k, v in overrides.items():
             if hasattr(_config, k) and v is not None:
                 setattr(_config, k, v)
+        # Loud failure on misconfiguration so missing org_id / api_key
+        # trips an explicit error at startup rather than silently
+        # dropping events for the entire process lifetime.
+        try:
+            _config.validate()
+        except ValueError:
+            # Re-raise so the caller sees the failure immediately.
+            raise
     return _config
 
 
 def get_config() -> EdenConfig:
-    """Return the current config, loading from env on first call."""
+    """Return the current config, loading from env on first call.
+
+    Permissive by default (no validation): the SDK is widely used
+    for trace *capture* in environments where shipping is disabled,
+    and we don't want every test / notebook import to raise.
+
+    Call :meth:`EdenConfig.validate` explicitly (or use
+    :func:`configure`) if you want startup-time validation.
+    """
     global _config
     if _config is None:
         with _lock:

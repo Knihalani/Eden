@@ -30,9 +30,9 @@ eden.instrument("openai", "langchain")
 
 @eden.trace_agent(name="langchain-summary", tags=["example", "langchain"])
 def summarise(text: str) -> str:
+    from langchain_core.output_parsers import StrOutputParser
     from langchain_core.prompts import ChatPromptTemplate
     from langchain_openai import ChatOpenAI
-    from langchain_core.output_parsers import StrOutputParser
 
     prompt = ChatPromptTemplate.from_messages(
         [("system", "Summarise the input in one sentence."),

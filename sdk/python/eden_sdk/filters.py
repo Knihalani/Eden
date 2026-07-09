@@ -43,7 +43,9 @@ filter is a one-liner here.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
+from typing import Any
 
 # Filter names exposed on the wire. Keep in sync with the gateway's
 # FilterRegistry.names() — see :mod:`eden.llmops.filters.base`.
@@ -128,3 +130,123 @@ class FilterConfig:
         if self.pii is not None:
             headers.update(self.pii.to_headers())
         return headers
+
+
+# ── Client-side safety-net redactor ─────────────────────────────────
+#
+# This is a *small*, conservative regex pass over outgoing payloads
+# designed to catch obvious PII before it leaves the process when
+# the gateway is down, misconfigured, or simply not present in a
+# local-dev setup. The gateway remains the authoritative redaction
+# layer; this is a belt-and-suspenders safety net. Disable via
+# ``EdenConfig(redact_on_client=False)`` when the gateway is the
+# trusted redaction point and you don't want false positives.
+
+# legitimate payloads (hex digests, model IDs, version strings).
+_EMAIL_RE = re.compile(r"\b[\w.+-]+@[\w-]+\.[\w.-]+\b")
+# US-style phone numbers: must look like a phone — either a
+# parenthesised area code ``(415) 555-2671`` or separators between
+# the 3-3-4 groups (``415-555-2671``, ``415.555.2671``,
+# ``+1 415 555 2671``).  Pure-digit runs of 10-11 characters are
+# intentionally NOT matched here — they're far more likely to be
+# numeric IDs, token counts, or Unix timestamps than phone
+# numbers.  E.164 (``+14155552671``) is also excluded: the leading
+# ``+`` plus the country code without separators is too easy to
+# confuse with hash digests and other base-16 IDs.
+_PHONE_RE = re.compile(
+    r"(?<!\d)"
+    r"(?:\+?1[-.\s]?)?"
+    r"(?:"
+    r"\(\d{3}\)\s*[-.]?\s*\d{3}[-.\s]?\d{4}"
+    r"|\d{3}[-.\s]\d{3}[-.\s]\d{4}"
+    r")"
+    r"(?!\d)"
+)
+# US SSN: 3-2-4 with hyphens, anchored to word boundaries.
+_SSN_RE = re.compile(r"(?<!\d)\d{3}-\d{2}-\d{4}(?!\d)")
+# Credit cards: 13-19 digits with optional spaces or hyphens
+# between groups. We require the matched run to also pass a Luhn
+# checksum, which dramatically reduces false positives on
+# arbitrary numeric IDs, timestamps, and other long digit
+# sequences that happen to live in payloads.
+_CC_RE = re.compile(r"(?<!\d)(?:\d[ -]?){12,18}\d(?!\d)")
+
+_MASK = "[REDACTED]"
+
+
+def _luhn_ok(digits: str) -> bool:
+    """Return True if ``digits`` passes the Luhn checksum.
+
+    Luhn is the standard mod-10 check used by every major card
+    network; running it on the candidate CC match drops the
+    false-positive rate from "every 13-19 digit number" to roughly
+    1-in-10, which is essential for not corrupting the many
+    legitimate long-numeric values (timestamps, hashes, etc.) that
+    flow through telemetry payloads.
+    """
+    if not (13 <= len(digits) <= 19):
+        return False
+    total = 0
+    parity = len(digits) % 2
+    for i, ch in enumerate(digits):
+        d = ord(ch) - 48
+        if i % 2 == parity:
+            d *= 2
+            if d > 9:
+                d -= 9
+        total += d
+    return total % 10 == 0
+
+
+def _redact_string(s: str) -> str:
+    """Apply the four patterns to a single string in order.
+
+    The CC pass runs each candidate through :func:`_luhn_ok` so
+    long-numeric IDs (e.g. Unix timestamps) are not redacted.
+    """
+
+    def _cc_sub(m: re.Match[str]) -> str:
+        candidate = m.group(0)
+        if _luhn_ok(candidate.replace(" ", "").replace("-", "")):
+            return _MASK
+        return candidate
+
+    s = _EMAIL_RE.sub(_MASK, s)
+    s = _PHONE_RE.sub(_MASK, s)
+    s = _SSN_RE.sub(_MASK, s)
+    s = _CC_RE.sub(_cc_sub, s)
+    return s
+
+
+def _redact_value(v: Any) -> Any:
+    """Recursively walk a JSON-ish value, redacting strings in place.
+
+    Dicts and lists are descended into. String *keys* are also
+    redacted, because some upstream LLM SDKs (and some
+    application code) stash identifiers in dict keys. Everything
+    else is returned unchanged.  The original objects are NOT
+    mutated; we return new containers when we descend.
+    """
+    if isinstance(v, str):
+        return _redact_string(v)
+    if isinstance(v, dict):
+        return {
+            _redact_string(k) if isinstance(k, str) else k: _redact_value(val)
+            for k, val in v.items()
+        }
+    if isinstance(v, list):
+        return [_redact_value(item) for item in v]
+    if isinstance(v, tuple):
+        return tuple(_redact_value(item) for item in v)
+    return v
+
+
+def redact_payload(payload: Any) -> Any:
+    """Run the client-side redactor over a single telemetry payload.
+
+    Returns a NEW structure with masked strings. The original
+    ``payload`` is not modified — important because the SDK keeps
+    the original event in its queue for retry and we want the
+    redacted version only on the wire.
+    """
+    return _redact_value(payload)

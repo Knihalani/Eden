@@ -282,3 +282,36 @@ def test_advisor_close_releases_owned_client():
     # Second close is a no-op.
     adv.close()
     assert adv._client is None
+
+
+def test_advisor_works_as_context_manager():
+    """``with ModelAdvisor() as adv: ...`` releases the httpx
+    client on exit. Mirrors the standard Python DB driver /
+    HTTP client convention.
+    """
+    import httpx as _httpx
+
+    adv = ModelAdvisor(base_url="https://test.example.com")
+    real = _httpx.Client(timeout=1.0)
+    adv._client = real
+    adv._owns_client = True
+    with adv as bound:
+        assert bound is adv  # __enter__ returns self
+    assert adv._client is None  # __exit__ called close()
+
+
+def test_advisor_context_manager_does_not_close_borrowed_client():
+    """When the caller passed in a pre-built client (``_owns_client=False``)
+    the context-manager exit must NOT close it — the caller owns the
+    lifecycle. Same contract as the explicit ``close()``.
+    """
+    import httpx as _httpx
+
+    adv = ModelAdvisor(base_url="https://test.example.com", client=_httpx.Client(timeout=1.0))
+    assert adv._owns_client is False
+    borrowed = adv._client
+    assert borrowed is not None
+    with adv:
+        pass
+    # Borrowed client survives the context exit.
+    assert adv._client is borrowed

@@ -19,10 +19,11 @@ import logging
 import secrets
 import time
 import uuid
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass, field
-from typing import Any, Callable, Iterator, Optional
+from typing import Any
 
 from eden_sdk.client import TraceEvent, get_default_client
 from eden_sdk.config import get_config
@@ -35,19 +36,19 @@ logger = logging.getLogger("eden_sdk.trace")
 # ContextVars (not threading.local) so an async task that awaits a
 # child span sees the same trace_id and parent_span_id as its parent.
 
-_active_trace: ContextVar[Optional["TraceContext"]] = ContextVar(
+_active_trace: ContextVar[TraceContext | None] = ContextVar(
     "eden_active_trace", default=None
 )
-_active_span: ContextVar[Optional["Span"]] = ContextVar(
+_active_span: ContextVar[Span | None] = ContextVar(
     "eden_active_span", default=None
 )
 
 
-def current_trace() -> Optional["TraceContext"]:
+def current_trace() -> TraceContext | None:
     return _active_trace.get()
 
 
-def current_span() -> Optional["Span"]:
+def current_span() -> Span | None:
     return _active_span.get()
 
 
@@ -65,23 +66,85 @@ class Span:
     span_id: str = field(default_factory=lambda: secrets.token_hex(8))
     name: str = "span"
     start: float = field(default_factory=time.perf_counter)
-    end: Optional[float] = None
-    parent_span_id: Optional[str] = None
+    end: float | None = None
+    parent_span_id: str | None = None
     attributes: dict[str, Any] = field(default_factory=dict)
     outcome: str = "success"
-    error: Optional[str] = None
+    error: str | None = None
     span_token: Any = None
     trace_token: Any = None
 
     def set_attribute(self, key: str, value: Any) -> None:
         self.attributes[key] = value
 
-    def finish(self, outcome: str = "success", error: Optional[str] = None) -> None:
+    def set_input(self, value: Any) -> Span:
+        """Attach structured input to the span (logged as ``eden.input``)."""
+        self.attributes["eden.input"] = value
+        return self
+
+    def set_output(self, value: Any) -> Span:
+        """Attach structured output to the span (logged as ``eden.output``)."""
+        self.attributes["eden.output"] = value
+        return self
+
+    def set_tag(self, *tags: str) -> Span:
+        """Append tags to the span. Emitted alongside framework tags."""
+        # Tolerate a pre-existing string attribute (older decorator
+        # versions wrote eden.tags as a comma-joined string;
+        # treating that as iterable would spread its characters
+        # into the tag list). Coerce known shapes explicitly; a
+        # missing attribute starts as an empty list.
+        raw = self.attributes.get("eden.tags")
+        if isinstance(raw, str):
+            existing: list[str] = [t for t in raw.split(",") if t]
+        elif isinstance(raw, (list, tuple)):
+            existing = [str(t) for t in raw]
+        else:
+            existing = []
+        for t in tags:
+            if t and t not in existing:
+                existing.append(t)
+        self.attributes["eden.tags"] = existing
+        return self
+
+    def set_status(self, status: str, *, error: str | None = None) -> Span:
+        """Mark the span's outcome explicitly.
+
+        ``status`` is one of ``"ok"`` / ``"error"`` / ``"unset"``
+        (matching OTel status codes). When ``error`` is given the
+        span outcome is forced to ``"error"`` regardless of ``status``.
+        """
+        normalized = {"ok": "success", "error": "error", "unset": "unset"}.get(
+            status, status
+        )
+        # If the caller passed ``error=...`` the outcome is
+        # always ``"error"`` regardless of the ``status`` kwarg.
+        # Compute the final outcome first, then mirror it into
+        # both the public ``eden.status`` field and the internal
+        # ``eden._pending_outcome`` slot. The previous code wrote
+        # ``eden.status`` BEFORE the error-override, so a span
+        # with ``set_status("ok", error="boom")`` was emitted
+        # with ``status="success"`` but ``outcome="error"`` —
+        # the two fields disagreed.
+        if error is not None:
+            self.error = error
+            normalized = "error"
+        self.attributes["eden.status"] = normalized
+        # Do not call finish() here — finish() is invoked at context exit.
+        # Stash the intent so finish() picks it up.
+        self.attributes["eden._pending_outcome"] = normalized
+        return self
+
+    def finish(self, outcome: str | None = None, error: str | None = None) -> None:
         if self.end is not None:
             return
         self.end = time.perf_counter()
-        self.outcome = outcome
-        self.error = error
+        # Allow set_status() to override the default success outcome.
+        pending = self.attributes.pop("eden._pending_outcome", None)
+        self.outcome = pending or outcome or "success"
+        if error is not None:
+            self.error = error
+            self.outcome = "error"
 
     @property
     def duration_ms(self) -> float:
@@ -107,19 +170,24 @@ class TraceContext:
 def trace(
     name: str = "trace",
     *,
-    trace_id: Optional[str] = None,
-    attributes: Optional[dict[str, Any]] = None,
-) -> Iterator[TraceContext]:
-    """Open a new trace. Use as a context manager.
+    trace_id: str | None = None,
+    attributes: dict[str, Any] | None = None,
+) -> Iterator[Span]:
+    """Open a new trace as a context manager. The yielded ``Span``
+    supports ``set_input`` / ``set_output`` / ``set_tag`` / ``set_status``
+    and exposes ``span.trace_id`` / ``span.span_id`` for correlation.
 
-    >>> with eden.trace("qa-pipeline") as t:
-    ...     with eden.trace("summarise") as s:
-    ...         do_work()
+    >>> with eden.trace("qa-pipeline") as root:
+    ...     root.set_input({"q": "hi"})
+    ...     with eden.trace("summarise") as child:
+    ...         child.set_input("summarising")
+    ...         result = do_work()
+    ...         child.set_output(result)
     """
     cfg = get_config()
     if not cfg.enabled:
-        # Yield a no-op context so user code is unchanged when disabled.
-        yield TraceContext(name=name)
+        # Yield a no-op span so user code is unchanged when disabled.
+        yield Span(name=name)
         return
 
     parent = _active_trace.get()
@@ -139,18 +207,24 @@ def trace(
         parent_span_id=_active_span.get().span_id if _active_span.get() else None,
         attributes=dict(attributes or {}),
     )
+    # Attach the trace context to the span so users can read trace_id
+    # directly off the yielded value. ``span.trace_id`` is a convenience
+    # alias for ``span.trace_context.trace_id``.
+    span.trace_context = ctx  # type: ignore[attr-defined]
+    span.trace_id = new_trace_id  # type: ignore[attr-defined]
 
     trace_token = _active_trace.set(ctx)
     span_token = _active_span.set(span)
-    span.trace_token = trace_token
-    span.span_token = span_token
+    span.trace_token = trace_token  # type: ignore[attr-defined]
+    span.span_token = span_token  # type: ignore[attr-defined]
     try:
-        yield ctx
+        yield span
     except BaseException as exc:
-        span.finish(outcome="error", error=repr(exc))
+        span.finish(error=repr(exc))
         raise
     else:
-        span.finish(outcome="success")
+        if span.end is None:
+            span.finish()
     finally:
         # Always emit a framework event for the trace, even on errors.
         _emit_trace_event(span, ctx)
@@ -167,6 +241,30 @@ def _emit_trace_event(span: Span, ctx: TraceContext) -> None:
     if not cfg.enabled:
         return
     duration_ms = span.duration_ms
+    # Split out the structured fields from the general attributes dict.
+    # Anything the user attached via set_input / set_output / set_tag /
+    # set_status is hoisted to top-level fields on the event payload so
+    # the gateway doesn't have to know about the SDK's internal
+    # attribute prefix scheme.
+    raw_attrs = dict(span.attributes)
+    input_val = raw_attrs.pop("eden.input", None)
+    output_val = raw_attrs.pop("eden.output", None)
+    # Normalise the user-supplied eden.tags attribute into a
+    # list-of-strings. The decorator now writes a list, but the
+    # emitter is the wire contract — coerce defensively so a
+    # legacy string attribute (e.g. from user code that mirrors
+    # the SDK's older comma-joined form) does not end up spread
+    # into per-character tags on the wire.
+    raw_tags = raw_attrs.pop("eden.tags", None)
+    if isinstance(raw_tags, str):
+        extra_tags: list[str] = [t for t in raw_tags.split(",") if t]
+    elif isinstance(raw_tags, (list, tuple)):
+        extra_tags = [str(t) for t in raw_tags]
+    else:
+        extra_tags = []
+    status_val = raw_attrs.pop("eden.status", None)
+    pending_outcome = raw_attrs.pop("eden._pending_outcome", None)
+
     payload: dict[str, Any] = {
         "event_id": f"eden_span_{span.span_id}",
         "trace_id": ctx.trace_id,
@@ -175,13 +273,16 @@ def _emit_trace_event(span: Span, ctx: TraceContext) -> None:
         "agent_id": ctx.name,
         "agent_version": None,
         "duration_ms": duration_ms,
-        "outcome": span.outcome,
+        "outcome": pending_outcome or span.outcome,
+        "status": status_val,
+        "input": input_val,
+        "output": output_val,
         "attributes": {
-            **{f"eden.span.{k}": str(v) for k, v in span.attributes.items()},
+            **{f"eden.span.{k}": str(v) for k, v in raw_attrs.items()},
             "eden.span_id": span.span_id,
             "eden.trace_name": ctx.name,
         },
-        "tags": ["eden-sdk", "framework"],
+        "tags": ["eden-sdk", "framework", *extra_tags],
         "source_format": "framework",
         "span_id": span.span_id,
         "parent_span_id": span.parent_span_id,
@@ -197,10 +298,10 @@ def _emit_trace_event(span: Span, ctx: TraceContext) -> None:
 
 
 def trace_agent(
-    name: Optional[str] = None,
+    name: str | None = None,
     *,
-    tags: Optional[list[str]] = None,
-    attributes: Optional[dict[str, Any]] = None,
+    tags: list[str] | None = None,
+    attributes: dict[str, Any] | None = None,
     capture_args: bool = True,
 ) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
     """Decorate a function so every call is traced as an agent run.
@@ -221,7 +322,11 @@ def trace_agent(
                 if capture_args:
                     attrs["eden.args"] = _safe_repr(args)
                     attrs["eden.kwargs"] = _safe_repr(kwargs)
-                attrs["eden.tags"] = ",".join(deco_tags + ["async"])
+                # eden.tags is a list (matches Span.set_tag's
+                # contract); the emitter does
+                # ["eden-sdk", "framework", *extra_tags] so a
+                # string here would spread into per-character tags.
+                attrs["eden.tags"] = list(deco_tags) + ["async"]
                 with trace(func_name, attributes=attrs):
                     return await func(*args, **kwargs)
 
@@ -233,7 +338,7 @@ def trace_agent(
             if capture_args:
                 attrs["eden.args"] = _safe_repr(args)
                 attrs["eden.kwargs"] = _safe_repr(kwargs)
-            attrs["eden.tags"] = ",".join(deco_tags + ["sync"])
+            attrs["eden.tags"] = list(deco_tags) + ["sync"]
             with trace(func_name, attributes=attrs):
                 return func(*args, **kwargs)
 

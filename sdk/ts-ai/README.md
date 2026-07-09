@@ -266,6 +266,40 @@ Every emitted event matches the gateway's expected `telemetry_events` row (see `
 
 `sourceFormat` is one of `openai | anthropic | vercel-ai | langchain | eden-trace-agent-ts | eden-auto-instrument-ts` — the portal uses it to filter events by framework.
 
+For LLM-completion events, the SDK also populates:
+
+| Field | Source | Description |
+| --- | --- | --- |
+| `metrics.input_tokens` | provider `usage` block | prompt tokens (or `promptTokens` / `prompt_tokens`) |
+| `metrics.output_tokens` | provider `usage` block | completion tokens (or `completionTokens` / `completion_tokens`) |
+| `metrics.cache_read_input_tokens` | Anthropic / OpenAI `prompt_tokens_details.cached_tokens` | cached input tokens (Anthropic gives ~90% discount) |
+| `metrics.cache_creation_input_tokens` | Anthropic `cache_creation_input_tokens` | cache write tokens (billed at 25% premium) |
+| `modelNormalized` | `normalizeModelName(model)` | dated-suffix-stripped alias: `gpt-4o-2024-08-06` → `gpt-4o`, `claude-3-5-sonnet-20241022` → `claude-3-5-sonnet` |
+
+Missing token counts are reported as `null` (never 0) so billing
+math doesn't accidentally bill free input.
+
+## Token extraction & model normalization
+
+The same helpers used by every instrumentation are also exported as
+a public API for users who want to pre-screen their own payloads:
+
+```ts
+import { extractUsage, normalizeModelName } from "@eden-ai/sdk";
+
+extractUsage({
+  prompt_tokens: 100,
+  completion_tokens: 50,
+  prompt_tokens_details: { cached_tokens: 25 },
+});
+// => { inputTokens: 100, outputTokens: 50,
+//      cacheReadTokens: 25, cacheCreationTokens: null }
+
+normalizeModelName("gpt-4o-2024-08-06");           // => "gpt-4o"
+normalizeModelName("claude-3-5-sonnet-20241022"); // => "claude-3-5-sonnet"
+normalizeModelName("claude-3-5-sonnet-latest");   // => "claude-3-5-sonnet"
+```
+
 ## Why is it fire-and-forget?
 
 Tracing must never block the user's call. Every emit path is wrapped in a try/catch, network failures are logged at debug level, and oversized batches are dropped silently. To opt into strict mode:
@@ -300,3 +334,12 @@ Verify a row was written to `telemetry_events` with `framework="openai"` and the
 ## License
 
 MIT
+
+## What's new in 0.2.0
+
+- **Context-manager `trace()`.** `import { TraceController } from "@eden-ai/sdk"` and build the span imperatively with `setInput / setOutput / setTag / setStatus / recordError / end`. The legacy `await trace("name", async (ctx) => ...)` form is preserved.
+- **Retry with backoff.** `EdenSDK.postJson` retries transient gateway failures (3 attempts, honours `Retry-After`, never retries 4xx other than 408/429).
+- **Config parity with Python.** New `maxQueueSize` (default 4096, oldest-event drop), `timeoutS` (default 5), `redactOnClient` (default `true`), and `disabled` flags.
+- **Client-side PII safety net.** `redactPayload()` masks obvious emails / phones / SSNs / credit cards in every outgoing payload. Disable via `new EdenSDK({ redactOnClient: false })` when the gateway is your trusted redaction point.
+- **Detection helpers.** `autoInstrument()` and `detectInstalledFrameworks()` report which LLM SDKs are installed; same shape as the Python SDK.
+- **CHANGELOG.md** ships with the package; see `sdk/ts-ai/CHANGELOG.md` for the full 0.2.0 notes.
