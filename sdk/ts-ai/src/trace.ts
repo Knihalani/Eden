@@ -148,7 +148,34 @@ class TraceController implements TraceContext {
   }
   recordError(err: unknown): this {
     this.status = "error";
-    this.error = err instanceof Error ? `${err.constructor.name}: ${err.message}` : String(err);
+    if (err instanceof Error) {
+      // Match the Python SDK's ``repr(exc)`` shape so the
+      // error_message split in ``finishTrace`` populates
+      // both ``error_type`` and ``error_message`` on the
+      // wire. (Python's repr: ``TypeError('boom')`` /
+      // ``TypeError('boom', 'extra')`` -- we use the
+      // ``ClassName: message`` form for parity.)
+      this.error = `${err.constructor.name}: ${err.message}`;
+    } else if (err === null) {
+      this.error = "null";
+    } else if (err === undefined) {
+      this.error = "undefined";
+    } else if (typeof err === "object") {
+      // ``String({code: "X"})`` returns ``"[object Object]"``
+      // and silently drops the payload. Try ``JSON.stringify``
+      // first; fall back to the constructor name when the
+      // value isn't serialisable (e.g. circular refs).
+      try {
+        const json = JSON.stringify(err);
+        this.error = json === undefined ? Object.prototype.toString.call(err) : json;
+      } catch {
+        this.error = Object.prototype.toString.call(err);
+      }
+    } else {
+      // Primitives (string, number, boolean, bigint, symbol)
+      // stringify cleanly.
+      this.error = String(err);
+    }
     return this;
   }
   end(opts: { status?: "ok" | "error" | "unset"; error?: string } = {}): void {

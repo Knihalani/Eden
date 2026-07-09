@@ -125,6 +125,28 @@ def test_compare_transport_error_raises(advisor):
     assert "dns" in exc_info.value.reason.lower()
 
 
+def test_compare_200_with_empty_body_raises(advisor):
+    # Empty-body 200s are a common failure mode when a proxy
+    # strips a chunked response or the backend swallows the
+    # reply. Previously ``r.json()`` on the empty body raised
+    # a raw ``json.JSONDecodeError`` that propagated up as a
+    # confusing traceback — the caller couldn't tell the
+    # difference between "server returned nothing" and "server
+    # gave us garbage". Now it should fail loud here with a
+    # typed error.
+    request = httpx.Request("POST", "https://test.eden.local/")
+    empty_resp = httpx.Response(200, request=request)
+    advisor._client.post.return_value = empty_resp
+    with pytest.raises(ModelAdvisorError) as exc_info:
+        advisor.compare(
+            org_id="org_123",
+            current=("openai", "gpt-4o"),
+            candidate=("openai", "gpt-4o-mini"),
+        )
+    assert exc_info.value.status_code == 200
+    assert exc_info.value.reason == "empty response body"
+
+
 # ─────────────────────────────────────────────────────────────────────
 # recommend
 # ─────────────────────────────────────────────────────────────────────

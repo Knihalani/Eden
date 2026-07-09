@@ -460,7 +460,7 @@ describe("EdenSDK User-Agent header", () => {
     });
     return sdk.flush().then(() => {
       expect(captured.length).toBe(1);
-      expect(captured[0].headers["User-Agent"]).toBe("@eden-ai/sdk/0.2.25");
+      expect(captured[0].headers["User-Agent"]).toBe("@eden-ai/sdk/0.2.26");
     });
   });
 });
@@ -859,6 +859,93 @@ describe("EdenSDK chunk buffer cap", () => {
       expect(buf.length).toBe(8);
       expect(buf[0].chunkIndex).toBe(42);
       expect(buf[buf.length - 1].chunkIndex).toBe(49);
+    },
+  );
+});
+
+
+describe("EdenSDK timer unref", () => {
+  it(
+    "arm'd flush timers call .unref() so a short-lived process can exit",
+    () => {
+      // Regression: the flush timer used to keep the
+      // Node event loop alive. A short-lived CLI script
+      // (``bun run script.ts``) that armed a flush timer
+      // and finished its user-visible work would hang
+      // for ``flushIntervalMs`` (default 250ms) before
+      // the process could exit. Pin that the timer is
+      // armed with ``.unref()`` so the loop can drain.
+      //
+      // Use a stub fetch so the SDK arms the timer
+      // (``disabled: true`` short-circuits the emit path
+      // before the timer is arm'd).
+      const originalFetch = globalThis.fetch;
+      globalThis.fetch = (async () =>
+        new Response("{}", { status: 200 })) as unknown as typeof fetch;
+      try {
+        const sdk = new EdenSDK({
+          orgId: "o",
+          apiKey: "k",
+          flushIntervalMs: 60_000,
+          disabled: false,
+        });
+        // Push an event so ``emit`` arms the flush timer.
+        sdk.emit({
+          eventId: "e1",
+          tenantId: "o",
+          projectId: "default",
+          traceId: "t1",
+          realm: "production",
+          eventType: "agent.run",
+          timestamp: new Date().toISOString(),
+          sourceFormat: "openai",
+          payload: { x: 1 },
+        });
+        const timer = (sdk as unknown as {
+          flushTimer: { unref?: () => void } | null;
+        }).flushTimer;
+        expect(timer).not.toBeNull();
+        expect(typeof timer?.unref).toBe("function");
+        // Drain so the test doesn't leak timers across
+        // cases (the next describe starts with
+        // ``resetDefaultClient``).
+        void sdk.flush();
+      } finally {
+        globalThis.fetch = originalFetch;
+      }
+    },
+  );
+
+  it(
+    "arm'd chunk timers call .unref() so a streaming producer doesn't pin the process",
+    () => {
+      // Same regression for the streaming chunk path --
+      // without ``.unref()``, a producer that buffered
+      // chunks and then exited would hold the process
+      // open for ``flushIntervalMs`` after the user code
+      // finished. Pin that the chunk timer is unref'd.
+      const sdk = new EdenSDK({
+        orgId: "o",
+        apiKey: "k",
+        flushIntervalMs: 60_000,
+        disabled: true,
+      });
+      sdk.bufferChunk({
+        eventId: "e1",
+        traceId: "t1",
+        chunkIndex: 0,
+        deltaText: "x",
+        ttftMs: 1,
+        itlMs: null,
+        tpotMs: null,
+        receivedAtClientMs: 0,
+      });
+      const timer = (sdk as unknown as {
+        chunkTimer: { unref?: () => void } | null;
+      }).chunkTimer;
+      expect(timer).not.toBeNull();
+      expect(typeof timer?.unref).toBe("function");
+      sdk.flushChunks();
     },
   );
 });

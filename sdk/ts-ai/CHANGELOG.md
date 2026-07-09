@@ -4,6 +4,63 @@ All notable changes to the Eden TypeScript SDK are documented here. The
 format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## 0.2.26 — 2026-07-09
+
+Bug-fix + resilience release.
+
+### Fixed
+- `model_advisor.ModelAdvisor.post<T>` returned
+  `null as T` on a 200 with an empty body (interrupted
+  chunked response, missing ``Content-Type``, or a
+  proxy that swallowed the reply). The caller's
+  ``comparisonFromApi(null)`` then blew up later with a
+  cryptic ``Cannot read property 'current' of null``
+  with no mention of the network at all. Now the SDK
+  throws a typed ``ModelAdvisorError(200, "empty
+  response body", null)`` so the caller can surface a
+  clear message and the rest of any retry / circuit-
+  breaker logic can react.
+- `trace.TraceController.recordError` (used by
+  `trace()` and `@traceAgent`) crashed on non-`Error`
+  throws. The previous code did
+  ``err.constructor.name`` unconditionally, so throwing
+  ``null``, ``undefined``, a plain object, or a
+  primitive caused a ``TypeError`` in the cleanup
+  path and the trace was emitted with no error
+  context. Now the method handles every shape:
+  `Error` (class + message), `null`, `undefined`,
+  objects (via `JSON.stringify` with a circular-ref
+  fallback to `Object.prototype.toString`), and
+  primitives (`String(...)`).
+- `client.EdenSDK` (the background flush + chunk
+  timer): the three internal `setTimeout` handles
+  (`bufferChunk` chunk timer, `scheduleFlush` flush
+  timer, `_postChunksTracked` re-arm) were not
+  unref'd. The Node.js event loop therefore held the
+  process open until each timer's first firing, which
+  in a short-lived script (e.g. a one-off benchmark,
+  a serverless function that did a single
+  `eden.shutdown()`) could keep the runtime alive
+  for up to a full ``flushIntervalMs`` after the
+  work was done. All three now call
+  ``.unref()`` when available, mirroring the
+  well-known Node.js pattern for background
+  intervals. The behaviour is unchanged on Deno /
+  Bun (where unref is a no-op).
+
+### Tests
+- 1 new test in `tests/model_advisor.test.ts`:
+  `raises ModelAdvisorError on 200 with empty body`.
+- 3 new tests in `tests/trace.test.ts`:
+  `recordError handles null`, `recordError handles
+  primitive`, `recordError handles circular object`.
+- 2 new tests in `tests/client.test.ts`:
+  `setTimeout handles are unref'd in
+  scheduleFlush` and `_postChunksTracked` (pins the
+  three unref sites by inspecting the active
+  timer list).
+- TS: 173/173 tests pass; `tsc --noEmit` clean.
+
 ## 0.2.25 — 2026-07-09
 
 Bug-fix release.

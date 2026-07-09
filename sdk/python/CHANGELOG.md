@@ -4,6 +4,27 @@ All notable changes to the Eden Python SDK are documented here. The
 format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## 0.2.17 — 2026-07-09
+
+Bug-fix + resilience release.
+
+### Fixed
+- `model_advisor.ModelAdvisor._post` raised a raw
+  ``json.JSONDecodeError`` on a 200 with an empty body
+  (interrupted chunked response, missing
+  ``Content-Type``, or a proxy that swallowed the
+  reply). Callers had no typed signal to tell
+  "server returned nothing" apart from "the server
+  gave us garbage". Now the SDK raises a typed
+  ``ModelAdvisorError(200, "empty response body", None)``
+  — mirrors the TS SDK fix in 0.2.26 so both
+  surfaces behave the same.
+
+### Tests
+- 1 new test in `tests/test_model_advisor.py`:
+  `test_compare_200_with_empty_body_raises`.
+- 210/210 Python tests pass (was 209).
+
 ## 0.2.16 — 2026-07-09
 
 No SDK changes; tracks the parallel TypeScript SDK

@@ -200,6 +200,32 @@ describe("ModelAdvisor.compare", () => {
       expect((err as ModelAdvisorError).reason).toContain("dns");
     }
   });
+
+  it("raises ModelAdvisorError on 200 with empty body", async () => {
+    // Empty-body 200s are a common failure mode when a proxy
+    // strips a chunked response or the backend swallows the
+    // reply. Previously the SDK returned ``null`` and the
+    // caller crashed later with a cryptic
+    // ``Cannot read property 'current' of null`` from
+    // ``comparisonFromApi``. Now it should fail loud here.
+    const { fetchImpl } = makeFakeFetch({});
+    const advisor = new ModelAdvisor({
+      baseUrl: "https://test.eden.local",
+      fetchImpl,
+    });
+    try {
+      await advisor.compare(
+        "org_123",
+        { provider: "openai", modelId: "gpt-4o" },
+        { provider: "openai", modelId: "gpt-4o-mini" },
+      );
+      throw new Error("expected throw");
+    } catch (err) {
+      expect(err).toBeInstanceOf(ModelAdvisorError);
+      expect((err as ModelAdvisorError).statusCode).toBe(200);
+      expect((err as ModelAdvisorError).reason).toBe("empty response body");
+    }
+  });
 });
 
 // ─────────────────────────────────────────────────────────────────────
