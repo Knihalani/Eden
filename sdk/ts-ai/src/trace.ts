@@ -289,12 +289,27 @@ function makeWrappedMethod(
       `${(this as { constructor?: { name?: string } })?.constructor?.name ?? "Anon"}.${propertyKey}`,
       options,
     ) as TraceController;
+    // Track ``status`` separately because ``recordError`` sets
+    // it to ``"error"`` and we want to mirror that on the way
+    // out (without going through ``controller.setStatus`` which
+    // is for the *caller's* explicit status, not auto-error
+    // detection). Using ``controller.recordError`` (rather than
+    // hand-rolling ``controller.error = err.constructor.name``)
+    // ensures the captured error string matches the
+    // ``"${ClassName}: ${message}"`` shape that
+    // ``finishTrace`` splits into ``error_type`` /
+    // ``error_message`` on the wire. The previous code stored
+    // only the class name -- so the SDK emitted
+    // ``error_type: "TypeError"`` with ``error_message: null``
+    // for every decorator-thrown exception, while the Python
+    // SDK's ``@trace_agent`` and the TS callback-form
+    // ``trace()`` both captured the full message. This was a
+    // wire divergence: the TS decorator was the only path
+    // silently dropping the error message.
     let status: "success" | "error" = "success";
-    let errorType: string | undefined;
 
     const finish = () => {
       controller.setStatus(status === "error" ? "error" : "ok");
-      if (errorType) controller.error = errorType;
       controller.end();
     };
 
@@ -304,7 +319,7 @@ function makeWrappedMethod(
         return result
           .catch((err: unknown) => {
             status = "error";
-            errorType = err instanceof Error ? err.constructor.name : "Error";
+            controller.recordError(err);
             throw err;
           })
           .finally(finish);
@@ -313,7 +328,7 @@ function makeWrappedMethod(
       return result;
     } catch (err) {
       status = "error";
-      errorType = err instanceof Error ? err.constructor.name : "Error";
+      controller.recordError(err);
       finish();
       throw err;
     }

@@ -29,6 +29,7 @@ const DEFAULT_MAX_BATCH_SIZE = 50;
 const DEFAULT_MAX_QUEUE_SIZE = 4096;
 const DEFAULT_TIMEOUT_S = 5;
 const DEFAULT_FLUSH_INTERVAL_MS = 250;
+const DEFAULT_MAX_CHUNK_BUFFER = 4096;
 
 
 // ── Configuration ─────────────────────────────────────────────────
@@ -57,6 +58,20 @@ export interface ResolvedConfig {
   maxBatchSize: number;
   maxQueueSize: number;
   flushIntervalMs: number;
+  /**
+   * Upper bound on the streaming chunk buffer. A runaway
+   * streaming response (millions of small chunks) would
+   * OOM the process without this cap — the producer thread
+   * can push faster than the worker thread can flush, and
+   * the buffer would grow without bound. Mirrors the Python
+   * SDK's ``_chunk_buffer_max`` (added in 0.2.13). On
+   * overflow the oldest chunks are dropped and a debug log
+   * is emitted (the user's model output is lossy in
+   * extreme cases, but the aggregate event still ships
+   * because the per-chunk TTFT/ITL/TPOT dashboards only
+   * need a representative sample).
+   */
+  maxChunkBuffer: number;
   /** Per-request timeout in seconds. Defaults to 5. Mirrors Python's ``timeout_s``. */
   timeoutS: number;
   /**
@@ -96,6 +111,7 @@ export function resolveConfig(opts: EdenSDKOptions = {}): ResolvedConfig {
   const strict = opts.strict ?? false;
   const maxBatchSize = opts.maxBatchSize ?? DEFAULT_MAX_BATCH_SIZE;
   const maxQueueSize = opts.maxQueueSize ?? DEFAULT_MAX_QUEUE_SIZE;
+  const maxChunkBuffer = opts.maxChunkBuffer ?? DEFAULT_MAX_CHUNK_BUFFER;
   const flushIntervalMs = opts.flushIntervalMs ?? DEFAULT_FLUSH_INTERVAL_MS;
   const timeoutS = opts.timeoutS ?? DEFAULT_TIMEOUT_S;
   const disabled = opts.disabled ?? false;
@@ -134,6 +150,7 @@ export function resolveConfig(opts: EdenSDKOptions = {}): ResolvedConfig {
     maxBatchSize,
     maxQueueSize,
     flushIntervalMs,
+    maxChunkBuffer,
     timeoutS,
     disabled,
     redactOnClient,
@@ -326,6 +343,24 @@ export class EdenSDK {
    */
   bufferChunk(chunk: StreamChunk): void {
     if (this.disposed) return;
+    // Cap the chunk buffer at ``maxChunkBuffer`` entries.
+    // Drop the oldest on overflow (a runaway streaming
+    // response producing millions of small chunks would
+    // OOM the process before this). Mirrors the Python
+    // SDK's ``_chunk_buffer_max`` from 0.2.13. We use
+    // ``shift`` (O(n)) rather than a deque because the
+    // producer pace is throttled by the worker tick
+    // (default 250ms) so total work per cycle stays
+    // bounded.
+    if (this.chunkBuffer.length >= this.config.maxChunkBuffer) {
+      this.chunkBuffer.shift();
+      if (this.config.debug) {
+        // eslint-disable-next-line no-console
+        console.debug(
+          "[eden-ai] chunk buffer overflow, dropped oldest",
+        );
+      }
+    }
     this.chunkBuffer.push(chunk);
     if (this.chunkBuffer.length >= this.config.maxBatchSize) {
       // Trigger an immediate flush. ``flushChunks()`` itself

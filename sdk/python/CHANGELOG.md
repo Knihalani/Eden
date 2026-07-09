@@ -4,6 +4,23 @@ All notable changes to the Eden Python SDK are documented here. The
 format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## 0.2.15 — 2026-07-09
+
+No SDK changes; this release bumps the version to track
+the parallel TypeScript SDK release (0.2.24). The TS SDK
+fixes two issues the Python SDK already had parity on:
+
+* `bufferChunk` chunk-buffer cap (parallel to 0.2.13's
+  ``_chunk_buffer_max``) — TS now caps at
+  ``maxChunkBuffer`` (default 4096) and drops oldest on
+  overflow, matching the Python SDK's behavior.
+* `@traceAgent` error-message capture — TS now uses
+  ``controller.recordError(err)`` so the wire payload's
+  ``error_message`` is populated, matching the Python
+  SDK's ``@trace_agent``.
+
+209/209 Python tests still pass; mypy unchanged.
+
 ## 0.2.14 — 2026-07-09
 
 Refactor + bug-fix release.
