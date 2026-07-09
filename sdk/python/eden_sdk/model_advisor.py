@@ -56,6 +56,7 @@ from typing import Any
 
 import httpx
 
+from eden_sdk.client import _USER_AGENT
 from eden_sdk.config import EdenConfig, get_config
 
 logger = logging.getLogger("eden_sdk.model_advisor")
@@ -313,7 +314,16 @@ class ModelAdvisor:
         self._client_lock = threading.Lock()
 
     def _headers(self) -> dict[str, str]:
-        h = {"Content-Type": "application/json", "User-Agent": "eden-sdk/python"}
+        h = {
+            "Content-Type": "application/json",
+            # Reuse the same User-Agent the telemetry client sends
+            # on every ingestion POST so the advisor and the
+            # auto-instrumentation paths always report the same
+            # SDK version. The previous hardcoded string had no
+            # version, so version attribution for advisor traffic
+            # was permanently pinned to a literal.
+            "User-Agent": _USER_AGENT,
+        }
         if self.api_key:
             h["Authorization"] = f"Bearer {self.api_key}"
         return h

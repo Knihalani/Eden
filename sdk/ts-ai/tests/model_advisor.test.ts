@@ -371,3 +371,81 @@ describe("ModelAdvisor configuration", () => {
     expect(headers["Authorization"]).toBeUndefined();
   });
 });
+
+
+// ─────────────────────────────────────────────────────────────────────
+// SDK config fallback (parity with Python ModelAdvisor)
+// ─────────────────────────────────────────────────────────────────────
+
+describe("ModelAdvisor SDK config fallback", () => {
+  it("falls back to SDK config apiKey when no explicit apiKey given", async () => {
+    // Configure the default SDK client with an apiKey; then build
+    // a ModelAdvisor without an explicit apiKey and verify the
+    // Authorization header is populated from the SDK config. The
+    // previous TS implementation only looked at the explicit
+    // ``opts.apiKey`` and left the Authorization empty, so a
+    // caller that did ``configure({ apiKey })`` and then
+    // ``new ModelAdvisor()`` got 401s on every call.
+    const { getDefaultClient, resetDefaultClient } = await import(
+      "../src/client.js"
+    );
+    resetDefaultClient();
+    const sdk = getDefaultClient();
+    sdk.configure({
+      orgId: "org_cfg",
+      apiKey: "sk-cfg",
+      baseUrl: "https://cfg.example.com",
+    });
+
+    const { fetchImpl, calls } = makeFakeFetch({ body: FAKE_COMPARE_RESPONSE });
+    const advisor = new ModelAdvisor({ fetchImpl });
+    await advisor.compare(
+      "org_123",
+      { provider: "openai", modelId: "gpt-4o" },
+      { provider: "openai", modelId: "gpt-4o-mini" },
+    );
+    const headers = calls[0]!.init.headers as Record<string, string>;
+    expect(headers["Authorization"]).toBe("Bearer sk-cfg");
+    expect(advisor.orgId).toBe("org_cfg");
+    expect(calls[0]!.url.startsWith("https://cfg.example.com/orgs/")).toBe(
+      true,
+    );
+
+    // Restore the singleton so other tests aren't affected.
+    resetDefaultClient();
+  });
+
+  it("explicit opts always win over SDK config fallback", async () => {
+    const { getDefaultClient, resetDefaultClient } = await import(
+      "../src/client.js"
+    );
+    resetDefaultClient();
+    const sdk = getDefaultClient();
+    sdk.configure({
+      orgId: "org_cfg",
+      apiKey: "sk-cfg",
+      baseUrl: "https://cfg.example.com",
+    });
+
+    const { fetchImpl, calls } = makeFakeFetch({ body: FAKE_COMPARE_RESPONSE });
+    const advisor = new ModelAdvisor({
+      apiKey: "sk-explicit",
+      orgId: "org_explicit",
+      baseUrl: "https://explicit.example.com",
+      fetchImpl,
+    });
+    await advisor.compare(
+      "org_123",
+      { provider: "openai", modelId: "gpt-4o" },
+      { provider: "openai", modelId: "gpt-4o-mini" },
+    );
+    const headers = calls[0]!.init.headers as Record<string, string>;
+    expect(headers["Authorization"]).toBe("Bearer sk-explicit");
+    expect(advisor.orgId).toBe("org_explicit");
+    expect(calls[0]!.url.startsWith("https://explicit.example.com/orgs/")).toBe(
+      true,
+    );
+
+    resetDefaultClient();
+  });
+});

@@ -22,6 +22,7 @@
  * ```
  */
 
+import { getDefaultClient } from "./client.js";
 import { SDK_USER_AGENT } from "./version.js";
 
 // ─────────────────────────────────────────────────────────────────────
@@ -279,9 +280,19 @@ export class ModelAdvisor {
   private readonly fetchImpl: typeof fetch;
 
   constructor(opts: ModelAdvisorOptions = {}) {
-    this.baseUrl = (opts.baseUrl ?? DEFAULT_BASE_URL).replace(/\/$/, "");
-    this.apiKey = opts.apiKey ?? "";
-    this.orgId = opts.orgId ?? "";
+    // Fall back to the SDK config singleton for ``apiKey``,
+    // ``orgId`` and ``baseUrl`` so a caller that did
+    // ``configure({ orgId, apiKey })`` and then ``new ModelAdvisor()``
+    // doesn't end up with an empty ``Authorization`` header.
+    // Mirrors the Python SDK's ``ModelAdvisor.__init__``, which
+    // reads ``EdenConfig`` for the same fields. An explicit
+    // ``opts`` value always wins (the explicit path is the
+    // documented escape hatch for customers running their own
+    // Eden instance).
+    const cfg = getDefaultClient().getConfig();
+    this.baseUrl = (opts.baseUrl ?? cfg.baseUrl ?? DEFAULT_BASE_URL).replace(/\/$/, "");
+    this.apiKey = opts.apiKey ?? cfg.apiKey ?? "";
+    this.orgId = opts.orgId ?? cfg.orgId ?? "";
     this.timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS;
     this.fetchImpl = opts.fetchImpl ?? globalThis.fetch.bind(globalThis);
   }

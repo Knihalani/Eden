@@ -353,6 +353,56 @@ describe("wrapVercelAI", () => {
     const stream_ = events.find((e) => e.eventType === "llm_completion_stream");
     expect(stream_?.sourceFormat).toBe("vercel-ai");
   });
+
+  it("streaming emit buffers per-chunk events to /ingest/chunks (parity with OpenAI + Anthropic)", async () => {
+    // Regression: the Vercel AI streaming path used to only
+    // emit the aggregate ``llm_completion_stream`` event and
+    // never push per-chunk events to ``/ingest/chunks``. The
+    // OpenAI + Anthropic paths do this, the Python SDK does
+    // this — Vercel AI was the odd one out, and the per-chunk
+    // TTFT / ITL / TPOT dashboards rendered empty for every
+    // Vercel AI stream. Capture locally so the test only sees
+    // the requests this case generates.
+    const localCaptured: Array<{ url: string; body: any }> = [];
+    globalThis.fetch = (async (url: RequestInfo | URL, init?: RequestInit) => {
+      const u = String(url);
+      let body: any = {};
+      try { body = init?.body ? JSON.parse(init.body as string) : {}; } catch {}
+      localCaptured.push({ url: u, body });
+      return new Response("{}", { status: 200 });
+    }) as unknown as typeof fetch;
+
+    async function* stream() {
+      yield { type: "text-delta", textDelta: "Hi" };
+      yield { type: "text-delta", textDelta: " there" };
+    }
+    const fakeAi = {
+      generateText: async () => ({}),
+      streamText: async () => ({ fullStream: stream(), textStream: stream() }),
+    };
+    const wrapped = wrapVercelAI(fakeAi);
+    const result = await wrapped.streamText({ model: "openai:gpt-4o-mini", prompt: "hi" });
+    for await (const _chunk of result.textStream) { /* drain */ }
+    await new Promise((r) => setTimeout(r, 20));
+    await getDefaultClient().flush();
+    await getDefaultClient().flushChunks();
+    await new Promise((r) => setTimeout(r, 50));
+
+    const chunkPosts = localCaptured.filter(
+      (c) => c.url.includes("/ingest/chunks") && Array.isArray(c.body?.chunks)
+    );
+    const allChunks = chunkPosts.flatMap((c) => c.body.chunks);
+    // 2 text-delta events → 2 chunk-buffer pushes.
+    expect(allChunks.length).toBe(2);
+    // Both text deltas expose ``delta_text``; the per-chunk
+    // buffer mirrors the OpenAI / Anthropic streaming paths.
+    expect(allChunks[0].delta_text).toBe("Hi");
+    expect(allChunks[1].delta_text).toBe(" there");
+    // Every chunk is in the same ``trace_id`` family and has
+    // an incrementing ``chunk_index`` from 0.
+    expect(new Set(allChunks.map((c: any) => c.trace_id)).size).toBe(1);
+    expect(allChunks.map((c: any) => c.chunk_index)).toEqual([0, 1]);
+  });
 });
 
 // ── LangChain ─────────────────────────────────────────────────────

@@ -315,3 +315,31 @@ def test_advisor_context_manager_does_not_close_borrowed_client():
         pass
     # Borrowed client survives the context exit.
     assert adv._client is borrowed
+
+
+# ─────────────────────────────────────────────────────────────────────
+# User-Agent header (parity with client.py)
+# ─────────────────────────────────────────────────────────────────────
+
+
+def test_advisor_user_agent_includes_version() -> None:
+    """The advisor's User-Agent must include the SDK version
+    string (e.g. ``eden-sdk/0.2.10 (python)``), matching the
+    telemetry client. The previous implementation hardcoded
+    ``eden-sdk/python`` with no version, so version drift
+    across the fleet was invisible in advisor traffic.
+    """
+    from eden_sdk.client import _USER_AGENT
+    from eden_sdk.client import __version__ as _v
+    from eden_sdk.model_advisor import ModelAdvisor
+
+    adv = ModelAdvisor(
+        config=None,
+        base_url="https://test.eden.local",
+    )
+    headers = adv._headers()
+    ua = headers.get("User-Agent", "")
+    assert ua == _USER_AGENT
+    assert _v in ua
+    assert ua.startswith("eden-sdk/")
+    assert ua.endswith(" (python)")
