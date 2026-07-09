@@ -19,7 +19,24 @@ Wire disconnected hooks into one **issue state machine** that drives detect → 
 
 ---
 
-## 2. Issue state machine
+## 2. Eden current state (codebase-accurate)
+
+| Component | Path | Status |
+|---|---|---|
+| HookBus + 20+ hooks | `llmops/promotion_hooks.py` | **SHIPPED** |
+| `register_all_hooks()` | `promotion_hooks.py:1667` | **STUB** — logs only; lazy singletons |
+| Closed-loop executor | `llmops/closed_loop_executor.py` | **PARTIAL** — advisory side effects |
+| Closed-loop portal API | `api/routes/intelligence_closed_loop.py` | **SHIPPED** |
+| Insights → KB loop | `insights/detector_loop.py` | **SHIPPED** — running in lifespan |
+| Issue state machine | `src/eden/closed_loop/orchestrator.py` | **MISSING** |
+| Improvement cockpit UX | N17 | **MISSING** |
+| `src/eden/issues/` | — | **MISSING** |
+
+**F46 builds orchestrator; N17 provides operator UX** — complementary, not duplicate.
+
+---
+
+## 3. Issue state machine
 
 ```
                     ┌─────────────┐
@@ -47,16 +64,6 @@ Wire disconnected hooks into one **issue state machine** that drives detect → 
        │  LEARNING   │ (optional shadow nudge)
        └─────────────┘
 ```
-
----
-
-## 3. Eden current state
-
-| Hook | Path | Status |
-|---|---|---|
-| `promotion_hooks.py` | partial | Not issue-scoped |
-| Trace finalized consumer | workers | Parallel, uncoordinated |
-| Issue status | — | F29 not built |
 
 ---
 

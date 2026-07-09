@@ -21,7 +21,20 @@
 
 ## P0 ship list
 
-F48, F28, F29, F20, F30, F04, F47, F03, F01, F22, F39, F41, F46, **N01, N02, N07, N08, N09**
+**N14** (blocker), F48, F28, F29, F20, N08, N16, F04, N17, F30, F22, F39, F41, N15, N01, N07
+
+## New: production maintenance stand-outs (N14–N19)
+
+| ID | Why it matters |
+|---|---|
+| N14 | Activates ETEC/StatGate/worker — **unblocks moats** |
+| N15 | Evals become live gateway guardrails (shipped EvalToGuardrailLink) |
+| N16 | 80% cost cut, keep all failures |
+| N17 | Single improvement queue for operators |
+| N18 | Auto prompt evolution + canary (shipped evolver) |
+| N19 | KB compounding with safe two-speed promotion |
+
+See [`../PRODUCTION-MAINTENANCE-STANDOUT.md`](../PRODUCTION-MAINTENANCE-STANDOUT.md).
 
 ## Restored high-value (N09–N13)
 
