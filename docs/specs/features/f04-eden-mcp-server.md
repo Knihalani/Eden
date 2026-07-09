@@ -337,15 +337,70 @@ Rollout: design partners → beta (read-only tools) → GA (full loop).
 
 ---
 
-## 15. What we are NOT building
+## 15. Use-with-AI documentation (absorbed F27)
+
+| Deliverable | Path |
+|---|---|
+| MCP quickstart | `docs/integrations/eden-mcp-server.md` |
+| `llms.txt` | Auto-generated tool + API index |
+| Claude Code skill | `skills/eden-debug/SKILL.md` |
+| Cursor rules | `docs/integrations/cursor-rules.md` |
+| OTel guide | `docs/integrations/opentelemetry.md` |
+
+**Client experience:** 5-minute first trace; zero-cost docs maintenance via OpenAPI codegen.
+
+---
+
+## 16. What we are NOT building
 
 | Deleted spec | Reason | Covered by |
 |---|---|---|
 | F05 Eden CLI debug | MCP is universal across IDEs | F04 tools |
-| F10 Local debug dev server | Cloud/self-hosted API sufficient | F04 + optional `EDEN_LOCAL` |
+| F10 Local debug dev server | Streaming-first | F04 + **N11** live tail |
 | F26 CLI session inspection | `list_debug_sessions` tool | F04 |
 | F37 MCP run_autofix standalone | Merged into F04 tool catalog | F04 §8 |
-| F32 Eden Workshop OSS | Portal + MCP cover dev loop; OSS maintenance cost | F04 + portal |
+| F32 Eden Workshop OSS | Portal + MCP cover dev loop | F04 + portal |
+| F27 Use-with-AI docs | Docs bundle | F04 §15 |
+
+---
+
+## 17. Performance & cost optimization
+
+See [PERFORMANCE-COST-STANDARDS.md](../PERFORMANCE-COST-STANDARDS.md).
+
+### MCP tool latency budgets
+
+| Tool category | p50 | p95 |
+|---|---|---|
+| Read (get_transcript, search) | <150ms | <800ms |
+| Debugger rerun (cached prefix) | <500ms | <2s |
+| Triage / autofix orchestration | <2s | <60s |
+
+### Cost controls
+
+- Read tools: **$0** — HTTP to Eden API only
+- `run_autofix`: cap 1 concurrent/org; daily `mcp_fix_budget_usd`
+- Response compression: gzip JSON >10KB
+- `get_transcript`: paginate steps; default max 50 steps/request
+
+### Caching
+
+- Redis cache `mcp:transcript:{trace_id}` 60s TTL for repeated tool calls in same session
+- ETag on trace metadata
+
+### Client experience
+
+- Streaming MCP responses for large transcripts (chunk by step)
+- Clear error messages with `retry_after` on 429
+- Tool timeouts: read 30s, autofix 300s
+
+### Monitoring
+
+```
+eden_mcp_tool_duration_seconds{tool}
+eden_mcp_tool_errors_total{tool,reason}
+eden_mcp_autofix_cost_usd_total
+```
 
 ---
 

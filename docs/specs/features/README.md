@@ -1,44 +1,44 @@
 # Feature Implementation Specs
 
-> **Master document:** [`../FEATURE-GAP-MASTER.md`](../FEATURE-GAP-MASTER.md)  
-> **Market hypotheses:** [`../MARKET-HYPOTHESES.md`](../MARKET-HYPOTHESES.md)  
-> **Deleted specs:** [`DELETED-FEATURES.md`](./DELETED-FEATURES.md)  
-> **Review:** [`SPEC-REVIEW.md`](./SPEC-REVIEW.md)
+> **Master:** [`../FEATURE-GAP-MASTER.md`](../FEATURE-GAP-MASTER.md)  
+> **Performance SLAs:** [`../PERFORMANCE-COST-STANDARDS.md`](../PERFORMANCE-COST-STANDARDS.md)  
+> **Market thesis:** [`../MARKET-HYPOTHESES.md`](../MARKET-HYPOTHESES.md)
 
-## Inventory (revised July 2026)
+## Inventory
 
-| Category | Count | Description |
-|---|---|---|
-| **F-features** | 24 | Competitor-parity closed loop (pruned from 48) |
-| **N-features** | 8 | Next-level maintenance, improvement, observability |
-
-## Priority tiers
-
-| Priority | Features |
+| Category | Count |
 |---|---|
-| **P0 — Ship first** | F01, F03, F04, F20, F28, F29, F30, F39, F41, F46, F47, F48, **N01, N02, N07** |
-| **P1 — Next** | F06, F09, F12, F22, F23, F33, F35, F40, F42, F44, **N03, N04, N05, N06, N08** |
-| **P2 — Later** | F21, F34 |
+| F-features (parity) | 24 |
+| N-features (differentiation + restored) | 13 |
+| **Total** | **37** |
 
-## Coding-agent-first strategy
+## Mandatory in every spec
 
-**F04 Eden MCP Server** is the primary interface for Cursor, Claude Code, and Windsurf. Deleted F05 CLI, F10 local dev server, F26 session inspection, F37 run_autofix — all absorbed into F04 MCP tools. See [f04-eden-mcp-server.md](./f04-eden-mcp-server.md).
+- Latency budgets (p50/p95)
+- Cost model ($/1k ops or $0 deterministic)
+- Caching & degradation modes
+- Prometheus metrics
 
-## Quick start for engineers
+## P0 ship list
 
-1. Read [FEATURE-GAP-MASTER.md](../FEATURE-GAP-MASTER.md) Section 5 for waves
-2. **Wave 0:** F48 portal fix (blocker)
-3. **Wave 1:** F28→F29→F20→F30 + F04 MCP read tools
-4. Check dependencies in each spec before starting
-5. For differentiation work, read [MARKET-HYPOTHESES.md](../MARKET-HYPOTHESES.md) then N-feature specs
+F48, F28, F29, F20, F30, F04, F47, F03, F01, F22, F39, F41, F46, **N01, N02, N07, N08, N09**
 
-## Hand-deepened specs
+## Restored high-value (N09–N13)
 
-These were expanded beyond generator output:
+| ID | Was | Why |
+|---|---|---|
+| N09 | F11 | Storage cost at scale |
+| N10 | F36 | Search → signal conversion |
+| N11 | F10 | Live trace tail |
+| N12 | F17 | Session timeline |
+| N13 | F38 | Transcript polish |
 
-- F01, F04, F06, F09, F20, F29, F39, F48
-- N01–N08 (new)
+## Deepened specs (second pass)
+
+All 37 feature specs expanded with implementation detail + performance/cost sections.
+
+Hand-edited priority: F01, F03, F04, F06, F09, F20, F28–F30, F22, F41, F46, F47, F48, N01–N13.
 
 ## Generator
 
-`generate_specs.py` — regenerates skeleton F-specs only. **Hand-edited specs take precedence.** N-features are not generated.
+`generate_specs.py` — skeleton F-specs only; never overwrites hand-edited files.
