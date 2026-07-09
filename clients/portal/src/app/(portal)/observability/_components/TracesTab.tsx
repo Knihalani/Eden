@@ -13,14 +13,13 @@
  * provides the four callbacks. We also accept `initialTraceId` so a
  * deep link like `/traces?trace_id=abc-123` can pre-select a row.
  */
-
 import { Filter, TreePine, Clock, PlayCircle, Download, Layers, Tag } from "lucide-react";
 import Link from "next/link";
 import { SkeletonTableRow } from "@/components/ui/skeleton";
 import { TraceOutcomeBadge } from "@/components/ui/status-badge";
 import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
 import type { TraceFilter, TraceItem } from "../_lib/types";
-
+import { Card } from "@/components/ui/card";
 interface TracesTabProps {
   traces: TraceItem[];
   loading: boolean;
@@ -38,7 +37,6 @@ interface TracesTabProps {
    *  dialog must mount at the page level (Radix portals to body). */
   onAnnotate?: (id: string) => void;
 }
-
 const OUTCOMES = ["success", "failure", "partial", "timeout", "crash"] as const;
 
 // Pattern 5.1 (Langfuse): Token & Cost formatting helpers. Format
@@ -52,7 +50,6 @@ function formatTokens(n: number | null | undefined): string {
   if (n < 1_000_000) return `${(n / 1_000).toFixed(n < 10_000 ? 1 : 0)}K`;
   return `${(n / 1_000_000).toFixed(n < 10_000_000 ? 1 : 0)}M`;
 }
-
 function formatCostUSD(cents: number | null | undefined): string {
   if (cents == null) return "—";
   const dollars = cents / 100;
@@ -61,7 +58,6 @@ function formatCostUSD(cents: number | null | undefined): string {
   if (dollars < 0.01) return "<$0.01";
   return `$${dollars.toFixed(2)}`;
 }
-
 export function TracesTab({
   traces,
   loading,
@@ -72,247 +68,185 @@ export function TracesTab({
   onExport,
   initialTraceId,
   showReplayLink = true,
-  onAnnotate,
+  onAnnotate
 }: TracesTabProps) {
   // Pattern 5.1 (Langfuse): Only render token / cost columns when
   // at least one trace actually has that data. Avoids adding three
   // empty columns on tenants whose traces predate telemetry ingestion.
-  const showTokenCostCols = traces.some(
-    (t) =>
-      t.input_tokens != null ||
-      t.output_tokens != null ||
-      t.cost_cents != null,
-  );
-
-  const columns: DataTableColumn<TraceItem>[] = [
-    {
-      key: "trace_id",
-      header: "Trace ID",
-      sortable: true,
-      sticky: true,
-      cell: (t) => (
-        <span className="font-mono text-xs text-[var(--text-primary)]">
+  const showTokenCostCols = traces.some(t => t.input_tokens != null || t.output_tokens != null || t.cost_cents != null);
+  const columns: DataTableColumn<TraceItem>[] = [{
+    key: "trace_id",
+    header: "Trace ID",
+    sortable: true,
+    sticky: true,
+    cell: t => <span className="font-mono text-xs text-[var(--text-primary)]">
           {t.trace_id.slice(0, 16)}…
         </span>
-      ),
-    },
-    {
-      key: "realm",
-      header: "Realm",
-      sortable: true,
-      cell: (t) => (
-        <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-[var(--accent-faint)] text-[var(--accent)]">
+  }, {
+    key: "realm",
+    header: "Realm",
+    sortable: true,
+    cell: t => <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-[var(--accent-faint)] text-[var(--accent)]">
           {t.realm}
         </span>
-      ),
-    },
-    {
-      key: "outcome",
-      header: "Outcome",
-      sortable: true,
-      cell: (t) => <TraceOutcomeBadge outcome={t.outcome} />,
-    },
-    {
-      key: "span_count",
-      header: "Spans",
-      sortable: true,
-      align: "right",
-      cell: (t) => <span className="text-[var(--text-secondary)]">{t.span_count}</span>,
-    },
-    {
-      key: "duration_ms",
-      header: "Duration",
-      sortable: true,
-      align: "right",
-      cell: (t) => <span className="text-[var(--text-secondary)]">{t.duration_ms.toFixed(0)}ms</span>,
-    },
-    ...(showTokenCostCols
-      ? [
-          {
-            // Pattern 5.1 (Langfuse): right-aligned token counts with
-            // thousands separators. Hide entirely when no row carries
-            // the data (computed at the columns build site).
-            key: "input_tokens" as const,
-            header: "In tok",
-            sortable: true,
-            align: "right" as const,
-            cell: (t: TraceItem) => (
-              <span className="font-mono text-[var(--text-secondary)] tabular-nums">
+  }, {
+    key: "outcome",
+    header: "Outcome",
+    sortable: true,
+    cell: t => <TraceOutcomeBadge outcome={t.outcome} />
+  }, {
+    key: "span_count",
+    header: "Spans",
+    sortable: true,
+    align: "right",
+    cell: t => <span className="text-[var(--text-secondary)]">{t.span_count}</span>
+  }, {
+    key: "duration_ms",
+    header: "Duration",
+    sortable: true,
+    align: "right",
+    cell: t => <span className="text-[var(--text-secondary)]">{t.duration_ms.toFixed(0)}ms</span>
+  }, ...(showTokenCostCols ? [{
+    // Pattern 5.1 (Langfuse): right-aligned token counts with
+    // thousands separators. Hide entirely when no row carries
+    // the data (computed at the columns build site).
+    key: "input_tokens" as const,
+    header: "In tok",
+    sortable: true,
+    align: "right" as const,
+    cell: (t: TraceItem) => <span className="font-mono text-[var(--text-secondary)] tabular-nums">
                 {formatTokens(t.input_tokens)}
               </span>
-            ),
-          },
-          {
-            key: "output_tokens" as const,
-            header: "Out tok",
-            sortable: true,
-            align: "right" as const,
-            cell: (t: TraceItem) => (
-              <span className="font-mono text-[var(--text-secondary)] tabular-nums">
+  }, {
+    key: "output_tokens" as const,
+    header: "Out tok",
+    sortable: true,
+    align: "right" as const,
+    cell: (t: TraceItem) => <span className="font-mono text-[var(--text-secondary)] tabular-nums">
                 {formatTokens(t.output_tokens)}
               </span>
-            ),
-          },
-          {
-            key: "cost_cents" as const,
-            header: "Cost",
-            sortable: true,
-            align: "right" as const,
-            cell: (t: TraceItem) => (
-              <span className="font-mono text-[var(--text-primary)] tabular-nums font-medium">
+  }, {
+    key: "cost_cents" as const,
+    header: "Cost",
+    sortable: true,
+    align: "right" as const,
+    cell: (t: TraceItem) => <span className="font-mono text-[var(--text-primary)] tabular-nums font-medium">
                 {formatCostUSD(t.cost_cents)}
               </span>
-            ),
-          },
-        ]
-      : []),
-    {
-      key: "streaming_metrics",
-      header: "Streaming",
-      cell: (t) =>
-        t.streaming_metrics ? (
-          <div className="flex flex-col gap-0.5 text-[var(--text-muted)] text-xs">
+  }] : []), {
+    key: "streaming_metrics",
+    header: "Streaming",
+    cell: t => t.streaming_metrics ? <div className="flex flex-col gap-0.5 text-[var(--text-muted)] text-xs">
             <span>TTFT {t.streaming_metrics.ttft_ms?.toFixed(0)}ms</span>
             <span>ITL {t.streaming_metrics.itl_ms_avg?.toFixed(1)}ms</span>
             <span>TPOT {t.streaming_metrics.tpot_ms?.toFixed(1)}ms</span>
-          </div>
-        ) : (
-          <span className="text-[var(--text-muted)] text-xs">—</span>
-        ),
-    },
-    {
-      key: "actions",
-      header: "Actions",
-      align: "right",
-      cell: (t) => (
-        <div className="flex items-center justify-end gap-1">
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              onSelectTrace(t.trace_id);
-            }}
-            className="p-1.5 text-[var(--text-muted)] hover:text-[var(--accent)] hover:bg-[var(--accent-faint)] rounded-lg transition-colors"
-            title="View Trace Tree"
-            aria-label="View Trace Tree"
-          >
+          </div> : <span className="text-[var(--text-muted)] text-xs">—</span>
+  }, {
+    key: "actions",
+    header: "Actions",
+    align: "right",
+    cell: t => <div className="flex items-center justify-end gap-1">
+          <button onClick={e => {
+        e.stopPropagation();
+        onSelectTrace(t.trace_id);
+      }} className="p-1.5 text-[var(--text-muted)] hover:text-[var(--accent)] hover:bg-[var(--accent-faint)] rounded-lg transition-colors" title="View Trace Tree" aria-label="View Trace Tree">
             <TreePine className="w-4 h-4" />
           </button>
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              onViewTimeline(t.trace_id);
-            }}
-            className="p-1.5 text-[var(--text-muted)] hover:text-[var(--accent)] hover:bg-[var(--accent-faint)] rounded-lg transition-colors"
-            title="View Timeline"
-            aria-label="View Timeline"
-          >
+          <button onClick={e => {
+        e.stopPropagation();
+        onViewTimeline(t.trace_id);
+      }} className="p-1.5 text-[var(--text-muted)] hover:text-[var(--accent)] hover:bg-[var(--accent-faint)] rounded-lg transition-colors" title="View Timeline" aria-label="View Timeline">
             <Clock className="w-4 h-4" />
           </button>
-          {showReplayLink && (
-            <Link
-              href={`/replay?trace_id=${t.trace_id}`}
-              onClick={(e) => e.stopPropagation()}
-              className="p-1.5 text-[var(--text-muted)] hover:text-[var(--accent)] hover:bg-[var(--accent-faint)] rounded-lg transition-colors"
-              title="Open in Replay"
-              aria-label="Open in Replay"
-            >
+          {showReplayLink && <Link href={`/replay?trace_id=${t.trace_id}`} onClick={e => e.stopPropagation()} className="p-1.5 text-[var(--text-muted)] hover:text-[var(--accent)] hover:bg-[var(--accent-faint)] rounded-lg transition-colors" title="Open in Replay" aria-label="Open in Replay">
               <PlayCircle className="w-4 h-4" />
-            </Link>
-          )}
+            </Link>}
           {/* Pattern 5.2 (Langfuse) — annotate button. Fires onAnnotate
               so the parent page can open the AnnotateTraceDialog. */}
-          {onAnnotate && (
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                onAnnotate(t.trace_id);
-              }}
-              className="p-1.5 text-[var(--text-muted)] hover:text-[var(--accent)] hover:bg-[var(--accent-faint)] rounded-lg transition-colors"
-              title="Annotate"
-              aria-label="Annotate"
-            >
+          {onAnnotate && <button onClick={e => {
+        e.stopPropagation();
+        onAnnotate(t.trace_id);
+      }} className="p-1.5 text-[var(--text-muted)] hover:text-[var(--accent)] hover:bg-[var(--accent-faint)] rounded-lg transition-colors" title="Annotate" aria-label="Annotate">
               <Tag className="w-4 h-4" />
-            </button>
-          )}
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              onExport(t.trace_id);
-            }}
-            className="p-1.5 text-[var(--text-muted)] hover:text-[var(--accent)] hover:bg-[var(--accent-faint)] rounded-lg transition-colors"
-            title="Export"
-            aria-label="Export"
-          >
+            </button>}
+          <button onClick={e => {
+        e.stopPropagation();
+        onExport(t.trace_id);
+      }} className="p-1.5 text-[var(--text-muted)] hover:text-[var(--accent)] hover:bg-[var(--accent-faint)] rounded-lg transition-colors" title="Export" aria-label="Export">
             <Download className="w-4 h-4" />
           </button>
         </div>
-      ),
-    },
-  ];
-
-  return (
-    <div className="space-y-4">
+  }];
+  return <div className="space-y-4">
       {/* Filters */}
-      <div className="flex flex-wrap items-center gap-3 bg-[var(--bg-primary)] border border-[var(--border-default)] rounded-xl p-3">
+      <Card padding="sm" className="flex flex-wrap items-center gap-3">
         <Filter className="w-4 h-4 text-[var(--text-muted)]" />
-        <select
-          value={filter.realm}
-          onChange={(e) => onFilterChange({ ...filter, realm: e.target.value })}
-          className="px-3 py-1.5 bg-[var(--bg-secondary)] border border-[var(--border-default)] rounded-lg text-sm text-[var(--text-primary)]"
-        >
+        <select value={filter.realm} onChange={e => onFilterChange({
+        ...filter,
+        realm: e.target.value
+      })} className="px-3 py-1.5 bg-[var(--bg-secondary)] border border-[var(--border-default)] rounded-lg text-sm text-[var(--text-primary)]">
           <option value="">All Realms</option>
           <option value="environment">Environment</option>
           <option value="production">Production</option>
         </select>
-        <select
-          value={filter.outcome}
-          onChange={(e) => onFilterChange({ ...filter, outcome: e.target.value })}
-          className="px-3 py-1.5 bg-[var(--bg-secondary)] border border-[var(--border-default)] rounded-lg text-sm text-[var(--text-primary)]"
-        >
+        <select value={filter.outcome} onChange={e => onFilterChange({
+        ...filter,
+        outcome: e.target.value
+      })} className="px-3 py-1.5 bg-[var(--bg-secondary)] border border-[var(--border-default)] rounded-lg text-sm text-[var(--text-primary)]">
           <option value="">All Outcomes</option>
-          {OUTCOMES.map((o) => (
-            <option key={o} value={o}>
+          {OUTCOMES.map(o => <option key={o} value={o}>
               {o.charAt(0).toUpperCase() + o.slice(1)}
-            </option>
-          ))}
+            </option>)}
         </select>
-        <input
-          type="text"
-          placeholder="Agent ID..."
-          value={filter.agent_id}
-          onChange={(e) => onFilterChange({ ...filter, agent_id: e.target.value })}
-          className="px-3 py-1.5 bg-[var(--bg-secondary)] border border-[var(--border-default)] rounded-lg text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)]"
-        />
-      </div>
+        <input type="text" placeholder="Agent ID..." value={filter.agent_id} onChange={e => onFilterChange({
+        ...filter,
+        agent_id: e.target.value
+      })} className="px-3 py-1.5 bg-[var(--bg-secondary)] border border-[var(--border-default)] rounded-lg text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)]" />
+      </Card>
 
-      {loading && traces.length === 0 ? (
-        <div className="rounded-xl border border-[var(--border-default)] bg-[var(--bg-primary)] overflow-hidden" role="status" aria-live="polite" aria-label="Loading traces">
+      {loading && traces.length === 0 ? <Card padding="lg" className="overflow-hidden" role="status" aria-live="polite" aria-label="Loading traces">
           <div className="flex items-center gap-4 px-4 py-3 border-b border-[var(--border-default)] bg-[var(--bg-secondary)]">
             <span className="text-xs uppercase tracking-wide text-[var(--text-muted)]">Loading traces…</span>
           </div>
-          {Array.from({ length: 8 }).map((_, i) => (
-            <SkeletonTableRow
-              key={i}
-              columns={["w-32", "w-24", "w-20", "w-28", "w-16"]}
-            />
-          ))}
-        </div>
-      ) : (
-        <DataTable
-          columns={columns}
-          rows={traces}
-          rowKey={(t) => t.trace_id}
-          loading={loading && traces.length > 0}
-          defaultSort={{ key: "duration_ms", direction: "desc" }}
-          emptyTitle="No traces found"
-          emptyDescription="Send telemetry from the Eden SDK or run a job — traces will appear here as your agents run."
-          emptyIcon={Layers}
-          onRowClick={(t) => onSelectTrace(t.trace_id)}
-          rowAttrs={(t) => ({ "data-trace-id": t.trace_id })}
-          highlightRowId={initialTraceId}
-          pageSize={25}
-        />
-      )}
-    </div>
-  );
+          {Array.from({
+        length: 8
+      }).map((_, i) => <SkeletonTableRow key={i} columns={["w-32", "w-24", "w-20", "w-28", "w-16"]} />)}
+        </Card> : <DataTable columns={columns} rows={traces} rowKey={t => t.trace_id} loading={loading && traces.length > 0} defaultSort={{
+      key: "duration_ms",
+      direction: "desc"
+    }} emptyTitle="No traces found" emptyDescription="Send telemetry from the Eden SDK or run a job — traces will appear here as your agents run." emptyIcon={Layers} emptyVariant="terminal" emptyTerminal={<div className="rounded-lg overflow-hidden border border-[var(--border-default)] bg-[var(--bg-base)] text-left shadow-[0_24px_60px_-24px_rgba(0,0,0,0.6)]">
+              <div className="flex items-center gap-1.5 px-3 py-1.5 bg-[var(--bg-secondary)] border-b border-[var(--border-subtle)]">
+                <span className="w-2 h-2 rounded-full bg-[var(--traffic-close)]" />
+                <span className="w-2 h-2 rounded-full bg-[var(--traffic-minimize)]" />
+                <span className="w-2 h-2 rounded-full bg-[var(--traffic-zoom)]" />
+                <span className="ml-2 text-[10px] font-mono text-[var(--text-muted)] tracking-wider">traces.log</span>
+                <span className="ml-auto inline-flex items-center gap-1 text-[10px] font-mono uppercase tracking-[0.18em] text-[var(--text-muted)]">
+                  <span className="w-1 h-1 rounded-full bg-[var(--text-muted)]" />
+                  waiting
+                </span>
+              </div>
+              <div className="p-4 space-y-1 font-mono text-xs">
+                <div className="flex items-center gap-3 text-[var(--text-muted)]">
+                  <span>··:··:··</span>
+                  <span className="text-[var(--text-secondary)]">trace_id=…</span>
+                  <span className="text-[var(--accent)]">agent.start</span>
+                  <span className="ml-auto text-[var(--terminal)]">ready</span>
+                </div>
+                <div className="flex items-center gap-3 text-[var(--text-muted)]">
+                  <span>··:··:··</span>
+                  <span className="text-[var(--text-secondary)]">trace_id=…</span>
+                  <span className="text-[var(--accent)]">tool.call</span>
+                  <span className="ml-auto text-[var(--text-muted)]">awaiting ingest</span>
+                </div>
+                <div className="flex items-center gap-3 text-[var(--text-muted)]">
+                  <span>··:··:··</span>
+                  <span className="text-[var(--text-secondary)]">trace_id=…</span>
+                  <span className="text-[var(--accent)]">agent.finish</span>
+                  <span className="ml-auto text-[var(--text-muted)]">awaiting ingest</span>
+                </div>
+              </div>
+            </div>} onRowClick={t => onSelectTrace(t.trace_id)} rowAttrs={t => ({
+      "data-trace-id": t.trace_id
+    })} highlightRowId={initialTraceId} pageSize={25} />}
+    </div>;
 }

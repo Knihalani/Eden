@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Logo } from "@/components/brand/logo";
-import { ChevronLeft, Shield, Lock, Eye, Database } from "lucide-react";
+import { LegalPage } from "@/components/layout/legal-page";
+import { Shield, Lock, Eye, Database } from "lucide-react";
 
 export const metadata: Metadata = {
   title: "Privacy · Eden",
@@ -138,35 +138,12 @@ const SECTIONS = [
 
 export default function PrivacyPage() {
   return (
-    <div className="min-h-screen bg-[var(--bg-secondary)]">
-      <nav className="sticky top-0 z-50 h-16 bg-[var(--bg-primary)]/90 backdrop-blur-xl border-b border-[var(--border-subtle)]">
-        <div className="max-w-5xl mx-auto px-6 h-full flex items-center justify-between">
-          <Logo size="md" showWordmark href="/" />
-          <Link
-            href="/"
-            className="inline-flex items-center gap-1.5 text-sm text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors"
-          >
-            <ChevronLeft className="w-4 h-4" />
-            Back to home
-          </Link>
-        </div>
-      </nav>
-
-      <main className="max-w-3xl mx-auto px-6 py-16">
-        <p className="text-[11px] font-mono font-semibold uppercase tracking-widest text-[var(--accent)] mb-3">
-          Legal
-        </p>
-        <h1
-          className="text-4xl md:text-5xl font-bold text-[var(--text-primary)] mb-4"
-          style={{ letterSpacing: "-0.03em", lineHeight: 1.05 }}
-        >
-          Privacy
-        </h1>
-        <p className="text-base text-[var(--text-secondary)] mb-12 leading-relaxed">
-          Eden is built around the principle that your telemetry is yours. This page
-          summarises what we collect, where it lives, who can see it, and how to take it
-          back. For the legally-binding version, see our DPA.
-        </p>
+    <LegalPage
+      eyebrow="Legal"
+      title="Privacy"
+      description="Eden is built around the principle that your telemetry is yours. This page summarises what we collect, where it lives, who can see it, and how to take it back. For the legally-binding version, see our DPA."
+      size="narrow"
+    >
 
         <div className="space-y-12">
           {SECTIONS.map((s) => (
@@ -195,7 +172,6 @@ export default function PrivacyPage() {
             . We respond within one business day.
           </p>
         </div>
-      </main>
-    </div>
+    </LegalPage>
   );
 }

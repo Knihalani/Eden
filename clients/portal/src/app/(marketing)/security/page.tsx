@@ -1,16 +1,17 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Logo } from "@/components/brand/logo";
+import { LegalPage } from "@/components/layout/legal-page";
 import {
-  ChevronLeft,
   Shield,
   Lock,
   Server,
   Key,
   FileCheck2,
-  
   AlertTriangle,
-  CheckCircle2 } from "lucide-react";
+  CheckCircle2,
+  Clock4,
+  Building2,
+} from "lucide-react";
 
 export const metadata: Metadata = {
   title: "Security · Eden",
@@ -52,79 +53,79 @@ const CONTROLS = [
       "Public bug bounty via HackerOne. Rewards up to $25,000 for critical findings in production endpoints." },
 ];
 
-const CERTIFICATIONS = [
-  { name: "SOC 2 Type II", status: "Active — annual audit", icon: CheckCircle2 },
-  { name: "GDPR", status: "Compliant — DPA auto-attached", icon: CheckCircle2 },
-  { name: "CCPA", status: "Compliant — Do Not Sell honoured", icon: CheckCircle2 },
-  { name: "HIPAA", status: "Available on Enterprise + BAA", icon: CheckCircle2 },
-  { name: "ISO 27001", status: "In progress — target Q4 2026", icon: Shield },
-  { name: "C5 (BSI)", status: "Available on Enterprise (EU)", icon: Shield },
+// status_kind drives icon + colour, not the icon itself. A buyer
+// scanning the page reads ACTIVE / IN PROGRESS / ENTERPRISE
+// correctly instead of all six rows looking identical. Phosphor
+// green is reserved for active/success; in-progress is amber;
+// tier-gated is muted (not a security claim until contracted).
+type CertKind = "active" | "in-progress" | "tier-gated";
+const CERTIFICATIONS: Array<{ name: string; status: string; kind: CertKind; icon: typeof CheckCircle2 }> = [
+  { name: "SOC 2 Type II", status: "Active — annual audit",            kind: "active",      icon: CheckCircle2 },
+  { name: "GDPR",          status: "Compliant — DPA auto-attached",    kind: "active",      icon: CheckCircle2 },
+  { name: "CCPA",          status: "Compliant — Do Not Sell honoured", kind: "active",      icon: CheckCircle2 },
+  { name: "HIPAA",         status: "Available on Enterprise + BAA",    kind: "tier-gated",  icon: Building2 },
+  { name: "ISO 27001",     status: "In progress — target Q4 2026",     kind: "in-progress", icon: Clock4 },
+  { name: "C5 (BSI)",      status: "Available on Enterprise (EU)",     kind: "tier-gated",  icon: Building2 },
 ];
 
 export default function SecurityPage() {
   return (
-    <div className="min-h-screen bg-[var(--bg-secondary)]">
-      <nav className="sticky top-0 z-50 h-16 bg-[var(--bg-primary)]/90 backdrop-blur-xl border-b border-[var(--border-subtle)]">
-        <div className="max-w-5xl mx-auto px-6 h-full flex items-center justify-between">
-          <Logo size="md" showWordmark href="/" />
-          <Link
-            href="/"
-            className="inline-flex items-center gap-1.5 text-sm text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors"
-          >
-            <ChevronLeft className="w-4 h-4" />
-            Back to home
-          </Link>
-        </div>
-      </nav>
+        <LegalPage
+      eyebrow="Trust Center"
+      title="Security"
+      description="Eden is built around the principle that observability data is sensitive. This page summarises the controls we have in place to protect your data — and the ways you can verify them yourself."
+      size="narrow"
+    >
 
-      <main className="max-w-4xl mx-auto px-6 py-16">
-        <p className="text-[11px] font-mono font-semibold uppercase tracking-widest text-[var(--accent)] mb-3">
-          Trust Center
-        </p>
-        <h1
-          className="text-4xl md:text-5xl font-bold text-[var(--text-primary)] mb-4"
-          style={{ letterSpacing: "-0.03em", lineHeight: 1.05 }}
-        >
-          Security
-        </h1>
-        <p className="text-base text-[var(--text-secondary)] mb-12 leading-relaxed max-w-2xl">
-          Eden is built around the principle that observability data is sensitive. This
-          page summarises the controls we have in place to protect your data — and the
-          ways you can verify them yourself.
-        </p>
 
         {/* Compliance status */}
         <section className="mb-12">
-          <h2 className="text-xl font-semibold text-[var(--text-primary)] mb-4 tracking-tight">
+          <h2 id="certifications" className="text-xl font-semibold text-[var(--text-primary)] mb-4 tracking-tight scroll-mt-20">
             Certifications & compliance
           </h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            {CERTIFICATIONS.map((c) => (
-              <div
-                key={c.name}
-                className="bg-[var(--bg-primary)] border border-[var(--border-default)] rounded-xl p-4 flex items-start gap-3"
-              >
-                <c.icon
-                  className={
-                    c.icon === CheckCircle2
-                      ? "w-5 h-5 text-[var(--terminal)] mt-0.5 shrink-0"
-                      : "w-5 h-5 text-[var(--text-muted)] mt-0.5 shrink-0"
-                  }
-                />
-                <div>
-                  <h3 className="text-sm font-semibold text-[var(--text-primary)]">
-                    {c.name}
-                  </h3>
-                  <p className="text-xs text-[var(--text-muted)] mt-0.5">{c.status}</p>
+            {CERTIFICATIONS.map((c) => {
+              // Phosphor green only for active; amber for in-progress;
+              // muted for tier-gated (not a security claim until
+              // contracted). Per-row kind label removes the "all six
+              // look identical" footgun a buyer hits scanning the page.
+              const iconColor =
+                c.kind === "active"      ? "text-[var(--terminal)]" :
+                c.kind === "in-progress" ? "text-[var(--warning)]"  :
+                                           "text-[var(--text-muted)]";
+              const kindLabel =
+                c.kind === "active"      ? "ACTIVE"      :
+                c.kind === "in-progress" ? "IN PROGRESS" :
+                                           "ENTERPRISE";
+              return (
+                <div
+                  key={c.name}
+                  className="bg-[var(--bg-primary)] border border-[var(--border-default)] rounded-xl p-4 flex items-start gap-3"
+                >
+                  <c.icon className={`w-5 h-5 ${iconColor} mt-0.5 shrink-0`} />
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <h3 className="text-sm font-semibold text-[var(--text-primary)]">
+                        {c.name}
+                      </h3>
+                      <span
+                        className={`text-[10px] font-mono uppercase tracking-[0.18em] ${iconColor}`}
+                        aria-label={`Status: ${kindLabel}`}
+                      >
+                        {kindLabel}
+                      </span>
+                    </div>
+                    <p className="text-xs text-[var(--text-muted)] mt-0.5">{c.status}</p>
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </section>
 
         {/* Controls */}
         <section className="mb-12">
-          <h2 className="text-xl font-semibold text-[var(--text-primary)] mb-4 tracking-tight">
+          <h2 id="controls" className="text-xl font-semibold text-[var(--text-primary)] mb-4 tracking-tight scroll-mt-20">
             Technical controls
           </h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -154,7 +155,7 @@ export default function SecurityPage() {
           <div className="flex items-start gap-3">
             <AlertTriangle className="w-5 h-5 text-[var(--accent)] mt-0.5 shrink-0" />
             <div>
-              <h2 className="text-base font-semibold text-[var(--text-primary)] mb-1">
+              <h2 id="report-vulnerability" className="text-base font-semibold text-[var(--text-primary)] mb-1 scroll-mt-20">
                 Report a vulnerability
               </h2>
               <p className="text-sm text-[var(--text-secondary)] leading-relaxed mb-3">
@@ -211,7 +212,6 @@ export default function SecurityPage() {
             .
           </p>
         </div>
-      </main>
-    </div>
+    </LegalPage>
   );
 }

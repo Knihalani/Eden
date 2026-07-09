@@ -26,10 +26,10 @@ export default function PortalNotFound() {
             404
           </p>
           <h1 className="text-2xl font-semibold text-[var(--text-primary)]">
-            We can't find that page
+            We can&apos;t find that page
           </h1>
           <p className="text-sm text-[var(--text-secondary)] leading-relaxed">
-            The URL doesn't match a portal route. The sidebar on the left
+            The URL doesn&apos;t match a portal route. The sidebar on the left
             lists every page in this app — or press{" "}
             <kbd className="px-1.5 py-0.5 bg-[var(--bg-tertiary)] border border-[var(--border-default)] rounded font-mono text-xs">
               ⌘K

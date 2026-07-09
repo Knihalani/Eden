@@ -1,5 +1,5 @@
 import { SignIn } from "@clerk/nextjs";
-import { AuthSplitLayout, AuthBrandPanel } from "@/components/auth";
+import { AuthSplitLayout, AuthBrandPanel, ClerkAuthFallback } from "@/components/auth";
 import { clerkAppearance } from "@/components/auth/clerk-theme";
 
 // Catch-all so Clerk's internal sub-flows (factor-one, verify-email,
@@ -12,6 +12,11 @@ import { clerkAppearance } from "@/components/auth/clerk-theme";
 // API (in clerk-theme.ts) maps our CSS variables onto Clerk's theme
 // tokens so the form inputs, buttons, and alerts all inherit the
 // dark palette instead of Clerk's default light theme.
+//
+// ClerkAuthFallback wraps the <SignIn /> component. If the Clerk
+// SDK fails to mount (missing publishable key, network blocked,
+// backend outage), the fallback shows a designed empty state
+// instead of a blank right column.
 export default function LoginPage() {
   return (
     <AuthSplitLayout brandPanel={<AuthBrandPanel />}>
@@ -29,18 +34,20 @@ export default function LoginPage() {
             Sign in to your Eden workspace
           </p>
         </div>
-        <SignIn
-          path="/login"
-          routing="path"
-          signUpUrl="/signup"
-          // Send signed-in users to the dashboard, not back to "/".
-          // Without an explicit fallback Clerk sometimes resolves to
-          // the current URL, which can leave a user who clicked
-          // "Sign in" from /signup stuck on the auth card. Mirrors
-          // the /sign-in route so both paths behave identically.
-          fallbackRedirectUrl="/dashboard"
-          appearance={clerkAppearance}
-        />
+        <ClerkAuthFallback formLabel="sign-in">
+          <SignIn
+            path="/login"
+            routing="path"
+            signUpUrl="/signup"
+            // Send signed-in users to the dashboard, not back to "/".
+            // Without an explicit fallback Clerk sometimes resolves to
+            // the current URL, which can leave a user who clicked
+            // "Sign in" from /signup stuck on the auth card. Mirrors
+            // the /sign-in route so both paths behave identically.
+            fallbackRedirectUrl="/dashboard"
+            appearance={clerkAppearance}
+          />
+        </ClerkAuthFallback>
       </div>
     </AuthSplitLayout>
   );

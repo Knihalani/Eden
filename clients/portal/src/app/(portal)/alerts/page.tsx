@@ -349,6 +349,7 @@ export default function AlertsPage() {
           </div>
         ) : alerts.length === 0 ? (
           <EmptyState
+            variant="plain"
             icon={Bell}
             title="All clear"
             description={

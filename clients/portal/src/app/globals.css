@@ -26,8 +26,7 @@
    *
    *   3. Component tokens — scoped to a single surface, named for
    *      where they live (--auth-card, --node-agent, --traffic-close,
-   *       --code-surface, --grid-stroke, --mesh-accent, --indicator-bg,
-   *       --shimmer). These are pre-resolved recipes a component uses
+   *       --code-surface, --shimmer). These are pre-resolved recipes a component uses
    *      to keep its visual identity self-contained.
    *
    * Compatibility aliases at the bottom map shadcn-style names
@@ -103,7 +102,6 @@
   --success-strong: #2D6B4F;
   --warning: #FFB547;
   --warning-bg: rgba(255, 181, 71, 0.1);
-  --warning-dim: rgba(255, 181, 71, 0.06);
   --warning-strong: #B45309;
   --error: #FF6B7A;
   --error-bg: rgba(255, 107, 122, 0.1);
@@ -111,10 +109,8 @@
   --error-strong: #B91C1C;
   --info: #22D3EE;
   --info-bg: rgba(34, 211, 238, 0.10);
-  --info-strong: #0E7490;
 
   /* Category tokens (used by hilt-panel + clerk-theme) */
-  --cat-success-dim: #0F1F18;
   --cat-success-fg:  #5FE5A8;
   --cat-warning-dim: rgba(255, 181, 71, 0.10);
   --cat-warning-fg:  #FFB547;
@@ -139,12 +135,19 @@
   --stage-testing: #A3E635;
   --stage-archiving: #E879F9;
 
-  /* Status Colors — remapped to terminal palette */
-  --status-pending: #64748B;
-  --status-running: #5B9EFF;
-  --status-completed: #5FE5A8;
-  --status-failed: #FF6B7A;
-  --status-human-review: #FFB547;
+  /* Status Colors — decoupled from --accent (CTA blue) so a
+   * "running" pill no longer competes visually with a button.
+   * Six-step ladder ordered by lifecycle:
+   *   pending       slate   (waiting to start)
+   *   running       sky     (actively processing)
+   *   completed     green   (terminal success)
+   *   failed        red     (terminal error)
+   *   human-review  amber   (waiting on a human)
+   *   paused        violet  (held / suspended)
+   * The running hue is intentionally a separate cyan from --info
+   * (#22D3EE) so process-state never reads as "informational". */
+  --status-running: #38BDF8;
+  --status-running-bg: rgba(56, 189, 248, 0.10);
 
   /* Chart palette — dark theme */
   --chart-accent: #5B9EFF;
@@ -160,7 +163,6 @@
   --chart-pie-3: #FFB547;
   --chart-pie-4: #C084FC;
   --chart-pie-5: #E879F9;
-  --chart-pie-6: #22D3EE;
   --chart-outcome-gold: #FFB547;
   --chart-outcome-silver: #94A3B8;
   --chart-outcome-bronze: #C084FC;
@@ -176,7 +178,6 @@
   --overlay: rgba(0, 0, 0, 0.72);
 
   /* Typography Scale */
-  --font-size-xs: 0.75rem;
   --font-size-sm: 0.875rem;
   --font-size-base: 1rem;
   --font-size-lg: 1.125rem;
@@ -208,58 +209,23 @@
   --font-size-2xs: 0.625rem;
   --font-size-3xs: 0.5625rem;
 
-  --font-weight-normal: 400;
-  --font-weight-medium: 500;
-  --font-weight-semibold: 600;
-  --font-weight-bold: 700;
-
   --line-height-tight: 1.25;
   --line-height-normal: 1.5;
   --line-height-relaxed: 1.625;
 
   --letter-spacing-tight: -0.025em;
   --letter-spacing-normal: 0;
-  --letter-spacing-wide: 0.025em;
-
-  /* ui-audit 2026-07-06 L1: icon stroke-width ladder. Lucide
-   * defaults to 2; the portal overrides in four documented cases:
-   *   --icon-stroke-default  2    Lucide default; charts; toolbars
-   *   --icon-stroke-fine     1.5  EmptyState placeholder; sparkline
-   *                              polyline (small canvas, needs weight
-   *                              reduction to avoid blobbing)
-   *   --icon-stroke-feature  2.25 Auth brand-panel feature icons
-   *                              (slightly heavier to balance the
-   *                              mesh gradient behind them)
-   *   --icon-stroke-brand    2.5  Auth split-layout Layers icon
-   *                              (single hero icon — needs presence)
-   * LineageGraph connector strokes are strokeWidth=1 because they
-   * are NOT icons (they are SVG <path> connectors), so they don't
-   * need a token here. */
-  --icon-stroke-default: 2;
-  --icon-stroke-fine: 1.5;
-  --icon-stroke-feature: 2.25;
-  --icon-stroke-brand: 2.5;
 
   /* Spacing System (base 4px) */
-  --space-1: 0.25rem;
   --space-2: 0.5rem;
   --space-3: 0.75rem;
   --space-4: 1rem;
-  --space-5: 1.25rem;
-  --space-6: 1.5rem;
-  --space-8: 2rem;
-  --space-10: 2.5rem;
-  --space-12: 3rem;
-  --space-16: 4rem;
-  --space-20: 5rem;
-  --space-24: 6rem;
 
   /* Border Radius */
   --radius-sm: 6px;
   --radius-md: 8px;
   --radius-lg: 12px;
   --radius-xl: 16px;
-  --radius-full: 9999px;
 
   /* Shadows — Linear-inspired: subtle, precise, not diffused everywhere */
   --shadow-xs: 0 0 0 1px rgba(0, 0, 0, 0.03);
@@ -274,7 +240,6 @@
   --duration-slow: 300ms;
   --ease-out: cubic-bezier(0.33, 1, 0.68, 1);
   --ease-in: cubic-bezier(0.32, 0, 0.67, 0);
-  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
 
   /* Z-index scale (ui-audit prompt 20). Documented tiers so future
    * call sites don't reach for arbitrary z-9999. Distribution in
@@ -283,12 +248,6 @@
    * floating overlays (ChatSidebar, notifications, command palette).
    * The grain overlay uses z-[9999] but is pointer-events:none +
    * aria-hidden, so it can't trap clicks. */
-  --z-base: 0;
-  --z-sticky: 10;
-  --z-dropdown: 20;
-  --z-topbar: 30;
-  --z-modal: 40;
-  --z-overlay: 50;
   /* ui-audit 2026-07-06 M7: extended ladder. Cookie consent and
    * toast notifications use the slots below the grain texture
    * but above page content. Anything truly full-viewport
@@ -305,16 +264,7 @@
   --accent-bg: var(--accent-faint);
   --bg-muted: var(--bg-tertiary);
   --bg-elevated: var(--bg-tertiary);
-  --fg-muted: var(--text-muted);
-  --fg-secondary: var(--text-secondary);
-  --fg-faint: var(--text-faint);
   --bg-surface: var(--bg-primary);
-  --error-bg-dim: var(--error-dim);
-
-  /* Frosted glass indicator for settings nav */
-  --indicator-bg: rgba(91, 158, 255, 0.08);
-  --indicator-border: rgba(91, 158, 255, 0.15);
-  --indicator-blur: 8px;
 
   /* macOS window chrome (terminal mocks) */
   --traffic-close: #ff5f57;
@@ -324,14 +274,10 @@
   /* Code/diff surface (VS Code dark parity) */
   --code-surface: #1e1e1e;
 
-  /* Marketing hero grid stroke */
-  --grid-stroke: rgba(130, 140, 160, 0.045);
-
   /* Auth brand panel mesh gradient stops */
   --mesh-accent: rgba(91, 158, 255, 0.14);
   --mesh-accent-soft: rgba(91, 158, 255, 0.08);
   --mesh-accent-faint: rgba(91, 158, 255, 0.06);
-  --mesh-accent-glow: rgba(91, 158, 255, 0.45);
   --mesh-terminal: rgba(95, 229, 168, 0.08);
   --mesh-purple: rgba(192, 132, 252, 0.06);
 
@@ -400,11 +346,8 @@
   --color-stage-verifying: var(--stage-verifying);
   --color-stage-testing: var(--stage-testing);
   --color-stage-archiving: var(--stage-archiving);
-  --color-status-pending: var(--status-pending);
   --color-status-running: var(--status-running);
-  --color-status-completed: var(--status-completed);
-  --color-status-failed: var(--status-failed);
-  --color-status-human-review: var(--status-human-review);
+  --color-status-running-bg: var(--status-running-bg);
   --color-chart-accent: var(--chart-accent);
   --color-chart-primary: var(--chart-primary);
   --color-chart-success: var(--chart-success);
@@ -424,15 +367,12 @@
   --shadow-xl: var(--shadow-xl);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
-  /* ui-audit 2026-07-06 M1: --font-display is the explicit
-   * commitment to Geist as the display face. Today it aliases
-   * --font-sans (both are Geist), but exposing the alias means
-   * a future swap to e.g. IBM Plex Sans + Geist Mono only has
-   * to change ONE variable here, not 200+ components. Future
-   * audit: if you ever want a different display face, set
-   * --font-display to a new token + add the @font-face in
-   * layout.tsx. */
-  --font-display: var(--font-sans);
+  /* Inter Display for headings (free, ships well, terminal-adjacent
+   * character). Body stays on Geist Sans — Inter Display's
+   * tighter optical sizes give the heading tier real contrast.
+   * To swap again, just point --font-display at a new variable. */
+
+  --font-display: var(--font-inter-display);
 }
 
 /* ==================== Base Styles ==================== */
@@ -524,7 +464,15 @@ html {
   overscroll-behavior: contain;
 }
 body {
-  overflow-x: hidden;
+  /* Use overflow-x: clip (not hidden) so the cascade rule
+   * overflow-x: hidden -> overflow-y: auto does not make body
+   * a scroll container. When body is the scroll container,
+   * position: sticky inside it (docs sidebar, docs TOC, portal
+   * sidebar) stops engaging — pins to body, not viewport. The
+   * user's scroll then scrolls the sticky element off-screen.
+   * clip clips horizontal overflow without establishing a scroll
+   * context, so sticky elements work. July 2026. */
+  overflow-x: clip;
   /* ponytail: ``min-height: 100dvh`` (not ``height: 100dvh``) so
    * the body grows with content — the html element scrolls the
    * document. The previous fixed ``height: 100dvh`` made the body
@@ -550,6 +498,22 @@ body {
    * this rule dropped. */
 }
 
+
+/* FIX-COOKIE: keep the cookie-consent banner from covering the
+ * last viewport of content on long pages (/privacy, /docs, the
+ * marketing FAQ, the 404 destination cards). CookieConsent
+ * (``src/components/cookie-consent.tsx``) sets the
+ * ``--cookie-banner-offset`` CSS custom property on the html
+ * element when the banner is visible, and resets it to ``0px``
+ * once the user makes a choice. We apply it as a body padding
+ * so the document grows below the fixed banner, and the banner
+ * is the only thing rendered in that reserved strip. The auth
+ * routes (sign-in / sign-up / login / signup / forgot-password /
+ * reset-password / invite) don't render the banner — the
+ * variable stays at its ``0px`` default. */
+body {
+  padding-bottom: var(--cookie-banner-offset, 0px);
+}
 /* FIX-B: defensive rule — every high-z fixed/absolute overlay
  * that's outside a Radix Portal must be pointer-events-none by
  * default. Component authors can opt-in by adding
@@ -1126,6 +1090,11 @@ h1, h2, h3, h4, h5, h6 {
   color: var(--text-primary);
   font-weight: 600;
   line-height: var(--line-height-tight);
+  /* ui-audit 2026-07-06: headings use --font-display (Inter Display)
+   * for tighter optical sizes than the body face. Body still on
+   * Geist Sans via --font-sans, so the page has a clear two-tier
+   * type system. */
+  font-family: var(--font-display);
 }
 
 h1 {
@@ -1259,6 +1228,40 @@ pre {
   border-radius: var(--radius-md);
   overflow-x: auto;
   color: var(--text-primary);
+  /* ``white-space: pre`` keeps the code on one line so the user
+   * can scroll horizontally instead of seeing line-broken
+   * characters mid-word. ``overflow-y: hidden`` avoids a
+   * second scroll axis when the code is wider than the
+   * container. The optional right-edge fade (``.pre--scroll``)
+   * signals to the user that more content is hidden to the
+   * right. */
+  white-space: pre;
+  overflow-y: hidden;
+}
+
+/* Right-edge fade hint for scrollable code blocks. Renders a
+ * thin (24px) gradient overlay on the right edge that fades
+ * from transparent to the code surface colour, signalling to
+ * the user that more content is hidden to the right. The
+ * overlay is absolute-positioned over the right edge of the
+ * pre. ``pointer-events: none`` so it never intercepts clicks
+ * meant for the underlying code or the copy button. */
+.pre--scroll {
+  position: relative;
+}
+.pre--scroll::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 24px;
+  height: 100%;
+  background: linear-gradient(
+    to right,
+    transparent,
+    var(--code-surface, var(--bg-inset))
+  );
+  pointer-events: none;
 }
 
 pre code {

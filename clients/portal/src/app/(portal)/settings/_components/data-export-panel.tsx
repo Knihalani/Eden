@@ -4,6 +4,7 @@ import { useState } from "react";
 import { api } from "@/lib/api";
 import { Download, Loader2, FileArchive, CheckCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Card } from "@/components/ui/card";
 
 interface DataExportPanelProps {
   orgId: string;
@@ -36,7 +37,7 @@ export function DataExportPanel({ orgId, canExport }: DataExportPanelProps) {
   if (!canExport) return null;
 
   return (
-    <div className="p-4 bg-[var(--bg-primary)] rounded-xl border border-[var(--border)]">
+    <Card padding="md">
       <div className="flex items-center gap-2 mb-4">
         <FileArchive className="w-4 h-4 text-[var(--text-muted)]" />
         <h3 className="text-sm font-semibold">Export Data</h3>
@@ -85,6 +86,6 @@ export function DataExportPanel({ orgId, canExport }: DataExportPanelProps) {
       <p className="text-xs text-[var(--text-muted)] mt-3">
         Export includes: members.json, references.json, jobs.json, audit_log.json, settings.json
       </p>
-    </div>
+    </Card>
   );
 }

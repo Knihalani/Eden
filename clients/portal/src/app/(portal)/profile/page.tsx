@@ -10,11 +10,17 @@ import { PageHeader } from "@/components/layout/page-header";
 import { useToast } from "@/components/ui/toast";
 import { useConfirm } from "@/hooks/use-confirm";
 import { TwoFASetupDialog } from "../settings/_components/2fa-setup-dialog";
-
+import { Card } from "@/components/ui/card";
 export default function ProfilePage() {
-  const { user, refreshUser } = useAuth();
+  const {
+    user,
+    refreshUser
+  } = useAuth();
   const toast = useToast();
-  const { confirm, ConfirmDialog } = useConfirm();
+  const {
+    confirm,
+    ConfirmDialog
+  } = useConfirm();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [saving, setSaving] = useState(false);
@@ -42,7 +48,6 @@ export default function ProfilePage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
-
   useEffect(() => {
     if (user) {
       setName(user.name);
@@ -50,12 +55,9 @@ export default function ProfilePage() {
       setAvatarUrl(user.avatar_url ?? null);
     }
   }, [user]);
-
   useEffect(() => {
     load2FAStatus();
-     
   }, []);
-
   const load2FAStatus = async () => {
     setLoading2FA(true);
     try {
@@ -67,13 +69,14 @@ export default function ProfilePage() {
       setLoading2FA(false);
     }
   };
-
   const handleSaveProfile = async () => {
     if (!name.trim()) return;
     setSaving(true);
     setSaveSuccess(false);
     try {
-      await api.updateProfile({ name: name.trim() });
+      await api.updateProfile({
+        name: name.trim()
+      });
       setSaveSuccess(true);
       await refreshUser();
       setTimeout(() => setSaveSuccess(false), 2000);
@@ -83,22 +86,18 @@ export default function ProfilePage() {
       setSaving(false);
     }
   };
-
   const handleChangePassword = async (e: React.FormEvent) => {
     e.preventDefault();
     setPasswordError("");
     setPasswordSuccess("");
-
     if (newPassword.length < 8) {
       setPasswordError("Password must be at least 8 characters");
       return;
     }
-
     if (newPassword !== confirmPassword) {
       setPasswordError("Passwords do not match");
       return;
     }
-
     setChangingPassword(true);
     try {
       await api.changePassword(currentPassword, newPassword);
@@ -113,21 +112,17 @@ export default function ProfilePage() {
       setChangingPassword(false);
     }
   };
-
   const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-
     if (!file.type.startsWith("image/")) {
       toast.error("Please select an image file");
       return;
     }
-
     if (file.size > 2 * 1024 * 1024) {
       toast.error("Image must be smaller than 2MB");
       return;
     }
-
     setUploadingAvatar(true);
     try {
       const result = await api.uploadAvatar(file);
@@ -141,24 +136,21 @@ export default function ProfilePage() {
       setUploadingAvatar(false);
     }
   };
-
   const handleDeleteAccount = async () => {
     const firstConfirm = await confirm({
       title: "Delete your account?",
       description: "This action cannot be undone and all your data will be permanently deleted.",
       confirmLabel: "Continue",
-      variant: "destructive",
+      variant: "destructive"
     });
     if (!firstConfirm) return;
-
     const secondConfirm = await confirm({
       title: "Are you absolutely sure?",
       description: "This will permanently delete your account and all associated organizations.",
       confirmLabel: "Delete forever",
-      variant: "destructive",
+      variant: "destructive"
     });
     if (!secondConfirm) return;
-
     setDeleting(true);
     try {
       await api.deleteAccount("DELETE");
@@ -168,17 +160,9 @@ export default function ProfilePage() {
       setDeleting(false);
     }
   };
-
   if (!user) return null;
-
-  return (
-    <div className="p-4 sm:p-6 lg:p-8 max-w-2xl mx-auto space-y-6">
-      <PageHeader
-        eyebrow="Account"
-        title="Profile"
-        subtitle="Manage your account settings, security, and authentication."
-        icon={User}
-      />
+  return <div className="p-4 sm:p-6 lg:p-8 max-w-2xl mx-auto space-y-6">
+      <PageHeader eyebrow="Account" title="Profile" subtitle="Manage your account settings, security, and authentication." icon={User} />
 
       {/* User Info Section */}
       <div className="bg-[var(--bg-primary)] rounded-lg border border-[var(--border)] p-6 mb-6">
@@ -188,42 +172,14 @@ export default function ProfilePage() {
         <div className="flex items-center gap-4 mb-6">
           <div className="relative">
             <div className="user-avatar w-20 h-20 rounded-full flex items-center justify-center text-2xl overflow-hidden bg-[var(--bg-tertiary)]">
-              {avatarUrl ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={avatarUrl}
-                  alt="Your profile photo"
-                  loading="lazy"
-                  decoding="async"
-                  width={80}
-                  height={80}
-                  className="w-full h-full object-cover"
-                />
-              ) : (
-                name.charAt(0).toUpperCase()
-              )}
+              {avatarUrl ?
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={avatarUrl} alt="Your profile photo" loading="lazy" decoding="async" width={80} height={80} className="w-full h-full object-cover" /> : name.charAt(0).toUpperCase()}
             </div>
-            <button
-              type="button"
-              onClick={() => fileInputRef.current?.click()}
-              disabled={uploadingAvatar}
-              aria-label={uploadingAvatar ? "Uploading avatar" : "Upload avatar"}
-              className="absolute bottom-0 right-0 w-8 h-8 bg-[var(--bg-primary)] border border-[var(--border)] rounded-full flex items-center justify-center hover:bg-[var(--bg-muted)] transition-colors"
-            >
-              {uploadingAvatar ? (
-                <Loader2 className="w-4 h-4 animate-spin" aria-hidden />
-              ) : (
-                <Camera className="w-4 h-4" aria-hidden />
-              )}
+            <button type="button" onClick={() => fileInputRef.current?.click()} disabled={uploadingAvatar} aria-label={uploadingAvatar ? "Uploading avatar" : "Upload avatar"} className="absolute bottom-0 right-0 w-8 h-8 bg-[var(--bg-primary)] border border-[var(--border)] rounded-full flex items-center justify-center hover:bg-[var(--bg-muted)] transition-colors">
+              {uploadingAvatar ? <Loader2 className="w-4 h-4 animate-spin" aria-hidden /> : <Camera className="w-4 h-4" aria-hidden />}
             </button>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/*"
-              onChange={handleAvatarUpload}
-              className="hidden"
-              aria-label="Upload profile photo"
-            />
+            <input ref={fileInputRef} type="file" accept="image/*" onChange={handleAvatarUpload} className="hidden" aria-label="Upload profile photo" />
           </div>
           <div>
             <p className="text-sm font-medium text-[var(--text-primary)]">Profile Photo</p>
@@ -239,13 +195,7 @@ export default function ProfilePage() {
             </label>
             <div className="relative">
               <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-muted)]" aria-hidden />
-              <input
-                id="profile-name"
-                type="text"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                className="w-full pl-10 pr-3 py-2 rounded-lg border border-[var(--border)] focus:outline-none focus:ring-2 focus:ring-[var(--accent)]/40"
-              />
+              <input id="profile-name" type="text" value={name} onChange={e => setName(e.target.value)} className="w-full pl-10 pr-3 py-2 rounded-lg border border-[var(--border)] focus:outline-none focus:ring-2 focus:ring-[var(--accent)]/40" />
             </div>
           </div>
 
@@ -256,23 +206,14 @@ export default function ProfilePage() {
             </label>
             <div className="relative">
               <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-muted)]" aria-hidden />
-              <input
-                id="profile-email"
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="w-full pl-10 pr-3 py-2 rounded-lg border border-[var(--border)] focus:outline-none focus:ring-2 focus:ring-[var(--accent)]/40"
-              />
+              <input id="profile-email" type="email" value={email} onChange={e => setEmail(e.target.value)} className="w-full pl-10 pr-3 py-2 rounded-lg border border-[var(--border)] focus:outline-none focus:ring-2 focus:ring-[var(--accent)]/40" />
             </div>
           </div>
 
           {/* User ID (read-only) */}
           <div>
             <p className="block text-sm font-medium text-[var(--text-secondary)] mb-1">User ID</p>
-            <p
-              aria-label={`User ID ${user.user_id}`}
-              className="text-sm text-[var(--text-primary)] font-mono bg-[var(--bg-muted)] px-3 py-2 rounded-lg inline-block"
-            >
+            <p aria-label={`User ID ${user.user_id}`} className="text-sm text-[var(--text-primary)] font-mono bg-[var(--bg-muted)] px-3 py-2 rounded-lg inline-block">
               {user.user_id}
             </p>
           </div>
@@ -280,14 +221,10 @@ export default function ProfilePage() {
           {/* Save Button */}
           <div className="pt-2">
             <Button onClick={handleSaveProfile} disabled={saving || !name.trim()} loading={saving}>
-              {saveSuccess ? (
-                <>
+              {saveSuccess ? <>
                   <Check className="w-4 h-4" aria-hidden />
                   Saved
-                </>
-              ) : (
-                "Save Changes"
-              )}
+                </> : "Save Changes"}
             </Button>
           </div>
         </div>
@@ -310,60 +247,31 @@ export default function ProfilePage() {
             <label htmlFor="profile-current-password" className="block text-sm font-medium text-[var(--text-secondary)] mb-1">
               Current Password
             </label>
-            <input
-              id="profile-current-password"
-              type="password"
-              value={currentPassword}
-              onChange={(e) => setCurrentPassword(e.target.value)}
-              className="w-full px-3 py-2 rounded-lg border border-[var(--border)] focus:outline-none focus:ring-2 focus:ring-[var(--accent)]/40"
-              autoComplete="current-password"
-            />
+            <input id="profile-current-password" type="password" value={currentPassword} onChange={e => setCurrentPassword(e.target.value)} className="w-full px-3 py-2 rounded-lg border border-[var(--border)] focus:outline-none focus:ring-2 focus:ring-[var(--accent)]/40" autoComplete="current-password" />
           </div>
 
           <div>
             <label htmlFor="profile-new-password" className="block text-sm font-medium text-[var(--text-secondary)] mb-1">
               New Password
             </label>
-            <input
-              id="profile-new-password"
-              type="password"
-              value={newPassword}
-              onChange={(e) => setNewPassword(e.target.value)}
-              className="w-full px-3 py-2 rounded-lg border border-[var(--border)] focus:outline-none focus:ring-2 focus:ring-[var(--accent)]/40"
-              autoComplete="new-password"
-            />
+            <input id="profile-new-password" type="password" value={newPassword} onChange={e => setNewPassword(e.target.value)} className="w-full px-3 py-2 rounded-lg border border-[var(--border)] focus:outline-none focus:ring-2 focus:ring-[var(--accent)]/40" autoComplete="new-password" />
           </div>
 
           <div>
             <label htmlFor="profile-confirm-password" className="block text-sm font-medium text-[var(--text-secondary)] mb-1">
               Confirm New Password
             </label>
-            <input
-              id="profile-confirm-password"
-              type="password"
-              value={confirmPassword}
-              onChange={(e) => setConfirmPassword(e.target.value)}
-              className="w-full px-3 py-2 rounded-lg border border-[var(--border)] focus:outline-none focus:ring-2 focus:ring-[var(--accent)]/40"
-              autoComplete="new-password"
-            />
+            <input id="profile-confirm-password" type="password" value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} className="w-full px-3 py-2 rounded-lg border border-[var(--border)] focus:outline-none focus:ring-2 focus:ring-[var(--accent)]/40" autoComplete="new-password" />
           </div>
 
-          {passwordError && (
-            <p role="alert" className="text-sm text-[var(--error)]">{passwordError}</p>
-          )}
+          {passwordError && <p role="alert" className="text-sm text-[var(--error)]">{passwordError}</p>}
 
-          {passwordSuccess && (
-            <p className="text-sm text-[var(--terminal)] flex items-center gap-1">
+          {passwordSuccess && <p className="text-sm text-[var(--terminal)] flex items-center gap-1">
               <Check className="w-4 h-4" aria-hidden />
               {passwordSuccess}
-            </p>
-          )}
+            </p>}
 
-          <Button
-            type="submit"
-            disabled={changingPassword || !currentPassword || !newPassword || !confirmPassword}
-            loading={changingPassword}
-          >
+          <Button type="submit" disabled={changingPassword || !currentPassword || !newPassword || !confirmPassword} loading={changingPassword}>
             Change Password
           </Button>
         </form>
@@ -381,53 +289,32 @@ export default function ProfilePage() {
           </div>
         </div>
 
-        {loading2FA ? (
-          <div className="flex items-center gap-2" aria-live="polite">
+        {loading2FA ? <div className="flex items-center gap-2" aria-live="polite">
             <Loader2 className="w-4 h-4 animate-spin" aria-hidden />
             <span className="text-sm text-[var(--text-muted)]">Loading…</span>
-          </div>
-        ) : (
-          <div className="flex items-center justify-between">
+          </div> : <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              {twoFactorEnabled ? (
-                <>
+              {twoFactorEnabled ? <>
                   <span className="px-3 py-1 bg-[var(--terminal-faint)] text-[var(--terminal)] text-sm font-medium rounded-full flex items-center gap-1">
                     <ShieldCheck className="w-4 h-4" aria-hidden />
                     Enabled
                   </span>
                   <p className="text-sm text-[var(--text-secondary)]">Your account is protected with 2FA</p>
-                </>
-              ) : (
-                <>
+                </> : <>
                   <span className="px-3 py-1 bg-[var(--warning-bg)] text-[var(--warning)] text-sm font-medium rounded-full flex items-center gap-1">
                     <ShieldAlert className="w-4 h-4" aria-hidden />
                     Not Enabled
                   </span>
                   <p className="text-sm text-[var(--text-secondary)]">Add an extra layer of security to your account</p>
-                </>
-              )}
+                </>}
             </div>
 
-            {twoFactorEnabled ? (
-              <Button
-                variant="destructive"
-                size="sm"
-                onClick={() => setShowDisableDialog(true)}
-                aria-label="Disable two-factor authentication"
-              >
+            {twoFactorEnabled ? <Button variant="destructive" size="sm" onClick={() => setShowDisableDialog(true)} aria-label="Disable two-factor authentication">
                 Disable 2FA
-              </Button>
-            ) : (
-              <Button
-                size="sm"
-                onClick={() => setShowSetupDialog(true)}
-                aria-label="Set up two-factor authentication"
-              >
+              </Button> : <Button size="sm" onClick={() => setShowSetupDialog(true)} aria-label="Set up two-factor authentication">
                 Set Up 2FA
-              </Button>
-            )}
-          </div>
-        )}
+              </Button>}
+          </div>}
       </div>
 
       {/* Danger Zone */}
@@ -447,27 +334,15 @@ export default function ProfilePage() {
             <p className="text-sm font-medium text-[var(--text-primary)]">Delete Account</p>
             <p className="text-xs text-[var(--text-secondary)]">Permanently delete your account and all data</p>
           </div>
-          <Button
-            variant="destructive"
-            size="sm"
-            onClick={() => setShowDeleteConfirm(true)}
-            disabled={deleting}
-            aria-label="Delete account"
-          >
+          <Button variant="destructive" size="sm" onClick={() => setShowDeleteConfirm(true)} disabled={deleting} aria-label="Delete account">
             Delete Account
           </Button>
         </div>
       </div>
 
       {/* Delete Confirmation Modal */}
-      {showDeleteConfirm && (
-        <div
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="delete-account-title"
-          className="fixed inset-0 bg-[var(--overlay)] flex items-center justify-center z-50 p-4"
-        >
-          <div className="bg-[var(--bg-primary)] rounded-xl p-6 w-full max-w-md border border-[var(--border-default)]">
+      {showDeleteConfirm && <div role="dialog" aria-modal="true" aria-labelledby="delete-account-title" className="fixed inset-0 bg-[var(--overlay)] flex items-center justify-center z-50 p-4">
+          <Card padding="xl" className="w-full max-w-md">
             <div className="flex items-center gap-3 mb-4">
               <div className="p-2 bg-[var(--error-dim)] rounded-lg">
                 <Trash2 className="w-5 h-5 text-[var(--error)]" aria-hidden />
@@ -495,39 +370,26 @@ export default function ProfilePage() {
                 Delete Forever
               </Button>
             </div>
-          </div>
-        </div>
-      )}
+          </Card>
+        </div>}
 
       {/* 2FA Setup Dialog */}
-      {showSetupDialog && (
-        <TwoFASetupDialog
-          onClose={() => setShowSetupDialog(false)}
-          onSuccess={() => {
-            setShowSetupDialog(false);
-            setTwoFactorEnabled(true);
-          }}
-        />
-      )}
+      {showSetupDialog && <TwoFASetupDialog onClose={() => setShowSetupDialog(false)} onSuccess={() => {
+      setShowSetupDialog(false);
+      setTwoFactorEnabled(true);
+    }} />}
 
       {/* 2FA Disable Dialog */}
-      {showDisableDialog && (
-        <Disable2FADialog
-          onClose={() => setShowDisableDialog(false)}
-          onSuccess={() => {
-            setShowDisableDialog(false);
-            setTwoFactorEnabled(false);
-          }}
-        />
-      )}
+      {showDisableDialog && <Disable2FADialog onClose={() => setShowDisableDialog(false)} onSuccess={() => {
+      setShowDisableDialog(false);
+      setTwoFactorEnabled(false);
+    }} />}
       {ConfirmDialog}
-    </div>
-  );
+    </div>;
 }
-
 function Disable2FADialog({
   onClose,
-  onSuccess,
+  onSuccess
 }: {
   onClose: () => void;
   onSuccess: () => void;
@@ -535,12 +397,10 @@ function Disable2FADialog({
   const [code, setCode] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
     setLoading(true);
-
     try {
       await api.disable2FA(code);
       onSuccess();
@@ -550,15 +410,8 @@ function Disable2FADialog({
       setLoading(false);
     }
   };
-
-  return (
-    <div
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="disable-2fa-title"
-      className="fixed inset-0 bg-[var(--overlay)] flex items-center justify-center z-50 p-4"
-    >
-      <div className="bg-[var(--bg-primary)] rounded-xl p-6 w-full max-w-md border border-[var(--border-default)]">
+  return <div role="dialog" aria-modal="true" aria-labelledby="disable-2fa-title" className="fixed inset-0 bg-[var(--overlay)] flex items-center justify-center z-50 p-4">
+      <Card padding="xl" className="w-full max-w-md">
         <h2 id="disable-2fa-title" className="text-lg font-semibold mb-4 text-[var(--text-primary)]">
           Disable 2FA
         </h2>
@@ -571,26 +424,12 @@ function Disable2FADialog({
             <label htmlFor="disable-2fa-code" className="sr-only">
               6-digit authenticator code
             </label>
-            <input
-              id="disable-2fa-code"
-              type="text"
-              inputMode="numeric"
-              pattern="[0-9]*"
-              value={code}
-              onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
-              placeholder="000000"
-              maxLength={6}
-              aria-describedby={error ? "disable-2fa-error" : undefined}
-              className="w-full px-3 py-2 text-center text-2xl tracking-widest border border-[var(--border)] rounded-lg bg-[var(--bg-primary)] text-[var(--text-primary)]"
-              autoFocus
-            />
+            <input id="disable-2fa-code" type="text" inputMode="numeric" pattern="[0-9]*" value={code} onChange={e => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))} placeholder="000000" maxLength={6} aria-describedby={error ? "disable-2fa-error" : undefined} className="w-full px-3 py-2 text-center text-2xl tracking-widest border border-[var(--border)] rounded-lg bg-[var(--bg-primary)] text-[var(--text-primary)]" autoFocus />
           </div>
 
-          {error && (
-            <p id="disable-2fa-error" role="alert" className="text-sm text-[var(--error)]">
+          {error && <p id="disable-2fa-error" role="alert" className="text-sm text-[var(--error)]">
               {error}
-            </p>
-          )}
+            </p>}
 
           <div className="flex gap-3 justify-end">
             <Button type="button" variant="outline" onClick={onClose} disabled={loading}>
@@ -601,7 +440,6 @@ function Disable2FADialog({
             </Button>
           </div>
         </form>
-      </div>
-    </div>
-  );
+      </Card>
+    </div>;
 }

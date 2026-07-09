@@ -100,9 +100,12 @@ export function NodeShell({
   return (
     <div
       className={cn(
-        "min-w-[180px] max-w-[260px] rounded-md border border-[var(--border-default)] border-l-4 bg-[var(--bg-base)] shadow-md",
-        accent.border,
-        selected && `ring-2 ${accent.ring}`,
+        "min-w-[180px] max-w-[260px] rounded-md border border-[var(--border-default)] bg-[var(--bg-base)] shadow-md",
+        // ui-audit 2026-07-06: the 4px left "colored stripe" was a
+        // SaaS cliché tell. Move type identity to the header chip and
+        // use a thin 2px accent strip as a selected-only affordance
+        // (which matches the `ring-2 ring-…` already on selection).
+        selected ? `border-l-2 ${accent.border} ring-2 ${accent.ring}` : null,
         className,
       )}
     >

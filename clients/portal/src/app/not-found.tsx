@@ -1,6 +1,8 @@
 "use client";
 
 import Link from "next/link";
+import { CodeChip } from "@/components/ui/code-chip";
+import { Panel } from "@/components/ui/panel";
 import { usePathname } from "next/navigation";
 import { Home, Compass, ArrowRight, Activity, Bot, Sparkles, Bell } from "lucide-react";
 
@@ -24,7 +26,7 @@ const POPULAR: Array<{
   {
     group: "Observe",
     items: [
-      { href: "/traces", icon: Activity, label: "Trace Explorer", description: "Search every trace in your system" },
+      { href: "/traces", icon: Activity, label: "Traces", description: "Search every trace in your system" },
       { href: "/incidents", icon: Bell, label: "Incidents", description: "Open RCA clusters" },
     ] },
   {
@@ -53,16 +55,18 @@ export default function GlobalNotFound() {
             link is from a deploy that&apos;s no longer live.
           </p>
           {pathname && pathname !== "/" && (
-            <code className="inline-block mt-2 px-3 py-1.5 rounded-md bg-[var(--bg-primary)] border border-[var(--border-default)] text-xs font-mono text-[var(--text-muted)]">
+            <CodeChip as="span" size="md" className="mt-2">
               {pathname}
-            </code>
+            </CodeChip>
           )}
         </div>
 
         {/* Category-grouped popular routes. Renders 3 columns on lg,
             1 column on mobile. Mirrors the sidebar grouping so users
-            can navigate by intent (e.g. "I want to look at traces"). */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-left">
+            can navigate by intent (e.g. "I want to look at traces").
+            Wrapped in a flat Panel so it reads as a coherent surface
+            group rather than three floating lists. */}
+        <Panel tone="flat" padding="md" className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-left bg-[var(--bg-secondary)]/60">
           {POPULAR.map((group) => (
             <div key={group.group} className="space-y-2">
               <p className="text-[10px] font-mono font-semibold uppercase tracking-[0.14em] text-[var(--text-muted)] px-1">
@@ -90,7 +94,7 @@ export default function GlobalNotFound() {
               })}
             </div>
           ))}
-        </div>
+        </Panel>
 
         <div className="flex items-center justify-center gap-3 pt-2">
           <Link

@@ -2,6 +2,7 @@
 
 import { Loader2, Timer, ArrowUpRight, ArrowDownRight } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Card } from "@/components/ui/card";
 
 interface LatencyCardProps {
   loading: boolean;
@@ -39,8 +40,9 @@ export function LatencyCard({
   return (
     <a
       href={href}
-      className="block bg-[var(--bg-primary)] rounded-xl p-5 border border-[var(--border-default)] transition-shadow hover:shadow-md"
+      className="block transition-shadow hover:shadow-md"
     >
+      <Card variant="interactive" padding="lg" className="h-full">
       <div className="flex items-start justify-between mb-3">
         <div className="flex items-center gap-2.5">
           <div className="p-2.5 rounded-lg bg-[var(--primary-light)] text-[var(--primary)]">
@@ -96,7 +98,7 @@ export function LatencyCard({
           )}
         </div>
       </div>
-    </a>
+    </Card></a>
   );
 }
 

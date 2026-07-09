@@ -1,6 +1,6 @@
 import { ClerkProvider } from "@clerk/nextjs";
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Geist, Geist_Mono, Inter } from "next/font/google";
 import { NextIntlClientProvider, hasLocale } from "next-intl";
 import { getLocale, getMessages } from "next-intl/server";
 import { notFound } from "next/navigation";
@@ -23,6 +23,19 @@ const geistSans = Geist({
 const geistMono = Geist_Mono({
   variable: "--font-geist-mono",
   subsets: ["latin"],
+});
+
+// Inter Display as the heading face — free, ships well, has an
+// "ops tool" character that fits Eden's terminal aesthetic. June 2026
+// polish round: brings the heading tier into a different optical
+// weight from body so the page reads as a designed system, not a
+// single-font scaffold. --font-display is the only thing that
+// changes; everything else still uses --font-sans (Geist).
+const interDisplay = Inter({
+  variable: "--font-inter-display",
+  subsets: ["latin"],
+  weight: ["500", "600", "700", "800"],
+  display: "swap",
 });
 
 export const metadata: Metadata = {
@@ -107,7 +120,7 @@ export default async function RootLayout({
     // user saw a frozen auth card. ``min-h-full`` lets the html grow
     // with its content while still establishing the % height context
     // ``body { min-height: 100dvh }`` needs.
-    <html lang={locale} className={`${geistSans.variable} ${geistMono.variable} min-h-full antialiased`}>
+    <html lang={locale} className={`${geistSans.variable} ${geistMono.variable} ${interDisplay.variable} min-h-full antialiased`}>
       <body className="flex min-h-full flex-col bg-[var(--bg-primary)] grain-overlay">
         <ClerkProvider allowedRedirectOrigins={ALLOWED_REDIRECT_ORIGINS}>
           <NextIntlClientProvider locale={locale} messages={messages}>

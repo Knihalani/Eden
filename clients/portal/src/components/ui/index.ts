@@ -96,3 +96,10 @@ export { CommandPalette } from "./command-palette";
 export { Tag } from "./tag";
 
 export { CodeBlock } from "./code-block";
+export { Panel, panelVariants } from "./panel";
+export type { PanelProps } from "./panel";
+
+export { DataList, DataRow, DataLabel, DataValue } from "./data-list";
+
+export { CodeChip } from "./code-chip";
+export type { CodeChipProps } from "./code-chip";

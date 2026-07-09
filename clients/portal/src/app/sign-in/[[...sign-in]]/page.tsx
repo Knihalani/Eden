@@ -1,5 +1,5 @@
 import { SignIn } from "@clerk/nextjs";
-import { AuthSplitLayout, AuthBrandPanel } from "@/components/auth";
+import { AuthSplitLayout, AuthBrandPanel, ClerkAuthFallback } from "@/components/auth";
 import { clerkAppearance } from "@/components/auth/clerk-theme";
 
 // Catch-all so Clerk's internal sub-flows (factor-one, verify-email,
@@ -15,6 +15,11 @@ import { clerkAppearance } from "@/components/auth/clerk-theme";
 // Two routes (legacy /login/* and new /sign-in/*) both render the
 // same chrome — Clerk's own portal-style redirects use /sign-in by
 // default, so this is the path most users will land on.
+//
+// ClerkAuthFallback wraps the <SignIn /> component. If the Clerk
+// SDK fails to mount (missing publishable key, network blocked,
+// backend outage), the fallback shows a designed empty state
+// instead of a blank right column.
 export default function SignInPage() {
   return (
     <AuthSplitLayout brandPanel={<AuthBrandPanel />}>
@@ -34,17 +39,19 @@ export default function SignInPage() {
             Sign in to your Eden workspace
           </p>
         </div>
-        <SignIn
-          path="/sign-in"
-          routing="path"
-          signUpUrl="/sign-up"
-          // Send signed-in users to the dashboard, not back to "/".
-          // Without an explicit fallback Clerk sometimes resolves to
-          // the current URL, which can leave a user who clicked "Sign
-          // in" from /sign-up stuck on the auth card.
-          fallbackRedirectUrl="/dashboard"
-          appearance={clerkAppearance}
-        />
+        <ClerkAuthFallback formLabel="sign-in">
+          <SignIn
+            path="/sign-in"
+            routing="path"
+            signUpUrl="/sign-up"
+            // Send signed-in users to the dashboard, not back to "/".
+            // Without an explicit fallback Clerk sometimes resolves to
+            // the current URL, which can leave a user who clicked "Sign
+            // in" from /sign-up stuck on the auth card.
+            fallbackRedirectUrl="/dashboard"
+            appearance={clerkAppearance}
+          />
+        </ClerkAuthFallback>
       </div>
     </AuthSplitLayout>
   );
