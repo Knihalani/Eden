@@ -187,9 +187,32 @@ CREATE TABLE nudge_outcomes (
 
 ---
 
+## 11. Performance & cost optimization
+
+### Gateway hot path
+
+| Step | p95 budget |
+|---|---|
+| Load active nudges for agent | <2ms (Redis cache) |
+| Trigger evaluation (compiled predicates) | <3ms |
+| Apply promoted nudge to messages | <1ms |
+| **Total gateway overhead** | **<5ms** |
+
+### Cost
+
+- Shadow mode: **$0** — log only
+- Nudge author LLM: async on issue resolve (~$0.02/nudge)
+- Promoted nudges: $0 at inference
+
+### Caching & degradation
+
+- Compile trigger DSL on save; Redis cache by nudge_id
+- Max 50 active nudges/agent; eval timeout → skip + log
+- `nudges_enabled=false` → zero overhead early exit
+
 ---
 
-## 11. Repo export workflow (absorbed F45)
+## 12. Repo export workflow (absorbed F45)
 
 Previously spec'd as standalone F45; merged here because export is part of nudge lifecycle, not a separate product surface.
 

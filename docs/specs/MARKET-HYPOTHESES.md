@@ -129,9 +129,19 @@
 
 **Success metric:** P0 detection latency; % incidents classified without LLM.
 
+### 3.9 N09–N13 — Restored high-value specs
+
+| ID | Hypothesis |
+|---|---|
+| N09 | Storage dedupe = margin + faster search at enterprise scale |
+| N10 | Search→signal = highest conversion path to custom detection |
+| N11 | Live tail = dev UX parity without OSS Workshop maintenance |
+| N12 | Session timeline = how platform teams think about multi-turn failures |
+| N13 | Transcript polish = demo win rate in competitive evals |
+
 ---
 
-## 4. Pruning rationale (48 → 24 features)
+## 4. Pruning rationale (48 → 24 F + 13 N)
 
 We deleted 24 specs that were **low incremental value** vs MCP-first strategy:
 

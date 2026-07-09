@@ -171,4 +171,38 @@ Deprecate `/intelligence/rca/incidents` UI links → redirect to `/agent-issues`
 
 ---
 
+## 9. Performance & cost optimization
+
+### Read path (portal / MCP)
+
+| Query | p95 | Technique |
+|---|---|---|
+| Issue list (50 rows) | <300ms | Covering index `(org_id, status, severity, last_seen DESC)` |
+| Issue detail | <200ms | Primary key + stumble count from counter |
+| Timeline chart | <400ms | Pre-aggregated hourly `issue_stumble_rates` MV |
+
+### Write path
+
+| Operation | p95 |
+|---|---|
+| IssuePromoter upsert | <25ms |
+| HyperLogLog user_count | O(1) Redis PFADD |
+
+### Cost
+
+- **$0** — SQL only, no LLM on issue CRUD
+- Storage: ~1KB/issue + 500B/stumble
+
+### Caching
+
+- Redis: `issue:{id}:summary` 30s TTL during active incident
+- List view: invalidate on stumble only for affected fingerprint
+
+```
+eden_issue_list_duration_seconds
+eden_issue_promoter_duration_seconds
+```
+
+---
+
 *See F28 for stumble creation; F20 for auto-detection; F30 for triage.*

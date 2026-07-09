@@ -135,4 +135,24 @@ One doc page per framework as **examples**, not standalone feature specs.
 
 ---
 
+## 12. Performance & cost optimization
+
+| Concern | Mitigation |
+|---|---|
+| Upload bandwidth | Client-side batch 100 events/2s; zstd compress payloads |
+| Storage cost | TTL 90d browser events; N09 dedupe identical DOM snapshots |
+| Replay load | Lazy-load replay bundle; CDN cache static RRWeb assets |
+| Portal paint | Thumbnail first; full replay on click |
+
+**Latency:** Upload ACK p95 <200ms; replay start p95 <1.5s.
+
+**Client SDK overhead:** <2ms per RRWeb event (async queue).
+
+```
+eden_browser_upload_bytes_total
+eden_browser_replay_load_duration_seconds
+```
+
+---
+
 *See [DELETED-FEATURES.md](./DELETED-FEATURES.md) for F13–F16 rationale.*

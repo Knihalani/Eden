@@ -152,12 +152,32 @@ On signal create or definition change:
 
 ## 9. Cost controls
 
+See [PERFORMANCE-COST-STANDARDS.md](../PERFORMANCE-COST-STANDARDS.md) for platform SLAs.
+
 | Guard | Value |
 |---|---|
 | Investigator model | SLM default (Haiku-class) |
 | Max traces/min/org | 100 |
 | Compressor token budget | 4k tokens/trace |
 | Skip if trace <3 steps | Yes |
+| Multi-signal batch | 1 LLM call for F35 library (6 schemas) |
+
+### Performance & cost optimization
+
+| Metric | Target |
+|---|---|
+| Investigator async completion | p95 <15s per trace |
+| Cost per trace (single signal) | <$0.01 SLM / <$0.05 Sonnet |
+| Backfill 1k traces | <30min at 100/min |
+| Cluster worker | nightly only; $0 LLM for naming batch |
+
+**Degradation:** Budget exceeded → deterministic signals only (F20/StatGate); queue investigator for next day.
+
+```
+eden_signal_investigate_duration_seconds
+eden_signal_investigate_cost_usd_total
+eden_signal_backfill_progress{signal_id}
+```
 
 ---
 
