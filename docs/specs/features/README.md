@@ -25,13 +25,14 @@
 
 **N14** (blocker), **N22** (autonomy gate), F48, F28, F29, F20, N08, N16, F04, N17, F30, F22, F39, F41, N15, N01, N20, N07
 
-## Autonomous maintenance (N20–N22)
+**Autonomous agent maintenance:** F46 orchestrates detect → diagnose → fix → verify. N21 fixes runtime outages; N20 fixes code. N22 sets safety bounds.
 
-| ID | Why it matters |
+| ID | Role |
 |---|---|
-| N22 | **Graded autonomy** — T0–T4 per action, compliance presets, spend caps |
-| N20 | Issue-triggered autonomous patches (Cat 23 → F29 inbox) |
-| N21 | Self-heal execute path (rollback/reweight/cache_bust) |
+| F46 | Orchestrator — runs the maintenance loop |
+| N21 | Runtime fix — rollback, cache bust, reweight |
+| N20 | Code fix — autonomous patch PR from diagnosis |
+| N22 | Safety bounds — how far Eden may auto-fix |
 
 See [`../AUTONOMOUS-MAINTENANCE.md`](../AUTONOMOUS-MAINTENANCE.md).
 

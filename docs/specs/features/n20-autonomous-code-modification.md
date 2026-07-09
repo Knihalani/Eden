@@ -1,4 +1,4 @@
-# N20: Autonomous Code Modification Pipeline (Cat 23 → Issues)
+# N20: Autonomous Code Fix (Platform Repairs Agent Code)
 
 | Field | Value |
 |---|---|
@@ -7,19 +7,19 @@
 | **Priority** | P0 |
 | **Effort** | L |
 | **Eden status** | **PARTIAL** — scheduler + PatchGenerator shipped; not issue-scoped |
-| **Mode** | **Assisted autonomous** (propose → approve → merge) |
-| **Dependencies** | F29, F22, N22, `code_change/scheduler.py`, F41 |
+| **Role in autonomous maintenance** | When root cause is in the **customer's agent application code**, Eden generates and opens a fix PR — so the platform repairs the agent, not just runtime config |
+| **Dependencies** | F29, F30, F22, N22, `code_change/scheduler.py`, F41, N01, N04 |
 
 ---
 
 ## 1. Problem
 
-Eden Cat 23 ships a **quality-gated autonomous patch scheduler** (`src/eden/code_change/scheduler.py`) that:
-- Runs 15-min cron on **incident clusters** (not F29 issues)
-- Pre-filters: `code_change_enabled`, cluster size, daily cost cap, rejection memory
-- Generates `proposed_patches` via `PatchGenerator`
+Autonomous maintenance must fix **code bugs**, not only prompt/model/runtime issues. When F30 triage identifies a recurring failure caused by application code (stack trace, file:line, same fingerprint ≥5×), Eden should **fix the user's agent code** — not just alert.
 
-But it is **disconnected** from the F29 issue loop, F22 fix chat, and F04 `run_autofix`. Operators cannot get autonomous PR proposals triggered by **agent issues** they see in the cockpit.
+Cat 23 ships a quality-gated patch scheduler (`code_change/scheduler.py`) but it:
+- Runs on **incident clusters**, not F29 agent issues
+- Is **disconnected** from F30 diagnosis and F46 maintenance loop
+- Never triggers from production outage/quality-drop playbooks (see [AUTONOMOUS-MAINTENANCE.md](../AUTONOMOUS-MAINTENANCE.md) §3.6)
 
 ---
 
@@ -50,34 +50,23 @@ But it is **disconnected** from the F29 issue loop, F22 fix chat, and F04 `run_a
 
 ---
 
-## 3. Target behavior
+## 3. Target behavior (autonomous maintenance playbook 3.6)
 
-### Operator mode (normal)
-```
-Issue → human opens F22 fix chat → proposes diff → human applies → PR
-```
+When F30 classifies root cause as **application code bug**:
 
-### Assisted autonomous mode
 ```
-F29 Issue (P0/P1, stumble_count ≥ 5, N22 tier ≥ T2)
-    → AutonomousPatchOrchestrator.evaluate(issue)
-    → Passes Cat23 pre-filters (cost, dedup, severity)
-    → PatchGenerator with triage_result + example traces (F30)
-    → proposed_patches row status=proposed
-    → N17 cockpit + Slack (F47): "Patch ready for review"
-    → Human approve → existing review.py flow → PR
-    → N01 regression on PR branch → F41 before merge
+F29 Issue (code_bug, stumble_count ≥ 5, fingerprint stable)
+    → F46 triggers IssuePatchTrigger
+    → PatchGenerator uses triage_result + example traces (F30)
+    → proposed_patches row → GitHub PR
+    → N04 impact preview + N01 regression on PR branch
+    → Default: N17 "Awaiting you" — merge PR
+    → Sandbox/opt-in: auto-merge if verify pass (N22 bound)
+    → F33 experiment confirms stumble_rate drop post-merge
+    → Issue resolved; N01 regression case permanent
 ```
 
-### Fully autonomous mode (T4, sandbox only)
-```
-Same as above + auto-approve if:
-    - N01 regression pass
-    - N04 impact preview pass
-    - StatGate pass on hermetic verify
-    - F41 EvidenceGate pass
-→ Auto-merge PR (GitHub App)
-```
+**Platform maintains the agent** — human only merges PR in default enterprise posture.
 
 ---
 

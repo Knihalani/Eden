@@ -14,37 +14,32 @@
 
 ## 1. Problem
 
-Eden ships maintenance primitives in silos:
+Eden will **autonomously maintain production agents** (detect → fix → verify — see AUTONOMOUS-MAINTENANCE.md), but users need **visibility** into what the platform is doing:
 
-| Source | Path | Emits |
-|---|---|---|
-| Closed-loop actions | `intelligence_closed_loop.py` | Pending approve/deny |
-| Judge prompt evolver | `agents/evolution/components.py` | New prompt variants + canary |
-| Insights detector | `insights/detector_loop.py` | KB insights |
-| Promotion hooks | `promotion_hooks.py` | 20+ event kinds |
-| Code change hook | `CodeChangeHook` | Patch proposals |
-| Drift alerts | `DriftAlertHook` | PSI breaches |
+- Is my agent in an incident right now?
+- Did Eden rollback a bad deploy?
+- Is a canary running? Did quality recover?
+- What needs **me** (credential rotation, PR merge, novel failure)?
 
-**No unified "Agent Improvement Queue"** — users cannot answer: *"What should I do today to improve agent X?"*
+Today maintenance signals are scattered across 12+ Cat pages. N17 is the **single pane for agent health + Eden's autonomous actions**.
 
 ---
 
 ## 2. Target behavior
 
-**Portal `/improve`** — single maintenance cockpit per agent (and fleet-wide view):
+**Portal `/improve`** — what Eden is doing to keep your agents healthy:
 
-| Column | Item types (operator mode) | + Autonomous mode (N22 T2+) |
-|---|---|---|
-| **Urgent** | P0 issues (F29), StatGate escalations (N08), budget breaches | + policy auto-escalations, failed autonomous actions |
-| **Proposed** | Empty until human requests fix | Patches (N20), heals (N21), canaries (N18), shadow nudges (F39), KB drafts (N19), signals (N10) |
-| **Awaiting approval** | — | Self-heal queue, proposed_patches inbox, dual-approval promotions (N06) |
-| **Verify** | Open PRs (F22), experiments (F33), regression runs (N01), impact previews (N04) | + autonomous PR smoke, canary experiments (F33) |
-| **Running autonomously** | — | Active canaries, shadow nudges logging, live heal in progress |
-| **Learned** | KB skills added, Book updates (F40), resolved this week | + auto-promoted items with F41 evidence links |
+| Section | Content |
+|---|---|
+| **Active incidents** | Open issues, StatGate P0, SLO breaches (N05), quality drops (N03) |
+| **Eden fixing now** | Rollback in progress, cache bust, canary at 5%, shadow nudge logging |
+| **Needs you** | PR to merge (N20), MCP credential rotation, novel failure, dual-approval (N06) |
+| **Verified recovered** | Resolved this week with before/after metrics |
+| **Learned** | KB skills, Book updates, new regression cases |
 
-Each card: **one-click actions** — Approve, Reject, Open in Cursor (F04 MCP), Snooze, View policy (N22).
+This is **not** a task queue for operators to run maintenance — Eden runs the loop (F46). Humans intervene on exceptions.
 
-See [`AUTONOMOUS-MAINTENANCE.md`](../AUTONOMOUS-MAINTENANCE.md) for mode definitions.
+See [`AUTONOMOUS-MAINTENANCE.md`](../AUTONOMOUS-MAINTENANCE.md) §9.
 
 ---
 

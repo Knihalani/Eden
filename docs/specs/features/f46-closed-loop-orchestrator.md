@@ -15,7 +15,11 @@
 
 ## 1. Summary
 
-Wire disconnected hooks into one **issue state machine** that drives detect → triage → fix → verify → learn → alert. Eden has pieces (`promotion_hooks.py`, workers) but no orchestrator ensuring the full loop completes.
+**Autonomous agent SRE orchestrator** — wires disconnected hooks into one state machine that runs the full maintenance loop without human intervention for routine incidents:
+
+**detect** (F20/N08) → **diagnose** (F30) → **fix** (N21 runtime / N20 code / F39/N18) → **verify** (N01/N03/F33) → **learn** (N19/F40) → **alert** (F47)
+
+Eden has the pieces (`promotion_hooks.py`, SelfHealer, Cat 23, evolver) but no orchestrator ensuring outages and quality drops actually get **fixed**, not just logged. See [AUTONOMOUS-MAINTENANCE.md](../AUTONOMOUS-MAINTENANCE.md).
 
 ---
 
@@ -32,9 +36,7 @@ Wire disconnected hooks into one **issue state machine** that drives detect → 
 | Improvement cockpit UX | N17 | **MISSING** |
 | `src/eden/issues/` | — | **MISSING** |
 
-**F46 builds orchestrator; N17 provides operator UX** — complementary, not duplicate.
-
-**Autonomous maintenance:** F46 is the **state machine** that N20/N21/N18 plug into. Every autonomous side effect passes `N22.may()` before transition. See [`AUTONOMOUS-MAINTENANCE.md`](../AUTONOMOUS-MAINTENANCE.md).
+**F46 is the autonomous maintenance engine.** N17 shows what Eden is doing; N22 sets safety bounds.
 
 ---
 
@@ -67,22 +69,20 @@ Wire disconnected hooks into one **issue state machine** that drives detect → 
        └─────────────┘
 ```
 
-### 3.1 Normal (operator-led) vs autonomous transitions
+### 3.1 Autonomous transitions (default enterprise: runtime auto-fix)
 
-| Transition | Operator mode | Autonomous mode (N22 gated) |
+| Event | Eden action (no human) | Playbook |
 |---|---|---|
-| stumble → issue | Always (F29) | Same |
-| issue → triaged | F30 on demand or auto | T1+: auto F30 ReAct |
-| triaged → fix_pending | Human opens F22 fix chat | T2: N20 propose patch; T2: F04 autofix dry_run |
-| fix_pending → verifying | Human opens PR | T4: N20 auto-merge PR after N04+N01 |
-| verifying → resolved | Human confirms | T3: auto-resolve if N01+StatGate pass |
-| resolved → learning | Manual nudge/KB | T2: F39 shadow + N19 skill draft auto |
-| any → regressed | Manual or N01 fail | T3: auto-reopen + N21 rollback suggest |
+| N08 StatGate P0 after deploy | N21 `rollback` + F47 alert | AUTONOMOUS-MAINTENANCE §3.1 |
+| N03 quality_drop >2σ | F30 RCA → N18 canary OR F39 nudge | §3.2 |
+| F30 root_cause=cache_poison | N21 `cache_bust` | §3.5 |
+| F30 root_cause=routing_drift | N21 `reweight` | §3.7 |
+| F30 root_cause=code_bug | N20 patch PR (human merge default) | §3.6 |
+| Verify pass (N03/N08 clear) | Resolve issue + N01 case + N19 skill | learn |
+| Verify fail | Reopen + escalate N17 + F47 | escalate |
+| MCP credential outage | Detect + alert — **cannot auto-fix** | §3.4 |
 
-**Hard rules (all tiers):**
-- F41 required for gateway-impacting promotion (nudge/guardrail)
-- N06 audit log on every transition
-- `autonomous_actions_v0=false` → N21 execute blocked regardless of tier
+N22 checks `maintenance_mode` and per-action bounds before execute. F41 required for nudge/guardrail **promote** (not shadow).
 
 ---
 

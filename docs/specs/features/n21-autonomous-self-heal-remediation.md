@@ -1,27 +1,28 @@
-# N21: Autonomous Self-Heal & Remediation (Cat 14)
+# N21: Autonomous Runtime Remediation (Self-Heal)
 
 | Field | Value |
 |---|---|
 | **Feature ID** | N21 |
 | **Slug** | `autonomous-self-heal-remediation` |
-| **Priority** | P1 |
+| **Priority** | P0 |
 | **Effort** | M |
 | **Eden status** | **PARTIAL** — SelfHealer queues only; execute path incomplete |
-| **Mode** | **Assisted autonomous** → optional **T3 auto** with gates |
-| **Dependencies** | N22, F29, N08, `autonomous/investigation.py`, F41 |
+| **Role in autonomous maintenance** | Eden **fixes production outages and quality drops at runtime** — rollback bad deploys, bust poisoned caches, reweight routing — without waiting for a human |
+| **Dependencies** | N22, F29, F30, N08, F42, `autonomous/investigation.py`, F41, F46 |
 
 ---
 
 ## 1. Problem
 
-Cat 14 ships `SelfHealer` (`investigation.py:419`) with three action types:
-- `rollback` — revert prompt/model version
-- `reweight` — adjust routing weights
-- `cache_bust` — clear semantic cache entries
+When a production agent has an **outage or service quality cliff**, the fix is often **runtime configuration**, not code:
 
-**Today:** Always queues `status=pending_approval`. Execute path and `POST /heal/approve` are **incomplete**. Not connected to F29 issues or N08 StatGate escalations.
+| Incident | Fix | Human today |
+|---|---|---|
+| Bad prompt deploy 14:02 | Rollback to last good version | Manual portal |
+| Semantic cache poisoned | Cache bust org+agent | Manual ops |
+| Model routing to degraded endpoint | Reweight traffic away | Manual gateway config |
 
-For **runtime incidents** (bad deploy, cache poison, routing drift), operators need one-click remediation — autonomous when policy allows.
+Cat 14 `SelfHealer` (`investigation.py:419`) knows these three actions but **only queues** — never executes. F46 cannot complete the autonomous maintenance loop until N21 runs heals and verifies recovery (N03/N08).
 
 ---
 
@@ -42,35 +43,32 @@ For **runtime incidents** (bad deploy, cache poison, routing drift), operators n
 
 ---
 
-## 3. Target behavior
+## 3. Remediation playbooks (maps to AUTONOMOUS-MAINTENANCE §3)
 
-### Remediation playbooks (deterministic mapping)
+F30 diagnosis → F46 selects heal automatically when N22 allows:
 
-| Issue kind / StatGate signal | Suggested heal | Risk |
+| Root cause (F30) | Heal action | Playbook |
 |---|---|---|
-| Prompt regression (N18 canary fail) | `rollback` to last promoted prompt version | Medium |
-| Model routing drift (F42) | `reweight` away from degraded model | Medium |
-| Cache poisoning / stale responses | `cache_bust` for org+agent | Low |
-| StatGate P0 loop spike after deploy | `rollback` + F47 alert | High |
+| `deploy_regression` — loop spike after prompt deploy | `rollback` | §3.1 |
+| `cache_poison` — stale/wrong cached responses | `cache_bust` | §3.5 |
+| `routing_drift` — degraded model receiving traffic | `reweight` | §3.7 |
+| StatGate P0 + `detected_after_deploy` | `rollback` + F47 alert | §3.1, §3.3 |
+| N18 canary failure | `rollback` canary variant | prompt evolution safety |
 
-### Operator flow
+### Autonomous execution flow (default for runtime heals)
+
 ```
-N17 cockpit → "Suggested heal: rollback prompt v12 → v11"
-→ Admin reviews before_state audit
-→ POST /heal/approve
-→ HealExecutor runs action
-→ N01 regression smoke on rollback
-→ Issue marked resolved or regressed
+N08 P0 OR N03 quality_drop OR F42 deploy_correlation
+    → F29 issue + F30 RCA
+    → F46: classify → SelfHealer.heal(action_type)
+    → N22: allow runtime heal? (default YES for enterprise non-HIPAA)
+    → HealExecutor runs (p95 <2s, $0)
+    → Verify: N03 pass rate + N08 clear within 30min
+    → Success → issue resolved, N06 audit, N17 "Resolved"
+    → Fail → escalate human + F47; optional second playbook
 ```
 
-### Autonomous flow (T3, opt-in)
-```
-StatGate P0 + issue kind=loop + detected_after_deploy
-→ SelfHealer.heal(rollback) auto-queued
-→ If N22.auto_heal_rollback=true AND F41 quick-check pass:
-    → Execute without human (configurable)
-→ Else: pending_approval + F47
-```
+**Enterprise default:** runtime heals (rollback/cache/reweight) execute **without per-incident approval**. Code patches (N20) still need merge approval unless sandbox.
 
 ---
 

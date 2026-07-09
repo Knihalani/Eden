@@ -18,7 +18,7 @@ Eden wins on **production agent maintenance & improvement** (operator-led **and*
 3. **Improve in production safely** (N15 guardrails, F39 nudges, N18 prompt evolution, F41 evidence)
 4. **Cut cost 80%+ without blind spots** (N16 sampling, N09 dedupe, zstd 15× shipped)
 5. **Unify operator UX** (N17 improvement cockpit)
-6. **Grade autonomy** (N22) — patches, heals, canaries with spend caps + audit (N06)
+6. **Autonomously fix production agents** (F46 + N21 runtime heal + N20 code fix) — outages, quality drops, bad deploys
 7. **Reproduce failures** (N07 env gen — unique)
 
 ---
@@ -69,15 +69,16 @@ Eden wins on **production agent maintenance & improvement** (operator-led **and*
 | N12 | Session timeline UI | P1 | [n12](features/n12-session-multiturn-timeline-ui.md) |
 | N13 | Transcript UI v2 | P2 | [n13](features/n13-transcript-ui-v2.md) |
 
-### Autonomous maintenance (stand-out)
+### Autonomous agent maintenance (platform SRE)
 
 | ID | Feature | P | Spec |
 |---|---|---|---|
-| **N22** | **Autonomy policy engine (T0–T4)** | **P0** | [n22](features/n22-autonomy-policy-engine.md) |
-| N20 | Autonomous code modification (Cat 23) | P0 | [n20](features/n20-autonomous-code-modification.md) |
-| N21 | Autonomous self-heal (Cat 14) | P1 | [n21](features/n21-autonomous-self-heal-remediation.md) |
+| **F46** | **Closed-loop orchestrator (detect→fix→verify→learn)** | **P0** | [f46](features/f46-closed-loop-orchestrator.md) |
+| **N21** | **Runtime remediation** (rollback/cache/reweight) | **P0** | [n21](features/n21-autonomous-self-heal-remediation.md) |
+| N20 | Autonomous code fix (PR from diagnosis) | P0 | [n20](features/n20-autonomous-code-modification.md) |
+| N22 | Safety bounds (how far Eden may auto-fix) | P0 | [n22](features/n22-autonomy-policy-engine.md) |
 
-See [`AUTONOMOUS-MAINTENANCE.md`](AUTONOMOUS-MAINTENANCE.md) for normal vs assisted vs fully autonomous flows.
+See [`AUTONOMOUS-MAINTENANCE.md`](AUTONOMOUS-MAINTENANCE.md) — incident playbooks for outages, quality drops, deploy regressions.
 
 ---
 
@@ -124,9 +125,9 @@ Wave 2    N16 + N09 (cost stack)
 Wave 3    F04 MCP + N17 cockpit v1
 Wave 4    F30 → F22 → N01 → N04
 Wave 5    N15 + F39 + F41 + N18
-Wave 6    N22 + N20 + N21 (autonomous) + N07 Phase 1
-Wave 7    N10–N13 UX polish + F35/F44
-Capstone  F46 + N19
+Wave 6    F46 + N21 (runtime fix) + N20 (code fix) + N18/N39
+Wave 7    N22 safety bounds + N10–N13 UX + F35/F44
+Capstone  N19 KB flywheel
 ```
 
 Full rationale: [`PRODUCTION-MAINTENANCE-STANDOUT.md`](PRODUCTION-MAINTENANCE-STANDOUT.md)
