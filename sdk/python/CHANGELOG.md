@@ -4,6 +4,59 @@ All notable changes to the Eden Python SDK are documented here. The
 format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## 0.2.13 — 2026-07-09
+
+Bug-fix + resilience release.
+
+### Fixed
+- `client.EdenClient._run_loop`: wrap `asyncio.run(self._async_loop())`
+  in a `try`/`except` so a failure in `httpx.AsyncClient(...)`
+  construction (invalid transport, bad timeout, anything that
+  raises before `_loop_started.set()`) is logged at WARNING and
+  surfaces via a new `_loop_failed` latch. Without this, the
+  worker thread died silently, `start()` returned normally after
+  timing out on `_loop_started.wait(...)`, and every subsequent
+  `enqueue()` landed in a queue nothing drained — events
+  silently disappeared. `start()` now raises `RuntimeError` when
+  the latch reports a failed start, so the caller can react.
+- `client.EdenClient._send_batch`: parse the `Retry-After`
+  response header per RFC 7231 — accepts both the
+  delta-seconds form (`"5"`) and the HTTP-date form
+  (`"Wed, 21 Oct 2015 07:28:00 GMT"`). The previous
+  implementation did `float(retry_after)`, which raised
+  `ValueError` on HTTP-date and silently fell back to
+  exponential backoff, ignoring the gateway's explicit hint.
+  Past HTTP-dates clamp to 0 ("retry now"); far-future dates
+  are capped at 30s to keep the worker responsive.
+
+### Added
+- `client.EdenClient._enqueue_chunk`: producer-side helper that
+  pushes a streaming chunk with oldest-drop overflow
+  semantics, mirroring `enqueue()` for the regular event
+  queue. Existing instrumentations still append directly to
+  `self._chunk_buffer` (the cap is also enforced defensively
+  at flush time).
+- `client.EdenClient._chunk_buffer_max`: hard cap on the
+  streaming chunk buffer (4096 entries by default). A
+  runaway streaming response (millions of small chunks
+  between worker ticks) could OOM the process before this —
+  now oldest chunks are dropped with a warning on overflow,
+  both at enqueue time and at flush time.
+
+### Tests
+- 5 new tests in `test_client.py`:
+  - `test_start_raises_runtime_error_when_async_client_init_fails`
+    monkeypatches `httpx.AsyncClient` to raise during
+    construction and asserts `start()` now raises
+    `RuntimeError` (and the failure latch is flipped).
+  - 3 × `_parse_retry_after` tests cover delta-seconds,
+    future HTTP-date, past HTTP-date, and garbage input.
+  - `test_send_batch_retries_after_http_date_retry_after`
+    pins the end-to-end retry path with an HTTP-date header.
+  - 2 chunk-buffer tests pin the cap on `_enqueue_chunk` and
+    the defensive trim inside `_send_chunks` so
+    instrumentations that bypass the helper are also bounded.
+
 ## 0.2.12 — 2026-07-09
 
 Bug-fix + parity release.
