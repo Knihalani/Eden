@@ -9,8 +9,8 @@
 | Category | Count |
 |---|---|
 | F-features (parity) | 24 |
-| N-features (differentiation + restored) | 13 |
-| **Total** | **37** |
+| N-features (differentiation + platform) | 19 |
+| **Total** | **43** |
 
 ## Mandatory in every spec
 
