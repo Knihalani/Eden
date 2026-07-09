@@ -94,7 +94,7 @@ __all__ = [
     "__version__",
 ]
 
-__version__ = "0.2.18"
+__version__ = "0.2.19"
 
 
 # Lazy instrumentation registry — the per-framework modules are

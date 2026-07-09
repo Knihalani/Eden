@@ -425,7 +425,7 @@ def install() -> None:
                     _trace_id_or_random()
                 ),
                 "name": meta["name"],
-                "event_type": "framework.callback",
+                "event_type": "agent.run",
                 "agent_id": meta["name"],
                 "duration_ms": duration_ms,
                 "outcome": (

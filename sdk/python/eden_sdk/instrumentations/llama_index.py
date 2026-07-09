@@ -83,7 +83,7 @@ def install() -> None:
                     _trace_id_or_random()
                 ),
                 "name": str(md.get("class_name") or md.get("name") or "span"),
-                "event_type": "framework.callback",
+                "event_type": "agent.run",
                 "agent_id": str(md.get("class_name") or "llama_index"),
                 "duration_ms": duration_ms,
                 "outcome": "error" if error else "success",

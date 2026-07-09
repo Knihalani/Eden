@@ -42,7 +42,7 @@ def install() -> None:
                 "event_id": f"eden_ag_{uuid.uuid4().hex[:16]}",
                 "trace_id": _trace_id_or_random(),
                 "name": name,
-                "event_type": "framework.callback",
+                "event_type": "agent.run",
                 "agent_id": name,
                 "outcome": "success",
                 "attributes": {

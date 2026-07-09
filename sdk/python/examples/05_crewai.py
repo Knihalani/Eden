@@ -10,7 +10,7 @@ Run:
     python examples/05_crewai.py
 
 Expected:
-    A ``framework.callback`` event is emitted for every agent step,
+    A ``agent.run`` event is emitted for every agent step,
     every tool call, and every task completion under the active
     crew.  The events flow through ``/orgs/{org_id}/ingest/framework``.
 """
