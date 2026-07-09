@@ -1,4 +1,4 @@
-# N22: Autonomy Policy Engine (Graded Self-Maintenance)
+# N22: Autonomous Maintenance Safety Bounds
 
 | Field | Value |
 |---|---|
@@ -7,75 +7,65 @@
 | **Priority** | P0 |
 | **Effort** | M |
 | **Eden status** | **MISSING** — flags exist scattered in config; no unified policy |
-| **Mode** | Governs **normal + autonomous** maintenance |
+| **Role in autonomous maintenance** | **Safety envelope** — how far Eden may go fixing the user's agent without asking (not the maintenance capability itself) |
 | **Dependencies** | N14, N17, N20, N21, N18, F39, F41, F46 |
 
 ---
 
 ## 1. Problem
 
-Autonomous capabilities are gated by **disconnected flags**:
-- `autonomous_actions_v0` (`config.py:157`)
-- `code_change_enabled` (org JSONB)
-- `evolver_auto_canary_pct` (default 5)
-- `mcp_autofix_v1`, `nudges_enabled`, etc.
+Eden will autonomously detect, diagnose, and fix production agents (see [AUTONOMOUS-MAINTENANCE.md](../AUTONOMOUS-MAINTENANCE.md)). Enterprises need **configurable bounds**:
 
-Enterprise buyers need **one policy object**: "What can Eden do autonomously for agent X?" with HIPAA/regulated overrides.
+- Which agents may Eden **auto-rollback** on outage?
+- May Eden **open PRs** without human? Auto-merge?
+- HIPAA/regulated: detect + diagnose only?
+- Daily spend cap on autonomous LLM (triage, patches)?
+
+Today these are **disconnected flags** (`autonomous_actions_v0`, `code_change_enabled`, etc.) — not a coherent safety model.
 
 ---
 
-## 2. Target: AutonomyPolicy model
+## 2. Target: maintenance bounds (not "autonomy modes" as product)
 
 ```python
 @dataclass
-class AutonomyPolicy:
+class AutonomousMaintenancePolicy:
     org_id: str
     agent_id: str | None  # None = org default
 
-    maintenance_mode: Literal["manual", "assisted", "autonomous"]
+    # Primary knob — what users configure
+    maintenance_mode: Literal[
+        "autonomous",   # Eden runs playbooks: runtime heal + propose/merge code per below
+        "assisted",     # Eden auto runtime heal; code patches need approve
+        "observe",      # Eden detect + diagnose + recommend only
+    ]
 
-    # Per-action tiers (T0–T4 from AUTONOMOUS-MAINTENANCE.md)
-    detect_and_alert: AutonomyTier = T0  # always
-    triage_llm: AutonomyTier = T1          # suggest
-    mcp_autofix: AutonomyTier = T2         # dry_run default
-    code_patch: AutonomyTier = T2          # propose → inbox
-    self_heal: AutonomyTier = T2           # queue approve
-    prompt_canary: AutonomyTier = T2       # 5% auto
-    nudge_shadow: AutonomyTier = T1        # auto shadow
-    nudge_promote: AutonomyTier = T3       # F41 required
-    guardrail_promote: AutonomyTier = T3   # N15 + F41
-    pr_auto_merge: AutonomyTier = T4       # sandbox only
+    # Fine-grained bounds (defaults depend on maintenance_mode)
+    auto_runtime_heal: bool = True       # rollback, cache_bust, reweight — N21
+    auto_code_patch_pr: bool = True      # N20 opens PR
+    auto_code_patch_merge: bool = False  # N20 auto-merge (sandbox only default)
+    auto_prompt_canary: bool = True      # N18 on quality drop
+    auto_nudge_promote: bool = False     # F39 — requires F41 evidence always
+    auto_guardrail_promote: bool = False # N15 — requires F41 evidence always
 
-    daily_autonomy_budget_usd: float = 25.0
-    require_statgate_for_auto: bool = True
-    require_regression_pass: bool = True
+    daily_maintenance_budget_usd: float = 25.0  # triage + patch LLM cap
+    max_auto_rollbacks_per_day: int = 3
+    compliance_profile: Literal["standard", "hipaa", "soc2_strict"] = "standard"
 ```
+
+**HIPAA profile:** `maintenance_mode=observe` — Eden detects/diagnoses/alerts; zero autonomous execute.
 
 ---
 
-## 3. Tier semantics
+## 3. maintenance_mode semantics
 
-| Tier | Behavior | Example |
-|---|---|---|
-| **T0** | Detect + alert only | HIPAA PHI agents |
-| **T1** | Suggest in N17/MCP; no side effects | Default triage |
-| **T2** | Auto-create **proposals** (patches, heals, shadow nudges) | Enterprise default |
-| **T3** | Auto-execute if **F41 + StatGate** pass | Opt-in production |
-| **T4** | Auto-merge/deploy if CI+N01 pass | Dev/sandbox agents |
+| Mode | Eden behavior on outage/quality drop |
+|---|---|
+| **autonomous** | Execute runtime heals (N21). Open PRs (N20). Opt-in auto-merge. Run prompt canaries. Promote nudges/guardrails only with F41 pass. |
+| **assisted** | Same as autonomous for **runtime heals**. Code patches → PR + human merge. |
+| **observe** | Detect (F20/N08), diagnose (F30), alert (F47), recommend in N17 — **no execute** |
 
-**Evaluation:**
-
-```python
-class AutonomyPolicyEngine:
-    async def may(self, org_id: str, agent_id: str, action: AutonomyAction) -> PolicyDecision:
-        policy = await self._resolve(org_id, agent_id)  # agent override > org default
-        tier = getattr(policy, action.field)
-        if tier == T0:
-            return PolicyDecision(deny=True, reason="manual_only")
-        if await self._budget_exceeded(org_id):
-            return PolicyDecision(deny=True, reason="budget")
-        return PolicyDecision(allow=True, tier=tier, requires_approval=tier <= T2)
-```
+F41 + StatGate are **hard gates** in all modes — no unverified production mutation.
 
 ---
 

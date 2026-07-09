@@ -10,8 +10,8 @@
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│ L5 AUTONOMY  N22 Policy Engine · N20 Auto Patches · N21 Self-Heal│
-│              N18 Canary · F46 Orchestrator (state machine)        │
+│ L5 AUTONOMOUS SRE  F46 Orchestrator · N21 Runtime Fix · N20 Code │
+│                    N18/N39/N15 Improve · N22 Safety Bounds        │
 ├─────────────────────────────────────────────────────────────────┤
 │ L4 UX        N17 Improvement Cockpit · N13 Transcript · N12 Session│
 ├─────────────────────────────────────────────────────────────────┤
@@ -28,8 +28,8 @@
 ```
 
 **Rules:**
-1. Ship **N14 first** — otherwise L2–L3 backends are shelfware.
-2. Ship **N22 before N20/N21 execute** — graded autonomy + audit (N06).
+1. Ship **N14 first** — otherwise detect/fix backends are shelfware.
+2. **F46 + N21** are the autonomous maintenance core — detect outage → rollback/fix → verify recovery.
 
 ---
 
@@ -45,8 +45,8 @@
 | Prompt auto-evolution + canary | — | — | partial | **N18** (evolver shipped) |
 | Env from prod failure | — | — | — | **N07** (unique) |
 | 80% cost cut w/ failure keep | partial | — | — | **N16** + **N09** |
-| Unified improvement queue | — | partial | partial | **N17** (+ autonomous columns) |
-| Graded autonomous maintenance | — | partial | partial | **N22 + N20 + N21** |
+| Unified maintenance visibility | — | partial | partial | **N17** |
+| **Autonomous outage/quality fix** | — | partial | partial | **F46 + N21 + N20** |
 | Compliance audit packs | — | — | — | **N06** + shipped compliance |
 
 ---
@@ -95,10 +95,9 @@
 6. F30 → F22 → N01 → N04       ← fix + verify loop
 7. N15 Eval→Guardrail + F39    ← improve in production
 8. N18 Prompt evolution
-9. N22 Autonomy policy         ← gate before autonomous execute
-10. N20 + N21 Autonomous       ← patches + self-heal
-11. N07 Env repro (Phase 1)
-12. F46 Orchestrator + N19 KB flywheel
+9. N22 Safety bounds (before broad auto-merge)
+10. N20 Code fix + N07 Env repro
+11. N19 KB flywheel
 ```
 
 ---
