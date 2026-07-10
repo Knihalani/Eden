@@ -4,7 +4,7 @@
  * HeatmapTab — extracted from observability/page.tsx (June 2026).
  * Renders a 2D heatmap of a metric vs (x, y) buckets.
  */
-import { BarChart3, Zap, Loader2 } from "lucide-react";
+import { Zap, Loader2 } from "lucide-react";
 import { EmptyState } from "@/components/ui/empty-state";
 import { cn } from "@/lib/utils";
 import type { HeatmapData } from "../_lib/types";

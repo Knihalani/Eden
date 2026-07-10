@@ -22,11 +22,14 @@ def _coerce_int(value: Any) -> int | None:
     fractional floats (the SDK would otherwise silently round
     ``0.7`` to ``0`` and under-bill a call).
 
-    The TypeScript SDK's ``coerceInt`` is slightly more
-    permissive — it accepts any finite number including
-    fractional floats. The Python SDK is the more conservative
-    of the two on purpose: we don't want to accidentally bill
-    a call for a fractional token.
+    The TypeScript SDK's ``coerceInt`` historically was
+    slightly more permissive — it accepted any finite number
+    including fractional floats. The 0.2.18 release tightened
+    it to match the Python SDK (whole-number floats only;
+    fractional values return ``null``), so the two SDKs now
+    agree on what counts as a valid token count and a call
+    cannot be billed for a fractional token from either
+    language.
     """
     if value is None or isinstance(value, bool):
         return None

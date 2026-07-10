@@ -60,6 +60,80 @@ def test_framework_instrumentations_emit_agent_run_event_type() -> None:
     assert _has_agent_run(llama_index), "llama_index still uses framework.callback"
 
 
+# ── Wire contract: _to_dict recurses into nested Pydantic models ──────
+
+
+def test_to_dict_recurses_into_nested_pydantic_models() -> None:
+    """Regression: ``_to_dict`` (the OpenAI + Anthropic
+    instrumentations' request / response normaliser) used to
+    call ``obj.model_dump()`` and return the result without
+    recursing. A Pydantic model containing other Pydantic
+    models ended up with nested model instances still in the
+    dict, and the subsequent ``json.dumps(..., default=str)``
+    call stringified the nested ``repr()`` into the wire
+    payload (``"FakeModel(foo='bar')"`` instead of
+    ``{"foo": "bar"}``). The fix wraps the model_dump /
+    to_dict result in another ``_to_dict(...)`` so every
+    nested value walks through the same normalisation.
+    """
+    from eden_sdk.instrumentations.openai import _to_dict
+
+    class _FakePydantic:
+        """Minimal Pydantic-v2-shaped stand-in.
+
+        Real ``pydantic.BaseModel.model_dump()`` is recursively
+        walked by Pydantic itself, but the SDK has to handle
+        user-supplied objects that *quack* like a Pydantic
+        model — subclasses that override ``model_dump`` to
+        return a shallow dict. The previous ``_to_dict``
+        returned that shallow dict unchanged.
+        """
+
+        def __init__(self, d: dict[str, Any]) -> None:
+            self._d = d
+
+        def model_dump(self) -> dict[str, Any]:
+            # Deliberately shallow: Pydantic's real model_dump
+            # recurses, but the bug surfaces when a user
+            # returns a hand-rolled shallow dict.
+            return dict(self._d)
+
+        def __repr__(self) -> str:
+            # Used by the ``default=str`` json fallback so we
+            # can assert the bug is fixed: the bug's symptom
+            # is the nested model being stringified.
+            return f"_FakePydantic({self._d!r})"
+
+    inner = _FakePydantic({"key": "value"})
+    middle = _FakePydantic({"inner": inner, "n": 1})
+    outer = _FakePydantic({"middle": middle, "name": "outer"})
+
+    result = _to_dict(outer)
+    # Every level must be a plain dict, not a _FakePydantic.
+    assert isinstance(result, dict)
+    assert isinstance(result["middle"], dict)
+    assert isinstance(result["middle"]["inner"], dict)
+    assert result["middle"]["inner"] == {"key": "value"}
+    assert result["middle"]["n"] == 1
+    assert result["name"] == "outer"
+
+    # And critically, the result must be JSON-serialisable
+    # without the ``default=str`` fallback firing. The
+    # fallback would have produced a stringified ``repr``
+    # blob for the nested model.
+    import json as _json
+
+    serialised = _json.dumps(result)
+    decoded = _json.loads(serialised)
+    assert decoded == result
+    # ``""_FakePydantic(\"{'key': 'value'}\")""`` would be
+    # the buggy output (a stringified repr). The fix gives
+    # us the proper nested dict back.
+    assert "_FakePydantic" not in serialised
+    assert "value" in serialised
+
+
+
 
 
 def _install_fake_openai() -> dict[str, Any]:
