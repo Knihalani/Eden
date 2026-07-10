@@ -52,6 +52,31 @@ def _table(name: str, body: str, extra_index: str = "") -> None:
 
 
 def upgrade() -> None:
+    # Migration 001 created a legacy ``prompt_versions`` keyed by
+    # ``(agent, version)`` with no ``org_id``. D.9 (this revision)
+    # replaces it with a per-org registry model. ``CREATE TABLE IF
+    # NOT EXISTS`` would silently keep the legacy table and the
+    # ``idx_prompt_versions_org`` index would fail in CI.
+    op.execute(
+        """
+        DO $$ BEGIN
+          IF EXISTS (
+            SELECT 1 FROM information_schema.columns
+            WHERE table_schema = 'public'
+              AND table_name = 'prompt_versions'
+              AND column_name = 'agent'
+          ) AND NOT EXISTS (
+            SELECT 1 FROM information_schema.columns
+            WHERE table_schema = 'public'
+              AND table_name = 'prompt_versions'
+              AND column_name = 'prompt_id'
+          ) THEN
+            DROP TABLE prompt_versions CASCADE;
+          END IF;
+        END $$
+        """
+    )
+
     # ── 1. prompts — per-org registry ──────────────────────────────
     _table(
         "prompts",
