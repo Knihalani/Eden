@@ -71,6 +71,10 @@ class ResolveRequest(BaseModel):
     status: str = "resolved"  # resolved | ignored
 
 
+class TriageRequest(BaseModel):
+    force: bool = False
+
+
 @router.get("/agent-issues")
 async def list_issues(
     org_id: str = Path(...),
@@ -117,6 +121,17 @@ async def resolve_issue(
         "agent_issues",
         {"issue_id": issue_id, "status": target, "updated": ok},
     )
+
+
+@router.post("/agent-issues/{issue_id}/triage")
+async def triage_issue(
+    org_id: str = Path(...),
+    issue_id: str = Path(...),
+    body: TriageRequest = Body(default=TriageRequest()),
+) -> dict[str, Any]:
+    from eden.issues.triage_agent import TriageAgent
+
+    return await TriageAgent().triage(org_id, issue_id, force=body.force)
 
 
 @router.get("/stumbles")

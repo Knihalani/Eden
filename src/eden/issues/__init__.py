@@ -22,7 +22,9 @@ from eden.issues.models import (
     severity_for_kind,
 )
 from eden.issues.repo import IssuesRepo
+from eden.issues.statgate_scorer import StatGateIncidentScorer, StatGateScore
 from eden.issues.stumble_writer import StumbleWriter
+from eden.issues.triage_agent import TriageAgent
 
 __all__ = [
     "ISSUE_STATUSES",
@@ -31,10 +33,13 @@ __all__ = [
     "IssuePromoter",
     "IssuesRepo",
     "Severity",
+    "StatGateIncidentScorer",
+    "StatGateScore",
     "Stumble",
     "StumbleCreate",
     "StumbleKind",
     "StumbleWriter",
+    "TriageAgent",
     "compute_fingerprint",
     "error_signature_for",
     "severity_for_kind",
