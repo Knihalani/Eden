@@ -20,7 +20,9 @@ dependencies = [
     # use a custom httpx wrapper at eden.llm.client). Anthropic is
     # used by the AI Insights chat sidebar (B4).
     "openai>=1.0.0,<2.0.0",
-    "anthropic>=0.40.0,<1.0.0",
+    # Anthropic SDK — used by the AI Insights chat sidebar (B4).
+    # OpenRouter above still drives the main pipeline.
+    "anthropic>=0.109.1,<1.0.0",
 
     # JWT — replaces python-jose[cryptography]. Drops the `ecdsa`
     # transitive that was carrying CVE-2024-23342 / PVE-2024-64396.
