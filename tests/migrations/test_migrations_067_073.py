@@ -22,8 +22,12 @@ from typing import Any
 
 import pytest
 
-MIGRATIONS_DIR = Path(
-    "/Users/kaiavnihalani/Downloads/Eden/src/eden/db_migrations/versions"
+MIGRATIONS_DIR = (
+    Path(__file__).resolve().parents[2]
+    / "src"
+    / "eden"
+    / "db_migrations"
+    / "versions"
 )
 
 MIGRATION_IDS: list[str] = [

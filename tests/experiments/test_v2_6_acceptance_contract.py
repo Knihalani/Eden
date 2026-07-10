@@ -23,6 +23,7 @@ import importlib
 import json
 import os
 import time
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -423,11 +424,14 @@ def test_invariant_13_171_traces_round_trip() -> None:
     except ImportError:
         pytest.skip("TelemetryEvent not importable")
     events_path = (
-        "/Users/kaiavnihalani/Downloads/Eden/"
-        "tests/fixtures/traces/synthetic/traces"
+        Path(__file__).resolve().parents[1]
+        / "fixtures"
+        / "traces"
+        / "synthetic"
+        / "traces"
     )
 
-    if not os.path.exists(events_path):
+    if not Path(events_path).exists():
         pytest.skip("synthetic dataset not present")
     # Inspect one event's required fields first; if TelemetryEvent
     # requires fields the fixtures don't provide, skip gracefully
