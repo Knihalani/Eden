@@ -629,6 +629,22 @@ def _build_settings_class():
         # Triage budget (F30) — max LLM spend per org per day for triage.
         max_triage_cost_usd_per_day: float = 25.0
 
+        # ── Autonomy policy engine (N22) ────────────────────────────────
+        # Org-level defaults for the autonomous-maintenance safety
+        # envelope. When an org (or agent) has no ``autonomy_policies`` row
+        # these seed the resolved policy, so the effective posture is
+        # derived from the existing scattered flags
+        # (``autonomous_actions_v0`` → runtime heal, ``code_change_enabled``
+        # → patch PR, ``auto_pr_enabled`` → auto-merge). ``assisted`` is
+        # the safe default: runtime heals auto-execute, code patches need a
+        # human. ``daily_maintenance_budget_usd`` caps triage+patch LLM
+        # spend per org per day; on breach the loop downgrades to
+        # suggest-only. ``hipaa`` forces ``observe`` regardless.
+        default_maintenance_mode: str = "assisted"
+        default_compliance_profile: str = "standard"
+        daily_maintenance_budget_usd: float = 25.0
+        max_auto_rollbacks_per_day: int = 3
+
         # ── Kill-switch defaults (v2.7 hot-path) ────────────────────────
         # Mutating actions default OFF per audit/permission policy.
         # Read-only actions default ON. Override per-tenant via

@@ -33,6 +33,7 @@ from eden.api.routes import (
     app_events,
     audit,
     auth,
+    autonomy,
     billing,
     budgets,
     builder_graphs,
@@ -812,6 +813,7 @@ app.include_router(intelligence_code_change.router)  # /orgs/{org_id}/intelligen
 # All self-gate on `intelligence_gap_v0` via the per-router `dependencies=`
 # list; this just makes them reachable when the flag is on.
 app.include_router(agent_issues.router)  # /orgs/{org_id}/agent-issues (F28/F29, gated by agent_issues_v0)
+app.include_router(autonomy.router)  # /orgs/{org_id}/settings/autonomy (N22, gated by closed_loop_orchestrator_v1)
 app.include_router(intelligence_agents.router)
 app.include_router(intelligence_apm_depth.router)
 app.include_router(intelligence_autonomous.router)

@@ -372,19 +372,21 @@ class TestClosedLoopExecutor:
             )
         assert r["status"] == "not_implemented"
 
-    async def test_apply_approved_v0_noop(self) -> None:
+    async def test_apply_approved_records_unmapped_kind(self) -> None:
+        # G8: apply now fetches the exact action by id and dispatches a
+        # real side effect. An action_kind with no mapped handler
+        # (block_promotion) is safely *recorded* (no destructive default).
         from eden.llmops.closed_loop_executor import ClosedLoopExecutor
 
         with patch(
-            "eden.llmops.closed_loop_executor._fetch_actions",
+            "eden.llmops.closed_loop_executor._fetch_action_by_id",
             AsyncMock(
-                return_value=[
-                    {
-                        "id": "a1",
-                        "action_kind": "block_promotion",
-                        "status": "approved",
-                    }
-                ]
+                return_value={
+                    "id": "a1",
+                    "action_kind": "block_promotion",
+                    "payload": {},
+                    "status": "approved",
+                }
             ),
         ), patch(
             "eden.llmops.closed_loop_executor._update_status",
@@ -394,25 +396,22 @@ class TestClosedLoopExecutor:
                 "org_t", action_id="a1", applied_by="alice"
             )
         assert r["data"]["status"] == "applied"
-        assert r["data"]["side_effect"] == "v0_noop"
+        assert r["data"]["side_effect"] == "recorded"
         assert r["data"]["action_kind"] == "block_promotion"
 
-    async def test_apply_approved_handles_unknown_action(self) -> None:
+    async def test_apply_approved_missing_action_not_implemented(self) -> None:
+        # G8: a missing/unknown action id no longer silently flips to
+        # applied — it returns not_implemented so the caller sees the miss.
         from eden.llmops.closed_loop_executor import ClosedLoopExecutor
 
         with patch(
-            "eden.llmops.closed_loop_executor._fetch_actions",
-            AsyncMock(return_value=[]),
-        ), patch(
-            "eden.llmops.closed_loop_executor._update_status",
-            AsyncMock(return_value=True),
+            "eden.llmops.closed_loop_executor._fetch_action_by_id",
+            AsyncMock(return_value=None),
         ):
             r = await ClosedLoopExecutor().apply_approved(
                 "org_t", action_id="unknown", applied_by="alice"
             )
-        # Even with no matching row, the status flips to applied
-        # (the v0 ship is best-effort)
-        assert r["data"]["action_kind"] == "unknown"
+        assert r["status"] == "not_implemented"
 
     async def test_dashboard_aggregates(self) -> None:
         from eden.llmops.closed_loop_executor import ClosedLoopExecutor
@@ -529,11 +528,14 @@ class TestClosedLoopRoutes:
     def test_apply_route(self, closed_loop_app: FastAPI) -> None:
         client = TestClient(closed_loop_app)
         with patch(
-            "eden.llmops.closed_loop_executor._fetch_actions",
+            "eden.llmops.closed_loop_executor._fetch_action_by_id",
             AsyncMock(
-                return_value=[
-                    {"id": "a1", "action_kind": "block_promotion"}
-                ]
+                return_value={
+                    "id": "a1",
+                    "action_kind": "block_promotion",
+                    "payload": {},
+                    "status": "approved",
+                }
             ),
         ), patch(
             "eden.llmops.closed_loop_executor._update_status",
