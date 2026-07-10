@@ -114,6 +114,7 @@
 | 080 | pr_discipline_layer | yes | forever | none | medium | Cat 23 PR-discipline (v1.7+silencing) | v3.0 |
 | 081 | org_cost_overrides | yes | forever | none | medium | §6.1 per-tenant contract rates (D.4+) | v3.0 |
 | 082 | org_cost_overrides (cache read/write cols) | yes | forever | none | low | §6.1 cache-discount contract rates | v3.0 |
+| 083 | fix_pr_rejection_memory_index | yes | forever | none | low | Drop invalid partial index using NOW() on pr_rejection_memory | v3.0 |
 
 ## Critical-path migrations (downgrade risk = `hard`)
 
