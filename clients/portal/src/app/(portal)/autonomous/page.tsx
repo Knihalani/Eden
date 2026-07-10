@@ -359,9 +359,9 @@ function RecommendationsTab() {
     });
     autonomousApi
       .recommendations(currentOrg.id)
-      .then((res: { recommendations?: Array<{ id: string; title: string; impact: string; effort: string; rationale: string }> }) => {
+      .then((res) => {
         if (cancelled) return;
-        setItems(res.recommendations ?? []);
+        setItems(res.data?.recommendations ?? []);
       })
       .catch((err: unknown) => {
         if (cancelled) return;
