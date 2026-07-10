@@ -302,7 +302,7 @@ async def _resolve_trigger_context(
         try:
             row = await client.fetchrow(
                 "SELECT * FROM incident_clusters "
-                "WHERE org_id = $1 AND cluster_id = $2",
+                "WHERE org_id = $1 AND id = $2",
                 org_id,
                 trigger.split(":", 1)[1],
             )

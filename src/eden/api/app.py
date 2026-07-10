@@ -229,6 +229,7 @@ class HealthResponse(BaseModel):
     version: str
     postgres: str
     qdrant: str
+    quality_worker_running: bool = False
 
 
 # ============================================================================
@@ -318,6 +319,26 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning(f"Promotion hook registration skipped: {e}")
 
+    # N14 — production platform activation. Install the trace-quality
+    # wirings (Cat 15/17/22 + StatGate gating on closed-loop apply) and
+    # start the quality-pipeline sidecar worker. ``install_all()`` is
+    # idempotent (safe to call once per process); the worker self-gates
+    # on ``trace_quality_enabled`` / ``trace_quality_compute_async``.
+    try:
+        from eden.observability.trace_quality.wiring import install_all
+
+        install_all()
+        logger.info("trace_quality: install_all complete")
+    except Exception as e:
+        logger.warning(f"trace_quality install_all skipped: {e}")
+
+    try:
+        from eden.observability.quality_pipeline.worker import start_worker
+
+        await start_worker()
+    except Exception as e:
+        logger.warning(f"quality_pipeline worker startup skipped: {e}")
+
     # Phase 3a (2026-06-23) — surface a loud startup warning when neither
     # a GitHub App nor the legacy PR-provider env vars are configured.
     # Without this, the agent silently falls back to ``LocalPRProvider``
@@ -373,6 +394,13 @@ async def lifespan(app: FastAPI):
             await stop_insights_detector_loop()
         except Exception as e:  # pragma: no cover - defensive
             logger.warning(f"Insights detector loop stop failed: {e}")
+
+    try:
+        from eden.observability.quality_pipeline.worker import stop_worker
+
+        await stop_worker()
+    except Exception as e:  # pragma: no cover - defensive
+        logger.warning(f"quality_pipeline worker stop failed: {e}")
 
     try:
         from eden.observability.trace_quality.hooks import (
@@ -898,11 +926,21 @@ async def health_check():
         except Exception:
             pass
 
+    try:
+        from eden.observability.quality_pipeline.worker import (
+            is_worker_running,
+        )
+
+        worker_running = is_worker_running()
+    except Exception:
+        worker_running = False
+
     body = HealthResponse(
         status=overall,
         version=settings.app_version,
         postgres=pg,
         qdrant=kb_health.get("qdrant", "unknown"),
+        quality_worker_running=worker_running,
     )
 
     # HEALH_PROBE_MODE controls the status code:

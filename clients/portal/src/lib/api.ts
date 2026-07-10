@@ -3005,15 +3005,41 @@ export const predictiveApi = {
 };
 
 // ── Intelligence: Autonomous (Cat 14) ───────────────────────────────
+// The backend returns the standard ``_ok_envelope`` shape
+// ``{ status, feature, live, trace_id?, timestamp?, data }`` — the
+// payload lives under ``data``. F48 aligned these client types with the
+// real contract (previously the types claimed the unwrapped payload).
+export type AutonomousEnvelope<T> = {
+  status: string;
+  feature: string;
+  live: boolean;
+  trace_id?: string;
+  timestamp?: string;
+  data: T;
+};
+
+export type InvestigateData = {
+  investigation_id?: string;
+  trigger?: string;
+  trigger_type?: string;
+  findings: Array<Record<string, unknown>>;
+  proposed_remediations: Array<Record<string, unknown>>;
+  llm_used?: boolean;
+  message?: string;
+};
+
 export const autonomousApi = {
-  investigate: (orgId: string, data: { trace_id?: string; question: string }) =>
-    fetchApi<{ investigation_id: string; findings: string; recommended_actions: string[]; confidence: number; }>(`/orgs/${orgId}/intelligence/autonomous/investigate`, { method: "POST", body: JSON.stringify(data) }),
-  report: (orgId: string, data: { topic: string; period_days?: number }) =>
-    fetchApi<{ report_id: string; title: string; markdown: string; period_days: number; generated_at: string; }>(`/orgs/${orgId}/intelligence/autonomous/report`, { method: "POST", body: JSON.stringify(data) }),
+  // F48: send a typed ``trigger`` (e.g. ``incident:<id>``) — the
+  // backend also accepts ``{question, trace_id}`` and resolves a
+  // trigger server-side for back-compat.
+  investigate: (orgId: string, data: { trigger?: string; trace_id?: string; question?: string }) =>
+    fetchApi<AutonomousEnvelope<InvestigateData>>(`/orgs/${orgId}/intelligence/autonomous/investigate`, { method: "POST", body: JSON.stringify(data) }),
+  report: (orgId: string, data: { period?: string }) =>
+    fetchApi<AutonomousEnvelope<{ report_id: string; period: string; report_json: Record<string, unknown>; }>>(`/orgs/${orgId}/intelligence/autonomous/report`, { method: "POST", body: JSON.stringify(data) }),
   recommendations: (orgId: string) =>
-    fetchApi<{ recommendations: Array<{ id: string; title: string; impact: string; effort: string; rationale: string }>; }>(`/orgs/${orgId}/intelligence/autonomous/recommendations`),
-  heal: (orgId: string, data: { component: string; description: string }) =>
-    fetchApi<{ heal_id: string; status: "pending_approval" | "applied" | "rejected"; before_state: Record<string, unknown>; proposed_change: string; }>(`/orgs/${orgId}/intelligence/autonomous/heal`, { method: "POST", body: JSON.stringify(data) }),
+    fetchApi<AutonomousEnvelope<{ recommendations: Array<{ id: string; title: string; impact: string; effort: string; rationale: string }>; }>>(`/orgs/${orgId}/intelligence/autonomous/recommendations`),
+  heal: (orgId: string, data: { action_type: string }) =>
+    fetchApi<AutonomousEnvelope<{ action_id: string; action_type: string; status: "pending_approval" | "applied" | "rejected"; before_state: Record<string, unknown>; after_state: Record<string, unknown>; message: string; }>>(`/orgs/${orgId}/intelligence/autonomous/heal`, { method: "POST", body: JSON.stringify(data) }),
   nlQuery: (orgId: string, data: { question: string }) =>
     fetchApi<{ question: string; sql: string; rows: Array<Record<string, unknown>>; explanation: string; }>(`/orgs/${orgId}/intelligence/autonomous/nl/query`, { method: "POST", body: JSON.stringify(data) }),
   nlDashboard: (orgId: string, data: { description: string }) =>
