@@ -127,6 +127,13 @@ class ClosedLoopOrchestrator:
     async def _decide_remediation(
         self, event: LoopEvent, triage_result: dict[str, Any]
     ) -> str:
+        """Choose recommend | heal | patch | human under the N22 policy.
+
+        The autonomy engine is asked ``decide(policy, action)`` for the
+        first suggested action; the verdict (allow / require_approval /
+        deny) is audited, then translated into a loop decision. A P0 or
+        an explicit auto-escalate always surfaces to a human.
+        """
         suggested = triage_result.get("suggested_actions") or []
         first_type = None
         for a in suggested:
@@ -137,20 +144,54 @@ class ClosedLoopOrchestrator:
         wants_heal = first_type in _HEALABLE
         wants_patch = first_type in ("propose_patch", "patch", "code_change")
 
-        # N22 autonomy gate (Wave 5). Until the policy engine lands, the
-        # gate returns "assisted" so nothing auto-executes — we only
-        # record a recommendation.
+        # N22 — effective maintenance mode (compliance override + budget
+        # downgrade applied inside ``evaluate_mode``).
         mode = await self._gate(event, triage_result, first_type)
+        escalate = bool(triage_result.get("auto_escalate") or _is_p0(triage_result))
+
         if mode == "observe":
-            return "recommend"
-        if mode == "autonomous" and wants_heal:
-            return "heal"
-        if mode == "autonomous" and wants_patch:
-            return "patch"
-        # assisted / p0 → surface to a human when high severity.
-        if triage_result.get("auto_escalate") or _is_p0(triage_result):
-            return "human"
-        return "recommend"
+            return "human" if escalate else "recommend"
+
+        if wants_heal or wants_patch:
+            decision = await self._decide_action(event, first_type or "")
+            if decision == "allow" and wants_heal:
+                return "heal"
+            if decision == "allow" and wants_patch:
+                return "patch"
+            if decision == "require_approval":
+                # A pending action row already exists (recorded by the
+                # hook); surface to a human when it's high severity.
+                return "human" if escalate else "recommend"
+            # deny → advisory only.
+            return "human" if escalate else "recommend"
+
+        return "human" if escalate else "recommend"
+
+    async def _decide_action(self, event: LoopEvent, action_type: str) -> str:
+        """Resolve the policy + return the audited decision for one action."""
+        try:
+            from eden.closed_loop.autonomy_policy import (
+                audit,
+                decide,
+                resolve,
+            )
+
+            policy = await resolve(
+                event.org_id, event.payload.get("agent_id")
+            )
+            verdict, reason, tier = decide(policy, action_type)
+            await audit(
+                event.org_id,
+                agent_id=event.payload.get("agent_id"),
+                action=action_type,
+                tier=tier,
+                decision=verdict,
+                reason=reason,
+            )
+            return verdict
+        except Exception as exc:
+            logger.debug("orchestrator: policy decide failed: %s", exc)
+            return "require_approval"
 
     async def _gate(
         self,
@@ -159,8 +200,9 @@ class ClosedLoopOrchestrator:
         action_type: str | None,
     ) -> str:
         """Return the effective maintenance mode
-        (``observe``/``assisted``/``autonomous``). Wave 5 wires the
-        autonomy policy engine here; the safe default is ``assisted``."""
+        (``observe``/``assisted``/``autonomous``) with the N22 compliance
+        override + daily-budget downgrade applied. Safe default:
+        ``assisted``."""
         try:
             from eden.closed_loop.autonomy_policy import (  # noqa: PLC0415
                 evaluate_mode,
