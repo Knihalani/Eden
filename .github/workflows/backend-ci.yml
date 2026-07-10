@@ -127,7 +127,7 @@ jobs:
       POSTGRES_PASSWORD: eden
       POSTGRES_DB: eden_test
       POSTGRES_SSLMODE: disable
-      JWT_SECRET: test-secret-do-not-use-in-prod
+      JWT_SECRET: test-secret-do-not-use-in-prod-32chars
       ENCRYPTION_KEY: test-encryption-key-must-be-32-chars-long!
       SESSION_SECRET: test-session-secret
       ENVIRONMENT: test
