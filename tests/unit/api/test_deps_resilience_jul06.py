@@ -126,7 +126,7 @@ async def test_require_org_member_synthesizes_on_db_blip_with_clerk_claim(monkey
     )
 
     assert result["org_id"] == "org_clerktrust"
-    assert result["role"] == "org:admin"  # clerk_role_to_eden_role
+    assert result["role"] == "owner"  # clerk_role_to_eden_role maps org:admin → owner
     assert result["_pending_sync"] is True
 
 
