@@ -63,8 +63,12 @@ jobs:
           version: "latest"
       - name: Export runtime deps
         # Mirrors the production `uv sync --no-dev` tree so the audit
-        # only checks what actually ships to prod.
-        run: uv export --no-hashes --format requirements-txt --no-dev > /tmp/runtime-reqs.txt
+        # only checks what actually ships to prod. Strip the editable
+        # ``-e .`` line — pip-audit cannot deduce a version from it.
+        run: |
+          uv export --no-hashes --format requirements-txt --no-dev > /tmp/runtime-reqs.txt
+          grep -v '^-e \.' /tmp/runtime-reqs.txt > /tmp/runtime-reqs-audit.txt
+          mv /tmp/runtime-reqs-audit.txt /tmp/runtime-reqs.txt
       - name: pip-audit (fail on any known vuln)
         # ``pip-audit`` is the upstream-maintained replacement for
         # ``safety``: it pulls from the PyPI Advisory DB and OSV.

@@ -178,7 +178,7 @@ export function OrgProvider({ children }: { children: ReactNode }) {
       // and were confusing. The exception is the generic
       // "Session expired" path for 401.
       let message: string;
-      if (/401|not\s*authenticated|unauthorized/i.test(rawMessage)) {
+      if (/401|not\s*authenticated|authentication\s*required|unauthorized/i.test(rawMessage)) {
         message = "Session expired. Please sign in again.";
         if (typeof window !== "undefined") {
           window.sessionStorage.setItem("eden:auth:error", "session_expired");
