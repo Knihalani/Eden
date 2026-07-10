@@ -579,6 +579,45 @@ def _build_settings_class():
         github_app_webhook_secret: str = ""
         github_app_callback_url: str = ""  # e.g. https://portal.example.com/onboarding/connect
 
+        # ── Trace-quality / quality-pipeline activation (N14) ───────────
+        # These gate the trace-quality wiring (``install_all()``) and the
+        # quality-pipeline sidecar worker started from ``api/app.py``
+        # lifespan. Source of truth: ``prompts/06_settings.md``. Prior to
+        # N14 these attributes were absent, so ``quality_pipeline.worker``
+        # no-oped even when started. Env-driven via ``EDEN_*``.
+        trace_quality_enabled: bool = True
+        trace_quality_compute_async: bool = True
+        traceloop_auto_apply: bool = False  # per-action kill-switch default
+        stat_gate_min_n: int = 30
+        stat_gate_min_effect: float = 0.2
+        detector_keep_rate_loop: float = 1.0
+        detector_keep_rate_error: float = 1.0
+        quality_pipeline_workers: int = 2
+        quality_pipeline_watermark_poll_ms: int = 1000
+        quality_pipeline_batch_size: int = 100
+
+        # Per-action kill-switch defaults mirrored into
+        # ``tenant_guardrail_action_config`` (read-only True, mutating
+        # False). Distinct from ``_KILL_SWITCH_DEFAULT`` (private) so it is
+        # env-serialisable as JSON.
+        default_action_applied_flag: dict[str, bool] = {
+            "record_to_table": True,
+            "emit_audit_event": True,
+            "emit_drift_alert": True,
+            "rewrite_response": True,
+            "coalesce_step": True,
+            "truncate_context": False,
+            "block_user": False,
+            "escalate_to_admin": False,
+            "revoke_api_key": False,
+            "apply_policy_change": False,
+        }
+
+        # Enhancement-tracking bounds (no-drop invariant + compute budget).
+        enhancements_per_component_max: int = 5
+        enhancements_compute_budget_seconds: int = 14400  # 4 CPU-hours
+        enhancements_no_drop_invariant_enforced: bool = True
+
         # ── Kill-switch defaults (v2.7 hot-path) ────────────────────────
         # Mutating actions default OFF per audit/permission policy.
         # Read-only actions default ON. Override per-tenant via
