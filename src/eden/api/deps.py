@@ -163,6 +163,8 @@ async def check_resource_permission(
     keep using :func:`require_org_permission`.
     """
     client = await get_postgres_client()
+    resolved_user_id = await resolve_eden_user_id(user_id)
+    resolved_org_id = await resolve_eden_org_id(org_id)
 
     role_row = await client.fetchrow(
         """
@@ -171,8 +173,8 @@ async def check_resource_permission(
         WHERE user_id = $1 AND org_id = $2
         LIMIT 1
         """,
-        user_id,
-        org_id,
+        resolved_user_id,
+        resolved_org_id,
     )
     role = (role_row or {}).get("role", "")
     if has_permission(role, permission):
@@ -193,8 +195,8 @@ async def check_resource_permission(
           AND permission = $5
         LIMIT 1
         """,
-        user_id,
-        org_id,
+        resolved_user_id,
+        resolved_org_id,
         resource_type,
         resource_id,
         permission,
@@ -229,46 +231,83 @@ async def get_current_org_member(
     instead of a raw dict. Raises 401 on no/invalid auth, 403 on
     no membership in the requested org.
     """
-    user_id = payload.get("sub") or extract_user_id(payload)
-    if not user_id:
+    clerk_user_id = payload.get("sub") or extract_user_id(payload)
+    if not clerk_user_id:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid token payload",
         )
-    # Clerk path: the active org id is in the abbreviated ``o.id``
-    # claim by default (and ``org_id`` only when a custom JWT
-    # template is configured). ``extract_org_id`` covers both.
-    # Fall back to ``X-Org-Id`` header (org switcher) and the legacy
-    # ``current_org_id`` claim (cookie-authed callers).
-    org_id = (
+    raw_org_id = (
         x_org_id
         or (extract_org_id(payload) if _is_clerk_payload_public(payload) else None)
         or payload.get("current_org_id")
     )
-    if not org_id:
+    if not raw_org_id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="No active organization",
         )
+
+    eden_user_id = await resolve_eden_user_id(clerk_user_id)
+    eden_org_id = await resolve_eden_org_id(raw_org_id)
+    is_clerk = _is_clerk_payload_public(payload)
+    clerk_role = extract_org_role(payload) if is_clerk else None
+    eden_role = clerk_role_to_eden_role(clerk_role)
+
     client = await get_postgres_client()
-    row = await client.fetchrow(
-        """
-        SELECT om.role, u.name AS user_name, u.email
-        FROM org_members om
-        JOIN users u ON u.id = om.user_id
-        WHERE om.user_id = $1 AND om.org_id = $2
-        """,
-        user_id,
-        org_id,
-    )
+    row = None
+    try:
+        row = await client.fetchrow(
+            """
+            SELECT om.role, u.name AS user_name, u.email
+            FROM org_members om
+            JOIN users u ON u.id = om.user_id
+            WHERE om.user_id = $1 AND om.org_id = $2
+            """,
+            eden_user_id,
+            eden_org_id,
+        )
+    except Exception as exc:
+        logger.warning(
+            "get_current_org_member: membership SELECT failed user=%s org=%s: %s",
+            eden_user_id,
+            eden_org_id,
+            exc,
+        )
+
+    if not row and is_clerk:
+        await ensure_clerk_membership(eden_user_id, eden_org_id, clerk_role)
+        try:
+            row = await client.fetchrow(
+                """
+                SELECT om.role, u.name AS user_name, u.email
+                FROM org_members om
+                JOIN users u ON u.id = om.user_id
+                WHERE om.user_id = $1 AND om.org_id = $2
+                """,
+                eden_user_id,
+                eden_org_id,
+            )
+        except Exception:
+            row = None
+        if not row:
+            db_user = await get_user_by_id(clerk_user_id, lookup_column="clerk_id")
+            return OrgMember(
+                user_id=eden_user_id or clerk_user_id,
+                org_id=eden_org_id or raw_org_id,
+                role=eden_role,
+                email=(db_user or {}).get("email") or "",
+                name=(db_user or {}).get("name") or "",
+            )
+
     if not row:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Not a member of this organization",
         )
     return OrgMember(
-        user_id=user_id,
-        org_id=org_id,
+        user_id=eden_user_id or clerk_user_id,
+        org_id=eden_org_id or raw_org_id,
         role=row["role"],
         email=row.get("email") or "",
         name=row.get("user_name") or "",
@@ -372,6 +411,13 @@ async def get_current_user(
         except Exception:
             pass  # noqa: BLE001 — best-effort, never block auth
 
+    # Clerk JWTs carry the Clerk string id in ``sub``; downstream
+    # org_members / sidebar_prefs lookups need Eden ``users.id``.
+    if _is_clerk_payload_public(payload):
+        db_user = await get_user_by_id(user_id, lookup_column="clerk_id")
+        if db_user:
+            user_id = str(db_user["id"])
+
     return {"user_id": user_id, "email": email}
 
 
@@ -394,6 +440,103 @@ async def get_optional_user(
         return None
     user_id = payload.get("sub") or extract_user_id(payload)
     return {"user_id": user_id, "email": payload.get("email")}
+
+
+async def resolve_eden_user_id(user_id: str | None) -> str | None:
+    """Map a Clerk ``sub`` or Eden ``users.id`` to the canonical Eden id.
+
+    ``org_members.user_id`` and most FK columns reference ``users.id``,
+    not ``users.clerk_id``. Clerk session JWTs carry the Clerk string
+    id in ``sub`` — callers must resolve before any membership lookup.
+    """
+    if not user_id:
+        return None
+    try:
+        client = await get_postgres_client()
+        row = await client.fetchrow(
+            "SELECT id FROM users WHERE id::text = $1 OR clerk_id::text = $1 LIMIT 1",
+            user_id,
+        )
+        return str(row["id"]) if row else user_id
+    except Exception as exc:
+        logger.warning(
+            "resolve_eden_user_id failed for user=%s: %s",
+            user_id,
+            exc,
+        )
+        return user_id
+
+
+async def resolve_eden_org_id(org_id: str | None) -> str | None:
+    """Map a Clerk org id or Eden ``organizations.id`` to the Eden id.
+
+    New rows store a generated UUID in ``organizations.id`` and the
+    Clerk id in ``clerk_org_id``; legacy webhook rows may use the
+    Clerk id as ``id`` directly. Accept both shapes.
+    """
+    if not org_id:
+        return None
+    try:
+        client = await get_postgres_client()
+        row = await client.fetchrow(
+            """
+            SELECT id FROM organizations
+            WHERE id::text = $1 OR clerk_org_id::text = $1
+            LIMIT 1
+            """,
+            org_id,
+        )
+        return str(row["id"]) if row else org_id
+    except Exception as exc:
+        logger.warning(
+            "resolve_eden_org_id failed for org=%s: %s",
+            org_id,
+            exc,
+        )
+        return org_id
+
+
+async def ensure_clerk_membership(
+    eden_user_id: str,
+    eden_org_id: str,
+    clerk_role: str | None,
+) -> bool:
+    """Best-effort upsert of ``org_members`` when Clerk JWT is trusted.
+
+    Mirrors ``clerk_webhooks._upsert_membership`` so the portal can
+    self-heal when the webhook is delayed or misconfigured.
+    """
+    eden_role = clerk_role_to_eden_role(clerk_role)
+    try:
+        client = await get_postgres_client()
+        await client.execute(
+            """
+            INSERT INTO org_members (
+                org_id, user_id, role, last_active_at, created_at, last_writer_source
+            )
+            VALUES ($1, $2, $3, NOW(), NOW(), 'clerk')
+            ON CONFLICT (org_id, user_id) DO UPDATE
+            SET role = CASE
+                    WHEN org_members.last_writer_source = 'clerk'
+                        THEN EXCLUDED.role
+                    ELSE org_members.role
+                END,
+                last_writer_source = 'clerk',
+                last_active_at = NOW()
+            """,
+            eden_org_id,
+            eden_user_id,
+            eden_role,
+        )
+        return True
+    except Exception as exc:
+        logger.warning(
+            "ensure_clerk_membership failed user=%s org=%s: %s",
+            eden_user_id,
+            eden_org_id,
+            exc,
+        )
+        return False
 
 
 async def get_user_by_id(user_id: str, lookup_column: str = "id") -> dict | None:
@@ -434,6 +577,32 @@ async def get_user_by_id(user_id: str, lookup_column: str = "id") -> dict | None
         return None
 
 
+async def get_eden_user_row_from_auth(user: dict) -> dict | None:
+    """Resolve a ``get_current_user`` dict to an Eden ``users`` row.
+
+    Clerk session JWTs carry the Clerk string id (``user_2abc…``) in
+    ``user["user_id"]`` until a Postgres row exists. Passing that
+    string into a UUID FK column crashes asyncpg with
+    ``invalid input syntax for type uuid`` → unhandled 500. Look up
+    by ``clerk_id`` first, then by Eden ``id``.
+    """
+    uid = user.get("user_id")
+    if not uid:
+        return None
+    uid_str = str(uid)
+    if uid_str.startswith("user_"):
+        row = await get_user_by_id(uid_str, lookup_column="clerk_id")
+        if row:
+            return row
+    return await get_user_by_id(uid_str, lookup_column="id")
+
+
+async def eden_user_id_from_auth(user: dict) -> str | None:
+    """Return Eden ``users.id`` for an auth user dict, or None."""
+    row = await get_eden_user_row_from_auth(user)
+    return str(row["id"]) if row else None
+
+
 async def get_current_org(
     x_org_id: str | None = Header(None, alias="X-Org-Id"),
     payload: dict | None = Depends(_try_resolve_token_payload),
@@ -458,9 +627,11 @@ async def get_current_org(
     # Clerk path: trust the org_id + role claims from the session JWT.
     is_clerk = _is_clerk_payload_public(payload)
     if is_clerk:
-        org_id = x_org_id or extract_org_id(payload)
-        if not org_id:
+        raw_org_id = x_org_id or extract_org_id(payload)
+        if not raw_org_id:
             return None
+        eden_user_id = await resolve_eden_user_id(user_id)
+        eden_org_id = await resolve_eden_org_id(raw_org_id)
         clerk_role = extract_org_role(payload)
         eden_role = clerk_role_to_eden_role(clerk_role)
         # Defensive: a DB blip or RLS-blanket here must not 500 the
@@ -482,8 +653,8 @@ async def get_current_org(
                     JOIN organizations o ON o.id = om.org_id
                     WHERE om.user_id = $1 AND om.org_id = $2
                     """,
-                    user_id,
-                    org_id,
+                    eden_user_id,
+                    eden_org_id,
                 )
             else:
                 row = await client.fetchrow(
@@ -493,15 +664,31 @@ async def get_current_org(
                     JOIN organizations o ON o.id = om.org_id
                     WHERE om.user_id = $1 AND om.org_id = $2 AND o.archived_at IS NULL
                     """,
-                    user_id,
-                    org_id,
+                    eden_user_id,
+                    eden_org_id,
                 )
         except Exception as exc:
             logger.warning(
                 "get_current_org: org_members SELECT failed for user=%s org=%s: %s — "
                 "falling through to synthesised pending_sync entry",
-                user_id, org_id, exc,
+                eden_user_id, eden_org_id, exc,
             )
+        if not row:
+            await ensure_clerk_membership(eden_user_id, eden_org_id, clerk_role)
+            try:
+                client = await get_postgres_client()
+                row = await client.fetchrow(
+                    """
+                    SELECT om.role, o.name, o.slug, o.owner_id, o.archived_at
+                    FROM org_members om
+                    JOIN organizations o ON o.id = om.org_id
+                    WHERE om.user_id = $1 AND om.org_id = $2
+                    """,
+                    eden_user_id,
+                    eden_org_id,
+                )
+            except Exception:
+                row = None
         if not row:
             # Clerk says the user is in this org but Eden's
             # ``org_members`` row doesn't exist yet — the Clerk
@@ -509,10 +696,10 @@ async def get_current_org(
             # will create it shortly. Return a synthesised entry so the
             # caller can still proceed with the Clerk-trusted role.
             return {
-                "org_id": org_id,
+                "org_id": eden_org_id,
                 "role": eden_role,
-                "name": org_id,
-                "slug": org_id,
+                "name": eden_org_id,
+                "slug": eden_org_id,
                 "archived_at": None,
                 "_pending_sync": True,
             }
@@ -520,7 +707,7 @@ async def get_current_org(
         # Eden's row says. This keeps role changes in Clerk in
         # effect without waiting for a webhook round-trip.
         return {
-            "org_id": org_id,
+            "org_id": eden_org_id,
             "role": eden_role,
             "name": row["name"],
             "slug": row["slug"],
@@ -528,7 +715,8 @@ async def get_current_org(
         }
 
     # Legacy Eden cookie path — unchanged.
-    org_id = x_org_id or payload.get("current_org_id")
+    org_id = await resolve_eden_org_id(x_org_id or payload.get("current_org_id"))
+    user_id = await resolve_eden_user_id(user_id)
 
     if not org_id or not user_id:
         return None
@@ -595,12 +783,15 @@ async def require_org_member(
             x_org_id, exc,
         )
         # Try the synthesize path so Clerk-trusted users still pass.
-        if payload and payload.get("org_id"):
+        clerk_org = extract_org_id(payload) if payload else None
+        if payload and clerk_org:
+            eden_org_id = await resolve_eden_org_id(clerk_org)
+            clerk_role = extract_org_role(payload)
             return {
-                "org_id": payload.get("org_id"),
-                "role": payload.get("org_role", "member"),
-                "name": payload.get("org_id"),
-                "slug": payload.get("org_id"),
+                "org_id": eden_org_id or clerk_org,
+                "role": clerk_role_to_eden_role(clerk_role),
+                "name": eden_org_id or clerk_org,
+                "slug": eden_org_id or clerk_org,
                 "archived_at": None,
                 "_pending_sync": True,
             }

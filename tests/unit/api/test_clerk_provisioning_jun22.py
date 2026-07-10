@@ -287,6 +287,33 @@ class TestNotificationsHandlers:
         )
         assert response.status_code != 500
 
+    def test_list_notifications_with_clerk_id_before_sync(
+        self, mock_postgres_client: MagicMock, api_client: TestClient
+    ):
+        """Clerk JWT with no Eden row yet must not pass user_… into a
+        UUID column — that was the post-signup 500 on /notifications."""
+        clerk_id = "user_2freshsignup"
+        mock_postgres_client._fetchrow_overrides.append(
+            ("WHERE clerk_id::text", None)
+        )
+        mock_postgres_client._fetchrow_overrides.append(
+            ("WHERE id::text", None)
+        )
+
+        with patch(
+            "eden.api.deps.verify_clerk_token",
+            return_value={"sub": clerk_id, "email": "fresh@example.com"},
+        ):
+            response = api_client.get(
+                "/notifications?limit=20",
+                headers={"Authorization": "Bearer fake-clerk-jwt"},
+            )
+
+        assert response.status_code == 200, response.text
+        data = response.json()
+        assert data["notifications"] == []
+        assert data["total"] == 0
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Clerk webhook _upsert_user with a non-UUID clerk_id

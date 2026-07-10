@@ -15,11 +15,15 @@ from pydantic import BaseModel, EmailStr, Field
 from qrcode import QRCode
 
 from eden.api.deps import (
+    _resolve_token_payload,
+    ensure_clerk_membership,
     get_current_org,
     get_current_user,
+    get_eden_user_row_from_auth,
     get_user_by_id,
     log_audit_event,
     require_org_admin,
+    resolve_eden_org_id,
 )
 from eden.api.middleware.security_headers import apply_security_headers
 from eden.api.utils.auth import (
@@ -30,6 +34,11 @@ from eden.api.utils.auth import (
 )
 from eden.api.utils.clerk_client import (
     extract_user_profile,
+)
+from eden.api.utils.clerk_auth import (
+    extract_org_id,
+    extract_org_role,
+    is_clerk_payload,
 )
 from eden.api.utils.clerk_client import (
     get_user as clerk_get_user,
@@ -826,7 +835,10 @@ async def logout_all(
 
 
 @router.get("/me", response_model=UserResponse)
-async def get_me(user: dict = Depends(get_current_user)):
+async def get_me(
+    user: dict = Depends(get_current_user),
+    payload: dict = Depends(_resolve_token_payload),
+):
     """Return the currently authenticated user.
 
     Auto-provisions the user on first authenticated call: if the
@@ -1045,6 +1057,17 @@ async def get_me(user: dict = Depends(get_current_user)):
 
     client = await get_postgres_client()
 
+    # Self-heal Clerk org membership when the webhook is delayed.
+    if is_clerk_payload(payload):
+        clerk_org = extract_org_id(payload)
+        if clerk_org:
+            eden_org_id = await resolve_eden_org_id(clerk_org)
+            await ensure_clerk_membership(
+                str(db_user["id"]),
+                eden_org_id or clerk_org,
+                extract_org_role(payload),
+            )
+
     # Fetch user's organizations
     orgs_query = """
         SELECT o.id, o.name, o.slug, om.role
@@ -1053,7 +1076,7 @@ async def get_me(user: dict = Depends(get_current_user)):
         WHERE om.user_id = $1
         ORDER BY o.created_at DESC
     """
-    orgs_rows = await client.fetch(orgs_query, user["user_id"])
+    orgs_rows = await client.fetch(orgs_query, str(db_user["id"]))
 
     organizations = [
         {
@@ -1088,12 +1111,9 @@ async def list_my_pending_invites(user: dict = Depends(get_current_user)):
     Pending invites that have passed ``expires_at`` are filtered out
     here (they would also be rejected by the accept route).
     """
-    db_user = await get_user_by_id(user["user_id"])
+    db_user = await get_eden_user_row_from_auth(user)
     if not db_user:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="User not found",
-        )
+        return []
 
     client = await get_postgres_client()
     rows = await client.fetch(
