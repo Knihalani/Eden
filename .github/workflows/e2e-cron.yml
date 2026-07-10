@@ -34,7 +34,7 @@ jobs:
       JWT_SECRET: test-jwt-secret-do-not-use-in-production-ever
       ENCRYPTION_KEY: $(python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())")
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Set up Python
         uses: actions/setup-python@v5
