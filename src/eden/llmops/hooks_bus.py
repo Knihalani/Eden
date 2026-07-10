@@ -350,7 +350,7 @@ async def _persist_hook_event(hook_id: str, event: HookEvent) -> None:
             hook_id,
             event.org_id,
             event.reason[:64],
-            "hook_bus",
+            _infer_action_kind(event),
             (event.source.get("target_id", "") if isinstance(event.source, dict) else "")[:256] or None,
             json.dumps(
                 {
