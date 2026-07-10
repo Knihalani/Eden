@@ -618,6 +618,17 @@ def _build_settings_class():
         enhancements_compute_budget_seconds: int = 14400  # 4 CPU-hours
         enhancements_no_drop_invariant_enforced: bool = True
 
+        # ── Closed-loop error diagnosis feature flags ───────────────────
+        # The issues surface (F28/F29 stumbles+issues + routes) is on by
+        # default to honour the zero-config product promise; auto
+        # detection (F20) and the orchestrator (F46) are gated so they
+        # can be rolled out per deployment.
+        agent_issues_v0: bool = True
+        auto_issue_detection_v1: bool = True
+        closed_loop_orchestrator_v1: bool = True
+        # Triage budget (F30) — max LLM spend per org per day for triage.
+        max_triage_cost_usd_per_day: float = 25.0
+
         # ── Kill-switch defaults (v2.7 hot-path) ────────────────────────
         # Mutating actions default OFF per audit/permission policy.
         # Read-only actions default ON. Override per-tenant via

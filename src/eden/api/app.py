@@ -25,6 +25,7 @@ from eden.api.routes import (
     agents,
     ai_agent,
     ai_insights,
+    agent_issues,
     alerts,
     analytics,
     analytics_v2,
@@ -778,6 +779,7 @@ app.include_router(intelligence_code_change.router)  # /orgs/{org_id}/intelligen
 # Intelligence gap surface — Cat 4/5/6/8/9/10/11/12/13/14/18/19/20/22
 # All self-gate on `intelligence_gap_v0` via the per-router `dependencies=`
 # list; this just makes them reachable when the flag is on.
+app.include_router(agent_issues.router)  # /orgs/{org_id}/agent-issues (F28/F29, gated by agent_issues_v0)
 app.include_router(intelligence_agents.router)
 app.include_router(intelligence_apm_depth.router)
 app.include_router(intelligence_autonomous.router)
