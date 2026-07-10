@@ -70,6 +70,9 @@ ACTION_KIND: dict[str, str] = {
     "on_incident_clustered": "investigate",
     "on_low_user_satisfaction": "investigate",
     "on_low_roi_department": "investigate",
+    # F28/F29 — a grouped agent issue was created/regressed. Kicks off
+    # triage (F30) via the closed-loop orchestrator (F46).
+    "on_issue_created": "investigate",
     "on_compliance_gap_gdpr": "rtbf",
     "on_compliance_gap_soc2": "investigate",
     "on_compliance_gap_hipaa": "investigate",
@@ -1514,6 +1517,54 @@ class IncidentHook:
         )
 
 
+class IssueHook:
+    """F28/F29 — fires when a grouped agent issue is created or regressed.
+
+    Records a ``pending_approval`` closed-loop action (action_kind
+    ``investigate``) so the F46 orchestrator picks it up and schedules
+    triage (F30) + alerts (F47). Severity is derived from the issue's
+    p0-p3 severity so P0/P1 issues flow through as ``high``/``critical``
+    and hit the human-approval gate where required.
+    """
+
+    name = "issue"
+
+    async def on_issue_created(
+        self,
+        org_id: str,
+        *,
+        issue_id: str,
+        fingerprint: str,
+        kind: str,
+        severity: str,
+        title: str,
+        regressed: bool = False,
+    ) -> str | None:
+        # Map p0-p3 → hook severity vocabulary.
+        hook_sev = {
+            "p0": "critical",
+            "p1": "high",
+            "p2": "medium",
+            "p3": "low",
+        }.get(severity, "medium")
+        return await _record_action(
+            org_id,
+            hook_name="on_issue_created",
+            action_kind=ACTION_KIND["on_issue_created"],
+            target=issue_id,
+            payload={
+                "primary_entity_id": f"issue:{issue_id}",
+                "issue_id": issue_id,
+                "fingerprint": fingerprint,
+                "kind": kind,
+                "issue_severity": severity,
+                "title": title,
+                "regressed": regressed,
+            },
+            severity=hook_sev,
+        )
+
+
 class UserSatisfactionHook:
     """Cat 9 — fires when user-corrected satisfaction drops below 0.4.
 
@@ -1624,6 +1675,7 @@ class RoiHook:
 
 _budget_hook: BudgetHook | None = None
 _incident_hook: IncidentHook | None = None
+_issue_hook: IssueHook | None = None
 _user_satisfaction_hook: UserSatisfactionHook | None = None
 _drift_alert_hook: DriftAlertHook | None = None
 _roi_hook: RoiHook | None = None
@@ -1641,6 +1693,13 @@ def get_incident_hook() -> IncidentHook:
     if _incident_hook is None:
         _incident_hook = IncidentHook()
     return _incident_hook
+
+
+def get_issue_hook() -> IssueHook:
+    global _issue_hook
+    if _issue_hook is None:
+        _issue_hook = IssueHook()
+    return _issue_hook
 
 
 def get_user_satisfaction_hook() -> UserSatisfactionHook:
