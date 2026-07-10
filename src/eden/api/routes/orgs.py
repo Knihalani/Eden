@@ -6,16 +6,21 @@ import re
 import secrets
 from uuid import uuid4
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
 from pydantic import BaseModel
 
 from eden.api.deps import (
+    _try_resolve_token_payload,
+    eden_user_id_from_auth,
+    get_current_org,
     get_current_user,
     log_audit_event,
     require_org_admin,
     require_org_member,
     require_org_owner,
     require_org_permission_dep,
+    resolve_eden_org_id,
+    resolve_eden_user_id,
 )
 from eden.api.routes.billing import check_limit
 from eden.api.utils.redact import redact_all
@@ -132,7 +137,12 @@ async def create_org(
     )
 
     client = await get_postgres_client()
-    user_id = user["user_id"]
+    user_id = await eden_user_id_from_auth(user)
+    if not user_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found",
+        )
 
     # Validate name
     if len(name) < 2 or len(name) > 100:
@@ -277,7 +287,9 @@ async def list_user_orgs(
 ):
     """List all organizations the user is a member of (excludes archived by default)."""
     client = await get_postgres_client()
-    user_id = user["user_id"]
+    user_id = await eden_user_id_from_auth(user)
+    if not user_id:
+        return []
 
     if include_archived:
         query = """
@@ -587,9 +599,25 @@ async def remove_member(
 
 
 @router.get("/{org_id}/members", response_model=list[dict])
-async def list_org_members(org_id: str, user: dict = Depends(get_current_user)):
+async def list_org_members(
+    org_id: str,
+    user: dict = Depends(get_current_user),
+    x_org_id: str | None = Header(None, alias="X-Org-Id"),
+    payload: dict | None = Depends(_try_resolve_token_payload),
+):
     """List all members of an organization."""
-    await require_org_member(org_id, authorization=None)
+    eden_org_id = await resolve_eden_org_id(org_id or x_org_id)
+    if not eden_org_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not a member of this organization",
+        )
+    org = await get_current_org(eden_org_id, payload)
+    if not org:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not a member of this organization",
+        )
 
     client = await get_postgres_client()
 
@@ -601,7 +629,7 @@ async def list_org_members(org_id: str, user: dict = Depends(get_current_user)):
         WHERE om.org_id = $1
         ORDER BY om.joined_at ASC
     """
-    rows = await client.fetch(query, org_id)
+    rows = await client.fetch(query, eden_org_id)
 
     return [
         {

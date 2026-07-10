@@ -5,7 +5,7 @@ import logging
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 
-from eden.api.deps import get_current_user
+from eden.api.deps import eden_user_id_from_auth, get_current_user
 from eden.storage.postgres import get_postgres_client
 
 logger = logging.getLogger(__name__)
@@ -69,7 +69,18 @@ async def list_notifications(
     Now wired through ``Depends(get_current_user)`` like the rest of
     the route layer.
     """
-    user_id = user["user_id"]
+    user_id = await eden_user_id_from_auth(user)
+    if not user_id:
+        # Webhook /auth/me race: Clerk session is valid but Eden row
+        # not synced yet — return an empty inbox instead of passing a
+        # Clerk string into notifications.user_id (UUID) → 500.
+        return NotificationListResponse(
+            notifications=[],
+            total=0,
+            unread_count=0,
+            limit=limit,
+            offset=offset,
+        )
 
     client = await get_postgres_client()
 
@@ -144,7 +155,9 @@ async def create_notification(
     to prevent any-user-to-any-user spam. Also enforce org_id matches the
     caller's memberships.
     """
-    user_id = user["user_id"]
+    user_id = await eden_user_id_from_auth(user)
+    if not user_id:
+        raise HTTPException(status_code=404, detail="User not found")
 
     client = await get_postgres_client()
 
@@ -173,7 +186,9 @@ async def mark_notification_read(
     user: dict = Depends(get_current_user),
 ):
     """Mark a notification as read."""
-    user_id = user["user_id"]
+    user_id = await eden_user_id_from_auth(user)
+    if not user_id:
+        return {"message": "Notification marked as read"}
 
     client = await get_postgres_client()
 
@@ -204,7 +219,9 @@ async def mark_all_notifications_read(
     user: dict = Depends(get_current_user),
 ):
     """Mark all notifications as read for the authenticated user."""
-    user_id = user["user_id"]
+    user_id = await eden_user_id_from_auth(user)
+    if not user_id:
+        return {"message": "All notifications marked as read"}
 
     client = await get_postgres_client()
 
@@ -226,7 +243,9 @@ async def delete_notification(
     user: dict = Depends(get_current_user),
 ):
     """Delete a notification."""
-    user_id = user["user_id"]
+    user_id = await eden_user_id_from_auth(user)
+    if not user_id:
+        return {"message": "Notification deleted"}
 
     client = await get_postgres_client()
 
