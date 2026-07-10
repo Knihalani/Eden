@@ -157,11 +157,15 @@ async function handle(
       // never retry — tearing down a live SSE would corrupt the
       // consumer.
       const dialUpstream = async () => {
+        const upstreamHeaders: Record<string, string> = { ...headers };
+        if (authorization) upstreamHeaders.authorization = authorization;
+        const cookieHeader = request.headers.get("cookie");
+        if (cookieHeader) upstreamHeaders.cookie = cookieHeader;
         return fetch(
           `${FASTAPI_URL}${upstreamPath}${search}`,
           {
             method: request.method as "GET" | "POST" | "PUT" | "PATCH" | "DELETE",
-            headers,
+            headers: upstreamHeaders,
             body: body as BodyInit | null | undefined,
           },
         );

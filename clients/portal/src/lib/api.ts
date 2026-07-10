@@ -17,6 +17,7 @@ import {
   retryAfterMs,
   RETRY_AFTER_DEFAULT_MS,
 } from "@/lib/proxy";
+import { toUserFacingError } from "@/lib/safe-error-message";
 
 export const API_BASE =
   process.env.NEXT_PUBLIC_API_URL || "/api/proxy";
@@ -234,7 +235,21 @@ async function fetchApi<T>(
       const error = await response.json().catch(
         () => ({ detail: `Request failed (${response.status})` }),
       );
-      throw new ApiError(response.status, error.detail || `HTTP ${response.status}`);
+      const rawDetail =
+        typeof error === "object" && error !== null && "detail" in error
+          ? (error as { detail?: unknown }).detail
+          : undefined;
+      const detailStr =
+        typeof rawDetail === "string"
+          ? rawDetail
+          : typeof rawDetail === "object" && rawDetail !== null
+            ? JSON.stringify(rawDetail)
+            : `HTTP ${response.status}`;
+      const message = toUserFacingError(
+        new Error(detailStr),
+        detailStr || `HTTP ${response.status}`,
+      );
+      throw new ApiError(response.status, message);
     }
 
     // SSE streams don't return JSON.

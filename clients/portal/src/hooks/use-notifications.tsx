@@ -52,12 +52,15 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
       setError(null);
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
-      // 404 = endpoint not deployed yet (pre-launch). Silently
-      // swallow and keep polling at the steady-state interval so
-      // the bell comes back automatically once the route ships.
-      if (/404|not\s*found/i.test(msg)) {
+      // 404 = endpoint not deployed yet (pre-launch). 500 during the
+      // post-signup auto-provision race is transient — swallow and
+      // let the next poll succeed once /auth/me has created the row.
+      if (/404|not\s*found|5\d\d|unexpected\s*error/i.test(msg)) {
         setNotifications([]);
         setUnreadCount(0);
+        if (/5\d\d|unexpected\s*error/i.test(msg)) {
+          setError(null);
+        }
         return;
       }
       // For other errors, log + clear state + re-throw so
