@@ -43,7 +43,7 @@ import { Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ErrorState } from "@/components/ui/error-state";
 import { PageHeader } from "@/components/layout/page-header";
-import { PageContent } from "@/components/layout/page-content";
+import { PageContent, PageLoading } from "@/components/layout/page-content";
 import { AgentUploadPanel } from "./upload-panel";
 
 function formatRelative(iso?: string | null): string {
@@ -157,18 +157,12 @@ export default function AgentDetailPage() {
   }
 
   if (loading && !agent) {
-    return (
-      // Match the page wrapper so the loader isn't flush-left.
-      <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto text-sm text-[var(--text-muted)] flex items-center gap-2">
-        <Loader2 className="w-4 h-4 animate-spin" />
-        Loading agent…
-      </div>
-    );
+    return <PageLoading size="wide" message="Loading agent…" />;
   }
 
   if (loadError) {
     return (
-      <div className="p-4 sm:p-6 lg:p-8 max-w-3xl mx-auto space-y-4">
+      <PageContent size="narrow" className="space-y-4">
         <Link
           href="/agents"
           className="inline-flex items-center gap-1 text-xs text-[var(--text-muted)] hover:text-[var(--accent)] transition-colors"
@@ -193,13 +187,13 @@ export default function AgentDetailPage() {
             </button>
           }
         />
-      </div>
+      </PageContent>
     );
   }
 
   if (!agent) {
     return (
-      <div className="p-4 sm:p-6 lg:p-8 max-w-3xl mx-auto space-y-4">
+      <PageContent size="narrow" className="space-y-4">
         <Link
           href="/agents"
           className="inline-flex items-center gap-1 text-xs text-[var(--text-muted)] hover:text-[var(--accent)] transition-colors"
@@ -213,7 +207,7 @@ export default function AgentDetailPage() {
           description={`No agent with id ${agentId} exists in this organisation yet. It will appear once the agent first reports telemetry or you upload code.`}
           size="lg"
         />
-      </div>
+      </PageContent>
     );
   }
 

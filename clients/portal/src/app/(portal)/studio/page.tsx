@@ -8,6 +8,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { NoOrgState } from "@/components/ui/no-org-state";
 import { PageHeader } from "@/components/layout/page-header";
 import { PageContent } from "@/components/layout/page-content";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { motion, AnimatePresence } from "framer-motion";
 import { DataTable } from "@/components/ui/data-table";
@@ -34,6 +35,7 @@ interface MetricDetail {
   rubric: string;
   model: string;
   version: string;
+  approved?: boolean;
   history: Array<{
     version: string;
     tagged_at: string;
@@ -60,28 +62,19 @@ export default function StudioPage() {
         </div>}
 
       {!currentOrg ? <NoOrgState icon={Sparkles} feature="Custom-Metric Studio" description="Choose an organization to design and version custom evaluation rubrics." /> : <>
-          <div role="tablist" aria-label="Custom-Metric Studio sections" className="flex items-center gap-1 p-1 bg-[var(--bg-tertiary)] rounded-xl w-fit flex-wrap">
-            {[{
-          key: "templates" as Tab,
-          label: "Templates",
-          icon: FileText
-        }, {
-          key: "examples" as Tab,
-          label: "From examples",
-          icon: Wand2
-        }, {
-          key: "metrics" as Tab,
-          label: "My metrics",
-          icon: Layers
-        }].map(({
-          key,
-          label,
-          icon: Icon
-        }) => <button key={key} role="tab" aria-selected={activeTab === key} aria-label={label} onClick={() => setActiveTab(key)} className={cn("px-4 py-2 rounded-lg text-sm font-medium transition-all flex items-center gap-2", activeTab === key ? "bg-[var(--bg-primary)] text-[var(--text-primary)] shadow-sm" : "text-[var(--text-muted)] hover:text-[var(--text-secondary)]")}>
-                <Icon className="w-4 h-4" aria-hidden="true" />
-                {label}
-              </button>)}
-          </div>
+          <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as Tab)}>
+            <TabsList aria-label="Custom-Metric Studio sections" className="bg-[var(--bg-tertiary)] rounded-xl h-auto flex-wrap w-fit">
+              {([
+                { key: "templates" as Tab, label: "Templates", icon: FileText },
+                { key: "examples" as Tab, label: "From examples", icon: Wand2 },
+                { key: "metrics" as Tab, label: "My metrics", icon: Layers },
+              ] as const).map(({ key, label, icon: Icon }) => (
+                <TabsTrigger key={key} value={key} className="flex items-center gap-2 data-[state=active]:text-[var(--text-primary)]">
+                  <Icon className="w-4 h-4" aria-hidden />
+                  {label}
+                </TabsTrigger>
+              ))}
+            </TabsList>
 
           <AnimatePresence mode="wait">
             <motion.div key={activeTab} initial={{
@@ -101,6 +94,7 @@ export default function StudioPage() {
               {activeTab === "metrics" && <MyMetricsTab orgId={currentOrg.id} onError={setError} />}
             </motion.div>
           </AnimatePresence>
+          </Tabs>
         </>}
     </PageContent>;
 }
@@ -429,7 +423,8 @@ function MyMetricsTab({
     try {
       await metricStudioApi.approveMetric(orgId, openDetail.metric_id);
       setOpenDetail({
-        ...openDetail
+        ...openDetail,
+        approved: true,
       });
       // Reflect in the table list
       setMetrics(prev => prev.map(m => m.metric_id === openDetail.metric_id ? {
@@ -522,9 +517,9 @@ function MyMetricsTab({
             <button onClick={() => setOpenDetail(null)} disabled={approving} aria-label="Close metric detail" className="px-3 py-1.5 bg-[var(--bg-tertiary)] text-[var(--text-primary)] rounded-lg text-xs font-medium hover:bg-[var(--border-default)] transition-colors disabled:opacity-50">
               Close
             </button>
-            <button onClick={handleApprove} disabled={approving} aria-label={`Approve metric ${openDetail?.name}`} className="inline-flex items-center gap-1.5 px-4 py-1.5 bg-[var(--accent)] text-[var(--bg-base)] rounded-lg text-xs font-medium hover:bg-[var(--accent-hover)] disabled:opacity-50 transition-colors">
+            <button onClick={handleApprove} disabled={approving || openDetail?.approved} aria-label={`Approve metric ${openDetail?.name}`} className="inline-flex items-center gap-1.5 px-4 py-1.5 bg-[var(--accent)] text-[var(--bg-base)] rounded-lg text-xs font-medium hover:bg-[var(--accent-hover)] disabled:opacity-50 transition-colors">
               {approving ? <Loader2 className="w-3.5 h-3.5 animate-spin" aria-hidden="true" /> : <CheckCircle2 className="w-3.5 h-3.5" aria-hidden="true" />}
-              Approve
+              {openDetail?.approved ? "Approved" : "Approve"}
             </button>
           </DialogFooter>
         </DialogContent>

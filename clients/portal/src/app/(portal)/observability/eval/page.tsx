@@ -8,6 +8,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { NoOrgState } from "@/components/ui/no-org-state";
 import { PageHeader } from "@/components/layout/page-header";
 import { PageContent } from "@/components/layout/page-content";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { motion, AnimatePresence } from "framer-motion";
 import { DataTable } from "@/components/ui/data-table";
@@ -57,36 +58,21 @@ export default function EvalPage() {
         </div>}
 
       {!currentOrg ? <NoOrgState icon={Gauge} feature="Evaluation Quality" description="Choose an organization to manage judge versions, failure clusters, and human-in-the-loop data." /> : <>
-          <div className="flex items-center gap-1 p-1 bg-[var(--bg-tertiary)] rounded-xl w-fit flex-wrap">
-            {[{
-          key: "versions" as Tab,
-          label: "Versions",
-          icon: Tag
-        }, {
-          key: "clusters" as Tab,
-          label: "Failure clusters",
-          icon: Layers
-        }, {
-          key: "clhf" as Tab,
-          label: "CLHF",
-          icon: Sparkles
-        }, {
-          key: "hil" as Tab,
-          label: "HIL queue",
-          icon: UserCheck
-        }, {
-          key: "pairwise" as Tab,
-          label: "Pairwise",
-          icon: Users
-        }].map(({
-          key,
-          label,
-          icon: Icon
-        }) => <button key={key} onClick={() => setActiveTab(key)} role="tab" aria-selected={activeTab === key} className={cn("px-4 py-2 rounded-lg text-sm font-medium transition-all flex items-center gap-2", activeTab === key ? "bg-[var(--bg-primary)] text-[var(--text-primary)] shadow-sm" : "text-[var(--text-muted)] hover:text-[var(--text-secondary)]")}>
-                <Icon className="w-4 h-4" />
-                {label}
-              </button>)}
-          </div>
+          <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as Tab)}>
+            <TabsList aria-label="Evaluation sections" className="bg-[var(--bg-tertiary)] rounded-xl h-auto flex-wrap w-fit">
+              {([
+                { key: "versions" as Tab, label: "Versions", icon: Tag },
+                { key: "clusters" as Tab, label: "Failure clusters", icon: Layers },
+                { key: "clhf" as Tab, label: "CLHF", icon: Sparkles },
+                { key: "hil" as Tab, label: "HIL queue", icon: UserCheck },
+                { key: "pairwise" as Tab, label: "Pairwise", icon: Users },
+              ] as const).map(({ key, label, icon: Icon }) => (
+                <TabsTrigger key={key} value={key} className="flex items-center gap-2 data-[state=active]:text-[var(--text-primary)]">
+                  <Icon className="w-4 h-4" aria-hidden />
+                  {label}
+                </TabsTrigger>
+              ))}
+            </TabsList>
 
           <AnimatePresence mode="wait">
             <motion.div key={activeTab} initial={{
@@ -108,6 +94,7 @@ export default function EvalPage() {
               {activeTab === "pairwise" && <PairwiseTab orgId={currentOrg.id} onError={setError} />}
             </motion.div>
           </AnimatePresence>
+          </Tabs>
         </>}
     </PageContent>;
 }

@@ -9,7 +9,7 @@ import { Card } from "@/components/ui/card";
 import { NoOrgState } from "@/components/ui/no-org-state";
 import { ErrorState } from "@/components/ui/error-state";
 import { PageHeader } from "@/components/layout/page-header";
-import { PageContent } from "@/components/layout/page-content";
+import { PageContent, PageLoading } from "@/components/layout/page-content";
 import {
   ArrowLeft,
   Network,
@@ -80,16 +80,12 @@ export default function FineTuneLineagePage() {
   }
 
   if (loading && !lineage) {
-    return (
-      <div className="p-8 flex items-center justify-center">
-        <Loader2 className="w-6 h-6 animate-spin text-[var(--accent)]" />
-      </div>
-    );
+    return <PageLoading message="Loading lineage…" />;
   }
 
   if (error || !lineage) {
     return (
-      <div className="p-4 sm:p-6 lg:p-8 max-w-3xl mx-auto space-y-4">
+      <PageContent size="narrow" className="space-y-4">
         <Link
           href="/observability"
           className="inline-flex items-center gap-2 text-sm text-[var(--text-secondary)] hover:text-[var(--accent)]"
@@ -113,7 +109,7 @@ export default function FineTuneLineagePage() {
             </button>
           }
         />
-      </div>
+      </PageContent>
     );
   }
 

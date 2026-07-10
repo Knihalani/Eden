@@ -51,6 +51,8 @@ const QUALITY_BADGE_STYLES: Record<string, string> = {
 export default function MarketplacePage() {
   const { currentOrg } = useOrg();
   const toast = useToast();
+  const toastRef = useRef(toast);
+  toastRef.current = toast;
   const [cards, setCards] = useState<EnvCardSummary[]>([]);
   const [featured, setFeatured] = useState<EnvCardSummary[]>([]);
   const [loading, setLoading] = useState(true);
@@ -96,34 +98,32 @@ export default function MarketplacePage() {
           // the FE's vocabulary.
           const toCard = (r: {
             id: string;
-            name: string;
-            description: string;
+            slug: string;
+            title: string;
+            summary: string;
             category: string;
-            quality: "low" | "medium" | "high";
-            author: string;
-            stars: number;
-            forks: number;
-            updated_at: string;
+            tags?: string[];
+            quality_band?: "low" | "medium" | "high" | null;
+            quality_score?: number | null;
+            fork_count?: number;
+            install_count?: number;
+            is_featured?: boolean;
+            published_at?: string | null;
           }): EnvCardSummary => ({
             id: r.id,
-            slug: r.id,
-            name: r.name,
-            title: r.name,
-            description: r.description,
-            summary: r.description,
+            slug: r.slug,
+            title: r.title,
+            summary: r.summary,
+            description: r.summary,
             category: r.category,
-            tags: [],
-            author: r.author,
-            stars: r.stars,
-            forks: r.forks,
-            quality: r.quality,
-            quality_score: null,
-            quality_band: r.quality,
-            fork_count: r.forks,
-            install_count: 0,
-            is_featured: false,
-            published_at: null,
-            updated_at: r.updated_at,
+            tags: r.tags ?? [],
+            quality: r.quality_band ?? "low",
+            quality_score: r.quality_score ?? null,
+            quality_band: r.quality_band ?? null,
+            fork_count: r.fork_count ?? 0,
+            install_count: r.install_count ?? 0,
+            is_featured: r.is_featured ?? false,
+            published_at: r.published_at ?? null,
           });
           setCards((list || []).map(toCard));
           setFeatured((feat || []).map(toCard));
@@ -131,7 +131,7 @@ export default function MarketplacePage() {
       } catch (e) {
         const message = e instanceof Error ? e.message : "Failed to load marketplace";
         if (!cancelled) setError(message);
-        toast.error("Failed to load marketplace", message);
+        toastRef.current.error("Failed to load marketplace", message);
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -141,13 +141,11 @@ export default function MarketplacePage() {
     };
   };
 
-  useEffect(() => load(), [currentOrg, debouncedQuery, category, quality, toast]);
+  useEffect(() => load(), [currentOrg, debouncedQuery, category, quality]);
 
   if (!currentOrg) {
     return (
-      // Wrap in the standard page container so the no-org empty state
-      // isn't flush against the sidebar/header edges. June 2026 fix.
-      <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto">
+      <PageContent size="wide">
         <PageHeader
           eyebrow="Build"
           title="Marketplace"
@@ -167,7 +165,7 @@ export default function MarketplacePage() {
             </Link>
           }
         />
-      </div>
+      </PageContent>
     );
   }
 
@@ -308,7 +306,7 @@ function CardTile({ card, featured = false }: { card: EnvCardSummary; featured?:
   const qualityBadge = card.quality_band ? QUALITY_BADGE_STYLES[card.quality_band] : null;
   return (
     <Link
-      href={`/marketplace/${card.slug}`}
+      href={`/marketplace/${encodeURIComponent(card.id)}`}
       className="group block bg-[var(--bg-primary)] border border-[var(--border-default)] rounded-xl p-4 hover:border-[var(--accent)] transition-colors"
       aria-label={`${card.title} — ${card.category}`}
     >

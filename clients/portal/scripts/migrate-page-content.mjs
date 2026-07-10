@@ -1,7 +1,16 @@
 #!/usr/bin/env node
 /**
  * Migrate portal page outer wrappers to PageContent.
- * Only transforms return blocks that contain PageHeader (main page body).
+ *
+ * SAFETY RULES (read before running):
+ * 1. Only transforms return blocks whose outer `<div>` contains `PageHeader`
+ *    — this targets the main page body, not loader/error early returns.
+ * 2. Skips files that already import PageContent.
+ * 3. One-liner returns (`return <PageContent …>`) close with `</PageContent>;`
+ *    — not `);`. Parenthesized returns close with `</PageContent>\n  );`.
+ * 4. For loader branches, use PageLoading / PageContent manually instead.
+ *
+ * Usage: `node scripts/migrate-page-content.mjs` from clients/portal/
  */
 import { readFileSync, writeFileSync, readdirSync, statSync } from "node:fs";
 import path from "node:path";

@@ -84,10 +84,6 @@ const SidebarSettingsTab = dynamic(() => import("./_components/sidebar-settings-
   ssr: false,
   loading: () => <Skeleton className="h-64 w-full" />
 });
-;
-
-// Phase 5 (June 2026) — extracted from the inlined functions below
-// so each tab can be developed / tested / lazy-loaded independently.
 import { OrgTab } from "./_components/org-tab";
 import { MembersTab } from "./_components/members-tab";
 import { ReferencesTab } from "./_components/references-tab";
