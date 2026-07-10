@@ -13,12 +13,13 @@ import Link from "next/link";
 import { useUser } from "@clerk/nextjs";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
-import { cn } from "@/lib/utils";
+import { cn, isExternalHref } from "@/lib/utils";
 import { Logo } from "@/components/brand/logo";
 import { LocaleSwitcher } from "@/components/i18n/locale-switcher";
 import {
   PRODUCT_VERSION,
   PRODUCT_COPYRIGHT_YEAR,
+  DOCS_URL,
 } from "@/lib/constants";
 import { CodeChip } from "@/components/ui";
 import {
@@ -46,7 +47,7 @@ import {
 const NAV_LINKS = [
   { label: "Pillars", href: "#pillars" },
   { label: "How it works", href: "#improve" },
-  { label: "Docs", href: "/docs" },
+  { label: "Docs", href: DOCS_URL },
 ];
 
 // Three pillars — mirrors the architecture pillars, expressed as
@@ -445,15 +446,27 @@ export default function LandingPage() {
           <Logo size="md" showWordmark priority href="/" />
 
           <div className="hidden md:flex items-center gap-1">
-            {NAV_LINKS.map((link) => (
-              <Link
-                key={link.label}
-                href={link.href}
-                className="px-3 py-2 text-sm text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)] rounded-lg transition-colors"
-              >
-                {link.label}
-              </Link>
-            ))}
+            {NAV_LINKS.map((link) =>
+              isExternalHref(link.href) ? (
+                <a
+                  key={link.label}
+                  href={link.href}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="px-3 py-2 text-sm text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)] rounded-lg transition-colors"
+                >
+                  {link.label}
+                </a>
+              ) : (
+                <Link
+                  key={link.label}
+                  href={link.href}
+                  className="px-3 py-2 text-sm text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)] rounded-lg transition-colors"
+                >
+                  {link.label}
+                </Link>
+              ),
+            )}
           </div>
 
           <div className="hidden md:flex items-center gap-2">
@@ -507,16 +520,29 @@ export default function LandingPage() {
 
         {mobileMenuOpen && (
           <div className="md:hidden absolute top-16 left-0 right-0 bg-[var(--bg-primary)] border-b border-[var(--border-subtle)] px-6 py-4 flex flex-col gap-2">
-            {NAV_LINKS.map((link) => (
-              <Link
-                key={link.label}
-                href={link.href}
-                className="px-3 py-2 text-sm text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)] rounded-lg transition-colors"
-                onClick={() => setMobileMenuOpen(false)}
-              >
-                {link.label}
-              </Link>
-            ))}
+            {NAV_LINKS.map((link) =>
+              isExternalHref(link.href) ? (
+                <a
+                  key={link.label}
+                  href={link.href}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="px-3 py-2 text-sm text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)] rounded-lg transition-colors"
+                  onClick={() => setMobileMenuOpen(false)}
+                >
+                  {link.label}
+                </a>
+              ) : (
+                <Link
+                  key={link.label}
+                  href={link.href}
+                  className="px-3 py-2 text-sm text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)] rounded-lg transition-colors"
+                  onClick={() => setMobileMenuOpen(false)}
+                >
+                  {link.label}
+                </Link>
+              ),
+            )}
             <div className="flex flex-col gap-2 mt-2 pt-2 border-t border-[var(--border-subtle)]">
               {signedIn ? (
                 <Link
@@ -605,12 +631,14 @@ export default function LandingPage() {
                   {signedIn ? "Open dashboard" : "Start free"}
                   <ArrowRight className="w-4 h-4" />
                 </Link>
-                <Link
-                  href="/docs"
+                <a
+                  href={DOCS_URL}
+                  target="_blank"
+                  rel="noopener noreferrer"
                   className="inline-flex items-center gap-2 px-5 py-2.5 text-sm font-medium text-[var(--text-primary)] bg-[var(--bg-secondary)] border border-[var(--border-default)] rounded-lg hover:bg-[var(--bg-tertiary)] transition-colors"
                 >
                   Read the docs
-                </Link>
+                </a>
               </div>
 
               <p className="mt-5 text-xs text-[var(--text-muted)]">
@@ -861,13 +889,15 @@ export default function LandingPage() {
                     <code className="text-[var(--text-secondary)]">EDEN_API_KEY</code>{" "}
                     and you&rsquo;re capturing.
                   </span>
-                  <Link
-                    href="/docs"
+                  <a
+                    href={DOCS_URL}
+                    target="_blank"
+                    rel="noopener noreferrer"
                     className="ml-auto text-[var(--accent)] hover:text-[var(--accent-hover)] inline-flex items-center gap-1"
                   >
                     Full docs
                     <ArrowRight className="w-3 h-3" />
-                  </Link>
+                  </a>
                 </div>
               </div>
             </div>
@@ -1004,13 +1034,15 @@ export default function LandingPage() {
                     </li>
                   ))}
                 </ul>
-                <Link
-                  href="/docs"
+                <a
+                  href={DOCS_URL}
+                  target="_blank"
+                  rel="noopener noreferrer"
                   className="inline-flex items-center gap-2 text-sm font-medium text-[var(--accent)] hover:text-[var(--accent-hover)]"
                 >
                   Read the PR-suggestions docs
                   <ArrowRight className="w-4 h-4" />
-                </Link>
+                </a>
               </div>
 
               {/* PR timeline card */}
@@ -1341,12 +1373,14 @@ export default function LandingPage() {
                       {signedIn ? "Open dashboard" : "Start free"}
                       <ArrowRight className="w-4 h-4" />
                     </Link>
-                    <Link
-                      href="/docs"
+                    <a
+                      href={DOCS_URL}
+                      target="_blank"
+                      rel="noopener noreferrer"
                       className="inline-flex items-center gap-2 px-5 py-2.5 text-sm font-medium text-[var(--text-primary)] bg-transparent border border-[var(--border-default)] rounded-lg hover:bg-[var(--bg-tertiary)] transition-colors"
                     >
                       Read the docs
-                    </Link>
+                    </a>
                   </div>
                 </div>
 
@@ -1420,9 +1454,9 @@ export default function LandingPage() {
                 <span className="text-[11px] font-mono uppercase tracking-[0.18em] text-[var(--text-muted)]">
                   Product
                 </span>
-                <Link href="/docs" className="text-sm text-[var(--text-secondary)] hover:text-[var(--text-primary)]">
+                <a href={DOCS_URL} target="_blank" rel="noopener noreferrer" className="text-sm text-[var(--text-secondary)] hover:text-[var(--text-primary)]">
                   Documentation
-                </Link>
+                </a>
                 <Link href="/sign-up" className="text-sm text-[var(--text-secondary)] hover:text-[var(--text-primary)]">
                   Sign up
                 </Link>
@@ -1434,12 +1468,12 @@ export default function LandingPage() {
                 <span className="text-[11px] font-mono uppercase tracking-[0.18em] text-[var(--text-muted)]">
                   Resources
                 </span>
-                <Link href="/docs#getting-started" className="text-sm text-[var(--text-secondary)] hover:text-[var(--text-primary)]">
+                <a href={`${DOCS_URL}/quickstart`} target="_blank" rel="noopener noreferrer" className="text-sm text-[var(--text-secondary)] hover:text-[var(--text-primary)]">
                   Getting started
-                </Link>
-                <Link href="/docs#api-reference" className="text-sm text-[var(--text-secondary)] hover:text-[var(--text-primary)]">
+                </a>
+                <a href={`${DOCS_URL}/reference/`} target="_blank" rel="noopener noreferrer" className="text-sm text-[var(--text-secondary)] hover:text-[var(--text-primary)]">
                   API reference
-                </Link>
+                </a>
                 <a
                   href="https://status.edenobservability.com"
                   target="_blank"

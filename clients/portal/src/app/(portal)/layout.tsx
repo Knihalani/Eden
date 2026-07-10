@@ -40,13 +40,14 @@ import {
   
   AlertTriangle,
   ArrowRight } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { cn, isExternalHref } from "@/lib/utils";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import { CommandPalette } from "@/components/ui/command-palette";
 import { ChatSidebar } from "@/components/ai-insights/ChatSidebar";
 import { Logo } from "@/components/brand/logo";
 import { SidebarSearch } from "@/components/layout/sidebar-search";
+import { PortalNavLink } from "@/components/layout/portal-nav-link";
 import { buildBreadcrumbs } from "@/lib/breadcrumbs";
 import { PageHelpHint } from "@/components/layout/page-help-hint";
 import { ErrorBoundary } from "@/components/ui/error-boundary";
@@ -801,10 +802,12 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
              *  way to learn the IA without clicking around. The
              *  component itself is a no-op for paths without a
              *  description in page-descriptions.ts. */}
-            <PageHelpHint />
+            <div className="hidden lg:block shrink-0">
+              <PageHelpHint />
+            </div>
 
             {/* Right: Search + Notifications */}
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 shrink-0">
               <button
                 onClick={() => setCommandPaletteOpen(true)}
                 className="hidden lg:flex items-center gap-2 px-3 py-1.5 text-sm text-[var(--text-muted)] bg-[var(--bg-tertiary)] hover:bg-[var(--border-default)] rounded-lg transition-colors"
@@ -930,7 +933,7 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
             raised/pill style via `isCenter`; pb-safe gives the bar
             enough breathing room for notched phones. */}
         <nav
-          className="lg:hidden fixed bottom-0 left-0 right-0 bg-[var(--bg-primary)] border-t border-[var(--border-default)] z-40 pb-safe"
+          className="lg:hidden fixed bottom-0 left-0 right-0 bg-[var(--bg-primary)] border-t border-[var(--border-default)] z-40 pb-[env(safe-area-inset-bottom)]"
           aria-label="Mobile navigation"
         >
           <div className="flex items-center justify-around h-16 px-1">
@@ -1124,13 +1127,20 @@ function NotificationsDropdown() {
   );
 }
 
-function isActivePath(pathname: string, href: string): boolean {
+function isActivePath(pathname: string, href: string, search?: string): boolean {
   if (!pathname || !href) return false;
+  const [pathOnly, queryPart] = href.split("?", 2);
   // Dashboard is treated as the root — only matches the exact path,
   // never its sub-pages (otherwise /dashboard would stay highlighted
   // while you're on /dashboard/something).
-  if (href === "/dashboard") return pathname === "/dashboard";
-  return pathname === href || pathname.startsWith(href + "/");
+  if (pathOnly === "/dashboard") return pathname === "/dashboard";
+  const pathMatch =
+    pathname === pathOnly || pathname.startsWith(pathOnly + "/");
+  if (!pathMatch) return false;
+  if (!queryPart) return true;
+  const expectedTab = new URLSearchParams(queryPart).get("tab");
+  if (!expectedTab) return true;
+  return new URLSearchParams(search || "").get("tab") === expectedTab;
 }
 
 function NavSubItem({
@@ -1148,9 +1158,10 @@ function NavSubItem({
   onClick?: () => void;
 }) {
   const pathname = usePathname();
-  const active = isActivePath(pathname, href);
+  const searchParams = useSearchParams();
+  const active = !isExternalHref(href) && isActivePath(pathname, href, searchParams.toString());
   const link = (
-    <Link
+    <PortalNavLink
       href={href}
       onClick={onClick}
       aria-label={label}
@@ -1169,7 +1180,7 @@ function NavSubItem({
         />
       )}
       <span className="truncate">{label}</span>
-    </Link>
+    </PortalNavLink>
   );
   if (!description) return link;
   return (
@@ -1215,29 +1226,23 @@ function NavItem({
   onTogglePin?: () => void;
 }) {
   const pathname = usePathname();
-  const active = isActivePath(pathname, href);
+  const searchParams = useSearchParams();
+  const external = isExternalHref(href);
+  const active = !external && isActivePath(pathname, href, searchParams.toString());
   const hasChildren = !collapsed && children;
 
   return (
     <div className="group/navitem relative">
       {(() => {
-        // Inline render of the nav link. When the sidebar is collapsed,
-        // wrap it in a Radix Tooltip so keyboard / screen-reader users
-        // can discover the label (the previous CSS-only tooltip was
-        // hover-only and invisible to AT).
         const link = (
-          <Link
+          <PortalNavLink
             href={href}
             onClick={onClick}
             aria-label={label}
             aria-current={active ? "page" : undefined}
+            showExternalIcon={external && !collapsed}
             className={cn(
               "nav-item flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-all duration-150 relative",
-              // Pattern 1.4 (Linear): the active item gets full opacity,
-              // accent color, and bold weight; idle items sit at 60%
-              // opacity so the user's eye lands on the active one first.
-              // The hover state bumps opacity back to 100% so the
-              // affordance is still visible.
               active
                 ? "font-semibold text-[var(--accent)] bg-[var(--accent-light)] opacity-100"
                 : "font-medium text-[var(--text-secondary)] opacity-60 hover:text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)] hover:opacity-100"
@@ -1287,7 +1292,7 @@ function NavItem({
                 )}
               </>
             )}
-          </Link>
+          </PortalNavLink>
         );
         // Tooltip with description is shown even when the sidebar is
         // expanded — the label alone ("Traces", "Insights", "Tools")
@@ -1334,7 +1339,8 @@ function BottomNavItem({
   isCenter?: boolean;
 }) {
   const pathname = usePathname();
-  const active = isActivePath(pathname, href);
+  const searchParams = useSearchParams();
+  const active = isActivePath(pathname, href, searchParams.toString());
 
   return (
     <Link

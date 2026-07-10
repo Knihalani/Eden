@@ -3,73 +3,33 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { Command as Cmnd } from "cmdk";
 import { useRouter, usePathname } from "next/navigation";
-import { Search, Bot, Wand2, Box, Network, Activity, Layers, Brain, Compass, Bell, Cog, Sparkles, FlaskConical, Shield, Inbox, GitPullRequestArrow, BarChart3, Settings, CreditCard, FileText, User, Users, X, ChevronRight, Wrench, PlayCircle, Gauge, Database, GitBranch, Library, History } from "lucide-react"; // Sandbox (Server) icon import removed 2026-07-04.
-import { cn } from "@/lib/utils";
+import { Search, X, ChevronRight } from "lucide-react";
+import { cn, isExternalHref } from "@/lib/utils";
 import {
   COMMAND_PALETTE_RECENT_KEY,
-  COMMAND_PALETTE_RECENT_LIMIT } from "@/lib/constants";
+  COMMAND_PALETTE_RECENT_LIMIT,
+} from "@/lib/constants";
+import { buildNavCommands, type NavCommand } from "@/lib/nav-commands";
 
 interface CommandPaletteProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
 
-type NavEntry = {
-  href: string;
-  label: string;
-  description?: string;
-  group: string;
-  icon: React.ComponentType<{ className?: string }>;
+type NavEntry = NavCommand & {
   accent?: "accent" | "terminal" | "muted";
 };
 
-// Single source of truth for the command palette. Mirrors the
-// sidebar groups in `(portal)/layout.tsx` so anything the user can
-// reach from the sidebar is also reachable from Cmd+K.
-const COMMANDS: NavEntry[] = [
-  // Build
-  { href: "/dashboard", label: "Dashboard", description: "Org-level metrics and recent activity", group: "Build", icon: Sparkles, accent: "terminal" },
-  { href: "/agents", label: "Agents", description: "Manage registered agents", group: "Build", icon: Bot },
-  { href: "/builder", label: "Builder", description: "Scaffold new agent configs", group: "Build", icon: Wand2, accent: "accent" },
-  { href: "/marketplace", label: "Marketplace", description: "Browse community agents", group: "Build", icon: Box },
-  { href: "/multi-agent", label: "Multi-Agent", description: "Orchestrate multi-agent flows", group: "Build", icon: Network },
-  // Sandbox command removed 2026-07-04 — subsystem retired.
-  // Observe
-  { href: "/traces", label: "Trace Explorer", description: "Browse and filter traces", group: "Observe", icon: Layers },
-  { href: "/replay", label: "Replay", description: "Step through a past trace", group: "Observe", icon: PlayCircle },
-  { href: "/observability", label: "Observability", description: "Telemetry overview", group: "Observe", icon: Activity },
-  { href: "/observability/apm", label: "APM Tracing", group: "Observe", icon: Gauge },
-  { href: "/observability/cohorts", label: "Columnar Engine", group: "Observe", icon: Database },
-  { href: "/observability/decisions", label: "Decisions", group: "Observe", icon: GitBranch },
-  { href: "/observability/eval", label: "Eval", group: "Observe", icon: BarChart3 },
-  { href: "/observability/memory", label: "Memory", group: "Observe", icon: Brain },
-  { href: "/observability/query", label: "Query", group: "Observe", icon: Search },
-  { href: "/observability/retrieval", label: "Retrieval", group: "Observe", icon: Library },
-  { href: "/observability/time-travel", label: "Time-Travel", group: "Observe", icon: History },
-  { href: "/tools", label: "Tools", description: "Tool attribution and recommendations", group: "Observe", icon: Wrench },
-  { href: "/incidents", label: "Incidents", description: "Open RCA clusters", group: "Observe", icon: Bell },
-  { href: "/insights", label: "Insights", description: "Auto-generated intelligence", group: "Observe", icon: Brain },
-  { href: "/inspector", label: "Inspector", description: "Debug a specific trace", group: "Observe", icon: Compass },
-  { href: "/alerts", label: "Alerts", description: "Active alerts and rules", group: "Observe", icon: Bell },
-  { href: "/llmops", label: "LLMOps", description: "LLM observability + judge ops", group: "Observe", icon: Cog },
-  { href: "/analytics", label: "Analytics", description: "Token & traffic analytics", group: "Observe", icon: BarChart3 },
-  // Optimize
-  { href: "/optimization", label: "Cost", description: "Cost overview", group: "Optimize", icon: Sparkles, accent: "accent" },
-  { href: "/optimization/outcomes", label: "Outcomes", group: "Optimize", icon: Sparkles },
-  { href: "/optimization/predict", label: "Predictive", group: "Optimize", icon: Sparkles },
-  { href: "/studio", label: "Custom Metrics", description: "Build custom eval metrics", group: "Optimize", icon: FlaskConical },
-  { href: "/guardrails", label: "Guardrails", description: "Active runtime policies", group: "Optimize", icon: Shield },
-  // Automate
-  { href: "/autonomous", label: "Autonomous", description: "Self-healing code changes", group: "Automate", icon: Wand2 },
-  { href: "/closed-loop", label: "Closed-Loop", description: "Auto-improvement loop", group: "Automate", icon: Inbox },
-  { href: "/pr-suggestions", label: "PR Suggestions", description: "Suggested code improvements", group: "Automate", icon: GitPullRequestArrow },
-  // Admin
-  { href: "/settings", label: "Settings", description: "Org + account settings", group: "Admin", icon: Settings },
-  { href: "/users", label: "Members", description: "Org members and seats", group: "Admin", icon: Users },
-  { href: "/billing", label: "Billing", description: "Plan + payment method", group: "Admin", icon: CreditCard },
-  { href: "/profile", label: "Profile", description: "Your profile", group: "Admin", icon: User },
-  { href: "/docs", label: "Documentation", description: "API docs and guides", group: "Admin", icon: FileText },
-];
+const COMMANDS: NavEntry[] = buildNavCommands().map((cmd) => ({
+  ...cmd,
+  ...(cmd.href === "/dashboard"
+    ? { accent: "terminal" as const }
+    : cmd.href === "/builder"
+      ? { accent: "accent" as const }
+      : cmd.href === "/optimization"
+        ? { accent: "accent" as const }
+        : {}),
+}));
 
 const ACCENT_BG: Record<NonNullable<NavEntry["accent"]>, string> = {
   accent: "bg-[var(--accent-faint)] text-[var(--accent)]",
@@ -166,6 +126,10 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
   const runCommand = useCallback(
     (path: string) => {
       onOpenChange(false);
+      if (isExternalHref(path)) {
+        window.open(path, "_blank", "noopener,noreferrer");
+        return;
+      }
       router.push(path);
     },
     [onOpenChange, router],

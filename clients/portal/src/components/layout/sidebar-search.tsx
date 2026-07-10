@@ -1,10 +1,10 @@
 "use client";
 
 import * as React from "react";
-import Link from "next/link";
 import { Search, X } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { cn, isExternalHref } from "@/lib/utils";
 import type { SidebarItem } from "@/lib/sidebar-config";
+import { PortalNavLink, sidebarSearchResultClass } from "@/components/layout/portal-nav-link";
 
 /**
  * SidebarSearch — local fuzzy filter for the sidebar nav.
@@ -43,10 +43,6 @@ function flatten(items: SidebarItem[]): SidebarItem[] {
 function matches(query: string, label: string): boolean {
   const q = query.trim().toLowerCase();
   if (!q) return true;
-  // Token match: every space-separated query token must appear in
-  // the label (substring). Keeps matches readable — "inc rev" finds
-  // "PR Suggestions" via the r/e/v tokens, "trace rep" finds
-  // "Replay", etc.
   return q
     .split(/\s+/)
     .every((t) => label.toLowerCase().includes(t));
@@ -59,7 +55,6 @@ export function SidebarSearch({ items, hiddenIds, className }: SidebarSearchProp
   const inputRef = React.useRef<HTMLInputElement>(null);
   const containerRef = React.useRef<HTMLDivElement>(null);
 
-  // Flatten + filter on every keystroke.
   const all = React.useMemo(() => flatten(items), [items]);
   const filtered = React.useMemo(() => {
     if (!query.trim()) return [] as SidebarItem[];
@@ -69,10 +64,8 @@ export function SidebarSearch({ items, hiddenIds, className }: SidebarSearchProp
       .slice(0, 8);
   }, [all, query, hiddenIds]);
 
-  // Reset active index whenever the result set changes.
   React.useEffect(() => setActiveIdx(0), [query]);
 
-  // Click-outside dismisses the result panel.
   React.useEffect(() => {
     function onDown(e: MouseEvent) {
       const root = containerRef.current;
@@ -84,7 +77,7 @@ export function SidebarSearch({ items, hiddenIds, className }: SidebarSearchProp
     return () => document.removeEventListener("mousedown", onDown);
   }, []);
 
-  const showResults = focused && query.trim().length > 0 && filtered.length > 0;
+  const showPanel = focused && query.trim().length > 0;
 
   function handleKey(e: React.KeyboardEvent<HTMLInputElement>) {
     if (e.key === "Escape") {
@@ -94,7 +87,7 @@ export function SidebarSearch({ items, hiddenIds, className }: SidebarSearchProp
       inputRef.current?.blur();
       return;
     }
-    if (!showResults) return;
+    if (!showPanel || filtered.length === 0) return;
     if (e.key === "ArrowDown") {
       e.preventDefault();
       setActiveIdx((i) => Math.min(i + 1, filtered.length - 1));
@@ -103,16 +96,10 @@ export function SidebarSearch({ items, hiddenIds, className }: SidebarSearchProp
       setActiveIdx((i) => Math.max(i - 1, 0));
     } else if (e.key === "Enter") {
       e.preventDefault();
-      const target = filtered[activeIdx];
-      if (target) {
-        // We don't have router here; the parent renders this input
-        // and the Link results are real <Link>s so clicks navigate
-        // normally. Keyboard Enter just opens the focused result.
-        const links = containerRef.current?.querySelectorAll<HTMLAnchorElement>(
-          '[data-sidebar-search-result]'
-        );
-        links?.[activeIdx]?.click();
-      }
+      const links = containerRef.current?.querySelectorAll<HTMLAnchorElement>(
+        "[data-sidebar-search-result]",
+      );
+      links?.[activeIdx]?.click();
     }
   }
 
@@ -132,7 +119,6 @@ export function SidebarSearch({ items, hiddenIds, className }: SidebarSearchProp
           onKeyDown={handleKey}
           placeholder="Search the sidebar…"
           aria-label="Search sidebar items"
-          // Autocomplete off — this is route discovery, not form data.
           autoComplete="off"
           autoCorrect="off"
           spellCheck={false}
@@ -153,49 +139,46 @@ export function SidebarSearch({ items, hiddenIds, className }: SidebarSearchProp
         )}
       </label>
 
-      {showResults && (
+      {showPanel && (
         <div
           role="listbox"
           aria-label="Sidebar search results"
           className="absolute left-3 right-3 top-full mt-1 z-40 rounded-lg border border-[var(--border-default)] bg-[var(--bg-elevated)] shadow-xl overflow-hidden"
         >
-          {filtered.map((item, idx) => {
-            const Icon = item.icon;
-            const isActive = idx === activeIdx;
-            return (
-              <Link
-                key={item.id}
-                href={item.href}
-                data-sidebar-search-result
-                role="option"
-                aria-selected={isActive}
-                onClick={() => setFocused(false)}
-                onMouseEnter={() => setActiveIdx(idx)}
-                className={cn(
-                  "flex items-center gap-2.5 px-3 py-2 text-xs transition-colors",
-                  isActive
-                    ? "bg-[var(--accent-faint)] text-[var(--text-primary)]"
-                    : "text-[var(--text-secondary)] hover:bg-[var(--bg-secondary)]"
-                )}
-              >
-                <Icon
-                  className={cn(
-                    "w-3.5 h-3.5 shrink-0",
-                    isActive ? "text-[var(--accent)]" : "text-[var(--text-muted)]"
-                  )}
-                  aria-hidden
-                />
-                <span className="truncate flex-1">{item.label}</span>
-                <span className="text-[10px] font-mono text-[var(--text-faint)] truncate max-w-[40%]">
-                  {item.href}
-                </span>
-              </Link>
-            );
-          })}
-          {filtered.length === 0 && (
+          {filtered.length === 0 ? (
             <div className="px-3 py-3 text-xs text-[var(--text-muted)] text-center">
-              No matches.
+              No matches for &ldquo;{query.trim()}&rdquo;
             </div>
+          ) : (
+            filtered.map((item, idx) => {
+              const Icon = item.icon;
+              const isActive = idx === activeIdx;
+              const external = isExternalHref(item.href);
+              return (
+                <PortalNavLink
+                  key={item.id}
+                  href={item.href}
+                  data-sidebar-search-result
+                  role="option"
+                  aria-selected={isActive}
+                  onClick={() => setFocused(false)}
+                  onMouseEnter={() => setActiveIdx(idx)}
+                  className={sidebarSearchResultClass(isActive)}
+                >
+                  <Icon
+                    className={cn(
+                      "w-3.5 h-3.5 shrink-0",
+                      isActive ? "text-[var(--accent)]" : "text-[var(--text-muted)]",
+                    )}
+                    aria-hidden
+                  />
+                  <span className="truncate flex-1">{item.label}</span>
+                  <span className="text-[10px] text-[var(--text-faint)] truncate max-w-[40%]">
+                    {external ? "External" : item.href}
+                  </span>
+                </PortalNavLink>
+              );
+            })
           )}
         </div>
       )}
