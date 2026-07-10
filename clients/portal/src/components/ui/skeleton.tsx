@@ -34,13 +34,32 @@ export function LoadingSkeleton({
   variant = "default",
   lines = 4,
   className,
+  size = "default",
 }: {
   variant?: "default" | "stats" | "table" | "detail";
   lines?: number;
   className?: string;
+  size?: "default" | "wide" | "narrow" | "full";
 }) {
+  const maxWidth =
+    size === "wide"
+      ? "max-w-7xl"
+      : size === "narrow"
+        ? "max-w-3xl"
+        : size === "full"
+          ? "max-w-none"
+          : "max-w-6xl";
+
   return (
-    <div className={cn("space-y-6 page-enter", className)} aria-busy="true" aria-live="polite">
+    <div
+      className={cn(
+        "w-full mx-auto p-4 sm:p-6 lg:p-8 space-y-6 page-enter",
+        maxWidth,
+        className,
+      )}
+      aria-busy="true"
+      aria-live="polite"
+    >
       {/* Header skeleton */}
       <div className="space-y-2">
         <Skeleton className="h-8 w-64" />

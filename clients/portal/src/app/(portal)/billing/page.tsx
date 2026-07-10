@@ -7,6 +7,7 @@ import { SALES_EMAIL } from "@/lib/constants";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/layout/page-header";
+import { PageContent } from "@/components/layout/page-content";
 import {
   CreditCard,
   Check,
@@ -202,17 +203,16 @@ export default function BillingPage() {
 
   if (loading) {
     return (
-      // Match the page wrapper so the loader isn't flush-left on mobile.
-      <div className="p-4 sm:p-6 lg:p-8 max-w-6xl mx-auto flex items-center justify-center gap-2 text-sm text-[var(--text-muted)]">
+      <PageContent className="flex items-center justify-center gap-2 text-sm text-[var(--text-muted)]">
         <Loader2 className="w-4 h-4 animate-spin" aria-hidden />
         Loading billing…
-      </div>
+      </PageContent>
     );
   }
 
   if (loadError && !usage) {
     return (
-      <div className="p-4 sm:p-6 lg:p-8 max-w-6xl mx-auto">
+      <PageContent>
         <PageHeader
           eyebrow="Workspace"
           title="Billing"
@@ -229,12 +229,12 @@ export default function BillingPage() {
             </Button>
           }
         />
-      </div>
+      </PageContent>
     );
   }
 
   return (
-    <div className="p-4 sm:p-6 lg:p-8 max-w-6xl mx-auto space-y-6">
+    <PageContent>
       <PageHeader
         eyebrow="Workspace"
         title="Billing"
@@ -608,7 +608,7 @@ export default function BillingPage() {
           </>
         )}
       </Card>
-    </div>
+    </PageContent>
   );
 }
 

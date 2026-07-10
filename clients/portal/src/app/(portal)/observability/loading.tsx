@@ -5,5 +5,5 @@ import { LoadingSkeleton } from "@/components/ui/skeleton";
  * Renders a styled skeleton matching the loaded state's general shape.
  */
 export default function Loading() {
-  return <LoadingSkeleton variant="table" lines={5} />;
+  return <LoadingSkeleton variant="table" lines={5} size="wide" />;
 }

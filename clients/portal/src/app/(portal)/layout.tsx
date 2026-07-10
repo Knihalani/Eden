@@ -721,7 +721,7 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
       <main id="main-content" className="flex-1 min-w-0 pb-20 lg:pb-0 flex flex-col" tabIndex={-1}>
         {/* Top bar */}
         <header className="sticky top-0 z-30 bg-[var(--bg-primary)] border-b border-[var(--border-default)]">
-          <div className="flex items-center justify-between px-4 lg:px-6 py-3">
+          <div className="flex items-center justify-between h-14 px-4 lg:px-6">
             {/* Left: Mobile logo + hamburger */}
             <div className="flex items-center gap-3 lg:hidden">
               <button
@@ -802,7 +802,7 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
              *  way to learn the IA without clicking around. The
              *  component itself is a no-op for paths without a
              *  description in page-descriptions.ts. */}
-            <div className="hidden lg:block shrink-0">
+            <div className="shrink-0 ml-2">
               <PageHelpHint />
             </div>
 

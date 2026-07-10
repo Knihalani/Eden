@@ -11,6 +11,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { Button } from "@/components/ui/button";
 import { NoOrgState } from "@/components/ui/no-org-state";
 import { PageHeader } from "@/components/layout/page-header";
+import { PageContent } from "@/components/layout/page-content";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Bell,
@@ -198,7 +199,7 @@ export default function AlertsPage() {
   }
 
   return (
-    <div className=" p-4 sm:p-6 lg:p-8 max-w-6xl mx-auto">
+    <PageContent>
       <PageHeader
         title="Alert Feed"
         subtitle={loading ? "..." : `${total} alerts · ${unreadCount} unread`}
@@ -533,7 +534,7 @@ export default function AlertsPage() {
           </>
         )}
       </div>
-    </div>
+    </PageContent>
   );
 }
 

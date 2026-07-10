@@ -7,6 +7,7 @@ import { rcaApi } from "@/lib/api";
 import { SeverityBadge } from "@/components/ui/status-badge";
 import { NoOrgState } from "@/components/ui/no-org-state";
 import { PageHeader } from "@/components/layout/page-header";
+import { PageContent } from "@/components/layout/page-content";
 import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
 import {
   AlertOctagon,
@@ -142,7 +143,7 @@ export default function IncidentsPage() {
   ];
 
   return (
-    <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-6">
+    <PageContent size="wide">
       <PageHeader
         title="Incidents"
         subtitle="Cluster-level RCA summaries of recurring failures — catch the same bug biting 50 users before it bites 5,000"
@@ -212,7 +213,7 @@ export default function IncidentsPage() {
         }
         pageSize={25}
       />
-    </div>
+    </PageContent>
   );
 }
 

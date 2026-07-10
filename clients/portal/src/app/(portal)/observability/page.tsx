@@ -20,8 +20,8 @@ import { Activity, BarChart3, Brain, Compass, Database, History, Network, Sparkl
 import { Skeleton } from "@/components/ui/skeleton";
 import { motion } from "framer-motion";
 import { PageHeader } from "@/components/layout/page-header";
+import { PageContent } from "@/components/layout/page-content";
 import { Card } from "@/components/ui/card";
-;
 import { useOrg } from "@/hooks/use-org";
 import { api, agentsApi } from "@/lib/api";
 import { cn } from "@/lib/utils";
@@ -309,10 +309,16 @@ export default function ObservabilityLanding() {
     href: "/observability/eval",
     tone: stats.evalCoverage < 0.4 ? "warning" as const : "accent" as const
   }], [stats]);
-  return <>
-      <PageHeader eyebrow="Observe" title="Observability" subtitle="Inspect, evaluate, and replay every interaction in your agent stack" icon={Activity} />
+  return (
+    <PageContent size="wide">
+      <PageHeader
+        eyebrow="Observe"
+        title="Observability"
+        subtitle="Inspect, evaluate, and replay every interaction in your agent stack"
+        icon={Activity}
+      />
 
-      <div className="px-4 sm:p-6 lg:p-8 max-w-7xl mx-auto w-full space-y-6">
+      <div className="space-y-6">
         {/* Pattern 4.4 (Honeycomb) — When the URL carries ?trace_id=…,
             the SelectedTraceRail renders as a sticky sidebar on lg+
             viewports. On mobile it stacks above the KPI tiles. */}
@@ -371,7 +377,8 @@ export default function ObservabilityLanding() {
           <SelectedTraceRail />
         </div>
       </div>
-    </>;
+    </PageContent>
+  );
 }
 
 /** ponytail: minimal local helper — fetches active agents count without
@@ -435,7 +442,7 @@ function KpiTile({
   // "good" direction decides which colour the delta badge uses —
   // lower error rate is good, so a -12% delta gets a green badge.
   const deltaIsGood = delta != null && deltaIsPositive === (good === "up");
-  return <Link href={href} className={cn("block bg-[var(--bg-primary)] rounded-xl p-4 border border-[var(--border-default] h-full", "hover:border-[var(--accent)]/40 hover:shadow-sm transition-all")}>
+  return <Link href={href} className={cn("block bg-[var(--bg-primary)] rounded-xl p-4 border border-[var(--border-default)] h-full", "hover:border-[var(--accent)]/40 transition-colors")}>
       <div className="flex items-center justify-between mb-2">
         <div className="flex items-center gap-2 min-w-0">
           <div className={cn("p-1.5 rounded-md shrink-0", toneClass)}>

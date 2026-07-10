@@ -98,6 +98,9 @@ import { useSearchParams, useRouter } from "next/navigation";
 import { SettingsSearch } from "@/components/settings/settings-search";
 import { SettingsCategoryGroup } from "@/components/settings/settings-category-group";
 import { Card } from "@/components/ui/card";
+import { PageHeader } from "@/components/layout/page-header";
+import { PageContent } from "@/components/layout/page-content";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 type Tab = "org" | "members" | "references" | "api-keys" | "security" | "scim" | "sso" | "audit-log" | "analytics" | "billing" | "gateway" | "pii" | "retention" | "exports" | "sidebar" | "autonomous" | "roles";
 type SettingsCategory = "Org" | "Members" | "Security" | "Compliance" | "Billing" | "Advanced";
 const TABS: ReadonlyArray<{
@@ -298,7 +301,9 @@ function SettingsPageInner() {
 
       {/* Main Content */}
       <div className="flex-1 min-w-0">
-        <div className="p-4 sm:p-6 lg:p-8 max-w-6xl mx-auto space-y-6">
+        <PageContent>
+          <PageHeader title="Settings" icon={Settings2} />
+
           {/* Org Switcher */}
           {organizations.length > 0 && <Card padding="md" className="mb-6">
               <div className="flex items-center gap-3 mb-3">
@@ -309,33 +314,35 @@ function SettingsPageInner() {
                 <label htmlFor="settings-org-select" className="sr-only">
                   Current organization
                 </label>
-                <select id="settings-org-select" value={currentOrg?.id || ""} onChange={e => {
-              const org = organizations.find(o => o.id === e.target.value);
-              if (org) {
-                setCurrentOrg(org);
-                // Sync Clerk's active org so useOrganization() returns
-                // the same org everywhere (sidebar, top nav, etc).
-                // June 2026 UI overhaul — without this, switching
-                // orgs from settings updated local state only.
-                const clerkOrgId = (org as {
-                  clerk_org_id?: string;
-                }).clerk_org_id;
-                if (clerkOrgId && setActiveOrg) {
-                  void setActiveOrg({
-                    organization: clerkOrgId
-                  });
-                }
-              }
-            }} className="flex-1 min-w-0 px-3 py-2 rounded-lg border border-[var(--border-default)] bg-[var(--bg-secondary)] text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--accent)]">
-                  {organizations.map(org => <option key={org.id} value={org.id}>
-                      {org.name} ({org.role})
-                    </option>)}
-                </select>
+                <Select
+                  value={currentOrg?.id || ""}
+                  onValueChange={(value) => {
+                    const org = organizations.find((o) => o.id === value);
+                    if (org) {
+                      setCurrentOrg(org);
+                      const clerkOrgId = (org as { clerk_org_id?: string }).clerk_org_id;
+                      if (clerkOrgId && setActiveOrg) {
+                        void setActiveOrg({ organization: clerkOrgId });
+                      }
+                    }
+                  }}
+                >
+                  <SelectTrigger id="settings-org-select" className="flex-1 min-w-0">
+                    <SelectValue placeholder="Select organization" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {organizations.map((org) => (
+                      <SelectItem key={org.id} value={org.id}>
+                        {org.name} ({org.role})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             </Card>}
 
           {/* Tab Content */}
-          <div className="page-enter" role="tabpanel" aria-labelledby={`settings-tab-${activeTab}`}>
+          <div role="tabpanel" aria-labelledby={`settings-tab-${activeTab}`}>
             {activeTab === "org" && <OrgTab org={currentOrg} />}
             {activeTab === "members" && <MembersTab org={currentOrg} />}
             {activeTab === "roles" && <RolesTab />}
@@ -354,7 +361,7 @@ function SettingsPageInner() {
             {activeTab === "exports" && <ExportsTab orgId={currentOrg?.id || ""} canManage={currentOrg?.role === "owner" || currentOrg?.role === "admin"} />}
             {activeTab === "sidebar" && <SidebarSettingsTab />}
           </div>
-        </div>
+        </PageContent>
       </div>
     </div>;
 }

@@ -36,7 +36,7 @@ function remarkEscapeBareLt() {
 const config = {
   title: 'Eden Docs',
   tagline: 'Observability, evaluation, governance for AI agents',
-  favicon: 'img/favicon.svg',
+  favicon: 'img/favicon.png',
 
   url: 'https://docs.edenobservability.com',
   baseUrl: '/',
@@ -183,8 +183,8 @@ const config = {
         // back to edenobservability.com (portal, pricing, marketing).
         logo: {
           alt: 'Eden — back to edenobservability.com',
-          src: 'img/logo.svg',
-          srcDark: 'img/logo.svg',
+          src: 'img/logo.webp',
+          srcDark: 'img/logo.webp',
           href: 'https://edenobservability.com',
           target: '_self',
           height: 28,

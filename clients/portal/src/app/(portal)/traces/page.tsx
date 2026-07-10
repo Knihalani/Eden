@@ -105,7 +105,7 @@ function TracesPageInner() {
   if (!currentOrg) return <NoOrgState feature="Traces" />;
 
   return (
-    <>
+    <PageContent size="wide" className="space-y-6">
       <PageHeader
         eyebrow="Observe"
         title="Traces"
@@ -118,8 +118,7 @@ function TracesPageInner() {
           </Button>
         }
       />
-      <PageContent size="wide" className="space-y-0">
-        <TracesTab
+      <TracesTab
           traces={traces}
           loading={loading}
           filter={filter}
@@ -130,7 +129,6 @@ function TracesPageInner() {
           onAnnotate={handleAnnotate}
           initialTraceId={initialTraceId}
         />
-      </PageContent>
       <TraceExportModal
         open={exportOpen}
         onOpenChange={setExportOpen}
@@ -144,7 +142,7 @@ function TracesPageInner() {
         onOpenChange={setAnnotateOpen}
         traceId={annotateTraceId}
       />
-    </>
+    </PageContent>
   );
 }
 

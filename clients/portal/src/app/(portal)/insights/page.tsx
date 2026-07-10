@@ -10,6 +10,8 @@ import { ErrorState } from "@/components/ui/error-state";
 import { StatCard } from "@/components/ui/stat-card";
 import { SeverityBadge, SeverityIcon } from "@/components/ui/status-badge";
 import { PageHeader } from "@/components/layout/page-header";
+import { PageContent } from "@/components/layout/page-content";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Lightbulb, Activity, AlertTriangle, BarChart3, Database, Layers, ChevronRight, Loader2, Zap, TrendingUp, Sparkles, FileJson, Download, Play, CheckCircle2 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
@@ -159,7 +161,7 @@ export default function InsightsPage() {
   if (!currentOrg) {
     return <NoOrgState icon={Lightbulb} feature="Insights" description="Pattern detection, disparity analysis, and dataset generation light up once your organization has traces to inspect." />;
   }
-  return <div className=" p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-6">
+  return <PageContent size="wide">
       <PageHeader title="Insights" subtitle="Automatic pattern detection, disparity analysis, and dataset generation" icon={Lightbulb} actions={<div className="flex items-center gap-2">
             <Button variant="default" onClick={handleRunDetectors} loading={runningDetectors} aria-label="Run insight detectors now">
               <Play className="w-4 h-4" />
@@ -177,11 +179,19 @@ export default function InsightsPage() {
         </div>}
 
       {/* Tabs */}
-      <div className="flex items-center gap-1 p-1 bg-[var(--bg-tertiary)] rounded-xl w-fit">
-        {(["overview", "insights", "disparity", "datasets", "closed-loop"] as Tab[]).map(tab => <button key={tab} onClick={() => setActiveTab(tab)} className={cn("px-4 py-2 rounded-lg text-sm font-medium transition-all", activeTab === tab ? "bg-[var(--bg-primary)] text-[var(--text-primary)] shadow-sm" : "text-[var(--text-muted)] hover:text-[var(--text-secondary)]")}>
-            {tab === "closed-loop" ? "Closed-loop" : tab.charAt(0).toUpperCase() + tab.slice(1)}
-          </button>)}
-      </div>
+      <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as Tab)}>
+        <TabsList className="bg-[var(--bg-tertiary)] rounded-xl w-fit">
+          {(["overview", "insights", "disparity", "datasets", "closed-loop"] as Tab[]).map((tab) => (
+            <TabsTrigger
+              key={tab}
+              value={tab}
+              className="px-4 py-2 rounded-lg data-[state=active]:bg-[var(--bg-primary)] data-[state=active]:text-[var(--text-primary)] data-[state=active]:shadow-sm text-[var(--text-muted)] hover:text-[var(--text-secondary)]"
+            >
+              {tab === "closed-loop" ? "Closed-loop" : tab.charAt(0).toUpperCase() + tab.slice(1)}
+            </TabsTrigger>
+          ))}
+        </TabsList>
+      </Tabs>
 
       {/* Content */}
       {loading && !overview ? <div className="flex items-center justify-center py-20">
@@ -253,7 +263,7 @@ export default function InsightsPage() {
       <Dialog open={selectedReport !== null} onOpenChange={open => !open && setSelectedReport(null)}>
         {selectedReport && <ReportDetailModal report={selectedReport} onClose={() => setSelectedReport(null)} />}
       </Dialog>
-    </div>;
+    </PageContent>;
 }
 
 // ──────────────────────────────────────────────────────────────────────────

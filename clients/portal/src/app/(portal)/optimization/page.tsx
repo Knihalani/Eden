@@ -13,6 +13,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { ErrorState } from "@/components/ui/error-state";
 import { StatCard } from "@/components/ui/stat-card";
 import { PageHeader } from "@/components/layout/page-header";
+import { PageContent } from "@/components/layout/page-content";
 import { NoOrgState } from "@/components/ui/no-org-state";
 import { useOrg } from "@/hooks/use-org";
 import { costApi } from "@/lib/api";
@@ -622,7 +623,7 @@ export default function OptimizationPage() {
   }
 
   return (
-    <div className=" mx-auto max-w-7xl space-y-6 p-4 sm:p-6 lg:p-8">
+    <PageContent size="wide">
       <PageHeader
         eyebrow="Optimize"
         title="Cost & usage optimization"
@@ -682,6 +683,6 @@ export default function OptimizationPage() {
           )}
         </AnimatePresence>
       </Tabs>
-    </div>
+    </PageContent>
   );
 }
