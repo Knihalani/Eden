@@ -190,7 +190,8 @@ def test_no_drop_invariant_run_number_present() -> None:
     with the contract fixture.
     """
     contract = (
-        Path(__file__).resolve().parent
+        Path(__file__).resolve().parents[1]
+        / "experiments"
         / "test_v2_6_acceptance_contract.py"
     )
     assert contract.exists(), (
