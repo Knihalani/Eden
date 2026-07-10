@@ -185,7 +185,7 @@ export default function InsightsPage() {
             <TabsTrigger
               key={tab}
               value={tab}
-              className="px-4 py-2 rounded-lg data-[state=active]:bg-[var(--bg-primary)] data-[state=active]:text-[var(--text-primary)] data-[state=active]:shadow-sm text-[var(--text-muted)] hover:text-[var(--text-secondary)]"
+              className="px-4 py-2 rounded-lg data-[state=active]:bg-[var(--bg-primary)] data-[state=active]:text-[var(--text-primary)] text-[var(--text-muted)] hover:text-[var(--text-secondary)]"
             >
               {tab === "closed-loop" ? "Closed-loop" : tab.charAt(0).toUpperCase() + tab.slice(1)}
             </TabsTrigger>

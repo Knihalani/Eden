@@ -25,7 +25,7 @@ const tabsTriggerVariants = cva(
   {
     variants: {
       variant: {
-        default: "rounded-md px-3 py-1.5 data-[state=active]:bg-[var(--bg-primary)] data-[state=active]:text-[var(--accent)] data-[state=active]:shadow-sm text-[var(--text-secondary)]",
+        default: "rounded-md px-3 py-1.5 data-[state=active]:bg-[var(--bg-primary)] data-[state=active]:text-[var(--accent)] text-[var(--text-secondary)]",
         underline: "border-b-2 border-transparent -mb-px pb-3 data-[state=active]:border-[var(--accent)] data-[state=active]:text-[var(--accent)] text-[var(--text-muted)]",
         pills: "rounded-full px-3 py-1.5 data-[state=active]:bg-[var(--accent)] data-[state=active]:text-[var(--bg-base)] text-[var(--text-secondary)]",
       },

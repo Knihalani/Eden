@@ -26,7 +26,7 @@ export function DangerZone({
   return (
     <section
       className={cn(
-        "rounded-xl border border-[var(--error)]/30 bg-[var(--error-dim)]/40 shadow-sm",
+        "rounded-xl border border-[var(--error)]/30 bg-[var(--error-dim)]/40",
         className
       )}
     >

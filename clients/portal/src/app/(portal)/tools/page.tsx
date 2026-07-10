@@ -7,6 +7,8 @@ import { cn } from "@/lib/utils";
 import { EmptyState } from "@/components/ui/empty-state";
 import { NoOrgState } from "@/components/ui/no-org-state";
 import { PageHeader } from "@/components/layout/page-header";
+import { PageContent } from "@/components/layout/page-content";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
 import { Wrench, GitCompare, Sparkles, ChevronDown, ChevronRight, Loader2, AlertTriangle, Activity, Search, X } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
@@ -135,7 +137,7 @@ export default function ToolsPage() {
   if (!currentOrg) {
     return <NoOrgState icon={Wrench} feature="Tool Intelligence" description="Tool attribution, comparison, and recommendations light up once your organization is processing tool calls." />;
   }
-  return <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-6">
+  return <PageContent size="wide">
       <PageHeader eyebrow="Observe" title="Tool Intelligence" subtitle="Attribution, head-to-head comparison, and task-based recommendations for every tool in the fleet" icon={Wrench} />
 
       {error && <div className="bg-[var(--error-bg)] text-[var(--error)] text-sm px-4 py-3 rounded-xl flex items-center gap-2.5 border border-[var(--error)]/20">
@@ -144,32 +146,31 @@ export default function ToolsPage() {
         </div>}
 
       {/* Tabs */}
-      <div className="flex items-center gap-1 p-1 bg-[var(--bg-tertiary)] rounded-xl w-fit flex-wrap">
-        {[{
-        key: "attribution" as Tab,
-        label: "Attribution",
-        icon: Activity
-      }, {
-        key: "compare" as Tab,
-        label: "Compare",
-        icon: GitCompare
-      }, {
-        key: "recommender" as Tab,
-        label: "Recommender",
-        icon: Sparkles
-      }, {
-        key: "taxonomy" as Tab,
-        label: "Taxonomy",
-        icon: ChevronRight
-      }].map(({
-        key,
-        label,
-        icon: Icon
-      }) => <button key={key} onClick={() => setActiveTab(key)} className={cn("px-4 py-2 rounded-lg text-sm font-medium transition-all flex items-center gap-2", activeTab === key ? "bg-[var(--bg-primary)] text-[var(--text-primary)] shadow-sm" : "text-[var(--text-muted)] hover:text-[var(--text-secondary)]")}>
-            <Icon className="w-4 h-4" />
-            {label}
-          </button>)}
-      </div>
+      <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as Tab)}>
+        <TabsList aria-label="Tool intelligence sections" className="bg-[var(--bg-tertiary)] rounded-xl h-auto flex-wrap w-fit">
+          {([{
+          key: "attribution" as Tab,
+          label: "Attribution",
+          icon: Activity
+        }, {
+          key: "compare" as Tab,
+          label: "Compare",
+          icon: GitCompare
+        }, {
+          key: "recommender" as Tab,
+          label: "Recommender",
+          icon: Sparkles
+        }, {
+          key: "taxonomy" as Tab,
+          label: "Taxonomy",
+          icon: ChevronRight
+        }] as const).map(({ key, label, icon: Icon }) => (
+            <TabsTrigger key={key} value={key} className="flex items-center gap-2 data-[state=active]:text-[var(--text-primary)]">
+              <Icon className="w-4 h-4" aria-hidden />
+              {label}
+            </TabsTrigger>
+          ))}
+        </TabsList>
 
       {/* Content */}
       <AnimatePresence mode="wait">
@@ -191,7 +192,8 @@ export default function ToolsPage() {
           {activeTab === "taxonomy" && <TaxonomyTab taxonomy={taxonomy} loading={taxonomyLoading} expanded={taxonomyOpen} onToggleExpanded={() => setTaxonomyOpen(!taxonomyOpen)} />}
         </motion.div>
       </AnimatePresence>
-    </div>;
+      </Tabs>
+    </PageContent>;
 }
 
 // ──────────────────────────────────────────────────────────────────────────

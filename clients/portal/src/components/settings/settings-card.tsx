@@ -28,7 +28,7 @@ export function SettingsCard({
   return (
     <section
       className={cn(
-        "rounded-xl border border-[var(--border-default)] bg-[var(--bg-primary)] shadow-sm",
+        "rounded-xl border border-[var(--border-default)] bg-[var(--bg-primary)]",
         className
       )}
     >

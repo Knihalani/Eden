@@ -43,6 +43,7 @@ import { Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ErrorState } from "@/components/ui/error-state";
 import { PageHeader } from "@/components/layout/page-header";
+import { PageContent } from "@/components/layout/page-content";
 import { AgentUploadPanel } from "./upload-panel";
 
 function formatRelative(iso?: string | null): string {
@@ -217,7 +218,7 @@ export default function AgentDetailPage() {
   }
 
   return (
-    <div className="space-y-6 p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto">
+    <PageContent size="wide">
       {/* Breadcrumb */}
       <Link
         href="/agents"
@@ -416,7 +417,8 @@ export default function AgentDetailPage() {
           </div>
         )}
       </section>
-    </div>
+    
+    </PageContent>
   );
 }
 

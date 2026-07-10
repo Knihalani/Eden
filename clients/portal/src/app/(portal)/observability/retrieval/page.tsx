@@ -7,6 +7,7 @@ import { Alert } from "@/components/ui/alert";
 ;
 ;
 import { PageHeader } from "@/components/layout/page-header";
+import { PageContent } from "@/components/layout/page-content";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { CheckCircle2, Database, Lightbulb, Loader2, Network, Search, Shuffle, Sparkles, XCircle, Zap } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
@@ -90,7 +91,7 @@ export default function RetrievalIntelligencePage() {
   if (!currentOrg) {
     return <NoOrgState icon={Database} feature="Retrieval Intelligence" description="RAG usage, knowledge gaps, and reordering suggestions will appear once your organization is configured." />;
   }
-  return <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-6">
+  return <PageContent size="wide">
       <PageHeader title="Retrieval" subtitle="Chunk attribution, gap detection, and reorder signals" icon={Network} eyebrow="Observe" />
 
       {error && <Alert variant="error" title="Request failed" description={error} onDismiss={() => setError("")} />}
@@ -139,7 +140,7 @@ export default function RetrievalIntelligencePage() {
           </motion.div>
         </AnimatePresence>
       </Tabs>
-    </div>;
+    </PageContent>;
 }
 function GapsTab({
   orgId,

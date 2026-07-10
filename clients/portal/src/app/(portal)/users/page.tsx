@@ -7,6 +7,8 @@ import { api } from "@/lib/api";
 import { EmptyState } from "@/components/ui/empty-state";
 import { NoOrgState } from "@/components/ui/no-org-state";
 import { PageHeader } from "@/components/layout/page-header";
+import { PageContent } from "@/components/layout/page-content";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Users, Target, Smile, Users2, Layers, Plus, Loader2, AlertTriangle, Activity, TrendingUp, Search, RefreshCw } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
@@ -208,7 +210,7 @@ export default function UsersPage() {
   if (!currentOrg) {
     return <NoOrgState icon={Users} feature="User Intelligence" description="Session aggregation, goal tracking, and behavioral cohorts light up once your organization has user activity to analyse." />;
   }
-  return <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-6">
+  return <PageContent size="wide">
       <PageHeader eyebrow="Intelligence" title="User Intelligence" subtitle="The 97% problem: behaviour-driven satisfaction, behavioural cohorts, and goal tracking" icon={Users} />
 
       {error && <div role="alert" className="bg-[var(--error-bg)] text-[var(--error)] text-sm px-4 py-3 rounded-xl flex items-center gap-2.5 border border-[var(--error)]/20">
@@ -227,40 +229,39 @@ export default function UsersPage() {
         </div>}
 
       {/* Tabs */}
-      <div role="tablist" aria-label="User intelligence sections" className="flex items-center gap-1 p-1 bg-[var(--bg-tertiary)] rounded-xl w-fit flex-wrap">
-        {[{
-        key: "sessions" as Tab,
-        label: "Sessions",
-        icon: Activity
-      }, {
-        key: "goals" as Tab,
-        label: "Goals",
-        icon: Target
-      }, {
-        key: "satisfaction" as Tab,
-        label: "Satisfaction",
-        icon: Smile
-      }, {
-        key: "cohorts" as Tab,
-        label: "Cohorts",
-        icon: Users2
-      }, {
-        key: "segments" as Tab,
-        label: "Segments",
-        icon: Layers
-      }].map(({
-        key,
-        label,
-        icon: Icon
-      }) => <button key={key} type="button" role="tab" aria-selected={activeTab === key} aria-controls={`users-tab-panel-${key}`} id={`users-tab-${key}`} onClick={() => setActiveTab(key)} className={cn("px-4 py-2 rounded-lg text-sm font-medium transition-all flex items-center gap-2", activeTab === key ? "bg-[var(--bg-primary)] text-[var(--text-primary)] shadow-sm" : "text-[var(--text-muted)] hover:text-[var(--text-secondary)]")}>
-            <Icon className="w-4 h-4" aria-hidden />
-            {label}
-          </button>)}
-      </div>
+      <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as Tab)}>
+        <TabsList aria-label="User intelligence sections" className="bg-[var(--bg-tertiary)] rounded-xl h-auto flex-wrap w-fit">
+          {([{
+          key: "sessions" as Tab,
+          label: "Sessions",
+          icon: Activity
+        }, {
+          key: "goals" as Tab,
+          label: "Goals",
+          icon: Target
+        }, {
+          key: "satisfaction" as Tab,
+          label: "Satisfaction",
+          icon: Smile
+        }, {
+          key: "cohorts" as Tab,
+          label: "Cohorts",
+          icon: Users2
+        }, {
+          key: "segments" as Tab,
+          label: "Segments",
+          icon: Layers
+        }] as const).map(({ key, label, icon: Icon }) => (
+            <TabsTrigger key={key} value={key} className="flex items-center gap-2 data-[state=active]:text-[var(--text-primary)]">
+              <Icon className="w-4 h-4" aria-hidden />
+              {label}
+            </TabsTrigger>
+          ))}
+        </TabsList>
 
       {/* Content */}
       <AnimatePresence mode="wait">
-        <motion.div key={activeTab} id={`users-tab-panel-${activeTab}`} role="tabpanel" aria-labelledby={`users-tab-${activeTab}`} initial={{
+        <motion.div key={activeTab} initial={{
         opacity: 0,
         y: 8
       }} animate={{
@@ -279,7 +280,8 @@ export default function UsersPage() {
           {activeTab === "segments" && <SegmentsTab segments={segments} loading={segmentsLoading} onRefresh={loadSegments} />}
         </motion.div>
       </AnimatePresence>
-    </div>;
+      </Tabs>
+    </PageContent>;
 }
 
 // ──────────────────────────────────────────────────────────────────────────

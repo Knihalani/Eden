@@ -40,7 +40,7 @@ export function LatencyCard({
   return (
     <a
       href={href}
-      className="block transition-shadow hover:shadow-md"
+      className="block transition-colors hover:border-[var(--border-strong)]"
     >
       <Card variant="interactive" padding="lg" className="h-full">
       <div className="flex items-start justify-between mb-3">

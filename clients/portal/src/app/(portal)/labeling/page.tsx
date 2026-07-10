@@ -8,6 +8,7 @@ import { DataTable, DataTableSearch } from "@/components/ui/data-table";
 import { NoOrgState } from "@/components/ui/no-org-state";
 import { ErrorState } from "@/components/ui/error-state";
 import { PageHeader } from "@/components/layout/page-header";
+import { PageContent } from "@/components/layout/page-content";
 import { useToast } from "@/components/ui/toast";
 import { Tag, RefreshCw, Plus, Tag as TagIcon } from "lucide-react";
 import { labelingApi, type LabelingItem } from "@/lib/api";
@@ -49,7 +50,7 @@ export default function LabelingPage() {
   });
 
   return (
-    <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-6">
+    <PageContent size="wide">
       <PageHeader
         eyebrow="Eval"
         title="Labeling queue"
@@ -131,6 +132,7 @@ export default function LabelingPage() {
           />
         </Card>
       )}
-    </div>
+    
+    </PageContent>
   );
 }

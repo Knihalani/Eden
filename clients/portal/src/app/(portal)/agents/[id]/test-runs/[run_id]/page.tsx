@@ -9,6 +9,7 @@ import { Card } from "@/components/ui/card";
 import { NoOrgState } from "@/components/ui/no-org-state";
 import { ErrorState } from "@/components/ui/error-state";
 import { PageHeader } from "@/components/layout/page-header";
+import { PageContent } from "@/components/layout/page-content";
 import {
   ArrowLeft,
   CheckCircle2,
@@ -128,7 +129,7 @@ export default function TestRunDetailPage() {
   const statusClass = STATUS_BADGE[run.status]?.bg ?? "bg-[var(--bg-tertiary)] text-[var(--text-secondary)]";
 
   return (
-    <div className="p-4 sm:p-6 lg:p-8 max-w-4xl mx-auto space-y-6">
+    <PageContent size="default">
       <Link
         href={`/agents/${encodeURIComponent(agentId)}/test-runs`}
         className="inline-flex items-center gap-1 text-xs text-[var(--text-muted)] hover:text-[var(--accent)] transition-colors"
@@ -183,7 +184,8 @@ export default function TestRunDetailPage() {
           </pre>
         </Card>
       )}
-    </div>
+    
+    </PageContent>
   );
 }
 

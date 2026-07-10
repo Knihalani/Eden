@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from "react";
 import { useOrg } from "@/hooks/use-org";
 import { API_BASE } from "@/lib/api";
 import { PageHeader } from "@/components/layout/page-header";
+import { PageContent } from "@/components/layout/page-content";
 import { NoOrgState } from "@/components/ui/no-org-state";
 import { useToast } from "@/components/ui/toast";
 import {
@@ -160,7 +161,7 @@ export default function PromptsPage() {
   if (!currentOrg) return <NoOrgState feature="Prompt Versions" />;
 
   return (
-    <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-6">
+    <PageContent size="wide">
       <PageHeader
         icon={FileText}
         title="Prompt Versions"
@@ -332,6 +333,7 @@ export default function PromptsPage() {
           </div>
         )}
       </div>
-    </div>
+    
+    </PageContent>
   );
 }

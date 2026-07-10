@@ -11,6 +11,7 @@ import { useToast } from "@/components/ui/toast";
 import { useConfirm } from "@/hooks/use-confirm";
 import { Check, X, Play, AlertCircle, Loader2, Inbox, History, BarChart3 } from "lucide-react";
 import { PageHeader } from "@/components/layout/page-header";
+import { PageContent } from "@/components/layout/page-content";
 import { Card } from "@/components/ui/card";
 type Action = {
   action_id: string;
@@ -121,7 +122,7 @@ export default function ClosedLoopPage() {
   if (!currentOrg) {
     return <NoOrgState feature="Closed-Loop Actions" icon={Inbox} description="Select an organization to review automated promotion recommendations" />;
   }
-  return <div className="p-4 sm:p-6 lg:p-8 max-w-6xl space-y-6">
+  return <PageContent size="default">
       <PageHeader title="Closed-Loop Actions" subtitle="Review and act on automated recommendations from the promotion loop, judge regressions, drift alerts, and experiment winners." icon={Inbox} />
 
       {/* Dashboard summary cards */}
@@ -162,7 +163,7 @@ export default function ClosedLoopPage() {
           <Loader2 className="h-4 w-4 mr-2 animate-spin" /> Loading…
         </div> : tab === "pending" ? <ActionList actions={pending} busyActionId={busyActionId} onApprove={handleApprove} onDeny={handleDeny} onApply={handleApply} emptyMessage="No pending actions — the promotion loop is up to date." /> : tab === "history" ? <ActionList actions={history} readOnly emptyMessage="No historical actions yet." /> : <DashboardView dashboard={dashboard} />}
       {ConfirmDialog}
-    </div>;
+    </PageContent>;
 }
 function SummaryCard({
   label,

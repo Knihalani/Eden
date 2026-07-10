@@ -44,6 +44,7 @@ import { StatCard } from "@/components/ui/stat-card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ErrorState } from "@/components/ui/error-state";
 import { PageHeader } from "@/components/layout/page-header";
+import { PageContent } from "@/components/layout/page-content";
 import { NoOrgState } from "@/components/ui/no-org-state";
 import { useOrg } from "@/hooks/use-org";
 import {
@@ -887,7 +888,7 @@ export default function ModelAdvisorPage() {
   }
 
   return (
-    <div className="mx-auto max-w-7xl space-y-6 p-4 sm:p-6 lg:p-8">
+    <PageContent size="wide">
       <PageHeader
         eyebrow="Optimize"
         title="Model advisor"
@@ -1018,6 +1019,7 @@ export default function ModelAdvisorPage() {
         <span className="font-medium text-[var(--text-primary)]">quality 60% · cost 25% · reliability 10% · latency 5%</span>
         {" "}— biased toward &quot;what would still work well&quot; rather than &quot;what&apos;s cheapest&quot;. Prices honour your contract overrides.
       </div>
-    </div>
+    
+    </PageContent>
   );
 }

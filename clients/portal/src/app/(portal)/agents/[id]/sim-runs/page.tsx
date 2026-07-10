@@ -10,6 +10,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { ErrorState } from "@/components/ui/error-state";
 import { NoOrgState } from "@/components/ui/no-org-state";
 import { PageHeader } from "@/components/layout/page-header";
+import { PageContent } from "@/components/layout/page-content";
 import { useToast } from "@/components/ui/toast";
 import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
 import {
@@ -188,7 +189,7 @@ export default function SimRunsPage() {
   }
 
   return (
-    <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-6">
+    <PageContent size="wide">
       <div>
         <Link
           href={`/agents/${encodeURIComponent(agentId)}`}
@@ -363,6 +364,7 @@ export default function SimRunsPage() {
           />
         </Card>
       )}
-    </div>
+    
+    </PageContent>
   );
 }

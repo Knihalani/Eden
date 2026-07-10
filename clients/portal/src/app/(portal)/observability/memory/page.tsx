@@ -8,6 +8,7 @@ import { Alert } from "@/components/ui/alert";
 import { EmptyState } from "@/components/ui/empty-state";
 import { NoOrgState } from "@/components/ui/no-org-state";
 import { PageHeader } from "@/components/layout/page-header";
+import { PageContent } from "@/components/layout/page-content";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Archive, Brain, Combine, Loader2, Search, TrendingDown, Zap } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
@@ -61,7 +62,7 @@ export default function MemoryIntelligencePage() {
   if (!currentOrg) {
     return <NoOrgState icon={Brain} feature="Memory Intelligence" description="Memory attribution, impact scoring, and reweaver suggestions will appear once your organization is configured." />;
   }
-  return <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-6">
+  return <PageContent size="wide">
       <PageHeader title="Memory" subtitle="Episodic + semantic memory attribution and reweaving" icon={Brain} eyebrow="Observe" />
 
       {error && <Alert variant="error" title="Request failed" description={error} onDismiss={() => setError("")} />}
@@ -110,7 +111,7 @@ export default function MemoryIntelligencePage() {
           </motion.div>
         </AnimatePresence>
       </Tabs>
-    </div>;
+    </PageContent>;
 }
 function AttributionTab({
   orgId,

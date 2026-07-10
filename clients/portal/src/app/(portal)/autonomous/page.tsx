@@ -12,6 +12,7 @@ import { NoOrgState } from "@/components/ui/no-org-state";
 import { useOrg } from "@/hooks/use-org";
 import { autonomousApi } from "@/lib/api";
 import { PageHeader } from "@/components/layout/page-header";
+import { PageContent } from "@/components/layout/page-content";
 import { cn } from "@/lib/utils";
 import { EmptyState } from "@/components/ui/empty-state";
 
@@ -573,7 +574,7 @@ export default function AutonomousPage() {
   }
 
   return (
-    <div className=" mx-auto max-w-7xl space-y-6 p-4 sm:p-6 lg:p-8">
+    <PageContent size="wide">
       <PageHeader
         title="Autonomous intelligence"
         subtitle="Ask questions in plain English, run investigations, and propose self-heals."
@@ -637,6 +638,7 @@ export default function AutonomousPage() {
           )}
         </AnimatePresence>
       </Tabs>
-    </div>
+    
+    </PageContent>
   );
 }

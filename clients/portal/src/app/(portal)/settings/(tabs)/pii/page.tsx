@@ -2,6 +2,7 @@
 
 import { PiiPolicyTab } from "../../_components/pii-policy-tab";
 import { PageHeader } from "@/components/layout/page-header";
+import { PageContent } from "@/components/layout/page-content";
 import { ShieldAlert } from "lucide-react";
 
 /**
@@ -12,7 +13,7 @@ import { ShieldAlert } from "lucide-react";
  */
 export default function PiiSettingsPage() {
   return (
-    <div className="p-4 sm:p-6 lg:p-8 max-w-4xl mx-auto space-y-6">
+    <PageContent size="default">
       <PageHeader
         eyebrow="Settings"
         title="PII redaction policy"
@@ -20,6 +21,7 @@ export default function PiiSettingsPage() {
         subtitle="Control which sensitive categories get masked before traces leave your agent — emails, SSNs, JWTs, credential URLs, and more."
       />
       <PiiPolicyTab />
-    </div>
+    
+    </PageContent>
   );
 }

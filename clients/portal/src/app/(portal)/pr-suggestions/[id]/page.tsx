@@ -33,6 +33,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { PageHeader } from "@/components/layout/page-header";
+import { PageContent } from "@/components/layout/page-content";
 import { PRStatusBadge } from "@/components/ui/status-badge";
 import { useToast } from "@/components/ui/toast";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -864,7 +865,7 @@ export default function PRSuggestionDetailPage({
   const isOpened = suggestion.status === "opened";
 
   return (
-    <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-6">
+    <PageContent size="wide">
       {/* Back button */}
       <Button
         variant="ghost"
@@ -1155,6 +1156,7 @@ export default function PRSuggestionDetailPage({
           />
         )}
       </AnimatePresence>
-    </div>
+    
+    </PageContent>
   );
 }

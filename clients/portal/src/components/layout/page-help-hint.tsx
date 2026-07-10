@@ -33,8 +33,8 @@ export function PageHelpHint() {
           aria-label="What is this page for?"
           className="inline-flex items-center gap-1.5 text-xs text-[var(--text-muted)] hover:text-[var(--text-secondary)] transition-colors"
         >
-          <Info className="w-3.5 h-3.5" />
-          <span className="hidden sm:inline">About this page</span>
+          <Info className="w-3.5 h-3.5 shrink-0" />
+          <span className="hidden md:inline">About this page</span>
         </button>
       </TooltipTrigger>
       <TooltipContent side="bottom" sideOffset={6} className="max-w-[320px]">
