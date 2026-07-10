@@ -47,7 +47,7 @@ dependencies = [
     "pydantic>=2.9.0,<3.0.0",
     "email-validator>=2.0.0,<3.0.0",
     "pydantic-settings>=2.14.2,<3.0.0",  # GHSA-4xgf-cpjx-pc3j fixed in 2.14.2
-    "sse-starlette>=2.0.0,<3.0.0",
+    "sse-starlette>=3.4.5,<4.0.0",
     # CVE-2026-53538/9/40 fixed in 0.0.30+. Latest is 0.0.32.
     "python-multipart>=0.0.32,<1.0.0",
 
