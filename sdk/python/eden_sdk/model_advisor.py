@@ -358,6 +358,23 @@ class ModelAdvisor:
             raise ModelAdvisorError(
                 status_code=r.status_code, reason=str(reason), body=err_body,
             )
+        # A 200 with an empty body is almost always a proxy/gateway
+        # misconfiguration (interrupted chunked response, missing
+        # ``Content-Type``, or a backend that swallowed the
+        # reply). ``r.json()`` on an empty body raises a raw
+        # ``json.JSONDecodeError`` that propagates up as a
+        # confusing traceback — the caller has no way to tell
+        # the difference between "server returned nothing" and
+        # "the server gave us garbage". Surface a typed
+        # ``ModelAdvisorError`` so the caller can show a clear
+        # message and the rest of the retry / circuit-breaker
+        # logic can react.
+        if not r.content:
+            raise ModelAdvisorError(
+                status_code=r.status_code,
+                reason="empty response body",
+                body=None,
+            )
         return r.json()
 
     # ── Public methods ─────────────────────────────────────────────

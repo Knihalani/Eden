@@ -13,6 +13,7 @@
  */
 
 import { getDefaultClient } from "../client.js";
+import { errorClass, errorMessage, randomId } from "../ids.js";
 import { extractUsage, normalizeModelName } from "../tokens.js";
 import { SOURCE_FORMATS, type StreamChunk, type TraceOptions } from "../types.js";
 
@@ -112,6 +113,7 @@ function _instrumentedCreate(
   // ship full usage on the ``Message`` object; the streaming path
   // extracts from chunks instead.
   let capturedUsage: unknown = undefined;
+  let errorMsg: string | undefined;
   const modelFromArgs = _extractModel(args);
 
   // Run the upstream call and emit telemetry on settle — both
@@ -133,7 +135,8 @@ function _instrumentedCreate(
       return result;
     } catch (err: unknown) {
       status = "error";
-      errorType = err instanceof Error ? err.constructor.name : "Error";
+      errorType = errorClass(err);
+      errorMsg = errorMessage(err);
       throw err;
     } finally {
       const durationMs = Date.now() - start;
@@ -143,6 +146,7 @@ function _instrumentedCreate(
         durationMs,
         status,
         errorType,
+        errorMessage: errorMsg,
         opts,
         usage: capturedUsage,
       });
@@ -156,6 +160,7 @@ function _emitAnthropicCompletion(args: {
   durationMs: number;
   status: "success" | "error";
   errorType: string | undefined;
+  errorMessage?: string | undefined;
   opts: TraceOptions;
   usage?: unknown;
 }): void {
@@ -187,6 +192,7 @@ function _emitAnthropicCompletion(args: {
       duration_ms: args.durationMs,
       status: args.status,
       error_type: args.errorType,
+      ...(args.errorMessage !== undefined ? { error_message: args.errorMessage } : {}),
       environment_id: args.opts.environmentId,
     },
     metrics: { duration_ms: args.durationMs, ...usageFields },
@@ -225,6 +231,7 @@ async function* _wrapAnthropicStream(
   let itlSumMs = 0;
   let itlCount = 0;
   let outputTokens = 0;
+  let errorMsg: string | undefined;
   let usageOutputTokens: number | undefined;
   let usageInputTokens: number | undefined;
   let usageCacheReadTokens: number | undefined;
@@ -332,7 +339,8 @@ async function* _wrapAnthropicStream(
     }
   } catch (err) {
     status = "error";
-    errorType = err instanceof Error ? err.constructor.name : "Error";
+    errorType = errorClass(err);
+    errorMsg = errorMessage(err);
     throw err;
   } finally {
     if (typeof usageOutputTokens === "number") outputTokens = usageOutputTokens;
@@ -357,6 +365,7 @@ async function* _wrapAnthropicStream(
         model,
         status,
         error_type: errorType,
+        ...(errorMsg !== undefined ? { error_message: errorMsg } : {}),
         chunk_count: chunkCount,
         finish_reason: finishReason,
         environment_id: opts.environmentId,
@@ -391,8 +400,3 @@ async function* _wrapAnthropicStream(
   }
 }
 
-function randomId(): string {
-  const ts = Date.now().toString(36);
-  const rand = Math.random().toString(36).slice(2, 10);
-  return `${ts}${rand}`.slice(0, 24);
-}

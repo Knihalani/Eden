@@ -13,17 +13,13 @@ import time
 import uuid
 from typing import Any, Optional
 
+from eden_sdk._instrumentation_ids import _trace_id_or_random
 from eden_sdk.client import TraceEvent, get_default_client
 from eden_sdk.config import get_config
 from eden_sdk.trace import current_trace
 
 logger = logging.getLogger("eden_sdk.instrumentation.llama_index")
 
-
-def _trace_id_or_random() -> str:
-    """Return the active trace id, or a fresh random one."""
-    ctx = current_trace()
-    return ctx.trace_id if ctx is not None else uuid.uuid4().hex
 
 _handler: Optional["EdenLlamaSpanHandler"] = None  # type: ignore[name-defined]  # noqa: F821,UP037,UP045
 
@@ -87,7 +83,7 @@ def install() -> None:
                     _trace_id_or_random()
                 ),
                 "name": str(md.get("class_name") or md.get("name") or "span"),
-                "event_type": "framework.callback",
+                "event_type": "agent.run",
                 "agent_id": str(md.get("class_name") or "llama_index"),
                 "duration_ms": duration_ms,
                 "outcome": "error" if error else "success",

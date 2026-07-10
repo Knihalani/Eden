@@ -148,7 +148,34 @@ class TraceController implements TraceContext {
   }
   recordError(err: unknown): this {
     this.status = "error";
-    this.error = err instanceof Error ? `${err.constructor.name}: ${err.message}` : String(err);
+    if (err instanceof Error) {
+      // Match the Python SDK's ``repr(exc)`` shape so the
+      // error_message split in ``finishTrace`` populates
+      // both ``error_type`` and ``error_message`` on the
+      // wire. (Python's repr: ``TypeError('boom')`` /
+      // ``TypeError('boom', 'extra')`` -- we use the
+      // ``ClassName: message`` form for parity.)
+      this.error = `${err.constructor.name}: ${err.message}`;
+    } else if (err === null) {
+      this.error = "null";
+    } else if (err === undefined) {
+      this.error = "undefined";
+    } else if (typeof err === "object") {
+      // ``String({code: "X"})`` returns ``"[object Object]"``
+      // and silently drops the payload. Try ``JSON.stringify``
+      // first; fall back to the constructor name when the
+      // value isn't serialisable (e.g. circular refs).
+      try {
+        const json = JSON.stringify(err);
+        this.error = json === undefined ? Object.prototype.toString.call(err) : json;
+      } catch {
+        this.error = Object.prototype.toString.call(err);
+      }
+    } else {
+      // Primitives (string, number, boolean, bigint, symbol)
+      // stringify cleanly.
+      this.error = String(err);
+    }
     return this;
   }
   end(opts: { status?: "ok" | "error" | "unset"; error?: string } = {}): void {
@@ -226,7 +253,7 @@ function finishTrace(
       projectId: config.projectId,
       traceId: ctx.traceId,
       realm: config.realm,
-      eventType: "agent_call",
+      eventType: "agent.run",
       timestamp: new Date().toISOString(),
       sourceFormat: SOURCE_FORMATS.TRACE_AGENT,
       payload: {
@@ -276,8 +303,13 @@ function _activeContext(): TraceContext | undefined {
 // ── traceAgent decorator ─────────────────────────────────────────────
 
 /**
- * Build a wrapped method that emits one `agent_call` event per
- * invocation.
+ * Build a wrapped method that emits one `agent.run` event per
+ * invocation. The wire value MUST be ``"agent.run"`` to match
+ * the gateway's SQL filter (``WHERE event_type = 'agent.run'``
+ * in ``src/eden/llmops/promotion.py``). The previous
+ * ``"agent_call"`` value silently dropped every TS-traced
+ * agent run from the promotion / cost-savings roll-ups
+ * because the filter never matched.
  */
 function makeWrappedMethod(
   propertyKey: string,
@@ -289,12 +321,27 @@ function makeWrappedMethod(
       `${(this as { constructor?: { name?: string } })?.constructor?.name ?? "Anon"}.${propertyKey}`,
       options,
     ) as TraceController;
+    // Track ``status`` separately because ``recordError`` sets
+    // it to ``"error"`` and we want to mirror that on the way
+    // out (without going through ``controller.setStatus`` which
+    // is for the *caller's* explicit status, not auto-error
+    // detection). Using ``controller.recordError`` (rather than
+    // hand-rolling ``controller.error = err.constructor.name``)
+    // ensures the captured error string matches the
+    // ``"${ClassName}: ${message}"`` shape that
+    // ``finishTrace`` splits into ``error_type`` /
+    // ``error_message`` on the wire. The previous code stored
+    // only the class name -- so the SDK emitted
+    // ``error_type: "TypeError"`` with ``error_message: null``
+    // for every decorator-thrown exception, while the Python
+    // SDK's ``@trace_agent`` and the TS callback-form
+    // ``trace()`` both captured the full message. This was a
+    // wire divergence: the TS decorator was the only path
+    // silently dropping the error message.
     let status: "success" | "error" = "success";
-    let errorType: string | undefined;
 
     const finish = () => {
       controller.setStatus(status === "error" ? "error" : "ok");
-      if (errorType) controller.error = errorType;
       controller.end();
     };
 
@@ -304,7 +351,7 @@ function makeWrappedMethod(
         return result
           .catch((err: unknown) => {
             status = "error";
-            errorType = err instanceof Error ? err.constructor.name : "Error";
+            controller.recordError(err);
             throw err;
           })
           .finally(finish);
@@ -313,7 +360,7 @@ function makeWrappedMethod(
       return result;
     } catch (err) {
       status = "error";
-      errorType = err instanceof Error ? err.constructor.name : "Error";
+      controller.recordError(err);
       finish();
       throw err;
     }

@@ -95,14 +95,14 @@ describe("wire format (camelCase ↔ snake_case, top-level rename)", () => {
       tenant_id: "t1",
       project_id: "p1",
       trace_id: "tr1",
-      event_type: "agent_call",
+      event_type: "agent.run",
       source_format: "openai",
       agent_id: "a",
       duration_ms: 5,
     });
     expect(out.eventId).toBe("ev1");
     expect(out.tenantId).toBe("t1");
-    expect(out.eventType).toBe("agent_call");
+    expect(out.eventType).toBe("agent.run");
     expect(out.sourceFormat).toBe("openai");
     expect(out.durationMs).toBe(5);
   });

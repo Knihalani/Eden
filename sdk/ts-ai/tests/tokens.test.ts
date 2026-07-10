@@ -76,6 +76,55 @@ describe("extractUsage", () => {
       cacheCreationTokens: null,
     });
   });
+
+  test("whole-number floats round-trip as integers", () => {
+    // ``1.0`` is the typical JSON-decoded whole-number float;
+    // the previous implementation returned ``1`` (the float),
+    // which still serialised as ``1`` on the wire, but
+    // keeping the value as an integer here matches the
+    // Python SDK and downstream billing math.
+    const out = extractUsage({
+      prompt_tokens: 1.0,
+      completion_tokens: 20.0,
+    });
+    expect(out.inputTokens).toBe(1);
+    expect(out.outputTokens).toBe(20);
+  });
+
+  test("fractional floats are dropped (not silently truncated)", () => {
+    // A token count of ``0.7`` would silently bill a call
+    // for a fractional token if accepted. The SDK now
+    // returns ``null`` for any non-integer number, matching
+    // the Python SDK's behaviour since 0.2.9.
+    const out = extractUsage({
+      prompt_tokens: 0.7,
+      completion_tokens: 1.5,
+    });
+    expect(out.inputTokens).toBeNull();
+    expect(out.outputTokens).toBeNull();
+  });
+
+  test("fractional strings are dropped", () => {
+    // Some providers serialise floats as strings; a
+    // fractional string (``"0.7"``) must not be coerced
+    // into ``0`` (which would under-bill) or kept as ``0.7``
+    // (which would bill a fractional token). Return ``null``.
+    const out = extractUsage({
+      prompt_tokens: "0.7",
+      completion_tokens: "20.0",
+    });
+    expect(out.inputTokens).toBeNull();
+    expect(out.outputTokens).toBe(20);
+  });
+
+  test("NaN and infinities are rejected", () => {
+    const out = extractUsage({
+      prompt_tokens: NaN,
+      completion_tokens: Infinity,
+    });
+    expect(out.inputTokens).toBeNull();
+    expect(out.outputTokens).toBeNull();
+  });
 });
 
 describe("normalizeModelName", () => {
