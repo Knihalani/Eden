@@ -106,7 +106,11 @@ export function OrgProvider({ children }: { children: ReactNode }) {
       // acceptable for the brief window between invite-accept and
       // webhook delivery.
       const fromClerk = clerkOrg
-        ? enrichedOrgs.find((o) => o.id === clerkOrg.id)
+        ? enrichedOrgs.find(
+            (o) =>
+              o.clerk_org_id === clerkOrg.id ||
+              o.id === clerkOrg.id,
+          )
         : undefined;
       if (fromClerk) {
         setCurrentOrgState(fromClerk);

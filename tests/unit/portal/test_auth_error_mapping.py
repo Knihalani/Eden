@@ -31,7 +31,11 @@ def _map_auth_error(raw_message: str) -> tuple[str, str | None]:
 
     Returns (user_message, session_storage_marker_or_none).
     """
-    if re.search(r"401|not\s*authenticated|unauthorized", raw_message, re.IGNORECASE):
+    if re.search(
+        r"401|not\s*authenticated|authentication\s*required|unauthorized",
+        raw_message,
+        re.IGNORECASE,
+    ):
         return "Session expired. Please sign in again.", "session_expired"
     if re.search(r"user\s*not\s*found", raw_message, re.IGNORECASE):
         return (
@@ -61,7 +65,7 @@ def _map_auth_error(raw_message: str) -> tuple[str, str | None]:
         "Session expired. Please sign in again.",
     ),
     (
-        "unauthorized request",
+        "Authentication required",
         "Session expired. Please sign in again.",
     ),
     # 404 / "User not found" — friendly "setting up your account" copy.
@@ -170,7 +174,7 @@ def test_actual_use_org_hook_uses_same_mapping():
     text = src.read_text()
     # The four canonical error branches must all be present.
     for token in [
-        "401|not\\s*authenticated|unauthorized",
+        "401|not\\s*authenticated|authentication\\s*required|unauthorized",
         "user\\s*not\\s*found",
         "404|not\\s*found",
         "5\\d\\d|server\\s*error",

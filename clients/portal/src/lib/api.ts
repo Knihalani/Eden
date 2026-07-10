@@ -357,6 +357,7 @@ export const api = {
         name: string;
         slug: string;
         role: string;
+        clerk_org_id?: string | null;
       }>;
       current_org_id: string | null;
     }>("/auth/me"),
