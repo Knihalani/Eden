@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Loader2, User, Mail, Lock, Shield, ShieldCheck, ShieldAlert, Trash2, Camera, Check } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { PageHeader } from "@/components/layout/page-header";
+import { PageContent } from "@/components/layout/page-content";
 import { useToast } from "@/components/ui/toast";
 import { useConfirm } from "@/hooks/use-confirm";
 import { TwoFASetupDialog } from "../settings/_components/2fa-setup-dialog";
@@ -161,7 +162,7 @@ export default function ProfilePage() {
     }
   };
   if (!user) return null;
-  return <div className="p-4 sm:p-6 lg:p-8 max-w-2xl mx-auto space-y-6">
+  return <PageContent size="narrow">
       <PageHeader eyebrow="Account" title="Profile" subtitle="Manage your account settings, security, and authentication." icon={User} />
 
       {/* User Info Section */}
@@ -385,7 +386,7 @@ export default function ProfilePage() {
       setTwoFactorEnabled(false);
     }} />}
       {ConfirmDialog}
-    </div>;
+    </PageContent>;
 }
 function Disable2FADialog({
   onClose,

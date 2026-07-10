@@ -67,7 +67,7 @@ interface KpiProps {
 function Kpi({ label, value, sublabel, icon: Icon, iconColor, trend, trendDir }: KpiProps) {
   return (
     <div
-      className="rounded-xl border border-[var(--border-default)] bg-[var(--bg-primary)] p-4 shadow-sm transition-all duration-200 hover:shadow-md"
+      className="rounded-xl border border-[var(--border-default)] bg-[var(--bg-primary)] p-4"
       aria-label={`${label}: ${value}`}
     >
       <div className="mb-2 flex items-start justify-between">
@@ -533,7 +533,7 @@ export default function AnalyticsPage() {
           <div
             role="group"
             aria-label="Date range"
-            className="inline-flex rounded-lg border border-[var(--border-default)] bg-[var(--bg-primary)] p-0.5 shadow-sm"
+            className="inline-flex rounded-lg border border-[var(--border-default)] bg-[var(--bg-primary)] p-0.5"
           >
             {DAY_OPTIONS.map((opt) => (
               <button
@@ -544,7 +544,7 @@ export default function AnalyticsPage() {
                 className={cn(
                   "rounded-md px-3 py-1.5 text-xs font-medium transition-all",
                   days === opt.value
-                    ? "bg-[var(--accent)] text-[var(--bg-base)] shadow-sm"
+                    ? "bg-[var(--accent)] text-[var(--bg-base)]"
                     : "text-[var(--text-muted)] hover:text-[var(--text-primary)]"
                 )}
               >
