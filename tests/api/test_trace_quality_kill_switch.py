@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -189,11 +190,10 @@ def test_no_drop_invariant_run_number_present() -> None:
     with the contract fixture.
     """
     contract = (
-        "/Users/kaiavnihalani/Downloads/Eden/tests/experiments/"
-        "test_v2_6_acceptance_contract.py"
+        Path(__file__).resolve().parent
+        / "test_v2_6_acceptance_contract.py"
     )
-    import os
-    assert os.path.exists(contract), (
+    assert contract.exists(), (
         "No-Drop contract fixture is missing — every enhancement "
         "promotion requires it"
     )

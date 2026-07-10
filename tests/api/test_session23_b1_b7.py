@@ -306,12 +306,14 @@ class TestB5DatetimeUtcNow:
     def test_no_utcnow_in_src(self) -> None:
         """No ``.utcnow()`` calls remain in the source."""
         import subprocess
+        from pathlib import Path
 
+        repo_root = Path(__file__).resolve().parents[2]
         result = subprocess.run(
             ["grep", "-rln", ".utcnow()", "src/eden/"],
             capture_output=True,
             text=True,
-            cwd="/Users/kaiavnihalani/Downloads/Eden",
+            cwd=repo_root,
         )
         assert result.returncode != 0, (
             f"B-5 regression: utcnow() still in: "

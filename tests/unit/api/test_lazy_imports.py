@@ -11,8 +11,11 @@ from __future__ import annotations
 import json
 import subprocess
 import sys
+from pathlib import Path
 
 import pytest
+
+REPO_ROOT = Path(__file__).resolve().parents[3]
 
 
 def _run_in_subprocess(code: str) -> dict:
@@ -31,7 +34,7 @@ def _run_in_subprocess(code: str) -> dict:
         [sys.executable, "-c", full_code],
         capture_output=True,
         text=True,
-        cwd="/Users/kaiavnihalani/Downloads/Eden",
+        cwd=REPO_ROOT,
         timeout=60,
     )
     if result.returncode != 0:
@@ -156,7 +159,7 @@ def test_smoke_full_app_still_works():
         [sys.executable, "-c", code],
         capture_output=True,
         text=True,
-        cwd="/Users/kaiavnihalani/Downloads/Eden",
+        cwd=REPO_ROOT,
         timeout=60,
     )
     assert result.returncode == 0, (
