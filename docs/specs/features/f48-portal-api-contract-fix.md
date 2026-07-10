@@ -243,4 +243,18 @@ Already has entries — verify copy matches Phase Q (metric rules, not SQL).
 
 ---
 
-*Blocks: F01, F02, all debugger UX work.*
+## 7. Performance & cost optimization
+
+Portal-only fix — no backend cost. Client experience targets:
+
+| Page | p95 load after fix |
+|---|---|
+| `/debugger` checkpoints list | <800ms |
+| `/signals` list + create | <600ms |
+| API error rate | 0% 404 on documented routes |
+
+**Implementation:** Fix client paths first (instant UX win); add React Query staleTime 30s to reduce refetch churn.
+
+---
+
+*Blocks: F01, F04 debugger tools, all debugger UX work.*

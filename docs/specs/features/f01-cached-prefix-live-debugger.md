@@ -7,7 +7,8 @@
 | **Effort** | XL |
 | **Eden status** | PARTIAL |
 | **Competitive source** | Laminar (`LMNR_DEBUG`, debugger caching docs) |
-| **Dependencies** | F03 (checkpoint ingest), F48 (portal fix), optionally F02 (sessions) |
+| **Dependencies** | F03 (checkpoint ingest), F48 (portal fix) |
+| **Absorbs** | F02 debug session timeline (deleted — sessions built into F01 + F04 MCP) |
 
 ---
 
@@ -282,4 +283,27 @@ class RerunResponse(BaseModel):
 
 ---
 
-*See also: F02 sessions, F03 ingest, F04 MCP `eden_rerun_debugger` tool.*
+---
+
+## 12. Debug sessions (absorbed F02)
+
+Debug sessions group multiple reruns, eval scores, and agent notes into one investigation timeline — previously spec'd as F02, now **part of F01** (portal) and **F04** (MCP).
+
+### 12.1 Behavior
+
+- First `cached_live` or `hermetic` rerun optionally creates `debug_session_id`
+- Subsequent reruns attach to same session (portal or MCP `create_debug_session`)
+- Portal `/debugger/sessions/[id]` shows vertical timeline: run traces, cache stats, diffs, linked issues
+- MCP: `create_debug_session`, `list_debug_sessions` (see F04)
+
+### 12.2 Tables
+
+Already defined in §4: `debug_sessions`, `debug_session_runs`.
+
+### 12.3 Local session file (optional)
+
+For offline IDE sync, write `.eden/debug-session.json` (similar to Laminar `.lmnr/debug-session.json`) — **optional**; MCP session APIs are canonical.
+
+---
+
+*See also: F03 ingest, F04 Eden MCP `rerun_debugger` / `create_debug_session` tools.*

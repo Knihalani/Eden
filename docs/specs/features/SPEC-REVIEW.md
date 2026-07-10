@@ -1,46 +1,60 @@
 # Feature Spec Cross-Review
 
-> Review of all 48 feature-by-feature specs — July 9, 2026
+> **Updated:** July 9, 2026 — second pass (37 specs, all with perf/cost)
 
 ## Verdict
 
-Specs are **feature-granular** (not competitor-organized), **codebase-grounded** (file paths verified), and **implementation-ready** for Wave 0–1.
+Spec set is **complete for high-value parity + differentiation**. Every feature includes latency budgets, cost controls, caching, and degradation modes per [PERFORMANCE-COST-STANDARDS.md](../PERFORMANCE-COST-STANDARDS.md).
+
+## Inventory
+
+| Type | Count |
+|---|---|
+| F-features | 24 |
+| N-features | 13 (N09–N13 restore deleted high-value work) |
 
 ## Critical path
 
-**F48 → F28 → F29 → F20 → F30 → F04 → F01 → F22 → F46**
+**F48 → F28 → F29 → F20 → F30 → F04 → F03 → F01 → F22 → F46**
 
-## Blockers found in codebase
+**Cost foundation:** **N09** early (storage) + **N08** (free P0 detection)
 
-1. **F48 must ship first** — debugger/signals portal unusable today
-2. **F03 before F01** — no checkpoints without ingest hook
-3. **F28 before F29** — issues require stumbles
-4. **Slack module missing** — F47/F31 need new `integrations/slack/` tree
-5. **Three debug stacks** — unify on F01 + F03; don't add fourth
+**Differentiation:** **N07, N08, N06**
 
-## Schema consolidation
+## Restored features (N09–N13)
 
-Single migration `080_feature_gap_wave1.sql` should include tables for F01, F28, F29, F20 (minimum Wave 1).
+| ID | Value |
+|---|---|
+| N09 | 5–20× storage savings (was F11) |
+| N10 | Raindrop search→signal (was F36) |
+| N11 | Live tail without Workshop (was F10) |
+| N12 | Session UX (was F17) |
+| N13 | Transcript demo quality (was F38) |
 
-## Hand-deepened specs
+## Performance highlights by feature
 
-These five were expanded beyond generator output:
-
-- F01 — Cached prefix live debugger
-- F20 — Zero-config issue detection  
-- F29 — Agent issues
-- F39 — Runtime nudges
-- F48 — Portal API fix
+| Feature | Key SLA |
+|---|---|
+| F01 | Prefix replay p95 <2s |
+| F03 | Ingest overhead p99 ≤5ms |
+| F04 | MCP read p95 <800ms |
+| F20 | Detect→stumble <60s, $0 for 5/7 detectors |
+| F29 | Issue list p95 <300ms |
+| F30 | StatGate triage <200ms; LLM <60s |
+| F39 | Gateway overhead p95 <5ms |
+| N08 | P0 without LLM <100ms |
+| N09 | Dedupe ratio ≥3× |
+| F12 | Search p95 <200ms |
 
 ## Risk summary
 
-| Risk | Features | Mitigation |
-|---|---|---|
-| Live rerun side effects | F01 | mock tools default |
-| LLM COGS | F06, F30, F34 | SLM + rate limits |
-| OSS maintenance | F32 | separate package |
-| Wrong nudge promoted | F39 | F41 shadow gate mandatory |
+| Risk | Mitigation |
+|---|---|
+| LLM COGS | SLM cascade, budgets, F34 classifiers |
+| Storage cost | N09 dedupe + 90d TTL |
+| MCP abuse | Scoped keys, rate limits |
+| Live stream scale | 100 sessions/org cap (N11) |
 
 ## Sign-off
 
-Pending product/engineering approval before Wave 1 code starts.
+Ready for Wave 0 (F48) implementation.
