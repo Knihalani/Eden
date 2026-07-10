@@ -16,6 +16,7 @@
  */
 
 import { getDefaultClient } from "../client.js";
+import { errorClass, errorMessage, randomId } from "../ids.js";
 import { extractUsage, normalizeModelName } from "../tokens.js";
 import {
   SOURCE_FORMATS,
@@ -145,6 +146,7 @@ function _instrumentedCreate(
   const traceId = randomId();
   let status: "success" | "error" = "success";
   let errorType: string | undefined;
+  let errorMsg: string | undefined;
   // Captured from the upstream result so we can normalize usage
   // into ``metrics`` on emit. Non-streaming OpenAI responses ship
   // full usage on the chat completion object; the streaming path
@@ -169,7 +171,8 @@ function _instrumentedCreate(
       return result;
     } catch (err: unknown) {
       status = "error";
-      errorType = err instanceof Error ? err.constructor.name : "Error";
+      errorType = errorClass(err);
+      errorMsg = errorMessage(err);
       throw err;
     } finally {
       const durationMs = Date.now() - start;
@@ -179,6 +182,7 @@ function _instrumentedCreate(
         durationMs,
         status,
         errorType,
+        errorMessage: errorMsg,
         opts,
         framework: SOURCE_FORMATS.OPENAI,
         usage: capturedUsage,
@@ -216,6 +220,7 @@ async function* _wrapOpenAIStream(
   let itlSumMs = 0;
   let itlCount = 0;
   let outputTokens = 0;
+  let errorMsg: string | undefined;
   let usageOutputTokens: number | undefined;
   let usageInputTokens: number | undefined;
   let usageCacheReadTokens: number | undefined;
@@ -292,7 +297,8 @@ async function* _wrapOpenAIStream(
     }
   } catch (err) {
     status = "error";
-    errorType = err instanceof Error ? err.constructor.name : "Error";
+    errorType = errorClass(err);
+    errorMsg = errorMessage(err);
     throw err;
   } finally {
     if (typeof usageOutputTokens === "number") outputTokens = usageOutputTokens;
@@ -315,6 +321,7 @@ async function* _wrapOpenAIStream(
         model,
         status,
         error_type: errorType,
+        ...(errorMsg !== undefined ? { error_message: errorMsg } : {}),
         chunk_count: chunkCount,
         finish_reason: finishReason,
         environment_id: opts.environmentId,
@@ -349,6 +356,7 @@ function _emitCompletion(args: {
   durationMs: number;
   status: "success" | "error";
   errorType: string | undefined;
+  errorMessage?: string | undefined;
   opts: TraceOptions;
   framework: string;
   usage?: unknown;
@@ -381,6 +389,7 @@ function _emitCompletion(args: {
       duration_ms: args.durationMs,
       status: args.status,
       error_type: args.errorType,
+      ...(args.errorMessage !== undefined ? { error_message: args.errorMessage } : {}),
       environment_id: args.opts.environmentId,
     },
     metrics: { duration_ms: args.durationMs, ...usageFields },
@@ -389,13 +398,4 @@ function _emitCompletion(args: {
     environmentId: args.opts.environmentId,
     durationMs: args.durationMs,
   });
-}
-
-function randomId(): string {
-  // Compact random id (24 chars) — matches Python SDK's
-  // ``f"auto_{provider}_{int(time.time() * 1_000_000)}"`` in
-  // uniqueness while staying URL-safe.
-  const ts = Date.now().toString(36);
-  const rand = Math.random().toString(36).slice(2, 10);
-  return `${ts}${rand}`.slice(0, 24);
 }

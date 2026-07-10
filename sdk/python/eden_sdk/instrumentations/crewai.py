@@ -15,6 +15,7 @@ import logging
 import uuid
 from typing import Any
 
+from eden_sdk._instrumentation_ids import _trace_id_or_random
 from eden_sdk.client import TraceEvent, get_default_client
 from eden_sdk.config import get_config
 from eden_sdk.trace import current_trace
@@ -35,7 +36,7 @@ def _emit(kind: str, name: str, payload: dict[str, Any] | None = None,
         "event_id": f"eden_crew_{uuid.uuid4().hex[:16]}",
         "trace_id": _trace_id_or_random(),
         "name": name,
-        "event_type": "framework.callback",
+        "event_type": "agent.run",
         "agent_id": name,
         "outcome": "error" if error else "success",
         "attributes": {
@@ -149,11 +150,3 @@ def _short(value: Any, max_len: int = 256) -> str:
     return s
 
 
-def _trace_id_or_random() -> str:
-    """Return the active trace id, or a fresh random one.
-
-    Centralised so callers don't have to handle the Optional
-    return type of :func:`current_trace` (mypy-friendly).
-    """
-    ctx = current_trace()
-    return ctx.trace_id if ctx is not None else uuid.uuid4().hex

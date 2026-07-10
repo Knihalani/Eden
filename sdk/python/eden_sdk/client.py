@@ -33,6 +33,7 @@ import queue as _queue
 import threading
 import time
 from collections import deque
+from email.utils import parsedate_to_datetime
 from typing import Any
 
 import httpx
@@ -45,7 +46,7 @@ from eden_sdk.filters import redact_payload
 # import time; if the package is re-installed the new value
 # takes effect. The gateway logs the SDK version on every POST
 # so version drift across the fleet is visible in one place.
-__version__ = "0.2.11"
+__version__ = "0.2.19"
 _USER_AGENT = f"eden-sdk/{__version__} (python)"
 
 logger = logging.getLogger("eden_sdk.client")
@@ -121,6 +122,17 @@ class EdenClient:
         # from the regular queue because they go to ``/ingest/chunks``
         # with a smaller payload shape.
         self._chunk_buffer: list[dict[str, Any]] = []
+        # Chunk buffer cap. Mirrors ``max_queue`` for the
+        # regular event queue: prevents a runaway streaming
+        # response (e.g. a model echoing millions of small
+        # tokens) from OOM-ing the process before the
+        # sender thread can flush. Without this, an
+        # instrumentation that enqueues one chunk per
+        # token on an unbounded stream would grow
+        # ``self._chunk_buffer`` without bound -- the
+        # Python GIL keeps ``.append`` atomic but does
+        # not save us from running out of memory.
+        self._chunk_buffer_max = 4096
         self._chunk_wake = threading.Event()
         self._chunk_generation = 0
         self._chunk_processed_generation = 0
@@ -139,6 +151,15 @@ class EdenClient:
             transport if transport is not None else cfg_transport
         )
         self._loop_started = threading.Event()
+        # Loop failure latch: set when the worker thread exits
+        # before flipping _loop_started (e.g. AsyncClient construction
+        # raised an invalid-transport error). Without this, start()
+        # would silently time out on _loop_started.wait() and return as
+        # if the sender was up, while the thread was already dead --
+        # every subsequent enqueue() would land in a queue that nothing
+        # drains, and events would silently disappear.
+        self._loop_failed = False
+        self._loop_failed_event = threading.Event()
         # Lifecycle lock: serialises ``start()`` + ``shutdown()`` so
         # two callers can't both observe ``self._thread is None``
         # and race to create a second worker thread.
@@ -185,6 +206,12 @@ class EdenClient:
             # against an in-flight HTTP client that's about to
             # be re-created.
             self._loop_started.clear()
+            # Reset the failure latch for the new worker. If the
+            # previous run died (e.g. transport error) and the
+            # caller is retrying start(), we want this run to
+            # report its own outcome.
+            self._loop_failed = False
+            self._loop_failed_event.clear()
             self._thread = threading.Thread(
                 target=self._run_loop, name="eden-sdk-sender", daemon=True
             )
@@ -194,6 +221,17 @@ class EdenClient:
         # long shutdown of a previous EdenClient doesn't block
         # other threads from creating fresh EdenClients.
         self._loop_started.wait(timeout=1.0)
+        if self._loop_failed:
+            # The thread died before flipping _loop_started (or
+            # set it itself after catching the exception in
+            # _run_loop). Surface a clear RuntimeError so the
+            # caller does NOT silently treat the sender as up
+            # -- otherwise enqueue() calls would land in a queue
+            # nothing drains.
+            raise RuntimeError(
+                "eden sdk: sender thread failed to start; "
+                "check the log for the underlying error"
+            )
 
     def shutdown(self, timeout: float = 5.0) -> None:
         """Stop the sender, draining the queue first."""
@@ -284,9 +322,29 @@ class EdenClient:
     # ── Internal loop ────────────────────────────────────────────────
 
     def _run_loop(self) -> None:
+        # Thread entry point. Wraps asyncio.run so any exception raised
+        # before _loop_started.set() (e.g. an invalid httpx.AsyncClient
+        # transport argument) is logged and surfaces via _loop_failed
+        # instead of silently killing the worker.
         import asyncio
 
-        asyncio.run(self._async_loop())
+        try:
+            asyncio.run(self._async_loop())
+        except Exception as exc:  # noqa: BLE001
+            # The async loop sets _loop_started as soon as the
+            # AsyncClient is built. If we get here before that line
+            # ran, start() is still waiting on the latch -- release it
+            # with a failure signal so the caller knows the sender
+            # never came up. If the loop already started and crashed
+            # mid-run, this branch is the only visible signal --
+            # log at WARNING so the issue is not silently swallowed.
+            self._loop_failed = True
+            self._loop_failed_event.set()
+            self._loop_started.set()
+            logger.warning(
+                "eden sdk: sender thread exited before loop was ready: %s",
+                exc,
+            )
 
     async def _async_loop(self) -> None:
 
@@ -380,6 +438,36 @@ class EdenClient:
         base = self.config.base_url.rstrip("/")
         return f"{base}/orgs/{self.config.org_id}/ingest/chunks"
 
+    def _enqueue_chunk(self, chunk: dict[str, Any]) -> None:
+        """Push a streaming chunk onto the buffer with oldest-drop overflow.
+
+        The producer-side API for streaming chunks. Mirrors
+        :meth:`enqueue` for the regular event queue: never
+        blocks the user thread, and on overflow drops the
+        oldest entry to make room for the new one. The cap
+        prevents a runaway stream from exhausting memory
+        before the sender thread can drain.
+        """
+        if not self.config.enabled:
+            return
+        if self.config.dry_run:
+            self._sent_total += 1
+            return
+        # Drop oldest to make room. This is O(n) for a list,
+        # but n is bounded by _chunk_buffer_max and the
+        # append/drop pair is amortised across the cap, so
+        # total work stays O(max) per overflow cycle.
+        while len(self._chunk_buffer) >= self._chunk_buffer_max:
+            try:
+                self._chunk_buffer.pop(0)
+            except IndexError:
+                break
+            self._dropped_total += 1
+        self._chunk_buffer.append(chunk)
+        # Wake the worker so the chunk ships promptly rather
+        # than waiting for the next batch window.
+        self._chunk_wake.set()
+
     async def _send_chunks(self) -> None:
         """POST buffered streaming chunks to ``/ingest/chunks``.
 
@@ -390,6 +478,22 @@ class EdenClient:
         assert self._http is not None
         if not self._chunk_buffer:
             return
+        # Defensive trim: instrumentations may append directly
+        # to ``self._chunk_buffer`` (bypassing the
+        # ``_enqueue_chunk`` helper), and a producer faster
+        # than the worker tick could pile up more than
+        # ``_chunk_buffer_max`` entries between flushes. Drop
+        # the oldest now so we never ship a buffer larger
+        # than the configured cap, and never OOM the process
+        # between ticks.
+        if len(self._chunk_buffer) > self._chunk_buffer_max:
+            overflow = len(self._chunk_buffer) - self._chunk_buffer_max
+            self._chunk_buffer = self._chunk_buffer[overflow:]
+            self._dropped_total += overflow
+            logger.warning(
+                "eden sdk: chunk buffer overflow, dropped %d oldest",
+                overflow,
+            )
         url = self.ingest_chunks_url()
         if url is None:
             # No org id — drop silently.
@@ -434,6 +538,47 @@ class EdenClient:
         except Exception as exc:  # noqa: BLE001
             self._failed_total += len(chunks)
             logger.warning("eden ingest chunks failed: %s", exc)
+
+    def _parse_retry_after(
+        self, value: str, fallback: float
+    ) -> float:
+        """Parse a ``Retry-After`` header value (RFC 7231).
+
+        The header may be either a delta-seconds integer (``"5"``)
+        or an HTTP-date (``"Wed, 21 Oct 2015 07:28:00 GMT"``).
+        Returns the seconds-to-wait, capped at 30s, falling back
+        to ``fallback`` on any parse failure so a malformed
+        header never wedges the retry loop.
+        """
+        # Fast path: integer / float seconds.
+        try:
+            return min(float(value), 30.0)
+        except (TypeError, ValueError):
+            pass
+        # Slow path: HTTP-date. parsedate_to_datetime returns
+        # ``None`` for unparseable input (does not raise), so the
+        # explicit None check is required.
+        try:
+            target = parsedate_to_datetime(value)
+        except (TypeError, ValueError):
+            return fallback
+        if target is None:
+            return fallback
+        from datetime import datetime, timezone
+
+        now = datetime.now(timezone.utc)
+        # parsedate_to_datetime returns a timezone-naive datetime
+        # by default; treat as UTC. If it's already aware, use
+        # it directly.
+        if target.tzinfo is None:
+            target = target.replace(tzinfo=timezone.utc)
+        delta = (target - now).total_seconds()
+        # A past HTTP-date means "retry now" -- clamp to 0 so we
+        # don't accidentally back off further. A far-future
+        # date is capped to keep the worker responsive.
+        if delta <= 0:
+            return 0.0
+        return min(delta, 30.0)
 
     async def _send_batch(self, batch: list[TraceEvent]) -> None:
         assert self._http is not None
@@ -514,15 +659,18 @@ class EdenClient:
                             source_format, status, resp.text[:200],
                         )
                         break
-                    # Respect Retry-After if present (seconds or HTTP date).
+                    # Respect Retry-After if present. The spec (RFC 7231)
+                    # allows either a delta-seconds integer or an
+                    # HTTP-date -- the original code only handled the
+                    # former and silently fell back to exponential
+                    # backoff on HTTP-date, ignoring the server's
+                    # intent. Parse both forms; cap the resulting
+                    # delay at 30s so a misconfigured gateway can't
+                    # stall ingestion indefinitely.
+                    delay = min(base_delay_s * (2 ** (attempt - 1)), 5.0)
                     retry_after = resp.headers.get("retry-after")
                     if retry_after is not None:
-                        try:
-                            delay = min(float(retry_after), 30.0)
-                        except (TypeError, ValueError):
-                            delay = min(base_delay_s * (2 ** (attempt - 1)), 5.0)
-                    else:
-                        delay = min(base_delay_s * (2 ** (attempt - 1)), 5.0)
+                        delay = self._parse_retry_after(retry_after, fallback=delay)
                     logger.warning(
                         "eden ingest %s returned %s; retrying in %.2fs (attempt %d/%d)",
                         source_format, status, delay, attempt, max_attempts,

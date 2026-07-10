@@ -17,6 +17,7 @@
  */
 
 import { getDefaultClient } from "../client.js";
+import { errorClass, errorMessage, randomId } from "../ids.js";
 import {
   SOURCE_FORMATS,
   type StreamChunk,
@@ -312,10 +313,10 @@ function _finishCall(
       helper: ctx.helper,
       model: ctx.model,
       status: outcome.status,
-      error_type:
-        outcome.errorType instanceof Error
-          ? outcome.errorType.constructor.name
-          : undefined,
+      error_type: errorClass(outcome.errorType),
+      ...(errorMessage(outcome.errorType) !== undefined
+        ? { error_message: errorMessage(outcome.errorType) as string }
+        : {}),
       chunk_count: isStream ? ctx.chunkCount : undefined,
       finish_reason: ctx.finishReason,
       environment_id: ctx.opts.environmentId,
@@ -339,8 +340,3 @@ function _finishCall(
   });
 }
 
-function randomId(): string {
-  const ts = Date.now().toString(36);
-  const rand = Math.random().toString(36).slice(2, 10);
-  return `${ts}${rand}`.slice(0, 24);
-}

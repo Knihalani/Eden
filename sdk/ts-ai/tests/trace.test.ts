@@ -65,7 +65,7 @@ describe("trace()", () => {
     await trace("happy", async () => "ok");
     await getDefaultClient().flush();
     const events = _flattenEvents();
-    const call = events.find((e) => e.eventType === "agent_call");
+    const call = events.find((e) => e.eventType === "agent.run");
     expect(call).toBeDefined();
     expect(call?.payload.status).toBe("success");
     expect(call?.payload.name).toBe("happy");
@@ -79,7 +79,7 @@ describe("trace()", () => {
       }),
     ).rejects.toThrow("kaboom");
     await getDefaultClient().flush();
-    const call = _flattenEvents().find((e) => e.eventType === "agent_call");
+    const call = _flattenEvents().find((e) => e.eventType === "agent.run");
     expect(call?.payload.status).toBe("error");
     expect(call?.payload.error_type).toBe("Error");
   });
@@ -108,7 +108,7 @@ describe("traceAgent()", () => {
     const result = await agent.run("world");
     expect(result).toBe("hello world");
     await getDefaultClient().flush();
-    const call = _flattenEvents().find((e) => e.eventType === "agent_call");
+    const call = _flattenEvents().find((e) => e.eventType === "agent.run");
     expect(call?.payload.function).toBe("MyAgent.run");
     expect(call?.payload.status).toBe("success");
   });
@@ -123,7 +123,7 @@ describe("traceAgent()", () => {
     const r = new Sync();
     expect(r.add(2, 3)).toBe(5);
     await getDefaultClient().flush();
-    const call = _flattenEvents().find((e) => e.eventType === "agent_call");
+    const call = _flattenEvents().find((e) => e.eventType === "agent.run");
     expect(call?.payload.status).toBe("success");
   });
 
@@ -136,10 +136,75 @@ describe("traceAgent()", () => {
     }
     expect(() => new Throwy().bad()).toThrow("nope");
     await getDefaultClient().flush();
-    const call = _flattenEvents().find((e) => e.eventType === "agent_call");
+    const call = _flattenEvents().find((e) => e.eventType === "agent.run");
     expect(call?.payload.status).toBe("error");
     expect(call?.payload.error_type).toBe("Error");
   });
+
+  it(
+    "captures the error MESSAGE (not just the class name) on sync throws",
+    async () => {
+      // Regression: the previous decorator path stored only
+      // ``err.constructor.name`` on ``controller.error``, so the
+      // wire payload had ``error_type: "TypeError"`` with
+      // ``error_message: null`` for every decorator-thrown
+      // exception. The callback form of ``trace()`` and the
+      // Python SDK's ``@trace_agent`` both captured the full
+      // message -- so the TS decorator was a silent regression
+      // that dropped the human-readable error text the portal
+      // surfaces in the trace detail view. Pin that the
+      // message now lands on the wire.
+      class Typed {
+        @traceAgent()
+        boom(): never {
+          throw new TypeError("kaboom");
+        }
+      }
+      let caught: unknown;
+      try {
+        new Typed().boom();
+      } catch (e) {
+        caught = e;
+      }
+      expect((caught as Error).message).toBe("kaboom");
+      await getDefaultClient().flush();
+      const call = _flattenEvents().find(
+        (e) => e.eventType === "agent.run" && e.payload.error_type === "TypeError",
+      );
+      expect(call?.payload.status).toBe("error");
+      expect(call?.payload.error_type).toBe("TypeError");
+      expect(call?.payload.error_message).toBe("kaboom");
+    },
+  );
+
+  it(
+    "captures the error MESSAGE on async rejects (regression)",
+    async () => {
+      // Same regression as the sync test, but on the
+      // promise-rejection path (the more common case in
+      // modern async agents).
+      class Async {
+        @traceAgent()
+        async boom(): Promise<never> {
+          throw new RangeError("async-boom");
+        }
+      }
+      let caught: unknown;
+      try {
+        await new Async().boom();
+      } catch (e) {
+        caught = e;
+      }
+      expect((caught as Error).message).toBe("async-boom");
+      await getDefaultClient().flush();
+      const call = _flattenEvents().find(
+        (e) => e.eventType === "agent.run" && e.payload.error_type === "RangeError",
+      );
+      expect(call?.payload.status).toBe("error");
+      expect(call?.payload.error_type).toBe("RangeError");
+      expect(call?.payload.error_message).toBe("async-boom");
+    },
+  );
 });
 
 function _flattenEvents(): TelemetryEvent[] {
@@ -184,7 +249,7 @@ describe("trace() context-manager form", () => {
     await getDefaultClient().flush();
     await new Promise((r) => setTimeout(r, 50));
     const events = _flattenEvents();
-    const root = events.find((e) => (e.name === "qa-pipeline" || e.payload?.name === "qa-pipeline") && e.eventType === "agent_call");
+    const root = events.find((e) => (e.name === "qa-pipeline" || e.payload?.name === "qa-pipeline") && e.eventType === "agent.run");
     expect(root).toBeDefined();
     expect((root?.payload as Record<string, unknown>).input).toEqual({ q: "hi" });
     expect((root?.payload as Record<string, unknown>).output).toEqual({ final: "ok" });
@@ -200,7 +265,7 @@ describe("trace() context-manager form", () => {
     // t.outcome not exposed; status is the public field.
     await getDefaultClient().flush();
     await new Promise((r) => setTimeout(r, 50));
-    const ev = _flattenEvents().find((e) => (e.name === "error-path" || e.payload?.name === "error-path") && e.eventType === "agent_call");
+    const ev = _flattenEvents().find((e) => (e.name === "error-path" || e.payload?.name === "error-path") && e.eventType === "agent.run");
     expect(ev).toBeDefined();
     expect((ev!.payload as Record<string, unknown>).status).toBe("error");
     expect((ev?.payload as Record<string, unknown>).error_type).toBe("boom");
@@ -261,5 +326,102 @@ describe("active-context stack hygiene", () => {
     expect(probe).toBe(2);
     await client.flush();
     expect(captured.length).toBeGreaterThanOrEqual(1);
+  });
+});
+
+
+
+// ── Wire-contract regression: event_type must be "agent.run" ──────────
+
+describe("trace() wire contract", () => {
+  it(
+    "emits event_type='agent.run' on the wire (matches the gateway SQL filter)",
+    async () => {
+      // Regression: the TS @traceAgent / trace() path used to
+      // emit ``eventType: "agent_call"``. The gateway's
+      // promotion roll-ups query ``WHERE event_type =
+      // 'agent.run'`` (``src/eden/llmops/promotion.py:161``),
+      // so the previous value silently dropped every
+      // TS-traced agent run from the cost-savings widgets.
+      // Pin the wire shape end-to-end through the actual
+      // emit path.
+      const t = trace("probe", { tags: ["contract"] });
+      t.end();
+      await getDefaultClient().flush();
+      // The fetch interceptor above captures the wire
+      // request as a snake_case ``event_type`` field.
+      const wireEvents = captured
+        .map((c) => c.body)
+        .filter((b): b is Record<string, unknown>[] =>
+          Array.isArray(b),
+        )
+        .flat();
+      const runEvents = wireEvents.filter(
+        (e) => e.event_type === "agent.run",
+      );
+      expect(runEvents.length).toBe(1);
+      // And explicitly assert the old (wrong) value is
+      // never on the wire — would catch a future
+      // regression that restored the typo.
+      const stale = wireEvents.filter(
+        (e) => e.event_type === "agent_call",
+      );
+      expect(stale.length).toBe(0);
+    },
+  );
+});
+
+
+describe("trace() recordError non-Error shapes", () => {
+  it("captures a thrown string with full text (regression)", () => {
+    // Regression: ``String(err)`` on a thrown string returns
+    // the string unchanged, which is fine, but on a thrown
+    // *object* it returned ``"[object Object]"`` and silently
+    // dropped every payload field. The previous code also
+    // crashed the JSON-stringify fallback for circular refs;
+    // the new helper now falls back to a class-name summary
+    // so the wire never carries a misleading literal.
+    const cases: Array<{ input: unknown; expectContains?: string; expectEquals?: string }> = [
+      { input: "boom", expectEquals: "boom" },
+      { input: 42, expectEquals: "42" },
+      { input: null, expectEquals: "null" },
+      { input: undefined, expectEquals: "undefined" },
+      { input: { code: "X", detail: "y" }, expectContains: '"code":"X"' },
+      { input: [1, 2, 3], expectContains: "[1,2,3]" },
+    ];
+    for (const c of cases) {
+      const ctrl = trace("probe-nonerr", {});
+      ctrl.recordError(c.input);
+      // The split in finishTrace uses ": " -- non-Error
+      // shapes are passed through unchanged.
+      if (c.expectContains) {
+        expect(ctrl.error).toContain(c.expectContains);
+      }
+      if (c.expectEquals) {
+        expect(ctrl.error).toBe(c.expectEquals);
+      }
+    }
+  });
+
+  it("captures the full message on Error instances (regression)", () => {
+    const ctrl = trace("probe-err", {});
+    ctrl.recordError(new RangeError("async-boom"));
+    expect(ctrl.error).toBe("RangeError: async-boom");
+  });
+
+  it("falls back to Object.prototype.toString for circular refs", () => {
+    // JSON.stringify throws on a self-referencing object;
+    // the helper must not propagate that into the wire
+    // shape. Fall back to ``[object Object]`` (matches the
+    // pre-fix behaviour) so the user gets a recognisable
+    // placeholder instead of an empty string.
+    const circ: Record<string, unknown> = {};
+    circ.self = circ;
+    const ctrl = trace("probe-circ", {});
+    ctrl.recordError(circ);
+    // Don't assert an exact value -- the fallback just
+    // needs to be non-empty.
+    expect(ctrl.error).toBeTruthy();
+    expect(typeof ctrl.error).toBe("string");
   });
 });

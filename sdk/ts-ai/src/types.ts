@@ -107,6 +107,17 @@ export interface EdenSDKOptions {
    * Defaults to 250.
    */
   flushIntervalMs?: number;
+  /**
+   * Upper bound on the streaming chunk buffer (per
+   * `bufferChunk`). A runaway streaming response (millions
+   * of small chunks) would OOM the process without this
+   * cap -- the producer can push faster than the worker
+   * thread can flush. Mirrors the Python SDK's
+   * ``_chunk_buffer_max`` from 0.2.13. On overflow the
+   * oldest chunks are dropped with a debug log. Defaults
+   * to 4096.
+   */
+  maxChunkBuffer?: number;
 
   /**
    * When `true`, emit a console.debug line for every batch flush.

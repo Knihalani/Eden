@@ -662,3 +662,256 @@ def test_start_shutdown_start_cycle_resets_latch() -> None:
         assert client.sent >= 1
     finally:
         client.shutdown()
+
+
+# ── Bug A: sender thread death on AsyncClient init failure ──────────────
+
+
+def test_start_raises_runtime_error_when_async_client_init_fails(
+    monkeypatch,
+) -> None:
+    """Regression: ``start()`` used to silently time out on the
+    ``_loop_started`` latch and return as if the sender was up,
+    while the worker thread had already died because
+    ``httpx.AsyncClient(...)`` construction raised. Every subsequent
+    ``enqueue()`` would land in a queue that nothing drained --
+    events silently disappeared into the void.
+
+    The fix catches the exception in ``_run_loop``, logs it, and
+    flips a failure latch that ``start()`` checks so the caller
+    gets a clear ``RuntimeError`` instead of a silent lie.
+    """
+    import asyncio
+
+    def _exploding_async_client(*_args, **_kwargs):
+        raise RuntimeError("simulated httpx.AsyncClient init failure")
+
+    monkeypatch.setattr(httpx, "AsyncClient", _exploding_async_client)
+
+    client = EdenClient(
+        EdenConfig(
+            org_id="o",
+            api_key="k",
+            base_url="http://test.invalid",
+            dry_run=False,
+            flush_interval_ms=50,
+        ),
+        transport=httpx.MockTransport(lambda req: httpx.Response(200)),
+    )
+    try:
+        raised = None
+        try:
+            client.start()
+        except RuntimeError as exc:
+            raised = exc
+        assert raised is not None, (
+            "start() must surface a RuntimeError when the worker thread "
+            "dies before _loop_started is set -- otherwise the caller "
+            "thinks the sender is up and enqueue() silently drops events."
+        )
+        assert "sender thread failed to start" in str(raised)
+        # The failure latch must be flipped so callers (and tests)
+        # can introspect post-mortem.
+        assert client._loop_failed is True
+        # Thread must have exited, not be running forever in the
+        # background.
+        if client._thread is not None:
+            client._thread.join(timeout=2.0)
+            assert not client._thread.is_alive(), (
+                "the worker thread must not be alive after start() failed"
+            )
+    finally:
+        # Cancel any lingering tasks the worker may have spawned
+        # (defensive -- the run_loop exception path is supposed to
+        # shut everything down, but the test monkey-patches the
+        # constructor so the loop never actually starts).
+        try:
+            loop = asyncio.get_event_loop()
+        except RuntimeError:
+            loop = None
+        client.shutdown()
+
+
+# ── Bug B: Retry-After HTTP-date parsing ────────────────────────────────
+
+
+def test_parse_retry_after_accepts_delta_seconds() -> None:
+    """Plain integer / float seconds form must still work."""
+    client = EdenClient(
+        EdenConfig(org_id="o", api_key="k", dry_run=True)
+    )
+    try:
+        assert client._parse_retry_after("5", fallback=1.0) == 5.0
+        assert client._parse_retry_after("0.25", fallback=1.0) == 0.25
+        # Cap at 30s so a misconfigured gateway can't stall us.
+        assert client._parse_retry_after("9999", fallback=1.0) == 30.0
+    finally:
+        client.shutdown()
+
+
+def test_parse_retry_after_accepts_http_date_future() -> None:
+    """HTTP-date form (RFC 7231) must parse to a positive delay."""
+    from datetime import datetime, timedelta, timezone
+
+    client = EdenClient(
+        EdenConfig(org_id="o", api_key="k", dry_run=True)
+    )
+    try:
+        future = datetime.now(timezone.utc) + timedelta(seconds=10)
+        # RFC 7231 / RFC 1123 format used by all real gateways.
+        date_str = future.strftime("%a, %d %b %Y %H:%M:%S GMT")
+        delay = client._parse_retry_after(date_str, fallback=99.0)
+        # Should be ~10s; allow generous slack for clock + parse skew.
+        assert 8.0 <= delay <= 12.0
+    finally:
+        client.shutdown()
+
+
+def test_parse_retry_after_accepts_http_date_past() -> None:
+    """A past HTTP-date means \"retry now\" -- clamp to 0, don't
+    accidentally back off further."""
+    from datetime import datetime, timedelta, timezone
+
+    client = EdenClient(
+        EdenConfig(org_id="o", api_key="k", dry_run=True)
+    )
+    try:
+        past = datetime.now(timezone.utc) - timedelta(minutes=5)
+        date_str = past.strftime("%a, %d %b %Y %H:%M:%S GMT")
+        assert client._parse_retry_after(date_str, fallback=99.0) == 0.0
+    finally:
+        client.shutdown()
+
+
+def test_parse_retry_after_falls_back_on_garbage() -> None:
+    """Unparseable input must fall back to exponential backoff --
+    a malformed Retry-After must never wedge the retry loop."""
+    client = EdenClient(
+        EdenConfig(org_id="o", api_key="k", dry_run=True)
+    )
+    try:
+        assert client._parse_retry_after("not a date", fallback=2.5) == 2.5
+        assert client._parse_retry_after("", fallback=2.5) == 2.5
+        assert client._parse_retry_after("garbage", fallback=99.0) == 99.0
+    finally:
+        client.shutdown()
+
+
+def test_send_batch_retries_after_http_date_retry_after() -> None:
+    """Regression: the original code did ``float(retry_after)``
+    which raised ``ValueError`` on HTTP-date strings like
+    ``\"Wed, 21 Oct 2015 07:28:00 GMT\"`` -- the except branch
+    silently fell back to exponential backoff, ignoring the
+    server's explicit hint. Now the gateway's HTTP-date
+    Retry-After is honoured, which means retry happens on
+    the server's schedule, not ours.
+    """
+    import asyncio
+    from datetime import datetime, timedelta, timezone
+
+    import httpx
+
+    from eden_sdk.client import TraceEvent
+
+    # Build a Retry-After that's 1 second in the future.
+    future = datetime.now(timezone.utc) + timedelta(seconds=1)
+    date_str = future.strftime("%a, %d %b %Y %H:%M:%S GMT")
+
+    call_count = 0
+    def handler(req):
+        nonlocal call_count
+        call_count += 1
+        if call_count == 1:
+            return httpx.Response(503, text="slow", headers={"retry-after": date_str})
+        return httpx.Response(200, json={"ok": True})
+
+    client = _make_client_with_mock(handler)
+    batch = [TraceEvent(payload={"x": 1}, source_format="openai")]
+    asyncio.run(client._send_batch(batch))
+    assert call_count == 2, "HTTP-date Retry-After should drive the retry"
+    assert client.sent == 1
+    assert client.failed == 0
+
+
+# ── Bug C: chunk buffer upper bound ─────────────────────────────────────
+
+
+def test_chunk_buffer_enforces_upper_bound() -> None:
+    """Regression: ``self._chunk_buffer`` had no max size. A
+    runaway streaming response (millions of small chunks)
+    could OOM the process before the worker thread flushed.
+    The cap + oldest-drop semantics mirror the regular
+    event queue: producers never block, oldest entries are
+    evicted on overflow, and the buffer stays bounded.
+    """
+    # dry_run=False so _enqueue_chunk actually pushes to the buffer.
+    # We never call start(), so nothing tries to drain it.
+    client = EdenClient(
+        EdenConfig(org_id="o", api_key="k", dry_run=False)
+    )
+    try:
+        # Force a tiny cap so we can hit overflow in a unit test.
+        client._chunk_buffer_max = 8
+        for i in range(50):
+            client._enqueue_chunk({"event_id": f"e{i}", "chunk_index": i})
+        # Cap holds: never above max.
+        assert len(client._chunk_buffer) == 8
+        # Oldest entries were evicted: the surviving set is the
+        # tail of the input stream.
+        assert client._chunk_buffer[0]["chunk_index"] == 42
+        assert client._chunk_buffer[-1]["chunk_index"] == 49
+        # Eviction was accounted for on the dropped counter.
+        assert client.dropped == 42
+    finally:
+        client.shutdown()
+
+
+def test_chunk_buffer_defensive_trim_in_send_chunks() -> None:
+    """Instrumentations may bypass ``_enqueue_chunk`` and append
+    directly to ``self._chunk_buffer``. ``_send_chunks`` must
+    defensively trim the buffer to the cap on flush, so a
+    runaway stream never OOMs the process between worker ticks.
+    """
+    import asyncio
+
+    class _FakeResp:
+        status_code = 200
+        text = ""
+
+    captured: dict = {}
+
+    class _FakeHttp:
+        async def post(self, url, content=None, headers=None):
+            captured["body"] = json.loads(content)
+            return _FakeResp()
+
+    config = EdenConfig(org_id="o", api_key="k")
+    client = EdenClient(config)
+    try:
+        client._chunk_buffer_max = 4
+        # Simulate a producer that piled up 10 chunks between
+        # worker ticks (e.g. a fast streaming response).
+        for i in range(10):
+            client._chunk_buffer.append(
+                {
+                    "event_id": "e",
+                    "trace_id": "t",
+                    "chunk_index": i,
+                    "delta_text": f"chunk-{i}",
+                    "ttft_ms": 1.0,
+                    "itl_ms": None,
+                    "tpot_ms": None,
+                    "received_at_client_ms": 0,
+                }
+            )
+        client._http = _FakeHttp()
+        asyncio.run(client._send_chunks())
+        # The shipped batch is at most ``_chunk_buffer_max`` entries.
+        assert len(captured["body"]["chunks"]) == 4
+        # It is the *tail* of the input (oldest dropped).
+        assert captured["body"]["chunks"][0]["chunk_index"] == 6
+        assert captured["body"]["chunks"][-1]["chunk_index"] == 9
+        # Eviction was counted.
+        assert client.dropped == 6
+    finally:
+        client.shutdown()

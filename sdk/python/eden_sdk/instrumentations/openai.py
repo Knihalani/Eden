@@ -20,6 +20,7 @@ import logging
 import time
 from typing import Any
 
+from eden_sdk._instrumentation_ids import _get_attr, _trace_id_or_random
 from eden_sdk._tokens import extract_usage, normalize_model_name
 from eden_sdk.client import TraceEvent, get_default_client
 from eden_sdk.config import get_config
@@ -545,19 +546,3 @@ def _extract_model(kwargs: dict) -> str | None:
     return m if isinstance(m, str) else None
 
 
-def _get_attr(obj: Any, name: str) -> Any:
-    if obj is None:
-        return None
-    if isinstance(obj, dict):
-        return obj.get(name)
-    return getattr(obj, name, None)
-
-
-def _trace_id_or_random() -> str:
-    """Return the active trace id, or a fresh random one."""
-    from eden_sdk.trace import current_trace as _ct
-    ctx = _ct()
-    if ctx is not None:
-        return ctx.trace_id
-    import uuid
-    return uuid.uuid4().hex

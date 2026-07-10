@@ -4,6 +4,270 @@ All notable changes to the Eden TypeScript SDK are documented here. The
 format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## 0.2.27 — 2026-07-09
+
+Bug-fix release.
+
+### Fixed
+- All four auto-instrumentations
+  (``openai.ts``, ``anthropic.ts``, ``langchain.ts``,
+  ``vercel-ai.ts``) used to store only the **class name**
+  of a thrown error (e.g. ``error_type: "Error"``) and
+  drop the message on the wire. The Python SDK's
+  instrumentations have always captured both
+  (``error=repr(exc)``) and the trace ``recordError`` path
+  also captures the message; a thrown
+  ``new Error("rate limit")`` from a TypeScript
+  instrumented call landed on the wire as just
+  ``error_type: "Error"`` and two distinct ``Error``
+  throws were indistinguishable in the portal's trace
+  detail view. The shared ``errorClass`` /
+  ``errorMessage`` helpers (added to ``ids.ts``) are
+  now used by every catch block, so each
+  ``llm_completion`` / ``llm_completion_stream`` event
+  also carries an ``error_message`` field on the wire.
+  Mirrors the Python SDK's existing wire shape so the
+  portal renders identical error rows for events from
+  either language.
+- ``tokens.coerceInt`` (used by ``extractUsage``) used to
+  accept any finite number, including fractional
+  floats (``coerceInt(0.7) === 0.7``). The
+  ``_coerce_int`` Python helper has been strict since
+  0.2.9 and rejects fractional values; the TS path
+  silently disagreed and let ``0.7`` propagate through
+  to ``input_tokens`` and bill a call for a fractional
+  token. The shared helper now mirrors Python's
+  behaviour: whole-number floats round-trip, but
+  fractional floats and fractional strings return
+  ``null`` (and the matching field is omitted from the
+  wire payload). NaN / infinity / empty-string inputs
+  are also rejected.
+
+### Added
+- ``ids.errorClass(err)`` and ``ids.errorMessage(err)``
+  shared helpers. The class helper always returns a
+  non-empty string for any throw shape (``Error``,
+  ``null``, ``undefined``, primitives, plain objects,
+  arrays); the message helper returns ``undefined`` for
+  ``null`` / ``undefined`` and a stringified form
+  otherwise (with a ``JSON.stringify`` fallback for
+  objects so circular refs don't crash the cleanup
+  path).
+
+### Tests
+- 1 new test in ``tests/instrumentations.test.ts``:
+  ``wrapOpenAI > captures errors without breaking the
+  call`` now also asserts the message is on the wire.
+- 1 new test in ``tests/instrumentations.test.ts``:
+  ``wrapOpenAI > captures the error message for
+  non-Error throws (object, primitive, string)`` — pins
+  the four non-``Error`` throw shapes (``TypeError``,
+  string, number, plain object) all produce a non-empty
+  ``error_type`` string.
+- 4 new tests in ``tests/tokens.test.ts``:
+  ``whole-number floats round-trip as integers``,
+  ``fractional floats are dropped``,
+  ``fractional strings are dropped``,
+  ``NaN and infinities are rejected``.
+- TS: 178/178 tests pass; ``tsc --noEmit`` clean.
+
+## 0.2.26 — 2026-07-09
+
+Bug-fix + resilience release.
+
+### Fixed
+- `model_advisor.ModelAdvisor.post<T>` returned
+  `null as T` on a 200 with an empty body (interrupted
+  chunked response, missing ``Content-Type``, or a
+  proxy that swallowed the reply). The caller's
+  ``comparisonFromApi(null)`` then blew up later with a
+  cryptic ``Cannot read property 'current' of null``
+  with no mention of the network at all. Now the SDK
+  throws a typed ``ModelAdvisorError(200, "empty
+  response body", null)`` so the caller can surface a
+  clear message and the rest of any retry / circuit-
+  breaker logic can react.
+- `trace.TraceController.recordError` (used by
+  `trace()` and `@traceAgent`) crashed on non-`Error`
+  throws. The previous code did
+  ``err.constructor.name`` unconditionally, so throwing
+  ``null``, ``undefined``, a plain object, or a
+  primitive caused a ``TypeError`` in the cleanup
+  path and the trace was emitted with no error
+  context. Now the method handles every shape:
+  `Error` (class + message), `null`, `undefined`,
+  objects (via `JSON.stringify` with a circular-ref
+  fallback to `Object.prototype.toString`), and
+  primitives (`String(...)`).
+- `client.EdenSDK` (the background flush + chunk
+  timer): the three internal `setTimeout` handles
+  (`bufferChunk` chunk timer, `scheduleFlush` flush
+  timer, `_postChunksTracked` re-arm) were not
+  unref'd. The Node.js event loop therefore held the
+  process open until each timer's first firing, which
+  in a short-lived script (e.g. a one-off benchmark,
+  a serverless function that did a single
+  `eden.shutdown()`) could keep the runtime alive
+  for up to a full ``flushIntervalMs`` after the
+  work was done. All three now call
+  ``.unref()`` when available, mirroring the
+  well-known Node.js pattern for background
+  intervals. The behaviour is unchanged on Deno /
+  Bun (where unref is a no-op).
+
+### Tests
+- 1 new test in `tests/model_advisor.test.ts`:
+  `raises ModelAdvisorError on 200 with empty body`.
+- 3 new tests in `tests/trace.test.ts`:
+  `recordError handles null`, `recordError handles
+  primitive`, `recordError handles circular object`.
+- 2 new tests in `tests/client.test.ts`:
+  `setTimeout handles are unref'd in
+  scheduleFlush` and `_postChunksTracked` (pins the
+  three unref sites by inspecting the active
+  timer list).
+- TS: 173/173 tests pass; `tsc --noEmit` clean.
+
+## 0.2.25 — 2026-07-09
+
+Bug-fix release.
+
+### Fixed
+- `trace.TraceController` (the `@traceAgent` / `trace()`
+  path) used to emit ``eventType: "agent_call"`` on the
+  wire. The gateway's promotion / cost-savings roll-ups
+  query ``WHERE event_type = 'agent.run'``
+  (``src/eden/llmops/promotion.py:161``), so the previous
+  value silently dropped **every TS-traced agent run**
+  from the cost-savings widgets and the monthly report
+  emails. The Python SDK already emits
+  ``event_type: "agent.run"``, so this was a wire-contract
+  regression introduced in 0.2.18 (commit ``aaab8f63``).
+  Now the TS SDK emits the canonical ``"agent.run"`` and
+  the gateway filters match.
+
+### Tests
+- 1 new test in `tests/trace.test.ts`: end-to-end wire
+  contract regression — runs a real `trace()` emit and
+  pins that the wire body has exactly one event with
+  ``event_type === "agent.run"`` and zero events with
+  the old ``"agent_call"`` value.
+- Updated 9 test assertions across `tests/trace.test.ts`,
+  `tests/wire.test.ts`, `tests/edge.test.ts`, and
+  `tests/client.test.ts` to assert against the new value.
+- TS: 167/167 tests pass; `tsc --noEmit` clean.
+
+## 0.2.24 — 2026-07-09
+
+Bug-fix + resilience release.
+
+### Fixed
+- `client.EdenSDK.bufferChunk`: cap the chunk buffer at
+  `maxChunkBuffer` (default 4096) entries and drop the
+  oldest on overflow. The TS buffer had no upper bound
+  (parallel to the Python bug fixed in 0.2.13); a
+  runaway streaming producer pushing millions of small
+  chunks would OOM the process before this. Mirrors the
+  Python SDK's `_chunk_buffer_max` from 0.2.13 so both
+  SDKs surface identical resilience guarantees on the
+  same gateway-side rate-limit configuration.
+- `client.TraceController` decorator path
+  (`@traceAgent`): the wrapped method stored only
+  `err.constructor.name` (just the class name) on
+  `controller.error` when the underlying call threw.
+  `finishTrace` splits `controller.error` on the first
+  `": "` into `error_type` + `error_message`, so the TS
+  decorator path was emitting `error_type: "TypeError"`
+  with `error_message: null` for every decorator-thrown
+  exception — silently dropping the human-readable
+  error message that the portal surfaces in the trace
+  detail view. The Python SDK's `@trace_agent` and the
+  TS callback-form `trace()` both captured the full
+  message. Now the decorator path uses
+  `controller.recordError(err)` (the same helper the
+  callback form uses) so the wire payload matches.
+
+### Added
+- `client.EdenSDKOptions.maxChunkBuffer` — new
+  constructor option (default 4096). Tunable via
+  `new EdenSDK({ maxChunkBuffer: N })`.
+
+### Tests
+- 3 new tests in `tests/client.test.ts` and
+  `tests/trace.test.ts`:
+  - `chunk buffer cap > drops oldest chunks when
+    maxChunkBuffer is exceeded` (pins the buffer
+    eviction end-to-end through `bufferChunk`).
+  - `traceAgent() > captures the error MESSAGE (not
+    just the class name) on sync throws` — regression
+    pinning the sync throw path.
+  - `traceAgent() > captures the error MESSAGE on async
+    rejects (regression)` — same for async.
+- 166/166 TS tests pass; `tsc --noEmit` clean.
+- Python SDK unchanged this turn: 209/209 still pass.
+
+## 0.2.23 — 2026-07-09
+
+Bug-fix release.
+
+### Fixed
+- `client.EdenSDK.postJson`: parse the `Retry-After`
+  response header per RFC 7231 — accept both the
+  delta-seconds form (`"5"`) and the HTTP-date form
+  (`"Wed, 21 Oct 2015 07:28:00 GMT"`). The previous
+  implementation did `parseFloat(retryAfter) * 1000` and
+  capped with `Number.isFinite`; on an HTTP-date
+  `parseFloat` returns `NaN`, `Math.min(NaN, 30_000)` is
+  `NaN`, `Number.isFinite(NaN)` is false — so the wait
+  was skipped entirely and the retry happened immediately,
+  hammering the server. The new ``parseRetryAfterMs``
+  helper handles both forms; past HTTP-dates clamp to 0
+  ("retry now"); far-future dates are capped at 30s to
+  keep the worker responsive. Mirrors the Python SDK's
+  `_parse_retry_after` from 0.2.13 so a single
+  gateway-side retry policy drives both SDKs identically.
+- `client.EdenSDK.dispose`: reorder the chunk-path
+  teardown so the in-flight chunk POST is awaited
+  BEFORE the ``chunkInflight`` flag is released. The
+  previous order (set flag false → await promise) left
+  a window where a concurrent ``flushChunks()`` could
+  see the slot as free and produce a phantom POST with
+  an empty body. Mirrors the batch-path handling that
+  the previous fix already got right.
+
+### Tests
+- 7 new tests in `tests/client.test.ts`:
+  - 5 unit tests for ``parseRetryAfterMs`` covering
+    delta-seconds, future HTTP-date, past HTTP-date,
+    garbage input, and the 30s cap.
+  - 1 regression test pinning the HTTP-date retry path
+    end-to-end on a 503 with an HTTP-date header.
+  - 1 regression test mirroring the existing batch-path
+    dispose() inflight test for the chunk path.
+  - 163/163 TS tests pass; ``tsc --noEmit`` clean.
+
+## 0.2.22 — 2026-07-09
+
+Refactor release.
+
+### Changed
+- Extracted the per-instrumentation `randomId()` helper into
+  a new shared module `src/ids.ts`. Each of the four
+  instrumentations (OpenAI, Anthropic, Vercel AI, LangChain)
+  previously carried its own copy of the same 6-line
+  `Date.now().toString(36) + Math.random().toString(36)`
+  function — a divergence hazard (a fix to one
+  instrumentation's id shape would silently leave the
+  others emitting a different id). The id shape on the wire
+  is unchanged, so existing consumers (the gateway's
+  per-event `trace_id` + `event_id` columns, the portal's
+  URL fragments) keep working without any contract change.
+
+### Tests
+- 3 new tests in `ids.test.ts` pinning the shared helper
+  (id length 8-24 chars, URL-safe base-36 characters,
+  unique across 1000 calls).
+
 ## 0.2.21 — 2026-07-09
 
 Bug-fix + parity release.

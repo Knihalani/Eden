@@ -29,6 +29,7 @@ const DEFAULT_MAX_BATCH_SIZE = 50;
 const DEFAULT_MAX_QUEUE_SIZE = 4096;
 const DEFAULT_TIMEOUT_S = 5;
 const DEFAULT_FLUSH_INTERVAL_MS = 250;
+const DEFAULT_MAX_CHUNK_BUFFER = 4096;
 
 
 // ── Configuration ─────────────────────────────────────────────────
@@ -57,6 +58,20 @@ export interface ResolvedConfig {
   maxBatchSize: number;
   maxQueueSize: number;
   flushIntervalMs: number;
+  /**
+   * Upper bound on the streaming chunk buffer. A runaway
+   * streaming response (millions of small chunks) would
+   * OOM the process without this cap — the producer thread
+   * can push faster than the worker thread can flush, and
+   * the buffer would grow without bound. Mirrors the Python
+   * SDK's ``_chunk_buffer_max`` (added in 0.2.13). On
+   * overflow the oldest chunks are dropped and a debug log
+   * is emitted (the user's model output is lossy in
+   * extreme cases, but the aggregate event still ships
+   * because the per-chunk TTFT/ITL/TPOT dashboards only
+   * need a representative sample).
+   */
+  maxChunkBuffer: number;
   /** Per-request timeout in seconds. Defaults to 5. Mirrors Python's ``timeout_s``. */
   timeoutS: number;
   /**
@@ -96,6 +111,7 @@ export function resolveConfig(opts: EdenSDKOptions = {}): ResolvedConfig {
   const strict = opts.strict ?? false;
   const maxBatchSize = opts.maxBatchSize ?? DEFAULT_MAX_BATCH_SIZE;
   const maxQueueSize = opts.maxQueueSize ?? DEFAULT_MAX_QUEUE_SIZE;
+  const maxChunkBuffer = opts.maxChunkBuffer ?? DEFAULT_MAX_CHUNK_BUFFER;
   const flushIntervalMs = opts.flushIntervalMs ?? DEFAULT_FLUSH_INTERVAL_MS;
   const timeoutS = opts.timeoutS ?? DEFAULT_TIMEOUT_S;
   const disabled = opts.disabled ?? false;
@@ -134,6 +150,7 @@ export function resolveConfig(opts: EdenSDKOptions = {}): ResolvedConfig {
     maxBatchSize,
     maxQueueSize,
     flushIntervalMs,
+    maxChunkBuffer,
     timeoutS,
     disabled,
     redactOnClient,
@@ -153,6 +170,39 @@ export function resolvedGatewayUrl(cfg: ResolvedConfig): string {
   return `${base}/v1`;
 }
 
+
+/**
+ * Parse a ``Retry-After`` response header (RFC 7231).
+ *
+ * Accepts either the delta-seconds form (``"5"``) or an
+ * HTTP-date (``"Wed, 21 Oct 2015 07:28:00 GMT"``). Returns
+ * the milliseconds to wait, capped at 30s, falling back to
+ * ``fallbackMs`` on any parse failure so a malformed header
+ * never wedges the retry loop.
+ *
+ * Mirrors :meth:`EdenClient._parse_retry_after` in the Python
+ * SDK -- the two SDKs must surface identical behaviour for
+ * both header forms so a single gateway-side retry policy
+ * drives both.
+ */
+export function parseRetryAfterMs(value: string, fallbackMs: number): number {
+  // Fast path: integer / float seconds.
+  const seconds = parseFloat(value);
+  if (Number.isFinite(seconds) && seconds >= 0) {
+    return Math.min(seconds * 1000, 30_000);
+  }
+  // Slow path: HTTP-date. ``Date.parse`` accepts the RFC 1123 /
+  // 7231 format used by every real gateway and returns NaN for
+  // anything else.
+  const ts = Date.parse(value);
+  if (!Number.isFinite(ts)) return fallbackMs;
+  const delta = ts - Date.now();
+  // Past HTTP-date means "retry now" -- clamp to 0 so we don't
+  // accidentally back off further. A far-future date is capped
+  // to keep the worker responsive.
+  if (delta <= 0) return 0;
+  return Math.min(delta, 30_000);
+}
 /**
  * Per-call overrides for {@link EdenSDK.gatewayHeaders}. Mirrors
  * the kwarg shape of `EdenConfig.gateway_headers()` in the Python SDK.
@@ -293,6 +343,24 @@ export class EdenSDK {
    */
   bufferChunk(chunk: StreamChunk): void {
     if (this.disposed) return;
+    // Cap the chunk buffer at ``maxChunkBuffer`` entries.
+    // Drop the oldest on overflow (a runaway streaming
+    // response producing millions of small chunks would
+    // OOM the process before this). Mirrors the Python
+    // SDK's ``_chunk_buffer_max`` from 0.2.13. We use
+    // ``shift`` (O(n)) rather than a deque because the
+    // producer pace is throttled by the worker tick
+    // (default 250ms) so total work per cycle stays
+    // bounded.
+    if (this.chunkBuffer.length >= this.config.maxChunkBuffer) {
+      this.chunkBuffer.shift();
+      if (this.config.debug) {
+        // eslint-disable-next-line no-console
+        console.debug(
+          "[eden-ai] chunk buffer overflow, dropped oldest",
+        );
+      }
+    }
     this.chunkBuffer.push(chunk);
     if (this.chunkBuffer.length >= this.config.maxBatchSize) {
       // Trigger an immediate flush. ``flushChunks()`` itself
@@ -306,6 +374,15 @@ export class EdenSDK {
         this.chunkTimer = null;
         void this.flushChunks();
       }, this.config.flushIntervalMs);
+      // ``.unref()`` lets the timer exit with the process.
+      // Without this, a short-lived script that armed a
+      // chunk timer (and then finished its work) would
+      // hang for ``flushIntervalMs`` (default 250ms) after
+      // the last user code ran -- a real problem in CLI
+      // tools and short-lived scripts.
+      if (typeof this.chunkTimer.unref === "function") {
+        this.chunkTimer.unref();
+      }
     }
   }
 
@@ -371,6 +448,12 @@ export class EdenSDK {
       this.flushTimer = null;
       void this.flush();
     }, this.config.flushIntervalMs);
+    // ``.unref()`` so a short-lived script doesn't hang on
+    // the last arm'd timer. See the matching comment in
+    // ``bufferChunk`` for the full rationale.
+    if (typeof this.flushTimer.unref === "function") {
+      this.flushTimer.unref();
+    }
   }
 
   /**
@@ -439,6 +522,9 @@ export class EdenSDK {
         this.chunkTimer = null;
         void this.flushChunks();
       }, this.config.flushIntervalMs);
+      if (typeof this.chunkTimer.unref === "function") {
+        this.chunkTimer.unref();
+      }
     }
   }
 
@@ -465,11 +551,20 @@ export class EdenSDK {
       await this.inflightPromise;
       this.inflightPromise = null;
     }
-    this.chunkInflight = false;
+    // Wait for the in-flight chunk POST (if any) BEFORE
+    // releasing the chunkInflight slot. Mirrors the batch
+    // path above: the previous code set the flag to false
+    // BEFORE awaiting the tracked promise, so a concurrent
+    // ``flushChunks()`` call during the ``dispose()`` window
+    // could see ``chunkInflight === false`` and grab the
+    // (already-shipped) buffer -- producing a phantom POST
+    // with an empty body. The order matters: await the POST
+    // first, then release the slot.
     if (this.chunkInflightPromise) {
       await this.chunkInflightPromise;
       this.chunkInflightPromise = null;
     }
+    this.chunkInflight = false;
     await Promise.allSettled([this.flush(), this.flushChunks()]);
   }
 
@@ -596,12 +691,19 @@ export class EdenSDK {
           }
           return;
         }
-        // Honour Retry-After (seconds) or default exponential backoff.
+        // Honour Retry-After if present. RFC 7231 allows either a
+        // delta-seconds integer ("5") or an HTTP-date
+        // ("Wed, 21 Oct 2015 07:28:00 GMT"); the previous code only
+        // handled the former (parseFloat on the HTTP-date form
+        // returned NaN, Number.isFinite(NaN) was false, so the
+        // retry skipped the wait entirely -- hammering the
+        // server instead of backing off). Delegate to the shared
+        // helper so the TS and Python SDKs surface identical
+        // behaviour for both header forms.
         const ra = res.headers.get("retry-after");
-        const delayMs = ra
-          ? Math.min(parseFloat(ra) * 1000, 30_000)
-          : Math.min(BASE_DELAY_MS * 2 ** (attempt - 1), 5_000);
-        if (Number.isFinite(delayMs) && delayMs > 0) {
+        const fallbackMs = Math.min(BASE_DELAY_MS * 2 ** (attempt - 1), 5_000);
+        const delayMs = ra ? parseRetryAfterMs(ra, fallbackMs) : fallbackMs;
+        if (delayMs > 0) {
           await new Promise((r) => setTimeout(r, delayMs));
         }
       } catch (err) {

@@ -4,6 +4,229 @@ All notable changes to the Eden Python SDK are documented here. The
 format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## 0.2.19 — 2026-07-09
+
+### Fixed
+- All four framework auto-instrumentations
+  (``instrumentations/autogen.py``,
+  ``instrumentations/crewai.py``,
+  ``instrumentations/langchain.py``,
+  ``instrumentations/llama_index.py``) used to emit
+  ``event_type: "framework.callback"`` on the wire. The
+  gateway's promotion / cost-savings rollups
+  (``src/eden/llmops/promotion.py:161``) filter on
+  ``WHERE event_type = 'agent.run'``, so every framework
+  callback was silently dropped from those reports AND
+  from the portal's monthly cost-savings widget. The
+  ``@trace_agent`` decorator path already emitted
+  ``agent.run`` (and the TS SDK was fixed in 0.2.25 for
+  the same reason); the framework instrumentations were
+  the last surface still on the old value. All four
+  now emit ``agent.run`` to match the SQL filter and
+  the rest of the SDK.
+
+### Tests
+- 1 new test in ``tests/test_instrumentations.py``:
+  ``test_framework_instrumentations_emit_agent_run_event_type``
+  — pins the wire contract by asserting the source of
+  each of the four instrumentations contains
+  ``"agent.run"`` and no longer references
+  ``"framework.callback"``.
+- 3 existing tests in ``tests/test_instrumentations.py``
+  updated to filter on ``agent.run`` instead of
+  ``framework.callback``.
+- 2 example scripts updated (``05_crewai.py``,
+  ``06_autogen.py``) so the docs match the new wire
+  value.
+- 211/211 Python tests pass (was 210).
+
+## 0.2.18 — 2026-07-09
+
+No SDK changes; this release bumps the version to track
+the parallel TypeScript SDK release (0.2.27). The TS SDK
+fixes two cross-SDK parity issues the Python SDK has
+had clean since 0.2.9 / 0.2.17:
+
+* **Error message capture in auto-instrumentations** —
+  TS instrumentations
+  (``openai``, ``anthropic``, ``langchain``, ``vercel-ai``)
+  used to emit only ``error_type`` and drop the
+  message; the Python SDK has always emitted
+  ``error=repr(exc)``. TS now captures both via the
+  shared ``errorClass`` / ``errorMessage`` helpers, so
+  the wire shape is identical regardless of which
+  language emitted the event.
+* **Fractional token count rejection** — TS
+  ``coerceInt`` used to accept fractional floats
+  (``0.7``) and bill a call for a fractional token;
+  the Python ``_coerce_int`` helper has been strict
+  since 0.2.9. TS now mirrors Python and rejects
+  fractional floats and fractional strings.
+
+210/210 Python tests still pass.
+
+## 0.2.17 — 2026-07-09
+
+Bug-fix + resilience release.
+
+### Fixed
+- `model_advisor.ModelAdvisor._post` raised a raw
+  ``json.JSONDecodeError`` on a 200 with an empty body
+  (interrupted chunked response, missing
+  ``Content-Type``, or a proxy that swallowed the
+  reply). Callers had no typed signal to tell
+  "server returned nothing" apart from "the server
+  gave us garbage". Now the SDK raises a typed
+  ``ModelAdvisorError(200, "empty response body", None)``
+  — mirrors the TS SDK fix in 0.2.26 so both
+  surfaces behave the same.
+
+### Tests
+- 1 new test in `tests/test_model_advisor.py`:
+  `test_compare_200_with_empty_body_raises`.
+- 210/210 Python tests pass (was 209).
+
+## 0.2.16 — 2026-07-09
+
+No SDK changes; tracks the parallel TypeScript SDK
+release (0.2.25). The TS SDK fixes a wire-contract
+regression where the ``@traceAgent`` / ``trace()`` path
+was emitting ``event_type: "agent_call"`` while the
+gateway's SQL filter expects ``agent.run`` (matching the
+Python SDK's existing value). Now both SDKs agree on
+``"agent.run"`` on the wire.
+
+209/209 Python tests still pass.
+
+## 0.2.15 — 2026-07-09
+
+No SDK changes; this release bumps the version to track
+the parallel TypeScript SDK release (0.2.24). The TS SDK
+fixes two issues the Python SDK already had parity on:
+
+* `bufferChunk` chunk-buffer cap (parallel to 0.2.13's
+  ``_chunk_buffer_max``) — TS now caps at
+  ``maxChunkBuffer`` (default 4096) and drops oldest on
+  overflow, matching the Python SDK's behavior.
+* `@traceAgent` error-message capture — TS now uses
+  ``controller.recordError(err)`` so the wire payload's
+  ``error_message`` is populated, matching the Python
+  SDK's ``@trace_agent``.
+
+209/209 Python tests still pass; mypy unchanged.
+
+## 0.2.14 — 2026-07-09
+
+Refactor + bug-fix release.
+
+### Fixed
+- `instrumentations.autogen`: a redundant ternary in the
+  `_reply_hook` did
+  `_trace_id_or_random() if current_trace() else uuid.uuid4().hex`.
+  The helper already returns the active trace id when one is
+  present and a fresh ``uuid4().hex`` otherwise — the inline
+  condition was a no-op that just made the code harder to
+  read. Now just `_trace_id_or_random()`.
+
+### Changed
+- New shared module ``eden_sdk._instrumentation_ids`` with
+  `_trace_id_or_random` and `_get_attr`. Previously, six
+  per-framework instrumentations (``openai``, ``anthropic``,
+  ``langchain``, ``crewai``, ``autogen``, ``llama_index``)
+  each carried their own byte-identical copy of
+  `_trace_id_or_random`, and two of them (OpenAI + Anthropic)
+  also had their own copy of `_get_attr`. Duplicated code is
+  a divergence hazard: a fix to one copy would silently
+  leave the others emitting a different ``trace_id`` on the
+  wire. Mirrors the TypeScript SDK's ``sdk/ts-ai/src/ids.ts``
+  shared module. Wire shape is unchanged.
+
+### Tests
+- 5 new tests in `test_instrumentation_ids.py` pin the wire
+  shape (``uuid4().hex`` 32 lowercase hex chars), the
+  active-context short-circuit, and ``_get_attr``'s None /
+  dict / object shapes. 209/209 Python tests pass.
+
+## 0.2.13 — 2026-07-09
+
+Bug-fix + resilience release.
+
+### Fixed
+- `client.EdenClient._run_loop`: wrap `asyncio.run(self._async_loop())`
+  in a `try`/`except` so a failure in `httpx.AsyncClient(...)`
+  construction (invalid transport, bad timeout, anything that
+  raises before `_loop_started.set()`) is logged at WARNING and
+  surfaces via a new `_loop_failed` latch. Without this, the
+  worker thread died silently, `start()` returned normally after
+  timing out on `_loop_started.wait(...)`, and every subsequent
+  `enqueue()` landed in a queue nothing drained — events
+  silently disappeared. `start()` now raises `RuntimeError` when
+  the latch reports a failed start, so the caller can react.
+- `client.EdenClient._send_batch`: parse the `Retry-After`
+  response header per RFC 7231 — accepts both the
+  delta-seconds form (`"5"`) and the HTTP-date form
+  (`"Wed, 21 Oct 2015 07:28:00 GMT"`). The previous
+  implementation did `float(retry_after)`, which raised
+  `ValueError` on HTTP-date and silently fell back to
+  exponential backoff, ignoring the gateway's explicit hint.
+  Past HTTP-dates clamp to 0 ("retry now"); far-future dates
+  are capped at 30s to keep the worker responsive.
+
+### Added
+- `client.EdenClient._enqueue_chunk`: producer-side helper that
+  pushes a streaming chunk with oldest-drop overflow
+  semantics, mirroring `enqueue()` for the regular event
+  queue. Existing instrumentations still append directly to
+  `self._chunk_buffer` (the cap is also enforced defensively
+  at flush time).
+- `client.EdenClient._chunk_buffer_max`: hard cap on the
+  streaming chunk buffer (4096 entries by default). A
+  runaway streaming response (millions of small chunks
+  between worker ticks) could OOM the process before this —
+  now oldest chunks are dropped with a warning on overflow,
+  both at enqueue time and at flush time.
+
+### Tests
+- 5 new tests in `test_client.py`:
+  - `test_start_raises_runtime_error_when_async_client_init_fails`
+    monkeypatches `httpx.AsyncClient` to raise during
+    construction and asserts `start()` now raises
+    `RuntimeError` (and the failure latch is flipped).
+  - 3 × `_parse_retry_after` tests cover delta-seconds,
+    future HTTP-date, past HTTP-date, and garbage input.
+  - `test_send_batch_retries_after_http_date_retry_after`
+    pins the end-to-end retry path with an HTTP-date header.
+  - 2 chunk-buffer tests pin the cap on `_enqueue_chunk` and
+    the defensive trim inside `_send_chunks` so
+    instrumentations that bypass the helper are also bounded.
+
+## 0.2.12 — 2026-07-09
+
+Bug-fix + parity release.
+
+### Fixed
+- `instrumentations.langchain._safe_llm_response`: walk the
+  ``LLMResult.generations`` and extract ``usage_metadata`` +
+  per-generation ``response_metadata`` from each
+  ``AIMessage``. Modern LangChain (0.1+) does NOT carry usage
+  in ``LLMResult.llm_output.token_usage`` (that field is
+  empty for modern chains), so the previous implementation
+  had no ``input_tokens`` /
+  ``cache_read_input_tokens`` /
+  ``cache_creation_input_tokens`` / ``model`` on the wire for
+  every non-streaming modern LangChain call — pricing
+  roll-ups missed every modern chain. The new path uses
+  ``setdefault`` semantics so the legacy path (which wins on
+  older LangChain versions where ``llm_output`` IS populated)
+  is not clobbered.
+
+### Tests
+- 2 new tests in `test_instrumentations.py` pinning the
+  modern + legacy paths (modern path surfaces
+  ``input_tokens`` / ``output_tokens`` / ``model`` from
+  ``usage_metadata`` + per-generation ``response_metadata``;
+  legacy path still wins when both are populated).
+
 ## 0.2.11 — 2026-07-09
 
 Bug-fix + parity release.
