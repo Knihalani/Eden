@@ -44,7 +44,7 @@ dependencies = [
     # API
     "fastapi>=0.115.0,<1.0.0",
     "uvicorn[standard]>=0.30.0,<1.0.0",
-    "pydantic>=2.9.0,<3.0.0",
+    "pydantic>=2.13.4,<3.0.0",
     "email-validator>=2.0.0,<3.0.0",
     "pydantic-settings>=2.14.2,<3.0.0",  # GHSA-4xgf-cpjx-pc3j fixed in 2.14.2
     "sse-starlette>=3.4.5,<4.0.0",
