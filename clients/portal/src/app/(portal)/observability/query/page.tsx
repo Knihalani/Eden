@@ -8,6 +8,7 @@ import { useToast } from "@/components/ui/toast";
 import { Alert } from "@/components/ui/alert";
 import { NoOrgState } from "@/components/ui/no-org-state";
 import { PageHeader } from "@/components/layout/page-header";
+import { PageContent } from "@/components/layout/page-content";
 import { Search, Loader2, Code2, AlertTriangle, CheckCircle2, Sparkles, ListChecks, Bell } from "lucide-react";
 import { motion } from "framer-motion";
 import { Card } from "@/components/ui/card";
@@ -183,7 +184,7 @@ export default function QueryDslPage() {
   if (!currentOrg) {
     return <NoOrgState icon={Search} feature="Trace Query DSL" description="Parse, lint, and resolve Eden Query Language (EQL) expressions once your org is configured." />;
   }
-  return <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-6">
+  return <PageContent size="wide">
       <PageHeader title="Query" subtitle="Trace Query DSL with EQL syntax over the columnar engine" icon={Sparkles} eyebrow="Observe" />
 
       {error && <Alert variant="error" title="Request failed" description={error} onDismiss={() => setError("")} />}
@@ -336,7 +337,7 @@ export default function QueryDslPage() {
           </Card>
         </div>
       </div>
-    </div>;
+    </PageContent>;
 }
 function ResultCard({
   title,

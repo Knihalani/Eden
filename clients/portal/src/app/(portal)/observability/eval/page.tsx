@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils";
 import { EmptyState } from "@/components/ui/empty-state";
 import { NoOrgState } from "@/components/ui/no-org-state";
 import { PageHeader } from "@/components/layout/page-header";
+import { PageContent } from "@/components/layout/page-content";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { motion, AnimatePresence } from "framer-motion";
 import { DataTable } from "@/components/ui/data-table";
@@ -47,7 +48,7 @@ export default function EvalPage() {
   } = useOrg();
   const [activeTab, setActiveTab] = useState<Tab>("versions");
   const [error, setError] = useState("");
-  return <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-6">
+  return <PageContent size="wide">
       <PageHeader title="Evaluation" subtitle="Judge scores, comparison, and quality signals" icon={BarChart3} eyebrow="Observe" />
 
       {error && <div className="bg-[var(--error-bg)] text-[var(--error)] text-sm px-4 py-3 rounded-xl flex items-center gap-2.5 border border-[var(--error)]/20">
@@ -108,7 +109,7 @@ export default function EvalPage() {
             </motion.div>
           </AnimatePresence>
         </>}
-    </div>;
+    </PageContent>;
 }
 
 // ──────────────────────────────────────────────────────────────────────────

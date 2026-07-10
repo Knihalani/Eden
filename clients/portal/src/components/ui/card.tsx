@@ -8,12 +8,12 @@ const cardVariants = cva(
   // `overflow-hidden` so long content (esp. with `rounded-xl`) can't
   // bleed past the corners; matches StatCard's contract so a grid
   // mixing Card and StatCard produces even rows. June 2026 fix.
-  "rounded-xl border border-[var(--border-default)] bg-[var(--bg-primary)] text-[var(--text-primary)] shadow-sm overflow-hidden",
+  "rounded-xl border border-[var(--border-default)] bg-[var(--bg-primary)] text-[var(--text-primary)] overflow-hidden",
   {
     variants: {
       variant: {
         default: "",
-        elevated: "bg-[var(--bg-secondary)] shadow-md",
+        elevated: "bg-[var(--bg-secondary)] border-[var(--border-strong)]",
         inset: "bg-[var(--bg-inset)]",
         interactive:
           "transition-all duration-200 ease-out card-hover-lift cursor-pointer hover:border-[var(--border-strong)]" },

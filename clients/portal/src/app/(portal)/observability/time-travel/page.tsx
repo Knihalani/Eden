@@ -8,6 +8,7 @@ import { useToast } from "@/components/ui/toast";
 import { Alert } from "@/components/ui/alert";
 import { NoOrgState } from "@/components/ui/no-org-state";
 import { PageHeader } from "@/components/layout/page-header";
+import { PageContent } from "@/components/layout/page-content";
 import { History, Loader2, Play, GitBranch, RotateCcw, Info, Circle, CheckCircle2, Code2 } from "lucide-react";
 import { motion } from "framer-motion";
 
@@ -183,7 +184,7 @@ export default function TimeTravelPage() {
   }
 
   return (
-    <div className="p-4 sm:p-6 lg:p-8 max-w-5xl mx-auto space-y-6">
+    <PageContent>
       <PageHeader
         title="Time-Travel"
         subtitle="Replay traces with point-in-time state restoration"
@@ -411,7 +412,7 @@ export default function TimeTravelPage() {
           </motion.div>
         )}
       </Panel>
-    </div>
+    </PageContent>
   );
 }
 

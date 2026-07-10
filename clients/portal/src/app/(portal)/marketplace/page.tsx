@@ -8,6 +8,7 @@ import { useOrg } from "@/hooks/use-org";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ErrorState } from "@/components/ui/error-state";
 import { PageHeader } from "@/components/layout/page-header";
+import { PageContent } from "@/components/layout/page-content";
 import { useToast } from "@/components/ui/toast";
 import { cn } from "@/lib/utils";
 
@@ -171,7 +172,7 @@ export default function MarketplacePage() {
   }
 
   return (
-    <div className="p-4 sm:p-6 lg:p-8 space-y-6 max-w-7xl mx-auto">
+    <PageContent size="wide">
       <PageHeader
         eyebrow="Build"
         title="Marketplace"
@@ -299,7 +300,7 @@ export default function MarketplacePage() {
           </div>
         )}
       </section>
-    </div>
+    </PageContent>
   );
 }
 

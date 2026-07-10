@@ -9,6 +9,7 @@ import { PageHeader } from "@/components/layout/page-header";
 import { motion, AnimatePresence } from "framer-motion";
 import { Compass, Loader2, AlertTriangle, GitBranch, Lightbulb, ChevronDown, ChevronRight, ArrowRight, Info, Sparkles, Play } from "lucide-react";
 import { Card } from "@/components/ui/card";
+import { PageContent } from "@/components/layout/page-content";
 interface Decision {
   step_index: number;
   decision: string;
@@ -89,7 +90,7 @@ export default function DecisionsPage() {
         <NoOrgState icon={Compass} feature="Decision Intelligence" description="Step-by-step reasoning with alternatives considered — choose an organization to begin." />
       </div>;
   }
-  return <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-6">
+  return <PageContent size="wide">
       <PageHeader title="Decisions" subtitle="Trace the choice points in your agent's reasoning" icon={Compass} eyebrow="Observe" />
 
       {error && <div className="bg-[var(--error-bg)] text-[var(--error)] text-sm px-4 py-3 rounded-xl flex items-center gap-2.5 border border-[var(--error)]/20">
@@ -219,7 +220,7 @@ export default function DecisionsPage() {
             </motion.div> : null}
         </AnimatePresence>
       </section>
-    </div>;
+    </PageContent>;
 }
 
 // ──────────────────────────────────────────────────────────────────────────

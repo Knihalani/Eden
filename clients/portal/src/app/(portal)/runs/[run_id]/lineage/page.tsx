@@ -9,6 +9,7 @@ import { Card } from "@/components/ui/card";
 import { NoOrgState } from "@/components/ui/no-org-state";
 import { ErrorState } from "@/components/ui/error-state";
 import { PageHeader } from "@/components/layout/page-header";
+import { PageContent } from "@/components/layout/page-content";
 import {
   ArrowLeft,
   Network,
@@ -123,7 +124,7 @@ export default function FineTuneLineagePage() {
     | null;
 
   return (
-    <div className="p-4 sm:p-6 lg:p-8 max-w-5xl mx-auto space-y-6">
+    <PageContent size="default">
       <Link
         href="/observability"
         className="inline-flex items-center gap-2 text-sm text-[var(--text-secondary)] hover:text-[var(--accent)]"
@@ -240,7 +241,8 @@ export default function FineTuneLineagePage() {
           </ul>
         </Card>
       </div>
-    </div>
+    
+    </PageContent>
   );
 }
 

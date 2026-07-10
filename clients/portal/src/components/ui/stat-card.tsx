@@ -75,7 +75,7 @@ export function StatCard({
     <div
       className={cn(
         "bg-[var(--bg-primary)] rounded-xl p-5 border border-[var(--border-default)] h-full",
-        "transition-all duration-200 ease-out hover:border-[var(--border-strong)] hover:shadow-md",
+        "transition-all duration-200 ease-out hover:border-[var(--border-strong)]",
         className,
       )}
     >

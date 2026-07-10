@@ -14,6 +14,7 @@ import { ArrowLeft, ExternalLink, GitBranch } from "lucide-react";
 import { OnboardingConnectFlow } from "@/components/onboarding/OnboardingConnectFlow";
 import { NoOrgState } from "@/components/ui/no-org-state";
 import { PageHeader } from "@/components/layout/page-header";
+import { PageContent } from "@/components/layout/page-content";
 import { usePermissions } from "@/hooks/use-permissions";
 import type { OnboardingPRRun } from "@/lib/api";
 
@@ -38,7 +39,7 @@ export default function ConnectAgentPage() {
   }
 
   return (
-    <div className="mx-auto max-w-3xl p-4 sm:p-6 lg:p-8">
+    <PageContent size="narrow">
       <Link
         href="/agents"
         className="inline-flex items-center gap-1 text-sm text-[var(--text-muted)] hover:text-[var(--text-primary)] mb-3 transition-colors"
@@ -76,6 +77,7 @@ export default function ConnectAgentPage() {
       )}
 
       <OnboardingConnectFlow onIntegrated={setLastRun} />
-    </div>
+    
+    </PageContent>
   );
 }

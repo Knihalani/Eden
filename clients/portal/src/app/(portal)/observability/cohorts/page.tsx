@@ -7,6 +7,7 @@ import { API_BASE } from "@/lib/api";
 import { useToast } from "@/components/ui/toast";
 import { NoOrgState } from "@/components/ui/no-org-state";
 import { PageHeader } from "@/components/layout/page-header";
+import { PageContent } from "@/components/layout/page-content";
 import { Database, Play, Layers, RefreshCw, Loader2, AlertTriangle, Archive, FileText } from "lucide-react";
 import { motion } from "framer-motion";
 import { Card } from "@/components/ui/card";
@@ -181,7 +182,7 @@ export default function CohortsPage() {
   if (!currentOrg) {
     return <NoOrgState icon={Database} feature="Columnar Engine" description="Run read-only SQL across ClickHouse partitions and precomputed rollups once your org is configured." />;
   }
-  return <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-6">
+  return <PageContent size="wide">
       <PageHeader title="Columnar Engine" subtitle="Read-only SQL across per-org monthly partitions with hourly / daily / weekly rollups" icon={Database} eyebrow="Observe" />
 
       {/* Maintenance actions */}
@@ -273,5 +274,5 @@ export default function CohortsPage() {
           <Database className="w-10 h-10 mx-auto mb-2 text-[var(--text-muted)] opacity-40" />
           <p className="text-sm text-[var(--text-muted)]">No results yet. Click Run to execute your query.</p>
         </Card>}
-    </div>;
+    </PageContent>;
 }

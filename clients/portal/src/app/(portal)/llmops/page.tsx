@@ -8,6 +8,7 @@ import { StatCard } from "@/components/ui/stat-card";
 import { NoOrgState } from "@/components/ui/no-org-state";
 import { useToast } from "@/components/ui/toast";
 import { PageHeader } from "@/components/layout/page-header";
+import { PageContent } from "@/components/layout/page-content";
 import { DataTable } from "@/components/ui/data-table";
 import { Cpu, Box, MessageSquare, FlaskConical, SplitSquareHorizontal, ShieldCheck, ActivitySquare, Database, Loader2, AlertCircle, CheckCircle2, TrendingUp, Clock, AlertTriangle, XCircle, Search, RefreshCw, Trash2, BarChart3, Gauge, Server, Hash, Play, GitCommit } from "lucide-react";
 
@@ -64,7 +65,7 @@ export default function LLMOpsPage() {
   if (!currentOrg) {
     return <NoOrgState feature="LLMOps" />;
   }
-  return <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-6">
+  return <PageContent size="wide">
       <PageHeader title="LLMOps & Experiments" subtitle="Model registry, prompt management, experiment tracking, and production monitoring" icon={Cpu} eyebrow="Operate" />
 
       {/* Tab Navigation */}
@@ -104,7 +105,7 @@ export default function LLMOpsPage() {
           {activeTab === "monitoring" && <MonitoringTab orgId={orgId} />}
           {activeTab === "cache" && <CacheTab orgId={orgId} />}
         </div>}
-    </div>;
+    </PageContent>;
 }
 
 // ──────────────────────────────────────────────────────────────────────────

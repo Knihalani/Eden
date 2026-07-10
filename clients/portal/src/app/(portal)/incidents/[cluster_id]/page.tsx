@@ -10,6 +10,7 @@ import { SeverityBadge } from "@/components/ui/status-badge";
 import { NoOrgState } from "@/components/ui/no-org-state";
 import { useToast } from "@/components/ui/toast";
 import { PageHeader } from "@/components/layout/page-header";
+import { PageContent } from "@/components/layout/page-content";
 import { AlertOctagon, AlertTriangle, ArrowLeft, CheckCircle2, ChevronRight, Loader2, Network } from "lucide-react";
 import { Card } from "@/components/ui/card";
 const rcaApi = {
@@ -115,7 +116,7 @@ export default function IncidentDetailPage() {
   if (!currentOrg) {
     return <NoOrgState icon={AlertOctagon} feature="Incident Detail" description="Cluster-level RCA detail will appear once your organization is configured." />;
   }
-  return <div className=" p-4 sm:p-6 lg:p-8 max-w-5xl mx-auto space-y-6">
+  return <PageContent size="default">
       <div>
         <Link href="/incidents" className="inline-flex items-center gap-1.5 text-xs text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors">
           <ArrowLeft className="w-3.5 h-3.5" />
@@ -214,7 +215,7 @@ export default function IncidentDetailPage() {
               </ul>}
           </Card>
         </> : null}
-    </div>;
+    </PageContent>;
 }
 function formatTime(iso?: string): string {
   if (!iso) return "—";

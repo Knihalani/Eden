@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { DataTable, DataTableSearch } from "@/components/ui/data-table";
 import { NoOrgState } from "@/components/ui/no-org-state";
 import { PageHeader } from "@/components/layout/page-header";
+import { PageContent } from "@/components/layout/page-content";
 import { useToast } from "@/components/ui/toast";
 import { RefreshCw, Rewind } from "lucide-react";
 import { debuggerApi, type Checkpoint } from "@/lib/api";
@@ -45,7 +46,7 @@ export default function DebuggerPage() {
   });
 
   return (
-    <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-6">
+    <PageContent size="wide">
       <PageHeader
         title="Agent debugger"
         subtitle="Time-travel checkpoints. Rewind a trace to a saved state and replay from there."
@@ -93,6 +94,7 @@ export default function DebuggerPage() {
           ]}
         />
       </Card>
-    </div>
+    
+    </PageContent>
   );
 }

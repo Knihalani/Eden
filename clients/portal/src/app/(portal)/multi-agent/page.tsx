@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { StatCard } from "@/components/ui/stat-card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { PageHeader } from "@/components/layout/page-header";
+import { PageContent } from "@/components/layout/page-content";
 import { useToast } from "@/components/ui/toast";
 import { useConfirm } from "@/hooks/use-confirm";
 import { Plus, Trash2, Send, MessageSquare, Users, BrainCircuit, MemoryStick, FlaskConical, ShieldCheck, ChevronRight, Play, RefreshCw, CheckCircle, XCircle, Activity, Server, Network, FileText, GitCommit, AlertTriangle } from "lucide-react";
@@ -97,7 +98,7 @@ export default function MultiAgentPage() {
       e.preventDefault();
     }
   }, [activeTab]);
-  return <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-6" onKeyDown={handleKeyDown}>
+  return <PageContent size="wide">
       <PageHeader eyebrow="Build" title="Multi-Agent Environments" subtitle="Orchestrate, observe, and evaluate multi-agent systems" icon={Users} actions={<Button size="sm" variant="outline" onClick={refresh} loading={loading} aria-label="Refresh environments">
             <RefreshCw className="w-4 h-4 mr-1.5" />
             Refresh
@@ -121,7 +122,7 @@ export default function MultiAgentPage() {
       </div>
 
       {/* Tabs */}
-      <div className="border-b border-[var(--border-default)]" role="tablist" aria-label="Multi-Agent sections">
+      <div className="border-b border-[var(--border-default)]" role="tablist" aria-label="Multi-Agent sections" onKeyDown={handleKeyDown}>
         <div className="flex gap-1 overflow-x-auto">
           {([{
           key: "environments",
@@ -173,7 +174,7 @@ export default function MultiAgentPage() {
         {activeTab === "hitl" && <HitlTab env={selectedEnv} orgId={orgId} />}
       </div>
       {ConfirmDialog}
-    </div>;
+    </PageContent>;
 }
 
 // ──────────────────────────────────────────────────────────────────────────

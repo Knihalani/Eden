@@ -13,6 +13,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { ErrorState } from "@/components/ui/error-state";
 import { NoOrgState } from "@/components/ui/no-org-state";
 import { PageHeader } from "@/components/layout/page-header";
+import { PageContent } from "@/components/layout/page-content";
 import {
   Search,
   ChevronRight,
@@ -217,7 +218,7 @@ export default function TraceInspectorPage() {
     // from the old ``h-screen + overflow-clip`` (portal) contract
     // that was retired in June 2026; with the new flex layout it
     // collapsed the page. June 2026 layout-pass fix.
-    <div className=" p-4 sm:p-6 lg:p-8 max-w-6xl mx-auto space-y-6 bg-[var(--bg-base)]">
+    <PageContent className="bg-[var(--bg-base)]">
       <PageHeader
         eyebrow="Observe"
         title="Trace Inspector"
@@ -358,7 +359,7 @@ export default function TraceInspectorPage() {
             <Clock className="ml-auto h-3 w-3" />
           </footer>
         )}
-    </div>
+    </PageContent>
   );
 }
 

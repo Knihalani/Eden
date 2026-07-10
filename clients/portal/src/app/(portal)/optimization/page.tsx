@@ -456,7 +456,7 @@ function CostTab() {
         <div
           role="group"
           aria-label="Day range"
-          className="inline-flex rounded-lg border border-[var(--border-default)] bg-[var(--bg-primary)] p-0.5 shadow-sm"
+          className="inline-flex rounded-lg border border-[var(--border-default)] bg-[var(--bg-primary)] p-0.5"
         >
           {[7, 30, 90].map((d) => (
             <button
@@ -467,7 +467,7 @@ function CostTab() {
               className={cn(
                 "rounded-md px-3 py-1.5 text-xs font-medium transition-all",
                 days === d
-                  ? "bg-[var(--accent)] text-[var(--bg-primary)] shadow-sm"
+                  ? "bg-[var(--accent)] text-[var(--bg-primary)]"
                   : "text-[var(--text-muted)] hover:text-[var(--text-primary)]"
               )}
             >

@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ErrorState } from "@/components/ui/error-state";
 import { PageHeader } from "@/components/layout/page-header";
+import { PageContent } from "@/components/layout/page-content";
 import { useToast } from "@/components/ui/toast";
 import { motion, AnimatePresence } from "framer-motion";
 import { ArrowLeft } from "lucide-react";
@@ -354,7 +355,7 @@ function ReplayPageInner() {
   const totalEvents = traceEvents.length;
 
   return (
-    <div className="p-4 sm:p-6 lg:p-8 max-w-6xl mx-auto space-y-6">
+    <PageContent>
       <PageHeader
         title="Trace Replay"
         subtitle="Inspect pipeline traces and control execution via HILT"
@@ -885,7 +886,7 @@ function ReplayPageInner() {
           )}
         </motion.div>
       )}
-    </div>
+    </PageContent>
   );
 }
 

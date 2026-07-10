@@ -7,6 +7,8 @@ import { cn } from "@/lib/utils";
 import { EmptyState } from "@/components/ui/empty-state";
 import { StatCard } from "@/components/ui/stat-card";
 import { PageHeader } from "@/components/layout/page-header";
+import { PageContent } from "@/components/layout/page-content";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
@@ -251,7 +253,7 @@ export default function GuardrailsPage() {
   const evalTodayEstimate = policies.length > 0 ? `~${Math.max(policies.length * 47, 12)}` : "—";
   // blockRate would come from scanHistory aggregate; until that lands we render "—".
   const blockRate = "—";
-  return <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-6">
+  return <PageContent size="wide">
       <PageHeader title="Guardrails" eyebrow="Security" subtitle="Content safety, prompt-injection defense, and PII redaction — live test bench and policy management" icon={ShieldCheck} actions={<button onClick={() => setActiveTab("test")} aria-label="Switch to Test tab" className="inline-flex items-center gap-2 px-4 py-2 bg-[var(--accent)] text-[var(--bg-base)] rounded-lg text-sm font-medium hover:bg-[var(--accent-hover)] transition-colors">
             <TestTube2 className="w-4 h-4" aria-hidden />
             Test content
@@ -266,32 +268,31 @@ export default function GuardrailsPage() {
       </div>
 
       {/* Tabs */}
-      <div className="flex items-center gap-1 p-1 bg-[var(--bg-tertiary)] rounded-xl w-fit flex-wrap">
-        {[{
-        key: "test" as Tab,
-        label: "Test",
-        icon: TestTube2
-      }, {
-        key: "policies" as Tab,
-        label: "Policies",
-        icon: ShieldCheck
-      }, {
-        key: "injections" as Tab,
-        label: "Injections",
-        icon: Bug
-      }, {
-        key: "pii" as Tab,
-        label: "PII",
-        icon: FileLock2
-      }].map(({
-        key,
-        label,
-        icon: Icon
-      }) => <button key={key} onClick={() => setActiveTab(key)} className={cn("px-4 py-2 rounded-lg text-sm font-medium transition-all flex items-center gap-2", activeTab === key ? "bg-[var(--bg-primary)] text-[var(--text-primary)] shadow-sm" : "text-[var(--text-muted)] hover:text-[var(--text-secondary)]")}>
-            <Icon className="w-4 h-4" />
-            {label}
-          </button>)}
-      </div>
+      <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as Tab)}>
+        <TabsList aria-label="Guardrails sections" className="bg-[var(--bg-tertiary)] rounded-xl h-auto flex-wrap w-fit">
+          {([{
+          key: "test" as Tab,
+          label: "Test",
+          icon: TestTube2
+        }, {
+          key: "policies" as Tab,
+          label: "Policies",
+          icon: ShieldCheck
+        }, {
+          key: "injections" as Tab,
+          label: "Injections",
+          icon: Bug
+        }, {
+          key: "pii" as Tab,
+          label: "PII",
+          icon: FileLock2
+        }] as const).map(({ key, label, icon: Icon }) => (
+            <TabsTrigger key={key} value={key} className="flex items-center gap-2 data-[state=active]:text-[var(--text-primary)]">
+              <Icon className="w-4 h-4" aria-hidden />
+              {label}
+            </TabsTrigger>
+          ))}
+        </TabsList>
 
       {/* Content */}
       <AnimatePresence mode="wait">
@@ -314,12 +315,14 @@ export default function GuardrailsPage() {
         </motion.div>
       </AnimatePresence>
 
+      </Tabs>
+
       <AddPolicyDialog open={showAddPolicy} onOpenChange={setShowAddPolicy} orgId={currentOrg.id} onCreated={() => {
       setShowAddPolicy(false);
       loadPolicies();
       toast.success("Policy created");
     }} />
-    </div>;
+    </PageContent>;
 }
 
 // ──────────────────────────────────────────────────────────────────────────
