@@ -1,60 +1,69 @@
-# F{ID}: {TITLE}
+# Feature Spec Template
+
+> Copy this template for new F or N features. **§ Performance & cost optimization is mandatory.**
 
 | Field | Value |
 |---|---|
-| **Feature ID** | F{ID} |
-| **Priority** | {PRIORITY} |
-| **Effort** | {EFFORT} |
-| **Eden status** | {STATUS} |
-| **Competitive source** | {COMPETITORS} |
-| **Closes gap** | {GAPS} |
+| **Feature ID** | F/N{ID} |
+| **Priority** | P0/P1/P2 |
+| **Effort** | XS–XL |
+| **Eden status** | MISSING / PARTIAL / SHIPPED |
+| **Dependencies** | ... |
 
 ---
 
 ## 1. Summary
 
-{SUMMARY}
-
 ## 2. Eden current state
-
-{CURRENT_STATE}
 
 ## 3. Target behavior
 
-{TARGET}
-
 ## 4. Architecture
-
-{ARCHITECTURE}
 
 ## 5. Data model
 
-{DATA_MODEL}
-
 ## 6. API specification
-
-{API}
 
 ## 7. Implementation plan
 
-{IMPLEMENTATION}
-
-## 8. SDK / CLI / Portal
-
-{CLIENT}
+## 8. SDK / MCP / Portal
 
 ## 9. Feature flags & rollout
 
-{FLAGS}
-
 ## 10. Test plan
-
-{TESTS}
 
 ## 11. Acceptance criteria
 
-{ACCEPTANCE}
+## 12. Performance & cost optimization
 
-## 12. Dependencies
+> See [PERFORMANCE-COST-STANDARDS.md](../PERFORMANCE-COST-STANDARDS.md)
 
-{DEPENDENCIES}
+### Latency budgets
+
+| Operation | p50 | p95 | p99 |
+|---|---|---|---|
+| ... | | | |
+
+### Cost model
+
+- LLM tier used (0 = deterministic only)
+- Est. $/1k operations
+- Storage per unit
+
+### Caching strategy
+
+- What is cached, TTL, invalidation
+
+### Degradation modes
+
+- Budget exceeded → behavior
+- Dependency down → fallback
+
+### Monitoring
+
+```
+eden_{feature}_duration_seconds
+eden_{feature}_cost_usd_total
+```
+
+## 13. Dependencies

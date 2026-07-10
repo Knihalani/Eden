@@ -19,14 +19,16 @@ This is Eden's counter to Bento's "Run 101 > Run 1" positioning.
 
 ---
 
-## 2. Eden current state
+## 2. Eden current state (codebase-accurate)
 
-| Component | Path | Gap |
+| Component | Path | Status |
 |---|---|---|
-| Skill storage | `src/eden/kb/procedural/client.py:24` | Postgres + Qdrant, no runtime hook |
-| Gateway | `src/eden/llmops/ai_gateway.py` | No nudge evaluation |
-| StatGate | trace quality spec | Guardrail actions only |
-| Cat 23 patches | `code_change/` | Code changes, not runtime hints |
+| Skill storage | `src/eden/kb/procedural/client.py:24` | **SHIPPED** — no runtime hook |
+| Gateway filter registry | `src/eden/llmops/filters/base.py:18–41` | **SHIPPED** — extension point for F39 |
+| `AIGateway.register_filter` | `src/eden/llmops/ai_gateway.py:459–499` | **SHIPPED** |
+| Nudge engine / filter | — | **MISSING** |
+| StatGate (promotion only today) | `trace_quality/wiring.py` | **SHIPPED** — gates apply, not nudges |
+| Cat 23 patches | `src/eden/code_change/` | Code changes, not runtime hints |
 
 ---
 
@@ -52,7 +54,7 @@ class Nudge:
     evidence: dict       # promotion stats
 ```
 
-**Customer repo export (F45):** `eden-nudges/{agent_id}/{nudge_id}.yaml`
+**Customer repo export (absorbed F45):** `eden-nudges/{agent_id}/{nudge_id}.yaml` — version-controlled nudges in customer repo; CI can diff on PR
 
 ---
 
@@ -76,29 +78,44 @@ content: |
 
 ---
 
-## 5. Gateway integration (critical path)
+## 5. Gateway integration (critical path — codebase-accurate)
 
-**Modify** `AIGateway.complete()` (or middleware wrapper):
+**Extension point:** `GatewayFilter` protocol in `src/eden/llmops/filters/base.py:18–41`.  
+**Registration:** `AIGateway.register_filter()` in `ai_gateway.py:459–499`.  
+**Pipeline order:** Filters run **before** cache and budget checks (`ai_gateway.py:593–629`).
+
+**Do NOT monkey-patch `AIGateway.complete()`** — implement nudges as a filter.
 
 ```python
-async def complete(self, ctx: GatewayContext, messages: list[dict], **kwargs):
-    nudges = await self._nudge_engine.evaluate(ctx)
-    applied: list[NudgeApplication] = []
+# src/eden/llmops/filters/nudge_filter.py
 
-    for nudge in nudges:
-        if nudge.mode == "shadow":
-            await self._nudge_outcomes.log_shadow(nudge, ctx)
-            continue
-        messages, meta = apply_nudge(nudge, messages, ctx)
-        applied.append(meta)
+class NudgeGatewayFilter:
+    name = "runtime_nudge"
 
-    response = await self._upstream.complete(messages, **kwargs)
+    def enabled(self, request: ModelRequest) -> bool:
+        return request.context.get("nudges_enabled", True)
 
-    await self._nudge_outcomes.log_outcomes(nudges, ctx, response)
-    return response
+    def apply(self, request: ModelRequest) -> tuple[ModelRequest, list[str]]:
+        nudges = self._engine.evaluate_sync(request.context)  # Redis-cached triggers
+        applied = []
+        for nudge in nudges:
+            if nudge.mode == "shadow":
+                self._outcomes.log_shadow(nudge, request)
+                continue
+            request.messages, meta = apply_nudge(nudge, request.messages)
+            applied.append(meta)
+        return request, [str(a) for a in applied]
 ```
 
-**`AgentContext` fields:**
+Register on startup after N14 platform activation:
+
+```python
+gateway.register_filter(NudgeGatewayFilter(nudge_engine))
+```
+
+**Parallel path (already shipped):** trajectory guardrails via `POST /v1/guardrails/trajectory/check` (`trace_quality.py:333`) — compose with filter for full coverage.
+
+**`AgentContext` fields** (passed via `ModelRequest.context`):
 - org_id, agent_id, trace_id, step_number
 - recent_tool_calls (last 10)
 - session metadata
@@ -187,4 +204,71 @@ CREATE TABLE nudge_outcomes (
 
 ---
 
+## 11. Performance & cost optimization
+
+### Gateway hot path
+
+| Step | p95 budget |
+|---|---|
+| Load active nudges for agent | <2ms (Redis cache) |
+| Trigger evaluation (compiled predicates) | <3ms |
+| Apply promoted nudge to messages | <1ms |
+| **Total gateway overhead** | **<5ms** |
+
+### Cost
+
+- Shadow mode: **$0** — log only
+- Nudge author LLM: async on issue resolve (~$0.02/nudge)
+- Promoted nudges: $0 at inference
+
+### Caching & degradation
+
+- Compile trigger DSL on save; Redis cache by nudge_id
+- Max 50 active nudges/agent; eval timeout → skip + log
+- `nudges_enabled=false` → zero overhead early exit
+
+---
+
+## 12. Repo export workflow (absorbed F45)
+
+Previously spec'd as standalone F45; merged here because export is part of nudge lifecycle, not a separate product surface.
+
+### 11.1 Export format
+
+```yaml
+# eden-nudges/checkout-agent/bash-python3.yaml
+apiVersion: eden.ai/v1
+kind: Nudge
+metadata:
+  agent_id: checkout-agent
+  source_issue_id: "..."
+spec:
+  trigger:
+    all:
+      - event: tool_result
+        tool_name: bash
+        result_contains: "command not found"
+  action_type: system_append
+  content: |
+    On macOS use python3 instead of python.
+  mode: promoted
+```
+
+### 11.2 Sync modes
+
+| Mode | Behavior |
+|---|---|
+| **Pull** | `POST /nudges/export` → zip for git commit |
+| **Git sync** | GitHub App watches `eden-nudges/**` → upsert nudges in Eden |
+| **MCP** | F04 `export_nudges(agent_id)` for coding-agent workflow |
+
+### 11.3 Safety
+
+- Import always lands in **shadow** mode until F41 EvidenceGate promotes
+- Git PR changing nudge triggers N04 impact preview (optional)
+
+---
+
 *Bento FAQ parity: "Run 101 measurably better" — measure via A/B on issue stumble rate with nudges enabled vs disabled.*
+
+*See [DELETED-FEATURES.md](./DELETED-FEATURES.md) for F45 merge rationale.*

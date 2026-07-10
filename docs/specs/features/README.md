@@ -1,26 +1,70 @@
 # Feature Implementation Specs
 
-> **Master document:** [`../FEATURE-GAP-MASTER.md`](../FEATURE-GAP-MASTER.md) — complete inventory of everything Eden is missing  
-> **Review:** [`SPEC-REVIEW.md`](./SPEC-REVIEW.md)
+> **Master:** [`../FEATURE-GAP-MASTER.md`](../FEATURE-GAP-MASTER.md)  
+> **Autonomous model:** [`../AUTONOMOUS-MAINTENANCE.md`](../AUTONOMOUS-MAINTENANCE.md)  
+> **Performance SLAs:** [`../PERFORMANCE-COST-STANDARDS.md`](../PERFORMANCE-COST-STANDARDS.md)  
+> **Market thesis:** [`../MARKET-HYPOTHESES.md`](../MARKET-HYPOTHESES.md)
 
-## 48 feature specs (canonical)
+## Inventory
 
-Each file `fXX-{slug}.md` is a **standalone implementation spec** for one feature. Specs are organized by feature, not by competitor.
-
-| Priority | Features |
+| Category | Count |
 |---|---|
-| **P0 — Ship first** | F01, F03, F04, F20, F28, F29, F30, F39, F46, F47, F48 |
-| **P1 — Next** | F02, F05, F06, F09, F10, F13–F15, F22, F23, F31–F35, F40–F44 |
-| **P2 — Polish** | F07, F08, F11, F16–F19, F21, F24–F27, F36–F38, F45 |
-| **P3 — GTM/docs** | F27, F19 |
+| F-features (parity) | 24 |
+| N-features (differentiation + platform + autonomous) | 22 |
+| **Total** | **46** |
 
-## Quick start for engineers
+## Mandatory in every spec
 
-1. Read [FEATURE-GAP-MASTER.md](../FEATURE-GAP-MASTER.md) Section 3 for the full missing-feature list
-2. Pick a feature ID from Wave 0/1 in the master doc
-3. Open `fXX-*.md` and implement against acceptance criteria
-4. Check dependencies in Section 12 of each spec before starting
+- Latency budgets (p50/p95)
+- Cost model ($/1k ops or $0 deterministic)
+- Caching & degradation modes
+- Prometheus metrics
+- Normal vs autonomous behavior where applicable (N22 tiers)
+
+## P0 ship list
+
+**N14** (blocker), **N22** (autonomy gate), F48, F28, F29, F20, N08, N16, F04, N17, F30, F22, F39, F41, N15, N01, N20, N07
+
+**Autonomous agent maintenance:** F46 orchestrates detect → diagnose → fix → verify. N21 fixes runtime outages; N20 fixes code. N22 sets safety bounds.
+
+| ID | Role |
+|---|---|
+| F46 | Orchestrator — runs the maintenance loop |
+| N21 | Runtime fix — rollback, cache bust, reweight |
+| N20 | Code fix — autonomous patch PR from diagnosis |
+| N22 | Safety bounds — how far Eden may auto-fix |
+
+See [`../AUTONOMOUS-MAINTENANCE.md`](../AUTONOMOUS-MAINTENANCE.md).
+
+## Production maintenance stand-outs (N14–N19)
+
+| ID | Why it matters |
+|---|---|
+| N14 | Activates ETEC/StatGate/worker — **unblocks moats** |
+| N15 | Evals become live gateway guardrails (shipped EvalToGuardrailLink) |
+| N16 | 80% cost cut, keep all failures |
+| N17 | Single improvement queue (operator + autonomous columns) |
+| N18 | Auto prompt evolution + canary (shipped evolver) |
+| N19 | KB compounding with safe two-speed promotion |
+
+See [`../PRODUCTION-MAINTENANCE-STANDOUT.md`](../PRODUCTION-MAINTENANCE-STANDOUT.md).
+
+## Restored high-value (N09–N13)
+
+| ID | Was | Why |
+|---|---|---|
+| N09 | F11 | Storage cost at scale |
+| N10 | F36 | Search → signal conversion |
+| N11 | F10 | Live trace tail |
+| N12 | F17 | Session timeline |
+| N13 | F38 | Transcript polish |
+
+## Spec depth (third pass — July 2026)
+
+All **46** specs expanded with implementation detail + performance/cost sections.
+
+**Fully deepened:** F01, F03, F04, F06, F09, F20, F21, F28–F30, F22, F33–F35, F39–F42, F44, F46–F48, N01–N22.
 
 ## Generator
 
-`generate_specs.py` regenerates skeleton specs from embedded definitions. **Hand-edited specs (F01, F20, F29, F39, F48) take precedence** over regeneration.
+`generate_specs.py` — skeleton F-specs only; never overwrites hand-edited files.

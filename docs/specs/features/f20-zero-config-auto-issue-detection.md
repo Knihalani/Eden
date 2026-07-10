@@ -151,4 +151,36 @@ Fixtures in `tests/fixtures/traces/issues/`:
 
 ---
 
+## 11. Performance & cost optimization
+
+### Latency
+
+| Stage | p95 |
+|---|---|
+| trace.finalized → worker pickup | <10s |
+| 7 detectors parallel | <500ms CPU |
+| stumble written | <60s end-to-end |
+
+### Cost model
+
+- **$0 LLM** for 5/7 detectors (tool_error, loop, task_failure, slow_trace, high_cost)
+- Optional SLM batch for hallucination/frustration: `$auto_issue_slm_pass_v1`, hourly batch not per-trace
+- StatGate/ETEC reads: cached per trace quality pipeline
+
+### Scale
+
+- 5 concurrent scans/org; horizontal worker scale
+- Skip traces >500 spans (sample every 10th step for loop detect)
+- Minimal profile: 2 detectors only — for cost-sensitive orgs
+
+### Monitoring
+
+```
+auto_issue.scan.duration_ms
+auto_issue.detector.hits{detector_id}
+auto_issue.queue_lag_seconds
+```
+
+---
+
 *Downstream: F29 promotes stumbles; F30 triages issues; F46 orchestrates loop.*
