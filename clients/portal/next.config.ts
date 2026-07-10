@@ -74,6 +74,18 @@ const nextConfig: NextConfig = {
         destination: "/sign-up/:path*",
         permanent: false,
       },
+      // Legacy portal /docs stub removed — canonical docs live on the
+      // Docusaurus site at docs.edenobservability.com.
+      {
+        source: "/docs",
+        destination: "https://docs.edenobservability.com",
+        permanent: true,
+      },
+      {
+        source: "/docs/:path*",
+        destination: "https://docs.edenobservability.com/:path*",
+        permanent: true,
+      },
     ];
   },
 };

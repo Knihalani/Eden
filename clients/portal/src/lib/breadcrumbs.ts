@@ -10,7 +10,7 @@ export type SidebarGroupId =
   | "observe"
   | "optimize"
   | "automate"
-  | "admin";
+  | "workspace";
 
 export interface BreadcrumbLabel {
   label: string;
@@ -23,10 +23,10 @@ export const BREADCRUMB_LABELS: Record<string, BreadcrumbLabel> = {
   dashboard: { label: "Dashboard", category: "build" },
   analytics: { label: "Analytics", category: "observe" },
   optimization: { label: "Cost", category: "optimize" },
-  settings: { label: "Settings", category: "admin" },
-  billing: { label: "Billing", category: "admin" },
-  docs: { label: "Documentation", category: "admin" },
-  profile: { label: "Profile", category: "admin" },
+  settings: { label: "Settings", category: "workspace" },
+  billing: { label: "Billing", category: "workspace" },
+  docs: { label: "Documentation", category: "workspace" },
+  profile: { label: "Profile", category: "workspace" },
   new: { label: "New", category: "build" },
   observability: { label: "Observability", category: "observe" },
   incidents: { label: "Incidents", category: "observe" },
@@ -39,7 +39,13 @@ export const BREADCRUMB_LABELS: Record<string, BreadcrumbLabel> = {
   marketplace: { label: "Marketplace", category: "build" },
   "multi-agent": { label: "Multi-Agent", category: "build" },
   // sandbox entry removed 2026-07-04 — sandbox subsystem retired
-  users: { label: "Members", category: "admin" },
+  users: { label: "User Intelligence", category: "observe" },
+  prompts: { label: "Prompts", category: "build" },
+  debugger: { label: "Debugger", category: "observe" },
+  synthetic: { label: "Synthetic Q/A", category: "observe" },
+  signals: { label: "Signals", category: "observe" },
+  redteam: { label: "Red team", category: "optimize" },
+  members: { label: "Members", category: "workspace" },
   guardrails: { label: "Guardrails", category: "optimize" },
   autonomous: { label: "Autonomous", category: "automate" },
   studio: { label: "Custom Metrics", category: "optimize" },
@@ -56,8 +62,8 @@ export const BREADCRUMB_LABELS: Record<string, BreadcrumbLabel> = {
   cohorts: { label: "Columnar Engine", category: "observe" },
   governance: { label: "Governance", category: "observe" },
   eval: { label: "Eval", category: "observe" },
-  traces: { label: "Trace Explorer", category: "observe" },
-  onboarding: { label: "Onboarding", category: "admin" },
+  traces: { label: "Traces", category: "observe" },
+  onboarding: { label: "Onboarding", category: "workspace" },
   connect: { label: "Connect Agent", category: "build" },
 };
 

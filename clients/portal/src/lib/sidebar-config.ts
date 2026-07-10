@@ -46,8 +46,12 @@ import {
   User,
   FileSpreadsheet,
   Tag,
+  Bug,
+  Radio,
+  ShieldAlert,
   type LucideIcon,
 } from "lucide-react";
+import { DOCS_URL } from "@/lib/constants";
 
 export interface SidebarItem {
   /** Stable id for customisation (pin / hide / reorder). */
@@ -107,6 +111,7 @@ export const DEFAULT_SIDEBAR: SidebarGroup[] = [
       { id: "labeling",    href: "/labeling",       label: "Labeling",      icon: Tag , category: "advanced", description: "Label traces and events to build ground truth for evals and fine-tunes."},
       { id: "connect",     href: "/agents/connect", label: "Connect repo",  icon: GitBranch , category: "advanced", description: "Link a GitHub repo so Eden can read your code and open integration PRs."},
       { id: "builder",     href: "/builder",        label: "Builder",       icon: Wand2 , description: "Visually design agent workflows, tool calls, and routing logic."},
+      { id: "prompts",     href: "/prompts",        label: "Prompts",       icon: FileText, category: "advanced", description: "Version and manage prompt templates with a full change history."},
       { id: "marketplace", href: "/marketplace",    label: "Marketplace",   icon: Box , description: "Browse and install pre-built agents, tools, and integrations from the catalog."},
       { id: "multi-agent", href: "/multi-agent",    label: "Multi-Agent",   icon: Network, badge: "beta" , category: "advanced", description: "Orchestrate multiple agents that collaborate on a shared task (beta)."},
     ],
@@ -131,6 +136,8 @@ export const DEFAULT_SIDEBAR: SidebarGroup[] = [
           { id: "obs-cohorts",     href: "/observability/cohorts",     label: "Columnar Engine", icon: Database, category: "advanced" , description: "Run fast columnar analytics over spans, traces, and decisions."},
           { id: "obs-decisions",   href: "/observability/decisions",   label: "Decisions",       icon: Compass, category: "advanced" , description: "Inspect what an agent decided and why, with policy and prompt context."},
           { id: "obs-eval",        href: "/observability/eval",        label: "Eval",            icon: BarChart3, category: "advanced" , description: "Score traces against evals to measure quality and regressions."},
+          { id: "obs-synthetic",   href: "/synthetic",                 label: "Synthetic Q/A",   icon: FlaskConical, category: "advanced", description: "Generate synthetic Q/A pairs to expand your eval datasets."},
+          { id: "obs-debugger",    href: "/debugger",                  label: "Debugger",        icon: Bug, category: "advanced", description: "Inspect agent checkpoints and rewind to earlier states."},
           { id: "obs-memory",      href: "/observability/memory",      label: "Memory",          icon: Brain, category: "advanced" , description: "Inspect the memory store an agent reads from and writes to."},
           { id: "obs-query",       href: "/observability/query",       label: "Query",           icon: Sparkles, category: "advanced" , description: "Ad-hoc query the trace corpus with natural language or SQL."},
           { id: "obs-retrieval",   href: "/observability/retrieval",   label: "Retrieval",       icon: Network, category: "advanced" , description: "Debug retrieval-augmented generation: chunks, scores, and grounding."},
@@ -139,6 +146,8 @@ export const DEFAULT_SIDEBAR: SidebarGroup[] = [
       },
       { id: "tools",     href: "/tools",     label: "Tools",     icon: Wrench, category: "advanced" , description: "See which tools your agents call most, compare success rates, and get recommendations."},
       { id: "insights",  href: "/insights",  label: "Insights",  icon: Brain , description: "AI-generated summaries of trends, anomalies, and what to look at next."},
+      { id: "signals",   href: "/signals",   label: "Signals",   icon: Radio, category: "advanced", description: "Compile behavioural signals from traces into reusable detectors."},
+      { id: "user-intelligence", href: "/users", label: "User Intelligence", icon: Users, category: "advanced", description: "Session aggregation, satisfaction scoring, and behavioural cohorts."},
       { id: "inspector", href: "/inspector", label: "Inspector", icon: Compass, category: "advanced" , description: "Deep-dive into a single trace to debug behaviour, token usage, and tool I/O."},
       { id: "incidents", href: "/incidents", label: "Incidents", icon: AlertOctagon , description: "Clustered failures and anomalies grouped by root cause."},
       { id: "alerts",    href: "/alerts",    label: "Alerts",    icon: Bell , description: "Configure notifications when traces, costs, or quality cross a threshold."},
@@ -163,6 +172,7 @@ export const DEFAULT_SIDEBAR: SidebarGroup[] = [
       },
       { id: "studio",     href: "/studio",     label: "Custom Metrics", icon: FlaskConical, category: "advanced" , description: "Define custom metrics and dimensions for traces and runs."},
       { id: "guardrails", href: "/guardrails", label: "Guardrails",     icon: Shield , description: "Block unsafe prompts, PII leaks, and policy violations before they ship."},
+      { id: "redteam",    href: "/redteam",    label: "Red team",       icon: ShieldAlert, category: "advanced", description: "Run adversarial probes against your prompts and review findings."},
     ],
   },
   {
@@ -179,9 +189,9 @@ export const DEFAULT_SIDEBAR: SidebarGroup[] = [
     label: "Workspace",
     items: [
       { id: "settings", href: "/settings", label: "Settings", icon: Settings },
-      { id: "users",    href: "/users",    label: "Members",  icon: Users , description: "Invite teammates and manage org members and roles."},
+      { id: "members",  href: "/settings?tab=members", label: "Members",  icon: Users , description: "Invite teammates and manage org members and roles."},
       { id: "billing",  href: "/billing",  label: "Billing",  icon: CreditCard , description: "Plan, invoices, payment method, and usage-based charges."},
-      { id: "docs",     href: "/docs",     label: "Docs",     icon: FileText , description: "API reference, guides, and code examples for the Eden platform."},
+      { id: "docs",     href: DOCS_URL, label: "Docs", icon: FileText , description: "API reference, guides, and code examples for the Eden platform."},
       { id: "profile",  href: "/profile",  label: "Profile",  icon: User , category: "advanced", description: "Your personal account settings, sessions, and API keys."},
     ],
   },

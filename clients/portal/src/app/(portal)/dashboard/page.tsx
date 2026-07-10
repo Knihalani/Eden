@@ -12,6 +12,7 @@ import { api } from "@/lib/api";
 import { useOrg } from "@/hooks/use-org";
 import { usePermissions } from "@/hooks/use-permissions";
 import { PageHeader } from "@/components/layout/page-header";
+import { PageContent } from "@/components/layout/page-content";
 import { StatCard } from "@/components/ui/stat-card";
 import { useToast } from "@/components/ui/toast";
 import { ThroughputCard } from "./_components/throughput-card";
@@ -226,7 +227,7 @@ export default function DashboardPage() {
   }
 
   return (
-    <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto">
+    <PageContent size="wide">
       <PageHeader
         title="Telemetry Overview"
         subtitle={
@@ -353,7 +354,7 @@ export default function DashboardPage() {
           <QuickLinks />
         </div>
       </div>
-    </div>
+    </PageContent>
   );
 }
 

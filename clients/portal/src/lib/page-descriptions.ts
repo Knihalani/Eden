@@ -97,8 +97,6 @@ export const PAGE_DESCRIPTIONS: Record<string, string> = {
     "Invite teammates and manage org members and roles.",
   "/billing":
     "Plan, invoices, payment method, and usage-based charges.",
-  "/docs":
-    "API reference, guides, and code examples for the Eden platform.",
   "/profile":
     "Your personal account settings, sessions, and API keys.",
 

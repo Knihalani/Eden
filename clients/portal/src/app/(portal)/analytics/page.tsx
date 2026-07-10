@@ -26,6 +26,7 @@ import {
 import { ChartCard } from "@/components/ui/chart-card";
 import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
 import { PageHeader } from "@/components/layout/page-header";
+import { PageContent } from "@/components/layout/page-content";
 import { NoOrgState } from "@/components/ui/no-org-state";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/components/ui/toast";
@@ -173,7 +174,7 @@ function MultiLineChart({
         <Tooltip
           contentStyle={TOOLTIP_STYLE}
           labelFormatter={(label) => labelFormatter(String(label))}
-          formatter={(value: number) => [valueFormatter(value), undefined]}
+          formatter={(value) => [valueFormatter(Number(value ?? 0)), undefined]}
         />
         {series.length > 1 && (
           <Legend
@@ -233,7 +234,7 @@ function LatencyChart({
         <Tooltip
           contentStyle={TOOLTIP_STYLE}
           labelFormatter={(label) => formatChartDate(String(label))}
-          formatter={(value: number) => [formatLatency(value), undefined]}
+          formatter={(value) => [formatLatency(Number(value ?? 0)), undefined]}
         />
         <Legend
           iconType="circle"
@@ -522,7 +523,7 @@ export default function AnalyticsPage() {
   }
 
   return (
-    <div className=" mx-auto max-w-7xl space-y-6 p-4 sm:p-6 lg:p-8">
+    <PageContent size="wide">
       <PageHeader
         eyebrow="Observe"
         title="Analytics"
@@ -618,7 +619,7 @@ export default function AnalyticsPage() {
           </>
         )}
       </div>
-    </div>
+    </PageContent>
   );
 }
 

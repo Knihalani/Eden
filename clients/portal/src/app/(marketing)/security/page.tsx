@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { LegalPage } from "@/components/layout/legal-page";
+import { DOCS_URL } from "@/lib/constants";
 import {
   Shield,
   Lock,
@@ -190,13 +191,13 @@ export default function SecurityPage() {
           >
             DPA
           </Link>
-          <Link
-            href="/docs"
+          <a
+            href={DOCS_URL}
             className="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-[var(--accent)] bg-[var(--accent)] hover:bg-[var(--accent-hover)] rounded-lg transition-colors"
             style={{ color: "var(--accent-foreground)" }}
           >
             Read the docs
-          </Link>
+          </a>
         </div>
 
         <div className="mt-12 pt-8 border-t border-[var(--border-subtle)]">

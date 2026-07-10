@@ -544,7 +544,7 @@ export function ChatSidebar() {
         type="button"
         onClick={() => setOpen((v) => !v)}
         className={cn(
-          "fixed bottom-4 right-4 z-50 flex h-12 w-12 items-center justify-center rounded-full",
+          "fixed bottom-20 right-4 lg:bottom-4 z-50 flex h-12 w-12 items-center justify-center rounded-full",
           "bg-[var(--accent)] text-[var(--bg-base)] shadow-lg transition-transform",
           "hover:scale-105 active:scale-95",
           open && "translate-x-[-200px] max-[480px]:translate-x-0 max-[480px]:opacity-0 max-[480px]:pointer-events-none",

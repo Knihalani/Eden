@@ -21,6 +21,9 @@ export const SALES_EMAIL = "sales@eden.dev";
 /** External status page (real URL). */
 export const STATUS_PAGE_URL = "https://status.edenobservability.com";
 
+/** Public Docusaurus docs site (hosted separately from the portal). */
+export const DOCS_URL = "https://docs.edenobservability.com";
+
 /** Maximum number of items the command palette tracks in localStorage. */
 export const COMMAND_PALETTE_RECENT_LIMIT = 5;
 

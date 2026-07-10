@@ -24,7 +24,6 @@ const isPublicRoute = createRouteMatcher([
   "/forgot-password(.*)",
   "/reset-password(.*)",
   "/invite(.*)",
-  "/docs(.*)",
   // Marketing / legal pages — must be public so anonymous browsers
   // and search-engine crawlers can fetch them. Without this, the
   // Clerk middleware 404s them (which is a real bug the user
