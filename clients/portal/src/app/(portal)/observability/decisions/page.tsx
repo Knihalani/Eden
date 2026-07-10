@@ -86,9 +86,11 @@ export default function DecisionsPage() {
     }
   }
   if (!currentOrg) {
-    return <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto">
+    return (
+      <PageContent size="wide">
         <NoOrgState icon={Compass} feature="Decision Intelligence" description="Step-by-step reasoning with alternatives considered — choose an organization to begin." />
-      </div>;
+      </PageContent>
+    );
   }
   return <PageContent size="wide">
       <PageHeader title="Decisions" subtitle="Trace the choice points in your agent's reasoning" icon={Compass} eyebrow="Observe" />

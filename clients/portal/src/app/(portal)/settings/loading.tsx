@@ -2,6 +2,7 @@
 
 import { Skeleton } from "@/components/ui/skeleton";
 import { Card } from "@/components/ui/card";
+import { PageContent } from "@/components/layout/page-content";
 
 export default function SettingsLoading() {
   return (
@@ -17,15 +18,17 @@ export default function SettingsLoading() {
           </div>
         </div>
       </div>
-      <div className="flex-1 min-w-0 p-4 sm:p-6 lg:p-8 max-w-6xl mx-auto space-y-6 w-full">
-        <Card padding="md" className="space-y-3">
-          <Skeleton className="h-4 w-40" />
-          <Skeleton className="h-10 w-full rounded-lg" />
-        </Card>
-        <Card padding="xl" className="space-y-5">
-          <Skeleton className="h-6 w-40" />
-          <Skeleton className="h-11 w-full rounded-lg" />
-        </Card>
+      <div className="flex-1 min-w-0">
+        <PageContent>
+          <Card padding="md" className="space-y-3">
+            <Skeleton className="h-4 w-40" />
+            <Skeleton className="h-10 w-full rounded-lg" />
+          </Card>
+          <Card padding="xl" className="space-y-5">
+            <Skeleton className="h-6 w-40" />
+            <Skeleton className="h-11 w-full rounded-lg" />
+          </Card>
+        </PageContent>
       </div>
     </div>
   );

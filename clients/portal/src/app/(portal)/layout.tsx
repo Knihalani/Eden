@@ -11,7 +11,7 @@ import {
 import { useClerk } from "@clerk/nextjs";
 import { api } from "@/lib/api";
 import { useRouter } from "next/navigation";
-import { useEffect, useState, useRef, useCallback } from "react";
+import { useEffect, useState, useRef, useCallback, Suspense } from "react";
 import { Pin, PanelLeftClose, PanelLeftOpen, RefreshCw } from "lucide-react";
 import {
   Loader2,
@@ -115,6 +115,20 @@ async function handleLogout(
 // chrome and makes breadcrumb labels discoverable in one place.
 
 export default function PortalLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-[100dvh] bg-[var(--bg-base)] flex items-center justify-center">
+          <Loader2 className="w-6 h-6 animate-spin text-[var(--accent)]" aria-hidden />
+        </div>
+      }
+    >
+      <PortalLayoutContent>{children}</PortalLayoutContent>
+    </Suspense>
+  );
+}
+
+function PortalLayoutContent({ children }: { children: React.ReactNode }) {
   const { user, loading, refreshUserWithRetry } = useAuth();
   const { signOut } = useClerk();
   const { prefs, togglePin } = useSidebarPrefs();

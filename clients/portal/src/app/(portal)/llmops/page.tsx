@@ -9,6 +9,7 @@ import { NoOrgState } from "@/components/ui/no-org-state";
 import { useToast } from "@/components/ui/toast";
 import { PageHeader } from "@/components/layout/page-header";
 import { PageContent } from "@/components/layout/page-content";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { DataTable } from "@/components/ui/data-table";
 import { Cpu, Box, MessageSquare, FlaskConical, SplitSquareHorizontal, ShieldCheck, ActivitySquare, Database, Loader2, AlertCircle, CheckCircle2, TrendingUp, Clock, AlertTriangle, XCircle, Search, RefreshCw, Trash2, BarChart3, Gauge, Server, Hash, Play, GitCommit } from "lucide-react";
 
@@ -68,43 +69,47 @@ export default function LLMOpsPage() {
   return <PageContent size="wide">
       <PageHeader title="LLMOps & Experiments" subtitle="Model registry, prompt management, experiment tracking, and production monitoring" icon={Cpu} eyebrow="Operate" />
 
-      {/* Tab Navigation */}
-      <div className="border-b border-[var(--border-default)] -mx-4 sm:-mx-6 lg:-mx-8 px-4 sm:px-6 lg:px-8">
-        <div className="flex overflow-x-auto scrollbar-hide">
-          {TABS.map(tab => {
-          const Icon = tab.icon;
-          return <button key={tab.key} role="tab" aria-selected={activeTab === tab.key} aria-controls={`llmops-panel-${tab.key}`} id={`llmops-tab-${tab.key}`} onClick={() => {
-            setActiveTab(tab.key);
-            setError("");
-          }} onKeyDown={e => {
-            if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
-              e.preventDefault();
-              const idx = TABS.findIndex(t => t.key === activeTab);
-              const nextIdx = e.key === "ArrowRight" ? (idx + 1) % TABS.length : (idx - 1 + TABS.length) % TABS.length;
-              setActiveTab(TABS[nextIdx].key);
-            }
-          }} className={cn("flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 whitespace-nowrap transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--accent)]/30 focus:ring-offset-1", activeTab === tab.key ? "border-[var(--accent)] text-[var(--accent)]" : "border-transparent text-[var(--text-muted)] hover:text-[var(--text-primary)]")}>
+      <Tabs
+        value={activeTab}
+        onValueChange={(tab) => {
+          setActiveTab(tab);
+          setError("");
+        }}
+        className="space-y-6"
+      >
+        <TabsList
+          variant="underline"
+          aria-label="LLMOps sections"
+          className="border-b border-[var(--border-default)] w-full justify-start overflow-x-auto -mx-4 sm:-mx-6 lg:-mx-8 px-4 sm:px-6 lg:px-8"
+        >
+          {TABS.map((tab) => {
+            const Icon = tab.icon;
+            return (
+              <TabsTrigger key={tab.key} value={tab.key} variant="underline" className="flex items-center gap-2">
                 <Icon className="w-4 h-4" aria-hidden="true" />
                 {tab.label}
-              </button>;
-        })}
-        </div>
-      </div>
+              </TabsTrigger>
+            );
+          })}
+        </TabsList>
 
       {error && <div className="bg-[var(--error-bg)] text-[var(--error)] text-sm px-4 py-3 rounded-xl flex items-center gap-2.5 border border-[var(--error)]/20">
           <AlertCircle className="w-4 h-4 flex-shrink-0" />
           {error}
         </div>}
 
-      {!orgId ? <NoOrgState feature="LLMOps" icon={Cpu} description="Select an organization to view LLMOps data" /> : <div role="tabpanel" id={`llmops-panel-${activeTab}`} aria-labelledby={`llmops-tab-${activeTab}`}>
-          {activeTab === "models" && <ModelsTab orgId={orgId} />}
-          {activeTab === "prompts" && <PromptsTab orgId={orgId} />}
-          {activeTab === "experiments" && <ExperimentsTab orgId={orgId} />}
-          {activeTab === "abtests" && <ABTestsTab orgId={orgId} />}
-          {activeTab === "gateway" && <GatewayTab orgId={orgId} />}
-          {activeTab === "monitoring" && <MonitoringTab orgId={orgId} />}
-          {activeTab === "cache" && <CacheTab orgId={orgId} />}
-        </div>}
+      {!orgId ? null : (
+        <>
+          <TabsContent value="models"><ModelsTab orgId={orgId} /></TabsContent>
+          <TabsContent value="prompts"><PromptsTab orgId={orgId} /></TabsContent>
+          <TabsContent value="experiments"><ExperimentsTab orgId={orgId} /></TabsContent>
+          <TabsContent value="abtests"><ABTestsTab orgId={orgId} /></TabsContent>
+          <TabsContent value="gateway"><GatewayTab orgId={orgId} /></TabsContent>
+          <TabsContent value="monitoring"><MonitoringTab orgId={orgId} /></TabsContent>
+          <TabsContent value="cache"><CacheTab orgId={orgId} /></TabsContent>
+        </>
+      )}
+      </Tabs>
     </PageContent>;
 }
 
@@ -415,7 +420,7 @@ function ExperimentsTab({
               <StatCard title="Type" value={selectedExp.experiment.experiment_type} icon={FlaskConical} accent="accent" />
               <StatCard title="Pipeline" value={selectedExp.experiment.pipeline_version} icon={GitCommit} accent="neutral" />
               <StatCard title="Runs" value={String(selectedExp.runs.length)} icon={Hash} accent="terminal" />
-              <StatCard title="Git Commit" value={selectedExp.experiment.git_commit.slice(0, 7)} icon={GitCommit} accent="neutral" />
+              <StatCard title="Git Commit" value={selectedExp.experiment.git_commit?.slice(0, 7) ?? "—"} icon={GitCommit} accent="neutral" />
             </div>
 
             {selectedExp.comparison && <div className="bg-[var(--bg-tertiary)] rounded-lg p-4">

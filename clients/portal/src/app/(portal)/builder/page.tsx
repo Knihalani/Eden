@@ -42,7 +42,6 @@ import { agentsApi, builderApi } from "@/lib/api";
 
 import { Inspector } from "./_components/Inspector";
 import { Palette } from "./_components/Palette";
-;
 import { RunResultsDialog } from "./_components/RunResultsDialog";
 import { TemplatesMenu } from "./_components/TemplatesMenu";
 import { useBuilderState } from "./_hooks/useBuilderState";

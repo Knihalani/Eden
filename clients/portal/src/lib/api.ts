@@ -2504,32 +2504,59 @@ export const api = {
     return fetchApi<
       Array<{
         id: string;
-        name: string;
-        description: string;
+        slug: string;
+        title: string;
+        summary: string;
         category: string;
-        quality: "high" | "medium" | "low";
-        author: string;
-        stars: number;
-        forks: number;
-        updated_at: string;
+        tags?: string[];
+        quality_score?: number | null;
+        quality_band?: "high" | "medium" | "low" | null;
+        fork_count?: number;
+        install_count?: number;
+        is_featured?: boolean;
+        published_at?: string | null;
       }>
-    >(`/marketplace${qs ? `?${qs}` : ""}`);
+    >(`/marketplace/cards${qs ? `?${qs}` : ""}`);
   },
 
   listMarketplaceFeatured: () =>
     fetchApi<
       Array<{
         id: string;
-        name: string;
-        description: string;
+        slug: string;
+        title: string;
+        summary: string;
         category: string;
-        quality: "high" | "medium" | "low";
-        author: string;
-        stars: number;
-        forks: number;
-        updated_at: string;
+        tags?: string[];
+        quality_score?: number | null;
+        quality_band?: "high" | "medium" | "low" | null;
+        fork_count?: number;
+        install_count?: number;
+        is_featured?: boolean;
+        published_at?: string | null;
       }>
-    >(`/marketplace/featured`),
+    >(`/marketplace/cards/featured`),
+
+  getMarketplaceCard: (cardId: string) =>
+    fetchApi<{
+      id: string;
+      slug: string;
+      title: string;
+      summary: string;
+      description?: string | null;
+      category: string;
+      tags?: string[];
+      quality_score?: number | null;
+      quality_band?: "high" | "medium" | "low" | null;
+      fork_count?: number;
+      install_count?: number;
+      is_featured?: boolean;
+      license?: string;
+      homepage_url?: string | null;
+      repository_url?: string | null;
+      published_at?: string | null;
+      updated_at?: string;
+    }>(`/marketplace/cards/${encodeURIComponent(cardId)}`),
 
   // Sandbox client removed 2026-07-04 — sandbox subsystem retired on
   // the backend. Sandbox navigation entries were removed from

@@ -23,7 +23,9 @@
  */
 
 import * as React from "react";
+import { Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { LoadingSkeleton } from "@/components/ui/skeleton";
 
 export type PageContentSize = "default" | "wide" | "narrow" | "full";
 
@@ -68,4 +70,35 @@ export function PageContent({
       {children}
     </div>
   );
+}
+
+/** Inline loading row inside canonical page padding (early-return branches). */
+export function PageLoading({
+  size = "default",
+  message = "Loading…",
+  className,
+}: {
+  size?: PageContentSize;
+  message?: string;
+  className?: string;
+}) {
+  return (
+    <PageContent size={size} className={cn("flex items-center gap-2 text-sm text-[var(--text-muted)]", className)}>
+      <Loader2 className="w-4 h-4 animate-spin shrink-0" aria-hidden />
+      {message}
+    </PageContent>
+  );
+}
+
+/** Full-page skeleton inside canonical padding (route loading.tsx). */
+export function PageLoadingSkeleton({
+  size = "default",
+  variant = "default",
+  lines = 4,
+}: {
+  size?: PageContentSize;
+  variant?: "default" | "stats" | "table" | "detail";
+  lines?: number;
+}) {
+  return <LoadingSkeleton size={size} variant={variant} lines={lines} />;
 }
