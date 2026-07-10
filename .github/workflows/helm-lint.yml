@@ -18,14 +18,14 @@ jobs:
   lint:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: azure/setup-helm@v4
         with:
           version: v3.15.0
       - name: helm lint
         run: helm lint helm/eden
       - name: ct lint
-        uses: helm/chart-testing-action@v2.0.0
+        uses: helm/chart-testing-action@v2.8.0
         with:
           config: helm/eden/ct.yaml
           command: lint
