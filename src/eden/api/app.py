@@ -349,6 +349,15 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning(f"trace_finalized consumer startup skipped: {e}")
 
+    # F46 — start the closed-loop event consumer (group eden-closed-loop)
+    # so issue_created → triage → remediate → verify events are processed.
+    try:
+        from eden.closed_loop.event_bus import start_consumer as start_loop
+
+        await start_loop()
+    except Exception as e:
+        logger.warning(f"closed-loop consumer startup skipped: {e}")
+
     # Phase 3a (2026-06-23) — surface a loud startup warning when neither
     # a GitHub App nor the legacy PR-provider env vars are configured.
     # Without this, the agent silently falls back to ``LocalPRProvider``
@@ -404,6 +413,13 @@ async def lifespan(app: FastAPI):
             await stop_insights_detector_loop()
         except Exception as e:  # pragma: no cover - defensive
             logger.warning(f"Insights detector loop stop failed: {e}")
+
+    try:
+        from eden.closed_loop.event_bus import stop_consumer as stop_loop
+
+        await stop_loop()
+    except Exception as e:  # pragma: no cover - defensive
+        logger.warning(f"closed-loop consumer stop failed: {e}")
 
     try:
         from eden.workers.trace_finalized_consumer import stop_consumer

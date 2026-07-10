@@ -1724,10 +1724,16 @@ def get_roi_hook() -> RoiHook:
 
 
 def register_all_hooks() -> None:
-    """No-op shim kept for backward compatibility.
+    """Register the closed-loop hooks (G9).
 
-    Hooks are now registered as singletons via ``get_*_hook()``; nothing
-    to register at startup because the in-process bus is lazy.
+    Hooks are singletons resolved via ``get_*_hook()`` (the in-process
+    bus is lazy), so there is nothing to *register* eagerly. What this
+    entrypoint now does is bridge those hooks into the F46 closed-loop
+    orchestrator: :meth:`ClosedLoopOrchestrator.subscribe` wraps
+    ``IssueHook.on_issue_created`` so every created/regressed issue emits
+    an ``issue_created`` LoopEvent onto ``eden.loop.events``. Gated by
+    ``closed_loop_orchestrator_v1`` and idempotent (safe to call once per
+    process).
     """
     logger.info(
         "closed-loop hooks registered (advisory): promotion, "
@@ -1735,3 +1741,16 @@ def register_all_hooks() -> None:
         "code_change, budget, incident, user_satisfaction, "
         "drift_alert, roi"
     )
+    try:
+        from eden.config import get_settings
+
+        if not getattr(get_settings(), "closed_loop_orchestrator_v1", True):
+            return
+    except Exception:  # pragma: no cover - defensive
+        pass
+    try:
+        from eden.closed_loop.orchestrator import get_orchestrator
+
+        get_orchestrator().subscribe()
+    except Exception as exc:  # pragma: no cover - defensive
+        logger.warning("register_all_hooks: orchestrator subscribe failed: %s", exc)
