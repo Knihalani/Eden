@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { usePermissions } from "@/hooks/use-permissions";
 import { api } from "@/lib/api";
-import { AuditEvent } from "@/lib/types";
+import { AuditEvent, type Organization } from "@/lib/types";
 import { Loader2, Filter, FileText } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
@@ -24,11 +24,10 @@ const ACTION_LABELS: Record<string, string> = {
   "invitation.declined": "Invitation declined"
 };
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function AuditLogTab({
   org
 }: {
-  org: any;
+  org: Organization | null | undefined;
 }) {
   const {
     hasPermission

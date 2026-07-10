@@ -170,6 +170,13 @@ const config = {
   themeConfig:
     /** @type {import('@docusaurus/preset-classic').ThemeConfig} */
     ({
+      // Eden is dark-terminal only across portal + docs (.impeccable.md).
+      // Keep the toggle off so Infima never flashes a light SaaS skin.
+      colorMode: {
+        defaultMode: 'dark',
+        disableSwitch: true,
+        respectPrefersColorScheme: false,
+      },
       navbar: {
         // Logo + brand text, linking back to the main Eden site.
         // The docs are a sub-product — the logo is the escape hatch

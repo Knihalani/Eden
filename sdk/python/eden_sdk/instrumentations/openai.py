@@ -165,7 +165,19 @@ def _build_request_payload(args: tuple, kwargs: dict) -> dict[str, Any]:
 
 
 def _to_dict(obj: Any) -> Any:
-    """Best-effort conversion of pydantic / dataclass / dict to a dict."""
+    """Best-effort conversion of pydantic / dataclass / dict to a dict.
+
+    Recurses into nested values so a Pydantic model that contains
+    other Pydantic models ends up as a flat ``dict`` of plain
+    Python primitives. Without the recursion the
+    ``json.dumps(..., default=str)`` fallback in ``_enqueue_chunk``
+    kicks in for every nested model and the wire payload carries
+    stringified ``repr()`` blobs like ``"FakeModel(foo='bar')"``
+    instead of the underlying dict. The previous implementation
+    called ``model_dump()`` / ``to_dict()`` but did not walk the
+    result, so a single nested model was enough to corrupt the
+    whole event payload.
+    """
     if obj is None:
         return None
     if isinstance(obj, dict):
@@ -174,12 +186,12 @@ def _to_dict(obj: Any) -> Any:
         return [_to_dict(v) for v in obj]
     if hasattr(obj, "model_dump"):
         try:
-            return obj.model_dump()
+            return _to_dict(obj.model_dump())
         except Exception:  # noqa: BLE001
             pass
     if hasattr(obj, "to_dict"):
         try:
-            return obj.to_dict()
+            return _to_dict(obj.to_dict())
         except Exception:  # noqa: BLE001
             pass
     if hasattr(obj, "__dict__"):

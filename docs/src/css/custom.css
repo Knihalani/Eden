@@ -1,59 +1,81 @@
 /* Eden Docs — dark terminal theme.
-   Matches the Eden portal palette so the docs feel native. */
+   Matches the Eden portal palette (see clients/portal/src/app/globals.css
+   and .impeccable.md) so the docs feel native — not Tailwind blue-on-black. */
 
 :root {
-  --ifm-color-primary: #3b82f6;
-  --ifm-color-primary-dark: #2563eb;
-  --ifm-color-primary-darker: #1d4ed8;
-  --ifm-color-primary-darkest: #1e40af;
-  --ifm-color-primary-light: #60a5fa;
-  --ifm-color-primary-lighter: #93c5fd;
-  --ifm-color-primary-lightest: #bfdbfe;
+  color-scheme: dark;
 
-  --ifm-color-secondary: #60a5fa;
-  --ifm-color-success: #10b981;
-  --ifm-color-warning: #f59e0b;
-  --ifm-color-danger: #ef4444;
-  --ifm-color-info: #3b82f6;
+  /* Eden portal primitives (mirrored for Docusaurus/Infima) */
+  --eden-bg-base: #03060A;
+  --eden-bg-primary: #0A0E14;
+  --eden-bg-secondary: #0F1419;
+  --eden-bg-tertiary: #151B23;
+  --eden-bg-inset: #060A10;
+  --eden-border-subtle: #526384;
+  --eden-text-primary: #E4ECF7;
+  --eden-text-secondary: #94A3B8;
+  --eden-text-muted: #7A8A9A;
+  --eden-accent: #5B9EFF;
+  --eden-accent-hover: #7AB1FF;
+  --eden-terminal: #5FE5A8;
+  --eden-warning: #FFB547;
 
-  --ifm-background-color: #0a0a0a;
-  --ifm-background-surface-color: #111111;
+  /* Infima primary ladder — terminal blue, not Tailwind blue-500 */
+  --ifm-color-primary: #5B9EFF;
+  --ifm-color-primary-dark: #5B9EFF;
+  --ifm-color-primary-darker: #3D7AD4;
+  --ifm-color-primary-darkest: #2A5FA8;
+  --ifm-color-primary-light: #7AB1FF;
+  --ifm-color-primary-lighter: #A8C8FF;
+  --ifm-color-primary-lightest: #C5DBFF;
 
-  --ifm-code-background: #0d0d0d;
-  --ifm-code-color: #e5e7eb;
+  --ifm-color-secondary: #7AB1FF;
+  --ifm-color-success: #5FE5A8;
+  --ifm-color-warning: #FFB547;
+  --ifm-color-danger: #F87171;
+  --ifm-color-info: #5B9EFF;
+
+  --ifm-background-color: #0A0E14;
+  --ifm-background-surface-color: #0F1419;
+
+  --ifm-code-background: #060A10;
+  --ifm-code-color: #E4ECF7;
   --ifm-code-font-size: 92%;
 
-  --ifm-font-family-base: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-  --ifm-font-family-monospace: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  --ifm-font-family-base: "Geist", "Geist Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --ifm-font-family-monospace: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 
-  --ifm-heading-color: #f3f4f6;
-  --ifm-link-color: #60a5fa;
-  --ifm-link-hover-color: #93c5fd;
-  --ifm-table-head-background: #111111;
-  --ifm-table-stripe-background: #0d0d0d;
-  --ifm-hr-border-color: #1f1f1f;
-  --ifm-blockquote-border-left-color: #3b82f6;
+  --ifm-heading-color: #E4ECF7;
+  --ifm-link-color: #7AB1FF;
+  --ifm-link-hover-color: #A8C8FF;
+  --ifm-table-head-background: #0F1419;
+  --ifm-table-stripe-background: #060A10;
+  --ifm-hr-border-color: #526384;
+  --ifm-blockquote-border-left-color: #5B9EFF;
 
-  --docusaurus-highlighted-code-line-bg: rgba(59, 130, 246, 0.12);
+  --docusaurus-highlighted-code-line-bg: rgba(91, 158, 255, 0.12);
 }
 
-/* Light-mode tokens (used when the user toggles to light) */
+/* Light-mode tokens kept as a safety net if Infima ever forces light.
+   colorMode.disableSwitch is true in docusaurus.config.js — Eden is
+   dark-terminal only. Values still use the Eden blue ladder, not
+   Tailwind defaults. */
 [data-theme='light'] {
-  --ifm-background-color: #ffffff;
-  --ifm-background-surface-color: #f8fafc;
-  --ifm-color-primary: #2563eb;
-  --ifm-color-primary-dark: #1d4ed8;
-  --ifm-color-primary-darker: #1e40af;
-  --ifm-color-primary-darkest: #1e3a8a;
-  --ifm-color-primary-light: #3b82f6;
-  --ifm-color-primary-lighter: #60a5fa;
-  --ifm-color-primary-lightest: #93c5fd;
+  --ifm-background-color: #0A0E14;
+  --ifm-background-surface-color: #0F1419;
+  --ifm-color-primary: #5B9EFF;
+  --ifm-color-primary-dark: #3D7AD4;
+  --ifm-color-primary-darker: #2A5FA8;
+  --ifm-color-primary-darkest: #1E3A5F;
+  --ifm-color-primary-light: #7AB1FF;
+  --ifm-color-primary-lighter: #A8C8FF;
+  --ifm-color-primary-lightest: #C5DBFF;
 
-  --ifm-heading-color: #0a0a0a;
-  --ifm-link-color: #2563eb;
-  --ifm-table-head-background: #f1f5f9;
-  --ifm-table-stripe-background: #f8fafc;
-  --ifm-hr-border-color: #e5e7eb;
+  --ifm-heading-color: #E4ECF7;
+  --ifm-link-color: #7AB1FF;
+  --ifm-table-head-background: #0F1419;
+  --ifm-table-stripe-background: #060A10;
+  --ifm-hr-border-color: #526384;
 }
 
 /* Body + typography */
@@ -71,21 +93,21 @@ body {
 
 /* Universal focus ring — keyboard nav visibility. */
 *:focus-visible {
-  outline: 2px solid #60a5fa;
+  outline: 2px solid #7AB1FF;
   outline-offset: 2px;
   border-radius: 4px;
 }
 
 /* Selection */
 ::selection {
-  background: rgba(59, 130, 246, 0.35);
+  background: rgba(91, 158, 255, 0.35);
   color: #ffffff;
 }
 
 /* Navbar — terminal-style, sits on a flat black bar */
 .navbar {
-  background-color: #0a0a0a;
-  border-bottom: 1px solid #1f1f1f;
+  background-color: #0A0E14;
+  border-bottom: 1px solid #526384;
   box-shadow: none;
   backdrop-filter: saturate(180%) blur(8px);
 }
@@ -100,14 +122,14 @@ body {
 
 .navbar__logo {
   border-radius: 6px;
-  filter: drop-shadow(0 0 8px rgba(59, 130, 246, 0.25));
+  filter: none;
 }
 
 .navbar__title {
   font-family: var(--ifm-font-family-monospace);
   font-weight: 600;
   letter-spacing: -0.01em;
-  color: #f3f4f6;
+  color: #E4ECF7;
   font-size: 1rem;
 }
 
@@ -119,63 +141,63 @@ body {
   font-family: var(--ifm-font-family-monospace);
   font-size: 0.8rem;
   font-weight: 600;
-  color: #34d399 !important;
-  border: 1px solid rgba(52, 211, 153, 0.35);
+  color: #7AB1FF !important;
+  border: 1px solid rgba(91, 158, 255, 0.35);
   border-radius: 4px;
   padding: 0.3rem 0.7rem;
   margin-left: 0.4rem;
-  transition: all 0.15s ease;
+  transition: color 0.15s ease, background-color 0.15s ease, border-color 0.15s ease;
 }
 
 .navbar-back-link:hover .navbar__link,
 .navbar-back-link.navbar__link:hover {
-  background-color: rgba(52, 211, 153, 0.08);
-  color: #6ee7b7 !important;
-  border-color: rgba(52, 211, 153, 0.6);
+  background-color: rgba(91, 158, 255, 0.08);
+  color: #A8C8FF !important;
+  border-color: rgba(91, 158, 255, 0.6);
 }
 
 .navbar__link {
   font-family: var(--ifm-font-family-monospace);
   font-size: 0.85rem;
   font-weight: 500;
-  color: #9ca3af;
+  color: #7A8A9A;
 }
 
 .navbar__link:hover,
 .navbar__link--active {
-  color: #f3f4f6;
+  color: #E4ECF7;
 }
 
 .navbar__items--right .navbar__link {
-  color: #9ca3af;
+  color: #7A8A9A;
 }
 
 /* Sidebar */
 .theme-doc-sidebar-container {
-  background-color: #0a0a0a;
-  border-right: 1px solid #1f1f1f;
+  background-color: #0A0E14;
+  border-right: 1px solid #526384;
 }
 
 .menu__link {
   font-family: var(--ifm-font-family-monospace);
   font-size: 0.85rem;
-  color: #9ca3af;
+  color: #7A8A9A;
   border-radius: 4px;
 }
 
 .menu__link:hover {
-  background-color: #111111;
-  color: #f3f4f6;
+  background-color: #0F1419;
+  color: #E4ECF7;
 }
 
 .menu__link--active {
-  background-color: rgba(59, 130, 246, 0.12);
-  color: #93c5fd;
+  background-color: rgba(91, 158, 255, 0.12);
+  color: #A8C8FF;
 }
 
 .menu__list-item-collapsible .menu__link {
   font-weight: 600;
-  color: #e5e7eb;
+  color: #E4ECF7;
 }
 
 /* Doc content */
@@ -194,45 +216,45 @@ article header h1 {
 }
 
 .markdown h2 {
-  border-bottom: 1px solid #1f1f1f;
+  border-bottom: 1px solid #526384;
   padding-bottom: 0.4rem;
 }
 
 .markdown p,
 .markdown li {
-  color: #d1d5db;
+  color: #94A3B8;
   line-height: 1.7;
 }
 
 .markdown a {
   text-decoration: none;
-  border-bottom: 1px solid rgba(59, 130, 246, 0.4);
+  border-bottom: 1px solid rgba(91, 158, 255, 0.4);
 }
 
 .markdown a:hover {
-  border-bottom-color: #93c5fd;
+  border-bottom-color: #A8C8FF;
 }
 
 .markdown blockquote {
-  background-color: rgba(59, 130, 246, 0.06);
-  border-left: 3px solid #3b82f6;
-  color: #d1d5db;
+  background-color: rgba(91, 158, 255, 0.06);
+  border-left: 3px solid #5B9EFF;
+  color: #94A3B8;
   border-radius: 0 4px 4px 0;
   font-style: normal;
 }
 
 /* Code blocks */
 code {
-  background-color: #111111;
-  border: 1px solid #1f1f1f;
-  color: #e5e7eb;
+  background-color: #0F1419;
+  border: 1px solid #526384;
+  color: #E4ECF7;
   border-radius: 3px;
   padding: 0.1rem 0.35rem;
 }
 
 pre {
-  background-color: #0d0d0d;
-  border: 1px solid #1f1f1f;
+  background-color: #060A10;
+  border: 1px solid #526384;
   border-radius: 8px;
   padding: 1rem 1.1rem;
   box-shadow: 0 2px 12px rgba(0, 0, 0, 0.25);
@@ -241,12 +263,12 @@ pre {
 /* Code-block file-tab strip (when fenced blocks have a `title=`) */
 .codeBlockTitle_node_modules-\@docusaurus-theme-classic-lib-theme-CodeBlock-Content-styles-module,
 div[class*='codeBlockTitle'] {
-  background: #111111 !important;
-  border: 1px solid #1f1f1f !important;
+  background: #0F1419 !important;
+  border: 1px solid #526384 !important;
   border-bottom: 0 !important;
   border-radius: 8px 8px 0 0 !important;
   font-family: var(--ifm-font-family-monospace) !important;
-  color: #93c5fd !important;
+  color: #A8C8FF !important;
   font-size: 0.78rem !important;
   font-weight: 500 !important;
   padding: 0.5rem 1rem !important;
@@ -265,13 +287,13 @@ pre code {
 
 /* Tables */
 table {
-  border: 1px solid #1f1f1f;
+  border: 1px solid #526384;
   border-radius: 6px;
   overflow: hidden;
 }
 
 th {
-  color: #f3f4f6;
+  color: #E4ECF7;
   font-family: var(--ifm-font-family-monospace);
   font-weight: 600;
   font-size: 0.8rem;
@@ -280,61 +302,61 @@ th {
 }
 
 td {
-  border-top: 1px solid #1f1f1f;
+  border-top: 1px solid #526384;
 }
 
 /* Footer */
 .footer {
-  background-color: #0a0a0a;
-  border-top: 1px solid #1f1f1f;
+  background-color: #0A0E14;
+  border-top: 1px solid #526384;
 }
 
 .footer__title {
   font-family: var(--ifm-font-family-monospace);
-  color: #f3f4f6;
+  color: #E4ECF7;
   font-size: 0.8rem;
   text-transform: uppercase;
   letter-spacing: 0.08em;
 }
 
 .footer__link-item {
-  color: #9ca3af;
+  color: #7A8A9A;
   font-size: 0.85rem;
 }
 
 .footer__link-item:hover {
-  color: #f3f4f6;
+  color: #E4ECF7;
 }
 
 .footer__copyright {
-  color: #6b7280;
+  color: #5A6B85;
   font-size: 0.8rem;
 }
 
 /* Table of contents (right rail) */
 .table-of-contents__link {
-  color: #9ca3af;
+  color: #7A8A9A;
   font-family: var(--ifm-font-family-monospace);
   font-size: 0.8rem;
 }
 
 .table-of-contents__link--active {
-  color: #93c5fd;
+  color: #A8C8FF;
 }
 
 /* Pagination */
 .pagination-nav__link {
-  background-color: #0d0d0d;
-  border: 1px solid #1f1f1f;
+  background-color: #060A10;
+  border: 1px solid #526384;
   border-radius: 6px;
 }
 
 .pagination-nav__link:hover {
-  border-color: #3b82f6;
+  border-color: #5B9EFF;
 }
 
 .pagination-nav__sublabel {
-  color: #9ca3af;
+  color: #7A8A9A;
   font-family: var(--ifm-font-family-monospace);
   font-size: 0.75rem;
   text-transform: uppercase;
@@ -342,7 +364,7 @@ td {
 }
 
 .pagination-nav__label {
-  color: #f3f4f6;
+  color: #E4ECF7;
   font-weight: 600;
 }
 
@@ -362,16 +384,16 @@ td {
 /* Code-block copy button */
 .theme-code-block button.copyButton,
 .theme-code-block .clean-btn {
-  color: #9ca3af;
+  color: #7A8A9A;
   background-color: transparent;
-  border: 1px solid #1f1f1f;
+  border: 1px solid #526384;
   border-radius: 4px;
 }
 
 .theme-code-block button.copyButton:hover,
 .theme-code-block .clean-btn:hover {
-  color: #f3f4f6;
-  border-color: #3b82f6;
+  color: #E4ECF7;
+  border-color: #5B9EFF;
 }
 
 /* Badge / status pills (used by roadmap / observability pages) */
@@ -387,9 +409,9 @@ td {
   border: 1px solid transparent;
 }
 
-.pill--shipped { background: rgba(16, 185, 129, 0.12); color: #34d399; border-color: rgba(16, 185, 129, 0.3); }
-.pill--stub    { background: rgba(245, 158, 11, 0.12); color: #fbbf24; border-color: rgba(245, 158, 11, 0.3); }
-.pill--planned { background: rgba(59, 130, 246, 0.12); color: #60a5fa; border-color: rgba(59, 130, 246, 0.3); }
+.pill--shipped { background: rgba(16, 185, 129, 0.12); color: #5FE5A8; border-color: rgba(16, 185, 129, 0.3); }
+.pill--stub    { background: rgba(245, 158, 11, 0.12); color: #FFB547; border-color: rgba(245, 158, 11, 0.3); }
+.pill--planned { background: rgba(91, 158, 255, 0.12); color: #7AB1FF; border-color: rgba(91, 158, 255, 0.3); }
 
 /* ============================================================
    Hero (intro/index.md landing page)
@@ -399,11 +421,11 @@ td {
   text-align: center;
   padding: 6rem 1rem 4rem;
   background:
-    radial-gradient(ellipse 80% 60% at 50% 0%, rgba(59, 130, 246, 0.18), transparent 70%),
+    radial-gradient(ellipse 80% 60% at 50% 0%, rgba(91, 158, 255, 0.18), transparent 70%),
     radial-gradient(ellipse 60% 50% at 20% 30%, rgba(16, 185, 129, 0.05), transparent 70%),
     radial-gradient(ellipse 60% 50% at 80% 30%, rgba(139, 92, 246, 0.05), transparent 70%),
-    linear-gradient(180deg, #0a0a0a 0%, #0a0a0a 100%);
-  border-bottom: 1px solid #1f1f1f;
+    linear-gradient(180deg, #0A0E14 0%, #0A0E14 100%);
+  border-bottom: 1px solid #526384;
   margin: -1rem -1rem 2rem;
   overflow: hidden;
 }
@@ -414,8 +436,8 @@ td {
   position: absolute;
   inset: 0;
   background-image:
-    linear-gradient(rgba(59, 130, 246, 0.04) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(59, 130, 246, 0.04) 1px, transparent 1px);
+    linear-gradient(rgba(91, 158, 255, 0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(91, 158, 255, 0.04) 1px, transparent 1px);
   background-size: 48px 48px;
   background-position: -1px -1px;
   mask-image: radial-gradient(ellipse 80% 60% at 50% 0%, black, transparent 70%);
@@ -435,9 +457,9 @@ td {
   font-size: 0.72rem;
   font-weight: 600;
   letter-spacing: 0.18em;
-  color: #93c5fd;
-  background: rgba(59, 130, 246, 0.08);
-  border: 1px solid rgba(59, 130, 246, 0.3);
+  color: #A8C8FF;
+  background: rgba(91, 158, 255, 0.08);
+  border: 1px solid rgba(91, 158, 255, 0.3);
   padding: 0.4rem 1rem;
   border-radius: 999px;
   margin-bottom: 1.8rem;
@@ -448,8 +470,8 @@ td {
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: #3b82f6;
-  box-shadow: 0 0 8px #3b82f6;
+  background: #5B9EFF;
+  box-shadow: 0 0 8px #5B9EFF;
 }
 
 .eden-hero__title {
@@ -459,11 +481,11 @@ td {
   letter-spacing: -0.035em;
   line-height: 1.08;
   margin: 0 0 1.4rem;
-  color: #f3f4f6;
+  color: #E4ECF7;
 }
 
 .eden-hero__title--accent {
-  background: linear-gradient(135deg, #60a5fa 0%, #a78bfa 50%, #34d399 100%);
+  background: linear-gradient(135deg, #7AB1FF 0%, #C084FC 50%, #5FE5A8 100%);
   -webkit-background-clip: text;
   background-clip: text;
   -webkit-text-fill-color: transparent;
@@ -471,7 +493,7 @@ td {
 
 .eden-hero__subtitle {
   font-size: 1.15rem;
-  color: #9ca3af;
+  color: #7A8A9A;
   max-width: 40rem;
   margin: 0 auto 2.2rem;
   line-height: 1.65;
@@ -489,8 +511,8 @@ td {
 .eden-hero__install {
   max-width: 36rem;
   margin: 0 auto;
-  background: #0d0d0d;
-  border: 1px solid #1f1f1f;
+  background: #060A10;
+  border: 1px solid #526384;
   border-radius: 10px;
   padding: 0.5rem;
   display: flex;
@@ -503,7 +525,7 @@ td {
 
 .eden-hero__install-prompt {
   font-family: var(--ifm-font-family-monospace);
-  color: #34d399;
+  color: #5FE5A8;
   padding: 0 0.25rem 0 0.5rem;
   user-select: none;
 }
@@ -512,7 +534,7 @@ td {
   flex: 1;
   font-family: var(--ifm-font-family-monospace);
   font-size: 0.92rem;
-  color: #e5e7eb;
+  color: #E4ECF7;
   background: transparent;
   border: 0;
   padding: 0.6rem 0;
@@ -522,9 +544,9 @@ td {
   font-family: var(--ifm-font-family-monospace);
   font-size: 0.72rem;
   font-weight: 600;
-  color: #9ca3af;
-  background: #111111;
-  border: 1px solid #1f1f1f;
+  color: #7A8A9A;
+  background: #0F1419;
+  border: 1px solid #526384;
   border-radius: 5px;
   padding: 0.35rem 0.7rem;
   cursor: pointer;
@@ -532,13 +554,13 @@ td {
 }
 
 .eden-hero__install-copy:hover {
-  color: #f3f4f6;
-  border-color: #3b82f6;
+  color: #E4ECF7;
+  border-color: #5B9EFF;
 }
 
 .eden-hero__install-copy.copied {
-  color: #34d399;
-  border-color: rgba(52, 211, 153, 0.4);
+  color: #5FE5A8;
+  border-color: rgba(95, 229, 168, 0.4);
 }
 
 /* Buttons */
@@ -557,26 +579,26 @@ td {
 }
 
 .eden-btn--primary {
-  background: #3b82f6;
+  background: #5B9EFF;
   color: #ffffff;
 }
 
 .eden-btn--primary:hover {
-  background: #2563eb;
+  background: #5B9EFF;
   color: #ffffff;
   transform: translateY(-1px);
-  box-shadow: 0 6px 20px rgba(59, 130, 246, 0.25);
+  box-shadow: 0 6px 20px rgba(91, 158, 255, 0.25);
 }
 
 .eden-btn--ghost {
   background: transparent;
-  color: #e5e7eb;
-  border-color: #1f1f1f;
+  color: #E4ECF7;
+  border-color: #526384;
 }
 
 .eden-btn--ghost:hover {
-  border-color: #3b82f6;
-  color: #93c5fd;
+  border-color: #5B9EFF;
+  color: #A8C8FF;
 }
 
 /* ============================================================
@@ -594,8 +616,8 @@ td {
 }
 
 .eden-card {
-  background: #0d0d0d;
-  border: 1px solid #1f1f1f;
+  background: #060A10;
+  border: 1px solid #526384;
   border-radius: 8px;
   padding: 1.3rem;
   transition: border-color 0.15s ease, transform 0.15s ease;
@@ -610,12 +632,12 @@ td {
   left: 0;
   width: 3px;
   height: 100%;
-  background: linear-gradient(180deg, #3b82f6, transparent);
+  background: linear-gradient(180deg, #5B9EFF, transparent);
   opacity: 0.6;
 }
 
 .eden-card:hover {
-  border-color: #3b82f6;
+  border-color: #5B9EFF;
   transform: translateY(-2px);
 }
 
@@ -633,7 +655,7 @@ td {
   font-size: 1.05rem;
   font-weight: 600;
   margin: 0 0 0.5rem;
-  color: #f3f4f6;
+  color: #E4ECF7;
 }
 
 .eden-card h4 {
@@ -641,13 +663,13 @@ td {
   font-size: 0.95rem;
   font-weight: 600;
   margin: 0 0 0.5rem;
-  color: #f3f4f6;
+  color: #E4ECF7;
   line-height: 1.5;
 }
 
 .eden-card p {
   font-size: 0.9rem;
-  color: #9ca3af;
+  color: #7A8A9A;
   margin: 0 0 0.7rem;
   line-height: 1.55;
 }
@@ -655,14 +677,14 @@ td {
 .eden-card a {
   font-family: var(--ifm-font-family-monospace);
   font-size: 0.8rem;
-  color: #60a5fa;
+  color: #7AB1FF;
   text-decoration: none;
   border-bottom: 1px solid transparent;
 }
 
 .eden-card a:hover {
-  border-bottom-color: #60a5fa;
-  color: #93c5fd;
+  border-bottom-color: #7AB1FF;
+  color: #A8C8FF;
 }
 
 .eden-card ul {
@@ -674,42 +696,42 @@ td {
 
 .eden-card ul li {
   padding: 0.15rem 0;
-  color: #9ca3af;
+  color: #7A8A9A;
 }
 
 .eden-card ul li::before {
   content: "→";
-  color: #3b82f6;
+  color: #5B9EFF;
   margin-right: 0.4rem;
   font-family: var(--ifm-font-family-monospace);
 }
 
 .eden-card ul li a {
-  color: #d1d5db;
+  color: #94A3B8;
   border: 0;
   font-family: var(--ifm-font-family-base);
   font-size: 0.85rem;
 }
 
 .eden-card ul li a:hover {
-  color: #93c5fd;
+  color: #A8C8FF;
 }
 
 /* Announcement bar polish */
 .announcement-bar a {
-  color: #93c5fd;
+  color: #A8C8FF;
   text-decoration: underline;
 }
 
 .announcement-bar a:hover {
-  color: #bfdbfe;
+  color: #C5DBFF;
 }
 
 /* GitHub star link in navbar */
 .navbar-github-link {
   font-family: var(--ifm-font-family-monospace);
   font-size: 0.8rem;
-  color: #fbbf24;
+  color: #FFB547;
   border: 1px solid rgba(251, 191, 36, 0.4);
   border-radius: 4px;
   padding: 0.3rem 0.7rem;
@@ -719,35 +741,35 @@ td {
 
 .navbar-github-link:hover {
   background: rgba(251, 191, 36, 0.08);
-  color: #fcd34d;
+  color: #FFC86B;
   border-color: rgba(251, 191, 36, 0.6);
 }
 
 /* Light mode adjustments */
 [data-theme='light'] .eden-hero {
   background:
-    radial-gradient(ellipse at top, rgba(59, 130, 246, 0.06), transparent 60%),
-    linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
-  border-bottom-color: #e5e7eb;
+    radial-gradient(ellipse at top, rgba(91, 158, 255, 0.06), transparent 60%),
+    linear-gradient(180deg, #ffffff 0%, #E8EEF6 100%);
+  border-bottom-color: #E4ECF7;
 }
 
 [data-theme='light'] .eden-card {
   background: #ffffff;
-  border-color: #e5e7eb;
+  border-color: #E4ECF7;
 }
 
 [data-theme='light'] .eden-card:hover {
-  border-color: #3b82f6;
+  border-color: #5B9EFF;
 }
 
 [data-theme='light'] .eden-card p,
 [data-theme='light'] .eden-card ul li {
-  color: #4b5563;
+  color: #5A6B85;
 }
 
 [data-theme='light'] .eden-card h3,
 [data-theme='light'] .eden-card h4 {
-  color: #0a0a0a;
+  color: #0A0E14;
 }
 
 /* Smooth scrolling for the in-page TOC */
@@ -779,7 +801,7 @@ html {
   font-weight: 700;
   letter-spacing: -0.05em;
   line-height: 1;
-  background: linear-gradient(90deg, #3b82f6, #60a5fa, #ef4444);
+  background: linear-gradient(90deg, #5B9EFF, #7AB1FF, #F87171);
   -webkit-background-clip: text;
   background-clip: text;
   -webkit-text-fill-color: transparent;
@@ -790,17 +812,17 @@ html {
   font-family: var(--ifm-font-family-monospace);
   font-size: 1.8rem;
   font-weight: 600;
-  color: #f3f4f6;
+  color: #E4ECF7;
   margin: 0 0 1rem;
 }
 
 .eden-404__prompt {
-  color: #3b82f6;
+  color: #5B9EFF;
   margin-right: 0.5rem;
 }
 
 .eden-404__subtitle {
-  color: #9ca3af;
+  color: #7A8A9A;
   font-size: 1.05rem;
   line-height: 1.6;
   margin: 0 0 2rem;
@@ -815,8 +837,8 @@ html {
 }
 
 .eden-404__hints {
-  background: #0d0d0d;
-  border: 1px solid #1f1f1f;
+  background: #060A10;
+  border: 1px solid #526384;
   border-radius: 8px;
   padding: 1.5rem;
   text-align: left;
@@ -827,7 +849,7 @@ html {
   font-size: 0.75rem;
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  color: #6b7280;
+  color: #5A6B85;
   margin-bottom: 0.8rem;
 }
 
@@ -842,33 +864,33 @@ html {
 
 .eden-404__hints ul li::before {
   content: "→";
-  color: #3b82f6;
+  color: #5B9EFF;
   margin-right: 0.4rem;
   font-family: var(--ifm-font-family-monospace);
 }
 
 .eden-404__hints ul li a {
-  color: #d1d5db;
+  color: #94A3B8;
   font-size: 0.9rem;
   text-decoration: none;
   border-bottom: 1px solid transparent;
 }
 
 .eden-404__hints ul li a:hover {
-  color: #93c5fd;
-  border-bottom-color: #3b82f6;
+  color: #A8C8FF;
+  border-bottom-color: #5B9EFF;
 }
 
 [data-theme='light'] .eden-404__hints {
   background: #ffffff;
-  border-color: #e5e7eb;
+  border-color: #E4ECF7;
 }
 
 [data-theme='light'] .eden-404__subtitle,
 [data-theme='light'] .eden-404__hints ul li a {
-  color: #4b5563;
+  color: #5A6B85;
 }
 
 [data-theme='light'] .eden-404__title {
-  color: #0a0a0a;
+  color: #0A0E14;
 }

@@ -67,7 +67,6 @@ export function useConfirm() {
     return () => document.removeEventListener("keydown", onKey);
     // close is stable (no deps change), so this effect is gated
     // purely on open.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.open]);
 
   const ConfirmDialog = state.open ? (

@@ -4,7 +4,6 @@ import { Suspense, useState, useEffect, useRef, useCallback } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { FileText, Code, ChevronRight, Copy, Check, Search, X, Menu, Book, Lock, Layers } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { CodeChip } from "@/components/ui/code-chip";
 import { Card } from "@/components/ui/card";
 interface DocSection {
   id: string;
