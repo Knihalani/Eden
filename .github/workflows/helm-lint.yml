@@ -25,7 +25,7 @@ jobs:
       - name: helm lint
         run: helm lint helm/eden
       - name: ct lint
-        uses: helm/chart-testing-action@v2.0.0
+        uses: helm/chart-testing-action@v2.8.0
         with:
           config: helm/eden/ct.yaml
           command: lint
