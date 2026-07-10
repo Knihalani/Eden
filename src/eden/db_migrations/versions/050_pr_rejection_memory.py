@@ -20,8 +20,9 @@ one patch → 0-or-many rejections as it goes through the inbox),
 and the not-now memory is queried by (org, file_path, title_hash)
 which is a different access pattern than the proposed_patches
 PK. The new table is also smaller — no diff/text columns — so
-the partial index on (file_path, title_hash) WHERE expires_at > NOW()
-fits in a fraction of the proposed_patches footprint.
+the lookup index on (org_id, file_path, title_hash, expires_at) —
+Postgres rejects ``WHERE expires_at > NOW()`` in partial-index
+predicates because ``NOW()`` is STABLE, not IMMUTABLE.
 
 The TTL is set per rejection_type:
 - wontfix      → 30d (codebase intentionally doesn't want this)
@@ -67,8 +68,7 @@ def upgrade() -> None:
     )
     op.execute(
         "CREATE INDEX IF NOT EXISTS idx_pr_rejection_memory_active "
-        "ON pr_rejection_memory (org_id, file_path, title_hash) "
-        "WHERE expires_at > NOW()"
+        "ON pr_rejection_memory (org_id, file_path, title_hash, expires_at)"
     )
     op.execute(
         "CREATE INDEX IF NOT EXISTS idx_pr_rejection_memory_expires "

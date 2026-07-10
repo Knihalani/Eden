@@ -1070,7 +1070,7 @@ async def get_me(
 
     # Fetch user's organizations
     orgs_query = """
-        SELECT o.id, o.name, o.slug, om.role
+        SELECT o.id, o.name, o.slug, om.role, o.clerk_org_id
         FROM organizations o
         JOIN org_members om ON om.org_id = o.id
         WHERE om.user_id = $1
@@ -1084,6 +1084,7 @@ async def get_me(
             "name": r["name"],
             "slug": r["slug"],
             "role": r["role"],
+            "clerk_org_id": r.get("clerk_org_id"),
         }
         for r in orgs_rows
     ]
