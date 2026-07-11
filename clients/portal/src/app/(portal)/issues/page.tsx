@@ -8,9 +8,10 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { NoOrgState } from "@/components/ui/no-org-state";
 import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
-import { AlertCircle, Loader2, ShieldAlert, Repeat } from "lucide-react";
+import { AlertCircle, Loader2, ShieldAlert } from "lucide-react";
 import { PageHeader } from "@/components/layout/page-header";
 import { PageContent } from "@/components/layout/page-content";
+import { RepeatBadge, SeverityBadge, StatusBadge } from "./_components/issue-badges";
 
 const STATUS_FILTERS = [
   "all",
@@ -145,47 +146,5 @@ export default function IssuesPage() {
         </div>
       )}
     </PageContent>
-  );
-}
-
-export function SeverityBadge({ severity }: { severity: string }) {
-  const colorMap: Record<string, string> = {
-    p0: "bg-[var(--error)]/20 text-[var(--error)] border-[var(--error)]/30",
-    p1: "bg-[var(--warning)]/20 text-[var(--warning)] border-[var(--warning)]/30",
-    p2: "bg-[var(--accent)]/20 text-[var(--accent)] border-[var(--accent)]/30",
-    p3: "bg-[var(--bg-tertiary)] text-[var(--text-muted)] border-[var(--border-subtle)]",
-  };
-  return (
-    <span className={cn("inline-flex items-center text-[10px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded border", colorMap[severity] ?? colorMap.p3)}>
-      {severity}
-    </span>
-  );
-}
-
-export function StatusBadge({ status }: { status: string }) {
-  const colorMap: Record<string, string> = {
-    open: "bg-[var(--warning)]/20 text-[var(--warning)] border-[var(--warning)]/30",
-    triaged: "bg-[var(--accent)]/20 text-[var(--accent)] border-[var(--accent)]/30",
-    fix_pending: "bg-[var(--accent)]/20 text-[var(--accent)] border-[var(--accent)]/30",
-    verifying: "bg-[var(--accent)]/20 text-[var(--accent)] border-[var(--accent)]/30",
-    resolved: "bg-[var(--terminal)]/20 text-[var(--terminal)] border-[var(--terminal)]/30",
-    regressed: "bg-[var(--error)]/20 text-[var(--error)] border-[var(--error)]/30",
-    ignored: "bg-[var(--bg-tertiary)] text-[var(--text-muted)] border-[var(--border-subtle)]",
-  };
-  return (
-    <span className={cn("inline-flex items-center text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded border", colorMap[status] ?? "bg-[var(--bg-tertiary)] text-[var(--text-muted)] border-[var(--border-subtle)]")}>
-      {status.replace("_", " ")}
-    </span>
-  );
-}
-
-export function RepeatBadge({ count }: { count: number }) {
-  return (
-    <span
-      title={`Regressed / re-occurred ${count} times`}
-      className="inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded border bg-[var(--error)]/10 text-[var(--error)] border-[var(--error)]/30"
-    >
-      <Repeat className="h-3 w-3" />×{count}
-    </span>
   );
 }

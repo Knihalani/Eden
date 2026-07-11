@@ -3222,21 +3222,63 @@ export const experimentsApi = {
 };
 
 // ── Intelligence: Closed Loop (Cat 17) ──────────────────────────────
+export type ClosedLoopAction = {
+  id: string;
+  hook_name: string;
+  action_kind: string;
+  target: string;
+  severity: string;
+  status: string;
+  created_at: string;
+  applied_at?: string | null;
+  applied_by?: string | null;
+  payload: Record<string, unknown>;
+};
+
+type ClosedLoopEnvelope<T> = {
+  status: string;
+  feature: string;
+  live?: boolean;
+  timestamp?: string;
+  data: T;
+};
+
 export const closedLoopApi = {
-  listActions: (orgId: string, params?: { status?: "pending" | "approved" | "denied" | "applied" }) => {
-    const q = new URLSearchParams();
-    if (params?.status) q.set("status", params.status);
-    const qs = q.toString();
-    return fetchApi<{ actions: Array<{ action_id: string; hook: string; status: string; created_at: string; payload: Record<string, unknown> }>; }>(`/orgs/${orgId}/intelligence/closed-loop/actions${qs ? `?${qs}` : ""}`);
-  },
+  listPending: (orgId: string) =>
+    fetchApi<ClosedLoopEnvelope<{ actions: ClosedLoopAction[]; count: number }>>(
+      `/orgs/${orgId}/intelligence/closed-loop/actions`,
+    ),
+  listAll: (orgId: string) =>
+    fetchApi<ClosedLoopEnvelope<{ actions: ClosedLoopAction[]; count: number }>>(
+      `/orgs/${orgId}/intelligence/closed-loop/actions/all`,
+    ),
+  /** @deprecated Prefer listPending / listAll — backend uses separate routes, not ?status= */
+  listActions: (orgId: string, params?: { status?: "pending" | "all" }) =>
+    params?.status === "all"
+      ? closedLoopApi.listAll(orgId)
+      : closedLoopApi.listPending(orgId),
   approveAction: (orgId: string, actionId: string) =>
-    fetchApi<{ action_id: string; status: string; }>(`/orgs/${orgId}/intelligence/closed-loop/actions/${actionId}/approve`, { method: "POST" }),
-  denyAction: (orgId: string, actionId: string, data: { reason?: string }) =>
-    fetchApi<{ action_id: string; status: string; reason: string; }>(`/orgs/${orgId}/intelligence/closed-loop/actions/${actionId}/deny`, { method: "POST", body: JSON.stringify(data) }),
+    fetchApi<ClosedLoopEnvelope<{ action_id: string; status: string }>>(
+      `/orgs/${orgId}/intelligence/closed-loop/actions/${actionId}/approve`,
+      { method: "POST" },
+    ),
+  denyAction: (orgId: string, actionId: string, data: { reason?: string } = {}) =>
+    fetchApi<ClosedLoopEnvelope<{ action_id: string; status: string }>>(
+      `/orgs/${orgId}/intelligence/closed-loop/actions/${actionId}/deny`,
+      { method: "POST", body: JSON.stringify(data) },
+    ),
   applyAction: (orgId: string, actionId: string) =>
-    fetchApi<{ action_id: string; status: string; applied_at: string; }>(`/orgs/${orgId}/intelligence/closed-loop/actions/${actionId}/apply`, { method: "POST" }),
+    fetchApi<ClosedLoopEnvelope<{ action_id: string; status: string; action_kind?: string }>>(
+      `/orgs/${orgId}/intelligence/closed-loop/actions/${actionId}/apply`,
+      { method: "POST" },
+    ),
   dashboard: (orgId: string) =>
-    fetchApi<{ pending: number; approved: number; denied: number; applied_today: number; by_hook: Record<string, number>; }>(`/orgs/${orgId}/intelligence/closed-loop/dashboard`),
+    fetchApi<ClosedLoopEnvelope<{
+      total: number;
+      by_kind: Record<string, number>;
+      by_status: Record<string, number>;
+      by_severity: Record<string, number>;
+    }>>(`/orgs/${orgId}/intelligence/closed-loop/dashboard`),
 };
 
 // ── Agent Issues (F28/F29/F46 closed-loop) ──────────────────────────
