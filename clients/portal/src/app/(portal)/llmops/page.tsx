@@ -210,9 +210,11 @@ function ModelsTab({
 
               <div>
                 <h4 className="text-sm font-semibold text-[var(--text-primary)] mb-3">Evaluations</h4>
-                {selectedArtifact.evaluations.length > 0 ? <div className="space-y-2">
+                {(() => {
+                  const evals = selectedArtifact.evaluations ?? [];
+                  return evals.length > 0 ? <div className="space-y-2">
   {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
-                    {selectedArtifact.evaluations.map((e: any) => <div key={e.evaluation_id} className="flex items-center justify-between p-3 rounded-lg bg-[var(--bg-tertiary)]">
+                    {evals.map((e: any) => <div key={e.evaluation_id} className="flex items-center justify-between p-3 rounded-lg bg-[var(--bg-tertiary)]">
                         <div className="flex items-center gap-3">
                           <div className={cn("w-8 h-8 rounded-full flex items-center justify-center", e.pass_rate >= 0.9 ? "bg-[var(--terminal-dim)] text-[var(--terminal)]" : e.pass_rate >= 0.7 ? "bg-[var(--warning-bg)] text-[var(--warning)]" : "bg-[var(--error-dim)] text-[var(--error)]")}>
                             <TrendingUp className="w-4 h-4" />
@@ -227,7 +229,8 @@ function ModelsTab({
                           <p>${e.cost_per_1k_tokens}/1K tokens</p>
                         </div>
                       </div>)}
-                  </div> : <p className="text-sm text-[var(--text-muted)]">No evaluations yet</p>}
+                  </div> : <p className="text-sm text-[var(--text-muted)]">No evaluations yet</p>;
+                })()}
               </div>
 
               {selectedArtifact.artifact.metadata?.description && <div>

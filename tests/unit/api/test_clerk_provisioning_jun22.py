@@ -49,8 +49,12 @@ class TestAuthMeClerkProvisioning:
             "clerk_id": clerk_id,
         }
 
-        # Queue: first lookup-by-clerk_id returns None (triggers
-        # INSERT), INSERT returns the provisioned row.
+        # Queue: get_current_user looks up by clerk_id (miss), then
+        # get_me's get_eden_user_row_from_auth looks up by clerk_id
+        # again (miss) → INSERT returns the provisioned row.
+        mock_postgres_client._fetchrow_overrides.append(
+            ("WHERE clerk_id::text", None)
+        )
         mock_postgres_client._fetchrow_overrides.append(
             ("WHERE clerk_id::text", None)
         )
@@ -89,9 +93,13 @@ class TestAuthMeClerkProvisioning:
             "clerk_id": clerk_id,
         }
 
-        # Lookup-by-clerk_id returns the existing row → no INSERT path.
+        # get_current_user resolves clerk_id → Eden UUID; get_me then
+        # looks up by Eden id (get_eden_user_row_from_auth).
         mock_postgres_client._fetchrow_overrides.append(
             ("WHERE clerk_id::text", existing_row)
+        )
+        mock_postgres_client._fetchrow_overrides.append(
+            ("WHERE id::text", existing_row)
         )
 
         with patch(
@@ -105,6 +113,50 @@ class TestAuthMeClerkProvisioning:
 
         assert response.status_code == 200, response.text
         assert response.json()["email"] == "newuser@example.com"
+
+    def test_me_with_remapped_uuid_does_not_ghost_provision(
+        self, mock_postgres_client: MagicMock, api_client: TestClient
+    ):
+        """Regression (Jul 2026): get_current_user remaps Clerk sub →
+        Eden UUID. /auth/me must resolve that UUID via id lookup and
+        MUST NOT auto-provision a ghost row with clerk_id=<uuid>.
+        """
+        clerk_id = "user_2abc123def456"
+        eden_id = "00000000-0000-0000-0000-000000000001"
+        existing_row = {
+            "id": eden_id,
+            "email": "newuser@example.com",
+            "name": "newuser",
+            "created_at": None,
+            "preferred_org_id": None,
+            "clerk_id": clerk_id,
+        }
+        mock_postgres_client._fetchrow_overrides.append(
+            ("WHERE clerk_id::text", existing_row)
+        )
+        mock_postgres_client._fetchrow_overrides.append(
+            ("WHERE id::text", existing_row)
+        )
+
+        with patch(
+            "eden.api.deps.verify_clerk_token",
+            return_value={"sub": clerk_id, "email": "newuser@example.com"},
+        ):
+            response = api_client.get(
+                "/auth/me",
+                headers={"Authorization": "Bearer fake-clerk-jwt"},
+            )
+
+        assert response.status_code == 200, response.text
+        data = response.json()
+        assert data["user_id"] == eden_id
+        assert data["email"] == "newuser@example.com"
+        # No INSERT should have been attempted.
+        insert_calls = [
+            c for c in mock_postgres_client.fetchrow.call_args_list
+            if c.args and "INSERT INTO users" in c.args[0]
+        ]
+        assert insert_calls == [], f"ghost provision fired: {insert_calls}"
 
     def test_me_unauthenticated_still_returns_401(
         self, api_client: TestClient

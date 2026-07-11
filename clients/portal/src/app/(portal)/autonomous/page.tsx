@@ -14,6 +14,7 @@ import { PageHeader } from "@/components/layout/page-header";
 import { PageContent } from "@/components/layout/page-content";
 import { cn } from "@/lib/utils";
 import { EmptyState } from "@/components/ui/empty-state";
+import { errorFromCaught } from "@/lib/safe-error-message";
 
 /* ----------------------- NL Query section ---------------------------- */
 
@@ -39,7 +40,7 @@ function NLQuerySection() {
       const res = await autonomousApi.nlQuery(currentOrg.id, { question: question.trim() });
       setResult(res);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to run NL query");
+      setError(errorFromCaught(e, "Failed to run NL query"));
     } finally {
       setSubmitting(false);
     }
@@ -181,7 +182,7 @@ function InvestigateTab() {
         question: question.trim() });
       setResult(res);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to run investigation");
+      setError(errorFromCaught(e, "Failed to run investigation"));
     } finally {
       setSubmitting(false);
     }
@@ -322,7 +323,7 @@ function RecommendationsTab() {
       })
       .catch((err: unknown) => {
         if (cancelled) return;
-        setError(err instanceof Error ? err.message : "Failed to load recommendations");
+        setError(errorFromCaught(err, "Failed to load recommendations"));
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -436,7 +437,7 @@ function HealTab() {
         description: description.trim() });
       setResult(res);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to request heal");
+      setError(errorFromCaught(e, "Failed to request heal"));
     } finally {
       setSubmitting(false);
     }

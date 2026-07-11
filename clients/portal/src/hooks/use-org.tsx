@@ -11,7 +11,7 @@ import {
   type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { useOrganization, useOrganizationList, useUser } from "@clerk/nextjs";
-import { api } from "@/lib/api";
+import { api, ApiError } from "@/lib/api";
 import type { Organization } from "@/lib/types";
 import { usePolling } from "./use-polling";
 
@@ -33,6 +33,8 @@ interface OrgContextType {
   clerkOrgId: string | null;
   /** Clerk's active org role (``org:admin`` / ``org:member`` / null). */
   clerkOrgRole: string | null;
+  /** Clerk has an active org but Eden has not synced the row yet. */
+  orgSyncing: boolean;
 }
 
 const OrgContext = createContext<OrgContextType | null>(null);
@@ -119,32 +121,6 @@ export function OrgProvider({ children }: { children: ReactNode }) {
         setCurrentOrgState(preferred ?? enrichedOrgs[0] ?? null);
       } else if (enrichedOrgs.length > 0) {
         setCurrentOrgState(enrichedOrgs[0]);
-      } else if (clerkOrg) {
-        // FIX-R: Clerk has an active org but Eden's /auth/me
-        // doesn't know about it (the Clerk webhook that creates
-        // the Eden-side ``organizations`` + ``org_members`` rows
-        // on org.created is delayed or hasn't fired). The user
-        // perceives this as "I created an org during sign-up but
-        // Eden doesn't recognise it" — they land on the
-        // onboarding wizard, click "Get started", and the wizard
-        // can't find an org to PATCH state into.
-        //
-        // Synthesise a placeholder Organization from the Clerk
-        // data so the portal chrome (sidebar, breadcrumbs, org
-        // switcher) at least renders something and the user can
-        // proceed. The Eden-side row will arrive in a few
-        // seconds via the polling loop; once it does, the
-        // refresh replaces this synthetic entry with the real
-        // one. Backend operations that need the real row (PATCH
-        // onboarding state, create agent, etc.) will keep
-        // failing until the webhook lands, but the user will see
-        // a working UI instead of a "stuck" one.
-        setCurrentOrgState({
-          id: clerkOrg.id,
-          name: clerkOrg.name,
-          slug: clerkOrg.slug,
-          role: "owner", // best guess — Clerk makes the creator the admin
-        } as Organization);
       } else {
         setCurrentOrgState(null);
       }
@@ -166,7 +142,15 @@ export function OrgProvider({ children }: { children: ReactNode }) {
       // console with the same backtrace the user already saw a
       // friendly version of.
       const rawMessage = e instanceof Error ? e.message : "Failed to load orgs";
-      if (!/401|404|429|5\d\d|not\s*authenticated|unauthorized|not\s*found|unreachable|timed?\s*out|bad\s*gateway|rate.?limit/i.test(rawMessage)) {
+      const status = e instanceof ApiError ? e.status : undefined;
+      // Also treat ApiError by status — backend 500 detail is often
+      // "An unexpected error occurred" with no "500" substring, which
+      // previously logged as "Unexpected org-load failure" and left
+      // the raw string in the auth banner.
+      if (
+        !(typeof status === "number" && status >= 500) &&
+        !/401|404|429|5\d\d|not\s*authenticated|unauthorized|not\s*found|unreachable|timed?\s*out|bad\s*gateway|rate.?limit|unexpected\s*error|internal\s*error/i.test(rawMessage)
+      ) {
         console.error("Unexpected org-load failure:", e);
       }
       // ponytail: a 401 here means the Clerk session is valid
@@ -182,7 +166,10 @@ export function OrgProvider({ children }: { children: ReactNode }) {
       // and were confusing. The exception is the generic
       // "Session expired" path for 401.
       let message: string;
-      if (/401|not\s*authenticated|authentication\s*required|unauthorized/i.test(rawMessage)) {
+      if (
+        status === 401 ||
+        /401|not\s*authenticated|authentication\s*required|unauthorized/i.test(rawMessage)
+      ) {
         message = "Session expired. Please sign in again.";
         if (typeof window !== "undefined") {
           window.sessionStorage.setItem("eden:auth:error", "session_expired");
@@ -196,11 +183,14 @@ export function OrgProvider({ children }: { children: ReactNode }) {
         // lets them proceed without an org.
         message =
           "Setting up your account… If this takes more than a moment, refresh the page.";
-      } else if (/404|not\s*found/i.test(rawMessage)) {
+      } else if (status === 404 || /404|not\s*found/i.test(rawMessage)) {
         message = "We couldn't load your workspace. Please refresh.";
-      } else if (/429|rate.?limit/i.test(rawMessage)) {
+      } else if (status === 429 || /429|rate.?limit/i.test(rawMessage)) {
         message = "Too many requests — pausing briefly. Reload in a moment.";
-      } else if (/5\d\d|server\s*error|unreachable|timed?\s*out|bad\s*gateway/i.test(rawMessage)) {
+      } else if (
+        (typeof status === "number" && status >= 500) ||
+        /5\d\d|server\s*error|unreachable|timed?\s*out|bad\s*gateway|unexpected\s*error|internal\s*error/i.test(rawMessage)
+      ) {
         message = "Eden is having trouble reaching the server. Please try again in a moment.";
       } else {
         message = rawMessage;
@@ -303,15 +293,21 @@ export function OrgProvider({ children }: { children: ReactNode }) {
       authError,
       clearAuthError: () => setAuthError(null),
       clerkOrgId: clerkOrg?.id ?? null,
-      // Clerk role strings are ``org:admin`` / ``org:member`` by
-      // default; map them onto Eden's ``owner``/``member`` vocab so
-      // existing RBAC checks (`org["role"] === "admin"`) keep
-      // working. The full mapping lives in `lib/roles.ts`.
       clerkOrgRole: clerkOrg
         ? userMemberships.data?.find(
             (m) => m.organization?.id === clerkOrg.id,
           )?.role ?? null
-        : null }),
+        : null,
+      orgSyncing: Boolean(
+        clerkOrg?.id &&
+          !authError &&
+          !loading &&
+          organizations.length === 0 &&
+          !organizations.some(
+            (o) => o.clerk_org_id === clerkOrg.id || o.id === clerkOrg.id,
+          ),
+      ),
+    }),
     // Intentionally depend on the *identity* of `currentOrg.id`,
     // not the object reference — Clerk returns a fresh
     // Organization wrapper per render, which would otherwise

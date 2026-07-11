@@ -49,8 +49,9 @@ import { deleteSaved, flushGraph, listRecent, loadSavedByName } from "./_lib/sto
 import { downloadPortable, importPortable } from "./_lib/portableGraph";
 import type { BuilderTemplate } from "./_lib/templates";
 
-import type { SavedGraphMeta } from "@/lib/types";
+import { NoOrgState } from "@/components/ui/no-org-state";
 import type { SimRun } from "@/lib/api";
+import type { SavedGraphMeta } from "@/lib/types";
 
 // React Flow touches window/document on mount, so we have to
 // dynamic-import the canvas with ssr:false.
@@ -307,6 +308,10 @@ function BuilderPageInner() {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [s, reactFlow, toast]);
+
+  if (!currentOrg) {
+    return <NoOrgState feature="Environment builder" icon={Wand2} />;
+  }
 
   return (
     <div className="flex flex-col h-[calc(100vh-64px)]">

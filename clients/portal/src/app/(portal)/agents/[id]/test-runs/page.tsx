@@ -24,6 +24,7 @@ import {
   TestTube2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { errorFromCaught } from "@/lib/safe-error-message";
 
 const STATUS_BADGE: Record<string, string> = {
   pending: "bg-[var(--bg-tertiary)] text-[var(--text-secondary)]",
@@ -78,7 +79,7 @@ export default function TestRunsPage() {
       const data = await agentsApi.listTestRuns(currentOrg.id, agentId, { limit: 50 });
       setRuns(data.runs);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to load test runs");
+      setError(errorFromCaught(e, "Failed to load test runs"));
     } finally {
       setLoading(false);
     }

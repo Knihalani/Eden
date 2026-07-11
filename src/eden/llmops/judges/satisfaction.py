@@ -15,6 +15,7 @@ import logging
 from typing import TYPE_CHECKING
 
 from .base import Judge, JudgeContext, JudgeScore
+from ._sampling import production_sample_matches
 
 if TYPE_CHECKING:
     from eden.observability.telemetry_collector import TelemetryEvent
@@ -36,7 +37,7 @@ class SatisfactionJudge(Judge):
         return any(
             key in payload
             for key in ("openai", "anthropic", "bedrock", "gemini", "langfuse")
-        )
+        ) and production_sample_matches(event)
 
     async def score(
         self, event: TelemetryEvent, ctx: JudgeContext

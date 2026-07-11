@@ -28,6 +28,16 @@ import {
   ChevronUp,
   Clock,
   RefreshCw } from "lucide-react";
+import { errorFromCaught } from "@/lib/safe-error-message";
+
+const CHANNEL_CONFIGURED: Record<string, boolean> = {
+  in_app: true,
+  websocket: true,
+  webhook: Boolean(process.env.NEXT_PUBLIC_ALERT_WEBHOOK_CONFIGURED),
+  email: false,
+  slack: false,
+  pagerduty: false,
+};
 
 interface AlertItem {
   alert_id: string;
@@ -120,7 +130,7 @@ export default function AlertsPage() {
       setTotal(data.total);
       setUnreadCount(data.unread_count);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to load alerts");
+      setError(errorFromCaught(e, "Failed to load alerts"));
     } finally {
       if (isInitial) setLoading(false);
       else setRefreshing(false);
@@ -138,8 +148,9 @@ export default function AlertsPage() {
     deps: [currentOrg, severityFilter, acknowledgedFilter, offset, limit] });
 
   const handleAcknowledge = async (alertId: string) => {
+    if (!currentOrg) return;
     try {
-      await api.acknowledgeAlert(alertId);
+      await api.acknowledgeAlert(currentOrg.id, alertId);
       setAlerts((prev) =>
         prev.map((a) => (a.alert_id === alertId ? { ...a, acknowledged: true } : a))
       );
@@ -152,10 +163,10 @@ export default function AlertsPage() {
 
   const handleBatchAcknowledge = async () => {
     const ids = Array.from(selectedAlerts);
-    if (ids.length === 0) return;
+    if (ids.length === 0 || !currentOrg) return;
     setAckLoading(true);
     try {
-      await api.acknowledgeAlertsBatch(ids);
+      await api.acknowledgeAlertsBatch(currentOrg.id, ids);
       setAlerts((prev) =>
         prev.map((a) => (selectedAlerts.has(a.alert_id) ? { ...a, acknowledged: true } : a))
       );
@@ -446,8 +457,25 @@ export default function AlertsPage() {
                           </span>
                         )}
                         {alert.channels.length > 0 && (
-                          <span className="text-[10px] text-[var(--text-muted)]">
-                            {alert.channels.join(", ")}
+                          <span className="text-[10px] flex flex-wrap gap-1">
+                            {alert.channels.map((ch) => (
+                              <span
+                                key={ch}
+                                className={cn(
+                                  "px-1.5 py-0.5 rounded",
+                                  CHANNEL_CONFIGURED[ch]
+                                    ? "text-[var(--text-muted)]"
+                                    : "text-[var(--text-muted)]/50 line-through bg-[var(--bg-muted)]",
+                                )}
+                                title={
+                                  CHANNEL_CONFIGURED[ch]
+                                    ? ch
+                                    : `${ch} (not configured)`
+                                }
+                              >
+                                {ch}
+                              </span>
+                            ))}
                           </span>
                         )}
                       </div>
@@ -637,8 +665,20 @@ function AlertRulesPanel({ orgId }: { orgId?: string }) {
                       {et}
                     </span>
                   ))}
-                  <span className="text-[10px] text-[var(--text-muted)]">
-                    → {rule.channels.join(", ")}
+                  <span className="text-[10px] text-[var(--text-muted)] flex flex-wrap gap-1">
+                    {rule.channels.map((ch) => (
+                      <span
+                        key={ch}
+                        className={cn(
+                          "px-1.5 py-0.5 rounded",
+                          CHANNEL_CONFIGURED[ch]
+                            ? "bg-[var(--bg-muted)] text-[var(--text-secondary)]"
+                            : "bg-[var(--bg-muted)]/50 text-[var(--text-muted)]/50 line-through",
+                        )}
+                      >
+                        {ch}
+                      </span>
+                    ))}
                   </span>
                 </div>
               </div>

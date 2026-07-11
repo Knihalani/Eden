@@ -13,6 +13,7 @@ import { PageHeader } from "@/components/layout/page-header";
 import { PageContent } from "@/components/layout/page-content";
 import { AlertOctagon, AlertTriangle, ArrowLeft, CheckCircle2, ChevronRight, Loader2, Network } from "lucide-react";
 import { Card } from "@/components/ui/card";
+import { errorFromCaught } from "@/lib/safe-error-message";
 const rcaApi = {
   summarizeIncident: (orgId: string, clusterId: string) => api.get<{
     cluster_id: string;
@@ -85,7 +86,7 @@ export default function IncidentDetailPage() {
         setMembers(rawMembers.slice(0, 5));
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load incident");
+      setError(errorFromCaught(err, "Failed to load incident"));
     } finally {
       setLoading(false);
     }

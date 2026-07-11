@@ -21,6 +21,7 @@ import {
   Database,
   ArrowRight } from "lucide-react";
 import { LineageGraph } from "./_components/LineageGraph";
+import { errorFromCaught } from "@/lib/safe-error-message";
 
 const STATUS_BADGE: Record<
   string,
@@ -56,9 +57,7 @@ export default function FineTuneLineagePage() {
       const data = await fineTuneApi.getLineage(runId);
       setLineage(data.data ?? null);
     } catch (e) {
-      setError(
-        e instanceof Error ? e.message : "Failed to load fine-tune lineage"
-      );
+      setError(errorFromCaught(e, "Failed to load fine-tune lineage"));
     } finally {
       setLoading(false);
     }

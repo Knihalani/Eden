@@ -10,6 +10,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { useToast } from "@/components/ui/toast";
 import { usePolling } from "@/hooks/use-polling";
 import { Wallet, Loader2, AlertTriangle, CheckCircle2, History } from "lucide-react";
+import { errorFromCaught } from "@/lib/safe-error-message";
 
 interface Budget {
   window: string;
@@ -80,10 +81,7 @@ export default function BudgetPage() {
         setActions(data.data.actions || []);
       }
     } catch (err) {
-      toast.error(
-        "Budget fetch failed",
-        err instanceof Error ? err.message : "Unknown error",
-      );
+      toast.error("Budget fetch failed", errorFromCaught(err, "Unknown error"));
     } finally {
       setLoading(false);
     }
@@ -124,7 +122,7 @@ export default function BudgetPage() {
         toast.error("Save failed", `HTTP ${res.status}. Org owner required.`);
       }
     } catch (err) {
-      toast.error("Save failed", err instanceof Error ? err.message : "Unknown error");
+      toast.error("Save failed", errorFromCaught(err, "Unknown error"));
     } finally {
       setSaving(false);
     }

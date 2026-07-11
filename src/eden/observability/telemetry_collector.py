@@ -585,6 +585,7 @@ class TelemetryCollector:
                 fields={"data": json.dumps(event.to_dict(), default=str, separators=(",", ":"))},
                 maxlen=self.STREAM_MAXLEN,
             )
+            await redis.expire(stream_key, 7 * 24 * 3600)
         except Exception as exc:
             logger.warning(f"Redis telemetry xadd failed: {exc}")
             return

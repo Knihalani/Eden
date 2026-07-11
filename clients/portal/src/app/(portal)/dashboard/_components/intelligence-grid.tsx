@@ -77,24 +77,55 @@ export function IntelligenceGrid() {
       setLoading(false);
       return;
     }
+    const cacheKey = `eden:intel-grid:${currentOrg.id}`;
+    try {
+      const cached = window.sessionStorage.getItem(cacheKey);
+      if (cached) {
+        const parsed = JSON.parse(cached) as { at: number; values: Record<string, unknown> };
+        if (Date.now() - parsed.at < 120_000) {
+          setValues(parsed.values);
+          setLoading(false);
+          return;
+        }
+      }
+    } catch {
+      // ignore corrupt cache
+    }
+
     let cancelled = false;
     setLoading(true);
+    const orgId = currentOrg.id;
     (async () => {
-      // Each loader is wrapped in `.catch` so one missing/broken endpoint
-      // does not blank the entire grid — it just leaves that card empty.
-      const entries = await Promise.all(
-        CARDS.map(async (card) => {
+      const loaded: Record<string, unknown> = {};
+      const queue = [...CARDS];
+      const concurrency = 4;
+      const staggerMs = 75;
+
+      async function worker() {
+        while (queue.length > 0 && !cancelled) {
+          const card = queue.shift();
+          if (!card) break;
+          await new Promise((r) => setTimeout(r, staggerMs));
           try {
-            const raw = await card.load(currentOrg.id);
-            return [card.key, raw] as const;
+            loaded[card.key] = await card.load(orgId);
           } catch {
-            return [card.key, null] as const;
+            loaded[card.key] = null;
           }
-        }),
-      );
+        }
+      }
+
+      await Promise.all(Array.from({ length: concurrency }, () => worker()));
       if (cancelled) return;
-      setValues(Object.fromEntries(entries));
+      setValues(loaded);
       setLoading(false);
+      try {
+        window.sessionStorage.setItem(
+          cacheKey,
+          JSON.stringify({ at: Date.now(), values: loaded }),
+        );
+      } catch {
+        // non-fatal
+      }
     })();
     return () => {
       cancelled = true;

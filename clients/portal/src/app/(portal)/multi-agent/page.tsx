@@ -12,7 +12,9 @@ import { PageContent } from "@/components/layout/page-content";
 import { useToast } from "@/components/ui/toast";
 import { useConfirm } from "@/hooks/use-confirm";
 import { Plus, Trash2, Send, MessageSquare, Users, BrainCircuit, MemoryStick, FlaskConical, ShieldCheck, ChevronRight, Play, RefreshCw, CheckCircle, XCircle, Activity, Server, Network, FileText, GitCommit, AlertTriangle } from "lucide-react";
+import { NoOrgState } from "@/components/ui/no-org-state";
 import { Card } from "@/components/ui/card";
+import { errorFromCaught } from "@/lib/safe-error-message";
 type TabKey = "environments" | "communication" | "roles" | "memory" | "planning" | "tests" | "hitl";
 interface MultiAgentEnv {
   env_id: string;
@@ -57,7 +59,7 @@ function useMultiAgentData(orgId: string | undefined) {
       const res = await api.listMultiAgentEnvs(orgId);
       setEnvs(res.environments);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load environments");
+      setError(errorFromCaught(err, "Failed to load environments"));
     } finally {
       setLoading(false);
     }
@@ -88,6 +90,10 @@ export default function MultiAgentPage() {
   } = useMultiAgentData(orgId);
   const [activeTab, setActiveTab] = useState<TabKey>("environments");
   const [selectedEnv, setSelectedEnv] = useState<MultiAgentEnv | null>(null);
+
+  if (!currentOrg) {
+    return <NoOrgState feature="Multi-agent" icon={Users} />;
+  }
 
   // Keyboard navigation
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {

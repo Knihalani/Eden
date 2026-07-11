@@ -12,6 +12,7 @@ import { useToast } from "@/components/ui/toast";
 import { useConfirm } from "@/hooks/use-confirm";
 import { TwoFASetupDialog } from "../settings/_components/2fa-setup-dialog";
 import { Card } from "@/components/ui/card";
+import { errorFromCaught } from "@/lib/safe-error-message";
 export default function ProfilePage() {
   const {
     user,
@@ -406,7 +407,7 @@ function Disable2FADialog({
       await api.disable2FA(code);
       onSuccess();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to disable 2FA");
+      setError(errorFromCaught(e, "Failed to disable 2FA"));
     } finally {
       setLoading(false);
     }

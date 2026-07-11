@@ -10,6 +10,7 @@ import { Card } from "@/components/ui/card";
 import { ErrorState } from "@/components/ui/error-state";
 import { PageContent, PageLoading } from "@/components/layout/page-content";
 import { cn } from "@/lib/utils";
+import { errorFromCaught } from "@/lib/safe-error-message";
 
 const QUALITY_BADGE_STYLES: Record<string, string> = {
   high: "bg-[var(--success-bg)] text-[var(--success)] border-[var(--success)]/30",
@@ -35,7 +36,7 @@ export default function MarketplaceDetailPage() {
         if (!cancelled) setCard(data);
       } catch (e) {
         if (!cancelled) {
-          setError(e instanceof Error ? e.message : "Failed to load environment");
+          setError(errorFromCaught(e, "Failed to load environment"));
         }
       } finally {
         if (!cancelled) setLoading(false);

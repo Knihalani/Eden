@@ -6,6 +6,7 @@ import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
 import { Pause, Play, SkipForward, MessageSquare, CheckCircle2, XCircle, Activity, Terminal, Loader2, AlertCircle, ChevronDown, ChevronUp, Clock, Send } from "lucide-react";
+import { errorFromCaught } from "@/lib/safe-error-message";
 
 interface HILTState {
   job_id: string;
@@ -81,7 +82,7 @@ export function HILTPanel({ jobId, jobStatus }: HILTPanelProps) {
         setError(result.message);
       }
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Command failed");
+      setError(errorFromCaught(e, "Command failed"));
     } finally {
       setCommandLoading(null);
     }

@@ -18,6 +18,7 @@ import { NoOrgState } from "@/components/ui/no-org-state";
 import { useOrg } from "@/hooks/use-org";
 import { costApi } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { errorFromCaught } from "@/lib/safe-error-message";
 
 /* ----------------------- Sub-pages (lazy) ----------------------------- */
 
@@ -387,7 +388,7 @@ function CostTab() {
       })
       .catch((e) => {
         if (cancelled) return;
-        setError(e instanceof Error ? e.message : "Failed to load cost data");
+        setError(errorFromCaught(e, "Failed to load cost data"));
       })
       .finally(() => {
         if (!cancelled) setLoading(false);

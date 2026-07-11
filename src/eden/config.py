@@ -506,6 +506,14 @@ def _build_settings_class():
         insights_loop_batch_size: int = 200
         insights_loop_max_runtime_seconds: float = 50.0
 
+        # Anomaly detection background loop (data platform).
+        anomaly_loop_enabled: bool = True
+        anomaly_loop_interval_seconds: float = 900.0
+
+        # Judge Redis tailer — off by default to limit LLM cost.
+        judges_async_tailer_enabled: bool = False
+        judges_async_tailer_max_keys: int = 50
+
         # Feature flags
         # Default OFF: the legacy multi-stage environment-generation pipeline
         # (Planner→Critic→Refiner→Fact-checker→Executor→Code-quality→Verifier→Tester→Archivist)

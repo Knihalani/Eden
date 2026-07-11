@@ -41,6 +41,7 @@ import type {
   PRSuggestion,
   PRSuggestionStatus,
   PRSuggestionTrigger } from "@/lib/types";
+import { errorFromCaught } from "@/lib/safe-error-message";
 
 // ── Constants + helpers (mirror the inbox) ──────────────────────
 
@@ -480,9 +481,7 @@ function FileViewer({ path, orgId, suggestionId }: { path: string; orgId: string
       })
       .catch((err) => {
         if (!mounted) return;
-        setError(
-          err instanceof Error ? err.message : "Failed to read file"
-        );
+        setError(errorFromCaught(err, "Failed to read file"));
       })
       .finally(() => {
         if (mounted) setLoading(false);
@@ -736,9 +735,7 @@ export default function PRSuggestionDetailPage({
         setPrNumber(data.data.suggestion.opened_pr_number);
       }
     } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "Failed to load suggestion"
-      );
+      setError(errorFromCaught(err, "Failed to load suggestion"));
     } finally {
       setLoading(false);
     }

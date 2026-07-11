@@ -2,7 +2,9 @@
 
 Six routes:
 
+  * ``GET  /orgs/{org}/labeling/items`` — list items + annotation counts
   * ``POST /orgs/{org}/labeling/items`` — seed new items
+  * ``POST /orgs/{org}/labeling/traces/{trace_id}/annotate`` — trace score
   * ``GET  /orgs/{org}/labeling/queue/{user}`` — pop the next batch
   * ``POST /orgs/{org}/labeling/annotate`` — submit a label
   * ``POST /orgs/{org}/labeling/skip`` — mark an item skipped
@@ -71,6 +73,27 @@ class ItemResponse(BaseModel):
     source_dataset_id: str | None = None
     source_synthetic_qa_id: str | None = None
     assigned_to: str | None = None
+
+
+class LabelingItemListEntry(BaseModel):
+    id: str
+    prompt: str
+    context: str | None = None
+    tags: list[str] = Field(default_factory=list)
+    source: str
+    created_at: str
+    annotations_count: int = 0
+
+
+class LabelingItemsListResponse(BaseModel):
+    items: list[LabelingItemListEntry]
+    total: int
+
+
+class TraceAnnotateRequest(BaseModel):
+    score: int = Field(..., ge=0, le=10)
+    category: str = Field(..., min_length=1, max_length=100)
+    comment: str | None = None
 
 
 class QueueResponse(BaseModel):
@@ -156,6 +179,26 @@ def _user_skills(uid: str) -> list[str]:
 # ── Routes ────────────────────────────────────────────────────────
 
 
+@router.get(
+    "/items",
+    response_model=LabelingItemsListResponse,
+    summary="List labeling queue items with annotation counts",
+)
+async def list_items(
+    org_id: str = Path(...),
+    limit: int = Query(default=100, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+    user: dict = Depends(get_current_user),
+) -> LabelingItemsListResponse:
+    pg = await get_postgres_client()
+    svc = LabelingService(pg, user_skills=_user_skills)
+    items, total = await svc.list_items(org_id=org_id, limit=limit, offset=offset)
+    return LabelingItemsListResponse(
+        items=[LabelingItemListEntry(**item) for item in items],
+        total=total,
+    )
+
+
 @router.post(
     "/items",
     response_model=SeedItemResponse,
@@ -182,6 +225,40 @@ async def seed_item(
         source_synthetic_qa_id=body.source_synthetic_qa_id,
     )
     return SeedItemResponse(item_id=item_id)
+
+
+@router.post(
+    "/traces/{trace_id}/annotate",
+    response_model=AnnotationResponse,
+    summary="Annotate a trace with a 0-10 score (find-or-seed trace-score item)",
+)
+async def annotate_trace(
+    body: TraceAnnotateRequest,
+    org_id: str = Path(...),
+    trace_id: str = Path(...),
+    user: dict = Depends(get_current_user),
+) -> AnnotationResponse:
+    user_id = str(user.get("id") or user.get("user_id") or user.get("sub"))
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    pg = await get_postgres_client()
+    svc = LabelingService(pg, user_skills=_user_skills)
+    item_id = await svc.find_or_seed_trace_score_item(org_id=org_id, trace_id=trace_id)
+    try:
+        ann = await svc.annotate(
+            org_id=org_id,
+            item_id=item_id,
+            annotator_id=user_id,
+            label={"score": body.score, "category": body.category},
+            confidence=body.score / 10.0,
+            notes=body.comment,
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail={"error": "invalid_annotation", "detail": str(exc)},
+        ) from exc
+    return _annotation_to_response(ann)
 
 
 @router.get(
