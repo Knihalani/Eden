@@ -1,15 +1,16 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
+import Link from "next/link";
 import { useOrg } from "@/hooks/use-org";
-import { closedLoopApi } from "@/lib/api";
+import { closedLoopApi, type ClosedLoopAction } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { NoOrgState } from "@/components/ui/no-org-state";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/components/ui/toast";
 import { useConfirm } from "@/hooks/use-confirm";
-import { Check, X, Play, AlertCircle, Loader2, Inbox, History, BarChart3 } from "lucide-react";
+import { Check, X, Play, AlertCircle, Loader2, Inbox, History, BarChart3, Repeat } from "lucide-react";
 import { PageHeader } from "@/components/layout/page-header";
 import { PageContent } from "@/components/layout/page-content";
 import { Card } from "@/components/ui/card";
@@ -25,9 +26,43 @@ type Dashboard = {
   pending: number;
   approved: number;
   denied: number;
-  applied_today: number;
+  applied: number;
   by_hook: Record<string, number>;
+  by_status: Record<string, number>;
+  by_severity: Record<string, number>;
 };
+
+function mapClosedLoopAction(row: ClosedLoopAction): Action {
+  const status =
+    row.status === "pending_approval"
+      ? "pending"
+      : row.status;
+  return {
+    action_id: row.id,
+    hook: row.hook_name || row.action_kind,
+    status,
+    created_at: row.created_at,
+    payload: row.payload ?? {},
+  };
+}
+
+function mapDashboard(data: {
+  total: number;
+  by_kind: Record<string, number>;
+  by_status: Record<string, number>;
+  by_severity: Record<string, number>;
+}): Dashboard {
+  const byStatus = data.by_status ?? {};
+  return {
+    pending: byStatus.pending_approval ?? 0,
+    approved: byStatus.approved ?? 0,
+    denied: byStatus.denied ?? 0,
+    applied: byStatus.applied ?? 0,
+    by_hook: data.by_kind ?? {},
+    by_status: byStatus,
+    by_severity: data.by_severity ?? {},
+  };
+}
 export default function ClosedLoopPage() {
   const {
     currentOrg
@@ -49,16 +84,14 @@ export default function ClosedLoopPage() {
     setLoading(true);
     setError(null);
     try {
-      const [pendingRes, allRes, dashRes] = await Promise.all([closedLoopApi.listActions(currentOrg.id, {
-        status: "pending"
-      }).catch(() => ({
-        actions: []
-      })), closedLoopApi.listActions(currentOrg.id).catch(() => ({
-        actions: []
-      })), closedLoopApi.dashboard(currentOrg.id).catch(() => null)]);
-      setPending(pendingRes.actions ?? []);
-      setHistory(allRes.actions ?? []);
-      setDashboard(dashRes);
+      const [pendingRes, allRes, dashRes] = await Promise.all([
+        closedLoopApi.listPending(currentOrg.id).catch(() => ({ data: { actions: [] } })),
+        closedLoopApi.listAll(currentOrg.id).catch(() => ({ data: { actions: [] } })),
+        closedLoopApi.dashboard(currentOrg.id).catch(() => null),
+      ]);
+      setPending((pendingRes.data?.actions ?? []).map(mapClosedLoopAction));
+      setHistory((allRes.data?.actions ?? []).map(mapClosedLoopAction));
+      setDashboard(dashRes?.data ? mapDashboard(dashRes.data) : null);
     } catch (err) {
       setError(errorFromCaught(err, "Failed to load closed-loop actions"));
     } finally {
@@ -131,7 +164,7 @@ export default function ClosedLoopPage() {
           <SummaryCard label="Pending" value={dashboard.pending} icon={Inbox} />
           <SummaryCard label="Approved" value={dashboard.approved} icon={Check} />
           <SummaryCard label="Denied" value={dashboard.denied} icon={X} />
-          <SummaryCard label="Applied today" value={dashboard.applied_today} icon={Play} />
+          <SummaryCard label="Applied" value={dashboard.applied} icon={Play} />
         </div>}
 
       {/* Tab strip */}
@@ -226,7 +259,10 @@ function ActionList({
       </Card>;
   }
   return <div className="space-y-3">
-      {actions.map(a => <div key={a.action_id} className="rounded-lg border border-[var(--border-default)] bg-[var(--bg-primary)] p-4">
+      {actions.map(a => {
+      const issueId = typeof a.payload?.issue_id === "string" ? a.payload.issue_id : null;
+      const repeat = typeof a.payload?.repetition_count === "number" ? a.payload.repetition_count : 0;
+      return <div key={a.action_id} className="rounded-lg border border-[var(--border-default)] bg-[var(--bg-primary)] p-4">
           <div className="flex items-start justify-between gap-3">
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
@@ -234,6 +270,12 @@ function ActionList({
                   {a.hook}
                 </span>
                 <StatusBadge status={a.status} />
+                {issueId && <Link href={`/issues/${issueId}`} className="text-xs font-medium text-[var(--accent)] hover:underline">
+                  View issue →
+                </Link>}
+                {repeat > 1 && <span title={`Re-occurred ${repeat} times`} className="inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded border bg-[var(--error)]/10 text-[var(--error)] border-[var(--error)]/30">
+                  <Repeat className="h-3 w-3" />×{repeat}
+                </span>}
                 <span className="text-xs text-[var(--text-muted)]">
                   {new Date(a.created_at).toLocaleString()}
                 </span>
@@ -257,7 +299,8 @@ function ActionList({
                   </Button>}
               </div>}
           </div>
-        </div>)}
+        </div>;
+    })}
     </div>;
 }
 function StatusBadge({
@@ -291,6 +334,15 @@ function DashboardView({
         {Object.keys(dashboard.by_hook).length === 0 ? <p className="text-sm text-[var(--text-muted)]">No actions recorded yet.</p> : <ul className="space-y-2">
             {Object.entries(dashboard.by_hook).sort(([, a], [, b]) => b - a).map(([hook, count]) => <li key={hook} className="flex items-center justify-between text-sm">
                   <span className="font-mono text-[var(--text-secondary)]">{hook}</span>
+                  <span className="text-[var(--text-muted)]">{count}</span>
+                </li>)}
+          </ul>}
+      </div>
+      <div className="rounded-lg border border-[var(--border-default)] bg-[var(--bg-primary)] p-4">
+        <h3 className="text-sm font-semibold text-[var(--text-primary)] mb-3">Actions by status</h3>
+        {Object.keys(dashboard.by_status).length === 0 ? <p className="text-sm text-[var(--text-muted)]">No status breakdown yet.</p> : <ul className="space-y-2">
+            {Object.entries(dashboard.by_status).sort(([, a], [, b]) => b - a).map(([status, count]) => <li key={status} className="flex items-center justify-between text-sm">
+                  <span className="font-mono text-[var(--text-secondary)]">{status}</span>
                   <span className="text-[var(--text-muted)]">{count}</span>
                 </li>)}
           </ul>}

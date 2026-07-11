@@ -85,6 +85,8 @@ export const PAGE_DESCRIPTIONS: Record<string, string> = {
   // Automate
   "/autonomous":
     "Let Eden autonomously investigate, patch, and propose fixes to your codebase.",
+  "/issues":
+    "Grouped agent failures with auto-triage, self-heal, and verify lifecycle.",
   "/closed-loop":
     "Closed-loop improvements — events flow from detection back to deploy.",
   "/pr-suggestions":

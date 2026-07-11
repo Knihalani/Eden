@@ -55,7 +55,7 @@ DEFAULT_LLM_SLOT: str = "fast"
 # how to resolve. Unknown prefixes return ``None`` and the
 # agent surfaces an "unsupported trigger" envelope.
 KNOWN_TRIGGER_TYPES: frozenset[str] = frozenset(
-    {"drift_alert", "incident", "judge_regression", "guardrail_breach"}
+    {"drift_alert", "incident", "judge_regression", "guardrail_breach", "issue"}
 )
 
 # The 3 destructive action types the :class:`SelfHealer`
@@ -302,7 +302,7 @@ async def _resolve_trigger_context(
         try:
             row = await client.fetchrow(
                 "SELECT * FROM incident_clusters "
-                "WHERE org_id = $1 AND cluster_id = $2",
+                "WHERE org_id = $1 AND id = $2",
                 org_id,
                 trigger.split(":", 1)[1],
             )
@@ -318,6 +318,59 @@ async def _resolve_trigger_context(
             "context": {
                 "severity": dict(row).get("severity"),
                 "member_count": dict(row).get("member_count"),
+            },
+        }
+    if prefix == "issue":
+        # issue:<uuid> — F30 triage trigger. Load the grouped issue
+        # plus its most-recent example stumbles so the investigator has
+        # concrete evidence to ground the RCA.
+        issue_id = trigger.split(":", 1)[1]
+        try:
+            row = await client.fetchrow(
+                "SELECT * FROM agent_issues "
+                "WHERE org_id = $1 AND id = $2::uuid",
+                org_id,
+                issue_id,
+            )
+        except Exception as exc:
+            logger.debug("autonomous._common: issue fetch failed: %s", exc)
+            return None
+        if row is None:
+            return None
+        issue = dict(row)
+        stumbles: list[dict[str, Any]] = []
+        try:
+            srows = await client.fetch(
+                "SELECT trace_id, kind, title, detail, severity, span_id, "
+                "detected_at FROM agent_stumbles "
+                "WHERE org_id = $1 AND fingerprint = $2 "
+                "ORDER BY detected_at DESC LIMIT 5",
+                org_id,
+                issue["fingerprint"],
+            )
+            stumbles = [dict(s) for s in srows]
+        except Exception as exc:
+            logger.debug("autonomous._common: issue stumbles fetch failed: %s", exc)
+        return {
+            "trigger_type": "issue",
+            "trigger_id": trigger,
+            "row": issue,
+            "context": {
+                "issue_id": issue_id,
+                "kind": issue.get("kind"),
+                "severity": issue.get("severity"),
+                "title": issue.get("title"),
+                "stumble_count": issue.get("stumble_count"),
+                "user_count": issue.get("user_count"),
+                "agent_id": issue.get("agent_id"),
+                "sample_stumbles": [
+                    {
+                        "trace_id": s.get("trace_id"),
+                        "title": s.get("title"),
+                        "detail": s.get("detail"),
+                    }
+                    for s in stumbles
+                ],
             },
         }
     if prefix == "judge_regression":

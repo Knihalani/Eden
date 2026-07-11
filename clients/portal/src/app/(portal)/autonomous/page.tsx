@@ -157,30 +157,40 @@ function NLQuerySection() {
 
 /* ----------------------- Investigate tab ----------------------------- */
 
+type InvestigateResult = {
+  investigation_id?: string;
+  trigger?: string;
+  trigger_type?: string;
+  findings: Array<Record<string, unknown>>;
+  proposed_remediations: Array<Record<string, unknown>>;
+  message?: string;
+  status?: string;
+};
+
 function InvestigateTab() {
   const { currentOrg } = useOrg();
+  const [trigger, setTrigger] = useState("");
   const [traceId, setTraceId] = useState("");
   const [question, setQuestion] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string>("");
-  const [result, setResult] = useState<{
-    investigation_id: string;
-    findings: string;
-    recommended_actions: string[];
-    confidence: number;
-  } | null>(null);
+  const [result, setResult] = useState<InvestigateResult | null>(null);
+
+  const canSubmit = Boolean(trigger.trim() || traceId.trim());
 
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!currentOrg || !question.trim()) return;
+    if (!currentOrg || !canSubmit) return;
     setSubmitting(true);
     setError("");
     setResult(null);
     try {
       const res = await autonomousApi.investigate(currentOrg.id, {
+        ...(trigger.trim() ? { trigger: trigger.trim() } : {}),
         ...(traceId.trim() ? { trace_id: traceId.trim() } : {}),
-        question: question.trim() });
-      setResult(res);
+        ...(question.trim() ? { question: question.trim() } : {}),
+      });
+      setResult({ ...(res.data ?? {}), status: res.status } as InvestigateResult);
     } catch (e) {
       setError(errorFromCaught(e, "Failed to run investigation"));
     } finally {
@@ -192,13 +202,31 @@ function InvestigateTab() {
     <Card>
       <CardHeader>
         <CardTitle>Investigate</CardTitle>
-        <CardDescription>Run an autonomous investigation on a trace or topic</CardDescription>
+        <CardDescription>
+          Run an autonomous investigation. Provide a typed trigger
+          (e.g. <code>incident:&lt;id&gt;</code>, <code>issue:&lt;id&gt;</code>,
+          <code>drift_alert:&lt;id&gt;</code>) or a trace ID that belongs to a
+          detected incident cluster.
+        </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         <form onSubmit={onSubmit} className="space-y-3">
           <label className="block">
             <span className="text-xs font-medium uppercase tracking-wide text-[var(--text-muted)]">
-              Trace ID (optional)
+              Trigger
+            </span>
+            <input
+              type="text"
+              value={trigger}
+              onChange={(e) => setTrigger(e.target.value)}
+              placeholder="incident:… · issue:… · drift_alert:…"
+              aria-label="Investigation trigger"
+              className="mt-1 w-full rounded-md border border-[var(--border-default)] bg-[var(--bg-tertiary)] px-3 py-2 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:border-[var(--accent)] focus:outline-none"
+            />
+          </label>
+          <label className="block">
+            <span className="text-xs font-medium uppercase tracking-wide text-[var(--text-muted)]">
+              Trace ID (optional — resolves to its incident)
             </span>
             <input
               type="text"
@@ -211,12 +239,11 @@ function InvestigateTab() {
           </label>
           <label className="block">
             <span className="text-xs font-medium uppercase tracking-wide text-[var(--text-muted)]">
-              Question
+              Question (optional context)
             </span>
             <textarea
               value={question}
               onChange={(e) => setQuestion(e.target.value)}
-              required
               rows={3}
               placeholder="Why did this trace fail…"
               aria-label="Investigation question"
@@ -225,7 +252,7 @@ function InvestigateTab() {
           </label>
           <button
             type="submit"
-            disabled={submitting || !question.trim()}
+            disabled={submitting || !canSubmit}
             aria-label="Run autonomous investigation"
             className={cn(
               "inline-flex items-center gap-2 rounded-md px-4 py-2 text-sm font-medium transition-colors",
@@ -260,24 +287,40 @@ function InvestigateTab() {
               exit={{ opacity: 0 }}
               className="space-y-3"
             >
+              {result.status === "needs_trigger" && (
+                <p className="rounded-md border border-[var(--warning)] bg-[var(--warning-bg)] p-3 text-xs text-[var(--warning)]">
+                  {result.message ?? "Provide a trigger or a trace ID that belongs to an incident."}
+                </p>
+              )}
               <div>
                 <p className="mb-1 text-[10px] font-medium uppercase tracking-wide text-[var(--text-muted)]">
-                  Findings · confidence {(result.confidence * 100).toFixed(0)}%
+                  Findings{result.trigger ? ` · ${result.trigger}` : ""}
                 </p>
-                <p className="rounded-md border border-[var(--border-subtle)] bg-[var(--bg-base)] p-3 text-sm text-[var(--text-primary)]">
-                  {result.findings}
-                </p>
+                {(result.findings ?? []).length === 0 ? (
+                  <p className="rounded-md border border-[var(--border-subtle)] bg-[var(--bg-base)] p-3 text-sm text-[var(--text-muted)]">
+                    No findings.
+                  </p>
+                ) : (
+                  <ul className="space-y-1 rounded-md border border-[var(--border-subtle)] bg-[var(--bg-base)] p-3 text-sm text-[var(--text-primary)]">
+                    {(result.findings ?? []).map((f, i) => (
+                      <li key={i} className="flex items-start gap-2">
+                        <Search className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[var(--accent)]" />
+                        <span>{String(f.summary ?? f.title ?? f.description ?? JSON.stringify(f))}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
               </div>
-              {result.recommended_actions.length > 0 && (
+              {(result.proposed_remediations ?? []).length > 0 && (
                 <div>
                   <p className="mb-1 text-[10px] font-medium uppercase tracking-wide text-[var(--text-muted)]">
-                    Recommended actions
+                    Proposed remediations
                   </p>
                   <ul className="space-y-1 rounded-md border border-[var(--border-subtle)] bg-[var(--bg-base)] p-3 text-sm text-[var(--text-primary)]">
-                    {result.recommended_actions.map((a, i) => (
+                    {(result.proposed_remediations ?? []).map((a, i) => (
                       <li key={i} className="flex items-start gap-2">
                         <Lightbulb className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[var(--accent)]" />
-                        <span>{a}</span>
+                        <span>{String(a.summary ?? a.action_type ?? a.description ?? JSON.stringify(a))}</span>
                       </li>
                     ))}
                   </ul>
@@ -317,9 +360,9 @@ function RecommendationsTab() {
     });
     autonomousApi
       .recommendations(currentOrg.id)
-      .then((res: { recommendations?: Array<{ id: string; title: string; impact: string; effort: string; rationale: string }> }) => {
+      .then((res) => {
         if (cancelled) return;
-        setItems(res.recommendations ?? []);
+        setItems(res.data?.recommendations ?? []);
       })
       .catch((err: unknown) => {
         if (cancelled) return;
@@ -406,23 +449,24 @@ function RecommendationsTab() {
 
 /* ----------------------- Self-heal tab ------------------------------- */
 
+// Heal action types the backend ``SelfHealer`` understands.
 const HEAL_COMPONENTS = [
-  { value: "PromotionLoop", label: "PromotionLoop" },
-  { value: "ModelRouter", label: "ModelRouter" },
-  { value: "SemanticCache", label: "SemanticCache" },
+  { value: "rollback", label: "rollback" },
+  { value: "reweight", label: "reweight" },
+  { value: "cache_bust", label: "cache_bust" },
 ];
 
 function HealTab() {
   const { currentOrg } = useOrg();
-  const [component, setComponent] = useState("PromotionLoop");
+  const [component, setComponent] = useState("rollback");
   const [description, setDescription] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string>("");
   const [result, setResult] = useState<{
-    heal_id: string;
+    action_id: string;
     status: "pending_approval" | "applied" | "rejected";
     before_state: Record<string, unknown>;
-    proposed_change: string;
+    message: string;
   } | null>(null);
 
   const onSubmit = async (e: React.FormEvent) => {
@@ -433,9 +477,14 @@ function HealTab() {
     setResult(null);
     try {
       const res = await autonomousApi.heal(currentOrg.id, {
-        component,
-        description: description.trim() });
-      setResult(res);
+        action_type: component,
+      });
+      setResult({
+        action_id: res.data?.action_id,
+        status: res.data?.status,
+        before_state: res.data?.before_state ?? {},
+        message: res.data?.message,
+      });
     } catch (e) {
       setError(errorFromCaught(e, "Failed to request heal"));
     } finally {
@@ -531,18 +580,18 @@ function HealTab() {
               </div>
               <div>
                 <p className="mb-1 text-[10px] font-medium uppercase tracking-wide text-[var(--text-muted)]">
-                  Heal ID
+                  Action ID
                 </p>
                 <p className="rounded-md border border-[var(--border-subtle)] bg-[var(--bg-base)] p-2 font-mono text-xs text-[var(--text-secondary)]">
-                  {result.heal_id}
+                  {result.action_id}
                 </p>
               </div>
               <div>
                 <p className="mb-1 text-[10px] font-medium uppercase tracking-wide text-[var(--text-muted)]">
-                  Proposed change
+                  Message
                 </p>
                 <p className="rounded-md border border-[var(--border-subtle)] bg-[var(--bg-base)] p-3 text-sm text-[var(--text-primary)]">
-                  {result.proposed_change}
+                  {result.message}
                 </p>
               </div>
               <div>
