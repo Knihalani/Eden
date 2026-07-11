@@ -359,6 +359,15 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning(f"closed-loop consumer startup skipped: {e}")
 
+    # F46 (Wave 6) — start the verify worker that resolves/regresses
+    # issues once a remediation's quiet window elapses.
+    try:
+        from eden.closed_loop.verify import start_verify_worker
+
+        await start_verify_worker()
+    except Exception as e:
+        logger.warning(f"closed-loop verify worker startup skipped: {e}")
+
     # Phase 3a (2026-06-23) — surface a loud startup warning when neither
     # a GitHub App nor the legacy PR-provider env vars are configured.
     # Without this, the agent silently falls back to ``LocalPRProvider``
@@ -414,6 +423,13 @@ async def lifespan(app: FastAPI):
             await stop_insights_detector_loop()
         except Exception as e:  # pragma: no cover - defensive
             logger.warning(f"Insights detector loop stop failed: {e}")
+
+    try:
+        from eden.closed_loop.verify import stop_verify_worker
+
+        await stop_verify_worker()
+    except Exception as e:  # pragma: no cover - defensive
+        logger.warning(f"closed-loop verify worker stop failed: {e}")
 
     try:
         from eden.closed_loop.event_bus import stop_consumer as stop_loop

@@ -645,6 +645,19 @@ def _build_settings_class():
         daily_maintenance_budget_usd: float = 25.0
         max_auto_rollbacks_per_day: int = 3
 
+        # ── Closed-loop verify loop (F46 Wave 6) ────────────────────────
+        # After a remediation the orchestrator schedules a verify row;
+        # the verify worker waits ``verify_delay_seconds`` then confirms
+        # the fix held (no new stumbles for the issue fingerprint in the
+        # trailing ``verify_quiet_window_minutes`` AND StatGate P0
+        # cleared). Pass → issue ``resolved``; fail → ``regressed`` +
+        # human escalation. The worker polls every
+        # ``verify_poll_interval_seconds``.
+        verify_delay_seconds: int = 1800
+        verify_quiet_window_minutes: int = 30
+        verify_poll_interval_seconds: int = 60
+        verify_max_attempts: int = 3
+
         # ── Kill-switch defaults (v2.7 hot-path) ────────────────────────
         # Mutating actions default OFF per audit/permission policy.
         # Read-only actions default ON. Override per-tenant via
