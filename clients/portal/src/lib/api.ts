@@ -3239,6 +3239,64 @@ export const closedLoopApi = {
     fetchApi<{ pending: number; approved: number; denied: number; applied_today: number; by_hook: Record<string, number>; }>(`/orgs/${orgId}/intelligence/closed-loop/dashboard`),
 };
 
+// ── Agent Issues (F28/F29/F46 closed-loop) ──────────────────────────
+export type AgentIssue = {
+  id: string;
+  org_id: string;
+  fingerprint: string;
+  kind: string;
+  title: string;
+  status: string;
+  severity: string;
+  agent_id: string | null;
+  stumble_count: number;
+  user_count: number;
+  repetition_count: number;
+  first_seen?: string | null;
+  last_seen?: string | null;
+  triage_result?: Record<string, unknown> | null;
+};
+
+export type AgentStumble = {
+  id: string;
+  trace_id: string;
+  kind: string;
+  fingerprint: string;
+  title: string;
+  severity: string;
+  detected_by: string;
+  detected_at?: string | null;
+  detail?: Record<string, unknown>;
+};
+
+type IssuesEnvelope<T> = { status: string; feature: string; data: T };
+
+export const agentIssuesApi = {
+  list: (orgId: string, params?: { status?: string; severity?: string; limit?: number; offset?: number }) => {
+    const q = new URLSearchParams();
+    if (params?.status) q.set("status", params.status);
+    if (params?.severity) q.set("severity", params.severity);
+    if (params?.limit != null) q.set("limit", String(params.limit));
+    if (params?.offset != null) q.set("offset", String(params.offset));
+    const qs = q.toString();
+    return fetchApi<IssuesEnvelope<{ issues: AgentIssue[]; count: number }>>(`/orgs/${orgId}/agent-issues${qs ? `?${qs}` : ""}`);
+  },
+  get: (orgId: string, issueId: string) =>
+    fetchApi<IssuesEnvelope<{ issue: AgentIssue }>>(`/orgs/${orgId}/agent-issues/${issueId}`),
+  resolve: (orgId: string, issueId: string, data: { status?: "resolved" | "ignored" } = {}) =>
+    fetchApi<IssuesEnvelope<{ issue_id: string; status: string; updated: boolean }>>(`/orgs/${orgId}/agent-issues/${issueId}/resolve`, { method: "POST", body: JSON.stringify(data) }),
+  triage: (orgId: string, issueId: string, data: { force?: boolean } = {}) =>
+    fetchApi<IssuesEnvelope<{ triage_result?: Record<string, unknown> }>>(`/orgs/${orgId}/agent-issues/${issueId}/triage`, { method: "POST", body: JSON.stringify(data) }),
+  stumbles: (orgId: string, params?: { fingerprint?: string; trace_id?: string; limit?: number }) => {
+    const q = new URLSearchParams();
+    if (params?.fingerprint) q.set("fingerprint", params.fingerprint);
+    if (params?.trace_id) q.set("trace_id", params.trace_id);
+    if (params?.limit != null) q.set("limit", String(params.limit));
+    const qs = q.toString();
+    return fetchApi<IssuesEnvelope<{ stumbles: AgentStumble[]; count: number }>>(`/orgs/${orgId}/stumbles${qs ? `?${qs}` : ""}`);
+  },
+};
+
 // ── Intelligence: Eval (Cat 3) ──────────────────────────────────────
 export const evalApi = {
   tagVersion: (orgId: string, data: { judge_name: string; version: string; notes?: string }) =>

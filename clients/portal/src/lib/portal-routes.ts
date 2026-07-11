@@ -25,6 +25,7 @@ export const KNOWN_PORTAL_PREFIXES: readonly string[] = [
   "/studio",
   "/guardrails",
   "/autonomous",
+  "/issues",
   "/closed-loop",
   "/pr-suggestions",
   "/settings",
