@@ -11,7 +11,7 @@ import { NoOrgState } from "@/components/ui/no-org-state";
 import { useToast } from "@/components/ui/toast";
 import { ArrowLeft, Loader2, ShieldAlert, Stethoscope, CheckCircle2, Ban } from "lucide-react";
 import { PageContent } from "@/components/layout/page-content";
-import { SeverityBadge, StatusBadge, RepeatBadge } from "../page";
+import { SeverityBadge, StatusBadge, RepeatBadge } from "../_components/issue-badges";
 
 export default function IssueDetailPage() {
   const { currentOrg } = useOrg();

@@ -241,7 +241,7 @@ class SecurityScanner:
 
         # ── Fire the closed-loop hook for each severe finding ──
         for f in findings:
-            _fire_security_violation(
+            await _fire_security_violation(
                 org_id,
                 scanner=f["scanner"],
                 count=f["count"],

@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import { useOrg } from "@/hooks/use-org";
-import { closedLoopApi } from "@/lib/api";
+import { closedLoopApi, type ClosedLoopAction } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { NoOrgState } from "@/components/ui/no-org-state";
@@ -25,9 +25,43 @@ type Dashboard = {
   pending: number;
   approved: number;
   denied: number;
-  applied_today: number;
+  applied: number;
   by_hook: Record<string, number>;
+  by_status: Record<string, number>;
+  by_severity: Record<string, number>;
 };
+
+function mapClosedLoopAction(row: ClosedLoopAction): Action {
+  const status =
+    row.status === "pending_approval"
+      ? "pending"
+      : row.status;
+  return {
+    action_id: row.id,
+    hook: row.hook_name || row.action_kind,
+    status,
+    created_at: row.created_at,
+    payload: row.payload ?? {},
+  };
+}
+
+function mapDashboard(data: {
+  total: number;
+  by_kind: Record<string, number>;
+  by_status: Record<string, number>;
+  by_severity: Record<string, number>;
+}): Dashboard {
+  const byStatus = data.by_status ?? {};
+  return {
+    pending: byStatus.pending_approval ?? 0,
+    approved: byStatus.approved ?? 0,
+    denied: byStatus.denied ?? 0,
+    applied: byStatus.applied ?? 0,
+    by_hook: data.by_kind ?? {},
+    by_status: byStatus,
+    by_severity: data.by_severity ?? {},
+  };
+}
 export default function ClosedLoopPage() {
   const {
     currentOrg
@@ -49,16 +83,14 @@ export default function ClosedLoopPage() {
     setLoading(true);
     setError(null);
     try {
-      const [pendingRes, allRes, dashRes] = await Promise.all([closedLoopApi.listActions(currentOrg.id, {
-        status: "pending"
-      }).catch(() => ({
-        actions: []
-      })), closedLoopApi.listActions(currentOrg.id).catch(() => ({
-        actions: []
-      })), closedLoopApi.dashboard(currentOrg.id).catch(() => null)]);
-      setPending(pendingRes.actions ?? []);
-      setHistory(allRes.actions ?? []);
-      setDashboard(dashRes);
+      const [pendingRes, allRes, dashRes] = await Promise.all([
+        closedLoopApi.listPending(currentOrg.id).catch(() => ({ data: { actions: [] } })),
+        closedLoopApi.listAll(currentOrg.id).catch(() => ({ data: { actions: [] } })),
+        closedLoopApi.dashboard(currentOrg.id).catch(() => null),
+      ]);
+      setPending((pendingRes.data?.actions ?? []).map(mapClosedLoopAction));
+      setHistory((allRes.data?.actions ?? []).map(mapClosedLoopAction));
+      setDashboard(dashRes?.data ? mapDashboard(dashRes.data) : null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load closed-loop actions");
     } finally {
@@ -131,7 +163,7 @@ export default function ClosedLoopPage() {
           <SummaryCard label="Pending" value={dashboard.pending} icon={Inbox} />
           <SummaryCard label="Approved" value={dashboard.approved} icon={Check} />
           <SummaryCard label="Denied" value={dashboard.denied} icon={X} />
-          <SummaryCard label="Applied today" value={dashboard.applied_today} icon={Play} />
+          <SummaryCard label="Applied" value={dashboard.applied} icon={Play} />
         </div>}
 
       {/* Tab strip */}
@@ -301,6 +333,15 @@ function DashboardView({
         {Object.keys(dashboard.by_hook).length === 0 ? <p className="text-sm text-[var(--text-muted)]">No actions recorded yet.</p> : <ul className="space-y-2">
             {Object.entries(dashboard.by_hook).sort(([, a], [, b]) => b - a).map(([hook, count]) => <li key={hook} className="flex items-center justify-between text-sm">
                   <span className="font-mono text-[var(--text-secondary)]">{hook}</span>
+                  <span className="text-[var(--text-muted)]">{count}</span>
+                </li>)}
+          </ul>}
+      </div>
+      <div className="rounded-lg border border-[var(--border-default)] bg-[var(--bg-primary)] p-4">
+        <h3 className="text-sm font-semibold text-[var(--text-primary)] mb-3">Actions by status</h3>
+        {Object.keys(dashboard.by_status).length === 0 ? <p className="text-sm text-[var(--text-muted)]">No status breakdown yet.</p> : <ul className="space-y-2">
+            {Object.entries(dashboard.by_status).sort(([, a], [, b]) => b - a).map(([status, count]) => <li key={status} className="flex items-center justify-between text-sm">
+                  <span className="font-mono text-[var(--text-secondary)]">{status}</span>
                   <span className="text-[var(--text-muted)]">{count}</span>
                 </li>)}
           </ul>}

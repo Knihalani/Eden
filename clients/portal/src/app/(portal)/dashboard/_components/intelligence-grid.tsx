@@ -523,12 +523,12 @@ const CARDS: CardSpec[] = [
     iconClassName: "bg-[var(--warning-bg)] text-[var(--warning-strong)]",
     load: (orgId) => closedLoopApi.dashboard(orgId),
     pick: (raw) => {
-      const data = raw as { pending?: number } | null;
-      return data?.pending ?? 0;
+      const data = raw as { data?: { by_status?: Record<string, number> } } | null;
+      return data?.data?.by_status?.pending_approval ?? 0;
     },
     pickSubtitle: (raw) => {
-      const data = raw as { applied_today?: number } | null;
-      return `${data?.applied_today ?? 0} applied today`;
+      const data = raw as { data?: { by_status?: Record<string, number> } } | null;
+      return `${data?.data?.by_status?.applied ?? 0} applied`;
     },
     emptyText: "Inbox zero",
   },
