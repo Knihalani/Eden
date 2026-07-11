@@ -33,6 +33,7 @@ import {
   Lock,
   RefreshCw,
 } from "lucide-react";
+import { errorFromCaught } from "@/lib/safe-error-message";
 
 // Lucide-react does not ship a Github icon in this version; render an
 // inline SVG matching the GitHub Octicon. Keeps the visual semantics
@@ -119,7 +120,7 @@ export function OnboardingConnectFlow({
         if (first) setSelectedRepo(first);
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not load repos");
+      setError(errorFromCaught(err, "Could not load repos"));
     } finally {
       setLoadingRepos(false);
     }

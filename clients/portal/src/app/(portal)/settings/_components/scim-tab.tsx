@@ -5,6 +5,7 @@ import { usePermissions } from "@/hooks/use-permissions";
 import { api } from "@/lib/api";
 import { Loader2, Shield, RefreshCw, Copy, Check, Key, AlertTriangle, Users } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { errorFromCaught } from "@/lib/safe-error-message";
 
 interface ScimConfig {
   scim_enabled: boolean;
@@ -39,7 +40,7 @@ export function ScimTab({ org }: { org: any }) {
         const data = await api.getScimConfig(currentOrg.id);
         setConfig(data);
       } catch (e) {
-        setError(e instanceof Error ? e.message : "Failed to load SCIM configuration");
+        setError(errorFromCaught(e, "Failed to load SCIM configuration"));
       } finally {
         setLoading(false);
       }
@@ -64,7 +65,7 @@ export function ScimTab({ org }: { org: any }) {
         setNewToken(result.bearer_token);
       }
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to configure SCIM");
+      setError(errorFromCaught(e, "Failed to configure SCIM"));
     } finally {
       setSaving(false);
     }
@@ -84,7 +85,7 @@ export function ScimTab({ org }: { org: any }) {
         has_token: true,
       });
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to rotate token");
+      setError(errorFromCaught(e, "Failed to rotate token"));
     } finally {
       setSaving(false);
     }

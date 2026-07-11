@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { AuthSplitLayout, AuthBrandPanel, AuthFormCard } from "@/components/auth";
+import { errorFromCaught } from "@/lib/safe-error-message";
 
 export default function ForgotPasswordPage() {
   const [email, setEmail] = useState("");
@@ -38,7 +39,7 @@ export default function ForgotPasswordPage() {
       // Strongly-typed catch: instanceof Error guard, fallback to a
       // friendly string for non-Error throws (e.g. API client
       // surface that stringifies the network error).
-      setError(err instanceof Error ? err.message : "Request failed");
+      setError(errorFromCaught(err, "Request failed"));
     } finally {
       setLoading(false);
     }

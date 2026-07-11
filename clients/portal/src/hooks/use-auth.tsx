@@ -3,7 +3,6 @@
 import {
   createContext,
   useContext,
-  useEffect,
   useState,
   useCallback,
   type ReactNode } from "react";
@@ -135,23 +134,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Final attempt to refresh the (now stuck) error state.
     await refreshUser();
   }, [refreshUser]);
-
-  useEffect(() => {
-    // Use the retry variant on first mount so the auto-provision
-    // race window doesn't bounce the user into the "Setting up your
-    // account" banner during the first half-second after signup.
-    refreshUserWithRetry();
-    // We intentionally only run this once on mount — the refresh
-    // function is recreated every render and depending on it would
-    // trigger a refetch on every Clerk state change. The org-hook
-    // (use-org) owns the refresh-on-clerk-org-change path.
-    //
-    // PQ-13: depend on ``clerkUser?.updatedAt`` in addition to ``id``
-    // so accepting a new org invite in another tab triggers a re-fetch.
-    // Pre-fix the dep array was ``[clerkUser?.id]`` alone, which left
-    // the org list stale after an invite-accept until a full reload.
-
-  }, [clerkUser?.id, clerkUser?.updatedAt]);
 
   const user: User | null = clerkUser
     ? buildEdenUser(clerkUser, organizations, currentOrgId)

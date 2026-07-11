@@ -14,6 +14,7 @@ import time
 from typing import TYPE_CHECKING
 
 from .base import Judge, JudgeContext, JudgeScore
+from ._sampling import production_sample_matches
 from .hallucination import _parse_judge_response
 
 if TYPE_CHECKING:
@@ -50,7 +51,7 @@ class ReasoningCoherenceJudge(Judge):
         if not super().matches(event):
             return False
         payload = event.payload or {}
-        return bool(payload.get("reasoning") or payload.get("thought"))
+        return bool(payload.get("reasoning") or payload.get("thought")) and production_sample_matches(event)
 
     async def score(
         self, event: TelemetryEvent, ctx: JudgeContext

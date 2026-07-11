@@ -10,6 +10,7 @@ import time
 from typing import TYPE_CHECKING
 
 from .base import Judge, JudgeContext, JudgeScore
+from ._sampling import production_sample_matches
 from .hallucination import _extract_text_and_spec, _parse_judge_response
 
 if TYPE_CHECKING:
@@ -38,6 +39,11 @@ class ToneJudge(Judge):
     name = "tone"
     version = "2026-06-03"
     model_slot = "fast"
+
+    def matches(self, event: TelemetryEvent) -> bool:
+        if not super().matches(event):
+            return False
+        return production_sample_matches(event)
 
     async def score(
         self, event: TelemetryEvent, ctx: JudgeContext

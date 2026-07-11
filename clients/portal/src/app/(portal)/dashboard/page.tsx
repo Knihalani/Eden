@@ -22,6 +22,7 @@ import {
   type TraceRow } from "./_components/recent-traces-card";
 import { QuickLinks } from "./_components/quick-links";
 import { NoOrgState } from "@/components/ui/no-org-state";
+import { errorFromCaught } from "@/lib/safe-error-message";
 
 interface DashboardData {
   traces: TraceRow[];
@@ -140,7 +141,7 @@ export default function DashboardPage() {
       } catch (e) {
         if (!cancelled) {
           console.error("Failed to load dashboard telemetry:", e);
-          setError(e instanceof Error ? e.message : "Failed to load telemetry");
+          setError(errorFromCaught(e, "Failed to load telemetry"));
           toast.error(e instanceof Error ? e.message : "Failed to load telemetry");
         }
       } finally {

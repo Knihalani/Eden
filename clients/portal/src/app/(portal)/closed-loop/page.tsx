@@ -13,6 +13,7 @@ import { Check, X, Play, AlertCircle, Loader2, Inbox, History, BarChart3 } from 
 import { PageHeader } from "@/components/layout/page-header";
 import { PageContent } from "@/components/layout/page-content";
 import { Card } from "@/components/ui/card";
+import { errorFromCaught } from "@/lib/safe-error-message";
 type Action = {
   action_id: string;
   hook: string;
@@ -59,7 +60,7 @@ export default function ClosedLoopPage() {
       setHistory(allRes.actions ?? []);
       setDashboard(dashRes);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load closed-loop actions");
+      setError(errorFromCaught(err, "Failed to load closed-loop actions"));
     } finally {
       setLoading(false);
     }

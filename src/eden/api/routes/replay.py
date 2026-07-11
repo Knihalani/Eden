@@ -6,24 +6,24 @@ Provides endpoints for:
 - Acknowledging single or batches of alerts
 - Listing configured alert rules
 
-The prior ``/jobs/{job_id}/trace/...`` and ``/jobs/{job_id}/hilt/...``
-endpoints have been removed along with the jobs feature. Trace
-replay now lives under ``/orgs/{org_id}/traces/{trace_id}/replay``
-in :mod:`eden.api.routes.observability`.
-
 All endpoints require authentication via Clerk session cookie
 (or Clerk Bearer JWT for service-to-service callers).
 """
 
 from __future__ import annotations
 
+import json
 import logging
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 
-from eden.api.deps import get_current_user
+from eden.api.deps import (
+    eden_user_id_from_auth,
+    get_current_user,
+    resolve_eden_org_id,
+)
 from eden.realtime.alert_stream import get_alert_processor
 from eden.storage.postgres import get_postgres_client
 
@@ -55,26 +55,34 @@ async def list_alerts(
     offset: int = Query(0, ge=0),
     user: dict[str, Any] = Depends(get_current_user),
 ):
-    """List alerts for an organization.
-
-    Query parameters:
-      severity: Filter by severity (debug, info, warning, high, critical)
-      acknowledged: Filter by acknowledged status
-    """
+    """List in-app alerts for an organization (scoped to the caller)."""
     client = await get_postgres_client()
-    orgs = await client.fetch(
-        "SELECT org_id FROM org_members WHERE user_id = $1 AND org_id = $2",
-        user["user_id"], org_id,
+    user_id = await eden_user_id_from_auth(user)
+    if not user_id:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    eden_org_id = await resolve_eden_org_id(org_id)
+    if not eden_org_id:
+        raise HTTPException(status_code=404, detail="Organization not found")
+
+    membership = await client.fetchrow(
+        "SELECT role FROM org_members WHERE org_id = $1 AND user_id = $2",
+        eden_org_id,
+        user_id,
     )
-    if not orgs:
+    if not membership:
         raise HTTPException(status_code=403, detail="Not a member of this organization")
 
-    conditions = ["(metadata->>'is_alert')::boolean = true"]
-    params: list[Any] = []
-    param_idx = 1
+    conditions = [
+        "user_id = $1",
+        "org_id = $2",
+        "(data->>'is_alert')::boolean = true",
+    ]
+    params: list[Any] = [user_id, eden_org_id]
+    param_idx = 3
 
     if severity:
-        conditions.append(f"metadata->>'severity' = ${param_idx}")
+        conditions.append(f"data->>'severity' = ${param_idx}")
         params.append(severity)
         param_idx += 1
 
@@ -83,7 +91,6 @@ async def list_alerts(
             conditions.append("read_at IS NOT NULL")
         else:
             conditions.append("read_at IS NULL")
-        param_idx += 1
 
     where_clause = " AND ".join(conditions)
 
@@ -101,73 +108,118 @@ async def list_alerts(
 
     rows = await client.fetch(
         f"""
-        SELECT id, user_id, type, title, body, data, read_at, created_at
+        SELECT id, user_id, org_id, type, title, body, data, read_at, created_at
         FROM notifications
         WHERE {where_clause}
         ORDER BY created_at DESC
         LIMIT ${param_idx} OFFSET ${param_idx + 1}
         """,
-        *params, limit, offset,
+        *params,
+        limit,
+        offset,
     )
 
     alerts = []
     for row in rows:
-        metadata = row["data"]
-        if isinstance(metadata, str):
-            import json
-            metadata = json.loads(metadata)
+        data = row["data"]
+        if isinstance(data, str):
+            data = json.loads(data)
+        if not isinstance(data, dict):
+            data = {}
         alerts.append({
-            "alert_id": row["id"],
+            "alert_id": str(row["id"]),
             "title": row["title"],
             "message": row["body"] or "",
-            "severity": metadata.get("severity", "info") if metadata else "info",
-            "entity_id": metadata.get("entity_id", "") if metadata else "",
+            "severity": data.get("severity", "info"),
+            "entity_id": data.get("entity_id", ""),
             "acknowledged": row["read_at"] is not None,
-            "created_at": row["created_at"],
-            "channels": metadata.get("channels", []) if metadata else [],
+            "acknowledged_at": row["read_at"].isoformat() if row["read_at"] else None,
+            "created_at": row["created_at"].isoformat() if row["created_at"] else None,
+            "channels": data.get("channels", []),
+            "metadata": data,
         })
 
     return AlertListResponse(alerts=alerts, total=total, unread_count=unread_count)
 
 
-@router.post("/alerts/{alert_id}/acknowledge")
+@router.post("/orgs/{org_id}/alerts/{alert_id}/acknowledge")
 async def acknowledge_alert(
+    org_id: str,
     alert_id: str,
     user: dict[str, Any] = Depends(get_current_user),
 ):
-    """Acknowledge an alert."""
-    processor = await get_alert_processor()
-    ok = await processor.acknowledge_alert(alert_id)
-
+    """Acknowledge a single alert (IDOR-safe)."""
     client = await get_postgres_client()
-    await client.execute(
-        "UPDATE notifications SET read_at = NOW() WHERE id = $1",
+    user_id = await eden_user_id_from_auth(user)
+    if not user_id:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    eden_org_id = await resolve_eden_org_id(org_id)
+    if not eden_org_id:
+        raise HTTPException(status_code=404, detail="Organization not found")
+
+    result = await client.execute(
+        """
+        UPDATE notifications
+        SET read_at = NOW()
+        WHERE id = $1
+          AND user_id = $2
+          AND org_id = $3
+          AND (data->>'is_alert')::boolean = true
+          AND read_at IS NULL
+        """,
         alert_id,
+        user_id,
+        eden_org_id,
     )
+    if result == "UPDATE 0":
+        raise HTTPException(status_code=404, detail="Alert not found")
 
-    return {"status": "ok" if ok else "error", "alert_id": alert_id}
+    processor = await get_alert_processor()
+    await processor.acknowledge_alert(alert_id)
+
+    return {"status": "ok", "alert_id": alert_id, "acknowledged": True}
 
 
-@router.post("/alerts/acknowledge-batch")
+@router.post("/orgs/{org_id}/alerts/acknowledge-batch")
 async def acknowledge_alerts_batch(
+    org_id: str,
     req: AlertAcknowledgeRequest,
     user: dict[str, Any] = Depends(get_current_user),
 ):
-    """Acknowledge multiple alerts at once."""
-    processor = await get_alert_processor()
+    """Acknowledge multiple alerts at once (IDOR-safe)."""
     client = await get_postgres_client()
+    user_id = await eden_user_id_from_auth(user)
+    if not user_id:
+        raise HTTPException(status_code=404, detail="User not found")
 
-    acknowledged = []
+    eden_org_id = await resolve_eden_org_id(org_id)
+    if not eden_org_id:
+        raise HTTPException(status_code=404, detail="Organization not found")
+
+    processor = await get_alert_processor()
+    acknowledged: list[str] = []
+
     for alert_id in req.alert_ids:
-        ok = await processor.acknowledge_alert(alert_id)
-        if ok:
-            await client.execute(
-                "UPDATE notifications SET read_at = NOW() WHERE id = $1",
-                alert_id,
-            )
+        result = await client.execute(
+            """
+            UPDATE notifications
+            SET read_at = NOW()
+            WHERE id = $1
+              AND user_id = $2
+              AND org_id = $3
+              AND (data->>'is_alert')::boolean = true
+              AND read_at IS NULL
+            """,
+            alert_id,
+            user_id,
+            eden_org_id,
+        )
+        if result != "UPDATE 0":
+            await processor.acknowledge_alert(alert_id)
             acknowledged.append(alert_id)
 
-    return {"status": "ok", "acknowledged_count": len(acknowledged)}
+    return {"status": "ok", "acknowledged_count": len(acknowledged), "alert_ids": acknowledged}
 
 
 @router.get("/orgs/{org_id}/alerts/rules")
@@ -176,6 +228,23 @@ async def list_alert_rules(
     user: dict[str, Any] = Depends(get_current_user),
 ):
     """List configured alert rules for an organization."""
+    client = await get_postgres_client()
+    user_id = await eden_user_id_from_auth(user)
+    if not user_id:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    eden_org_id = await resolve_eden_org_id(org_id)
+    if not eden_org_id:
+        raise HTTPException(status_code=404, detail="Organization not found")
+
+    membership = await client.fetchrow(
+        "SELECT role FROM org_members WHERE org_id = $1 AND user_id = $2",
+        eden_org_id,
+        user_id,
+    )
+    if not membership:
+        raise HTTPException(status_code=403, detail="Not a member of this organization")
+
     processor = await get_alert_processor()
     rules = processor.get_rules()
     return {"rules": [{

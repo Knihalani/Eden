@@ -457,14 +457,14 @@ async def resolve_eden_user_id(user_id: str | None) -> str | None:
             "SELECT id FROM users WHERE id::text = $1 OR clerk_id::text = $1 LIMIT 1",
             user_id,
         )
-        return str(row["id"]) if row else user_id
+        return str(row["id"]) if row else None
     except Exception as exc:
         logger.warning(
             "resolve_eden_user_id failed for user=%s: %s",
             user_id,
             exc,
         )
-        return user_id
+        return None
 
 
 async def resolve_eden_org_id(org_id: str | None) -> str | None:
@@ -486,14 +486,14 @@ async def resolve_eden_org_id(org_id: str | None) -> str | None:
             """,
             org_id,
         )
-        return str(row["id"]) if row else org_id
+        return str(row["id"]) if row else None
     except Exception as exc:
         logger.warning(
             "resolve_eden_org_id failed for org=%s: %s",
             org_id,
             exc,
         )
-        return org_id
+        return None
 
 
 async def ensure_clerk_membership(
@@ -509,10 +509,11 @@ async def ensure_clerk_membership(
     eden_role = clerk_role_to_eden_role(clerk_role)
     try:
         client = await get_postgres_client()
+        # Column is ``joined_at`` (migration 001), not ``created_at``.
         await client.execute(
             """
             INSERT INTO org_members (
-                org_id, user_id, role, last_active_at, created_at, last_writer_source
+                org_id, user_id, role, last_active_at, joined_at, last_writer_source
             )
             VALUES ($1, $2, $3, NOW(), NOW(), 'clerk')
             ON CONFLICT (org_id, user_id) DO UPDATE
@@ -585,15 +586,19 @@ async def get_eden_user_row_from_auth(user: dict) -> dict | None:
     string into a UUID FK column crashes asyncpg with
     ``invalid input syntax for type uuid`` → unhandled 500. Look up
     by ``clerk_id`` first, then by Eden ``id``.
+
+    When ``user_id`` is still a Clerk ``user_…`` id and the
+    ``clerk_id`` lookup misses, return ``None`` immediately — do
+    NOT fall through to an ``id`` lookup with the Clerk string
+    (that can never match a real Eden PK and confused auto-provision
+    tests / any mock that returns a row for arbitrary ids).
     """
     uid = user.get("user_id")
     if not uid:
         return None
     uid_str = str(uid)
     if uid_str.startswith("user_"):
-        row = await get_user_by_id(uid_str, lookup_column="clerk_id")
-        if row:
-            return row
+        return await get_user_by_id(uid_str, lookup_column="clerk_id")
     return await get_user_by_id(uid_str, lookup_column="id")
 
 

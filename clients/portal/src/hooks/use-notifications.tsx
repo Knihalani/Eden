@@ -7,7 +7,7 @@ import {
   useCallback,
   type ReactNode,
 } from "react";
-import { api } from "@/lib/api";
+import { api, ApiError } from "@/lib/api";
 import { usePolling } from "@/hooks/use-polling";
 
 export interface Notification {
@@ -26,6 +26,7 @@ interface NotificationsContextType {
   notifications: Notification[];
   unreadCount: number;
   error: string | null;
+  refresh: () => Promise<void>;
   markAsRead: (notificationId: string) => Promise<void>;
   markAllAsRead: () => Promise<void>;
   deleteNotification: (notificationId: string) => Promise<void>;
@@ -33,7 +34,8 @@ interface NotificationsContextType {
 
 const NotificationsContext = createContext<NotificationsContextType | null>(null);
 
-const POLL_INTERVAL_MS = 30_000;
+const POLL_INTERVAL_ACTIVE_MS = 30_000;
+const POLL_INTERVAL_IDLE_MS = 300_000;
 
 export function NotificationsProvider({ children }: { children: ReactNode }) {
   const [notifications, setNotifications] = useState<Notification[]>([]);
@@ -52,15 +54,20 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
       setError(null);
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
-      // 404 = endpoint not deployed yet (pre-launch). 500 during the
+      const status = e instanceof ApiError ? e.status : undefined;
+      // 404 = endpoint not deployed yet (pre-launch). 5xx during the
       // post-signup auto-provision race is transient — swallow and
       // let the next poll succeed once /auth/me has created the row.
-      if (/404|not\s*found|5\d\d|unexpected\s*error/i.test(msg)) {
+      // Match on status OR message: toUserFacingError strips "500" /
+      // "unexpected error" from the message in production.
+      const isTransient =
+        (typeof status === "number" && status >= 500) ||
+        status === 404 ||
+        /404|not\s*found|5\d\d|unexpected\s*error|having\s*trouble\s*reaching/i.test(msg);
+      if (isTransient) {
         setNotifications([]);
         setUnreadCount(0);
-        if (/5\d\d|unexpected\s*error/i.test(msg)) {
-          setError(null);
-        }
+        setError(null);
         return;
       }
       // For other errors, log + clear state + re-throw so
@@ -75,8 +82,8 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
 
   usePolling({
     fetch: refresh,
-    intervalMs: POLL_INTERVAL_MS,
-    deps: [],
+    intervalMs: unreadCount > 0 ? POLL_INTERVAL_ACTIVE_MS : POLL_INTERVAL_IDLE_MS,
+    deps: [unreadCount],
   });
 
   const markAsRead = useCallback(async (notificationId: string) => {
@@ -148,6 +155,7 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
         notifications,
         unreadCount,
         error,
+        refresh,
         markAsRead,
         markAllAsRead,
         deleteNotification,

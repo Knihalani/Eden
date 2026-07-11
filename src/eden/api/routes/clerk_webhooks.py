@@ -388,8 +388,10 @@ async def _upsert_membership(data: dict[str, Any]) -> None:
 
     await client.execute(
         """
-        INSERT INTO org_members (org_id, user_id, role, last_active_at, created_at)
-        VALUES ($1, $2, $3, NOW(), NOW())
+        INSERT INTO org_members (
+            org_id, user_id, role, last_active_at, joined_at, last_writer_source
+        )
+        VALUES ($1, $2, $3, NOW(), NOW(), 'clerk')
         ON CONFLICT (org_id, user_id) DO UPDATE
         SET role = CASE
                 WHEN org_members.last_writer_source = 'clerk'

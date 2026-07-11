@@ -80,7 +80,7 @@ class RedisTailer:
         """Main loop. Errors are logged and looped over."""
         from eden.config import get_settings
         settings = get_settings()
-        if not getattr(settings, "judges_async_tailer_enabled", True):
+        if not getattr(settings, "judges_async_tailer_enabled", False):
             logger.info("judges_async_tailer disabled by settings; tailer not starting")
             return
 
@@ -107,8 +107,10 @@ class RedisTailer:
         consumer group + last-delivered-id cursor is the right
         primitive; that's the Phase 3 upgrade.
         """
+        from eden.config import get_settings
         from eden.storage.redis import get_redis_client
 
+        settings = get_settings()
         client = await get_redis_client()
         if client is None:
             return
@@ -116,10 +118,15 @@ class RedisTailer:
         registry = get_judge_registry()
         runner = JudgeRunner(llm_client=self.llm_client)
         seen: set[str] = set()
+        max_keys = int(getattr(settings, "judges_async_tailer_max_keys", 50))
 
         # Enumerate keys. SCAN avoids blocking the server.
         try:
+            scanned = 0
             async for key in client.scan_iter(match="telemetry:*:events", count=200):
+                if scanned >= max_keys:
+                    break
+                scanned += 1
                 key_str = key.decode() if isinstance(key, bytes) else str(key)
                 # Parse tenant_id + trace_id out of the key.
                 parts = key_str.split(":")

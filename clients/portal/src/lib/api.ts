@@ -246,7 +246,7 @@ async function fetchApi<T>(
             ? JSON.stringify(rawDetail)
             : `HTTP ${response.status}`;
       const message = toUserFacingError(
-        new Error(detailStr),
+        { status: response.status, message: detailStr },
         detailStr || `HTTP ${response.status}`,
       );
       throw new ApiError(response.status, message);
@@ -1722,20 +1722,54 @@ export const api = {
     return fetchApi(`/orgs/${orgId}/observability/traces${qs ? `?${qs}` : ""}`);
   },
 
-  // Pattern 5.2 (Langfuse) — annotate a trace with a 0-10 score +
-  // category + free-form comment. The real backend route is
-  // expected at `POST /orgs/{orgId}/observability/traces/{traceId}/annotate`
-  // but we currently have no-op'd it: the dialog always resolves
-  // with the payload so the UI ships before the endpoint exists.
-  // When the route is implemented, swap the return to
-  //   fetchApi(`/orgs/${orgId}/observability/traces/${traceId}/annotate`,
-  //            { method: "POST", body: JSON.stringify(payload) });
   annotateTrace: (
-    _orgId: string,
-    _traceId: string,
-    payload: { score: number; category: string; comment?: string },
-  ): Promise<{ score: number; category: string; comment?: string }> =>
-    Promise.resolve(payload),
+    orgId: string,
+    traceId: string,
+    payload: { score: number; category: string; comment?: string; time_spent_ms?: number },
+  ) =>
+    fetchApi<{
+      item_id: string;
+      annotation_id: string;
+      label: unknown;
+      confidence: number;
+      created_at: string;
+    }>(`/orgs/${orgId}/labeling/traces/${traceId}/annotate`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+
+  createTraceShare: (
+    orgId: string,
+    traceId: string,
+    body?: { expiry_days?: number; label?: string; base_url?: string },
+  ) =>
+    fetchApi<{
+      id: string;
+      url?: string;
+      token?: string;
+      expires_at: string | null;
+    }>(`/orgs/${orgId}/traces/${traceId}/share`, {
+      method: "POST",
+      body: JSON.stringify(body ?? {}),
+    }),
+
+  listTraceShares: (orgId: string, traceId: string) =>
+    fetchApi<{
+      shares: Array<{
+        id: string;
+        trace_id: string;
+        label: string | null;
+        expires_at: string | null;
+        revoked_at: string | null;
+        created_at: string;
+        active: boolean;
+      }>;
+    }>(`/orgs/${orgId}/traces/${traceId}/shares`),
+
+  revokeTraceShare: (orgId: string, shareId: string) =>
+    fetchApi<{ revoked: boolean }>(`/orgs/${orgId}/shares/${shareId}`, {
+      method: "DELETE",
+    }),
 
   getTraceTimeline: (
     orgId: string,
@@ -1814,7 +1848,7 @@ export const api = {
   // same {alerts, total, unread_count} envelope so the consumer
   // can use either.
 
-  listAlerts: (async (orgId?: string, params?: { severity?: string; acknowledged?: boolean; limit?: number; offset?: number }): Promise<{
+  listAlerts: (async (orgId: string, params?: { severity?: string; acknowledged?: boolean; limit?: number; offset?: number }): Promise<{
     alerts: Array<{
       alert_id: string;
       severity: string;
@@ -1830,103 +1864,61 @@ export const api = {
     total: number;
     unread_count: number;
   }> => {
-    // The org-scoped endpoint /orgs/{org_id}/alerts doesn't exist on the
-    // backend (the mounted alerts router is the global /alerts surface,
-    // which evaluates rules against current metrics and returns fired
-    // alerts across the user's reachable orgs). The dashboard only needs
-    // a count by severity, so we call the global endpoint, wrap the
-    // list in the {alerts, total, unread_count} envelope the rest of
-    // the app already speaks, and adapt field names. ``orgId`` is
-    // accepted for callers that still pass it; the filter is a
-    // best-effort client-side match on the alerts.router's `labels`
-    // bag, which carries the org id when an alert is org-scoped.
     const q = new URLSearchParams();
+    if (params?.severity) q.set("severity", params.severity);
+    if (params?.acknowledged !== undefined) q.set("acknowledged", String(params.acknowledged));
     if (params?.limit) q.set("limit", String(params.limit));
+    if (params?.offset) q.set("offset", String(params.offset));
     const qs = q.toString();
-    const raw = await fetchApi<
-      Array<{
-        rule_id: string;
+    const data = await fetchApi<{
+      alerts: Array<{
+        alert_id: string;
         severity: string;
         title: string;
         message: string;
-        value: number;
-        threshold: number;
-        fired_at: string;
-        labels: Record<string, string>;
-      }>
-    >(`/alerts${qs ? `?${qs}` : ""}`);
-
-    // Filter by orgId if given — the global feed includes alerts
-    // for every org the user can see, and the dashboard wants its
-    // own slice. ``labels["org_id"]`` is set by the alert rules
-    // engine when an alert is org-scoped; we fall back to "all"
-    // for system-level alerts (e.g. budget breached) which carry
-    // no org label.
-    const filtered = orgId
-      ? raw.filter((a) => a.labels?.org_id === orgId || !a.labels?.org_id)
-      : raw;
+        entity_id: string;
+        acknowledged: boolean;
+        acknowledged_at: string | null;
+        created_at: string;
+        channels: string[];
+        metadata: Record<string, unknown>;
+      }>;
+      total: number;
+      unread_count: number;
+    }>(`/orgs/${orgId}/alerts${qs ? `?${qs}` : ""}`);
 
     return {
-      alerts: filtered.map((a) => ({
-        alert_id: a.rule_id,
+      alerts: data.alerts.map((a) => ({
+        alert_id: a.alert_id,
         severity: a.severity,
         title: a.title,
         description: a.message,
-        source: "rule_engine",
-        triggered_at: a.fired_at,
-        acknowledged: false,
-        acknowledged_at: null,
+        source: a.entity_id || "alert",
+        triggered_at: a.created_at,
+        acknowledged: a.acknowledged,
+        acknowledged_at: a.acknowledged_at,
         acknowledged_by: null,
-        metadata: { value: a.value, threshold: a.threshold, labels: a.labels },
+        metadata: a.metadata ?? {},
       })),
-      total: filtered.length,
-      unread_count: filtered.length,
+      total: data.total,
+      unread_count: data.unread_count,
     };
-  }) as {
-    (orgId: string, params?: { severity?: string; acknowledged?: boolean; limit?: number; offset?: number }): Promise<{
-      alerts: Array<{
-        alert_id: string;
-        severity: string;
-        title: string;
-        description: string;
-        source: string;
-        triggered_at: string;
-        acknowledged: boolean;
-        acknowledged_at: string | null;
-        acknowledged_by: string | null;
-        metadata: Record<string, unknown>;
-      }>;
-      total: number;
-      unread_count: number;
-    }>;
-    (): Promise<{
-      alerts: Array<{
-        alert_id: string;
-        severity: string;
-        title: string;
-        description: string;
-        source: string;
-        triggered_at: string;
-        acknowledged: boolean;
-        acknowledged_at: string | null;
-        acknowledged_by: string | null;
-        metadata: Record<string, unknown>;
-      }>;
-      total: number;
-      unread_count: number;
-    }>;
-  },
+  }),
 
-  acknowledgeAlert: (alertId: string) =>
-    fetchApi<{ alert_id: string; acknowledged: boolean }>(`/alerts/${alertId}/ack`, {
-      method: "POST",
-    }),
+  acknowledgeAlert: (orgId: string, alertId: string) =>
+    fetchApi<{ alert_id: string; acknowledged: boolean }>(
+      `/orgs/${orgId}/alerts/${alertId}/acknowledge`,
+      { method: "POST" },
+    ),
 
-  acknowledgeAlertsBatch: (alertIds: string[]) =>
-    fetchApi<{ acknowledged: number }>(`/alerts/ack-batch`, {
-      method: "POST",
-      body: JSON.stringify({ alert_ids: alertIds }),
-    }),
+  acknowledgeAlertsBatch: (orgId: string, alertIds: string[]) =>
+    fetchApi<{ acknowledged_count: number; alert_ids: string[] }>(
+      `/orgs/${orgId}/alerts/acknowledge-batch`,
+      {
+        method: "POST",
+        body: JSON.stringify({ alert_ids: alertIds }),
+      },
+    ),
 
   getAlertRules: (orgId: string) =>
     fetchApi<{
@@ -2027,9 +2019,17 @@ export const api = {
         provider: string;
         artifact_type: string;
         created_at: string;
+        is_deployed?: boolean;
         config: Record<string, unknown>;
         metadata: Record<string, unknown>;
       };
+      evaluations?: Array<{
+        evaluation_id: string;
+        benchmark_suite_id: string;
+        pass_rate: number;
+        avg_latency_ms: number;
+        cost_per_1k_tokens: number;
+      }>;
     }>(`/orgs/${orgId}/llmops/artifacts/${artifactId}`),
 
   // ── LLM Ops: prompts registry + canary render ─────────────────
@@ -4473,7 +4473,7 @@ const labelingApi = {
       { headers: { "X-Org-Id": orgId } },
     ),
   annotate: (orgId: string, body: { item_id: string; label: string; notes?: string }) =>
-    fetchApi<LabelingAnnotation>(`/orgs/${orgId}/labeling/items/annotate`, {
+    fetchApi<LabelingAnnotation>(`/orgs/${orgId}/labeling/annotate`, {
       method: "POST",
       headers: { "X-Org-Id": orgId, "Content-Type": "application/json" },
       body: JSON.stringify(body),

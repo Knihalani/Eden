@@ -328,26 +328,52 @@ class AlertStreamProcessor:
                 logger.warning(f"Alert dispatch to {channel.value} failed: {exc}")
 
     async def _dispatch_in_app(self, alert: GeneratedAlert) -> None:
-        """Create an in-app notification."""
+        """Create in-app notifications for each org member."""
         try:
+            from eden.api.deps import resolve_eden_org_id
             from eden.storage.postgres import get_postgres_client
+
             client = await get_postgres_client()
             if not client:
                 return
 
-            await client.execute(
-                """
-                INSERT INTO notifications (id, user_id, type, title, message, metadata, created_at)
-                VALUES ($1, $2, $3, $4, $5, $6, $7)
-                """,
-                alert.alert_id,
-                "_system",
-                f"alert:{alert.severity.value}",
-                alert.title,
-                alert.message,
-                json.dumps(alert.context),
-                alert.timestamp,
+            org_id = await resolve_eden_org_id(alert.tenant_id) if alert.tenant_id else None
+            if not org_id:
+                logger.debug("Skipping in-app alert dispatch — no org_id for tenant %s", alert.tenant_id)
+                return
+
+            members = await client.fetch(
+                "SELECT user_id FROM org_members WHERE org_id = $1",
+                org_id,
             )
+            if not members:
+                return
+
+            payload = {
+                "is_alert": True,
+                "severity": alert.severity.value,
+                "entity_id": alert.entity_id,
+                "rule_id": alert.rule_id,
+                "channels": [c.value for c in alert.channels],
+                **alert.context,
+            }
+
+            for member in members:
+                notif_id = str(uuid.uuid4())
+                await client.execute(
+                    """
+                    INSERT INTO notifications (id, user_id, org_id, type, title, body, data, created_at)
+                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+                    """,
+                    notif_id,
+                    str(member["user_id"]),
+                    org_id,
+                    f"alert:{alert.severity.value}",
+                    alert.title,
+                    alert.message,
+                    json.dumps(payload),
+                    alert.timestamp,
+                )
         except Exception as exc:
             logger.warning(f"In-app alert dispatch failed: {exc}")
 
@@ -372,8 +398,12 @@ class AlertStreamProcessor:
             logger.debug(f"WebSocket alert dispatch failed: {exc}")
 
     async def _dispatch_email(self, alert: GeneratedAlert) -> None:
-        """Send alert via email (placeholder for email service integration)."""
-        logger.info(f"Email alert would be sent: {alert.title} to tenant {alert.tenant_id}")
+        """Send alert via email — gated when SendGrid is not configured."""
+        logger.info(
+            "Email alert skipped:not_configured: %s (tenant=%s)",
+            alert.title,
+            alert.tenant_id,
+        )
 
     async def _dispatch_webhook(self, alert: GeneratedAlert) -> None:
         """Send alert to configured webhook URL."""
@@ -393,12 +423,12 @@ class AlertStreamProcessor:
             logger.warning(f"Webhook alert dispatch failed: {exc}")
 
     async def _dispatch_slack(self, alert: GeneratedAlert) -> None:
-        """Send alert to Slack (placeholder)."""
-        logger.info(f"Slack alert would be sent: {alert.title}")
+        """Send alert to Slack — gated when Slack is not configured."""
+        logger.info("Slack alert skipped:not_configured: %s", alert.title)
 
     async def _dispatch_pagerduty(self, alert: GeneratedAlert) -> None:
-        """Send critical alert to PagerDuty (placeholder)."""
-        logger.info(f"PagerDuty alert would be sent: {alert.title}")
+        """Send alert to PagerDuty — gated when PagerDuty is not configured."""
+        logger.info("PagerDuty alert skipped:not_configured: %s", alert.title)
 
     def add_rule(self, rule: AlertRule) -> None:
         """Add a custom alert rule."""

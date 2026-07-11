@@ -308,6 +308,18 @@ async def lifespan(app: FastAPI):
         except Exception as e:
             logger.warning(f"Insights detector loop startup skipped: {e}")
 
+    anomaly_loop = None
+    if getattr(settings, "anomaly_loop_enabled", True):
+        try:
+            from eden.data_platform.anomaly_detector_loop import (
+                start_anomaly_detector_loop,
+            )
+
+            await start_anomaly_detector_loop()
+            anomaly_loop = True
+        except Exception as e:
+            logger.warning(f"Anomaly detector loop startup skipped: {e}")
+
     # Audit 2026-06-22 B1.36 — register all closed-loop promotion hooks
     # so on_judge_regression / on_drift_alert / etc. actually fire.
     try:
@@ -373,6 +385,16 @@ async def lifespan(app: FastAPI):
             await stop_insights_detector_loop()
         except Exception as e:  # pragma: no cover - defensive
             logger.warning(f"Insights detector loop stop failed: {e}")
+
+    if anomaly_loop:
+        try:
+            from eden.data_platform.anomaly_detector_loop import (
+                stop_anomaly_detector_loop,
+            )
+
+            await stop_anomaly_detector_loop()
+        except Exception as e:  # pragma: no cover - defensive
+            logger.warning(f"Anomaly detector loop stop failed: {e}")
 
     try:
         from eden.observability.trace_quality.hooks import (

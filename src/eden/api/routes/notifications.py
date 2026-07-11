@@ -161,9 +161,23 @@ async def create_notification(
 
     client = await get_postgres_client()
 
+    if request.org_id:
+        membership = await client.fetchrow(
+            "SELECT role FROM org_members WHERE org_id = $1 AND user_id = $2",
+            request.org_id,
+            user_id,
+        )
+        if not membership:
+            raise HTTPException(
+                status_code=403,
+                detail="Not a member of this organization",
+            )
+
+    # Schema is migration 001: body / data / read_at (not the legacy
+    # 015_notifications.sql shape message / metadata / is_read).
     row = await client.fetchrow(
         """
-        INSERT INTO notifications (user_id, org_id, type, title, message, metadata)
+        INSERT INTO notifications (user_id, org_id, type, title, body, data)
         VALUES ($1, $2, $3, $4, $5, $6)
         RETURNING id
         """,

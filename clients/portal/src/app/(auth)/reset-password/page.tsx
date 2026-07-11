@@ -9,6 +9,7 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { AuthSplitLayout, AuthBrandPanel, AuthFormCard } from "@/components/auth";
+import { errorFromCaught } from "@/lib/safe-error-message";
 
 function ResetPasswordForm() {
   const searchParams = useSearchParams();
@@ -74,7 +75,7 @@ function ResetPasswordForm() {
         router.push("/sign-in");
       }, 3000);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Reset failed");
+      setError(errorFromCaught(err, "Reset failed"));
     } finally {
       setLoading(false);
     }

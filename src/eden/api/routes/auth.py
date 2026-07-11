@@ -667,6 +667,21 @@ async def signup_from_invite(request: SignupFromInviteRequest, response: Respons
 
     user_id = str(row["id"])
 
+    try:
+        join_result = await accept_invitation(invitation["id"], user_id)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
+
+    await log_audit_event(
+        client=client,
+        org_id=join_result["org_id"],
+        user_id=user_id,
+        action="member.joined",
+        target_type="user",
+        target_id=user_id,
+        metadata={"role": join_result["role"], "via": "signup_from_invite"},
+    )
+
     # Fetch the freshly-inserted user's token_version so the issued
     # JWT is bound to it (defaults to 0 on a brand-new row).
     ver_row = await client.fetchrow(
@@ -686,8 +701,8 @@ async def signup_from_invite(request: SignupFromInviteRequest, response: Respons
     return SignupFromInviteResponse(
         user_id=user_id,
         email=invite_email,
-        org_id=org_id,
-        role=invitation.get("role", "member"),
+        org_id=join_result["org_id"],
+        role=join_result["role"],
         message="Account created and joined organization successfully",
     )
 
@@ -859,9 +874,13 @@ async def get_me(
     """
     client = await get_postgres_client()
 
-    # Clerk path: the JWT ``sub`` claim is a Clerk string id
-    # (``user_2abc...``), not a UUID. Look up by ``clerk_id``.
-    db_user = await get_user_by_id(user["user_id"], lookup_column="clerk_id")
+    # ``get_current_user`` remaps Clerk ``sub`` → Eden ``users.id``
+    # once the row exists (so org_members FKs work). Looking up by
+    # ``clerk_id`` alone then misses every returning user, falls into
+    # auto-provision with a UUID as ``clerk_id``, and — combined with
+    # the closed-httpx bug in ``clerk_client`` — 500s the portal.
+    # Resolve by clerk_id OR Eden id (same helper notifications use).
+    db_user = await get_eden_user_row_from_auth(user)
     if db_user:
         logger.info(
             "/auth/me HIT user_id=%s clerk_id=%s",
@@ -877,7 +896,21 @@ async def get_me(
         # auto-provision. Generated UUID PK + ``clerk_id`` +
         # ``password_hash = NULL``. ON CONFLICT (clerk_id) keeps
         # the webhook + /auth/me race safe.
-        clerk_id = user["user_id"]
+        # Prefer the JWT ``sub`` (real Clerk id). After remapping,
+        # ``user["user_id"]`` is an Eden UUID — never pass that to
+        # Clerk's Backend API or store it as ``clerk_id``.
+        clerk_id = (
+            (payload.get("sub") if isinstance(payload, dict) else None)
+            or user.get("user_id")
+        )
+        if not str(clerk_id).startswith("user_"):
+            # Remapped UUID with no usable Clerk sub — cannot
+            # auto-provision safely. Surface 404 so the portal
+            # retries rather than inserting a ghost row.
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="User not found",
+            )
 
         # The default Clerk session JWT carries ``sub`` but not
         # ``email`` / ``name`` / ``avatar_url`` — those have to be
@@ -890,7 +923,16 @@ async def get_me(
         name = (email.split("@", 1)[0] if email else "") or "Eden user"
         avatar_url = user.get("image_url") or user.get("avatar_url") or ""
         if not email or not avatar_url:
-            clerk_profile = await clerk_get_user(clerk_id)
+            try:
+                clerk_profile = await clerk_get_user(clerk_id)
+            except Exception as exc:
+                # Defense in depth: clerk_client should return None on
+                # failure, but never let a Clerk client blip 500 /auth/me.
+                logger.warning(
+                    "auto-provision clerk_get_user failed for %s: %s",
+                    clerk_id, redact_all(str(exc)),
+                )
+                clerk_profile = None
             if clerk_profile:
                 profile = extract_user_profile(clerk_profile)
                 if not email:
@@ -1062,11 +1104,12 @@ async def get_me(
         clerk_org = extract_org_id(payload)
         if clerk_org:
             eden_org_id = await resolve_eden_org_id(clerk_org)
-            await ensure_clerk_membership(
-                str(db_user["id"]),
-                eden_org_id or clerk_org,
-                extract_org_role(payload),
-            )
+            if eden_org_id:
+                await ensure_clerk_membership(
+                    str(db_user["id"]),
+                    eden_org_id,
+                    extract_org_role(payload),
+                )
 
     # Fetch user's organizations
     orgs_query = """
@@ -1084,7 +1127,7 @@ async def get_me(
             "name": r["name"],
             "slug": r["slug"],
             "role": r["role"],
-            "clerk_org_id": r.get("clerk_org_id"),
+            "clerk_org_id": str(r["clerk_org_id"]) if r.get("clerk_org_id") else None,
         }
         for r in orgs_rows
     ]

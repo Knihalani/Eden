@@ -10,6 +10,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Compass, Loader2, AlertTriangle, GitBranch, Lightbulb, ChevronDown, ChevronRight, ArrowRight, Info, Sparkles, Play } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { PageContent } from "@/components/layout/page-content";
+import { errorFromCaught } from "@/lib/safe-error-message";
 interface Decision {
   step_index: number;
   decision: string;
@@ -55,7 +56,7 @@ export default function DecisionsPage() {
       });
       setPathData(data);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load decision path");
+      setError(errorFromCaught(err, "Failed to load decision path"));
     } finally {
       setPathLoading(false);
     }
@@ -80,7 +81,7 @@ export default function DecisionsPage() {
       });
       setExplData(data);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to explain step");
+      setError(errorFromCaught(err, "Failed to explain step"));
     } finally {
       setExplLoading(false);
     }

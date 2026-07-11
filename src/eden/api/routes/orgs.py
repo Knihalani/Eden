@@ -336,7 +336,12 @@ async def list_user_orgs(
 async def get_org(org_id: str, user: dict = Depends(get_current_user)):
     """Get organization details (must be member)."""
     client = await get_postgres_client()
-    user_id = user["user_id"]
+    user_id = await eden_user_id_from_auth(user)
+    if not user_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not a member of this organization",
+        )
 
     # Verify membership
     membership = await client.fetchrow(
@@ -432,7 +437,7 @@ async def send_invite(
         ) from e
 
     # Send invitation email (stub)
-    await send_invite_email(
+    email_result = await send_invite_email(
         to_email=email,
         org_name=invitation["org_name"],
         inviter_name=invitation["inviter_name"],
@@ -440,6 +445,7 @@ async def send_invite(
         token=plain_token,
         expires_at=invitation["expires_at"],
     )
+    invite_url = f"{settings.portal_base_url}/invite/{plain_token}"
 
     # Audit log
     await log_audit_event(
@@ -452,11 +458,15 @@ async def send_invite(
         metadata={"invitee_email": email, "role": role},
     )
 
-    return {
+    response: dict[str, str] = {
         "message": f"Invitation sent to {email}",
         "invitation_id": invitation["id"],
         "expires_at": invitation["expires_at"],
+        "email_status": email_result.status,
     }
+    if email_result.status == "not_configured":
+        response["invite_url"] = invite_url
+    return response
 
 
 @router.get("/{org_id}/invites", response_model=list[dict])

@@ -14,6 +14,7 @@ import { Users, Target, Smile, Users2, Layers, Plus, Loader2, AlertTriangle, Act
 import { motion, AnimatePresence } from "framer-motion";
 import { DataTable } from "@/components/ui/data-table";
 import { Card } from "@/components/ui/card";
+import { errorFromCaught } from "@/lib/safe-error-message";
 type Tab = "sessions" | "goals" | "satisfaction" | "cohorts" | "segments";
 interface SessionRow {
   session_id: string;
@@ -105,7 +106,7 @@ export default function UsersPage() {
       });
       setSessions(data.sessions || []);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load sessions");
+      setError(errorFromCaught(err, "Failed to load sessions"));
     } finally {
       setSessionsLoading(false);
     }
@@ -119,7 +120,7 @@ export default function UsersPage() {
       }>(`/orgs/${currentOrg.id}/intelligence/user/goals`);
       setGoals(data.goals || []);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load goals");
+      setError(errorFromCaught(err, "Failed to load goals"));
     } finally {
       setGoalsLoading(false);
     }
@@ -133,7 +134,7 @@ export default function UsersPage() {
       }>(`/orgs/${currentOrg.id}/intelligence/user/dashboard/cohort`);
       setCohorts(data.cohorts || []);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load cohorts");
+      setError(errorFromCaught(err, "Failed to load cohorts"));
     } finally {
       setCohortsLoading(false);
     }
@@ -147,7 +148,7 @@ export default function UsersPage() {
       }>(`/orgs/${currentOrg.id}/intelligence/user/segment`);
       setSegments(data.segments || []);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load segments");
+      setError(errorFromCaught(err, "Failed to load segments"));
     } finally {
       setSegmentsLoading(false);
     }
@@ -176,7 +177,7 @@ export default function UsersPage() {
       setShowAddGoal(false);
       await loadGoals();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to create goal");
+      setError(errorFromCaught(err, "Failed to create goal"));
     } finally {
       setCreatingGoal(false);
     }
@@ -202,7 +203,7 @@ export default function UsersPage() {
         setCorrection(cor.value);
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Analysis failed");
+      setError(errorFromCaught(err, "Analysis failed"));
     } finally {
       setSatisfactionLoading(false);
     }

@@ -18,6 +18,7 @@ import {
   Zap,
 } from "lucide-react";
 import { useToast } from "@/components/ui/toast";
+import { errorFromCaught } from "@/lib/safe-error-message";
 
 interface Incident {
   cluster_id: string;
@@ -45,7 +46,7 @@ export default function IncidentsPage() {
       const data = await rcaApi.listIncidents(currentOrg.id);
       setIncidents((data.incidents as unknown as Incident[]) ?? []);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load incidents");
+      setError(errorFromCaught(err, "Failed to load incidents"));
     } finally {
       setLoading(false);
     }
