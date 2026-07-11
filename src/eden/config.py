@@ -658,6 +658,19 @@ def _build_settings_class():
         verify_poll_interval_seconds: int = 60
         verify_max_attempts: int = 3
 
+        # ── Issue alerting (F47 Wave 7) ─────────────────────────────────
+        # Slack Block Kit alerts for P0/P1 issue creation, verify
+        # failures, and human escalations. Global fallback webhook (a
+        # per-org ``org_integrations`` row overrides it when present).
+        # Storm caps stop an incident flood from paging on-call 200x: an
+        # identical fingerprint alert is deduped for
+        # ``issue_alert_dedup_minutes`` and an org is capped at
+        # ``issue_alert_max_per_hour`` alerts/hour.
+        slack_webhook_url: str = ""
+        issue_alerts_enabled: bool = True
+        issue_alert_dedup_minutes: int = 15
+        issue_alert_max_per_hour: int = 30
+
         # ── Kill-switch defaults (v2.7 hot-path) ────────────────────────
         # Mutating actions default OFF per audit/permission policy.
         # Read-only actions default ON. Override per-tenant via

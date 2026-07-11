@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
+import Link from "next/link";
 import { useOrg } from "@/hooks/use-org";
 import { closedLoopApi } from "@/lib/api";
 import { Button } from "@/components/ui/button";
@@ -9,7 +10,7 @@ import { NoOrgState } from "@/components/ui/no-org-state";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/components/ui/toast";
 import { useConfirm } from "@/hooks/use-confirm";
-import { Check, X, Play, AlertCircle, Loader2, Inbox, History, BarChart3 } from "lucide-react";
+import { Check, X, Play, AlertCircle, Loader2, Inbox, History, BarChart3, Repeat } from "lucide-react";
 import { PageHeader } from "@/components/layout/page-header";
 import { PageContent } from "@/components/layout/page-content";
 import { Card } from "@/components/ui/card";
@@ -225,7 +226,10 @@ function ActionList({
       </Card>;
   }
   return <div className="space-y-3">
-      {actions.map(a => <div key={a.action_id} className="rounded-lg border border-[var(--border-default)] bg-[var(--bg-primary)] p-4">
+      {actions.map(a => {
+      const issueId = typeof a.payload?.issue_id === "string" ? a.payload.issue_id : null;
+      const repeat = typeof a.payload?.repetition_count === "number" ? a.payload.repetition_count : 0;
+      return <div key={a.action_id} className="rounded-lg border border-[var(--border-default)] bg-[var(--bg-primary)] p-4">
           <div className="flex items-start justify-between gap-3">
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
@@ -233,6 +237,12 @@ function ActionList({
                   {a.hook}
                 </span>
                 <StatusBadge status={a.status} />
+                {issueId && <Link href={`/issues/${issueId}`} className="text-xs font-medium text-[var(--accent)] hover:underline">
+                  View issue →
+                </Link>}
+                {repeat > 1 && <span title={`Re-occurred ${repeat} times`} className="inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded border bg-[var(--error)]/10 text-[var(--error)] border-[var(--error)]/30">
+                  <Repeat className="h-3 w-3" />×{repeat}
+                </span>}
                 <span className="text-xs text-[var(--text-muted)]">
                   {new Date(a.created_at).toLocaleString()}
                 </span>
@@ -256,7 +266,8 @@ function ActionList({
                   </Button>}
               </div>}
           </div>
-        </div>)}
+        </div>;
+    })}
     </div>;
 }
 function StatusBadge({

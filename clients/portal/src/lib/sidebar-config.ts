@@ -180,6 +180,7 @@ export const DEFAULT_SIDEBAR: SidebarGroup[] = [
     label: "Automate",
     items: [
       { id: "autonomous",     href: "/autonomous",     label: "Autonomous",     icon: Wand2 },
+      { id: "issues",         href: "/issues",         label: "Agent Issues",   icon: ShieldAlert, description: "Grouped agent failures (stumbles) with auto-triage, heal, and verify lifecycle."},
       { id: "closed-loop",    href: "/closed-loop",    label: "Closed-Loop",    icon: Inbox, category: "advanced" , description: "Closed-loop improvements — events flow from detection back to deploy."},
       { id: "pr-suggestions", href: "/pr-suggestions", label: "PR Suggestions", icon: GitPullRequestArrow, badge: "new", category: "advanced" , description: "Auto-generated PRs that fix issues Eden finds in your repo (new)."},
     ],
