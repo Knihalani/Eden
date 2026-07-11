@@ -873,9 +873,12 @@ class TestCluster:
 
 class TestClusterHooks:
     @pytest.mark.asyncio
-    async def test_high_severity_cluster_fires_drift_alert(
+    async def test_high_severity_cluster_fires_on_clustered(
         self, mock_postgres_client: MagicMock
     ) -> None:
+        """G4 — a high-severity cluster fires ``IncidentHook.on_clustered``
+        (action_kind ``investigate``), NOT ``on_drift_alert``. Rollback
+        semantics are reserved for a stricter critical+large threshold."""
         from eden.insights.incidents.clusterer import IncidentClusterer
 
         # 35 traces (>= 30 → high severity) with the same key
@@ -886,20 +889,27 @@ class TestClusterHooks:
             "eden.insights.incidents.clusterer._delete_then_insert_incidents",
             new=AsyncMock(),
         ), patch(
+            "eden.llmops.promotion_hooks.get_incident_hook"
+        ) as incident_factory, patch(
             "eden.llmops.promotion_hooks.get_promotion_hook"
-        ) as hook_factory:
-            hook_mock = MagicMock()
-            hook_factory.return_value = hook_mock
+        ) as promo_factory:
+            incident_mock = MagicMock()
+            incident_mock.on_clustered = AsyncMock(return_value="a1")
+            incident_factory.return_value = incident_mock
+            promo_mock = MagicMock()
+            promo_mock.on_drift_alert = AsyncMock(return_value="d1")
+            promo_factory.return_value = promo_mock
             result = await IncidentClusterer().cluster(
                 "org_test", window="24h", min_cluster_size=10,
             )
         assert result["status"] == "ok"
-        # 1 high-severity cluster → 1 call
-        hook_mock.on_drift_alert.assert_called_once()
-        args, kwargs = hook_mock.on_drift_alert.call_args
-        assert args[0] == "org_test"
-        assert kwargs["drift_type"] == "incident_cluster"
-        assert kwargs["severity"] == "high"
+        # 1 high-severity cluster → 1 on_clustered call.
+        incident_mock.on_clustered.assert_awaited_once()
+        _args, kwargs = incident_mock.on_clustered.call_args
+        assert kwargs["trace_count"] == 35
+        assert isinstance(kwargs["sample_trace_ids"], list)
+        # high (not critical) → no rollback drift alert.
+        promo_mock.on_drift_alert.assert_not_awaited()
 
     @pytest.mark.asyncio
     async def test_low_severity_cluster_does_not_fire(
@@ -915,14 +925,21 @@ class TestClusterHooks:
             "eden.insights.incidents.clusterer._delete_then_insert_incidents",
             new=AsyncMock(),
         ), patch(
+            "eden.llmops.promotion_hooks.get_incident_hook"
+        ) as incident_factory, patch(
             "eden.llmops.promotion_hooks.get_promotion_hook"
-        ) as hook_factory:
-            hook_mock = MagicMock()
-            hook_factory.return_value = hook_mock
+        ) as promo_factory:
+            incident_mock = MagicMock()
+            incident_mock.on_clustered = AsyncMock(return_value="a1")
+            incident_factory.return_value = incident_mock
+            promo_mock = MagicMock()
+            promo_mock.on_drift_alert = AsyncMock(return_value="d1")
+            promo_factory.return_value = promo_mock
             await IncidentClusterer().cluster(
                 "org_test", window="24h", min_cluster_size=3,
             )
-        hook_mock.on_drift_alert.assert_not_called()
+        incident_mock.on_clustered.assert_not_awaited()
+        promo_mock.on_drift_alert.assert_not_awaited()
 
 
 # ─── 7. Summarize ───────────────────────────────────────────────────

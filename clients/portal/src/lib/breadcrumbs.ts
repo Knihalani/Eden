@@ -48,6 +48,7 @@ export const BREADCRUMB_LABELS: Record<string, BreadcrumbLabel> = {
   members: { label: "Members", category: "workspace" },
   guardrails: { label: "Guardrails", category: "optimize" },
   autonomous: { label: "Autonomous", category: "automate" },
+  issues: { label: "Agent Issues", category: "automate" },
   studio: { label: "Custom Metrics", category: "optimize" },
   "pr-suggestions": { label: "PR Suggestions", category: "automate" },
   retrieval: { label: "Retrieval", category: "observe" },

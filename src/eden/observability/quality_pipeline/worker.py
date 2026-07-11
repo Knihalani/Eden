@@ -1096,6 +1096,16 @@ async def start_worker() -> None:
     logger.info("quality_pipeline: started")
 
 
+def is_worker_running() -> bool:
+    """Return True when the sidecar worker task is alive.
+
+    N14 — surfaced on ``/health`` so operators can confirm the
+    quality-pipeline was actually started (not silently no-oped by
+    a missing Settings field or a disabled flag).
+    """
+    return _WORKER_TASK is not None and not _WORKER_TASK.done()
+
+
 async def stop_worker() -> None:
     """Stop the sidecar worker (drain in-flight, exit within 30s)."""
     global _WORKER_TASK, _STOP_EVENT

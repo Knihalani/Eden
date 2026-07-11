@@ -327,7 +327,7 @@ def _redact_match(value: str, pattern: str) -> str:
 # ── Closed-loop hook firing ──────────────────────────────────────────
 
 
-def _fire_security_violation(
+async def _fire_security_violation(
     org_id: str,
     *,
     scanner: str,
@@ -371,7 +371,7 @@ def _fire_security_violation(
         )
         return
     try:
-        hook.on_drift_alert(
+        await hook.on_drift_alert(
             org_id,
             drift_type=f"security:{scanner}",
             severity=hook_sev,
@@ -382,7 +382,7 @@ def _fire_security_violation(
         )
 
 
-def _fire_compliance_gap(
+async def _fire_compliance_gap(
     org_id: str,
     *,
     framework: str,
@@ -413,7 +413,7 @@ def _fire_compliance_gap(
         )
         return
     try:
-        hook.on_drift_alert(
+        await hook.on_drift_alert(
             org_id,
             drift_type=f"compliance_gap:{framework}",
             severity=hook_sev,

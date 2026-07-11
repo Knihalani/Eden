@@ -604,6 +604,18 @@ class TelemetryCollector:
         except Exception as exc:
             logger.debug(f"telemetry: publish_trace_event failed: {exc}")
 
+        # F20 — signal the auto-issue scanner when a trace finalizes. The
+        # helper cheaply no-ops for non-terminal events, so this stays off
+        # the critical path for the common per-span event.
+        try:
+            from eden.observability.trace_finalized import (
+                maybe_emit_trace_finalized,
+            )
+
+            await maybe_emit_trace_finalized(event, redis)
+        except Exception as exc:
+            logger.debug(f"telemetry: trace.finalized emit failed: {exc}")
+
     async def _route_postgres(self, event: TelemetryEvent) -> None:
         client = await self._get_postgres()
         if not client:

@@ -70,7 +70,15 @@ _nl_report = NLReportGenerator()
 
 
 class InvestigateRequest(BaseModel):
-    trigger: str
+    # Primary contract (F48): a typed trigger, e.g.
+    # ``incident:<uuid>``, ``drift_alert:<id>``, ``issue:<uuid>``.
+    trigger: str | None = None
+    # Back-compat shim for the portal, which historically sent
+    # ``{question, trace_id?}``. When ``trigger`` is omitted we resolve
+    # one server-side (trace_id → owning incident cluster). The free
+    # text ``question`` is advisory context only.
+    question: str | None = None
+    trace_id: str | None = None
 
 
 class ReportRequest(BaseModel):
@@ -106,12 +114,65 @@ class NLReportRequest(BaseModel):
     request: str
 
 
+async def _resolve_investigate_trigger(
+    org_id: str, body: InvestigateRequest
+) -> str | None:
+    """Resolve a typed trigger from a portal ``{question, trace_id}``
+    body (F48 shim). Returns ``None`` when no trigger can be derived.
+
+    A ``trace_id`` is mapped to the incident cluster that owns it (the
+    ``incident:`` trigger), which the ``InvestigationAgent`` already
+    understands. When the trace is not part of any cluster we cannot
+    build a meaningful trigger and return ``None`` so the caller can
+    respond with a graceful envelope instead of a 422.
+    """
+    if body.trigger:
+        return body.trigger
+    if not body.trace_id:
+        return None
+    try:
+        from eden.storage.postgres import get_postgres_client
+
+        client = await get_postgres_client()
+        if client is None:
+            return None
+        row = await client.fetchrow(
+            "SELECT cluster_id FROM incident_cluster_members "
+            "WHERE org_id = $1 AND trace_id = $2 "
+            "ORDER BY created_at DESC LIMIT 1",
+            org_id,
+            body.trace_id,
+        )
+    except Exception as exc:  # pragma: no cover - defensive
+        logger.debug("investigate: trace→cluster lookup failed: %s", exc)
+        return None
+    if row and row.get("cluster_id"):
+        return f"incident:{row['cluster_id']}"
+    return None
+
+
 @router.post("/investigate")
 async def investigate(
     org_id: str = Path(...),
     body: InvestigateRequest = Body(...),
 ) -> dict[str, Any]:
-    return await _investigator.investigate(org_id, trigger=body.trigger)
+    trigger = await _resolve_investigate_trigger(org_id, body)
+    if not trigger:
+        return {
+            "status": "needs_trigger",
+            "feature": "investigation",
+            "live": True,
+            "data": {
+                "message": (
+                    "Provide a 'trigger' (e.g. 'incident:<id>', "
+                    "'issue:<id>', 'drift_alert:<id>') or a 'trace_id' "
+                    "that belongs to a detected incident cluster."
+                ),
+                "findings": [],
+                "proposed_remediations": [],
+            },
+        }
+    return await _investigator.investigate(org_id, trigger=trigger)
 
 
 @router.post("/report")
