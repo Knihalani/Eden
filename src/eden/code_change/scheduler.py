@@ -434,11 +434,17 @@ async def _emit_drift(
     _tick_drift_count += 1
     try:
         from eden.llmops.promotion_hooks import PromotionHook
-        await PromotionHook.on_drift_alert(
-            org_id=org_id,
+
+        # G7: call on the *instance* (the old ``PromotionHook.on_drift_alert``
+        # left ``self`` unbound → TypeError) and drop the unsupported
+        # ``payload=`` kwarg — the signature is
+        # ``on_drift_alert(org_id, *, drift_type, severity)``. Both bugs
+        # were masked by the surrounding try/except, so the scheduler's
+        # drift alerts silently never fired.
+        await PromotionHook().on_drift_alert(
+            org_id,
             drift_type=drift_type,
             severity=severity,
-            payload=payload or {},
         )
     except Exception as exc:
         logger.debug("scheduler: on_drift_alert(%s) failed: %s", drift_type, exc)
