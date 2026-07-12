@@ -905,9 +905,9 @@ function PortalLayoutContent({ children }: { children: React.ReactNode }) {
                 <button
                   onClick={() => {
                     void (async () => {
+                      clearAuthError();
                       await refreshUserWithRetry();
                       await refreshOrgs();
-                      // authError clears inside refreshOrgs on success only
                     })();
                   }}
                   aria-label="Retry loading session"
