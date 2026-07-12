@@ -11,7 +11,6 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
 import { useOrg } from "@/hooks/use-org";
 import { onboardingApi } from "@/lib/api";
 import { useToast } from "@/components/ui/toast";
@@ -80,7 +79,6 @@ await new Greeter().greet("Say hello in five languages");`,
 };
 
 export default function OnboardingInstallPage() {
-  const router = useRouter();
   const toast = useToast();
   const { currentOrg, orgSyncing, orgSyncTimedOut, refreshOrgs } = useOrg();
   const [lang, setLang] = useState<Lang>("python");
@@ -117,7 +115,7 @@ export default function OnboardingInstallPage() {
     setAdvancing(true);
     try {
       await onboardingApi.patchState(currentOrg.id, { step: "done" });
-      router.push("/onboarding/done");
+      window.location.assign("/onboarding/done");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Could not advance");
     } finally {

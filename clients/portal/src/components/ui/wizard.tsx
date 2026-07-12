@@ -70,6 +70,8 @@ export interface WizardProps {
   children?: React.ReactNode;
   /** Optional "Skip to ..." link in the top bar (default: /dashboard). */
   skipHref?: string;
+  /** Hide the bottom Back/Next row on these slugs (steps with in-page CTAs). */
+  hideBottomNavOn?: string[];
 }
 
 export function Wizard({
@@ -79,7 +81,8 @@ export function Wizard({
   brand = { name: "Eden" },
   progressBar,
   children,
-  skipHref = "/dashboard" }: WizardProps) {
+  skipHref = "/dashboard",
+  hideBottomNavOn = [] }: WizardProps) {
   const router = useRouter();
   const pathname = usePathname() || steps[0]?.slug || "/";
 
@@ -141,6 +144,9 @@ export function Wizard({
   const activeIdx = activeStep ? visibleSteps.indexOf(activeStep) : -1;
   const isComplete = pathname === completeSlug;
   const progress = activeIdx >= 0 ? ((activeIdx + 1) / Math.max(visibleSteps.length, 1)) * 100 : 0;
+  const hideBottomNav = hideBottomNavOn.some(
+    (slug) => pathname === slug || pathname.replace(/\/$/, "") === slug,
+  );
 
   const setState = (key: string, value: unknown) =>
     setStateRecord((prev) => ({ ...prev, [key]: value }));
@@ -313,7 +319,7 @@ export function Wizard({
           above can scroll but the nav is anchored to the viewport's
           bottom edge. The translucent bg matches the body so the
           scroll content doesn't bleed through. */}
-      {!isComplete && activeStep && (
+      {!isComplete && activeStep && !hideBottomNav && (
         <div className="sticky bottom-0 z-10 mx-auto w-full max-w-3xl bg-[var(--bg-primary)]/95 backdrop-blur-sm border-t border-[var(--border-default)] px-6 py-3">
           <div className="flex items-center justify-between">
             <button

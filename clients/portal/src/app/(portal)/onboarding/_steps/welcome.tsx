@@ -11,7 +11,7 @@ import Link from "next/link";
 import { ArrowRight, KeyRound, Loader2, UserPlus } from "lucide-react";
 import { useOrganization } from "@clerk/nextjs";
 import { useOrg } from "@/hooks/use-org";
-import { onboardingApi } from "@/lib/api";
+import { api, onboardingApi } from "@/lib/api";
 
 export function WelcomeStep() {
   const { currentOrg, orgSyncing, orgSyncTimedOut, refreshOrgs } = useOrg();
@@ -23,19 +23,22 @@ export function WelcomeStep() {
   const isProvisioning = Boolean(orgSyncing && !orgSyncTimedOut && !currentOrg?.id);
 
   async function goNext() {
-    if (isProvisioning) {
-      await refreshOrgs();
-      return;
-    }
-    if (!currentOrg?.id) {
-      await refreshOrgs();
-    }
-    if (currentOrg?.id) {
-      try {
-        await onboardingApi.patchState(currentOrg.id, { step: "connect_github" });
-      } catch {
-        // best-effort
+    await refreshOrgs();
+    // Fresh /auth/me — ``currentOrg`` in this closure can be stale right
+    // after refreshOrgs() until the next render.
+    let orgId: string | undefined;
+    try {
+      const me = await api.getMe();
+      orgId =
+        me.current_org_id ?? me.organizations?.[0]?.id ?? currentOrg?.id;
+      if (orgId) {
+        await onboardingApi.patchState(orgId, { step: "connect_github" });
       }
+    } catch {
+      orgId = currentOrg?.id;
+    }
+    if (isProvisioning && !orgId) {
+      return;
     }
     window.location.assign("/onboarding/connect");
   }
@@ -96,7 +99,8 @@ export function WelcomeStep() {
         </div>
       )}
 
-      {!hasWorkspace && !isProvisioning && (        <div className="rounded-lg border border-dashed border-[var(--border-default)] bg-[var(--bg-secondary)]/50 p-4">
+      {!hasWorkspace && !isProvisioning && (
+        <div className="rounded-lg border border-dashed border-[var(--border-default)] bg-[var(--bg-secondary)]/50 p-4">
           <div className="mb-2 text-xs font-medium text-[var(--text-secondary)]">
             Joining a team?
           </div>

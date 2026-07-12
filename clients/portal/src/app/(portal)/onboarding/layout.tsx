@@ -86,6 +86,11 @@ export default function OnboardingLayout({ children }: { children: React.ReactNo
         brand={{ name: "Eden", tagline: "setup" }}
         progressBar={<OnboardingProgressBar />}
         skipHref="/dashboard"
+        hideBottomNavOn={[
+          "/onboarding/connect",
+          "/onboarding/wait",
+          "/onboarding/install",
+        ]}
       >
         {children}
       </Wizard>
