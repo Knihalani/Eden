@@ -540,8 +540,8 @@ async def ensure_clerk_org_from_session(
         client = await get_postgres_client()
         await client.execute(
             """
-            INSERT INTO organizations (id, clerk_org_id, name, slug, updated_at)
-            SELECT gen_random_uuid(), $1, $2, $3, NOW()
+            INSERT INTO organizations (id, clerk_org_id, name, slug, owner_id, updated_at)
+            SELECT gen_random_uuid(), $1, $2, $3, $4::uuid, NOW()
             WHERE NOT EXISTS (
                 SELECT 1 FROM organizations
                 WHERE clerk_org_id = $1 OR id::text = $1
@@ -550,6 +550,7 @@ async def ensure_clerk_org_from_session(
             clerk_org_id,
             name,
             slug,
+            eden_user_id,
         )
         row = await client.fetchrow(
             """

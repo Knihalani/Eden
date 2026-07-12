@@ -1104,12 +1104,32 @@ async def get_me(
     # skipped a non-UUID Clerk org id during signup.
     if is_clerk_payload(payload):
         clerk_org = extract_org_id(payload)
+        clerk_role = extract_org_role(payload)
+        if not clerk_org and clerk_id:
+            from eden.api.utils.clerk_client import list_user_organization_memberships
+
+            memberships = await list_user_organization_memberships(clerk_id)
+            if memberships:
+                first = memberships[0]
+                org_obj = first.get("organization") if isinstance(first, dict) else {}
+                if isinstance(org_obj, dict):
+                    clerk_org = org_obj.get("id") or clerk_org
+                clerk_role = first.get("role") or clerk_role
         if clerk_org:
-            await ensure_clerk_org_from_session(
+            healed_org_id = await ensure_clerk_org_from_session(
                 clerk_org,
                 str(db_user["id"]),
-                extract_org_role(payload),
+                clerk_role,
             )
+            if healed_org_id and not db_user.get("preferred_org_id"):
+                await client.execute(
+                    """
+                    UPDATE users SET preferred_org_id = $1
+                    WHERE id = $2 AND preferred_org_id IS NULL
+                    """,
+                    healed_org_id,
+                    str(db_user["id"]),
+                )
 
     # Fetch user's organizations
     orgs_query = """

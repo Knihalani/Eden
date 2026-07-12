@@ -256,6 +256,32 @@ async def create_organization(name: str, slug: str) -> dict[str, Any]:
     return await _post("/organizations", {"name": name, "slug": slug})
 
 
+async def list_user_organization_memberships(
+    clerk_user_id: str,
+) -> list[dict[str, Any]]:
+    """Return Clerk org memberships for a user (newest first).
+
+    Used when the session JWT lacks the ``o.id`` claim but Clerk's
+    frontend already has an active organization — ``/auth/me`` uses
+    this to self-heal the Eden ``organizations`` + ``org_members`` rows.
+    """
+    if not clerk_user_id:
+        return []
+    try:
+        payload = await _get(
+            f"/users/{clerk_user_id}/organization_memberships?limit=10",
+        )
+    except ClerkAPIError as exc:
+        logger.warning(
+            "list_user_organization_memberships failed for %s: %s",
+            clerk_user_id,
+            redact_all(str(exc)),
+        )
+        return []
+    data = payload.get("data")
+    return data if isinstance(data, list) else []
+
+
 async def get_organization(clerk_org_id: str) -> dict[str, Any] | None:
     """Fetch a Clerk organization by id (``org_2abc…``).
 

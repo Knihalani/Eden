@@ -270,6 +270,17 @@ async def _upsert_org(data: dict[str, Any]) -> None:
     slug = data.get("slug") or clerk_id
     client = await get_postgres_client()
 
+    # Resolve Eden owner for INSERT (owner_id is NOT NULL).
+    eden_owner_id: str | None = None
+    created_by = data.get("created_by")
+    if created_by:
+        owner_row = await client.fetchrow(
+            "SELECT id FROM users WHERE clerk_id::text = $1",
+            str(created_by),
+        )
+        if owner_row:
+            eden_owner_id = str(owner_row["id"])
+
     # Cases 2 + 3: refresh name/slug on the matching row. Idempotent
     # for case 2 (already linked) and case 3 (legacy). The
     # ``NOT EXISTS`` guard makes this a no-op if no row matches.
@@ -289,20 +300,25 @@ async def _upsert_org(data: dict[str, Any]) -> None:
     # Case 1: insert if no row exists. Always mint a UUID ``id`` and
     # store the Clerk string in ``clerk_org_id`` — Clerk's default
     # ``org_2x…`` ids are not UUIDs and must never be cast to one.
-    await client.execute(
-        """
-        INSERT INTO organizations
-            (id, clerk_org_id, name, slug, owner_id, archived_at, updated_at)
-        SELECT gen_random_uuid(), $1, $2, $3, NULL, NULL, NOW()
-        WHERE NOT EXISTS (
-            SELECT 1 FROM organizations
-            WHERE clerk_org_id = $1 OR id::text = $1
+    # ``owner_id`` is NOT NULL — skip INSERT when we cannot resolve
+    # the creator yet; ``/auth/me`` self-heal or the membership
+    # webhook will create the row once a user exists.
+    if eden_owner_id:
+        await client.execute(
+            """
+            INSERT INTO organizations
+                (id, clerk_org_id, name, slug, owner_id, archived_at, updated_at)
+            SELECT gen_random_uuid(), $1, $2, $3, $4::uuid, NULL, NOW()
+            WHERE NOT EXISTS (
+                SELECT 1 FROM organizations
+                WHERE clerk_org_id = $1 OR id::text = $1
+            )
+            """,
+            clerk_id,
+            name,
+            slug,
+            eden_owner_id,
         )
-        """,
-        clerk_id,
-        name,
-        slug,
-    )
 
 
 async def _upsert_membership(data: dict[str, Any]) -> None:
