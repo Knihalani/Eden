@@ -22,7 +22,6 @@ from eden.api.middleware.tenant_rate_limit import TenantRateLimitMiddleware
 from eden.api.routes import (
     agent_issues,
     agent_pr_suggestions,
-    agent_runs,
     agents,
     ai_agent,
     ai_insights,
@@ -36,7 +35,6 @@ from eden.api.routes import (
     autonomy,
     billing,
     budgets,
-    builder_graphs,
     chain,
     clerk_webhooks,
     compliance,
@@ -45,12 +43,12 @@ from eden.api.routes import (
     data_platform,
     datasets_spreadsheet,
     debugger,
-    evaluation,
     experiments,
     export,
     export_destinations,
     feature_flags,
     ingestion,
+    improve,
     insights,
     integrations_helicone,
     integrations_langfuse,
@@ -84,10 +82,8 @@ from eden.api.routes import (
     kb,
     labeling,
     llmops,
-    marketplace,
     media,
     model_compare,
-    multi_agent,
     notifications,
     observability,
     observability_a2a,
@@ -359,7 +355,8 @@ async def lifespan(app: FastAPI):
     # wirings (Cat 15/17/22 + StatGate gating on closed-loop apply) and
     # start the quality-pipeline sidecar worker. ``install_all()`` is
     # idempotent (safe to call once per process); the worker self-gates
-    # on ``trace_quality_enabled`` / ``trace_quality_compute_async``.
+    # on ``trace_quality_enabled`` / ``trace_quality_compute_async`` /
+    # ``trace_quality_worker_enabled``.
     try:
         from eden.observability.trace_quality.wiring import install_all
 
@@ -374,6 +371,14 @@ async def lifespan(app: FastAPI):
         await start_worker()
     except Exception as e:
         logger.warning(f"quality_pipeline worker startup skipped: {e}")
+
+    # N14 — optional judge Redis tailer (gated by judges_async_tailer_enabled).
+    try:
+        from eden.llmops.judges.redis_tailer import start_judge_tailer
+
+        await start_judge_tailer(settings)
+    except Exception as e:
+        logger.warning(f"judge tailer startup skipped: {e}")
 
     # F20 — start the trace.finalized consumer so finalized traces are
     # auto-scanned into stumbles/issues without operator configuration.
@@ -503,6 +508,13 @@ async def lifespan(app: FastAPI):
         await stop_worker()
     except Exception as e:  # pragma: no cover - defensive
         logger.warning(f"quality_pipeline worker stop failed: {e}")
+
+    try:
+        from eden.llmops.judges.redis_tailer import stop_judge_tailer
+
+        await stop_judge_tailer()
+    except Exception as e:  # pragma: no cover - defensive
+        logger.warning(f"judge tailer stop failed: {e}")
 
     try:
         from eden.observability.trace_quality.hooks import (
@@ -870,10 +882,7 @@ app.include_router(pii_policy.router)  # /orgs/{org_id}/pii-policy
 app.include_router(cost_overrides.router)  # /orgs/{org_id}/cost-overrides (per-tenant contract rates)  # /orgs/{org_id}/retention-policy
 app.include_router(region.router)  # /orgs/{org_id}/region
 app.include_router(experiments.router)  # /experiments (gated)
-app.include_router(evaluation.router)  # /evaluation (gated)
-app.include_router(multi_agent.router)  # /orgs/{org_id}/multi-agent (gated)
 app.include_router(notifications.router)  # /notifications (user-scoped feed; June 2026 Cat 5 mount fix)
-app.include_router(marketplace.router)  # /marketplace (gated)
 app.include_router(model_compare.router)  # /orgs/{org_id}/models/{compare,recommend,project} (Phase 7.6)
 app.include_router(integrations_helicone.router)  # /integrations/helicone (gated)
 app.include_router(intelligence_code_change.router)  # /orgs/{org_id}/intelligence/code-change (Cat 23, gated by intelligence_gap_v0)
@@ -881,6 +890,7 @@ app.include_router(intelligence_code_change.router)  # /orgs/{org_id}/intelligen
 # All self-gate on `intelligence_gap_v0` via the per-router `dependencies=`
 # list; this just makes them reachable when the flag is on.
 app.include_router(agent_issues.router)  # /orgs/{org_id}/agent-issues (F28/F29, gated by agent_issues_v0)
+app.include_router(improve.router)  # /orgs/{org_id}/improve (N17 cockpit + F04 autofix)
 app.include_router(autonomy.router)  # /orgs/{org_id}/settings/autonomy (N22, gated by closed_loop_orchestrator_v1)
 app.include_router(intelligence_agents.router)
 app.include_router(intelligence_apm_depth.router)
@@ -920,8 +930,6 @@ app.include_router(websocket.router)
 # SSE live-tail (Phase 7.2) — /orgs/{org_id}/observability/sse/stream
 # (prefix renamed in Phase 2 to avoid collision with observability.router)
 app.include_router(observability_stream.router)
-# Agent uploads + sim/test runs (Phase 3) — /orgs/{org_id}/agents/{agent_id}/...
-app.include_router(agent_runs.router)
 # Insights API (Phase 6.3) — /orgs/{org_id}/insights/...
 app.include_router(insights.router)
 # Judges (Phase 7.1b) — /orgs/{org_id}/observability/judges/...
@@ -932,8 +940,6 @@ app.include_router(replay.router)
 app.include_router(media.router)
 # Data platform (Phase 5) — /orgs/{org_id}/data-platform/...
 app.include_router(data_platform.router)
-# Visual builder graphs (Phase 1.7) — /orgs/{org_id}/builder/graphs/...
-app.include_router(builder_graphs.router)
 # Analytics v2 (Phase 8.2) — /orgs/{org_id}/analytics/{cohorts,funnel}
 app.include_router(analytics_v2.router)
 # Prompt canary management (Phase 7.2c/d) — /orgs/{org_id}/prompts/{agent}/canary

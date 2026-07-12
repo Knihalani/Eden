@@ -6,7 +6,10 @@
  * Clerk creates the workspace during signup; Eden syncs it on the first
  * /auth/me. No redundant "create org" step in the main path.
  *
- * Flow: Welcome → Connect repo → Install SDK → Done
+ * Flow: Welcome → Connect repo → (Wait for PR, if opened) → Install SDK → Done
+ *
+ * Progress chrome (banner + checklist) collapses wait into the install
+ * slot so LP-11 SoT stays welcome → connect → install → done.
  */
 
 import { Wizard, type WizardStep } from "@/components/ui/wizard";
@@ -22,6 +25,13 @@ const STEPS: WizardStep[] = [
     id: "connect",
     slug: "/onboarding/connect",
     label: "Connect repo",
+    optional: true,
+    onNext: () => "/onboarding/install",
+  },
+  {
+    id: "wait",
+    slug: "/onboarding/wait",
+    label: "Wait for PR",
     optional: true,
     onNext: () => "/onboarding/install",
   },

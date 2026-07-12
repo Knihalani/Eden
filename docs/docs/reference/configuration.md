@@ -79,8 +79,19 @@ side-effect to fire.
 
 | Env var | Default | Effect |
 |---------|---------|--------|
-| `EDEN_TAIL_SAMPLING_BUFFER` | `15000` | Slots in the tail sampling buffer |
-| `EDEN_PROBABILISTIC_SAMPLE_RATE` | `1.0` | Fallback keep rate after keep rules |
+| `EDEN_SAMPLING_ENABLED` | `true` | N16 master switch (`false` = keep 100%) |
+| `EDEN_SAMPLING_PROFILE` | `balanced` | `full` (100%) / `balanced` (~15% fallback) / `aggressive` (~5%) |
+| `EDEN_PROBABILISTIC_SAMPLE_RATE` | `1.0` | When `<1.0`, overrides profile fallback; `1.0` means “use profile” |
+| `EDEN_CONTENT_DEDUPE_ENABLED` | `true` | N09 message + blob dedupe; `false` stores inline |
+| `EDEN_TAIL_SAMPLING_BUFFER` | `15000` | Documented Cat 22 buffer size (code default; not Settings-bound) |
+| `EDEN_OTEL_SAMPLE_RATE` | `1.0` | Documented legacy — not wired into `Settings` |
+
+**Honest cost claims (Wave 2):**
+
+- zstd payload compression: measured ~15× on LLM payloads (`eden.storage.compression`).
+- N16 keep rates are **profile targets** for non-signal traces; P0/P1 signals always keep. Live % depends on failure mix.
+- N09 message dedupe is **trace-scoped** (O(k) vs O(k²) turns). Org-scoped `span_content_blobs` is additive for large prompts/schemas. Combined “0.04× vs naive JSON” in the N16 spec is an **illustrative product** of keep × dedupe × zstd — not an E2E production measurement from this phase.
+- Portal “Settings → Sampling” UI is **not** shipped; flags are env/Settings only.
 
 ## LLM-as-judge (Cat 3)
 

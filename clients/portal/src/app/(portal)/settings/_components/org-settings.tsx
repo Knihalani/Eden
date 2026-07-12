@@ -48,7 +48,7 @@ export function OrgSettings({ org }: OrgSettingsProps) {
         <EmptyState
           icon={Building2}
           title="No organization yet"
-          description="Create an organization to start generating environments and inviting your team."
+          description="Create an organization to start observing agents and inviting your team."
           size="md"
           action={
             <button

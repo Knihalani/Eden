@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Loader2, AlertTriangle, Send, Search, Lightbulb, Wrench, ShieldAlert, Database, Wand2 } from "lucide-react";
+import { Loader2, AlertTriangle, Search, Lightbulb, Wrench, ShieldAlert, Wand2 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -15,145 +15,6 @@ import { PageContent } from "@/components/layout/page-content";
 import { cn } from "@/lib/utils";
 import { EmptyState } from "@/components/ui/empty-state";
 import { errorFromCaught } from "@/lib/safe-error-message";
-
-/* ----------------------- NL Query section ---------------------------- */
-
-function NLQuerySection() {
-  const { currentOrg } = useOrg();
-  const [question, setQuestion] = useState("");
-  const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState<string>("");
-  const [result, setResult] = useState<{
-    question: string;
-    sql: string;
-    rows: Array<Record<string, unknown>>;
-    explanation: string;
-  } | null>(null);
-
-  const onSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!currentOrg || !question.trim()) return;
-    setSubmitting(true);
-    setError("");
-    setResult(null);
-    try {
-      const res = await autonomousApi.nlQuery(currentOrg.id, { question: question.trim() });
-      setResult(res);
-    } catch (e) {
-      setError(errorFromCaught(e, "Failed to run NL query"));
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Natural language query</CardTitle>
-        <CardDescription>Ask anything about your traces, agents, or cost</CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <form onSubmit={onSubmit} className="flex flex-col gap-2 sm:flex-row">
-          <input
-            type="text"
-            value={question}
-            onChange={(e) => setQuestion(e.target.value)}
-            placeholder="Top 5 agents by total cost this week…"
-            aria-label="Ask a natural-language question about your data"
-            className="flex-1 rounded-md border border-[var(--border-default)] bg-[var(--bg-tertiary)] px-3 py-2 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:border-[var(--accent)] focus:outline-none"
-          />
-          <button
-            type="submit"
-            disabled={submitting || !question.trim()}
-            aria-label="Run natural-language query"
-            className={cn(
-              "inline-flex items-center justify-center gap-2 rounded-md px-4 py-2 text-sm font-medium transition-colors",
-              "bg-[var(--accent)] text-[var(--bg-primary)] shadow-sm hover:bg-[var(--accent-hover)]",
-              "disabled:cursor-not-allowed disabled:opacity-50"
-            )}
-          >
-            {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-            Ask
-          </button>
-        </form>
-
-        <AnimatePresence>
-          {error && (
-            <motion.div
-              initial={{ opacity: 0, y: 4 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0 }}
-              className="flex items-start gap-2 rounded-md border border-[var(--error)] bg-[var(--error-bg)] p-3 text-xs text-[var(--error)]"
-            >
-              <AlertTriangle className="h-4 w-4 shrink-0" />
-              <span>{error}</span>
-            </motion.div>
-          )}
-        </AnimatePresence>
-
-        <AnimatePresence>
-          {result && (
-            <motion.div
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0 }}
-              className="space-y-3"
-            >
-              {/* Generated SQL */}
-              <div>
-                <p className="mb-1 text-[10px] font-medium uppercase tracking-wide text-[var(--text-muted)]">
-                  Generated SQL
-                </p>
-                <pre className="overflow-auto rounded-md border border-[var(--border-subtle)] bg-[var(--bg-base)] p-3 font-mono text-xs text-[var(--text-secondary)]">
-                  {result.sql}
-                </pre>
-              </div>
-
-              {/* Rows */}
-              <div>
-                <p className="mb-1 text-[10px] font-medium uppercase tracking-wide text-[var(--text-muted)]">
-                  Result · {result.rows.length} row{result.rows.length === 1 ? "" : "s"}
-                </p>
-                {result.rows.length > 0 ? (
-                  <div className="rounded-md border border-[var(--border-subtle)]">
-                    <DataTable
-                      columns={Object.keys(result.rows[0]).map((k) => ({
-                        key: k,
-                        header: k,
-                        cell: (r: Record<string, unknown>) => (
-                          <span className="font-mono text-xs text-[var(--text-secondary)]">
-                            {(() => {
-                              const v = r[k];
-                              return typeof v === "object" && v !== null ? JSON.stringify(v) : String(v ?? "—");
-                            })()}
-                          </span>
-                        ) }))}
-                      rows={result.rows as Array<Record<string, unknown>>}
-                      rowKey={(_, i) => `row_${i}`}
-                      pageSize={50}
-                    />
-                  </div>
-                ) : (
-                  <EmptyState icon={Database} title="No rows returned" size="sm" />
-                )}
-              </div>
-
-              {/* Explanation */}
-              <div>
-                <p className="mb-1 text-[10px] font-medium uppercase tracking-wide text-[var(--text-muted)]">
-                  Explanation
-                </p>
-                <p className="rounded-md border border-[var(--border-subtle)] bg-[var(--bg-base)] p-3 text-sm text-[var(--text-primary)]">
-                  {result.explanation}
-                </p>
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </CardContent>
-    </Card>
-  );
-}
 
 /* ----------------------- Investigate tab ----------------------------- */
 
@@ -471,19 +332,24 @@ function HealTab() {
 
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!currentOrg || !description.trim()) return;
+    if (!currentOrg) return;
     setSubmitting(true);
     setError("");
     setResult(null);
     try {
+      // API HealRequest is action_type-only; optional description is
+      // kept as operator context in the local result message.
       const res = await autonomousApi.heal(currentOrg.id, {
         action_type: component,
       });
+      const note = description.trim();
       setResult({
         action_id: res.data?.action_id,
         status: res.data?.status,
         before_state: res.data?.before_state ?? {},
-        message: res.data?.message,
+        message: note
+          ? `${res.data?.message ?? "Heal requested"} — note: ${note}`
+          : res.data?.message,
       });
     } catch (e) {
       setError(errorFromCaught(e, "Failed to request heal"));
@@ -522,14 +388,13 @@ function HealTab() {
           </label>
           <label className="block">
             <span className="text-xs font-medium uppercase tracking-wide text-[var(--text-muted)]">
-              Description
+              Description <span className="normal-case font-normal">(optional)</span>
             </span>
             <textarea
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              required
               rows={3}
-              placeholder="Describe the issue and the proposed change…"
+              placeholder="Optional note for your team (not sent to the API)…"
               aria-label="Heal description"
               className="mt-1 w-full rounded-md border border-[var(--border-default)] bg-[var(--bg-tertiary)] px-3 py-2 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:border-[var(--accent)] focus:outline-none"
             />
@@ -626,11 +491,9 @@ export default function AutonomousPage() {
     <PageContent size="wide">
       <PageHeader
         title="Autonomous intelligence"
-        subtitle="Ask questions in plain English, run investigations, and propose self-heals."
+        subtitle="Run investigations and propose self-heals. For ad-hoc questions, use the AI Insights chat (⌘J) or EQL at /observability/query."
         icon={Wand2}
       />
-
-      <NLQuerySection />
 
       <Tabs value={tab} onValueChange={(v) => setTab(v as Tab)}>
         <TabsList variant="underline" className="w-full">

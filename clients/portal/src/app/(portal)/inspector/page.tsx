@@ -27,6 +27,10 @@ import {
   Compass,
   ArrowLeft } from "lucide-react";
 import { cn } from "@/lib/utils";
+import {
+  TranscriptView as MessageTranscript,
+  type TranscriptMessage,
+} from "@/components/observability/transcript-view";
 
 /**
  * Trace Inspector — Phase 5.4.3
@@ -39,6 +43,7 @@ import { cn } from "@/lib/utils";
  *   - Tool calls, model thoughts, env steps — all expandable
  *   - Filter by type
  *   - Jump to timestamp
+ *   - N13 transcript view of LLM message cards
  *
  * Reads from the observability API: getTraceTree, getTimeline.
  */
@@ -54,6 +59,7 @@ type Span = {
 };
 
 type Filter = "all" | "llm" | "tool" | "env" | "reasoning";
+type ViewMode = "tree" | "transcript";
 
 const FILTER_LABELS: Record<Filter, string> = {
   all: "All",
@@ -61,6 +67,55 @@ const FILTER_LABELS: Record<Filter, string> = {
   tool: "Tools",
   env: "Env",
   reasoning: "Reasoning" };
+
+function spansToTranscriptMessages(spans: Span[]): TranscriptMessage[] {
+  const out: TranscriptMessage[] = [];
+  for (const span of spans) {
+    const payload = span.payload ?? {};
+    const messages = (payload.messages ?? payload.input_messages) as
+      | Array<Record<string, unknown>>
+      | undefined;
+    if (Array.isArray(messages)) {
+      for (const m of messages) {
+        const roleRaw = String(m.role ?? "assistant");
+        const role = (
+          roleRaw === "system" || roleRaw === "user" || roleRaw === "assistant" || roleRaw === "tool"
+            ? roleRaw
+            : "assistant"
+        ) as TranscriptMessage["role"];
+        out.push({
+          id: `${span.span_id}-${out.length}`,
+          role,
+          content: String(m.content ?? ""),
+        });
+      }
+    } else if (span.span_type === "llm_completion" || span.span_type === "reasoning") {
+      const content =
+        (typeof payload.response === "string" && payload.response) ||
+        (typeof payload.content === "string" && payload.content) ||
+        (typeof payload.output === "string" && payload.output) ||
+        JSON.stringify(payload).slice(0, 500);
+      out.push({
+        id: span.span_id,
+        role: "assistant",
+        content: content || span.name,
+      });
+    } else if (span.span_type === "tool_invocation") {
+      out.push({
+        id: span.span_id,
+        role: "tool",
+        content: JSON.stringify(payload, null, 2).slice(0, 2000),
+      });
+    } else if (span.span_type === "user_interaction") {
+      out.push({
+        id: span.span_id,
+        role: "user",
+        content: String(payload.content ?? payload.message ?? span.name),
+      });
+    }
+  }
+  return out;
+}
 
 const SPAN_ICONS: Record<Span["span_type"], typeof Brain> = {
   llm_completion: Brain,
@@ -131,6 +186,7 @@ export default function TraceInspectorPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<Filter>("all");
+  const [viewMode, setViewMode] = useState<ViewMode>("tree");
   const [query, setQuery] = useState("");
   const [autoRefresh, setAutoRefresh] = useState(false);
 
@@ -261,6 +317,28 @@ export default function TraceInspectorPage() {
             ))}
           </div>
           <div className="mx-3 h-5 w-px bg-[var(--border-subtle)]" aria-hidden />
+          <div role="group" aria-label="View mode" className="flex items-center gap-1">
+            {([
+              ["tree", "Tree"],
+              ["transcript", "Transcript"],
+            ] as const).map(([mode, label]) => (
+              <button
+                key={mode}
+                type="button"
+                onClick={() => setViewMode(mode)}
+                aria-pressed={viewMode === mode}
+                className={cn(
+                  "rounded px-2 py-1 text-xs font-medium transition-colors",
+                  viewMode === mode
+                    ? "bg-[var(--accent)] text-[var(--accent-foreground)]"
+                    : "text-[var(--text-secondary)] hover:bg-[var(--bg-tertiary)]"
+                )}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          <div className="mx-3 h-5 w-px bg-[var(--border-subtle)]" aria-hidden />
           <Button
             variant="ghost"
             size="sm"
@@ -322,6 +400,8 @@ export default function TraceInspectorPage() {
               description="No spans match the current filter. Try widening the filter or clearing the search."
               size="sm"
             />
+          ) : viewMode === "transcript" ? (
+            <MessageTranscript messages={spansToTranscriptMessages(orderedSpans)} />
           ) : (
             <div className="space-y-0.5">
               {orderedSpans.map((span) => (

@@ -6,7 +6,7 @@
 | **Slug** | `eden-mcp-server` |
 | **Priority** | P0 |
 | **Effort** | L |
-| **Eden status** | **MISSING** |
+| **Eden status** | **SHIPPED (v0)** — `src/eden/mcp_server/` (traces, issues, debugger, fix, improve queue). Full tool surface stretch deferred. |
 | **Competitive source** | Laminar MCP, Raindrop Workshop/MCP autofix |
 | **Replaces** | F05 CLI debug, F10 local dev server, F26 session inspection, F37 run_autofix (absorbed into MCP tools) |
 | **Dependencies** | F48 (portal fix), F29 (issues), F01 (debugger rerun), F30 (triage) |

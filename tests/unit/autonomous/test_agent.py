@@ -67,12 +67,11 @@ class TestToolRegistry:
         )
 
     def test_count_matches_plan(self):
-        # Phase 3a (2026-06-23): 12 → 14 with the addition of
-        # `create_pr_suggestion` (read-only) and `open_pr_suggestion`
-        # (admin). Both wired to the Cat 23 PRSuggester so the agent
-        # can stay in the Cmd-J panel for the full create→review→
-        # open-PR loop.
-        assert len(_TOOL_REGISTRY) == 14
+        # Phase 3a: 12 → 14 with create/open_pr_suggestion.
+        # Chat modernize: insights observability tools merge in via
+        # `_register_insights_tools()` (list_traces, get_cost_*, …).
+        assert len(_TOOL_REGISTRY) == len(tool_specs())
+        assert len(_TOOL_REGISTRY) >= 14
 
     def test_write_tools_require_role(self):
         assert _TOOL_REGISTRY["mark_incident_resolved"]["requires_role"] == "admin"

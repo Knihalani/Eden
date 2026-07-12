@@ -201,3 +201,36 @@ class RedisTailer:
                     await runner.run_for_event(event, judges, trace_id=trace_id)  # type: ignore[arg-type]
                 except Exception as exc:
                     logger.debug(f"runner.run_for_event failed: {exc}")
+
+
+# ── Lifespan helpers (N14) ──────────────────────────────────────────
+
+_DEFAULT_TAILER: RedisTailer | None = None
+
+
+async def start_judge_tailer(settings: Any | None = None) -> RedisTailer | None:
+    """Start the process-wide judge Redis tailer (N14 optional path).
+
+    No-op when ``judges_async_tailer_enabled`` is False. Idempotent.
+    """
+    global _DEFAULT_TAILER
+    if settings is None:
+        from eden.config import get_settings
+
+        settings = get_settings()
+    if not getattr(settings, "judges_async_tailer_enabled", False):
+        logger.info("judge tailer: disabled by Settings")
+        return None
+    if _DEFAULT_TAILER is None:
+        _DEFAULT_TAILER = RedisTailer()
+    await _DEFAULT_TAILER.start()
+    return _DEFAULT_TAILER
+
+
+async def stop_judge_tailer() -> None:
+    """Stop the process-wide judge Redis tailer if running."""
+    global _DEFAULT_TAILER
+    if _DEFAULT_TAILER is None:
+        return
+    await _DEFAULT_TAILER.stop()
+    _DEFAULT_TAILER = None

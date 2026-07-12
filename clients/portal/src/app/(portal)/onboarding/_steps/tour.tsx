@@ -58,7 +58,7 @@ const CARDS: TourCard[] = [
     href: "/observability",
     icon: LineChart,
     title: "Observability",
-    body: "Run a judge, replay a trace, or compare environments side-by-side. The cat-1 + cat-2 surfaces live here." },
+    body: "Run a judge, replay a trace, or compare staging vs production traces. The observe surfaces live here." },
   {
     href: "/alerts",
     icon: AlertOctagon,

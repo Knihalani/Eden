@@ -87,7 +87,7 @@ interface OverviewData {
     }>;
   };
 }
-type Tab = "overview" | "insights" | "disparity" | "datasets" | "closed-loop";
+type Tab = "overview" | "insights" | "closed-loop";
 
 // §3.2 — Closed-loop correlation report (Insights → KB → env quality).
 interface CorrelationWeekBucket {
@@ -120,7 +120,6 @@ export default function InsightsPage() {
   const [overview, setOverview] = useState<OverviewData | null>(null);
   const [runningDetectors, setRunningDetectors] = useState(false);
   const [selectedInsight, setSelectedInsight] = useState<OverviewData["insights"]["recent"][0] | null>(null);
-  const [selectedReport, setSelectedReport] = useState<OverviewData["disparity"]["reports"][0] | null>(null);
   useEffect(() => {
     if (!currentOrg) return;
     loadOverview();
@@ -159,10 +158,10 @@ export default function InsightsPage() {
     }
   }
   if (!currentOrg) {
-    return <NoOrgState icon={Lightbulb} feature="Insights" description="Pattern detection, disparity analysis, and dataset generation light up once your organization has traces to inspect." />;
+    return <NoOrgState icon={Lightbulb} feature="Insights" description="Pattern detection and closed-loop insights light up once your organization has traces to inspect." />;
   }
   return <PageContent size="wide">
-      <PageHeader title="Insights" subtitle="Automatic pattern detection, disparity analysis, and dataset generation" icon={Lightbulb} actions={<div className="flex items-center gap-2">
+      <PageHeader title="Insights" subtitle="Automatic pattern detection and closed-loop improvement signals" icon={Lightbulb} actions={<div className="flex items-center gap-2">
             <Button variant="default" onClick={handleRunDetectors} loading={runningDetectors} aria-label="Run insight detectors now">
               <Play className="w-4 h-4" />
               Run Detectors
@@ -181,7 +180,7 @@ export default function InsightsPage() {
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as Tab)}>
         <TabsList className="bg-[var(--bg-tertiary)] rounded-xl w-fit">
-          {(["overview", "insights", "disparity", "datasets", "closed-loop"] as Tab[]).map((tab) => (
+          {(["overview", "insights", "closed-loop"] as Tab[]).map((tab) => (
             <TabsTrigger
               key={tab}
               value={tab}
@@ -211,8 +210,6 @@ export default function InsightsPage() {
       }}>
             {activeTab === "overview" && <OverviewTab data={overview} />}
             {activeTab === "insights" && <InsightsTab data={overview.insights} onSelectInsight={setSelectedInsight} />}
-            {activeTab === "disparity" && <DisparityTab data={overview.disparity} onSelectReport={setSelectedReport} />}
-            {activeTab === "datasets" && <DatasetsTab data={overview.datasets} />}
             {activeTab === "closed-loop" && <ClosedLoopTab />}
           </motion.div>
         </AnimatePresence> : <EmptyState
@@ -258,11 +255,6 @@ export default function InsightsPage() {
       <Dialog open={selectedInsight !== null} onOpenChange={open => !open && setSelectedInsight(null)}>
         {selectedInsight && <InsightDetailModal insight={selectedInsight} onClose={() => setSelectedInsight(null)} />}
       </Dialog>
-
-      {/* Report Detail Modal — Radix Dialog (focus trap + ESC + ARIA) */}
-      <Dialog open={selectedReport !== null} onOpenChange={open => !open && setSelectedReport(null)}>
-        {selectedReport && <ReportDetailModal report={selectedReport} onClose={() => setSelectedReport(null)} />}
-      </Dialog>
     </PageContent>;
 }
 
@@ -279,7 +271,6 @@ function OverviewTab({
     summary,
     traces,
     insights,
-    disparity
   } = data;
   const cards = [{
     label: "Total Traces",
@@ -289,24 +280,13 @@ function OverviewTab({
     label: "Insights Found",
     value: summary.total_insights,
     icon: Sparkles
-  }, {
-    label: "Disparity Reports",
-    value: summary.total_disparity_reports,
-    icon: AlertTriangle
-  }, {
-    label: "Datasets",
-    value: summary.total_datasets,
-    icon: Database
   }];
   return <div className="space-y-6">
-      {/* Summary Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        {cards.map(card => <StatCard key={card.label} title={card.label} value={card.value} icon={card.icon} accent={card.label === "Total Traces" ? "accent" : card.label === "Datasets" ? "terminal" : "warning"} />)}
+        {cards.map(card => <StatCard key={card.label} title={card.label} value={card.value} icon={card.icon} accent={card.label === "Total Traces" ? "accent" : "warning"} />)}
       </div>
 
-      {/* Two-column layout */}
       <div className="grid lg:grid-cols-2 gap-6">
-        {/* Insights by Severity */}
         <Card padding="lg">
           <h3 className="text-sm font-semibold text-[var(--text-primary)] mb-4 flex items-center gap-2">
             <BarChart3 className="w-4 h-4 text-[var(--accent)]" />
@@ -317,11 +297,6 @@ function OverviewTab({
             const count = insights.by_severity[severity] || 0;
             const total = summary.total_insights || 1;
             const pct = count / total * 100;
-            // ponytail: progress bar fills get the *solid* color for
-            // each severity tier so the bar reads at a glance — the
-            // subtle wash tokens (warning-bg, accent-faint) are
-            // reserved for badge backgrounds. The info tier falls
-            // through to text-muted for an unobtrusive "no signal" bar.
             const color = severity === "critical" ? "bg-[var(--error)]" : severity === "high" ? "bg-[var(--warning)]" : severity === "medium" ? "bg-[var(--warning)]" : severity === "low" ? "bg-[var(--accent-faint)]" : "bg-[var(--text-muted)]";
             return <div key={severity}>
                   <div className="flex items-center justify-between text-sm mb-1">
@@ -338,7 +313,6 @@ function OverviewTab({
           </div>
         </Card>
 
-        {/* Traces by Realm */}
         <Card padding="lg">
           <h3 className="text-sm font-semibold text-[var(--text-primary)] mb-4 flex items-center gap-2">
             <Layers className="w-4 h-4 text-[var(--accent)]" />
@@ -360,12 +334,11 @@ function OverviewTab({
                   </div>
                 </div>;
           })}
-            {Object.keys(traces.by_realm).length === 0 && <EmptyState icon={Activity} title="No traces ingested yet" description="Trace ingestion happens automatically as your agents run jobs." size="sm" />}
+            {Object.keys(traces.by_realm).length === 0 && <EmptyState icon={Activity} title="No traces ingested yet" description="Trace ingestion happens automatically as your agents run." size="sm" />}
           </div>
         </Card>
       </div>
 
-      {/* Recent Insights */}
       <Card padding="lg">
         <h3 className="text-sm font-semibold text-[var(--text-primary)] mb-4 flex items-center gap-2">
           <Sparkles className="w-4 h-4 text-[var(--accent)]" />
@@ -388,32 +361,8 @@ function OverviewTab({
                   </div>
                 </div>
               </div>)}
-          </div> : <EmptyState icon={Sparkles} title="No insights yet" description="Run detectors to discover patterns, model disparities, and quality trends in your outputs." size="md" />}
+          </div> : <EmptyState icon={Sparkles} title="No insights yet" description="Run detectors to discover patterns and quality trends in your outputs." size="md" />}
       </Card>
-
-      {/* Disparity Score */}
-      {disparity.reports.length > 0 && <Card padding="lg">
-          <h3 className="text-sm font-semibold text-[var(--text-primary)] mb-4 flex items-center gap-2">
-            <AlertTriangle className="w-4 h-4 text-[var(--accent)]" />
-            Disparity Summary
-          </h3>
-          <div className="flex items-center gap-8">
-            <div>
-              <p className="text-3xl font-bold text-[var(--text-primary)]">
-                {(disparity.avg_score * 100).toFixed(1)}%
-              </p>
-              <p className="text-xs text-[var(--text-muted)]">Average Divergence</p>
-            </div>
-            <div>
-              <p className="text-3xl font-bold text-[var(--warning)]">{disparity.high_disparity_count}</p>
-              <p className="text-xs text-[var(--text-muted)]">High Disparity Reports</p>
-            </div>
-            <div>
-              <p className="text-3xl font-bold text-[var(--text-primary)]">{disparity.reports.length}</p>
-              <p className="text-xs text-[var(--text-muted)]">Total Reports</p>
-            </div>
-          </div>
-        </Card>}
     </div>;
 }
 
@@ -478,123 +427,14 @@ function InsightsTab({
                 <ChevronRight className="w-4 h-4 text-[var(--text-muted)] flex-shrink-0 mt-1" />
               </div>
             </button>)}
-        {data.recent.length === 0 && <EmptyState icon={Sparkles} title="No insights detected yet" description="Run detectors to discover quality patterns, model disparities, and training opportunities in your outputs." size="lg" />}
+        {data.recent.length === 0 && <EmptyState icon={Sparkles} title="No insights detected yet" description="Run detectors to discover quality patterns and improvement opportunities in your outputs." size="lg" />}
       </div>
     </div>;
 }
 
 // ──────────────────────────────────────────────────────────────────────────
-// Disparity Tab
-// ──────────────────────────────────────────────────────────────────────────
 
-function DisparityTab({
-  data,
-  onSelectReport
-}: {
-  data: OverviewData["disparity"];
-  onSelectReport: (report: OverviewData["disparity"]["reports"][0]) => void;
-}) {
-  return <div className="space-y-6">
-      {/* Stats */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <StatCard title="Total Reports" value={data.reports.length} icon={BarChart3} accent="neutral" />
-        <StatCard title="High Disparity" value={data.high_disparity_count} icon={AlertTriangle} accent="warning" />
-        <StatCard title="Avg Score" value={`${(data.avg_score * 100).toFixed(1)}%`} icon={TrendingUp} accent="terminal" />
-      </div>
 
-      {/* Reports */}
-      <div className="space-y-3">
-        {data.reports.map(report => <button key={report.report_id} onClick={() => onSelectReport(report)} className="w-full text-left bg-[var(--bg-primary)] border border-[var(--border-default)] rounded-xl p-4 hover:border-[var(--accent)]/30 transition-colors">
-            <div className="flex items-center justify-between mb-2">
-              <div className="flex items-center gap-2">
-                <span className={cn("text-xs font-bold px-2 py-0.5 rounded-full", report.overall_score > 0.6 ? "bg-[var(--error-bg)] text-[var(--error)]" : report.overall_score > 0.3 ? "bg-[var(--warning-bg)] text-[var(--warning)]" : "bg-[var(--terminal-faint)] text-[var(--terminal)]")}>
-                  {(report.overall_score * 100).toFixed(0)}%
-                </span>
-                <span className="text-xs text-[var(--text-muted)]">
-                  {new Date(report.generated_at).toLocaleDateString()}
-                </span>
-              </div>
-              <ChevronRight className="w-4 h-4 text-[var(--text-muted)]" />
-            </div>
-            <p className="text-sm font-medium text-[var(--text-primary)] mb-2">
-              Environment vs Production Disparity
-            </p>
-            <div className="flex flex-wrap gap-2">
-              {report.dimensions.map(dim => <span key={dim.name} className={cn("text-xs px-2 py-0.5 rounded-full", dim.gap > 0.5 ? "bg-[var(--error-bg)] text-[var(--error)]" : dim.gap > 0.2 ? "bg-[var(--warning-bg)] text-[var(--warning)]" : "bg-[var(--bg-tertiary)] text-[var(--text-muted)]")}>
-                  {dim.name}: {(dim.gap * 100).toFixed(0)}%
-                </span>)}
-            </div>
-          </button>)}
-        {data.reports.length === 0 && <EmptyState icon={AlertTriangle} title="No disparity reports yet" description="Compare environment and production traces to generate reports." size="md" />}
-      </div>
-    </div>;
-}
-
-// ──────────────────────────────────────────────────────────────────────────
-// Datasets Tab
-// ──────────────────────────────────────────────────────────────────────────
-
-function DatasetsTab({
-  data
-}: {
-  data: OverviewData["datasets"];
-}) {
-  const {
-    currentOrg
-  } = useOrg();
-  const typeLabels: Record<string, string> = {
-    regression_suite: "Regression Suite",
-    edge_case_collection: "Edge Cases",
-    adversarial_suite: "Adversarial",
-    performance_benchmark: "Performance",
-    disparity_collection: "Disparity",
-    golden_path: "Golden Paths"
-  };
-  const typeIcons: Record<string, typeof Database> = {
-    regression_suite: CheckCircle2,
-    edge_case_collection: AlertTriangle,
-    adversarial_suite: Zap,
-    performance_benchmark: TrendingUp,
-    disparity_collection: BarChart3,
-    golden_path: Sparkles
-  };
-  return <div className="space-y-6">
-      <Card padding="lg">
-        <h3 className="text-sm font-semibold text-[var(--text-primary)] mb-4">
-          Generated Datasets ({data.count})
-        </h3>
-        <div className="space-y-3">
-          {data.items.map(dataset => {
-          const Icon = typeIcons[dataset.dataset_type] || Database;
-          return <div key={dataset.dataset_id} className="flex items-center gap-3 p-3 rounded-lg bg-[var(--bg-secondary)]">
-                <div className="p-2 rounded-lg bg-[var(--bg-tertiary)]">
-                  <Icon className="w-4 h-4 text-[var(--accent)]" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-[var(--text-primary)]">{dataset.name}</p>
-                  <p className="text-xs text-[var(--text-muted)]">
-                    {typeLabels[dataset.dataset_type] || dataset.dataset_type} · {dataset.entry_count} entries · v{dataset.version}
-                  </p>
-                </div>
-                <div className="flex items-center gap-2">
-                  <a href={datasetsApi.exportUrl(currentOrg?.id ?? "", dataset.dataset_id, `${dataset.name}.jsonl`)} download aria-label={`Export ${dataset.name} as JSONL`} className="p-2 text-[var(--text-muted)] hover:text-[var(--accent)] transition-colors" title="Export JSONL">
-                    <FileJson className="w-4 h-4" />
-                  </a>
-                  <a href={datasetsApi.exportUrl(currentOrg?.id ?? "", dataset.dataset_id, `${dataset.name}.jsonl`)} download aria-label={`Download ${dataset.name}`} className="p-2 text-[var(--text-muted)] hover:text-[var(--accent)] transition-colors" title="Download">
-                    <Download className="w-4 h-4" />
-                  </a>
-                </div>
-              </div>;
-        })}
-          {data.items.length === 0 && <EmptyState icon={Database} title="No datasets generated yet" description="Datasets are auto-generated from insights and trace analysis." size="md" />}
-        </div>
-      </Card>
-    </div>;
-}
-
-// ──────────────────────────────────────────────────────────────────────────
-// Modals
-// ──────────────────────────────────────────────────────────────────────────
 
 function InsightDetailModal({
   insight,
@@ -651,72 +491,6 @@ function InsightDetailModal({
       </div>
     </DialogContent>;
 }
-function ReportDetailModal({
-  report,
-  onClose
-}: {
-  report: OverviewData["disparity"]["reports"][0];
-  onClose: () => void;
-}) {
-  // P6: Radix Dialog — same rationale as InsightDetailModal. Long
-  // reports with many dimensions previously overflowed past the
-  // close button; DialogContent's max-h-[90vh] + overflow guard
-  // (P7) keeps the panel inside the viewport with internal scroll.
-  return <DialogContent className="max-w-lg" aria-describedby={undefined}>
-      <DialogHeader>
-        <DialogTitle>Disparity Report</DialogTitle>
-      </DialogHeader>
-      <div className="space-y-4">
-        <div className="flex items-center gap-3">
-          <span className={cn("text-lg font-bold px-3 py-1 rounded-full", report.overall_score > 0.6 ? "bg-[var(--error-bg)] text-[var(--error)]" : report.overall_score > 0.3 ? "bg-[var(--warning-bg)] text-[var(--warning)]" : "bg-[var(--terminal-faint)] text-[var(--terminal)]")}>
-            {(report.overall_score * 100).toFixed(0)}% divergence
-          </span>
-          <span className="text-xs text-[var(--text-muted)]">
-            {new Date(report.generated_at).toLocaleString()}
-          </span>
-        </div>
-
-        <div className="space-y-2">
-          <p className="text-xs font-medium text-[var(--text-muted)]">Dimensions</p>
-          {report.dimensions.map(dim => <div key={dim.name} className="bg-[var(--bg-secondary)] rounded-lg p-3">
-              <div className="flex items-center justify-between mb-1">
-                <span className="text-sm font-medium text-[var(--text-primary)] capitalize">
-                  {dim.name.replace(/_/g, " ")}
-                </span>
-                <SeverityBadge severity={dim.severity} />
-              </div>
-              <div className="h-2 bg-[var(--bg-tertiary)] rounded-full overflow-hidden mb-2">
-                <div className={cn("h-full rounded-full", dim.gap > 0.5 ? "bg-[var(--error)]" : dim.gap > 0.2 ? "bg-[var(--warning-bg)]" : "bg-[var(--terminal)]")} style={{
-              width: `${dim.gap * 100}%`
-            }} />
-              </div>
-              <p className="text-xs text-[var(--text-muted)]">{dim.explanation}</p>
-            </div>)}
-        </div>
-
-        {report.recommendations.length > 0 && <div>
-            <p className="text-xs font-medium text-[var(--text-muted)] mb-2">Recommendations</p>
-            <ul className="space-y-2">
-              {report.recommendations.map((rec, i) => <li key={i} className="flex items-start gap-2 text-sm text-[var(--text-primary)]">
-                  <ChevronRight className="w-3 h-3 text-[var(--accent)] mt-0.5 flex-shrink-0" />
-                  {rec}
-                </li>)}
-            </ul>
-          </div>}
-        <button type="button" onClick={onClose} aria-label="Close disparity report" className="text-xs text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors">
-          Close
-        </button>
-      </div>
-    </DialogContent>;
-}
-
-// ──────────────────────────────────────────────────────────────────────────
-// Helpers
-// ──────────────────────────────────────────────────────────────────────────
-
-// ────────────────────────────────────────────────────────────────────────────
-// §3.2 — Closed-loop correlation tab
-// ────────────────────────────────────────────────────────────────────────────
 
 function ClosedLoopTab() {
   const {

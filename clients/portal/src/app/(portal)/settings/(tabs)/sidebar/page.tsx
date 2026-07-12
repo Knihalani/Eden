@@ -15,7 +15,7 @@
  * + reset affordances are enough for the first ship.
  */
 import Link from "next/link";
-import { useState } from "react";
+import { useState, type ComponentType } from "react";
 import { Eye, EyeOff, Pin, PinOff, RotateCcw, Settings2 } from "lucide-react";
 import { PageHeader } from "@/components/layout/page-header";
 import { useSidebarPrefs, applySidebarPrefs, DEFAULT_PREFS } from "@/hooks/use-sidebar-prefs";
@@ -219,7 +219,7 @@ function SidebarPreviewGroup({
   items: {
     id: string;
     label: string;
-    icon: typeof Settings2;
+    icon: ComponentType<{ className?: string }>;
   }[];
 }) {
   return <div className="mb-3 last:mb-0">

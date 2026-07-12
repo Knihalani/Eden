@@ -374,7 +374,15 @@ def mock_postgres_client() -> MagicMock:
     # ``async with client.acquire()``.
     @asynccontextmanager
     async def _acquire():
+        # Delegate query methods to the client so callers that use
+        # ``async with client.acquire() as conn: conn.fetchrow(...)``
+        # (e.g. TriageAgent active-work checks) see the same defaults
+        # as ``client.fetchrow`` — a bare AsyncMock returns a truthy
+        # MagicMock and falsely trips ``row is not None``.
         conn = AsyncMock()
+        conn.fetchrow = client.fetchrow
+        conn.fetch = client.fetch
+        conn.execute = client.execute
         conn.transaction = _noop_acm
         yield conn
 

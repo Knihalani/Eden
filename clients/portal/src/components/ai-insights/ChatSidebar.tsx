@@ -26,7 +26,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 import {
-  MessageSquare,
   Plus,
   Send,
   X,
@@ -34,9 +33,10 @@ import {
   Loader2,
   AlertTriangle,
   Archive,
+  ChevronDown,
+  Terminal,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Tag } from "@/components/ui/tag";
 import { ToolCallCard } from "./ToolCallCard";
 import { useOrg } from "@/hooks/use-org";
 import { useToast } from "@/components/ui/toast";
@@ -72,9 +72,30 @@ interface Message {
 
 const SIDEBAR_WIDTH = 360;
 
+function buildPageContext(pathname: string | null): {
+  pathname?: string;
+  trace_id?: string;
+  filters?: Record<string, string>;
+} {
+  const path = pathname ?? (typeof window !== "undefined" ? window.location.pathname : "");
+  const params =
+    typeof window !== "undefined"
+      ? new URLSearchParams(window.location.search)
+      : null;
+  const fromQuery = params?.get("trace_id") || params?.get("trace") || null;
+  const fromPath = path.match(/\/(?:traces|replay)\/([^/?#]+)/)?.[1] ?? null;
+  const issueMatch = path.match(/\/issues\/([^/?#]+)/)?.[1] ?? null;
+  return {
+    ...(path ? { pathname: path } : {}),
+    ...(fromQuery || fromPath ? { trace_id: fromQuery || fromPath || undefined } : {}),
+    ...(issueMatch ? { filters: { issue_id: issueMatch } } : {}),
+  };
+}
+
 export function ChatSidebar() {
   const { currentOrg } = useOrg();
   const toast = useToast();
+  const pathname = usePathname();
   // ponytail: open state is persisted to sessionStorage so a
   // returning user sees the AI assistant in the state they left it.
   // Default is closed — the user explicitly opts in via the
@@ -91,6 +112,7 @@ export function ChatSidebar() {
   const [input, setInput] = useState("");
   const [streaming, setStreaming] = useState(false);
   const [loadingSessions, setLoadingSessions] = useState(false);
+  const [sessionMenuOpen, setSessionMenuOpen] = useState(false);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   // PQ-3: AbortController per submit() so unmount cancels the
   // in-flight fetch + its reader. Previously a dead EventSource
@@ -124,6 +146,28 @@ export function ChatSidebar() {
   }, [open]);
 
   const orgId = currentOrg?.id;
+
+  // Desktop: push #main-content instead of overlaying it.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const main = document.getElementById("main-content");
+    if (!main) return;
+    const mq = window.matchMedia("(min-width: 1024px)");
+    const apply = () => {
+      if (open && mq.matches && orgId) {
+        main.style.marginRight = `${SIDEBAR_WIDTH}px`;
+        main.style.transition = "margin-right 200ms ease-out";
+      } else {
+        main.style.marginRight = "";
+      }
+    };
+    apply();
+    mq.addEventListener("change", apply);
+    return () => {
+      mq.removeEventListener("change", apply);
+      main.style.marginRight = "";
+    };
+  }, [open, orgId]);
 
   // Load the user's session list whenever the org changes.
   useEffect(() => {
@@ -292,7 +336,11 @@ export function ChatSidebar() {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: text, session_id: activeSessionId }),
+        body: JSON.stringify({
+          message: text,
+          session_id: activeSessionId,
+          page_context: buildPageContext(pathname),
+        }),
         signal: controller.signal,
       });
     } catch (err) {
@@ -521,10 +569,9 @@ export function ChatSidebar() {
           .catch(() => {});
       }
     }
-  }, [activeSessionId, input, orgId, streaming, toast]);
+  }, [activeSessionId, input, orgId, pathname, streaming, toast]);
 
   const hasOrg = !!orgId;
-  const pathname = usePathname();
   // Hide the floating chat toggle on the onboarding wizard —
   // it's a z-50 fixed button in the bottom-right that overlaps the
   // wizard's primary CTAs ("Get started", "Continue", "Create
@@ -535,66 +582,125 @@ export function ChatSidebar() {
   const hideChatOnRoute =
     pathname === "/onboarding" || pathname.startsWith("/onboarding/");
 
+  const activeSession = sessions.find((s) => s.session_id === activeSessionId);
+  const sessionLabel = activeSession?.title ?? "New chat";
+
   // ── Render ────────────────────────────────────────────────────────
   return (
     <>
-      {!hideChatOnRoute && (
-      // Floating toggle button (always visible, even when collapsed).
-      //   z-50 lifts it above the mobile sidebar overlay (z-40) and
-      //   the command palette wrapper (when mounted), so the click
-      //   never lands on a sibling overlay. When ``open`` is true we
-      //   still nudge it left so it sits just outside the chat
-      //   panel; on viewports narrower than 480px the chat panel
-      //   itself covers the toggle area, so we hide it entirely (the
-      //   chat panel has its own close button).
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        className={cn(
-          "fixed bottom-20 right-4 lg:bottom-4 z-50 flex h-12 w-12 items-center justify-center rounded-full",
-          "bg-[var(--accent)] text-[var(--bg-base)] shadow-lg transition-transform",
-          "hover:scale-105 active:scale-95",
-          open && "translate-x-[-200px] max-[480px]:translate-x-0 max-[480px]:opacity-0 max-[480px]:pointer-events-none",
-        )}
-        aria-label={open ? "Close AI assistant" : "Open AI assistant"}
-      >
-        {open ? <PanelRightClose className="h-5 w-5" /> : <MessageSquare className="h-5 w-5" />}
-      </button>
+      {/* Desktop edge tab — smaller than the old FAB; mobile keeps
+          bottom nav as the sole chrome affordance (plan: one bottom
+          affordance). Cmd-J still toggles on all viewports. */}
+      {!hideChatOnRoute && !open && (
+        <button
+          type="button"
+          onClick={() => setOpen(true)}
+          className={cn(
+            "fixed right-0 top-1/2 z-50 hidden -translate-y-1/2 lg:flex",
+            "h-20 w-7 flex-col items-center justify-center gap-1 rounded-l-md",
+            "border border-r-0 border-[var(--border-default)] bg-[var(--bg-primary)]",
+            "text-[var(--text-muted)] hover:text-[var(--accent)] hover:border-[var(--accent)]/40",
+            "transition-colors",
+          )}
+          aria-label="Open AI assistant"
+        >
+          <Terminal className="h-3.5 w-3.5" aria-hidden />
+          <span
+            className="text-[9px] font-medium uppercase tracking-wider"
+            style={{ writingMode: "vertical-rl" }}
+          >
+            Ask
+          </span>
+        </button>
       )}
 
       {open && hasOrg && (
         <aside
           className={cn(
-            // h-dvh (not h-screen) so the panel respects the mobile
-            // Safari URL-bar collapse. Without this the composer
-            // sits ~80px below the visible viewport on phones.
             "fixed right-0 top-0 z-30 flex h-dvh flex-col",
             "border-l border-[var(--border-default)] bg-[var(--bg-primary)]",
-            "shadow-2xl",
-            // Full-width on phones so the 360px panel doesn't bleed
-            // off-screen. June 2026 layout-pass fix.
+            "shadow-xl lg:shadow-none",
             "max-[480px]:!w-screen max-[480px]:!max-w-screen",
           )}
           style={{
             width: SIDEBAR_WIDTH,
-            // Inline-style fallback mirrors the className so SSR
-            // renders the right size even before the responsive
-            // classes apply (prevents a flash of 360px on mobile).
             maxWidth: typeof window !== "undefined" && window.innerWidth <= 480 ? "100vw" : SIDEBAR_WIDTH,
           }}
           role="complementary"
           aria-label="AI Insights assistant"
         >
           {/* Header */}
-          <div className="flex items-center justify-between border-b border-[var(--border-default)] px-4 py-3">
-            <div className="flex items-center gap-2">
-              <MessageSquare className="h-4 w-4 text-[var(--accent)]" />
-              <h2 className="text-sm font-semibold text-[var(--text-primary)]">
-                AI Insights
-              </h2>
-              <Tag className="text-[10px]">Beta</Tag>
+          <div className="flex items-center justify-between border-b border-[var(--border-default)] px-3 py-2.5">
+            <div className="relative flex min-w-0 flex-1 items-center gap-2">
+              <Terminal className="h-3.5 w-3.5 shrink-0 text-[var(--accent)]" aria-hidden />
+              <button
+                type="button"
+                onClick={() => setSessionMenuOpen((v) => !v)}
+                className="flex min-w-0 items-center gap-1 rounded-md px-1.5 py-1 text-left hover:bg-[var(--bg-tertiary)]"
+                aria-expanded={sessionMenuOpen}
+                aria-haspopup="listbox"
+                aria-label="Chat sessions"
+              >
+                <span className="truncate text-sm font-semibold text-[var(--text-primary)]">
+                  {sessionLabel}
+                </span>
+                <ChevronDown className="h-3.5 w-3.5 shrink-0 text-[var(--text-muted)]" aria-hidden />
+              </button>
+              {sessionMenuOpen && (
+                <div
+                  role="listbox"
+                  className="absolute left-0 top-full z-20 mt-1 max-h-56 w-64 overflow-y-auto rounded-md border border-[var(--border-default)] bg-[var(--bg-primary)] py-1 shadow-lg"
+                >
+                  {loadingSessions ? (
+                    <div className="flex items-center gap-1 px-3 py-2 text-xs text-[var(--text-muted)]">
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                      Loading…
+                    </div>
+                  ) : sessions.length === 0 ? (
+                    <div className="px-3 py-2 text-xs text-[var(--text-muted)]">
+                      No conversations yet
+                    </div>
+                  ) : (
+                    sessions.map((s) => (
+                      <div
+                        key={s.session_id}
+                        role="option"
+                        aria-selected={s.session_id === activeSessionId}
+                        className={cn(
+                          "flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs",
+                          s.session_id === activeSessionId
+                            ? "bg-[var(--accent-faint)] text-[var(--accent)]"
+                            : "text-[var(--text-secondary)] hover:bg-[var(--bg-tertiary)]",
+                          s.archived && "opacity-50",
+                        )}
+                      >
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setActiveSessionId(s.session_id);
+                            setSessionMenuOpen(false);
+                          }}
+                          className="min-w-0 flex-1 truncate text-left"
+                        >
+                          {s.title}
+                        </button>
+                        {!s.archived && (
+                          <button
+                            type="button"
+                            onClick={() => archiveSession(s.session_id)}
+                            className="shrink-0 text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+                            aria-label="Archive"
+                          >
+                            <Archive className="h-3 w-3" />
+                          </button>
+                        )}
+                      </div>
+                    ))
+                  )}
+                </div>
+              )}
             </div>
-            <div className="flex items-center gap-1">
+            <div className="flex shrink-0 items-center gap-0.5">
               <Button
                 variant="ghost"
                 size="sm"
@@ -611,57 +717,9 @@ export function ChatSidebar() {
                 aria-label="Close sidebar"
                 className="h-7 w-7 p-0"
               >
-                <X className="h-4 w-4" />
+                <PanelRightClose className="h-4 w-4" />
               </Button>
             </div>
-          </div>
-
-          {/* Sessions list */}
-          <div className="max-h-40 overflow-y-auto border-b border-[var(--border-subtle)] px-2 py-2">
-            {loadingSessions ? (
-              <div className="flex items-center justify-center py-3 text-xs text-[var(--text-muted)]">
-                <Loader2 className="mr-1 h-3 w-3 animate-spin" />
-                Loading…
-              </div>
-            ) : sessions.length === 0 ? (
-              <div className="px-2 py-3 text-xs text-[var(--text-muted)]">
-                No conversations yet. Ask a question to start one.
-              </div>
-            ) : (
-              <ul className="space-y-1">
-                {sessions.map((s) => (
-                  <li key={s.session_id}>
-                    <button
-                      type="button"
-                      onClick={() => setActiveSessionId(s.session_id)}
-                      className={cn(
-                        "group flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs",
-                        s.session_id === activeSessionId
-                          ? "bg-[var(--accent-faint)] text-[var(--accent)]"
-                          : "text-[var(--text-secondary)] hover:bg-[var(--bg-tertiary)]",
-                        s.archived && "opacity-50",
-                      )}
-                    >
-                      <MessageSquare className="h-3 w-3 flex-shrink-0" />
-                      <span className="flex-1 truncate">{s.title}</span>
-                      {!s.archived && (
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            archiveSession(s.session_id);
-                          }}
-                          className="hidden text-[var(--text-muted)] hover:text-[var(--text-primary)] group-hover:block"
-                          aria-label="Archive"
-                        >
-                          <Archive className="h-3 w-3" />
-                        </button>
-                      )}
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            )}
           </div>
 
           {/* Transcript */}
@@ -671,12 +729,12 @@ export function ChatSidebar() {
           >
             {messages.length === 0 && (
               <div className="rounded-md border border-dashed border-[var(--border-subtle)] p-3 text-xs text-[var(--text-muted)]">
-                Ask anything about your jobs, references, or org activity.
-                Examples:
+                Capture. Analyse. Improve. Ask about traces, cost,
+                evals, issues, or proposed patches.
                 <ul className="mt-2 list-disc space-y-1 pl-4">
-                  <li>How many jobs completed today?</li>
-                  <li>Find my last cartpole run</li>
-                  <li>Summarize this week&apos;s outcomes</li>
+                  <li>Show recent traces</li>
+                  <li>What&apos;s our p95 latency this week?</li>
+                  <li>Any open agent issues or pending patches?</li>
                 </ul>
               </div>
             )}
@@ -707,14 +765,9 @@ export function ChatSidebar() {
                 placeholder={
                   streaming
                     ? "Streaming…"
-                    : "Ask about your data…"
+                    : "Ask about traces, cost, evals, issues…"
                 }
                 disabled={streaming}
-                // P8: WCAG — textareas need an accessible name.
-                // Placeholder isn't a label, so screen readers
-                // announced the field with no name before. Also
-                // added aria-disabled so the streaming state is
-                // announced rather than just visual.
                 aria-label="Ask AI Insights a question"
                 aria-disabled={streaming || undefined}
                 className={cn(
@@ -743,12 +796,20 @@ export function ChatSidebar() {
       )}
 
       {!hasOrg && open && (
-        <div className="fixed bottom-20 right-4 z-50 max-w-xs rounded-md border border-[var(--warning)]/40 bg-[var(--bg-primary)] p-3 text-xs text-[var(--text-secondary)] shadow-lg">
+        <div className="fixed bottom-20 right-4 z-50 max-w-xs rounded-md border border-[var(--warning)]/40 bg-[var(--bg-primary)] p-3 text-xs text-[var(--text-secondary)] shadow-lg lg:bottom-4">
           <div className="flex items-start gap-2">
             <AlertTriangle className="h-4 w-4 text-[var(--warning)]" />
             <div>
               Select an organization from the sidebar to use AI Insights.
             </div>
+            <button
+              type="button"
+              onClick={() => setOpen(false)}
+              className="ml-auto text-[var(--text-muted)]"
+              aria-label="Dismiss"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
           </div>
         </div>
       )}

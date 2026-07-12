@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
+import Link from "next/link";
 import { useOrg } from "@/hooks/use-org";
 import { usePolling } from "@/hooks/use-polling";
 import { cn } from "@/lib/utils";
@@ -42,12 +43,16 @@ export function BudgetTicker() {
         `${API_BASE}/orgs/${currentOrg.id}/budget/ticker`,
         { credentials: "include" }
       );
-      if (res.ok) {
-        const d = await res.json();
-        setData(d.data);
+      // Throw on 5xx/4xx so usePolling backs off instead of
+      // silently re-polling every 5s (LP-21 poll amplification).
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}`);
       }
+      const d = await res.json();
+      setData(d.data);
     } catch (err) {
       console.error("Ticker fetch failed", err);
+      throw err;
     } finally {
       setLoading(false);
     }
@@ -90,15 +95,17 @@ export function BudgetTicker() {
   ).length;
 
   return (
-    <div
+    <Link
+      href="/optimization/budget"
       className={cn(
-        "rounded-md border p-3",
+        "block rounded-md border p-3 transition-colors hover:border-[var(--accent)]/40",
         status === "exceeded"
           ? "border-[var(--error)]/30 bg-[var(--error-bg)]"
           : status === "alert"
           ? "border-[var(--warning)]/30 bg-[var(--warning-bg)]"
           : "border-[var(--border-default)] bg-[var(--bg-elev-1)]"
       )}
+      aria-label="Open budget settings"
     >
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2 text-xs font-medium text-[var(--text-secondary)]">
@@ -143,6 +150,6 @@ export function BudgetTicker() {
           Enforcement off (advisory)
         </div>
       )}
-    </div>
+    </Link>
   );
 }

@@ -35,3 +35,12 @@ __all__ = [
     "get_orchestrator",
     "next_status",
 ]
+
+# Lazy re-export so ``from eden.closed_loop import AgentEfficiencyController``
+# works without pulling Redis/Postgres at import time for unrelated callers.
+def __getattr__(name: str) -> object:
+    if name == "AgentEfficiencyController":
+        from eden.closed_loop.efficiency import AgentEfficiencyController
+
+        return AgentEfficiencyController
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

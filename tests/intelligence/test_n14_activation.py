@@ -25,6 +25,8 @@ def test_settings_have_trace_quality_fields() -> None:
     s = get_settings()
     assert s.trace_quality_enabled is True
     assert s.trace_quality_compute_async is True
+    assert s.trace_quality_worker_enabled is True
+    assert s.trace_quality_hot_path_enabled is True
     assert s.stat_gate_min_n == 30
     assert isinstance(s.stat_gate_min_effect, float)
     assert s.quality_pipeline_workers == 2
@@ -36,6 +38,36 @@ def test_settings_have_trace_quality_fields() -> None:
     # Kill-switch mirror: read-only True, mutating False.
     assert s.default_action_applied_flag["emit_drift_alert"] is True
     assert s.default_action_applied_flag["block_user"] is False
+
+
+def test_app_lifespan_calls_install_all_and_workers() -> None:
+    """G1 — lifespan source must wire N14 activation + F46 hooks."""
+    from pathlib import Path
+
+    src = (
+        Path(__file__).resolve().parents[2]
+        / "src"
+        / "eden"
+        / "api"
+        / "app.py"
+    ).read_text(encoding="utf-8")
+    assert "install_all()" in src
+    assert "start_worker()" in src
+    assert "register_all_hooks()" in src
+    assert "start_judge_tailer" in src
+    assert "stop_judge_tailer" in src
+
+
+@pytest.mark.asyncio
+async def test_start_judge_tailer_respects_disable_flag() -> None:
+    from eden.llmops.judges.redis_tailer import start_judge_tailer, stop_judge_tailer
+
+    class _S:
+        judges_async_tailer_enabled = False
+
+    result = await start_judge_tailer(_S())
+    assert result is None
+    await stop_judge_tailer()
 
 
 def test_install_all_is_idempotent() -> None:

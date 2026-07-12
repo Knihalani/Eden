@@ -3,7 +3,8 @@
  *
  * Step 2 of the activation path (after welcome). Lets the user pick a
  * GitHub repo via the Eden GitHub App; Eden opens an SDK-integration PR,
- * then the wizard advances to /onboarding/install.
+ * then the wizard advances to /onboarding/wait (PR opened) so the
+ * user can track merge before installing the SDK.
  */
 "use client";
 
@@ -43,7 +44,7 @@ export function ConnectStep() {
     if (!currentOrg?.id) return;
     try {
       await onboardingApi.patchState(currentOrg.id, {
-        step: "install_sdk",
+        step: "wait_for_pr",
         mark_agent_onboarded: {
           agent_id: run.agent_id ?? undefined,
           agent_name: run.repo_full_name,
@@ -52,7 +53,7 @@ export function ConnectStep() {
     } catch {
       // best effort
     }
-    window.location.assign("/onboarding/install");
+    window.location.assign("/onboarding/wait");
   }
 
   return (

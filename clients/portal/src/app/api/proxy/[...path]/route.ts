@@ -20,6 +20,11 @@ import { type NextRequest, NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 import { forwardToBackend, proxyError, retryAfterMs, RETRY_AFTER_DEFAULT_MS } from "@/lib/proxy";
 
+/** Must be ≥ proxy ``AbortSignal.timeout(25_000)`` so the platform
+ *  does not kill the isolate mid-forward (would surface as 504 and
+ *  look like an upstream outage — LP-21). */
+export const maxDuration = 30;
+
 const FORWARDED_REQUEST_HEADERS = [
   "accept",
   "accept-language",

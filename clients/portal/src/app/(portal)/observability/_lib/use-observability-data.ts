@@ -73,18 +73,3 @@ export function useHeatmap(
     { enabled: Boolean(orgId), staleTime: DETAIL_STALE_TIME }
   );
 }
-
-export function useCompareTraces(
-  orgId: string | undefined,
-  envTraceId: string | null | undefined,
-  prodTraceId: string | null | undefined
-) {
-  return useApiQuery(
-    ["observability", "compare", orgId, envTraceId, prodTraceId],
-    () => {
-      if (!orgId || !envTraceId || !prodTraceId) throw new Error("all ids required");
-      return api.compareObservabilityTraces(orgId, envTraceId, prodTraceId);
-    },
-    { enabled: Boolean(orgId && envTraceId && prodTraceId), staleTime: DETAIL_STALE_TIME }
-  );
-}

@@ -24,11 +24,9 @@ const COMMANDS: NavEntry[] = buildNavCommands().map((cmd) => ({
   ...cmd,
   ...(cmd.href === "/dashboard"
     ? { accent: "terminal" as const }
-    : cmd.href === "/builder"
+    : cmd.href === "/optimization"
       ? { accent: "accent" as const }
-      : cmd.href === "/optimization"
-        ? { accent: "accent" as const }
-        : {}),
+      : {}),
 }));
 
 const ACCENT_BG: Record<NonNullable<NavEntry["accent"]>, string> = {

@@ -6,7 +6,7 @@
 | **Slug** | `closed-loop-orchestrator` |
 | **Priority** | P0 |
 | **Effort** | L |
-| **Eden status** | **MISSING** |
+| **Eden status** | **SHIPPED (v0)** — `src/eden/closed_loop/` orchestrator + event bus + verify worker + efficiency controller; lifespan-started. Full multi-playbook ReAct stretch deferred. |
 | **Competitive source** | All four (capstone) |
 | **Closes gap** | 5.1 |
 | **Dependencies** | F20, F28, F29, F30, F22, F39, F41, N01, F47, **N22, N20, N21, N18, N19** |
@@ -32,9 +32,9 @@ Eden has the pieces (`promotion_hooks.py`, SelfHealer, Cat 23, evolver) but no o
 | Closed-loop executor | `llmops/closed_loop_executor.py` | **PARTIAL** — advisory side effects |
 | Closed-loop portal API | `api/routes/intelligence_closed_loop.py` | **SHIPPED** |
 | Insights → KB loop | `insights/detector_loop.py` | **SHIPPED** — running in lifespan |
-| Issue state machine | `src/eden/closed_loop/orchestrator.py` | **MISSING** |
-| Improvement cockpit UX | N17 | **MISSING** |
-| `src/eden/issues/` | — | **MISSING** |
+| Issue state machine | `src/eden/closed_loop/orchestrator.py` | **SHIPPED (v0)** |
+| Improvement cockpit UX | N17 | **SHIPPED (v0)** — aggregator + portal `/improve` |
+| `src/eden/issues/` | — | **SHIPPED** |
 
 **F46 is the autonomous maintenance engine.** N17 shows what Eden is doing; N22 sets safety bounds.
 

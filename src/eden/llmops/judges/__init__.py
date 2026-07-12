@@ -27,7 +27,7 @@ from __future__ import annotations
 import logging
 
 from .base import Judge, JudgeContext, JudgeScore
-from .redis_tailer import RedisTailer
+from .redis_tailer import RedisTailer, start_judge_tailer, stop_judge_tailer
 from .registry import (
     JudgeRegistry,
     get_judge_registry,
@@ -45,6 +45,8 @@ __all__ = [
     "JudgeRunner",
     "run_judges_for_event",
     "RedisTailer",
+    "start_judge_tailer",
+    "stop_judge_tailer",
     "register_default_judges",
 ]
 

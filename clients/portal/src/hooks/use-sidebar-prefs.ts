@@ -45,11 +45,15 @@ export const DEFAULT_PREFS: SidebarPrefs = {
 const ADVANCED_KEY = "eden:sidebar:advanced-collapsed";
 
 export function readAdvancedCollapsed(): boolean {
-  if (typeof window === "undefined") return false;
+  // Default true: Advanced surfaces stay hidden until the user opts in
+  // (portal polish — ≥40% of Observe items behind Advanced).
+  if (typeof window === "undefined") return true;
   try {
-    return window.localStorage.getItem(ADVANCED_KEY) === "1";
+    const raw = window.localStorage.getItem(ADVANCED_KEY);
+    if (raw === null) return true;
+    return raw === "1";
   } catch {
-    return false;
+    return true;
   }
 }
 
@@ -82,15 +86,27 @@ function toApiPrefs(p: SidebarPrefs): ApiSidebarPrefs {
   };
 }
 
-function fromApiPrefs(p: ApiSidebarPrefs | null): SidebarPrefs {
-  if (!p) return DEFAULT_PREFS;
+function fromApiPrefs(p: ApiSidebarPrefs | null | Record<string, unknown>): SidebarPrefs {
+  // LP-03: live GET sometimes returns ``{}`` instead of ``null``.
+  // Treat empty / keyless objects as "no prefs yet".
+  if (
+    !p ||
+    (typeof p === "object" &&
+      !("pinned" in p) &&
+      !("hidden" in p) &&
+      !("group_order" in p) &&
+      !("density" in p))
+  ) {
+    return DEFAULT_PREFS;
+  }
+  const prefs = p as ApiSidebarPrefs;
   return {
-    pinned: Array.isArray(p.pinned) ? p.pinned : [],
-    hidden: Array.isArray(p.hidden) ? p.hidden : [],
-    groupOrder: Array.isArray(p.group_order) && p.group_order.length === 5
-      ? (p.group_order as SidebarGroup["id"][])
+    pinned: Array.isArray(prefs.pinned) ? prefs.pinned : [],
+    hidden: Array.isArray(prefs.hidden) ? prefs.hidden : [],
+    groupOrder: Array.isArray(prefs.group_order) && prefs.group_order.length === 5
+      ? (prefs.group_order as SidebarGroup["id"][])
       : DEFAULT_PREFS.groupOrder,
-    density: p.density === "compact" ? "compact" : "comfortable",
+    density: prefs.density === "compact" ? "compact" : "comfortable",
   };
 }
 
@@ -269,15 +285,11 @@ export function applySidebarPrefs(
           ? {
               ...item,
               children: item.children.filter((c) => keepItem(c.id)),
-              // If every child is hidden, drop the parent too.
             }
           : item
-      )
-      // Parent items with all children hidden: hide the parent.
-      .filter((item) => {
-        if (item.children && item.children.length === 0) return false;
-        return true;
-      }),
+      ),
+    // Keep hub parents (e.g. Observability) even when every child is
+    // Advanced-hidden — the parent still routes to the hub page.
   }));
 
   const ordered: SidebarGroup[] = prefs.groupOrder

@@ -20,11 +20,11 @@ The four wirings (spec §12.6, §12.7, §12.9):
    severity drift events into ``ClosedLoopAction`` rows. The
    existing Cat 17 surface picks them up via the
    ``ClosedLoopExecutor.apply_approved`` path.
-4. **Cat 22 SamplingPolicy.** Sets
-   ``detector_keep_rate_loop = 1.0`` so every loop-verdict
-   trace is kept by the tail sampler (the existing
-   ``supplementaries.cat_22_apm.tail_sampling`` reads this
-   setting).
+4. **Cat 22 / N16 SamplingPolicy.** Sets
+   ``detector_keep_rate_loop/error`` and the N16 profile
+   probabilistic rate onto ``DEFAULT_KEEP_RATES`` so loop/error
+   traces are kept and non-signal traces follow
+   ``sampling_profile`` (``eden.observability.sampling.policy``).
 """
 
 from __future__ import annotations
@@ -226,13 +226,13 @@ def install_cat17_closed_loop_collection() -> None:
 
 
 def install_cat22_sampling_policy() -> None:
-    """Wire loop-verdict keep rate = 1.0 (Cat 22 SamplingPolicy).
+    """Wire N16 / Cat 22 SamplingPolicy keep rates from Settings.
 
-    Reads ``Settings.detector_keep_rate_loop`` (default 1.0)
-    and writes it onto the existing
-    ``supplementaries.cat_22_apm.tail_sampling`` module's
-    ``DEFAULT_KEEP_RATES`` dict so every loop-verdict trace
-    survives tail sampling.
+    Writes onto ``supplementaries.cat_22_apm.tail_sampling.DEFAULT_KEEP_RATES``
+    so loop/error traces honour ``detector_keep_rate_*`` and the
+    probabilistic fallback follows ``sampling_profile`` (N16). Also
+    refreshes the process-wide :func:`eden.observability.sampling.policy.get_sampling_policy`
+    singleton so in-process callers see the same profile.
     """
     try:
         from eden.config import get_settings
@@ -241,11 +241,36 @@ def install_cat22_sampling_policy() -> None:
         logger.warning("wiring: cat22 import failed: %s", exc)
         return
     try:
-        rate = float(get_settings().detector_keep_rate_loop)
+        settings = get_settings()
+        loop_rate = float(settings.detector_keep_rate_loop)
+        error_rate = float(settings.detector_keep_rate_error)
         if hasattr(tail_sampling, "DEFAULT_KEEP_RATES"):
-            tail_sampling.DEFAULT_KEEP_RATES["loop"] = rate  # type: ignore[attr-defined]
+            rates = tail_sampling.DEFAULT_KEEP_RATES  # type: ignore[attr-defined]
+            rates["loop"] = loop_rate
+            rates["error"] = error_rate
+            enabled = bool(getattr(settings, "sampling_enabled", True))
+            profile = getattr(settings, "sampling_profile", "balanced") or "balanced"
+            if not enabled or profile == "full":
+                rates["probabilistic"] = 1.0
+            else:
+                from eden.observability.sampling.policy import profile_keep_rate
+
+                rates["probabilistic"] = profile_keep_rate(profile)
+                override = float(getattr(settings, "probabilistic_sample_rate", 1.0))
+                if override < 1.0:
+                    rates["probabilistic"] = override
+        # Reset N16 singleton so next get_sampling_policy() re-reads Settings.
+        try:
+            from eden.observability.sampling.policy import reset_sampling_policy
+
+            reset_sampling_policy()
+        except Exception as exc:
+            logger.debug("wiring: n16 policy reset skipped: %s", exc)
         logger.info(
-            "wiring: Cat 22 SamplingPolicy loop keep_rate=%.2f", rate,
+            "wiring: Cat 22/N16 SamplingPolicy loop=%.2f error=%.2f profile=%s",
+            loop_rate,
+            error_rate,
+            getattr(settings, "sampling_profile", "balanced"),
         )
     except Exception as exc:
         logger.debug("wiring: cat22 patch failed: %s", exc)

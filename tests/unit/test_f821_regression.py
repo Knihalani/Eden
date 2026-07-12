@@ -27,8 +27,6 @@ import pytest
 _REGRESSION_TARGETS: list[tuple[str, str]] = [
     # F821: missing imports that were silently used in dead code.
     ("eden.api.deps", "get_ingestion_auth"),  # had dead `return _dependency`
-    ("eden.api.routes.evaluation", "router"),  # used Path without import
-    ("eden.api.routes.multi_agent", "router"),  # used logger without import
     ("eden.api.routes.sso", "router"),  # used status without import
     ("eden.api.routes.auth", "router"),  # dead code referencing access_token
     ("eden.code_change.auto_approval.dry_run", "AUTO_APPROVAL_DEFAULTS"),

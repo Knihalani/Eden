@@ -76,16 +76,17 @@ class TestToolRegistry:
         return {t.name for t in insights_tools.list_tools()}
 
     def test_required_tools_present(self, tool_names: set[str]) -> None:
-        # ``list_traces`` is the spec's name for what the project
-        # implements as ``list_jobs``. We keep both; tests can call
-        # either via the same dispatcher.
-        # If the project still has ``list_jobs`` instead of
-        # ``list_traces``, fail with a clear message.
-        if "list_traces" not in tool_names and "list_jobs" not in tool_names:
-            pytest.fail(
-                "Expected either list_traces or list_jobs to be registered; "
-                f"got {sorted(tool_names)!r}"
-            )
+        assert "list_traces" in tool_names, (
+            f"Expected list_traces to be registered; got {sorted(tool_names)!r}"
+        )
+        assert "list_jobs" not in tool_names
+        for name in (
+            "get_cost_breakdown",
+            "get_judge_scores",
+            "list_agent_issues",
+            "list_proposed_patches",
+        ):
+            assert name in tool_names
 
     def test_every_tool_renders_to_anthropic_shape(self) -> None:
         """The chat endpoint forwards the tool list to Anthropic —

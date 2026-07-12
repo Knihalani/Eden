@@ -6,7 +6,7 @@
 | **Slug** | `intelligence-aware-tail-sampling` |
 | **Priority** | P0 |
 | **Effort** | M |
-| **Eden status** | **PARTIAL** — OTel config + Cat 22 lib + wiring hook exist |
+| **Eden status** | **SHIPPED (core)** — OTel edge policies + Cat 22 `DEFAULT_KEEP_RATES` + `src/eden/observability/sampling/policy.py`; metrics-only table migrated; portal profile UI deferred |
 | **Market hypothesis** | Enterprise buyers want **60–90% ingest cost reduction** without losing failures — deterministic keep rules beat random sampling |
 | **Dependencies** | N14 (`detector_keep_rate_loop`), F20, N08 |
 

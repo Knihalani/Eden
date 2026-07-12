@@ -1,7 +1,8 @@
 # Eden Codebase Ground Truth (for Spec Authors)
 
 > **Purpose:** Keep specs accurate — what is **shipped**, **partial**, **stub**, or **retired** in `/workspace/src/eden`.  
-> **Last audit:** July 9, 2026
+> **Last audit:** July 9, 2026  
+> **Phase 0 delta:** July 12, 2026 — see [`.omc/autopilot/ground-truth-delta.md`](../../.omc/autopilot/ground-truth-delta.md). Waves 0–7 on `main` landed issues + closed_loop; rows below marked **STALE→FIXED**.
 
 Use this doc when writing implementation steps. Specs MUST NOT assume modules exist without checking here.
 
@@ -11,15 +12,18 @@ Use this doc when writing implementation steps. Specs MUST NOT assume modules ex
 
 | Gap | Spec says | Reality | Fix spec |
 |---|---|---|---|
-| Trace quality worker | Running on ingest | `quality_pipeline/worker.py` **not started** in `app.py` lifespan | **N14** |
-| StatGate wiring | Active | `trace_quality/wiring.py:install_all()` **not called** from lifespan | **N14** |
-| `register_all_hooks()` | Registers hooks | `promotion_hooks.py:1667` — **no-op shim**, lazy singletons | **N14**, F46 |
-| `src/eden/issues/` | F28/F29/F20 | **Directory does not exist** | F28–F30 (greenfield) |
+| Trace quality worker | Running on ingest | **STALE→FIXED (Phase 0):** started in `app.py` lifespan | **N14** |
+| StatGate wiring | Active | `trace_quality/wiring.py:install_all()` — verify still not called from lifespan | **N14** |
+| `register_all_hooks()` | Registers hooks | `promotion_hooks.py` — still no-op shim / lazy singletons (confirm) | **N14**, F46 |
+| `src/eden/issues/` | F28/F29/F20 | **STALE→FIXED:** directory shipped (scanner, triage, promoter, …) | F28–F30 |
 | `src/eden/promotion/evidence_gate.py` | F41 | **Does not exist** | F41 (greenfield) |
-| `src/eden/closed_loop/orchestrator.py` | F46 | **Does not exist** | F46 (greenfield) |
+| `src/eden/closed_loop/orchestrator.py` | F46 | **STALE→FIXED:** `closed_loop/` shipped + lifespan consumers | F46 |
 | Runtime nudges in gateway | F39 | `AIGateway.complete()` has **filters only**, no nudge engine | F39 → `GatewayFilter` |
 | LangGraph env-gen pipeline | N07 Part VIII | **RETIRED** (`pyproject.toml`, `enable_eval_pipeline=false`) | N07 v2 |
 | `trace_quality_*` settings | Config | In `prompts/06_settings.md` only, **not in `config.py`** | N14 |
+| Weekly optimization cron | Recurring PRs | **OPEN:** `scheduled_trigger` not called from `cron_tick`; no `optimization_schedule*` on `DEFAULT_POLICY` | Phase 1C |
+| Patch `linked_files` | From triage/RCA | **OPEN:** `issue_patch_trigger` still passes `linked_files=[]` | Phase 1B |
+| Triage budget | Optional per org | **OPEN:** hard `max_triage_cost_usd_per_day=25.0` in config/`_budget_ok` | Phase 1A |
 
 ---
 
@@ -57,19 +61,23 @@ Use this doc when writing implementation steps. Specs MUST NOT assume modules ex
 | HookBus + 20+ hook kinds | `src/eden/llmops/promotion_hooks.py`, `hooks_bus.py` |
 | Closed-loop executor (v0 advisory) | `src/eden/llmops/closed_loop_executor.py` |
 | Closed-loop portal API | `src/eden/api/routes/intelligence_closed_loop.py` |
-| Insights → KB loop (running) | `src/eden/insights/detector_loop.py` (started `app.py:296–308`) |
+| Insights → KB loop (running) | `src/eden/insights/detector_loop.py` (started in lifespan) |
 | Judge prompt evolver + canary | `src/eden/agents/evolution/components.py` |
 | Promotion loop | `src/eden/llmops/promotion.py` |
 | Eval→guardrail link | `src/eden/evaluation/eval_intel/integration.py` (`EvalToGuardrailLink`) |
 | Auto dataset from failures | `AutoDatasetBridge` same file |
 | Investigation agent | `src/eden/autonomous/investigation.py` |
-| **SelfHealer (queue only)** | `investigation.py:419` — rollback/reweight/cache_bust |
+| **SelfHealer (queue only)** | `investigation.py` — rollback/reweight/cache_bust |
 | Code change scheduler (Cat 23) | `src/eden/code_change/scheduler.py` |
 | `proposed_patches` + review inbox | `code_change/inbox/review.py` |
-| DriftAlertHook | `promotion_hooks.py:1550` |
-| **Autonomy policy engine** | **MISSING** — N22 greenfield |
-| **Heal execute worker** | **MISSING** — N21 greenfield |
-| **Issue-scoped patch trigger** | **MISSING** — N20 greenfield |
+| DriftAlertHook | `promotion_hooks.py` |
+| **Autonomy policy engine** | **SHIPPED** — `closed_loop/autonomy_policy.py` (N22) |
+| **Heal / verify worker** | **SHIPPED (partial)** — `closed_loop/verify.py` started in lifespan |
+| **Issue-scoped patch trigger** | **SHIPPED (v0)** — `code_change/issue_patch_trigger.py` resolves `linked_files` via RCA linker + triage hints; duplicate_open + org policy gate; auto_pr remains opt-in |
+| **Scheduled optimization (weekly)** | **SHIPPED (v0)** — `DEFAULT_POLICY.optimization_schedule=weekly`, `schedule_due.is_optimization_due`, `cron_tick` → `scheduled_optimization` via `AgentEfficiencyController` |
+| **AgentEfficiencyController** | **SHIPPED (v0)** — `closed_loop/efficiency.py` (triage/patch/scheduled coalesce) |
+| **Issues + TriageAgent** | **SHIPPED** — `src/eden/issues/` (active-work suppress, severity/StatGate cache invalidate, optional budget) |
+| **ClosedLoopOrchestrator** | **SHIPPED** — `closed_loop/orchestrator.py` |
 
 ### KB & env gen fragments
 
@@ -77,9 +85,9 @@ Use this doc when writing implementation steps. Specs MUST NOT assume modules ex
 |---|---|
 | Procedural skills (Skill Library) | `src/eden/kb/procedural/client.py` |
 | Part VIII agent prompt seeds | `src/eden/kb/prompt_versions/seed.py` |
-| Multi-agent frameworks lib | `src/eden/multi_agent/` |
+| Multi-agent frameworks lib | **REMOVED** (strip-legacy) — was `src/eden/multi_agent/` |
 | Pattern → env job insert (no worker) | `src/eden/api/routes/patterns.py:126–175` |
-| Marketplace | `src/eden/marketplace/`, gated by `enable_eval_pipeline` |
+| Marketplace | **REMOVED** (strip-legacy) — was `src/eden/marketplace/` |
 | A2A delegation links | `src/eden/services/observability/a2a_links.py` |
 | Cat 6 fleet / handoff graph | `src/eden/agents/agent_intel/performance.py` |
 
@@ -88,6 +96,8 @@ Use this doc when writing implementation steps. Specs MUST NOT assume modules ex
 | Asset | Path |
 |---|---|
 | MCP ingest | `src/eden/api/routes/observability_mcp.py`, `sdk/mcp.py` |
+| **Eden MCP server (F04)** | **SHIPPED (v0)** — `src/eden/mcp_server/` tools: traces, issues, debugger, fix, improve queue |
+| **Improvement cockpit (N17)** | **SHIPPED (v0)** — `src/eden/improvement/cockpit_aggregator.py`, `GET /orgs/{id}/improve/queue`, portal `/improve` |
 | Hermetic debugger | `src/eden/debugger/checkpoints.py` |
 | Checkpoint rewind | `src/eden/observability/checkpoint/rewind.py` |
 | Compliance evidence | `src/eden/compliance/evidence_generator.py` |
@@ -96,14 +106,20 @@ Use this doc when writing implementation steps. Specs MUST NOT assume modules ex
 
 ## 3. App lifespan (`src/eden/api/app.py`) — what actually starts
 
-| Started | Line (approx) |
+| Started | Notes |
 |---|---|
-| KB init | 268–273 |
-| Insights detector loop | 296–308 |
-| `register_all_hooks()` (no-op log) | 311–318 |
-| Trace quality shutdown only | 377–382 (teardown) |
+| Alembic upgrade | Non-fatal on failure |
+| KB init + probe | |
+| Insights detector loop | |
+| Anomaly detector loop | |
+| Evolution loop | |
+| `register_all_hooks()` | Still primarily lazy/no-op shim — confirm |
+| quality_pipeline worker | **STARTED** (was NOT on Jul 9) |
+| F20 `trace_finalized` consumer | **STARTED** |
+| F46 closed-loop event consumer | **STARTED** |
+| F46 verify worker | **STARTED** |
 
-**NOT started:** `install_all()`, quality pipeline worker, judge Redis tailer (verify per deploy).
+**Still verify / not assumed:** `trace_quality/wiring.py:install_all()`, judge Redis tailer (per deploy).
 
 ---
 

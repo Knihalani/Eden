@@ -156,13 +156,20 @@ def uninstrument(*frameworks: str) -> None:
 # ── Detection helpers (parity with the TS SDK) ──────────────────────
 
 
-# Distribution / import names for each supported framework. The
-# Python distribution name is the canonical ``import`` target; the
-# optional ``alias`` entries are PyPI package names that some users
-# install under a different name (e.g. ``pyautogen`` for the ``autogen``
-# module). Detecting any one of them counts the framework as installed.
-from eden.integrations.framework_registry import PYTHON_SDK_MODULES as _FRAMEWORK_DETECTORS
-
+# Distribution / import names for each supported framework. Kept local
+# to the SDK package so ``import eden_sdk`` does not pull the monorepo
+# ``eden.integrations`` tree (which would circular-import the ``eden``
+# shim that re-exports this module). Keep in sync with
+# ``PYTHON_SDK_MODULES`` in ``src/eden/integrations/framework_registry.py``.
+_FRAMEWORK_DETECTORS: dict[str, tuple[str, ...]] = {
+    "langchain": ("langchain", "langchain_core", "langchain_community"),
+    "crewai": ("crewai",),
+    "autogen": ("autogen", "pyautogen", "autogen_agentchat"),
+    "llama_index": ("llama_index", "llama_index.core"),
+    "openai": ("openai",),
+    "anthropic": ("anthropic",),
+    "mastra": ("mastra",),
+}
 
 def _detect_one(module_names: tuple[str, ...]) -> bool:
     """Return True if any of ``module_names`` is importable.

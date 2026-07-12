@@ -7,7 +7,7 @@ const CACHE_NAME = "eden-portal-v1";
 const STATIC_ASSETS = [
   "/",
   "/dashboard",
-  "/jobs",
+  "/dashboard",
   "/settings",
   "/login",
 ];
