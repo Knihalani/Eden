@@ -4,9 +4,9 @@
  * /onboarding/* — streamlined setup wizard (Jul 2026 overhaul).
  *
  * Clerk creates the workspace during signup; Eden syncs it on the first
- * /auth/me. The wizard no longer forces a redundant "create org" step.
+ * /auth/me. No redundant "create org" step in the main path.
  *
- * Flow: Welcome → Install SDK → Connect repo (optional) → Done
+ * Flow: Welcome → Connect repo → Install SDK → Done
  */
 
 import { Wizard, type WizardStep } from "@/components/ui/wizard";
@@ -16,18 +16,19 @@ const STEPS: WizardStep[] = [
     id: "welcome",
     slug: "/onboarding",
     label: "Welcome",
-    onNext: () => "/onboarding/install",
-  },
-  {
-    id: "install",
-    slug: "/onboarding/install",
-    label: "Install SDK",
     onNext: () => "/onboarding/connect",
   },
   {
     id: "connect",
     slug: "/onboarding/connect",
     label: "Connect repo",
+    optional: true,
+    onNext: () => "/onboarding/install",
+  },
+  {
+    id: "install",
+    slug: "/onboarding/install",
+    label: "Install SDK",
     onNext: () => "/onboarding/done",
   },
   {

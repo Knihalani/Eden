@@ -2,16 +2,15 @@
  * /onboarding/install — Step 3: Install the SDK + show a copy-paste
  * snippet for the user's language.
  *
- * Renders for ALL users including member/viewer (everyone needs the
- * SDK installed in their agent code; only owners/admins go on to
- * connect a repo for auto-instrumentation).
+ * Comes after connect-repo (or skip). Everyone needs the SDK in their
+ * agent code; repo connect is optional for members/viewers.
  */
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useOrg } from "@/hooks/use-org";
-import { onboardingApi, githubApi } from "@/lib/api";
+import { onboardingApi } from "@/lib/api";
 import { useToast } from "@/components/ui/toast";
 import { PageHeader } from "@/components/layout/page-header";
 import { NoOrgState } from "@/components/ui/no-org-state";
@@ -19,15 +18,15 @@ import { ArrowRight, Check, Copy, Loader2, Package, Terminal } from "lucide-reac
 
 type Lang = "python" | "typescript";
 
-const SNIPPETS: Record<Lang, { install: string; init: string }> = {
+const SNIPPETS: Record<Lang, { install: string; init: (orgId: string) => string }> = {
   python: {
     install: "pip install eden-sdk",
-    init: `import os
+    init: (orgId) => `import os
 import eden
 
 eden.init(
     api_key=os.environ["EDEN_API_KEY"],
-    org_id=os.environ["EDEN_DEFAULT_ORG"],
+    org_id=os.environ.get("EDEN_DEFAULT_ORG", "${orgId}"),
     base_url=os.environ.get("EDEN_BASE_URL", "https://api.eden.ai"),
 )
 
@@ -37,11 +36,11 @@ with eden.trace(name="hello-world") as t:
   },
   typescript: {
     install: "npm install @eden-ai/sdk",
-    init: `import { init, trace } from "@eden-ai/sdk";
+    init: (orgId) => `import { init, trace } from "@eden-ai/sdk";
 
 init({
   apiKey: process.env.EDEN_API_KEY ?? "<your-api-key>",
-  orgId: process.env.EDEN_DEFAULT_ORG ?? "<your-org-id>",
+  orgId: process.env.EDEN_DEFAULT_ORG ?? "${orgId}",
   baseUrl: process.env.EDEN_BASE_URL ?? "https://api.eden.ai",
 });
 
@@ -59,18 +58,22 @@ export default function OnboardingInstallPage() {
   const [lang, setLang] = useState<Lang>("python");
   const [copied, setCopied] = useState<string | null>(null);
   const [skipRepo, setSkipRepo] = useState(false);
-  const [ghConfigured, setGhConfigured] = useState<boolean | null>(null);
   const [advancing, setAdvancing] = useState(false);
 
   useEffect(() => {
     if (typeof window !== "undefined") {
       setSkipRepo(window.localStorage.getItem("eden:onboarding:skipRepo") === "1");
     }
-    // Async — find out whether the next step is even possible.
-    githubApi.configured().then((r) => setGhConfigured(r.configured)).catch(() => setGhConfigured(false));
   }, []);
 
-  const snippet = SNIPPETS[lang];
+  const orgId = currentOrg?.id ?? "<your-org-id>";
+  const snippet = useMemo(
+    () => ({
+      install: SNIPPETS[lang].install,
+      init: SNIPPETS[lang].init(orgId),
+    }),
+    [lang, orgId],
+  );
 
   function copy(label: string, text: string) {
     if (typeof navigator !== "undefined" && navigator.clipboard) {
@@ -85,14 +88,8 @@ export default function OnboardingInstallPage() {
     if (!currentOrg?.id) return;
     setAdvancing(true);
     try {
-      // Joined-as-member users skip the repo step (frontend) AND any
-      // attempt to call POST /github/integrate would fail backend RBAC.
-      // If the instance has no GitHub App configured at all, skip too.
-      const goRepo = !skipRepo && ghConfigured === true;
-      await onboardingApi.patchState(currentOrg.id, {
-        step: goRepo ? "connect_github" : "done",
-      });
-      router.push(goRepo ? "/onboarding/connect" : "/onboarding/done");
+      await onboardingApi.patchState(currentOrg.id, { step: "done" });
+      router.push("/onboarding/done");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Could not advance");
     } finally {
@@ -102,13 +99,10 @@ export default function OnboardingInstallPage() {
 
   const skipReason = useMemo(() => {
     if (skipRepo) {
-      return "You joined as a member — your admin will connect repos for you.";
-    }
-    if (ghConfigured === false) {
-      return "This Eden instance doesn't have a GitHub App configured. The repo step is unavailable; integrate manually using the snippet above.";
+      return "You joined as a member — your admin will connect repos for you. Install the SDK in your agent to start sending traces.";
     }
     return null;
-  }, [skipRepo, ghConfigured]);
+  }, [skipRepo]);
 
   if (!currentOrg) {
     return (
@@ -129,9 +123,10 @@ export default function OnboardingInstallPage() {
         icon={Package}
         subtitle={
           <>
-            Drop these two snippets into your agent. Your first trace
-            will land in <code className="font-mono text-[var(--accent)]">/traces</code> a
-            second after the call completes.
+            {skipRepo
+              ? "Copy these snippets into your agent. Traces appear in "
+              : "After merging the integration PR (or skipping connect), drop these snippets into your agent. Traces land in "}
+            <code className="font-mono text-[var(--accent)]">/traces</code> within seconds.
           </>
         }
       />
@@ -189,7 +184,7 @@ export default function OnboardingInstallPage() {
           className="inline-flex items-center gap-2 rounded-lg bg-[var(--accent)] px-4 py-2 text-sm font-medium text-[var(--bg-primary)] hover:opacity-90 disabled:opacity-50"
         >
           {advancing ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-          {skipRepo || ghConfigured === false ? "Continue — I'll integrate manually" : "Continue — connect a repo"}
+          Finish setup
           <ArrowRight className="h-4 w-4" />
         </button>
       </div>

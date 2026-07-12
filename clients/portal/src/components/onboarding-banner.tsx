@@ -29,14 +29,18 @@ const STEPS: Array<{
   label: string;
   blurb: string;
 }> = [
-  { id: "install", label: "Install SDK", blurb: "Drop the SDK into your agent" },
-  { id: "org", label: "Org setup", blurb: "Configure your workspace" },
-  { id: "connect", label: "Connect", blurb: "Connect a repo or source" },
+  { id: "connect", label: "Connect repo", blurb: "Open an SDK integration PR" },
+  { id: "install", label: "Install SDK", blurb: "Copy the snippet into your agent" },
   { id: "wait", label: "First traces", blurb: "Send your first 10 traces" },
-  { id: "done", label: "First judge", blurb: "Run your first judge score" },
-  { id: "tour", label: "Prompt v1", blurb: "Save your first prompt version" },
-  { id: "autonomous", label: "Autonomous", blurb: "Enable self-healing" },
+  { id: "done", label: "Explore", blurb: "Run judges and explore the dashboard" },
 ];
+
+/** Map legacy/API step ids onto the simplified wizard order. */
+function stepIndex(step: OnboardingV2State["current_step"]): number {
+  if (step === "org") return 0;
+  const idx = STEPS.findIndex((s) => s.id === step);
+  return idx >= 0 ? idx : 0;
+}
 
 const SESSION_KEY = "eden:onboarding:v2:dismissed";
 
@@ -62,11 +66,11 @@ export function OnboardingBanner() {
   if (!state || !state.onboarding_v2_enabled) return null;
   if (state.source === "legacy") return null;
   if (dismissed) return null;
-  if (state.current_step === "autonomous") return null; // done — no banner
+  if (state.current_step === "autonomous" || state.current_step === "tour") return null;
 
-  const currentIdx = STEPS.findIndex((s) => s.id === state.current_step);
+  const currentIdx = stepIndex(state.current_step);
   const current = STEPS[currentIdx] ?? STEPS[0];
-  const completedCount = state.completed_steps.length;
+  const completedCount = Math.min(state.completed_steps.length, STEPS.length);
   const totalCount = STEPS.length;
 
   function dismiss() {
@@ -123,7 +127,11 @@ export function OnboardingBanner() {
           </div>
         </div>
         <Link
-          href="/onboarding"
+          href={
+            currentIdx <= 0 ? "/onboarding/connect" :
+            currentIdx === 1 ? "/onboarding/install" :
+            "/onboarding"
+          }
           className="inline-flex items-center gap-1 rounded-md border border-[var(--accent)]/40 bg-[var(--accent)]/10 px-2.5 py-1 text-xs font-medium text-[var(--accent)] hover:bg-[var(--accent)]/20"
         >
           Resume

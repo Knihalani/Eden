@@ -97,7 +97,7 @@ export default function OnboardingOrgPage() {
     // the user on the org page.
     const timer = window.setTimeout(() => {
       onboardingApi
-        .patchState(currentOrg.id, { step: "autonomous" })
+        .patchState(currentOrg.id, { step: "connect_github" })
         .catch(() => undefined);
       // Hard nav — same reason as the other "advance" calls: the
       // (portal) layout's orgless-redirect useEffect can race
@@ -105,7 +105,7 @@ export default function OnboardingOrgPage() {
       // hydration window. The 200ms delay lets React paint the
       // "Continue" button first so the user has something to
       // click if the redirect still doesn't fire.
-      window.location.assign("/onboarding/autonomous");
+      window.location.assign("/onboarding/connect");
     }, 200);
     return () => window.clearTimeout(timer);
   }, [currentOrg?.id]);
@@ -181,7 +181,7 @@ export default function OnboardingOrgPage() {
       await refreshUser();
       await refreshOrgs();
       await onboardingApi.patchState(res.org_id, {
-        step: "autonomous",
+        step: "connect_github",
         org_setup_choice: "created",
       });
       if (typeof window !== "undefined") {
@@ -190,7 +190,7 @@ export default function OnboardingOrgPage() {
       toast.success(`Created ${res.name} — you're the owner`);
       // FIX-S: hard nav (see welcome.tsx) — router.push silently
       // no-ops on this route group.
-      window.location.assign("/onboarding/autonomous");
+      window.location.assign("/onboarding/connect");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to create org");
     } finally {
@@ -218,7 +218,7 @@ export default function OnboardingOrgPage() {
       await refreshUser();
       await refreshOrgs();
       await onboardingApi.patchState(inv.org_id, {
-        step: "autonomous",
+        step: "connect_github",
         org_setup_choice: "joined",
       });
       // Joined users without integrations:write skip the repo step.
@@ -233,7 +233,7 @@ export default function OnboardingOrgPage() {
       toast.success(`Joined ${inv.org_name} as ${inv.role}`);
       // FIX-S: hard nav (see welcome.tsx) — router.push silently
       // no-ops on this route group.
-      window.location.assign("/onboarding/autonomous");
+      window.location.assign("/onboarding/connect");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to accept invite");
     } finally {
@@ -268,7 +268,7 @@ export default function OnboardingOrgPage() {
       await refreshUser();
       await refreshOrgs();
       await onboardingApi.patchState(res.org_id, {
-        step: "autonomous",
+        step: "connect_github",
         org_setup_choice: "joined",
       });
       const canIntegrate = res.role === "owner" || res.role === "admin";
@@ -282,7 +282,7 @@ export default function OnboardingOrgPage() {
       toast.success(`Joined ${res.org_name} as ${res.role}`);
       // FIX-S: hard nav (see welcome.tsx) — router.push silently
       // no-ops on this route group.
-      window.location.assign("/onboarding/autonomous");
+      window.location.assign("/onboarding/connect");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Invalid or expired invite");
     } finally {
@@ -295,7 +295,7 @@ export default function OnboardingOrgPage() {
   // If the user already has an org (Clerk auto-created during
   // signup, or they joined via invite, or the webhook just
   // synced), the auto-skip useEffect at the top of this file is
-  // about to PATCH state and redirect to /onboarding/autonomous.
+  // about to PATCH state and redirect to /onboarding/connect.
   // Show a friendly "setting up your account" state instead of
   // flashing the create/join menu for one frame. The page-level
   // ``min-h-[420px]`` on the wizard body keeps the chrome from
@@ -326,12 +326,12 @@ export default function OnboardingOrgPage() {
             onClick={() => {
               if (currentOrg?.id) {
                 onboardingApi
-                  .patchState(currentOrg.id, { step: "autonomous" })
+                  .patchState(currentOrg.id, { step: "connect_github" })
                   .catch(() => undefined);
               }
-              window.location.assign("/onboarding/autonomous");
+              window.location.assign("/onboarding/connect");
             }}
-            aria-label="Continue to autonomous setup"
+            aria-label="Continue to connect repo"
             className="inline-flex items-center gap-2 rounded-lg bg-[var(--accent)] px-4 py-2 text-sm font-medium text-[var(--accent-foreground)] hover:opacity-90 mt-2"
           >
             Continue

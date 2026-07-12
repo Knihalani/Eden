@@ -4,8 +4,7 @@
  * Welcome — first onboarding step.
  *
  * Clerk already created a workspace at signup; Eden syncs it on the
- * first authenticated /auth/me. This page confirms that sync (or
- * offers join-by-invite) then sends the user straight to SDK install.
+ * first authenticated /auth/me. Connect a repo first, then install SDK.
  */
 
 import Link from "next/link";
@@ -30,26 +29,29 @@ export function WelcomeStep() {
     }
     if (currentOrg?.id) {
       try {
-        await onboardingApi.patchState(currentOrg.id, { step: "install" });
+        await onboardingApi.patchState(currentOrg.id, { step: "connect_github" });
       } catch {
         // best-effort
       }
     }
-    window.location.assign("/onboarding/install");
+    window.location.assign("/onboarding/connect");
   }
 
   return (
     <div className="space-y-6 max-w-lg">
       <div>
+        <p className="text-[10px] font-mono font-semibold uppercase tracking-[0.18em] text-[var(--accent)] mb-2">
+          Setup · ~3 minutes
+        </p>
         <h1 className="text-2xl font-bold tracking-tight text-[var(--text-primary)]">
           Welcome to Eden
         </h1>
         <p className="mt-2 text-sm text-[var(--text-secondary)] leading-relaxed">
           {hasWorkspace
-            ? `${workspaceName} is ready. Install the SDK, send a trace, and you’ll see it in the dashboard.`
+            ? `${workspaceName} is ready. Connect a repo to auto-instrument your agent, then copy the SDK snippet.`
             : isProvisioning
               ? "Your workspace is syncing from Clerk — this usually takes a few seconds."
-              : "Install the SDK to start capturing agent traces. If a teammate invited you, join their workspace below."}
+              : "Connect a GitHub repo or install the SDK manually. If a teammate invited you, join their workspace below."}
         </p>
       </div>
 
@@ -86,36 +88,41 @@ export function WelcomeStep() {
           </div>
           <div className="text-[var(--text-secondary)]">
             <span className="font-medium text-[var(--text-primary)]">{workspaceName}</span>
-            {" — no extra setup needed."}
+            {" — Clerk created this at signup. No extra org setup needed."}
           </div>
         </div>
       )}
 
-      <ul className="space-y-2 text-sm">
+      <ol className="space-y-2 text-sm">
         {[
           {
-            icon: Package,
-            title: "Install the SDK",
-            body: "Copy a snippet for Python or TypeScript and wrap your agent calls.",
+            step: "1",
+            icon: GitBranch,
+            title: "Connect a repo",
+            body: "Eden opens a PR that wires the SDK into your codebase. Admins only — members can skip.",
           },
           {
-            icon: GitBranch,
-            title: "Connect a repo (optional)",
-            body: "Admins can open a PR that auto-instruments your codebase. Everyone else can skip.",
+            step: "2",
+            icon: Package,
+            title: "Install the SDK",
+            body: "Copy a Python or TypeScript snippet. Your first trace lands in /traces within seconds.",
           },
-        ].map(({ icon: Icon, title, body }) => (
+        ].map(({ step, icon: Icon, title, body }) => (
           <li
             key={title}
             className="flex items-start gap-3 rounded-lg border border-[var(--border-default)] bg-[var(--bg-secondary)] p-3"
           >
-            <Icon className="mt-0.5 h-4 w-4 shrink-0 text-[var(--accent)]" />
+            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[var(--accent-faint)] text-[10px] font-bold text-[var(--accent)]">
+              {step}
+            </span>
+            <Icon className="mt-1 h-4 w-4 shrink-0 text-[var(--accent)]" />
             <div>
               <div className="text-sm font-medium text-[var(--text-primary)]">{title}</div>
               <div className="text-xs text-[var(--text-muted)] leading-snug">{body}</div>
             </div>
           </li>
         ))}
-      </ul>
+      </ol>
 
       {!hasWorkspace && !isProvisioning && (
         <div className="rounded-lg border border-dashed border-[var(--border-default)] bg-[var(--bg-secondary)]/50 p-4">
@@ -155,7 +162,7 @@ export function WelcomeStep() {
             </>
           ) : (
             <>
-              {hasWorkspace ? "Continue to install" : "Get started"}
+              Connect a repo
               <ArrowRight className="h-4 w-4" />
             </>
           )}
