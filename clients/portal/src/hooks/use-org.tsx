@@ -35,6 +35,8 @@ interface OrgContextType {
   clerkOrgRole: string | null;
   /** Clerk has an active org but Eden has not synced the row yet. */
   orgSyncing: boolean;
+  /** True after orgSyncing persisted too long without resolving. */
+  orgSyncTimedOut: boolean;
 }
 
 const OrgContext = createContext<OrgContextType | null>(null);
@@ -64,6 +66,8 @@ export function OrgProvider({ children }: { children: ReactNode }) {
   const [organizations, setOrganizations] = useState<Organization[]>([]);
   const [loading, setLoading] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
+  const [orgSyncTimedOut, setOrgSyncTimedOut] = useState(false);
+  const orgSyncStartedAtRef = useRef<number | null>(null);
 
   // Use a ref to mirror `authError` so the 5s polling interval can
   // bail immediately on failure without waiting for the React state
@@ -214,6 +218,32 @@ export function OrgProvider({ children }: { children: ReactNode }) {
     }
   }, [user, clerkOrg]);
 
+  const orgSyncing = Boolean(
+    clerkOrg?.id &&
+      !authError &&
+      !loading &&
+      organizations.length === 0 &&
+      !organizations.some(
+        (o) => o.clerk_org_id === clerkOrg?.id || o.id === clerkOrg?.id,
+      ),
+  );
+
+  // Stop infinite "Syncing workspace…" after ~45s — surface a retry CTA.
+  useEffect(() => {
+    if (!orgSyncing) {
+      orgSyncStartedAtRef.current = null;
+      setOrgSyncTimedOut(false);
+      return;
+    }
+    if (orgSyncStartedAtRef.current === null) {
+      orgSyncStartedAtRef.current = Date.now();
+    }
+    const elapsed = Date.now() - orgSyncStartedAtRef.current;
+    const remaining = Math.max(0, 45_000 - elapsed);
+    const timer = window.setTimeout(() => setOrgSyncTimedOut(true), remaining);
+    return () => window.clearTimeout(timer);
+  }, [orgSyncing]);
+
   useEffect(() => {
     if (userLoaded && clerkOrgLoaded) {
       // Defer the first refresh to a microtask so the setState calls
@@ -301,22 +331,15 @@ export function OrgProvider({ children }: { children: ReactNode }) {
             (m) => m.organization?.id === clerkOrg.id,
           )?.role ?? null
         : null,
-      orgSyncing: Boolean(
-        clerkOrg?.id &&
-          !authError &&
-          !loading &&
-          organizations.length === 0 &&
-          !organizations.some(
-            (o) => o.clerk_org_id === clerkOrg.id || o.id === clerkOrg.id,
-          ),
-      ),
+      orgSyncing,
+      orgSyncTimedOut,
     }),
     // Intentionally depend on the *identity* of `currentOrg.id`,
     // not the object reference — Clerk returns a fresh
     // Organization wrapper per render, which would otherwise
     // invalidate the memo on every parent render.
      
-    [currentOrg, organizations, loading, authError, clerkOrg?.id, userMemberships.data, refreshOrgs],
+    [currentOrg, organizations, loading, authError, clerkOrg?.id, userMemberships.data, refreshOrgs, orgSyncing, orgSyncTimedOut],
   );
 
   return (

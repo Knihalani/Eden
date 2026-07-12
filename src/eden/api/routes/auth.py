@@ -17,6 +17,7 @@ from qrcode import QRCode
 from eden.api.deps import (
     _resolve_token_payload,
     ensure_clerk_membership,
+    ensure_clerk_org_from_session,
     get_current_org,
     get_current_user,
     get_eden_user_row_from_auth,
@@ -1099,17 +1100,16 @@ async def get_me(
 
     client = await get_postgres_client()
 
-    # Self-heal Clerk org membership when the webhook is delayed.
+    # Self-heal Clerk org + membership when the webhook is delayed or
+    # skipped a non-UUID Clerk org id during signup.
     if is_clerk_payload(payload):
         clerk_org = extract_org_id(payload)
         if clerk_org:
-            eden_org_id = await resolve_eden_org_id(clerk_org)
-            if eden_org_id:
-                await ensure_clerk_membership(
-                    str(db_user["id"]),
-                    eden_org_id,
-                    extract_org_role(payload),
-                )
+            await ensure_clerk_org_from_session(
+                clerk_org,
+                str(db_user["id"]),
+                extract_org_role(payload),
+            )
 
     # Fetch user's organizations
     orgs_query = """

@@ -37,11 +37,11 @@ export function ConnectStep() {
 
   if (!user) return null;
 
-  if (!hasPermission("jobs:write")) {
+  if (!hasPermission("integrations:write")) {
     return (
       <NoOrgState
         feature="Admins only"
-        description="The GitHub connect step requires the `jobs:write` permission. Switch to an org where you're an owner/admin, or ask one to complete this step. The wizard will advance to the Done step."
+        description="The GitHub connect step requires the `integrations:write` permission. Switch to an org where you're an owner/admin, or ask one to complete this step. The wizard will advance to the Done step."
       />
     );
   }

@@ -310,6 +310,9 @@ function PortalLayoutContent({ children }: { children: React.ReactNode }) {
   // and adding more prefixes dilutes the safety of this gate.
   useEffect(() => {
     if (loading || !user || currentOrg) return;
+    // Clerk may have an active org while Eden syncs — don't bounce
+    // the user away from dashboard during the brief sync window.
+    if (orgSyncing) return;
     const path = pathname || "";
     const isOrglessFriendly =
       path === "/" ||
@@ -323,7 +326,7 @@ function PortalLayoutContent({ children }: { children: React.ReactNode }) {
     if (!isOrglessFriendly) {
       router.replace("/onboarding");
     }
-  }, [loading, user, currentOrg, pathname, router]);
+  }, [loading, user, currentOrg, orgSyncing, pathname, router]);
 
   // Unknown portal URL (e.g. a typo): bypass the auth gate entirely
   // so the catch-all's notFound() can render the 404 immediately.
