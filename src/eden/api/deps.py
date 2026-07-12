@@ -457,14 +457,14 @@ async def resolve_eden_user_id(user_id: str | None) -> str | None:
             "SELECT id FROM users WHERE id::text = $1 OR clerk_id::text = $1 LIMIT 1",
             user_id,
         )
-        return str(row["id"]) if row else user_id
+        return str(row["id"]) if row else None
     except Exception as exc:
         logger.warning(
             "resolve_eden_user_id failed for user=%s: %s",
             user_id,
             exc,
         )
-        return user_id
+        return None
 
 
 async def resolve_eden_org_id(org_id: str | None) -> str | None:
@@ -486,14 +486,95 @@ async def resolve_eden_org_id(org_id: str | None) -> str | None:
             """,
             org_id,
         )
-        return str(row["id"]) if row else org_id
+        return str(row["id"]) if row else None
     except Exception as exc:
         logger.warning(
             "resolve_eden_org_id failed for org=%s: %s",
             org_id,
             exc,
         )
-        return org_id
+        return None
+
+
+async def ensure_clerk_org_from_session(
+    clerk_org_id: str,
+    eden_user_id: str,
+    clerk_role: str | None,
+) -> str | None:
+    """Ensure an Eden ``organizations`` row exists for a Clerk session org.
+
+    Clerk often creates an org during signup (``org_2x…`` string id).
+    The webhook and legacy INSERT paths skipped non-UUID ids, leaving
+    the portal stuck in ``orgSyncing`` with zero Eden organizations.
+    This self-heals on ``/auth/me`` by fetching the org from Clerk's
+    Backend API and inserting ``id = gen_random_uuid()`` +
+    ``clerk_org_id = clerk_org_id``.
+    """
+    if not clerk_org_id:
+        return None
+
+    eden_org_id = await resolve_eden_org_id(clerk_org_id)
+    if eden_org_id:
+        await ensure_clerk_membership(eden_user_id, eden_org_id, clerk_role)
+        return eden_org_id
+
+    from eden.api.utils.clerk_client import get_organization
+
+    try:
+        clerk_org = await get_organization(clerk_org_id)
+    except Exception as exc:
+        logger.warning(
+            "ensure_clerk_org_from_session: Clerk fetch failed org=%s: %s",
+            clerk_org_id,
+            exc,
+        )
+        return None
+
+    if not clerk_org:
+        return None
+
+    name = (clerk_org.get("name") or "").strip() or "Workspace"
+    slug = (clerk_org.get("slug") or "").strip() or clerk_org_id.replace("_", "-")
+
+    try:
+        client = await get_postgres_client()
+        await client.execute(
+            """
+            INSERT INTO organizations (id, clerk_org_id, name, slug, owner_id, updated_at)
+            SELECT gen_random_uuid(), $1, $2, $3, $4::uuid, NOW()
+            WHERE NOT EXISTS (
+                SELECT 1 FROM organizations
+                WHERE clerk_org_id = $1 OR id::text = $1
+            )
+            """,
+            clerk_org_id,
+            name,
+            slug,
+            eden_user_id,
+        )
+        row = await client.fetchrow(
+            """
+            SELECT id FROM organizations
+            WHERE clerk_org_id = $1 OR id::text = $1
+            LIMIT 1
+            """,
+            clerk_org_id,
+        )
+        if not row:
+            return None
+        eden_org_id = str(row["id"])
+        await ensure_clerk_membership(eden_user_id, eden_org_id, clerk_role)
+        return eden_org_id
+    except Exception as exc:
+        logger.warning(
+            "ensure_clerk_org_from_session failed org=%s: %s",
+            clerk_org_id,
+            exc,
+        )
+        eden_org_id = await resolve_eden_org_id(clerk_org_id)
+        if eden_org_id:
+            await ensure_clerk_membership(eden_user_id, eden_org_id, clerk_role)
+        return eden_org_id
 
 
 async def ensure_clerk_membership(
@@ -507,36 +588,62 @@ async def ensure_clerk_membership(
     self-heal when the webhook is delayed or misconfigured.
     """
     eden_role = clerk_role_to_eden_role(clerk_role)
+    client = await get_postgres_client()
+    # Column is ``joined_at`` (migration 001), not ``created_at``.
+    upsert_with_writer = """
+        INSERT INTO org_members (
+            org_id, user_id, role, last_active_at, joined_at, last_writer_source
+        )
+        VALUES ($1, $2, $3, NOW(), NOW(), 'clerk')
+        ON CONFLICT (org_id, user_id) DO UPDATE
+        SET role = CASE
+                WHEN org_members.last_writer_source = 'clerk'
+                    THEN EXCLUDED.role
+                ELSE org_members.role
+            END,
+            last_writer_source = 'clerk',
+            last_active_at = NOW()
+    """
+    upsert_legacy = """
+        INSERT INTO org_members (org_id, user_id, role, last_active_at, joined_at)
+        VALUES ($1, $2, $3, NOW(), NOW())
+        ON CONFLICT (org_id, user_id) DO UPDATE
+        SET role = EXCLUDED.role,
+            last_active_at = NOW()
+    """
     try:
-        client = await get_postgres_client()
         await client.execute(
-            """
-            INSERT INTO org_members (
-                org_id, user_id, role, last_active_at, created_at, last_writer_source
-            )
-            VALUES ($1, $2, $3, NOW(), NOW(), 'clerk')
-            ON CONFLICT (org_id, user_id) DO UPDATE
-            SET role = CASE
-                    WHEN org_members.last_writer_source = 'clerk'
-                        THEN EXCLUDED.role
-                    ELSE org_members.role
-                END,
-                last_writer_source = 'clerk',
-                last_active_at = NOW()
-            """,
+            upsert_with_writer,
             eden_org_id,
             eden_user_id,
             eden_role,
         )
         return True
     except Exception as exc:
-        logger.warning(
-            "ensure_clerk_membership failed user=%s org=%s: %s",
-            eden_user_id,
-            eden_org_id,
-            exc,
-        )
-        return False
+        if "last_writer_source" not in str(exc):
+            logger.warning(
+                "ensure_clerk_membership failed user=%s org=%s: %s",
+                eden_user_id,
+                eden_org_id,
+                exc,
+            )
+            return False
+        try:
+            await client.execute(
+                upsert_legacy,
+                eden_org_id,
+                eden_user_id,
+                eden_role,
+            )
+            return True
+        except Exception as legacy_exc:
+            logger.warning(
+                "ensure_clerk_membership legacy upsert failed user=%s org=%s: %s",
+                eden_user_id,
+                eden_org_id,
+                legacy_exc,
+            )
+            return False
 
 
 async def get_user_by_id(user_id: str, lookup_column: str = "id") -> dict | None:
@@ -585,15 +692,19 @@ async def get_eden_user_row_from_auth(user: dict) -> dict | None:
     string into a UUID FK column crashes asyncpg with
     ``invalid input syntax for type uuid`` → unhandled 500. Look up
     by ``clerk_id`` first, then by Eden ``id``.
+
+    When ``user_id`` is still a Clerk ``user_…`` id and the
+    ``clerk_id`` lookup misses, return ``None`` immediately — do
+    NOT fall through to an ``id`` lookup with the Clerk string
+    (that can never match a real Eden PK and confused auto-provision
+    tests / any mock that returns a row for arbitrary ids).
     """
     uid = user.get("user_id")
     if not uid:
         return None
     uid_str = str(uid)
     if uid_str.startswith("user_"):
-        row = await get_user_by_id(uid_str, lookup_column="clerk_id")
-        if row:
-            return row
+        return await get_user_by_id(uid_str, lookup_column="clerk_id")
     return await get_user_by_id(uid_str, lookup_column="id")
 
 

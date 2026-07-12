@@ -11,6 +11,7 @@ import { PageContent } from "@/components/layout/page-content";
 import { Database, Play, Layers, RefreshCw, Loader2, AlertTriangle, Archive, FileText } from "lucide-react";
 import { motion } from "framer-motion";
 import { Card } from "@/components/ui/card";
+import { errorFromCaught } from "@/lib/safe-error-message";
 interface ColumnarQueryResult {
   columns: string[];
   rows: Array<Array<unknown>>;
@@ -117,7 +118,7 @@ export default function CohortsPage() {
       setRows(res.rows);
       setDataSource(res.data_source);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Query failed");
+      setError(errorFromCaught(err, "Query failed"));
       setColumns([]);
       setRows([]);
     } finally {

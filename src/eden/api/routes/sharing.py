@@ -322,15 +322,20 @@ async def public_trace(
     if share is None or not share.is_active():
         raise HTTPException(status_code=404, detail="share not found or expired")
     await svc.record_view(share.id)
+    from eden.observability.public_trace import load_redacted_public_trace
+
+    redacted = await load_redacted_public_trace(share.org_id, share.trace_id)
+    if redacted is None:
+        raise HTTPException(status_code=404, detail="trace not found")
     return PublicTraceResponse(
         trace_id=share.trace_id,
         org_id=share.org_id,
         label=share.label,
-        spans=[],
-        message_count=0,
-        span_count=0,
-        duration_ms=0.0,
-        outcome=None,
+        spans=redacted["spans"],
+        message_count=redacted["message_count"],
+        span_count=redacted["span_count"],
+        duration_ms=redacted["duration_ms"],
+        outcome=redacted["outcome"],
         created_at=share.created_at.isoformat(),
     )
 

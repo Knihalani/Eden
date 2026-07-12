@@ -42,7 +42,7 @@ _HTTPX: httpx.AsyncClient | None = None
 
 def _shared_httpx(timeout: float) -> httpx.AsyncClient:
     global _HTTPX
-    if _HTTPX is None:
+    if _HTTPX is None or _HTTPX.is_closed:
         _HTTPX = httpx.AsyncClient(timeout=timeout)
     return _HTTPX
 
@@ -90,13 +90,23 @@ async def _post(path: str, body: dict[str, Any], *, timeout: float = 10.0) -> di
         "Authorization": f"Bearer {settings.clerk_secret_key}",
         "Content-Type": "application/json",
     }
+    # IMPORTANT: do NOT ``async with`` the shared singleton — that
+    # calls ``aclose()`` on exit and permanently bricks every later
+    # Clerk call with ``RuntimeError: Cannot reopen a client
+    # instance``. Mirror ``clerk_auth._get_http_client`` instead.
     try:
-        async with _shared_httpx(timeout) as client:
-            response = await client.post(url, json=body, headers=headers)
+        client = _shared_httpx(timeout)
+        response = await client.post(url, json=body, headers=headers)
     except httpx.TimeoutException as exc:
         raise ClerkAPIError(f"Clerk timeout: {path}") from exc
     except httpx.RequestError as exc:
         raise ClerkAPIError(f"Clerk network error: {path}: {exc}") from exc
+    except RuntimeError as exc:
+        # Closed / unusable singleton — reset and surface as ClerkAPIError
+        # so callers (auto-provision) can fall back instead of 500ing.
+        global _HTTPX
+        _HTTPX = None
+        raise ClerkAPIError(f"Clerk client error: {path}: {exc}") from exc
 
     if response.status_code < 200 or response.status_code >= 300:
         # Truncate the body so we never log a Clerk JWT or PII.
@@ -125,13 +135,18 @@ async def _get(path: str, *, timeout: float = 5.0) -> dict[str, Any]:
     headers = {
         "Authorization": f"Bearer {settings.clerk_secret_key}",
     }
+    # See ``_post`` — never ``async with`` the shared client.
     try:
-        async with _shared_httpx(timeout) as client:
-            response = await client.get(url, headers=headers)
+        client = _shared_httpx(timeout)
+        response = await client.get(url, headers=headers)
     except httpx.TimeoutException as exc:
         raise ClerkAPIError(f"Clerk timeout: {path}") from exc
     except httpx.RequestError as exc:
         raise ClerkAPIError(f"Clerk network error: {path}: {exc}") from exc
+    except RuntimeError as exc:
+        global _HTTPX
+        _HTTPX = None
+        raise ClerkAPIError(f"Clerk client error: {path}: {exc}") from exc
 
     if response.status_code < 200 or response.status_code >= 300:
         raise ClerkAPIError(
@@ -239,6 +254,51 @@ async def create_organization(name: str, slug: str) -> dict[str, Any]:
     Callers slug via ``slugify()`` in ``src/eden/api/routes/orgs.py:31``.
     """
     return await _post("/organizations", {"name": name, "slug": slug})
+
+
+async def list_user_organization_memberships(
+    clerk_user_id: str,
+) -> list[dict[str, Any]]:
+    """Return Clerk org memberships for a user (newest first).
+
+    Used when the session JWT lacks the ``o.id`` claim but Clerk's
+    frontend already has an active organization — ``/auth/me`` uses
+    this to self-heal the Eden ``organizations`` + ``org_members`` rows.
+    """
+    if not clerk_user_id:
+        return []
+    try:
+        payload = await _get(
+            f"/users/{clerk_user_id}/organization_memberships?limit=10",
+        )
+    except ClerkAPIError as exc:
+        logger.warning(
+            "list_user_organization_memberships failed for %s: %s",
+            clerk_user_id,
+            redact_all(str(exc)),
+        )
+        return []
+    data = payload.get("data")
+    return data if isinstance(data, list) else []
+
+
+async def get_organization(clerk_org_id: str) -> dict[str, Any] | None:
+    """Fetch a Clerk organization by id (``org_2abc…``).
+
+  Returns ``None`` when the org was deleted or the API call fails so
+  callers can fall back without 500ing the request.
+    """
+    if not clerk_org_id:
+        return None
+    try:
+        return await _get(f"/organizations/{clerk_org_id}")
+    except ClerkAPIError as exc:
+        logger.warning(
+            "get_organization failed for %s: %s",
+            clerk_org_id,
+            redact_all(str(exc)),
+        )
+        return None
 
 
 async def create_membership(clerk_org_id: str, user_id: str, role: str) -> dict[str, Any]:

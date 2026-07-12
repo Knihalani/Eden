@@ -14,6 +14,7 @@ import { Archive, Brain, Combine, Loader2, Search, TrendingDown, Zap } from "luc
 import { motion, AnimatePresence } from "framer-motion";
 import { DataTable } from "@/components/ui/data-table";
 import { Card } from "@/components/ui/card";
+import { errorFromCaught } from "@/lib/safe-error-message";
 const memoryApi = {
   attribute: (orgId: string, traceId: string) => api.post<{
     trace_id: string;
@@ -132,7 +133,7 @@ function AttributionTab({
       const data = await memoryApi.attribute(orgId, traceId.trim());
       setResult(data);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Attribution failed");
+      setError(errorFromCaught(err, "Attribution failed"));
     } finally {
       setLoading(false);
     }
@@ -213,7 +214,7 @@ function ImpactTab({
       const data = await memoryApi.impact(orgId, traceId.trim());
       setResult(data);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Impact scoring failed");
+      setError(errorFromCaught(err, "Impact scoring failed"));
     } finally {
       setLoading(false);
     }
@@ -307,7 +308,7 @@ function ReaverTab({
       const data = await memoryApi.reaverSuggest(orgId);
       setSuggestions(data.suggestions ?? []);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load suggestions");
+      setError(errorFromCaught(err, "Failed to load suggestions"));
     } finally {
       setLoading(false);
     }

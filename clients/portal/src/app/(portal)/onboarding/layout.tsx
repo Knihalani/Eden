@@ -1,25 +1,12 @@
 "use client";
 
 /**
- * /onboarding/* — wizard chrome (Phase 2 of the June 2026 UI overhaul).
+ * /onboarding/* — streamlined setup wizard (Jul 2026 overhaul).
  *
- * The chrome (top bar, progress strip, Back/Next nav) is rendered by
- * the generic <Wizard>. Each step is a thin sub-page that imports the
- * corresponding step component from /onboarding/_steps/.
+ * Clerk creates the workspace during signup; Eden syncs it on the first
+ * /auth/me. No redundant "create org" step in the main path.
  *
- * The list of steps is declared in a single place so the progress bar,
- * the back/next routing, and the canAdvance/onNext hooks are all in
- * sync.
- *
- * This file MUST be a client component: the <Wizard> receives a
- * ``steps: WizardStep[]`` array whose entries each hold a
- * ``render: (ctx) => ReactNode`` function. React 19 + Next.js 16 will
- * throw ``Error: Functions cannot be passed directly to Client
- * Components`` at render time if a server component constructs that
- * array and passes it across the boundary — the function reference
- * can't be serialized. Marking this file as a client component keeps
- * the array construction on the client side; the steps list never
- * leaves the client.
+ * Flow: Welcome → Connect repo → Install SDK → Done
  */
 
 import { Wizard, type WizardStep } from "@/components/ui/wizard";
@@ -29,38 +16,19 @@ const STEPS: WizardStep[] = [
     id: "welcome",
     slug: "/onboarding",
     label: "Welcome",
-    // The "Next" button in the wizard's bottom nav moves forward
-    // to the org-setup step on the same flow.
-    onNext: () => "/onboarding/org",
-  },
-  {
-    id: "org",
-    slug: "/onboarding/org",
-    label: "Organisation",
-    onNext: () => "/onboarding/autonomous",
-  },
-  {
-    id: "autonomous",
-    slug: "/onboarding/autonomous",
-    label: "Autonomous",
     onNext: () => "/onboarding/connect",
   },
   {
     id: "connect",
     slug: "/onboarding/connect",
     label: "Connect repo",
-    onNext: () => "/onboarding/wait",
+    optional: true,
+    onNext: () => "/onboarding/install",
   },
   {
-    id: "wait",
-    slug: "/onboarding/wait",
-    label: "Wait for PR",
-    onNext: () => "/onboarding/tour",
-  },
-  {
-    id: "tour",
-    slug: "/onboarding/tour",
-    label: "Quick tour",
+    id: "install",
+    slug: "/onboarding/install",
+    label: "Install SDK",
     onNext: () => "/onboarding/done",
   },
   {
@@ -71,17 +39,6 @@ const STEPS: WizardStep[] = [
 ];
 
 export default function OnboardingLayout({ children }: { children: React.ReactNode }) {
-  // FIX-N: tag the wizard ROOT (not document.body) with
-  // data-route="onboarding" so globals.css can scope the
-  // [class*="z-50"][class*="fixed"] click-blocker suppression rule
-  // to the onboarding subtree only. The previous version tagged
-  // document.body and never cleaned up on unmount — once a user
-  // visited /onboarding, every z-50 fixed element in the rest of
-  // the portal (user dropdown, notifications, Radix Select/Dropdown,
-  // etc.) became unclickable because the body:has([data-route])
-  // selector stayed matched. Mounting the rule on the wizard root
-  // means the suppression auto-clears on unmount, and a CSS reset
-  // is impossible to forget.
   return (
     <div data-route="onboarding" className="contents">
       <Wizard

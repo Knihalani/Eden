@@ -12,6 +12,7 @@ import { PageHeader } from "@/components/layout/page-header";
 import { PageContent, PageLoading } from "@/components/layout/page-content";
 import { ArrowLeft, Beaker, CheckCircle2, Clock, Loader2, XCircle, AlertCircle, Hash, Play } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { errorFromCaught } from "@/lib/safe-error-message";
 
 const STATUS_BADGE: Record<string, { bg: string; icon: typeof CheckCircle2 }> = {
   pending: { bg: "bg-[var(--bg-tertiary)] text-[var(--text-secondary)]", icon: Clock },
@@ -55,7 +56,7 @@ export default function SimRunDetailPage() {
       const data = await agentsApi.getSimRun(currentOrg.id, agentId, runId);
       setRun(data);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to load sim run");
+      setError(errorFromCaught(e, "Failed to load sim run"));
     } finally {
       setLoading(false);
     }

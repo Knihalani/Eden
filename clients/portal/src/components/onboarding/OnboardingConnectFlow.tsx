@@ -12,13 +12,15 @@
  *      a skip-with-manual-instructions panel.
  *   3. Install picker — list of repos across all installations for the
  *      org. User picks one + names the agent.
- *   4. Integrate button — fires POST /github/integrate, returns a
- *      PR-run row. Caller decides what to do next (wizard advances
- *      to /wait; standalone shows the open PR + offers another round).
+ *   4. Integrate — fires POST /github/integrate, returns a PR-run row.
+ *      In the onboarding wizard, auto-runs when exactly one repo is
+ *      available (typical right after GitHub App install). Caller
+ *      decides what to do next (wizard advances to install; standalone
+ *      shows the open PR).
  */
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useOrg } from "@/hooks/use-org";
 import { useAuth } from "@/hooks/use-auth";
@@ -33,6 +35,7 @@ import {
   Lock,
   RefreshCw,
 } from "lucide-react";
+import { errorFromCaught } from "@/lib/safe-error-message";
 
 // Lucide-react does not ship a Github icon in this version; render an
 // inline SVG matching the GitHub Octicon. Keeps the visual semantics
@@ -63,6 +66,21 @@ interface Props {
   preselectedInstallationId?: number | null;
 }
 
+/** Repo to auto-integrate after GitHub App install (wizard only). */
+function autoIntegrateTarget(
+  repos: GitHubRepo[],
+  preselectedInstallationId: number | null | undefined,
+): GitHubRepo | null {
+  if (repos.length === 1) return repos[0];
+  if (preselectedInstallationId) {
+    const fromInstall = repos.filter(
+      (r) => r.installation_id === preselectedInstallationId,
+    );
+    if (fromInstall.length === 1) return fromInstall[0];
+  }
+  return null;
+}
+
 export function OnboardingConnectFlow({
   onIntegrated,
   inWizard = false,
@@ -81,6 +99,7 @@ export function OnboardingConnectFlow({
   const [authorizing, setAuthorizing] = useState(false);
   const [integrating, setIntegrating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const autoIntegrateAttempted = useRef(false);
 
   // Resolve role from current org membership.
   const role: string = useMemo(() => {
@@ -114,20 +133,43 @@ export function OnboardingConnectFlow({
       }
       const rs = await githubApi.listRepos(currentOrg.id);
       setRepos(rs);
-      if (preselectedInstallationId) {
+      const autoTarget = autoIntegrateTarget(rs, preselectedInstallationId);
+      if (autoTarget) {
+        setSelectedRepo(autoTarget);
+      } else if (preselectedInstallationId) {
         const first = rs.find((r) => r.installation_id === preselectedInstallationId);
         if (first) setSelectedRepo(first);
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not load repos");
+      setError(errorFromCaught(err, "Could not load repos"));
     } finally {
       setLoadingRepos(false);
     }
   }, [currentOrg?.id, canIntegrate, configured, preselectedInstallationId]);
 
   useEffect(() => {
-    loadRepos();
-  }, [loadRepos]);
+    async function boot() {
+      if (
+        preselectedInstallationId &&
+        currentOrg?.id &&
+        configured === true &&
+        canIntegrate
+      ) {
+        try {
+          await githubApi.claimInstallation(
+            currentOrg.id,
+            preselectedInstallationId,
+          );
+        } catch (err) {
+          setError(
+            errorFromCaught(err, "Could not register GitHub installation"),
+          );
+        }
+      }
+      await loadRepos();
+    }
+    void boot();
+  }, [loadRepos, preselectedInstallationId, currentOrg?.id, configured, canIntegrate]);
 
   async function startInstall() {
     if (!currentOrg?.id) return;
@@ -143,39 +185,80 @@ export function OnboardingConnectFlow({
     }
   }
 
+  const runIntegrate = useCallback(
+    async (repo: GitHubRepo) => {
+      if (!currentOrg?.id) return;
+      setSelectedRepo(repo);
+      setIntegrating(true);
+      try {
+        const run = await githubApi.integrate(currentOrg.id, {
+          installation_id: repo.installation_id,
+          repo_full_name: repo.full_name,
+          agent_id: agentId || undefined,
+          agent_name: agentName || repo.name || undefined,
+        });
+        toast.success(
+          run.pr_url
+            ? "Pull request opened — review it on GitHub"
+            : "Integration started",
+        );
+        onIntegrated?.(run);
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : "Integration failed");
+      } finally {
+        setIntegrating(false);
+      }
+    },
+    [currentOrg?.id, agentId, agentName, onIntegrated, toast],
+  );
+
   async function integrate() {
-    if (!currentOrg?.id || !selectedRepo) return;
-    setIntegrating(true);
-    try {
-      const run = await githubApi.integrate(currentOrg.id, {
-        installation_id: selectedRepo.installation_id,
-        repo_full_name: selectedRepo.full_name,
-        agent_id: agentId || undefined,
-        agent_name: agentName || undefined,
-      });
-      toast.success(
-        run.pr_url ? "Pull request opened — review it on GitHub" : "Integration started",
-      );
-      onIntegrated?.(run);
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Integration failed");
-    } finally {
-      setIntegrating(false);
-    }
+    if (!selectedRepo) return;
+    await runIntegrate(selectedRepo);
   }
+
+  // Wizard: after GitHub App install, open the integration PR without an
+  // extra click when exactly one repo was granted (or only one total).
+  useEffect(() => {
+    if (
+      !inWizard ||
+      loadingRepos ||
+      integrating ||
+      autoIntegrateAttempted.current ||
+      !canIntegrate ||
+      configured !== true ||
+      repos.length === 0
+    ) {
+      return;
+    }
+    const target = autoIntegrateTarget(repos, preselectedInstallationId);
+    if (!target) return;
+    autoIntegrateAttempted.current = true;
+    void runIntegrate(target);
+  }, [
+    inWizard,
+    loadingRepos,
+    integrating,
+    canIntegrate,
+    configured,
+    repos,
+    preselectedInstallationId,
+    runIntegrate,
+  ]);
 
   // ── Gate 1: instance not configured ────────────────────────────
 
   if (configured === false) {
     return (
       <PanelWarning
+        inWizard={inWizard}
         title="GitHub integration not configured"
         body={
           <>
             This Eden instance doesn&apos;t have a GitHub App set up. Ask
             the operator to fill in <code className="font-mono">GITHUB_APP_*</code>
-            {" "}env vars, or skip — you can still use the SDK by copying the
-            snippets from the previous step.
+            {" "}env vars, or skip — you can still install the SDK manually
+            on the next step.
           </>
         }
       />
@@ -186,7 +269,7 @@ export function OnboardingConnectFlow({
 
   if (currentOrg && !canIntegrate) {
     return (
-      <PanelLocked role={role} />
+      <PanelLocked inWizard={inWizard} role={role} />
     );
   }
 
@@ -222,6 +305,21 @@ export function OnboardingConnectFlow({
   }
 
   // ── Main: installed + has repos ───────────────────────────────
+
+  if (inWizard && integrating) {
+    return (
+      <div className="flex flex-col items-center justify-center gap-3 py-16 text-center">
+        <Loader2 className="h-8 w-8 animate-spin text-[var(--accent)]" />
+        <h2 className="text-lg font-semibold text-[var(--text-primary)]">
+          Opening integration PR…
+        </h2>
+        <p className="max-w-sm text-sm text-[var(--text-secondary)]">
+          Eden is detecting your framework and opening a pull request with
+          the SDK wiring. You&apos;ll land on the install step when it&apos;s ready.
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -333,7 +431,7 @@ export function OnboardingConnectFlow({
       <div className="flex items-center justify-between">
         {inWizard ? (
           <Link
-            href="/onboarding/install"
+            href="/onboarding"
             className="text-sm text-[var(--text-muted)] hover:text-[var(--text-primary)]"
           >
             ← Back
@@ -347,6 +445,14 @@ export function OnboardingConnectFlow({
           </Link>
         )}
         <div className="flex items-center gap-2">
+          {inWizard && (
+            <Link
+              href="/onboarding/install"
+              className="inline-flex items-center gap-1 rounded border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-2 text-sm text-[var(--text-secondary)] hover:bg-[var(--bg-tertiary)]"
+            >
+              Skip for now
+            </Link>
+          )}
           <button
             onClick={startInstall}
             disabled={authorizing}
@@ -369,7 +475,16 @@ export function OnboardingConnectFlow({
   );
 }
 
-function PanelWarning({ title, body }: { title: string; body: React.ReactNode }) {
+function PanelWarning({
+  title,
+  body,
+  inWizard = false,
+}: {
+  title: string;
+  body: React.ReactNode;
+  inWizard?: boolean;
+}) {
+  const skipHref = inWizard ? "/onboarding/install" : "/onboarding/done";
   return (
     <div className="space-y-4">
       <div>
@@ -377,17 +492,18 @@ function PanelWarning({ title, body }: { title: string; body: React.ReactNode })
         <p className="mt-2 text-[var(--text-secondary)]">{body}</p>
       </div>
       <Link
-        href="/onboarding/done"
+        href={skipHref}
         className="inline-flex items-center gap-2 rounded-lg bg-[var(--accent)] px-4 py-2 text-sm font-medium text-[var(--bg-primary)] hover:opacity-90"
       >
-        Skip — I&apos;ll integrate manually
+        {inWizard ? "Skip — install SDK manually" : "Skip — I'll integrate manually"}
         <ArrowRight className="h-4 w-4" />
       </Link>
     </div>
   );
 }
 
-function PanelLocked({ role }: { role: string }) {
+function PanelLocked({ role, inWizard = false }: { role: string; inWizard?: boolean }) {
+  const continueHref = inWizard ? "/onboarding/install" : "/onboarding/done";
   return (
     <div className="space-y-6">
       <div>
@@ -404,14 +520,14 @@ function PanelLocked({ role }: { role: string }) {
         <div className="text-sm font-medium">What to do next</div>
         <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-[var(--text-secondary)]">
           <li>Ping an admin in your org — they can connect a repo from <Link href="/agents" className="text-[var(--accent)] underline">/agents</Link>.</li>
-          <li>In the meantime you can still use Eden by adding the SDK snippets to your agent yourself.</li>
+          <li>Install the SDK yourself on the next step — traces work without a connected repo.</li>
         </ul>
       </div>
       <Link
-        href="/onboarding/done"
+        href={continueHref}
         className="inline-flex items-center gap-2 rounded-lg bg-[var(--accent)] px-4 py-2 text-sm font-medium text-[var(--bg-primary)] hover:opacity-90"
       >
-        Continue
+        Continue to SDK install
         <ArrowRight className="h-4 w-4" />
       </Link>
     </div>

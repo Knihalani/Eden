@@ -246,7 +246,7 @@ async function fetchApi<T>(
             ? JSON.stringify(rawDetail)
             : `HTTP ${response.status}`;
       const message = toUserFacingError(
-        new Error(detailStr),
+        { status: response.status, message: detailStr },
         detailStr || `HTTP ${response.status}`,
       );
       throw new ApiError(response.status, message);
@@ -1722,20 +1722,54 @@ export const api = {
     return fetchApi(`/orgs/${orgId}/observability/traces${qs ? `?${qs}` : ""}`);
   },
 
-  // Pattern 5.2 (Langfuse) — annotate a trace with a 0-10 score +
-  // category + free-form comment. The real backend route is
-  // expected at `POST /orgs/{orgId}/observability/traces/{traceId}/annotate`
-  // but we currently have no-op'd it: the dialog always resolves
-  // with the payload so the UI ships before the endpoint exists.
-  // When the route is implemented, swap the return to
-  //   fetchApi(`/orgs/${orgId}/observability/traces/${traceId}/annotate`,
-  //            { method: "POST", body: JSON.stringify(payload) });
   annotateTrace: (
-    _orgId: string,
-    _traceId: string,
-    payload: { score: number; category: string; comment?: string },
-  ): Promise<{ score: number; category: string; comment?: string }> =>
-    Promise.resolve(payload),
+    orgId: string,
+    traceId: string,
+    payload: { score: number; category: string; comment?: string; time_spent_ms?: number },
+  ) =>
+    fetchApi<{
+      item_id: string;
+      annotation_id: string;
+      label: unknown;
+      confidence: number;
+      created_at: string;
+    }>(`/orgs/${orgId}/labeling/traces/${traceId}/annotate`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+
+  createTraceShare: (
+    orgId: string,
+    traceId: string,
+    body?: { expiry_days?: number; label?: string; base_url?: string },
+  ) =>
+    fetchApi<{
+      id: string;
+      url?: string;
+      token?: string;
+      expires_at: string | null;
+    }>(`/orgs/${orgId}/traces/${traceId}/share`, {
+      method: "POST",
+      body: JSON.stringify(body ?? {}),
+    }),
+
+  listTraceShares: (orgId: string, traceId: string) =>
+    fetchApi<{
+      shares: Array<{
+        id: string;
+        trace_id: string;
+        label: string | null;
+        expires_at: string | null;
+        revoked_at: string | null;
+        created_at: string;
+        active: boolean;
+      }>;
+    }>(`/orgs/${orgId}/traces/${traceId}/shares`),
+
+  revokeTraceShare: (orgId: string, shareId: string) =>
+    fetchApi<{ revoked: boolean }>(`/orgs/${orgId}/shares/${shareId}`, {
+      method: "DELETE",
+    }),
 
   getTraceTimeline: (
     orgId: string,
@@ -1814,7 +1848,7 @@ export const api = {
   // same {alerts, total, unread_count} envelope so the consumer
   // can use either.
 
-  listAlerts: (async (orgId?: string, params?: { severity?: string; acknowledged?: boolean; limit?: number; offset?: number }): Promise<{
+  listAlerts: (async (orgId: string, params?: { severity?: string; acknowledged?: boolean; limit?: number; offset?: number }): Promise<{
     alerts: Array<{
       alert_id: string;
       severity: string;
@@ -1830,103 +1864,61 @@ export const api = {
     total: number;
     unread_count: number;
   }> => {
-    // The org-scoped endpoint /orgs/{org_id}/alerts doesn't exist on the
-    // backend (the mounted alerts router is the global /alerts surface,
-    // which evaluates rules against current metrics and returns fired
-    // alerts across the user's reachable orgs). The dashboard only needs
-    // a count by severity, so we call the global endpoint, wrap the
-    // list in the {alerts, total, unread_count} envelope the rest of
-    // the app already speaks, and adapt field names. ``orgId`` is
-    // accepted for callers that still pass it; the filter is a
-    // best-effort client-side match on the alerts.router's `labels`
-    // bag, which carries the org id when an alert is org-scoped.
     const q = new URLSearchParams();
+    if (params?.severity) q.set("severity", params.severity);
+    if (params?.acknowledged !== undefined) q.set("acknowledged", String(params.acknowledged));
     if (params?.limit) q.set("limit", String(params.limit));
+    if (params?.offset) q.set("offset", String(params.offset));
     const qs = q.toString();
-    const raw = await fetchApi<
-      Array<{
-        rule_id: string;
+    const data = await fetchApi<{
+      alerts: Array<{
+        alert_id: string;
         severity: string;
         title: string;
         message: string;
-        value: number;
-        threshold: number;
-        fired_at: string;
-        labels: Record<string, string>;
-      }>
-    >(`/alerts${qs ? `?${qs}` : ""}`);
-
-    // Filter by orgId if given — the global feed includes alerts
-    // for every org the user can see, and the dashboard wants its
-    // own slice. ``labels["org_id"]`` is set by the alert rules
-    // engine when an alert is org-scoped; we fall back to "all"
-    // for system-level alerts (e.g. budget breached) which carry
-    // no org label.
-    const filtered = orgId
-      ? raw.filter((a) => a.labels?.org_id === orgId || !a.labels?.org_id)
-      : raw;
+        entity_id: string;
+        acknowledged: boolean;
+        acknowledged_at: string | null;
+        created_at: string;
+        channels: string[];
+        metadata: Record<string, unknown>;
+      }>;
+      total: number;
+      unread_count: number;
+    }>(`/orgs/${orgId}/alerts${qs ? `?${qs}` : ""}`);
 
     return {
-      alerts: filtered.map((a) => ({
-        alert_id: a.rule_id,
+      alerts: data.alerts.map((a) => ({
+        alert_id: a.alert_id,
         severity: a.severity,
         title: a.title,
         description: a.message,
-        source: "rule_engine",
-        triggered_at: a.fired_at,
-        acknowledged: false,
-        acknowledged_at: null,
+        source: a.entity_id || "alert",
+        triggered_at: a.created_at,
+        acknowledged: a.acknowledged,
+        acknowledged_at: a.acknowledged_at,
         acknowledged_by: null,
-        metadata: { value: a.value, threshold: a.threshold, labels: a.labels },
+        metadata: a.metadata ?? {},
       })),
-      total: filtered.length,
-      unread_count: filtered.length,
+      total: data.total,
+      unread_count: data.unread_count,
     };
-  }) as {
-    (orgId: string, params?: { severity?: string; acknowledged?: boolean; limit?: number; offset?: number }): Promise<{
-      alerts: Array<{
-        alert_id: string;
-        severity: string;
-        title: string;
-        description: string;
-        source: string;
-        triggered_at: string;
-        acknowledged: boolean;
-        acknowledged_at: string | null;
-        acknowledged_by: string | null;
-        metadata: Record<string, unknown>;
-      }>;
-      total: number;
-      unread_count: number;
-    }>;
-    (): Promise<{
-      alerts: Array<{
-        alert_id: string;
-        severity: string;
-        title: string;
-        description: string;
-        source: string;
-        triggered_at: string;
-        acknowledged: boolean;
-        acknowledged_at: string | null;
-        acknowledged_by: string | null;
-        metadata: Record<string, unknown>;
-      }>;
-      total: number;
-      unread_count: number;
-    }>;
-  },
+  }),
 
-  acknowledgeAlert: (alertId: string) =>
-    fetchApi<{ alert_id: string; acknowledged: boolean }>(`/alerts/${alertId}/ack`, {
-      method: "POST",
-    }),
+  acknowledgeAlert: (orgId: string, alertId: string) =>
+    fetchApi<{ alert_id: string; acknowledged: boolean }>(
+      `/orgs/${orgId}/alerts/${alertId}/acknowledge`,
+      { method: "POST" },
+    ),
 
-  acknowledgeAlertsBatch: (alertIds: string[]) =>
-    fetchApi<{ acknowledged: number }>(`/alerts/ack-batch`, {
-      method: "POST",
-      body: JSON.stringify({ alert_ids: alertIds }),
-    }),
+  acknowledgeAlertsBatch: (orgId: string, alertIds: string[]) =>
+    fetchApi<{ acknowledged_count: number; alert_ids: string[] }>(
+      `/orgs/${orgId}/alerts/acknowledge-batch`,
+      {
+        method: "POST",
+        body: JSON.stringify({ alert_ids: alertIds }),
+      },
+    ),
 
   getAlertRules: (orgId: string) =>
     fetchApi<{
@@ -2027,9 +2019,17 @@ export const api = {
         provider: string;
         artifact_type: string;
         created_at: string;
+        is_deployed?: boolean;
         config: Record<string, unknown>;
         metadata: Record<string, unknown>;
       };
+      evaluations?: Array<{
+        evaluation_id: string;
+        benchmark_suite_id: string;
+        pass_rate: number;
+        avg_latency_ms: number;
+        cost_per_1k_tokens: number;
+      }>;
     }>(`/orgs/${orgId}/llmops/artifacts/${artifactId}`),
 
   // ── LLM Ops: prompts registry + canary render ─────────────────
@@ -3005,15 +3005,41 @@ export const predictiveApi = {
 };
 
 // ── Intelligence: Autonomous (Cat 14) ───────────────────────────────
+// The backend returns the standard ``_ok_envelope`` shape
+// ``{ status, feature, live, trace_id?, timestamp?, data }`` — the
+// payload lives under ``data``. F48 aligned these client types with the
+// real contract (previously the types claimed the unwrapped payload).
+export type AutonomousEnvelope<T> = {
+  status: string;
+  feature: string;
+  live: boolean;
+  trace_id?: string;
+  timestamp?: string;
+  data: T;
+};
+
+export type InvestigateData = {
+  investigation_id?: string;
+  trigger?: string;
+  trigger_type?: string;
+  findings: Array<Record<string, unknown>>;
+  proposed_remediations: Array<Record<string, unknown>>;
+  llm_used?: boolean;
+  message?: string;
+};
+
 export const autonomousApi = {
-  investigate: (orgId: string, data: { trace_id?: string; question: string }) =>
-    fetchApi<{ investigation_id: string; findings: string; recommended_actions: string[]; confidence: number; }>(`/orgs/${orgId}/intelligence/autonomous/investigate`, { method: "POST", body: JSON.stringify(data) }),
-  report: (orgId: string, data: { topic: string; period_days?: number }) =>
-    fetchApi<{ report_id: string; title: string; markdown: string; period_days: number; generated_at: string; }>(`/orgs/${orgId}/intelligence/autonomous/report`, { method: "POST", body: JSON.stringify(data) }),
+  // F48: send a typed ``trigger`` (e.g. ``incident:<id>``) — the
+  // backend also accepts ``{question, trace_id}`` and resolves a
+  // trigger server-side for back-compat.
+  investigate: (orgId: string, data: { trigger?: string; trace_id?: string; question?: string }) =>
+    fetchApi<AutonomousEnvelope<InvestigateData>>(`/orgs/${orgId}/intelligence/autonomous/investigate`, { method: "POST", body: JSON.stringify(data) }),
+  report: (orgId: string, data: { period?: string }) =>
+    fetchApi<AutonomousEnvelope<{ report_id: string; period: string; report_json: Record<string, unknown>; }>>(`/orgs/${orgId}/intelligence/autonomous/report`, { method: "POST", body: JSON.stringify(data) }),
   recommendations: (orgId: string) =>
-    fetchApi<{ recommendations: Array<{ id: string; title: string; impact: string; effort: string; rationale: string }>; }>(`/orgs/${orgId}/intelligence/autonomous/recommendations`),
-  heal: (orgId: string, data: { component: string; description: string }) =>
-    fetchApi<{ heal_id: string; status: "pending_approval" | "applied" | "rejected"; before_state: Record<string, unknown>; proposed_change: string; }>(`/orgs/${orgId}/intelligence/autonomous/heal`, { method: "POST", body: JSON.stringify(data) }),
+    fetchApi<AutonomousEnvelope<{ recommendations: Array<{ id: string; title: string; impact: string; effort: string; rationale: string }>; }>>(`/orgs/${orgId}/intelligence/autonomous/recommendations`),
+  heal: (orgId: string, data: { action_type: string }) =>
+    fetchApi<AutonomousEnvelope<{ action_id: string; action_type: string; status: "pending_approval" | "applied" | "rejected"; before_state: Record<string, unknown>; after_state: Record<string, unknown>; message: string; }>>(`/orgs/${orgId}/intelligence/autonomous/heal`, { method: "POST", body: JSON.stringify(data) }),
   nlQuery: (orgId: string, data: { question: string }) =>
     fetchApi<{ question: string; sql: string; rows: Array<Record<string, unknown>>; explanation: string; }>(`/orgs/${orgId}/intelligence/autonomous/nl/query`, { method: "POST", body: JSON.stringify(data) }),
   nlDashboard: (orgId: string, data: { description: string }) =>
@@ -3196,21 +3222,121 @@ export const experimentsApi = {
 };
 
 // ── Intelligence: Closed Loop (Cat 17) ──────────────────────────────
+export type ClosedLoopAction = {
+  id: string;
+  hook_name: string;
+  action_kind: string;
+  target: string;
+  severity: string;
+  status: string;
+  created_at: string;
+  applied_at?: string | null;
+  applied_by?: string | null;
+  payload: Record<string, unknown>;
+};
+
+type ClosedLoopEnvelope<T> = {
+  status: string;
+  feature: string;
+  live?: boolean;
+  timestamp?: string;
+  data: T;
+};
+
 export const closedLoopApi = {
-  listActions: (orgId: string, params?: { status?: "pending" | "approved" | "denied" | "applied" }) => {
+  listPending: (orgId: string) =>
+    fetchApi<ClosedLoopEnvelope<{ actions: ClosedLoopAction[]; count: number }>>(
+      `/orgs/${orgId}/intelligence/closed-loop/actions`,
+    ),
+  listAll: (orgId: string) =>
+    fetchApi<ClosedLoopEnvelope<{ actions: ClosedLoopAction[]; count: number }>>(
+      `/orgs/${orgId}/intelligence/closed-loop/actions/all`,
+    ),
+  /** @deprecated Prefer listPending / listAll — backend uses separate routes, not ?status= */
+  listActions: (orgId: string, params?: { status?: "pending" | "all" }) =>
+    params?.status === "all"
+      ? closedLoopApi.listAll(orgId)
+      : closedLoopApi.listPending(orgId),
+  approveAction: (orgId: string, actionId: string) =>
+    fetchApi<ClosedLoopEnvelope<{ action_id: string; status: string }>>(
+      `/orgs/${orgId}/intelligence/closed-loop/actions/${actionId}/approve`,
+      { method: "POST" },
+    ),
+  denyAction: (orgId: string, actionId: string, data: { reason?: string } = {}) =>
+    fetchApi<ClosedLoopEnvelope<{ action_id: string; status: string }>>(
+      `/orgs/${orgId}/intelligence/closed-loop/actions/${actionId}/deny`,
+      { method: "POST", body: JSON.stringify(data) },
+    ),
+  applyAction: (orgId: string, actionId: string) =>
+    fetchApi<ClosedLoopEnvelope<{ action_id: string; status: string; action_kind?: string }>>(
+      `/orgs/${orgId}/intelligence/closed-loop/actions/${actionId}/apply`,
+      { method: "POST" },
+    ),
+  dashboard: (orgId: string) =>
+    fetchApi<ClosedLoopEnvelope<{
+      total: number;
+      by_kind: Record<string, number>;
+      by_status: Record<string, number>;
+      by_severity: Record<string, number>;
+    }>>(`/orgs/${orgId}/intelligence/closed-loop/dashboard`),
+};
+
+// ── Agent Issues (F28/F29/F46 closed-loop) ──────────────────────────
+export type AgentIssue = {
+  id: string;
+  org_id: string;
+  fingerprint: string;
+  kind: string;
+  title: string;
+  status: string;
+  severity: string;
+  agent_id: string | null;
+  stumble_count: number;
+  user_count: number;
+  repetition_count: number;
+  first_seen?: string | null;
+  last_seen?: string | null;
+  triage_result?: Record<string, unknown> | null;
+};
+
+export type AgentStumble = {
+  id: string;
+  trace_id: string;
+  kind: string;
+  fingerprint: string;
+  title: string;
+  severity: string;
+  detected_by: string;
+  detected_at?: string | null;
+  detail?: Record<string, unknown>;
+};
+
+type IssuesEnvelope<T> = { status: string; feature: string; data: T };
+
+export const agentIssuesApi = {
+  list: (orgId: string, params?: { status?: string; severity?: string; limit?: number; offset?: number }) => {
     const q = new URLSearchParams();
     if (params?.status) q.set("status", params.status);
+    if (params?.severity) q.set("severity", params.severity);
+    if (params?.limit != null) q.set("limit", String(params.limit));
+    if (params?.offset != null) q.set("offset", String(params.offset));
     const qs = q.toString();
-    return fetchApi<{ actions: Array<{ action_id: string; hook: string; status: string; created_at: string; payload: Record<string, unknown> }>; }>(`/orgs/${orgId}/intelligence/closed-loop/actions${qs ? `?${qs}` : ""}`);
+    return fetchApi<IssuesEnvelope<{ issues: AgentIssue[]; count: number }>>(`/orgs/${orgId}/agent-issues${qs ? `?${qs}` : ""}`);
   },
-  approveAction: (orgId: string, actionId: string) =>
-    fetchApi<{ action_id: string; status: string; }>(`/orgs/${orgId}/intelligence/closed-loop/actions/${actionId}/approve`, { method: "POST" }),
-  denyAction: (orgId: string, actionId: string, data: { reason?: string }) =>
-    fetchApi<{ action_id: string; status: string; reason: string; }>(`/orgs/${orgId}/intelligence/closed-loop/actions/${actionId}/deny`, { method: "POST", body: JSON.stringify(data) }),
-  applyAction: (orgId: string, actionId: string) =>
-    fetchApi<{ action_id: string; status: string; applied_at: string; }>(`/orgs/${orgId}/intelligence/closed-loop/actions/${actionId}/apply`, { method: "POST" }),
-  dashboard: (orgId: string) =>
-    fetchApi<{ pending: number; approved: number; denied: number; applied_today: number; by_hook: Record<string, number>; }>(`/orgs/${orgId}/intelligence/closed-loop/dashboard`),
+  get: (orgId: string, issueId: string) =>
+    fetchApi<IssuesEnvelope<{ issue: AgentIssue }>>(`/orgs/${orgId}/agent-issues/${issueId}`),
+  resolve: (orgId: string, issueId: string, data: { status?: "resolved" | "ignored" } = {}) =>
+    fetchApi<IssuesEnvelope<{ issue_id: string; status: string; updated: boolean }>>(`/orgs/${orgId}/agent-issues/${issueId}/resolve`, { method: "POST", body: JSON.stringify(data) }),
+  triage: (orgId: string, issueId: string, data: { force?: boolean } = {}) =>
+    fetchApi<IssuesEnvelope<{ triage_result?: Record<string, unknown> }>>(`/orgs/${orgId}/agent-issues/${issueId}/triage`, { method: "POST", body: JSON.stringify(data) }),
+  stumbles: (orgId: string, params?: { fingerprint?: string; trace_id?: string; limit?: number }) => {
+    const q = new URLSearchParams();
+    if (params?.fingerprint) q.set("fingerprint", params.fingerprint);
+    if (params?.trace_id) q.set("trace_id", params.trace_id);
+    if (params?.limit != null) q.set("limit", String(params.limit));
+    const qs = q.toString();
+    return fetchApi<IssuesEnvelope<{ stumbles: AgentStumble[]; count: number }>>(`/orgs/${orgId}/stumbles${qs ? `?${qs}` : ""}`);
+  },
 };
 
 // ── Intelligence: Eval (Cat 3) ──────────────────────────────────────
@@ -3451,6 +3577,12 @@ export const githubApi = {
       `/integrations/github/authorize`,
       { method: "GET", headers: { "X-Org-Id": orgId } },
     ),
+  claimInstallation: (orgId: string, installationId: number) =>
+    fetchApi<GitHubInstallation>(`/orgs/${orgId}/github/installations/claim`, {
+      method: "POST",
+      headers: { "X-Org-Id": orgId },
+      body: JSON.stringify({ installation_id: installationId }),
+    }),
   listInstallations: (orgId: string) =>
     fetchApi<GitHubInstallation[]>(
       `/orgs/${orgId}/github/installations`,
@@ -4473,7 +4605,7 @@ const labelingApi = {
       { headers: { "X-Org-Id": orgId } },
     ),
   annotate: (orgId: string, body: { item_id: string; label: string; notes?: string }) =>
-    fetchApi<LabelingAnnotation>(`/orgs/${orgId}/labeling/items/annotate`, {
+    fetchApi<LabelingAnnotation>(`/orgs/${orgId}/labeling/annotate`, {
       method: "POST",
       headers: { "X-Org-Id": orgId, "Content-Type": "application/json" },
       body: JSON.stringify(body),

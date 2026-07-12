@@ -34,40 +34,17 @@ from eden.observability.telemetry_collector import TelemetryEvent
 logger = logging.getLogger(__name__)
 
 
+from eden.integrations.framework_registry import (
+    build_otel_header_map,
+    build_otel_prefix_map,
+)
+
 # Attribute prefixes that identify a specific framework. OTel-mapped
 # framework-specific attributes live under these namespaces.
-_FRAMEWORK_PREFIXES: dict[str, str] = {
-    "vercel.ai.": "vercel-ai",
-    "ai.vercel.": "vercel-ai",
-    "ai.langchain.": "langchain",
-    "langchain.": "langchain",
-    "llama_index.": "llama-index",
-    "li.": "llama-index",
-    "mastra.": "mastra",
-    "crewai.": "crewai",
-    "smolagents.": "smolagents",
-    "pydantic_ai.": "pydantic-ai",
-    "dspy.": "dspy",
-}
+_FRAMEWORK_PREFIXES: dict[str, str] = build_otel_prefix_map()
 
-# X-Source-Framework header values → canonical name. Keys are the
-# lowercased header value; values are the canonical framework name.
-_FRAMEWORK_HEADER_VALUES: dict[str, str] = {
-    "vercel-ai": "vercel-ai",
-    "vercel_ai": "vercel-ai",
-    "vercelai": "vercel-ai",
-    "langchain": "langchain",
-    "llama-index": "llama-index",
-    "llama_index": "llama-index",
-    "llamaindex": "llama-index",
-    "mastra": "mastra",
-    "crewai": "crewai",
-    "smolagents": "smolagents",
-    "pydantic-ai": "pydantic-ai",
-    "pydantic_ai": "pydantic-ai",
-    "pydanticai": "pydantic-ai",
-    "dspy": "dspy",
-}
+# X-Source-Framework header values → canonical name.
+_FRAMEWORK_HEADER_VALUES: dict[str, str] = build_otel_header_map()
 
 
 def _identify_framework(

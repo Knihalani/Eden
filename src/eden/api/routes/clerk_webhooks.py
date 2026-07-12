@@ -270,6 +270,17 @@ async def _upsert_org(data: dict[str, Any]) -> None:
     slug = data.get("slug") or clerk_id
     client = await get_postgres_client()
 
+    # Resolve Eden owner for INSERT (owner_id is NOT NULL).
+    eden_owner_id: str | None = None
+    created_by = data.get("created_by")
+    if created_by:
+        owner_row = await client.fetchrow(
+            "SELECT id FROM users WHERE clerk_id::text = $1",
+            str(created_by),
+        )
+        if owner_row:
+            eden_owner_id = str(owner_row["id"])
+
     # Cases 2 + 3: refresh name/slug on the matching row. Idempotent
     # for case 2 (already linked) and case 3 (legacy). The
     # ``NOT EXISTS`` guard makes this a no-op if no row matches.
@@ -286,39 +297,27 @@ async def _upsert_org(data: dict[str, Any]) -> None:
         slug,
     )
 
-    # Case 1: insert if no row exists. Two safety guards:
-    # - ``WHERE NOT EXISTS`` prevents a duplicate row if the
-    #   ``UPDATE`` above just created one via a different code path.
-    # - The ``::uuid`` cast refuses non-UUID ``clerk_id`` values
-    #   (e.g. Clerk's default ``org_2x...`` format). The cast error
-    #   is caught by the outer try/except and logged — webhook
-    #   delivery is considered "best effort" for these orgs since
-    #   Eden's ``POST /orgs`` is the canonical source of truth.
-    try:
+    # Case 1: insert if no row exists. Always mint a UUID ``id`` and
+    # store the Clerk string in ``clerk_org_id`` — Clerk's default
+    # ``org_2x…`` ids are not UUIDs and must never be cast to one.
+    # ``owner_id`` is NOT NULL — skip INSERT when we cannot resolve
+    # the creator yet; ``/auth/me`` self-heal or the membership
+    # webhook will create the row once a user exists.
+    if eden_owner_id:
         await client.execute(
             """
             INSERT INTO organizations
                 (id, clerk_org_id, name, slug, owner_id, archived_at, updated_at)
-            SELECT $1::uuid, $2, $3, $4, NULL, NULL, NOW()
+            SELECT gen_random_uuid(), $1, $2, $3, $4::uuid, NULL, NOW()
             WHERE NOT EXISTS (
                 SELECT 1 FROM organizations
-                WHERE clerk_org_id = $2 OR id::text = $2
+                WHERE clerk_org_id = $1 OR id::text = $1
             )
             """,
             clerk_id,
-            clerk_id,
             name,
             slug,
-        )
-    except Exception as exc:  # noqa: BLE001
-        # Most common cause: clerk_id is a non-UUID string like
-        # ``org_2xabc``. Log and skip; the backfill script
-        # (``src/eden/scripts/backfill_legacy_orgs.py``) handles
-        # legacy rows explicitly, and Eden's ``POST /orgs`` handles
-        # new backend-created rows.
-        logger.info(
-            "_upsert_org: skipped INSERT for clerk_id=%s (likely non-UUID): %s",
-            clerk_id, redact_all(str(exc)),
+            eden_owner_id,
         )
 
 
@@ -388,8 +387,10 @@ async def _upsert_membership(data: dict[str, Any]) -> None:
 
     await client.execute(
         """
-        INSERT INTO org_members (org_id, user_id, role, last_active_at, created_at)
-        VALUES ($1, $2, $3, NOW(), NOW())
+        INSERT INTO org_members (
+            org_id, user_id, role, last_active_at, joined_at, last_writer_source
+        )
+        VALUES ($1, $2, $3, NOW(), NOW(), 'clerk')
         ON CONFLICT (org_id, user_id) DO UPDATE
         SET role = CASE
                 WHEN org_members.last_writer_source = 'clerk'

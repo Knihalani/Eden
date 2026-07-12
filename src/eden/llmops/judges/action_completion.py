@@ -15,6 +15,7 @@ import time
 from typing import TYPE_CHECKING, cast
 
 from .base import Judge, JudgeContext, JudgeScore
+from ._sampling import production_sample_matches
 from .hallucination import _parse_judge_response
 
 if TYPE_CHECKING:
@@ -51,7 +52,7 @@ class ActionCompletionJudge(Judge):
         if not super().matches(event):
             return False
         payload = event.payload or {}
-        return bool(payload.get("action") or payload.get("tool_call"))
+        return bool(payload.get("action") or payload.get("tool_call")) and production_sample_matches(event)
 
     async def score(
         self, event: TelemetryEvent, ctx: JudgeContext

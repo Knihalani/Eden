@@ -71,9 +71,18 @@ export default function LabelingPage() {
             </Button>
             <Button
               size="sm"
-              disabled
-              title="Seed from intake — coming soon"
-              aria-label="Seed item (coming soon)"
+              onClick={async () => {
+                const prompt = window.prompt("Seed item prompt:");
+                if (!prompt?.trim() || !currentOrg?.id) return;
+                try {
+                  await labelingApi.seedItem(currentOrg.id, { prompt: prompt.trim() });
+                  toast.success("Item seeded");
+                  await load();
+                } catch (e) {
+                  toast.error(e instanceof Error ? e.message : "Failed to seed item");
+                }
+              }}
+              aria-label="Seed labeling item"
             >
               <Plus className="h-3.5 w-3.5" /> Seed item
             </Button>

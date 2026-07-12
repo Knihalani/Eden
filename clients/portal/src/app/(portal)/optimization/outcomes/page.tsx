@@ -16,6 +16,7 @@ import { useToast } from "@/components/ui/toast";
 import { useOrg } from "@/hooks/use-org";
 import { outcomesApi } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { errorFromCaught } from "@/lib/safe-error-message";
 
 /* ----------------------- Helpers -------------------------------------- */
 
@@ -60,7 +61,7 @@ function DepartmentsTab() {
       })
       .catch((e: unknown) => {
         if (cancelled) return;
-        setError(e instanceof Error ? e.message : "Failed to load departments");
+        setError(errorFromCaught(e, "Failed to load departments"));
       })
       .finally(() => {
         if (!cancelled) setLoading(false);

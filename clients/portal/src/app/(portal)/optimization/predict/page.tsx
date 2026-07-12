@@ -15,6 +15,7 @@ import { predictiveApi } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { EmptyState } from "@/components/ui/empty-state";
 import { NoOrgState } from "@/components/ui/no-org-state";
+import { errorFromCaught } from "@/lib/safe-error-message";
 
 /* ----------------------- Helpers -------------------------------------- */
 
@@ -149,7 +150,7 @@ function QualityTab() {
       })
       .catch((e: unknown) => {
         if (cancelled) return;
-        setError(e instanceof Error ? e.message : "Failed to load quality forecast");
+        setError(errorFromCaught(e, "Failed to load quality forecast"));
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -204,7 +205,7 @@ function CostTab() {
       })
       .catch((e: unknown) => {
         if (cancelled) return;
-        setError(e instanceof Error ? e.message : "Failed to load cost forecast");
+        setError(errorFromCaught(e, "Failed to load cost forecast"));
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -268,7 +269,7 @@ function CapacityTab() {
       })
       .catch((e: unknown) => {
         if (cancelled) return;
-        setError(e instanceof Error ? e.message : "Failed to load capacity");
+        setError(errorFromCaught(e, "Failed to load capacity"));
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -399,7 +400,7 @@ function DriftTab() {
       })
       .catch((e: unknown) => {
         if (cancelled) return;
-        setError(e instanceof Error ? e.message : "Failed to load drift");
+        setError(errorFromCaught(e, "Failed to load drift"));
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -516,7 +517,7 @@ function RiskTab() {
       })
       .catch((e: unknown) => {
         if (cancelled) return;
-        setError(e instanceof Error ? e.message : "Failed to load risk");
+        setError(errorFromCaught(e, "Failed to load risk"));
       })
       .finally(() => {
         if (!cancelled) setLoading(false);

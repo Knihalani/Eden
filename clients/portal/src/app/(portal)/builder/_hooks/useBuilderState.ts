@@ -30,6 +30,8 @@ import {
 
 import { agentsApi } from "@/lib/api";
 import type { SimRun } from "@/lib/api";
+
+const MAX_SIM_POLL_MS = 30 * 60 * 1000;
 import type { BlockData, BlockKind, SavedGraph } from "@/lib/types";
 import { useToast } from "@/components/ui/toast";
 
@@ -444,7 +446,9 @@ export function useBuilderState(): UseBuilderState {
 
       const terminal = new Set(["passed", "failed", "error"]);
       let last = run;
+      const pollStarted = Date.now();
       while (!abort.aborted) {
+        if (Date.now() - pollStarted > MAX_SIM_POLL_MS) break;
         await new Promise((r) => setTimeout(r, 2000));
         if (abort.aborted) break;
         try {
@@ -542,7 +546,9 @@ export function useBuilderState(): UseBuilderState {
       // 7. Poll until terminal status.
       const terminal = new Set(["passed", "failed", "error"]);
       let last = run;
+      const pollStarted = Date.now();
       while (!abort.aborted) {
+        if (Date.now() - pollStarted > MAX_SIM_POLL_MS) break;
         await new Promise((r) => setTimeout(r, 2000));
         if (abort.aborted) break;
         try {

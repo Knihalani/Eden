@@ -30,6 +30,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import time
 from collections.abc import AsyncIterator
 from typing import Any
 
@@ -72,6 +73,11 @@ async def stream_traces(
     )
 
 
+_MAX_REPLAY_GAP = 1000
+_STREAM_MAX_DURATION_S = 3600
+_STREAM_MAX_EVENTS = 10_000
+
+
 async def _event_stream(
     org_id: str,
     last_event_id: str | None,
@@ -99,6 +105,9 @@ async def _event_stream(
             ),
         )
         return
+
+    started_at = time.monotonic()
+    events_sent = 0
 
     channel = f"observability:stream:{org_id}"
     pubsub = redis.pubsub()
@@ -159,11 +168,36 @@ async def _event_stream(
             backfilled = await _replay_since(org_id, last_event_id)
             for ev in backfilled:
                 seq += 1
+                events_sent += 1
                 yield _format_sse(
                     "trace", json.dumps(ev, default=str), event_id=str(seq)
                 )
 
         while True:
+            if time.monotonic() - started_at >= _STREAM_MAX_DURATION_S:
+                yield _format_sse(
+                    "error",
+                    json.dumps(
+                        {
+                            "code": "stream_duration_exceeded",
+                            "message": "SSE stream exceeded the 1-hour bound.",
+                        }
+                    ),
+                )
+                break
+            if events_sent >= _STREAM_MAX_EVENTS:
+                yield _format_sse(
+                    "error",
+                    json.dumps(
+                        {
+                            "code": "stream_event_cap",
+                            "message": (
+                                f"SSE stream exceeded the {_STREAM_MAX_EVENTS}-event cap."
+                            ),
+                        }
+                    ),
+                )
+                break
             try:
                 msg = await asyncio.wait_for(
                     pubsub.get_message(ignore_subscribe_messages=True),
@@ -186,6 +220,7 @@ async def _event_stream(
             except (TypeError, ValueError):
                 continue
             seq += 1
+            events_sent += 1
             yield _format_sse(
                 "trace", json.dumps(payload, default=str), event_id=str(seq)
             )
@@ -214,13 +249,6 @@ def _format_sse(
     out += "\n"
     return out.encode("utf-8")
 
-
-# Audit 2026-07-03 B-22 — bound on how far a reconnecting client
-# can backfill. Matches the ZSET replay window written by the
-# collector (``observability:replay:{org}`` ZSET, capped at the
-# last 1000 events); anything older than that isn't in the buffer
-# anyway, so refusing up-front is the safe default.
-_MAX_REPLAY_GAP = 1000
 
 
 async def _replay_since(org_id: str, last_event_id: str) -> list[dict]:
@@ -291,6 +319,8 @@ async def publish_trace_event(org_id: str, payload: dict[str, Any]) -> None:
         # which collides on identical body content and overwrote the
         # score under that member, hiding the prior event.
         await redis.zadd(set_key, {str(seq): seq})
+        await redis.expire(set_key, 24 * 3600)
+        await redis.expire(f"observability:seq:{org_id}", 24 * 3600)
         await redis.zremrangebyrank(set_key, 0, -1001)
     except Exception as exc:
         logger.debug(f"publish_trace_event failed: {exc}")

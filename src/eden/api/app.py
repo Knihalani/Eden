@@ -20,6 +20,7 @@ from eden.api.middleware.security_headers import (
 )
 from eden.api.middleware.tenant_rate_limit import TenantRateLimitMiddleware
 from eden.api.routes import (
+    agent_issues,
     agent_pr_suggestions,
     agent_runs,
     agents,
@@ -32,6 +33,7 @@ from eden.api.routes import (
     app_events,
     audit,
     auth,
+    autonomy,
     billing,
     budgets,
     builder_graphs,
@@ -229,6 +231,7 @@ class HealthResponse(BaseModel):
     version: str
     postgres: str
     qdrant: str
+    quality_worker_running: bool = False
 
 
 # ============================================================================
@@ -238,7 +241,18 @@ class HealthResponse(BaseModel):
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan handler."""
+    import asyncio
+
     logger.info("Starting Eden API...")
+
+    # Schema must lead code on every API deploy. Workers set
+    # SKIP_MIGRATIONS=1; the API owns the upgrade.
+    try:
+        from eden.db_migrations.runner import run_alembic_upgrade_head
+
+        await asyncio.to_thread(run_alembic_upgrade_head)
+    except Exception as exc:
+        logger.error("Alembic upgrade failed at startup: %s", exc)
 
     # Audit (June 21 2026) — surface missing Clerk webhook secret at
     # startup. Downgraded ERROR → WARNING so a fresh dev environment
@@ -299,6 +313,8 @@ async def lifespan(app: FastAPI):
     # 60s cadence (configurable via ``insights_loop_interval_seconds``)
     # and writes ``Insight`` objects to Postgres + the KB.
     insights_loop = None
+    anomaly_loop = None
+    evolution_loop = None
     if getattr(settings, "insights_loop_enabled", True):
         try:
             from eden.insights.detector_loop import start_insights_detector_loop
@@ -307,6 +323,27 @@ async def lifespan(app: FastAPI):
             insights_loop = True
         except Exception as e:
             logger.warning(f"Insights detector loop startup skipped: {e}")
+
+    if getattr(settings, "anomaly_loop_enabled", True):
+        try:
+            from eden.data_platform.anomaly_detector_loop import (
+                start_anomaly_detector_loop,
+            )
+
+            await start_anomaly_detector_loop()
+            anomaly_loop = True
+        except Exception as e:
+            logger.warning(f"Anomaly detector loop startup skipped: {e}")
+
+    if getattr(settings, "evolution_loop_enabled", True):
+        try:
+            from eden.agents.evolution.loop import start_evolution_loop
+
+            await start_evolution_loop()
+            evolution_loop = True
+            logger.info("Evolution loop started (evolver + promotion)")
+        except Exception as e:
+            logger.warning(f"Evolution loop startup skipped: {e}")
 
     # Audit 2026-06-22 B1.36 — register all closed-loop promotion hooks
     # so on_judge_regression / on_drift_alert / etc. actually fire.
@@ -317,6 +354,53 @@ async def lifespan(app: FastAPI):
         logger.info("Promotion hooks registered")
     except Exception as e:
         logger.warning(f"Promotion hook registration skipped: {e}")
+
+    # N14 — production platform activation. Install the trace-quality
+    # wirings (Cat 15/17/22 + StatGate gating on closed-loop apply) and
+    # start the quality-pipeline sidecar worker. ``install_all()`` is
+    # idempotent (safe to call once per process); the worker self-gates
+    # on ``trace_quality_enabled`` / ``trace_quality_compute_async``.
+    try:
+        from eden.observability.trace_quality.wiring import install_all
+
+        install_all()
+        logger.info("trace_quality: install_all complete")
+    except Exception as e:
+        logger.warning(f"trace_quality install_all skipped: {e}")
+
+    try:
+        from eden.observability.quality_pipeline.worker import start_worker
+
+        await start_worker()
+    except Exception as e:
+        logger.warning(f"quality_pipeline worker startup skipped: {e}")
+
+    # F20 — start the trace.finalized consumer so finalized traces are
+    # auto-scanned into stumbles/issues without operator configuration.
+    try:
+        from eden.workers.trace_finalized_consumer import start_consumer
+
+        await start_consumer()
+    except Exception as e:
+        logger.warning(f"trace_finalized consumer startup skipped: {e}")
+
+    # F46 — start the closed-loop event consumer (group eden-closed-loop)
+    # so issue_created → triage → remediate → verify events are processed.
+    try:
+        from eden.closed_loop.event_bus import start_consumer as start_loop
+
+        await start_loop()
+    except Exception as e:
+        logger.warning(f"closed-loop consumer startup skipped: {e}")
+
+    # F46 (Wave 6) — start the verify worker that resolves/regresses
+    # issues once a remediation's quiet window elapses.
+    try:
+        from eden.closed_loop.verify import start_verify_worker
+
+        await start_verify_worker()
+    except Exception as e:
+        logger.warning(f"closed-loop verify worker startup skipped: {e}")
 
     # Phase 3a (2026-06-23) — surface a loud startup warning when neither
     # a GitHub App nor the legacy PR-provider env vars are configured.
@@ -373,6 +457,52 @@ async def lifespan(app: FastAPI):
             await stop_insights_detector_loop()
         except Exception as e:  # pragma: no cover - defensive
             logger.warning(f"Insights detector loop stop failed: {e}")
+
+    if anomaly_loop:
+        try:
+            from eden.data_platform.anomaly_detector_loop import (
+                stop_anomaly_detector_loop,
+            )
+
+            await stop_anomaly_detector_loop()
+        except Exception as e:  # pragma: no cover - defensive
+            logger.warning(f"Anomaly detector loop stop failed: {e}")
+
+    if evolution_loop:
+        try:
+            from eden.agents.evolution.loop import stop_evolution_loop
+
+            await stop_evolution_loop()
+        except Exception as e:  # pragma: no cover - defensive
+            logger.warning(f"Evolution loop stop failed: {e}")
+
+    try:
+        from eden.closed_loop.verify import stop_verify_worker
+
+        await stop_verify_worker()
+    except Exception as e:  # pragma: no cover - defensive
+        logger.warning(f"closed-loop verify worker stop failed: {e}")
+
+    try:
+        from eden.closed_loop.event_bus import stop_consumer as stop_loop
+
+        await stop_loop()
+    except Exception as e:  # pragma: no cover - defensive
+        logger.warning(f"closed-loop consumer stop failed: {e}")
+
+    try:
+        from eden.workers.trace_finalized_consumer import stop_consumer
+
+        await stop_consumer()
+    except Exception as e:  # pragma: no cover - defensive
+        logger.warning(f"trace_finalized consumer stop failed: {e}")
+
+    try:
+        from eden.observability.quality_pipeline.worker import stop_worker
+
+        await stop_worker()
+    except Exception as e:  # pragma: no cover - defensive
+        logger.warning(f"quality_pipeline worker stop failed: {e}")
 
     try:
         from eden.observability.trace_quality.hooks import (
@@ -750,6 +880,8 @@ app.include_router(intelligence_code_change.router)  # /orgs/{org_id}/intelligen
 # Intelligence gap surface — Cat 4/5/6/8/9/10/11/12/13/14/18/19/20/22
 # All self-gate on `intelligence_gap_v0` via the per-router `dependencies=`
 # list; this just makes them reachable when the flag is on.
+app.include_router(agent_issues.router)  # /orgs/{org_id}/agent-issues (F28/F29, gated by agent_issues_v0)
+app.include_router(autonomy.router)  # /orgs/{org_id}/settings/autonomy (N22, gated by closed_loop_orchestrator_v1)
 app.include_router(intelligence_agents.router)
 app.include_router(intelligence_apm_depth.router)
 app.include_router(intelligence_autonomous.router)
@@ -898,11 +1030,21 @@ async def health_check():
         except Exception:
             pass
 
+    try:
+        from eden.observability.quality_pipeline.worker import (
+            is_worker_running,
+        )
+
+        worker_running = is_worker_running()
+    except Exception:
+        worker_running = False
+
     body = HealthResponse(
         status=overall,
         version=settings.app_version,
         postgres=pg,
         qdrant=kb_health.get("qdrant", "unknown"),
+        quality_worker_running=worker_running,
     )
 
     # HEALH_PROBE_MODE controls the status code:

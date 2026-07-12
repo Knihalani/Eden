@@ -540,23 +540,17 @@ class SelfHealer:
         )
 
         # Fire the drift-alert hook for the approve transition.
-        # Best-effort — never raises.
+        # G11: ``on_drift_alert`` only accepts ``(org_id, *, drift_type,
+        # severity)`` — the old call passed ``context=`` (a TypeError,
+        # silently swallowed below, so the hook never actually fired) and
+        # ``severity="info"`` (not in the whitelist). Best-effort — never
+        # raises.
         try:
             from eden.llmops.promotion_hooks import PromotionHook
             await PromotionHook().on_drift_alert(
-                org_id=org_id,
+                org_id,
                 drift_type="self_heal_approved",
-                severity="info",
-                context={
-                    "action_id": action_id,
-                    "action_type": before_state["action_type"],
-                    "approved_by": approved_by_user_id,
-                    "before_state": before_state.get("before_state"),
-                    "next_step": (
-                        "POST /heal/{action_id}/execute to actually "
-                        "run the remediation."
-                    ),
-                },
+                severity="low",
             )
         except Exception as exc:
             logger.debug("self_healer: drift alert hook failed: %s", exc)
@@ -729,6 +723,72 @@ class SelfHealer:
             },
         )
 
+    async def heal_from_issue(
+        self, org_id: str, issue_id: str
+    ) -> dict[str, Any]:
+        """Autonomous heal driven by an issue's triage result (N21).
+
+        Maps ``triage_result.suggested_actions`` → a valid heal
+        ``action_type`` (rollback / reweight / cache_bust), then queues +
+        executes it in one shot. Only invoked by the F46 orchestrator
+        *after* the N22 policy has already permitted an auto-execute, so
+        the human-approval gate is intentionally skipped here (the
+        approval is the policy). Returns the ``execute_heal`` envelope
+        with ``data.issue_id`` annotated so the orchestrator can link the
+        heal back to the issue.
+        """
+        from eden.issues.repo import IssuesRepo
+
+        issue = await IssuesRepo().get_issue(org_id, issue_id)
+        if issue is None:
+            return _not_implemented_envelope(
+                self.name, f"issue {issue_id!r} not found"
+            )
+        action_type = _heal_action_from_triage(issue.triage_result or {})
+        if action_type is None:
+            return _not_implemented_envelope(
+                self.name,
+                f"issue {issue_id!r} has no mapped heal action "
+                "(suggested_actions did not include rollback/reweight/cache_bust)",
+            )
+
+        queued = await self.heal(org_id, action_type=action_type)
+        action_id = (queued.get("data") or {}).get("action_id")
+        if not action_id:
+            return queued
+
+        # Autonomous path: promote pending_approval → approved without a
+        # human click (the policy engine already authorised it).
+        before_state = await _load_self_heal_action(org_id, action_id)
+        await _upsert_self_heal(
+            org_id,
+            action_id,
+            action_type=action_type,
+            status="approved",
+            before_state_json=_json_dumps(
+                (before_state or {}).get("before_state")
+            ),
+            after_state_json=None,
+        )
+        result = await self.execute_heal(
+            org_id, action_id, approved_by_user_id="orchestrator"
+        )
+        result.setdefault("data", {})["issue_id"] = issue_id
+        return result
+
+
+def _heal_action_from_triage(triage_result: dict[str, Any]) -> str | None:
+    """Extract a valid heal action_type from a triage result."""
+    sh = triage_result.get("suggested_heal")
+    if isinstance(sh, str) and sh in VALID_HEAL_ACTION_TYPES:
+        return sh
+    for a in triage_result.get("suggested_actions") or []:
+        if isinstance(a, dict):
+            at = a.get("action_type") or a.get("type")
+            if at in VALID_HEAL_ACTION_TYPES:
+                return at
+    return None
+
 
 async def _load_self_heal_action(
     org_id: str, action_id: str,
@@ -821,11 +881,13 @@ async def _execute_reweight(after_state: dict[str, Any]) -> dict[str, Any]:
     """
     try:
         from eden.llmops.promotion_hooks import PromotionHook
+        # G11: signature is ``(org_id, *, drift_type, severity)`` — the
+        # old ``context=`` kwarg raised a (swallowed) TypeError so the
+        # hook never fired; ``severity="info"`` was also off-whitelist.
         await PromotionHook().on_drift_alert(
-            org_id=after_state.get("org_id", "unknown"),
+            after_state.get("org_id", "unknown"),
             drift_type="self_heal_reweight",
-            severity="info",
-            context={"intent": "t3_to_t2_fallback_threshold_bump"},
+            severity="low",
         )
     except Exception as exc:
         # The hook is best-effort; the reweight itself always

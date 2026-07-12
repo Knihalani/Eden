@@ -264,7 +264,7 @@ class IncidentClusterer:
         await _delete_then_insert_incidents(org_id, clusters, members)
 
         # Fire closed-loop hook for high-severity, large clusters
-        self._fire_drift_alerts(org_id, clusters)
+        await self._fire_incident_hooks(org_id, clusters, members)
 
         return _ok_envelope(
             self.name,
@@ -487,29 +487,66 @@ class IncidentClusterer:
         )
 
     @staticmethod
-    def _fire_drift_alerts(
-        org_id: str, clusters: list[dict[str, Any]]
+    async def _fire_incident_hooks(
+        org_id: str,
+        clusters: list[dict[str, Any]],
+        members: list[dict[str, Any]],
     ) -> None:
-        """Fire ``PromotionHook.on_drift_alert`` for clusters
-        that meet the severity + size threshold.
+        """Fire ``IncidentHook.on_clustered`` for clusters that meet
+        the severity + size threshold (G4).
 
-        A high-severity cluster with 10+ members is a strong
-        signal that something has regressed in production; the
-        closed-loop hook is the right place to surface that to
-        the canary / rollback system. In stub mode the hook is
-        a no-op logger; a real implementation would let the
-        canary auto-rollback.
+        A high-severity cluster with 10+ members is a strong signal
+        that something regressed in production. The correct closed-loop
+        entry point is ``IncidentHook.on_clustered`` (action_kind
+        ``investigate``) — the previous code called
+        ``PromotionHook.on_drift_alert`` (action_kind ``rollback_canary``)
+        as a fire-and-forget sync call, which (a) never triaged and
+        (b) leaked an un-awaited coroutine. ``on_drift_alert`` is
+        reserved for genuine rollback semantics (a stricter, separate
+        threshold) so we do not auto-rollback on every large cluster.
         """
+        # Pre-index sample trace ids per cluster (cap 5) for the hook.
+        samples: dict[str, list[str]] = {}
+        for m in members:
+            cid = m.get("cluster_id")
+            if not cid:
+                continue
+            bucket = samples.setdefault(cid, [])
+            if len(bucket) < 5 and m.get("trace_id"):
+                bucket.append(str(m["trace_id"]))
+
         for c in clusters:
             severity = c.get("severity")
             count = c.get("member_count", 0)
-            if severity in ("critical", "high") and count >= 10:
+            if severity not in ("critical", "high") or count < 10:
+                continue
+            cluster_id = str(c.get("id") or "")
+            if not cluster_id:
+                continue
+            try:
+                from eden.llmops.promotion_hooks import get_incident_hook
+
+                await get_incident_hook().on_clustered(
+                    org_id,
+                    cluster_id=cluster_id,
+                    trace_count=int(count),
+                    sample_trace_ids=samples.get(cluster_id, []),
+                )
+            except Exception as exc:
+                logger.debug(
+                    "clusterer: on_clustered failed: %s", exc
+                )
+
+            # Reserve on_drift_alert for a stricter rollback threshold:
+            # only critical clusters with a large blast radius trip the
+            # canary rollback path.
+            if severity == "critical" and count >= 30:
                 try:
                     from eden.llmops.promotion_hooks import (
                         get_promotion_hook,
                     )
-                    hook = get_promotion_hook()
-                    hook.on_drift_alert(
+
+                    await get_promotion_hook().on_drift_alert(
                         org_id,
                         drift_type="incident_cluster",
                         severity=severity,

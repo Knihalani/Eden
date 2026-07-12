@@ -105,6 +105,13 @@ export function ChatSidebar() {
     window.sessionStorage.setItem("eden:ai-sidebar:open", open ? "1" : "0");
   }, [open]);
 
+  // Cmd-J (from portal layout) toggles this panel.
+  useEffect(() => {
+    const onToggle = () => setOpen((v) => !v);
+    window.addEventListener("eden:toggle-ai-chat", onToggle);
+    return () => window.removeEventListener("eden:toggle-ai-chat", onToggle);
+  }, []);
+
   // ponytail: Esc closes the chat. Saves the user from hunting for
   // the close button when the chat covers the right side of the page.
   useEffect(() => {

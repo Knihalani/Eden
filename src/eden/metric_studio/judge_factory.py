@@ -129,7 +129,10 @@ class RubricJudge(Judge):
         override for narrower scoping, but the v1.3 ship
         defaults to "any LLM event the customer is sending
         through the registry"."""
-        return super().matches(event)
+        if not super().matches(event):
+            return False
+        from eden.llmops.judges._sampling import production_sample_matches
+        return production_sample_matches(event)
 
     async def score(
         self, event: TelemetryEvent, ctx: JudgeContext
