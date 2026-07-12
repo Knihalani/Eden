@@ -48,7 +48,8 @@ export function ConnectStep() {
     }
     setCallbackNotice(notice);
 
-    // Drop one-shot callback params so a refresh does not re-show the banner.
+    // Drop one-shot callback params so a refresh does not re-show the
+    // banner or re-trigger claim / auto-integrate (duplicate PRs).
     if (
       typeof window !== "undefined" &&
       (idStr || setupAction || errCode)
@@ -56,9 +57,7 @@ export function ConnectStep() {
       const url = new URL(window.location.href);
       url.searchParams.delete("error");
       url.searchParams.delete("setup_action");
-      if (!idStr) {
-        url.searchParams.delete("installation_id");
-      }
+      url.searchParams.delete("installation_id");
       window.history.replaceState({}, "", url.pathname + url.search);
     }
   }, [searchParams]);

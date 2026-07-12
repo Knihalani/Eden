@@ -87,6 +87,7 @@ export default function OnboardingLayout({ children }: { children: React.ReactNo
         progressBar={<OnboardingProgressBar />}
         skipHref="/dashboard"
         hideBottomNavOn={[
+          "/onboarding",
           "/onboarding/connect",
           "/onboarding/wait",
           "/onboarding/install",

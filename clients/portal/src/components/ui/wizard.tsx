@@ -234,7 +234,7 @@ export function Wizard({
     // (portal) layout's existing document-scroll handles overflow
     // (FIX-A / FIX-B). The body keeps `flex-1` so on short pages
     // the body still takes any leftover vertical space.
-    <div className="flex flex-col bg-[var(--bg-primary)] text-[var(--text-primary)] min-h-[calc(100dvh-3.5rem)]">
+    <div className="flex flex-col bg-[var(--bg-primary)] text-[var(--text-primary)] min-h-dvh">
       {/* Top bar — compact: single line, h-12 */}
       <div className="flex h-12 items-center border-b border-[var(--border-default)] bg-[var(--bg-secondary)] px-6">
         <div className="mx-auto flex w-full max-w-3xl items-center justify-between">
