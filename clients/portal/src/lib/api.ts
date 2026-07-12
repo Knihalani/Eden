@@ -106,6 +106,27 @@ async function fetchApi<T>(
   // documented imperative escape hatch for cases like ours where
   // the call site lives inside an async helper outside the React
   // render tree.
+  const getClerkBearer = async (
+    opts?: { skipCache?: boolean },
+  ): Promise<string | null> => {
+    try {
+      const clerk = (
+        window as unknown as {
+          Clerk?: {
+            session?: {
+              touch?: () => Promise<unknown>;
+              getToken?: (opts?: { skipCache?: boolean }) => Promise<string | null>;
+            };
+          };
+        }
+      ).Clerk;
+      if (!clerk?.session?.getToken) return null;
+      return (await clerk.session.getToken(opts)) ?? null;
+    } catch {
+      return null;
+    }
+  };
+
   const refreshClerkToken = async (): Promise<boolean> => {
     try {
       const clerk = (
@@ -138,6 +159,19 @@ async function fetchApi<T>(
       };
       if (!(body instanceof FormData) && !stream) {
         (requestHeaders as Record<string, string>)["Content-Type"] = "application/json";
+      }
+      // Attach the client Clerk session JWT when available. Right
+      // after sign-up the Next.js ``auth().getToken()`` in the
+      // proxy can still be null while ``window.Clerk.session``
+      // already has a token — without this header `/auth/me`
+      // 401s and the portal shows "Session expired" until reload.
+      const existingAuth = (requestHeaders as Record<string, string>)["Authorization"]
+        ?? (requestHeaders as Record<string, string>)["authorization"];
+      if (!existingAuth) {
+        const bearer = await getClerkBearer();
+        if (bearer) {
+          (requestHeaders as Record<string, string>)["Authorization"] = `Bearer ${bearer}`;
+        }
       }
       const controller = new AbortController();
       let timer: ReturnType<typeof setTimeout> | undefined;

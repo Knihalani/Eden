@@ -115,24 +115,23 @@ async function handle(
     }
   }
 
-  // Resolve the Clerk session token server-side and forward it as a
-  // Bearer header. ``getToken()`` returns null when the caller isn't
-  // signed in via Clerk; in that case we fall back to the request's
-  // own ``Authorization`` header (CLI / SDK callers that POST
-  // ``Authorization: Bearer <api-key>`` directly to /api/proxy/*).
-  // If neither is set we leave the Authorization header unset so the
-  // legacy Eden cookie path can still serve the request.
+  // Prefer a caller-supplied Authorization header (portal ``fetchApi``
+  // attaches the client Clerk JWT). Right after sign-up,
+  // ``auth().getToken()`` can still be null while ``window.Clerk``
+  // already has a session — preferring the request header avoids the
+  // false "Session expired" banner until hard reload.
   let authorization: string | undefined;
-  try {
-    const { getToken } = await auth();
-    const token = await getToken();
-    if (token) authorization = `Bearer ${token}`;
-  } catch {
-    // Clerk not configured / signed out — fall through to caller-supplied auth.
-  }
-  if (!authorization) {
-    const callerAuth = request.headers.get("authorization");
-    if (callerAuth) authorization = callerAuth;
+  const callerAuth = request.headers.get("authorization");
+  if (callerAuth) {
+    authorization = callerAuth;
+  } else {
+    try {
+      const { getToken } = await auth();
+      const token = await getToken();
+      if (token) authorization = `Bearer ${token}`;
+    } catch {
+      // Clerk not configured / signed out — leave unset for cookie path.
+    }
   }
 
   try {

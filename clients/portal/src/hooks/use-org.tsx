@@ -94,7 +94,30 @@ export function OrgProvider({ children }: { children: ReactNode }) {
     if (authErrorRef.current) return;
     setLoading(true);
     try {
-      const me = await api.getMe();
+      // Post-signup handoff: Clerk client may report a user before
+      // the session JWT is forwardable. Retry transient 401s with
+      // short backoff instead of painting "Session expired" on the
+      // first paint (hard-reload used to be the only recovery).
+      const delays = [0, 300, 800];
+      let me: Awaited<ReturnType<typeof api.getMe>> | null = null;
+      let lastErr: unknown = null;
+      for (const ms of delays) {
+        if (ms > 0) await new Promise((r) => setTimeout(r, ms));
+        try {
+          me = await api.getMe();
+          lastErr = null;
+          break;
+        } catch (e) {
+          lastErr = e;
+          const status = e instanceof ApiError ? e.status : undefined;
+          const raw = e instanceof Error ? e.message : "";
+          const is401 =
+            status === 401 ||
+            /401|not\s*authenticated|authentication\s*required|unauthorized/i.test(raw);
+          if (!is401) break;
+        }
+      }
+      if (!me) throw lastErr ?? new Error("Failed to load orgs");
       const enrichedOrgs: Organization[] = me.organizations ?? [];
       setOrganizations(enrichedOrgs);
 
@@ -136,6 +159,9 @@ export function OrgProvider({ children }: { children: ReactNode }) {
       // /auth/me returning 200 with valid user data but the banner
       // still visible — this is the cause.
       setAuthError(null);
+      if (typeof window !== "undefined") {
+        window.sessionStorage.removeItem("eden:auth:error");
+      }
     } catch (e) {
       // Only emit a console error for genuinely unexpected failures
       // (anything that isn't a known transient / handled class).
@@ -174,10 +200,22 @@ export function OrgProvider({ children }: { children: ReactNode }) {
         status === 401 ||
         /401|not\s*authenticated|authentication\s*required|unauthorized/i.test(rawMessage)
       ) {
-        message = "Session expired. Please sign in again.";
+        // After internal retries still 401: first failure is a soft
+        // handoff race (common right after signup). Do NOT set
+        // authError — that would sticky-banner "Session expired" and
+        // also bail the 5s poll via authErrorRef. Mark once in
+        // sessionStorage; a later failure becomes the hard banner.
+        const alreadyExpired =
+          typeof window !== "undefined" &&
+          window.sessionStorage.getItem("eden:auth:error") === "session_expired";
         if (typeof window !== "undefined") {
           window.sessionStorage.setItem("eden:auth:error", "session_expired");
         }
+        if (!alreadyExpired) {
+          // Keep chrome usable; poll / Retry will re-hit /auth/me.
+          return;
+        }
+        message = "Session expired. Please sign in again.";
       } else if (/user\s*not\s*found/i.test(rawMessage)) {
         // June 22 2026 fix: this used to leak raw "User not found"
         // to the dashboard after a Clerk signup when the webhook

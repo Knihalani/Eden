@@ -582,12 +582,18 @@ def _build_settings_class():
         # installation tokens. All four fields are optional — when any are
         # missing, the wizard's "Connect GitHub" step gracefully degrades
         # to a "Skip — integrate manually" path.
+        #
+        # ``github_app_slug`` is the URL-friendly name in
+        # ``https://github.com/apps/<slug>/installations/new``. It is NOT
+        # the OAuth client id (``Iv23…``) — confusing those two produces
+        # a GitHub 404. Eden cloud default: ``eden-observability``.
         github_app_id: str = ""
         github_app_client_id: str = ""
         github_app_client_secret: str = ""
         github_app_private_key: str = ""  # PEM-encoded; multi-line OK in .env
         github_app_webhook_secret: str = ""
-        github_app_callback_url: str = ""  # e.g. https://portal.example.com/onboarding/connect
+        github_app_slug: str = ""  # e.g. eden-observability
+        github_app_callback_url: str = ""  # e.g. https://edenobservability.com/onboarding/connect
 
         # ── Trace-quality / quality-pipeline activation (N14) ───────────
         # These gate the trace-quality wiring (``install_all()``) and the

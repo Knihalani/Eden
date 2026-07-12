@@ -131,6 +131,18 @@ class GitHubAPIError(RuntimeError):
         self.response_body = response_body
 
 
+# Eden's production GitHub App URL slug. Used only when
+# ``GITHUB_APP_SLUG`` is unset — never fall back to the OAuth
+# client id (``Iv23…``), which is what previously 404'd installs.
+_DEFAULT_EDEN_APP_SLUG = "eden-observability"
+
+
+def _looks_like_client_id(value: str) -> bool:
+    """True for OAuth App / GitHub App client ids (``Iv1…`` / ``Iv23…``)."""
+    v = (value or "").strip()
+    return v.startswith("Iv1") or v.startswith("Iv23")
+
+
 class GitHubOAuthClient:
     """Thin wrapper around the four GitHub App endpoints we use.
 
@@ -147,13 +159,16 @@ class GitHubOAuthClient:
         client_secret: str | None = None,
         private_key: str | None = None,
         callback_url: str | None = None,
+        app_slug: str | None = None,
     ) -> None:
         s = get_settings()
         self.app_id = app_id or getattr(s, "github_app_id", "")
         self.client_id = client_id or getattr(s, "github_app_client_id", "")
         self.client_secret = client_secret or getattr(s, "github_app_client_secret", "")
         self.private_key = private_key or getattr(s, "github_app_private_key", "")
-        self.callback_url = callback_url or getattr(s, "github_app_callback_url", "")
+        self.app_slug = (app_slug if app_slug is not None else getattr(s, "github_app_slug", "")) or ""
+        raw_callback = callback_url if callback_url is not None else getattr(s, "github_app_callback_url", "")
+        self.callback_url = self._resolve_callback_url(raw_callback or "", s)
 
         if not is_configured():
             raise GitHubConfigError(
@@ -161,6 +176,41 @@ class GitHubOAuthClient:
                 "GITHUB_APP_CLIENT_ID, GITHUB_APP_CLIENT_SECRET, and "
                 "GITHUB_APP_PRIVATE_KEY in the environment."
             )
+
+    @staticmethod
+    def _resolve_callback_url(configured: str, settings: Any) -> str:
+        """Portal callback GitHub redirects to after App install.
+
+        Prefer ``GITHUB_APP_CALLBACK_URL``. When empty (common misconfig
+        that produced ``redirect_uri=``), fall back to
+        ``{APP_URL|PORTAL_BASE_URL}/onboarding/connect`` — the route
+        that claims the installation via
+        ``POST /orgs/{id}/github/installations/claim``.
+        """
+        url = (configured or "").strip()
+        if url:
+            return url
+        base = (
+            getattr(settings, "app_url", "")
+            or getattr(settings, "portal_base_url", "")
+            or ""
+        ).rstrip("/")
+        if base and "example.com" not in base:
+            return f"{base}/onboarding/connect"
+        # Last-resort Eden cloud default so prod never ships an empty
+        # redirect_uri even when APP_URL is still the placeholder.
+        return "https://edenobservability.com/onboarding/connect"
+
+    def resolve_app_slug(self) -> str:
+        """Human-readable GitHub App slug for install URLs.
+
+        Never returns an OAuth client id — those look like ``Iv23…``
+        and produce ``github.com/apps/Iv23…`` 404s.
+        """
+        slug = (self.app_slug or "").strip()
+        if slug and not _looks_like_client_id(slug):
+            return slug
+        return _DEFAULT_EDEN_APP_SLUG
 
     # ----------- authorize URL ---------------------------------------
 
@@ -171,16 +221,16 @@ class GitHubOAuthClient:
         ``state`` is the CSRF token the caller should generate via
         :func:`new_state_token` and persist on the session.
         """
-        # GitHub App installation URLs use the app slug, but the
-        # canonical "install on a new account" link is the public
-        # `/apps/{slug}/installations/new` URL. Apps can also be
-        # installed via the OAuth flow if the App is marked
-        # "Request user authorization during installation".
-        app_slug = self.client_id  # GitHub Apps publish via slug, not app_id
-        params = {
-            "state": state,
-            "redirect_uri": self.callback_url,
-        }
+        # Install URLs require the *slug* (``eden-observability``), not
+        # the numeric App ID and not the OAuth client id (``Iv23…``).
+        # See https://docs.github.com/en/apps/sharing-github-apps
+        app_slug = self.resolve_app_slug()
+        params: dict[str, str] = {"state": state}
+        # Only include redirect_uri when non-empty. An empty
+        # ``redirect_uri=`` confuses operators and some GitHub flows;
+        # when set, it must match a Callback URL registered on the App.
+        if self.callback_url:
+            params["redirect_uri"] = self.callback_url
         return f"{GITHUB_INSTALLATION_BASE}/{app_slug}/installations/new?{urlencode(params)}"
 
     @staticmethod

@@ -63,10 +63,12 @@ The manifest (`northflank.yml`) lists every non-secret env var. Below is the *ch
 | `TINYBIRD_BRANCH_TOKEN` | Tinybird dev branch | Per-branch token |
 | `SENTRY_DSN` | https://sentry.io/settings/eden/dsn/ | Optional; safe to leave empty |
 | `GITHUB_APP_ID` | GitHub App settings | Numeric string |
-| `GITHUB_APP_CLIENT_ID` | GitHub App settings | `Iv23li…` |
+| `GITHUB_APP_CLIENT_ID` | GitHub App settings | `Iv23li…` (OAuth client id — NOT the install URL slug) |
 | `GITHUB_APP_CLIENT_SECRET` | GitHub App settings | Generated secret |
 | `GITHUB_APP_PRIVATE_KEY` | GitHub App → Private key | Full PEM block, newlines preserved |
 | `GITHUB_APP_WEBHOOK_SECRET` | GitHub App → Webhook secret | 32+ hex |
+| `GITHUB_APP_SLUG` | GitHub App public page URL | Human slug, e.g. `eden-observability` (`github.com/apps/<slug>`) — never `Iv23…` |
+| `GITHUB_APP_CALLBACK_URL` | Portal callback after install | `https://edenobservability.com/onboarding/connect` |
 
 **Placeholders you MUST replace in `northflank.yml` before applying:**
 

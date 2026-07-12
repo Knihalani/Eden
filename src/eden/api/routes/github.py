@@ -263,9 +263,15 @@ def _wizard_step_to_v2(step: str) -> str | None:
 @public_router.get("/configured", response_model=ConfiguredResponse)
 async def github_configured() -> ConfiguredResponse:
     """Public — does this Eden instance have a GitHub App wired up?"""
+    slug: str | None = None
+    if is_configured():
+        try:
+            slug = GitHubOAuthClient().resolve_app_slug()
+        except GitHubConfigError:
+            slug = None
     return ConfiguredResponse(
         configured=is_configured(),
-        app_slug=getattr(settings, "github_app_client_id", None) or None,
+        app_slug=slug,
     )
 
 
