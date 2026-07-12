@@ -1,13 +1,10 @@
 "use client";
 
 /**
- * OnboardingChecklist — cold-start progress card aligned with the
- * Cat-23 wizard SoT (LP-11 / OnboardingBanner):
- *   welcome → connect → install → done
+ * OnboardingChecklist — optional progress list for non-wizard surfaces.
  *
- * Uses ``onboardingApi`` (same machine as the banner). The D.14 v2
- * 7-step vocabulary is intentionally not rendered here so the
- * checklist cannot disagree with the banner.
+ * Uses the same ``lib/onboarding-progress`` SoT as the banner + wizard.
+ * Not rendered inside the wizard welcome step (avoids dual counters).
  */
 
 import { useEffect, useState } from "react";
@@ -15,48 +12,11 @@ import Link from "next/link";
 import { Check, Circle, Loader2, Lock } from "lucide-react";
 import { useOrg } from "@/hooks/use-org";
 import { onboardingApi, type OnboardingState } from "@/lib/api";
+import {
+  formatOnboardingProgress,
+  ONBOARDING_PROGRESS_STEPS,
+} from "@/lib/onboarding-progress";
 import { cn } from "@/lib/utils";
-
-const STEPS: Array<{
-  id: string;
-  label: string;
-  description: string;
-  href: string;
-}> = [
-  {
-    id: "welcome",
-    label: "Welcome",
-    description: "Get started with Eden.",
-    href: "/onboarding",
-  },
-  {
-    id: "connect",
-    label: "Connect a repo",
-    description: "Open an SDK integration PR (optional for members).",
-    href: "/onboarding/connect",
-  },
-  {
-    id: "install",
-    label: "Install the SDK",
-    description: "Copy the configure snippet into your agent.",
-    href: "/onboarding/install",
-  },
-  {
-    id: "done",
-    label: "Done",
-    description: "Explore the dashboard and traces.",
-    href: "/onboarding/done",
-  },
-];
-
-/** Map cat-23 / legacy step ids onto the simplified wizard order. */
-function wizardStepIndex(step: string | null | undefined): number {
-  const s = (step || "welcome").toLowerCase();
-  if (s === "done") return 3;
-  if (s === "install" || s === "install_sdk" || s === "wait" || s === "wait_for_pr") return 2;
-  if (s === "connect" || s === "connect_github") return 1;
-  return 0;
-}
 
 export function OnboardingChecklist() {
   const { currentOrg } = useOrg();
@@ -93,11 +53,12 @@ export function OnboardingChecklist() {
     );
   }
 
-  const currentIdx = wizardStepIndex(state.step);
+  const progress = formatOnboardingProgress(state.step);
+  const currentIdx = progress.index;
 
   return (
     <ol className="space-y-2">
-      {STEPS.map((step, i) => {
+      {ONBOARDING_PROGRESS_STEPS.map((step, i) => {
         const done = i < currentIdx || state.step === "done";
         const active = i === currentIdx && state.step !== "done";
         const blocked = i > currentIdx + 1;
@@ -143,19 +104,19 @@ export function OnboardingChecklist() {
                 {i + 1}. {step.label}
               </div>
               <div className="mt-0.5 text-xs text-[var(--text-muted)]">
-                {step.description}
+                {step.blurb}
               </div>
             </div>
             {active && (
               <Link
                 href={step.href}
-                className="rounded-full bg-[var(--accent)]/20 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[var(--accent)] hover:bg-[var(--accent)]/30"
+                className="rounded-md border border-[var(--accent)]/40 bg-[var(--accent)]/10 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-[var(--accent)] hover:bg-[var(--accent)]/20"
               >
                 Resume
               </Link>
             )}
             {done && (
-              <span className="rounded-full bg-[var(--accent)]/20 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[var(--accent)]">
+              <span className="rounded-md bg-[var(--accent)]/10 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-[var(--accent)]">
                 Done
               </span>
             )}
@@ -166,4 +127,4 @@ export function OnboardingChecklist() {
   );
 }
 
-export { STEPS as ONBOARDING_CHECKLIST_STEPS };
+export { ONBOARDING_PROGRESS_STEPS as ONBOARDING_CHECKLIST_STEPS };

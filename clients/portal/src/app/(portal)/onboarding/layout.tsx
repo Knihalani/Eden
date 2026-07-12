@@ -1,18 +1,21 @@
 "use client";
 
 /**
- * /onboarding/* — streamlined setup wizard (Jul 2026 overhaul).
+ * /onboarding/* — setup wizard chrome.
  *
  * Clerk creates the workspace during signup; Eden syncs it on the first
- * /auth/me. No redundant "create org" step in the main path.
+ * /auth/me. Flow URLs: Welcome → Connect → (Wait) → Install → Done.
  *
- * Flow: Welcome → Connect repo → (Wait for PR, if opened) → Install SDK → Done
- *
- * Progress chrome (banner + checklist) collapses wait into the install
- * slot so LP-11 SoT stays welcome → connect → install → done.
+ * Progress chrome uses ``lib/onboarding-progress`` (3-step display) so
+ * the wizard never disagrees with the global banner outside this route.
  */
 
+import { usePathname } from "next/navigation";
 import { Wizard, type WizardStep } from "@/components/ui/wizard";
+import {
+  formatOnboardingProgress,
+  ONBOARDING_PROGRESS_TOTAL,
+} from "@/lib/onboarding-progress";
 
 const STEPS: WizardStep[] = [
   {
@@ -26,6 +29,8 @@ const STEPS: WizardStep[] = [
     slug: "/onboarding/connect",
     label: "Connect repo",
     optional: true,
+    // Skip / Next without a PR → install. Completing integrate hard-navs
+    // to /onboarding/wait from the step body.
     onNext: () => "/onboarding/install",
   },
   {
@@ -48,6 +53,29 @@ const STEPS: WizardStep[] = [
   },
 ];
 
+function OnboardingProgressBar() {
+  const pathname = usePathname() || "/onboarding";
+  const progress = formatOnboardingProgress(pathname, { fromPath: true });
+  const pct = (progress.current / Math.max(ONBOARDING_PROGRESS_TOTAL, 1)) * 100;
+
+  return (
+    <>
+      <div className="mb-1 flex items-center justify-between text-[11px] text-[var(--text-muted)]">
+        <span>
+          Step {progress.current} of {progress.total}
+          {progress.label ? ` · ${progress.label}` : ""}
+        </span>
+      </div>
+      <div className="h-0.5 w-full overflow-hidden rounded-full bg-[var(--bg-tertiary)]">
+        <div
+          className="h-full bg-[var(--accent)] transition-all duration-300"
+          style={{ width: `${pct}%` }}
+        />
+      </div>
+    </>
+  );
+}
+
 export default function OnboardingLayout({ children }: { children: React.ReactNode }) {
   return (
     <div data-route="onboarding" className="contents">
@@ -56,6 +84,8 @@ export default function OnboardingLayout({ children }: { children: React.ReactNo
         storageKey="eden:onboarding"
         completeSlug="/onboarding/done"
         brand={{ name: "Eden", tagline: "setup" }}
+        progressBar={<OnboardingProgressBar />}
+        skipHref="/dashboard"
       >
         {children}
       </Wizard>

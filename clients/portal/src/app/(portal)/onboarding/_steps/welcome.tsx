@@ -12,7 +12,6 @@ import { ArrowRight, KeyRound, Loader2, UserPlus } from "lucide-react";
 import { useOrganization } from "@clerk/nextjs";
 import { useOrg } from "@/hooks/use-org";
 import { onboardingApi } from "@/lib/api";
-import { OnboardingChecklist } from "@/components/onboarding-checklist";
 
 export function WelcomeStep() {
   const { currentOrg, orgSyncing, orgSyncTimedOut, refreshOrgs } = useOrg();
@@ -97,10 +96,7 @@ export function WelcomeStep() {
         </div>
       )}
 
-      <OnboardingChecklist />
-
-      {!hasWorkspace && !isProvisioning && (
-        <div className="rounded-lg border border-dashed border-[var(--border-default)] bg-[var(--bg-secondary)]/50 p-4">
+      {!hasWorkspace && !isProvisioning && (        <div className="rounded-lg border border-dashed border-[var(--border-default)] bg-[var(--bg-secondary)]/50 p-4">
           <div className="mb-2 text-xs font-medium text-[var(--text-secondary)]">
             Joining a team?
           </div>

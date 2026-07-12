@@ -249,7 +249,7 @@ export default function DashboardPage() {
         actions={
           canConnect ? (
             <Link
-              href="/agents/connect"
+              href={isFirstRun ? "/onboarding/connect" : "/agents/connect"}
               className="inline-flex items-center gap-1.5 px-3 py-2 bg-[var(--accent)] text-[var(--accent-foreground)] rounded-lg text-sm font-medium hover:bg-[var(--accent-hover)] transition-colors"
             >
               <GitBranch className="w-3.5 h-3.5" />

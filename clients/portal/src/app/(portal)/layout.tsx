@@ -51,6 +51,7 @@ import { OnboardingBanner } from "@/components/onboarding-banner";
 import { BudgetTicker } from "@/components/budget-ticker";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { isKnownPortalPath } from "@/lib/portal-routes";
+import { isOnboardingWizardPath } from "@/lib/onboarding-progress";
 
 const SIDEBAR_EXPANDED_WIDTH = 240;
 const SIDEBAR_COLLAPSED_WIDTH = 64;
@@ -114,8 +115,15 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
   return (
     <Suspense
       fallback={
-        <div className="min-h-[100dvh] bg-[var(--bg-base)] flex items-center justify-center">
-          <Loader2 className="w-6 h-6 animate-spin text-[var(--accent)]" aria-hidden />
+        <div
+          className="min-h-[100dvh] bg-[var(--bg-secondary)] flex flex-col items-center justify-center gap-3"
+          aria-busy="true"
+          aria-label="Loading portal"
+        >
+          <div className="h-px w-16 bg-[var(--border-default)]" />
+          <p className="text-[10px] font-mono uppercase tracking-[0.2em] text-[var(--text-muted)]">
+            Loading
+          </p>
         </div>
       }
     >
@@ -340,9 +348,10 @@ function PortalLayoutContent({ children }: { children: React.ReactNode }) {
     return <>{children}</>;
   }
   if (loading) {
-    // LP-19: quiet chrome skeleton — structure without a jarring
-    // full-viewport spinner. Soft pulse bars only; status copy is
-    // muted so the handoff to real chrome feels continuous.
+    // LP-19: calm instrument-panel chrome — quiet structure, no
+    // shimmer cascade or full-viewport spinner. Soft static bars
+    // match the real sidebar/header silhouette so the handoff feels
+    // continuous rather than a jarring skeleton flash.
     return (
       <div
         className="min-h-screen flex flex-col lg:flex-row bg-[var(--bg-secondary)]"
@@ -355,29 +364,41 @@ function PortalLayoutContent({ children }: { children: React.ReactNode }) {
           style={{ width: SIDEBAR_EXPANDED_WIDTH }}
           aria-hidden="true"
         >
-          <div className="flex items-center border-b border-[var(--border-default)] shrink-0 h-14 px-4 gap-2">
-            <div className="w-8 h-8 bg-[var(--bg-tertiary)] rounded-md opacity-70" />
-            <div className="h-2.5 w-16 bg-[var(--bg-tertiary)] rounded opacity-60" />
+          <div className="flex items-center border-b border-[var(--border-default)] shrink-0 h-14 px-4 gap-2.5">
+            <div className="w-7 h-7 rounded border border-[var(--border-default)] bg-[var(--bg-secondary)]" />
+            <div className="h-2 w-14 rounded-sm bg-[var(--bg-tertiary)]/80" />
           </div>
-          <div className="flex-1 p-3 space-y-2.5">
-            {[0, 1, 2, 3].map((i) => (
+          <div className="flex-1 px-3 py-4 space-y-1.5">
+            {[72, 56, 64, 48].map((w, i) => (
               <div
                 key={i}
-                className="h-7 bg-[var(--bg-tertiary)] rounded-md opacity-50"
-                style={{ width: `${62 + (i % 3) * 12}%` }}
+                className="h-6 rounded-md bg-[var(--bg-tertiary)]/40"
+                style={{ width: `${w}%` }}
               />
             ))}
+            <div className="pt-4 mt-2 border-t border-[var(--border-default)]/60 space-y-1.5">
+              {[40, 52].map((w, i) => (
+                <div
+                  key={`sec-${i}`}
+                  className="h-5 rounded-md bg-[var(--bg-tertiary)]/30"
+                  style={{ width: `${w}%` }}
+                />
+              ))}
+            </div>
           </div>
         </aside>
 
         <main className="flex-1 min-w-0 flex flex-col">
           <header className="h-14 border-b border-[var(--border-default)] bg-[var(--bg-primary)] flex items-center justify-between px-6">
-            <div className="h-2.5 w-32 bg-[var(--bg-tertiary)] rounded opacity-50" />
-            <div className="h-7 w-7 bg-[var(--bg-tertiary)] rounded-md opacity-40" />
+            <div className="h-2 w-28 rounded-sm bg-[var(--bg-tertiary)]/50" />
+            <div className="flex items-center gap-2">
+              <div className="h-6 w-6 rounded border border-[var(--border-default)] bg-[var(--bg-secondary)]" />
+            </div>
           </header>
-          <div className="flex-1 flex items-start justify-center pt-24 px-6">
-            <p className="text-xs text-[var(--text-muted)] tracking-wide">
-              Signing you in…
+          <div className="flex-1 flex flex-col items-center justify-center gap-3 px-6">
+            <div className="h-px w-16 bg-[var(--border-default)]" />
+            <p className="text-[10px] font-mono uppercase tracking-[0.2em] text-[var(--text-muted)]">
+              Signing you in
             </p>
           </div>
         </main>
@@ -394,7 +415,14 @@ function PortalLayoutContent({ children }: { children: React.ReactNode }) {
   // Without this, every page stays in its loading skeleton because
   // `currentOrg` never resolves. June 2026 fix.
   const showAuthBanner = !loading && user && authError;
-  const showOrgSyncingBanner = !loading && user && orgSyncing && !authError;
+  // Don't stack the sync banner on top of the wizard — welcome already
+  // shows a sync status card, and dual sticky chrome blocks the CTA.
+  const showOrgSyncingBanner =
+    !loading &&
+    user &&
+    orgSyncing &&
+    !authError &&
+    !isOnboardingWizardPath(pathname);
 
   const breadcrumbs = buildBreadcrumbs(pathname);
   const { pinnedItems, groups } = applySidebarPrefs(prefs, advancedCollapsed);
