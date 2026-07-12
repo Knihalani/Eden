@@ -55,26 +55,31 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       const status = e instanceof ApiError ? e.status : undefined;
-      // 404 = endpoint not deployed yet (pre-launch). 5xx during the
-      // post-signup auto-provision race is transient — swallow and
-      // let the next poll succeed once /auth/me has created the row.
-      // Match on status OR message: toUserFacingError strips "500" /
-      // "unexpected error" from the message in production.
-      const isTransient =
-        (typeof status === "number" && status >= 500) ||
+      // 404 = endpoint not deployed yet (pre-launch) — swallow so
+      // polling stays quiet. 5xx must re-throw so ``usePolling``
+      // applies exponential backoff (LP-21); swallowing caused a
+      // steady storm against a broken backend.
+      const isNotFound =
         status === 404 ||
-        /404|not\s*found|5\d\d|unexpected\s*error|having\s*trouble\s*reaching/i.test(msg);
-      if (isTransient) {
+        /404|not\s*found/i.test(msg);
+      if (isNotFound) {
         setNotifications([]);
         setUnreadCount(0);
         setError(null);
         return;
       }
-      // For other errors, log + clear state + re-throw so
-      // ``usePolling`` can apply backoff / permanent auth-bail.
+      const isServerError =
+        (typeof status === "number" && status >= 500) ||
+        /5\d\d|unexpected\s*error|having\s*trouble\s*reaching|Backend (unreachable|timed out)/i.test(
+          msg,
+        );
       console.error("Failed to load notifications:", e);
       setNotifications([]);
       setUnreadCount(0);
+      if (isServerError) {
+        setError(null);
+        throw e;
+      }
       setError("Failed to load notifications");
       throw e;
     }

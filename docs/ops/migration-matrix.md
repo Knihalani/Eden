@@ -115,6 +115,13 @@
 | 081 | org_cost_overrides | yes | forever | none | medium | §6.1 per-tenant contract rates (D.4+) | v3.0 |
 | 082 | org_cost_overrides (cache read/write cols) | yes | forever | none | low | §6.1 cache-discount contract rates | v3.0 |
 | 083 | fix_pr_rejection_memory_index | yes | forever | none | low | Drop invalid partial index using NOW() on pr_rejection_memory | v3.0 |
+| 084 | agent_stumbles + agent_issues | yes | forever | none | low | F28/F29 closed-loop issues layer | Autopilot |
+| 085 | issue_state_transitions | yes | forever | none | low | F46 closed-loop audit trail | Autopilot |
+| 086 | autonomy_policies + autonomy_audit_log | yes | forever | none | low | N22 autonomy safety envelope | Autopilot |
+| 087 | issue_verifications | yes | forever | none | low | F46 verify loop | Autopilot |
+| 088 | org_members.last_writer_source | yes | forever | none | medium | Port migrations/039 last_writer_source | Autopilot |
+| 089 | trace_sampling_summaries + span_content_blobs | yes | forever | none | low | N16/N09 cost platform | Autopilot |
+| 090 | nl_signals | yes | forever | none | low | F35 plain-English signals (created_by matches users.id type) | Autopilot |
 
 ## Critical-path migrations (downgrade risk = `hard`)
 

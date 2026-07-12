@@ -57,9 +57,8 @@ export function WaitStep() {
     if (!currentOrg?.id) return;
     setAdvancing(true);
     try {
-      await onboardingApi.patchState(currentOrg.id, { step: "done" });
-      // FIX-S: hard nav (see welcome.tsx) — router.push silently
-      // no-ops on this route group.
+      await onboardingApi.patchState(currentOrg.id, { step: "install_sdk" });
+      // Hard nav — router.push silently no-ops on this route group.
       window.location.assign("/onboarding/install");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Could not advance");

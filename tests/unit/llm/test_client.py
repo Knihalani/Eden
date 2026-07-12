@@ -390,7 +390,9 @@ class TestAcallUsesInProcessCache:
         # it, so the cache key must match that resolved value or
         # we'd be testing a key that never gets used in production.
         slot_cfg = c.MODEL_SLOTS["reasoning"]
-        mt = slot_cfg.max_tokens
+        # ``call`` clamps max_tokens before hashing; seed the cache
+        # with the clamped value so acall hits the same key.
+        mt = c._clamp_max_tokens(slot_cfg.max_tokens)
         key = c._cache_key(
             "anthropic/claude-3-5-sonnet-20241022",
             "hello", None, mt, temperature=0,

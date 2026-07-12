@@ -6,7 +6,7 @@
 | **Slug** | `autonomous-code-modification` |
 | **Priority** | P0 |
 | **Effort** | L |
-| **Eden status** | **PARTIAL** — scheduler + PatchGenerator shipped; not issue-scoped |
+| **Eden status** | **SHIPPED (v0)** — issue-scoped `issue_patch_trigger` + linked_files/RCA; weekly `optimization_schedule` + cron due-check; auto_pr remains opt-in (`False`). GitHub App / F22 chat still PARTIAL. |
 | **Role in autonomous maintenance** | When root cause is in the **customer's agent application code**, Eden generates and opens a fix PR — so the platform repairs the agent, not just runtime config |
 | **Dependencies** | F29, F30, F22, N22, `code_change/scheduler.py`, F41, N01, N04 |
 
@@ -33,8 +33,9 @@ Cat 23 ships a quality-gated patch scheduler (`code_change/scheduler.py`) but it
 | `proposed_patches` table | migration 023 | **SHIPPED** |
 | Review inbox | `code_change/inbox/review.py` | **SHIPPED** |
 | GitHub PR provider | `code_change/` + hooks | **PARTIAL** — needs GitHub App |
-| Issue trigger | — | **MISSING** |
-| F22 fix chat integration | — | **MISSING** |
+| Issue trigger | `code_change/issue_patch_trigger.py` | **SHIPPED (v0)** |
+| Weekly schedule + cron | `schedule_due.py` + `cron_tick._run_scheduled_optimization` | **SHIPPED (v0)** |
+| F22 fix chat integration | — | **PARTIAL** — deferred |
 
 **Org policy:** `organizations.features.code_change_policy` JSONB:
 ```json

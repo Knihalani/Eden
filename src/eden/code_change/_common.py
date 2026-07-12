@@ -206,6 +206,18 @@ DEFAULT_POLICY: dict[str, Any] = {
     "max_patches_per_day": 3,
     "max_cost_per_patch_usd": 5.0,
     "required_reviewers": ["@security-team", "@oncall"],
+    # Recurring scheduled optimization agent (default weekly).
+    # Values: off | daily | weekly | biweekly | monthly.
+    "optimization_schedule": "weekly",
+    "optimization_weekday": 0,  # Monday UTC (weekly / biweekly)
+    "optimization_hour_utc": 9,
+    "optimization_day_of_month": 1,  # monthly only
+    "max_prs_per_run": 2,
+    "candidate_sources": ["clusters", "issues", "drift"],
+    # Stamp written by cron after a successful scheduled run.
+    "last_optimization_run_at": None,
+    # Optional org spend cap (null / unset = unlimited).
+    "daily_maintenance_budget_usd": None,
 }
 
 

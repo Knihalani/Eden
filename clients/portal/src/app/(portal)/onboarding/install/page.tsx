@@ -4,6 +4,9 @@
  *
  * Comes after connect-repo (or skip). Everyone needs the SDK in their
  * agent code; repo connect is optional for members/viewers.
+ *
+ * Snippets match sdk/python + sdk/ts-ai public APIs (`configure`, not
+ * `init`) and the docs quickstart.
  */
 "use client";
 
@@ -18,36 +21,61 @@ import { ArrowRight, Check, Copy, Loader2, Package, Terminal } from "lucide-reac
 
 type Lang = "python" | "typescript";
 
-const SNIPPETS: Record<Lang, { install: string; init: (orgId: string) => string }> = {
+const SNIPPETS: Record<Lang, { install: string; configure: (orgId: string) => string }> = {
   python: {
     install: "pip install eden-sdk",
-    init: (orgId) => `import os
+    configure: (orgId) => `import os
 import eden
 
-eden.init(
+eden.configure(
     api_key=os.environ["EDEN_API_KEY"],
-    org_id=os.environ.get("EDEN_DEFAULT_ORG", "${orgId}"),
-    base_url=os.environ.get("EDEN_BASE_URL", "https://api.eden.ai"),
+    org_id=os.environ.get("EDEN_ORG_ID", "${orgId}"),
+    base_url=os.environ.get("EDEN_BASE_URL", "https://api.edenobservability.com"),
 )
 
-with eden.trace(name="hello-world") as t:
-    t.log("first eden trace")
-    t.usage(input_tokens=10, output_tokens=20, model="gpt-4o-mini")`,
+# Auto-instrument installed frameworks (OpenAI, Anthropic, LangChain, …)
+eden.instrument()
+
+@eden.trace_agent(name="hello-world", tags=["quickstart"])
+def answer(question: str) -> str:
+    from openai import OpenAI
+    client = OpenAI()
+    resp = client.chat.completions.create(
+        model="gpt-4o-mini",
+        messages=[{"role": "user", "content": question}],
+    )
+    return resp.choices[0].message.content or ""
+
+if __name__ == "__main__":
+    print(answer("Say hello in five languages"))
+    eden.get_default_client().flush()`,
   },
   typescript: {
     install: "npm install @eden-ai/sdk",
-    init: (orgId) => `import { init, trace } from "@eden-ai/sdk";
+    configure: (orgId) => `import { configure, instrument, traceAgent } from "@eden-ai/sdk";
 
-init({
+configure({
   apiKey: process.env.EDEN_API_KEY ?? "<your-api-key>",
-  orgId: process.env.EDEN_DEFAULT_ORG ?? "${orgId}",
-  baseUrl: process.env.EDEN_BASE_URL ?? "https://api.eden.ai",
+  orgId: process.env.EDEN_ORG_ID ?? "${orgId}",
+  baseUrl: process.env.EDEN_BASE_URL ?? "https://api.edenobservability.com",
 });
 
-await trace({ name: "hello-world" }, async (t) => {
-  t.log("first eden trace");
-  t.usage({ inputTokens: 10, outputTokens: 20, model: "gpt-4o-mini" });
-});`,
+instrument(); // patches OpenAI, Anthropic, Vercel AI, LangChain
+
+class Greeter {
+  @traceAgent({ name: "hello-world", tags: ["quickstart"] })
+  async greet(question: string) {
+    const OpenAI = (await import("openai")).default;
+    const client = new OpenAI();
+    const resp = await client.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: [{ role: "user", content: question }],
+    });
+    return resp.choices[0]?.message?.content;
+  }
+}
+
+await new Greeter().greet("Say hello in five languages");`,
   },
 };
 
@@ -70,7 +98,7 @@ export default function OnboardingInstallPage() {
   const snippet = useMemo(
     () => ({
       install: SNIPPETS[lang].install,
-      init: SNIPPETS[lang].init(orgId),
+      configure: SNIPPETS[lang].configure(orgId),
     }),
     [lang, orgId],
   );
@@ -162,13 +190,13 @@ export default function OnboardingInstallPage() {
         onCopy={() => copy("install", snippet.install)}
       />
 
-      {/* Init */}
+      {/* Configure */}
       <CodeBlock
-        label="init"
-        title="2. Initialise + send a trace"
-        code={snippet.init}
-        copied={copied === "init"}
-        onCopy={() => copy("init", snippet.init)}
+        label="configure"
+        title="2. Configure + send a trace"
+        code={snippet.configure}
+        copied={copied === "configure"}
+        onCopy={() => copy("configure", snippet.configure)}
       />
 
       {skipReason && (

@@ -249,9 +249,17 @@ class QuotaEnforcementMiddleware(BaseHTTPMiddleware):
         return response
 
     async def _build_quota_headers(self, org_id: str) -> dict[str, str]:
-        """Fetch budget status and return as HTTP headers."""
+        """Fetch budget status and return as HTTP headers.
+
+        Also warms ``_last_known_hard_limits`` so a subsequent
+        mutating request has a fresh snapshot (LP-10) — without
+        this, GETs (e.g. ``/auth/me``) built headers but left the
+        cache empty and mutations 429'd on "No recent quota snapshot".
+        """
         service = await self._get_usage_service()
         budget = await service.get_budget_status(org_id)
+        # Warm the enforcement cache from every successful read.
+        self._record_hard_limits(org_id, budget)
 
         headers: dict[str, str] = {}
 
@@ -296,22 +304,29 @@ class QuotaEnforcementMiddleware(BaseHTTPMiddleware):
         headline for free-tier overage; the others fall back to a generic
         resource-specific message.
 
-        DL-14 Fail-closed: on exception OR a stale cache, blocks the
-        request. The cached snapshot is rejected if older than
-        ``_BUDGET_STALENESS_LIMIT_S`` seconds.
+        LP-10: on live-fetch failure, enforce from a fresh cache when
+        available; otherwise fail-open so mutations are not stuck on
+        "No recent quota snapshot".
         """
         service = await self._get_usage_service()
         try:
             budget = await service.get_budget_status(org_id)
         except Exception as exc:
-            # Fail closed: don't fall back to a stale cache when the
-            # live fetch fails — return a generic "check failed"
-            # detail so the operator sees the blocker.
+            # LP-10: live fetch failed. If we still have a *fresh*
+            # cached snapshot, enforce against it. Otherwise fail-open
+            # — a missing/stale snapshot must not 429 every mutation
+            # (portal sidebar save, predict, investigate, …).
             logger.debug("quota: live fetch failed: %s", exc)
-            return (
-                True,
-                "Quota check failed. Reach out to support if this persists.",
+            cached = self._last_known_hard_limits.get(org_id)
+            if cached is not None:
+                ts, view = cached
+                if time.monotonic() - ts <= self._BUDGET_STALENESS_LIMIT_S:
+                    return self._evaluate_hard_limits(view.budget, resources)
+            logger.warning(
+                "quota: fail-open for org %s — no fresh snapshot after live fetch failure",
+                org_id,
             )
+            return False, ""
         return self._record_hard_limits(org_id, budget, resources)
 
     def _record_hard_limits(
@@ -351,26 +366,23 @@ class QuotaEnforcementMiddleware(BaseHTTPMiddleware):
     ) -> tuple[bool, str]:
         """Check hard limits using the cached budget snapshot.
 
-        DL-14 Fail-closed: if no cache exists, returns ``(True, ...)``
-        with a generic message. If the cache is older than
-        ``_BUDGET_STALENESS_LIMIT_S`` seconds, also returns
-        ``(True, ...)`` — a stale cache can't be trusted to enforce
-        a safety-critical cap.
+        LP-10 Fail-open on missing/stale cache: return
+        ``(False, "")`` so ``dispatch`` proceeds to the live
+        ``_check_hard_limits`` path (which warms the cache on
+        success). Only block when a *fresh* snapshot shows the
+        org is over / near a hard cap.
+
+        Previously missing cache returned 429 with
+        "No recent quota snapshot — Fail-closed…", which blocked
+        all portal mutations for orgs that had never warmed a
+        snapshot (typical free-tier / cold worker).
         """
         cached = self._last_known_hard_limits.get(org_id)
         if cached is None:
-            return (
-                True,
-                "No recent quota snapshot — Fail-closed until the next "
-                "successful check. Reach out to support if this persists.",
-            )
+            return False, ""
         ts, view = cached
         if time.monotonic() - ts > self._BUDGET_STALENESS_LIMIT_S:
-            return (
-                True,
-                "Quota snapshot is stale (Fail-closed). The next "
-                "successful check will restore enforcement.",
-            )
+            return False, ""
         return self._evaluate_hard_limits(view.budget, resources)
 
     def _budget_staleness(self, org_id: str) -> float | None:

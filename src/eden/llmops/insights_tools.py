@@ -1,26 +1,22 @@
 """Eden LLMOps — AI Insights tool registry.
 
 Server-side tools exposed to the AI Insights chat assistant. These
-are NOT exposed as public HTTP routes — they are direct DB/service
-calls invoked from the SSE chat endpoint.
+are NOT public HTTP routes — they are direct DB/service calls invoked
+from the SSE chat endpoint / unified ChatService.
 
-Each tool is a Python async function decorated with ``@insights_tool``
-so the route layer can both:
+Data sources (Capture → Analyse → Improve):
+  - ``telemetry_events`` — traces / latency / anomalies
+  - ``usage_events`` — cost
+  - ``judge_scores`` — eval scores
+  - ``agent_issues`` — grouped failures
+  - ``proposed_patches`` — PR / patch inbox
 
-  1. Render the tool in an Anthropic ``tools`` array (name +
-     description + JSON schema), and
-  2. Dispatch the tool by name when Claude emits a ``tool_use``
-     block.
-
-The data sources come from the worktree's existing PostgreSQL
-schema: ``jobs`` (the main workload table), ``code_references``
-(the org's reference library), and ``graph_entities`` /
-``skills`` / ``exploits`` (the KB layers). All are scoped to the
-caller's ``org_id`` so we never leak across tenants.
+All queries are scoped to the caller's ``org_id`` / ``tenant_id``.
 """
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import time
@@ -32,20 +28,16 @@ from eden.storage.postgres import get_postgres_client
 
 logger = logging.getLogger(__name__)
 
+# Per-process short-TTL cache so identical tool calls in one turn
+# (or back-to-back turns) do not re-hit Postgres. Keyed by
+# org + tool + args; entries expire after ``_DEDUPE_TTL_S``.
+_DEDUPE_TTL_S = 30.0
+_dedupe_cache: dict[str, tuple[float, dict[str, Any]]] = {}
+_DEDUPE_MAX = 64
+
+
 def _tool_error_text(exc: BaseException) -> str:
-    """Render an exception as a chat-safe diagnostic string.
-
-    Prefers the original ``str(exc)`` (the actual failure message)
-    because the dispatch envelope is consumed inside the chat
-    route, not by an external HTTP client — schema names +
-    provider endpoints are NOT leaks in this context. Falls back
-    to a class-name envelope if ``str(exc)`` itself blows up
-    (extremely rare; happens when ``__str__`` is buggy).
-
-    The full traceback is on the server log via ``logger.exception``
-    in the caller, so this string is purely for surfacing to the
-    chat sidebar UI.
-    """
+    """Render an exception as a chat-safe diagnostic string."""
     try:
         msg = str(exc)
     except Exception:  # noqa: BLE001 — last-ditch defensive
@@ -53,6 +45,32 @@ def _tool_error_text(exc: BaseException) -> str:
     return msg or f"{type(exc).__name__}: tool error"
 
 
+def _dedupe_key(org_id: str, name: str, input_json: dict[str, Any]) -> str:
+    raw = json.dumps(
+        {"org": org_id, "name": name, "args": input_json or {}},
+        sort_keys=True,
+        default=str,
+    )
+    return hashlib.sha256(raw.encode()).hexdigest()
+
+
+def _dedupe_get(key: str) -> dict[str, Any] | None:
+    entry = _dedupe_cache.get(key)
+    if not entry:
+        return None
+    expires_at, value = entry
+    if time.monotonic() > expires_at:
+        _dedupe_cache.pop(key, None)
+        return None
+    return value
+
+
+def _dedupe_put(key: str, value: dict[str, Any]) -> None:
+    if len(_dedupe_cache) >= _DEDUPE_MAX:
+        # Drop oldest by expiry.
+        oldest = min(_dedupe_cache.items(), key=lambda kv: kv[1][0])
+        _dedupe_cache.pop(oldest[0], None)
+    _dedupe_cache[key] = (time.monotonic() + _DEDUPE_TTL_S, value)
 
 
 # ============================================================================
@@ -60,11 +78,7 @@ def _tool_error_text(exc: BaseException) -> str:
 # ============================================================================
 
 class InsightsTool:
-    """A single server-side tool exposed to the Claude chat assistant.
-
-    The ``input_schema`` follows the Anthropic tool schema spec:
-    JSON Schema with ``type: object``, ``properties`` and ``required``.
-    """
+    """A single server-side tool exposed to the Claude chat assistant."""
 
     def __init__(
         self,
@@ -82,7 +96,6 @@ class InsightsTool:
         return await self.handler(org_id=org_id, **kwargs)
 
     def to_anthropic_tool(self) -> dict[str, Any]:
-        """Render this tool as the Anthropic API expects it."""
         return {
             "name": self.name,
             "description": self.description,
@@ -126,11 +139,7 @@ def list_tools() -> list[InsightsTool]:
 # ============================================================================
 
 def _parse_since(since: str) -> datetime:
-    """Accept an ISO-8601 timestamp or a relative phrase like '24h' / '7d'.
-
-    The relative parser keeps the model from having to compute dates
-    itself (which is a known source of timezone / off-by-one bugs).
-    """
+    """Accept an ISO-8601 timestamp or a relative phrase like '24h' / '7d'."""
     if not since:
         return datetime.now(UTC) - timedelta(hours=24)
     s = since.strip().lower()
@@ -140,286 +149,303 @@ def _parse_since(since: str) -> datetime:
         return datetime.now(UTC) - timedelta(days=int(s[:-1]))
     if s.endswith("m") and s[:-1].isdigit():
         return datetime.now(UTC) - timedelta(minutes=int(s[:-1]))
-    # Fall back to ISO-8601; accept a trailing 'Z'.
     try:
         return datetime.fromisoformat(since.replace("Z", "+00:00"))
     except ValueError:
-        # Default to last 24h if the input is unparseable — fail safe.
-        logger.warning(f"insights_tools: unparseable since={since!r}; defaulting to 24h")
+        logger.warning("insights_tools: unparseable since=%r; defaulting to 24h", since)
         return datetime.now(UTC) - timedelta(hours=24)
 
 
+def _iso(value: Any) -> str | None:
+    if value is None:
+        return None
+    if hasattr(value, "isoformat"):
+        return value.isoformat()
+    return str(value)
+
+
+def _deep_links_for_trace(trace_id: str) -> dict[str, str]:
+    return {
+        "traces_url": f"/traces?trace_id={trace_id}",
+        "inspector_url": f"/observability?trace_id={trace_id}",
+        "replay_url": f"/replay?trace={trace_id}",
+    }
+
+
+def _pct(sorted_vals: list[float], p: float) -> float | None:
+    n = len(sorted_vals)
+    if n == 0:
+        return None
+    if n == 1:
+        return sorted_vals[0]
+    idx = max(0, min(n - 1, int(round((p / 100.0) * (n - 1)))))
+    return sorted_vals[idx]
+
+
 # ============================================================================
-# Tools
+# Tools — Capture (traces)
 # ============================================================================
 
 @insights_tool(
-    name="list_jobs",
+    name="list_traces",
     description=(
-        "List recent Eden jobs in this org. Use for questions like "
-        "'what's been running today' or 'how many jobs are pending'. "
-        "Returns job_id, status, outcome_tier, environment_class, and "
-        "created_at. Limited to the most recent ``limit`` rows "
-        "(default 25, max 200)."
+        "List recent observability traces for this org (Capture). "
+        "Use for 'what's been running', 'show recent traces', or "
+        "'failed traces today'. Returns trace_id, outcome, duration, "
+        "cost, and deep links. Default window 24h."
     ),
     input_schema={
         "type": "object",
         "properties": {
             "limit": {
                 "type": "integer",
-                "description": "Maximum number of jobs to return (default 25, max 200).",
-                "minimum": 1,
-                "maximum": 200,
-            },
-            "since": {
-                "type": "string",
-                "description": (
-                    "Lower bound on created_at. Accepts ISO-8601 or a "
-                    "relative phrase like '24h', '7d', '30m'. Default: 24h."
-                ),
-            },
-            "status": {
-                "type": "string",
-                "description": (
-                    "Optional status filter — e.g. 'running', 'completed', "
-                    "'failed', 'pending', 'human_review'."
-                ),
-            },
-        },
-    },
-)
-async def list_jobs(
-    org_id: str,
-    limit: int = 25,
-    since: str = "24h",
-    status: str | None = None,
-) -> dict[str, Any]:
-    limit = max(1, min(int(limit), 200))
-    cutoff = _parse_since(since)
-    client = await get_postgres_client()
-
-    if status:
-        rows = await client.fetch(
-            """
-            SELECT job_id, status, outcome_tier, environment_class, created_at, updated_at
-            FROM jobs
-            WHERE org_id = $1 AND created_at >= $2 AND status = $3
-            ORDER BY created_at DESC
-            LIMIT $4
-            """,
-            org_id, cutoff, status, limit,
-        )
-    else:
-        rows = await client.fetch(
-            """
-            SELECT job_id, status, outcome_tier, environment_class, created_at, updated_at
-            FROM jobs
-            WHERE org_id = $1 AND created_at >= $2
-            ORDER BY created_at DESC
-            LIMIT $3
-            """,
-            org_id, cutoff, limit,
-        )
-
-    return {
-        "count": len(rows),
-        "since": cutoff.isoformat(),
-        "status_filter": status,
-        "jobs": [
-            {
-                "job_id": r["job_id"],
-                "status": r["status"],
-                "outcome_tier": r["outcome_tier"],
-                "environment_class": r["environment_class"],
-                "created_at": r["created_at"].isoformat() if r["created_at"] else None,
-                "updated_at": r["updated_at"].isoformat() if r["updated_at"] else None,
-            }
-            for r in rows
-        ],
-    }
-
-
-@insights_tool(
-    name="summarize_jobs",
-    description=(
-        "Aggregate job counts by status and outcome_tier over a time "
-        "window. Use for 'how are jobs going today' or 'how many "
-        "Gold-tier environments did we ship this week'."
-    ),
-    input_schema={
-        "type": "object",
-        "properties": {
-            "since": {
-                "type": "string",
-                "description": (
-                    "Lower bound on created_at. Accepts ISO-8601 or a "
-                    "relative phrase like '24h', '7d', '30m'. Default: 7d."
-                ),
-            },
-        },
-    },
-)
-async def summarize_jobs(
-    org_id: str,
-    since: str = "7d",
-) -> dict[str, Any]:
-    cutoff = _parse_since(since)
-    client = await get_postgres_client()
-
-    by_status = await client.fetch(
-        """
-        SELECT status, COUNT(*) AS n
-        FROM jobs
-        WHERE org_id = $1 AND created_at >= $2
-        GROUP BY status
-        ORDER BY n DESC
-        """,
-        org_id, cutoff,
-    )
-    by_outcome = await client.fetch(
-        """
-        SELECT outcome_tier, COUNT(*) AS n
-        FROM jobs
-        WHERE org_id = $1 AND created_at >= $2 AND outcome_tier IS NOT NULL
-        GROUP BY outcome_tier
-        ORDER BY n DESC
-        """,
-        org_id, cutoff,
-    )
-
-    return {
-        "since": cutoff.isoformat(),
-        "by_status": [{"status": r["status"], "count": r["n"]} for r in by_status],
-        "by_outcome": [{"outcome_tier": r["outcome_tier"], "count": r["n"]} for r in by_outcome],
-    }
-
-
-@insights_tool(
-    name="get_job",
-    description=(
-        "Fetch the full record for a single job by job_id, including "
-        "status, outcome, latest quality metrics, and timestamps. Use "
-        "this when the user wants details on a specific run."
-    ),
-    input_schema={
-        "type": "object",
-        "properties": {
-            "job_id": {
-                "type": "string",
-                "description": "The job_id (e.g. 'job_abc123') to fetch.",
-            },
-        },
-        "required": ["job_id"],
-    },
-)
-async def get_job(
-    org_id: str,
-    job_id: str,
-) -> dict[str, Any]:
-    client = await get_postgres_client()
-    row = await client.fetchrow(
-        """
-        SELECT job_id, status, outcome_tier, environment_class,
-               created_at, updated_at, completed_at, quality_metrics
-        FROM jobs
-        WHERE org_id = $1 AND job_id = $2
-        """,
-        org_id, job_id,
-    )
-    if not row:
-        return {"found": False, "job_id": job_id}
-    return {
-        "found": True,
-        "job": {
-            "job_id": row["job_id"],
-            "status": row["status"],
-            "outcome_tier": row["outcome_tier"],
-            "environment_class": row["environment_class"],
-            "created_at": row["created_at"].isoformat() if row["created_at"] else None,
-            "updated_at": row["updated_at"].isoformat() if row["updated_at"] else None,
-            "completed_at": row["completed_at"].isoformat() if row["completed_at"] else None,
-            "quality_metrics": row["quality_metrics"],
-        },
-    }
-
-
-@insights_tool(
-    name="list_recent_references",
-    description=(
-        "List the most recently uploaded code references in this org. "
-        "References are short code samples the org has saved to its "
-        "library (auth patterns, API conventions, etc.)."
-    ),
-    input_schema={
-        "type": "object",
-        "properties": {
-            "limit": {
-                "type": "integer",
-                "description": "Maximum number of references to return (default 20).",
+                "description": "Maximum traces to return (default 25, max 100).",
                 "minimum": 1,
                 "maximum": 100,
             },
-            "language": {
+            "since": {
                 "type": "string",
-                "description": "Optional language filter (e.g. 'python', 'typescript').",
+                "description": (
+                    "Lower bound on timestamp. ISO-8601 or relative "
+                    "('24h', '7d', '30m'). Default: 24h."
+                ),
+            },
+            "outcome": {
+                "type": "string",
+                "description": (
+                    "Optional outcome filter, e.g. 'success', 'failure', "
+                    "'error', 'partial'."
+                ),
+            },
+            "agent_id": {
+                "type": "string",
+                "description": "Optional agent_id filter.",
             },
         },
     },
 )
-async def list_recent_references(
+async def list_traces(
     org_id: str,
-    limit: int = 20,
-    language: str | None = None,
+    limit: int = 25,
+    since: str = "24h",
+    outcome: str | None = None,
+    agent_id: str | None = None,
 ) -> dict[str, Any]:
     limit = max(1, min(int(limit), 100))
+    cutoff = _parse_since(since)
     client = await get_postgres_client()
 
-    if language:
-        rows = await client.fetch(
-            """
-            SELECT name, description, language, purpose, filename, created_at
-            FROM code_references
-            WHERE org_id = $1 AND language = $2
-            ORDER BY created_at DESC
-            LIMIT $3
-            """,
-            org_id, language, limit,
+    clauses = ["tenant_id = $1", "timestamp >= $2"]
+    args: list[Any] = [org_id, cutoff]
+    if outcome:
+        args.append(outcome)
+        clauses.append(f"outcome = ${len(args)}")
+    if agent_id:
+        args.append(agent_id)
+        clauses.append(
+            f"(agent_id = ${len(args)} OR attributes->>'agent_id' = ${len(args)})"
         )
-    else:
-        rows = await client.fetch(
-            """
-            SELECT name, description, language, purpose, filename, created_at
-            FROM code_references
-            WHERE org_id = $1
-            ORDER BY created_at DESC
-            LIMIT $2
-            """,
-            org_id, limit,
-        )
+    args.append(limit)
+    limit_idx = len(args)
+
+    rows = await client.fetch(
+        f"""
+        SELECT trace_id,
+               min(timestamp) AS started_at,
+               max(realm) AS realm,
+               max(COALESCE(agent_id, attributes->>'agent_id')) AS agent_id,
+               max(COALESCE(model_name, attributes->>'model')) AS model,
+               max(outcome) AS outcome,
+               max(error_type) AS error_type,
+               count(*) AS span_count,
+               max(duration_ms) AS duration_ms,
+               coalesce(
+                 sum(COALESCE(
+                   NULLIF(metrics->>'cost_usd', '')::float,
+                   NULLIF(payload->>'cost_usd', '')::float,
+                   0
+                 )), 0
+               ) AS cost_usd
+        FROM telemetry_events
+        WHERE {' AND '.join(clauses)}
+        GROUP BY trace_id
+        ORDER BY started_at DESC
+        LIMIT ${limit_idx}
+        """,
+        *args,
+    )
+
+    traces = []
+    for r in rows:
+        tid = r["trace_id"]
+        traces.append({
+            "trace_id": tid,
+            "started_at": _iso(r["started_at"]),
+            "realm": r["realm"],
+            "agent_id": r["agent_id"],
+            "model": r["model"],
+            "outcome": r["outcome"],
+            "error_type": r["error_type"],
+            "span_count": int(r["span_count"] or 0),
+            "duration_ms": float(r["duration_ms"] or 0.0),
+            "cost_usd": round(float(r["cost_usd"] or 0.0), 6),
+            **_deep_links_for_trace(tid),
+        })
 
     return {
-        "count": len(rows),
-        "language_filter": language,
-        "references": [
-            {
-                "name": r["name"],
-                "description": r["description"],
-                "language": r["language"],
-                "purpose": r["purpose"],
-                "filename": r["filename"],
-                "created_at": r["created_at"].isoformat() if r["created_at"] else None,
-            }
-            for r in rows
-        ],
+        "count": len(traces),
+        "since": cutoff.isoformat(),
+        "outcome_filter": outcome,
+        "agent_id_filter": agent_id,
+        "traces": traces,
     }
 
 
 @insights_tool(
-    name="search_jobs",
+    name="get_trace",
     description=(
-        "Full-text search over Eden job descriptions for this org. "
-        "Use when the user wants to find jobs mentioning a topic — "
-        "e.g. 'cartpole jobs' or 'multi-agent jobs last week'."
+        "Fetch detail for one trace by trace_id: span count, duration, "
+        "outcome, models, and deep links to Traces / Inspector."
+    ),
+    input_schema={
+        "type": "object",
+        "properties": {
+            "trace_id": {
+                "type": "string",
+                "description": "The trace_id to fetch.",
+            },
+        },
+        "required": ["trace_id"],
+    },
+)
+async def get_trace(org_id: str, trace_id: str) -> dict[str, Any]:
+    client = await get_postgres_client()
+    row = await client.fetchrow(
+        """
+        SELECT trace_id,
+               min(timestamp) AS started_at,
+               max(timestamp) AS ended_at,
+               max(realm) AS realm,
+               max(COALESCE(agent_id, attributes->>'agent_id')) AS agent_id,
+               max(COALESCE(model_name, attributes->>'model')) AS model,
+               max(outcome) AS outcome,
+               max(error_type) AS error_type,
+               count(*) AS span_count,
+               max(duration_ms) AS duration_ms,
+               coalesce(
+                 sum(COALESCE(
+                   NULLIF(metrics->>'cost_usd', '')::float,
+                   NULLIF(payload->>'cost_usd', '')::float,
+                   0
+                 )), 0
+               ) AS cost_usd,
+               sum(COALESCE(usage_prompt_tokens,
+                            NULLIF(payload->>'input_tokens', '')::int, 0)) AS input_tokens,
+               sum(COALESCE(usage_completion_tokens,
+                            NULLIF(payload->>'output_tokens', '')::int, 0)) AS output_tokens
+        FROM telemetry_events
+        WHERE tenant_id = $1 AND trace_id = $2
+        GROUP BY trace_id
+        """,
+        org_id,
+        trace_id,
+    )
+    if not row:
+        return {"found": False, "trace_id": trace_id}
+    return {
+        "found": True,
+        "trace": {
+            "trace_id": row["trace_id"],
+            "started_at": _iso(row["started_at"]),
+            "ended_at": _iso(row["ended_at"]),
+            "realm": row["realm"],
+            "agent_id": row["agent_id"],
+            "model": row["model"],
+            "outcome": row["outcome"],
+            "error_type": row["error_type"],
+            "span_count": int(row["span_count"] or 0),
+            "duration_ms": float(row["duration_ms"] or 0.0),
+            "cost_usd": round(float(row["cost_usd"] or 0.0), 6),
+            "input_tokens": int(row["input_tokens"] or 0),
+            "output_tokens": int(row["output_tokens"] or 0),
+            **_deep_links_for_trace(trace_id),
+        },
+    }
+
+
+@insights_tool(
+    name="get_traces_by_filter",
+    description=(
+        "Ad-hoc filtered trace list. Supports outcome, agent_id, realm, "
+        "and since. Same shape as list_traces."
+    ),
+    input_schema={
+        "type": "object",
+        "properties": {
+            "outcome": {
+                "type": "string",
+                "description": "Filter by outcome (success, failure, error, …).",
+            },
+            "agent_id": {
+                "type": "string",
+                "description": "Filter by agent_id.",
+            },
+            "realm": {
+                "type": "string",
+                "description": "Filter by realm (e.g. production, staging).",
+            },
+            "since": {
+                "type": "string",
+                "description": "Lower bound. ISO-8601 or '24h'/'7d'. Default: 7d.",
+            },
+            "limit": {
+                "type": "integer",
+                "description": "Max traces (default 50, max 100).",
+                "minimum": 1,
+                "maximum": 100,
+            },
+        },
+    },
+)
+async def get_traces_by_filter(
+    org_id: str,
+    since: str = "7d",
+    outcome: str | None = None,
+    agent_id: str | None = None,
+    realm: str | None = None,
+    limit: int = 50,
+) -> dict[str, Any]:
+    result = await list_traces(
+        org_id=org_id,
+        limit=limit,
+        since=since,
+        outcome=outcome,
+        agent_id=agent_id,
+    )
+    if realm:
+        filtered = [t for t in result["traces"] if t.get("realm") == realm]
+        result = {
+            **result,
+            "count": len(filtered),
+            "traces": filtered,
+            "realm_filter": realm,
+        }
+    else:
+        result["realm_filter"] = None
+    result["filters"] = {
+        "outcome": outcome,
+        "agent_id": agent_id,
+        "realm": realm,
+        "since": result["since"],
+    }
+    return result
+
+
+@insights_tool(
+    name="search_traces",
+    description=(
+        "Search traces by free-text against span name / error_type / "
+        "model. Use when the user asks to find traces mentioning a topic."
     ),
     input_schema={
         "type": "object",
@@ -430,14 +456,11 @@ async def list_recent_references(
             },
             "since": {
                 "type": "string",
-                "description": (
-                    "Lower bound on created_at. Accepts ISO-8601 or a "
-                    "relative phrase like '24h', '7d', '30m'. Default: 30d."
-                ),
+                "description": "Lower bound. Default: 7d.",
             },
             "limit": {
                 "type": "integer",
-                "description": "Maximum number of jobs to return (default 25).",
+                "description": "Max traces (default 25, max 100).",
                 "minimum": 1,
                 "maximum": 100,
             },
@@ -445,315 +468,211 @@ async def list_recent_references(
         "required": ["query"],
     },
 )
-async def search_jobs(
+async def search_traces(
     org_id: str,
     query: str,
-    since: str = "30d",
+    since: str = "7d",
     limit: int = 25,
 ) -> dict[str, Any]:
     cutoff = _parse_since(since)
     limit = max(1, min(int(limit), 100))
     client = await get_postgres_client()
-
-    # ``request`` is JSONB; we cast to text for the FTS index.
+    pattern = f"%{query.strip()}%"
     rows = await client.fetch(
         """
-        SELECT job_id, status, outcome_tier, created_at,
-               ts_rank(to_tsvector('english', request::text),
-                       plainto_tsquery('english', $2)) AS rank
-        FROM jobs
-        WHERE org_id = $1
-          AND created_at >= $3
-          AND to_tsvector('english', request::text)
-              @@ plainto_tsquery('english', $2)
-        ORDER BY rank DESC, created_at DESC
+        SELECT trace_id,
+               min(timestamp) AS started_at,
+               max(outcome) AS outcome,
+               max(COALESCE(model_name, attributes->>'model')) AS model,
+               max(error_type) AS error_type,
+               max(duration_ms) AS duration_ms,
+               count(*) AS span_count
+        FROM telemetry_events
+        WHERE tenant_id = $1
+          AND timestamp >= $2
+          AND (
+            name ILIKE $3
+            OR COALESCE(error_type, '') ILIKE $3
+            OR COALESCE(model_name, '') ILIKE $3
+            OR COALESCE(agent_id, '') ILIKE $3
+            OR COALESCE(attributes->>'agent_id', '') ILIKE $3
+          )
+        GROUP BY trace_id
+        ORDER BY started_at DESC
         LIMIT $4
         """,
-        org_id, query, cutoff, limit,
+        org_id,
+        cutoff,
+        pattern,
+        limit,
     )
-
+    traces = [
+        {
+            "trace_id": r["trace_id"],
+            "started_at": _iso(r["started_at"]),
+            "outcome": r["outcome"],
+            "model": r["model"],
+            "error_type": r["error_type"],
+            "duration_ms": float(r["duration_ms"] or 0.0),
+            "span_count": int(r["span_count"] or 0),
+            **_deep_links_for_trace(r["trace_id"]),
+        }
+        for r in rows
+    ]
     return {
         "query": query,
         "since": cutoff.isoformat(),
-        "count": len(rows),
-        "jobs": [
-            {
-                "job_id": r["job_id"],
-                "status": r["status"],
-                "outcome_tier": r["outcome_tier"],
-                "created_at": r["created_at"].isoformat() if r["created_at"] else None,
-                "rank": float(r["rank"]) if r["rank"] is not None else 0.0,
-            }
-            for r in rows
-        ],
-    }
-
-
-@insights_tool(
-    name="get_traces_by_filter",
-    description=(
-        "Ad-hoc query: list jobs matching arbitrary filters. Use for "
-        "questions that don't fit a more specific tool. Returns the "
-        "same shape as list_jobs. Supports status, environment_class, "
-        "and outcome_tier filters."
-    ),
-    input_schema={
-        "type": "object",
-        "properties": {
-            "status": {
-                "type": "string",
-                "description": (
-                    "Filter to jobs in this status, e.g. 'running', "
-                    "'completed', 'failed', 'pending', 'human_review'."
-                ),
-            },
-            "environment_class": {
-                "type": "string",
-                "description": (
-                    "Filter to jobs of this environment class, e.g. "
-                    "'rl_training', 'code_eval', 'agentic', 'bench'."
-                ),
-            },
-            "outcome_tier": {
-                "type": "string",
-                "description": (
-                    "Filter to jobs with this outcome tier, e.g. "
-                    "'Gold', 'Silver', 'Bronze', 'Partial', 'Failed'."
-                ),
-            },
-            "since": {
-                "type": "string",
-                "description": (
-                    "Lower bound on created_at. Accepts ISO-8601 or a "
-                    "relative phrase like '24h', '7d', '30m'. Default: 7d."
-                ),
-            },
-            "limit": {
-                "type": "integer",
-                "description": "Maximum number of jobs to return (default 50, max 200).",
-                "minimum": 1,
-                "maximum": 200,
-            },
-        },
-    },
-)
-async def get_traces_by_filter(
-    org_id: str,
-    since: str = "7d",
-    status: str | None = None,
-    environment_class: str | None = None,
-    outcome_tier: str | None = None,
-    limit: int = 50,
-) -> dict[str, Any]:
-    cutoff = _parse_since(since)
-    limit = max(1, min(int(limit), 200))
-
-    clauses = ["org_id = $1", "created_at >= $2"]
-    args: list[Any] = [org_id, cutoff]
-    if status:
-        args.append(status)
-        clauses.append(f"status = ${len(args)}")
-    if environment_class:
-        args.append(environment_class)
-        clauses.append(f"environment_class = ${len(args)}")
-    if outcome_tier:
-        args.append(outcome_tier)
-        clauses.append(f"outcome_tier = ${len(args)}")
-    args.append(limit)
-    limit_idx = len(args)
-
-    sql = f"""
-        SELECT job_id, status, outcome_tier, environment_class, created_at, updated_at
-        FROM jobs
-        WHERE {' AND '.join(clauses)}
-        ORDER BY created_at DESC
-        LIMIT ${limit_idx}
-    """
-
-    client = await get_postgres_client()
-    rows = await client.fetch(sql, *args)
-    return {
-        "count": len(rows),
-        "filters": {
-            "status": status,
-            "environment_class": environment_class,
-            "outcome_tier": outcome_tier,
-            "since": cutoff.isoformat(),
-        },
-        "jobs": [
-            {
-                "job_id": r["job_id"],
-                "status": r["status"],
-                "outcome_tier": r["outcome_tier"],
-                "environment_class": r["environment_class"],
-                "created_at": r["created_at"].isoformat() if r["created_at"] else None,
-                "updated_at": r["updated_at"].isoformat() if r["updated_at"] else None,
-            }
-            for r in rows
-        ],
+        "count": len(traces),
+        "traces": traces,
     }
 
 
 # ============================================================================
-# Tool dispatch
+# Tools — Analyse (latency / cost / evals / anomalies)
 # ============================================================================
 
 @insights_tool(
     name="get_latency_p95",
     description=(
-        "Compute the 95th-percentile of Eden job durations in this org. "
-        "Durations are derived from created_at → completed_at for jobs "
-        "that have completed. Use for 'how slow is the pipeline' or "
-        "'what's the p95 of the last 7d'."
+        "Compute p50/p95/p99 of per-trace max duration_ms from "
+        "telemetry_events. Use for 'how slow are traces' questions."
     ),
     input_schema={
         "type": "object",
         "properties": {
             "since": {
                 "type": "string",
-                "description": (
-                    "Lower bound on created_at. Accepts ISO-8601 or "
-                    "'24h', '7d', '30m'. Default: 7d."
-                ),
+                "description": "Lower bound. Default: 7d.",
             },
         },
     },
 )
-async def get_latency_p95(
-    org_id: str,
-    since: str = "7d",
-) -> dict[str, Any]:
+async def get_latency_p95(org_id: str, since: str = "7d") -> dict[str, Any]:
     cutoff = _parse_since(since)
     client = await get_postgres_client()
     rows = await client.fetch(
         """
-        SELECT
-            EXTRACT(EPOCH FROM (completed_at - created_at)) AS duration_s
-        FROM jobs
-        WHERE org_id = $1
-          AND created_at >= $2
-          AND completed_at IS NOT NULL
+        SELECT max(duration_ms) AS duration_ms
+        FROM telemetry_events
+        WHERE tenant_id = $1
+          AND timestamp >= $2
+          AND duration_ms IS NOT NULL
+        GROUP BY trace_id
         """,
-        org_id, cutoff,
+        org_id,
+        cutoff,
     )
     durations = sorted(
-        float(r["duration_s"]) for r in rows
-        if r["duration_s"] is not None
+        float(r["duration_ms"]) for r in rows if r["duration_ms"] is not None
     )
     if not durations:
         return {
             "since": cutoff.isoformat(),
             "sample_size": 0,
-            "p50_s": None,
-            "p95_s": None,
-            "p99_s": None,
-            "note": "No completed jobs in window",
+            "p50_ms": None,
+            "p95_ms": None,
+            "p99_ms": None,
+            "note": "No traces with duration in window",
         }
-    n = len(durations)
-
-    def _pct(p: float) -> float:
-        if n == 1:
-            return durations[0]
-        idx = max(0, min(n - 1, int(round((p / 100.0) * (n - 1)))))
-        return durations[idx]
-
     return {
         "since": cutoff.isoformat(),
-        "sample_size": n,
-        "p50_s": round(_pct(50), 3),
-        "p95_s": round(_pct(95), 3),
-        "p99_s": round(_pct(99), 3),
+        "sample_size": len(durations),
+        "p50_ms": round(_pct(durations, 50) or 0.0, 3),
+        "p95_ms": round(_pct(durations, 95) or 0.0, 3),
+        "p99_ms": round(_pct(durations, 99) or 0.0, 3),
     }
 
 
 @insights_tool(
     name="get_cost_breakdown",
     description=(
-        "Estimate cost breakdown for Eden jobs in this org, broken "
-        "down by environment_class and outcome_tier. Costs are "
-        "derived from a heuristic cost-per-job table since Eden "
-        "doesn't bill directly; this is best-effort for budget "
-        "conversations."
+        "Cost breakdown from usage_events for this org (Analyse). "
+        "Groups by model and day. Use for budget / spend questions."
     ),
     input_schema={
         "type": "object",
         "properties": {
             "since": {
                 "type": "string",
-                "description": (
-                    "Lower bound on created_at. Accepts ISO-8601 or "
-                    "'24h', '7d', '30m'. Default: 30d."
-                ),
+                "description": "Lower bound. Default: 30d.",
             },
         },
     },
 )
-async def get_cost_breakdown(
-    org_id: str,
-    since: str = "30d",
-) -> dict[str, Any]:
-    # Heuristic cost per job in USD. Tune with the finance team; this
-    # is intentionally simple so the model has a number to cite.
-    cost_per_env: dict[str, float] = {
-        "rl_training": 12.0,
-        "code_eval": 0.85,
-        "agentic": 4.50,
-        "bench": 1.20,
-    }
-    default_cost = 2.0
+async def get_cost_breakdown(org_id: str, since: str = "30d") -> dict[str, Any]:
     cutoff = _parse_since(since)
     client = await get_postgres_client()
-    rows = await client.fetch(
+    by_model = await client.fetch(
         """
-        SELECT environment_class, outcome_tier, COUNT(*) AS n
-        FROM jobs
-        WHERE org_id = $1 AND created_at >= $2
-        GROUP BY environment_class, outcome_tier
+        SELECT COALESCE(model, 'unknown') AS model,
+               SUM(COALESCE(cost_usd, 0)) AS cost_usd,
+               COUNT(*) AS event_count
+        FROM usage_events
+        WHERE org_id::text = $1 AND created_at >= $2
+        GROUP BY 1
+        ORDER BY cost_usd DESC
+        LIMIT 50
         """,
-        org_id, cutoff,
+        org_id,
+        cutoff,
     )
-    by_env: dict[str, float] = {}
-    by_outcome: dict[str, float] = {}
-    total = 0.0
-    for r in rows:
-        env = r["environment_class"] or "unknown"
-        tier = r["outcome_tier"] or "unknown"
-        n = int(r["n"])
-        cost = cost_per_env.get(env, default_cost) * n
-        by_env[env] = by_env.get(env, 0.0) + cost
-        by_outcome[tier] = by_outcome.get(tier, 0.0) + cost
-        total += cost
+    by_day = await client.fetch(
+        """
+        SELECT date_trunc('day', created_at) AS day,
+               SUM(COALESCE(cost_usd, 0)) AS cost_usd,
+               COUNT(*) AS event_count
+        FROM usage_events
+        WHERE org_id::text = $1 AND created_at >= $2
+        GROUP BY 1
+        ORDER BY 1 DESC
+        LIMIT 60
+        """,
+        org_id,
+        cutoff,
+    )
+    total = sum(float(r["cost_usd"] or 0.0) for r in by_model)
+    series = [
+        {
+            "day": _iso(r["day"]),
+            "cost_usd": round(float(r["cost_usd"] or 0.0), 4),
+            "event_count": int(r["event_count"] or 0),
+        }
+        for r in by_day
+    ]
     return {
         "since": cutoff.isoformat(),
         "currency": "USD",
-        "estimated_total": round(total, 2),
-        "by_environment_class": {k: round(v, 2) for k, v in by_env.items()},
-        "by_outcome_tier": {k: round(v, 2) for k, v in by_outcome.items()},
-        "note": (
-            "Heuristic cost model — actual billing may differ. "
-            "Use for relative comparisons, not invoices."
-        ),
+        "estimated_total": round(total, 4),
+        "by_model": [
+            {
+                "model": r["model"],
+                "cost_usd": round(float(r["cost_usd"] or 0.0), 4),
+                "event_count": int(r["event_count"] or 0),
+            }
+            for r in by_model
+        ],
+        "series": series,
     }
 
 
 @insights_tool(
     name="get_judge_scores",
     description=(
-        "Aggregate judge / verifier scores for Eden jobs in this org. "
-        "Eden stores critic decisions, verifier reports, and tester "
-        "results in JSONB columns on the jobs table. This tool surfaces "
-        "a summary (count of jobs with critiques, pass/fail ratios, "
-        "top issue tags)."
+        "Aggregate judge / eval scores from judge_scores (Analyse). "
+        "Returns average score per judge and recent low-scoring traces."
     ),
     input_schema={
         "type": "object",
         "properties": {
             "since": {
                 "type": "string",
-                "description": (
-                    "Lower bound on created_at. Accepts ISO-8601 or "
-                    "'24h', '7d', '30m'. Default: 7d."
-                ),
+                "description": "Lower bound. Default: 7d.",
+            },
+            "limit": {
+                "type": "integer",
+                "description": "Max low-score examples (default 10).",
+                "minimum": 1,
+                "maximum": 50,
             },
         },
     },
@@ -761,76 +680,81 @@ async def get_cost_breakdown(
 async def get_judge_scores(
     org_id: str,
     since: str = "7d",
+    limit: int = 10,
 ) -> dict[str, Any]:
     cutoff = _parse_since(since)
+    limit = max(1, min(int(limit), 50))
     client = await get_postgres_client()
-    rows = await client.fetch(
+    by_judge = await client.fetch(
         """
-        SELECT
-            job_id,
-            critic_decisions,
-            verifier_report,
-            tester_results
-        FROM jobs
-        WHERE org_id = $1 AND created_at >= $2
+        SELECT judge_name,
+               COUNT(*) AS n,
+               AVG(score) AS avg_score,
+               MIN(score) AS min_score,
+               MAX(score) AS max_score
+        FROM judge_scores
+        WHERE tenant_id = $1 AND scored_at >= $2
+        GROUP BY judge_name
+        ORDER BY n DESC
         """,
-        org_id, cutoff,
+        org_id,
+        cutoff,
     )
-    total = len(rows)
-    with_critique = 0
-    verifier_pass = 0
-    verifier_fail = 0
-    tester_pass = 0
-    tester_fail = 0
-    for r in rows:
-        if r["critic_decisions"]:
-            with_critique += 1
-        v = r["verifier_report"]
-        if v and isinstance(v, dict):
-            if v.get("passed") is True:
-                verifier_pass += 1
-            elif v.get("passed") is False:
-                verifier_fail += 1
-        t = r["tester_results"]
-        if t and isinstance(t, dict):
-            if t.get("passed") is True:
-                tester_pass += 1
-            elif t.get("passed") is False:
-                tester_fail += 1
+    low = await client.fetch(
+        """
+        SELECT judge_run_id, judge_name, trace_id, score, scored_at, rationale
+        FROM judge_scores
+        WHERE tenant_id = $1 AND scored_at >= $2
+        ORDER BY score ASC, scored_at DESC
+        LIMIT $3
+        """,
+        org_id,
+        cutoff,
+        limit,
+    )
     return {
         "since": cutoff.isoformat(),
-        "sample_size": total,
-        "critic_coverage": {
-            "with_critique": with_critique,
-            "without_critique": total - with_critique,
-        },
-        "verifier": {"pass": verifier_pass, "fail": verifier_fail},
-        "tester": {"pass": tester_pass, "fail": tester_fail},
+        "by_judge": [
+            {
+                "judge_name": r["judge_name"],
+                "count": int(r["n"]),
+                "avg_score": round(float(r["avg_score"]), 4) if r["avg_score"] is not None else None,
+                "min_score": float(r["min_score"]) if r["min_score"] is not None else None,
+                "max_score": float(r["max_score"]) if r["max_score"] is not None else None,
+            }
+            for r in by_judge
+        ],
+        "low_scores": [
+            {
+                "judge_run_id": str(r["judge_run_id"]),
+                "judge_name": r["judge_name"],
+                "trace_id": r["trace_id"],
+                "score": float(r["score"]),
+                "scored_at": _iso(r["scored_at"]),
+                "rationale": (r["rationale"] or "")[:240] or None,
+                **_deep_links_for_trace(r["trace_id"]),
+            }
+            for r in low
+        ],
     }
 
 
 @insights_tool(
     name="get_anomalies",
     description=(
-        "Heuristically flag anomalous jobs in the recent window. "
-        "Anomalies are: (a) jobs that ran much longer than the org's "
-        "median duration, (b) jobs whose status is stuck (no update "
-        "in >1h), (c) jobs with a non-null outcome_tier but no "
-        "verifier_report. Returns the most suspicious N rows."
+        "Flag anomalous traces: slow (top duration), errored outcomes, "
+        "and high cost. Returns the most suspicious rows with deep links."
     ),
     input_schema={
         "type": "object",
         "properties": {
             "since": {
                 "type": "string",
-                "description": (
-                    "Lower bound on created_at. Accepts ISO-8601 or "
-                    "'24h', '7d', '30m'. Default: 24h."
-                ),
+                "description": "Lower bound. Default: 24h.",
             },
             "limit": {
                 "type": "integer",
-                "description": "Max anomalies to return (default 20, max 100).",
+                "description": "Max anomalies per bucket (default 20).",
                 "minimum": 1,
                 "maximum": 100,
             },
@@ -846,181 +770,364 @@ async def get_anomalies(
     cutoff = _parse_since(since)
     client = await get_postgres_client()
 
-    # Slow jobs: top decile by duration.
     slow = await client.fetch(
         """
-        SELECT job_id, status, outcome_tier, created_at, completed_at,
-               EXTRACT(EPOCH FROM (completed_at - created_at)) AS duration_s
-        FROM jobs
-        WHERE org_id = $1
-          AND created_at >= $2
-          AND completed_at IS NOT NULL
-        ORDER BY duration_s DESC
+        SELECT trace_id,
+               max(duration_ms) AS duration_ms,
+               max(outcome) AS outcome,
+               min(timestamp) AS started_at
+        FROM telemetry_events
+        WHERE tenant_id = $1 AND timestamp >= $2 AND duration_ms IS NOT NULL
+        GROUP BY trace_id
+        ORDER BY duration_ms DESC
         LIMIT $3
         """,
-        org_id, cutoff, limit,
+        org_id,
+        cutoff,
+        limit,
+    )
+    errored = await client.fetch(
+        """
+        SELECT trace_id,
+               max(outcome) AS outcome,
+               max(error_type) AS error_type,
+               min(timestamp) AS started_at,
+               max(duration_ms) AS duration_ms
+        FROM telemetry_events
+        WHERE tenant_id = $1
+          AND timestamp >= $2
+          AND (
+            outcome ILIKE ANY (ARRAY['fail%', 'error%', 'timeout%', 'crash%'])
+            OR error_type IS NOT NULL
+          )
+        GROUP BY trace_id
+        ORDER BY started_at DESC
+        LIMIT $3
+        """,
+        org_id,
+        cutoff,
+        limit,
+    )
+    costly = await client.fetch(
+        """
+        SELECT trace_id,
+               coalesce(
+                 sum(COALESCE(
+                   NULLIF(metrics->>'cost_usd', '')::float,
+                   NULLIF(payload->>'cost_usd', '')::float,
+                   0
+                 )), 0
+               ) AS cost_usd,
+               min(timestamp) AS started_at,
+               max(outcome) AS outcome
+        FROM telemetry_events
+        WHERE tenant_id = $1 AND timestamp >= $2
+        GROUP BY trace_id
+        HAVING coalesce(
+                 sum(COALESCE(
+                   NULLIF(metrics->>'cost_usd', '')::float,
+                   NULLIF(payload->>'cost_usd', '')::float,
+                   0
+                 )), 0
+               ) > 0
+        ORDER BY cost_usd DESC
+        LIMIT $3
+        """,
+        org_id,
+        cutoff,
+        limit,
     )
 
-    # Stuck jobs: status not in (completed, failed) and updated_at < now-1h.
-    stuck = await client.fetch(
-        """
-        SELECT job_id, status, outcome_tier, created_at, updated_at,
-               EXTRACT(EPOCH FROM (NOW() - updated_at)) AS stale_s
-        FROM jobs
-        WHERE org_id = $1
-          AND created_at >= $2
-          AND status NOT IN ('completed', 'failed', 'cancelled')
-          AND updated_at < NOW() - INTERVAL '1 hour'
-        ORDER BY updated_at ASC
-        LIMIT $3
-        """,
-        org_id, cutoff, limit,
-    )
-
-    # Outcome-without-verifier: quality_reports present but no verifier_report.
-    missing_verify = await client.fetch(
-        """
-        SELECT job_id, status, outcome_tier, created_at
-        FROM jobs
-        WHERE org_id = $1
-          AND created_at >= $2
-          AND outcome_tier IS NOT NULL
-          AND (verifier_report IS NULL
-               OR (verifier_report::text = 'null')
-               OR (verifier_report::text = '{}'))
-        ORDER BY created_at DESC
-        LIMIT $3
-        """,
-        org_id, cutoff, limit,
-    )
+    def _rows(rows: Any, extra: Callable[[Any], dict[str, Any]]) -> list[dict[str, Any]]:
+        out = []
+        for r in rows:
+            item = {
+                "trace_id": r["trace_id"],
+                "started_at": _iso(r["started_at"]),
+                **extra(r),
+                **_deep_links_for_trace(r["trace_id"]),
+            }
+            out.append(item)
+        return out
 
     return {
         "since": cutoff.isoformat(),
-        "slow": [
-            {
-                "job_id": r["job_id"],
-                "status": r["status"],
-                "outcome_tier": r["outcome_tier"],
-                "duration_s": float(r["duration_s"]) if r["duration_s"] else None,
-                "created_at": r["created_at"].isoformat() if r["created_at"] else None,
-            }
-            for r in slow
-        ],
-        "stuck": [
-            {
-                "job_id": r["job_id"],
-                "status": r["status"],
-                "outcome_tier": r["outcome_tier"],
-                "stale_s": float(r["stale_s"]) if r["stale_s"] else None,
-                "updated_at": r["updated_at"].isoformat() if r["updated_at"] else None,
-            }
-            for r in stuck
-        ],
-        "missing_verification": [
-            {
-                "job_id": r["job_id"],
-                "status": r["status"],
-                "outcome_tier": r["outcome_tier"],
-                "created_at": r["created_at"].isoformat() if r["created_at"] else None,
-            }
-            for r in missing_verify
-        ],
+        "slow": _rows(
+            slow,
+            lambda r: {
+                "duration_ms": float(r["duration_ms"]) if r["duration_ms"] is not None else None,
+                "outcome": r["outcome"],
+            },
+        ),
+        "errored": _rows(
+            errored,
+            lambda r: {
+                "outcome": r["outcome"],
+                "error_type": r["error_type"],
+                "duration_ms": float(r["duration_ms"]) if r["duration_ms"] is not None else None,
+            },
+        ),
+        "costly": _rows(
+            costly,
+            lambda r: {
+                "cost_usd": round(float(r["cost_usd"] or 0.0), 6),
+                "outcome": r["outcome"],
+            },
+        ),
     }
 
 
 @insights_tool(
     name="get_insights",
     description=(
-        "High-level health summary for this org: job counts, outcome "
-        "distribution, average quality, p95 latency. Use this as a "
-        "default first call when the user asks an open-ended 'how is "
-        "Eden doing' question."
+        "High-level org health: trace counts by outcome, p95 latency, "
+        "open issues, open patches. Default first call for open-ended "
+        "'how is Eden doing' questions (Capture/Analyse/Improve snapshot)."
     ),
     input_schema={
         "type": "object",
         "properties": {
             "since": {
                 "type": "string",
-                "description": (
-                    "Lower bound on created_at. Accepts ISO-8601 or "
-                    "'24h', '7d', '30m'. Default: 7d."
-                ),
+                "description": "Lower bound. Default: 7d.",
             },
         },
     },
 )
-async def get_insights(
-    org_id: str,
-    since: str = "7d",
-) -> dict[str, Any]:
-    """Compose the answer from the lower-level tools, with a single
-    DB round-trip per query."""
+async def get_insights(org_id: str, since: str = "7d") -> dict[str, Any]:
     cutoff = _parse_since(since)
     client = await get_postgres_client()
 
-    by_status_rows = await client.fetch(
+    by_outcome = await client.fetch(
         """
-        SELECT status, COUNT(*) AS n
-        FROM jobs
-        WHERE org_id = $1 AND created_at >= $2
-        GROUP BY status
+        SELECT COALESCE(outcome, 'unknown') AS outcome, COUNT(DISTINCT trace_id) AS n
+        FROM telemetry_events
+        WHERE tenant_id = $1 AND timestamp >= $2
+        GROUP BY 1
         ORDER BY n DESC
         """,
-        org_id, cutoff,
-    )
-    by_outcome_rows = await client.fetch(
-        """
-        SELECT outcome_tier, COUNT(*) AS n
-        FROM jobs
-        WHERE org_id = $1 AND created_at >= $2 AND outcome_tier IS NOT NULL
-        GROUP BY outcome_tier
-        ORDER BY n DESC
-        """,
-        org_id, cutoff,
+        org_id,
+        cutoff,
     )
     durations = await client.fetch(
         """
-        SELECT EXTRACT(EPOCH FROM (completed_at - created_at)) AS d
-        FROM jobs
-        WHERE org_id = $1
-          AND created_at >= $2
-          AND completed_at IS NOT NULL
+        SELECT max(duration_ms) AS d
+        FROM telemetry_events
+        WHERE tenant_id = $1 AND timestamp >= $2 AND duration_ms IS NOT NULL
+        GROUP BY trace_id
         """,
-        org_id, cutoff,
+        org_id,
+        cutoff,
     )
-    duration_list = sorted(
-        float(r["d"]) for r in durations if r["d"] is not None
-    )
-    n = len(duration_list)
+    duration_list = sorted(float(r["d"]) for r in durations if r["d"] is not None)
 
-    def _pct(p: float) -> float | None:
-        if n == 0:
-            return None
-        if n == 1:
-            return duration_list[0]
-        idx = max(0, min(n - 1, int(round((p / 100.0) * (n - 1)))))
-        return duration_list[idx]
+    open_issues = 0
+    open_patches = 0
+    try:
+        open_issues = int(
+            await client.fetchval(
+                """
+                SELECT COUNT(*) FROM agent_issues
+                WHERE org_id = $1 AND status IN ('open', 'triaged', 'fix_pending', 'verifying', 'regressed')
+                """,
+                org_id,
+            )
+            or 0
+        )
+    except Exception as exc:  # noqa: BLE001 — table may be absent in older envs
+        logger.debug("get_insights: agent_issues unavailable: %s", exc)
+    try:
+        open_patches = int(
+            await client.fetchval(
+                """
+                SELECT COUNT(*) FROM proposed_patches
+                WHERE org_id = $1 AND status IN ('proposed', 'approved')
+                """,
+                org_id,
+            )
+            or 0
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("get_insights: proposed_patches unavailable: %s", exc)
 
+    p95 = _pct(duration_list, 95)
     return {
         "since": cutoff.isoformat(),
-        "job_counts_by_status": {
-            r["status"]: int(r["n"]) for r in by_status_rows
+        "trace_counts_by_outcome": {r["outcome"]: int(r["n"]) for r in by_outcome},
+        "latency_ms": {
+            "sample_size": len(duration_list),
+            "p50": round(_pct(duration_list, 50), 3) if duration_list else None,
+            "p95": round(p95, 3) if p95 is not None else None,
         },
-        "job_counts_by_outcome": {
-            r["outcome_tier"]: int(r["n"]) for r in by_outcome_rows
-        },
-        "latency_s": {
-            "sample_size": n,
-            "p50": round(_pct(50), 3) if _pct(50) is not None else None,
-            "p95": round(_pct(95), 3) if _pct(95) is not None else None,
-        },
+        "open_agent_issues": open_issues,
+        "open_proposed_patches": open_patches,
     }
+
+
+# ============================================================================
+# Tools — Improve (issues + patches)
+# ============================================================================
+
+@insights_tool(
+    name="list_agent_issues",
+    description=(
+        "List open agent issues (Improve). Grouped stumbles with "
+        "severity, status, and link to /issues/{id}."
+    ),
+    input_schema={
+        "type": "object",
+        "properties": {
+            "status": {
+                "type": "string",
+                "description": (
+                    "Optional status filter. Default: open statuses "
+                    "(open, triaged, fix_pending, verifying, regressed)."
+                ),
+            },
+            "limit": {
+                "type": "integer",
+                "description": "Max issues (default 25, max 100).",
+                "minimum": 1,
+                "maximum": 100,
+            },
+        },
+    },
+)
+async def list_agent_issues(
+    org_id: str,
+    status: str | None = None,
+    limit: int = 25,
+) -> dict[str, Any]:
+    limit = max(1, min(int(limit), 100))
+    client = await get_postgres_client()
+    if status:
+        rows = await client.fetch(
+            """
+            SELECT id, fingerprint, kind, title, status, severity, agent_id,
+                   first_seen, last_seen, stumble_count
+            FROM agent_issues
+            WHERE org_id = $1 AND status = $2
+            ORDER BY last_seen DESC
+            LIMIT $3
+            """,
+            org_id,
+            status,
+            limit,
+        )
+    else:
+        rows = await client.fetch(
+            """
+            SELECT id, fingerprint, kind, title, status, severity, agent_id,
+                   first_seen, last_seen, stumble_count
+            FROM agent_issues
+            WHERE org_id = $1
+              AND status IN ('open', 'triaged', 'fix_pending', 'verifying', 'regressed')
+            ORDER BY last_seen DESC
+            LIMIT $2
+            """,
+            org_id,
+            limit,
+        )
+    issues = [
+        {
+            "issue_id": str(r["id"]),
+            "fingerprint": r["fingerprint"],
+            "kind": r["kind"],
+            "title": r["title"],
+            "status": r["status"],
+            "severity": r["severity"],
+            "agent_id": r["agent_id"],
+            "first_seen": _iso(r["first_seen"]),
+            "last_seen": _iso(r["last_seen"]),
+            "stumble_count": int(r["stumble_count"] or 0),
+            "issues_url": f"/issues/{r['id']}",
+        }
+        for r in rows
+    ]
+    return {"count": len(issues), "status_filter": status, "issues": issues}
+
+
+@insights_tool(
+    name="list_proposed_patches",
+    description=(
+        "List proposed code patches in the Improve inbox "
+        "(proposed_patches). Use for 'what PRs are pending' questions."
+    ),
+    input_schema={
+        "type": "object",
+        "properties": {
+            "status": {
+                "type": "string",
+                "description": "Optional status filter (proposed, approved, merged, …).",
+            },
+            "limit": {
+                "type": "integer",
+                "description": "Max patches (default 25, max 100).",
+                "minimum": 1,
+                "maximum": 100,
+            },
+        },
+    },
+)
+async def list_proposed_patches(
+    org_id: str,
+    status: str | None = None,
+    limit: int = 25,
+) -> dict[str, Any]:
+    limit = max(1, min(int(limit), 100))
+    client = await get_postgres_client()
+    if status:
+        rows = await client.fetch(
+            """
+            SELECT id, repo_id, trace_id, rca_id, description, status,
+                   quality_score, cost_usd, created_at, updated_at
+            FROM proposed_patches
+            WHERE org_id = $1 AND status = $2
+            ORDER BY created_at DESC
+            LIMIT $3
+            """,
+            org_id,
+            status,
+            limit,
+        )
+    else:
+        rows = await client.fetch(
+            """
+            SELECT id, repo_id, trace_id, rca_id, description, status,
+                   quality_score, cost_usd, created_at, updated_at
+            FROM proposed_patches
+            WHERE org_id = $1 AND status IN ('proposed', 'approved')
+            ORDER BY created_at DESC
+            LIMIT $2
+            """,
+            org_id,
+            limit,
+        )
+    patches = []
+    for r in rows:
+        tid = r["trace_id"]
+        item = {
+            "patch_id": r["id"],
+            "repo_id": r["repo_id"],
+            "trace_id": tid,
+            "rca_id": r["rca_id"],
+            "description": (r["description"] or "")[:280],
+            "status": r["status"],
+            "quality_score": float(r["quality_score"]) if r["quality_score"] is not None else None,
+            "cost_usd": float(r["cost_usd"]) if r["cost_usd"] is not None else None,
+            "created_at": _iso(r["created_at"]),
+            "updated_at": _iso(r["updated_at"]),
+            "inbox_url": "/closed-loop",
+        }
+        if tid:
+            item.update(_deep_links_for_trace(tid))
+        patches.append(item)
+    return {"count": len(patches), "status_filter": status, "patches": patches}
 
 
 # ============================================================================
 # Tool dispatch
 # ============================================================================
-
 
 async def dispatch_tool_call(
     org_id: str,
@@ -1029,11 +1136,14 @@ async def dispatch_tool_call(
 ) -> dict[str, Any]:
     """Execute a tool call and return the result envelope.
 
-    The shape mirrors what the chat route puts in the SSE stream's
-    ``tool_result`` event: ``{tool, status, output, duration_ms}``.
-    Errors are caught and turned into a non-throwing error envelope
-    so Claude can react to them mid-conversation.
+    Identical (org, name, args) calls within ``_DEDUPE_TTL_S`` reuse
+    the prior envelope so a single chat turn does not spam Postgres.
     """
+    cache_key = _dedupe_key(org_id, name, input_json or {})
+    cached = _dedupe_get(cache_key)
+    if cached is not None:
+        return {**cached, "cached": True}
+
     tool = get_tool(name)
     if not tool:
         return {
@@ -1047,29 +1157,25 @@ async def dispatch_tool_call(
     try:
         result = await tool(org_id=org_id, **(input_json or {}))
         duration_ms = int((time.perf_counter() - started) * 1000)
-        # ``result`` is a JSON-serializable dict from every tool above.
-        # If a tool returns something exotic, fall back to a string repr
-        # so the chat route's ``json.dumps`` doesn't blow up.
         try:
             json.dumps(result)
             output = result
         except (TypeError, ValueError):
             output = {"text": str(result)}
-        return {"tool": name, "status": "ok", "output": output, "duration_ms": duration_ms}
+        envelope = {
+            "tool": name,
+            "status": "ok",
+            "output": output,
+            "duration_ms": duration_ms,
+        }
+        _dedupe_put(cache_key, envelope)
+        return envelope
     except Exception as exc:  # noqa: BLE001 — top-level guard
         duration_ms = int((time.perf_counter() - started) * 1000)
-        logger.exception(f"insights tool {name!r} failed: {exc}")
+        logger.exception("insights tool %r failed: %s", name, exc)
         return {
             "tool": name,
             "status": "error",
-            # Audit 2026-07-06 — surface the original exception text in
-            # the dispatch envelope (pre-fix this used ``safe_detail(exc)``
-            # which deliberately strips the message for HTTP responses).
-            # The dispatch output is consumed by the chat route, not by
-            # external clients, and the full traceback is already on the
-            # server log via ``logger.exception`` above — preserve the
-            # diagnostic here too.  Safely fall back to a class-name
-            # envelope if ``str(exc)`` raises (unlikely but defensive).
             "output": _tool_error_text(exc),
             "duration_ms": duration_ms,
         }

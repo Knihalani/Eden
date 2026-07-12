@@ -31,6 +31,8 @@ import { useOrg } from "@/hooks/use-org";
 import { api } from "@/lib/api";
 import { TraceExportModal } from "../observability/_components/TraceExportModal";
 import { TraceShareModal } from "../observability/_components/TraceShareModal";
+import { LiveTailPanel } from "./_components/LiveTailPanel";
+import { SpanSearchBar } from "./_components/SpanSearchBar";
 import { RefreshCw } from "lucide-react";
 
 function TracesPageInner() {
@@ -121,17 +123,23 @@ function TracesPageInner() {
           </Button>
         }
       />
-      <TracesTab
-          traces={traces}
-          loading={loading}
-          filter={filter}
-          onFilterChange={setFilter}
-          onSelectTrace={handleSelectTrace}
-          onViewTimeline={handleViewTimeline}
-          onExport={handleExport}
-          onAnnotate={handleAnnotate}
-          initialTraceId={initialTraceId}
-        />
+      <div className="grid gap-4 lg:grid-cols-[1fr_18rem]">
+        <div className="space-y-4 min-w-0">
+          <SpanSearchBar orgId={currentOrg.id} onSelectTrace={handleSelectTrace} />
+          <TracesTab
+              traces={traces}
+              loading={loading}
+              filter={filter}
+              onFilterChange={setFilter}
+              onSelectTrace={handleSelectTrace}
+              onViewTimeline={handleViewTimeline}
+              onExport={handleExport}
+              onAnnotate={handleAnnotate}
+              initialTraceId={initialTraceId}
+            />
+        </div>
+        <LiveTailPanel orgId={currentOrg.id} onSelectTrace={handleSelectTrace} />
+      </div>
       <TraceExportModal
         open={exportOpen}
         onOpenChange={setExportOpen}

@@ -4,9 +4,14 @@
 # Install: helm install opentelemetry-collector open-telemetry/opentelemetry-collector
 #          -f deploy/otel-collector-config.yaml
 #
-# Pipeline: tail_sampling (errors / slow / force_trace / probabilistic)
-#           → k8sattributes (metadata + Downward API env vars)
-#           → batch → otlp/eden → eden-gateway:4317
+# Pipeline: tail_sampling (N16 intelligence attrs + errors / slow /
+#           force_trace / probabilistic) → k8sattributes → batch → otlp/eden
+#
+# Honest note: edge sampling_percentage below is the *fallback* for traces
+# that do not match a keep policy. Eden's in-process N16 policy
+# (``sampling_profile=balanced`` → ~15%) is the product default; keep this
+# collector fallback aligned or set EDEN_SAMPLING_PROFILE=full when the
+# collector is the only sampler.
 
 processors:
   tail_sampling:
@@ -14,6 +19,19 @@ processors:
     num_traces: 20000
     expected_new_traces_per_sec: 5000
     policies:
+      # N16 — never drop Eden intelligence / force tags (SDK or quality worker).
+      - name: eden_keep
+        type: string_attribute
+        string_attribute: { key: eden.keep, values: ["true"] }
+      - name: eden_loop
+        type: string_attribute
+        string_attribute: { key: eden.loop_verdict, values: ["true"] }
+      - name: eden_tool_error
+        type: string_attribute
+        string_attribute: { key: eden.tool_error, values: ["true"] }
+      - name: eden_stumble
+        type: string_attribute
+        string_attribute: { key: eden.stumble, values: ["true"] }
       - name: errors
         type: status_code
         status_code: { status_codes: [ERROR] }
@@ -23,9 +41,11 @@ processors:
       - name: force_trace
         type: string_attribute
         string_attribute: { key: eden.force_trace, values: ["true"] }
+      # Fallback only — balanced profile ~15%. Raise to 100 when
+      # EDEN_SAMPLING_PROFILE=full / sampling_enabled=false.
       - name: probabilistic
         type: probabilistic
-        probabilistic: { sampling_percentage: 1 }
+        probabilistic: { sampling_percentage: 15 }
 
   k8sattributes:
     passthrough: false

@@ -148,6 +148,8 @@ class TraceListItem(BaseModel):
     error: dict[str, Any] | None = None
     streaming_metrics: dict[str, Any] | None = None
     tags: list[str] = Field(default_factory=list)
+    # N12 — explicit session id when SDK/attrs carry one.
+    session_id: str | None = None
 
 
 class TraceListResponse(BaseModel):
@@ -309,6 +311,7 @@ async def list_traces(
                    max(attributes->>'agent_id') AS agent_id,
                    max(attributes->>'model') AS model,
                    max(attributes->>'provider') AS provider,
+                   max(attributes->>'session_id') AS session_id,
                    max(outcome) AS outcome,
                    max(error) AS error,
                    sum((payload->>'input_tokens')::int) AS input_tokens,
@@ -353,6 +356,7 @@ async def list_traces(
             error=dict(r["error"]) if r["error"] else None,
             streaming_metrics=None,
             tags=list(r["tags"] or []),
+            session_id=r["session_id"] if r.get("session_id") else None,
         )
         for r in rows
     ]

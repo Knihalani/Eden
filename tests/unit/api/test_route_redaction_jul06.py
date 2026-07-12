@@ -29,42 +29,14 @@ from fastapi import HTTPException
 
 
 # ---------------------------------------------------------------------------
-# patterns.py — generate_env_for_pattern
+# patterns.py — generate_env_for_pattern (retired)
 # ---------------------------------------------------------------------------
 
-def test_patterns_generate_env_redacts_db_error():
+def test_patterns_generate_env_route_removed():
+    """generate-env was stripped with the env-gen product surface."""
     from eden.api.routes import patterns as patterns_route
 
-    exc = Exception(
-        'asyncpg.exceptions.UniqueViolationError: '
-        'duplicate key value violates unique constraint "jobs_job_id_key" '
-        'DETAIL: Key (job_id)=(abc-123) already exists.'
-    )
-
-    fake_pg = AsyncMock()
-    fake_pg.fetchrow = AsyncMock(return_value={
-        "topic_label": "t",
-        "sample_count": 1,
-        "representative_trace_ids": [],
-    })
-    fake_pg.fetchval = AsyncMock(side_effect=exc)
-
-    async def runner():
-        with patch.object(patterns_route, "get_postgres_client",
-                          AsyncMock(return_value=fake_pg)):
-            with pytest.raises(HTTPException) as ei:
-                await patterns_route.generate_env_for_pattern(
-                    org_id="o",
-                    pattern_id="p",
-                    user={"user_id": "u"},
-                )
-            assert ei.value.status_code == 500
-            detail = ei.value.detail
-            assert "jobs_job_id_key" not in detail
-            assert "abc-123" not in detail
-            assert "duplicate key" not in detail
-
-    asyncio.run(runner())
+    assert not hasattr(patterns_route, "generate_env_for_pattern")
 
 
 # ---------------------------------------------------------------------------

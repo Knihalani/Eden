@@ -205,6 +205,19 @@ async function fetchApi<T>(
     // safe 5s default before trying once more — whichever is longer.
     const isIdempotent = method === "GET" || method === "HEAD" || method === "OPTIONS";
     const generalTransient = (s: number) => s >= 500 || s === 0 || s === 408;
+    /** Proxy 502 from ``forwardToBackend`` when Northflank is down —
+     *  retrying amplifies Vercel isolate load (LP-21). Detect by
+     *  ``detail`` before burning more attempts. */
+    const isProxyUpstreamDown = async (res: Response): Promise<boolean> => {
+      if (res.status !== 502) return false;
+      try {
+        const body = (await res.clone().json()) as { detail?: unknown };
+        const detail = typeof body?.detail === "string" ? body.detail : "";
+        return /Backend (unreachable|timed out)/i.test(detail);
+      } catch {
+        return false;
+      }
+    };
     let attempt = 0;
     const maxAttempts = (status: number) => (status === 429 ? 1 : 2);
     while (
@@ -213,6 +226,12 @@ async function fetchApi<T>(
       attempt < maxAttempts(response.status) &&
       (response.status === 429 || generalTransient(response.status))
     ) {
+      // Skip 5xx retries when the proxy already reported upstream
+      // unreachable/timed out — 1 user action must not become
+      // 3× Vercel × 3× Northflank (LP-21).
+      if (await isProxyUpstreamDown(response)) {
+        break;
+      }
       attempt += 1;
       let backoff: number;
       if (response.status === 429) {
@@ -1722,6 +1741,49 @@ export const api = {
     return fetchApi(`/orgs/${orgId}/observability/traces${qs ? `?${qs}` : ""}`);
   },
 
+  // N10 — full-text span search (backend: GET .../observability/spans/search).
+  searchSpans: (
+    orgId: string,
+    params?: {
+      q?: string;
+      agent?: string;
+      tool?: string;
+      outcome?: string;
+      event_type?: string;
+      from_ts?: number;
+      to_ts?: number;
+      per_page?: number;
+      page?: number;
+    },
+  ): Promise<{
+    hits: Array<{
+      trace_id: string;
+      span_id?: string;
+      name?: string;
+      snippet?: string;
+      preview?: string;
+      score?: number;
+      [key: string]: unknown;
+    }>;
+    total: number;
+    facet_counts?: Record<string, Array<Record<string, unknown>>>;
+    took_ms?: number;
+    query?: string;
+  }> => {
+    const q = new URLSearchParams();
+    if (params?.q) q.set("q", params.q);
+    if (params?.agent) q.set("agent", params.agent);
+    if (params?.tool) q.set("tool", params.tool);
+    if (params?.outcome) q.set("outcome", params.outcome);
+    if (params?.event_type) q.set("event_type", params.event_type);
+    if (params?.from_ts !== undefined) q.set("from_ts", String(params.from_ts));
+    if (params?.to_ts !== undefined) q.set("to_ts", String(params.to_ts));
+    if (params?.per_page !== undefined) q.set("per_page", String(params.per_page));
+    if (params?.page !== undefined) q.set("page", String(params.page));
+    const qs = q.toString();
+    return fetchApi(`/orgs/${orgId}/observability/spans/search${qs ? `?${qs}` : ""}`);
+  },
+
   annotateTrace: (
     orgId: string,
     traceId: string,
@@ -2200,364 +2262,6 @@ export const api = {
       body: JSON.stringify({ pattern }),
     }),
 
-  // ── Multi-agent: environments / comms / roles / memory / planning / tests / HITL ──
-  // These are the per-org routes for the multi-agent orchestrator
-  // surface in /multi-agent. They were added in 2026-06 as part of
-  // the multi-agent test-runner expansion; the page uses one helper
-  // per route so that consumers stay typed at the call site.
-
-  listMultiAgentEnvs: (orgId: string) =>
-    fetchApi<{
-      environments: Array<{
-        env_id: string;
-        name: string;
-        pattern: string;
-        agent_count: number;
-        max_steps: number;
-        created_at: string;
-      }>;
-    }>(`/orgs/${orgId}/multi-agent/environments`),
-
-  createMultiAgentEnv: (
-    orgId: string,
-    data: {
-      name: string;
-      communication_pattern: string;
-      agent_count: number;
-      max_steps: number;
-    },
-  ) =>
-    fetchApi<{
-      env_id: string;
-      name: string;
-      pattern: string;
-      agent_count: number;
-      max_steps: number;
-      created_at: string;
-    }>(`/orgs/${orgId}/multi-agent/environments`, {
-      method: "POST",
-      body: JSON.stringify(data),
-    }),
-
-  deleteMultiAgentEnv: (orgId: string, envId: string) =>
-    fetchApi<{ deleted: boolean }>(`/orgs/${orgId}/multi-agent/environments/${envId}`, {
-      method: "DELETE",
-    }),
-
-  getMultiAgentMessages: (orgId: string, envId: string, toAgent: string) =>
-    fetchApi<{
-      messages: Array<{
-        message_id: string;
-        from_agent: string;
-        to_agent: string;
-        content: Record<string, unknown>;
-        sent_at: string;
-        read_at: string | null;
-      }>;
-    }>(
-      `/orgs/${orgId}/multi-agent/environments/${envId}/messages?to=${encodeURIComponent(toAgent)}`,
-    ),
-
-  getMultiAgentCommStats: (orgId: string, envId: string) =>
-    fetchApi<{
-      stats: {
-        total_messages: number;
-        messages_per_minute: number;
-        unique_pairs: number;
-        broadcast_count: number;
-        avg_latency_ms: number;
-      };
-    }>(`/orgs/${orgId}/multi-agent/environments/${envId}/stats`),
-
-  sendMultiAgentMessage: (
-    orgId: string,
-    envId: string,
-    data: { from_agent: string; to_agent: string; content: Record<string, unknown> },
-  ) =>
-    fetchApi<{ message_id: string; sent_at: string }>(
-      `/orgs/${orgId}/multi-agent/environments/${envId}/messages`,
-      { method: "POST", body: JSON.stringify(data) },
-    ),
-
-  broadcastMultiAgentMessage: (
-    orgId: string,
-    envId: string,
-    data: { from_agent: string; content: Record<string, unknown> },
-  ) =>
-    fetchApi<{ delivered: number; sent_at: string }>(
-      `/orgs/${orgId}/multi-agent/environments/${envId}/broadcast`,
-      { method: "POST", body: JSON.stringify(data) },
-    ),
-
-  // Roles + role configs
-
-  listAgentRoles: (orgId: string, envId: string) =>
-    fetchApi<{
-      roles: Array<{
-        role_id: string;
-        role_name: string;
-        hierarchy: string;
-        agent_id: string | null;
-        objectives: string[];
-        tools: string[];
-      }>;
-    }>(`/orgs/${orgId}/multi-agent/environments/${envId}/roles`),
-
-  listRoleConfigs: (orgId: string, envId: string) =>
-    fetchApi<{
-      configs: Array<{
-        config_id: string;
-        role_name: string;
-        hierarchy: string;
-        objectives: string[];
-        tools: string[];
-        created_at: string;
-      }>;
-    }>(`/orgs/${orgId}/multi-agent/environments/${envId}/role-configs`),
-
-  createRoleConfig: (
-    orgId: string,
-    envId: string,
-    data: { role_name: string; hierarchy: string; objectives: string[]; tools: string[] },
-  ) =>
-    fetchApi<{
-      config_id: string;
-      role_name: string;
-      hierarchy: string;
-      objectives: string[];
-      tools: string[];
-      created_at: string;
-    }>(`/orgs/${orgId}/multi-agent/environments/${envId}/role-configs`, {
-      method: "POST",
-      body: JSON.stringify(data),
-    }),
-
-  assignAgentRole: (
-    orgId: string,
-    envId: string,
-    data: { agent_id: string; role_name: string },
-  ) =>
-    fetchApi<{ role_id: string; agent_id: string; role_name: string; assigned_at: string }>(
-      `/orgs/${orgId}/multi-agent/environments/${envId}/roles`,
-      { method: "POST", body: JSON.stringify(data) },
-    ),
-
-  // Memory
-
-  queryMemory: (orgId: string, envId: string, agentId: string) =>
-    fetchApi<{
-      working_memory_summary: string;
-      episodes: Array<{
-        episode_id: string;
-        content: string;
-        recorded_at: string;
-        importance: number;
-      }>;
-      semantic_facts: Array<{ fact: string; confidence: number }>;
-    }>(
-      `/orgs/${orgId}/multi-agent/environments/${envId}/memory/${encodeURIComponent(agentId)}/query`,
-    ),
-
-  getMemoryStats: (orgId: string, envId: string) =>
-    fetchApi<{
-      working_memory_count: number;
-      episodic: { total_recorded: number; recent_24h: number };
-      semantic: { total_facts: number; avg_confidence: number };
-    }>(`/orgs/${orgId}/multi-agent/environments/${envId}/memory/stats`),
-
-  addObservation: (
-    orgId: string,
-    envId: string,
-    data: { agent_id: string; content: string },
-  ) =>
-    fetchApi<{ observation_id: string; recorded_at: string }>(
-      `/orgs/${orgId}/multi-agent/environments/${envId}/memory/observe`,
-      { method: "POST", body: JSON.stringify(data) },
-    ),
-
-  consolidateMemory: (orgId: string, envId: string, agentId: string) =>
-    fetchApi<{ merged: number; archived: number; demoted: number }>(
-      `/orgs/${orgId}/multi-agent/environments/${envId}/memory/${encodeURIComponent(agentId)}/consolidate`,
-      { method: "POST" },
-    ),
-
-  // Planning
-
-  listPlanningFrameworks: (orgId: string) =>
-    fetchApi<{
-      frameworks: Array<{
-        id: string;
-        name: string;
-        description: string;
-        complexity: "low" | "medium" | "high";
-        supports: string[];
-      }>;
-    }>(`/orgs/${orgId}/multi-agent/frameworks`),
-
-  runEpisode: (
-    orgId: string,
-    envId: string,
-    data: { framework: string; agent_ids: string[]; max_steps: number },
-  ) =>
-    fetchApi<{
-      result: {
-        episode_id: string;
-        steps_taken: number;
-        outcome: string;
-        agent_contributions: Record<string, number>;
-        artifacts: Record<string, unknown>;
-      };
-    }>(`/orgs/${orgId}/multi-agent/environments/${envId}/episodes/run`, {
-      method: "POST",
-      body: JSON.stringify(data),
-    }),
-
-  // Tests + benchmark
-
-  runMultiAgentTests: (orgId: string, envId: string) =>
-    fetchApi<{
-      total_tests: number;
-      passed: number;
-      failed: number;
-      duration_ms: number;
-      all_passed: boolean;
-      results: Array<{
-        test_name: string;
-        passed: boolean;
-        duration_ms: number;
-        error: string | null;
-      }>;
-    }>(`/orgs/${orgId}/multi-agent/environments/${envId}/tests/run`, {
-      method: "POST",
-    }),
-
-  runMultiAgentBenchmark: (orgId: string, envId: string) =>
-    fetchApi<{
-      suite: string;
-      scores: Record<string, number>;
-      duration_ms: number;
-      per_test: Array<{ test_name: string; score: number; duration_ms: number }>;
-    }>(`/orgs/${orgId}/multi-agent/environments/${envId}/benchmark/run`, {
-      method: "POST",
-    }),
-
-  getMultiAgentTestResults: (orgId: string, envId: string) =>
-    fetchApi<{
-      total_tests: number;
-      passed: number;
-      failed: number;
-      duration_ms: number;
-      all_passed: boolean;
-      results: Array<{
-        test_name: string;
-        passed: boolean;
-        duration_ms: number;
-        error: string | null;
-      }>;
-    }>(`/orgs/${orgId}/multi-agent/environments/${envId}/tests/results`),
-
-  // HITL (human-in-the-loop)
-
-  getHitlRules: (orgId: string, envId: string) =>
-    fetchApi<{ rules: Record<string, string> }>(
-      `/orgs/${orgId}/multi-agent/environments/${envId}/hitl/rules`,
-    ),
-
-  getPendingApprovals: (orgId: string, envId: string) =>
-    fetchApi<{
-      pending: Array<{
-        approval_id: string;
-        action_type: string;
-        payload: Record<string, unknown>;
-        requested_at: string;
-        requested_by: string;
-      }>;
-    }>(`/orgs/${orgId}/multi-agent/environments/${envId}/hitl/pending`),
-
-  setHitlRule: (
-    orgId: string,
-    envId: string,
-    data: { action_type: string; rule: string },
-  ) =>
-    fetchApi<{ action_type: string; rule: string; set_at: string }>(
-      `/orgs/${orgId}/multi-agent/environments/${envId}/hitl/rules`,
-      { method: "POST", body: JSON.stringify(data) },
-    ),
-
-  resolveApproval: (orgId: string, envId: string, approvalId: string, approve: boolean) =>
-    fetchApi<{ approval_id: string; resolved: boolean; decision: "approved" | "rejected" }>(
-      `/orgs/${orgId}/multi-agent/environments/${envId}/hitl/resolve`,
-      {
-        method: "POST",
-        body: JSON.stringify({ approval_id: approvalId, approve }),
-      },
-    ),
-
-  // ── Marketplace (Cat 15) ──────────────────────────────────────
-
-  listMarketplace: (params?: { q?: string; category?: string; quality?: string }) => {
-    const q = new URLSearchParams();
-    if (params?.q) q.set("q", params.q);
-    if (params?.category) q.set("category", params.category);
-    if (params?.quality) q.set("quality", params.quality);
-    const qs = q.toString();
-    return fetchApi<
-      Array<{
-        id: string;
-        slug: string;
-        title: string;
-        summary: string;
-        category: string;
-        tags?: string[];
-        quality_score?: number | null;
-        quality_band?: "high" | "medium" | "low" | null;
-        fork_count?: number;
-        install_count?: number;
-        is_featured?: boolean;
-        published_at?: string | null;
-      }>
-    >(`/marketplace/cards${qs ? `?${qs}` : ""}`);
-  },
-
-  listMarketplaceFeatured: () =>
-    fetchApi<
-      Array<{
-        id: string;
-        slug: string;
-        title: string;
-        summary: string;
-        category: string;
-        tags?: string[];
-        quality_score?: number | null;
-        quality_band?: "high" | "medium" | "low" | null;
-        fork_count?: number;
-        install_count?: number;
-        is_featured?: boolean;
-        published_at?: string | null;
-      }>
-    >(`/marketplace/cards/featured`),
-
-  getMarketplaceCard: (cardId: string) =>
-    fetchApi<{
-      id: string;
-      slug: string;
-      title: string;
-      summary: string;
-      description?: string | null;
-      category: string;
-      tags?: string[];
-      quality_score?: number | null;
-      quality_band?: "high" | "medium" | "low" | null;
-      fork_count?: number;
-      install_count?: number;
-      is_featured?: boolean;
-      license?: string;
-      homepage_url?: string | null;
-      repository_url?: string | null;
-      published_at?: string | null;
-      updated_at?: string;
-    }>(`/marketplace/cards/${encodeURIComponent(cardId)}`),
-
   // Sandbox client removed 2026-07-04 — sandbox subsystem retired on
   // the backend. Sandbox navigation entries were removed from
   // sidebar-config.ts, breadcrumbs.ts, and command-palette.tsx.
@@ -2621,9 +2325,11 @@ export type ObservabilityTrace = {
   streaming_metrics?: ObservabilityStreamingMetrics | null;
   /** Free-form tag dict the BE attaches (e.g. ``realm:env``). */
   tags?: Record<string, string> | null;
+  /** N12 — explicit session id when present on span attributes. */
+  session_id?: string | null;
 };
 
-// ── Phase 3: agents + uploads + sim/test runs ────────────────────
+// ── Agents registry ─────────────────────────────────────────────
 
 export type AgentSummary = {
   agent_id: string;
@@ -2633,34 +2339,6 @@ export type AgentSummary = {
   last_seen_at: string;
   created_at: string;
   updated_at: string;
-};
-
-export type AgentUpload = {
-  upload_id: string;
-  upload_version: number;
-  code_path: string;
-  entry_point: string | null;
-  framework: string | null;
-  language: string | null;
-  file_count: number;
-  total_bytes: number;
-  eval_yaml: Record<string, unknown> | null;
-  uploaded_at: string;
-};
-
-export type SimRun = {
-  id: string;
-  org_id: string;
-  agent_id: string;
-  upload_id: string;
-  kind: "sim" | "test";
-  status: "pending" | "running" | "passed" | "failed" | "error";
-  started_at: string;
-  finished_at: string | null;
-  duration_ms: number | null;
-  results: Record<string, unknown> | null;
-  error: string | null;
-  runner_kind: string | null;
 };
 
 export const agentsApi = {
@@ -2682,64 +2360,8 @@ export const agentsApi = {
       `/orgs/${orgId}/agents/register`,
       { method: "POST", body: JSON.stringify(body) }
     ),
-  listUploads: (orgId: string, agentId: string, params?: { active_only?: boolean; limit?: number }) => {
-    const search = new URLSearchParams();
-    if (params?.active_only) search.set("active_only", "true");
-    if (params?.limit) search.set("limit", String(params.limit));
-    const qs = search.toString();
-    return fetchApi<AgentUpload[]>(
-      `/orgs/${orgId}/agents/${agentId}/uploads${qs ? `?${qs}` : ""}`
-    );
-  },
-  upload: (orgId: string, agentId: string, file: File, filename: string) => {
-    const form = new FormData();
-    form.append("file", file, filename);
-    return fetchApi<AgentUpload>(
-      `/orgs/${orgId}/agents/${agentId}/upload`,
-      { method: "POST", body: form }
-    );
-  },
-  triggerSimRun: (
-    orgId: string,
-    agentId: string,
-    body: { upload_id?: string; scenario_ids?: string[]; max_episodes?: number; runner_kind?: "firecracker" | "subprocess" }
-  ) =>
-    fetchApi<SimRun>(
-      `/orgs/${orgId}/agents/${agentId}/sim/runs`,
-      { method: "POST", body: JSON.stringify(body) }
-    ),
-  listSimRuns: (orgId: string, agentId: string, params?: { status?: string; limit?: number }) => {
-    const search = new URLSearchParams();
-    if (params?.status) search.set("status", params.status);
-    if (params?.limit) search.set("limit", String(params.limit));
-    const qs = search.toString();
-    return fetchApi<{ runs: SimRun[]; total: number }>(
-      `/orgs/${orgId}/agents/${agentId}/sim/runs${qs ? `?${qs}` : ""}`
-    );
-  },
-  getSimRun: (orgId: string, agentId: string, runId: string) =>
-    fetchApi<SimRun>(`/orgs/${orgId}/agents/${agentId}/sim/runs/${runId}`),
-  triggerTestRun: (
-    orgId: string,
-    agentId: string,
-    body: { upload_id?: string; runner_kind?: "firecracker" | "subprocess" }
-  ) =>
-    fetchApi<SimRun>(
-      `/orgs/${orgId}/agents/${agentId}/test/runs`,
-      { method: "POST", body: JSON.stringify(body) }
-    ),
-  listTestRuns: (orgId: string, agentId: string, params?: { status?: string; limit?: number }) => {
-    const search = new URLSearchParams();
-    if (params?.status) search.set("status", params.status);
-    if (params?.limit) search.set("limit", String(params.limit));
-    const qs = search.toString();
-    return fetchApi<{ runs: SimRun[]; total: number }>(
-      `/orgs/${orgId}/agents/${agentId}/test/runs${qs ? `?${qs}` : ""}`
-    );
-  },
-  getTestRun: (orgId: string, agentId: string, runId: string) =>
-    fetchApi<SimRun>(`/orgs/${orgId}/agents/${agentId}/test/runs/${runId}`),
 };
+
 // ── Agent PR-suggestion API (v1.7) ───────────────────────────────
 
 import type {
@@ -2838,70 +2460,6 @@ export const rcaApi = {
     fetchApi<{ cluster_id: string; summary: string; member_count: number; severity: string; first_seen: string; last_seen: string; }>(`/orgs/${orgId}/intelligence/rca/incidents/${clusterId}/summarize`),
 };
 
-// ── Visual Builder: graph save/load (§8.1, Phase 1.7) ────────────
-export const builderApi = {
-  list: (orgId: string, params?: { limit?: number; offset?: number }) => {
-    const search = new URLSearchParams();
-    if (params?.limit) search.set("limit", String(params.limit));
-    if (params?.offset) search.set("offset", String(params.offset));
-    const qs = search.toString();
-    return fetchApi<{
-      graphs: Array<{
-        id: string;
-        org_id: string;
-        name: string;
-        graph: { nodes: unknown[]; edges: unknown[] };
-        yaml: string;
-        agent_id: string | null;
-        created_at: string;
-        updated_at: string;
-      }>;
-      total: number;
-    }>(`/orgs/${orgId}/builder/graphs${qs ? `?${qs}` : ""}`);
-  },
-  get: (orgId: string, name: string) =>
-    fetchApi<{
-      id: string;
-      org_id: string;
-      name: string;
-      graph: { nodes: unknown[]; edges: unknown[] };
-      yaml: string;
-      agent_id: string | null;
-      created_at: string;
-      updated_at: string;
-    }>(`/orgs/${orgId}/builder/graphs/${encodeURIComponent(name)}`),
-  upsert: (
-    orgId: string,
-    body: {
-      name: string;
-      graph: { nodes: unknown[]; edges: unknown[] };
-      yaml?: string;
-      agent_id?: string | null;
-    },
-  ) =>
-    fetchApi<{
-      graph: {
-        id: string;
-        org_id: string;
-        name: string;
-        graph: { nodes: unknown[]; edges: unknown[] };
-        yaml: string;
-        agent_id: string | null;
-        created_at: string;
-        updated_at: string;
-      };
-      created: boolean;
-    }>(`/orgs/${orgId}/builder/graphs`, {
-      method: "POST",
-      body: JSON.stringify(body),
-    }),
-  delete: (orgId: string, name: string) =>
-    fetchApi<{ deleted: boolean; name: string }>(
-      `/orgs/${orgId}/builder/graphs/${encodeURIComponent(name)}`,
-      { method: "DELETE" },
-    ),
-};
-
 // ── Intelligence: Retrieval (Cat 4) ─────────────────────────────────
 export const retrievalApi = {
   utilization: (orgId: string, traceId: string) =>
@@ -2990,8 +2548,20 @@ export const outcomesApi = {
 
 // ── Intelligence: Predictive / Drift (Cat 13) ───────────────────────
 export const predictiveApi = {
-  quality: (orgId: string, data: { horizon_days?: number }) =>
-    fetchApi<{ predictions: Array<{ date: string; median: number; ci_95_low: number; ci_95_high: number }>; }>(`/orgs/${orgId}/intelligence/predict/quality`, { method: "POST", body: JSON.stringify(data) }),
+  quality: (orgId: string, data?: { horizon_days?: number; request_id?: string; forecast_horizon?: string; judge_name?: string }) => {
+    const horizon = data?.horizon_days ?? 7;
+    const body = {
+      request_id: data?.request_id ?? `portal-quality-${Date.now()}`,
+      forecast_horizon: data?.forecast_horizon ?? `${horizon}d`,
+      horizon_days: horizon,
+      ...(data?.judge_name ? { judge_name: data.judge_name } : {}),
+    };
+    return fetchApi<{
+      status?: string;
+      data?: { predictions: Array<{ date: string; median: number; ci_95_low: number; ci_95_high: number }> };
+      predictions?: Array<{ date: string; median: number; ci_95_low: number; ci_95_high: number }>;
+    }>(`/orgs/${orgId}/intelligence/predict/quality`, { method: "POST", body: JSON.stringify(body) });
+  },
   cost: (orgId: string, data: { horizon_days?: number }) =>
     fetchApi<{ predictions: Array<{ date: string; median: number; ci_95_low: number; ci_95_high: number }>; }>(`/orgs/${orgId}/intelligence/predict/cost`, { method: "POST", body: JSON.stringify(data) }),
   capacity: (orgId: string, data: { horizon_days?: number }) =>
@@ -2999,7 +2569,7 @@ export const predictiveApi = {
   risk: (orgId: string) =>
     fetchApi<{ risk_score: number; components: Record<string, { score: number; weight: number; alerts: string[] }>; breakdown: Array<{ component: string; score: number; alerts: string[] }>; }>(`/orgs/${orgId}/intelligence/predict/risk`, { method: "POST" }),
   drift: (orgId: string) =>
-    fetchApi<{ drift_detected: boolean; drift_score: number; baseline_period: string; current_period: string; severity: string; top_shifts: Array<Record<string, unknown>>; }>(`/orgs/${orgId}/intelligence/predict/drift`, { method: "POST" }),
+    fetchApi<{ drift_detected: boolean; drift_score: number; baseline_period: string; current_period: string; severity: string; top_shifts: Array<Record<string, unknown>>; }>(`/orgs/${orgId}/intelligence/predict/drift`, { method: "POST", body: JSON.stringify({}) }),
   embeddingDrift: (orgId: string) =>
     fetchApi<{ drift_detected: boolean; psi: number; histogram_buckets: number; severity: string; }>(`/orgs/${orgId}/intelligence/predict/drift/embedding`, { method: "POST" }),
 };
@@ -3339,6 +2909,52 @@ export const agentIssuesApi = {
   },
 };
 
+// ── N17 Improvement Cockpit ─────────────────────────────────────────
+export type ImproveQueueItem = {
+  ref: string;
+  item_type: string;
+  title: string;
+  column: string;
+  severity: string;
+  agent_id?: string | null;
+  status: string;
+  href?: string | null;
+  payload?: Record<string, unknown>;
+  autonomy_tier_required?: string | null;
+  blocked_reason?: string | null;
+  source?: string;
+};
+
+export type ImproveQueueData = {
+  items: ImproveQueueItem[];
+  refreshed_at: string;
+  counts_by_column: Record<string, number>;
+  counts_by_type: Record<string, number>;
+  count: number;
+};
+
+export const improveApi = {
+  queue: (orgId: string, params?: { agent_id?: string; limit?: number }) => {
+    const q = new URLSearchParams();
+    if (params?.agent_id) q.set("agent_id", params.agent_id);
+    if (params?.limit != null) q.set("limit", String(params.limit));
+    const qs = q.toString();
+    return fetchApi<IssuesEnvelope<ImproveQueueData>>(
+      `/orgs/${orgId}/improve/queue${qs ? `?${qs}` : ""}`,
+    );
+  },
+  snooze: (orgId: string, itemRef: string, hours = 24) =>
+    fetchApi<IssuesEnvelope<{ item_ref: string; snoozed_until: string }>>(
+      `/orgs/${orgId}/improve/items/${encodeURIComponent(itemRef)}/snooze`,
+      { method: "POST", body: JSON.stringify({ hours }) },
+    ),
+  approve: (orgId: string, itemRef: string) =>
+    fetchApi<IssuesEnvelope<{ item_ref: string; result?: unknown }>>(
+      `/orgs/${orgId}/improve/items/${encodeURIComponent(itemRef)}/approve`,
+      { method: "POST" },
+    ),
+};
+
 // ── Intelligence: Eval (Cat 3) ──────────────────────────────────────
 export const evalApi = {
   tagVersion: (orgId: string, data: { judge_name: string; version: string; notes?: string }) =>
@@ -3497,6 +3113,7 @@ export const governanceApi = {
 (api as unknown as Record<string, unknown>).costApi = costApi;
 (api as unknown as Record<string, unknown>).experimentsApi = experimentsApi;
 (api as unknown as Record<string, unknown>).closedLoopApi = closedLoopApi;
+(api as unknown as Record<string, unknown>).improveApi = improveApi;
 (api as unknown as Record<string, unknown>).evalApi = evalApi;
 (api as unknown as Record<string, unknown>).replayApi = replayApi;
 (api as unknown as Record<string, unknown>).timeTravelApi = timeTravelApi;
@@ -4618,68 +4235,108 @@ const labelingApi = {
     }),
 };
 
-// ── Signals (Phase Q) ────────────────────────────────────────────────
+// ── Signals (Phase Q / F48) ──────────────────────────────────────────
+
+export interface CompiledRule {
+  metric: string;
+  op: string;
+  threshold: number;
+  window_hours: number;
+  scope: Record<string, string>;
+  keywords: string[];
+}
 
 export interface Signal {
   id: string;
-  name: string;
+  org_id?: string;
   description: string;
-  natural_query: string;
-  compiled_sql?: string;
-  status: "draft" | "compiled" | "active" | "error";
-  last_compiled_at?: string;
+  rule: CompiledRule;
+  enabled: boolean;
+  cluster_id?: string | null;
+  created_by?: string | null;
+  match_count?: number;
   created_at: string;
+  updated_at?: string;
 }
 
 const signalsApi = {
   list: (orgId: string) =>
-    fetchApi<{ signals: Signal[]; total: number }>(
-      `/orgs/${orgId}/signals`,
-      { headers: { "X-Org-Id": orgId } },
-    ),
-  create: (orgId: string, body: { name: string; description: string; natural_query: string }) =>
+    fetchApi<{ signals: Signal[] }>(`/orgs/${orgId}/signals`, {
+      headers: { "X-Org-Id": orgId },
+    }),
+  create: (orgId: string, body: { description: string; enabled?: boolean }) =>
     fetchApi<Signal>(`/orgs/${orgId}/signals`, {
       method: "POST",
       headers: { "X-Org-Id": orgId, "Content-Type": "application/json" },
       body: JSON.stringify(body),
     }),
-  compile: (orgId: string, signalId: string) =>
-    fetchApi<Signal>(`/orgs/${orgId}/signals/${signalId}/compile`, {
-      method: "POST",
-      headers: { "X-Org-Id": orgId },
-    }),
+  seedDefaults: (orgId: string, profile: "minimal" | "standard" | "advanced" = "standard") =>
+    fetchApi<{ count: number; skipped: number; profile: string; signal_ids: string[] }>(
+      `/orgs/${orgId}/signals/seed-defaults`,
+      {
+        method: "POST",
+        headers: { "X-Org-Id": orgId, "Content-Type": "application/json" },
+        body: JSON.stringify({ profile }),
+      },
+    ),
+  match: (orgId: string, signalId: string, value: number) =>
+    fetchApi<{ matched: boolean; rule: CompiledRule }>(
+      `/orgs/${orgId}/signals/${signalId}/match`,
+      {
+        method: "POST",
+        headers: { "X-Org-Id": orgId, "Content-Type": "application/json" },
+        body: JSON.stringify({ value }),
+      },
+    ),
 };
 
-// ── Debugger (Phase P) ───────────────────────────────────────────────
+// ── Debugger (Phase P / F48) ─────────────────────────────────────────
 
 export interface Checkpoint {
   id: string;
   trace_id: string;
-  label: string;
-  step_index: number;
-  created_at: string;
-  payload_keys: string[];
+  step_number: number;
+  input_messages: Record<string, unknown>[];
+  tool_calls: Record<string, unknown>[];
+  tool_results: Record<string, unknown>[];
+  response: Record<string, unknown>;
+  prompt_override?: string | null;
+  started_at: string;
+  ended_at: string;
+  duration_ms: number;
+  source: "live" | "replay" | string;
+}
+
+export interface RerunResult {
+  source_trace_id: string;
+  from_step: number;
+  to_step: number;
+  prompt_override?: string | null;
+  checkpoints: Checkpoint[];
+  diff: Array<{
+    step_number: number;
+    original_response: unknown;
+    replayed_response: unknown;
+    input_messages_changed: boolean;
+  }>;
 }
 
 const debuggerApi = {
-  listCheckpoints: (orgId: string, traceId?: string) =>
-    fetchApi<{ checkpoints: Checkpoint[]; total: number }>(
-      `/orgs/${orgId}/debugger/checkpoints${traceId ? `?trace_id=${traceId}` : ""}`,
+  listCheckpoints: (orgId: string, traceId: string) =>
+    fetchApi<{ checkpoints: Checkpoint[] }>(
+      `/orgs/${orgId}/debugger/checkpoints/${encodeURIComponent(traceId)}`,
       { headers: { "X-Org-Id": orgId } },
     ),
-  rewind: (orgId: string, checkpointId: string) =>
-    fetchApi<{ ok: boolean; replayed_to: string }>(
-      `/orgs/${orgId}/debugger/rewind/${checkpointId}`,
-      { method: "POST", headers: { "X-Org-Id": orgId } },
-    ),
-  rerun: (orgId: string, body: { trace_id: string; from_step?: number }) =>
-    fetchApi<{ trace_id: string; status: string }>(
-      `/orgs/${orgId}/debugger/rerun`,
-      { method: "POST", headers: { "X-Org-Id": orgId, "Content-Type": "application/json" },
-        body: JSON.stringify(body) },
-    ),
+  rerun: (
+    orgId: string,
+    body: { trace_id: string; from_step?: number; prompt_override?: string },
+  ) =>
+    fetchApi<RerunResult>(`/orgs/${orgId}/debugger/rerun`, {
+      method: "POST",
+      headers: { "X-Org-Id": orgId, "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    }),
 };
-
 // ── QA Generator (Phase J — synthetic) ──────────────────────────────
 
 export interface QARun {
@@ -4908,4 +4565,53 @@ export const disciplineApi = {
       `/orgs/${orgId}/intelligence/code-change/repos/${encodeURIComponent(repoId)}/request-index`,
       { method: "POST" }
     ),
+};
+
+/** Cat 23 code-change policy (incl. optimization schedule). */
+export type OptimizationSchedule =
+  | "off"
+  | "daily"
+  | "weekly"
+  | "biweekly"
+  | "monthly";
+
+export interface CodeChangePolicy {
+  code_change_enabled?: boolean;
+  auto_pr_enabled?: boolean;
+  auto_revert_enabled?: boolean;
+  optimization_schedule?: OptimizationSchedule;
+  optimization_weekday?: number;
+  optimization_hour_utc?: number;
+  optimization_day_of_month?: number;
+  max_prs_per_run?: number;
+  candidate_sources?: string[];
+  last_optimization_run_at?: string | null;
+  daily_maintenance_budget_usd?: number | null;
+  [key: string]: unknown;
+}
+
+export const codeChangePolicyApi = {
+  get: (orgId: string) =>
+    fetchApi<{
+      status: string;
+      data: {
+        org_id: string;
+        policy: CodeChangePolicy;
+        policy_source: string;
+      };
+    }>(`/orgs/${orgId}/intelligence/code-change/policy`),
+  update: (orgId: string, policy: Partial<CodeChangePolicy>) =>
+    fetchApi<{
+      status: string;
+      data: {
+        org_id: string;
+        policy: CodeChangePolicy;
+        persisted: boolean;
+        message?: string;
+      };
+      message?: string;
+    }>(`/orgs/${orgId}/intelligence/code-change/policy`, {
+      method: "POST",
+      body: JSON.stringify({ policy }),
+    }),
 };

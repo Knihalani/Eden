@@ -12,7 +12,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from fastapi import APIRouter, Depends, Path
+from fastapi import APIRouter, Depends, Path, Query
 from pydantic import BaseModel, Field
 
 from eden.api.routes.auth import get_current_user
@@ -103,6 +103,23 @@ def _checkpoint_to_response(c: Checkpoint) -> CheckpointResponse:
 
 
 # ─- Routes ────────────────────────────────────────────────────────
+
+
+
+@router.get(
+    "/checkpoints",
+    response_model=CheckpointListResponse,
+    summary="List checkpoints for a trace (query: trace_id)",
+)
+async def list_checkpoints_query(
+    org_id: str = Path(...),
+    trace_id: str = Query(..., min_length=1, description="Trace to list checkpoints for"),
+    user: dict = Depends(get_current_user),
+) -> CheckpointListResponse:
+    """LP-15: portal historically called ``/checkpoints?trace_id=``;
+    path form ``/checkpoints/{trace_id}`` remains canonical.
+    """
+    return await list_checkpoints(org_id=org_id, trace_id=trace_id, user=user)
 
 
 @router.get(

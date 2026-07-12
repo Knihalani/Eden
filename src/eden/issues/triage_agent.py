@@ -4,13 +4,14 @@ Facade over the existing :class:`InvestigationAgent` (reuse, not a
 parallel ReAct engine):
 
 1. Load the issue + its top-5 example stumbles.
-2. **StatGate-first**: run the deterministic
-   :class:`StatGateIncidentScorer`. If a P0 signal fires, write a
-   deterministic ``triage_result`` (``source="statgate"``, sub-200ms, no
-   LLM) and return immediately.
-3. Otherwise, respect the daily triage budget (N22 pre-cursor), then
-   delegate to ``InvestigationAgent.investigate(trigger="issue:<id>")``
-   and map the findings into the ``triage_result`` JSONB.
+2. **Active-work suppress**: open proposed patch, pending verify, or
+   remediating status → return cached/suppressed (no LLM) unless
+   ``force=True``.
+3. **Cache**: return existing ``triage_result`` unless ``force``, severity
+   escalated since triage, or StatGate would newly auto-escalate.
+4. **StatGate-first**: deterministic P0 path (``source="statgate"``).
+5. Optional org triage budget — unset / ``<=0`` = unlimited.
+6. Otherwise delegate to ``InvestigationAgent.investigate``.
 
 Results are persisted to ``agent_issues.triage_result`` and returned in
 the standard envelope shape.
@@ -30,6 +31,34 @@ logger = logging.getLogger(__name__)
 # Rough per-triage LLM cost estimate ($) used to debit the daily budget
 # when the provider does not report an exact cost.
 _TRIAGE_COST_ESTIMATE_USD = 0.02
+
+# Issue statuses that mean remediation is already in flight.
+_REMEDIATING_STATUSES = frozenset({"fix_pending", "verifying"})
+
+# Open proposed_patches statuses that should suppress re-triage.
+_OPEN_PATCH_STATUSES = ("proposed", "approved", "needs_revision")
+
+# F46 ``_decide_remediation`` branches on these action types.
+_ALLOWED_ACTION_TYPES = frozenset(
+    {"rollback", "reweight", "cache_bust", "propose_patch", "escalate"}
+)
+
+_ACTION_ALIASES: dict[str, str] = {
+    "patch": "propose_patch",
+    "code_change": "propose_patch",
+    "fix": "propose_patch",
+    "heal": "rollback",
+    "heal_rollback": "rollback",
+    "revert": "rollback",
+    "rebalance": "reweight",
+    "bust_cache": "cache_bust",
+    "human": "escalate",
+    "page": "escalate",
+    "alert": "escalate",
+    "review": "escalate",
+}
+
+_SEVERITY_RANK: dict[str, int] = {"p0": 0, "p1": 1, "p2": 2, "p3": 3}
 
 
 class TriageAgent:
@@ -52,14 +81,15 @@ class TriageAgent:
                 status="not_found",
             )
 
-        # Return cached triage unless forced.
-        if issue.triage_result and not force:
+        # ── Active-work suppress (unless manual force) ──
+        if not force and await self._has_active_work(org_id, issue):
             return _envelope(
                 "triage",
                 {
                     "issue_id": issue_id,
-                    "triage_result": issue.triage_result,
+                    "triage_result": issue.triage_result or {},
                     "cached": True,
+                    "suppressed": "active_work",
                 },
             )
 
@@ -68,7 +98,20 @@ class TriageAgent:
         )
         issue_row = _issue_to_row(issue)
 
-        # ── 1. StatGate-first (deterministic, no LLM) ──
+        # ── Cache unless force / severity escalate / new StatGate P0 ──
+        if issue.triage_result and not force:
+            score_preview = self._scorer.score(issue_row, stumbles)
+            if not _should_invalidate_cache(issue, score_preview):
+                return _envelope(
+                    "triage",
+                    {
+                        "issue_id": issue_id,
+                        "triage_result": issue.triage_result,
+                        "cached": True,
+                    },
+                )
+
+        # ── StatGate-first (deterministic, no LLM) ──
         score = self._scorer.score(issue_row, stumbles)
         if score.auto_escalate:
             triage_result = {
@@ -78,9 +121,10 @@ class TriageAgent:
                 "auto_escalate": True,
                 "p0_checks": score.p0_checks,
                 "suggested_actions": _statgate_actions(score),
-                "evidence_span_ids": [
-                    s.get("span_id") for s in stumbles if s.get("span_id")
-                ],
+                "evidence_span_ids": _evidence_span_ids(stumbles),
+                "fingerprint": issue.fingerprint,
+                "linked_files": _linked_files_hints(stumbles, issue.triage_result),
+                "severity_at_triage": issue.severity,
                 "triaged_at": datetime.now(UTC).isoformat(),
             }
             await self._repo.set_triage_result(org_id, issue_id, triage_result)
@@ -89,7 +133,7 @@ class TriageAgent:
                 {"issue_id": issue_id, "triage_result": triage_result},
             )
 
-        # ── 2. Budget gate before spending an LLM call (N22 pre-cursor) ──
+        # ── Optional budget gate (unset / <=0 = unlimited) ──
         if not await self._budget_ok(org_id):
             triage_result = {
                 "root_cause": "deferred — daily triage budget exhausted",
@@ -97,6 +141,8 @@ class TriageAgent:
                 "source": "budget_exceeded",
                 "suggested_actions": [],
                 "evidence_span_ids": [],
+                "fingerprint": issue.fingerprint,
+                "severity_at_triage": issue.severity,
                 "triaged_at": datetime.now(UTC).isoformat(),
             }
             await self._repo.set_triage_result(org_id, issue_id, triage_result)
@@ -106,7 +152,7 @@ class TriageAgent:
                 status="budget_exceeded",
             )
 
-        # ── 3. LLM triage via InvestigationAgent (issue: trigger) ──
+        # ── LLM triage via InvestigationAgent (issue: trigger) ──
         try:
             from eden.autonomous import InvestigationAgent
 
@@ -130,8 +176,11 @@ class TriageAgent:
             "auto_escalate": False,
             "p0_checks": [],
             "suggested_actions": _map_remediations(remediations),
-            "evidence_span_ids": [],
+            "evidence_span_ids": _evidence_span_ids(stumbles),
+            "fingerprint": issue.fingerprint,
+            "linked_files": _linked_files_hints(stumbles, data),
             "investigation_id": data.get("investigation_id"),
+            "severity_at_triage": issue.severity,
             "triaged_at": datetime.now(UTC).isoformat(),
         }
         await self._repo.set_triage_result(org_id, issue_id, triage_result)
@@ -141,19 +190,100 @@ class TriageAgent:
             "triage", {"issue_id": issue_id, "triage_result": triage_result}
         )
 
-    # ── budget helpers (N22 pre-cursor; formalised in Wave 5) ──
+    # ── active-work helpers ─────────────────────────────────────────
+
+    async def _has_active_work(self, org_id: str, issue: Any) -> bool:
+        if str(getattr(issue, "status", "") or "") in _REMEDIATING_STATUSES:
+            return True
+        if await self._has_open_patch(org_id, issue):
+            return True
+        if await self._has_pending_verify(org_id, issue):
+            return True
+        return False
+
+    async def _has_open_patch(self, org_id: str, issue: Any) -> bool:
+        try:
+            from eden.storage.postgres import get_postgres_client
+
+            client = await get_postgres_client()
+            if client is None:
+                return False
+            rca_id = f"iss_{issue.id}"
+            placeholders = ", ".join(f"${i}" for i in range(3, 3 + len(_OPEN_PATCH_STATUSES)))
+            sql = (
+                "SELECT 1 FROM proposed_patches "
+                f"WHERE org_id = $1 AND rca_id = $2 AND status IN ({placeholders}) "
+                "LIMIT 1"
+            )
+            async with client.acquire() as conn:
+                row = await conn.fetchrow(
+                    sql, org_id, rca_id, *_OPEN_PATCH_STATUSES
+                )
+            return row is not None
+        except Exception as exc:  # pragma: no cover - optional substrate
+            logger.debug("triage_agent: open-patch check failed: %s", exc)
+            return False
+
+    async def _has_pending_verify(self, org_id: str, issue: Any) -> bool:
+        try:
+            from eden.storage.postgres import get_postgres_client
+
+            client = await get_postgres_client()
+            if client is None:
+                return False
+            async with client.acquire() as conn:
+                row = await conn.fetchrow(
+                    """
+                    SELECT 1 FROM issue_verifications
+                    WHERE org_id = $1
+                      AND status = 'pending'
+                      AND (issue_id::text = $2 OR fingerprint = $3)
+                    LIMIT 1
+                    """,
+                    org_id,
+                    str(issue.id),
+                    str(issue.fingerprint or ""),
+                )
+            return row is not None
+        except Exception as exc:  # pragma: no cover - optional substrate
+            logger.debug("triage_agent: pending-verify check failed: %s", exc)
+            return False
+
+    # ── budget helpers — unlimited unless org/settings set a positive cap ──
 
     def _budget_key(self, org_id: str) -> str:
         return f"triage_spend:{org_id}:{date.today().isoformat()}"
 
-    async def _budget_ok(self, org_id: str) -> bool:
+    async def _resolve_budget_cap(self, org_id: str) -> float | None:
+        """Return a positive USD cap, or ``None`` when unlimited.
+
+        Org ``code_change_policy.max_triage_cost_usd_per_day`` wins when
+        present (including explicit ``null`` / ``<=0`` → unlimited).
+        Otherwise fall back to settings; ``<=0`` means unlimited.
+        """
+        try:
+            from eden.code_change.policy import get_org_code_change_policy
+
+            policy = await get_org_code_change_policy(org_id)
+            if isinstance(policy, dict) and "max_triage_cost_usd_per_day" in policy:
+                raw = policy.get("max_triage_cost_usd_per_day")
+                if raw is None:
+                    return None
+                cap = float(raw)
+                return cap if cap > 0 else None
+        except Exception:
+            pass
         try:
             from eden.config import get_settings
 
-            cap = float(getattr(get_settings(), "max_triage_cost_usd_per_day", 25.0))
+            cap = float(getattr(get_settings(), "max_triage_cost_usd_per_day", 0.0) or 0.0)
         except Exception:
-            cap = 25.0
-        if cap <= 0:
+            return None
+        return cap if cap > 0 else None
+
+    async def _budget_ok(self, org_id: str) -> bool:
+        cap = await self._resolve_budget_cap(org_id)
+        if cap is None:
             return True
         try:
             from eden.storage.redis import get_redis_client
@@ -167,6 +297,8 @@ class TriageAgent:
             return True
 
     async def _debit_budget(self, org_id: str, amount: float) -> None:
+        if await self._resolve_budget_cap(org_id) is None:
+            return
         try:
             from eden.storage.redis import get_redis_client
 
@@ -187,15 +319,55 @@ class TriageAgent:
         return f"Deterministic P0 escalation ({checks}) for {issue.kind} issue"
 
 
+def _should_invalidate_cache(issue: Any, score: Any) -> bool:
+    """True when cached triage must be recomputed."""
+    prior = issue.triage_result or {}
+    if score.auto_escalate and not bool(prior.get("auto_escalate")):
+        return True
+    if _severity_escalated(issue.severity, prior):
+        return True
+    return False
+
+
+def _severity_escalated(current: str, prior_triage: dict[str, Any]) -> bool:
+    prior = prior_triage.get("severity_at_triage") or prior_triage.get("severity")
+    if not prior:
+        return False
+    cur_rank = _SEVERITY_RANK.get(str(current), 99)
+    prior_rank = _SEVERITY_RANK.get(str(prior), 99)
+    return cur_rank < prior_rank
+
+
+def _normalize_action_type(raw: Any) -> str:
+    text = str(raw or "").strip().lower()
+    if not text:
+        return "escalate"
+    mapped = _ACTION_ALIASES.get(text, text)
+    if mapped in _ALLOWED_ACTION_TYPES:
+        return mapped
+    return "propose_patch" if "patch" in mapped or "fix" in mapped else "escalate"
+
+
 def _statgate_actions(score: Any) -> list[dict[str, Any]]:
     actions: list[dict[str, Any]] = []
-    if score.suggested_heal:
+    heal = score.suggested_heal
+    if heal:
+        action_type = _normalize_action_type(heal)
         actions.append(
             {
-                "type": score.suggested_heal,
-                "action_type": score.suggested_heal,
-                "summary": f"Auto-suggested heal: {score.suggested_heal}",
+                "type": action_type,
+                "action_type": action_type,
+                "summary": f"Auto-suggested heal: {action_type}",
                 "auto": True,
+            }
+        )
+    elif score.auto_escalate:
+        actions.append(
+            {
+                "type": "escalate",
+                "action_type": "escalate",
+                "summary": "StatGate P0 — escalate to human",
+                "auto": False,
             }
         )
     return actions
@@ -206,7 +378,9 @@ def _map_remediations(remediations: list[dict[str, Any]]) -> list[dict[str, Any]
     for r in remediations:
         if not isinstance(r, dict):
             continue
-        action = r.get("action") or r.get("action_type") or "review"
+        action = _normalize_action_type(
+            r.get("action") or r.get("action_type") or r.get("type")
+        )
         out.append(
             {
                 "type": action,
@@ -216,6 +390,44 @@ def _map_remediations(remediations: list[dict[str, Any]]) -> list[dict[str, Any]
             }
         )
     return out
+
+
+def _evidence_span_ids(stumbles: list[dict[str, Any]]) -> list[Any]:
+    return [s.get("span_id") for s in stumbles if s.get("span_id")]
+
+
+def _linked_files_hints(
+    stumbles: list[dict[str, Any]], extra: dict[str, Any] | None
+) -> list[str]:
+    files: list[str] = []
+    seen: set[str] = set()
+
+    def _add(path: Any) -> None:
+        if not isinstance(path, str):
+            return
+        cleaned = path.strip()
+        if cleaned and cleaned not in seen:
+            seen.add(cleaned)
+            files.append(cleaned)
+
+    if isinstance(extra, dict):
+        for key in ("linked_files", "files", "file_paths"):
+            raw = extra.get(key)
+            if isinstance(raw, list):
+                for item in raw:
+                    _add(item)
+    for s in stumbles:
+        detail = s.get("detail") if isinstance(s, dict) else None
+        if not isinstance(detail, dict):
+            continue
+        for key in ("file", "file_path", "path", "linked_files"):
+            val = detail.get(key)
+            if isinstance(val, list):
+                for item in val:
+                    _add(item)
+            else:
+                _add(val)
+    return files
 
 
 def _first_summary(findings: list[dict[str, Any]]) -> str | None:

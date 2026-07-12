@@ -325,6 +325,15 @@ class TelemetryCollector:
 
         # 5. Route to sinks
         await self._route(event)
+        # F03 — best-effort debugger checkpoint from LLM spans.
+        try:
+            from eden.observability.ingestion.checkpoint_hook import (
+                maybe_persist_checkpoint,
+            )
+
+            await maybe_persist_checkpoint(event)
+        except Exception:  # noqa: BLE001 — never fail ingest for debugger
+            pass
         return True
 
     async def ingest_batch(self, events: list[TelemetryEvent]) -> dict[str, Any]:
@@ -377,6 +386,16 @@ class TelemetryCollector:
         # swallows + logs its own errors, so we just call it and
         # let it do the right thing.
         await self._emit_billing_events(to_route)
+        # F03 — best-effort debugger checkpoints (non-blocking fail-open).
+        try:
+            from eden.observability.ingestion.checkpoint_hook import (
+                maybe_persist_checkpoint,
+            )
+
+            for ev in to_route:
+                await maybe_persist_checkpoint(ev)
+        except Exception:  # noqa: BLE001
+            pass
 
         return {
             "accepted": accepted,
@@ -585,10 +604,15 @@ class TelemetryCollector:
                 fields={"data": json.dumps(event.to_dict(), default=str, separators=(",", ":"))},
                 maxlen=self.STREAM_MAXLEN,
             )
-            await redis.expire(stream_key, 7 * 24 * 3600)
         except Exception as exc:
             logger.warning(f"Redis telemetry xadd failed: {exc}")
             return
+        # Best-effort TTL — must not block SSE fanout after a successful
+        # xadd (expire failures previously short-circuited publish).
+        try:
+            await redis.expire(stream_key, 7 * 24 * 3600)
+        except Exception as exc:
+            logger.debug(f"Redis telemetry expire failed: {exc}")
         # DL-1: after a successful xadd, publish to the SSE fanout
         # channel so live-tail consumers see the event in ~10ms vs
         # the 1s poll the previous design used. The publish is
@@ -652,16 +676,18 @@ class TelemetryCollector:
                 event.metrics,
                 event.attributes,
             ])
-            # Phase A — content-addressed message dedup (Laminar 20x trick).
+            # Phase A / N09 — content-addressed message dedup (Laminar 20x).
             # Hash every message in request_body / response_body via the
             # canonical-JSON SHA-256 in :mod:`eden.observability.canonical`
-            # and upsert into ``trace_messages``. The hash arrays go onto
-            # ``telemetry_events`` so the trace view can reconstruct the
-            # original payload via JOIN at read time. The guard
-            # ``if not event.request_message_hashes`` lets SDK callers
-            # pre-compute hashes (e.g. client-side dedup) without us
-            # re-doing the work.
-            if event.request_body is not None and not event.request_message_hashes:
+            # and upsert into ``trace_messages``. Kill switch:
+            # ``Settings.content_dedupe_enabled`` / ``EDEN_CONTENT_DEDUPE_ENABLED``.
+            _dedupe_on = True
+            try:
+                from eden.config import get_settings
+                _dedupe_on = bool(get_settings().content_dedupe_enabled)
+            except Exception:
+                _dedupe_on = True
+            if _dedupe_on and event.request_body is not None and not event.request_message_hashes:
                 try:
                     from eden.observability.message_store import get_message_store
                     event.request_message_hashes = await get_message_store().upsert_request(
@@ -669,7 +695,7 @@ class TelemetryCollector:
                     )
                 except Exception as exc:
                     logger.debug(f"dedup upsert_request failed (non-fatal): {exc}")
-            if event.response_body is not None and not event.response_message_hashes:
+            if _dedupe_on and event.response_body is not None and not event.response_message_hashes:
                 try:
                     from eden.observability.message_store import get_message_store
                     event.response_message_hashes = await get_message_store().upsert_response(

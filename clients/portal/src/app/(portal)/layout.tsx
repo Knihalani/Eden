@@ -15,9 +15,6 @@ import { useEffect, useState, useRef, useCallback, Suspense } from "react";
 import { Pin, PanelLeftClose, PanelLeftOpen, RefreshCw } from "lucide-react";
 import {
   Loader2,
-  LayoutDashboard,
-  
-  
   
   LogOut,
   Layers,
@@ -51,11 +48,11 @@ import { buildBreadcrumbs } from "@/lib/breadcrumbs";
 import { PageHelpHint } from "@/components/layout/page-help-hint";
 import { ErrorBoundary } from "@/components/ui/error-boundary";
 import { OnboardingBanner } from "@/components/onboarding-banner";
+import { BudgetTicker } from "@/components/budget-ticker";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
-import { DEFAULT_SIDEBAR } from "@/lib/sidebar-config";
 import { isKnownPortalPath } from "@/lib/portal-routes";
 
-const SIDEBAR_EXPANDED_WIDTH = 260;
+const SIDEBAR_EXPANDED_WIDTH = 240;
 const SIDEBAR_COLLAPSED_WIDTH = 64;
 const COLLAPSE_STORAGE_KEY = "eden:sidebar:collapsed";
 
@@ -136,7 +133,8 @@ function PortalLayoutContent({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
-  const [advancedCollapsed, setAdvancedCollapsed] = useState(false);
+  const [advancedCollapsed, setAdvancedCollapsed] = useState(true);
+  const densityCompact = prefs.density === "compact";
   const [userDropdownOpen, setUserDropdownOpen] = useState(false);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const userDropdownRef = useRef<HTMLDivElement>(null);
@@ -342,51 +340,45 @@ function PortalLayoutContent({ children }: { children: React.ReactNode }) {
     return <>{children}</>;
   }
   if (loading) {
-    // Show a chrome skeleton instead of a blank centred spinner so
-    // the user can see the portal is rendering while Clerk and the
-    // /auth/me call resolve. The skeleton has no clickable targets
-    // (no nav, no buttons) so it doesn't conflict with the eventual
-    // real chrome once Clerk loads. Replaces a prior "blank centred
-    // spinner" that left the page feeling dead and unclickable.
+    // LP-19: quiet chrome skeleton — structure without a jarring
+    // full-viewport spinner. Soft pulse bars only; status copy is
+    // muted so the handoff to real chrome feels continuous.
     return (
       <div
         className="min-h-screen flex flex-col lg:flex-row bg-[var(--bg-secondary)]"
         aria-busy="true"
         aria-live="polite"
+        aria-label="Loading portal"
       >
-        {/* Sidebar skeleton — visible structure while auth resolves. */}
         <aside
-          className="sidebar flex flex-col relative bg-[var(--bg-primary)] border-r border-[var(--border-default)] z-50 h-full"
+          className="sidebar hidden lg:flex flex-col relative bg-[var(--bg-primary)] border-r border-[var(--border-default)] z-50 h-full"
           style={{ width: SIDEBAR_EXPANDED_WIDTH }}
           aria-hidden="true"
         >
           <div className="flex items-center border-b border-[var(--border-default)] shrink-0 h-14 px-4 gap-2">
-            <div className="w-9 h-9 bg-[var(--bg-tertiary)] rounded-lg relative overflow-hidden after:absolute after:inset-0 after:-translate-x-full after:bg-gradient-to-r after:from-transparent after:via-[var(--shimmer)] after:to-transparent after:animate-[skeleton-shimmer_1.6s_infinite]" />
-            <div className="h-3 w-20 bg-[var(--bg-tertiary)] rounded-md relative overflow-hidden after:absolute after:inset-0 after:-translate-x-full after:bg-gradient-to-r after:from-transparent after:via-[var(--shimmer)] after:to-transparent after:animate-[skeleton-shimmer_1.6s_infinite]" />
+            <div className="w-8 h-8 bg-[var(--bg-tertiary)] rounded-md opacity-70" />
+            <div className="h-2.5 w-16 bg-[var(--bg-tertiary)] rounded opacity-60" />
           </div>
-          <div className="flex-1 p-3 space-y-3">
-            {[0, 1, 2, 3, 4].map((i) => (
+          <div className="flex-1 p-3 space-y-2.5">
+            {[0, 1, 2, 3].map((i) => (
               <div
                 key={i}
-                className="h-8 bg-[var(--bg-tertiary)] rounded-md relative overflow-hidden after:absolute after:inset-0 after:-translate-x-full after:bg-gradient-to-r after:from-transparent after:via-[var(--shimmer)] after:to-transparent after:animate-[skeleton-shimmer_1.6s_infinite]"
-                style={{ width: `${70 + (i % 3) * 10}%` }}
+                className="h-7 bg-[var(--bg-tertiary)] rounded-md opacity-50"
+                style={{ width: `${62 + (i % 3) * 12}%` }}
               />
             ))}
           </div>
         </aside>
 
-        {/* Main pane skeleton with status copy so the user knows
-            the portal is loading their session, not stuck. */}
         <main className="flex-1 min-w-0 flex flex-col">
           <header className="h-14 border-b border-[var(--border-default)] bg-[var(--bg-primary)] flex items-center justify-between px-6">
-            <div className="h-4 w-40 bg-[var(--bg-tertiary)] rounded-md relative overflow-hidden after:absolute after:inset-0 after:-translate-x-full after:bg-gradient-to-r after:from-transparent after:via-[var(--shimmer)] after:to-transparent after:animate-[skeleton-shimmer_1.6s_infinite]" />
-            <div className="h-8 w-8 bg-[var(--bg-tertiary)] rounded-lg relative overflow-hidden after:absolute after:inset-0 after:-translate-x-full after:bg-gradient-to-r after:from-transparent after:via-[var(--shimmer)] after:to-transparent after:animate-[skeleton-shimmer_1.6s_infinite]" />
+            <div className="h-2.5 w-32 bg-[var(--bg-tertiary)] rounded opacity-50" />
+            <div className="h-7 w-7 bg-[var(--bg-tertiary)] rounded-md opacity-40" />
           </header>
-          <div className="flex-1 flex items-center justify-center">
-            <div className="flex flex-col items-center gap-3">
-              <Loader2 className="w-8 h-8 animate-spin text-[var(--accent)]" />
-              <p className="text-sm text-[var(--text-muted)]">Loading…</p>
-            </div>
+          <div className="flex-1 flex items-start justify-center pt-24 px-6">
+            <p className="text-xs text-[var(--text-muted)] tracking-wide">
+              Signing you in…
+            </p>
           </div>
         </main>
       </div>
@@ -433,7 +425,10 @@ function PortalLayoutContent({ children }: { children: React.ReactNode }) {
     // grows, the html element scrolls. Sidebar keeps its own
     // ``lg:h-dvh`` so the chrome still fills the viewport on
     // short pages.
-    <div className="min-h-dvh flex flex-col lg:flex-row lg:items-start bg-[var(--bg-secondary)]">
+    <div
+      className="min-h-dvh flex flex-col lg:flex-row lg:items-start bg-[var(--bg-secondary)]"
+      data-density={densityCompact ? "compact" : "comfortable"}
+    >
       {/* Skip-to-content link — visually hidden until focused, allows keyboard users to bypass the sidebar nav */}
       <a href="#main-content" className="skip-to-content">
         Skip to main content
@@ -542,7 +537,10 @@ function PortalLayoutContent({ children }: { children: React.ReactNode }) {
             search. */}
 
         <nav
-          className="relative flex-1 min-h-0 p-3 space-y-5 overflow-y-auto overscroll-contain"
+          className={cn(
+            "relative flex-1 min-h-0 overflow-y-auto overscroll-contain",
+            densityCompact ? "p-2 space-y-3" : "p-3 space-y-5",
+          )}
           aria-label="Main navigation"
         >
           {pinnedItems.length > 0 && (
@@ -555,6 +553,7 @@ function PortalLayoutContent({ children }: { children: React.ReactNode }) {
                   label={item.label}
                   description={item.description}
                   collapsed={collapsed}
+                  compact={densityCompact}
                   onClick={() => setSidebarOpen(false)}
                   pinned
                   onTogglePin={() => togglePin(item.id)}
@@ -576,6 +575,7 @@ function PortalLayoutContent({ children }: { children: React.ReactNode }) {
                     description={item.description}
                     badge={item.badge}
                     collapsed={collapsed}
+                    compact={densityCompact}
                     onClick={() => setSidebarOpen(false)}
                     pinned={isPinned}
                     onTogglePin={() => togglePin(item.id)}
@@ -586,6 +586,7 @@ function PortalLayoutContent({ children }: { children: React.ReactNode }) {
                         href={child.href}
                         label={child.label}
                         description={child.description}
+                        compact={densityCompact}
                         onClick={() => setSidebarOpen(false)}
                       />
                     ))}
@@ -633,7 +634,13 @@ function PortalLayoutContent({ children }: { children: React.ReactNode }) {
             When collapsed, the avatar is centred so it sits under the
             centered logo (visual symmetry). The dropdown is the same
             either way — width is independent of collapse. */}
-        <div className="relative mt-auto p-3 border-t border-[var(--border-default)] shrink-0">
+        <div className="relative mt-auto border-t border-[var(--border-default)] shrink-0">
+          {!collapsed && (
+            <div className="px-3 pt-3">
+              <BudgetTicker />
+            </div>
+          )}
+          <div className="p-3">
           <div ref={userDropdownRef} className="relative">
             <button
               onClick={() => setUserDropdownOpen(!userDropdownOpen)}
@@ -709,6 +716,7 @@ function PortalLayoutContent({ children }: { children: React.ReactNode }) {
               <LogOut className="w-4 h-4" />
             </button>
           )}
+          </div>
         </div>
       </aside>
 
@@ -856,7 +864,7 @@ function PortalLayoutContent({ children }: { children: React.ReactNode }) {
           {/* D.14 cold-start UX banner — renders nothing for legacy
               orgs (created before 2026-07-01) or once onboarding is
               complete. Best-effort: an API failure just hides it. */}
-          <OnboardingBanner />
+          <OnboardingBanner collapsed={!!showAuthBanner} />
           {/* ErrorBoundary isolates render-time failures inside the
               page so a single bad component doesn't crash the entire
               portal chrome (sidebar + header stay usable, the user
@@ -1177,6 +1185,7 @@ function NavSubItem({
   href,
   label,
   description,
+  compact,
   onClick }: {
   href: string;
   label: string;
@@ -1185,6 +1194,7 @@ function NavSubItem({
    *  Retrieval, Decisions) that most users don't recognise from
    *  the icon alone. */
   description?: string;
+  compact?: boolean;
   onClick?: () => void;
 }) {
   const pathname = usePathname();
@@ -1197,7 +1207,8 @@ function NavSubItem({
       aria-label={label}
       aria-current={active ? "page" : undefined}
       className={cn(
-        "nav-subitem block pl-9 pr-3 py-1.5 rounded-md text-xs font-medium transition-colors relative",
+        "nav-subitem block pl-9 pr-3 rounded-md text-xs font-medium transition-colors relative",
+        compact ? "py-1" : "py-1.5",
         active
           ? "text-[var(--accent)] bg-[var(--accent-light)]/60"
           : "text-[var(--text-muted)] hover:text-[var(--text-secondary)] hover:bg-[var(--bg-tertiary)]"
@@ -1232,20 +1243,22 @@ function NavItem({
   label,
   description,
   collapsed,
+  compact,
   onClick,
   children,
   badge,
   pinned,
   onTogglePin }: {
   href: string;
-  icon: typeof LayoutDashboard;
+  icon: React.ComponentType<{ className?: string }>;
   label: string;
   /** One-line "what is this" hint shown in the tooltip on hover.
    *  Critical for navigation clarity — the sidebar has ~30 routes
-   *  and many icons look identical at small sizes (Brain, Sparkles,
-   *  Compass). A short hover hint tells the user which is which. */
+   *  and many icons used to look identical at small sizes. A short
+   *  hover hint tells the user which is which. */
   description?: string;
   collapsed: boolean;
+  compact?: boolean;
   onClick?: () => void;
   children?: React.ReactNode;
   /** Optional badge shown next to the label (e.g. "new", "beta"). */
@@ -1272,7 +1285,8 @@ function NavItem({
             aria-current={active ? "page" : undefined}
             showExternalIcon={external && !collapsed}
             className={cn(
-              "nav-item flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-all duration-150 relative",
+              "nav-item flex items-center gap-3 px-3 rounded-lg text-sm transition-all duration-150 relative",
+              compact ? "py-1.5" : "py-2",
               active
                 ? "font-semibold text-[var(--accent)] bg-[var(--accent-light)] opacity-100"
                 : "font-medium text-[var(--text-secondary)] opacity-60 hover:text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)] hover:opacity-100"
@@ -1289,7 +1303,8 @@ function NavItem({
             <Icon
               className={cn(
                 "flex-shrink-0 nav-icon transition-all duration-200",
-                active ? "w-4 h-4 text-[var(--accent)]" : "w-4 h-4 text-[var(--text-muted)] group-hover:text-[var(--text-secondary)]"
+                compact ? "w-3.5 h-3.5" : "w-4 h-4",
+                active ? "text-[var(--accent)]" : "text-[var(--text-muted)] group-hover:text-[var(--text-secondary)]"
               )}
             />
             {!collapsed && (

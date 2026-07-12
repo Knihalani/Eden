@@ -23,6 +23,7 @@ from fastapi import APIRouter, Body, Depends, Path, Query
 from pydantic import BaseModel
 
 from eden.api.deps import get_current_user, require_feature_flag
+from eden.api.utils.redact import redact_all
 
 logger = logging.getLogger(__name__)
 
@@ -159,5 +160,5 @@ async def get_audit(
                         d[k] = str(v)
                 rows.append(d)
     except Exception as exc:
-        logger.debug("autonomy audit fetch failed: %s", exc)
+        logger.debug("autonomy audit fetch failed: %s", redact_all(str(exc)))
     return _ok({"entries": rows, "count": len(rows)})

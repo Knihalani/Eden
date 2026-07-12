@@ -46,12 +46,29 @@ class ClosedLoopOrchestrator:
     # ── issue_created → triage + alert ──────────────────────────────
 
     async def _on_issue_created(self, event: LoopEvent) -> None:
+        from eden.closed_loop.efficiency import AgentEfficiencyController
         from eden.issues.triage_agent import TriageAgent
 
         triage_result: dict[str, Any] | None = None
         try:
-            res = await TriageAgent().triage(event.org_id, event.issue_id)
-            triage_result = (res or {}).get("data", {}).get("triage_result")
+            ctrl = AgentEfficiencyController()
+            allowed, reason = await ctrl.should_run_triage(
+                event.org_id, event.issue_id, force=False
+            )
+            if not allowed and reason == "already_triaged":
+                triage_result = await self._reload_triage(event)
+            elif not allowed:
+                logger.info(
+                    "orchestrator: triage suppressed issue=%s reason=%s",
+                    event.issue_id,
+                    reason,
+                )
+                return
+            else:
+                res = await TriageAgent().triage(
+                    event.org_id, event.issue_id
+                )
+                triage_result = (res or {}).get("data", {}).get("triage_result")
         except Exception as exc:
             logger.warning("orchestrator: triage failed: %s", exc)
 
@@ -264,10 +281,21 @@ class ClosedLoopOrchestrator:
             detail={"suggested": triage_result.get("suggested_actions")},
         )
         try:
+            from eden.closed_loop.efficiency import AgentEfficiencyController
             from eden.code_change.issue_patch_trigger import (
                 propose_patch_for_issue,
             )
 
+            allowed, reason = await AgentEfficiencyController().should_run_patch(
+                event.org_id, event.issue_id
+            )
+            if not allowed:
+                logger.info(
+                    "orchestrator: patch suppressed issue=%s reason=%s",
+                    event.issue_id,
+                    reason,
+                )
+                return
             await propose_patch_for_issue(event.org_id, event.issue_id)
         except Exception as exc:
             logger.debug("orchestrator: patch trigger unavailable: %s", exc)

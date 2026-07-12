@@ -23,6 +23,7 @@ export const BREADCRUMB_LABELS: Record<string, BreadcrumbLabel> = {
   dashboard: { label: "Dashboard", category: "build" },
   analytics: { label: "Analytics", category: "observe" },
   optimization: { label: "Cost", category: "optimize" },
+  budget: { label: "Budget", category: "optimize" },
   settings: { label: "Settings", category: "workspace" },
   billing: { label: "Billing", category: "workspace" },
   docs: { label: "Documentation", category: "workspace" },
@@ -35,10 +36,7 @@ export const BREADCRUMB_LABELS: Record<string, BreadcrumbLabel> = {
   alerts: { label: "Alerts", category: "observe" },
   llmops: { label: "LLMOps", category: "observe" },
   agents: { label: "Agents", category: "build" },
-  builder: { label: "Builder", category: "build" },
-  marketplace: { label: "Marketplace", category: "build" },
-  "multi-agent": { label: "Multi-Agent", category: "build" },
-  // sandbox entry removed 2026-07-04 — sandbox subsystem retired
+  // sandbox / builder / marketplace / multi-agent removed — env-gen strip
   users: { label: "User Intelligence", category: "observe" },
   prompts: { label: "Prompts", category: "build" },
   debugger: { label: "Debugger", category: "observe" },
@@ -48,6 +46,7 @@ export const BREADCRUMB_LABELS: Record<string, BreadcrumbLabel> = {
   members: { label: "Members", category: "workspace" },
   guardrails: { label: "Guardrails", category: "optimize" },
   autonomous: { label: "Autonomous", category: "automate" },
+  improve: { label: "Improve", category: "automate" },
   issues: { label: "Agent Issues", category: "automate" },
   studio: { label: "Custom Metrics", category: "optimize" },
   "pr-suggestions": { label: "PR Suggestions", category: "automate" },

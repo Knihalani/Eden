@@ -5,13 +5,12 @@ import { useOrg } from "@/hooks/use-org";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { DataTable, DataTableSearch } from "@/components/ui/data-table";
-import { StatusBadge } from "@/components/ui/status-badge";
 import { NoOrgState } from "@/components/ui/no-org-state";
 import { ErrorState } from "@/components/ui/error-state";
 import { PageHeader } from "@/components/layout/page-header";
 import { PageContent } from "@/components/layout/page-content";
 import { useToast } from "@/components/ui/toast";
-import { Activity, Loader2, RefreshCw, Play } from "lucide-react";
+import { Activity, RefreshCw, Play } from "lucide-react";
 import { signalsApi, type Signal } from "@/lib/api";
 
 export default function SignalsPage() {
@@ -19,9 +18,13 @@ export default function SignalsPage() {
   const toast = useToast();
   const [signals, setSignals] = useState<Signal[]>([]);
   const [loading, setLoading] = useState(false);
-  const [compilingId, setCompilingId] = useState<string | null>(null);
+  const [creating, setCreating] = useState(false);
+  const [matchingId, setMatchingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState("");
+  const [description, setDescription] = useState("");
+  const [matchValue, setMatchValue] = useState("0.05");
+  const [lastCreated, setLastCreated] = useState<Signal | null>(null);
 
   const load = useCallback(async () => {
     if (!currentOrg?.id) return;
@@ -48,20 +51,63 @@ export default function SignalsPage() {
   const filtered = signals.filter((s) => {
     if (!filter) return true;
     const q = filter.toLowerCase();
-    return s.name.toLowerCase().includes(q) || s.natural_query.toLowerCase().includes(q);
+    return (
+      s.description.toLowerCase().includes(q) ||
+      s.rule.metric.toLowerCase().includes(q) ||
+      s.rule.keywords.some((k) => k.toLowerCase().includes(q))
+    );
   });
 
-  const compileSignal = async (signalId: string) => {
+  const createSignal = async () => {
     if (!currentOrg?.id) return;
-    setCompilingId(signalId);
+    const desc = description.trim();
+    if (desc.length < 3) {
+      toast.error("Description must be at least 3 characters");
+      return;
+    }
+    setCreating(true);
     try {
-      await signalsApi.compile(currentOrg.id, signalId);
-      toast.success("Compiled");
-      load();
+      const created = await signalsApi.create(currentOrg.id, { description: desc });
+      setLastCreated(created);
+      setDescription("");
+      toast.success(`Compiled rule: ${created.rule.metric} ${created.rule.op} ${created.rule.threshold}`);
+      await load();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Compilation failed");
+      toast.error(e instanceof Error ? e.message : "Create failed");
     } finally {
-      setCompilingId(null);
+      setCreating(false);
+    }
+  };
+
+  const seedDefaults = async () => {
+    if (!currentOrg?.id) return;
+    setCreating(true);
+    try {
+      const res = await signalsApi.seedDefaults(currentOrg.id, "standard");
+      toast.success(`Seeded ${res.count} default signals (${res.skipped} skipped)`);
+      await load();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Seed failed");
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  const testMatch = async (signalId: string) => {
+    if (!currentOrg?.id) return;
+    const value = Number(matchValue);
+    if (Number.isNaN(value)) {
+      toast.error("Match value must be a number");
+      return;
+    }
+    setMatchingId(signalId);
+    try {
+      const res = await signalsApi.match(currentOrg.id, signalId, value);
+      toast.success(res.matched ? "Matched" : "No match");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Match failed");
+    } finally {
+      setMatchingId(null);
     }
   };
 
@@ -70,7 +116,7 @@ export default function SignalsPage() {
       <PageHeader
         eyebrow="Observability"
         title="Signals"
-        subtitle="Plain-English metrics. Each signal is compiled to a SQL query the platform runs on telemetry."
+        subtitle="Plain-English metric rules. Describe a threshold; Eden compiles it immediately."
         icon={Activity}
         actions={
           <>
@@ -89,6 +135,41 @@ export default function SignalsPage() {
         }
       />
 
+      <Card className="mb-4 p-4 space-y-3">
+        <label className="block text-xs font-medium text-[var(--text-muted)]" htmlFor="signal-desc">
+          New signal description
+        </label>
+        <textarea
+          id="signal-desc"
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+          rows={3}
+          placeholder='e.g. "error rate above 5%"'
+          className="w-full rounded-md border border-[var(--border-subtle)] bg-[var(--bg-elev-1)] px-3 py-2 text-sm"
+        />
+        <div className="flex flex-wrap items-center gap-2">
+          <Button onClick={createSignal} size="sm" disabled={creating || description.trim().length < 3} loading={creating}>
+            Create signal
+          </Button>
+          <Button onClick={seedDefaults} size="sm" variant="outline" disabled={creating} loading={creating}>
+            Seed defaults
+          </Button>
+          <input
+            value={matchValue}
+            onChange={(e) => setMatchValue(e.target.value)}
+            className="h-8 w-24 rounded-md border border-[var(--border-subtle)] bg-[var(--bg-elev-1)] px-2 text-xs font-mono"
+            aria-label="Test match value"
+            title="Value used by Test match"
+          />
+          <span className="text-xs text-[var(--text-muted)]">Test-match value</span>
+        </div>
+        {lastCreated?.rule && (
+          <pre className="rounded-md bg-[var(--bg-base)] border border-[var(--border-subtle)] p-3 text-xs font-mono overflow-auto">
+            {JSON.stringify(lastCreated.rule, null, 2)}
+          </pre>
+        )}
+      </Card>
+
       {error ? (
         <ErrorState
           title="Could not load signals"
@@ -106,69 +187,51 @@ export default function SignalsPage() {
             rows={filtered}
             rowKey={(r) => r.id}
             emptyTitle="No signals yet"
-            emptyDescription="Create a signal from the CLI: `eden signals add` — they'll appear here once compiled."
+            emptyDescription='Create a signal above — e.g. "error rate above 5%" — and the compiled rule appears immediately.'
             emptyIcon={Activity}
-            emptyVariant="terminal"
-            emptyTerminal={
-              <div className="rounded-lg overflow-hidden border border-[var(--border-default)] bg-[var(--bg-base)] text-left shadow-[0_24px_60px_-24px_rgba(0,0,0,0.6)]">
-                <div className="flex items-center gap-1.5 px-3 py-1.5 bg-[var(--bg-secondary)] border-b border-[var(--border-subtle)]">
-                  <span className="w-2 h-2 rounded-full bg-[var(--traffic-close)]" />
-                  <span className="w-2 h-2 rounded-full bg-[var(--traffic-minimize)]" />
-                  <span className="w-2 h-2 rounded-full bg-[var(--traffic-zoom)]" />
-                  <span className="ml-2 text-[10px] font-mono text-[var(--text-muted)] tracking-wider">
-                    signal.preview
-                  </span>
-                  <span className="ml-auto inline-flex items-center gap-1 text-[10px] font-mono uppercase tracking-[0.18em] text-[var(--terminal)]">
-                    <span className="w-1 h-1 rounded-full bg-[var(--terminal)]" />
-                    compiled
-                  </span>
-                </div>
-                <div className="p-4 space-y-2 font-mono text-xs">
-                  <div className="flex items-center gap-2 text-[var(--text-muted)]">
-                    <span className="text-[var(--accent)]">$</span>
-                    <span>eden signals add &quot;p95 latency by tool&quot;</span>
-                  </div>
-                  <div className="pl-4 text-[var(--text-secondary)]">
-                    → sql/tools/p95_latency_by_tool.sql
-                  </div>
-                  <div className="pl-4 text-[var(--terminal)]">
-                    ✓ compiled · 142 traces · last run 3m ago
-                  </div>
-                </div>
-              </div>
-            }
             columns={[
-              { key: "name", header: "Name", sortable: true },
-              { key: "description", header: "Description" },
               {
-                key: "natural_query",
-                header: "Query",
+                key: "description",
+                header: "Description",
+                sortable: true,
+              },
+              {
+                key: "rule",
+                header: "Rule",
                 cell: (r) => (
-                  <span className="font-mono text-xs text-[var(--text-muted)]">{r.natural_query}</span>
+                  <span className="font-mono text-xs text-[var(--text-muted)]">
+                    {r.rule.metric} {r.rule.op} {r.rule.threshold}
+                  </span>
                 ),
               },
-              { key: "status", header: "Status", cell: (r) => <StatusBadge status={r.status} /> },
+              {
+                key: "enabled",
+                header: "Enabled",
+                cell: (r) => (r.enabled ? "yes" : "no"),
+              },
+              {
+                key: "match_count",
+                header: "Matches",
+                align: "right",
+                cell: (r) => r.match_count ?? 0,
+              },
               {
                 key: "actions",
                 header: "",
                 align: "right",
                 cell: (r) => {
-                  const isCompiling = compilingId === r.id;
+                  const isMatching = matchingId === r.id;
                   return (
                     <Button
                       size="sm"
                       variant="ghost"
-                      disabled={r.status === "active" || isCompiling}
-                      loading={isCompiling}
-                      onClick={() => compileSignal(r.id)}
-                      aria-label={`Compile signal ${r.name}`}
+                      disabled={isMatching}
+                      loading={isMatching}
+                      onClick={() => testMatch(r.id)}
+                      aria-label={`Test match for ${r.description}`}
                     >
-                      {isCompiling ? (
-                        <Loader2 className="h-3 w-3 animate-spin" />
-                      ) : (
-                        <Play className="h-3 w-3" />
-                      )}
-                      Compile
+                      <Play className="h-3 w-3" />
+                      Test match
                     </Button>
                   );
                 },
@@ -177,7 +240,6 @@ export default function SignalsPage() {
           />
         </Card>
       )}
-    
     </PageContent>
   );
 }

@@ -106,6 +106,11 @@ async def _write_policy_jsonb(
         return False
 
 
+_VALID_SCHEDULES = frozenset(
+    {"off", "daily", "weekly", "biweekly", "monthly"}
+)
+
+
 def _validate_policy(policy: dict[str, Any]) -> list[str]:
     """Return a list of validation errors (empty list = OK)."""
     errors: list[str] = []
@@ -121,6 +126,42 @@ def _validate_policy(policy: dict[str, Any]) -> list[str]:
             v = policy[pct_field]
             if not isinstance(v, (int, float)) or v < 0 or v > 1:
                 errors.append(f"{pct_field} must be a number in [0, 1]")
+    if "optimization_schedule" in policy:
+        sched = policy["optimization_schedule"]
+        if not isinstance(sched, str) or sched.lower() not in _VALID_SCHEDULES:
+            errors.append(
+                "optimization_schedule must be one of "
+                "off|daily|weekly|biweekly|monthly"
+            )
+    if "optimization_weekday" in policy:
+        wd = policy["optimization_weekday"]
+        if not isinstance(wd, int) or wd < 0 or wd > 6:
+            errors.append("optimization_weekday must be an int in [0, 6]")
+    if "optimization_hour_utc" in policy:
+        hr = policy["optimization_hour_utc"]
+        if not isinstance(hr, int) or hr < 0 or hr > 23:
+            errors.append("optimization_hour_utc must be an int in [0, 23]")
+    if "optimization_day_of_month" in policy:
+        day = policy["optimization_day_of_month"]
+        if not isinstance(day, int) or day < 1 or day > 28:
+            errors.append("optimization_day_of_month must be an int in [1, 28]")
+    if "max_prs_per_run" in policy:
+        m = policy["max_prs_per_run"]
+        if not isinstance(m, int) or m < 0 or m > 20:
+            errors.append("max_prs_per_run must be an int in [0, 20]")
+    if "candidate_sources" in policy:
+        cs = policy["candidate_sources"]
+        if not isinstance(cs, list) or not all(isinstance(x, str) for x in cs):
+            errors.append("candidate_sources must be a list of strings")
+    if (
+        "daily_maintenance_budget_usd" in policy
+        and policy["daily_maintenance_budget_usd"] is not None
+    ):
+        b = policy["daily_maintenance_budget_usd"]
+        if not isinstance(b, (int, float)) or b < 0:
+            errors.append(
+                "daily_maintenance_budget_usd must be null or a number >= 0"
+            )
     return errors
 
 

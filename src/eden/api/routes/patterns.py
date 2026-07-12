@@ -2,9 +2,6 @@
 
 GET  /orgs/{org_id}/observability/patterns — list clusters
 GET  /orgs/{org_id}/observability/patterns/{pattern_id} — pattern detail
-POST /orgs/{org_id}/observability/patterns/{pattern_id}/generate-env
-                                                — kick off env generation
-                                                for a coverage gap
 """
 
 from __future__ import annotations
@@ -16,7 +13,6 @@ from fastapi import APIRouter, Depends, HTTPException, Path, Query
 from pydantic import BaseModel
 
 from eden.api.deps import get_current_user
-from eden.api.utils.safe_error import safe_detail
 from eden.storage.postgres import get_postgres_client
 
 logger = logging.getLogger(__name__)
@@ -121,55 +117,3 @@ async def get_pattern(
         status=str(r["status"]),
         coverage=_coverage_from_metadata(r.get("metadata")),
     )
-
-
-@router.post("/{pattern_id}/generate-env")
-async def generate_env_for_pattern(
-    org_id: str = Path(...),
-    pattern_id: str = Path(...),
-    user: dict = Depends(get_current_user),
-) -> dict[str, Any]:
-    """Kick off environment generation for a pattern's coverage gap.
-
-    Reuses the existing Eden pipeline: the pattern's representative
-    traces are summarized, the summary is fed to the spec generator,
-    and a new environment is published to the marketplace.
-
-    This is a thin wrapper today — the heavy lifting happens
-    asynchronously via the existing job system. We return the new
-    job_id immediately so the portal can show progress.
-    """
-    client = await get_postgres_client()
-    if not client:
-        raise HTTPException(status_code=503, detail="Database unavailable")
-    # Look up the pattern
-    row = await client.fetchrow(
-        """
-        SELECT topic_label, sample_count, representative_trace_ids
-        FROM trace_patterns
-        WHERE tenant_id = $1 AND pattern_id = $2
-        """,
-        org_id, pattern_id,
-    )
-    if not row:
-        raise HTTPException(status_code=404, detail="Pattern not found")
-    # Create a job. The actual pipeline runs in the background.
-    try:
-        job_id = await client.fetchval(
-            """
-            INSERT INTO jobs (job_id, tenant_id, kind, status, payload, created_at)
-            VALUES (gen_random_uuid()::text, $1, 'env_from_pattern', 'pending',
-                    jsonb_build_object('pattern_id', $2::text, 'topic_label', $3, 'sample_traces', $4::text[]),
-                    NOW())
-            RETURNING job_id
-            """,
-            org_id, pattern_id, str(row["topic_label"]), list(row["representative_trace_ids"] or []),
-        )
-    except Exception as exc:
-        logger.warning(f"generate_env failed to create job: {exc}")
-        raise HTTPException(status_code=500, detail=safe_detail(exc, fallback="Internal error while generating environment from pattern")) from exc
-    return {
-        "job_id": str(job_id),
-        "pattern_id": pattern_id,
-        "status": "pending",
-    }

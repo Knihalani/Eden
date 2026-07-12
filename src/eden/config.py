@@ -597,11 +597,36 @@ def _build_settings_class():
         # no-oped even when started. Env-driven via ``EDEN_*``.
         trace_quality_enabled: bool = True
         trace_quality_compute_async: bool = True
+        # N14 — explicit worker / hot-path toggles (default on; worker
+        # still also requires ``trace_quality_enabled`` + compute_async).
+        trace_quality_worker_enabled: bool = True
+        trace_quality_hot_path_enabled: bool = True
         traceloop_auto_apply: bool = False  # per-action kill-switch default
         stat_gate_min_n: int = 30
         stat_gate_min_effect: float = 0.2
         detector_keep_rate_loop: float = 1.0
         detector_keep_rate_error: float = 1.0
+
+        # ── N16 intelligence-aware tail sampling ───────────────────────
+        # Master switch + profile for the in-process policy
+        # (``eden.observability.sampling.policy``). OTel edge sampling is
+        # configured separately in ``deploy/otel-collector-config.yaml``.
+        # ``sampling_enabled=False`` or ``sampling_profile=full`` keeps
+        # 100% of traces (safe rollback). ``probabilistic_sample_rate``
+        # overrides the profile fallback when set below 1.0; default 1.0
+        # means "use profile rate" (not "keep everything").
+        sampling_enabled: bool = True
+        sampling_profile: str = "balanced"  # full | balanced | aggressive
+        probabilistic_sample_rate: float = 1.0
+        sampling_slow_threshold_ms: float = 5_000.0
+
+        # ── N09 content-addressed / message dedupe ─────────────────────
+        # Gates ``message_store`` upserts on ingest and ``BlobStore``
+        # intern. When False, payloads stay fully inline (N09 rollback).
+        # Trace-scoped message dedupe is always the primary path; org
+        # blob store is additive for large system/tool payloads.
+        content_dedupe_enabled: bool = True
+
         quality_pipeline_workers: int = 2
         quality_pipeline_watermark_poll_ms: int = 1000
         quality_pipeline_batch_size: int = 100
@@ -636,8 +661,10 @@ def _build_settings_class():
         agent_issues_v0: bool = True
         auto_issue_detection_v1: bool = True
         closed_loop_orchestrator_v1: bool = True
-        # Triage budget (F30) — max LLM spend per org per day for triage.
-        max_triage_cost_usd_per_day: float = 25.0
+        # Triage budget (F30) — optional max LLM spend per org per day.
+        # ``<=0`` / unset = unlimited; orgs may override via
+        # ``code_change_policy.max_triage_cost_usd_per_day``.
+        max_triage_cost_usd_per_day: float = 0.0
 
         # ── Autonomy policy engine (N22) ────────────────────────────────
         # Org-level defaults for the autonomous-maintenance safety

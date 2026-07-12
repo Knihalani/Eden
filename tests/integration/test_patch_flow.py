@@ -207,6 +207,144 @@ async def test_patch_flow_provider_receives_codeowners(temp_git_repo: Path) -> N
 
 
 @pytest.mark.asyncio
+async def test_cat23_patch_approve_test_pr_e2e(temp_git_repo: Path) -> None:
+    """P.2 E2E: patch_generator → inbox approve → test_runner → pr_creator.
+
+    Uses mocked LLM + DB persistence; LocalPRProvider for the PR step.
+    ``TestPlanRunner.run`` remains gate=3_blocked (sandbox retired);
+    ``generate_plan`` is the live path exercised here.
+    """
+    from eden.code_change.inbox.review import PRReviewService
+    from eden.code_change.patch_generator import PatchGenerator
+    from eden.code_change.pr_creator import PRCreator
+    from eden.code_change.test_runner import TestPlanRunner
+    from eden.providers.pr import LocalPRProvider, PRCreateRequest
+    from eden.providers.repo import FileEntry
+
+    synthetic_diff = (
+        "--- a/sample.py\n+++ b/sample.py\n"
+        "@@ -1,2 +1,2 @@\n"
+        " def rate_limit():\n"
+        "-    return 42\n"
+        "+    return 100  # patched\n"
+    )
+    patch_id = "patch-cat23-e2e"
+
+    # 1. PatchGenerator with injected router → ok envelope
+    class _FakeResp:
+        content = f"```diff\n{synthetic_diff}\n```"
+        model = "fake"
+        usage = type("U", (), {"cost": 0.0})()
+
+    class _FakeRouter:
+        async def aroute(self, *args, **kwargs):
+            return _FakeResp()
+
+    gen = PatchGenerator(router=_FakeRouter())
+    with (
+        patch(
+            "eden.code_change.patch_generator._critic_review",
+            AsyncMock(return_value={"passed": True, "issues": []}),
+        ),
+        patch(
+            "eden.code_change.patch_generator._is_similar_to_recent_patch",
+            AsyncMock(return_value=None),
+        ),
+        patch(
+            "eden.code_change.patch_generator._insert_row",
+            AsyncMock(return_value=None),
+        ),
+        patch(
+            "eden.code_change.patch_generator._new_id",
+            return_value=patch_id,
+        ),
+    ):
+        gen_result = await gen.generate(
+            "test-org",
+            rca_id="rca-e2e",
+            trace_id="trace-e2e",
+            repo_id="repo-e2e",
+            linked_files=[{"path": "sample.py", "confidence": 0.9}],
+            test_plan=["test_rate_limit_regression"],
+            rca_summary="rate_limit returns wrong value",
+        )
+    assert gen_result["status"] == "ok", gen_result
+    assert gen_result["data"].get("patch_id") == patch_id
+
+    # 2. Inbox approve (policy opt-in + mocked persistence)
+    reviewer = PRReviewService()
+    policy = {
+        "code_change_enabled": True,
+        "auto_approve_enabled": True,
+        "auto_pr_enabled": True,
+    }
+    with (
+        patch(
+            "eden.code_change.inbox.review._insert_row",
+            AsyncMock(return_value=None),
+        ),
+        patch(
+            "eden.code_change.inbox.review._update_row",
+            AsyncMock(return_value=None),
+        ),
+    ):
+        approve_result = await reviewer.act(
+            "test-org",
+            patch_id,
+            "approve",
+            policy,
+            actor_user_id="user-e2e",
+            comment="lgtm",
+        )
+    assert approve_result["status"] == "ok", approve_result
+
+    # 3. Test plan generate (live) + run (sandbox retired → gate)
+    runner = TestPlanRunner(router=None)
+    plan_result = await runner.generate_plan(
+        "test-org",
+        patch_id,
+        rca_summary="rate_limit regression",
+        diff=synthetic_diff,
+    )
+    assert plan_result["status"] == "ok"
+    assert plan_result["data"]["count"] >= 1
+
+    run_result = await runner.run("test-org", patch_id=patch_id)
+    assert run_result["status"] == "not_implemented"
+    assert run_result["data"]["gate"] == "3_blocked"
+
+    # 4. PRCreator opens PR via LocalPRProvider
+    provider = LocalPRProvider(repo_path=str(temp_git_repo))
+    creator = PRCreator(provider=provider)
+    req = PRCreateRequest(
+        title="[Eden Agent] Fix rate_limit",
+        body="Cat 23 E2E patch",
+        branch="eden/cat23-e2e",
+        base="main",
+        draft=True,
+        files=[
+            FileEntry(
+                path="sample.py",
+                size=0,
+                content="def rate_limit():\n    return 100  # patched\n",
+            ),
+        ],
+    )
+    with patch.object(
+        creator, "resolve_codeowners_reviewers", AsyncMock(return_value=[]),
+    ):
+        pr_result = await creator.create(
+            org_id="test-org",
+            patch_id=patch_id,
+            policy={"code_change_enabled": True, "auto_pr_enabled": True},
+            req=req,
+        )
+    assert pr_result["status"] == "ok", pr_result
+    assert pr_result["data"]["pr"]["branch"] == "eden/cat23-e2e"
+    assert "return 100  # patched" in (temp_git_repo / "sample.py").read_text()
+
+
+@pytest.mark.asyncio
 async def test_patch_flow_no_auto_create(temp_git_repo: Path) -> None:
     """Without ``auto_pr_enabled``, the destructive-route
     path returns the optin_blocked envelope — NO PR is

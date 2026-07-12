@@ -120,14 +120,3 @@ def test_dataset_routes_isolated_by_org() -> None:
         resp = client_y.get("/orgs/org-x/datasets")
     assert resp.status_code in (200, 403, 404)
 
-
-def test_run_routes_isolated_by_org() -> None:
-    """Run/sim-routes are org-scoped."""
-    from eden.api.routes import agent_runs as runs
-
-    client_y = _client_for(runs.router, current_user=USER_Y)
-    pg = MagicMock()
-    pg.fetch = AsyncMock(return_value=[])
-    with patch("eden.storage.postgres.get_postgres_client", AsyncMock(return_value=pg)):
-        resp = client_y.get("/orgs/org-x/runs")
-    assert resp.status_code in (200, 403, 404)

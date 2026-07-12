@@ -44,13 +44,16 @@ CLI.
 | `EDEN_LLM_AS_JUDGE_PER_ORG_RPM` | 60 | API | |
 | `EDEN_ORG_ID` | unset | SDKs | |
 | `EDEN_OTEL_EXPORTER_OTLP_ENDPOINT` | `http://localhost:4317` | API | |
-| `EDEN_OTEL_SAMPLE_RATE` | `1.0` | API | |
+| `EDEN_OTEL_SAMPLE_RATE` | `1.0` | API | Documented legacy name — **not** bound to `Settings` today; OTel SDK sample rate if set by ops tooling |
 | `EDEN_PAYWALL_MODE` | `quota` | API | `quota` or `hard_block` |
-| `EDEN_PROBABILISTIC_SAMPLE_RATE` | `1.0` | API | Fallback keep rate |
+| `EDEN_PROBABILISTIC_SAMPLE_RATE` | `1.0` | API | N16 — when `<1.0`, overrides profile fallback keep rate. `1.0` = use `EDEN_SAMPLING_PROFILE` rate |
+| `EDEN_SAMPLING_ENABLED` | `true` | API | N16 master switch; `false` keeps 100% |
+| `EDEN_SAMPLING_PROFILE` | `balanced` | API | N16 `full` \| `balanced` (~15%) \| `aggressive` (~5%) |
+| `EDEN_CONTENT_DEDUPE_ENABLED` | `true` | API | N09 — gates message_store upserts + BlobStore intern |
 | `EDEN_PROMPT_TRUNCATION_TOKENS` | 8192 | API | |
 | `EDEN_RESPONSE_TRUNCATION_TOKENS` | 8192 | API | |
 | `EDEN_SENTRY_DSN` | unset | API | |
-| `EDEN_TAIL_SAMPLING_BUFFER` | 15000 | API | |
+| `EDEN_TAIL_SAMPLING_BUFFER` | 15000 | API | Documented; Cat 22 buffer default is code-side (15k), not Settings-bound |
 | `EDEN_TELEMETRY_INGEST_PER_TENANT_RPM` | 1500 | API | |
 | `ENCRYPTION_KEY` | unset | API | Fernet key |
 

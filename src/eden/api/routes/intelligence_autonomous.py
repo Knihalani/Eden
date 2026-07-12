@@ -36,6 +36,7 @@ from eden.api.deps import (
     require_feature_flag,
     require_org_admin,
 )
+from eden.api.utils.redact import redact_all
 from eden.autonomous import (
     InvestigationAgent,
     NLReportGenerator,
@@ -144,7 +145,10 @@ async def _resolve_investigate_trigger(
             body.trace_id,
         )
     except Exception as exc:  # pragma: no cover - defensive
-        logger.debug("investigate: trace→cluster lookup failed: %s", exc)
+        logger.debug(
+            "investigate: trace→cluster lookup failed: %s",
+            redact_all(str(exc)),
+        )
         return None
     if row and row.get("cluster_id"):
         return f"incident:{row['cluster_id']}"
