@@ -73,6 +73,25 @@ router = APIRouter(
 # Schemas
 # ============================================================================
 
+class PageContext(BaseModel):
+    """Optional UI context so answers cite the view the user is on."""
+
+    pathname: str | None = Field(
+        None,
+        description="Current portal pathname, e.g. /traces or /issues/abc.",
+        max_length=512,
+    )
+    trace_id: str | None = Field(
+        None,
+        description="Optional trace_id from the URL or selected row.",
+        max_length=128,
+    )
+    filters: dict[str, Any] | None = Field(
+        None,
+        description="Optional UI filters (agent_id, outcome, since, …).",
+    )
+
+
 class ChatRequest(BaseModel):
     """Body for POST /chat."""
     message: str = Field(..., min_length=1, max_length=8000)
@@ -82,6 +101,10 @@ class ChatRequest(BaseModel):
             "Existing session to append to. Omit (or null) to start a "
             "fresh session."
         ),
+    )
+    page_context: PageContext | None = Field(
+        None,
+        description="Portal page context (pathname, optional trace_id).",
     )
 
 
@@ -105,18 +128,26 @@ def _build_system_prompt(tools: list) -> str:
     tool_block = "\n".join(tool_lines) if tool_lines else "(no tools available)"
 
     return f"""\
-You are Eden's AI Insights assistant. Help users understand what's \
-happening in their Eden workspace.
+You are Eden's AI Insights assistant for Capture → Analyse → Improve.
+
+Capture: traces, spans, live agent runs.
+Analyse: latency, cost, judge/eval scores, anomalies.
+Improve: agent issues, proposed patches / PR inbox.
 
 Answer style:
 - Lead with the answer (1-2 sentences). Then numbers. Never padding.
-- Cite job_ids / trace_ids / timestamps verbatim.
-- Aggregate over dumping rows on open-ended questions.
+- Cite trace_ids / issue_ids / patch_ids / timestamps verbatim.
+- Prefer aggregate tools (get_insights, get_cost_breakdown) over \
+dumping rows on open-ended questions.
+- Include deep links from tool output (traces_url / issues_url) when \
+citing an id.
 - Never invent data. Surface tool errors plainly.
+- Use page_context (pathname / trace_id) when present — do not ask \
+for an id the UI already provides.
 
 If the user asks for something outside your tools, say so. Don't \
-guess. "I don't have that data — try the dashboard's X panel" beats a \
-fabricated answer.
+guess. Point them at /traces, /issues, /closed-loop, or \
+/observability/query (EQL) as appropriate.
 
 Available tools (call one by emitting the JSON block below):
 {tool_block}
@@ -125,7 +156,7 @@ When you need data: emit EXACTLY ONE tool call block, fenced with \
 ``tool_call`` markers, like this:
 
 ```tool_call
-{{"name": "list_jobs", "args": {{"limit": 5, "status": "failed"}}}}
+{{"name": "list_traces", "args": {{"limit": 5, "outcome": "failure"}}}}
 ```
 
 When you have enough to answer: write the answer directly, no \
@@ -418,6 +449,7 @@ async def _stream_chat(
     *,
     user_role: str = "member",
     is_new_session: bool = False,
+    page_context: dict[str, Any] | None = None,
 ) -> AsyncIterator[dict[str, Any]]:
     """Yield SSE events via the unified ChatService (insights compat layer)."""
     from eden.autonomous.insights_compat import stream_insights_chat
@@ -439,6 +471,7 @@ async def _stream_chat(
         user_message=user_message,
         user_role=user_role,
         is_new_session=is_new_session,
+        page_context=page_context,
     ):
         yield ev
 
@@ -513,6 +546,12 @@ async def chat(
         except Exception as exc:  # noqa: BLE001 — audit must not block chat
             logger.warning(f"ai_insights: audit log failed (non-fatal): {exc}")
 
+    page_ctx: dict[str, Any] = {"surface": "ai_insights_sidebar"}
+    if body.page_context is not None:
+        page_ctx.update(
+            body.page_context.model_dump(exclude_none=True),
+        )
+
     async def event_generator():
         async for ev in _stream_chat(
             org_id=org_id,
@@ -521,6 +560,7 @@ async def chat(
             user_message=body.message,
             user_role=user_role,
             is_new_session=is_new,
+            page_context=page_ctx,
         ):
             yield {"event": ev.get("type", "message"), "data": json.dumps(ev, default=str)}
 

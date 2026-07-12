@@ -27,6 +27,7 @@ async def stream_insights_chat(
     user_message: str,
     user_role: str,
     is_new_session: bool,
+    page_context: dict[str, Any] | None = None,
 ) -> AsyncIterator[dict[str, Any]]:
     """Stream ai-insights-compatible SSE events via ChatService."""
     if is_new_session:
@@ -38,6 +39,9 @@ async def stream_insights_chat(
 
     queue: asyncio.Queue[dict[str, Any] | None] = asyncio.Queue()
     tool_seq = 0
+    ctx: dict[str, Any] = {"surface": "ai_insights_sidebar"}
+    if page_context:
+        ctx.update(page_context)
 
     async def emit(chunk: AgentChunk) -> None:
         nonlocal tool_seq
@@ -74,7 +78,7 @@ async def stream_insights_chat(
                 user_id=user_id,
                 conversation_id=session_id,
                 user_message=user_message,
-                page_context={"surface": "ai_insights_sidebar"},
+                page_context=ctx,
                 user_role=user_role,
                 emit=emit,
             )

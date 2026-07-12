@@ -6,7 +6,7 @@
 | **Slug** | `agent-improvement-cockpit` |
 | **Priority** | P0 |
 | **Effort** | L |
-| **Eden status** | **PARTIAL** — hooks, portal API, evolver exist; no unified UX |
+| **Eden status** | **SHIPPED (v0)** — `improvement/cockpit_aggregator.py` + `GET /orgs/{id}/improve/queue` + portal `/improve`. Richer columns / autonomous visibility stretch deferred. |
 | **Market hypothesis** | Platform teams need **one queue** for "what to fix/improve next" — not 12 disconnected Cat pages |
 | **Dependencies** | N14, F29, F46, `intelligence_closed_loop.py`, `agents/evolution/components.py` |
 

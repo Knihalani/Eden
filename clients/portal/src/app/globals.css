@@ -921,6 +921,16 @@ button:active, [role="button"]:active {
   width: 64px;
 }
 
+/* Density prefs — wired from layout data-density attribute */
+[data-density="compact"] .nav-item {
+  font-size: 0.8125rem;
+}
+
+[data-density="compact"] .nav-icon {
+  width: 0.875rem;
+  height: 0.875rem;
+}
+
 .sidebar-gradient {
   background: linear-gradient(
     to bottom,

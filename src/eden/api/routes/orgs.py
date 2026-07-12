@@ -270,6 +270,14 @@ async def create_org(
             user_id,
         )
 
+    # F35 — seed default signal library (best-effort; never block org create).
+    try:
+        from eden.signals.defaults import seed_org_signals
+
+        await seed_org_signals(org_id, profile="standard", created_by=user_id, pg=client)
+    except Exception as exc:  # noqa: BLE001
+        logger.info("F35 signal seed skipped for org=%s: %s", org_id, redact_all(str(exc)))
+
     return {
         "org_id": org_id,
         "name": name,

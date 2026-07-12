@@ -65,6 +65,21 @@ All **46** specs expanded with implementation detail + performance/cost sections
 
 **Fully deepened:** F01, F03, F04, F06, F09, F20, F21, F28–F30, F22, F33–F35, F39–F42, F44, F46–F48, N01–N22.
 
+## Autopilot status refresh (2026-07-12)
+
+Honest SHIPPED (v0) after Full Autopilot core loop + cost/MCP waves (see `.omc/autopilot/phase-validate-gate.md`):
+
+| ID | Status |
+|---|---|
+| F30 | **SHIPPED (v0)** — TriageAgent anti-spam |
+| F46 | **SHIPPED (v0)** — closed_loop orchestrator |
+| N20 | **SHIPPED (v0)** — issue-scoped patch + weekly schedule; auto_pr opt-in |
+| N22 | **SHIPPED** — autonomy policy |
+| F04 | **SHIPPED (v0)** — MCP server |
+| N17 | **SHIPPED (v0)** — improve cockpit |
+| N16 / N09 | **SHIPPED (core)** — sampling + content-addressed blobs |
+| Wave 7 (N10–N13, F35/F44/…) | **PARTIAL / race** — not required for core validate |
+
 ## Generator
 
 `generate_specs.py` — skeleton F-specs only; never overwrites hand-edited files.

@@ -69,6 +69,44 @@ export function proxyError(error: unknown, fallback: string) {
 const API_BASE =
   process.env.API_INTERNAL_URL || "http://localhost:8000";
 
+/**
+ * In-memory circuit breaker for upstream fetch failures (LP-21).
+ *
+ * After ``CIRCUIT_FAILURE_THRESHOLD`` consecutive network/timeout
+ * failures, short-circuit with 503 + Retry-After for
+ * ``CIRCUIT_COOLDOWN_MS``. State is per Vercel isolate — cold starts
+ * reset the counters (documented trade-off; Redis would be shared
+ * but adds latency on every proxy hop).
+ */
+export const CIRCUIT_FAILURE_THRESHOLD = 5;
+export const CIRCUIT_COOLDOWN_MS = 45_000;
+export const CIRCUIT_RETRY_AFTER_S = 45;
+
+let consecutiveFetchFailures = 0;
+let circuitOpenUntilMs = 0;
+
+/** Test-only: reset circuit breaker state between vitest cases. */
+export function __resetProxyCircuitBreakerForTests(): void {
+  consecutiveFetchFailures = 0;
+  circuitOpenUntilMs = 0;
+}
+
+function circuitIsOpen(now = Date.now()): boolean {
+  return now < circuitOpenUntilMs;
+}
+
+function recordFetchFailure(now = Date.now()): void {
+  consecutiveFetchFailures += 1;
+  if (consecutiveFetchFailures >= CIRCUIT_FAILURE_THRESHOLD) {
+    circuitOpenUntilMs = now + CIRCUIT_COOLDOWN_MS;
+  }
+}
+
+function recordFetchSuccess(): void {
+  consecutiveFetchFailures = 0;
+  circuitOpenUntilMs = 0;
+}
+
 interface ForwardOptions {
   method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
   /**
@@ -130,6 +168,30 @@ export async function forwardToBackend(
       ? crypto.randomUUID()
       : `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`);
 
+  // Circuit open → 503 without hitting upstream (LP-21).
+  if (circuitIsOpen()) {
+    const retryAfterS = Math.max(
+      1,
+      Math.ceil((circuitOpenUntilMs - Date.now()) / 1000),
+    );
+    return NextResponse.json(
+      {
+        detail: "Backend circuit open",
+        upstream: API_BASE,
+        path,
+        request_id: requestId,
+        retry_after_s: retryAfterS,
+      },
+      {
+        status: 503,
+        headers: {
+          "Retry-After": String(retryAfterS),
+          "X-Request-ID": requestId,
+        },
+      },
+    );
+  }
+
   // Body-type guard (PT-6). Multipart (FormData) bodies need
   // ``Content-Type: multipart/form-data; boundary=...`` derived
   // automatically by WHATWG fetch — pre-setting ``application/json``
@@ -181,7 +243,8 @@ export async function forwardToBackend(
     // handshake, timeout, or pod restart. Surface as 502 Bad Gateway
     // (the standard code for "upstream is down") with a clear
     // ``detail`` so the portal can show "Backend unreachable" instead
-    // of a generic 500.
+    // of a generic 500. Counts toward the circuit breaker (LP-21).
+    recordFetchFailure();
     const message =
       error instanceof Error ? error.message : "Unknown fetch error";
     const isAbort =
@@ -197,9 +260,14 @@ export async function forwardToBackend(
         cause: message,
         request_id: requestId,
       },
-      { status: 502 },
+      {
+        status: 502,
+        headers: { "X-Request-ID": requestId },
+      },
     );
   }
+
+  recordFetchSuccess();
 
   // Read the body once — clone before reading so the body is also available
   // for forwarding set-cookie logic.
@@ -211,6 +279,19 @@ export async function forwardToBackend(
     } catch {
       parsed = { detail: responseBody };
     }
+  }
+
+  // Echo request_id on pass-through upstream 5xx so support can
+  // correlate browser errors with proxy logs (LP-21). Upstream HTTP
+  // errors do NOT trip the circuit — only fetch failures do.
+  if (
+    response.status >= 500 &&
+    parsed !== null &&
+    typeof parsed === "object" &&
+    !Array.isArray(parsed) &&
+    !("request_id" in (parsed as Record<string, unknown>))
+  ) {
+    (parsed as Record<string, unknown>).request_id = requestId;
   }
 
   const nextResponse = NextResponse.json(parsed ?? {}, {
@@ -228,6 +309,7 @@ export async function forwardToBackend(
   // ``Cache-Control: public, max-age=300`` would silently leak.
   nextResponse.headers.set("Vary", "Cookie, Authorization");
   nextResponse.headers.set("Cache-Control", "private, no-store");
+  nextResponse.headers.set("X-Request-ID", requestId);
 
   // Forward every Set-Cookie header from FastAPI. Next.js's
   // NextResponse.cookies is the supported path — using `headers.append`

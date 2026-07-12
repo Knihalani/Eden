@@ -3,8 +3,7 @@
  * and the left nav never drift apart.
  */
 
-import type { LucideIcon } from "lucide-react";
-import { DEFAULT_SIDEBAR, type SidebarGroup, type SidebarItem } from "@/lib/sidebar-config";
+import { DEFAULT_SIDEBAR, type SidebarGroup, type SidebarIcon, type SidebarItem } from "@/lib/sidebar-config";
 
 const GROUP_LABEL: Record<SidebarGroup["id"], string> = {
   build: "Build",
@@ -19,7 +18,7 @@ export type NavCommand = {
   label: string;
   description?: string;
   group: string;
-  icon: LucideIcon;
+  icon: SidebarIcon;
 };
 
 function walkItems(

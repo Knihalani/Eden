@@ -189,7 +189,7 @@ export function MembersSettings({ org }: MembersSettingsProps) {
           loading={loading}
           defaultSort={{ key: "name", direction: "asc" }}
           emptyTitle="No members yet"
-          emptyDescription="Invite teammates to share environments and review output together."
+          emptyDescription="Invite teammates to share traces, alerts, and improvements together."
           emptyIcon={Users}
           pageSize={25}
         />

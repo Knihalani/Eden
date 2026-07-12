@@ -6,7 +6,7 @@
 | **Slug** | `content-addressed-trace-storage` |
 | **Priority** | P1 |
 | **Effort** | XL |
-| **Eden status** | **MISSING** |
+| **Eden status** | **SHIPPED (core)** — trace-scoped `message_store` (ingest-wired) + org-scoped `compression/blob_store.py` + `span_content_blobs` migration; cold tier / RTBF refcount deferred |
 | **Restores** | Deleted F11 (trace content deduplication) |
 | **Market hypothesis** | At scale, duplicate system prompts/tool schemas dominate storage — 5–20× savings = better margins and faster queries |
 | **Dependencies** | Ingest pipeline, ClickHouse/Postgres telemetry |

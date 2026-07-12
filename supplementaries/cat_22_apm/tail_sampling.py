@@ -30,6 +30,14 @@ from typing import Iterable, Sequence
 
 # ── SamplingPolicy ────────────────────────────────────────────
 
+# Mutated by ``eden.observability.trace_quality.wiring.install_cat22_sampling_policy``
+# from Settings (N14/N16). Keys: loop / error / probabilistic.
+DEFAULT_KEEP_RATES: dict[str, float] = {
+    "loop": 1.0,
+    "error": 1.0,
+    "probabilistic": 0.15,
+}
+
 
 @dataclass(frozen=True)
 class SamplingDecision:
@@ -51,6 +59,9 @@ class SamplingPolicy:
       5. probabilistic — random sampling at keep_rate
 
     Anything not matching → drop.
+
+    ``DEFAULT_KEEP_RATES["loop"|"error"]`` gate the hard-keep rules so
+    N16 wiring can set ``detector_keep_rate_loop=1.0`` (never drop loops).
     """
 
     slow_threshold_ms: float = 5_000.0
@@ -65,17 +76,23 @@ class SamplingPolicy:
         force_trace: bool = False,
         rng: random.Random | None = None,
     ) -> SamplingDecision:
-        if force_trace:
-            return SamplingDecision(True, "forced by caller", "force_trace")
-        if has_error:
-            return SamplingDecision(True, "has error outcome", "error")
-        if is_loop:
-            return SamplingDecision(True, "loop detected", "loop")
-        if duration_ms > self.slow_threshold_ms:
-            return SamplingDecision(True, f"slow ({duration_ms}ms)", "slow")
         if rng is None:
             import random as _random
             rng = _random.Random()
+        if force_trace:
+            return SamplingDecision(True, "forced by caller", "force_trace")
+        if has_error:
+            # detector_keep_rate_error (DEFAULT_KEEP_RATES["error"]) — default 1.0.
+            if rng.random() < float(DEFAULT_KEEP_RATES.get("error", 1.0)):
+                return SamplingDecision(True, "has error outcome", "error")
+        if is_loop:
+            # detector_keep_rate_loop (DEFAULT_KEEP_RATES["loop"]) — default 1.0.
+            if rng.random() < float(DEFAULT_KEEP_RATES.get("loop", 1.0)):
+                return SamplingDecision(True, "loop detected", "loop")
+        if duration_ms > self.slow_threshold_ms:
+            return SamplingDecision(True, f"slow ({duration_ms}ms)", "slow")
+        # Instance keep_rate wins; DEFAULT_KEEP_RATES["probabilistic"] is
+        # the N16-wired default for freshly constructed policies.
         if rng.random() < self.keep_rate:
             return SamplingDecision(True, "probabilistic sample", "probabilistic")
         return SamplingDecision(False, "no keep rule matched", None)

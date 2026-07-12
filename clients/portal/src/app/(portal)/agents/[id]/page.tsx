@@ -27,24 +27,16 @@ import {
   ArrowLeft,
   Bot,
   Clock,
-  Code,
   ExternalLink,
-  Package,
-  PlayCircle,
-  FileCode,
-  Cpu,
-  Upload as UploadIcon,
-  Beaker,
   Loader2,
 } from "lucide-react";
 import { useOrg } from "@/hooks/use-org";
-import { agentsApi, type AgentUpload } from "@/lib/api";
+import { agentsApi } from "@/lib/api";
 import { Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ErrorState } from "@/components/ui/error-state";
 import { PageHeader } from "@/components/layout/page-header";
 import { PageContent, PageLoading } from "@/components/layout/page-content";
-import { AgentUploadPanel } from "./upload-panel";
 
 function formatRelative(iso?: string | null): string {
   if (!iso) return "Never";
@@ -58,12 +50,6 @@ function formatRelative(iso?: string | null): string {
   const d = Math.floor(h / 24);
   if (d < 30) return `${d}d ago`;
   return new Date(iso).toLocaleDateString();
-}
-
-function formatBytes(n: number): string {
-  if (n < 1024) return `${n} B`;
-  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
-  return `${(n / 1024 / 1024).toFixed(2)} MB`;
 }
 
 const FRAMEWORK_BADGE: Record<string, string> = {
@@ -81,11 +67,6 @@ interface AgentRecord {
   repo_url?: string | null;
 }
 
-interface RunsEnvelope {
-  runs?: Array<unknown>;
-  total?: number;
-}
-
 export default function AgentDetailPage() {
   const params = useParams<{ id: string }>();
   const agentId = useMemo(
@@ -96,9 +77,6 @@ export default function AgentDetailPage() {
   const orgId = currentOrg?.id;
 
   const [agent, setAgent] = useState<AgentRecord | null>(null);
-  const [uploads, setUploads] = useState<AgentUpload[]>([]);
-  const [simRuns, setSimRuns] = useState<RunsEnvelope>({ runs: [], total: 0 });
-  const [testRuns, setTestRuns] = useState<RunsEnvelope>({ runs: [], total: 0 });
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
 
@@ -108,20 +86,9 @@ export default function AgentDetailPage() {
       setLoading(true);
       setLoadError(null);
       try {
-        const [agentsResp, ups, sims, tests] = await Promise.all([
-          agentsApi.list(orgId, { limit: 200 }),
-          agentsApi.listUploads(orgId, agentId, { limit: 20 }),
-          agentsApi.listSimRuns(orgId, agentId, { limit: 5 }),
-          agentsApi.listTestRuns(orgId, agentId, { limit: 5 }),
-        ]);
+        const agentsResp = await agentsApi.list(orgId, { limit: 200 });
         const list = (agentsResp?.agents ?? []) as AgentRecord[];
         setAgent(list.find((a) => a.agent_id === agentId) ?? null);
-        // ``listUploads`` already returns ``AgentUpload[]`` from the
-        // shared api client — no shape narrowing required. Defensive
-        // nullish fallback in case the catch above swallowed a 4xx.
-        setUploads(ups ?? []);
-        setSimRuns(sims);
-        setTestRuns(tests);
       } catch (e) {
         setLoadError(e instanceof Error ? e.message : "Failed to load agent");
       } finally {
@@ -132,7 +99,6 @@ export default function AgentDetailPage() {
   );
 
   useEffect(() => {
-     
     void load();
   }, [load]);
 
@@ -204,7 +170,7 @@ export default function AgentDetailPage() {
         <EmptyState
           icon={Bot}
           title="Agent not found"
-          description={`No agent with id ${agentId} exists in this organisation yet. It will appear once the agent first reports telemetry or you upload code.`}
+          description={`No agent with id ${agentId} exists in this organisation yet. It will appear once the agent first reports telemetry.`}
           size="lg"
         />
       </PageContent>
@@ -213,7 +179,6 @@ export default function AgentDetailPage() {
 
   return (
     <PageContent size="wide">
-      {/* Breadcrumb */}
       <Link
         href="/agents"
         className="inline-flex items-center gap-1 text-xs text-[var(--text-muted)] hover:text-[var(--accent)] transition-colors"
@@ -266,152 +231,25 @@ export default function AgentDetailPage() {
         }
       />
 
-      {/* Quick stats */}
       <Card className="p-6">
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          <Stat
-            icon={UploadIcon}
-            label="Uploads"
-            value={String(uploads.length)}
-          />
-          <Stat
-            icon={Beaker}
-            label="Sim runs"
-            value={String(simRuns.total ?? simRuns.runs?.length ?? 0)}
-          />
-          <Stat
-            icon={PlayCircle}
-            label="Test runs"
-            value={String(testRuns.total ?? testRuns.runs?.length ?? 0)}
-          />
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
           <Stat
             icon={Clock}
             label="Last seen"
             value={formatRelative(agent?.last_seen_at)}
           />
+          <Stat
+            icon={Bot}
+            label="Framework"
+            value={agent?.framework ?? "—"}
+          />
+          <Stat
+            icon={ExternalLink}
+            label="Repo"
+            value={repoHost ?? "Not linked"}
+          />
         </div>
       </Card>
-
-      {/* Quick links */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        <Link
-          href={`/agents/${encodeURIComponent(agentId)}/sim-runs`}
-          className="block"
-        >
-          <Card className="p-4 hover:border-[var(--accent)]/40 hover:bg-[var(--bg-secondary)]/30 transition-colors">
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-[var(--accent-faint)] text-[var(--accent)]">
-                <Beaker className="w-4 h-4" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <h3 className="text-sm font-medium text-[var(--text-primary)]">
-                  Sim runs
-                </h3>
-                <p className="text-xs text-[var(--text-muted)] mt-0.5">
-                  View {simRuns.total ?? simRuns.runs?.length ?? 0} sim run
-                  {(simRuns.total ?? simRuns.runs?.length ?? 0) === 1 ? "" : "s"}
-                </p>
-              </div>
-              <ExternalLink className="w-3.5 h-3.5 text-[var(--text-muted)]" />
-            </div>
-          </Card>
-        </Link>
-        <Link
-          href={`/agents/${encodeURIComponent(agentId)}/test-runs`}
-          className="block"
-        >
-          <Card className="p-4 hover:border-[var(--accent)]/40 hover:bg-[var(--bg-secondary)]/30 transition-colors">
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-[var(--terminal-faint)] text-[var(--terminal)]">
-                <PlayCircle className="w-4 h-4" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <h3 className="text-sm font-medium text-[var(--text-primary)]">
-                  Test runs
-                </h3>
-                <p className="text-xs text-[var(--text-muted)] mt-0.5">
-                  View {testRuns.total ?? testRuns.runs?.length ?? 0} test run
-                  {(testRuns.total ?? testRuns.runs?.length ?? 0) === 1 ? "" : "s"}
-                </p>
-              </div>
-              <ExternalLink className="w-3.5 h-3.5 text-[var(--text-muted)]" />
-            </div>
-          </Card>
-        </Link>
-      </div>
-
-      {/* Upload panel — typed AgentUpload[] directly. */}
-      <AgentUploadPanel
-        orgId={orgId}
-        agentId={agentId}
-        uploads={uploads}
-      />
-
-      {/* Recent uploads */}
-      <section>
-        <header className="flex items-center justify-between mb-3">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-[var(--text-muted)] flex items-center gap-2">
-            <Package className="w-4 h-4" />
-            Recent uploads
-          </h2>
-          {uploads.length > 0 && (
-            <span className="text-xs text-[var(--text-muted)]">
-              {uploads.length} total
-            </span>
-          )}
-        </header>
-        {uploads.length === 0 ? (
-          <Card className="p-6">
-            <EmptyState
-              icon={Package}
-              title="No uploads yet"
-              description="Run eden agent push <dir> from the CLI, or upload a tarball above."
-              size="md"
-            />
-          </Card>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            {uploads.slice(0, 6).map((u) => (
-              <Card key={u.upload_id} className="p-4">
-                <div className="flex items-start justify-between gap-2 mb-2">
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-semibold text-[var(--text-primary)]">
-                      v{u.upload_version}
-                    </span>
-                    {u.framework && (
-                      <span className="text-[10px] font-medium uppercase tracking-wide px-1.5 py-0.5 rounded bg-[var(--bg-tertiary)] text-[var(--text-secondary)]">
-                        {u.framework}
-                      </span>
-                    )}
-                  </div>
-                  <span className="text-[10px] text-[var(--text-muted)] font-mono">
-                    {u.uploaded_at?.slice(0, 19).replace("T", " ")}
-                  </span>
-                </div>
-                <div className="space-y-1 text-xs">
-                  {u.entry_point && (
-                    <p className="text-[var(--text-muted)] flex items-center gap-1.5">
-                      <FileCode className="w-3 h-3 flex-shrink-0" />
-                      <span className="font-mono truncate">{u.entry_point}</span>
-                    </p>
-                  )}
-                  <p className="text-[var(--text-muted)] flex items-center gap-3">
-                    <span className="flex items-center gap-1">
-                      <Code className="w-3 h-3" />
-                      {u.file_count} files
-                    </span>
-                    <span className="flex items-center gap-1">
-                      <Cpu className="w-3 h-3" />
-                      {formatBytes(u.total_bytes ?? 0)}
-                    </span>
-                  </p>
-                </div>
-              </Card>
-            ))}
-          </div>
-        )}
-      </section>
-    
     </PageContent>
   );
 }

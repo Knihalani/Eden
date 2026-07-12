@@ -1,19 +1,18 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Loader2, Sparkles, ShieldAlert, Activity, TrendingUp } from "lucide-react";
+import { Loader2, Sparkles, Activity, TrendingUp } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { DataTable } from "@/components/ui/data-table";
+import { EmptyState } from "@/components/ui/empty-state";
 import { ErrorState } from "@/components/ui/error-state";
 import { StatCard } from "@/components/ui/stat-card";
 import { PageHeader } from "@/components/layout/page-header";
 import { useOrg } from "@/hooks/use-org";
 import { predictiveApi } from "@/lib/api";
-import { cn } from "@/lib/utils";
-import { EmptyState } from "@/components/ui/empty-state";
 import { NoOrgState } from "@/components/ui/no-org-state";
 import { errorFromCaught } from "@/lib/safe-error-message";
 
@@ -24,12 +23,14 @@ function formatNumber(n: number) {
 }
 
 function formatCurrency(n: number, opts?: { compact?: boolean }) {
-  if (opts?.compact) {
-    if (Math.abs(n) >= 1_000_000) return `$${(n / 1_000_000).toFixed(1)}M`;
-    if (Math.abs(n) >= 1_000) return `$${(n / 1_000).toFixed(1)}k`;
-    return `$${n.toFixed(2)}`;
+  if (opts?.compact && Math.abs(n) >= 1000) {
+    return `$${(n / 1000).toFixed(1)}k`;
   }
-  return `$${n.toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    maximumFractionDigits: 2,
+  }).format(n);
 }
 
 /* ----------------------- Inline SVG forecast chart ------------------- */
@@ -144,9 +145,12 @@ function QualityTab() {
     });
     predictiveApi
       .quality(currentOrg.id, { horizon_days: 7 })
-      .then((res: { predictions?: Array<{ date: string; median: number; ci_95_low: number; ci_95_high: number }> }) => {
+      .then((res: {
+        predictions?: Array<{ date: string; median: number; ci_95_low: number; ci_95_high: number }>;
+        data?: { predictions?: Array<{ date: string; median: number; ci_95_low: number; ci_95_high: number }> };
+      }) => {
         if (cancelled) return;
-        setData(res.predictions ?? []);
+        setData(res.data?.predictions ?? res.predictions ?? []);
       })
       .catch((e: unknown) => {
         if (cancelled) return;
@@ -183,185 +187,6 @@ function QualityTab() {
   );
 }
 
-function CostTab() {
-  const { currentOrg } = useOrg();
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string>("");
-  const [data, setData] = useState<Array<{ date: string; median: number; ci_95_low: number; ci_95_high: number }>>([]);
-
-  useEffect(() => {
-    if (!currentOrg) return;
-    let cancelled = false;
-    queueMicrotask(() => {
-      if (cancelled) return;
-      setLoading(true);
-      setError("");
-    });
-    predictiveApi
-      .cost(currentOrg.id, { horizon_days: 7 })
-      .then((res: { predictions?: Array<{ date: string; median: number; ci_95_low: number; ci_95_high: number }> }) => {
-        if (cancelled) return;
-        setData(res.predictions ?? []);
-      })
-      .catch((e: unknown) => {
-        if (cancelled) return;
-        setError(errorFromCaught(e, "Failed to load cost forecast"));
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [currentOrg]);
-
-  if (loading) {
-    return (
-      <div className="flex h-48 items-center justify-center">
-        <Loader2 className="h-5 w-5 animate-spin text-[var(--text-muted)]" />
-      </div>
-    );
-  }
-  if (error) {
-    return <ErrorState title="Could not load cost forecast" message={error} />;
-  }
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Cost forecast</CardTitle>
-        <CardDescription>7-day projected spend with 95% CI</CardDescription>
-      </CardHeader>
-      <CardContent>
-        <ForecastLine data={data} unit="usd" color="var(--terminal)" />
-      </CardContent>
-    </Card>
-  );
-}
-
-/* ----------------------- Capacity tab -------------------------------- */
-
-function CapacityTab() {
-  const { currentOrg } = useOrg();
-  const [growth, setGrowth] = useState<number>(10);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string>("");
-  const [predictions, setPredictions] = useState<Array<{ date: string; gpu_hours: number }>>([]);
-  const [scenarios, setScenarios] = useState<Record<string, { gpu_hours: number; cost: number }>>({});
-
-  useEffect(() => {
-    if (!currentOrg) return;
-    let cancelled = false;
-    queueMicrotask(() => {
-      if (cancelled) return;
-      setLoading(true);
-      setError("");
-    });
-    predictiveApi
-      .capacity(currentOrg.id, { horizon_days: 7 })
-      .then((res: { predictions?: Array<{ date: string; gpu_hours: number }>; scenarios?: Record<string, { gpu_hours: number; cost: number }> }) => {
-        if (cancelled) return;
-        setPredictions(res.predictions ?? []);
-        // The API returns scenarios; we add a custom "growth" derived scenario.
-        const baseScenarios = res.scenarios ?? {};
-        setScenarios({
-          ...baseScenarios,
-          [`growth_${growth}pct`]: scaleScenario(baseScenarios, growth / 100) });
-      })
-      .catch((e: unknown) => {
-        if (cancelled) return;
-        setError(errorFromCaught(e, "Failed to load capacity"));
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [currentOrg, growth]);
-
-  return (
-    <Card>
-      <CardHeader>
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-          <div>
-            <CardTitle>Capacity scenarios</CardTitle>
-            <CardDescription>GPU-hour projections under different growth assumptions</CardDescription>
-          </div>
-          <label className="flex items-center gap-2 text-sm text-[var(--text-muted)]">
-            <span>Growth %</span>
-            <input
-              type="number"
-              value={growth}
-              onChange={(e) => setGrowth(Math.max(0, Math.min(500, Number(e.target.value) || 0)))}
-              aria-label="Growth percentage"
-              min={0}
-              max={500}
-              className="w-20 rounded-md border border-[var(--border-default)] bg-[var(--bg-tertiary)] px-2 py-1 text-sm text-[var(--text-primary)] focus:border-[var(--accent)] focus:outline-none"
-            />
-          </label>
-        </div>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        {loading ? (
-          <div className="flex h-32 items-center justify-center">
-            <Loader2 className="h-5 w-5 animate-spin text-[var(--text-muted)]" />
-          </div>
-        ) : error ? (
-          <ErrorState title="Could not load capacity" message={error} />
-        ) : (
-          <>
-            <DataTable
-              columns={[
-                { key: "name", header: "Scenario", cell: (r) => <span className="font-medium text-[var(--text-primary)]">{r.name}</span> },
-                { key: "gpu_hours", header: "GPU hours", align: "right", cell: (r) => formatNumber(r.s.gpu_hours), sortable: true },
-                { key: "cost", header: "Cost", align: "right", cell: (r) => formatCurrency(r.s.cost, { compact: true }), sortable: true },
-              ]}
-              rows={Object.entries(scenarios).map(([name, s]) => ({ name, s }))}
-              rowKey={(r) => r.name}
-              emptyTitle="No capacity scenarios"
-            />
-            {predictions.length > 0 && (
-              <div>
-                <p className="mb-2 text-xs font-medium uppercase tracking-wide text-[var(--text-muted)]">
-                  Daily GPU hours (next {predictions.length} days)
-                </p>
-                <ForecastLine
-                  data={predictions.map((p) => ({
-                    date: p.date,
-                    median: p.gpu_hours,
-                    ci_95_low: p.gpu_hours * 0.9,
-                    ci_95_high: p.gpu_hours * 1.1 }))}
-                  color="var(--terminal)"
-                />
-              </div>
-            )}
-          </>
-        )}
-      </CardContent>
-    </Card>
-  );
-}
-
-function scaleScenario(
-  base: Record<string, { gpu_hours: number; cost: number }>,
-  factor: number
-): { gpu_hours: number; cost: number } {
-  // Compute a "total" of all known scenarios to extrapolate a growth scenario.
-  let totalGpu = 0;
-  let totalCost = 0;
-  let n = 0;
-  for (const v of Object.values(base)) {
-    totalGpu += v.gpu_hours;
-    totalCost += v.cost;
-    n += 1;
-  }
-  const avgGpu = n > 0 ? totalGpu / n : 0;
-  const avgCost = n > 0 ? totalCost / n : 0;
-  return { gpu_hours: avgGpu * (1 + factor), cost: avgCost * (1 + factor) };
-}
-
-/* ----------------------- Drift tab ----------------------------------- */
-
 function DriftTab() {
   const { currentOrg } = useOrg();
   const [loading, setLoading] = useState(true);
@@ -374,12 +199,6 @@ function DriftTab() {
     severity: string;
     top_shifts: Array<Record<string, unknown>>;
   } | null>(null);
-  const [embedDrift, setEmbedDrift] = useState<{
-    drift_detected: boolean;
-    psi: number;
-    histogram_buckets: number;
-    severity: string;
-  } | null>(null);
 
   useEffect(() => {
     if (!currentOrg) return;
@@ -389,14 +208,19 @@ function DriftTab() {
       setLoading(true);
       setError("");
     });
-    Promise.all([predictiveApi.drift(currentOrg.id), predictiveApi.embeddingDrift(currentOrg.id)])
-      .then(([jd, ed]: [
-        { drift_detected: boolean; drift_score: number; baseline_period: string; current_period: string; severity: string; top_shifts: Array<Record<string, unknown>> },
-        { drift_detected: boolean; psi: number; histogram_buckets: number; severity: string }
-      ]) => {
+    // LP-12: embeddingDrift returns 501 — judge drift only.
+    predictiveApi
+      .drift(currentOrg.id)
+      .then((jd: {
+        drift_detected: boolean;
+        drift_score: number;
+        baseline_period: string;
+        current_period: string;
+        severity: string;
+        top_shifts: Array<Record<string, unknown>>;
+      }) => {
         if (cancelled) return;
         setJudgeDrift(jd);
-        setEmbedDrift(ed);
       })
       .catch((e: unknown) => {
         if (cancelled) return;
@@ -423,26 +247,13 @@ function DriftTab() {
 
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <StatCard
-          title="Judge-score drift"
-          value={judgeDrift?.drift_score?.toFixed(3) ?? "0.000"}
-          subtitle={judgeDrift?.drift_detected ? `Detected · ${judgeDrift.severity}` : "No drift detected"}
-          icon={Activity}
-          accent={judgeDrift?.drift_detected ? "warning" : "accent"}
-        />
-        <StatCard
-          title="Embedding drift (PSI)"
-          value={embedDrift?.psi?.toFixed(3) ?? "0.000"}
-          subtitle={
-            embedDrift?.drift_detected
-              ? `Detected · ${embedDrift.severity} · ${embedDrift.histogram_buckets} buckets`
-              : "No drift detected"
-          }
-          icon={Activity}
-          accent={embedDrift?.drift_detected ? "warning" : "accent"}
-        />
-      </div>
+      <StatCard
+        title="Judge-score drift"
+        value={judgeDrift?.drift_score?.toFixed(3) ?? "0.000"}
+        subtitle={judgeDrift?.drift_detected ? `Detected · ${judgeDrift.severity}` : "No drift detected"}
+        icon={Activity}
+        accent={judgeDrift?.drift_detected ? "warning" : "accent"}
+      />
       <Card>
         <CardHeader>
           <CardTitle>Top judge-score shifts</CardTitle>
@@ -488,132 +299,11 @@ function DriftTab() {
   );
 }
 
-/* ----------------------- Risk tab ------------------------------------ */
-
-function RiskTab() {
-  const { currentOrg } = useOrg();
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string>("");
-  const [risk, setRisk] = useState<{
-    risk_score: number;
-    breakdown: Array<{ component: string; score: number; alerts: string[] }>;
-  } | null>(null);
-
-  useEffect(() => {
-    if (!currentOrg) return;
-    let cancelled = false;
-    queueMicrotask(() => {
-      if (cancelled) return;
-      setLoading(true);
-      setError("");
-    });
-    predictiveApi
-      .risk(currentOrg.id)
-      .then((res: { risk_score?: number; breakdown?: Array<{ component: string; score: number; alerts: string[] }> }) => {
-        if (cancelled) return;
-        setRisk({
-          risk_score: res.risk_score ?? 0,
-          breakdown: res.breakdown ?? [] });
-      })
-      .catch((e: unknown) => {
-        if (cancelled) return;
-        setError(errorFromCaught(e, "Failed to load risk"));
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [currentOrg]);
-
-  if (loading) {
-    return (
-      <div className="flex h-48 items-center justify-center">
-        <Loader2 className="h-5 w-5 animate-spin text-[var(--text-muted)]" />
-      </div>
-    );
-  }
-  if (error) {
-    return <ErrorState title="Could not load risk" message={error} />;
-  }
-
-  const riskScore = risk?.risk_score ?? 0;
-  const riskColor =
-    riskScore >= 70
-      ? "text-[var(--error)]"
-      : riskScore >= 40
-        ? "text-[var(--warning)]"
-        : "text-[var(--success)]";
-
-  return (
-    <div className="space-y-4">
-      <Card>
-        <CardHeader>
-          <CardTitle>Composite risk</CardTitle>
-          <CardDescription>Weighted score across 5 components (0-100)</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="flex items-baseline gap-3">
-            <span className={cn("text-6xl font-bold tracking-tight", riskColor)}>
-              {riskScore.toFixed(0)}
-            </span>
-            <span className="text-sm text-[var(--text-muted)]">/ 100</span>
-          </div>
-        </CardContent>
-      </Card>
-      <Card>
-        <CardHeader>
-          <CardTitle>Component breakdown</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {risk && risk.breakdown.length > 0 ? (
-            <div className="space-y-3">
-              {risk.breakdown.map((b) => (
-                <div key={b.component}>
-                  <div className="mb-1 flex items-center justify-between text-xs text-[var(--text-secondary)]">
-                    <span className="font-medium capitalize">
-                      {b.component.replace(/_/g, " ")}
-                    </span>
-                    <span className="text-[var(--text-muted)]">
-                      {b.score.toFixed(0)}{b.alerts.length > 0 ? ` · ${b.alerts.length} alert${b.alerts.length === 1 ? "" : "s"}` : ""}
-                    </span>
-                  </div>
-                  <div className="h-2 w-full overflow-hidden rounded-full bg-[var(--bg-tertiary)]">
-                    <div
-                      className={cn(
-                        "h-full rounded-full transition-all",
-                        b.score >= 70
-                          ? "bg-[var(--error)]"
-                          : b.score >= 40
-                            ? "bg-[var(--warning)]"
-                            : "bg-[var(--accent)]"
-                      )}
-                      style={{ width: `${Math.max(0, Math.min(100, b.score))}%` }}
-                    />
-                  </div>
-                  {b.alerts.length > 0 && (
-                    <ul className="mt-1 space-y-0.5 text-[10px] text-[var(--text-muted)]">
-                      {b.alerts.map((a, i) => (
-                        <li key={i}>• {a}</li>
-                      ))}
-                    </ul>
-                  )}
-                </div>
-              ))}
-            </div>
-          ) : (
-            <EmptyState icon={ShieldAlert} title="No risk components" size="sm" />
-          )}
-        </CardContent>
-      </Card>
-    </div>
-  );
-}
 
 /* ----------------------- Page ---------------------------------------- */
 
-type Tab = "quality" | "cost" | "capacity" | "drift" | "risk";
+// LP-12: cost/capacity/risk return 501 deferred envelopes — hide those tabs.
+type Tab = "quality" | "drift";
 
 export default function PredictPage() {
   const { currentOrg } = useOrg();
@@ -627,8 +317,8 @@ export default function PredictPage() {
     <div className="space-y-4">
       <PageHeader
         eyebrow="Predict"
-        title="Quality, cost, capacity & risk forecasts"
-        subtitle="Projections with 95% confidence bands and drift detection across the stack."
+        title="Quality forecast & drift"
+        subtitle="Judge-score projections with 95% confidence bands and output drift detection."
         icon={TrendingUp}
       />
       <Tabs value={tab} onValueChange={(v) => setTab(v as Tab)}>
@@ -636,17 +326,8 @@ export default function PredictPage() {
           <TabsTrigger value="quality" variant="underline">
             Quality
           </TabsTrigger>
-          <TabsTrigger value="cost" variant="underline">
-            Cost
-          </TabsTrigger>
-          <TabsTrigger value="capacity" variant="underline">
-            Capacity
-          </TabsTrigger>
           <TabsTrigger value="drift" variant="underline">
             Drift
-          </TabsTrigger>
-          <TabsTrigger value="risk" variant="underline">
-            Risk
           </TabsTrigger>
         </TabsList>
 
@@ -664,32 +345,6 @@ export default function PredictPage() {
               </motion.div>
             </TabsContent>
           )}
-          {tab === "cost" && (
-            <TabsContent value="cost">
-              <motion.div
-                key="cost"
-                initial={{ opacity: 0, y: 4 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -4 }}
-                transition={{ duration: 0.15 }}
-              >
-                {tab === "cost" && <CostTab />}
-              </motion.div>
-            </TabsContent>
-          )}
-          {tab === "capacity" && (
-            <TabsContent value="capacity">
-              <motion.div
-                key="capacity"
-                initial={{ opacity: 0, y: 4 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -4 }}
-                transition={{ duration: 0.15 }}
-              >
-                {tab === "capacity" && <CapacityTab />}
-              </motion.div>
-            </TabsContent>
-          )}
           {tab === "drift" && (
             <TabsContent value="drift">
               <motion.div
@@ -700,19 +355,6 @@ export default function PredictPage() {
                 transition={{ duration: 0.15 }}
               >
                 {tab === "drift" && <DriftTab />}
-              </motion.div>
-            </TabsContent>
-          )}
-          {tab === "risk" && (
-            <TabsContent value="risk">
-              <motion.div
-                key="risk"
-                initial={{ opacity: 0, y: 4 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -4 }}
-                transition={{ duration: 0.15 }}
-              >
-                {tab === "risk" && <RiskTab />}
               </motion.div>
             </TabsContent>
           )}

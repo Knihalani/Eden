@@ -209,14 +209,52 @@ def _state_to_dict(row: dict[str, Any]) -> dict[str, Any]:
     updated_iso = (
         updated_at.isoformat() if isinstance(updated_at, datetime) else str(updated_at or "")
     )
+    # LP-11: cat-23 wizard uses ``step``; D.14 v2 uses ``current_step``
+    # on the same table depending on which migration landed. Prefer
+    # ``step``, then map ``current_step`` so the banner/wizard stay
+    # consistent.
+    step = row.get("step")
+    if not step:
+        v2 = row.get("current_step")
+        step = _v2_step_to_wizard(str(v2)) if v2 else "welcome"
     return {
         "org_id": str(row.get("org_id", "")),
-        "step": row.get("step") or "welcome",
+        "step": step or "welcome",
         "org_setup_choice": row.get("org_setup_choice"),
         "agents_onboarded": list(agents),
         "completed_by_users": [str(u) for u in completed],
         "updated_at": updated_iso,
     }
+
+
+def _v2_step_to_wizard(current_step: str) -> str:
+    """Map D.14 v2 vocabulary onto the 4-step wizard."""
+    mapping = {
+        "install": "welcome",  # v2 starts at install; wizard at welcome
+        "org": "welcome",
+        "connect": "connect",
+        "wait": "install",
+        "done": "done",
+        "tour": "done",
+        "autonomous": "done",
+    }
+    return mapping.get(current_step, "welcome")
+
+
+def _wizard_step_to_v2(step: str) -> str | None:
+    """Best-effort reverse map for syncing v2 when cat-23 advances."""
+    mapping = {
+        "welcome": "install",
+        "org_setup": "org",
+        "connect": "connect",
+        "connect_github": "connect",
+        "install": "install",
+        "install_sdk": "install",
+        "wait": "wait",
+        "wait_for_pr": "wait",
+        "done": "done",
+    }
+    return mapping.get(step)
 
 
 # ── Public integration routes ───────────────────────────────────────
@@ -713,6 +751,24 @@ async def patch_onboarding_state(
         json.dumps(completed),
         org_id,
     )
+    # LP-11: best-effort sync of D.14 ``current_step`` when the column
+    # exists (056 schema). Ignore failures on legacy ``step``-only DBs.
+    v2_step = _wizard_step_to_v2(new_step)
+    if v2_step:
+        try:
+            await pg.execute(
+                """
+                UPDATE onboarding_state
+                SET current_step = $1, updated_at = NOW()
+                WHERE org_id = $2
+                """,
+                v2_step,
+                org_id,
+            )
+        except Exception:
+            logger.debug(
+                "onboarding: current_step sync skipped for org=%s", org_id, exc_info=True,
+            )
     row = await pg.fetchrow(
         "SELECT * FROM onboarding_state WHERE org_id = $1", org_id,
     )

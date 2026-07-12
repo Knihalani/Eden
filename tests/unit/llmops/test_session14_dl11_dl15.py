@@ -405,10 +405,9 @@ class TestDl14QuotaFailClosed:
         mw = QuotaEnforcementMiddleware(MagicMock())
         assert mw._budget_staleness("org-never-seen") is None
 
-    def test_cached_block_check_blocks_when_no_cache(self) -> None:
-        """If we have no cached value at all, fail closed with
-        a generic message — even one rejection is better than
-        no cap during a DB blip."""
+    def test_cached_block_check_fails_open_when_no_cache(self) -> None:
+        """LP-10: missing snapshot must not 429 — fail-open so the
+        live ``_check_hard_limits`` path can warm the cache."""
         from eden.api.middleware.quota_enforcement import (
             QuotaEnforcementMiddleware,
         )
@@ -417,8 +416,29 @@ class TestDl14QuotaFailClosed:
         blocked, detail = mw._cached_block_check(
             "org-fresh", ["cost_usd"],
         )
-        assert blocked is True
-        assert "Fail-closed" in detail
+        assert blocked is False
+        assert detail == ""
+
+    def test_cached_block_check_fails_open_when_stale(self) -> None:
+        """LP-10: stale snapshot fails open (live check runs next)."""
+        from eden.api.middleware.quota_enforcement import (
+            QuotaEnforcementMiddleware,
+        )
+
+        mw = QuotaEnforcementMiddleware(MagicMock())
+        mw._record_hard_limits(
+            "org-stale",
+            {"cost_usd": {"used": 100.0, "hard_limit": 50.0, "status": "hard_exceeded"}},
+        )
+        old_ts, cached = mw._last_known_hard_limits["org-stale"]
+        mw._last_known_hard_limits["org-stale"] = (
+            time.monotonic() - 120.0, cached,
+        )
+        blocked, detail = mw._cached_block_check(
+            "org-stale", ["cost_usd"],
+        )
+        assert blocked is False
+        assert detail == ""
 
     def test_cached_block_check_uses_cached_cost(self) -> None:
         """When the cache has cost_usd and the live check
@@ -530,23 +550,16 @@ class TestDl14QuotaFailClosed:
             call_next.assert_not_awaited()
 
     @pytest.mark.asyncio
-    async def test_dispatch_fails_closed_on_stale_budget(
+    async def test_dispatch_fails_open_on_stale_budget_then_live_ok(
         self,
     ) -> None:
-        """If the budget is >60s old, the middleware fails
-        closed even when the live call returns ok — the cap
-        might have changed while we weren't looking."""
+        """LP-10: stale cache must not 429 — live check proceeds."""
         from starlette.requests import Request
 
         from eden.api.middleware.quota_enforcement import (
             QuotaEnforcementMiddleware,
         )
 
-        # Override conftest's quota_enabled=False so the
-        # middleware actually enforces (fail-closed on stale
-        # budget is the behaviour under test). Wrap the entire
-        # dispatch so the patch is in effect when ``dispatch``
-        # reads ``get_settings()`` from the source module.
         with patch(
             "eden.config.get_settings",
             return_value=_quota_enabled_settings(),
@@ -558,12 +571,10 @@ class TestDl14QuotaFailClosed:
             mw._check_hard_limits = AsyncMock(  # type: ignore[method-assign]
                 return_value=(False, ""),
             )
-            # But the budget was last refreshed 120s ago (> 60s).
             mw._record_hard_limits(
                 "org-stale",
                 {"cost_usd": {"used": 0, "hard_limit": 50.0}},
             )
-            # Manually backdate the cache entry.
             old_ts, cached = mw._last_known_hard_limits["org-stale"]
             mw._last_known_hard_limits["org-stale"] = (
                 time.monotonic() - 120.0, cached,
@@ -581,10 +592,8 @@ class TestDl14QuotaFailClosed:
                 return_value=MagicMock(headers={}),
             )
 
-            from starlette.responses import JSONResponse
             result = await mw.dispatch(request, call_next)
 
-            # Stale budget → 429 fail-closed.
-            assert isinstance(result, JSONResponse)
-            assert result.status_code == 429
-            call_next.assert_not_awaited()
+            call_next.assert_awaited()
+            assert result is call_next.return_value
+            mw._check_hard_limits.assert_awaited()

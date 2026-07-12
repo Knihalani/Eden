@@ -315,7 +315,7 @@ export function OnboardingConnectFlow({
         </h2>
         <p className="max-w-sm text-sm text-[var(--text-secondary)]">
           Eden is detecting your framework and opening a pull request with
-          the SDK wiring. You&apos;ll land on the install step when it&apos;s ready.
+          the SDK wiring. You&apos;ll land on the wait step when the PR is open.
         </p>
       </div>
     );
