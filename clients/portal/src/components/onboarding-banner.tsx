@@ -1,20 +1,17 @@
 "use client";
 
 /**
- * OnboardingBanner — cold-start progress chip (LP-11 + portal polish).
+ * OnboardingBanner — cold-start progress chip (single SoT).
  *
- * Single source of truth: the Cat-23 wizard state
- * (``onboardingApi`` / ``/orgs/.../onboarding/state``), aligned with
- * the 4-step wizard in ``onboarding/layout.tsx``:
- *   welcome → connect → install → done
- *
- * Visual: single-line chip (progress + Resume). Collapses when the
- * layout auth-error banner is showing so the viewport isn't stacked
- * with two sticky chrome bands.
+ * Progress comes from ``lib/onboarding-progress`` (Cat-23 wizard
+ * state via ``onboardingApi``). Hidden on ``/onboarding/*`` so the
+ * wizard chrome is the only step counter inside the flow — no dual
+ * "1 of 5" / "1 of 3" stacks.
  */
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { ChevronRight, Terminal, X } from "lucide-react";
 import { useOrg } from "@/hooks/use-org";
 import {
@@ -23,29 +20,12 @@ import {
   type OnboardingState,
   type OnboardingV2State,
 } from "@/lib/api";
+import {
+  formatOnboardingProgress,
+  isOnboardingWizardPath,
+  ONBOARDING_PROGRESS_STEPS,
+} from "@/lib/onboarding-progress";
 import { cn } from "@/lib/utils";
-
-const STEPS: Array<{
-  id: string;
-  label: string;
-  blurb: string;
-  href: string;
-}> = [
-  { id: "welcome", label: "Welcome", blurb: "Get started with Eden", href: "/onboarding" },
-  { id: "connect", label: "Connect repo", blurb: "Open an SDK integration PR", href: "/onboarding/connect" },
-  { id: "install", label: "Install SDK", blurb: "Copy the snippet into your agent", href: "/onboarding/install" },
-  { id: "done", label: "Done", blurb: "Explore the dashboard", href: "/onboarding/done" },
-];
-
-/** Map cat-23 / legacy step ids onto the simplified wizard order. */
-function wizardStepIndex(step: string | null | undefined): number {
-  const s = (step || "welcome").toLowerCase();
-  if (s === "done") return 3;
-  if (s === "install" || s === "install_sdk" || s === "wait" || s === "wait_for_pr") return 2;
-  if (s === "connect" || s === "connect_github") return 1;
-  // welcome | org_setup | org | unknown
-  return 0;
-}
 
 const SESSION_KEY = "eden:onboarding:v2:dismissed";
 
@@ -55,6 +35,7 @@ export function OnboardingBanner({
   /** When true (auth error banner visible), render nothing. */
   collapsed?: boolean;
 }) {
+  const pathname = usePathname();
   const { currentOrg } = useOrg();
   const [wizardState, setWizardState] = useState<OnboardingState | null>(null);
   const [v2Meta, setV2Meta] = useState<Pick<OnboardingV2State, "source" | "onboarding_v2_enabled"> | null>(null);
@@ -72,7 +53,6 @@ export function OnboardingBanner({
     const orgId = currentOrg.id;
     let cancelled = false;
 
-    // Cat-23 wizard = SoT for step display.
     onboardingApi
       .getState(orgId)
       .then((res) => {
@@ -93,7 +73,6 @@ export function OnboardingBanner({
         });
       })
       .catch(() => {
-        // If v2 is unreachable, still show banner from wizard state.
         if (!cancelled) setV2Meta({ source: "defaults", onboarding_v2_enabled: true });
       });
 
@@ -102,17 +81,15 @@ export function OnboardingBanner({
     };
   }, [currentOrg?.id]);
 
+  // Wizard routes own their progress strip — don't stack a second counter.
+  if (isOnboardingWizardPath(pathname)) return null;
   if (collapsed) return null;
   if (!wizardState) return null;
   if (v2Meta?.source === "legacy" || v2Meta?.onboarding_v2_enabled === false) return null;
   if (dismissed) return null;
 
-  const currentIdx = wizardStepIndex(wizardState.step);
-  // Hide once the wizard is complete.
-  if (currentIdx >= STEPS.length - 1 || wizardState.step === "done") return null;
-
-  const current = STEPS[currentIdx] ?? STEPS[0];
-  const totalCount = STEPS.length - 1; // exclude terminal "done" from progress denom
+  const progress = formatOnboardingProgress(wizardState.step);
+  if (progress.isComplete) return null;
 
   function dismiss() {
     if (typeof window !== "undefined") {
@@ -130,18 +107,18 @@ export function OnboardingBanner({
       <div className="mx-auto flex max-w-7xl items-center gap-2 px-4 py-1.5 text-xs sm:text-sm">
         <Terminal className="h-3.5 w-3.5 shrink-0 text-[var(--accent)]" aria-hidden />
         <span className="font-medium text-[var(--text-primary)] whitespace-nowrap">
-          Step {currentIdx + 1}/{totalCount}
+          Step {progress.current}/{progress.total}
         </span>
         <span className="text-[var(--text-muted)]" aria-hidden>
           ·
         </span>
         <span className="min-w-0 truncate text-[var(--text-secondary)]">
-          {current.label}
-          <span className="hidden text-[var(--text-muted)] sm:inline"> — {current.blurb}</span>
+          {progress.label}
+          <span className="hidden text-[var(--text-muted)] sm:inline"> — {progress.blurb}</span>
         </span>
         <div className="ml-auto flex shrink-0 items-center gap-1.5">
           <Link
-            href={current.href}
+            href={progress.href}
             className={cn(
               "inline-flex items-center gap-0.5 rounded-md border border-[var(--accent)]/40",
               "bg-[var(--accent)]/10 px-2 py-0.5 text-[11px] font-medium text-[var(--accent)]",
@@ -165,4 +142,4 @@ export function OnboardingBanner({
   );
 }
 
-export { STEPS as ONBOARDING_V2_STEPS };
+export { ONBOARDING_PROGRESS_STEPS as ONBOARDING_V2_STEPS };

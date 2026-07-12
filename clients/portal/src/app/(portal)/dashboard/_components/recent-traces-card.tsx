@@ -41,7 +41,7 @@ export function RecentTracesCard({
       {loading ? <div className="flex items-center justify-center py-10">
           <Loader2 className="w-5 h-5 animate-spin text-[var(--text-muted)]" />
         </div> : empty ? <div className="px-5 pb-5">
-          <EmptyState icon={GitBranch} title="No traces yet" description="Traces will appear here once your agents emit telemetry. Connect an agent to see live signals in seconds." action={<Link href="/agents/connect">
+          <EmptyState icon={GitBranch} title="No traces yet" description="Traces will appear here once your agents emit telemetry. Connect an agent to see live signals in seconds." action={<Link href="/onboarding/connect">
                 <Button>
                   <GitBranch className="w-4 h-4" />
                   Connect a repo

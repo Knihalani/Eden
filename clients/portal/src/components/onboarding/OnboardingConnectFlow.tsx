@@ -20,10 +20,10 @@
  */
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useOrg } from "@/hooks/use-org";
-import { useAuth } from "@/hooks/use-auth";
+import { usePermissions } from "@/hooks/use-permissions";
 import { githubApi, type GitHubInstallation, type GitHubRepo, type OnboardingPRRun } from "@/lib/api";
 import { useToast } from "@/components/ui/toast";
 import {
@@ -88,7 +88,10 @@ export function OnboardingConnectFlow({
 }: Props) {
   const toast = useToast();
   const { currentOrg } = useOrg();
-  const { user } = useAuth();
+  // Same permission source as dashboard /agents/connect — includes
+  // Clerk org:admin + is_owner fallbacks while Eden role syncs.
+  const { hasPermission, role } = usePermissions();
+  const canIntegrate = hasPermission("integrations:write");
   const [configured, setConfigured] = useState<boolean | null>(null);
   const [installations, setInstallations] = useState<GitHubInstallation[]>([]);
   const [repos, setRepos] = useState<GitHubRepo[]>([]);
@@ -100,14 +103,6 @@ export function OnboardingConnectFlow({
   const [integrating, setIntegrating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const autoIntegrateAttempted = useRef(false);
-
-  // Resolve role from current org membership.
-  const role: string = useMemo(() => {
-    if (!currentOrg || !user) return "";
-    const found = user.organizations?.find((o) => o.id === currentOrg.id);
-    return found?.role ?? "";
-  }, [currentOrg, user]);
-  const canIntegrate = role === "owner" || role === "admin";
 
   // Bootstrap — is the instance configured at all?
   useEffect(() => {
@@ -269,7 +264,7 @@ export function OnboardingConnectFlow({
 
   if (currentOrg && !canIntegrate) {
     return (
-      <PanelLocked inWizard={inWizard} role={role} />
+      <PanelLocked inWizard={inWizard} role={role ?? ""} />
     );
   }
 

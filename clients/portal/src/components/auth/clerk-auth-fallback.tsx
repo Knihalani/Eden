@@ -210,33 +210,25 @@ function ClerkFormSkeleton({
     <div
       aria-hidden="true"
       className={
-        "pointer-events-none absolute inset-0 flex flex-col gap-3 transition-opacity duration-150 motion-reduce:transition-none " +
+        "pointer-events-none absolute inset-0 flex flex-col gap-3 transition-opacity duration-200 motion-reduce:transition-none " +
         (visible ? "opacity-100" : "opacity-0")
       }
-      // React 19 ships ``inert`` as a native boolean prop. When
-      // the skeleton is hidden we exclude it from the focus
-      // order and from the a11y tree entirely.
       inert={!visible}
     >
-      {/* Two stacked input fields */}
-      <div className="h-10 w-full rounded-md border border-[var(--border-default)] skeleton" />
-      <div className="h-10 w-full rounded-md border border-[var(--border-default)] skeleton" />
-      {/* Primary action button — uses accent so the affordance
-       * reads as "this is where you click" even while loading. */}
-      <div className="mt-1 h-10 w-full rounded-md skeleton border border-[var(--accent)]/30" />
-      {/* Divider + identity-provider buttons (Google, GitHub) */}
-      <div className="mt-2 flex items-center gap-3 text-[10px] font-mono uppercase tracking-[0.18em] text-[var(--text-muted)]">
+      {/* Quiet instrument-panel placeholders — static opacity, no
+       * shimmer cascade. Matches portal LP-19 auth chrome. */}
+      <div className="h-10 w-full rounded-md border border-[var(--border-default)] bg-[var(--bg-secondary)]/80" />
+      <div className="h-10 w-full rounded-md border border-[var(--border-default)] bg-[var(--bg-secondary)]/80" />
+      <div className="mt-1 h-10 w-full rounded-md border border-[var(--accent)]/25 bg-[var(--accent)]/5" />
+      <div className="mt-3 flex items-center gap-3 text-[10px] font-mono uppercase tracking-[0.18em] text-[var(--text-muted)]">
         <span className="h-px flex-1 bg-[var(--border-subtle)]" />
         or
         <span className="h-px flex-1 bg-[var(--border-subtle)]" />
       </div>
-      <div className="h-10 w-full rounded-md border border-[var(--border-default)] skeleton" />
-      <div className="h-10 w-full rounded-md border border-[var(--border-default)] skeleton" />
-      {/* Micro-label confirming what the eventual form is for.
-       * Helps screen-reader users with the loader announcement
-       * and gives the skeleton semantic context. */}
-      <p className="mt-1 text-center text-[10px] font-mono uppercase tracking-[0.18em] text-[var(--text-muted)]">
-        loading {formLabel}…
+      <div className="h-10 w-full rounded-md border border-[var(--border-default)] bg-[var(--bg-secondary)]/60" />
+      <div className="h-10 w-full rounded-md border border-[var(--border-default)] bg-[var(--bg-secondary)]/60" />
+      <p className="mt-2 text-center text-[10px] font-mono uppercase tracking-[0.2em] text-[var(--text-muted)]">
+        {formLabel === "sign-in" ? "sign in" : "sign up"}
       </p>
     </div>
   );

@@ -57,11 +57,32 @@ export interface UsePermissionsResult {
   role: string | null;
 }
 
+/**
+ * Resolve Eden role with Clerk / owner fallbacks.
+ *
+ * Org creators briefly have a Clerk `org:admin` membership while Eden
+ * `/auth/me` still omits `role` (id mismatch or webhook lag). Without
+ * these fallbacks, Connect-repo CTAs lock out the person who just
+ * created the workspace.
+ */
+function resolveRole(
+  currentOrg: { role?: string; is_owner?: boolean } | null,
+  clerkOrgRole: string | null,
+): string | null {
+  const edenRole = currentOrg?.role;
+  if (edenRole && PERMISSION_MAP[edenRole]) return edenRole;
+  if (currentOrg?.is_owner) return "owner";
+  if (clerkOrgRole === "org:admin") return "admin";
+  if (clerkOrgRole === "org:member") return "member";
+  return edenRole || null;
+}
+
 export function usePermissions(): UsePermissionsResult {
-  const { currentOrg } = useOrg();
+  const { currentOrg, clerkOrgRole } = useOrg();
 
   return useMemo(() => {
-    if (!currentOrg?.role) {
+    const role = resolveRole(currentOrg, clerkOrgRole);
+    if (!role) {
       return {
         permissions: new Set<Permission>(),
         hasPermission: () => false,
@@ -69,7 +90,6 @@ export function usePermissions(): UsePermissionsResult {
       };
     }
 
-    const role = currentOrg.role;
     const permissions = new Set<Permission>(PERMISSION_MAP[role] || []);
 
     return {
@@ -77,7 +97,7 @@ export function usePermissions(): UsePermissionsResult {
       hasPermission: (permission: Permission) => permissions.has(permission),
       role,
     };
-  }, [currentOrg?.role]);
+  }, [currentOrg, clerkOrgRole]);
 }
 
 export const ROLE_LABELS: Record<string, string> = {
