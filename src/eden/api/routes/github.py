@@ -54,18 +54,13 @@ from eden.api.deps import (
 )
 from eden.api.utils.redact import redact_all
 from eden.config import get_settings
-from eden.integrations.framework_detector import (
-    detect_framework_from_files,
-)
+from eden.integrations.onboarding_agent import build_integration_for_repo
 from eden.integrations.github import (
     GitHubAPIError,
     GitHubConfigError,
     GitHubOAuthClient,
     is_configured,
     verify_webhook_signature,
-)
-from eden.integrations.sdk_integrator import (
-    build_integration_plan_from_files,
 )
 from eden.providers.pr import GitHubPRProvider, PRCreateRequest
 from eden.providers.repo import FileEntry, GitHubRepoProvider
@@ -576,14 +571,9 @@ async def integrate_repo(
         _, token = await _client_for(req.installation_id)
         repo_provider = GitHubRepoProvider(token=token.token, repo=req.repo_full_name)
         default_branch = await repo_provider.get_default_branch()
-        # Pull only the manifest files we need.
-        manifest_contents: dict[str, str] = {}
-        for path in _MANIFEST_FILES:
-            content = await repo_provider.read_file(path)
-            if content:
-                manifest_contents[path] = content
-        detection = detect_framework_from_files(manifest_contents)
-        plan = build_integration_plan_from_files(manifest_contents, detection)
+        detection, plan = await build_integration_for_repo(
+            repo_provider, org_id=org_id,
+        )
         # Build the file changes for the PR.
         files = [
             FileEntry(path=c.path, size=len(c.content), content=c.content)

@@ -313,6 +313,8 @@ async def lifespan(app: FastAPI):
     # 60s cadence (configurable via ``insights_loop_interval_seconds``)
     # and writes ``Insight`` objects to Postgres + the KB.
     insights_loop = None
+    anomaly_loop = None
+    evolution_loop = None
     if getattr(settings, "insights_loop_enabled", True):
         try:
             from eden.insights.detector_loop import start_insights_detector_loop
@@ -322,7 +324,6 @@ async def lifespan(app: FastAPI):
         except Exception as e:
             logger.warning(f"Insights detector loop startup skipped: {e}")
 
-    anomaly_loop = None
     if getattr(settings, "anomaly_loop_enabled", True):
         try:
             from eden.data_platform.anomaly_detector_loop import (
@@ -333,6 +334,16 @@ async def lifespan(app: FastAPI):
             anomaly_loop = True
         except Exception as e:
             logger.warning(f"Anomaly detector loop startup skipped: {e}")
+
+    if getattr(settings, "evolution_loop_enabled", True):
+        try:
+            from eden.agents.evolution.loop import start_evolution_loop
+
+            await start_evolution_loop()
+            evolution_loop = True
+            logger.info("Evolution loop started (evolver + promotion)")
+        except Exception as e:
+            logger.warning(f"Evolution loop startup skipped: {e}")
 
     # Audit 2026-06-22 B1.36 — register all closed-loop promotion hooks
     # so on_judge_regression / on_drift_alert / etc. actually fire.
@@ -456,6 +467,14 @@ async def lifespan(app: FastAPI):
             await stop_anomaly_detector_loop()
         except Exception as e:  # pragma: no cover - defensive
             logger.warning(f"Anomaly detector loop stop failed: {e}")
+
+    if evolution_loop:
+        try:
+            from eden.agents.evolution.loop import stop_evolution_loop
+
+            await stop_evolution_loop()
+        except Exception as e:  # pragma: no cover - defensive
+            logger.warning(f"Evolution loop stop failed: {e}")
 
     try:
         from eden.closed_loop.verify import stop_verify_worker

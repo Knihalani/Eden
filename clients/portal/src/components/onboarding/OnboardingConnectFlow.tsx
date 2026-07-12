@@ -12,13 +12,15 @@
  *      a skip-with-manual-instructions panel.
  *   3. Install picker — list of repos across all installations for the
  *      org. User picks one + names the agent.
- *   4. Integrate button — fires POST /github/integrate, returns a
- *      PR-run row. Caller decides what to do next (wizard advances
- *      to /wait; standalone shows the open PR + offers another round).
+ *   4. Integrate — fires POST /github/integrate, returns a PR-run row.
+ *      In the onboarding wizard, auto-runs when exactly one repo is
+ *      available (typical right after GitHub App install). Caller
+ *      decides what to do next (wizard advances to install; standalone
+ *      shows the open PR).
  */
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useOrg } from "@/hooks/use-org";
 import { useAuth } from "@/hooks/use-auth";
@@ -64,6 +66,21 @@ interface Props {
   preselectedInstallationId?: number | null;
 }
 
+/** Repo to auto-integrate after GitHub App install (wizard only). */
+function autoIntegrateTarget(
+  repos: GitHubRepo[],
+  preselectedInstallationId: number | null | undefined,
+): GitHubRepo | null {
+  if (repos.length === 1) return repos[0];
+  if (preselectedInstallationId) {
+    const fromInstall = repos.filter(
+      (r) => r.installation_id === preselectedInstallationId,
+    );
+    if (fromInstall.length === 1) return fromInstall[0];
+  }
+  return null;
+}
+
 export function OnboardingConnectFlow({
   onIntegrated,
   inWizard = false,
@@ -82,6 +99,7 @@ export function OnboardingConnectFlow({
   const [authorizing, setAuthorizing] = useState(false);
   const [integrating, setIntegrating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const autoIntegrateAttempted = useRef(false);
 
   // Resolve role from current org membership.
   const role: string = useMemo(() => {
@@ -115,7 +133,10 @@ export function OnboardingConnectFlow({
       }
       const rs = await githubApi.listRepos(currentOrg.id);
       setRepos(rs);
-      if (preselectedInstallationId) {
+      const autoTarget = autoIntegrateTarget(rs, preselectedInstallationId);
+      if (autoTarget) {
+        setSelectedRepo(autoTarget);
+      } else if (preselectedInstallationId) {
         const first = rs.find((r) => r.installation_id === preselectedInstallationId);
         if (first) setSelectedRepo(first);
       }
@@ -164,26 +185,66 @@ export function OnboardingConnectFlow({
     }
   }
 
+  const runIntegrate = useCallback(
+    async (repo: GitHubRepo) => {
+      if (!currentOrg?.id) return;
+      setSelectedRepo(repo);
+      setIntegrating(true);
+      try {
+        const run = await githubApi.integrate(currentOrg.id, {
+          installation_id: repo.installation_id,
+          repo_full_name: repo.full_name,
+          agent_id: agentId || undefined,
+          agent_name: agentName || repo.name || undefined,
+        });
+        toast.success(
+          run.pr_url
+            ? "Pull request opened — review it on GitHub"
+            : "Integration started",
+        );
+        onIntegrated?.(run);
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : "Integration failed");
+      } finally {
+        setIntegrating(false);
+      }
+    },
+    [currentOrg?.id, agentId, agentName, onIntegrated, toast],
+  );
+
   async function integrate() {
-    if (!currentOrg?.id || !selectedRepo) return;
-    setIntegrating(true);
-    try {
-      const run = await githubApi.integrate(currentOrg.id, {
-        installation_id: selectedRepo.installation_id,
-        repo_full_name: selectedRepo.full_name,
-        agent_id: agentId || undefined,
-        agent_name: agentName || undefined,
-      });
-      toast.success(
-        run.pr_url ? "Pull request opened — review it on GitHub" : "Integration started",
-      );
-      onIntegrated?.(run);
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Integration failed");
-    } finally {
-      setIntegrating(false);
-    }
+    if (!selectedRepo) return;
+    await runIntegrate(selectedRepo);
   }
+
+  // Wizard: after GitHub App install, open the integration PR without an
+  // extra click when exactly one repo was granted (or only one total).
+  useEffect(() => {
+    if (
+      !inWizard ||
+      loadingRepos ||
+      integrating ||
+      autoIntegrateAttempted.current ||
+      !canIntegrate ||
+      configured !== true ||
+      repos.length === 0
+    ) {
+      return;
+    }
+    const target = autoIntegrateTarget(repos, preselectedInstallationId);
+    if (!target) return;
+    autoIntegrateAttempted.current = true;
+    void runIntegrate(target);
+  }, [
+    inWizard,
+    loadingRepos,
+    integrating,
+    canIntegrate,
+    configured,
+    repos,
+    preselectedInstallationId,
+    runIntegrate,
+  ]);
 
   // ── Gate 1: instance not configured ────────────────────────────
 
@@ -244,6 +305,21 @@ export function OnboardingConnectFlow({
   }
 
   // ── Main: installed + has repos ───────────────────────────────
+
+  if (inWizard && integrating) {
+    return (
+      <div className="flex flex-col items-center justify-center gap-3 py-16 text-center">
+        <Loader2 className="h-8 w-8 animate-spin text-[var(--accent)]" />
+        <h2 className="text-lg font-semibold text-[var(--text-primary)]">
+          Opening integration PR…
+        </h2>
+        <p className="max-w-sm text-sm text-[var(--text-secondary)]">
+          Eden is detecting your framework and opening a pull request with
+          the SDK wiring. You&apos;ll land on the install step when it&apos;s ready.
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">

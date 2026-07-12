@@ -403,7 +403,11 @@ def _derive_title(message: str) -> str:
 
 def _is_enabled() -> bool:
     settings = get_settings()
-    return bool(settings.ai_insights_enabled) and bool(settings.openrouter_api_key)
+    return (
+        bool(settings.openrouter_api_key)
+        and bool(getattr(settings, "ai_insights_enabled", True))
+        and bool(getattr(settings, "ai_agent_enabled", True))
+    )
 
 
 async def _stream_chat(
@@ -411,176 +415,32 @@ async def _stream_chat(
     user_id: str,
     session_id: str,
     user_message: str,
+    *,
+    user_role: str = "member",
+    is_new_session: bool = False,
 ) -> AsyncIterator[dict[str, Any]]:
-    """Yield SSE event dicts for a single chat turn.
+    """Yield SSE events via the unified ChatService (insights compat layer)."""
+    from eden.autonomous.insights_compat import stream_insights_chat
 
-    Goes through the model_router (T1 -> T2 -> T3 tiers) so the
-    agent picks the cheapest tier that can answer. Manual
-    agentic loop with pseudo tool calling: the model emits a
-    fenced ``tool_call`` JSON block, we dispatch it, and feed the
-    result back into the next model call. Max 4 iterations so a
-    single chat can't burn unbounded tokens.
-
-    Errors are caught and turned into ``{"type": "error", ...}``
-    events so the client always gets a graceful close.
-    """
     if not _is_enabled():
         yield {
             "type": "error",
             "message": (
-                "AI Insights is not configured. Set OPENROUTER_API_KEY "
-                "and ensure ai_insights_enabled is true."
+                "AI assistant is not configured. Set OPENROUTER_API_KEY "
+                "and ensure ai_agent_enabled is true."
             ),
         }
         return
 
-    client = get_llm_client()
-
-    # Persist the user message immediately (best-effort — a failure
-    # here shouldn't block the chat).
-    history = await _load_history(session_id)
-    history.append({"role": "user", "content": user_message})
-    await _append_message(session_id, "user", [{"type": "text", "text": user_message}])
-
-    # Build the system prompt + the tool catalogue ONCE per turn.
-    # The tool catalogue is the same across turns, so the model
-    # only has to re-read it on the first call of a session.
-    tools = list_tools()
-    system_prompt = _build_system_prompt(tools)
-
-    iterations = 0
-    last_usage: dict[str, Any] = {}
-
-    try:
-        while iterations < MAX_TOOL_ITERATIONS:
-            iterations += 1
-
-            # Format the in-memory history (capped + head + recent)
-            # as a single transcript string. The OpenRouter client
-            # only takes one ``prompt`` field, so we flatten
-            # everything into it. The system_prompt carries the
-            # tool catalogue + format instructions; the user_prompt
-            # carries the live conversation + the new turn.
-            history_block = _format_history_for_prompt(history)
-            user_prompt = (
-                f"{history_block}\n\nUSER (new): {user_message}"
-                if history_block
-                else user_message
-            )
-
-            # The OpenRouter client has its own retry + circuit
-            # breaker + per-slot model selection. The
-            # ``MODEL_SLOTS[slot].fallback`` chain is the failover
-            # path within a slot — we just call once and trust
-            # the client to handle transient provider errors.
-            loop = asyncio.get_event_loop()
-            try:
-                # Bind user_prompt/system_prompt as default args so
-                # the lambda captures THIS iteration's values, not
-                # whatever the loop variable happens to point at
-                # when the executor actually runs the closure
-                # (B023). Without the binding, concurrent iterations
-                # could see stale prompts.
-                response = await loop.run_in_executor(
-                    None,
-                    lambda prompt=user_prompt, sp=system_prompt: client.call(
-                        agent="ai_insights",
-                        prompt=prompt,
-                        slot=LLM_SLOT,
-                        system_prompt=sp,
-                        max_tokens=MAX_OUTPUT_TOKENS,
-                    ),
-                )
-            except Exception as exc:  # noqa: BLE001
-                logger.exception(f"ai_insights: all models failed: {exc}")
-                yield {
-                    "type": "error",
-                    "message": safe_detail(exc, fallback="All model tiers failed"),
-                }
-                return
-
-            # Capture token usage for the final ``done`` event.
-            usage = getattr(response, "usage", None)
-            if usage is not None:
-                last_usage = {
-                    "input_tokens": getattr(usage, "input_tokens", None),
-                    "output_tokens": getattr(usage, "output_tokens", None),
-                }
-
-            raw = response.content or ""
-            tool_call = _extract_tool_call(raw)
-
-            # Persist the assistant turn (the raw text minus the
-            # tool_call fence, so we don't double-print it on
-            # replay).
-            visible_text = _strip_tool_call_block(raw) if tool_call else raw
-            if visible_text:
-                # The OpenRouter sync call returns the full text in
-                # one chunk, not a delta stream. Emit a single
-                # text_delta event so the UI's existing parser
-                # doesn't need to change.
-                yield {"type": "text_delta", "text": visible_text}
-
-            await _append_message(
-                session_id,
-                "assistant",
-                [{"type": "text", "text": raw}],
-            )
-
-            if not tool_call:
-                # The model didn't ask for a tool — final answer.
-                break
-
-            # Tool-use turn: dispatch the call, persist the result,
-            # loop. We emit the tool_call + tool_result events so
-            # the UI can render a "calling X" card while we wait.
-            tool_id = f"call_{uuid.uuid4().hex[:12]}"
-            yield {
-                "type": "tool_call",
-                "id": tool_id,
-                "name": tool_call["name"],
-                "input": tool_call["args"],
-            }
-
-            result = await dispatch_tool_call(
-                org_id=org_id,
-                name=tool_call["name"],
-                input_json=tool_call["args"],
-            )
-            tool_result_payload = {
-                "type": "tool_result",
-                "tool_use_id": tool_id,
-                "content": json.dumps(result.get("output", ""), default=str),
-                "is_error": result.get("status") == "error",
-            }
-            await _append_message(session_id, "tool", [tool_result_payload])
-            yield {
-                "type": "tool_result",
-                "id": tool_id,
-                "name": tool_call["name"],
-                "status": result.get("status", "ok"),
-                "output": result.get("output"),
-                "duration_ms": result.get("duration_ms", 0),
-            }
-
-            # Append the tool result to the in-memory history so
-            # the next model call sees it. Use a compact
-            # ``tool: <name> -> <summary>`` form to keep the
-            # transcript short on long sessions.
-            summary = _summarize_tool_result(tool_call["name"], result)
-            history.append({"role": "user", "content": summary})
-
-        # Update the session's ``updated_at`` and bump the touch.
-        await _touch_session(session_id)
-
-        yield {
-            "type": "done",
-            "iterations": iterations,
-            "usage": last_usage,
-        }
-    except Exception as exc:  # noqa: BLE001 — last-resort guard
-        logger.exception(f"ai_insights chat failed: {exc}")
-        yield {"type": "error", "message": safe_detail(exc, fallback=f"{type(exc).__name__}: chat failed")}
+    async for ev in stream_insights_chat(
+        org_id=org_id,
+        user_id=user_id,
+        session_id=session_id,
+        user_message=user_message,
+        user_role=user_role,
+        is_new_session=is_new_session,
+    ):
+        yield ev
 
 
 def _summarize_tool_result(name: str, result: dict[str, Any]) -> str:
@@ -617,6 +477,9 @@ async def chat(
     entry so the org's compliance view can see AI usage.
     """
     user_id = user["user_id"]
+    from eden.api.routes.ai_agent import _resolve_user_role
+
+    user_role = await _resolve_user_role(org_id, user_id)
 
     # Find or create the session.
     if body.session_id:
@@ -651,28 +514,15 @@ async def chat(
             logger.warning(f"ai_insights: audit log failed (non-fatal): {exc}")
 
     async def event_generator():
-        if is_new:
-            # First event: tell the UI the new session id so it can
-            # show the row in the sidebar and persist it client-side.
-            yield {
-                "event": "session",
-                "data": json.dumps({
-                    "type": "session",
-                    "session_id": session_id,
-                    "title": _derive_title(body.message),
-                }),
-            }
         async for ev in _stream_chat(
             org_id=org_id,
             user_id=user_id,
             session_id=session_id,
             user_message=body.message,
+            user_role=user_role,
+            is_new_session=is_new,
         ):
             yield {"event": ev.get("type", "message"), "data": json.dumps(ev, default=str)}
-        # SSE terminator: the EventSourceResponse sends ``data: [DONE]``
-        # implicitly when the generator returns. We follow the
-        # portal's prior convention by emitting an explicit done event
-        # for clients that don't use the EventSource helper.
 
     return EventSourceResponse(event_generator())
 
@@ -766,6 +616,24 @@ async def list_messages(
             user_id, org_id, session_id, redact_all(str(exc)),
         )
         rows = []
+    if not rows:
+        from eden.autonomous.insights_compat import list_messages_from_conversation
+
+        compat = await list_messages_from_conversation(session_id)
+        if compat:
+            return {
+                "session_id": session_id,
+                "title": existing["title"],
+                "messages": [
+                    {
+                        "message_id": f"compat_{i}",
+                        "role": m["role"],
+                        "content": m["content"],
+                        "created_at": m.get("created_at"),
+                    }
+                    for i, m in enumerate(compat)
+                ],
+            }
     return {
         "session_id": session_id,
         "title": existing["title"],

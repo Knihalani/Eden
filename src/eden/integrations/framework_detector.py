@@ -12,6 +12,9 @@ imports (``from langchain.*``, ``import openai``, ``from anthropic``,
 etc.). Heuristics are conservative — we never claim "custom" until
 we have looked at a meaningful sample of files.
 
+When heuristics are ambiguous, :mod:`eden.integrations.onboarding_agent`
+refines detection with the T3 model (validated output only).
+
 Originally lived under ``cli/eden/framework_detector.py`` while the
 agent CLI shipped. The CLI was retired in the June 2026 cleanup; this
 module is now imported by ``eden.api.routes.github`` (onboarding flow)
@@ -27,86 +30,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-# Canonical markers per framework. We use a (module, import_pattern)
-# pair; either side matching counts.
-FRAMEWORK_MARKERS: dict[str, dict[str, Any]] = {
-    "langchain": {
-        "pip": ["langchain", "langchain-core", "langchain-community"],
-        "npm": ["langchain", "@langchain/core"],
-        "imports": [
-            r"from\s+langchain[\w\.]*\s+import",
-            r"import\s+langchain[\w\.]*",
-        ],
-        "instrumentation": "LangChainInstrumentor",
-    },
-    "crewai": {
-        "pip": ["crewai"],
-        "npm": ["crewai"],
-        "imports": [
-            r"from\s+crewai\s+import",
-            r"import\s+crewai",
-        ],
-        "instrumentation": "CrewAIInstrumentor",
-    },
-    "autogen": {
-        "pip": ["pyautogen", "autogen-agentchat"],
-        "npm": ["autogen"],
-        "imports": [
-            r"from\s+autogen\s+import",
-            r"import\s+autogen",
-            r"from\s+autogen_agentchat\s+import",
-        ],
-        "instrumentation": "AutoGenInstrumentor",
-    },
-    "llama_index": {
-        "pip": ["llama-index", "llama_index"],
-        "npm": ["llama-index", "@llamaindex/core"],
-        "imports": [
-            r"from\s+llama_index[\w\.]*\s+import",
-            r"import\s+llama_index[\w\.]*",
-            r"from\s+llama_index\.core\s+import",
-        ],
-        "instrumentation": "LlamaIndexInstrumentor",
-    },
-    "openai": {
-        "pip": ["openai"],
-        "npm": ["openai"],
-        "imports": [
-            r"from\s+openai\s+import",
-            r"import\s+openai",
-            r"OpenAI\s*\(",
-        ],
-        "instrumentation": "OpenAIInstrumentor",
-    },
-    "anthropic": {
-        "pip": ["anthropic"],
-        "npm": ["@anthropic-ai/sdk", "anthropic"],
-        "imports": [
-            r"from\s+anthropic\s+import",
-            r"import\s+anthropic",
-            r"Anthropic\s*\(",
-        ],
-        "instrumentation": "AnthropicInstrumentor",
-    },
-    # Ollama is its own provider *and* the most common way to run local
-    # models. It also exposes an OpenAI-compatible endpoint at
-    # ``<host>/v1/chat/completions``, so the OpenAI instrumentor catches
-    # it too — but we still want a first-class ``ollama`` framework so
-    # the SDK integrator writes the right bootstrap (sets
-    # ``OPENAI_BASE_URL`` to ``http://localhost:11434/v1`` etc.) and
-    # the dashboard attributes the trace to ``provider=ollama``.
-    "ollama": {
-        "pip": ["ollama"],
-        "npm": ["ollama", "@ollama/ollama"],
-        "imports": [
-            r"from\s+ollama\s+import",
-            r"import\s+ollama",
-            r"Ollama\s*\(",
-            r"ollama\.chat\s*\(",
-        ],
-        "instrumentation": "OpenAIInstrumentor",  # Ollama's OpenAI-compat path
-    },
-}
+from eden.integrations.framework_registry import FRAMEWORK_MARKERS
 
 
 @dataclass
@@ -505,6 +429,8 @@ def detect_framework_from_files(files: dict[str, str]) -> FrameworkDetection:
         project_files=list(files.keys())[:20],
     )
 
+
+from eden.integrations.framework_registry import FRAMEWORK_MARKERS  # noqa: F401 — re-export
 
 __all__ = [
     "FRAMEWORK_MARKERS",

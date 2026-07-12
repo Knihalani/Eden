@@ -161,15 +161,7 @@ def uninstrument(*frameworks: str) -> None:
 # optional ``alias`` entries are PyPI package names that some users
 # install under a different name (e.g. ``pyautogen`` for the ``autogen``
 # module). Detecting any one of them counts the framework as installed.
-_FRAMEWORK_DETECTORS: dict[str, tuple[str, ...]] = {
-    "openai": ("openai",),
-    "anthropic": ("anthropic",),
-    "langchain": ("langchain", "langchain_core", "langchain_community"),
-    "llama_index": ("llama_index", "llama_index.core"),
-    "crewai": ("crewai",),
-    "autogen": ("autogen", "pyautogen", "autogen_agentchat"),
-    "mastra": ("mastra",),  # python wrapper around the TS framework
-}
+from eden.integrations.framework_registry import PYTHON_SDK_MODULES as _FRAMEWORK_DETECTORS
 
 
 def _detect_one(module_names: tuple[str, ...]) -> bool:

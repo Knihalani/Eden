@@ -266,6 +266,11 @@ function PortalLayoutContent({ children }: { children: React.ReactNode }) {
         target?.tagName === "TEXTAREA" ||
         target?.isContentEditable;
 
+      if (e.key === "j" && (e.metaKey || e.ctrlKey) && !isFormField) {
+        e.preventDefault();
+        window.dispatchEvent(new CustomEvent("eden:toggle-ai-chat"));
+        return;
+      }
       if (e.key === "k" && (e.metaKey || e.ctrlKey)) {
         e.preventDefault();
         setCommandPaletteOpen((prev) => !prev);

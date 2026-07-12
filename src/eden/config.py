@@ -225,12 +225,11 @@ def _build_settings_class():
         scheduler_tick_seconds: int = 900
 
         # Phase C — unified AI agent (Cat 14 real + global panel).
-        # The agent uses the ModelRouter T3 tier (premium: claude-opus-4,
-        # gpt-4.5, deepseek-v4) per the user's "super super capable"
-        # requirement. ``max_turns`` caps the ReAct loop so a runaway
-        # query can't burn an unlimited number of LLM calls. The
-        # retention window controls how long persisted conversations
-        # live before a separate retention job prunes them.
+        # The agent uses the ModelRouter T3 tier (x-ai/grok-4.5 primary).
+        # Override via AI_AGENT_T3_MODEL when set. ``max_turns`` caps the
+        # ReAct loop so a runaway query can't burn an unlimited number of
+        # LLM calls. The retention window controls how long persisted
+        # conversations live before a separate retention job prunes them.
         ai_agent_enabled: bool = True
         ai_agent_max_turns: int = 10
         ai_agent_t3_model: str = ""  # blank → use ModelTier.T3 default
@@ -275,7 +274,7 @@ def _build_settings_class():
         # Model configuration
         model_reasoning: str = "anthropic/claude-sonnet-4.6"
         model_code: str = "qwen/qwen3-coder:free"
-        model_fast: str = "deepseek/deepseek-v4-flash:free"
+        model_fast: str = "xiaomi/mimo-v2.5"
         model_fallback: str = "meta-llama/llama-3.3-70b-instruct"
 
         # Token budgets per agent
@@ -484,6 +483,9 @@ def _build_settings_class():
         evolver_degradation_threshold: float = 0.7
 
         # ── Promotion loop (Phase 7.1b follow-up) ───────────────────────
+        evolution_loop_enabled: bool = True
+        evolution_loop_interval_seconds: int = 300
+        promotion_loop_enabled: bool = True
         # Used by ``eden.llmops.promotion.PromotionLoop`` to decide
         # whether the canary's stats are significant enough to
         # promote, keep, or roll back.
