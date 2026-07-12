@@ -27,6 +27,9 @@ export function WelcomeStep() {
       await refreshOrgs();
       return;
     }
+    if (!currentOrg?.id) {
+      await refreshOrgs();
+    }
     if (currentOrg?.id) {
       try {
         await onboardingApi.patchState(currentOrg.id, { step: "connect_github" });

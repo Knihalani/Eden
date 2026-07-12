@@ -127,8 +127,28 @@ export function OnboardingConnectFlow({
   }, [currentOrg?.id, canIntegrate, configured, preselectedInstallationId]);
 
   useEffect(() => {
-    loadRepos();
-  }, [loadRepos]);
+    async function boot() {
+      if (
+        preselectedInstallationId &&
+        currentOrg?.id &&
+        configured === true &&
+        canIntegrate
+      ) {
+        try {
+          await githubApi.claimInstallation(
+            currentOrg.id,
+            preselectedInstallationId,
+          );
+        } catch (err) {
+          setError(
+            errorFromCaught(err, "Could not register GitHub installation"),
+          );
+        }
+      }
+      await loadRepos();
+    }
+    void boot();
+  }, [loadRepos, preselectedInstallationId, currentOrg?.id, configured, canIntegrate]);
 
   async function startInstall() {
     if (!currentOrg?.id) return;

@@ -50,7 +50,7 @@ from starlette.responses import RedirectResponse
 from eden.api.deps import (
     get_current_user,
     require_org_member,
-    require_org_permission,
+    require_org_permission_dep,
 )
 from eden.api.utils.redact import redact_all
 from eden.config import get_settings
@@ -132,6 +132,10 @@ class IntegrateRequest(BaseModel):
     repo_full_name: str
     agent_id: str | None = None
     agent_name: str | None = None
+
+
+class ClaimInstallationRequest(BaseModel):
+    installation_id: int
 
 
 class PRRunOut(BaseModel):
@@ -235,7 +239,7 @@ async def github_configured() -> ConfiguredResponse:
 @public_router.get("/authorize", response_model=AuthorizeResponse)
 async def github_authorize(
     request: Request,
-    org: dict = Depends(lambda: require_org_permission("integrations:write")),
+    org: dict = Depends(require_org_permission_dep("integrations:write")),
 ) -> AuthorizeResponse:
     """Return the GitHub install URL + a CSRF state token.
 
@@ -404,6 +408,58 @@ async def github_webhook(request: Request) -> dict[str, str]:
 # ── Org-scoped routes ───────────────────────────────────────────────
 
 
+@org_router.post("/github/installations/claim", response_model=InstallationOut)
+async def claim_github_installation(
+    org_id: str,
+    req: ClaimInstallationRequest,
+    user: dict = Depends(get_current_user),
+    org: dict = Depends(require_org_permission_dep("integrations:write")),
+) -> InstallationOut:
+    """Persist a GitHub App installation after the portal callback.
+
+    ``GITHUB_APP_CALLBACK_URL`` points at the portal
+    (``/onboarding/connect``), so GitHub redirects there with
+    ``installation_id`` instead of hitting ``/integrations/github/callback``.
+    This route lets the wizard register the installation in Eden's DB.
+    """
+    pg = await get_postgres_client()
+    installation_id = int(req.installation_id)
+    try:
+        oauth = GitHubOAuthClient()
+        token = await oauth.installation_token(installation_id)
+        repos = await oauth.list_installation_repos(token)
+        account_login = repos[0].owner if repos else "unknown"
+    except (GitHubConfigError, GitHubAPIError) as exc:
+        raise HTTPException(400, f"Could not verify GitHub installation: {exc}") from exc
+
+    row = await pg.fetchrow(
+        """
+        INSERT INTO org_github_installations
+            (org_id, installation_id, github_account_login,
+             github_account_type, installed_by_user_id)
+        VALUES ($1, $2, $3, 'Organization', $4)
+        ON CONFLICT (org_id, installation_id) DO UPDATE
+        SET github_account_login = EXCLUDED.github_account_login,
+            suspended_at = NULL
+        RETURNING installation_id, github_account_login, github_account_type,
+                  installed_at, suspended_at
+        """,
+        org_id,
+        installation_id,
+        account_login,
+        user["user_id"],
+    )
+    if not row:
+        raise HTTPException(500, "Failed to persist GitHub installation")
+    return InstallationOut(
+        installation_id=int(row["installation_id"]),
+        account_login=row["github_account_login"],
+        account_type=row["github_account_type"],
+        installed_at=row["installed_at"].isoformat(),
+        suspended=bool(row["suspended_at"]),
+    )
+
+
 @org_router.get("/github/installations", response_model=list[InstallationOut])
 async def list_org_installations(
     org_id: str,
@@ -435,7 +491,7 @@ async def list_org_installations(
 @org_router.get("/github/repos", response_model=list[RepoOut])
 async def list_org_repos(
     org_id: str,
-    org: dict = Depends(lambda: require_org_permission("integrations:write")),
+    org: dict = Depends(require_org_permission_dep("integrations:write")),
 ) -> list[RepoOut]:
     """List repos all the org's installations have access to.
 
@@ -478,7 +534,7 @@ async def integrate_repo(
     org_id: str,
     req: IntegrateRequest,
     user: dict = Depends(get_current_user),
-    org: dict = Depends(lambda: require_org_permission("integrations:write")),
+    org: dict = Depends(require_org_permission_dep("integrations:write")),
 ) -> PRRunOut:
     """Detect the framework + open the integration PR.
 
