@@ -440,11 +440,18 @@ class AnomalyDetector:
                 try:
                     if channel == "in_app":
                         await self._dispatch_in_app(alert)
+                        dispatched[channel] += 1
                     elif channel == "websocket":
                         await self._dispatch_websocket(alert)
+                        dispatched[channel] += 1
                     elif channel == "webhook":
-                        await self._dispatch_webhook(alert)
-                    dispatched[channel] += 1
+                        if getattr(settings, "alert_webhook_url", None):
+                            await self._dispatch_webhook(alert)
+                            dispatched[channel] += 1
+                        else:
+                            logger.debug("Webhook alert skipped:not_configured")
+                    elif channel in ("email", "slack", "pagerduty"):
+                        logger.info("%s alert skipped:not_configured", channel)
                 except Exception as exc:
                     logger.warning(f"Failed to dispatch alert to {channel}: {exc}")
 
@@ -487,20 +494,51 @@ class AnomalyDetector:
             await conn.executemany(query, rows)
 
     async def _dispatch_in_app(self, alert: AnomalyAlert) -> None:
-        """Create an in-app notification."""
+        """Create in-app notifications for org members."""
+        import uuid as _uuid
+
         client = await self._get_postgres()
-        await client.execute(
-            """
-            INSERT INTO notifications (id, user_id, type, title, message, created_at)
-            VALUES ($1, $2, $3, $4, $5, $6)
-            """,
-            alert.alert_id,
-            "_system",  # System-wide alert
-            f"anomaly:{alert.alert_type}",
-            f"Anomaly: {alert.metric}",
-            alert.message,
-            alert.timestamp,
-        )
+        org_id = alert.context.get("org_id")
+        if org_id:
+            members = await client.fetch(
+                "SELECT user_id FROM org_members WHERE org_id = $1",
+                org_id,
+            )
+        else:
+            members = await client.fetch(
+                "SELECT org_id, user_id FROM org_members",
+            )
+
+        if not members:
+            return
+
+        payload = {
+            "is_alert": True,
+            "severity": alert.severity,
+            "alert_type": alert.alert_type,
+            "metric": alert.metric,
+            "entity_id": alert.table or "",
+            "channels": ["in_app"],
+            **{k: v for k, v in alert.context.items() if k != "org_id"},
+        }
+
+        for member in members:
+            member_org_id = org_id or member.get("org_id")
+            notif_id = str(_uuid.uuid4())
+            await client.execute(
+                """
+                INSERT INTO notifications (id, user_id, org_id, type, title, body, data, created_at)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+                """,
+                notif_id,
+                str(member["user_id"]),
+                str(member_org_id) if member_org_id else None,
+                f"anomaly:{alert.alert_type}",
+                f"Anomaly: {alert.metric}",
+                alert.message,
+                json.dumps(payload),
+                alert.timestamp,
+            )
 
     async def _dispatch_websocket(self, alert: AnomalyAlert) -> None:
         """Push alert to connected WebSocket clients."""

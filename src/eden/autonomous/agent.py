@@ -4,10 +4,9 @@ The headline surface of the new portal: one agent, accessible from
 any page via Cmd-J, capable of answering questions about traces,
 incidents, costs, judges, drift, satisfaction, and guardrails via
 14 registered tools. Uses the ModelRouter T3 tier
-(``minimax/minimax-m3`` primary, with ``deepseek/deepseek-v4-pro``
+(``x-ai/grok-4.5`` primary, with ``minimax/minimax-m3``
 and ``xiaomi/mimo-v2.5-pro`` fallback — per
-``src/eden/optimization/model_router.py``; this is the only model
-chain Eden uses. Claude / GPT models are NOT in the stack).
+``src/eden/optimization/model_router.py``).
 
 Architecture
 ─────────────
@@ -19,7 +18,7 @@ Architecture
   │     ▼                                                           │
   │  ChatService                                                     │
   │     ├─ System prompt + page context + tool list                 │
-  │     ├─ OpenRouterClient (T3 tier: minimax-m3)                   │
+  │     ├─ OpenRouterClient (T3 tier: x-ai/grok-4.5)                │
   │     ├─ ReAct loop (max 10 turns)                                │
   │     ├─ Tool registry → 14 tools                                 │
   │     ├─ Chart spec emitter (line/bar/pie/scatter/                │
@@ -1625,6 +1624,44 @@ def _parse_tool_call(raw: str) -> dict[str, Any]:
     if not isinstance(obj, dict):
         raise ValueError("tool block must be an object")
     return obj
+
+
+def _register_insights_tools() -> None:
+    """Merge AI Insights job tools into the unified agent registry."""
+    from eden.llmops.insights_tools import dispatch_tool_call, list_tools
+
+    for tool in list_tools():
+        name = tool.name
+        if name in _TOOL_REGISTRY:
+            continue
+
+        async def _handler(
+            tenant_id: str,
+            args: dict[str, Any],
+            *,
+            _tool_name: str = name,
+        ) -> Any:
+            envelope = await dispatch_tool_call(tenant_id, _tool_name, args or {})
+            if envelope.get("status") == "error":
+                raise RuntimeError(str(envelope.get("output", "tool error")))
+            return envelope.get("output")
+
+        _TOOL_REGISTRY[name] = {"fn": _handler, "requires_role": None}
+        schema = tool.input_schema.get("properties", {})
+        _TOOL_SPECS.append({
+            "name": name,
+            "summary": (tool.description or "").split("\n", 1)[0].strip(),
+            "args": {
+                k: {
+                    "type": v.get("type", "string"),
+                    "required": k in (tool.input_schema.get("required") or []),
+                }
+                for k, v in schema.items()
+            },
+        })
+
+
+_register_insights_tools()
 
 
 # ────────────────────────────────────────────────────────────────────

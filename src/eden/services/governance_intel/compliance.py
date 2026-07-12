@@ -333,7 +333,7 @@ class ComplianceEvidenceGenerator:
                 )
 
         # Closed-loop hook
-        _fire_compliance_gap(
+        await _fire_compliance_gap(
             org_id, framework=canon, failing_controls=failing,
         )
 

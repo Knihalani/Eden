@@ -12,6 +12,7 @@ import { PageContent } from "@/components/layout/page-content";
 import { Search, Loader2, Code2, AlertTriangle, CheckCircle2, Sparkles, ListChecks, Bell } from "lucide-react";
 import { motion } from "framer-motion";
 import { Card } from "@/components/ui/card";
+import { errorFromCaught } from "@/lib/safe-error-message";
 const EXAMPLE_EQL = `root.span.duration_ms > 1000 AND any.judge.score < 0.5`;
 interface ParseResult {
   ast: Record<string, unknown>;
@@ -129,7 +130,7 @@ export default function QueryDslPage() {
       const res = await parseQuery(currentOrg.id, query);
       setParseResult(res);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Parse failed");
+      setError(errorFromCaught(err, "Parse failed"));
       setParseResult(null);
     } finally {
       setActiveOp(null);
@@ -143,7 +144,7 @@ export default function QueryDslPage() {
       const res = await lintQuery(currentOrg.id, query);
       setLintWarnings(res.warnings);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Lint failed");
+      setError(errorFromCaught(err, "Lint failed"));
       setLintWarnings([]);
     } finally {
       setActiveOp(null);
@@ -157,7 +158,7 @@ export default function QueryDslPage() {
       const res = await resolveQuery(currentOrg.id, query);
       setResolveResult(res);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Resolve failed");
+      setError(errorFromCaught(err, "Resolve failed"));
       setResolveResult(null);
     } finally {
       setActiveOp(null);

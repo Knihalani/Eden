@@ -40,6 +40,7 @@ import type {
   PRSuggestion,
   PRSuggestionStatus,
   PRSuggestionTrigger } from "@/lib/types";
+import { errorFromCaught } from "@/lib/safe-error-message";
 
 // ── Trigger / status mapping ────────────────────────────────────
 
@@ -285,7 +286,7 @@ function CreateSuggestionForm({
       onCreated(data.data.suggestion_id);
       toast.success("Suggestion generated");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to create");
+      setError(errorFromCaught(err, "Failed to create"));
       toast.error(err instanceof Error ? err.message : "Failed to create suggestion");
     } finally {
       setBusy(false);
@@ -537,7 +538,7 @@ function DisciplineStateCard() {
         }
       } catch (err) {
         if (!cancelled) {
-          setError(err instanceof Error ? err.message : "");
+          setError(errorFromCaught(err, ""));
         }
       }
     })();
@@ -654,7 +655,7 @@ export default function PRSuggestionsPage() {
         return next;
       });
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load");
+      setError(errorFromCaught(err, "Failed to load"));
     } finally {
       setLoading(false);
     }

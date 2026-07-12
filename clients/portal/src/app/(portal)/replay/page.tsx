@@ -16,6 +16,8 @@ import { PageContent } from "@/components/layout/page-content";
 import { useToast } from "@/components/ui/toast";
 import { motion, AnimatePresence } from "framer-motion";
 import { ArrowLeft } from "lucide-react";
+import { NoOrgState } from "@/components/ui/no-org-state";
+import { errorFromCaught } from "@/lib/safe-error-message";
 import { History, Pause, Play, StepForward, RotateCcw, CheckCircle2, XCircle, Terminal, Info, Loader2, AlertCircle, ChevronDown, ChevronUp, Clock, Layers, Activity, Zap, Trash2, RefreshCw, Search, BarChart3, Send, GitBranch } from "lucide-react";
 
 interface __JobItem {
@@ -176,38 +178,11 @@ function ReplayPageInner() {
         agent_id: t.agent_id ?? null,
         user_id: (t as { user_id?: string | null }).user_id ?? null }));
       setTraces(flattened);
-      // ponytail: cheap first-user-message lookup. For each unique
-      // trace_id, fetch only one page of replay events, pick the
-      // first user_message event, and store it on the picker item.
-      // This is bounded (top 12 newest + parallel requests with a
-      // concurrency cap = 6) so cold start latency is acceptable.
-      const candidates = flattened.slice(0, 12);
-      const limited = await Promise.all(
-        candidates.map(async (item) => {
-          try {
-            const replay = await api.getTraceReplay(currentOrg.id, item.job_id, 0, 20);
-            const firstUser = replay.events.find((e) => e.event_type === "user_message");
-            const text =
-              firstUser && typeof firstUser.payload?.message === "string"
-                ? (firstUser.payload.message as string)
-                : null;
-            return { job_id: item.job_id, first_user_message: text };
-          } catch {
-            return { job_id: item.job_id, first_user_message: null };
-          }
-        }),
-      );
-      const labelMap = new Map(limited.map((l) => [l.job_id, l.first_user_message]));
-      setTraces((prev) =>
-        prev.map((p) =>
-          labelMap.has(p.job_id) ? { ...p, first_user_message: labelMap.get(p.job_id) ?? null } : p,
-        ),
-      );
       if (data.traces.length > 0 && !selectedJobId) {
         setSelectedJobId(data.traces[0].trace_id);
       }
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to load traces");
+      setError(errorFromCaught(e, "Failed to load traces"));
     } finally {
       setLoadingJobs(false);
     }
@@ -223,7 +198,7 @@ function ReplayPageInner() {
     setLoadingTrace(true);
     try {
       const [replayData, summaryData] = await Promise.all([
-        api.getTraceReplay(currentOrg.id, selectedJobId, 0, 1000),
+        api.getTraceReplay(currentOrg.id, selectedJobId, 0, 500),
         api.getTraceSummary(currentOrg.id, selectedJobId),
       ]);
       setTraceEvents(replayData.events);
@@ -352,6 +327,10 @@ function ReplayPageInner() {
   }, {} as Record<string, number>);
 
   const totalEvents = traceEvents.length;
+
+  if (!currentOrg) {
+    return <NoOrgState feature="Replay" icon={History} />;
+  }
 
   return (
     <PageContent>

@@ -1,0 +1,163 @@
+"""Autonomy policy settings API (N22).
+
+Exposes the org-level (and per-agent) autonomous-maintenance safety
+envelope so the portal Settings → Autonomy matrix can read + edit it, and
+surfaces the decision audit log for the N06 compliance pack.
+
+    GET   /orgs/{org_id}/settings/autonomy
+    PATCH /orgs/{org_id}/settings/autonomy
+    GET   /orgs/{org_id}/settings/autonomy/audit
+
+An optional ``agent_id`` query param scopes to a per-agent override.
+Gated behind ``closed_loop_orchestrator_v1`` (the loop that consumes it).
+"""
+
+from __future__ import annotations
+
+import logging
+import uuid
+from datetime import UTC, datetime
+from typing import Any
+
+from fastapi import APIRouter, Body, Depends, Path, Query
+from pydantic import BaseModel
+
+from eden.api.deps import get_current_user, require_feature_flag
+
+logger = logging.getLogger(__name__)
+
+_FLAG = "closed_loop_orchestrator_v1"
+
+router = APIRouter(
+    prefix="/orgs/{org_id}/settings/autonomy",
+    tags=["autonomy"],
+    dependencies=[
+        Depends(require_feature_flag(_FLAG)),
+        Depends(get_current_user),
+    ],
+)
+
+
+def _ok(data: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "status": "ok",
+        "feature": "autonomy_policy",
+        "live": True,
+        "trace_id": f"aut_{uuid.uuid4().hex[:12]}",
+        "timestamp": datetime.now(UTC).isoformat(),
+        "data": data,
+    }
+
+
+class AutonomyPatch(BaseModel):
+    maintenance_mode: str | None = None  # autonomous | assisted | observe
+    auto_runtime_heal: bool | None = None
+    auto_code_patch_pr: bool | None = None
+    auto_code_patch_merge: bool | None = None
+    auto_prompt_canary: bool | None = None
+    auto_nudge_promote: bool | None = None
+    auto_guardrail_promote: bool | None = None
+    daily_maintenance_budget_usd: float | None = None
+    max_auto_rollbacks_per_day: int | None = None
+    compliance_profile: str | None = None  # standard | hipaa | soc2_strict
+
+
+@router.get("")
+async def get_autonomy(
+    org_id: str = Path(...),
+    agent_id: str | None = Query(None),
+    current_user: dict[str, Any] = Depends(get_current_user),
+) -> dict[str, Any]:
+    from eden.closed_loop.autonomy_policy import check_budget, resolve
+
+    policy = await resolve(org_id, agent_id)
+    ok, spent, limit = await check_budget(org_id, policy)
+    data = policy.to_json()
+    data["effective_mode"] = policy.effective_mode()
+    data["budget"] = {
+        "spent_usd": round(spent, 4),
+        "limit_usd": limit,
+        "within_budget": ok,
+    }
+    return _ok(data)
+
+
+@router.patch("")
+async def patch_autonomy(
+    org_id: str = Path(...),
+    agent_id: str | None = Query(None),
+    body: AutonomyPatch = Body(...),
+    current_user: dict[str, Any] = Depends(get_current_user),
+) -> dict[str, Any]:
+    from eden.closed_loop.autonomy_policy import upsert_policy
+
+    patch = body.model_dump(exclude_none=True)
+    compliance = patch.pop("compliance_profile", None)
+    mode = patch.get("maintenance_mode")
+    if mode is not None and mode not in ("autonomous", "assisted", "observe"):
+        return {
+            "status": "invalid",
+            "feature": "autonomy_policy",
+            "live": True,
+            "data": {"error": f"invalid maintenance_mode {mode!r}"},
+        }
+    if compliance is not None and compliance not in (
+        "standard",
+        "hipaa",
+        "soc2_strict",
+    ):
+        return {
+            "status": "invalid",
+            "feature": "autonomy_policy",
+            "live": True,
+            "data": {"error": f"invalid compliance_profile {compliance!r}"},
+        }
+    updated_by = (current_user or {}).get("sub") or (current_user or {}).get(
+        "user_id"
+    )
+    policy = await upsert_policy(
+        org_id,
+        agent_id=agent_id,
+        patch=patch,
+        compliance_profile=compliance,
+        updated_by=updated_by,
+    )
+    data = policy.to_json()
+    data["effective_mode"] = policy.effective_mode()
+    return _ok(data)
+
+
+@router.get("/audit")
+async def get_audit(
+    org_id: str = Path(...),
+    limit: int = Query(100, ge=1, le=500),
+) -> dict[str, Any]:
+    from eden.storage.postgres import get_postgres_client
+
+    rows: list[dict[str, Any]] = []
+    try:
+        client = await get_postgres_client()
+        if client is not None:
+            fetched = await client.fetch(
+                """
+                SELECT id, org_id, agent_id, action, tier_applied,
+                       decision, reason, created_at
+                FROM autonomy_audit_log
+                WHERE org_id = $1
+                ORDER BY created_at DESC
+                LIMIT $2
+                """,
+                org_id,
+                int(limit),
+            )
+            for r in fetched or []:
+                d = dict(r)
+                for k, v in list(d.items()):
+                    if isinstance(v, datetime):
+                        d[k] = v.isoformat()
+                    elif isinstance(v, uuid.UUID):
+                        d[k] = str(v)
+                rows.append(d)
+    except Exception as exc:
+        logger.debug("autonomy audit fetch failed: %s", exc)
+    return _ok({"entries": rows, "count": len(rows)})

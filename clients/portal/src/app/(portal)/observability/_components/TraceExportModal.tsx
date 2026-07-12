@@ -11,6 +11,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { Download, X } from "lucide-react";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { errorFromCaught } from "@/lib/safe-error-message";
 
 type ExportFormat = "json" | "jsonl" | "csv";
 
@@ -36,7 +37,7 @@ export function TraceExportModal({ open, onOpenChange, orgId, traceId }: TraceEx
     api
       .exportTrace(orgId, traceId, format)
       .then((res) => setData(res.data))
-      .catch((err) => setError(err instanceof Error ? err.message : "Export failed"))
+      .catch((err) => setError(errorFromCaught(err, "Export failed")))
       .finally(() => setLoading(false));
   }, [open, orgId, traceId, format]);
 

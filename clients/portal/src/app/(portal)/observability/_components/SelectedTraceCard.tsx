@@ -17,11 +17,12 @@
 import { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { X, ExternalLink, Clock, DollarSign, Hash, Activity } from "lucide-react";
+import { X, ExternalLink, Clock, DollarSign, Hash, Activity, Link2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useOrg } from "@/hooks/use-org";
 import { api } from "@/lib/api";
 import type { ObservabilityTrace } from "@/lib/api";
+import { TraceShareModal } from "./TraceShareModal";
 
 /** Wrapper that reads `?trace_id=` from the URL and renders the rail
  *  iff a trace is selected. Uses Suspense so Next 15 doesn't bail the
@@ -46,6 +47,7 @@ export function SelectedTraceCard({ traceId }: SelectedTraceCardProps) {
   const { currentOrg } = useOrg();
   const [trace, setTrace] = useState<ObservabilityTrace | null>(null);
   const [loading, setLoading] = useState(true);
+  const [shareOpen, setShareOpen] = useState(false);
 
   useEffect(() => {
     if (!currentOrg || !traceId) {
@@ -168,12 +170,22 @@ export function SelectedTraceCard({ traceId }: SelectedTraceCardProps) {
         </dl>
       )}
 
-      <Link
-        href={`/replay?trace_id=${traceId}`}
-        className="inline-flex items-center gap-1 text-xs text-[var(--accent)] hover:underline"
-      >
-        Open in Replay <ExternalLink className="w-3 h-3" />
-      </Link>
+      <div className="flex items-center gap-3">
+        <button
+          type="button"
+          onClick={() => setShareOpen(true)}
+          className="inline-flex items-center gap-1 text-xs text-[var(--accent)] hover:underline"
+        >
+          <Link2 className="w-3 h-3" /> Share
+        </button>
+        <Link
+          href={`/replay?trace_id=${traceId}`}
+          className="inline-flex items-center gap-1 text-xs text-[var(--accent)] hover:underline"
+        >
+          Open in Replay <ExternalLink className="w-3 h-3" />
+        </Link>
+      </div>
+      <TraceShareModal open={shareOpen} onOpenChange={setShareOpen} traceId={traceId} />
     </aside>
   );
 }

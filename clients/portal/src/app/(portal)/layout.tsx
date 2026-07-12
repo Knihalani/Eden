@@ -46,7 +46,6 @@ import { usePathname, useSearchParams } from "next/navigation";
 import { CommandPalette } from "@/components/ui/command-palette";
 import { ChatSidebar } from "@/components/ai-insights/ChatSidebar";
 import { Logo } from "@/components/brand/logo";
-import { SidebarSearch } from "@/components/layout/sidebar-search";
 import { PortalNavLink } from "@/components/layout/portal-nav-link";
 import { buildBreadcrumbs } from "@/lib/breadcrumbs";
 import { PageHelpHint } from "@/components/layout/page-help-hint";
@@ -132,7 +131,7 @@ function PortalLayoutContent({ children }: { children: React.ReactNode }) {
   const { user, loading, refreshUserWithRetry } = useAuth();
   const { signOut } = useClerk();
   const { prefs, togglePin } = useSidebarPrefs();
-  const { authError, clearAuthError, refreshOrgs, currentOrg } = useOrg();
+  const { authError, clearAuthError, refreshOrgs, currentOrg, orgSyncing } = useOrg();
   const router = useRouter();
   const pathname = usePathname();
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -267,6 +266,11 @@ function PortalLayoutContent({ children }: { children: React.ReactNode }) {
         target?.tagName === "TEXTAREA" ||
         target?.isContentEditable;
 
+      if (e.key === "j" && (e.metaKey || e.ctrlKey) && !isFormField) {
+        e.preventDefault();
+        window.dispatchEvent(new CustomEvent("eden:toggle-ai-chat"));
+        return;
+      }
       if (e.key === "k" && (e.metaKey || e.ctrlKey)) {
         e.preventDefault();
         setCommandPaletteOpen((prev) => !prev);
@@ -311,6 +315,9 @@ function PortalLayoutContent({ children }: { children: React.ReactNode }) {
   // and adding more prefixes dilutes the safety of this gate.
   useEffect(() => {
     if (loading || !user || currentOrg) return;
+    // Clerk may have an active org while Eden syncs — don't bounce
+    // the user away from dashboard during the brief sync window.
+    if (orgSyncing) return;
     const path = pathname || "";
     const isOrglessFriendly =
       path === "/" ||
@@ -324,7 +331,7 @@ function PortalLayoutContent({ children }: { children: React.ReactNode }) {
     if (!isOrglessFriendly) {
       router.replace("/onboarding");
     }
-  }, [loading, user, currentOrg, pathname, router]);
+  }, [loading, user, currentOrg, orgSyncing, pathname, router]);
 
   // Unknown portal URL (e.g. a typo): bypass the auth gate entirely
   // so the catch-all's notFound() can render the 404 immediately.
@@ -395,6 +402,7 @@ function PortalLayoutContent({ children }: { children: React.ReactNode }) {
   // Without this, every page stays in its loading skeleton because
   // `currentOrg` never resolves. June 2026 fix.
   const showAuthBanner = !loading && user && authError;
+  const showOrgSyncingBanner = !loading && user && orgSyncing && !authError;
 
   const breadcrumbs = buildBreadcrumbs(pathname);
   const { pinnedItems, groups } = applySidebarPrefs(prefs, advancedCollapsed);
@@ -529,29 +537,9 @@ function PortalLayoutContent({ children }: { children: React.ReactNode }) {
             flex child refuses to shrink and the sidebar expands
             past the viewport. `overscroll-contain` keeps the
             wheel-chained scroll inside the sidebar from scrolling
-            the document under it. */}
-        {/* ui-audit 2026-07-06: Sidebar-local search.
-            With ~30 routes across 5 groups, scanning takes a beat.
-            The Cmd+K palette covers actions + routes globally; this
-            inline filter is the fast path for sidebar-narrowed route
-            discovery. Hidden when collapsed so it doesn't fight the
-            icon rail. */}
-        {!collapsed && (
-          <SidebarSearch
-            items={DEFAULT_SIDEBAR.flatMap((g) => g.items)}
-            hiddenIds={
-              advancedCollapsed
-                ? new Set(
-                    DEFAULT_SIDEBAR.flatMap((g) =>
-                      g.items
-                        .filter((it) => it.category === "advanced")
-                        .map((it) => it.id)
-                    )
-                )
-                : undefined
-            }
-          />
-        )}
+            the document under it. Route discovery is via Cmd+K
+            (header search / command palette) — no inline sidebar
+            search. */}
 
         <nav
           className="relative flex-1 min-h-0 p-3 space-y-5 overflow-y-auto overscroll-contain"
@@ -889,6 +877,35 @@ function PortalLayoutContent({ children }: { children: React.ReactNode }) {
               </div>
             }
           >
+          {showOrgSyncingBanner && (
+            <div
+              role="status"
+              className="flex items-center justify-between gap-3 px-4 sm:px-6 py-3 bg-[var(--bg-primary)] border-b border-[var(--border-default)] text-sm"
+            >
+              <div className="flex items-center gap-2 min-w-0">
+                <Loader2 className="w-4 h-4 text-[var(--accent)] shrink-0 animate-spin" />
+                <span className="text-[var(--text-secondary)] truncate">
+                  Syncing your workspace from Clerk…
+                </span>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <Link
+                  href="/onboarding"
+                  className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-[var(--accent)] hover:underline"
+                >
+                  Setup wizard
+                </Link>
+                <button
+                  onClick={() => void refreshOrgs()}
+                  aria-label="Refresh workspace sync"
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-[var(--border-default)] text-[var(--text-secondary)] rounded-md text-xs font-medium hover:bg-[var(--bg-secondary)] transition-colors"
+                >
+                  <RefreshCw className="w-3 h-3" />
+                  Refresh
+                </button>
+              </div>
+            </div>
+          )}
           {showAuthBanner && (
             <div
               role="alert"
@@ -903,15 +920,11 @@ function PortalLayoutContent({ children }: { children: React.ReactNode }) {
               <div className="flex items-center gap-1.5 shrink-0">
                 <button
                   onClick={() => {
-                    // Re-fetch /auth/me (with retry) and the org list
-                    // in parallel. The refreshUserWithRetry path covers
-                    // the transient "User not found" race during the
-                    // auto-provision window; refreshOrgs re-reads the
-                    // user's orgs in case the webhook landed after the
-                    // first fetch.
-                    clearAuthError();
-                    void refreshUserWithRetry();
-                    void refreshOrgs();
+                    void (async () => {
+                      clearAuthError();
+                      await refreshUserWithRetry();
+                      await refreshOrgs();
+                    })();
                   }}
                   aria-label="Retry loading session"
                   className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-[var(--error)]/40 text-[var(--error)] rounded-md text-xs font-medium hover:bg-[var(--error)]/10 transition-colors"
@@ -920,15 +933,7 @@ function PortalLayoutContent({ children }: { children: React.ReactNode }) {
                   Retry
                 </button>
                 <button
-                  onClick={clearAuthError}
-                  aria-label="Dismiss session error"
-                  className="p-1.5 text-[var(--error)] hover:bg-[var(--error)]/10 rounded-md transition-colors"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-                <button
                   onClick={() => {
-                    clearAuthError();
                     router.push("/sign-in");
                   }}
                   className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[var(--error)] text-[var(--bg-base)] rounded-md text-xs font-medium hover:opacity-90 transition-opacity"
@@ -975,7 +980,7 @@ function NotificationsDropdown() {
   const [open, setOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
-  const { notifications, unreadCount, markAsRead, markAllAsRead, deleteNotification } = useNotifications();
+  const { notifications, unreadCount, error, markAsRead, markAllAsRead, deleteNotification, refresh: refreshNotifications } = useNotifications();
 
   // Close on click outside
   useEffect(() => {
@@ -1076,7 +1081,18 @@ function NotificationsDropdown() {
 
           {/* Notification list */}
           <div className="max-h-[320px] overflow-y-auto">
-            {notifications.length === 0 ? (
+            {error && notifications.length === 0 ? (
+              <div className="text-center py-8 px-4 space-y-3">
+                <p className="text-sm text-[var(--error)]">{error}</p>
+                <button
+                  type="button"
+                  onClick={() => void refreshNotifications()}
+                  className="text-xs text-[var(--accent)] hover:underline font-medium"
+                >
+                  Retry
+                </button>
+              </div>
+            ) : notifications.length === 0 ? (
               <div className="text-center py-8">
                 <Bell className="w-8 h-8 mx-auto mb-2 text-[var(--text-muted)] stroke-1 opacity-50" />
                 <p className="text-sm text-[var(--text-muted)]">No notifications</p>

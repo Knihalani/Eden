@@ -6,7 +6,7 @@ from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
 from eden.config import get_settings
-from eden.services.email_service import get_email_service
+from eden.services.email_service import EmailResult, get_email_service
 from eden.storage.postgres import get_postgres_client
 
 logger = logging.getLogger(__name__)
@@ -268,32 +268,42 @@ async def accept_invitation(invitation_id: str, user_id: str) -> dict:
         client, str(invitation["org_id"]),
     )
     if clerk_org_id:
-        try:
-            await create_membership(
-                clerk_org_id=clerk_org_id,
-                user_id=user_id,
-                role=invitation["role"],
-            )
-        except ClerkAPIError as exc:
-            # 422 "already a member" is benign — log at info level so
-            # we don't page on retried accepts. Anything else is a
-            # real outage; warn + let the webhook reconcile.
-            if "already" in str(exc).lower():
-                logger.info(
-                    "Clerk membership already exists (user=%s org=%s)",
-                    user_id, clerk_org_id,
+        clerk_user_row = await client.fetchrow(
+            "SELECT clerk_id FROM users WHERE id = $1",
+            user_id,
+        )
+        clerk_user_id = (
+            str(clerk_user_row["clerk_id"])
+            if clerk_user_row and clerk_user_row.get("clerk_id")
+            else None
+        )
+        if clerk_user_id:
+            try:
+                await create_membership(
+                    clerk_org_id=clerk_org_id,
+                    user_id=clerk_user_id,
+                    role=invitation["role"],
                 )
-            else:
-                logger.warning(
-                    "Clerk membership create failed (user=%s org=%s): %s; "
-                    "webhook will reconcile",
+            except ClerkAPIError as exc:
+                # 422 "already a member" is benign — log at info level so
+                # we don't page on retried accepts. Anything else is a
+                # real outage; warn + let the webhook reconcile.
+                if "already" in str(exc).lower():
+                    logger.info(
+                        "Clerk membership already exists (user=%s org=%s)",
+                        user_id, clerk_org_id,
+                    )
+                else:
+                    logger.warning(
+                        "Clerk membership create failed (user=%s org=%s): %s; "
+                        "webhook will reconcile",
+                        user_id, clerk_org_id, exc,
+                    )
+            except Exception as exc:  # noqa: BLE001 — defensive
+                logger.exception(
+                    "Unexpected Clerk side-effect on accept_invitation (user=%s org=%s): %s",
                     user_id, clerk_org_id, exc,
                 )
-        except Exception as exc:  # noqa: BLE001 — defensive
-            logger.exception(
-                "Unexpected Clerk side-effect on accept_invitation (user=%s org=%s): %s",
-                user_id, clerk_org_id, exc,
-            )
 
     return {
         "org_id": str(invitation["org_id"]),
@@ -366,7 +376,14 @@ async def get_pending_invitations(org_id: str) -> list[dict]:
     ]
 
 
-async def send_invite_email(to_email: str, org_name: str, inviter_name: str, role: str, token: str, expires_at: str) -> None:
+async def send_invite_email(
+    to_email: str,
+    org_name: str,
+    inviter_name: str,
+    role: str,
+    token: str,
+    expires_at: str,
+) -> EmailResult:
     """Send invitation email to the invitee.
 
     Sends via SendGrid if configured, otherwise logs a warning.
@@ -418,7 +435,7 @@ async def send_invite_email(to_email: str, org_name: str, inviter_name: str, rol
     """
 
     email_service = get_email_service()
-    await email_service.send_email(
+    return await email_service.send_email(
         to_email=to_email,
         subject=subject,
         html_content=html_content,

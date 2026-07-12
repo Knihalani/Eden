@@ -129,3 +129,21 @@ class TestVerifyClerkToken:
         assert clerk_auth.is_clerk_payload(dev) is True
         assert clerk_auth.is_clerk_payload(prod) is True
         assert clerk_auth.is_clerk_payload(other) is False
+
+    def test_public_key_from_jwk_accepts_jwks_dict(self):
+        # Minimal RSA public JWK (PyJWT test vector). Passing the raw
+        # dict to jwt.decode raises TypeError on PyJWT 2.13+.
+        jwk = {
+            "kty": "RSA",
+            "kid": "test",
+            "use": "sig",
+            "n": (
+                "0vx7agoebGcQSuuPiLJXZptN9nndrQckP"
+                "VkbSSzAoiUbI3G0F7CXi8syBi5zTgY6K1"
+                "TCnzMokNW6zT3BnYg6hVJDUin18zjF3"
+                "rYxuJ8oo1AJaNWQ9w-8Kvw"
+            ),
+            "e": "AQAB",
+        }
+        key = clerk_auth._public_key_from_jwk(jwk)
+        assert key is not None

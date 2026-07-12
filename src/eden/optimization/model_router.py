@@ -23,23 +23,20 @@ class ModelTier(Enum):
 # Tier-to-model mapping (configurable via settings)
 TIER_MODELS: dict[ModelTier, list[str]] = {
     ModelTier.T1: [
-        "deepseek/deepseek-v4-flash",
         "xiaomi/mimo-v2.5",
         "tencent/hy3-preview",
+        "qwen/qwen3-8b:free",
     ],
     ModelTier.T2: [
-        "deepseek/deepseek-v4-pro",
         "minimax/minimax-m3",
         "xiaomi/mimo-v2.5-pro",
+        "tencent/hy3-preview",
     ],
-    # T3 = Expert tier (complex architecture, novel patterns, adversarial
-    # design). The previous defaults (mid-tier "minimax/minimax-m3") were
-    # a routing regression caught by tests/unit/autonomous/test_agent.py::
-    # TestModelSelection::test_picks_t3_when_unset — reverted per the
-    # user's instruction to treat model lists as immutable.
+    # T3 = Expert tier — portal Cmd-J agent, onboarding integration agent,
+    # and other high-stakes reasoning tasks.
     ModelTier.T3: [
+        "x-ai/grok-4.5",
         "minimax/minimax-m3",
-        "deepseek/deepseek-v4-pro",
         "xiaomi/mimo-v2.5-pro",
     ],
     ModelTier.T4: [
@@ -100,7 +97,13 @@ class TaskClassifier:
     SIMPLE_AGENTS: set[str] = {"format", "extract", "classify", "summarize"}
 
     # Agents that are always complex / reasoning-heavy
-    COMPLEX_AGENTS: set[str] = {"planner", "critic", "archivist", "adversarial_tester"}
+    COMPLEX_AGENTS: set[str] = {
+        "planner",
+        "critic",
+        "archivist",
+        "adversarial_tester",
+        "onboarding_integration",
+    }
 
     # Code agents that may vary in complexity
     CODE_AGENTS: set[str] = {"executor", "refiner", "verifier", "tester", "code_quality"}

@@ -11,6 +11,7 @@ import { PageHeader } from "@/components/layout/page-header";
 import { PageContent } from "@/components/layout/page-content";
 import { History, Loader2, Play, GitBranch, RotateCcw, Info, Circle, CheckCircle2, Code2 } from "lucide-react";
 import { motion } from "framer-motion";
+import { errorFromCaught } from "@/lib/safe-error-message";
 
 const DEFAULT_EDITED_STATE = `{
   "messages": [
@@ -111,7 +112,7 @@ export default function TimeTravelPage() {
       setReplayId(null);
       toast.success(`Recorded ${res.steps} steps — ${res.recording_id.slice(0, 12)}…`);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Recording failed");
+      toast.error(errorFromCaught(err, "Recording failed"));
     } finally {
       setRecording(false);
     }
@@ -137,7 +138,7 @@ export default function TimeTravelPage() {
       setReplayId(null);
       toast.success(`Forked at step ${res.from_step} — ${res.fork_id.slice(0, 12)}…`);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Fork failed");
+      toast.error(errorFromCaught(err, "Fork failed"));
     } finally {
       setForking(false);
     }
@@ -155,7 +156,7 @@ export default function TimeTravelPage() {
       setReplayOutcome(res.outcome);
       toast.success(`Replayed ${res.steps_replayed} steps — ${res.outcome}`);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Replay failed");
+      toast.error(errorFromCaught(err, "Replay failed"));
     } finally {
       setReplaying(false);
     }

@@ -22,6 +22,7 @@ import {
   TestTube2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { errorFromCaught } from "@/lib/safe-error-message";
 
 const STATUS_BADGE: Record<string, { bg: string; icon: typeof CheckCircle2 }> = {
   pending: { bg: "bg-[var(--bg-tertiary)] text-[var(--text-secondary)]", icon: Clock },
@@ -66,7 +67,7 @@ export default function TestRunDetailPage() {
       const data = await agentsApi.getTestRun(currentOrg.id, agentId, runId);
       setRun(data);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to load test run");
+      setError(errorFromCaught(e, "Failed to load test run"));
     } finally {
       setLoading(false);
     }

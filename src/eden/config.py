@@ -225,12 +225,11 @@ def _build_settings_class():
         scheduler_tick_seconds: int = 900
 
         # Phase C — unified AI agent (Cat 14 real + global panel).
-        # The agent uses the ModelRouter T3 tier (premium: claude-opus-4,
-        # gpt-4.5, deepseek-v4) per the user's "super super capable"
-        # requirement. ``max_turns`` caps the ReAct loop so a runaway
-        # query can't burn an unlimited number of LLM calls. The
-        # retention window controls how long persisted conversations
-        # live before a separate retention job prunes them.
+        # The agent uses the ModelRouter T3 tier (x-ai/grok-4.5 primary).
+        # Override via AI_AGENT_T3_MODEL when set. ``max_turns`` caps the
+        # ReAct loop so a runaway query can't burn an unlimited number of
+        # LLM calls. The retention window controls how long persisted
+        # conversations live before a separate retention job prunes them.
         ai_agent_enabled: bool = True
         ai_agent_max_turns: int = 10
         ai_agent_t3_model: str = ""  # blank → use ModelTier.T3 default
@@ -275,7 +274,7 @@ def _build_settings_class():
         # Model configuration
         model_reasoning: str = "anthropic/claude-sonnet-4.6"
         model_code: str = "qwen/qwen3-coder:free"
-        model_fast: str = "deepseek/deepseek-v4-flash:free"
+        model_fast: str = "xiaomi/mimo-v2.5"
         model_fallback: str = "meta-llama/llama-3.3-70b-instruct"
 
         # Token budgets per agent
@@ -484,6 +483,9 @@ def _build_settings_class():
         evolver_degradation_threshold: float = 0.7
 
         # ── Promotion loop (Phase 7.1b follow-up) ───────────────────────
+        evolution_loop_enabled: bool = True
+        evolution_loop_interval_seconds: int = 300
+        promotion_loop_enabled: bool = True
         # Used by ``eden.llmops.promotion.PromotionLoop`` to decide
         # whether the canary's stats are significant enough to
         # promote, keep, or roll back.
@@ -505,6 +507,14 @@ def _build_settings_class():
         insights_loop_interval_seconds: float = 60.0
         insights_loop_batch_size: int = 200
         insights_loop_max_runtime_seconds: float = 50.0
+
+        # Anomaly detection background loop (data platform).
+        anomaly_loop_enabled: bool = True
+        anomaly_loop_interval_seconds: float = 900.0
+
+        # Judge Redis tailer — off by default to limit LLM cost.
+        judges_async_tailer_enabled: bool = False
+        judges_async_tailer_max_keys: int = 50
 
         # Feature flags
         # Default OFF: the legacy multi-stage environment-generation pipeline
@@ -578,6 +588,98 @@ def _build_settings_class():
         github_app_private_key: str = ""  # PEM-encoded; multi-line OK in .env
         github_app_webhook_secret: str = ""
         github_app_callback_url: str = ""  # e.g. https://portal.example.com/onboarding/connect
+
+        # ── Trace-quality / quality-pipeline activation (N14) ───────────
+        # These gate the trace-quality wiring (``install_all()``) and the
+        # quality-pipeline sidecar worker started from ``api/app.py``
+        # lifespan. Source of truth: ``prompts/06_settings.md``. Prior to
+        # N14 these attributes were absent, so ``quality_pipeline.worker``
+        # no-oped even when started. Env-driven via ``EDEN_*``.
+        trace_quality_enabled: bool = True
+        trace_quality_compute_async: bool = True
+        traceloop_auto_apply: bool = False  # per-action kill-switch default
+        stat_gate_min_n: int = 30
+        stat_gate_min_effect: float = 0.2
+        detector_keep_rate_loop: float = 1.0
+        detector_keep_rate_error: float = 1.0
+        quality_pipeline_workers: int = 2
+        quality_pipeline_watermark_poll_ms: int = 1000
+        quality_pipeline_batch_size: int = 100
+
+        # Per-action kill-switch defaults mirrored into
+        # ``tenant_guardrail_action_config`` (read-only True, mutating
+        # False). Distinct from ``_KILL_SWITCH_DEFAULT`` (private) so it is
+        # env-serialisable as JSON.
+        default_action_applied_flag: dict[str, bool] = {
+            "record_to_table": True,
+            "emit_audit_event": True,
+            "emit_drift_alert": True,
+            "rewrite_response": True,
+            "coalesce_step": True,
+            "truncate_context": False,
+            "block_user": False,
+            "escalate_to_admin": False,
+            "revoke_api_key": False,
+            "apply_policy_change": False,
+        }
+
+        # Enhancement-tracking bounds (no-drop invariant + compute budget).
+        enhancements_per_component_max: int = 5
+        enhancements_compute_budget_seconds: int = 14400  # 4 CPU-hours
+        enhancements_no_drop_invariant_enforced: bool = True
+
+        # ── Closed-loop error diagnosis feature flags ───────────────────
+        # The issues surface (F28/F29 stumbles+issues + routes) is on by
+        # default to honour the zero-config product promise; auto
+        # detection (F20) and the orchestrator (F46) are gated so they
+        # can be rolled out per deployment.
+        agent_issues_v0: bool = True
+        auto_issue_detection_v1: bool = True
+        closed_loop_orchestrator_v1: bool = True
+        # Triage budget (F30) — max LLM spend per org per day for triage.
+        max_triage_cost_usd_per_day: float = 25.0
+
+        # ── Autonomy policy engine (N22) ────────────────────────────────
+        # Org-level defaults for the autonomous-maintenance safety
+        # envelope. When an org (or agent) has no ``autonomy_policies`` row
+        # these seed the resolved policy, so the effective posture is
+        # derived from the existing scattered flags
+        # (``autonomous_actions_v0`` → runtime heal, ``code_change_enabled``
+        # → patch PR, ``auto_pr_enabled`` → auto-merge). ``assisted`` is
+        # the safe default: runtime heals auto-execute, code patches need a
+        # human. ``daily_maintenance_budget_usd`` caps triage+patch LLM
+        # spend per org per day; on breach the loop downgrades to
+        # suggest-only. ``hipaa`` forces ``observe`` regardless.
+        default_maintenance_mode: str = "assisted"
+        default_compliance_profile: str = "standard"
+        daily_maintenance_budget_usd: float = 25.0
+        max_auto_rollbacks_per_day: int = 3
+
+        # ── Closed-loop verify loop (F46 Wave 6) ────────────────────────
+        # After a remediation the orchestrator schedules a verify row;
+        # the verify worker waits ``verify_delay_seconds`` then confirms
+        # the fix held (no new stumbles for the issue fingerprint in the
+        # trailing ``verify_quiet_window_minutes`` AND StatGate P0
+        # cleared). Pass → issue ``resolved``; fail → ``regressed`` +
+        # human escalation. The worker polls every
+        # ``verify_poll_interval_seconds``.
+        verify_delay_seconds: int = 1800
+        verify_quiet_window_minutes: int = 30
+        verify_poll_interval_seconds: int = 60
+        verify_max_attempts: int = 3
+
+        # ── Issue alerting (F47 Wave 7) ─────────────────────────────────
+        # Slack Block Kit alerts for P0/P1 issue creation, verify
+        # failures, and human escalations. Global fallback webhook (a
+        # per-org ``org_integrations`` row overrides it when present).
+        # Storm caps stop an incident flood from paging on-call 200x: an
+        # identical fingerprint alert is deduped for
+        # ``issue_alert_dedup_minutes`` and an org is capped at
+        # ``issue_alert_max_per_hour`` alerts/hour.
+        slack_webhook_url: str = ""
+        issue_alerts_enabled: bool = True
+        issue_alert_dedup_minutes: int = 15
+        issue_alert_max_per_hour: int = 30
 
         # ── Kill-switch defaults (v2.7 hot-path) ────────────────────────
         # Mutating actions default OFF per audit/permission policy.

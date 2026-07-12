@@ -272,6 +272,18 @@ class OpenRouterClient:
         return config.primary
 
     @staticmethod
+    def _clamp_max_tokens(max_tokens: int | None) -> int:
+        """Clamp max_tokens to GATEWAY_MAX_TOKENS_CAP (default 4096).
+
+        Set ``GATEWAY_MAX_TOKENS_CAP=0`` to disable the cap.
+        """
+        cap = int(os.getenv("GATEWAY_MAX_TOKENS_CAP", "4096"))
+        resolved = max_tokens if max_tokens is not None else 4096
+        if cap <= 0:
+            return resolved
+        return min(resolved, cap)
+
+    @staticmethod
     def _is_anthropic_model(model: str) -> bool:
         """Classify a model as Anthropic (Claude family) for provider-routing.
 
@@ -382,6 +394,8 @@ class OpenRouterClient:
             all_models = [model_config.primary] + model_config.fallback
             if max_tokens is None:
                 max_tokens = model_config.max_tokens
+
+        max_tokens = self._clamp_max_tokens(max_tokens)
 
         last_error = None
         # Lazy-resolve openai exception classes (audit 2026-07-06).
@@ -523,6 +537,7 @@ class OpenRouterClient:
         **kwargs,
     ) -> LLMResponse:
         """Make a single request to OpenRouter."""
+        max_tokens = self._clamp_max_tokens(max_tokens)
         # In-process LRU cache: same (model, prompt, system,
         # max_tokens, temperature) within the TTL window
         # returns the cached response without hitting the

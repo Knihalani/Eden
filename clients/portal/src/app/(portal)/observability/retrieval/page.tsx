@@ -13,6 +13,7 @@ import { DataTable } from "@/components/ui/data-table";
 import { EmptyState } from "@/components/ui/empty-state";
 import { NoOrgState } from "@/components/ui/no-org-state";
 import { Card } from "@/components/ui/card";
+import { errorFromCaught } from "@/lib/safe-error-message";
 async function callApi<T>(endpoint: string, init: RequestInit = {}): Promise<T> {
   // Delegate to the shared api client — it knows about Clerk refresh,
   // SSE, the catch-all proxy, and the in-flight de-dup map. The
@@ -155,7 +156,7 @@ function GapsTab({
       const data = await retrievalApi.gaps(orgId);
       setGaps(data.gaps ?? []);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load gaps");
+      setError(errorFromCaught(err, "Failed to load gaps"));
     } finally {
       setLoading(false);
     }
@@ -224,7 +225,7 @@ function UtilizationTab({
       const data = await retrievalApi.utilization(orgId, traceId.trim());
       setResult(data);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Utilization failed");
+      setError(errorFromCaught(err, "Utilization failed"));
     } finally {
       setLoading(false);
     }
@@ -326,7 +327,7 @@ function ReorderTab({
       const data = await retrievalApi.reorder(orgId);
       setEntries(data.reordering ?? []);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load reorder");
+      setError(errorFromCaught(err, "Failed to load reorder"));
     } finally {
       setLoading(false);
     }

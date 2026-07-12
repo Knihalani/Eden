@@ -30,6 +30,7 @@ import type { TraceFilter, TraceItem } from "../observability/_lib/types";
 import { useOrg } from "@/hooks/use-org";
 import { api } from "@/lib/api";
 import { TraceExportModal } from "../observability/_components/TraceExportModal";
+import { TraceShareModal } from "../observability/_components/TraceShareModal";
 import { RefreshCw } from "lucide-react";
 
 function TracesPageInner() {
@@ -50,6 +51,8 @@ function TracesPageInner() {
   // re-rendering.
   const [annotateOpen, setAnnotateOpen] = useState(false);
   const [annotateTraceId, setAnnotateTraceId] = useState<string>("");
+  const [shareOpen, setShareOpen] = useState(false);
+  const [shareTraceId, setShareTraceId] = useState<string>("");
 
   const handleSelectTrace = useCallback(
     (id: string) => {
@@ -135,12 +138,15 @@ function TracesPageInner() {
         orgId={currentOrg.id}
         traceId={exportTraceId}
       />
-      {/* Pattern 5.2 (Langfuse) — annotate dialog. No-op endpoint
-          for now; see api.annotateTrace in src/lib/api.ts. */}
       <AnnotateTraceDialog
         open={annotateOpen}
         onOpenChange={setAnnotateOpen}
         traceId={annotateTraceId}
+      />
+      <TraceShareModal
+        open={shareOpen}
+        onOpenChange={setShareOpen}
+        traceId={shareTraceId}
       />
     </PageContent>
   );

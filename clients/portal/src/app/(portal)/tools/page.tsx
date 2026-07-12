@@ -13,6 +13,7 @@ import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
 import { Wrench, GitCompare, Sparkles, ChevronDown, ChevronRight, Loader2, AlertTriangle, Activity, Search, X } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Card } from "@/components/ui/card";
+import { errorFromCaught } from "@/lib/safe-error-message";
 type Tab = "attribution" | "compare" | "recommender" | "taxonomy";
 interface ToolAttribution {
   tool_name: string;
@@ -72,7 +73,7 @@ export default function ToolsPage() {
       });
       setTools(data.tools || []);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load attribution");
+      setError(errorFromCaught(err, "Failed to load attribution"));
     } finally {
       setAttributionLoading(false);
     }
@@ -89,7 +90,7 @@ export default function ToolsPage() {
       const all = (data.categories || []).flatMap(c => c.tools);
       setAllToolNames(all);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load taxonomy");
+      setError(errorFromCaught(err, "Failed to load taxonomy"));
     } finally {
       setTaxonomyLoading(false);
     }
@@ -112,7 +113,7 @@ export default function ToolsPage() {
       });
       setComparison(data.comparison || []);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Comparison failed");
+      setError(errorFromCaught(err, "Comparison failed"));
     } finally {
       setCompareLoading(false);
     }
@@ -129,7 +130,7 @@ export default function ToolsPage() {
       });
       setRecommendations(data.recommendations || []);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Recommendation failed");
+      setError(errorFromCaught(err, "Recommendation failed"));
     } finally {
       setRecommendLoading(false);
     }

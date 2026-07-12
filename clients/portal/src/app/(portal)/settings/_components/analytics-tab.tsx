@@ -12,6 +12,7 @@ import { Loader2, TrendingUp, Users, Database, Code } from "lucide-react";
 // @/lib/chart-colors so every chart in the portal uses the
 // same single source of truth.
 import { getStorageColorsResolved } from "@/lib/chart-colors";
+import { errorFromCaught } from "@/lib/safe-error-message";
 
 const STORAGE_COLORS = getStorageColorsResolved();
 
@@ -38,7 +39,7 @@ export function AnalyticsTab() {
         const data = await api.getOrgAnalytics(currentOrg.id);
         setAnalytics(data);
       } catch (e) {
-        setError(e instanceof Error ? e.message : "Failed to load analytics");
+        setError(errorFromCaught(e, "Failed to load analytics"));
       } finally {
         setLoading(false);
       }

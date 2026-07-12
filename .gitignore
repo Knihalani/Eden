@@ -43,6 +43,7 @@ bun.lockb
 
 # Runtime caches (not source of truth)
 .eden/ci/
+*.rdb
 .eden/cache/
 .eden/auto_datasets/
 .eden/canary/
@@ -53,6 +54,7 @@ bun.lockb
 *.local
 secrets/
 .neon
+clients/portal/e2e/.auth-state.json
 docs/.docusaurus/
 
 # Tinybird CLI local state (contains user/workspace tokens in plaintext)

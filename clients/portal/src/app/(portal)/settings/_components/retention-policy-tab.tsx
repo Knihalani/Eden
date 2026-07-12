@@ -8,6 +8,7 @@ import { usePermissions } from "@/hooks/use-permissions";
 import { useToast } from "@/components/ui/toast";
 import { cn } from "@/lib/utils";
 import { Card } from "@/components/ui/card";
+import { errorFromCaught } from "@/lib/safe-error-message";
 
 const TABLES: Array<{ id: string; label: string; description: string }> = [
   { id: "raw_traces", label: "Raw traces", description: "Pre-aggregation ingestion events" },
@@ -78,7 +79,7 @@ export function RetentionPolicyTab() {
       })
       .catch((e: unknown) => {
         if (cancelled) return;
-        setError(e instanceof Error ? e.message : "Failed to load retention policy");
+        setError(errorFromCaught(e, "Failed to load retention policy"));
       })
       .finally(() => {
         if (cancelled) return;

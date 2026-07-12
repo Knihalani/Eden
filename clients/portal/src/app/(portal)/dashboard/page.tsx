@@ -22,6 +22,7 @@ import {
   type TraceRow } from "./_components/recent-traces-card";
 import { QuickLinks } from "./_components/quick-links";
 import { NoOrgState } from "@/components/ui/no-org-state";
+import { errorFromCaught } from "@/lib/safe-error-message";
 
 interface DashboardData {
   traces: TraceRow[];
@@ -56,7 +57,7 @@ interface DashboardData {
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 export default function DashboardPage() {
-  const { currentOrg, authError } = useOrg();
+  const { currentOrg, authError, orgSyncing, orgSyncTimedOut, refreshOrgs } = useOrg();
   const toast = useToast();
   const { hasPermission } = usePermissions();
   const __router = useRouter();
@@ -140,7 +141,7 @@ export default function DashboardPage() {
       } catch (e) {
         if (!cancelled) {
           console.error("Failed to load dashboard telemetry:", e);
-          setError(e instanceof Error ? e.message : "Failed to load telemetry");
+          setError(errorFromCaught(e, "Failed to load telemetry"));
           toast.error(e instanceof Error ? e.message : "Failed to load telemetry");
         }
       } finally {
@@ -221,7 +222,16 @@ export default function DashboardPage() {
     return (
       <NoOrgState
         feature="The dashboard"
-        description="Create or join an organization to start capturing traces, alerts, and cost data for your agents."
+        syncing={orgSyncing && !orgSyncTimedOut}
+        syncTimedOut={orgSyncTimedOut}
+        onRetrySync={() => void refreshOrgs()}
+        description={
+          orgSyncTimedOut
+            ? "Workspace sync is taking longer than expected. Try refreshing, or finish setup from onboarding."
+            : orgSyncing
+              ? undefined
+              : "Finish setup to start capturing traces, alerts, and cost data for your agents."
+        }
       />
     );
   }

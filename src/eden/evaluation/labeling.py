@@ -300,6 +300,87 @@ class LabelingService:
         )
         return item_id
 
+    async def find_or_seed_trace_score_item(
+        self,
+        *,
+        org_id: str,
+        trace_id: str,
+    ) -> str:
+        """Return the labeling item id for a trace-score row.
+
+        Finds an existing item keyed by ``source_trace_id`` with
+        ``label_schema.type = 'trace-score'``; seeds one when missing.
+        """
+        row = await self._pg.fetchrow(
+            """
+            SELECT id FROM labeling_items
+            WHERE org_id = $1
+              AND source_trace_id = $2
+              AND label_schema->>'type' = 'trace-score'
+            LIMIT 1
+            """,
+            org_id,
+            trace_id,
+        )
+        if row is not None:
+            return str(row["id"])
+        return await self.seed(
+            org_id=org_id,
+            payload={"trace_id": trace_id},
+            label_schema={"type": "trace-score"},
+            prompt=f"Trace score for {trace_id}",
+            tags=["trace-score"],
+            source_trace_id=trace_id,
+        )
+
+    async def list_items(
+        self,
+        *,
+        org_id: str,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> tuple[list[dict[str, Any]], int]:
+        """List labeling items with per-item annotation counts."""
+        total = await self._pg.fetchval(
+            "SELECT count(*) FROM labeling_items WHERE org_id = $1",
+            org_id,
+        )
+        rows = await self._pg.fetch(
+            """
+            SELECT i.*,
+                   count(a.id)::int AS annotations_count
+            FROM labeling_items i
+            LEFT JOIN annotations a ON a.item_id = i.id
+            WHERE i.org_id = $1
+            GROUP BY i.id
+            ORDER BY i.created_at DESC
+            LIMIT $2 OFFSET $3
+            """,
+            org_id,
+            limit,
+            offset,
+        )
+        items: list[dict[str, Any]] = []
+        for row in rows:
+            item = _row_to_item(row)
+            source = (
+                item.source_trace_id
+                or item.source_dataset_id
+                or item.source_span_id
+                or item.source_synthetic_qa_id
+                or "manual"
+            )
+            items.append({
+                "id": item.id,
+                "prompt": item.prompt or "",
+                "context": item.payload.get("context") if item.payload else None,
+                "tags": item.tags,
+                "source": source,
+                "created_at": item.created_at,
+                "annotations_count": int(row.get("annotations_count") or 0),
+            })
+        return items, int(total or 0)
+
     # ── Pop (annotator pulls the next item) ──────────────────
 
     async def pop(

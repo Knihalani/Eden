@@ -1,6 +1,8 @@
 """Email service for sending transactional emails via SendGrid."""
 
 import logging
+from dataclasses import dataclass
+from typing import Literal
 
 import httpx
 
@@ -11,6 +13,13 @@ logger = logging.getLogger(__name__)
 
 # SendGrid API endpoint
 SENDGRID_API_URL = "https://api.sendgrid.com/v3/mail/send"
+
+EmailStatus = Literal["sent", "not_configured", "failed"]
+
+
+@dataclass(frozen=True)
+class EmailResult:
+    status: EmailStatus
 
 
 class EmailService:
@@ -29,7 +38,7 @@ class EmailService:
         subject: str,
         html_content: str,
         text_content: str | None = None,
-    ) -> bool:
+    ) -> EmailResult:
         """Send an email via SendGrid.
 
         Args:
@@ -39,7 +48,7 @@ class EmailService:
             text_content: Plain text body (optional, for email clients that prefer text)
 
         Returns:
-            True if email was sent successfully, False otherwise
+            EmailResult with sent, not_configured, or failed status
         """
         api_key = self.settings.sendgrid_api_key
 
@@ -59,7 +68,7 @@ class EmailService:
                 f"  Subject: {subject}\n"
                 f"  Content: {redact_email(text_content or html_content[:100])}..."
             )
-            return False
+            return EmailResult(status="not_configured")
 
         # Prepare SendGrid API payload
         payload = {
@@ -104,7 +113,7 @@ class EmailService:
                     # local-part.
                     recipient_domain = to_email.rsplit("@", 1)[-1] if "@" in to_email else "unknown"
                     logger.info(f"Email sent successfully to ***@{recipient_domain}")
-                    return True
+                    return EmailResult(status="sent")
                 else:
                     # F65 — recipient email is PII. The
                     # SendGrid error body is logged as-is —
@@ -115,13 +124,13 @@ class EmailService:
                         f"Failed to send email to ***@{recipient_domain}. "
                         f"Status: {response.status_code}, Body: {response.text}"
                     )
-                    return False
+                    return EmailResult(status="failed")
 
         except httpx.TimeoutException:
             # F65 — recipient email is PII.
             recipient_domain = to_email.rsplit("@", 1)[-1] if "@" in to_email else "unknown"
             logger.error(f"Timeout sending email to ***@{recipient_domain}")
-            return False
+            return EmailResult(status="failed")
         except httpx.RequestError as e:
             # F65 — recipient email is PII. The httpx
             # RequestError exception is also run through
@@ -132,7 +141,7 @@ class EmailService:
             logger.error(
                 f"Request error sending email to ***@{recipient_domain}: {redact_all(str(e))}"
             )
-            return False
+            return EmailResult(status="failed")
 
     def _html_to_text(self, html: str) -> str:
         """Convert basic HTML to plain text (simple conversion)."""
