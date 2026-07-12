@@ -23,6 +23,10 @@ from pathlib import Path
 from typing import Any
 
 from eden.integrations.framework_detector import FrameworkDetection, detect_framework
+from eden.integrations.framework_registry import (
+    PYTHON_IMPORT_SNIPPETS,
+    TS_IMPORT_SNIPPETS,
+)
 
 
 @dataclass
@@ -307,33 +311,8 @@ init({{
 """
 
 
-# Framework-specific import snippets that are prepended to the
-# generated instrumentation file.
-PYTHON_IMPORT_SNIPPETS: dict[str, str] = {
-    "langchain": "from eden.integrations.langchain import LangChainInstrumentor\n",
-    "crewai": "from eden.integrations.crewai import CrewAIInstrumentor\n",
-    "autogen": "from eden.integrations.autogen import AutoGenInstrumentor\n",
-    "llama_index": "from eden.integrations.llama_index import LlamaIndexInstrumentor\n",
-    "openai": "from eden.integrations.openai import OpenAIInstrumentor\n",
-    "anthropic": "from eden.integrations.anthropic import AnthropicInstrumentor\n",
-    # Ollama: users typically call the OpenAI-compat endpoint at
-    # ``$OLLAMA_HOST/v1/chat/completions``, which the OpenAI instrumentor
-    # already patches. The import here is a hint to the LLM (and to the
-    # user reading the diff) — the actual interception is via the env
-    # vars set below in the ollama bootstrap variant.
-    "ollama": "from openai import OpenAI  # Ollama's OpenAI-compat endpoint\n",
-}
 
-TS_IMPORT_SNIPPETS: dict[str, str] = {
-    "langchain": "import { LangChainInstrumentor } from \"@eden-ai/sdk/integrations/langchain\";\n",
-    "crewai": "import { CrewAIInstrumentor } from \"@eden-ai/sdk/integrations/crewai\";\n",
-    "autogen": "import { AutoGenInstrumentor } from \"@eden-ai/sdk/integrations/autogen\";\n",
-    "llama_index": "import { LlamaIndexInstrumentor } from \"@eden-ai/sdk/integrations/llama-index\";\n",
-    "openai": "import { OpenAIInstrumentor } from \"@eden-ai/sdk/integrations/openai\";\n",
-    "anthropic": "import { AnthropicInstrumentor } from \"@eden-ai/sdk/integrations/anthropic\";\n",
-    "ollama": "import { OpenAIInstrumentor } from \"@eden-ai/sdk/integrations/openai\";  // Ollama's OpenAI-compat endpoint\n",
-}
-
+# Re-exported from the canonical registry (``framework_registry.py``).
 
 # ---------------------------------------------------------------------------
 # Plan generation
