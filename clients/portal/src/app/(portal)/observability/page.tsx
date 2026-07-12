@@ -7,7 +7,7 @@
  * purpose: it shows live status tiles so the user knows whether
  * anything needs attention, then routes them to the dedicated sub-
  * routes via cards. The extracted tab components (TraceTreeTab,
- * TimelineTab, HeatmapTab, CompareTab) live in _components/ and are
+ * TimelineTab, HeatmapTab) live in _components/ and are
  * reused by future sub-routes.
  *
  * B2B pattern roles applied:

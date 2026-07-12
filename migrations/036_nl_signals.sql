@@ -20,7 +20,7 @@ CREATE TABLE IF NOT EXISTS nl_signals (
     -- migrations.
     rule            JSONB NOT NULL DEFAULT '{}'::jsonb,
     enabled         BOOLEAN NOT NULL DEFAULT TRUE,
-    created_by      UUID REFERENCES users(id) ON DELETE SET NULL,
+    created_by      TEXT REFERENCES users(id) ON DELETE SET NULL,
     -- Optional: the cluster this signal belongs to (set by
     -- SignalClusterer).
     cluster_id      TEXT,

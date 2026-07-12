@@ -6,7 +6,6 @@ import { useRouter } from "next/navigation";
 import {
   DollarSign,
   AlertTriangle,
-  LayoutDashboard,
   GitBranch } from "lucide-react";
 import { api } from "@/lib/api";
 import { useOrg } from "@/hooks/use-org";
@@ -237,7 +236,7 @@ export default function DashboardPage() {
   }
 
   return (
-    <PageContent size="wide">
+    <PageContent size="wide" className="space-y-4 sm:space-y-5">
       <PageHeader
         title="Telemetry Overview"
         subtitle={
@@ -245,7 +244,7 @@ export default function DashboardPage() {
             ? "Live signals from your agents — connect a repo to start seeing traces here."
             : "Live signals from your agents and pipelines."
         }
-        icon={LayoutDashboard}
+        className="mb-4 sm:mb-5"
         greeting={currentOrg ? `Welcome back to ${currentOrg.name}.` : undefined}
         actions={
           canConnect ? (
@@ -274,7 +273,7 @@ export default function DashboardPage() {
         // callout, not a status pill.
         <div
           role="alert"
-          className="mb-6 p-4 rounded-xl border border-[var(--error)]/40 bg-[var(--error-bg)] text-[var(--error)] text-sm"
+          className="mb-4 p-3 rounded-xl border border-[var(--error)]/40 bg-[var(--error-bg)] text-[var(--error)] text-sm"
         >
           <p className="font-medium">Could not load some telemetry.</p>
           <p className="text-xs mt-1 opacity-80">{error}</p>
@@ -282,7 +281,7 @@ export default function DashboardPage() {
       )}
 
       {/* Row 1: Live throughput + p95 latency + cost + anomalies */}
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3 sm:gap-4 mb-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3 sm:gap-4 mb-4">
         <ThroughputCard
           loading={loading}
           series={throughputSeries}

@@ -6,21 +6,20 @@
  * surface per-org. Defaults to ON (matches the Settings default
  * since June 2026). Only org admins can change.
  *
- * Settings are persisted via PATCH /orgs/{org_id}/settings on the
- * backend. The keys ``intelligence_gap_v0`` and
- * ``autonomous_actions_v0`` are read by the route-layer
- * ``require_feature_flag`` checks on the backend.
+ * Also configures the recurring optimization schedule via the
+ * Cat 23 code-change ``/policy`` API (default weekly).
  */
 import { useEffect, useState } from "react";
 import {
   Bot,
+  CalendarClock,
   Loader2,
   ShieldAlert,
   ShieldCheck,
   ShieldOff,
   Wrench,
 } from "lucide-react";
-import { api } from "@/lib/api";
+import { api, codeChangePolicyApi, type CodeChangePolicy, type OptimizationSchedule } from "@/lib/api";
 import { useOrg } from "@/hooks/use-org";
 import { usePermissions } from "@/hooks/use-permissions";
 import { useToast } from "@/components/ui/toast";
@@ -28,6 +27,32 @@ import { useToast } from "@/components/ui/toast";
 type Flags = {
   intelligence_gap_v0: boolean;
   autonomous_actions_v0: boolean;
+};
+
+const WEEKDAYS = [
+  "Monday",
+  "Tuesday",
+  "Wednesday",
+  "Thursday",
+  "Friday",
+  "Saturday",
+  "Sunday",
+] as const;
+
+const SCHEDULE_OPTIONS: { value: OptimizationSchedule; label: string }[] = [
+  { value: "off", label: "Off" },
+  { value: "daily", label: "Daily" },
+  { value: "weekly", label: "Weekly" },
+  { value: "biweekly", label: "Every two weeks" },
+  { value: "monthly", label: "Monthly" },
+];
+
+const DEFAULT_SCHEDULE: CodeChangePolicy = {
+  optimization_schedule: "weekly",
+  optimization_weekday: 0,
+  optimization_hour_utc: 9,
+  optimization_day_of_month: 1,
+  max_prs_per_run: 2,
 };
 
 export default function AutonomousTab() {
@@ -38,8 +63,11 @@ export default function AutonomousTab() {
     intelligence_gap_v0: true,
     autonomous_actions_v0: true,
   });
+  const [schedule, setSchedule] = useState<CodeChangePolicy>(DEFAULT_SCHEDULE);
   const [busy, setBusy] = useState(false);
+  const [scheduleBusy, setScheduleBusy] = useState(false);
   const [loaded, setLoaded] = useState(false);
+  const [scheduleLoaded, setScheduleLoaded] = useState(false);
 
   // Seed from the org's current settings JSONB.
   useEffect(() => {
@@ -50,6 +78,50 @@ export default function AutonomousTab() {
       autonomous_actions_v0: s.autonomous_actions_v0 !== false,
     });
     setLoaded(true);
+  }, [currentOrg]);
+
+  // Load Cat 23 code-change policy (schedule fields).
+  useEffect(() => {
+    if (!currentOrg) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await codeChangePolicyApi.get(currentOrg.id);
+        const policy = res?.data?.policy ?? {};
+        if (!cancelled) {
+          setSchedule({
+            optimization_schedule:
+              (policy.optimization_schedule as OptimizationSchedule) || "weekly",
+            optimization_weekday:
+              typeof policy.optimization_weekday === "number"
+                ? policy.optimization_weekday
+                : 0,
+            optimization_hour_utc:
+              typeof policy.optimization_hour_utc === "number"
+                ? policy.optimization_hour_utc
+                : 9,
+            optimization_day_of_month:
+              typeof policy.optimization_day_of_month === "number"
+                ? policy.optimization_day_of_month
+                : 1,
+            max_prs_per_run:
+              typeof policy.max_prs_per_run === "number"
+                ? policy.max_prs_per_run
+                : 2,
+            last_optimization_run_at: policy.last_optimization_run_at ?? null,
+          });
+          setScheduleLoaded(true);
+        }
+      } catch {
+        if (!cancelled) {
+          setSchedule(DEFAULT_SCHEDULE);
+          setScheduleLoaded(true);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, [currentOrg]);
 
   const isAdmin = hasPermission("settings:edit");
@@ -73,7 +145,60 @@ export default function AutonomousTab() {
     }
   }
 
+  async function persistSchedule(next: CodeChangePolicy) {
+    if (!currentOrg) return;
+    setScheduleBusy(true);
+    try {
+      const res = await codeChangePolicyApi.update(currentOrg.id, {
+        optimization_schedule: next.optimization_schedule,
+        optimization_weekday: next.optimization_weekday,
+        optimization_hour_utc: next.optimization_hour_utc,
+        optimization_day_of_month: next.optimization_day_of_month,
+        max_prs_per_run: next.max_prs_per_run,
+      });
+      if (res.status === "bad_request") {
+        toast.error(res.message || "Invalid schedule settings");
+        return;
+      }
+      const policy = res?.data?.policy ?? next;
+      setSchedule((prev) => ({
+        ...prev,
+        optimization_schedule:
+          (policy.optimization_schedule as OptimizationSchedule) ||
+          next.optimization_schedule,
+        optimization_weekday:
+          typeof policy.optimization_weekday === "number"
+            ? policy.optimization_weekday
+            : next.optimization_weekday,
+        optimization_hour_utc:
+          typeof policy.optimization_hour_utc === "number"
+            ? policy.optimization_hour_utc
+            : next.optimization_hour_utc,
+        optimization_day_of_month:
+          typeof policy.optimization_day_of_month === "number"
+            ? policy.optimization_day_of_month
+            : next.optimization_day_of_month,
+        max_prs_per_run:
+          typeof policy.max_prs_per_run === "number"
+            ? policy.max_prs_per_run
+            : next.max_prs_per_run,
+        last_optimization_run_at:
+          policy.last_optimization_run_at ?? prev.last_optimization_run_at,
+      }));
+      toast.success("Optimization schedule saved.");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : String(err));
+    } finally {
+      setScheduleBusy(false);
+    }
+  }
+
   if (!currentOrg) return null;
+
+  const sched = schedule.optimization_schedule || "weekly";
+  const showWeekday = sched === "weekly" || sched === "biweekly";
+  const showMonthDay = sched === "monthly";
+  const scheduleDisabled = !isAdmin || scheduleBusy || sched === "off";
 
   return (
     <div className="space-y-6">
@@ -118,6 +243,155 @@ export default function AutonomousTab() {
         onChange={(v) => persist({ ...flags, autonomous_actions_v0: v })}
       />
 
+      <div className="rounded-xl border border-[var(--border-default)] bg-[var(--bg-secondary)]/30 p-4 space-y-4">
+        <div className="flex items-start gap-4">
+          <div className="rounded-lg bg-[var(--accent-faint)] p-2 shrink-0">
+            <CalendarClock className="w-5 h-5 text-[var(--accent)]" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="text-sm font-medium">Optimization schedule</div>
+            <p className="text-xs text-[var(--text-secondary)] mt-0.5 leading-relaxed">
+              Recurring improvement agent. Default is weekly (Monday 09:00 UTC).
+              Requires code-change to be enabled for the org before PRs are
+              proposed. Cron checks every 5 minutes and only runs when due.
+            </p>
+          </div>
+        </div>
+
+        <div className="grid gap-3 sm:grid-cols-2">
+          <label className="block text-xs space-y-1">
+            <span className="text-[var(--text-secondary)]">Cadence</span>
+            <select
+              className="w-full rounded-md border border-[var(--border-default)] bg-[var(--bg-base)] px-2 py-1.5 text-sm"
+              value={sched}
+              disabled={!isAdmin || scheduleBusy}
+              onChange={(e) => {
+                const next = {
+                  ...schedule,
+                  optimization_schedule: e.target.value as OptimizationSchedule,
+                };
+                setSchedule(next);
+                void persistSchedule(next);
+              }}
+            >
+              {SCHEDULE_OPTIONS.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label className="block text-xs space-y-1">
+            <span className="text-[var(--text-secondary)]">Hour (UTC)</span>
+            <select
+              className="w-full rounded-md border border-[var(--border-default)] bg-[var(--bg-base)] px-2 py-1.5 text-sm"
+              value={schedule.optimization_hour_utc ?? 9}
+              disabled={scheduleDisabled}
+              onChange={(e) => {
+                const next = {
+                  ...schedule,
+                  optimization_hour_utc: Number(e.target.value),
+                };
+                setSchedule(next);
+                void persistSchedule(next);
+              }}
+            >
+              {Array.from({ length: 24 }, (_, h) => (
+                <option key={h} value={h}>
+                  {String(h).padStart(2, "0")}:00 UTC
+                </option>
+              ))}
+            </select>
+          </label>
+
+          {showWeekday && (
+            <label className="block text-xs space-y-1">
+              <span className="text-[var(--text-secondary)]">Weekday</span>
+              <select
+                className="w-full rounded-md border border-[var(--border-default)] bg-[var(--bg-base)] px-2 py-1.5 text-sm"
+                value={schedule.optimization_weekday ?? 0}
+                disabled={scheduleDisabled}
+                onChange={(e) => {
+                  const next = {
+                    ...schedule,
+                    optimization_weekday: Number(e.target.value),
+                  };
+                  setSchedule(next);
+                  void persistSchedule(next);
+                }}
+              >
+                {WEEKDAYS.map((name, i) => (
+                  <option key={name} value={i}>
+                    {name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+
+          {showMonthDay && (
+            <label className="block text-xs space-y-1">
+              <span className="text-[var(--text-secondary)]">Day of month</span>
+              <select
+                className="w-full rounded-md border border-[var(--border-default)] bg-[var(--bg-base)] px-2 py-1.5 text-sm"
+                value={schedule.optimization_day_of_month ?? 1}
+                disabled={scheduleDisabled}
+                onChange={(e) => {
+                  const next = {
+                    ...schedule,
+                    optimization_day_of_month: Number(e.target.value),
+                  };
+                  setSchedule(next);
+                  void persistSchedule(next);
+                }}
+              >
+                {Array.from({ length: 28 }, (_, i) => i + 1).map((d) => (
+                  <option key={d} value={d}>
+                    {d}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+
+          <label className="block text-xs space-y-1">
+            <span className="text-[var(--text-secondary)]">Max PRs per run</span>
+            <select
+              className="w-full rounded-md border border-[var(--border-default)] bg-[var(--bg-base)] px-2 py-1.5 text-sm"
+              value={schedule.max_prs_per_run ?? 2}
+              disabled={scheduleDisabled}
+              onChange={(e) => {
+                const next = {
+                  ...schedule,
+                  max_prs_per_run: Number(e.target.value),
+                };
+                setSchedule(next);
+                void persistSchedule(next);
+              }}
+            >
+              {[1, 2, 3, 5].map((n) => (
+                <option key={n} value={n}>
+                  {n}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+
+        {scheduleLoaded && schedule.last_optimization_run_at && (
+          <p className="text-[11px] text-[var(--text-muted)]">
+            Last run: {schedule.last_optimization_run_at}
+          </p>
+        )}
+        {scheduleBusy && (
+          <div className="flex items-center gap-2 text-xs text-[var(--text-muted)]">
+            <Loader2 className="w-3 h-3 animate-spin" />
+            Saving schedule…
+          </div>
+        )}
+      </div>
+
       {!isAdmin && (
         <div className="rounded-lg border border-dashed border-[var(--border-default)] p-4 flex items-start gap-3 text-sm text-[var(--text-secondary)]">
           <ShieldAlert className="w-4 h-4 mt-0.5 text-[var(--text-muted)] shrink-0" />
@@ -141,6 +415,7 @@ export default function AutonomousTab() {
           backend; the corresponding env vars
           (<code>INTELLIGENCE_GAP_V0</code>,{" "}
           <code>AUTONOMOUS_ACTIONS_V0</code>) override per-deployment.
+          Schedule lives in <code>code_change_policy</code>.
         </p>
       )}
     </div>

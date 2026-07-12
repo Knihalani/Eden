@@ -1,52 +1,63 @@
 "use client";
 
 /**
- * OnboardingBanner — D.14 cold-start UX (upgradespec §10.2)
+ * OnboardingBanner — cold-start progress chip (LP-11 + portal polish).
  *
- * Top-of-portal dismissable banner that surfaces the D.14
- * state-machine progress for new orgs (created on/after
- * 2026-07-01). Renders nothing for legacy orgs (the state
- * row returns ``source: "legacy"`` + ``onboarding_v2_enabled:
- * false``).
+ * Single source of truth: the Cat-23 wizard state
+ * (``onboardingApi`` / ``/orgs/.../onboarding/state``), aligned with
+ * the 4-step wizard in ``onboarding/layout.tsx``:
+ *   welcome → connect → install → done
  *
- * Ponytail: best-effort. If the API is unreachable the banner
- * just doesn't render — never blocks the portal.
- *
- * Dismissal is per-session (sessionStorage) so the banner
- * stays out of the way while a user is actively working
- * without persisting across browser sessions.
+ * Visual: single-line chip (progress + Resume). Collapses when the
+ * layout auth-error banner is showing so the viewport isn't stacked
+ * with two sticky chrome bands.
  */
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { ChevronRight, Sparkles, X } from "lucide-react";
+import { ChevronRight, Terminal, X } from "lucide-react";
 import { useOrg } from "@/hooks/use-org";
-import { onboardingV2Api, type OnboardingV2State } from "@/lib/api";
+import {
+  onboardingApi,
+  onboardingV2Api,
+  type OnboardingState,
+  type OnboardingV2State,
+} from "@/lib/api";
 import { cn } from "@/lib/utils";
 
 const STEPS: Array<{
-  id: OnboardingV2State["current_step"];
+  id: string;
   label: string;
   blurb: string;
+  href: string;
 }> = [
-  { id: "connect", label: "Connect repo", blurb: "Open an SDK integration PR" },
-  { id: "install", label: "Install SDK", blurb: "Copy the snippet into your agent" },
-  { id: "wait", label: "First traces", blurb: "Send your first 10 traces" },
-  { id: "done", label: "Explore", blurb: "Run judges and explore the dashboard" },
+  { id: "welcome", label: "Welcome", blurb: "Get started with Eden", href: "/onboarding" },
+  { id: "connect", label: "Connect repo", blurb: "Open an SDK integration PR", href: "/onboarding/connect" },
+  { id: "install", label: "Install SDK", blurb: "Copy the snippet into your agent", href: "/onboarding/install" },
+  { id: "done", label: "Done", blurb: "Explore the dashboard", href: "/onboarding/done" },
 ];
 
-/** Map legacy/API step ids onto the simplified wizard order. */
-function stepIndex(step: OnboardingV2State["current_step"]): number {
-  if (step === "org") return 0;
-  const idx = STEPS.findIndex((s) => s.id === step);
-  return idx >= 0 ? idx : 0;
+/** Map cat-23 / legacy step ids onto the simplified wizard order. */
+function wizardStepIndex(step: string | null | undefined): number {
+  const s = (step || "welcome").toLowerCase();
+  if (s === "done") return 3;
+  if (s === "install" || s === "install_sdk" || s === "wait" || s === "wait_for_pr") return 2;
+  if (s === "connect" || s === "connect_github") return 1;
+  // welcome | org_setup | org | unknown
+  return 0;
 }
 
 const SESSION_KEY = "eden:onboarding:v2:dismissed";
 
-export function OnboardingBanner() {
+export function OnboardingBanner({
+  collapsed = false,
+}: {
+  /** When true (auth error banner visible), render nothing. */
+  collapsed?: boolean;
+}) {
   const { currentOrg } = useOrg();
-  const [state, setState] = useState<OnboardingV2State | null>(null);
+  const [wizardState, setWizardState] = useState<OnboardingState | null>(null);
+  const [v2Meta, setV2Meta] = useState<Pick<OnboardingV2State, "source" | "onboarding_v2_enabled"> | null>(null);
   const [dismissed, setDismissed] = useState(false);
 
   useEffect(() => {
@@ -54,24 +65,54 @@ export function OnboardingBanner() {
       setDismissed(window.sessionStorage.getItem(SESSION_KEY) === "1");
     }
     if (!currentOrg?.id) {
-      setState(null);
+      setWizardState(null);
+      setV2Meta(null);
       return;
     }
+    const orgId = currentOrg.id;
+    let cancelled = false;
+
+    // Cat-23 wizard = SoT for step display.
+    onboardingApi
+      .getState(orgId)
+      .then((res) => {
+        if (!cancelled) setWizardState(res);
+      })
+      .catch(() => {
+        if (!cancelled) setWizardState(null);
+      });
+
+    // v2 only gates legacy vs new-org banner visibility.
     onboardingV2Api
-      .getState(currentOrg.id)
-      .then((res) => setState(res.data))
-      .catch(() => setState(null));
+      .getState(orgId)
+      .then((res) => {
+        if (cancelled || !res?.data) return;
+        setV2Meta({
+          source: res.data.source,
+          onboarding_v2_enabled: res.data.onboarding_v2_enabled,
+        });
+      })
+      .catch(() => {
+        // If v2 is unreachable, still show banner from wizard state.
+        if (!cancelled) setV2Meta({ source: "defaults", onboarding_v2_enabled: true });
+      });
+
+    return () => {
+      cancelled = true;
+    };
   }, [currentOrg?.id]);
 
-  if (!state || !state.onboarding_v2_enabled) return null;
-  if (state.source === "legacy") return null;
+  if (collapsed) return null;
+  if (!wizardState) return null;
+  if (v2Meta?.source === "legacy" || v2Meta?.onboarding_v2_enabled === false) return null;
   if (dismissed) return null;
-  if (state.current_step === "autonomous" || state.current_step === "tour") return null;
 
-  const currentIdx = stepIndex(state.current_step);
+  const currentIdx = wizardStepIndex(wizardState.step);
+  // Hide once the wizard is complete.
+  if (currentIdx >= STEPS.length - 1 || wizardState.step === "done") return null;
+
   const current = STEPS[currentIdx] ?? STEPS[0];
-  const completedCount = Math.min(state.completed_steps.length, STEPS.length);
-  const totalCount = STEPS.length;
+  const totalCount = STEPS.length - 1; // exclude terminal "done" from progress denom
 
   function dismiss() {
     if (typeof window !== "undefined") {
@@ -81,69 +122,44 @@ export function OnboardingBanner() {
   }
 
   return (
-    // `sticky top-{topbar-height} z-20` so the banner stays visible
-    // while scrolling, sitting just below the topbar (z-30). Without
-    // the z-index, the sticky topbar (z-30) covers it on scroll.
-    // `top-14` = 56px (matches the topbar's effective height with
-    // its `py-3` + ~40px content). June 2026 layout-pass fix.
     <div
       role="region"
       aria-label="Onboarding progress"
-      className="sticky top-14 z-20 border-b border-[var(--accent)]/30 bg-[var(--accent)]/5 backdrop-blur"
+      className="sticky top-14 z-20 border-b border-[var(--accent)]/25 bg-[var(--accent)]/5 backdrop-blur"
     >
-      <div className="mx-auto flex max-w-7xl flex-wrap items-center gap-3 px-4 py-2 text-sm">
-        <Sparkles className="h-4 w-4 shrink-0 text-[var(--accent)]" />
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2">
-            <span className="font-medium text-[var(--text-primary)]">
-              Onboarding: step {currentIdx + 1} of {totalCount}
-            </span>
-            <span className="text-[var(--text-secondary)]">·</span>
-            <span className="text-[var(--text-secondary)]">{current.label}</span>
-            <span className="text-[var(--text-muted)]">— {current.blurb}</span>
-          </div>
-          <div className="mt-1 flex items-center gap-1">
-            {STEPS.map((s, i) => {
-              const done = i < currentIdx || state.completed_steps.includes(s.id);
-              const active = i === currentIdx;
-              return (
-                <div
-                  key={s.id}
-                  className={cn(
-                    "h-1 flex-1 rounded-full",
-                    done
-                      ? "bg-[var(--accent)]"
-                      : active
-                      ? "bg-[var(--accent)]/50"
-                      : "bg-[var(--bg-elev-2)]",
-                  )}
-                  aria-hidden="true"
-                />
-              );
-            })}
-            <span className="ml-2 text-xs text-[var(--text-muted)]">
-              {completedCount}/{totalCount}
-            </span>
-          </div>
+      <div className="mx-auto flex max-w-7xl items-center gap-2 px-4 py-1.5 text-xs sm:text-sm">
+        <Terminal className="h-3.5 w-3.5 shrink-0 text-[var(--accent)]" aria-hidden />
+        <span className="font-medium text-[var(--text-primary)] whitespace-nowrap">
+          Step {currentIdx + 1}/{totalCount}
+        </span>
+        <span className="text-[var(--text-muted)]" aria-hidden>
+          ·
+        </span>
+        <span className="min-w-0 truncate text-[var(--text-secondary)]">
+          {current.label}
+          <span className="hidden text-[var(--text-muted)] sm:inline"> — {current.blurb}</span>
+        </span>
+        <div className="ml-auto flex shrink-0 items-center gap-1.5">
+          <Link
+            href={current.href}
+            className={cn(
+              "inline-flex items-center gap-0.5 rounded-md border border-[var(--accent)]/40",
+              "bg-[var(--accent)]/10 px-2 py-0.5 text-[11px] font-medium text-[var(--accent)]",
+              "hover:bg-[var(--accent)]/20",
+            )}
+          >
+            Resume
+            <ChevronRight className="h-3 w-3" aria-hidden />
+          </Link>
+          <button
+            type="button"
+            onClick={dismiss}
+            aria-label="Dismiss onboarding banner"
+            className="rounded p-1 text-[var(--text-muted)] hover:bg-[var(--bg-elev-2)] hover:text-[var(--text-primary)]"
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
         </div>
-        <Link
-          href={
-            currentIdx <= 0 ? "/onboarding/connect" :
-            currentIdx === 1 ? "/onboarding/install" :
-            "/onboarding"
-          }
-          className="inline-flex items-center gap-1 rounded-md border border-[var(--accent)]/40 bg-[var(--accent)]/10 px-2.5 py-1 text-xs font-medium text-[var(--accent)] hover:bg-[var(--accent)]/20"
-        >
-          Resume
-          <ChevronRight className="h-3 w-3" />
-        </Link>
-        <button
-          onClick={dismiss}
-          aria-label="Dismiss onboarding banner"
-          className="rounded p-1 text-[var(--text-muted)] hover:bg-[var(--bg-elev-2)] hover:text-[var(--text-primary)]"
-        >
-          <X className="h-3.5 w-3.5" />
-        </button>
       </div>
     </div>
   );

@@ -8,10 +8,11 @@
  */
 
 import Link from "next/link";
-import { ArrowRight, GitBranch, KeyRound, Loader2, Package, UserPlus } from "lucide-react";
+import { ArrowRight, KeyRound, Loader2, UserPlus } from "lucide-react";
 import { useOrganization } from "@clerk/nextjs";
 import { useOrg } from "@/hooks/use-org";
 import { onboardingApi } from "@/lib/api";
+import { OnboardingChecklist } from "@/components/onboarding-checklist";
 
 export function WelcomeStep() {
   const { currentOrg, orgSyncing, orgSyncTimedOut, refreshOrgs } = useOrg();
@@ -96,36 +97,7 @@ export function WelcomeStep() {
         </div>
       )}
 
-      <ol className="space-y-2 text-sm">
-        {[
-          {
-            step: "1",
-            icon: GitBranch,
-            title: "Connect a repo",
-            body: "Eden opens a PR that wires the SDK into your codebase. Admins only — members can skip.",
-          },
-          {
-            step: "2",
-            icon: Package,
-            title: "Install the SDK",
-            body: "Copy a Python or TypeScript snippet. Your first trace lands in /traces within seconds.",
-          },
-        ].map(({ step, icon: Icon, title, body }) => (
-          <li
-            key={title}
-            className="flex items-start gap-3 rounded-lg border border-[var(--border-default)] bg-[var(--bg-secondary)] p-3"
-          >
-            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[var(--accent-faint)] text-[10px] font-bold text-[var(--accent)]">
-              {step}
-            </span>
-            <Icon className="mt-1 h-4 w-4 shrink-0 text-[var(--accent)]" />
-            <div>
-              <div className="text-sm font-medium text-[var(--text-primary)]">{title}</div>
-              <div className="text-xs text-[var(--text-muted)] leading-snug">{body}</div>
-            </div>
-          </li>
-        ))}
-      </ol>
+      <OnboardingChecklist />
 
       {!hasWorkspace && !isProvisioning && (
         <div className="rounded-lg border border-dashed border-[var(--border-default)] bg-[var(--bg-secondary)]/50 p-4">

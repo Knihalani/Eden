@@ -40,8 +40,10 @@ class SidebarPrefs(BaseModel):
     group_order: list[str] = Field(default_factory=list)
     density: str = "comfortable"
 
+    model_config = {"extra": "ignore"}
 
-@router.get("", response_model=SidebarPrefs | None)
+
+@router.get("")
 async def get_sidebar_prefs(
     org_id: str = Path(...),
     user: dict = Depends(get_current_user),
@@ -55,6 +57,8 @@ async def get_sidebar_prefs(
     client treats as "no prefs yet, use defaults") on any DB
     failure so the user still sees a working sidebar. June 2026
     hardening.
+
+    LP-03: never return a bare ``{}`` — unset is JSON ``null``.
     """
     user_id = user.get("user_id")
     if not user_id:
@@ -93,6 +97,9 @@ async def get_sidebar_prefs(
         return None
     raw = row["prefs"]
     if isinstance(raw, dict):
+        # Empty JSON object → treat as unset (LP-03 soft contract).
+        if not raw:
+            return None
         try:
             return SidebarPrefs(**raw)
         except Exception as exc:
@@ -101,7 +108,7 @@ async def get_sidebar_prefs(
     return None
 
 
-@router.put("", response_model=dict[str, Any])
+@router.put("")
 async def set_sidebar_prefs(
     prefs: SidebarPrefs,
     org_id: str = Path(...),

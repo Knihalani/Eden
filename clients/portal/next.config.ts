@@ -34,19 +34,76 @@ const nextConfig: NextConfig = {
   /* config options here */
   async redirects() {
     return [
-      // Legacy /jobs URL renamed to /eval-harnesses.
-      // When the eval-pipeline feature flag is off, /eval-harnesses will
-      // 404 (handled by the new page guard); the redirect itself still
-      // happens, which is the desired behavior: old links always land
-      // users on the new canonical URL first.
+      // Dead /jobs and /eval-harnesses surfaces → dashboard.
       {
         source: "/jobs",
-        destination: "/eval-harnesses",
+        destination: "/dashboard",
         permanent: false,
       },
       {
         source: "/jobs/:path*",
-        destination: "/eval-harnesses/:path*",
+        destination: "/dashboard",
+        permanent: false,
+      },
+      {
+        source: "/eval-harnesses",
+        destination: "/dashboard",
+        permanent: false,
+      },
+      {
+        source: "/eval-harnesses/:path*",
+        destination: "/dashboard",
+        permanent: false,
+      },
+      // Stripped env-gen surfaces → dashboard.
+      {
+        source: "/builder",
+        destination: "/dashboard",
+        permanent: false,
+      },
+      {
+        source: "/builder/:path*",
+        destination: "/dashboard",
+        permanent: false,
+      },
+      {
+        source: "/marketplace",
+        destination: "/dashboard",
+        permanent: false,
+      },
+      {
+        source: "/marketplace/:path*",
+        destination: "/dashboard",
+        permanent: false,
+      },
+      {
+        source: "/multi-agent",
+        destination: "/dashboard",
+        permanent: false,
+      },
+      {
+        source: "/multi-agent/:path*",
+        destination: "/dashboard",
+        permanent: false,
+      },
+      {
+        source: "/agents/:id/sim-runs",
+        destination: "/dashboard",
+        permanent: false,
+      },
+      {
+        source: "/agents/:id/sim-runs/:path*",
+        destination: "/dashboard",
+        permanent: false,
+      },
+      {
+        source: "/agents/:id/test-runs",
+        destination: "/dashboard",
+        permanent: false,
+      },
+      {
+        source: "/agents/:id/test-runs/:path*",
+        destination: "/dashboard",
         permanent: false,
       },
       // Auth cutover to Clerk (June 17, 2026). The old /login and

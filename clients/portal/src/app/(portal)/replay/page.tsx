@@ -41,6 +41,8 @@ interface TracePickerItem {
   updated_at: string;
   user_id?: string | null;
   agent_id?: string | null;
+  // N12 — prefer explicit session_id from observability when present.
+  session_id?: string | null;
   // Pattern 6.1 (Helicone) — optional first user message so the
   // sessions tree can label each node with something better than
   // a trace_id short. Pulled from the first user_message event in
@@ -176,6 +178,7 @@ function ReplayPageInner() {
         // group across users / agents. Without this every trace
         // collapses into one giant session.
         agent_id: t.agent_id ?? null,
+        session_id: t.session_id ?? null,
         user_id: (t as { user_id?: string | null }).user_id ?? null }));
       setTraces(flattened);
       if (data.traces.length > 0 && !selectedJobId) {
@@ -277,21 +280,36 @@ function ReplayPageInner() {
 
   const selectedJob = traces.find((j) => j.job_id === selectedJobId);
 
-  // Pattern 6.1 (Helicone) — Session tree derivation. Group traces
-  // by agent_id and time-proximity (SESSION_GAP_MS between adjacent
-  // traces triggers a new session). Memoised so re-renders don't
-  // recompute the grouping.
+  // N12 — prefer explicit session_id; else agent_id + time-proximity.
   const sessions = useMemo<TraceSession[]>(() => {
     if (traces.length === 0) return [];
     const sorted = [...traces].sort(
       (a, b) =>
         new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
     );
-    const out: TraceSession[] = [];
+    const byExplicit = new Map<string, TraceSession>();
+    const heuristic: TraceSession[] = [];
     let current: TraceSession | null = null;
     let lastTs = 0;
     let lastAgent: string | null = null;
     for (const t of sorted) {
+      const explicit = t.session_id?.trim();
+      if (explicit) {
+        let sess = byExplicit.get(explicit);
+        if (!sess) {
+          sess = {
+            session_id: explicit,
+            trace_ids: [],
+            agent_id: t.agent_id ?? null,
+            started_at: t.created_at,
+            ended_at: t.created_at,
+          };
+          byExplicit.set(explicit, sess);
+        }
+        sess.trace_ids.push(t.job_id);
+        sess.ended_at = t.created_at;
+        continue;
+      }
       const ts = new Date(t.created_at).getTime();
       const agent = t.agent_id ?? null;
       const sameAgent = agent === lastAgent;
@@ -303,14 +321,14 @@ function ReplayPageInner() {
           agent_id: agent,
           started_at: t.created_at,
           ended_at: t.created_at };
-        out.push(current);
+        heuristic.push(current);
       }
       current.trace_ids.push(t.job_id);
       current.ended_at = t.created_at;
       lastTs = ts;
       lastAgent = agent;
     }
-    return out;
+    return [...byExplicit.values(), ...heuristic];
   }, [traces]);
 
   // Locate the session containing the currently-selected trace.

@@ -55,10 +55,18 @@ _drift = DriftDetector()
 
 
 class QualityRequest(BaseModel):
-    request_id: str
+    # LP-12: portal historically sent ``{horizon_days}`` without
+    # ``request_id`` → 422. Accept both shapes; mint a request_id
+    # when the client omits it.
+    request_id: str | None = Field(
+        default=None,
+        description="Correlation id for predict-vs-actuals; auto-minted when omitted.",
+    )
     judge_name: str | None = None
     forecast_horizon: str = Field(default="7d", description="e.g. 7d, 14d, 30d")
     history_window: str = Field(default="7d", description="e.g. 7d, 30d, 90d")
+    # Portal alias — ``{horizon_days: 7}`` maps onto forecast_horizon.
+    horizon_days: int | None = Field(default=None, ge=1, le=90)
 
 
 class DriftRequest(BaseModel):
@@ -80,11 +88,17 @@ async def predict_quality(
     body: QualityRequest = Body(...),
 ) -> dict[str, Any]:
     """Per-day judge-score forecast with CUSUM anomalies."""
+    import uuid
+
+    request_id = body.request_id or f"portal-{uuid.uuid4().hex[:12]}"
+    forecast_horizon = body.forecast_horizon
+    if body.horizon_days is not None:
+        forecast_horizon = f"{body.horizon_days}d"
     return await _quality.predict(
         org_id,
-        request_id=body.request_id,
+        request_id=request_id,
         judge_name=body.judge_name,
-        forecast_horizon=body.forecast_horizon,
+        forecast_horizon=forecast_horizon,
         history_window=body.history_window,
     )
 
@@ -92,7 +106,7 @@ async def predict_quality(
 @router.post("/drift")
 async def detect_drift(
     org_id: str = Path(...),
-    body: DriftRequest = Body(...),
+    body: DriftRequest = Body(default_factory=DriftRequest),
 ) -> dict[str, Any]:
     """PSI-based output drift detector on judge-score distribution."""
     result = await _drift.detect_output_drift(

@@ -506,7 +506,7 @@ spec:
     - |
       cd /app
       export SKIP_MIGRATIONS=1
-      exec python -m eden.workers.cron_tick
+      exec python -m eden.workers.cron_tick --no-dry-run
   env:
     - name: APP_NAME
       value: Eden

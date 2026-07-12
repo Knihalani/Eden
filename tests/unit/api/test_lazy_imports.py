@@ -167,7 +167,12 @@ def test_smoke_full_app_still_works():
     )
     out = json.loads(result.stdout.strip().splitlines()[-1])
     assert out["ok"] is True
-    assert out["routes"] > 700, (
-        f"Expected >700 routes (was 743), got {out['routes']}. "
-        f"Routes may have been lost when making __init__s lazy."
+    # Post strip (marketplace / builder / multi-agent / sim-runs /
+    # generate-env removed): route count settled ~679. Guard against
+    # accidental mass-deletion from lazy-import regressions, not the
+    # pre-strip 700+ floor.
+    assert out["routes"] > 600, (
+        f"Expected >600 routes (post-strip baseline ~679), got "
+        f"{out['routes']}. Routes may have been lost when making "
+        f"__init__s lazy."
     )

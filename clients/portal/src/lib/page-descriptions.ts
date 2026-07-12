@@ -23,12 +23,6 @@ export const PAGE_DESCRIPTIONS: Record<string, string> = {
     "Curated, labelled evaluation datasets used to score and improve agents.",
   "/labeling":
     "Label traces and events to build ground truth for evals and fine-tunes.",
-  "/builder":
-    "Visually design agent workflows, tool calls, and routing logic.",
-  "/marketplace":
-    "Browse and install pre-built agents, tools, and integrations from the catalog.",
-  "/multi-agent":
-    "Orchestrate multiple agents that collaborate on a shared task. Beta.",
 
   // Observe
   "/traces":
@@ -71,6 +65,8 @@ export const PAGE_DESCRIPTIONS: Record<string, string> = {
   // Optimize
   "/optimization":
     "Cost surfaces — see spend, predict the bill, and get model-change advice.",
+  "/optimization/budget":
+    "Set soft and hard spend caps, toggle enforcement, and review recent budget actions.",
   "/optimization/outcomes":
     "Business-outcome attribution from agent runs to downstream results.",
   "/optimization/predict":
@@ -83,6 +79,8 @@ export const PAGE_DESCRIPTIONS: Record<string, string> = {
     "Block unsafe prompts, PII leaks, and policy violations before they ship.",
 
   // Automate
+  "/improve":
+    "Unified improvement queue — operator needs-you and Eden autonomous columns.",
   "/autonomous":
     "Let Eden autonomously investigate, patch, and propose fixes to your codebase.",
   "/issues":

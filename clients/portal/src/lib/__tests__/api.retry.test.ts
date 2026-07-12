@@ -149,4 +149,41 @@ describe("fetchApi 429 backoff", () => {
     expect(fetchMock.mock.calls.length).toBeGreaterThanOrEqual(2);
     expect(fetchMock.mock.calls.length).toBeLessThanOrEqual(3);
   });
+
+  it("does NOT retry proxy 502 Backend unreachable (LP-21)", async () => {
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse(502, { detail: "Backend unreachable", request_id: "r1" }),
+    );
+
+    const handler = (reason: unknown) => {
+      if (reason instanceof ApiError && reason.status === 502) return;
+      throw reason;
+    };
+    process.on("unhandledRejection", handler);
+    try {
+      await expect(api.getMe()).rejects.toBeInstanceOf(ApiError);
+      // Exactly one request — no amplification against a dead upstream.
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    } finally {
+      process.off("unhandledRejection", handler);
+    }
+  });
+
+  it("does NOT retry proxy 502 Backend timed out (LP-21)", async () => {
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse(502, { detail: "Backend timed out", request_id: "r2" }),
+    );
+
+    const handler = (reason: unknown) => {
+      if (reason instanceof ApiError && reason.status === 502) return;
+      throw reason;
+    };
+    process.on("unhandledRejection", handler);
+    try {
+      await expect(api.getMe()).rejects.toBeInstanceOf(ApiError);
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    } finally {
+      process.off("unhandledRejection", handler);
+    }
+  });
 });

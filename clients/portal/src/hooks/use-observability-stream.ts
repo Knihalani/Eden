@@ -65,6 +65,8 @@ export function useObservabilityStream({
   const reconnectAttemptsRef = React.useRef(0);
   const sourceRef = React.useRef<EventSource | null>(null);
   const reconnectTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pausedRef = React.useRef(false);
+  pausedRef.current = paused;
   // PQ-5: capture onError via ref so the ``connect`` useCallback
   // doesn't tear down + reopen the EventSource every time the
   // parent passes a fresh closure. Same pattern as usePolling.
@@ -100,6 +102,8 @@ export function useObservabilityStream({
           setLastEventId((e as MessageEvent).lastEventId);
         }
         setEvents((prev) => {
+          // Skip buffer updates while paused so "pause" freezes the view.
+          if (pausedRef.current) return prev;
           if (prev.find((t) => t.trace_id === data.trace_id)) return prev;
           return [data, ...prev].slice(0, maxEvents);
         });
@@ -160,7 +164,7 @@ export function useObservabilityStream({
 
   return {
     connected: connected && enabled && !paused,
-    events: paused ? events : events,
+    events,
     paused,
     pause,
     resume,

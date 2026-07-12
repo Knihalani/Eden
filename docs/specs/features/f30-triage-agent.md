@@ -6,7 +6,7 @@
 | **Slug** | `triage-agent` |
 | **Priority** | P0 |
 | **Effort** | M |
-| **Eden status** | **PARTIAL** |
+| **Eden status** | **SHIPPED (v0)** — StatGate-first + InvestigationAgent facade; active-work suppress; cache invalidate on severity/StatGate escalate; optional org budget (unset=unlimited). Full ReAct stretch deferred. |
 | **Competitive source** | Raindrop 2.0 (Triage) |
 | **Closes gap** | 3.2, 5.1 |
 | **Dependencies** | F29 (issues), F04 (MCP handoff), N08 (StatGate evidence) |

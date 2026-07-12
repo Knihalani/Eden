@@ -1079,7 +1079,11 @@ async def start_worker() -> None:
         s = get_settings()
     except Exception:
         return
-    if not s.trace_quality_enabled or not s.trace_quality_compute_async:
+    if (
+        not s.trace_quality_enabled
+        or not s.trace_quality_compute_async
+        or not getattr(s, "trace_quality_worker_enabled", True)
+    ):
         logger.info("quality_pipeline: disabled by Settings")
         return
     if _WORKER_TASK is not None and not _WORKER_TASK.done():

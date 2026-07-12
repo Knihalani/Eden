@@ -7,7 +7,10 @@ Wired into the Northflank ``eden-cron`` scheduled job
    so the Cat 23 pipeline sees new incident clusters within
    15 min (the scheduler's own internal cadence; ticks faster
    than the rate at which new clusters form).
-2. If the UTC hour matches one of the heavier scheduled jobs,
+2. Cheap due-check for the recurring optimization agent
+   (:func:`eden.code_change.triggers.scheduled_trigger.run`) via
+   :class:`eden.closed_loop.efficiency.AgentEfficiencyController`.
+3. If the UTC hour matches one of the heavier scheduled jobs,
    runs that as well:
 
    * **03:00 UTC** — :func:`stale_pending_sweep` + the daily
@@ -18,13 +21,14 @@ Wired into the Northflank ``eden-cron`` scheduled job
 The hourly cadence is intentionally simple: every tick is
 cheap (the scheduler pre-filters before LLM calls), and only
 the daily / weekly jobs cost real money. The Northflank job
-runs at ``*/5 * * * *``; we ignore the intermediate ticks for
-the heavy jobs.
+runs at ``*/5 * * * *`` with ``--no-dry-run``; we ignore the
+intermediate ticks for the heavy jobs.
 
 CLI:
 
     python -m eden.workers.cron_tick                    # single tick
     python -m eden.workers.cron_tick --dry-run         # no LLM calls
+    python -m eden.workers.cron_tick --no-dry-run      # production
     python -m eden.workers.cron_tick --once            # alias for default
 
 Exit code: 0 always (a tick failure is logged + the next tick
@@ -72,6 +76,96 @@ async def _run_weekly(now: datetime, *, dry_run: bool) -> dict[str, object]:
         return {"errors": [str(exc)]}
 
 
+async def _run_scheduled_optimization(
+    now: datetime, *, dry_run: bool
+) -> dict[str, object]:
+    """Fire the recurring optimization agent for orgs whose schedule is due.
+
+    Cheap path: every tick iterates opted-in orgs and runs
+    :meth:`AgentEfficiencyController.should_run_scheduled` (pure due-check
+    + optional budget). Only due orgs gather candidates and call
+    :func:`scheduled_trigger.run`.
+    """
+    from eden.closed_loop.efficiency import AgentEfficiencyController
+    from eden.code_change.candidate_sources import gather_candidates
+    from eden.code_change.policy import CodeChangePolicyService
+    from eden.code_change.scheduler import _get_org_policy, _list_active_orgs
+    from eden.code_change.triggers import scheduled_trigger
+
+    summary: dict[str, object] = {
+        "orgs_scanned": 0,
+        "orgs_due": 0,
+        "orgs_run": 0,
+        "dry_run": dry_run,
+        "results": [],
+    }
+    ctrl = AgentEfficiencyController()
+    results: list[dict[str, object]] = []
+
+    try:
+        orgs = await _list_active_orgs()
+    except Exception as exc:
+        logger.exception("[cron_tick] list active orgs failed: %s", exc)
+        return {**summary, "errors": [str(exc)]}
+
+    summary["orgs_scanned"] = len(orgs)
+    for org_id in orgs:
+        try:
+            policy = await _get_org_policy(org_id)
+            allowed, reason = await ctrl.should_run_scheduled(
+                org_id, policy, now=now
+            )
+            if not allowed:
+                continue
+            summary["orgs_due"] = int(summary["orgs_due"]) + 1
+            if dry_run:
+                results.append(
+                    {
+                        "org_id": org_id,
+                        "dry_run": True,
+                        "reason": reason,
+                    }
+                )
+                continue
+
+            candidates = await gather_candidates(org_id, policy=policy)
+            max_prs = int(policy.get("max_prs_per_run") or 2)
+            run_summary = await scheduled_trigger.run(
+                candidates,
+                policy=policy,
+                max_prs=max_prs,
+            )
+            # Stamp last run so the next tick in the hour window suppresses.
+            try:
+                await CodeChangePolicyService().update(
+                    org_id,
+                    {"last_optimization_run_at": now.isoformat()},
+                )
+            except Exception as stamp_exc:
+                logger.debug(
+                    "[cron_tick] stamp last_optimization_run_at failed: %s",
+                    stamp_exc,
+                )
+            summary["orgs_run"] = int(summary["orgs_run"]) + 1
+            results.append(
+                {
+                    "org_id": org_id,
+                    "candidates": len(candidates),
+                    **(run_summary if isinstance(run_summary, dict) else {}),
+                }
+            )
+        except Exception as exc:
+            logger.exception(
+                "[cron_tick] scheduled optimization failed for %s: %s",
+                org_id,
+                exc,
+            )
+            results.append({"org_id": org_id, "error": str(exc)})
+
+    summary["results"] = results
+    return summary
+
+
 async def _tick(*, dry_run: bool) -> dict[str, object]:
     """A single cron tick. Always runs the scheduler; sometimes
     runs the daily / weekly jobs based on the UTC clock."""
@@ -93,6 +187,18 @@ async def _tick(*, dry_run: bool) -> dict[str, object]:
         logger.exception("[cron_tick] evaluate_pending_clusters failed: %s", exc)
         logger.error("CRON_TICK_FAILURE evaluate_pending_clusters %s", type(exc).__name__)
         out["cat23_scheduler"] = {"errors": [str(exc)], "failure_marker": True}
+
+    # 1b. Always: cheap due-check for the recurring optimization agent.
+    try:
+        out["scheduled_optimization"] = await _run_scheduled_optimization(
+            now, dry_run=dry_run
+        )
+    except Exception as exc:
+        logger.exception("[cron_tick] scheduled_optimization failed: %s", exc)
+        out["scheduled_optimization"] = {
+            "errors": [str(exc)],
+            "failure_marker": True,
+        }
 
     # 2. Daily @ 03:00 UTC: stale_pending_sweep + retention_cron.
     if now.hour == 3 and now.minute < 10:
