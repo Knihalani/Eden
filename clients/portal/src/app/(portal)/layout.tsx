@@ -426,6 +426,9 @@ function PortalLayoutContent({ children }: { children: React.ReactNode }) {
 
   const breadcrumbs = buildBreadcrumbs(pathname);
   const { pinnedItems, groups } = applySidebarPrefs(prefs, advancedCollapsed);
+  // Wizard routes ship their own top bar + progress — hide the portal
+  // sidebar/header/mobile nav so setup isn't competing with 75 routes.
+  const inOnboardingWizard = isOnboardingWizardPath(pathname);
 
   return (
     // FIX-A: scroll the document natively instead of trapping content
@@ -464,7 +467,7 @@ function PortalLayoutContent({ children }: { children: React.ReactNode }) {
       {/* Mobile sidebar overlay — div (not button) so keyboard tab
        * skips it. aria-hidden + the existing CSS rule at globals.css:419-423
        * kill pointer-events for non-interactive overlays. */}
-      {sidebarOpen && (
+      {sidebarOpen && !inOnboardingWizard && (
         <div
           role="presentation"
           aria-hidden="true"
@@ -478,6 +481,7 @@ function PortalLayoutContent({ children }: { children: React.ReactNode }) {
           natively while the sidebar follows. The sidebar's own
           internal scroll handles the case where there are more
           nav items than fit in the viewport. */}
+      {!inOnboardingWizard && (
       <aside
         aria-label="Main sidebar navigation"
         className={cn(
@@ -747,6 +751,7 @@ function PortalLayoutContent({ children }: { children: React.ReactNode }) {
           </div>
         </div>
       </aside>
+      )}
 
       {/* Main content — flex-1 takes remaining width; document scrolls
           natively (no internal overflow). The mobile bottom nav
@@ -756,8 +761,16 @@ function PortalLayoutContent({ children }: { children: React.ReactNode }) {
           grows to fit the page content and pushes the body past
           100dvh, breaking the document-scroll affordance. June 2026
           scroll-pass fix. */}
-      <main id="main-content" className="flex-1 min-w-0 pb-20 lg:pb-0 flex flex-col" tabIndex={-1}>
+      <main
+        id="main-content"
+        className={cn(
+          "flex-1 min-w-0 flex flex-col",
+          inOnboardingWizard ? "pb-0" : "pb-20 lg:pb-0",
+        )}
+        tabIndex={-1}
+      >
         {/* Top bar */}
+        {!inOnboardingWizard && (
         <header className="sticky top-0 z-30 bg-[var(--bg-primary)] border-b border-[var(--border-default)]">
           <div className="flex items-center justify-between h-14 px-4 lg:px-6">
             {/* Left: Mobile logo + hamburger */}
@@ -873,6 +886,7 @@ function PortalLayoutContent({ children }: { children: React.ReactNode }) {
             </div>
           </div>
         </header>
+        )}
 
         {/* Page content — content-sized wrapper. The previous
             ``flex-1 min-h-0`` here was the silent scroll killer:
@@ -987,6 +1001,7 @@ function PortalLayoutContent({ children }: { children: React.ReactNode }) {
         {/* Mobile bottom navigation. Centered "Observe" item is the
             raised/pill style via `isCenter`; pb-safe gives the bar
             enough breathing room for notched phones. */}
+        {!inOnboardingWizard && (
         <nav
           className="lg:hidden fixed bottom-0 left-0 right-0 bg-[var(--bg-primary)] border-t border-[var(--border-default)] z-40 pb-[env(safe-area-inset-bottom)]"
           aria-label="Mobile navigation"
@@ -999,6 +1014,7 @@ function PortalLayoutContent({ children }: { children: React.ReactNode }) {
             <BottomNavItem href="/settings" icon={Settings} label="Settings" />
           </div>
         </nav>
+        )}
 
         {/* Command Palette (Cmd+K) */}
         <CommandPalette open={commandPaletteOpen} onOpenChange={setCommandPaletteOpen} />
@@ -1007,7 +1023,7 @@ function PortalLayoutContent({ children }: { children: React.ReactNode }) {
       {/* AI Insights chat sidebar — persistent across the portal.
           Renders its own floating toggle button so it can be opened
           from any page. */}
-      <ChatSidebar />
+      {!inOnboardingWizard && <ChatSidebar />}
     </div>
   );
 }
