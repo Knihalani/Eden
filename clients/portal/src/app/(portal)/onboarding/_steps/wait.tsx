@@ -73,7 +73,7 @@ export function WaitStep() {
         <h1 className="text-3xl font-bold tracking-tight">Waiting for your pull request</h1>
         <p className="mt-2 text-[var(--text-secondary)]">
           {anyMerged
-            ? "Your integration PR was merged — Eden is wired in. Continue to your dashboard."
+            ? "Your integration PR was merged — Eden is wired in. Continue to install the SDK."
             : anyOpen
             ? "Your PR is open. Review it on GitHub and merge when you're ready — or skip and merge later."
             : "No integration PRs yet. Refresh once GitHub has the branch."}

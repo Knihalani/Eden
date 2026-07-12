@@ -241,6 +241,19 @@ export function OnboardingConnectFlow({
     runIntegrate,
   ]);
 
+  // ── Gate 0: still checking GitHub App config ───────────────────
+
+  if (configured === null) {
+    return (
+      <div className="flex flex-col items-center justify-center gap-3 py-16 text-center">
+        <Loader2 className="h-8 w-8 animate-spin text-[var(--accent)]" />
+        <p className="text-sm text-[var(--text-secondary)]">
+          Checking GitHub integration…
+        </p>
+      </div>
+    );
+  }
+
   // ── Gate 1: instance not configured ────────────────────────────
 
   if (configured === false) {
@@ -499,6 +512,14 @@ function PanelWarning({
 
 function PanelLocked({ role, inWizard = false }: { role: string; inWizard?: boolean }) {
   const continueHref = inWizard ? "/onboarding/install" : "/onboarding/done";
+
+  function continueToInstall() {
+    if (inWizard && typeof window !== "undefined") {
+      window.localStorage.setItem("eden:onboarding:skipRepo", "1");
+    }
+    window.location.assign(continueHref);
+  }
+
   return (
     <div className="space-y-6">
       <div>
@@ -518,13 +539,14 @@ function PanelLocked({ role, inWizard = false }: { role: string; inWizard?: bool
           <li>Install the SDK yourself on the next step — traces work without a connected repo.</li>
         </ul>
       </div>
-      <Link
-        href={continueHref}
+      <button
+        type="button"
+        onClick={continueToInstall}
         className="inline-flex items-center gap-2 rounded-lg bg-[var(--accent)] px-4 py-2 text-sm font-medium text-[var(--bg-primary)] hover:opacity-90"
       >
         Continue to SDK install
         <ArrowRight className="h-4 w-4" />
-      </Link>
+      </button>
     </div>
   );
 }
