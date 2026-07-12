@@ -507,37 +507,62 @@ async def ensure_clerk_membership(
     self-heal when the webhook is delayed or misconfigured.
     """
     eden_role = clerk_role_to_eden_role(clerk_role)
+    client = await get_postgres_client()
+    # Column is ``joined_at`` (migration 001), not ``created_at``.
+    upsert_with_writer = """
+        INSERT INTO org_members (
+            org_id, user_id, role, last_active_at, joined_at, last_writer_source
+        )
+        VALUES ($1, $2, $3, NOW(), NOW(), 'clerk')
+        ON CONFLICT (org_id, user_id) DO UPDATE
+        SET role = CASE
+                WHEN org_members.last_writer_source = 'clerk'
+                    THEN EXCLUDED.role
+                ELSE org_members.role
+            END,
+            last_writer_source = 'clerk',
+            last_active_at = NOW()
+    """
+    upsert_legacy = """
+        INSERT INTO org_members (org_id, user_id, role, last_active_at, joined_at)
+        VALUES ($1, $2, $3, NOW(), NOW())
+        ON CONFLICT (org_id, user_id) DO UPDATE
+        SET role = EXCLUDED.role,
+            last_active_at = NOW()
+    """
     try:
-        client = await get_postgres_client()
-        # Column is ``joined_at`` (migration 001), not ``created_at``.
         await client.execute(
-            """
-            INSERT INTO org_members (
-                org_id, user_id, role, last_active_at, joined_at, last_writer_source
-            )
-            VALUES ($1, $2, $3, NOW(), NOW(), 'clerk')
-            ON CONFLICT (org_id, user_id) DO UPDATE
-            SET role = CASE
-                    WHEN org_members.last_writer_source = 'clerk'
-                        THEN EXCLUDED.role
-                    ELSE org_members.role
-                END,
-                last_writer_source = 'clerk',
-                last_active_at = NOW()
-            """,
+            upsert_with_writer,
             eden_org_id,
             eden_user_id,
             eden_role,
         )
         return True
     except Exception as exc:
-        logger.warning(
-            "ensure_clerk_membership failed user=%s org=%s: %s",
-            eden_user_id,
-            eden_org_id,
-            exc,
-        )
-        return False
+        if "last_writer_source" not in str(exc):
+            logger.warning(
+                "ensure_clerk_membership failed user=%s org=%s: %s",
+                eden_user_id,
+                eden_org_id,
+                exc,
+            )
+            return False
+        try:
+            await client.execute(
+                upsert_legacy,
+                eden_org_id,
+                eden_user_id,
+                eden_role,
+            )
+            return True
+        except Exception as legacy_exc:
+            logger.warning(
+                "ensure_clerk_membership legacy upsert failed user=%s org=%s: %s",
+                eden_user_id,
+                eden_org_id,
+                legacy_exc,
+            )
+            return False
 
 
 async def get_user_by_id(user_id: str, lookup_column: str = "id") -> dict | None:
