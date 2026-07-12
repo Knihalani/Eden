@@ -14,6 +14,7 @@ import { useOrg } from "@/hooks/use-org";
 import { onboardingApi, githubApi } from "@/lib/api";
 import { useToast } from "@/components/ui/toast";
 import { PageHeader } from "@/components/layout/page-header";
+import { NoOrgState } from "@/components/ui/no-org-state";
 import { ArrowRight, Check, Copy, Loader2, Package, Terminal } from "lucide-react";
 
 type Lang = "python" | "typescript";
@@ -54,7 +55,7 @@ await trace({ name: "hello-world" }, async (t) => {
 export default function OnboardingInstallPage() {
   const router = useRouter();
   const toast = useToast();
-  const { currentOrg } = useOrg();
+  const { currentOrg, orgSyncing, orgSyncTimedOut, refreshOrgs } = useOrg();
   const [lang, setLang] = useState<Lang>("python");
   const [copied, setCopied] = useState<string | null>(null);
   const [skipRepo, setSkipRepo] = useState(false);
@@ -108,6 +109,17 @@ export default function OnboardingInstallPage() {
     }
     return null;
   }, [skipRepo, ghConfigured]);
+
+  if (!currentOrg) {
+    return (
+      <NoOrgState
+        feature="SDK install"
+        syncing={orgSyncing && !orgSyncTimedOut}
+        syncTimedOut={orgSyncTimedOut}
+        onRetrySync={() => void refreshOrgs()}
+      />
+    );
+  }
 
   return (
     <div className="space-y-8">

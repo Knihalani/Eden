@@ -57,7 +57,7 @@ interface DashboardData {
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 export default function DashboardPage() {
-  const { currentOrg, authError } = useOrg();
+  const { currentOrg, authError, orgSyncing, orgSyncTimedOut, refreshOrgs } = useOrg();
   const toast = useToast();
   const { hasPermission } = usePermissions();
   const __router = useRouter();
@@ -222,7 +222,16 @@ export default function DashboardPage() {
     return (
       <NoOrgState
         feature="The dashboard"
-        description="Create or join an organization to start capturing traces, alerts, and cost data for your agents."
+        syncing={orgSyncing && !orgSyncTimedOut}
+        syncTimedOut={orgSyncTimedOut}
+        onRetrySync={() => void refreshOrgs()}
+        description={
+          orgSyncTimedOut
+            ? "Workspace sync is taking longer than expected. Try refreshing, or finish setup from onboarding."
+            : orgSyncing
+              ? undefined
+              : "Finish setup to start capturing traces, alerts, and cost data for your agents."
+        }
       />
     );
   }

@@ -286,40 +286,23 @@ async def _upsert_org(data: dict[str, Any]) -> None:
         slug,
     )
 
-    # Case 1: insert if no row exists. Two safety guards:
-    # - ``WHERE NOT EXISTS`` prevents a duplicate row if the
-    #   ``UPDATE`` above just created one via a different code path.
-    # - The ``::uuid`` cast refuses non-UUID ``clerk_id`` values
-    #   (e.g. Clerk's default ``org_2x...`` format). The cast error
-    #   is caught by the outer try/except and logged — webhook
-    #   delivery is considered "best effort" for these orgs since
-    #   Eden's ``POST /orgs`` is the canonical source of truth.
-    try:
-        await client.execute(
-            """
-            INSERT INTO organizations
-                (id, clerk_org_id, name, slug, owner_id, archived_at, updated_at)
-            SELECT $1::uuid, $2, $3, $4, NULL, NULL, NOW()
-            WHERE NOT EXISTS (
-                SELECT 1 FROM organizations
-                WHERE clerk_org_id = $2 OR id::text = $2
-            )
-            """,
-            clerk_id,
-            clerk_id,
-            name,
-            slug,
+    # Case 1: insert if no row exists. Always mint a UUID ``id`` and
+    # store the Clerk string in ``clerk_org_id`` — Clerk's default
+    # ``org_2x…`` ids are not UUIDs and must never be cast to one.
+    await client.execute(
+        """
+        INSERT INTO organizations
+            (id, clerk_org_id, name, slug, owner_id, archived_at, updated_at)
+        SELECT gen_random_uuid(), $1, $2, $3, NULL, NULL, NOW()
+        WHERE NOT EXISTS (
+            SELECT 1 FROM organizations
+            WHERE clerk_org_id = $1 OR id::text = $1
         )
-    except Exception as exc:  # noqa: BLE001
-        # Most common cause: clerk_id is a non-UUID string like
-        # ``org_2xabc``. Log and skip; the backfill script
-        # (``src/eden/scripts/backfill_legacy_orgs.py``) handles
-        # legacy rows explicitly, and Eden's ``POST /orgs`` handles
-        # new backend-created rows.
-        logger.info(
-            "_upsert_org: skipped INSERT for clerk_id=%s (likely non-UUID): %s",
-            clerk_id, redact_all(str(exc)),
-        )
+        """,
+        clerk_id,
+        name,
+        slug,
+    )
 
 
 async def _upsert_membership(data: dict[str, Any]) -> None:

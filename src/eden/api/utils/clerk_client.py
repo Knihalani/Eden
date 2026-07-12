@@ -256,6 +256,25 @@ async def create_organization(name: str, slug: str) -> dict[str, Any]:
     return await _post("/organizations", {"name": name, "slug": slug})
 
 
+async def get_organization(clerk_org_id: str) -> dict[str, Any] | None:
+    """Fetch a Clerk organization by id (``org_2abc…``).
+
+  Returns ``None`` when the org was deleted or the API call fails so
+  callers can fall back without 500ing the request.
+    """
+    if not clerk_org_id:
+        return None
+    try:
+        return await _get(f"/organizations/{clerk_org_id}")
+    except ClerkAPIError as exc:
+        logger.warning(
+            "get_organization failed for %s: %s",
+            clerk_org_id,
+            redact_all(str(exc)),
+        )
+        return None
+
+
 async def create_membership(clerk_org_id: str, user_id: str, role: str) -> dict[str, Any]:
     """Add a user to a Clerk org; returns the membership record.
 

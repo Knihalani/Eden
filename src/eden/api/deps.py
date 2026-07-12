@@ -496,6 +496,86 @@ async def resolve_eden_org_id(org_id: str | None) -> str | None:
         return None
 
 
+async def ensure_clerk_org_from_session(
+    clerk_org_id: str,
+    eden_user_id: str,
+    clerk_role: str | None,
+) -> str | None:
+    """Ensure an Eden ``organizations`` row exists for a Clerk session org.
+
+    Clerk often creates an org during signup (``org_2x…`` string id).
+    The webhook and legacy INSERT paths skipped non-UUID ids, leaving
+    the portal stuck in ``orgSyncing`` with zero Eden organizations.
+    This self-heals on ``/auth/me`` by fetching the org from Clerk's
+    Backend API and inserting ``id = gen_random_uuid()`` +
+    ``clerk_org_id = clerk_org_id``.
+    """
+    if not clerk_org_id:
+        return None
+
+    eden_org_id = await resolve_eden_org_id(clerk_org_id)
+    if eden_org_id:
+        await ensure_clerk_membership(eden_user_id, eden_org_id, clerk_role)
+        return eden_org_id
+
+    from eden.api.utils.clerk_client import get_organization
+
+    try:
+        clerk_org = await get_organization(clerk_org_id)
+    except Exception as exc:
+        logger.warning(
+            "ensure_clerk_org_from_session: Clerk fetch failed org=%s: %s",
+            clerk_org_id,
+            exc,
+        )
+        return None
+
+    if not clerk_org:
+        return None
+
+    name = (clerk_org.get("name") or "").strip() or "Workspace"
+    slug = (clerk_org.get("slug") or "").strip() or clerk_org_id.replace("_", "-")
+
+    try:
+        client = await get_postgres_client()
+        await client.execute(
+            """
+            INSERT INTO organizations (id, clerk_org_id, name, slug, updated_at)
+            SELECT gen_random_uuid(), $1, $2, $3, NOW()
+            WHERE NOT EXISTS (
+                SELECT 1 FROM organizations
+                WHERE clerk_org_id = $1 OR id::text = $1
+            )
+            """,
+            clerk_org_id,
+            name,
+            slug,
+        )
+        row = await client.fetchrow(
+            """
+            SELECT id FROM organizations
+            WHERE clerk_org_id = $1 OR id::text = $1
+            LIMIT 1
+            """,
+            clerk_org_id,
+        )
+        if not row:
+            return None
+        eden_org_id = str(row["id"])
+        await ensure_clerk_membership(eden_user_id, eden_org_id, clerk_role)
+        return eden_org_id
+    except Exception as exc:
+        logger.warning(
+            "ensure_clerk_org_from_session failed org=%s: %s",
+            clerk_org_id,
+            exc,
+        )
+        eden_org_id = await resolve_eden_org_id(clerk_org_id)
+        if eden_org_id:
+            await ensure_clerk_membership(eden_user_id, eden_org_id, clerk_role)
+        return eden_org_id
+
+
 async def ensure_clerk_membership(
     eden_user_id: str,
     eden_org_id: str,
