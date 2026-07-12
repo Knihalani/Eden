@@ -170,13 +170,14 @@ export function OnboardingConnectFlow({
   if (configured === false) {
     return (
       <PanelWarning
+        inWizard={inWizard}
         title="GitHub integration not configured"
         body={
           <>
             This Eden instance doesn&apos;t have a GitHub App set up. Ask
             the operator to fill in <code className="font-mono">GITHUB_APP_*</code>
-            {" "}env vars, or skip — you can still use the SDK by copying the
-            snippets from the previous step.
+            {" "}env vars, or skip — you can still install the SDK manually
+            on the next step.
           </>
         }
       />
@@ -187,7 +188,7 @@ export function OnboardingConnectFlow({
 
   if (currentOrg && !canIntegrate) {
     return (
-      <PanelLocked role={role} />
+      <PanelLocked inWizard={inWizard} role={role} />
     );
   }
 
@@ -334,7 +335,7 @@ export function OnboardingConnectFlow({
       <div className="flex items-center justify-between">
         {inWizard ? (
           <Link
-            href="/onboarding/install"
+            href="/onboarding"
             className="text-sm text-[var(--text-muted)] hover:text-[var(--text-primary)]"
           >
             ← Back
@@ -348,6 +349,14 @@ export function OnboardingConnectFlow({
           </Link>
         )}
         <div className="flex items-center gap-2">
+          {inWizard && (
+            <Link
+              href="/onboarding/install"
+              className="inline-flex items-center gap-1 rounded border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-2 text-sm text-[var(--text-secondary)] hover:bg-[var(--bg-tertiary)]"
+            >
+              Skip for now
+            </Link>
+          )}
           <button
             onClick={startInstall}
             disabled={authorizing}
@@ -370,7 +379,16 @@ export function OnboardingConnectFlow({
   );
 }
 
-function PanelWarning({ title, body }: { title: string; body: React.ReactNode }) {
+function PanelWarning({
+  title,
+  body,
+  inWizard = false,
+}: {
+  title: string;
+  body: React.ReactNode;
+  inWizard?: boolean;
+}) {
+  const skipHref = inWizard ? "/onboarding/install" : "/onboarding/done";
   return (
     <div className="space-y-4">
       <div>
@@ -378,17 +396,18 @@ function PanelWarning({ title, body }: { title: string; body: React.ReactNode })
         <p className="mt-2 text-[var(--text-secondary)]">{body}</p>
       </div>
       <Link
-        href="/onboarding/done"
+        href={skipHref}
         className="inline-flex items-center gap-2 rounded-lg bg-[var(--accent)] px-4 py-2 text-sm font-medium text-[var(--bg-primary)] hover:opacity-90"
       >
-        Skip — I&apos;ll integrate manually
+        {inWizard ? "Skip — install SDK manually" : "Skip — I'll integrate manually"}
         <ArrowRight className="h-4 w-4" />
       </Link>
     </div>
   );
 }
 
-function PanelLocked({ role }: { role: string }) {
+function PanelLocked({ role, inWizard = false }: { role: string; inWizard?: boolean }) {
+  const continueHref = inWizard ? "/onboarding/install" : "/onboarding/done";
   return (
     <div className="space-y-6">
       <div>
@@ -405,14 +424,14 @@ function PanelLocked({ role }: { role: string }) {
         <div className="text-sm font-medium">What to do next</div>
         <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-[var(--text-secondary)]">
           <li>Ping an admin in your org — they can connect a repo from <Link href="/agents" className="text-[var(--accent)] underline">/agents</Link>.</li>
-          <li>In the meantime you can still use Eden by adding the SDK snippets to your agent yourself.</li>
+          <li>Install the SDK yourself on the next step — traces work without a connected repo.</li>
         </ul>
       </div>
       <Link
-        href="/onboarding/done"
+        href={continueHref}
         className="inline-flex items-center gap-2 rounded-lg bg-[var(--accent)] px-4 py-2 text-sm font-medium text-[var(--bg-primary)] hover:opacity-90"
       >
-        Continue
+        Continue to SDK install
         <ArrowRight className="h-4 w-4" />
       </Link>
     </div>

@@ -1,14 +1,19 @@
 "use client";
 
-/**
- * /onboarding/autonomous — Step 2 in the onboarding flow.
- *
- * Surfaces the autonomous-features-on-by-default disclosure
- * before the new user hits the dashboard. Renders the
- * ``_steps/autonomous.tsx`` step.
- */
-import AutonomousStep from "../_steps/autonomous";
+import { useEffect } from "react";
 
+/**
+ * Legacy route — autonomous disclosure step removed from main wizard.
+ * Redirect to connect-repo (step 2).
+ */
 export default function OnboardingAutonomousPage() {
-  return <AutonomousStep />;
+  useEffect(() => {
+    window.location.replace("/onboarding/connect");
+  }, []);
+
+  return (
+    <div className="flex min-h-[40vh] items-center justify-center text-sm text-[var(--text-muted)]">
+      Redirecting…
+    </div>
+  );
 }

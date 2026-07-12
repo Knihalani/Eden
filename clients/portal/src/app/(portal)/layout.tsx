@@ -880,17 +880,25 @@ function PortalLayoutContent({ children }: { children: React.ReactNode }) {
               <div className="flex items-center gap-2 min-w-0">
                 <Loader2 className="w-4 h-4 text-[var(--accent)] shrink-0 animate-spin" />
                 <span className="text-[var(--text-secondary)] truncate">
-                  Syncing your workspace…
+                  Syncing your workspace from Clerk…
                 </span>
               </div>
-              <button
-                onClick={() => void refreshOrgs()}
-                aria-label="Refresh workspace sync"
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-[var(--border-default)] text-[var(--text-secondary)] rounded-md text-xs font-medium hover:bg-[var(--bg-secondary)] transition-colors shrink-0"
-              >
-                <RefreshCw className="w-3 h-3" />
-                Refresh
-              </button>
+              <div className="flex items-center gap-2 shrink-0">
+                <Link
+                  href="/onboarding"
+                  className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-[var(--accent)] hover:underline"
+                >
+                  Setup wizard
+                </Link>
+                <button
+                  onClick={() => void refreshOrgs()}
+                  aria-label="Refresh workspace sync"
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-[var(--border-default)] text-[var(--text-secondary)] rounded-md text-xs font-medium hover:bg-[var(--bg-secondary)] transition-colors"
+                >
+                  <RefreshCw className="w-3 h-3" />
+                  Refresh
+                </button>
+              </div>
             </div>
           )}
           {showAuthBanner && (

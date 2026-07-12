@@ -60,7 +60,7 @@ export function WaitStep() {
       await onboardingApi.patchState(currentOrg.id, { step: "done" });
       // FIX-S: hard nav (see welcome.tsx) — router.push silently
       // no-ops on this route group.
-      window.location.assign("/onboarding/done");
+      window.location.assign("/onboarding/install");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Could not advance");
     } finally {
