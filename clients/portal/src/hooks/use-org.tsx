@@ -291,7 +291,10 @@ export function OrgProvider({ children }: { children: ReactNode }) {
       refreshOrg: refreshOrgs,
       loading,
       authError,
-      clearAuthError: () => setAuthError(null),
+      clearAuthError: () => {
+        authErrorRef.current = null;
+        setAuthError(null);
+      },
       clerkOrgId: clerkOrg?.id ?? null,
       clerkOrgRole: clerkOrg
         ? userMemberships.data?.find(
