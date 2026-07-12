@@ -41,6 +41,7 @@ from typing import Any
 import httpx
 import jwt
 from jwt import InvalidTokenError as JWTError
+from jwt.api_jwk import PyJWK
 
 from eden.api.utils.redact import redact_all
 from eden.config import get_settings
@@ -179,6 +180,16 @@ async def _fetch_jwks() -> dict[str, Any]:
             return _JWKS_CACHE["keys"] or {"keys": []}
 
 
+def _public_key_from_jwk(jwk: dict[str, Any]) -> Any:
+    """Convert a JWKS key entry to the object ``jwt.decode`` expects.
+
+    PyJWT 2.13+ no longer accepts a raw JWK dict as ``jwt.decode``'s
+    key argument — passing one raises ``TypeError: Expecting a
+    PEM-formatted key`` and 500'd every authenticated portal request.
+    """
+    return PyJWK.from_dict(jwk).key
+
+
 async def verify_clerk_token(token: str) -> dict[str, Any] | None:
     """Verify a Clerk session JWT and return the decoded payload.
 
@@ -254,11 +265,11 @@ async def verify_clerk_token(token: str) -> dict[str, Any] | None:
                     return None
             return jwt.decode(
                 token,
-                matching,
+                _public_key_from_jwk(matching),
                 algorithms=[alg],
                 options={"verify_aud": False},
             )
-        except JWTError as exc:
+        except (JWTError, TypeError, ValueError) as exc:
             logger.debug("Clerk JWT JWKS verification failed: %s", redact_all(str(exc)))
             return None
     return None
