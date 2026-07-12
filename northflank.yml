@@ -362,6 +362,11 @@ spec:
         secretKeyRef:
           group: eden-required
           key: GITHUB_APP_CALLBACK_URL
+    # Public URL slug (github.com/apps/<slug>) — NOT the OAuth client id.
+    # Plain value so missing secret groups don't break the deploy; code
+    # also defaults to eden-observability when unset.
+    - name: GITHUB_APP_SLUG
+      value: eden-observability
 
 # ─────────────────────────────────────────────────────────────────────
 # Job 1/2: eden-worker (long-running background work)

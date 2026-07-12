@@ -46,7 +46,7 @@
    for key in JWT_SECRET ENCRYPTION_KEY SESSION_SECRET OPENROUTER_API_KEY \
               TINYBIRD_ADMIN_TOKEN TINYBIRD_BRANCH_TOKEN SENTRY_DSN \
               GITHUB_APP_ID GITHUB_APP_CLIENT_ID GITHUB_APP_CLIENT_SECRET \
-              GITHUB_APP_PRIVATE_KEY GITHUB_APP_WEBHOOK_SECRET; do
+              GITHUB_APP_PRIVATE_KEY GITHUB_APP_WEBHOOK_SECRET GITHUB_APP_CALLBACK_URL; do
      northflank create secret --project eden-staging --group eden-required \
        --key "$key" --value "$(grep ^${key}= .env | cut -d= -f2-)"
    done
