@@ -17,6 +17,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
+import sqlalchemy as sa
 from alembic import op
 
 revision: str = "083"
@@ -25,7 +26,23 @@ branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
 
+def _table_exists(table_name: str) -> bool:
+    conn = op.get_bind()
+    row = conn.execute(
+        sa.text(
+            "SELECT 1 FROM information_schema.tables "
+            "WHERE table_schema = 'public' AND table_name = :t"
+        ),
+        {"t": table_name},
+    ).first()
+    return row is not None
+
+
 def upgrade() -> None:
+    # Neon staging was stamped at 082 without migration 050's table —
+    # skip the index fix when the table is absent so 084–088 can run.
+    if not _table_exists("pr_rejection_memory"):
+        return
     op.execute("DROP INDEX IF EXISTS idx_pr_rejection_memory_active")
     op.execute(
         "CREATE INDEX IF NOT EXISTS idx_pr_rejection_memory_active "
