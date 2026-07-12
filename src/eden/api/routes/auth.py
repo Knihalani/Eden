@@ -1134,9 +1134,9 @@ async def get_me(
 
     return UserResponse(
         user_id=str(db_user["id"]),
-        email=db_user["email"],
-        name=db_user["name"],
-        two_factor_enabled=db_user.get("two_factor_enabled", False),
+        email=db_user.get("email") or "",
+        name=db_user.get("name") or "Eden user",
+        two_factor_enabled=bool(db_user.get("two_factor_enabled", False)),
         organizations=organizations,
         current_org_id=str(db_user["preferred_org_id"]) if db_user.get("preferred_org_id") else None,
     )

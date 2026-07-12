@@ -241,7 +241,18 @@ class HealthResponse(BaseModel):
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan handler."""
+    import asyncio
+
     logger.info("Starting Eden API...")
+
+    # Schema must lead code on every API deploy. Workers set
+    # SKIP_MIGRATIONS=1; the API owns the upgrade.
+    try:
+        from eden.db_migrations.runner import run_alembic_upgrade_head
+
+        await asyncio.to_thread(run_alembic_upgrade_head)
+    except Exception as exc:
+        logger.error("Alembic upgrade failed at startup: %s", exc)
 
     # Audit (June 21 2026) — surface missing Clerk webhook secret at
     # startup. Downgraded ERROR → WARNING so a fresh dev environment
