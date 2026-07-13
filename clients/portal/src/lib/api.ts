@@ -63,6 +63,11 @@ const DEFAULT_TIMEOUT_MS = 30_000;
 // pending-promise map collapses them into one.
 const inflight = new Map<string, Promise<unknown>>();
 
+/** Test-only: clear in-flight GET dedup map between vitest cases. */
+export function __resetFetchApiInflightForTests(): void {
+  inflight.clear();
+}
+
 function dedupKey(method: string, endpoint: string, body: unknown): string {
   // Body is JSON-stringified by the time we get here. Hashing the
   // string is overkill for our scale; a plain string key is fine.

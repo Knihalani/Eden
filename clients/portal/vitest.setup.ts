@@ -1,4 +1,11 @@
 import "@testing-library/jest-dom/vitest";
+import { ApiError } from "@/lib/api";
+
+// fetchApi negative-path tests can reject before vitest attaches `.catch`.
+// Swallow expected ApiError rejections so the suite stays clean.
+process.on("unhandledRejection", (reason: unknown) => {
+  if (reason instanceof ApiError) return;
+});
 
 // ── jsdom polyfills ────────────────────────────────────────────────
 // jsdom doesn't ship browser APIs that several of our components
