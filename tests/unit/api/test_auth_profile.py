@@ -251,6 +251,30 @@ def test_avatar_upload_png(client, test_user, upload_dir):
     assert u["avatar_url"] == body["avatar_url"]
 
 
+def test_avatar_upload_prefers_local_when_s3_configured(client, test_user, upload_dir, monkeypatch):
+    """Local disk wins when avatar backend is local even if S3 bucket is set."""
+    from eden.config import get_settings
+
+    monkeypatch.setenv("AVATAR_S3_BUCKET", "eden-avatars-prod")
+    monkeypatch.setenv("BRONZE_S3_BUCKET", "eden-bronze")
+    monkeypatch.setenv("AVATAR_STORAGE_BACKEND", "local")
+    get_settings.cache_clear()
+
+    png_bytes = (
+        b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01"
+        b"\x08\x06\x00\x00\x00\x1f\x15\xc4\x89\x00\x00\x00\rIDATx\x9cc\xf8\xff"
+        b"\xff?\x00\x05\xfe\x02\xfe\xa6\x9c\x82\xe0\x00\x00\x00\x00IEND\xaeB`\x82"
+    )
+    resp = client.post(
+        "/auth/users/me/avatar",
+        files={"file": ("avatar.png", io.BytesIO(png_bytes), "image/png")},
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["avatar_url"].startswith("/uploads/avatars/")
+    assert list((upload_dir / "avatars").iterdir())
+
+
 def test_avatar_upload_unsupported_type_400(client, test_user):
     resp = client.post(
         "/auth/users/me/avatar",
