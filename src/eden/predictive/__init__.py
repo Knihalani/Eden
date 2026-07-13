@@ -1,26 +1,29 @@
 """Predictive Intelligence (Cat 13) — new top-level package.
 
-ponytail: per upgradespec §D.3 (Phase 1 cut), Cat 13 ships
-only :class:`QualityPredictor` and :class:`DriftDetector`.
-The :class:`CostPredictor` (median projection) was folded
-into Cat 7 (Cost Intelligence) — see
-``docs/eden-cost-intel-plan.md``. The :class:`CapacityPredictor`,
-:class:`RiskScorer`, and embedding drift were removed.
-
-Two surviving services:
+Five services:
 
 * :class:`QualityPredictor` — per-request judge-score
   forecast (trailing-window mean over recent
   ``judge_scores``).
-* :class:`DriftDetector` — output (judge-score) drift
-  detection via the Population Stability Index (PSI).
+* :class:`CostPredictor` — per-day cost forecast from
+  Postgres ``usage_events`` (median projection + per-agent
+  WoW alert). Documents Postgres-fallback assumptions when
+  ClickHouse is unavailable.
+* :class:`CapacityPredictor` — N-day GPU-hour projection
+  (linear regression on daily call + token series).
+* :class:`RiskScorer` — composite org risk from
+  judge-score / cost-CV / latency-p95 / embedding drift.
+* :class:`DriftDetector` — output (judge-score) +
+  embedding (response-text) drift detection via the
+  Population Stability Index (PSI).
 
-Both services read from the production-grade
+All services read from the production-grade
 ``telemetry_events``, ``usage_events``, and
-``judge_scores`` tables and persist to the 2 surviving
-Cat 13 tables (``quality_predictions`` + ``drift_alerts``).
-The ``cost_predictions`` / ``capacity_forecasts`` /
-``risk_scores`` tables were dropped per §D.3.
+``judge_scores`` tables (Postgres) and persist to the
+Cat 13 tables declared in migration 020. ClickHouse is
+an optional analytics substrate; when it is unavailable
+the services fall back to Postgres aggregates and stamp
+``assumptions`` on the response.
 
 The package uses **lazy re-exports** so that
 ``from eden.predictive import QualityPredictor`` does not
@@ -35,8 +38,11 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 __all__ = [
+    "CapacityPredictor",
+    "CostPredictor",
     "DriftDetector",
     "QualityPredictor",
+    "RiskScorer",
     "annotate_change_points",
     "cusum_classify_trend",
     "cusum_detect",
@@ -48,9 +54,12 @@ __all__ = [
 # pyright) happy without importing the implementations at
 # runtime.
 if TYPE_CHECKING:  # pragma: no cover - import only
+    from .capacity import CapacityPredictor
+    from .cost import CostPredictor
     from .cusum import annotate_change_points, cusum_classify_trend, cusum_detect
     from .drift import DriftDetector
     from .quality import QualityPredictor
+    from .risk import RiskScorer
 
 
 # Map public name -> (module, attribute) for the lazy
@@ -58,8 +67,11 @@ if TYPE_CHECKING:  # pragma: no cover - import only
 # import spec stay in sync. Adding a new service means adding
 # two lines, not three.
 _LAZY_IMPORTS: dict[str, tuple[str, str]] = {
+    "CapacityPredictor": (".capacity", "CapacityPredictor"),
+    "CostPredictor": (".cost", "CostPredictor"),
     "DriftDetector": (".drift", "DriftDetector"),
     "QualityPredictor": (".quality", "QualityPredictor"),
+    "RiskScorer": (".risk", "RiskScorer"),
     "cusum_detect": (".cusum", "cusum_detect"),
     "cusum_classify_trend": (".cusum", "cusum_classify_trend"),
     "annotate_change_points": (".cusum", "annotate_change_points"),
