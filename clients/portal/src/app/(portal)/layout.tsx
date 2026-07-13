@@ -9,7 +9,7 @@ import {
   applySidebarPrefs,
   readAdvancedCollapsed,
   writeAdvancedCollapsed } from "@/hooks/use-sidebar-prefs";
-import { useClerk } from "@clerk/nextjs";
+import { useClerk, OrganizationSwitcher } from "@clerk/nextjs";
 import { api } from "@/lib/api";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, useRef, useCallback, Suspense } from "react";
@@ -556,11 +556,24 @@ function PortalLayoutContent({ children }: { children: React.ReactNode }) {
           </button>
         </div>
 
-        {/* Organization switcher REMOVED — June 2026 UI overhaul.
-            The active org still flows through Clerk + useOrg(), but
-            the sidebar no longer surfaces an org logo/avatar (which
-            looked like a second brand mark next to the Eden logo).
-            Users reach org controls via Settings → Organization. */}
+        {/* Organization switcher — Clerk-native multi-org control.
+            Soft-launch: restore discoverable switching without a
+            second brand avatar; appearance keeps it compact. */}
+        {!collapsed && (
+          <div className="px-3 pb-2">
+            <OrganizationSwitcher
+              hidePersonal
+              afterSelectOrganizationUrl="/dashboard"
+              appearance={{
+                elements: {
+                  rootBox: "w-full",
+                  organizationSwitcherTrigger:
+                    "w-full justify-between rounded-lg border border-[var(--border-default)] bg-[var(--bg-secondary)] px-2 py-1.5 text-sm text-[var(--text-primary)]",
+                },
+              }}
+            />
+          </div>
+        )}
 
         {/* Navigation — data-driven from DEFAULT_SIDEBAR + user prefs
             (pinned / hidden / reordered). FIX-I: bounded max-height

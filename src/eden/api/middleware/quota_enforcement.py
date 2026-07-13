@@ -42,8 +42,10 @@ import re
 
 _PATH_PATTERNS: list[tuple[re.Pattern[str], list[str]]] = [
     (re.compile(r"^/orgs/[^/]+/invitations(?:/|$)"), ["seats"]),
+    (re.compile(r"^/orgs/[^/]+/invites(?:/|$)"), ["seats"]),
     (re.compile(r"^/orgs/[^/]+/references(?:/|$)"), ["references"]),
     (re.compile(r"^/invitations(?:/|$)"), ["seats"]),
+    (re.compile(r"^/invites(?:/|$)"), ["seats"]),
 ]
 
 # Public alias used by tests + callers that want to inspect mapping by

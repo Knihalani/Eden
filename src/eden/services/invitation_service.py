@@ -224,6 +224,21 @@ async def accept_invitation(invitation_id: str, user_id: str) -> dict:
     if _as_utc(invitation["expires_at"]) < datetime.now(UTC):
         raise ValueError("Invitation has expired")
 
+    # Enforce seat quota at accept time (pending invites can outlive a
+    # capacity change).
+    try:
+        from eden.api.routes.billing import check_limit, sync_plan_usage
+
+        await sync_plan_usage(str(invitation["org_id"]))
+        if await check_limit(str(invitation["org_id"]), "seats"):
+            raise ValueError(
+                "Seat limit reached. Ask an admin to free a seat or upgrade."
+            )
+    except ValueError:
+        raise
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("seat check on accept failed: %s", exc)
+
     # Add user to org. ``ON CONFLICT DO NOTHING`` is defensive against
     # the rare case where the invitation is accepted twice (network
     # retry on the FE) — both rows are no-ops and the webhook's
