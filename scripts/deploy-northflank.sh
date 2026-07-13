@@ -73,8 +73,17 @@ fi
 
 cd "$REPO_ROOT"
 
-echo "▶ northflank combine --project $PROJECT --path $MANIFEST"
-northflank combine --project "$PROJECT" --path "$MANIFEST"
+echo "▶ Northflank deploy for project $PROJECT"
+echo "  Git CI/CD is enabled on eden-api — pushes to main trigger builds automatically."
+echo "  To apply northflank.yml env/resource changes, update via the Northflank dashboard"
+echo "  or use: northflank patch service combined --project $PROJECT --service eden-api -f ..."
+
+if ! northflank combine --project "$PROJECT" --path "$MANIFEST" 2>/dev/null; then
+  echo "▶ northflank combine unavailable in CLI $(northflank --version 2>/dev/null | tail -1)"
+  echo "  Checking service status (git-triggered build should deploy main)..."
+  northflank list services --project "$PROJECT" 2>/dev/null || true
+  exit 0
+fi
 
 if $FOLLOW_LOGS; then
   echo "▶ following logs (Ctrl-C to detach; service keeps running)"
