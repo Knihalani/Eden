@@ -114,16 +114,21 @@ export default function ImprovePage() {
         title="Improve"
         description="One queue for triage, patches, nudges, and promotions from Agent Issues. When Eden proposes a fix, it lands here."
         actions={
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => void load()}
-            disabled={loading}
-            aria-label="Refresh improvement queue"
-          >
-            <RefreshCw className={cn("h-4 w-4", loading && "animate-spin")} />
-            Refresh
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" asChild>
+              <Link href="/agents/eden/inbox">PR Inbox</Link>
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => void load()}
+              disabled={loading}
+              aria-label="Refresh improvement queue"
+            >
+              <RefreshCw className={cn("h-4 w-4", loading && "animate-spin")} />
+              Refresh
+            </Button>
+          </div>
         }
       />
       <PageContent>

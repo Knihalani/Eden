@@ -8,8 +8,9 @@ v1.6 STUB checklist:
 * ``POST /inbox/{patch_id}/edit`` — RBAC: ``editor``+.
 * ``POST /inbox/{patch_id}/request-changes`` — RBAC: ``reviewer``+.
 * ``POST /inbox/{patch_id}/comment`` — RBAC: ``commenter``+.
-* ``POST /inbox/{patch_id}/pr`` — RBAC: ``editor``+ AND
-  ``auto_pr_enabled=true`` if creating auto-mode.
+* ``POST /inbox/{patch_id}/pr`` — RBAC: ``editor``+.
+  Human open uses ``manual_open_pr`` (``code_change_enabled``
+  only). Automated open_pr still requires ``auto_pr_enabled``.
 * ``POST /inbox/{patch_id}/revert`` — RBAC: ``admin``+ AND
   ``auto_revert_enabled=true`` if creating auto-mode.
 * ``POST /inbox/{patch_id}/bulk`` — bulk action; RBAC: ``admin``+.
@@ -67,13 +68,17 @@ INBOX_ACTION_RBAC: dict[str, str] = {
 }
 
 # Map inbox action → ``_check_two_stage_optin`` action kind.
+# Human inbox actions use kinds that only need
+# ``code_change_enabled``. Auto-mode kinds (``open_pr``,
+# ``auto_approve``, ``revert_pr``) stay available for
+# automated callers that pass them explicitly.
 INBOX_ACTION_KIND: dict[str, str] = {
-    "approve": "auto_approve",
+    "approve": "create_patch",  # human approve — not auto-approve
     "deny": "create_patch",  # no auto-mode opt-in needed
     "edit": "create_patch",
     "request-changes": "create_patch",
     "comment": "create_patch",
-    "pr": "open_pr",
+    "pr": "manual_open_pr",  # human Open PR — not auto_pr gate
     "revert": "revert_pr",
     "bulk": "create_patch",
 }
@@ -203,9 +208,9 @@ class PRReviewService:
         #
         # Each one writes an audit row to ``closed_loop_actions``
         # and updates the corresponding patch state. The
-        # opt-in check above already gated them on
-        # ``code_change_enabled`` + ``auto_pr_enabled`` /
-        # ``auto_revert_enabled``.
+        # opt-in check above already gated them
+        # (``manual_open_pr`` / ``create_patch`` for human
+        # actions; ``revert_pr`` still needs auto_revert).
         if action == "edit":
             if not edited_diff:
                 return _error_envelope(
@@ -260,9 +265,9 @@ class PRReviewService:
 
         if action == "pr":
             # Delegate to PRCreator so the inbox action reuses the
-            # same gate / provider / diff-parsing path. PRCreator
-            # requires ``code_change_enabled`` + ``auto_pr_enabled``
-            # — the opt-in check above already enforced those.
+            # same gate / provider / diff-parsing path. Human
+            # inbox Open PR uses ``manual_open_pr`` (master
+            # opt-in only) — matching POST /patches/{id}/pr.
             from ..pr_creator import PRCreator
 
             creator = PRCreator()
@@ -273,6 +278,7 @@ class PRReviewService:
             pr_result = await creator.create(
                 org_id, patch_id, policy,
                 pr_patterns=None,
+                action_kind="manual_open_pr",
             )
             return pr_result
 

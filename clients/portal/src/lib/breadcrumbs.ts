@@ -50,6 +50,8 @@ export const BREADCRUMB_LABELS: Record<string, BreadcrumbLabel> = {
   issues: { label: "Agent Issues", category: "automate" },
   studio: { label: "Custom Metrics", category: "optimize" },
   "pr-suggestions": { label: "PR Suggestions", category: "automate" },
+  eden: { label: "Eden", category: "automate" },
+  inbox: { label: "PR Inbox", category: "automate" },
   retrieval: { label: "Retrieval", category: "observe" },
   memory: { label: "Memory", category: "observe" },
   "time-travel": { label: "Time-Travel", category: "observe" },

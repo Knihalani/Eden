@@ -151,12 +151,16 @@ class PRCreator:
         *,
         req: PRCreateRequest | None = None,
         pr_patterns: dict[str, Any] | None = None,
+        action_kind: str = "manual_open_pr",
     ) -> dict[str, Any]:
         """Create the branch, commit, and open the PR.
 
         Cat 23 destructive-route path (no ``req``): opt-in
-        check fires FIRST (``code_change_enabled`` +
-        ``auto_pr_enabled``). On success, delegates to the
+        check fires FIRST. Admin manual open (default
+        ``action_kind="manual_open_pr"``) only requires
+        ``code_change_enabled``. Automated callers pass
+        ``action_kind="open_pr"`` to also require
+        ``auto_pr_enabled``. On success, delegates to the
         :class:`PRProvider` and persists the result to
         ``pull_requests``.
 
@@ -172,7 +176,7 @@ class PRCreator:
         provider = await self._resolve_provider(org_id)
         if req is None:
             optin = _check_two_stage_optin(
-                self.name, policy, "open_pr",
+                self.name, policy, action_kind,
             )
             if optin is not None:
                 return optin
