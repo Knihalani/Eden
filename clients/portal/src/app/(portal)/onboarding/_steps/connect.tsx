@@ -15,6 +15,11 @@ import { AlertCircle } from "lucide-react";
 import { NoOrgState } from "@/components/ui/no-org-state";
 import { OnboardingConnectFlow } from "@/components/onboarding/OnboardingConnectFlow";
 import { onboardingApi, type OnboardingPRRun } from "@/lib/api";
+import {
+  parseInstallationId,
+  readStoredInstallationId,
+  storeInstallationId,
+} from "@/lib/github-install";
 import { useAuth } from "@/hooks/use-auth";
 import { useOrg } from "@/hooks/use-org";
 
@@ -33,8 +38,15 @@ export function ConnectStep() {
   const [callbackNotice, setCallbackNotice] = useState<string | null>(null);
 
   useEffect(() => {
-    const idStr = searchParams.get("installation_id");
-    if (idStr) setPreselected(Number(idStr));
+    const fromUrl = parseInstallationId(searchParams.get("installation_id"));
+    const fromStore = readStoredInstallationId();
+    const installId = fromUrl ?? fromStore;
+    if (fromUrl != null) {
+      storeInstallationId(fromUrl);
+    }
+    if (installId != null) {
+      setPreselected(installId);
+    }
 
     const setupAction = searchParams.get("setup_action");
     const errCode = searchParams.get("error");
@@ -45,15 +57,14 @@ export function ConnectStep() {
       notice = GITHUB_CALLBACK_ERRORS[errCode];
     } else if (errCode) {
       notice = "GitHub connect did not complete. Try again or skip to SDK install.";
+    } else if (installId != null && setupAction !== "cancel") {
+      notice = "GitHub App installed — Eden is registering access and opening your integration PR.";
     }
     setCallbackNotice(notice);
 
-    // Drop one-shot callback params so a refresh does not re-show the
-    // banner or re-trigger claim / auto-integrate (duplicate PRs).
-    if (
-      typeof window !== "undefined" &&
-      (idStr || setupAction || errCode)
-    ) {
+    // Drop one-shot callback query params (installation_id lives in
+    // sessionStorage until claim succeeds).
+    if (typeof window !== "undefined" && (searchParams.get("setup_action") || errCode)) {
       const url = new URL(window.location.href);
       url.searchParams.delete("error");
       url.searchParams.delete("setup_action");
@@ -95,10 +106,10 @@ export function ConnectStep() {
     <div className="space-y-4">
       {callbackNotice && (
         <div
-          role="alert"
-          className="rounded-lg border border-[var(--warning)]/40 bg-[var(--warning-faint)] p-3 text-sm text-[var(--text-secondary)]"
+          role="status"
+          className="rounded-xl border border-[var(--accent)]/30 bg-[var(--accent-faint)] p-4 text-sm text-[var(--text-secondary)]"
         >
-          <AlertCircle className="mr-1.5 inline h-4 w-4 text-[var(--warning)]" />
+          <AlertCircle className="mr-1.5 inline h-4 w-4 text-[var(--accent)]" />
           {callbackNotice}
           <span className="mt-2 block text-xs text-[var(--text-muted)]">
             <Link href="/onboarding/install" className="text-[var(--accent)] hover:underline">

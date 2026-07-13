@@ -44,13 +44,15 @@ from datetime import UTC, datetime
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from starlette.responses import RedirectResponse
 
 from eden.api.deps import (
     get_current_user,
     require_org_member,
     require_org_permission_dep,
+    resolve_eden_org_id,
+    resolve_eden_user_id,
 )
 from eden.api.utils.redact import redact_all
 from eden.config import get_settings
@@ -132,6 +134,22 @@ class IntegrateRequest(BaseModel):
 class ClaimInstallationRequest(BaseModel):
     installation_id: int
 
+    @field_validator("installation_id", mode="before")
+    @classmethod
+    def _coerce_installation_id(cls, v: object) -> object:
+        if v is None or v == "":
+            raise ValueError("installation_id is required")
+        if isinstance(v, str) and not v.strip().isdigit():
+            raise ValueError("installation_id must be a positive integer")
+        return int(v)
+
+    @field_validator("installation_id")
+    @classmethod
+    def _positive_installation_id(cls, v: int) -> int:
+        if v <= 0:
+            raise ValueError("installation_id must be a positive integer")
+        return v
+
 
 class PRRunOut(BaseModel):
     id: str
@@ -167,6 +185,60 @@ class OnboardingStatePatch(BaseModel):
 
 
 # ── Helpers ──────────────────────────────────────────────────────────
+
+
+async def _eden_org_or_404(org_id: str) -> str:
+    """Map Clerk or Eden org id to canonical ``organizations.id``."""
+    eden_org_id = await resolve_eden_org_id(org_id)
+    if not eden_org_id:
+        raise HTTPException(404, "Organization not found")
+    return eden_org_id
+
+
+async def _persist_installation_row(
+    pg: Any,
+    *,
+    org_id: str,
+    installation_id: int,
+    account_login: str,
+    account_type: str = "Organization",
+    installed_by_user_id: str | None = None,
+) -> dict[str, Any]:
+    row = await pg.fetchrow(
+        """
+        INSERT INTO org_github_installations
+            (org_id, installation_id, github_account_login,
+             github_account_type, installed_by_user_id)
+        VALUES ($1, $2, $3, $4, $5)
+        ON CONFLICT (org_id, installation_id) DO UPDATE
+        SET github_account_login = EXCLUDED.github_account_login,
+            suspended_at = NULL
+        RETURNING installation_id, github_account_login, github_account_type,
+                  installed_at, suspended_at
+        """,
+        org_id,
+        installation_id,
+        account_login,
+        account_type,
+        installed_by_user_id,
+    )
+    if not row:
+        raise HTTPException(500, "Failed to persist GitHub installation")
+    return dict(row)
+
+
+async def _guess_org_for_github_install(pg: Any) -> str | None:
+    """Best-effort org match when GitHub webhook fires before portal claim."""
+    row = await pg.fetchrow(
+        """
+        SELECT org_id FROM onboarding_state
+        WHERE step = 'connect_github'
+          AND updated_at > NOW() - INTERVAL '2 hours'
+        ORDER BY updated_at DESC
+        LIMIT 1
+        """
+    )
+    return str(row["org_id"]) if row else None
 
 
 async def _client_for(installation_id: int) -> tuple[GitHubOAuthClient, Any]:
@@ -420,6 +492,7 @@ async def github_callback(
             url="/onboarding/connect?error=state_not_found",
             status_code=302,
         )
+    eden_org_id = await _eden_org_or_404(org_id)
     # Look up the installation account info so we can render a
     # recognisable label in the UI.
     try:
@@ -435,19 +508,12 @@ async def github_callback(
             url="/onboarding/connect?error=installation_token_failed",
             status_code=302,
         )
-    await pg.execute(
-        """
-        INSERT INTO org_github_installations
-            (org_id, installation_id, github_account_login,
-             github_account_type, installed_by_user_id)
-        VALUES ($1, $2, $3, 'Organization', NULL)
-        ON CONFLICT (org_id, installation_id) DO UPDATE
-        SET github_account_login = EXCLUDED.github_account_login,
-            suspended_at = NULL
-        """,
-        org_id,
-        int(installation_id),
-        account_login,
+    await _persist_installation_row(
+        pg,
+        org_id=eden_org_id,
+        installation_id=int(installation_id),
+        account_login=account_login,
+        installed_by_user_id=None,
     )
     return RedirectResponse(
         url=f"/onboarding/connect?installation_id={installation_id}",
@@ -496,8 +562,33 @@ async def github_webhook(request: Request) -> dict[str, str]:
             )
     elif event == "installation":
         action = payload.get("action", "")
-        installation_id = (payload.get("installation") or {}).get("id")
-        if action == "suspend" and installation_id:
+        installation = payload.get("installation") or {}
+        installation_id = installation.get("id")
+        if action == "created" and installation_id:
+            account = installation.get("account") or {}
+            account_login = account.get("login") or "unknown"
+            account_type = (
+                "Organization"
+                if (account.get("type") or "").lower() == "organization"
+                else "User"
+            )
+            target_org = await _guess_org_for_github_install(pg)
+            if target_org:
+                try:
+                    await _persist_installation_row(
+                        pg,
+                        org_id=target_org,
+                        installation_id=int(installation_id),
+                        account_login=account_login,
+                        account_type=account_type,
+                        installed_by_user_id=None,
+                    )
+                except Exception as exc:
+                    logger.warning(
+                        "installation.created webhook persist failed: %s",
+                        redact_all(str(exc)),
+                    )
+        elif action == "suspend" and installation_id:
             await pg.execute(
                 """
                 UPDATE org_github_installations
@@ -535,35 +626,42 @@ async def claim_github_installation(
     ``installation_id`` instead of hitting ``/integrations/github/callback``.
     This route lets the wizard register the installation in Eden's DB.
     """
+    eden_org_id = await _eden_org_or_404(org_id)
     pg = await get_postgres_client()
     installation_id = int(req.installation_id)
-    try:
-        oauth = GitHubOAuthClient()
-        token = await oauth.installation_token(installation_id)
-        repos = await oauth.list_installation_repos(token)
-        account_login = repos[0].owner if repos else "unknown"
-    except (GitHubConfigError, GitHubAPIError) as exc:
-        raise HTTPException(400, f"Could not verify GitHub installation: {exc}") from exc
 
-    row = await pg.fetchrow(
+    existing = await pg.fetchrow(
         """
-        INSERT INTO org_github_installations
-            (org_id, installation_id, github_account_login,
-             github_account_type, installed_by_user_id)
-        VALUES ($1, $2, $3, 'Organization', $4)
-        ON CONFLICT (org_id, installation_id) DO UPDATE
-        SET github_account_login = EXCLUDED.github_account_login,
-            suspended_at = NULL
-        RETURNING installation_id, github_account_login, github_account_type,
-                  installed_at, suspended_at
+        SELECT installation_id, github_account_login, github_account_type,
+               installed_at, suspended_at
+        FROM org_github_installations
+        WHERE org_id = $1 AND installation_id = $2
         """,
-        org_id,
+        eden_org_id,
         installation_id,
-        account_login,
-        user["user_id"],
     )
-    if not row:
-        raise HTTPException(500, "Failed to persist GitHub installation")
+    if existing:
+        row = dict(existing)
+    else:
+        try:
+            oauth = GitHubOAuthClient()
+            token = await oauth.installation_token(installation_id)
+            repos = await oauth.list_installation_repos(token)
+            account_login = repos[0].owner if repos else "unknown"
+        except (GitHubConfigError, GitHubAPIError) as exc:
+            raise HTTPException(
+                400, f"Could not verify GitHub installation: {exc}",
+            ) from exc
+
+        installer_id = await resolve_eden_user_id(user.get("user_id"))
+        row = await _persist_installation_row(
+            pg,
+            org_id=eden_org_id,
+            installation_id=installation_id,
+            account_login=account_login,
+            installed_by_user_id=installer_id,
+        )
+
     return InstallationOut(
         installation_id=int(row["installation_id"]),
         account_login=row["github_account_login"],
