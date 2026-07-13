@@ -90,14 +90,12 @@ jobs:
           version: "latest"
       - run: uv sync --frozen --all-extras
       - run: uv run ruff check src/ || true
-        # ruff is informational only — the codebase has ~240
-        # pre-existing style errors (mostly F401/F841/B904) that
-        # ruff --fix has whittled down but not eliminated. Flip
-        # to non-zero exit once the cleanup pass lands.
+        # Soft-launch: keep informational until unused-import sweep lands.
+        # Prefer ``ruff check src/ --select F401,F841`` as the first
+        # blocking gate once that sweep is green.
       - run: uv run mypy src/ || true
-        # mypy is informational only — the codebase still has a lot
-        # of gradual typing. Flip to non-zero exit once we ship the
-        # cleanup pass tracked in eden-audit-phase8.
+        # mypy is informational only — flip to non-zero exit once the
+        # cleanup pass tracked in eden-audit-phase8 lands.
 
   test:
     name: pytest

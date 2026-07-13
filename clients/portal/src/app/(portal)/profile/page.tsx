@@ -46,6 +46,7 @@ export default function ProfilePage() {
   // Delete account
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [exportingData, setExportingData] = useState(false);
 
   // Avatar upload
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -320,6 +321,44 @@ export default function ProfilePage() {
                 Set Up 2FA
               </Button>}
           </div>}
+      </div>
+
+      {/* GDPR data export */}
+      <div className="bg-[var(--bg-primary)] rounded-lg border border-[var(--border)] p-6 mb-6">
+        <div className="flex items-center gap-3 mb-4">
+          <div className="p-2 rounded-lg bg-[var(--accent-faint)]">
+            <Shield className="w-5 h-5 text-[var(--accent)]" aria-hidden />
+          </div>
+          <div>
+            <h2 className="text-lg font-semibold text-[var(--text-primary)]">Your data</h2>
+            <p className="text-sm text-[var(--text-muted)]">GDPR Art. 15 — request a copy of your personal data</p>
+          </div>
+        </div>
+        <div className="flex items-center justify-between gap-4 flex-wrap">
+          <p className="text-sm text-[var(--text-secondary)] max-w-xl">
+            We queue an export job, write it to secure storage, and email a download link when ready.
+          </p>
+          <Button
+            size="sm"
+            variant="secondary"
+            loading={exportingData}
+            onClick={async () => {
+              setExportingData(true);
+              try {
+                const res = await fetch("/api/proxy/api/v1/me/data", { method: "GET" });
+                if (!res.ok) throw new Error(`Export failed (${res.status})`);
+                const body = await res.json();
+                toast.success("Export queued", `Job ${body.job_id} — check your email when ready.`);
+              } catch (e) {
+                toast.error("Export failed", e instanceof Error ? e.message : undefined);
+              } finally {
+                setExportingData(false);
+              }
+            }}
+          >
+            Request data export
+          </Button>
+        </div>
       </div>
 
       {/* Danger Zone */}
