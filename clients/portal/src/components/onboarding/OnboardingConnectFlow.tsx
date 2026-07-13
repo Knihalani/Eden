@@ -25,7 +25,7 @@ import Link from "next/link";
 import { useOrg } from "@/hooks/use-org";
 import { usePermissions } from "@/hooks/use-permissions";
 import { githubApi, type GitHubInstallation, type GitHubRepo, type OnboardingPRRun } from "@/lib/api";
-import { clearStoredInstallationId } from "@/lib/github-install";
+import { clearStoredInstallationId, readStoredInstallationId } from "@/lib/github-install";
 import { useToast } from "@/components/ui/toast";
 import {
   AlertCircle,
@@ -110,7 +110,11 @@ export function OnboardingConnectFlow({
   const [loadingRepos, setLoadingRepos] = useState(false);
   const [authorizing, setAuthorizing] = useState(false);
   const [integrating, setIntegrating] = useState(false);
-  const [phase, setPhase] = useState<ConnectPhase>("checking");
+  const pendingInstallationId =
+    preselectedInstallationId ?? readStoredInstallationId();
+  const [phase, setPhase] = useState<ConnectPhase>(() =>
+    pendingInstallationId ? "claiming" : "checking",
+  );
   const [error, setError] = useState<string | null>(null);
   const autoIntegrateAttempted = useRef(false);
 
@@ -131,28 +135,28 @@ export function OnboardingConnectFlow({
     try {
       const insts = await githubApi.listInstallations(currentOrg.id);
       setInstallations(insts.filter((i) => !i.suspended));
-      if (insts.length === 0) {
+      if (insts.length === 0 && !pendingInstallationId) {
         setRepos([]);
         setPhase("install-app");
         return;
       }
       const rs = await githubApi.listRepos(currentOrg.id);
       setRepos(rs);
-      const autoTarget = autoIntegrateTarget(rs, preselectedInstallationId);
+      const autoTarget = autoIntegrateTarget(rs, pendingInstallationId);
       if (autoTarget) {
         setSelectedRepo(autoTarget);
-      } else if (preselectedInstallationId) {
-        const first = rs.find((r) => r.installation_id === preselectedInstallationId);
+      } else if (pendingInstallationId) {
+        const first = rs.find((r) => r.installation_id === pendingInstallationId);
         if (first) setSelectedRepo(first);
       }
-      setPhase(rs.length > 0 ? "pick-repo" : "install-app");
+      setPhase(rs.length > 0 ? "pick-repo" : pendingInstallationId ? "claiming" : "install-app");
     } catch (err) {
       setError(errorFromCaught(err, "Could not load repos"));
-      setPhase("install-app");
+      setPhase(pendingInstallationId ? "claiming" : "install-app");
     } finally {
       setLoadingRepos(false);
     }
-  }, [currentOrg?.id, canIntegrate, configured, preselectedInstallationId]);
+  }, [currentOrg?.id, canIntegrate, configured, pendingInstallationId]);
 
   useEffect(() => {
     async function boot() {
@@ -160,12 +164,12 @@ export function OnboardingConnectFlow({
         if (configured === false) setPhase("install-app");
         return;
       }
-      if (preselectedInstallationId) {
+      if (pendingInstallationId) {
         setPhase("claiming");
         try {
           await githubApi.claimInstallation(
             currentOrg.id,
-            preselectedInstallationId,
+            pendingInstallationId,
           );
           clearStoredInstallationId();
         } catch (err) {
@@ -177,7 +181,7 @@ export function OnboardingConnectFlow({
       await loadRepos();
     }
     void boot();
-  }, [loadRepos, preselectedInstallationId, currentOrg?.id, configured, canIntegrate]);
+  }, [loadRepos, pendingInstallationId, currentOrg?.id, configured, canIntegrate]);
 
   async function startInstall() {
     if (!currentOrg?.id) return;
@@ -242,7 +246,7 @@ export function OnboardingConnectFlow({
     ) {
       return;
     }
-    const target = autoIntegrateTarget(repos, preselectedInstallationId);
+    const target = autoIntegrateTarget(repos, pendingInstallationId);
     if (!target) return;
     autoIntegrateAttempted.current = true;
     void runIntegrate(target);
@@ -253,7 +257,7 @@ export function OnboardingConnectFlow({
     canIntegrate,
     configured,
     repos,
-    preselectedInstallationId,
+    pendingInstallationId,
     runIntegrate,
   ]);
 
