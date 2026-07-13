@@ -98,6 +98,9 @@ dependencies = [
     # and the [socks] extra (Eden does not route through SOCKS).
     "httpx>=0.27.0,<1.0.0",
 
+    # CLI transitive (uvicorn/typer) — pinned for PYSEC-2026-2132 (click 8.1.x).
+    "click>=8.3.3,<9.0.0",
+
     # Logging
     "structlog>=24.0.0,<25.0.0",
 
