@@ -57,6 +57,7 @@ from ._common import (
     _parse_window,
     _psi,
     _safe_float,
+    _with_pg_assumptions,
 )
 
 logger = logging.getLogger(__name__)
@@ -269,14 +270,16 @@ class DriftDetector:
         )
         return _ok_envelope(
             self.name,
-            {
-                "drift_type": "embedding",
-                "org_id": org_id,
-                "psi_value": psi_value,
-                "severity": severity,
-                "details": details,
-                "model": MODEL_NAME,
-            },
+            _with_pg_assumptions(
+                {
+                    "drift_type": "embedding",
+                    "org_id": org_id,
+                    "psi_value": psi_value,
+                    "severity": severity,
+                    "details": details,
+                    "model": MODEL_NAME,
+                }
+            ),
         )
 
 

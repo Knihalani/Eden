@@ -613,33 +613,44 @@ class TestRoutes:
         assert r.status_code in (200, 403)
 
     def test_nl_query_route(self, client: TestClient) -> None:
-        # NLQueryEngine removed per upgradespec §D.4; the
-        # route stays mounted for deep-link resolution but
-        # returns a stable 501 envelope pointing at the
-        # EQL DSL replacement.
-        r = client.post(
-            "/orgs/org_test/intelligence/autonomous/nl/query",
-            json={"question": "anything?"},
+        pg = _pg_with_signals(
+            judge_trends=[
+                {"judge_name": "hallucination", "avg_score": 0.9, "n": 10},
+            ]
         )
+        with patch("eden.storage.postgres.get_postgres_client", return_value=pg):
+            with patch(
+                "eden.llm.client.get_llm_client",
+                return_value=_make_llm_client(content="not json"),
+            ):
+                r = client.post(
+                    "/orgs/org_test/intelligence/autonomous/nl/query",
+                    json={"question": "how is judge quality?"},
+                )
         body = r.json()
         assert r.status_code == 200
-        assert body["status"] == "not_implemented"
-        assert body["live"] is False
-        assert "EQL" in body["message"]
+        assert body["status"] == "ok"
+        assert body["live"] is True
+        assert "assumptions" in body["data"]
+        assert body["data"]["data_source"] == "postgres"
 
     def test_nl_dashboard_route(self, client: TestClient) -> None:
-        # AutoDashboardBuilder removed per upgradespec §D.4;
-        # the route returns a stable 501 envelope pointing
-        # at the dashboards surface.
-        r = client.post(
-            "/orgs/org_test/intelligence/autonomous/nl/dashboard",
-            json={"description": "judge quality last 7 days"},
-        )
+        pg = _pg_with_signals()
+        with patch("eden.storage.postgres.get_postgres_client", return_value=pg):
+            with patch(
+                "eden.llm.client.get_llm_client",
+                return_value=_make_llm_client(content="not json"),
+            ):
+                r = client.post(
+                    "/orgs/org_test/intelligence/autonomous/nl/dashboard",
+                    json={"description": "judge quality last 7 days"},
+                )
         body = r.json()
         assert r.status_code == 200
-        assert body["status"] == "not_implemented"
-        assert body["live"] is False
-        assert "dashboard" in body["message"].lower()
+        assert body["status"] == "ok"
+        assert body["live"] is True
+        assert "panels" in body["data"]["spec"]
+        assert len(body["data"]["spec"]["panels"]) >= 1
 
     def test_nl_report_route(self, client: TestClient) -> None:
         r = client.post(
@@ -655,20 +666,17 @@ class TestRoutes:
 
 class TestPackageReexports:
     def test_top_level_imports(self) -> None:
-        # Per the package docstring, the Cat 9/12 cut kept only
-        # ``InvestigationAgent`` + ``SelfHealer`` from
-        # ``investigation`` + ``NLReportGenerator`` from
-        # ``nl_interface``. The deleted classes
-        # (``NLQueryEngine``, ``AutoDashboardBuilder``,
-        # ``RecommendationEngine``, ``ReportGenerator``) were
-        # folded into the surviving services.
         from eden.autonomous import (  # noqa: F401
+            AutoDashboardBuilder,
             InvestigationAgent,
+            NLQueryEngine,
             NLReportGenerator,
             SelfHealer,
         )
 
     def test_nl_subpackage_imports(self) -> None:
         from eden.autonomous.nl_interface import (  # noqa: F401
+            AutoDashboardBuilder,
+            NLQueryEngine,
             NLReportGenerator,
         )

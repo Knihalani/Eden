@@ -110,6 +110,23 @@ CONF_BAND_UPPER: float = 1.2
 #: without being noisy on small samples.
 EMBEDDING_BUCKETS: int = 64
 
+#: Documented assumptions stamped on predictive envelopes when
+#: aggregates are computed from Postgres rather than ClickHouse.
+#: ClickHouse is the optional analytics substrate; Postgres is
+#: always the durable source of truth for judge_scores /
+#: usage_events / telemetry_events.
+POSTGRES_FALLBACK_ASSUMPTIONS: tuple[str, ...] = (
+    "ClickHouse analytics substrate unavailable or unused; "
+    "aggregates computed from Postgres telemetry_events, "
+    "usage_events, and judge_scores.",
+    "Cost/capacity/risk heuristics use trailing-window "
+    "median / OLS / PSI on org telemetry — not a trained "
+    "forecasting model.",
+    "Embedding drift uses a stable hash-bucket proxy over "
+    "response_body text (64 buckets), not a learned embedding "
+    "model.",
+)
+
 
 # ── Window parsing ───────────────────────────────────────────────────
 
@@ -159,6 +176,28 @@ def _ok_envelope(feature: str, data: dict[str, Any]) -> dict[str, Any]:
         "timestamp": datetime.now(UTC).isoformat(),
         "data": data,
     }
+
+
+def _with_pg_assumptions(data: dict[str, Any]) -> dict[str, Any]:
+    """Stamp Postgres-fallback assumptions onto a live payload.
+
+    Predictive services always read Postgres today (ClickHouse
+    is optional). Callers include the assumptions so portal /
+    API consumers can surface the data-source caveat without
+    treating the response as a stub.
+    """
+    out = dict(data)
+    existing = out.get("assumptions")
+    if isinstance(existing, list):
+        merged = list(existing)
+        for item in POSTGRES_FALLBACK_ASSUMPTIONS:
+            if item not in merged:
+                merged.append(item)
+        out["assumptions"] = merged
+    else:
+        out["assumptions"] = list(POSTGRES_FALLBACK_ASSUMPTIONS)
+    out.setdefault("data_source", "postgres")
+    return out
 
 
 def _bad_request_envelope(feature: str, message: str) -> dict[str, Any]:
@@ -993,6 +1032,7 @@ __all__ = [
     "COST_HISTORY_DAYS",
     "EMBEDDING_BUCKETS",
     "MIN_FORECAST_HISTORY_DAYS",
+    "POSTGRES_FALLBACK_ASSUMPTIONS",
     "PSI_BUCKETS",
     "PSI_THRESHOLD",
     "QUALITY_HISTORY_DAYS",
@@ -1020,5 +1060,6 @@ __all__ = [
     "_upsert_cost_prediction",
     "_upsert_quality_prediction",
     "_upsert_risk_score",
+    "_with_pg_assumptions",
     "_zscore",
 ]
