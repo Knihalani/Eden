@@ -1,10 +1,10 @@
 """Simple in-memory rate limiter for auth endpoints.
 
 Provides token-bucket-style rate limiting per IP address.
-In production, replace with Redis-backed rate limiting (e.g., slowapi).
-
-Audit 2026-06-22 B1.28 — bounded OrderedDict with TTL eviction so
-the bucket map cannot grow unbounded under attack.
+When ``REDIS_URL`` is configured, auth buckets are backed by a
+distributed sliding window (sorted-set + Lua) so multi-worker deploys
+share counters. Falls back to the in-process deque when Redis is
+down or unset.
 """
 
 import asyncio
@@ -12,11 +12,88 @@ import logging
 import time
 from collections import OrderedDict
 
+from eden.api.utils.redact import redact_all
+
 logger = logging.getLogger(__name__)
 
 # ponytail: global cap on tracked keys; under attack, oldest unpoked
 # keys get evicted. 50_000 entries × ~50 bytes each ≈ 2.5 MB cap.
 _MAX_TRACKED_KEYS = 50_000
+
+_AUTH_REDIS_PREFIX = "eden:auth-ratelimit"
+
+_SLIDING_WINDOW_LUA = """
+local key = KEYS[1]
+local now = tonumber(ARGV[1])
+local window_start = tonumber(ARGV[2])
+local max_requests = tonumber(ARGV[3])
+local window_seconds = tonumber(ARGV[4])
+
+redis.call("zremrangebyscore", key, 0, window_start)
+local count = redis.call("zcard", key)
+
+if count >= max_requests then
+    local oldest = redis.call("zrange", key, 0, 0, "withscores")
+    local retry_after = window_seconds
+    if #oldest > 0 then
+        retry_after = math.max(1, (tonumber(oldest[2]) + window_seconds) - now)
+    end
+    return {-1, retry_after}
+end
+
+redis.call("zadd", key, now, now)
+redis.call("expire", key, window_seconds + 1)
+return {count + 1, 0}
+"""
+
+
+async def _redis_sliding_window_check(
+    key: str,
+    max_requests: int,
+    window_seconds: float,
+) -> float | None:
+    """Distributed auth rate-limit check.
+
+    Returns ``None`` when the request is allowed, a positive
+    ``retry_after`` seconds value when denied, or raises no exception
+    on Redis failure (caller should fall back to in-memory).
+    """
+    try:
+        from eden.storage.redis import get_redis_client
+    except Exception:
+        return None
+
+    try:
+        client = await get_redis_client()
+    except Exception:
+        return None
+
+    if client is None:
+        return None
+
+    now = time.time()
+    window_start = now - window_seconds
+    redis_key = f"{_AUTH_REDIS_PREFIX}:{key}"
+
+    try:
+        result = await client.eval(
+            _SLIDING_WINDOW_LUA,
+            1,
+            redis_key,
+            now,
+            window_start,
+            max_requests,
+            int(window_seconds) + 1,
+        )
+        if isinstance(result, list) and len(result) == 2 and result[0] == -1:
+            return float(result[1])
+        return None
+    except Exception as exc:
+        logger.debug(
+            "auth rate limit Redis path failed: %s",
+            redact_all(str(exc)),
+        )
+        return None
 
 
 class RateLimitExceeded(Exception):
@@ -54,6 +131,12 @@ class SlidingWindowRateLimiter:
         Raises:
             RateLimitExceeded: If the rate limit has been exceeded.
         """
+        retry_after = await _redis_sliding_window_check(
+            key, self.max_requests, self.window_seconds,
+        )
+        if retry_after is not None:
+            raise RateLimitExceeded(retry_after=retry_after)
+
         now = time.monotonic()
         cutoff = now - self.window_seconds
 
