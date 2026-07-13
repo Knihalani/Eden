@@ -57,6 +57,19 @@ def _build_settings_class():
         app_version: str = "0.1.0"
         debug: bool = False
 
+        # Production readiness (Phase 1 backend foundation)
+        # ``eden_production`` enables fail-closed startup checks and
+        # stricter KB init. ``run_background_workers`` gates whether the
+        # API process hosts in-process background loops (off when a
+        # dedicated ``eden-worker`` job is deployed).
+        eden_production: bool = False
+        run_background_workers: bool = True
+        strict_startup_checks: bool = False
+        eden_upload_dir: str = "/tmp/eden-uploads"
+        avatar_storage_backend: str = "local"  # "local" | "s3"
+        avatar_s3_bucket: str = ""
+        avatar_public_base_url: str = ""
+
         # Server
         host: str = "0.0.0.0"
         port: int = 8000
@@ -800,6 +813,9 @@ def get_settings() -> "Settings":  # noqa: F821
     import os
 
     settings = _build_settings_class()()
+    # Phase 1: production mode implies strict startup unless overridden.
+    if settings.eden_production and not settings.strict_startup_checks:
+        settings = settings.model_copy(update={"strict_startup_checks": True})
     placeholder = "change-me-in-production"
     if settings.jwt_secret == placeholder:
         testing = os.environ.get("EDEN_TESTING", "").lower() in (

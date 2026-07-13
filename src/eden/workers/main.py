@@ -62,19 +62,20 @@ async def _run_forever() -> None:
        fine — NF runs one worker container.
     """
     loops: list[tuple[str, Any]] = []
+    stop = asyncio.Event()
 
-    # 1. Insights detector loop — polls new judge_scores → insights.
-    try:
-        from eden.insights.detector_loop import InsightsDetectorLoop
-        loop = InsightsDetectorLoop()
-        await loop.start()
-        loops.append(("insights_loop", loop))
-        logger.info("worker: insights_loop started")
-    except Exception as exc:  # pragma: no cover - defensive
-        logger.warning("worker: insights_loop failed to start (%s); skipping", exc)
+    # 1. Insights detector loop — leader-gated singleton.
+    insights_task = asyncio.create_task(
+        _leader_insights_loop(stop),
+        name="insights-loop",
+    )
+    loops.append(("insights_loop", insights_task))
 
-    # 2. Webhook delivery drain — runs in this coroutine directly.
-    webhook_task = asyncio.create_task(_webhook_drain_loop(), name="webhook-drain")
+    # 2. Webhook delivery drain — leader-gated singleton loop.
+    webhook_task = asyncio.create_task(
+        _leader_webhook_drain_loop(stop),
+        name="webhook-drain",
+    )
     loops.append(("webhook_drain", webhook_task))
 
     if not loops:
@@ -82,12 +83,10 @@ async def _run_forever() -> None:
         # NF will SIGTERM the container after the grace period;
         # without this sleep the process would exit 1 and NF would
         # mark the deploy as crashed.
-        stop = asyncio.Event()
         _install_signal_handlers(stop)
         await stop.wait()
         return
 
-    stop = asyncio.Event()
     _install_signal_handlers(stop)
 
     try:
@@ -114,6 +113,44 @@ async def _run_forever() -> None:
             for _, task in loops:
                 if isinstance(task, asyncio.Task) and not task.done():
                     task.cancel()
+
+
+async def _leader_insights_loop(stop: asyncio.Event) -> None:
+    """Leader-gated insights detector loop."""
+    from eden.workers.leader import run_if_leader
+
+    async def _tick() -> None:
+        from eden.insights.detector_loop import InsightsDetectorLoop
+
+        loop = InsightsDetectorLoop()
+        result = await loop.tick_once()
+        if any(result.values()):
+            logger.info("worker: insights_loop tick result=%s", result)
+
+    await run_if_leader(
+        "insights_loop",
+        _tick,
+        interval=60.0,
+        stop=stop,
+    )
+
+
+async def _leader_webhook_drain_loop(stop: asyncio.Event) -> None:
+    """Leader-gated 30s cadence webhook delivery drain."""
+    from eden.workers.leader import run_if_leader
+
+    async def _tick() -> None:
+        try:
+            from eden.services.webhook_delivery import WebhookDeliveryService
+
+            svc = WebhookDeliveryService()
+            n = await svc.process_pending_deliveries()
+            if n:
+                logger.info("worker: webhook_drain delivered=%d", n)
+        except Exception as exc:  # pragma: no cover - defensive
+            logger.warning("worker: webhook_drain tick failed: %s", exc)
+
+    await run_if_leader("webhook_drain", _tick, interval=30.0, stop=stop)
 
 
 async def _webhook_drain_loop() -> None:

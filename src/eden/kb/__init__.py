@@ -68,19 +68,29 @@ async def _seed_initial_prompts() -> None:
 async def _initialize_postgres_schema() -> None:
     """Initialize PostgreSQL schema from migration file."""
     import os
+    from pathlib import Path
+
+    from eden.config import get_settings
 
     get_postgres_client = _get_postgres_client()
     client = await get_postgres_client()
 
+    settings = get_settings()
     migrations_dir = os.environ.get(
         "EDEN_MIGRATIONS_DIR",
-        "/Users/kaiavnihalani/Downloads/Eden/migrations"
+        str(settings.migrations_dir),
     )
+    if not Path(migrations_dir).is_absolute():
+        migrations_dir = str(settings.project_root / migrations_dir)
 
-    schema_file = f"{migrations_dir}/001_kb_schema.sql"
+    schema_file = Path(migrations_dir) / "001_kb_schema.sql"
 
-    if not os.path.exists(schema_file):
-        logger.warning(f"Migration file not found: {schema_file}")
+    if not schema_file.is_file():
+        msg = f"Migration file not found: {schema_file}"
+        if settings.eden_production or settings.strict_startup_checks:
+            logger.error(msg)
+            raise FileNotFoundError(msg)
+        logger.warning(msg)
         return
 
     with open(schema_file) as f:
