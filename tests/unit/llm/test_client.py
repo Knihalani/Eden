@@ -336,24 +336,22 @@ class TestUsageTracking:
 # Model Slots
 # ─────────────────────────────────────────────────────────────────────────────
 
-class TestModelSlots:
+class TestSlotTierRouting:
     def test_get_model_for_slot(self):
-        """Model slots map task types to configured models."""
+        """Slots resolve to ModelRouter tier primary models."""
         with patch("eden.llm.client.OpenAI"):
             client = OpenRouterClient(api_key="test")
-            # The primary model comes from settings, but we can verify
-            # the slot structure exists
-            assert "reasoning" in client.MODEL_SLOTS
-            assert "code" in client.MODEL_SLOTS
-            assert "fast" in client.MODEL_SLOTS
-            assert "extraction" in client.MODEL_SLOTS
+            assert client.get_model_for_slot("reasoning") == "minimax/minimax-m3"
+            assert client.get_model_for_slot("fast") == "tencent/hy3"
+            assert client.get_model_for_slot("code") == "minimax/minimax-m3"
+            assert client.get_model_for_slot("extraction") == "tencent/hy3"
 
     def test_slot_has_max_tokens(self):
-        """Each slot configures max_tokens."""
+        """Each slot configures max_tokens from settings."""
         with patch("eden.llm.client.OpenAI"):
             client = OpenRouterClient(api_key="test")
-            slot = client.MODEL_SLOTS["reasoning"]
-            assert slot.max_tokens > 0
+            _, max_tokens = client._models_and_tokens_for_slot("reasoning")
+            assert max_tokens > 0
 
 
 class TestAcallUsesInProcessCache:
@@ -385,14 +383,14 @@ class TestAcallUsesInProcessCache:
             finish_reason="stop",
         )
         # Manually populate the cache using the same max_tokens
-        # the slot's reasoning config carries — ``acall`` resolves
+        # the slot's tier config carries — ``acall`` resolves
         # ``max_tokens`` from the slot when the caller doesn't pass
         # it, so the cache key must match that resolved value or
         # we'd be testing a key that never gets used in production.
-        slot_cfg = c.MODEL_SLOTS["reasoning"]
+        _, slot_max_tokens = c._models_and_tokens_for_slot("reasoning")
         # ``call`` clamps max_tokens before hashing; seed the cache
         # with the clamped value so acall hits the same key.
-        mt = c._clamp_max_tokens(slot_cfg.max_tokens)
+        mt = c._clamp_max_tokens(slot_max_tokens)
         key = c._cache_key(
             "anthropic/claude-3-5-sonnet-20241022",
             "hello", None, mt, temperature=0,

@@ -282,12 +282,6 @@ def _build_settings_class():
         minimax_base_url: str = "https://api.minimax.io/v1"
         minimax_model: str = "MiniMax-M3"
 
-        # Model configuration
-        model_reasoning: str = "anthropic/claude-sonnet-4.6"
-        model_code: str = "qwen/qwen3-coder:free"
-        model_fast: str = "xiaomi/mimo-v2.5"
-        model_fallback: str = "meta-llama/llama-3.3-70b-instruct"
-
         # Token budgets per agent
         max_tokens_planner: int = 50000
         max_tokens_critic: int = 30000
@@ -476,7 +470,7 @@ def _build_settings_class():
         eden_storage_access_key: str = ""
         eden_storage_secret_key: str = ""
         # When True, the production monitor's hallucination judge uses
-        # the configured LLM (model_reasoning) as a tiebreaker when
+        # the ModelRouter T3 tier primary model as a tiebreaker when
         # the heuristic is inconclusive. Off by default — the
         # heuristic + judge_scores table is the primary signal.
         production_monitor_use_llm_judge: bool = False
