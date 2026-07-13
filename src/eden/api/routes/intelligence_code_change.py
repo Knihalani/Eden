@@ -238,6 +238,10 @@ class RevertRequest(BaseModel):
 
 class TestPatchRequest(BaseModel):
     patch_id: str
+    policy: dict[str, Any] | None = None
+    files: list[dict[str, Any]] | None = None
+    command: list[str] | None = None
+    model_config = {"extra": "ignore"}
 
 
 class OpenPRRequest(BaseModel):
@@ -365,7 +369,13 @@ async def test_patch(
     patch_id: str = Path(...),
     body: TestPatchRequest = Body(...),
 ) -> dict[str, Any]:
-    return await _test_runner.run(org_id, patch_id=body.patch_id)
+    return await _test_runner.run(
+        org_id,
+        patch_id=body.patch_id,
+        policy=body.policy,
+        files=body.files,
+        command=body.command,
+    )
 
 
 @router.post("/patches/{patch_id}/pr")

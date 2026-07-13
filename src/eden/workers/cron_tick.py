@@ -10,6 +10,9 @@ Wired into the Northflank ``eden-cron`` scheduled job
 2. Cheap due-check for the recurring optimization agent
    (:func:`eden.code_change.triggers.scheduled_trigger.run`) via
    :class:`eden.closed_loop.efficiency.AgentEfficiencyController`.
+2b. Post-merge monitor tick
+   (:meth:`eden.code_change.post_merge_monitor.PostMergeMonitor.tick_due`)
+   so merged Cat 23 PRs get 1h/6h/24h/7d regression windows.
 3. If the UTC hour matches one of the heavier scheduled jobs,
    runs that as well:
 
@@ -95,6 +98,17 @@ async def _run_classifier_retrain() -> dict[str, object]:
         return await ClassifierTrainingPipeline().retrain_due_orgs()
     except Exception as exc:
         logger.exception("[cron_tick] classifier_retrain failed: %s", exc)
+        return {"errors": [str(exc)]}
+
+
+async def _run_post_merge_monitor(*, dry_run: bool) -> dict[str, object]:
+    """Tick the Cat 23 post-merge regression monitor."""
+    try:
+        from eden.code_change.post_merge_monitor import PostMergeMonitor
+
+        return await PostMergeMonitor().tick_due(dry_run=dry_run)
+    except Exception as exc:
+        logger.exception("[cron_tick] post_merge_monitor failed: %s", exc)
         return {"errors": [str(exc)]}
 
 
@@ -218,6 +232,18 @@ async def _tick(*, dry_run: bool) -> dict[str, object]:
     except Exception as exc:
         logger.exception("[cron_tick] scheduled_optimization failed: %s", exc)
         out["scheduled_optimization"] = {
+            "errors": [str(exc)],
+            "failure_marker": True,
+        }
+
+    # 1c. Always: Cat 23 post-merge monitor (Gate 4b).
+    try:
+        out["post_merge_monitor"] = await _run_post_merge_monitor(
+            dry_run=dry_run
+        )
+    except Exception as exc:
+        logger.exception("[cron_tick] post_merge_monitor failed: %s", exc)
+        out["post_merge_monitor"] = {
             "errors": [str(exc)],
             "failure_marker": True,
         }

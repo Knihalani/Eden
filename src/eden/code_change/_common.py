@@ -27,9 +27,10 @@ STUB mode contract (per the v1.6 STUB checklist):
   (``status="not_implemented"``, ``live=False``) with a
   ``gate=<N>_blocked`` marker so the portal can show
   "this requires Gate N (real ship)".
-* **TestPlanRunner.run** is the canonical example: it returns
-  ``gate=3_blocked`` because the sandbox worker (Gate 3) is
-  intentionally not yet wired.
+* **TestPlanRunner.run** is the canonical example: without
+  ``code_change_enabled`` it returns ``gate=3_blocked``; with
+  the opt-in it delegates to :mod:`eden.sandbox.runner`
+  (subprocess allowlist + timeout substitute for Firecracker).
 
 The helpers are intentionally local to the package — Cat 23 is a
 self-contained unit and the package boundary is the right place to
