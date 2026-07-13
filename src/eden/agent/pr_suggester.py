@@ -386,6 +386,7 @@ class PRSuggester:
             status="pending",
         )
         self._persist(suggestion)
+        await self._async_persist_to_proposed_patches(suggestion)
         return suggestion
 
     async def list_suggestions(
@@ -405,79 +406,108 @@ class PRSuggester:
         with ``created_at >= since`` are returned). The
         date filter is the v1.7 inbox date-range slider's
         backing.
+
+        When Postgres is available, also merges rows from
+        ``proposed_patches`` (dual-read) so suggestions
+        written only to the DB still appear.
         """
-        if not os.path.isfile(self._store_path):
-            return []
-        # Parse the since string once.
-        since_ts: float | None = None
-        if since:
-            try:
-                from datetime import datetime as _dt
-                since_ts = _dt.fromisoformat(since.replace("Z", "+00:00")).timestamp()
-            except Exception:
-                since_ts = None
         out: list[PRSuggestion] = []
-        try:
-            with open(self._store_path, encoding="utf-8") as fh:
-                for line in fh:
-                    line = line.strip()
-                    if not line:
-                        continue
-                    try:
-                        data = json.loads(line)
-                    except Exception:
-                        continue
-                    if data.get("org_id") != org_id:
-                        continue
-                    if status and data.get("status") != status:
-                        continue
-                    if trigger and data.get("trigger") != trigger:
-                        continue
-                    if since_ts is not None:
+        seen: set[str] = set()
+        if os.path.isfile(self._store_path):
+            # Parse the since string once.
+            since_ts: float | None = None
+            if since:
+                try:
+                    from datetime import datetime as _dt
+                    since_ts = _dt.fromisoformat(since.replace("Z", "+00:00")).timestamp()
+                except Exception:
+                    since_ts = None
+            try:
+                with open(self._store_path, encoding="utf-8") as fh:
+                    for line in fh:
+                        line = line.strip()
+                        if not line:
+                            continue
                         try:
-                            from datetime import datetime as _dt
-                            created = data.get("created_at")
-                            if created:
-                                created_ts = _dt.fromisoformat(
-                                    created.replace("Z", "+00:00"),
-                                ).timestamp()
-                                if created_ts < since_ts:
-                                    continue
+                            data = json.loads(line)
                         except Exception:
-                            pass
-                    try:
-                        out.append(_suggestion_from_dict(data))
-                    except Exception:
-                        continue
+                            continue
+                        if data.get("org_id") != org_id:
+                            continue
+                        if status and data.get("status") != status:
+                            continue
+                        if trigger and data.get("trigger") != trigger:
+                            continue
+                        if since_ts is not None:
+                            try:
+                                from datetime import datetime as _dt
+                                created = data.get("created_at")
+                                if created:
+                                    created_ts = _dt.fromisoformat(
+                                        created.replace("Z", "+00:00"),
+                                    ).timestamp()
+                                    if created_ts < since_ts:
+                                        continue
+                            except Exception:
+                                pass
+                        try:
+                            suggestion = _suggestion_from_dict(data)
+                            out.append(suggestion)
+                            seen.add(suggestion.id)
+                        except Exception:
+                            continue
+            except Exception as exc:
+                logger.debug("PRSuggester.list_suggestions: %s", exc)
+
+        # Dual-read: merge Postgres-backed suggestions not already
+        # present in the JSONL log (best-effort; no-op offline).
+        try:
+            pg_rows = await self._list_from_proposed_patches(
+                org_id,
+                status=status,
+                trigger=trigger,
+                since=since,
+                limit=limit,
+            )
+            for suggestion in pg_rows:
+                if suggestion.id not in seen:
+                    out.append(suggestion)
+                    seen.add(suggestion.id)
         except Exception as exc:
-            logger.debug("PRSuggester.list_suggestions: %s", exc)
+            logger.debug("PRSuggester.list_suggestions postgres: %s", exc)
+
         out.sort(key=lambda s: s.created_at, reverse=True)
         return out[:limit]
 
     async def get_suggestion(
         self, org_id: str, suggestion_id: str,
     ) -> PRSuggestion | None:
-        """Read a single suggestion by id."""
-        if not os.path.isfile(self._store_path):
-            return None
+        """Read a single suggestion by id (JSONL, then Postgres)."""
+        if os.path.isfile(self._store_path):
+            try:
+                with open(self._store_path, encoding="utf-8") as fh:
+                    for line in fh:
+                        line = line.strip()
+                        if not line:
+                            continue
+                        try:
+                            data = json.loads(line)
+                        except Exception:
+                            continue
+                        if (
+                            data.get("org_id") == org_id
+                            and data.get("id") == suggestion_id
+                        ):
+                            return _suggestion_from_dict(data)
+            except Exception as exc:
+                logger.debug("PRSuggester.get_suggestion: %s", exc)
         try:
-            with open(self._store_path, encoding="utf-8") as fh:
-                for line in fh:
-                    line = line.strip()
-                    if not line:
-                        continue
-                    try:
-                        data = json.loads(line)
-                    except Exception:
-                        continue
-                    if (
-                        data.get("org_id") == org_id
-                        and data.get("id") == suggestion_id
-                    ):
-                        return _suggestion_from_dict(data)
+            return await self._get_from_proposed_patches(
+                org_id, suggestion_id,
+            )
         except Exception as exc:
-            logger.debug("PRSuggester.get_suggestion: %s", exc)
-        return None
+            logger.debug("PRSuggester.get_suggestion postgres: %s", exc)
+            return None
 
     async def mark_opened(
         self, org_id: str, suggestion_id: str, pr_number: int,
@@ -487,11 +517,16 @@ class PRSuggester:
         Rewrites the JSONL file in place. Returns the
         updated suggestion.
         """
-        return self._update_suggestion(
+        found = self._update_suggestion(
             org_id, suggestion_id,
             status="opened",
             opened_pr_number=pr_number,
         )
+        if found is not None:
+            await self._update_proposed_patches_status(
+                org_id, suggestion_id, status="opened",
+            )
+        return found
 
     async def mark_status(
         self,
@@ -504,9 +539,14 @@ class PRSuggester:
         suggestion or ``None`` when the id is unknown."""
         if status not in {"merged", "rejected", "opened"}:
             return None
-        return self._update_suggestion(
+        found = self._update_suggestion(
             org_id, suggestion_id, status=status,
         )
+        if found is not None:
+            await self._update_proposed_patches_status(
+                org_id, suggestion_id, status=status,
+            )
+        return found
 
     async def get_file_content(
         self,
@@ -641,6 +681,7 @@ class PRSuggester:
         # implementation: re-persist + remove the old.
         # We rewrite the file in full to keep things simple.
         self._replace_suggestion(updated)
+        await self._async_persist_to_proposed_patches(updated)
         return updated
 
     async def bulk_regenerate(
@@ -863,6 +904,175 @@ class PRSuggester:
         except Exception as exc:
             logger.debug("PRSuggester._persist: %s", exc)
 
+    async def _async_persist_to_proposed_patches(
+        self, suggestion: PRSuggestion,
+    ) -> None:
+        """Best-effort dual-write into Cat 23 ``proposed_patches``.
+
+        Failures are silent so the JSONL path (and unit tests)
+        keep working when Postgres is unavailable.
+        """
+        try:
+            from eden.code_change._common import _insert_row
+        except Exception:
+            return
+        status = _suggestion_status_to_patch(suggestion.status)
+        description = suggestion.pr_title or suggestion.trigger_summary or ""
+        explanation = suggestion.pr_body or ""
+        # repo_id is NOT NULL on proposed_patches — use a stable
+        # placeholder when the suggester has no repo connection.
+        repo_id = getattr(self._repo, "repo_id", None) or "local"
+        try:
+            await _insert_row(
+                suggestion.org_id,
+                "proposed_patches",
+                [
+                    "id",
+                    "repo_id",
+                    "trace_id",
+                    "rca_id",
+                    "base_sha",
+                    "diff",
+                    "description",
+                    "explanation",
+                    "blast_radius_score",
+                    "quality_score",
+                    "model_used",
+                    "cost_usd",
+                    "version",
+                    "status",
+                ],
+                [
+                    suggestion.id,
+                    str(repo_id),
+                    suggestion.trigger_id or "",
+                    (
+                        suggestion.trigger_id
+                        if suggestion.trigger == TRIGGER_RCA_CLUSTER
+                        else None
+                    ),
+                    "",
+                    suggestion.patch_diff or "",
+                    description,
+                    explanation,
+                    float(suggestion.blast_radius or 0.0),
+                    float(suggestion.confidence or 0.0),
+                    "pr_suggester",
+                    0.0,
+                    1,
+                    status,
+                ],
+            )
+        except Exception as exc:
+            logger.debug(
+                "PRSuggester._async_persist_to_proposed_patches: %s", exc,
+            )
+
+    async def _list_from_proposed_patches(
+        self,
+        org_id: str,
+        *,
+        status: str | None = None,
+        trigger: str | None = None,
+        since: str | None = None,
+        limit: int = 50,
+    ) -> list[PRSuggestion]:
+        """Best-effort read of agent suggestions from ``proposed_patches``.
+
+        Only rows written by the suggester (``model_used=pr_suggester``)
+        are returned, so Cat 23 inbox patches don't leak into the
+        agent PR-suggestion list.
+        """
+        try:
+            from eden.code_change._common import _select_rows
+        except Exception:
+            return []
+        try:
+            rows = await _select_rows(
+                org_id,
+                "proposed_patches",
+                where="model_used = $2",
+                params=("pr_suggester",),
+                order_by="created_at DESC",
+                limit=limit * 2,
+            )
+        except Exception as exc:
+            logger.debug("PRSuggester._list_from_proposed_patches: %s", exc)
+            return []
+        since_ts: float | None = None
+        if since:
+            try:
+                since_ts = datetime.fromisoformat(
+                    since.replace("Z", "+00:00"),
+                ).timestamp()
+            except Exception:
+                since_ts = None
+        out: list[PRSuggestion] = []
+        for row in rows:
+            suggestion = _suggestion_from_patch_row(row)
+            if suggestion is None:
+                continue
+            if status and suggestion.status != status:
+                continue
+            if trigger and suggestion.trigger != trigger:
+                continue
+            if since_ts is not None:
+                try:
+                    if suggestion.created_at.timestamp() < since_ts:
+                        continue
+                except Exception:
+                    pass
+            out.append(suggestion)
+        return out[:limit]
+
+    async def _get_from_proposed_patches(
+        self, org_id: str, suggestion_id: str,
+    ) -> PRSuggestion | None:
+        try:
+            from eden.code_change._common import _select_one
+        except Exception:
+            return None
+        try:
+            row = await _select_one(
+                org_id,
+                "proposed_patches",
+                where="id = $2",
+                params=(suggestion_id,),
+            )
+        except Exception as exc:
+            logger.debug("PRSuggester._get_from_proposed_patches: %s", exc)
+            return None
+        if row is None:
+            return None
+        return _suggestion_from_patch_row(row)
+
+    async def _update_proposed_patches_status(
+        self,
+        org_id: str,
+        suggestion_id: str,
+        *,
+        status: str | None = None,
+    ) -> None:
+        if status is None:
+            return
+        try:
+            from eden.code_change._common import _update_row
+        except Exception:
+            return
+        try:
+            await _update_row(
+                org_id,
+                "proposed_patches",
+                where_col="id",
+                where_val=suggestion_id,
+                set_col="status",
+                set_val=_suggestion_status_to_patch(status),
+            )
+        except Exception as exc:
+            logger.debug(
+                "PRSuggester._update_proposed_patches_status: %s", exc,
+            )
+
     def _update_suggestion(
         self,
         org_id: str,
@@ -934,6 +1144,69 @@ def _clamp01(value: Any) -> float:
     if v > 1.0:
         return 1.0
     return v
+
+
+def _suggestion_status_to_patch(status: str) -> str:
+    """Map PRSuggestion status → proposed_patches.status."""
+    return {
+        "pending": "proposed",
+        "opened": "approved",
+        "merged": "merged",
+        "rejected": "denied",
+    }.get(status, "proposed")
+
+
+def _patch_status_to_suggestion(status: str) -> str:
+    """Map proposed_patches.status → PRSuggestion status."""
+    return {
+        "proposed": "pending",
+        "approved": "opened",
+        "merged": "merged",
+        "denied": "rejected",
+        "rejected": "rejected",
+        "needs_revision": "pending",
+        "reverted": "rejected",
+    }.get(status, "pending")
+
+
+def _suggestion_from_patch_row(row: dict[str, Any]) -> PRSuggestion | None:
+    """Best-effort convert a ``proposed_patches`` row to PRSuggestion."""
+    try:
+        created_at = row.get("created_at")
+        if isinstance(created_at, datetime):
+            if created_at.tzinfo is None:
+                created_at = created_at.replace(tzinfo=UTC)
+        elif isinstance(created_at, str):
+            created_at = datetime.fromisoformat(
+                created_at.replace("Z", "+00:00"),
+            )
+        else:
+            created_at = datetime.now(UTC)
+        explanation = row.get("explanation") or ""
+        description = row.get("description") or ""
+        # Recover trigger metadata from explanation prefix when present.
+        trigger = "rca_cluster"
+        trigger_id = str(row.get("rca_id") or row.get("trace_id") or "")
+        return PRSuggestion(
+            id=str(row.get("id") or ""),
+            org_id=str(row.get("org_id") or ""),
+            trigger=trigger,
+            trigger_id=trigger_id,
+            trigger_summary=description,
+            files=[],
+            patch_diff=str(row.get("diff") or ""),
+            pr_title=description,
+            pr_body=explanation if isinstance(explanation, str) else str(explanation),
+            blast_radius=_clamp01(row.get("blast_radius_score", 0.0)),
+            confidence=_clamp01(row.get("quality_score", 0.0)),
+            status=_patch_status_to_suggestion(
+                str(row.get("status") or "proposed"),
+            ),
+            created_at=created_at,
+            opened_pr_number=None,
+        )
+    except Exception:
+        return None
 
 
 def _suggestion_to_dict(s: PRSuggestion) -> dict:

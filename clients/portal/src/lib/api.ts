@@ -5140,3 +5140,134 @@ export const codeChangePolicyApi = {
       body: JSON.stringify({ policy }),
     }),
 };
+
+/** Cat 23 proposed-patch inbox (Gate 4a human review surface). */
+export type CodeChangePatchStatus =
+  | "proposed"
+  | "approved"
+  | "denied"
+  | "merged"
+  | "reverted"
+  | "needs_revision";
+
+export interface CodeChangeInboxPatch {
+  patch_id: string;
+  repo_id: string;
+  trace_id: string;
+  rca_id?: string | null;
+  description?: string;
+  status: string;
+  quality_score?: number | null;
+  blast_radius_score?: number | null;
+  cost_usd?: number | null;
+  model_used?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+  explanation?: {
+    what_happened?: string;
+    why_it_happened?: string;
+    what_patch_does?: string;
+    what_to_watch?: string;
+  };
+  found?: boolean;
+}
+
+export interface CodeChangeInboxStats {
+  org_id: string;
+  proposed_count: number;
+  approved_count: number;
+  denied_count: number;
+  merged_count: number;
+  reverted_count: number;
+  needs_revision_count: number;
+  open_pr_count: number;
+  avg_quality_score: number | null;
+  avg_review_time_seconds: number | null;
+  total_cost_savings_usd: number;
+}
+
+export type CodeChangeInboxAction =
+  | "approve"
+  | "deny"
+  | "comment"
+  | "pr"
+  | "request-changes"
+  | "edit";
+
+export const codeChangeInboxApi = {
+  list: (
+    orgId: string,
+    params?: { status?: string; sort?: string; group_by?: string; limit?: number }
+  ) =>
+    fetchApi<{
+      status: string;
+      data: {
+        org_id: string;
+        status: string;
+        sort: string;
+        group_by: string;
+        patches: CodeChangeInboxPatch[];
+        count: number;
+        limit: number;
+      };
+    }>(`/orgs/${orgId}/intelligence/code-change/inbox/list`, {
+      method: "POST",
+      body: JSON.stringify({
+        status: params?.status ?? "open",
+        sort: params?.sort ?? "priority",
+        group_by: params?.group_by ?? "repo",
+        limit: params?.limit ?? 50,
+      }),
+    }),
+  stats: (orgId: string) =>
+    fetchApi<{ status: string; data: CodeChangeInboxStats }>(
+      `/orgs/${orgId}/intelligence/code-change/inbox/stats`
+    ),
+  get: (orgId: string, patchId: string) =>
+    fetchApi<{ status: string; data: CodeChangeInboxPatch }>(
+      `/orgs/${orgId}/intelligence/code-change/patches/${encodeURIComponent(patchId)}`
+    ),
+  diff: (orgId: string, patchId: string) =>
+    fetchApi<{
+      status: string;
+      data: { patch_id: string; diff: string; language?: string; found?: boolean };
+    }>(
+      `/orgs/${orgId}/intelligence/code-change/inbox/${encodeURIComponent(patchId)}/diff`
+    ),
+  act: (
+    orgId: string,
+    patchId: string,
+    action: CodeChangeInboxAction,
+    body?: {
+      comment?: string;
+      edited_diff?: string;
+      policy?: Partial<CodeChangePolicy>;
+    }
+  ) =>
+    fetchApi<{ status: string; data: Record<string, unknown>; message?: string }>(
+      `/orgs/${orgId}/intelligence/code-change/inbox/${encodeURIComponent(patchId)}/${encodeURIComponent(action)}`,
+      {
+        method: "POST",
+        body: JSON.stringify({
+          action,
+          comment: body?.comment ?? "",
+          edited_diff: body?.edited_diff ?? "",
+          policy: body?.policy ?? { code_change_enabled: true },
+        }),
+      }
+    ),
+  openPR: (
+    orgId: string,
+    patchId: string,
+    policy?: Partial<CodeChangePolicy>
+  ) =>
+    fetchApi<{ status: string; data: Record<string, unknown>; message?: string }>(
+      `/orgs/${orgId}/intelligence/code-change/patches/${encodeURIComponent(patchId)}/pr`,
+      {
+        method: "POST",
+        body: JSON.stringify({
+          policy: policy ?? { code_change_enabled: true },
+        }),
+      }
+    ),
+};
