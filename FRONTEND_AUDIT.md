@@ -23,7 +23,7 @@ The July 2026 WS7 pass promotes **Agent Issues**, **Improve**, and **Debugger** 
 | Core Observe nav (no Advanced) | Traces, Agent Issues, Fleet, Observability hub, Incidents, Alerts |
 | Core Automate nav | Improve (first), then Advanced-only items |
 | P0 issues (WS7) | **2 open** (see below) |
-| P1 issues (WS7) | **4 open** |
+| P1 issues (WS7) | **1 open** |
 
 ---
 
@@ -126,10 +126,16 @@ The July 2026 WS7 pass promotes **Agent Issues**, **Improve**, and **Debugger** 
 
 | # | Page/Component | Issue |
 |---|---|---|
-| P1-1 | `/issues/[id]/fix` | Fix tab polish incomplete per WS3 |
-| P1-2 | `/observability/mcp` | MCP SRE dashboard (N02) not built |
-| P1-3 | Mobile touch targets | Issues list, fix chat, transcript — verify ≥44px (frontendtask §F) |
-| P1-4 | `(marketing)/page.tsx` | Hero still references improvement loop inconsistently with env-gen removal |
+| P1-2 | `(marketing)/page.tsx` | Hero still references improvement loop inconsistently with env-gen removal |
+
+## P1 — Closed in WS7 polish pass (2026-07-13)
+
+| # | Page/Component | Fix |
+|---|---|---|
+| P1-1 | `/issues/[id]/fix` | 44px touch targets, stream retry on 429, session + route skeletons |
+| P1-3 | Mobile touch targets | Issues fix chat verified ≥44px (frontendtask §F) |
+| P1-4 | `/observability/mcp` | MCP SRE dashboard polished — skeletons, ErrorState + retry, refresh CTA |
+| P1-5 | Settings integration banners | `IntegrationStatusBanners` on billing (stripe), autonomous (github), profile (storage), gateway, exports, security |
 
 ## P0/P1 — Closed in WS7
 
@@ -141,6 +147,9 @@ The July 2026 WS7 pass promotes **Agent Issues**, **Improve**, and **Debugger** 
 | WS7-4 | Issues + Improve empty states have onboarding CTAs |
 | WS7-5 | Issues ↔ Incidents cross-linked in copy |
 | WS7-6 | Legacy env-gen HTML archived with README |
+| WS7-7 | Integration status banners (`use-integration-status`, settings + profile) |
+| WS7-8 | Issues fix tab polish (touch targets, stream retry, skeletons) |
+| WS7-9 | MCP observability page polish (loading/error/refresh) |
 
 ---
 
@@ -155,6 +164,8 @@ The July 5 pass identified 30 interaction/visual issues (P1–P3); all marked fi
 | Check | Command | WS7 status |
 |-------|---------|------------|
 | Typecheck | `cd clients/portal && bun run typecheck` | ✅ Pass (2026-07-13) |
+| Build | `cd clients/portal && bun run build` | ✅ Pass (2026-07-13 polish pass) |
+| Unit tests | `cd clients/portal && bun test` | ✅ Pass (2026-07-13 polish pass) |
 | E2E audit | `node clients/portal/e2e/portal-audit.mjs` | Routes updated |
 | IA | Issues visible without Advanced toggle | ✅ |
 

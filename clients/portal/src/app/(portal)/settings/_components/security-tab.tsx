@@ -9,6 +9,7 @@ import { cn } from "@/lib/utils";
 import { useToast } from "@/components/ui/toast";
 import { useConfirm } from "@/hooks/use-confirm";
 import { TwoFASetupDialog } from "./2fa-setup-dialog";
+import { IntegrationStatusBanners } from "@/components/integration-status-banners";
 
 interface Member2FAStatus {
   user_id: string;
@@ -105,6 +106,10 @@ export function SecurityTab() {
 
   return (
     <div className="space-y-6">
+      {currentOrg && (
+        <IntegrationStatusBanners integration="security" orgId={currentOrg.id} />
+      )}
+
       {/* Header */}
       <div className="flex items-center gap-3">
         <div className="p-2 bg-[var(--accent-faint)] rounded-lg">

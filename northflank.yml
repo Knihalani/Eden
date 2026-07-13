@@ -8,12 +8,11 @@
 #   • 1 addon  (managed Postgres / Redis / MongoDB / etc.)
 #   • 1 BYOC cluster allowed (we don't use it on the free tier)
 #
-# Stack fit:
-#   • eden-migrate   → job       (one-shot Alembic upgrade before API)
-#   • eden-api       → service   (FastAPI, port 8000, /live + /ready)
-#   • eden-worker    → job       (background work: judges, sim, drift, RCA)
-#   • eden-cron      → job       (scheduled jobs, on Northflank cron trigger)
-#   • eden-postgres  → addon     (managed Postgres 16)
+# Stack fit (matches live Northflank project eden-staging-us-central):
+#   • eden-api       → service   (FastAPI — runs Alembic on boot, /live + /ready)
+#   • eden-worker    → job       (background loops when EDEN_RUN_BACKGROUND_WORKERS=1)
+#   • eden-cron      → job       (scheduled cron tick every 5 min)
+# No eden-migrate job — keeps the 2-job quota; API lifespan runs Alembic before /ready.
 #
 # External / out-of-sandbox (free tiers elsewhere):
 #   • Qdrant         → Qdrant Cloud free (1 GB cluster) — set QDRANT_HOST
@@ -149,13 +148,13 @@ spec:
     - name: LOG_JSON
       value: "true"
     - name: EDEN_PRODUCTION
-      value: "true"
-    - name: SKIP_MIGRATIONS
       value: "1"
+    - name: EDEN_MIGRATIONS_DIR
+      value: /app/migrations
     - name: EDEN_RUN_BACKGROUND_WORKERS
       value: "0"
     - name: SENTRY_ENVIRONMENT
-      value: northflank-staging
+      value: production
     - name: SENTRY_TRACES_SAMPLE_RATE
       value: "0.1"
     # ── CORS — set this to your Vercel portal URL after first deploy ──
@@ -379,55 +378,6 @@ spec:
       value: eden-observability
 
 # ─────────────────────────────────────────────────────────────────────
-# Job 0: eden-migrate (one-shot Alembic upgrade before API rollout)
-# ─────────────────────────────────────────────────────────────────────
----
-apiVersion: workloads/v1
-kind: Job
-metadata:
-  name: eden-migrate
-spec:
-  compute:
-    name: nf-compute-20
-  build:
-    type: dockerfile
-    dockerfilePath: ./Dockerfile
-    dockerBuildContext: .
-  # Run once per deploy before the API accepts traffic. The API sets
-  # SKIP_MIGRATIONS=1 and relies on this job to advance schema.
-  command:
-    - bash
-    - -lc
-    - |
-      cd /app
-      exec python -c "from eden.db_migrations.runner import run_alembic_upgrade_head; run_alembic_upgrade_head()"
-  env:
-    - name: APP_NAME
-      value: Eden
-    - name: DEBUG
-      value: "false"
-    - name: LOG_LEVEL
-      value: INFO
-    - name: LOG_JSON
-      value: "true"
-    - name: POSTGRES_HOST
-      valueFrom: { secretKeyRef: { group: eden-required, key: POSTGRES_HOST } }
-    - name: POSTGRES_PORT
-      valueFrom: { secretKeyRef: { group: eden-required, key: POSTGRES_PORT } }
-    - name: POSTGRES_DB
-      valueFrom: { secretKeyRef: { group: eden-required, key: POSTGRES_DB } }
-    - name: POSTGRES_USER
-      valueFrom: { secretKeyRef: { group: eden-required, key: POSTGRES_USER } }
-    - name: POSTGRES_PASSWORD
-      valueFrom: { secretKeyRef: { group: eden-required, key: POSTGRES_PASSWORD } }
-    - name: POSTGRES_SSLMODE
-      valueFrom: { secretKeyRef: { group: eden-required, key: POSTGRES_SSLMODE } }
-    - name: POSTGRES_CHANNEL_BINDING
-      valueFrom: { secretKeyRef: { group: eden-required, key: POSTGRES_CHANNEL_BINDING } }
-    - name: POSTGRES_ENDPOINT_ID
-      valueFrom: { secretKeyRef: { group: eden-required, key: POSTGRES_ENDPOINT_ID } }
-
-# ─────────────────────────────────────────────────────────────────────
 # Job 1/2: eden-worker (long-running background work)
 # ─────────────────────────────────────────────────────────────────────
 ---
@@ -449,7 +399,7 @@ spec:
     dockerfilePath: ./Dockerfile
     dockerBuildContext: .
   # The worker is a long-running service that never accepts HTTP.
-  # SKIP_MIGRATIONS=1 — schema is advanced by the eden-migrate job.
+  # SKIP_MIGRATIONS=1 — API runs Alembic on boot; worker must not race migrations.
   # Override the default CMD via the start command. We exec into the
   # same image with a different command that runs the worker loop.
   command:

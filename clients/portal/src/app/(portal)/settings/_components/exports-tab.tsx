@@ -7,7 +7,6 @@ import { useConfirm } from "@/hooks/use-confirm";
 import { Download, Loader2, Plus, Trash2, Cloud, Database, Play, AlertCircle, CheckCircle2, XCircle, Calendar, FileArchive } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
-import { IntegrationStatusBanner } from "@/components/settings/integration-status-banner";
 
 // ────────────────────────────────────────────────────────────────────
 // Catalog (must match eden.api.routes.export_destinations.DATA_TYPES
@@ -15,6 +14,7 @@ import { IntegrationStatusBanner } from "@/components/settings/integration-statu
 // list endpoint is offline; the server still validates on write.
 // ────────────────────────────────────────────────────────────────────
 import { Card } from "@/components/ui/card";
+import { IntegrationStatusBanners } from "@/components/integration-status-banners";
 const DATA_TYPES = [{
   id: "traces",
   label: "Traces",
@@ -250,7 +250,8 @@ export function ExportsTab({
         </div>
   }];
   return <div className="space-y-6">
-      <IntegrationStatusBanner orgId={orgId} watch={["exports"]} />
+      <IntegrationStatusBanners integration="exports" orgId={orgId} />
+
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
