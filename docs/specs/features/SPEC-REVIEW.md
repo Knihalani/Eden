@@ -19,7 +19,7 @@ Spec set is **complete for high-value parity + differentiation**. Every feature 
 
 **Cost foundation:** **N09** early (storage) + **N08** (free P0 detection)
 
-**Differentiation:** **N07, N08, N06**
+**Differentiation:** **D6/D7/D12, N08, N06**
 
 ## Restored features (N09–N13)
 

@@ -14,7 +14,7 @@ settings = get_settings()
 router = APIRouter(
     prefix="/chain",
     tags=["chain"],
-    dependencies=[Depends(require_feature_flag("enable_eval_pipeline"))],
+    dependencies=[Depends(require_feature_flag("experiments_v1"))],
 )
 
 # Core agents (always enabled, immutable)

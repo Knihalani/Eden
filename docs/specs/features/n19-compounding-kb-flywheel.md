@@ -134,7 +134,7 @@ Use existing fields from `kb/procedural/client.py`:
 |---|---|
 | `archivist_reviewed: bool` | Must be `true` before runtime promotion |
 | `confidence_score: float` | Rank in N17 queue |
-| `applicable_env_classes` | Link to N07 generated envs |
+| `applicable_env_classes` | Legacy field — prefer `source_issue_id` lineage for D6 fixture links |
 | `search_by_embedding()` | Match issue triage text to skills |
 | `source_insight_id` / `source_issue_id` | Lineage (new metadata) |
 

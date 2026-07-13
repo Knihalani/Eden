@@ -104,3 +104,37 @@ async def get_improvement_queue(
     agent_id: str | None = None,
 ) -> dict[str, Any]:
     return await client.get_improvement_queue(org_id, agent_id=agent_id)
+
+
+async def export_fixture(
+    client: EdenApiClient, org_id: str, *, issue_id: str
+) -> dict[str, Any]:
+    return await client.export_fixture(org_id, issue_id)
+
+
+async def create_regression_case(
+    client: EdenApiClient,
+    org_id: str,
+    *,
+    issue_id: str,
+    max_traces: int = 3,
+) -> dict[str, Any]:
+    return await client.create_regression_case(
+        org_id, issue_id, max_traces=max_traces
+    )
+
+
+async def preview_change_impact(
+    client: EdenApiClient,
+    org_id: str,
+    *,
+    change_id: str,
+    changed_files: list[str],
+    agent_id: str | None = None,
+) -> dict[str, Any]:
+    return await client.preview_change_impact(
+        org_id,
+        change_id=change_id,
+        changed_files=changed_files,
+        agent_id=agent_id,
+    )

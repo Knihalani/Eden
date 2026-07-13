@@ -108,7 +108,7 @@ export default function ImprovePage() {
     <>
       <PageHeader
         title="Improve"
-        description="One queue for issues, patches, nudges, and Eden autonomous work."
+        description="One queue for triage, patches, nudges, and promotions from Agent Issues. When Eden proposes a fix, it lands here."
         actions={
           <Button
             variant="outline"
@@ -141,7 +141,17 @@ export default function ImprovePage() {
         ) : items.length === 0 ? (
           <EmptyState
             title="Nothing in the queue"
-            description="When Eden finds issues or proposes patches, they show up here — operator and autonomous columns."
+            description="When Eden detects issues or proposes patches and nudges, they show up here — operator and autonomous columns."
+            action={
+              <div className="flex flex-wrap items-center justify-center gap-2">
+                <Link href="/onboarding/install">
+                  <Button>Install SDK</Button>
+                </Link>
+                <Link href="/issues">
+                  <Button variant="outline">View Agent Issues</Button>
+                </Link>
+              </div>
+            }
           />
         ) : (
           <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-5">
@@ -190,7 +200,12 @@ export default function ImprovePage() {
                           </p>
                           {item.blocked_reason && (
                             <p className="mt-1 text-[11px] text-[var(--warning)]">
-                              {item.blocked_reason}
+                              Blocked: {item.blocked_reason}
+                            </p>
+                          )}
+                          {item.autonomy_tier_required && (
+                            <p className="mt-0.5 text-[10px] text-[var(--text-muted)]">
+                              Tier {item.autonomy_tier_required} required
                             </p>
                           )}
                         </div>
@@ -198,7 +213,9 @@ export default function ImprovePage() {
                       <div className="mt-2 flex gap-1">
                         {(item.column === "proposed" ||
                           item.column === "needs_you") &&
-                          item.ref.startsWith("closed_loop:") && (
+                          (item.ref.startsWith("closed_loop:") ||
+                            item.ref.startsWith("promotion:") ||
+                            item.item_type === "nudge_shadow") && (
                             <Button
                               size="sm"
                               variant="ghost"

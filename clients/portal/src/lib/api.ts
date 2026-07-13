@@ -1818,6 +1818,44 @@ export const api = {
     return fetchApi(`/orgs/${orgId}/observability/spans/search${qs ? `?${qs}` : ""}`);
   },
 
+  saveSearchAsSignal: (
+    orgId: string,
+    body: {
+      search_query: string;
+      trace_ids: string[];
+      mode?: "investigator" | "classifier";
+    },
+  ) =>
+    fetchApi<{
+      status: string;
+      data: {
+        signal_id: string;
+        saved_search_id: string;
+        mode: string;
+        trace_count: number;
+      };
+    }>(`/orgs/${orgId}/search/to-signal`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+
+  labelToolCall: (
+    orgId: string,
+    spanId: string,
+    body: {
+      trace_id: string;
+      tool_name: string;
+      label: "good" | "bad";
+      reason?: string;
+      agent_id?: string;
+      args_summary?: string;
+    },
+  ) =>
+    fetchApi(`/orgs/${orgId}/tool-calls/${spanId}/label`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+
   annotateTrace: (
     orgId: string,
     traceId: string,
@@ -2361,6 +2399,7 @@ export type ObservabilityTrace = {
   tags?: Record<string, string> | null;
   /** N12 — explicit session id when present on span attributes. */
   session_id?: string | null;
+  agent_session_id?: string | null;
 };
 
 // ── Agents registry ─────────────────────────────────────────────
@@ -2901,6 +2940,9 @@ export type AgentIssue = {
   first_seen?: string | null;
   last_seen?: string | null;
   triage_result?: Record<string, unknown> | null;
+  experiment_id?: string | null;
+  experiment_result?: Record<string, unknown> | null;
+  regression_case_id?: string | null;
 };
 
 export type AgentStumble = {
@@ -2941,6 +2983,115 @@ export const agentIssuesApi = {
     const qs = q.toString();
     return fetchApi<IssuesEnvelope<{ stumbles: AgentStumble[]; count: number }>>(`/orgs/${orgId}/stumbles${qs ? `?${qs}` : ""}`);
   },
+  fixSession: (orgId: string, issueId: string) =>
+    fetchApi<IssuesEnvelope<{ session: Record<string, unknown> }>>(
+      `/orgs/${orgId}/agent-issues/${issueId}/fix/session`,
+    ),
+  fixApply: (orgId: string, issueId: string, data: { confirm?: boolean } = {}) =>
+    fetchApi<IssuesEnvelope<Record<string, unknown>>>(
+      `/orgs/${orgId}/agent-issues/${issueId}/fix/apply`,
+      { method: "POST", body: JSON.stringify(data) },
+    ),
+  fixChatStream: async (
+    orgId: string,
+    issueId: string,
+    data: { message: string; repo_full_name: string },
+  ) => {
+    const res = await fetch(`/api/proxy/orgs/${orgId}/agent-issues/${issueId}/fix/chat`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
+      credentials: "include",
+    });
+    if (!res.ok || !res.body) throw new Error(`Fix chat failed (${res.status})`);
+    return res.body;
+  },
+  createRegressionCases: (
+    orgId: string,
+    issueId: string,
+    data?: { max_traces?: number; auto?: boolean },
+  ) =>
+    fetchApi<IssuesEnvelope<{ cases: unknown[]; count: number }>>(
+      `/orgs/${orgId}/agent-issues/${issueId}/regression-cases`,
+      { method: "POST", body: JSON.stringify(data ?? {}) },
+    ),
+  exportFixture: (orgId: string, issueId: string) =>
+    fetchApi<IssuesEnvelope<{ fixture: Record<string, unknown> }>>(
+      `/orgs/${orgId}/agent-issues/${issueId}/export-fixture`,
+      { method: "POST" },
+    ),
+  createExperiment: (
+    orgId: string,
+    issueId: string,
+    data: { control_variant?: string; treatment_variant?: string; min_samples?: number } = {},
+  ) =>
+    fetchApi<IssuesEnvelope<Record<string, unknown>>>(
+      `/orgs/${orgId}/agent-issues/${issueId}/experiments`,
+      { method: "POST", body: JSON.stringify(data) },
+    ),
+  listExperiments: (orgId: string, issueId: string) =>
+    fetchApi<IssuesEnvelope<{ experiments: Record<string, unknown>[]; count: number }>>(
+      `/orgs/${orgId}/agent-issues/${issueId}/experiments`,
+    ),
+  experimentReport: (orgId: string, issueId: string, linkId: string) =>
+    fetchApi<IssuesEnvelope<{ report: Record<string, unknown> }>>(
+      `/orgs/${orgId}/agent-issues/${issueId}/experiments/${linkId}/report`,
+    ),
+};
+
+export type AgentSessionRecord = {
+  id: string;
+  org_id: string;
+  agent_id?: string | null;
+  user_id?: string | null;
+  success?: boolean | null;
+  failure_reason?: string | null;
+  trace_ids?: string[];
+  started_at?: string;
+  ended_at?: string | null;
+};
+
+export const agentSessionsApi = {
+  list: (orgId: string, params?: { agent_id?: string; limit?: number }) => {
+    const q = new URLSearchParams();
+    if (params?.agent_id) q.set("agent_id", params.agent_id);
+    if (params?.limit != null) q.set("limit", String(params.limit));
+    const qs = q.toString();
+    return fetchApi<IssuesEnvelope<{ sessions: AgentSessionRecord[]; count: number }>>(
+      `/orgs/${orgId}/agent-sessions${qs ? `?${qs}` : ""}`,
+    );
+  },
+  get: (orgId: string, sessionId: string) =>
+    fetchApi<IssuesEnvelope<{ session: AgentSessionRecord }>>(
+      `/orgs/${orgId}/agent-sessions/${sessionId}`,
+    ),
+};
+
+export type FleetAgentCard = {
+  agent_id: string;
+  display_name?: string;
+  tier?: string;
+  open_issues: number;
+  stumble_count_7d: number;
+  eval_pass_rate_24h: number | null;
+  slo_breach?: boolean;
+  severity_score: number;
+  last_seen?: string | null;
+};
+
+export const fleetApi = {
+  summary: (orgId: string) =>
+    fetchApi<IssuesEnvelope<{ agents: FleetAgentCard[]; count: number }>>(
+      `/orgs/${orgId}/fleet/summary`,
+    ),
+  heatmap: (orgId: string) =>
+    fetchApi<IssuesEnvelope<{ cells: Array<{ agent_id: string; stumble_kind: string; count: number }> }>>(
+      `/orgs/${orgId}/fleet/heatmap`,
+    ),
+  delegation: (orgId: string) =>
+    fetchApi<IssuesEnvelope<{ nodes: Array<{ id: string; label: string }>; edges: Array<{ source: string; target: string; call_count_7d: number; error_rate_7d?: number }> }>>(
+      `/orgs/${orgId}/fleet/delegation`,
+    ),
 };
 
 // ── N17 Improvement Cockpit ─────────────────────────────────────────
@@ -2986,6 +3137,53 @@ export const improveApi = {
     fetchApi<IssuesEnvelope<{ item_ref: string; result?: unknown }>>(
       `/orgs/${orgId}/improve/items/${encodeURIComponent(itemRef)}/approve`,
       { method: "POST" },
+    ),
+};
+
+// ── WS2 Learn in production (F39/F40/F41/F42/F44/N19) ───────────────
+export const learnApi = {
+  getBook: (orgId: string, agentId: string) =>
+    fetchApi<IssuesEnvelope<{ book?: Record<string, unknown>; config?: Record<string, unknown> }>>(
+      `/orgs/${orgId}/agents/${encodeURIComponent(agentId)}/book`,
+    ),
+  regenerateBook: (orgId: string, agentId: string) =>
+    fetchApi<IssuesEnvelope<{ book?: Record<string, unknown> }>>(
+      `/orgs/${orgId}/agents/${encodeURIComponent(agentId)}/book/regenerate`,
+      { method: "POST" },
+    ),
+  patchBookConfig: (
+    orgId: string,
+    agentId: string,
+    body: { enabled: boolean; max_tokens?: number },
+  ) =>
+    fetchApi<IssuesEnvelope<{ updated: boolean }>>(
+      `/orgs/${orgId}/agents/${encodeURIComponent(agentId)}/book/config`,
+      { method: "PATCH", body: JSON.stringify(body) },
+    ),
+  getDrift: (orgId: string, agentId: string) =>
+    fetchApi<IssuesEnvelope<{ report?: Record<string, unknown> }>>(
+      `/orgs/${orgId}/agents/${encodeURIComponent(agentId)}/drift`,
+    ),
+  computeDrift: (orgId: string, agentId: string) =>
+    fetchApi<IssuesEnvelope<{ report?: Record<string, unknown> }>>(
+      `/orgs/${orgId}/agents/${encodeURIComponent(agentId)}/drift/compute`,
+      { method: "POST" },
+    ),
+  listNudges: (orgId: string, agentId?: string) => {
+    const q = agentId ? `?agent_id=${encodeURIComponent(agentId)}` : "";
+    return fetchApi<IssuesEnvelope<{ nudges: Array<Record<string, unknown>> }>>(
+      `/orgs/${orgId}/nudges${q}`,
+    );
+  },
+  listPromotions: (orgId: string, status?: string) => {
+    const q = status ? `?status=${encodeURIComponent(status)}` : "";
+    return fetchApi<IssuesEnvelope<{ promotions: Array<Record<string, unknown>> }>>(
+      `/orgs/${orgId}/promotions${q}`,
+    );
+  },
+  flywheelStatus: (orgId: string) =>
+    fetchApi<IssuesEnvelope<{ drafts: number; promoted: number }>>(
+      `/orgs/${orgId}/kb/flywheel/status`,
     ),
 };
 
@@ -3408,6 +3606,31 @@ export interface McpAuthFailureRow {
   resolved_by: string | null;
 }
 
+export interface McpServerRow {
+  server_name: string;
+  call_count_7d?: number;
+  error_rate_7d?: number;
+  p95_latency_ms?: number | null;
+  auth_failure_count_7d?: number;
+  tool_names?: string[];
+  transport?: string | null;
+  first_seen?: string | null;
+  last_seen?: string | null;
+}
+
+export interface McpToolStatRow {
+  tool_name: string;
+  call_count_7d?: number;
+  error_rate_7d?: number;
+  p95_latency_ms?: number | null;
+}
+
+export interface McpGraphEdge {
+  agent_id: string;
+  server_name: string;
+  call_count: number;
+}
+
 export const mcpApi = {
   getTraceMcp: (traceId: string) =>
     fetchApi<{ data: McpTraceRow[]; count: number }>(
@@ -3446,6 +3669,26 @@ export const mcpApi = {
         headers: { "X-Org-Id": orgId, "Content-Type": "application/json" },
         body: JSON.stringify(body),
       },
+    ),
+  listFleetServers: (orgId: string) =>
+    fetchApi<{ data: McpServerRow[]; count: number }>(
+      `/orgs/${orgId}/observability/mcp/servers`,
+      { headers: { "X-Org-Id": orgId } },
+    ),
+  listServerTools: (orgId: string, serverName: string) =>
+    fetchApi<{ data: McpToolStatRow[]; count: number }>(
+      `/orgs/${orgId}/observability/mcp/servers/${encodeURIComponent(serverName)}/tools`,
+      { headers: { "X-Org-Id": orgId } },
+    ),
+  fleetGraph: (orgId: string) =>
+    fetchApi<{ data: McpGraphEdge[]; count: number }>(
+      `/orgs/${orgId}/observability/mcp/graph`,
+      { headers: { "X-Org-Id": orgId } },
+    ),
+  fleetAuthFailures: (orgId: string, limit = 50) =>
+    fetchApi<{ data: McpAuthFailureRow[]; count: number }>(
+      `/orgs/${orgId}/observability/mcp/auth-failures?limit=${limit}`,
+      { headers: { "X-Org-Id": orgId } },
     ),
 };
 

@@ -6,7 +6,7 @@
 | **Slug** | `production-platform-activation` |
 | **Priority** | **P0 — BLOCKER** |
 | **Effort** | M |
-| **Eden status** | **PARTIAL** — deepest backends exist, not connected at runtime |
+| **Eden status** | **SHIPPED (v0)** — quality worker, F20 consumer, closed_loop lifespan, `install_all` wiring |
 | **Market hypothesis** | Eden loses credibility if StatGate/ETEC/closed-loop code exists but never runs in prod |
 | **Dependencies** | None — unlocks F20, N08, F39, F41, F46 |
 

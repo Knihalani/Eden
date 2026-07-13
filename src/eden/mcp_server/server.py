@@ -159,6 +159,48 @@ TOOL_CATALOG: list[dict[str, Any]] = [
             "required": ["org_id"],
         },
     },
+    {
+        "name": "export_fixture",
+        "description": "D6 — export redacted failure fixture for local replay.",
+        "scope": "mcp:read",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "org_id": {"type": "string"},
+                "issue_id": {"type": "string"},
+            },
+            "required": ["org_id", "issue_id"],
+        },
+    },
+    {
+        "name": "create_regression_case",
+        "description": "N01 — materialize regression eval cases from a resolved issue.",
+        "scope": "mcp:fix",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "org_id": {"type": "string"},
+                "issue_id": {"type": "string"},
+                "max_traces": {"type": "integer"},
+            },
+            "required": ["org_id", "issue_id"],
+        },
+    },
+    {
+        "name": "preview_change_impact",
+        "description": "N04 — run change impact preview for a PR/config diff.",
+        "scope": "mcp:read",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "org_id": {"type": "string"},
+                "change_id": {"type": "string"},
+                "changed_files": {"type": "array", "items": {"type": "string"}},
+                "agent_id": {"type": "string"},
+            },
+            "required": ["org_id", "change_id", "changed_files"],
+        },
+    },
 ]
 
 _HANDLERS: dict[str, ToolHandler] = {
@@ -172,6 +214,9 @@ _HANDLERS: dict[str, ToolHandler] = {
     "triage_issue": tool_fns.triage_issue,
     "run_autofix": tool_fns.run_autofix,
     "get_improvement_queue": tool_fns.get_improvement_queue,
+    "export_fixture": tool_fns.export_fixture,
+    "create_regression_case": tool_fns.create_regression_case,
+    "preview_change_impact": tool_fns.preview_change_impact,
 }
 
 _SCOPE_BY_NAME = {t["name"]: t["scope"] for t in TOOL_CATALOG}

@@ -1,7 +1,7 @@
 # Eden Feature Gap Master Document
 
-> **Date:** July 9, 2026 (autonomous maintenance pass)  
-> **Inventory:** 24 F-features + **22 N-features** = **46 specs**  
+> **Date:** July 9, 2026 (autonomous maintenance pass; N07 removed July 2026)  
+> **Inventory:** 24 F-features + **21 N-features** = **45 specs**  
 > **Autonomous model:** [`AUTONOMOUS-MAINTENANCE.md`](AUTONOMOUS-MAINTENANCE.md)  
 > **Stand-out map:** [`PRODUCTION-MAINTENANCE-STANDOUT.md`](PRODUCTION-MAINTENANCE-STANDOUT.md)  
 > **Ground truth:** [`CODEBASE-GROUND-TRUTH.md`](CODEBASE-GROUND-TRUTH.md)  
@@ -19,11 +19,11 @@ Eden wins on **production agent maintenance & improvement** (operator-led **and*
 4. **Cut cost 80%+ without blind spots** (N16 sampling, N09 dedupe, zstd 15× shipped)
 5. **Unify operator UX** (N17 improvement cockpit)
 6. **Autonomously fix production agents** (F46 + N21 runtime heal + N20 code fix) — outages, quality drops, bad deploys
-7. **Reproduce failures** (N07 env gen — unique)
+7. **Prove failures without hosted clones** (D6 fixture export + D7 regression memory + D12 session contract)
 
 ---
 
-## 2. N-feature inventory (22)
+## 2. N-feature inventory (21)
 
 ### Platform & cost foundation
 
@@ -49,13 +49,15 @@ Eden wins on **production agent maintenance & improvement** (operator-led **and*
 | N19 | Compounding KB flywheel | P1 | [n19](features/n19-compounding-kb-flywheel.md) |
 | N17 | Agent improvement cockpit | P0 | [n17](features/n17-agent-improvement-cockpit.md) |
 
-### Verify & reproduce
+### Verify & prove
 
 | ID | Feature | P | Spec |
 |---|---|---|---|
 | N01 | Production → regression eval | P0 | [n01](features/n01-production-trace-regression-eval.md) |
 | N04 | Change impact preview | P1 | [n04](features/n04-agent-change-impact-preview.md) |
-| N07 | Environment from failures (v2) | P0 | [n07](features/n07-environment-from-production-failures.md) |
+| **D6** | Failure fixture export (replaces N07) | P0 | differentiation moat — redacted trace bundle for local replay |
+| **D7** | Regression memory (N01 product surface) | P0 | [n01](features/n01-production-trace-regression-eval.md) |
+| **D12** | Agent session contract (F23 + N12) | P1 | [f23](features/f23-session-first-sdk.md) |
 
 ### Enterprise & UX
 
@@ -154,11 +156,11 @@ Full rationale: [`PRODUCTION-MAINTENANCE-STANDOUT.md`](PRODUCTION-MAINTENANCE-ST
 
 | Depth | Specs |
 |---|---|
-| **Deep (180–400+ lines)** | F01, F03, F04, F06, F09, F20, F28–F30, F22, F39, F41, F46, F47, F48, N07–N22, N14–N19 |
+| **Deep (180–400+ lines)** | F01, F03, F04, F06, F09, F20, F28–F30, F22, F39, F41, F46, F47, F48, N01–N06, N08–N22, N14–N19 |
 | **Expanded this pass** | N01–N06, N10–N13, N19, F21, F33–F35, F40, F42, F44 |
 
 Every spec includes mandatory § Performance & cost optimization (see `_SPEC_TEMPLATE.md`).
 
 ---
 
-*46 specs, codebase-verified + autonomous maintenance pass — July 2026.*
+*45 specs, codebase-verified + autonomous maintenance pass — July 2026.*

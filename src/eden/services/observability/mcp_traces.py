@@ -168,6 +168,214 @@ class McpTraceService:
             logger.debug("mcp.record_auth_failure failed: %s", exc)
             return None
 
+    async def list_server_registry(self, org_id: str) -> list[dict[str, Any]]:
+        """Fleet overview — registry table with live rollup fallback."""
+        client = await _get_client()
+        if client is None:
+            return []
+        try:
+            rows = await client.fetch(
+                """
+                SELECT org_id, server_name, first_seen, last_seen, tool_names,
+                       transport, call_count_7d, error_rate_7d, p95_latency_ms,
+                       auth_failure_count_7d, affected_agent_ids
+                FROM mcp_server_registry
+                WHERE org_id = $1
+                ORDER BY call_count_7d DESC
+                LIMIT 100
+                """,
+                org_id,
+            )
+            if rows:
+                return [_row(r) for r in rows]
+        except Exception as exc:
+            logger.debug("mcp.list_server_registry table miss: %s", exc)
+
+        # Live fallback from telemetry view.
+        try:
+            rows = await client.fetch(
+                """
+                SELECT mcp_server_name AS server_name,
+                       COUNT(*)::bigint AS call_count_7d,
+                       MIN(created_at) AS first_seen,
+                       MAX(created_at) AS last_seen,
+                       ARRAY_AGG(DISTINCT mcp_tool_name)
+                           FILTER (WHERE mcp_tool_name IS NOT NULL) AS tool_names,
+                       MAX(mcp_transport) AS transport
+                FROM mcp_traces_v
+                WHERE org_id = $1
+                  AND created_at > NOW() - INTERVAL '7 days'
+                GROUP BY mcp_server_name
+                ORDER BY call_count_7d DESC
+                LIMIT 100
+                """,
+                org_id,
+            )
+        except Exception as exc:
+            logger.debug("mcp.list_server_registry fallback failed: %s", exc)
+            return []
+        return [_row(r) for r in rows]
+
+    async def list_tool_stats(
+        self, org_id: str, server_name: str
+    ) -> list[dict[str, Any]]:
+        client = await _get_client()
+        if client is None:
+            return []
+        try:
+            rows = await client.fetch(
+                """
+                SELECT tool_name, call_count_7d, error_rate_7d, p95_latency_ms
+                FROM mcp_tool_stats
+                WHERE org_id = $1 AND server_name = $2
+                ORDER BY call_count_7d DESC
+                """,
+                org_id,
+                server_name,
+            )
+            if rows:
+                return [_row(r) for r in rows]
+        except Exception as exc:
+            logger.debug("mcp.list_tool_stats table miss: %s", exc)
+
+        try:
+            rows = await client.fetch(
+                """
+                SELECT mcp_tool_name AS tool_name,
+                       COUNT(*)::bigint AS call_count_7d
+                FROM mcp_traces_v
+                WHERE org_id = $1
+                  AND mcp_server_name = $2
+                  AND created_at > NOW() - INTERVAL '7 days'
+                GROUP BY mcp_tool_name
+                ORDER BY call_count_7d DESC
+                """,
+                org_id,
+                server_name,
+            )
+        except Exception as exc:
+            logger.debug("mcp.list_tool_stats fallback failed: %s", exc)
+            return []
+        return [_row(r) for r in rows]
+
+    async def agent_server_graph(self, org_id: str) -> list[dict[str, Any]]:
+        """Agent → MCP server edges for the fleet graph."""
+        client = await _get_client()
+        if client is None:
+            return []
+        try:
+            rows = await client.fetch(
+                """
+                SELECT agent_id, mcp_server_name AS server_name,
+                       COUNT(*)::bigint AS call_count
+                FROM telemetry_events
+                WHERE tenant_id = $1
+                  AND attributes ? 'mcp'
+                  AND created_at > NOW() - INTERVAL '7 days'
+                  AND agent_id IS NOT NULL
+                GROUP BY agent_id, mcp_server_name
+                ORDER BY call_count DESC
+                LIMIT 500
+                """,
+                org_id,
+            )
+        except Exception as exc:
+            logger.debug("mcp.agent_server_graph failed: %s", exc)
+            return []
+        return [_row(r) for r in rows]
+
+    async def rollup_registry(self, org_id: str | None = None) -> dict[str, int]:
+        """Cron rollup: merge telemetry into registry tables."""
+        client = await _get_client()
+        if client is None:
+            return {"servers": 0, "tools": 0}
+        where = ""
+        args: list[Any] = []
+        if org_id:
+            where = "WHERE org_id = $1"
+            args = [org_id]
+        try:
+            servers = await client.fetch(
+                f"""
+                SELECT org_id, mcp_server_name AS server_name,
+                       MIN(created_at) AS first_seen,
+                       MAX(created_at) AS last_seen,
+                       COUNT(*)::bigint AS call_count_7d,
+                       ARRAY_AGG(DISTINCT mcp_tool_name)
+                           FILTER (WHERE mcp_tool_name IS NOT NULL) AS tool_names,
+                       MAX(mcp_transport) AS transport
+                FROM mcp_traces_v
+                {where}
+                GROUP BY org_id, mcp_server_name
+                """,
+                *args,
+            )
+        except Exception as exc:
+            logger.debug("mcp.rollup_registry failed: %s", exc)
+            return {"servers": 0, "tools": 0}
+
+        n_servers = 0
+        n_tools = 0
+        for row in servers:
+            n_servers += 1
+            tools = row.get("tool_names") or []
+            n_tools += len(tools)
+            try:
+                await client.execute(
+                    """
+                    INSERT INTO mcp_server_registry
+                        (org_id, server_name, first_seen, last_seen, tool_names,
+                         transport, call_count_7d)
+                    VALUES ($1, $2, $3, $4, $5, $6, $7)
+                    ON CONFLICT (org_id, server_name) DO UPDATE SET
+                        first_seen = LEAST(
+                            mcp_server_registry.first_seen, EXCLUDED.first_seen
+                        ),
+                        last_seen = GREATEST(
+                            mcp_server_registry.last_seen, EXCLUDED.last_seen
+                        ),
+                        tool_names = EXCLUDED.tool_names,
+                        transport = COALESCE(
+                            EXCLUDED.transport, mcp_server_registry.transport
+                        ),
+                        call_count_7d = EXCLUDED.call_count_7d
+                    """,
+                    row["org_id"],
+                    row["server_name"],
+                    row["first_seen"],
+                    row["last_seen"],
+                    tools,
+                    row.get("transport"),
+                    int(row["call_count_7d"] or 0),
+                )
+            except Exception as exc:
+                logger.debug("mcp.rollup_registry upsert server failed: %s", exc)
+
+        return {"servers": n_servers, "tools": n_tools}
+
+    async def sre_summary(self, org_id: str) -> dict[str, Any]:
+        """D4 — org-level MCP boundary SRE rollup."""
+        servers = await self.list_server_registry(org_id)
+        auth_failures = await self.list_auth_failures(
+            org_id, resolved=False, limit=50
+        )
+        graph = await self.agent_server_graph(org_id)
+        isolated: list[str] = []
+        for srv in servers:
+            name = str(srv.get("server_name") or "")
+            err_rate = float(srv.get("error_rate_7d") or 0.0)
+            auth_n = int(srv.get("auth_failure_count_7d") or 0)
+            if auth_n >= 3 or err_rate >= 0.25:
+                isolated.append(name)
+        return {
+            "server_count": len(servers),
+            "open_auth_failures": len(auth_failures),
+            "agent_edges": len(graph),
+            "auto_isolated_servers": isolated,
+            "servers": servers[:20],
+            "recent_auth_failures": auth_failures[:10],
+        }
+
 
 _singleton: McpTraceService | None = None
 

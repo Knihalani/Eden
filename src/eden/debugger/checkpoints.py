@@ -131,6 +131,28 @@ class ReRunResult:
         }
 
 
+@dataclass
+class LivePrefixResult:
+    """Cached-prefix replay with a live tail boundary (F01)."""
+
+    source_trace_id: str
+    live_from_step: int
+    prefix_checkpoints: list[Checkpoint]
+    live_tail_steps: int
+    mode: str = "cached_prefix"
+    diff: list[dict[str, Any]] = field(default_factory=list)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "source_trace_id": self.source_trace_id,
+            "live_from_step": self.live_from_step,
+            "prefix_checkpoints": [c.to_dict() for c in self.prefix_checkpoints],
+            "live_tail_steps": self.live_tail_steps,
+            "mode": self.mode,
+            "diff": self.diff,
+        }
+
+
 # ─- Checkpoint store ────────────────────────────────────────────
 
 
@@ -315,6 +337,56 @@ class ReRunEngine:
         )
 
 
+class LivePrefixEngine:
+    """Replay cached prefix steps; mark tail for live re-execution (F01).
+
+    Hermetic prefix replay uses recorded checkpoints up to
+    ``live_from_step``; steps at or beyond that boundary are counted as
+    the live tail (would invoke the gateway in production).
+    """
+
+    def __init__(self, store: CheckpointStore) -> None:
+        self._store = store
+        self._rerun = ReRunEngine(store)
+
+    async def rerun_live_prefix(
+        self,
+        trace_id: str,
+        *,
+        live_from_step: int = 0,
+        prompt_override: str | None = None,
+    ) -> LivePrefixResult:
+        all_checkpoints = await self._store.list_for_trace(trace_id)
+        prefix = [c for c in all_checkpoints if c.step_number < live_from_step]
+        tail = [c for c in all_checkpoints if c.step_number >= live_from_step]
+
+        if prompt_override and prefix:
+            prefix = [
+                _apply_prompt_override(prefix[0], prompt_override),
+                *prefix[1:],
+            ]
+
+        diff: list[dict[str, Any]] = []
+        if prompt_override and prefix:
+            orig = {c.step_number: c for c in all_checkpoints}
+            for c in prefix:
+                o = orig.get(c.step_number)
+                if o and c.input_messages != o.input_messages:
+                    diff.append({
+                        "step_number": c.step_number,
+                        "input_messages_changed": True,
+                        "mode": "cached_prefix",
+                    })
+
+        return LivePrefixResult(
+            source_trace_id=trace_id,
+            live_from_step=live_from_step,
+            prefix_checkpoints=prefix,
+            live_tail_steps=len(tail),
+            diff=diff,
+        )
+
+
 # ─- RolloutEntrypoint discovery ──────────────────────────────────
 
 
@@ -450,8 +522,10 @@ def _apply_prompt_override(
 __all__ = [
     "Checkpoint",
     "ReRunResult",
+    "LivePrefixResult",
     "CheckpointStore",
     "ReRunEngine",
+    "LivePrefixEngine",
     "RolloutEntrypoint",
     "discover_entrypoint",
     "_apply_prompt_override",

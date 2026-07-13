@@ -51,9 +51,14 @@ class TestRateLimiterFailsClosedOnDbOutage:
     """A DB outage returns allowed=False (fail-closed)."""
 
     @pytest.mark.asyncio
-    async def test_db_outage_returns_disallowed(self):
-        # No DB available in the unit-test env — _count_recent
-        # returns the fail-closed sentinel 10_000_000.
+    async def test_db_outage_returns_disallowed(self, monkeypatch):
+        async def _no_db():
+            return None
+
+        monkeypatch.setattr(
+            "eden.storage.postgres.get_postgres_client",
+            _no_db,
+        )
         limiter = RateLimiter()
         verdict = await limiter.check("org_test", "repo_test")
         assert verdict["allowed"] is False

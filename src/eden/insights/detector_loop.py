@@ -304,6 +304,14 @@ class InsightsDetectorLoop:
                     continue
                 if result is not None:
                     persisted += 1
+                    try:
+                        from eden.kb.flywheel.coordinator import get_flywheel_coordinator
+
+                        await get_flywheel_coordinator().on_insight_created(insight)
+                    except Exception as fly_exc:
+                        logger.debug(
+                            "insights loop: flywheel hook failed: %s", fly_exc
+                        )
         except Exception as exc:  # noqa: BLE001
             logger.debug(f"insights loop: InsightsService unavailable: {exc}")
 

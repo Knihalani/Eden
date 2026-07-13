@@ -446,3 +446,17 @@ async def _redis() -> Any | None:
         return await get_redis_client()
     except Exception:
         return None
+
+
+async def why_blocked(
+    org_id: str,
+    action: str,
+    *,
+    agent_id: str | None = None,
+) -> tuple[str | None, str | None]:
+    """Return ``(blocked_reason, tier_required)`` for the improve queue (D5)."""
+    policy = await resolve(org_id, agent_id)
+    verdict, reason, tier = decide(policy, action)
+    if verdict == "allow":
+        return None, tier
+    return reason, tier

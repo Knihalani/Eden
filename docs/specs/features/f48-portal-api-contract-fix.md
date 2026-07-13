@@ -5,7 +5,7 @@
 | **Feature ID** | F48 |
 | **Priority** | **P0 — BLOCKER** |
 | **Effort** | S (1–2 engineer-days) |
-| **Eden status** | **BROKEN** |
+| **Eden status** | **SHIPPED (v0)** — portal API contracts aligned with backend routes |
 | **Dependencies** | None — ship before all other gap features |
 
 ---

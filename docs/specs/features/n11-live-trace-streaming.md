@@ -6,7 +6,7 @@
 | **Slug** | `live-trace-streaming` |
 | **Priority** | P1 |
 | **Effort** | L |
-| **Eden status** | **MISSING** |
+| **Eden status** | **PARTIAL** — live tail service shipped; portal WebSocket polish deferred |
 | **Market hypothesis** | DevTools "tail -f" for agents — instant feedback beats post-hoc traces for local dev |
 | **Dependencies** | Ingest pipeline, F04 MCP, portal WebSocket infra, F28, N22 |
 

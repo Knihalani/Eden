@@ -82,7 +82,7 @@ class RateLimiter:
             from eden.storage.postgres import get_postgres_client
             client = await get_postgres_client()
             if client is None:
-                return 0
+                return 10_000_000
             async with client.acquire() as conn:
                 if repo_id:
                     row = await conn.fetchrow(

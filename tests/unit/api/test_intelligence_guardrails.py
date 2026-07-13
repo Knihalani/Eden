@@ -53,7 +53,7 @@ def app(stub_pg, monkeypatch):
 
     class _FakeSettings:
         intelligence_gap_v0 = True
-        enable_eval_pipeline = True
+        experiments_v1 = True
     monkeypatch.setattr(eden_deps, "get_settings", lambda: _FakeSettings())
 
     async def _get_pg():

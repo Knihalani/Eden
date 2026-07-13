@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter(
     prefix="/experiments",
     tags=["experiments"],
-    dependencies=[Depends(require_feature_flag("enable_eval_pipeline"))],
+    dependencies=[Depends(require_feature_flag("experiments_v1"))],
 )
 
 

@@ -70,6 +70,23 @@ class EdenApiClient(Protocol):
         self, org_id: str, *, agent_id: str | None = None
     ) -> dict[str, Any]: ...
 
+    async def create_regression_case(
+        self, org_id: str, issue_id: str, *, max_traces: int = 3
+    ) -> dict[str, Any]: ...
+
+    async def preview_change_impact(
+        self,
+        org_id: str,
+        *,
+        change_id: str,
+        changed_files: list[str],
+        agent_id: str | None = None,
+    ) -> dict[str, Any]: ...
+
+    async def export_fixture(
+        self, org_id: str, issue_id: str
+    ) -> dict[str, Any]: ...
+
 
 class HttpEdenClient:
     """HTTPS client against Eden FastAPI routes."""
@@ -221,4 +238,39 @@ class HttpEdenClient:
             params["agent_id"] = agent_id
         return await self._request(
             "GET", f"/orgs/{org_id}/improve/queue", params=params or None
+        )
+
+    async def create_regression_case(
+        self, org_id: str, issue_id: str, *, max_traces: int = 3
+    ) -> dict[str, Any]:
+        return await self._request(
+            "POST",
+            f"/orgs/{org_id}/agent-issues/{issue_id}/regression-cases",
+            json_body={"max_traces": max_traces, "auto": True},
+        )
+
+    async def preview_change_impact(
+        self,
+        org_id: str,
+        *,
+        change_id: str,
+        changed_files: list[str],
+        agent_id: str | None = None,
+    ) -> dict[str, Any]:
+        body: dict[str, Any] = {
+            "change_id": change_id,
+            "changed_files": changed_files,
+        }
+        if agent_id:
+            body["agent_id"] = agent_id
+        return await self._request(
+            "POST",
+            f"/orgs/{org_id}/change-impact/preview",
+            json_body=body,
+        )
+
+    async def export_fixture(self, org_id: str, issue_id: str) -> dict[str, Any]:
+        return await self._request(
+            "POST",
+            f"/orgs/{org_id}/agent-issues/{issue_id}/export-fixture",
         )

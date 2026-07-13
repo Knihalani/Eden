@@ -28,6 +28,7 @@ __all__ = [
     "crewai",
     "autogen",
     "mastra",
+    "pydantic_ai",
 ]
 
 

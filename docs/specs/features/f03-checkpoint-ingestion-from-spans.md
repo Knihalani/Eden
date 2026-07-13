@@ -6,7 +6,7 @@
 | **Slug** | `checkpoint-ingestion-from-spans` |
 | **Priority** | P0 |
 | **Effort** | M |
-| **Eden status** | **MISSING** |
+| **Eden status** | **SHIPPED (v0)** — checkpoint ingest wired for F01 prefix replay |
 | **Competitive source** | Laminar |
 | **Closes gap** | 1.1 |
 | **Dependencies** | F01 (prefix cache consumer) |

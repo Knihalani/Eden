@@ -6,7 +6,7 @@
 | **Slug** | `autonomy-policy-engine` |
 | **Priority** | P0 |
 | **Effort** | M |
-| **Eden status** | **MISSING** — flags exist scattered in config; no unified policy |
+| **Eden status** | **SHIPPED (v0)** — `closed_loop/autonomy_policy.py` unified policy engine |
 | **Role in autonomous maintenance** | **Safety envelope** — how far Eden may go fixing the user's agent without asking (not the maintenance capability itself) |
 | **Dependencies** | N14, N17, N20, N21, N18, F39, F41, F46 |
 

@@ -19,11 +19,11 @@ Use this doc when writing implementation steps. Specs MUST NOT assume modules ex
 | `src/eden/promotion/evidence_gate.py` | F41 | **Does not exist** | F41 (greenfield) |
 | `src/eden/closed_loop/orchestrator.py` | F46 | **STALE→FIXED:** `closed_loop/` shipped + lifespan consumers | F46 |
 | Runtime nudges in gateway | F39 | `AIGateway.complete()` has **filters only**, no nudge engine | F39 → `GatewayFilter` |
-| LangGraph env-gen pipeline | N07 Part VIII | **RETIRED** (`pyproject.toml`, `enable_eval_pipeline=false`) | N07 v2 |
+| LangGraph env-gen pipeline | **REMOVED (N07)** | **RETIRED** — use D6 fixture export + D7 regression memory instead | — |
 | `trace_quality_*` settings | Config | In `prompts/06_settings.md` only, **not in `config.py`** | N14 |
-| Weekly optimization cron | Recurring PRs | **OPEN:** `scheduled_trigger` not called from `cron_tick`; no `optimization_schedule*` on `DEFAULT_POLICY` | Phase 1C |
-| Patch `linked_files` | From triage/RCA | **OPEN:** `issue_patch_trigger` still passes `linked_files=[]` | Phase 1B |
-| Triage budget | Optional per org | **OPEN:** hard `max_triage_cost_usd_per_day=25.0` in config/`_budget_ok` | Phase 1A |
+| Weekly optimization cron | Recurring PRs | **STALE→FIXED:** `DEFAULT_POLICY.optimization_schedule`, `cron_tick.scheduled_optimization` | Phase 1C |
+| Patch `linked_files` | From triage/RCA | **STALE→FIXED:** `issue_patch_trigger` resolves via RCA linker + triage hints | Phase 1B |
+| Triage budget | Optional per org | **STALE→FIXED:** optional org budget in TriageAgent (unset=unlimited) | Phase 1A |
 
 ---
 
@@ -79,15 +79,13 @@ Use this doc when writing implementation steps. Specs MUST NOT assume modules ex
 | **Issues + TriageAgent** | **SHIPPED** — `src/eden/issues/` (active-work suppress, severity/StatGate cache invalidate, optional budget) |
 | **ClosedLoopOrchestrator** | **SHIPPED** — `closed_loop/orchestrator.py` |
 
-### KB & env gen fragments
+### KB & procedural skills
 
 | Asset | Path |
 |---|---|
 | Procedural skills (Skill Library) | `src/eden/kb/procedural/client.py` |
-| Part VIII agent prompt seeds | `src/eden/kb/prompt_versions/seed.py` |
-| Multi-agent frameworks lib | **REMOVED** (strip-legacy) — was `src/eden/multi_agent/` |
-| Pattern → env job insert (no worker) | `src/eden/api/routes/patterns.py:126–175` |
-| Marketplace | **REMOVED** (strip-legacy) — was `src/eden/marketplace/` |
+| Agent prompt seeds | `src/eden/kb/prompt_versions/seed.py` |
+| Pattern → job insert (legacy, gated by `experiments_v1`) | `src/eden/api/routes/patterns.py:126–175` |
 | A2A delegation links | `src/eden/services/observability/a2a_links.py` |
 | Cat 6 fleet / handoff graph | `src/eden/agents/agent_intel/performance.py` |
 
@@ -128,7 +126,7 @@ Use this doc when writing implementation steps. Specs MUST NOT assume modules ex
 1. **Greenfield modules** — mark as MISSING; list exact path to create
 2. **Wire before build** — N14 before F20/F28 if ETEC data needed live
 3. **Gateway changes** — implement as `GatewayFilter`, not monkey-patch `complete()`
-4. **Env gen** — use `multi_agent/` + patterns job + marketplace; do not reference removed LangGraph runner
+4. **Failure reproduction** — use D6 fixture export + F01 debugger + N01 regression; do not reference removed env-gen / N07
 5. **Cost claims** — cite `storage/compression.py` (15× zstd) + N09 dedupe + N16 sampling
 6. **Autonomous actions** — always gate with N22 + log to N06; `SelfHealer` and Cat 23 **queue only** today
 7. **Autonomy flags** — `autonomous_actions_v0`, `code_change_enabled`, `evolver_auto_canary_pct` in `config.py` — N22 unifies

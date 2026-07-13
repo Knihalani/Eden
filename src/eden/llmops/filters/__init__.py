@@ -22,13 +22,21 @@ from dataclasses import dataclass, field
 from typing import Any, Protocol, runtime_checkable
 
 from .base import FilterRegistry, GatewayFilter
+from .book import BookGatewayFilter
+from .guardrail import GuardrailBlocked, GuardrailGatewayFilter, get_guardrail_filter
+from .nudge import NudgeGatewayFilter
 from .pii import PIIFilter, PIIFilterConfig
 
 __all__ = [
+    "BookGatewayFilter",
     "FilterRegistry",
     "GatewayFilter",
+    "GuardrailBlocked",
+    "GuardrailGatewayFilter",
+    "NudgeGatewayFilter",
     "PIIFilter",
     "PIIFilterConfig",
+    "get_guardrail_filter",
 ]
 
 

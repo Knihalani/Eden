@@ -49,16 +49,26 @@ configure({
 
 ## Auto-instrument
 
-```ts
-import { instrument } from "@eden-ai/sdk";
+The TypeScript SDK wraps **client instances**, not modules globally.
+Use `detectInstalledFrameworks()` to see what's installed, then call the
+matching `wrap*` helper:
 
-instrument();           // patches OpenAI, Anthropic, Vercel AI, LangChain
-instrument("openai");   // patch only OpenAI
+```ts
+import {
+  detectInstalledFrameworks,
+  wrapOpenAI,
+  wrapAnthropic,
+  wrapVercelAI,
+  wrapLangChain,
+} from "@eden-ai/sdk";
+
+const installed = detectInstalledFrameworks();
+// if (installed.openai) { client = wrapOpenAI(new OpenAI()); }
 ```
 
-`instrument()` patches the constructors of each supported SDK. It
-does **not** mutate any instances you've already created — call it
-before you `new OpenAI(...)`.
+`autoInstrument()` is an alias for `detectInstalledFrameworks()` kept for
+v0.1 compatibility — it does **not** patch constructors. Call `wrap*`
+before creating client instances you want traced.
 
 ## Per-framework wrappers
 

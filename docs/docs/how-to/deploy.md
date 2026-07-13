@@ -70,6 +70,54 @@ helm install eden eden/eden \
   --values values.yaml
 ```
 
+### Helm smoke test (kind / minikube)
+
+Validate the self-host path before production cutover:
+
+```bash
+# 1. Create a local cluster
+kind create cluster --name eden-smoke
+# or: minikube start
+
+# 2. Install from the repo chart (dev defaults)
+cd /path/to/eden
+helm install eden ./helm/eden \
+  --namespace eden \
+  --create-namespace
+
+# 3. Wait for API pod
+kubectl -n eden rollout status deployment/eden-eden-api --timeout=120s
+
+# 4. Port-forward and health check
+kubectl -n eden port-forward svc/eden-eden-api 8000:8000 &
+curl -sf http://localhost:8000/health | jq .
+# Expect: {"status":"healthy", ...}
+
+# 5. Run migrations (one-shot job)
+kubectl -n eden run eden-migrate --rm -it --restart=Never \
+  --image=eden/api:latest \
+  -- alembic upgrade head
+
+# 6. First ingest smoke (replace org/key from portal signup)
+export EDEN_API_KEY="sk_eden_…"
+export EDEN_ORG_ID="org_…"
+export EDEN_BASE_URL="http://localhost:8000"
+python -m eden_sdk.doctor   # or: pip install eden-sdk && doctor
+
+# 7. Teardown
+helm uninstall eden -n eden
+kind delete cluster --name eden-smoke
+```
+
+**Pass criteria:**
+
+- `/health` returns `healthy` with postgres + redis connected
+- Alembic migrations complete without error
+- SDK doctor emits a test event visible in Traces
+- External Postgres/Redis/Qdrant URLs work when
+  `externalPostgres` / `externalRedis` / `externalQdrant` are set
+  and in-chart services are disabled (see `helm/eden/README.md`)
+
 `values.yaml`:
 
 ```yaml

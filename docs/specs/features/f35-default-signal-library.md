@@ -6,7 +6,7 @@
 | **Slug** | `default-signal-library` |
 | **Priority** | P1 |
 | **Effort** | M |
-| **Eden status** | **MISSING** |
+| **Eden status** | **SHIPPED (v0)** — default signal library seeded; classifier stretch deferred |
 | **Competitive source** | Raindrop |
 | **Closes gap** | 3.6, 5.4 |
 | **Dependencies** | F06 (investigator), F34 (optional classifiers), F20, F28, N14 |

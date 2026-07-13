@@ -127,6 +127,7 @@ class TriageAgent:
                 "severity_at_triage": issue.severity,
                 "triaged_at": datetime.now(UTC).isoformat(),
             }
+            triage_result = _enrich_playbook(triage_result, issue)
             await self._repo.set_triage_result(org_id, issue_id, triage_result)
             return _envelope(
                 "triage",
@@ -183,6 +184,7 @@ class TriageAgent:
             "severity_at_triage": issue.severity,
             "triaged_at": datetime.now(UTC).isoformat(),
         }
+        triage_result = _enrich_playbook(triage_result, issue)
         await self._repo.set_triage_result(org_id, issue_id, triage_result)
         if llm_used:
             await self._debit_budget(org_id, _TRIAGE_COST_ESTIMATE_USD)
@@ -317,6 +319,14 @@ class TriageAgent:
     def _statgate_root_cause(score: Any, issue: Any) -> str:
         checks = ", ".join(score.p0_checks) or "p0"
         return f"Deterministic P0 escalation ({checks}) for {issue.kind} issue"
+
+
+def _enrich_playbook(triage_result: dict[str, Any], issue: Any) -> dict[str, Any]:
+    from eden.closed_loop.playbook_router import enrich_triage_with_playbook
+
+    out = enrich_triage_with_playbook(triage_result)
+    out["issue_kind"] = getattr(issue, "kind", None)
+    return out
 
 
 def _should_invalidate_cache(issue: Any, score: Any) -> bool:

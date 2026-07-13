@@ -257,6 +257,78 @@ def _wizard_step_to_v2(step: str) -> str | None:
     return mapping.get(step)
 
 
+async def _enqueue_change_impact_preview(
+    pg: Any,
+    payload: dict[str, Any],
+    repo_full: str,
+    pr: dict[str, Any] | None = None,
+) -> None:
+    """N04: run change impact preview on PR open/sync (best-effort)."""
+    try:
+        from eden.config import get_settings
+
+        if not getattr(get_settings(), "change_impact_preview_v1", False):
+            return
+    except Exception:
+        return
+    pr = pr or payload.get("pull_request") or {}
+    pr_number = pr.get("number")
+    head = (pr.get("head") or {}).get("sha", "")
+    if not pr_number:
+        return
+    changed: list[str] = []
+    for f in payload.get("commits") or []:
+        for key in ("added", "modified", "removed"):
+            changed.extend(list(f.get(key) or []))
+    from eden.change_impact.preview import ChangeDetector, ImpactPreviewOrchestrator
+
+    agent_files = ChangeDetector.detect_changed_files(changed)
+    if not agent_files:
+        return
+    row = await pg.fetchrow(
+        """
+        SELECT org_id, installation_id FROM onboarding_pr_runs
+        WHERE repo_full_name = $1
+        ORDER BY created_at DESC
+        LIMIT 1
+        """,
+        repo_full,
+    )
+    org_id = str(row["org_id"]) if row and row.get("org_id") else "default"
+    installation_id = int(row["installation_id"]) if row and row.get("installation_id") else None
+    change_id = f"pr-{repo_full}-{pr_number}"
+    orchestrator = ImpactPreviewOrchestrator(pg=pg)
+    report = await orchestrator.generate_report(
+        org_id,
+        change_id=change_id,
+        changed_files=agent_files,
+        agent_id=ChangeDetector.resolve_agent_id(agent_files),
+    )
+    logger.info(
+        "change_impact_preview org=%s change=%s recommendation=%s head=%s",
+        org_id,
+        change_id,
+        report.recommendation,
+        head[:12] if head else "",
+    )
+    if installation_id and pr_number and head:
+        from eden.change_impact.preview import post_github_check_and_comment
+
+        gh_result = await post_github_check_and_comment(
+            installation_id=installation_id,
+            repo_full=repo_full,
+            pr_number=int(pr_number),
+            head_sha=head,
+            report=report,
+        )
+        logger.info(
+            "change_impact_github org=%s pr=%s posted=%s",
+            org_id,
+            pr_number,
+            gh_result.get("posted") or gh_result.get("skipped"),
+        )
+
+
 # ── Public integration routes ───────────────────────────────────────
 
 
@@ -408,6 +480,8 @@ async def github_webhook(request: Request) -> dict[str, str]:
         repo_full = (payload.get("repository") or {}).get("full_name", "")
         if not pr_number or not repo_full:
             return {"status": "ignored"}
+        if action in ("opened", "synchronize", "reopened"):
+            await _enqueue_change_impact_preview(pg, payload, repo_full, pr)
         if action == "closed":
             merged = pr.get("merged", False)
             new_status = "merged" if merged else "closed"

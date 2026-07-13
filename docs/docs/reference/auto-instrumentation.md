@@ -7,9 +7,20 @@ sidebar_position: 6
 
 # Auto-instrumentation matrix
 
-The Eden SDKs patch the most popular LLM SDKs at import time, so
-"trace my agent" is a one-liner. The matrix below lists every
-framework the SDKs know how to wrap and what gets recorded.
+The Eden SDKs patch the most popular LLM SDKs at import time (Python) or
+wrap client instances (TypeScript), so "trace my agent" is a one-liner.
+The matrix below lists every framework the SDKs know how to wrap and what
+gets recorded.
+
+## Three-tier model
+
+| Tier | When | Mechanism |
+|------|------|-----------|
+| **1 — Native** | Framework listed below | `eden.instrument()` / `wrap*` |
+| **2 — Universal** | Custom agent, raw HTTP, OTel-only frameworks | HTTP capture, OTel bridge, logging forwarder |
+| **3 — Manual** | Full control | `@trace_agent` / `traceAgent` |
+
+See [Connect any agent](/how-to/connect-any-agent) for the full decision tree.
 
 ## By SDK
 
@@ -23,7 +34,16 @@ framework the SDKs know how to wrap and what gets recorded.
 | `llama_index` | `QueryEngine.query`, `ChatEngine.chat` | query, response, retrieved node ids |
 | `crewai` | `Crew.kickoff` | crew name, agent roster, task outcomes |
 | `autogen` | `ConversableAgent.generate_reply` | speaker, recipient, message contents |
-| `mastra` | Mastra Python runtime calls | runtime id, workflow name, step outcomes |
+| `pydantic-ai` | `Agent.run`, tool calls | agent name, tools, tokens, `source_format: pydantic-ai` |
+| `mastra` | No-op (use TypeScript SDK) | — |
+
+### Tier 2 — Python universal fallback
+
+| Mechanism | Patches | Recorded |
+|-----------|---------|----------|
+| HTTP capture | `httpx` for OpenAI/Anthropic/Ollama URL patterns | model, request/response bodies (truncated), latency |
+| OTel bridge | `eden_sdk.otel.configure_exporter()` | spans forwarded with framework attribution |
+| Logging forwarder | `eden_sdk.logging_forwarder.install_logging()` | `event_type: log` events |
 
 ### TypeScript (`@eden-ai/sdk`)
 
@@ -33,6 +53,15 @@ framework the SDKs know how to wrap and what gets recorded.
 | `anthropic` | `wrapAnthropic(client)` | model, system, messages, response, tokens |
 | `ai` (Vercel AI) | `wrapVercelAI({ openai })` | model, prompt, response |
 | `langchain` | `wrapLangChain({ ChatOpenAI })` | chain/agent name, intermediate steps |
+| `mastra` | `wrapMastra(mastraInstance)` | workflow name, step outcomes, `source_format: mastra` |
+
+### Tier 2 — TypeScript universal fallback
+
+| Mechanism | Patches | Recorded |
+|-----------|---------|----------|
+| HTTP capture | `fetch` / `undici` for known LLM URLs | model, bodies (truncated), latency |
+| OTel bridge | `@eden-ai/sdk/otel` exporter | spans with framework attribution |
+| Logging forwarder | SDK logging shim | `event_type: log` events |
 
 ## What gets recorded, per call
 
@@ -42,7 +71,7 @@ with these standard fields:
 | Field | Source | Always? |
 |-------|--------|---------|
 | `event_type` | `"framework"` | yes |
-| `source_format` | `"openai"` \| `"anthropic"` \| `"vercel-ai"` \| `"langchain"` \| `"custom"` | yes |
+| `source_format` | `"openai"` \| `"anthropic"` \| `"vercel-ai"` \| `"langchain"` \| `"pydantic-ai"` \| `"mastra"` \| `"http-capture"` \| `"custom"` | yes |
 | `model` | From request | yes |
 | `prompt` | Last user message (truncated at 8 KiB) | yes |
 | `response` | Assistant message (truncated at 8 KiB) | yes |

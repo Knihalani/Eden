@@ -213,6 +213,15 @@ class DefaultDenyAuthMiddleware:
     async def __call__(
         self, scope: Scope, receive: Receive, send: Send
     ) -> None:
+        # Lifespan (and any future non-HTTP scope) must pass through —
+        # otherwise uvicorn's startup hook never runs and background
+        # consumers (trace.finalized, closed-loop, verify worker) stay
+        # dead. Pre-fix: lifespan hit the HTTP 401 branch and uvicorn
+        # logged "ASGI lifespan protocol appears unsupported".
+        if scope["type"] not in ("http", "websocket"):
+            await self.app(scope, receive, send)
+            return
+
         path = scope.get("path", "")
         method = scope.get("method", "GET")
         # F74 — pass CORS preflight through to CORSMiddleware.

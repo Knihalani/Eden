@@ -1,11 +1,10 @@
 """AutoIssueScanner — zero-config auto issue detection (F20).
 
 Runs a set of always-on detectors over a finalized trace's events and
-writes any hits as stumbles (which promote into issues). v1 ships four
-detectors — ``tool_error``, ``loop`` (loop_detected), ``task_failure``,
-and ``slow_trace`` — matching the closed-loop DoD; the remaining F20
-detectors (hallucination, user_frustration, confusion_loop, high_cost)
-are deferred and slot into the same detector table.
+writes any hits as stumbles (which promote into issues). Seven detectors
+ship in the standard profile — ``tool_error``, ``loop``, ``task_failure``,
+``slow_trace``, ``hallucination``, ``user_frustration``, ``confusion_loop``,
+and ``high_cost``.
 
 Detectors reuse the RCA event fetch (``_fetch_trace_events``) and the
 telemetry row shape, so no new ingestion coupling is introduced.
@@ -22,12 +21,30 @@ from eden.issues.stumble_writer import StumbleWriter
 logger = logging.getLogger(__name__)
 
 # Detectors enabled per detection profile (F20). ``minimal`` runs the two
-# cheapest high-signal detectors; ``standard``/``advanced`` run all v1
+# cheapest high-signal detectors; ``standard``/``advanced`` run all seven
 # detectors. Unknown profiles fall back to ``standard``.
 _PROFILE_DETECTORS: dict[str, set[str]] = {
     "minimal": {"tool_error", "task_failure"},
-    "standard": {"tool_error", "loop", "task_failure", "slow_trace"},
-    "advanced": {"tool_error", "loop", "task_failure", "slow_trace"},
+    "standard": {
+        "tool_error",
+        "loop",
+        "task_failure",
+        "slow_trace",
+        "hallucination",
+        "user_frustration",
+        "confusion_loop",
+        "high_cost",
+    },
+    "advanced": {
+        "tool_error",
+        "loop",
+        "task_failure",
+        "slow_trace",
+        "hallucination",
+        "user_frustration",
+        "confusion_loop",
+        "high_cost",
+    },
 }
 
 _FAILURE_OUTCOMES = {"failure", "error", "timeout", "crash", "failed"}
@@ -35,6 +52,20 @@ _LOOP_REPEAT_THRESHOLD = 3
 _ETEC_LOOP_THRESHOLD = 0.85
 _MAX_SPANS = 500
 _SLOW_TRACE_MS_DEFAULT = 30_000.0
+_HALLUCINATION_JUDGE_THRESHOLD = 0.3
+_HIGH_COST_USD_DEFAULT = 1.0
+_CONFUSION_REPEAT_THRESHOLD = 2
+_FRUSTRATION_KEYWORDS = (
+    "try again",
+    "wrong",
+    "not helpful",
+    "doesn't work",
+    "does not work",
+    "frustrated",
+    "useless",
+    "broken",
+    "still wrong",
+)
 _MAX_STUMBLES_PER_KIND = 3
 
 
@@ -92,6 +123,22 @@ class AutoIssueScanner:
             )
         if "slow_trace" in enabled:
             stumbles += self._detect_slow_trace(
+                org_id, trace_id, agent_id, session_id, user_id, events
+            )
+        if "hallucination" in enabled and not big_trace:
+            stumbles += await self._detect_hallucination(
+                org_id, trace_id, agent_id, session_id, user_id, events
+            )
+        if "user_frustration" in enabled and not big_trace:
+            stumbles += self._detect_user_frustration(
+                org_id, trace_id, agent_id, session_id, user_id, events
+            )
+        if "confusion_loop" in enabled:
+            stumbles += self._detect_confusion_loop(
+                org_id, trace_id, agent_id, session_id, user_id, events
+            )
+        if "high_cost" in enabled:
+            stumbles += self._detect_high_cost(
                 org_id, trace_id, agent_id, session_id, user_id, events
             )
 
@@ -317,6 +364,241 @@ class AutoIssueScanner:
                     "max_duration_ms": max_ms,
                     "threshold_ms": _SLOW_TRACE_MS_DEFAULT,
                     "heuristic": "fixed_threshold_v1",
+                },
+                detected_by="auto_scanner",
+                agent_id=agent_id,
+                session_id=session_id,
+                user_id=user_id,
+            )
+        ]
+
+    async def _detect_hallucination(
+        self,
+        org_id: str,
+        trace_id: str,
+        agent_id: str | None,
+        session_id: str | None,
+        user_id: str | None,
+        events: list[dict[str, Any]],
+    ) -> list[StumbleCreate]:
+        """Judge score first; heuristic fallback when no judge rows."""
+        try:
+            from eden.insights.rca._common import _fetch_judge_scores
+
+            judge_rows = await _fetch_judge_scores(org_id, trace_id)
+        except Exception:
+            judge_rows = []
+
+        for row in judge_rows:
+            if _s(row.get("judge_name")).lower() != "hallucination":
+                continue
+            try:
+                score = float(row.get("score"))
+            except (TypeError, ValueError):
+                continue
+            if score < _HALLUCINATION_JUDGE_THRESHOLD:
+                return [
+                    StumbleCreate(
+                        org_id=org_id,
+                        trace_id=trace_id,
+                        kind="hallucination",
+                        title="Hallucination detected",
+                        detail={
+                            "judge_score": score,
+                            "source": "judge",
+                        },
+                        detected_by="auto_scanner",
+                        agent_id=agent_id,
+                        session_id=session_id,
+                        user_id=user_id,
+                    )
+                ]
+
+        for e in events:
+            attrs = e.get("attributes") or {}
+            for k in ("hallucination_score", "hhe_score"):
+                try:
+                    hs = float(attrs.get(k))
+                except (TypeError, ValueError):
+                    continue
+                if hs > 0.5:
+                    return [
+                        StumbleCreate(
+                            org_id=org_id,
+                            trace_id=trace_id,
+                            kind="hallucination",
+                            title="Hallucination detected",
+                            detail={
+                                "hallucination_score": round(hs, 4),
+                                "source": "trace_quality",
+                            },
+                            detected_by="auto_scanner",
+                            agent_id=agent_id,
+                            session_id=session_id,
+                            user_id=user_id,
+                        )
+                    ]
+
+        tool_outputs: list[str] = []
+        assistant_texts: list[str] = []
+        for e in events:
+            et = _s(e.get("event_type")).lower()
+            if "tool" in et and e.get("tool_results"):
+                for tr in e.get("tool_results") or []:
+                    if isinstance(tr, dict):
+                        tool_outputs.append(_s(tr.get("content") or tr.get("output")))
+            if et in ("llm.completion", "chat.completion", "message"):
+                assistant_texts.append(
+                    _s(e.get("output_text") or e.get("content") or e.get("response"))
+                )
+
+        empty_tool = any(not t.strip() or t.strip() in ("{}", "[]", "null") for t in tool_outputs)
+        claims_data = any(
+            any(w in t.lower() for w in ("found", "according to", "shows that", "%"))
+            for t in assistant_texts
+            if t
+        )
+        if empty_tool and claims_data:
+            return [
+                StumbleCreate(
+                    org_id=org_id,
+                    trace_id=trace_id,
+                    kind="hallucination",
+                    title="Possible hallucination",
+                    detail={
+                        "heuristic": "empty_tool_result_with_claims",
+                        "source": "heuristic",
+                    },
+                    detected_by="auto_scanner",
+                    agent_id=agent_id,
+                    session_id=session_id,
+                    user_id=user_id,
+                )
+            ]
+        return []
+
+    def _detect_user_frustration(
+        self,
+        org_id: str,
+        trace_id: str,
+        agent_id: str | None,
+        session_id: str | None,
+        user_id: str | None,
+        events: list[dict[str, Any]],
+    ) -> list[StumbleCreate]:
+        user_msgs: list[str] = []
+        regen_count = 0
+        for e in events:
+            attrs = e.get("attributes") or {}
+            role = _s(attrs.get("role") or attrs.get("message_role")).lower()
+            text = _s(
+                e.get("input_text")
+                or e.get("content")
+                or attrs.get("user_message")
+                or attrs.get("text")
+            )
+            if attrs.get("regeneration") or attrs.get("is_regeneration"):
+                regen_count += 1
+            if role == "user" and text:
+                user_msgs.append(text.lower())
+
+        frustrated = regen_count >= 2 or any(
+            kw in msg for msg in user_msgs for kw in _FRUSTRATION_KEYWORDS
+        )
+        if not frustrated:
+            return []
+        return [
+            StumbleCreate(
+                org_id=org_id,
+                trace_id=trace_id,
+                kind="user_frustration",
+                title="User frustration detected",
+                detail={
+                    "regeneration_count": regen_count,
+                    "matched_keywords": [
+                        kw
+                        for kw in _FRUSTRATION_KEYWORDS
+                        if any(kw in m for m in user_msgs)
+                    ],
+                },
+                detected_by="auto_scanner",
+                agent_id=agent_id,
+                session_id=session_id,
+                user_id=user_id,
+            )
+        ]
+
+    def _detect_confusion_loop(
+        self,
+        org_id: str,
+        trace_id: str,
+        agent_id: str | None,
+        session_id: str | None,
+        user_id: str | None,
+        events: list[dict[str, Any]],
+    ) -> list[StumbleCreate]:
+        questions: list[str] = []
+        for e in events:
+            attrs = e.get("attributes") or {}
+            role = _s(attrs.get("role") or attrs.get("message_role")).lower()
+            text = _s(e.get("output_text") or e.get("content") or attrs.get("text"))
+            if role in ("assistant", "agent") and "?" in text:
+                norm = " ".join(text.lower().split())[:200]
+                if norm:
+                    questions.append(norm)
+
+        counts: dict[str, int] = {}
+        for q in questions:
+            counts[q] = counts.get(q, 0) + 1
+        repeated = [q for q, n in counts.items() if n >= _CONFUSION_REPEAT_THRESHOLD]
+        if not repeated:
+            return []
+        return [
+            StumbleCreate(
+                org_id=org_id,
+                trace_id=trace_id,
+                kind="loop",
+                title="Confusion loop detected",
+                detail={
+                    "repeated_question": repeated[0],
+                    "repeat_count": counts[repeated[0]],
+                    "detector": "confusion_loop",
+                },
+                detected_by="auto_scanner",
+                agent_id=agent_id,
+                session_id=session_id,
+                user_id=user_id,
+            )
+        ]
+
+    def _detect_high_cost(
+        self,
+        org_id: str,
+        trace_id: str,
+        agent_id: str | None,
+        session_id: str | None,
+        user_id: str | None,
+        events: list[dict[str, Any]],
+    ) -> list[StumbleCreate]:
+        total = 0.0
+        for e in events:
+            for key in ("cost_usd", "estimated_cost_usd"):
+                try:
+                    total += float(e.get(key) or (e.get("attributes") or {}).get(key) or 0.0)
+                except (TypeError, ValueError):
+                    continue
+        if total <= _HIGH_COST_USD_DEFAULT:
+            return []
+        return [
+            StumbleCreate(
+                org_id=org_id,
+                trace_id=trace_id,
+                kind="custom",
+                title="High-cost trace",
+                detail={
+                    "total_cost_usd": round(total, 6),
+                    "threshold_usd": _HIGH_COST_USD_DEFAULT,
+                    "detector": "high_cost",
                 },
                 detected_by="auto_scanner",
                 agent_id=agent_id,

@@ -21,6 +21,7 @@ from eden.api.middleware.security_headers import (
 from eden.api.middleware.tenant_rate_limit import TenantRateLimitMiddleware
 from eden.api.routes import (
     agent_issues,
+    agent_sessions,
     agent_pr_suggestions,
     agents,
     ai_agent,
@@ -36,8 +37,10 @@ from eden.api.routes import (
     billing,
     budgets,
     chain,
+    change_impact,
     clerk_webhooks,
     compliance,
+    compliance_pack,
     cost,
     cost_overrides,
     data_platform,
@@ -47,9 +50,11 @@ from eden.api.routes import (
     export,
     export_destinations,
     feature_flags,
+    fleet,
     ingestion,
     improve,
     insights,
+    learn,
     integrations_helicone,
     integrations_langfuse,
     integrations_langsmith,
@@ -102,6 +107,7 @@ from eden.api.routes import (
     prompt_canary,
     prompts,
     prompts_v2,
+    production_eval,
     qa_generator,
     rbac,
     redteam,
@@ -113,6 +119,8 @@ from eden.api.routes import (
     sharing,
     sidebar_prefs,
     signals,
+    search_signals,
+    tool_call_labels,
     sql_query,
     sso,
     streaming_tokens,
@@ -364,6 +372,15 @@ async def lifespan(app: FastAPI):
         logger.info("trace_quality: install_all complete")
     except Exception as e:
         logger.warning(f"trace_quality install_all skipped: {e}")
+
+    # WS2 — F39/F40/N15 learn-in-production gateway filters.
+    try:
+        from eden.llmops.learn_wiring import install_learn_filters
+
+        install_learn_filters()
+        logger.info("learn_wiring: gateway filters installed")
+    except Exception as e:
+        logger.warning(f"learn_wiring install skipped: {e}")
 
     try:
         from eden.observability.quality_pipeline.worker import start_worker
@@ -890,7 +907,15 @@ app.include_router(intelligence_code_change.router)  # /orgs/{org_id}/intelligen
 # All self-gate on `intelligence_gap_v0` via the per-router `dependencies=`
 # list; this just makes them reachable when the flag is on.
 app.include_router(agent_issues.router)  # /orgs/{org_id}/agent-issues (F28/F29, gated by agent_issues_v0)
+app.include_router(fleet.router)  # /orgs/{org_id}/fleet (N05/D9, gated by fleet_health_v1)
+app.include_router(agent_sessions.router)  # /orgs/{org_id}/agent-sessions (F23, gated by agent_sessions_v1)
+app.include_router(change_impact.router)  # /orgs/{org_id}/change-impact (N04)
 app.include_router(improve.router)  # /orgs/{org_id}/improve (N17 cockpit + F04 autofix)
+app.include_router(learn.router)  # /orgs/{org_id}/{nudges,promotions,book,drift,...} (WS2)
+app.include_router(production_eval.router)  # /orgs/{org_id}/production-eval/* (N03, gated)
+app.include_router(compliance_pack.router)  # /orgs/{org_id}/compliance/* (N06, gated)
+app.include_router(search_signals.router)  # /orgs/{org_id}/search/to-signal (N10)
+app.include_router(tool_call_labels.router)  # /orgs/{org_id}/tool-calls/{span_id}/label (F21)
 app.include_router(autonomy.router)  # /orgs/{org_id}/settings/autonomy (N22, gated by closed_loop_orchestrator_v1)
 app.include_router(intelligence_agents.router)
 app.include_router(intelligence_apm_depth.router)

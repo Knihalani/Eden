@@ -592,6 +592,93 @@ class PromptEvolvers(EvolutionComponent):
         return created
 
 
+class IssuePromptEvolver(EvolutionComponent):
+    """Issue-driven prompt evolution (N18).
+
+    When an issue is resolved with triage context, generate a prompt
+    variant addressing the root cause and enroll it in a shadow canary
+    via :class:`PromptEvolvers`.
+    """
+
+    async def evolve_from_issue(
+        self,
+        org_id: str,
+        issue_id: str,
+        *,
+        agent_id: str | None = None,
+    ) -> dict[str, Any]:
+        try:
+            from eden.issues.repo import IssuesRepo
+
+            issue = await IssuesRepo().get_issue(org_id, issue_id)
+        except Exception as exc:
+            logger.debug("IssuePromptEvolver load: %s", exc)
+            return {"created": 0, "skipped": True, "reason": "load_failed"}
+        if issue is None:
+            return {"created": 0, "skipped": True, "reason": "not_found"}
+
+        agent = agent_id or issue.agent_id
+        if not agent:
+            return {"created": 0, "skipped": True, "reason": "no_agent"}
+
+        triage = issue.triage_result or {}
+        summary = triage.get("summary") or triage.get("root_cause") or issue.title
+        failure_jobs = [
+            {
+                "issue_id": issue_id,
+                "fingerprint": issue.fingerprint,
+                "kind": issue.kind,
+                "summary": summary,
+            }
+        ]
+
+        if self.prompt_versions is None:
+            self.prompt_versions = await _maybe_await(get_prompt_versions_client())
+
+        try:
+            active = await self.prompt_versions.get_active_version(agent)
+        except Exception:
+            active = None
+        current_version = int((active or {}).get("version") or 1)
+        current_prompt = (active or {}).get("prompt") or f"Agent {agent} system prompt."
+
+        revised = (
+            f"{current_prompt}\n\n"
+            f"# Resolved issue guardrail ({issue.fingerprint})\n"
+            f"Avoid recurrence of: {summary}"
+        )
+
+        try:
+            ok = await self.prompt_versions.insert_version(
+                agent,
+                current_version + 1,
+                revised,
+                active=False,
+                ab_test_active=True,
+                quality_metrics={
+                    "org_id": org_id,
+                    "source_issue_id": issue_id,
+                    "evolver": "issue_prompt",
+                },
+            )
+        except Exception as exc:
+            logger.debug("IssuePromptEvolver insert failed: %s", exc)
+            return {"created": 0, "skipped": True, "reason": "insert_failed"}
+
+        if not ok:
+            return {"created": 0, "skipped": True, "reason": "insert_rejected"}
+
+        evolver = PromptEvolvers(llm_client=self.llm)
+        evolver.prompt_versions = self.prompt_versions
+        await evolver._auto_create_canary(agent, current_version + 1, round=1)
+        return {
+            "created": 1,
+            "agent": agent,
+            "version": current_version + 1,
+            "issue_id": issue_id,
+        }
+
+
 async def _maybe_await(value: Any) -> Any:
     """Await ``value`` if it's awaitable, otherwise return as-is.
 

@@ -64,6 +64,8 @@ export default function AutonomousTab() {
     autonomous_actions_v0: true,
   });
   const [schedule, setSchedule] = useState<CodeChangePolicy>(DEFAULT_SCHEDULE);
+  const [autoPrEnabled, setAutoPrEnabled] = useState(false);
+  const [codeChangeEnabled, setCodeChangeEnabled] = useState(false);
   const [busy, setBusy] = useState(false);
   const [scheduleBusy, setScheduleBusy] = useState(false);
   const [loaded, setLoaded] = useState(false);
@@ -110,6 +112,8 @@ export default function AutonomousTab() {
                 : 2,
             last_optimization_run_at: policy.last_optimization_run_at ?? null,
           });
+          setAutoPrEnabled(Boolean(policy.auto_pr_enabled));
+          setCodeChangeEnabled(Boolean(policy.code_change_enabled));
           setScheduleLoaded(true);
         }
       } catch {
@@ -193,6 +197,29 @@ export default function AutonomousTab() {
     }
   }
 
+  async function persistAutoPr(next: boolean) {
+    if (!currentOrg) return;
+    setScheduleBusy(true);
+    try {
+      const res = await codeChangePolicyApi.update(currentOrg.id, {
+        auto_pr_enabled: next,
+        code_change_enabled: next ? true : codeChangeEnabled,
+      });
+      const policy = res?.data?.policy ?? {};
+      setAutoPrEnabled(Boolean(policy.auto_pr_enabled ?? next));
+      setCodeChangeEnabled(Boolean(policy.code_change_enabled ?? codeChangeEnabled));
+      toast.success(
+        next
+          ? "Auto-PR enabled — approved patches can open PRs without manual click."
+          : "Auto-PR disabled — patches stay in inbox until you open a PR.",
+      );
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : String(err));
+    } finally {
+      setScheduleBusy(false);
+    }
+  }
+
   if (!currentOrg) return null;
 
   const sched = schedule.optimization_schedule || "weekly";
@@ -224,6 +251,24 @@ export default function AutonomousTab() {
         </div>
       </div>
 
+      <div className="rounded-xl border border-[var(--border-default)] bg-[var(--bg-secondary)]/30 p-4 space-y-3">
+        <h3 className="text-sm font-semibold text-[var(--text-primary)]">Autonomy tiers (T0–T4)</h3>
+        <p className="text-sm text-[var(--text-secondary)] leading-relaxed">
+          Eden grades autonomous actions from observe-only to auto-merge. Your effective tier is the
+          lowest level allowed by maintenance mode, compliance profile, and daily budget.
+        </p>
+        <ul className="text-sm text-[var(--text-secondary)] space-y-2 list-disc pl-5">
+          <li><strong className="text-[var(--text-primary)]">T0 — Observe:</strong> Detect issues and recommend fixes only. No runtime changes.</li>
+          <li><strong className="text-[var(--text-primary)]">T1 — Diagnose:</strong> Auto-triage and investigate. Still no mutations.</li>
+          <li><strong className="text-[var(--text-primary)]">T2 — Assisted heal:</strong> Runtime heals (rollback, cache bust, reweight) may auto-run; code patches need approval.</li>
+          <li><strong className="text-[var(--text-primary)]">T3 — Promote:</strong> Evidence-gated prompt canaries and nudge promotions when policy allows.</li>
+          <li><strong className="text-[var(--text-primary)]">T4 — Auto-merge:</strong> Highest blast radius — auto-merge approved patches (off by default).</li>
+        </ul>
+        <p className="text-xs text-[var(--text-muted)]">
+          HIPAA compliance profile forces T0 (observe only). Configure per-agent overrides under Settings → Autonomy policy.
+        </p>
+      </div>
+
       <FlagRow
         title="Intelligence surface (Cat 1-23)"
         description="Routes under /intelligence/*. Includes the Inbox, Knowledge Graph, Patch Generator, and Style Learner. Turning this off hides the surface entirely."
@@ -241,6 +286,16 @@ export default function AutonomousTab() {
         disabled={!isAdmin || busy || !flags.intelligence_gap_v0}
         warn={flags.autonomous_actions_v0}
         onChange={(v) => persist({ ...flags, autonomous_actions_v0: v })}
+      />
+
+      <FlagRow
+        title="Auto-open PRs (N20)"
+        description="When enabled, approved issue patches can automatically open GitHub PRs (requires code-change + GitHub App). Off by default for safety."
+        icon={autoPrEnabled ? ShieldCheck : ShieldOff}
+        enabled={autoPrEnabled}
+        disabled={!isAdmin || scheduleBusy || !flags.intelligence_gap_v0}
+        warn={autoPrEnabled}
+        onChange={(v) => void persistAutoPr(v)}
       />
 
       <div className="rounded-xl border border-[var(--border-default)] bg-[var(--bg-secondary)]/30 p-4 space-y-4">

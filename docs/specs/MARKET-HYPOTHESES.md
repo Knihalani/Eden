@@ -25,7 +25,7 @@
 3. **"How do I know a prompt change won't break prod?"** → N04 change impact preview
 4. **"Which of our 12 agents is failing?"** → N05 fleet health
 5. **"Can you prove this run was compliant?"** → N06 audit automation
-6. **"We can't reproduce production failures locally"** → N07 environment gen (**Eden unique**)
+6. **"We can't reproduce production failures locally"** → D6 failure fixture export + D7 regression memory + F01 live debugger (**Eden unique — no hosted clones**)
 7. **"I don't trust LLM severity scores"** → N08 StatGate incident response (**Eden unique**)
 8. **"Our agents call 20 MCP servers — where do they break?"** → N02 MCP toolchain observability
 
@@ -33,12 +33,12 @@
 
 | Competitor | Strength | Eden counter |
 |---|---|---|
-| Laminar | Debugger + MCP + dev speed | Match F01+F04; exceed with StatGate + env gen |
+| Laminar | Debugger + MCP + dev speed | Match F01+F04; exceed with StatGate + D6/D7 prove-without-clones |
 | Sentrial | Session-first + auto-detect | Match F20+F23 concepts via MCP; exceed with governance |
 | Raindrop | Issues → triage → fix loop | Match F28–F30+F04; exceed with N01/N04 verification |
 | BentoLabs | Runtime nudges + learning | Match F39; exceed with evidence gate + audit (F41, N06) |
 
-**Eden's unreplicated assets:** Environment generation (Part VIII), ETEC/StatGate, 22 intelligence categories, gateway + compliance stack.
+**Eden's unreplicated assets:** D6/D7 failure prove loop, ETEC/StatGate, 22 intelligence categories, gateway + compliance stack.
 
 ---
 
@@ -47,7 +47,7 @@
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │  LAYER 3: NEXT LEVEL (N-features) — category leadership     │
-│  N07 Env-from-failures, N08 StatGate incidents, N06 audit   │
+│  D6/D7 prove loop, N08 StatGate incidents, N06 audit         │
 └─────────────────────────────────────────────────────────────┘
 ┌─────────────────────────────────────────────────────────────┐
 │  LAYER 2: CLOSED LOOP (F-features) — competitor parity      │
@@ -55,7 +55,7 @@
 └─────────────────────────────────────────────────────────────┘
 ┌─────────────────────────────────────────────────────────────┐
 │  LAYER 1: FOUNDATION — already shipped, leverage not rebuild│
-│  Gateway, evals, EQL, governance, env gen PRD, GitHub App   │
+│  Gateway, evals, EQL, governance, GitHub App                │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -113,13 +113,13 @@
 
 **Success metric:** Audit pack generation time; compliance deal win rate.
 
-### 3.7 N07 — Environment from production failures
+### 3.7 D6 + D7 + D12 — Prove failures without hosted clones (replaces N07)
 
-**Hypothesis:** Reproducibility is the #1 unsolved pain in agent debugging. **Synthetic env from real failure is Eden's category-defining bet.**
+**Hypothesis:** Reproducibility is the #1 unsolved pain in agent debugging. Eden wins with **redacted fixture export + regression memory + session contract** — not synthetic environment clones.
 
-**Evidence:** No competitor ships this; Eden Part VIII PRD is unique IP.
+**Evidence:** Archal-style hosted repro is a different category; Eden's moat is prove-in-CI + local replay inside the compliance envelope.
 
-**Success metric:** Reproduction success rate; time-to-local-repro from issue.
+**Success metric:** Fixture export round-trip rate; regression cases per resolved issue; session-grouped issue MTTR.
 
 ### 3.8 N08 — StatGate incident response
 
@@ -168,7 +168,7 @@ Wave 2   F03 → F01 debugger → F04 (debug tools) → F22 fix chat
 Wave 3   F39 nudges + F41 evidence gate
 Wave 4   N02 MCP obs + N08 StatGate incidents
 Wave 5   N01 regression eval + N04 impact preview + N03 prod sampling
-Wave 6   N05 fleet + N06 audit + N07 env gen
+Wave 6   N05 fleet + N06 audit + D6 fixture export + D7 regression memory
 Capstone F46 closed-loop orchestrator
 ```
 
@@ -188,7 +188,7 @@ Capstone F46 closed-loop orchestrator
 
 ## 7. GTM narrative (one paragraph)
 
-> Eden is the **only** agent observability platform that closes the full loop: **detect** production failures automatically, **debug** from your IDE via MCP with cached-prefix replay, **fix** with triage and GitHub PRs, **verify** with regression evals and change impact preview, **learn** with evidence-gated runtime nudges, and **reproduce** failures in auto-generated test environments — all with deterministic StatGate quality and enterprise audit trails.
+> Eden is the **only** agent observability platform that closes the full loop: **detect** production failures automatically, **debug** from your IDE via MCP with cached-prefix replay, **fix** with triage and GitHub PRs, **verify** with regression evals and change impact preview, **learn** with evidence-gated runtime nudges, and **prove** failures via D6 fixture export + D7 regression memory + D12 session contract — all with deterministic StatGate quality and enterprise audit trails.
 
 ---
 

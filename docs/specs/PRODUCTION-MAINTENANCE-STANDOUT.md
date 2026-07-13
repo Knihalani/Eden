@@ -23,7 +23,7 @@
 │ L1 ACTIVATE  N14 Platform Wiring · N16 Smart Sampling · N09   │
 │              Storage · zstd compression (shipped 15×)             │
 ├─────────────────────────────────────────────────────────────────┤
-│ L0 FIX       F04 MCP · F01 Debugger · F22 Fix · N07 Env Repro   │
+│ L0 FIX       F04 MCP · F01 Debugger · F22 Fix · D6/D7/D12 Prove   │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
@@ -43,7 +43,7 @@
 | Deterministic P0 (no LLM) | — | — | — | **N08** ETEC/StatGate |
 | Eval → live guardrail | partial | — | — | **N15** (EvalToGuardrailLink shipped) |
 | Prompt auto-evolution + canary | — | — | partial | **N18** (evolver shipped) |
-| Env from prod failure | — | — | — | **N07** (unique) |
+| Prove without clones | partial | — | — | **D6 + D7 + D12** (fixture + regression + session) |
 | 80% cost cut w/ failure keep | partial | — | — | **N16** + **N09** |
 | Unified maintenance visibility | — | partial | partial | **N17** |
 | **Autonomous outage/quality fix** | — | partial | partial | **F46 + N21 + N20** |
@@ -96,15 +96,15 @@
 7. N15 Eval→Guardrail + F39    ← improve in production
 8. N18 Prompt evolution
 9. N22 Safety bounds (before broad auto-merge)
-10. N20 Code fix + N07 Env repro
+10. N20 Code fix + D6 fixture export + D7 regression memory
 11. N19 KB flywheel
 ```
 
 ---
 
-## 6. Full spec index (46 features)
+## 6. Full spec index (45 features)
 
-**F:** 24 parity specs · **N:** N01–N22 differentiation + autonomous specs
+**F:** 24 parity specs · **N:** N01–N06, N08–N22 differentiation + autonomous specs (N07 removed)
 
 See [`FEATURE-GAP-MASTER.md`](FEATURE-GAP-MASTER.md) and [`AUTONOMOUS-MAINTENANCE.md`](AUTONOMOUS-MAINTENANCE.md).
 

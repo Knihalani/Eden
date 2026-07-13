@@ -409,6 +409,54 @@ class GitHubOAuthClient:
         return repos
 
 
+    async def create_check_run(
+        self,
+        installation_token: InstallationToken,
+        *,
+        owner: str,
+        repo: str,
+        payload: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Create a GitHub Check Run on a commit (N04 change impact)."""
+        async with _shared_httpx() as client:
+            r = await client.post(
+                f"{GITHUB_API_BASE}/repos/{owner}/{repo}/check-runs",
+                headers={
+                    "Accept": "application/vnd.github+json",
+                    "Authorization": f"token {installation_token.token}",
+                    "X-GitHub-Api-Version": "2022-11-28",
+                },
+                json=payload,
+            )
+            if r.status_code not in (200, 201):
+                raise GitHubAPIError(r.status_code, "create_check_run", r.text)
+            return r.json()
+
+    async def create_pr_comment(
+        self,
+        installation_token: InstallationToken,
+        *,
+        owner: str,
+        repo: str,
+        pr_number: int,
+        body: str,
+    ) -> dict[str, Any]:
+        """Post a comment on a pull request."""
+        async with _shared_httpx() as client:
+            r = await client.post(
+                f"{GITHUB_API_BASE}/repos/{owner}/{repo}/issues/{pr_number}/comments",
+                headers={
+                    "Accept": "application/vnd.github+json",
+                    "Authorization": f"token {installation_token.token}",
+                    "X-GitHub-Api-Version": "2022-11-28",
+                },
+                json={"body": body},
+            )
+            if r.status_code not in (200, 201):
+                raise GitHubAPIError(r.status_code, "create_pr_comment", r.text)
+            return r.json()
+
+
 # ─── Webhook signature verification ─────────────────────────────────
 
 

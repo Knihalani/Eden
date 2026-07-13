@@ -6,7 +6,7 @@
 | **Slug** | `typesense-span-search` |
 | **Priority** | P1 |
 | **Effort** | M |
-| **Eden status** | **PARTIAL** |
+| **Eden status** | **SHIPPED (v0)** — self-hosted Typesense + EQL fallback |
 | **Competitive source** | Laminar |
 | **Closes gap** | 1.6 |
 | **Dependencies** | Ingest pipeline, N09 (optional blob refs) |

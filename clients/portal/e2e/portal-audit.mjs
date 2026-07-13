@@ -13,6 +13,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const PORT = process.env.PORT || "3000";
 const BASE = `http://127.0.0.1:${PORT}`;
 const TEST_EMAIL = process.env.E2E_EMAIL || "kaiav.nihalani@gmail.com";
+const TEST_PASSWORD = process.env.E2E_PASSWORD || "Happydays1!2345";
 const STORAGE = join(__dirname, ".auth-state.json");
 const ROUTE_DELAY_MS = Number(process.env.E2E_ROUTE_DELAY_MS || "2500");
 
@@ -28,7 +29,7 @@ const PORTAL_ROUTES = [
   "/dashboard", "/observability", "/observability/query", "/observability/cohorts",
   "/observability/decisions", "/observability/memory", "/observability/retrieval",
   "/observability/apm", "/observability/eval", "/observability/time-travel",
-  "/traces", "/llmops", "/optimization", "/optimization/budget",
+  "/traces", "/issues", "/fleet", "/improve", "/observability/mcp", "/llmops", "/optimization", "/optimization/budget",
   "/optimization/model-advisor", "/optimization/outcomes", "/optimization/predict",
   "/settings", "/settings/sidebar", "/settings/exports", "/settings/gateway",
   "/settings/pii", "/settings/retention", "/settings/webhooks-dlq",
@@ -36,9 +37,10 @@ const PORTAL_ROUTES = [
   "/onboarding/autonomous", "/onboarding/tour", "/onboarding/done", "/onboarding/wait",
   "/agents", "/agents/connect", "/alerts", "/billing", "/guardrails",
   "/insights", "/pr-suggestions", "/users", "/tools", "/datasets", "/debugger",
-  "/replay", "/studio", "/synthetic", "/multi-agent", "/marketplace", "/closed-loop",
+  "/replay", "/studio", "/synthetic", "/closed-loop",
   "/incidents", "/signals", "/labeling", "/inspector", "/prompts", "/redteam",
-  "/profile", "/builder", "/analytics", "/autonomous", "/runs/test-run-id/lineage",
+  "/profile", "/analytics", "/autonomous", "/issues", "/improve", "/fleet",
+  "/runs/test-run-id/lineage",
 ];
 
 const BAD_VISIBLE = [
@@ -121,6 +123,36 @@ async function auditRoute(page, route, authed) {
   return result;
 }
 
+async function signInViaForm(page) {
+  const identifier = page.locator('input[name="identifier"]').first();
+  if ((await identifier.count()) === 0) return false;
+  await identifier.fill(TEST_EMAIL);
+  const continueBtn = page.locator('button:has-text("Continue"), button:has-text("Weiter")').first();
+  if (await continueBtn.count()) await continueBtn.click().catch(() => {});
+  await sleep(800);
+  const pw = page.locator('input[name="password"]').first();
+  if (await pw.count()) await pw.fill(TEST_PASSWORD);
+  const submit = page
+    .locator('button[type="submit"], button:has-text("Continue"), button:has-text("Sign in")')
+    .last();
+  await submit.click().catch(() => {});
+  return true;
+}
+
+async function waitForSignedIn(page, timeoutMs = 45_000) {
+  const started = Date.now();
+  while (Date.now() - started < timeoutMs) {
+    const url = page.url();
+    const onAuthPage = /\/(login|sign-in|sign-up|signup)(\/|$)/.test(new URL(url).pathname);
+    if (!onAuthPage) {
+      const me = await page.request.get(`${BASE}/api/proxy/auth/me`).catch(() => null);
+      if (me?.status() === 200) return true;
+    }
+    await sleep(1000);
+  }
+  return false;
+}
+
 async function ensureAuth(browser) {
   if (existsSync(STORAGE)) {
     const ctx = await browser.newContext({ storageState: STORAGE, viewport: { width: 1440, height: 900 } });
@@ -136,9 +168,31 @@ async function ensureAuth(browser) {
   const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
   const page = await ctx.newPage();
   await setupClerkTestingToken({ page });
-  await page.goto(`${BASE}/`, { waitUntil: "domcontentloaded" });
-  await clerk.signIn({ page, emailAddress: TEST_EMAIL });
-  await sleep(2000);
+  await page.goto(`${BASE}/sign-in`, { waitUntil: "domcontentloaded" });
+
+  let signedIn = false;
+  for (let i = 0; i < 20; i++) {
+    if (await page.locator('input[name="identifier"]').count()) {
+      signedIn = await signInViaForm(page);
+      break;
+    }
+    await sleep(500);
+  }
+
+  if (!signedIn) {
+    try {
+      await clerk.signIn({ page, emailAddress: TEST_EMAIL, signInParams: { strategy: "password", password: TEST_PASSWORD } });
+      signedIn = true;
+    } catch {
+      /* fall through */
+    }
+  }
+
+  if (!(await waitForSignedIn(page))) {
+    await ctx.close();
+    throw new Error("ensureAuth: sign-in did not reach auth/me 200");
+  }
+
   await ctx.storageState({ path: STORAGE });
   await ctx.close();
 }

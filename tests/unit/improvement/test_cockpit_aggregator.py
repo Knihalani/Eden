@@ -55,18 +55,27 @@ async def test_list_queue_merges_sources() -> None:
 
     mock_pg = MagicMock()
     mock_pg.fetch = AsyncMock(
-        return_value=[
-            {
-                "id": "patch_1",
-                "repo_id": "agent_a",
-                "trace_id": "trc_1",
-                "rca_id": "iss_i1",
-                "description": "Fix loop in handler",
-                "status": "proposed",
-                "created_at": datetime.now(UTC),
-            }
+        side_effect=[
+            # proposed_patches
+            [
+                {
+                    "id": "patch_1",
+                    "repo_id": "agent_a",
+                    "trace_id": "trc_1",
+                    "rca_id": "iss_i1",
+                    "description": "Fix loop in handler",
+                    "status": "proposed",
+                    "created_at": datetime.now(UTC),
+                }
+            ],
+            # nudges
+            [],
+            # promotions handled by EvidenceGate mock
         ]
     )
+
+    mock_gate = MagicMock()
+    mock_gate.list_queue = AsyncMock(return_value=[])
 
     with (
         patch("eden.issues.repo.IssuesRepo", return_value=mock_repo),
@@ -77,6 +86,10 @@ async def test_list_queue_merges_sources() -> None:
         patch(
             "eden.storage.postgres.get_postgres_client",
             new=AsyncMock(return_value=mock_pg),
+        ),
+        patch(
+            "eden.promotion.evidence_gate.EvidenceGate",
+            return_value=mock_gate,
         ),
     ):
         queue = await ImprovementCockpitAggregator().list_queue("org_1")
@@ -108,6 +121,8 @@ async def test_snooze_hides_item() -> None:
     mock_exec.list_pending = AsyncMock(return_value={"data": {"actions": []}})
     mock_pg = MagicMock()
     mock_pg.fetch = AsyncMock(return_value=[])
+    mock_gate = MagicMock()
+    mock_gate.list_queue = AsyncMock(return_value=[])
 
     with (
         patch("eden.issues.repo.IssuesRepo", return_value=mock_repo),
@@ -118,6 +133,10 @@ async def test_snooze_hides_item() -> None:
         patch(
             "eden.storage.postgres.get_postgres_client",
             new=AsyncMock(return_value=mock_pg),
+        ),
+        patch(
+            "eden.promotion.evidence_gate.EvidenceGate",
+            return_value=mock_gate,
         ),
     ):
         # Inject via direct filter check — aggregator filters snoozed refs

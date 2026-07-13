@@ -6,6 +6,31 @@ sidebar_position: 99
 
 # What's new
 
+## SDK 0.3.0 — July 2026
+
+### SDKs
+
+- **Python `eden-sdk` 0.3.0** — Pydantic AI instrumentation, HTTP capture,
+  OTel bridge, logging forwarder, session-first API, `eden doctor` CLI.
+- **TypeScript `@eden-ai/sdk` 0.3.0** — Mastra `wrapMastra`, HTTP capture,
+  `detectInstalledFrameworks` + `wrap*` pattern (replaces broken
+  `instrument()` global patch docs), session API, `npx @eden-ai/sdk doctor`.
+
+### Docs
+
+- [Connect any agent](/how-to/connect-any-agent) — three-tier instrumentation guide
+- [MCP in Cursor](/how-to/mcp-cursor) — IDE setup for Eden MCP tools
+- [Agent sessions](/how-to/agent-sessions) — F23 session-first SDK reference
+- [Failure fixtures](/how-to/failure-fixtures) — D6 export + local replay
+- [Security launch checklist](/operations/security-launch-checklist) — pre-launch gate
+- Quickstart TS fix: `detectInstalledFrameworks` + `wrapOpenAI` (not `instrument()`)
+- Auto-instrumentation matrix: Pydantic AI, Mastra, HTTP capture tiers
+- Helm smoke test documented in [Deploy](/how-to/deploy)
+
+### Portal
+
+- **Settings → MCP** — copy-paste `.cursor/mcp.json` and Claude Code config
+
 ## v1.7 — June 2026
 
 ### Docs

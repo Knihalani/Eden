@@ -128,6 +128,7 @@ class ClosedLoopOrchestrator:
             reason="verification passed",
             detail=event.payload,
         )
+        await self._flywheel_on_resolved(event)
 
     async def _on_verify_failed(self, event: LoopEvent) -> None:
         await apply_transition(
@@ -151,6 +152,9 @@ class ClosedLoopOrchestrator:
         deny) is audited, then translated into a loop decision. A P0 or
         an explicit auto-escalate always surfaces to a human.
         """
+        from eden.closed_loop.playbook_router import enrich_triage_with_playbook
+
+        triage_result = enrich_triage_with_playbook(triage_result)
         suggested = triage_result.get("suggested_actions") or []
         first_type = None
         for a in suggested:
@@ -161,10 +165,36 @@ class ClosedLoopOrchestrator:
         wants_heal = first_type in _HEALABLE
         wants_patch = first_type in ("propose_patch", "patch", "code_change")
 
+        # D3 playbook router — fill missing heal action from issue kind.
+        if not wants_heal and not wants_patch:
+            try:
+                from eden.closed_loop.playbooks import resolve_playbook
+                from eden.issues.repo import IssuesRepo
+
+                issue = await IssuesRepo().get_issue(
+                    event.org_id, event.issue_id
+                )
+                playbook = resolve_playbook(
+                    issue.kind if issue else None, triage_result
+                )
+                if playbook in _HEALABLE:
+                    wants_heal = True
+                    first_type = playbook
+                    triage_result = {
+                        **triage_result,
+                        "suggested_heal": playbook,
+                        "playbook_source": "kind_router",
+                    }
+            except Exception as exc:
+                logger.debug("orchestrator: playbook router failed: %s", exc)
+
         # N22 — effective maintenance mode (compliance override + budget
         # downgrade applied inside ``evaluate_mode``).
         mode = await self._gate(event, triage_result, first_type)
         escalate = bool(triage_result.get("auto_escalate") or _is_p0(triage_result))
+
+        if escalate:
+            return "human"
 
         if mode == "observe":
             return "human" if escalate else "recommend"
@@ -413,6 +443,29 @@ class ClosedLoopOrchestrator:
         hook.on_issue_created = _wrapped  # type: ignore[assignment]
         hook._loop_wrapped = True  # type: ignore[attr-defined]
         logger.info("orchestrator: subscribed to issue hooks (G9)")
+
+    async def _flywheel_on_resolved(self, event: LoopEvent) -> None:
+        """N19 — issue verified → KB flywheel + F39 shadow nudge draft."""
+        try:
+            from eden.issues.repo import IssuesRepo
+            from eden.kb.flywheel.coordinator import get_flywheel_coordinator
+
+            issue = await IssuesRepo().get_issue(event.org_id, event.issue_id)
+            if issue is None:
+                return
+            await get_flywheel_coordinator().on_issue_resolved(
+                {
+                    "org_id": event.org_id,
+                    "id": issue.id,
+                    "agent_id": issue.agent_id,
+                    "title": issue.title,
+                    "kind": issue.kind,
+                    "stumble_count": issue.stumble_count,
+                    "triage_result": issue.triage_result,
+                }
+            )
+        except Exception as exc:
+            logger.debug("orchestrator: flywheel on resolved failed: %s", exc)
 
 
 def _is_p0(triage_result: dict[str, Any]) -> bool:

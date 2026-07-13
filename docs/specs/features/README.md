@@ -10,8 +10,8 @@
 | Category | Count |
 |---|---|
 | F-features (parity) | 24 |
-| N-features (differentiation + platform + autonomous) | 22 |
-| **Total** | **46** |
+| N-features (differentiation + platform + autonomous) | 21 |
+| **Total** | **45** |
 
 ## Mandatory in every spec
 
@@ -23,7 +23,7 @@
 
 ## P0 ship list
 
-**N14** (blocker), **N22** (autonomy gate), F48, F28, F29, F20, N08, N16, F04, N17, F30, F22, F39, F41, N15, N01, N20, N07
+**N14** (blocker), **N22** (autonomy gate), F48, F28, F29, F20, N08, N16, F04, N17, F30, F22, F39, F41, N15, N01, N20, D6, D7, D12
 
 **Autonomous agent maintenance:** F46 orchestrates detect → diagnose → fix → verify. N21 fixes runtime outages; N20 fixes code. N22 sets safety bounds.
 
@@ -61,9 +61,9 @@ See [`../PRODUCTION-MAINTENANCE-STANDOUT.md`](../PRODUCTION-MAINTENANCE-STANDOUT
 
 ## Spec depth (third pass — July 2026)
 
-All **46** specs expanded with implementation detail + performance/cost sections.
+All **45** specs expanded with implementation detail + performance/cost sections.
 
-**Fully deepened:** F01, F03, F04, F06, F09, F20, F21, F28–F30, F22, F33–F35, F39–F42, F44, F46–F48, N01–N22.
+**Fully deepened:** F01, F03, F04, F06, F09, F20, F21, F28–F30, F22, F33–F35, F39–F42, F44, F46–F48, N01–N06, N08–N22.
 
 ## Autopilot status refresh (2026-07-12)
 
@@ -74,11 +74,12 @@ Honest SHIPPED (v0) after Full Autopilot core loop + cost/MCP waves (see `.omc/a
 | F30 | **SHIPPED (v0)** — TriageAgent anti-spam |
 | F46 | **SHIPPED (v0)** — closed_loop orchestrator |
 | N20 | **SHIPPED (v0)** — issue-scoped patch + weekly schedule; auto_pr opt-in |
-| N22 | **SHIPPED** — autonomy policy |
+| N22 | **SHIPPED (v0)** — autonomy policy |
 | F04 | **SHIPPED (v0)** — MCP server |
 | N17 | **SHIPPED (v0)** — improve cockpit |
 | N16 / N09 | **SHIPPED (core)** — sampling + content-addressed blobs |
-| Wave 7 (N10–N13, F35/F44/…) | **PARTIAL / race** — not required for core validate |
+| F03, F12, F20, F28, F29, F35, F47, F48, N08, N14 | **SHIPPED (v0)** — see per-spec headers |
+| Wave 7 (N10–N13, F44/…) | **PARTIAL** — save-as-signal / session UI stretch |
 
 ## Generator
 
