@@ -12,6 +12,8 @@ import logging
 import time
 from collections import OrderedDict
 
+from eden.api.utils.redact import redact_all
+
 logger = logging.getLogger(__name__)
 
 # ponytail: global cap on tracked keys; under attack, oldest unpoked
@@ -87,7 +89,10 @@ async def _redis_sliding_window_check(
             return float(result[1])
         return None
     except Exception as exc:
-        logger.debug("auth rate limit Redis path failed: %s", exc)
+        logger.debug(
+            "auth rate limit Redis path failed: %s",
+            redact_all(str(exc)),
+        )
         return None
 
 
