@@ -93,3 +93,37 @@ jobs:
           name: next-build-${{ github.run_id }}
           path: clients/portal/.next
           retention-days: 3
+
+  # Soft a11y audit — needs a live portal server (scripts/audit-a11y.cjs
+  # polls localhost). Non-blocking until the suite is green enough to
+  # gate merges. continue-on-error keeps Phase 4 soft-launch CI green
+  # even when axe reports serious/critical findings.
+  a11y:
+    name: Accessibility audit (soft)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    needs: [typecheck]
+    defaults:
+      run:
+        working-directory: clients/portal
+    steps:
+      - uses: actions/checkout@v7
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - run: bun install --frozen-lockfile
+      - name: Start portal + audit:a11y
+        env:
+          NEXT_PUBLIC_API_URL: "http://localhost:8000"
+          PORT: "3000"
+        run: |
+          bun run build
+          bun run start -- -p 3000 &
+          # Wait for the server, then run axe. Soft job — failures don't block.
+          for i in $(seq 1 60); do
+            if curl -sf "http://127.0.0.1:3000/" >/dev/null; then
+              break
+            fi
+            sleep 2
+          done
+          bun run audit:a11y || true

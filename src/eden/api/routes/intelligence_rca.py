@@ -5,7 +5,7 @@ The services under :mod:`eden.insights.rca` and
 implementations as of 2026-06-11 — see
 ``docs/observability-gap/02-root-cause-incidents.md``.
 
-Surface (5 routes):
+Surface (6 routes):
 
 * ``POST /{trace_id}/analyze`` — categorise a failed trace
 * ``GET  /{trace_id}/explain`` — 1-sentence cause + similar
@@ -15,6 +15,8 @@ Surface (5 routes):
 * ``GET  /incidents/{cluster_id}/summarize`` — one-paragraph
   cluster summary (the missing route from the appendix
   contract)
+* ``POST /incidents/{cluster_id}/resolve`` — mark a cluster
+  resolved (status + optional note)
 * ``GET  /incidents`` — paginated list of clusters
 """
 
@@ -23,11 +25,12 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from fastapi import APIRouter, Body, Depends, Path, Query
-from pydantic import BaseModel
+from fastapi import APIRouter, Body, Depends, HTTPException, Path, Query, status
+from pydantic import BaseModel, Field
 
 from eden.api.deps import get_current_user, require_feature_flag
 from eden.insights.incidents.clusterer import IncidentClusterer, IncidentStore
+from eden.insights.rca._common import _resolve_incident_cluster
 from eden.insights.rca.analyzer import RootCauseAnalyzer
 
 logger = logging.getLogger(__name__)
@@ -52,6 +55,10 @@ _store = IncidentStore()
 class ClusterRequest(BaseModel):
     window: str = "24h"
     min_cluster_size: int = 3
+
+
+class ResolveIncidentRequest(BaseModel):
+    note: str = Field(default="", max_length=2000)
 
 
 @router.post("/{trace_id}/analyze")
@@ -88,6 +95,24 @@ async def summarize_cluster(
     cluster_id: str = Path(...),
 ) -> dict[str, Any]:
     return await _clusterer.summarize(org_id, cluster_id)
+
+
+@router.post("/incidents/{cluster_id}/resolve")
+async def resolve_incident(
+    org_id: str = Path(...),
+    cluster_id: str = Path(...),
+    body: ResolveIncidentRequest = Body(default_factory=ResolveIncidentRequest),
+) -> dict[str, Any]:
+    """Mark an incident cluster as resolved."""
+    result = await _resolve_incident_cluster(
+        org_id, cluster_id, note=body.note
+    )
+    if result is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Incident cluster not found",
+        )
+    return result
 
 
 @router.get("/incidents")

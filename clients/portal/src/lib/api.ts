@@ -2713,6 +2713,11 @@ export const rcaApi = {
     fetchApi<{ incidents: Array<Record<string, unknown>>; }>(`/orgs/${orgId}/intelligence/rca/incidents`),
   summarizeIncident: (orgId: string, clusterId: string) =>
     fetchApi<{ cluster_id: string; summary: string; member_count: number; severity: string; first_seen: string; last_seen: string; }>(`/orgs/${orgId}/intelligence/rca/incidents/${clusterId}/summarize`),
+  resolveIncident: (orgId: string, clusterId: string, note?: string) =>
+    fetchApi<{ cluster_id: string; status: string; resolved_at: string | null; resolution_note: string; }>(
+      `/orgs/${orgId}/intelligence/rca/incidents/${clusterId}/resolve`,
+      { method: "POST", body: JSON.stringify({ note: note ?? "" }) },
+    ),
 };
 
 // ── Intelligence: Retrieval (Cat 4) ─────────────────────────────────

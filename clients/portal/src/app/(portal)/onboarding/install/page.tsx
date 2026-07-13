@@ -50,8 +50,12 @@ if __name__ == "__main__":
     eden.get_default_client().flush()`,
   },
   typescript: {
-    install: "npm install @eden-ai/sdk",
-    configure: (orgId) => `import { configure, instrument, traceAgent } from "@eden-ai/sdk";
+    install: "npm install @eden-ai/sdk openai",
+    // Function-style `trace()` + `instrument()` — avoids stage-3
+    // class decorators and top-level await so the snippet pastes
+    // into standard TS / Node without experimental flags.
+    configure: (orgId) => `import { configure, instrument, trace } from "@eden-ai/sdk";
+import OpenAI from "openai";
 
 configure({
   apiKey: process.env.EDEN_API_KEY ?? "<your-api-key>",
@@ -61,20 +65,22 @@ configure({
 
 instrument(); // HTTP capture + wrap* helpers
 
-class Greeter {
-  @traceAgent({ name: "hello-world", tags: ["quickstart"] })
-  async greet(question: string) {
-    const OpenAI = (await import("openai")).default;
+async function greet(question: string) {
+  return trace("hello-world", async (ctx) => {
+    ctx.setTag("quickstart");
+    ctx.setInput({ question });
     const client = new OpenAI();
     const resp = await client.chat.completions.create({
       model: "gpt-4o-mini",
       messages: [{ role: "user", content: question }],
     });
-    return resp.choices[0]?.message?.content;
-  }
+    const answer = resp.choices[0]?.message?.content ?? "";
+    ctx.setOutput({ answer });
+    return answer;
+  });
 }
 
-await new Greeter().greet("Say hello in five languages");`,
+greet("Say hello in five languages").then(console.log).catch(console.error);`,
   },
 };
 

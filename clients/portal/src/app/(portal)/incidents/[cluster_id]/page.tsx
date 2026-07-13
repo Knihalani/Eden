@@ -1,9 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
+import { useState } from "react";
 import { useOrg } from "@/hooks/use-org";
-import { api } from "@/lib/api";
+import { api, rcaApi } from "@/lib/api";
 import { useOrgQuery } from "@/hooks/use-api-query";
 import { queryKeys } from "@/lib/query-keys";
 import { cn } from "@/lib/utils";
@@ -11,9 +12,11 @@ import { SeverityBadge } from "@/components/ui/status-badge";
 import { NoOrgState } from "@/components/ui/no-org-state";
 import { PageHeader } from "@/components/layout/page-header";
 import { PageContent } from "@/components/layout/page-content";
+import { useToast } from "@/components/ui/toast";
 import { AlertOctagon, AlertTriangle, ArrowLeft, CheckCircle2, ChevronRight, Loader2, Network } from "lucide-react";
 import { Card } from "@/components/ui/card";
-const rcaApi = {
+
+const detailRcaApi = {
   summarizeIncident: (orgId: string, clusterId: string) => api.get<{
     cluster_id: string;
     summary: string;
@@ -26,14 +29,6 @@ const rcaApi = {
     incidents: Array<Record<string, unknown>>;
   }>(`/orgs/${orgId}/intelligence/rca/incidents`)
 };
-interface SummaryResponse {
-  cluster_id: string;
-  summary: string;
-  member_count: number;
-  severity: string;
-  first_seen: string;
-  last_seen: string;
-}
 interface FactorItem {
   factor: string;
   weight: number;
@@ -51,10 +46,14 @@ export default function IncidentDetailPage() {
   } = useParams<{
     cluster_id: string;
   }>();
+  const router = useRouter();
+  const toast = useToast();
   const {
     currentOrg
   } = useOrg();
   const orgId = currentOrg?.id;
+  const [resolving, setResolving] = useState(false);
+  const [resolved, setResolved] = useState(false);
 
   // Two independent GETs on mount — summarize gives the headline
   // stats, list gives factors/members for this cluster (not returned
@@ -63,13 +62,13 @@ export default function IncidentDetailPage() {
   const summaryQuery = useOrgQuery(
     queryKeys.incidents.summary(orgId, cluster_id),
     orgId,
-    () => rcaApi.summarizeIncident(orgId!, cluster_id),
+    () => detailRcaApi.summarizeIncident(orgId!, cluster_id),
     { enabled: Boolean(orgId) && Boolean(cluster_id) },
   );
   const listQuery = useOrgQuery(
     queryKeys.incidents.list(orgId),
     orgId,
-    () => rcaApi.listIncidents(orgId!),
+    () => detailRcaApi.listIncidents(orgId!),
   );
 
   const summary = summaryQuery.data ?? null;
@@ -78,6 +77,10 @@ export default function IncidentDetailPage() {
   );
   const factors = (matched?.factors as FactorItem[] | undefined) ?? [];
   const members = ((matched?.recent_members as MemberTrace[] | undefined) ?? []).slice(0, 5);
+  const alreadyResolved =
+    resolved ||
+    matched?.status === "resolved" ||
+    (typeof matched?.status === "string" && matched.status === "resolved");
 
   const loading = summaryQuery.isLoading || listQuery.isLoading;
   const error = summaryQuery.error?.message ?? listQuery.error?.message ?? "";
@@ -85,6 +88,23 @@ export default function IncidentDetailPage() {
     summaryQuery.refetch();
     listQuery.refetch();
   };
+
+  async function handleResolve() {
+    if (!orgId || !cluster_id || resolving || alreadyResolved) return;
+    setResolving(true);
+    try {
+      await rcaApi.resolveIncident(orgId, cluster_id);
+      setResolved(true);
+      toast.success("Incident marked resolved");
+      await listQuery.refetch();
+      // Soft redirect back to the list after a beat so the toast is readable.
+      window.setTimeout(() => router.push("/incidents"), 800);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not resolve incident");
+    } finally {
+      setResolving(false);
+    }
+  }
 
   if (!currentOrg) {
     return <NoOrgState icon={AlertOctagon} feature="Incident Detail" description="Cluster-level RCA detail will appear once your organization is configured." />;
@@ -97,10 +117,33 @@ export default function IncidentDetailPage() {
         </Link>
       </div>
 
-      <PageHeader eyebrow="Observe" title="Incident cluster" subtitle={`Root-cause summary, contributing factors, and the traces that make up this cluster.`} icon={AlertOctagon} actions={<button disabled title="Resolving incident clusters is coming soon" aria-label="Mark resolved (coming soon)" className="inline-flex items-center gap-2 px-4 py-2 bg-[var(--bg-tertiary)] text-[var(--text-muted)] rounded-lg text-sm font-medium cursor-not-allowed opacity-60">
-            <CheckCircle2 className="w-4 h-4" />
-            Mark resolved (coming soon)
-          </button>} />
+      <PageHeader
+        eyebrow="Observe"
+        title="Incident cluster"
+        subtitle="Root-cause summary, contributing factors, and the traces that make up this cluster."
+        icon={AlertOctagon}
+        actions={
+          <button
+            type="button"
+            onClick={() => void handleResolve()}
+            disabled={resolving || alreadyResolved}
+            aria-label={alreadyResolved ? "Incident resolved" : "Mark resolved"}
+            className={cn(
+              "inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors",
+              alreadyResolved
+                ? "bg-[var(--terminal-faint)] text-[var(--terminal)] cursor-default"
+                : "bg-[var(--accent)] text-[var(--bg-primary)] hover:opacity-90 disabled:opacity-50",
+            )}
+          >
+            {resolving ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <CheckCircle2 className="w-4 h-4" />
+            )}
+            {alreadyResolved ? "Resolved" : resolving ? "Resolving…" : "Mark resolved"}
+          </button>
+        }
+      />
       <p className="text-xs font-mono text-[var(--text-muted)] -mt-4 mb-6 break-all">
         {cluster_id}
       </p>
@@ -122,6 +165,9 @@ export default function IncidentDetailPage() {
           <Card padding="lg" className="space-y-3">
             <div className="flex flex-wrap items-center gap-3">
               <SeverityBadge severity={summary.severity} />
+              {alreadyResolved && (
+                <span className="text-xs font-medium text-[var(--terminal)]">Resolved</span>
+              )}
               <span className="text-xs text-[var(--text-muted)]">
                 {summary.member_count} member trace{summary.member_count === 1 ? "" : "s"}
               </span>
