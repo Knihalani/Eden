@@ -112,6 +112,32 @@ async def _run_post_merge_monitor(*, dry_run: bool) -> dict[str, object]:
         return {"errors": [str(exc)]}
 
 
+async def _run_columnar_compaction(*, dry_run: bool) -> dict[str, object]:
+    """Hourly Cat 18 compaction watchdog."""
+    if dry_run:
+        return {"skipped": True, "reason": "dry_run"}
+    try:
+        from eden.columnar import ColumnarCompactor
+
+        return await ColumnarCompactor().compact_due()
+    except Exception as exc:
+        logger.exception("[cron_tick] columnar_compaction failed: %s", exc)
+        return {"errors": [str(exc)]}
+
+
+async def _run_eql_alert_watchdog(*, dry_run: bool) -> dict[str, object]:
+    """Cat 19 alert-as-code watchdog — evaluate due rules."""
+    if dry_run:
+        return {"skipped": True, "reason": "dry_run"}
+    try:
+        from eden.dsl import AlertAsCode
+
+        return await AlertAsCode().fire_due()
+    except Exception as exc:
+        logger.exception("[cron_tick] eql_alert_watchdog failed: %s", exc)
+        return {"errors": [str(exc)]}
+
+
 async def _run_scheduled_optimization(
     now: datetime, *, dry_run: bool
 ) -> dict[str, object]:
@@ -248,6 +274,18 @@ async def _tick(*, dry_run: bool) -> dict[str, object]:
             "failure_marker": True,
         }
 
+    # 1d. Always: Cat 19 EQL alert-as-code watchdog.
+    try:
+        out["eql_alert_watchdog"] = await _run_eql_alert_watchdog(
+            dry_run=dry_run
+        )
+    except Exception as exc:
+        logger.exception("[cron_tick] eql_alert_watchdog failed: %s", exc)
+        out["eql_alert_watchdog"] = {
+            "errors": [str(exc)],
+            "failure_marker": True,
+        }
+
     # 2. Daily @ 03:00 UTC: stale_pending_sweep + retention_cron.
     if now.hour == 3 and now.minute < 10:
         out["daily"] = await _run_daily(now, dry_run=dry_run)
@@ -257,6 +295,21 @@ async def _tick(*, dry_run: bool) -> dict[str, object]:
         out["mcp_rollup"] = await _run_mcp_rollup(dry_run=dry_run)
         if not dry_run:
             out["classifier_retrain"] = await _run_classifier_retrain()
+
+    # 2c. Hourly: Cat 18 columnar compaction watchdog.
+    if now.minute < 10:
+        try:
+            out["columnar_compaction"] = await _run_columnar_compaction(
+                dry_run=dry_run
+            )
+        except Exception as exc:
+            logger.exception(
+                "[cron_tick] columnar_compaction failed: %s", exc
+            )
+            out["columnar_compaction"] = {
+                "errors": [str(exc)],
+                "failure_marker": True,
+            }
 
     # 3. Weekly Monday @ 09:00 UTC: weekly_digest.
     if now.weekday() == 0 and now.hour == 9 and now.minute < 10:

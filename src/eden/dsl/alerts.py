@@ -17,11 +17,18 @@ Closed-loop wiring: when the compiler finds at least one
 lint warning, :func:`DSLHook.on_alert_lint_warning` fires
 (the hook is a no-op logger in v1.3; v1.4 will surface the
 warnings in the alert editor).
+
+Runtime: :meth:`AlertAsCode.evaluate` runs one rule on
+demand; :meth:`AlertAsCode.fire_due` is the cron watchdog
+that evaluates every due rule and persists firings to
+``eql_alert_firings``.
 """
 
 from __future__ import annotations
 
+import json
 import logging
+import uuid as _uuid
 from datetime import UTC, datetime
 from typing import Any
 
@@ -46,10 +53,19 @@ _VALID_SEVERITIES: frozenset[str] = frozenset(
     {"info", "warning", "high", "critical"}
 )
 
+# Severities the cron watchdog actually fires notifications for.
+_FIREABLE_SEVERITIES: frozenset[str] = frozenset(
+    {"info", "warning", "high"}
+)
+
 # Minimum alert interval — the failure-modes table calls this
 # out as a guardrail against a customer writing a 24/7 query
 # that overloads ClickHouse. 60s is the Braintrust default.
 _MIN_INTERVAL_SECONDS: int = 60
+
+# Cap sample rows persisted on a firing so an adversarial
+# query that returns millions of rows can't bloat the table.
+_FIRING_SAMPLE_LIMIT: int = 20
 
 
 class AlertAsCode:
@@ -114,18 +130,13 @@ class AlertAsCode:
                 "eql_query failed the read-only allowlist check",
             )
 
-        # 1. Parse + expand the EQL query. The parser is the
-        #    single source of truth for the expansion
-        #    (the alert compiler does not duplicate the
-        #    expansion logic).
         parser = EQLParser()
         parse_result = await parser.parse(
             org_id,
             query=eql_query,
             shape=shape,
-            lint_mode="default",  # alert compile is always non-strict
+            lint_mode="default",
         )
-        # Surface the parse result if it failed.
         if parse_result["status"] != "ok":
             return _not_implemented_envelope(
                 "AlertAsCode",
@@ -134,13 +145,8 @@ class AlertAsCode:
         clickhouse_sql = parse_result["data"]["clickhouse_sql"]
         warnings = parse_result["data"]["warnings"]
 
-        # 2. Compute the alert id (deterministic on org + name).
         alert_id = _alert_id_for(org_id=org_id, name=name)
 
-        # 3. Persist the alert rule. The upsert pattern means
-        #    a re-compile on the same (org, name) updates the
-        #    row in place — the watchdog reads the new
-        #    clickhouse_sql on the next tick.
         await _upsert_alert_rule(
             org_id=org_id,
             alert_id=alert_id,
@@ -152,9 +158,6 @@ class AlertAsCode:
             severity=severity,
         )
 
-        # 4. Fire the closed-loop hook when at least one
-        #    warning surfaced. The hook is a no-op logger in
-        #    v1.3; the wiring is in place for v1.4.
         if warnings:
             await _fire_dsl_alert_lint_warning_hook(
                 org_id,
@@ -219,6 +222,378 @@ class AlertAsCode:
                 "n_alerts": len(alerts),
             },
         )
+
+    async def evaluate(
+        self,
+        org_id: str,
+        *,
+        alert_id: str,
+        force: bool = True,
+    ) -> dict[str, Any]:
+        """On-demand evaluation of one alert rule.
+
+        Runs the compiled SQL, persists a row to
+        ``eql_alert_firings`` when the query returns ≥1 row
+        (or a ``missed`` / ``error`` row otherwise), and
+        advances ``next_fire_at``. ``force=True`` (default
+        for the HTTP endpoint) evaluates even when
+        ``next_fire_at`` is still in the future.
+        """
+        if not alert_id:
+            return _not_implemented_envelope(
+                "AlertAsCode",
+                "alert_id is required",
+            )
+        rule = await _fetch_alert_rule(org_id, alert_id)
+        if rule is None:
+            return _not_implemented_envelope(
+                "AlertAsCode",
+                f"alert_id={alert_id!r} not found",
+            )
+        if not rule.get("enabled", True) and not force:
+            return _ok_envelope(
+                "AlertAsCode",
+                {
+                    "alert_id": alert_id,
+                    "fired": False,
+                    "reason": "disabled",
+                },
+            )
+        result = await _evaluate_rule(rule, force=force)
+        return _ok_envelope("AlertAsCode", result)
+
+    async def fire_due(self, *, limit: int = 100) -> dict[str, Any]:
+        """Cron watchdog: evaluate every due enabled alert.
+
+        Selects ``eql_alert_rules`` where ``enabled`` and
+        ``next_fire_at <= now()`` and ``lifecycle_status`` is
+        not ``auto_disabled``. Persists firings and advances
+        schedules. Called from :mod:`eden.workers.cron_tick`.
+        """
+        from eden.storage.postgres import get_postgres_client
+
+        client = await get_postgres_client()
+        now = datetime.now(UTC)
+        rows = await client.fetch(
+            """
+            SELECT alert_id, org_id, name, eql_query, clickhouse_sql,
+                   shape, interval_seconds, severity, next_fire_at,
+                   enabled, lifecycle_status, n_fired
+            FROM eql_alert_rules
+            WHERE enabled = true
+              AND lifecycle_status <> 'auto_disabled'
+              AND (next_fire_at IS NULL OR next_fire_at <= $1)
+            ORDER BY next_fire_at ASC NULLS FIRST
+            LIMIT $2
+            """,
+            now,
+            limit,
+        )
+        results: list[dict[str, Any]] = []
+        n_fired = 0
+        n_missed = 0
+        n_errors = 0
+        for r in rows:
+            rule = dict(r)
+            try:
+                out = await _evaluate_rule(rule, force=False)
+                results.append(out)
+                if out.get("fired"):
+                    n_fired += 1
+                elif out.get("status") == "error":
+                    n_errors += 1
+                else:
+                    n_missed += 1
+            except Exception as exc:  # noqa: BLE001 - continue
+                logger.warning(
+                    "AlertAsCode.fire_due failed for alert=%s: %s",
+                    rule.get("alert_id"),
+                    exc,
+                )
+                n_errors += 1
+                results.append(
+                    {
+                        "alert_id": rule.get("alert_id"),
+                        "org_id": rule.get("org_id"),
+                        "fired": False,
+                        "status": "error",
+                        "error": str(exc),
+                    }
+                )
+        return _ok_envelope(
+            "AlertAsCode",
+            {
+                "n_due": len(rows),
+                "n_fired": n_fired,
+                "n_missed": n_missed,
+                "n_errors": n_errors,
+                "results": results,
+            },
+        )
+
+
+# ── Internal helpers ───────────────────────────────────────────────
+
+
+async def _fetch_alert_rule(
+    org_id: str, alert_id: str
+) -> dict[str, Any] | None:
+    from eden.storage.postgres import get_postgres_client
+
+    client = await get_postgres_client()
+    row = await client.fetchrow(
+        """
+        SELECT alert_id, org_id, name, eql_query, clickhouse_sql,
+               shape, interval_seconds, severity, next_fire_at,
+               enabled, lifecycle_status, n_fired
+        FROM eql_alert_rules
+        WHERE org_id = $1 AND alert_id = $2
+        """,
+        org_id,
+        alert_id,
+    )
+    return dict(row) if row else None
+
+
+async def _evaluate_rule(
+    rule: dict[str, Any], *, force: bool
+) -> dict[str, Any]:
+    """Run one alert rule and persist the firing / miss."""
+    org_id = rule["org_id"]
+    alert_id = rule["alert_id"]
+    severity = rule.get("severity") or "warning"
+    interval = int(rule.get("interval_seconds") or 3600)
+    sql = rule.get("clickhouse_sql") or rule.get("eql_query") or ""
+
+    # Watchdog filters critical at fire time in v1.3 (accepted
+    # at compile for forward-compat). On-demand force still runs.
+    if not force and severity not in _FIREABLE_SEVERITIES:
+        await _advance_next_fire(org_id, alert_id, interval)
+        return {
+            "alert_id": alert_id,
+            "org_id": org_id,
+            "fired": False,
+            "reason": "severity_filtered",
+            "severity": severity,
+        }
+
+    rows: list[dict[str, Any]] = []
+    data_source = "postgres"
+    error: str | None = None
+    try:
+        rows, data_source = await _run_alert_sql(sql)
+    except Exception as exc:  # noqa: BLE001
+        error = str(exc)
+        logger.warning(
+            "AlertAsCode evaluate SQL failed alert=%s: %s",
+            alert_id,
+            exc,
+        )
+
+    now = datetime.now(UTC)
+    firing_id = f"eql_fire_{_uuid.uuid4().hex[:12]}"
+    n_rows = len(rows)
+    fired = error is None and n_rows > 0
+    status = "error" if error else ("fired" if fired else "missed")
+    sample = rows[:_FIRING_SAMPLE_LIMIT]
+
+    await _insert_alert_firing(
+        firing_id=firing_id,
+        org_id=org_id,
+        alert_id=alert_id,
+        severity=severity,
+        fired_at=now,
+        n_rows=n_rows,
+        sample_rows_json=json.dumps(sample, default=str),
+        clickhouse_sql=sql,
+        data_source=data_source,
+        status=status,
+        error=error,
+    )
+
+    if fired:
+        await _mark_alert_fired(org_id, alert_id, now, interval)
+    else:
+        await _advance_next_fire(org_id, alert_id, interval)
+        if error:
+            await _maybe_auto_disable(org_id, alert_id)
+
+    return {
+        "alert_id": alert_id,
+        "org_id": org_id,
+        "firing_id": firing_id,
+        "fired": fired,
+        "status": status,
+        "n_rows": n_rows,
+        "severity": severity,
+        "data_source": data_source,
+        "error": error,
+        "sample_rows": sample,
+    }
+
+
+async def _run_alert_sql(
+    sql: str,
+) -> tuple[list[dict[str, Any]], str]:
+    """Execute alert SQL via ClickHouse when healthy, else Postgres."""
+    from eden.columnar._common import _check_ch_available
+
+    if await _check_ch_available():
+        try:
+            from eden.data_platform.clickhouse_sink import get_clickhouse_sink
+
+            sink = await get_clickhouse_sink()
+            raw = await sink._execute(sql)  # noqa: SLF001
+            rows = sink._parse_tsv(raw)  # noqa: SLF001
+            return list(rows or []), "clickhouse"
+        except Exception as exc:
+            logger.debug(
+                "AlertAsCode CH path failed, falling back to PG: %s", exc
+            )
+
+    from eden.storage.postgres import get_postgres_client
+
+    client = await get_postgres_client()
+    # Translate common ClickHouse date helpers so the Postgres
+    # fallback can run the same compiled SQL shape.
+    pg_sql = (
+        sql.replace("toStartOfHour(", "date_trunc('hour', ")
+        .replace("toDate(", "date_trunc('day', ")
+        .replace("toMonday(", "date_trunc('week', ")
+    )
+    rows = await client.fetch(pg_sql)
+    out: list[dict[str, Any]] = []
+    for r in rows:
+        d = dict(r)
+        for k, v in list(d.items()):
+            if hasattr(v, "isoformat"):
+                d[k] = v.isoformat()
+        out.append(d)
+    return out, "postgres_fallback"
+
+
+async def _insert_alert_firing(
+    *,
+    firing_id: str,
+    org_id: str,
+    alert_id: str,
+    severity: str,
+    fired_at: datetime,
+    n_rows: int,
+    sample_rows_json: str,
+    clickhouse_sql: str,
+    data_source: str,
+    status: str,
+    error: str | None,
+) -> None:
+    from eden.storage.postgres import get_postgres_client
+
+    client = await get_postgres_client()
+    try:
+        await client.execute(
+            """
+            INSERT INTO eql_alert_firings (
+                id, org_id, alert_id, severity, fired_at, n_rows,
+                sample_rows_json, clickhouse_sql, data_source, status, error
+            ) VALUES (
+                $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11
+            )
+            """,
+            firing_id,
+            org_id,
+            alert_id,
+            severity,
+            fired_at,
+            n_rows,
+            sample_rows_json,
+            clickhouse_sql,
+            data_source,
+            status,
+            error,
+        )
+    except Exception as exc:
+        logger.debug("AlertAsCode insert firing failed: %s", exc)
+
+
+async def _mark_alert_fired(
+    org_id: str, alert_id: str, fired_at: datetime, interval: int
+) -> None:
+    from eden.storage.postgres import get_postgres_client
+
+    client = await get_postgres_client()
+    next_fire = datetime.fromtimestamp(
+        fired_at.timestamp() + max(interval, _MIN_INTERVAL_SECONDS),
+        tz=UTC,
+    )
+    await client.execute(
+        """
+        UPDATE eql_alert_rules
+        SET last_fired_at = $3,
+            next_fire_at = $4,
+            n_fired = COALESCE(n_fired, 0) + 1
+        WHERE org_id = $1 AND alert_id = $2
+        """,
+        org_id,
+        alert_id,
+        fired_at,
+        next_fire,
+    )
+
+
+async def _advance_next_fire(
+    org_id: str, alert_id: str, interval: int
+) -> None:
+    from eden.storage.postgres import get_postgres_client
+
+    client = await get_postgres_client()
+    next_fire = datetime.fromtimestamp(
+        datetime.now(UTC).timestamp() + max(interval, _MIN_INTERVAL_SECONDS),
+        tz=UTC,
+    )
+    await client.execute(
+        """
+        UPDATE eql_alert_rules
+        SET next_fire_at = $3
+        WHERE org_id = $1 AND alert_id = $2
+        """,
+        org_id,
+        alert_id,
+        next_fire,
+    )
+
+
+async def _maybe_auto_disable(org_id: str, alert_id: str) -> None:
+    """Auto-disable after 3 consecutive evaluation errors."""
+    from eden.storage.postgres import get_postgres_client
+
+    client = await get_postgres_client()
+    try:
+        row = await client.fetchrow(
+            """
+            SELECT COUNT(*) AS n
+            FROM (
+                SELECT status FROM eql_alert_firings
+                WHERE org_id = $1 AND alert_id = $2
+                ORDER BY fired_at DESC
+                LIMIT 3
+            ) t
+            WHERE status = 'error'
+            """,
+            org_id,
+            alert_id,
+        )
+        if row and int(row["n"] or 0) >= 3:
+            await client.execute(
+                """
+                UPDATE eql_alert_rules
+                SET lifecycle_status = 'auto_disabled', enabled = false
+                WHERE org_id = $1 AND alert_id = $2
+                """,
+                org_id,
+                alert_id,
+            )
+    except Exception as exc:
+        logger.debug("AlertAsCode auto_disable check failed: %s", exc)
 
 
 __all__ = [

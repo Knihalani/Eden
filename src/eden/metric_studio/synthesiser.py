@@ -16,8 +16,9 @@ Algorithm
 1. **Validate** the input — between 2 and 5 examples, each with
    ``input`` and ``output`` strings + a ``label`` (``"pass"`` /
    ``"fail"``) + an optional ``rationale`` (the human's
-   reasoning). Returns ``_not_implemented_envelope`` with a
-   clear message on validation failure.
+   reasoning). Returns ``_validation_envelope`` with a clear
+   message on validation failure (never a stub
+   ``not_implemented`` envelope).
 2. **Compose** the synthesis prompt — the LLM is told the
    customer's domain, the labelled examples, and is asked to
    produce a rubric prompt that, when fed to a future judge
@@ -69,10 +70,11 @@ from ._common import (
     _approximate_token_count,
     _delete_then_insert,
     _enforce_rubric_token_cap,
+    _error_envelope,
     _json_dumps,
-    _not_implemented_envelope,
     _ok_envelope,
     _update_run_status,
+    _validation_envelope,
 )
 
 logger = logging.getLogger(__name__)
@@ -157,39 +159,39 @@ class RubricSynthesiser:
         """
         # ── 1. Validate input ─────────────────────────────────────
         if not isinstance(examples, list) or not examples:
-            return _not_implemented_envelope(
+            return _validation_envelope(
                 self.name,
                 "at least 2 examples are required",
                 data={"approval_required": True},
             )
         if len(examples) < self.MIN_EXAMPLES:
-            return _not_implemented_envelope(
+            return _validation_envelope(
                 self.name,
                 f"need at least {self.MIN_EXAMPLES} examples, got {len(examples)}",
                 data={"approval_required": True},
             )
         if len(examples) > self.MAX_EXAMPLES:
-            return _not_implemented_envelope(
+            return _validation_envelope(
                 self.name,
                 f"at most {self.MAX_EXAMPLES} examples, got {len(examples)}",
                 data={"approval_required": True},
             )
         for i, ex in enumerate(examples):
             if not isinstance(ex, dict):
-                return _not_implemented_envelope(
+                return _validation_envelope(
                     self.name,
                     f"example {i} is not a dict",
                     data={"approval_required": True},
                 )
             if not ex.get("input") or not ex.get("output"):
-                return _not_implemented_envelope(
+                return _validation_envelope(
                     self.name,
                     f"example {i} missing input or output",
                     data={"approval_required": True},
                 )
             label = (ex.get("label") or "").lower()
             if label not in {"pass", "fail"}:
-                return _not_implemented_envelope(
+                return _validation_envelope(
                     self.name,
                     f"example {i} label must be 'pass' or 'fail', got {label!r}",
                     data={"approval_required": True},
@@ -209,12 +211,13 @@ class RubricSynthesiser:
         if not rubric_prompt:
             # The LLM call failed (or returned empty). The audit
             # log is intentionally NOT written — the customer
-            # can re-submit the same examples and try again. A
-            # future improvement would write a "synthesis_failed"
-            # row for analytics.
-            return _not_implemented_envelope(
+            # can re-submit the same examples and try again.
+            # Structured error (not not_implemented) so the UI
+            # can distinguish "LLM unavailable" from a stub.
+            return _error_envelope(
                 self.name,
                 "LLM synthesis failed; the OpenRouterClient returned no usable text",
+                error_code="llm_unavailable",
                 data={"approval_required": True},
             )
 
@@ -290,7 +293,7 @@ class RubricSynthesiser:
         reason. No judge is registered, no hook fires.
         """
         if not rubric_id:
-            return _not_implemented_envelope(
+            return _validation_envelope(
                 self.name,
                 "rubric_id is required",
             )
@@ -300,9 +303,10 @@ class RubricSynthesiser:
             org_id, rubric_id
         )
         if not rubric_prompt:
-            return _not_implemented_envelope(
+            return _error_envelope(
                 self.name,
                 f"no synthesised rubric found for rubric_id={rubric_id!r}",
+                error_code="rubric_not_found",
             )
 
         if approved:

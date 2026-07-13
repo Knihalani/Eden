@@ -340,15 +340,20 @@ class ColumnarAggregator:
             "day": "day",
             "week": "week",
         }[granularity]
+        from ._common import _PG_TABLE_COLUMNS
+
+        tenant_col, time_col = _PG_TABLE_COLUMNS.get(
+            table, ("org_id", "created_at")
+        )
         rows = await client.fetch(
             f"""
             SELECT
-                date_trunc('{trunc}', created_at) AS bucket,
+                date_trunc('{trunc}', {time_col}) AS bucket,
                 count(*)::bigint AS n
             FROM {table}
-            WHERE org_id = $1
-              AND created_at >= $2
-              AND created_at < $3
+            WHERE {tenant_col} = $1
+              AND {time_col} >= $2
+              AND {time_col} < $3
             GROUP BY bucket
             ORDER BY bucket ASC
             """,
