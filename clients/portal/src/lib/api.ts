@@ -2997,13 +2997,31 @@ export const agentIssuesApi = {
     issueId: string,
     data: { message: string; repo_full_name: string },
   ) => {
-    const res = await fetch(`/api/proxy/orgs/${orgId}/agent-issues/${issueId}/fix/chat`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(data),
-      credentials: "include",
-    });
-    if (!res.ok || !res.body) throw new Error(`Fix chat failed (${res.status})`);
+    const url = `${API_BASE}/orgs/${orgId}/agent-issues/${issueId}/fix/chat`;
+    const doFetch = () =>
+      fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+        credentials: "include",
+      });
+
+    let res = await doFetch();
+    if (res.status === 429) {
+      const wait = retryAfterMs(res) ?? RETRY_AFTER_DEFAULT_MS;
+      await new Promise((r) => setTimeout(r, wait));
+      res = await doFetch();
+    }
+    if (!res.ok || !res.body) {
+      let detail = `Fix chat failed (${res.status})`;
+      try {
+        const body = (await res.json()) as { detail?: string };
+        if (body.detail) detail = body.detail;
+      } catch {
+        /* ignore */
+      }
+      throw new Error(detail);
+    }
     return res.body;
   },
   createRegressionCases: (
