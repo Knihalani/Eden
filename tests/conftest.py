@@ -331,6 +331,15 @@ def mock_postgres_client() -> MagicMock:
                 "preferred_org_id": None,
                 "clerk_id": user_id if "clerk_id" in query else None,
             }
+        # resolve_eden_org_id / resolve_eden_user_id — echo the lookup
+        # key back as the canonical id so path-param UUIDs in integration
+        # tests (e.g. export destinations) pass org membership checks.
+        if "SELECT id FROM organizations" in query:
+            org_id = args[0] if args else "org-123"
+            return {"id": org_id}
+        if "SELECT id FROM users" in query and "clerk_id" in query:
+            user_id = args[0] if args else "user-123"
+            return {"id": user_id}
         if "org_members" in query and "role" in query:
             return {"role": "owner", "name": "Test Org", "slug": "test-org", "owner_id": "user-123", "archived_at": None}
         if "two_factor_enforced" in query:
