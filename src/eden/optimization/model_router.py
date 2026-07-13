@@ -23,14 +23,13 @@ class ModelTier(Enum):
 # Tier-to-model mapping (configurable via settings)
 TIER_MODELS: dict[ModelTier, list[str]] = {
     ModelTier.T1: [
+        "tencent/hy3",
         "xiaomi/mimo-v2.5",
-        "tencent/hy3-preview",
-        "qwen/qwen3-8b:free",
     ],
     ModelTier.T2: [
         "minimax/minimax-m3",
         "xiaomi/mimo-v2.5-pro",
-        "tencent/hy3-preview",
+        "tencent/hy3",
     ],
     # T3 = Expert tier — portal Cmd-J agent, onboarding integration agent,
     # and other high-stakes reasoning tasks.

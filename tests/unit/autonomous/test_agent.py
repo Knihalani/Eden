@@ -442,7 +442,6 @@ def _wrap_openai(fake: _FakeOpenAIClient) -> Any:
     # ``_call_llm`` switched to ``async_client`` in June 2026 — mirror
     # the same fake here so the streaming path can ``await`` it.
     wrapper.async_client = fake
-    wrapper.MODEL_SLOTS = {}
     # Mirror the class-level staticmethod so ``OpenRouterClient._is_anthropic_model``
     # resolves when the test fixture replaces the whole class with a lambda.
     # Default to non-Anthropic; per-test mocks can override.
