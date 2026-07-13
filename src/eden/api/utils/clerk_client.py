@@ -116,7 +116,7 @@ async def _post(path: str, body: dict[str, Any], *, timeout: float = 10.0) -> di
     return response.json()
 
 
-async def _get(path: str, *, timeout: float = 5.0) -> dict[str, Any]:
+async def _get(path: str, *, timeout: float = 5.0) -> Any:
     """GET Clerk Backend API and return the decoded body.
 
     Used by ``get_user`` to enrich the auto-provision path when the
@@ -124,6 +124,9 @@ async def _get(path: str, *, timeout: float = 5.0) -> dict[str, Any]:
     Clerk session token only includes ``sub`` / ``iat`` / ``exp``).
     Failures raise ``ClerkAPIError`` so the caller can fall back
     gracefully.
+
+    Return type is ``Any`` because some Clerk list endpoints
+    (``GET /users``) return a bare JSON array.
     """
     import httpx
 
@@ -153,6 +156,74 @@ async def _get(path: str, *, timeout: float = 5.0) -> dict[str, Any]:
             f"Clerk {response.status_code} on {path}: {response.text[:300]}"
         )
     return response.json()
+
+
+async def _patch(path: str, body: dict[str, Any], *, timeout: float = 10.0) -> dict[str, Any]:
+    """PATCH JSON to Clerk Backend API and return the decoded body."""
+    import httpx
+
+    settings = get_settings()
+    if not settings.clerk_secret_key:
+        raise ClerkAPIError("CLERK_SECRET_KEY not configured")
+
+    url = f"{CLERK_API_BASE}{path}"
+    headers = {
+        "Authorization": f"Bearer {settings.clerk_secret_key}",
+        "Content-Type": "application/json",
+    }
+    try:
+        client = _shared_httpx(timeout)
+        response = await client.patch(url, json=body, headers=headers)
+    except httpx.TimeoutException as exc:
+        raise ClerkAPIError(f"Clerk timeout: {path}") from exc
+    except httpx.RequestError as exc:
+        raise ClerkAPIError(f"Clerk network error: {path}: {exc}") from exc
+    except RuntimeError as exc:
+        global _HTTPX
+        _HTTPX = None
+        raise ClerkAPIError(f"Clerk client error: {path}: {exc}") from exc
+
+    if response.status_code < 200 or response.status_code >= 300:
+        raise ClerkAPIError(
+            f"Clerk {response.status_code} on {path}: {response.text[:300]}"
+        )
+    return response.json()
+
+
+async def _delete(path: str, *, timeout: float = 10.0) -> dict[str, Any] | None:
+    """DELETE against Clerk Backend API and return the decoded body (if any)."""
+    import httpx
+
+    settings = get_settings()
+    if not settings.clerk_secret_key:
+        raise ClerkAPIError("CLERK_SECRET_KEY not configured")
+
+    url = f"{CLERK_API_BASE}{path}"
+    headers = {
+        "Authorization": f"Bearer {settings.clerk_secret_key}",
+    }
+    try:
+        client = _shared_httpx(timeout)
+        response = await client.delete(url, headers=headers)
+    except httpx.TimeoutException as exc:
+        raise ClerkAPIError(f"Clerk timeout: {path}") from exc
+    except httpx.RequestError as exc:
+        raise ClerkAPIError(f"Clerk network error: {path}: {exc}") from exc
+    except RuntimeError as exc:
+        global _HTTPX
+        _HTTPX = None
+        raise ClerkAPIError(f"Clerk client error: {path}: {exc}") from exc
+
+    if response.status_code < 200 or response.status_code >= 300:
+        raise ClerkAPIError(
+            f"Clerk {response.status_code} on {path}: {response.text[:300]}"
+        )
+    if not response.content:
+        return None
+    try:
+        return response.json()
+    except ValueError:
+        return None
 
 
 async def get_user(clerk_id: str) -> dict[str, Any] | None:
@@ -313,6 +384,109 @@ async def create_membership(clerk_org_id: str, user_id: str, role: str) -> dict[
         f"/organizations/{clerk_org_id}/memberships",
         {"user_id": user_id, "role": clerk_role},
     )
+
+
+async def update_membership(
+    clerk_org_id: str, user_id: str, role: str,
+) -> dict[str, Any]:
+    """Update a Clerk org membership role; returns the membership record.
+
+    Maps Eden roles via ``_eden_role_to_clerk_role`` then PATCHes
+    ``/organizations/{org}/memberships/{user}``.
+    """
+    clerk_role = _eden_role_to_clerk_role(role)
+    return await _patch(
+        f"/organizations/{clerk_org_id}/memberships/{user_id}",
+        {"role": clerk_role},
+    )
+
+
+async def delete_membership(clerk_org_id: str, user_id: str) -> dict[str, Any] | None:
+    """Remove a user from a Clerk org (SCIM deprovision / suspend).
+
+    DELETE ``/organizations/{org}/memberships/{user}``. Callers should
+    treat ``ClerkAPIError`` as non-fatal — the local suspend still
+    stands and webhooks can reconcile.
+    """
+    return await _delete(f"/organizations/{clerk_org_id}/memberships/{user_id}")
+
+
+async def create_user(
+    *,
+    email: str,
+    first_name: str | None = None,
+    last_name: str | None = None,
+    skip_password_requirement: bool = True,
+) -> dict[str, Any]:
+    """Create a Clerk user via ``POST /users``.
+
+    SCIM-provisioned users authenticate via SSO, so we default to
+    ``skip_password_requirement=True``. ``email_address`` is a list per
+    Clerk's Backend API schema.
+    """
+    body: dict[str, Any] = {
+        "email_address": [email],
+        "skip_password_requirement": skip_password_requirement,
+    }
+    if first_name:
+        body["first_name"] = first_name
+    if last_name:
+        body["last_name"] = last_name
+    return await _post("/users", body)
+
+
+async def create_user_with_email(
+    email: str,
+    *,
+    first_name: str | None = None,
+    last_name: str | None = None,
+) -> dict[str, Any]:
+    """Return an existing Clerk user for ``email``, or create one.
+
+    Looks up ``GET /users?email_address=...`` first so SCIM re-syncs
+    are idempotent. On a miss, calls ``create_user``.
+    """
+    existing = await find_user_by_email(email)
+    if existing:
+        return existing
+    try:
+        return await create_user(
+            email=email,
+            first_name=first_name,
+            last_name=last_name,
+        )
+    except ClerkAPIError as exc:
+        # Race: another provisioner created the user between lookup
+        # and create. Re-fetch; if still missing, re-raise.
+        if "422" in str(exc) or "already" in str(exc).lower() or "exists" in str(exc).lower():
+            raced = await find_user_by_email(email)
+            if raced:
+                return raced
+        raise
+
+
+async def find_user_by_email(email: str) -> dict[str, Any] | None:
+    """Look up a Clerk user by exact email address. Returns ``None`` if missing."""
+    from urllib.parse import quote
+
+    if not email:
+        return None
+    try:
+        payload = await _get(f"/users?email_address={quote(email.lower())}&limit=1")
+    except ClerkAPIError as exc:
+        logger.warning(
+            "find_user_by_email failed for %s: %s",
+            email,
+            redact_all(str(exc)),
+        )
+        return None
+    if isinstance(payload, list):
+        return payload[0] if payload else None
+    if isinstance(payload, dict):
+        data = payload.get("data")
+        if isinstance(data, list) and data:
+            return data[0]
+    return None
 
 
 def _eden_role_to_clerk_role(eden_role: str) -> str:
