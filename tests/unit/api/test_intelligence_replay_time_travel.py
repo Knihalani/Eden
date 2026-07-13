@@ -33,7 +33,7 @@ class _StubPostgresClient:
       - INSERT INTO replay_sessions ... RETURNING id, created_at
 
     time-travel:
-      - INSERT INTO time_travel_forks ... RETURNING id, created_at
+      - INSERT INTO trace_fork_branches ... (via _upsert_fork_branch)
     """
 
     def __init__(self) -> None:
@@ -61,22 +61,22 @@ class _StubPostgresClient:
             }
             return {"id": sid, "created_at": _NOW}
 
-        if "INSERT INTO time_travel_forks" in q and "RETURNING" in q:
-            # The route hardcodes fork_at_step = -1 in the SQL, so
-            # only 4 params are passed: sid, org, trace, label.
-            sid, org, trace, label = args
-            self.snapshots[sid] = {
-                "id": sid, "org_id": org, "parent_trace_id": trace,
-                "fork_at_step": -1, "name": label, "created_at": _NOW,
-            }
-            return {"id": sid, "created_at": _NOW}
-
         return None
 
     async def fetch(self, query: str, *args, **kwargs):
         return []
 
     async def execute(self, query: str, *args, **kwargs):
+        q = " ".join(query.split())
+        if "INSERT INTO trace_fork_branches" in q:
+            # _upsert_fork_branch args:
+            # uuid, org_id, fork_id, parent_trace_id, parent_fork_id,
+            # fork_at_step, name, edits_json
+            _uid, org, fork_id, parent_trace_id, _parent_fork, fork_at_step, name, _edits = args
+            self.snapshots[fork_id] = {
+                "id": fork_id, "org_id": org, "parent_trace_id": parent_trace_id,
+                "fork_at_step": fork_at_step, "name": name, "created_at": _NOW,
+            }
         return None
 
 

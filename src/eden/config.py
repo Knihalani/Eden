@@ -172,6 +172,11 @@ def _build_settings_class():
         # out per-org via the Settings page (or per-deploy by
         # setting the env var to "false" in the Northflank env).
         intelligence_gap_v0: bool = True
+        # Cat 20 — best-effort TraceRecorder hooks on the AI gateway
+        # hot path. When True, ``AIGateway.complete`` +
+        # ``/gateway/v1/*`` record cacheability metadata for
+        # fork-and-replay. Failures never break the LLM response.
+        time_travel_recording_enabled: bool = True
         # Cat 14 (autonomous) destructive-action flag. The
         # ``/heal``, ``/heal/{id}/approve``, ``/heal/{id}/deny`` routes
         # require this + the per-action two-stage opt-in. Default
@@ -563,7 +568,6 @@ def _build_settings_class():
         # per 60s window. Backed by Redis (REDIS_URL) when available; falls
         # back to in-memory TokenBucket for single-node dev. The middleware
         # also sets standard X-RateLimit-* headers on every response.
-        rate_limit_enabled: bool = True
         # Default-deny auth middleware (security 26). Every request must
         # carry an auth context; the middleware short-circuits to 401
         # before the route runs unless the path is on the public allow-
@@ -577,6 +581,12 @@ def _build_settings_class():
         rate_limit_enabled: bool = True
         rate_limit_default_per_window: int = 60
         rate_limit_window_seconds: int = 60
+        # IdempotencyMiddleware — when enabled, mutating ``/v1/*``
+        # requests that carry an ``Idempotency-Key`` header are
+        # deduped (Redis + Postgres). Requests without the header
+        # pass through unchanged. Disable with
+        # ``IDEMPOTENCY_MIDDLEWARE_ENABLED=false``.
+        idempotency_middleware_enabled: bool = True
 
         # ClickHouse — used by data_platform.clickhouse_sink + the columnar
         # engine (Cat 18). HTTP interface only; see

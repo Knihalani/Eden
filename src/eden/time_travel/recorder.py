@@ -33,7 +33,10 @@ replay.
 
 from __future__ import annotations
 
+import json
 import logging
+import uuid
+from datetime import UTC, datetime
 from typing import Any
 
 from ._common import _step_cache_key
@@ -107,17 +110,95 @@ class TraceRecorder:
             response_hash=response_hash,
         ) if cacheable else None
 
-        # The recorder is the single source of truth for
-        # the cacheable flag. The AIGateway reads this
-        # when it emits the ``cache_lookups`` telemetry
-        # row; the :class:`TraceReplayer` reads the same
-        # ``agent.step`` event to decide "serve from cache".
-        return {
+        meta = {
             "cacheable": cacheable,
             "cache_key": cache_key,
             "step_index": step_index,
             "trace_id": trace_id,
         }
+
+        # Best-effort persist so fork/replay can read
+        # ``agent.step`` rows. Never raise — the gateway
+        # hot path must stay intact.
+        await self._persist_agent_step(
+            org_id=org_id,
+            trace_id=trace_id,
+            step_index=step_index,
+            request=request,
+            response=response,
+            response_hash=response_hash,
+            meta=meta,
+            temperature=temperature,
+            seed=seed,
+            cache_mode=cache_mode,
+        )
+        return meta
+
+    async def _persist_agent_step(
+        self,
+        *,
+        org_id: str,
+        trace_id: str,
+        step_index: int,
+        request: dict[str, Any],
+        response: dict[str, Any],
+        response_hash: str,
+        meta: dict[str, Any],
+        temperature: float | None,
+        seed: int | None,
+        cache_mode: str | None,
+    ) -> None:
+        try:
+            from eden.storage.postgres import get_postgres_client
+
+            client = await get_postgres_client()
+            if client is None:
+                return
+            event_id = f"ttstep_{uuid.uuid4().hex[:16]}"
+            payload = {
+                "step_index": step_index,
+                "request": request,
+                "response": {
+                    k: v
+                    for k, v in response.items()
+                    if k != "text"  # never persist raw completion text
+                },
+                "temperature": temperature,
+                "seed": seed,
+                "cache_mode": cache_mode,
+            }
+            attributes = {
+                "cacheable": meta["cacheable"],
+                "cache_key": meta["cache_key"],
+                "step_index": step_index,
+                "response_hash": response_hash,
+            }
+            # Match the live telemetry_events schema
+            # (tenant_id, not org_id; no response_hash column).
+            await client.execute(
+                """
+                INSERT INTO telemetry_events (
+                    event_id, tenant_id, project_id, trace_id, realm,
+                    event_type, timestamp, name, payload, attributes,
+                    metrics, tags, outcome, source_format
+                ) VALUES (
+                    $1, $2, 'default', $3, 'production',
+                    'agent.step', $4, 'agent.step', $5::jsonb, $6::jsonb,
+                    '{}'::jsonb, '[]'::jsonb, 'success', 'time_travel'
+                )
+                ON CONFLICT DO NOTHING
+                """,
+                event_id,
+                org_id,
+                trace_id,
+                datetime.now(UTC),
+                json.dumps(payload, default=str),
+                json.dumps(attributes, default=str),
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.debug(
+                "TraceRecorder.persist_agent_step failed: %s", exc
+            )
 
 
 __all__ = ["TraceRecorder", "_CACHEABLE_TEMPERATURE"]
