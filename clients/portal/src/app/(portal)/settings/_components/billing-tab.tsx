@@ -14,6 +14,7 @@ import { useToast } from "@/components/ui/toast";
 // and the cost_used_usd fields — kept in sync to one source of truth
 // so the build doesn't fail.
 import { Card } from "@/components/ui/card";
+import { IntegrationStatusBanners } from "@/components/integration-status-banners";
 export function BillingTab() {
   const {
     currentOrg
@@ -63,6 +64,8 @@ export function BillingTab() {
   const costPct = costHard > 0 ? Math.min(100, costUsed / costHard * 100) : 0;
   const costStatus = plan?.cost_status ?? "ok";
   return <div className="space-y-6">
+      <IntegrationStatusBanners integration="stripe" orgId={currentOrg.id} />
+
       {error && <div className="p-4 bg-[var(--error-dim)] border border-[var(--error)] rounded-lg flex items-center gap-2 text-[var(--error)]">
           <AlertCircle className="w-5 h-5 flex-shrink-0" />
           <span className="text-sm">{error}</span>

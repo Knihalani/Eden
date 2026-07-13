@@ -14,6 +14,7 @@ import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
 // list endpoint is offline; the server still validates on write.
 // ────────────────────────────────────────────────────────────────────
 import { Card } from "@/components/ui/card";
+import { IntegrationStatusBanners } from "@/components/integration-status-banners";
 const DATA_TYPES = [{
   id: "traces",
   label: "Traces",
@@ -249,6 +250,8 @@ export function ExportsTab({
         </div>
   }];
   return <div className="space-y-6">
+      <IntegrationStatusBanners integration="exports" orgId={orgId} />
+
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
