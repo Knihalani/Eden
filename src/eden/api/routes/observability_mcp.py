@@ -249,4 +249,23 @@ async def mcp_sre_summary(
     }
 
 
+@_fleet_router.get("/trends")
+async def mcp_call_trends(
+    org_id: str = Path(...),
+    days: int = Query(7, ge=1, le=90),
+    _member: dict = Depends(require_org_member),
+) -> dict[str, Any]:
+    """Daily MCP call volume + auth-failure trend buckets."""
+    svc = get_mcp_service()
+    rows = await svc.call_trends(org_id, days=days)
+    return {
+        "status": "ok",
+        "feature": "mcp_trends",
+        "live": True,
+        "data": rows,
+        "count": len(rows),
+        "days": days,
+    }
+
+
 router.include_router(_fleet_router)

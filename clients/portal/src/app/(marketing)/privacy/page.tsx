@@ -143,6 +143,7 @@ export default function PrivacyPage() {
       title="Privacy"
       description="Eden is built around the principle that your telemetry is yours. This page summarises what we collect, where it lives, who can see it, and how to take it back. For the legally-binding version, see our DPA."
       size="narrow"
+      draft
     >
 
         <div className="space-y-12">

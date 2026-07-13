@@ -142,6 +142,7 @@ export default function DpaPage() {
         </>
       }
       size="narrow"
+      draft
     >
       <div className="bg-[var(--bg-primary)] border border-[var(--border-default)] rounded-xl p-6 mb-10 flex items-start gap-4">
         <div className="w-12 h-12 rounded-lg bg-[var(--accent-faint)] border border-[var(--accent)]/20 flex items-center justify-center text-[var(--accent)] shrink-0">

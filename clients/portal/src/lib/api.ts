@@ -2997,14 +2997,27 @@ export const agentIssuesApi = {
     issueId: string,
     data: { message: string; repo_full_name: string },
   ) => {
-    const res = await fetch(`/api/proxy/orgs/${orgId}/agent-issues/${issueId}/fix/chat`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(data),
-      credentials: "include",
-    });
-    if (!res.ok || !res.body) throw new Error(`Fix chat failed (${res.status})`);
-    return res.body;
+    const url = `/api/proxy/orgs/${orgId}/agent-issues/${issueId}/fix/chat`;
+    const payload = JSON.stringify(data);
+    let attempt = 0;
+    while (attempt < 2) {
+      const res = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: payload,
+        credentials: "include",
+      });
+      if (res.ok && res.body) return res.body;
+      if (res.status === 429 && attempt === 0) {
+        const retryAfter = res.headers.get("Retry-After");
+        const waitMs = retryAfter ? Number(retryAfter) * 1000 : 1500;
+        await new Promise((r) => setTimeout(r, Number.isFinite(waitMs) ? waitMs : 1500));
+        attempt += 1;
+        continue;
+      }
+      throw new Error(`Fix chat failed (${res.status})`);
+    }
+    throw new Error("Fix chat failed (rate limited)");
   },
   createRegressionCases: (
     orgId: string,
@@ -3690,6 +3703,35 @@ export const mcpApi = {
       `/orgs/${orgId}/observability/mcp/auth-failures?limit=${limit}`,
       { headers: { "X-Org-Id": orgId } },
     ),
+  trends: (orgId: string, days = 7) =>
+    fetchApi<{ data: McpTrendRow[]; count: number; days: number }>(
+      `/orgs/${orgId}/observability/mcp/trends?days=${days}`,
+      { headers: { "X-Org-Id": orgId } },
+    ),
+};
+
+export interface McpTrendRow {
+  day: string;
+  call_count: number;
+  auth_failure_count: number;
+}
+
+export interface IntegrationStatusItem {
+  id: string;
+  label: string;
+  enabled: boolean;
+  configured: boolean;
+  detail?: string | null;
+}
+
+export const integrationsApi = {
+  status: (orgId: string) =>
+    fetchApi<{
+      integration_version: string;
+      integrations: IntegrationStatusItem[];
+    }>(`/orgs/${orgId}/integrations/status`, {
+      headers: { "X-Org-Id": orgId },
+    }),
 };
 
 (api as unknown as Record<string, unknown>).mcpApi = mcpApi;
@@ -4644,21 +4686,33 @@ const qaApi = {
 
 export interface RedteamFinding {
   id: string;
-  probe: string;
-  prompt: string;
-  response: string;
+  probe_name: string;
+  attack_prompt: string;
+  agent_response: string;
   severity: "low" | "medium" | "high" | "critical";
   category: string;
+  failed?: boolean;
+  detection_reason?: string;
+  target_label?: string;
   created_at: string;
 }
 
-export interface RedteamScan {
-  id: string;
-  status: "queued" | "running" | "completed" | "failed";
-  probes: string[];
-  created_at: string;
-  completed_at?: string;
-  findings_count?: number;
+export interface RedteamProbe {
+  name: string;
+  category: string;
+  severity: string;
+  description: string;
+  prompt_count: number;
+}
+
+export interface RedteamScanRun {
+  runs: Array<{
+    probe_name: string;
+    target_label: string;
+    findings: RedteamFinding[];
+    prompts_executed: number;
+    failure_count: number;
+  }>;
 }
 
 const redteamApi = {
@@ -4668,12 +4722,19 @@ const redteamApi = {
       { headers: { "X-Org-Id": orgId } },
     ),
   listProbes: (orgId: string) =>
-    fetchApi<{ probes: { id: string; name: string; description: string }[] }>(
+    fetchApi<{ probes: RedteamProbe[] }>(
       `/orgs/${orgId}/redteam/probes`,
       { headers: { "X-Org-Id": orgId } },
     ),
-  runScan: (orgId: string, body: { probe_ids: string[]; target_prompt: string }) =>
-    fetchApi<RedteamScan>(`/orgs/${orgId}/redteam/scans`, {
+  runScan: (
+    orgId: string,
+    body: {
+      target_endpoint?: string;
+      target_label?: string;
+      probe_names?: string[];
+    },
+  ) =>
+    fetchApi<RedteamScanRun>(`/orgs/${orgId}/redteam/scan`, {
       method: "POST",
       headers: { "X-Org-Id": orgId, "Content-Type": "application/json" },
       body: JSON.stringify(body),
