@@ -27,10 +27,12 @@ import argparse
 import asyncio
 import logging
 import sys
+from datetime import UTC, datetime, timedelta
 
 from eden.data_platform.retention import DataRetentionManager
 from eden.data_platform.storage_lifecycle import StorageLifecycleManager
 from eden.services.data_platform import ArchiveService, PartitionManager
+from eden.services.data_platform.archive import DEFAULT_COLD_AGE_DAYS
 
 logger = logging.getLogger(__name__)
 
@@ -64,19 +66,34 @@ async def run(dry_run: bool = False) -> dict:
     expired = await lifecycle.expire_temporary_data()
     results["expired_objects"] = expired
 
-    # 4. Cold-archive telemetry_events older than 90d (Phase B3).
+    # 4. Cold-archive telemetry_events older than per-org warm window.
     #    Per-org loop so one tenant's slow archive doesn't block others.
+    #    After archiving, also purge any Postgres rows already in the index
+    #    (safety net for archive transactions where the DELETE failed).
     archive = ArchiveService()
-    orgs = await _list_orgs_with_old_traces(archive)
+    retention_for_purge = DataRetentionManager(dry_run=dry_run)
+    org_warm_days = await _load_org_warm_days()
+    orgs = await _list_orgs_with_old_traces(archive, org_warm_days)
     cold_results: dict[str, dict] = {}
     for org_id in orgs:
+        warm_days = org_warm_days.get(org_id, DEFAULT_COLD_AGE_DAYS)
+        before_date = datetime.now(UTC) - timedelta(days=warm_days)
         try:
             cold_results[org_id] = await archive.archive_old_rows(
-                org_id, dry_run=dry_run,
+                org_id, before_date=before_date, dry_run=dry_run,
             )
         except Exception as exc:
             logger.error(f"[cold_archive] {org_id} failed: {exc}")
             cold_results[org_id] = {"errors": [str(exc)]}
+        # Purge hot rows already in the archive index, scoped to this org and
+        # its warm window (avoids cross-org deletes with mismatched cutoffs).
+        try:
+            purged = await retention_for_purge.purge_archived_telemetry(
+                before_date, org_id=org_id
+            )
+            cold_results.setdefault(org_id, {})["purged_rows"] = purged
+        except Exception as exc:
+            logger.error(f"[cold_archive_purge] {org_id} failed: {exc}")
     results["cold_archive"] = cold_results
 
     # 5. Phase B4 — orphan-message GC. Catches any trace_messages
@@ -118,11 +135,23 @@ async def run(dry_run: bool = False) -> dict:
     return results
 
 
-async def _list_orgs_with_old_traces(archive: ArchiveService) -> list[str]:
+async def _load_org_warm_days() -> dict[str, int]:
+    """Per-tenant warm-window overrides from ``org_retention_policies``."""
+    try:
+        retention = DataRetentionManager(dry_run=True)
+        return await retention.load_org_warm_days()
+    except Exception as exc:
+        logger.debug(f"[retention_cron] org warm_days lookup failed: {exc}")
+        return {}
+
+
+async def _list_orgs_with_old_traces(
+    archive: ArchiveService,
+    org_warm_days: dict[str, int] | None = None,
+) -> list[str]:
     """List orgs that have at least one trace eligible for cold archive.
 
-    Cheap query — the index on ``(org_id, timestamp)`` makes this an
-    index-only scan.
+    Uses the longest configured warm window when scanning candidates.
     """
     try:
         from eden.storage.postgres import get_postgres_client
@@ -132,10 +161,15 @@ async def _list_orgs_with_old_traces(archive: ArchiveService) -> list[str]:
     client = await get_postgres_client()
     if client is None:
         return []
+    # Scan generously: use the smallest of (DEFAULT_COLD_AGE_DAYS, any per-org
+    # override). This ensures orgs on the default policy are never missed when
+    # some override is longer than the default.
+    all_warm = list(org_warm_days.values()) + [DEFAULT_COLD_AGE_DAYS]
+    min_scan_days = min(all_warm)
     rows = await client.fetch(
-        """
+        f"""
         SELECT DISTINCT tenant_id FROM telemetry_events
-        WHERE timestamp < NOW() - INTERVAL '90 days'
+        WHERE timestamp < NOW() - INTERVAL '{int(min_scan_days)} days'
         LIMIT 1000
         """
     )

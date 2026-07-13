@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { Loader2, Sparkles, Activity, TrendingUp } from "lucide-react";
+import { useState } from "react";
+import { Sparkles, Activity, TrendingUp } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -11,10 +11,12 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { ErrorState } from "@/components/ui/error-state";
 import { StatCard } from "@/components/ui/stat-card";
 import { PageHeader } from "@/components/layout/page-header";
+import { PageContent, PageLoadingSkeleton } from "@/components/layout/page-content";
 import { useOrg } from "@/hooks/use-org";
+import { useOrgQuery } from "@/hooks/use-api-query";
+import { queryKeys } from "@/lib/query-keys";
 import { predictiveApi } from "@/lib/api";
 import { NoOrgState } from "@/components/ui/no-org-state";
-import { errorFromCaught } from "@/lib/safe-error-message";
 
 /* ----------------------- Helpers -------------------------------------- */
 
@@ -131,48 +133,34 @@ function ForecastLine({
 
 function QualityTab() {
   const { currentOrg } = useOrg();
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string>("");
-  const [data, setData] = useState<Array<{ date: string; median: number; ci_95_low: number; ci_95_high: number }>>([]);
+  const orgId = currentOrg?.id;
+  const { data, isLoading, error, refetch } = useOrgQuery(
+    queryKeys.predict.quality(orgId, { horizon_days: 7 }),
+    orgId,
+    async () => {
+      const res = await predictiveApi.quality(orgId!, { horizon_days: 7 });
+      return res.data?.predictions ?? res.predictions ?? [];
+    },
+  );
 
-  useEffect(() => {
-    if (!currentOrg) return;
-    let cancelled = false;
-    queueMicrotask(() => {
-      if (cancelled) return;
-      setLoading(true);
-      setError("");
-    });
-    predictiveApi
-      .quality(currentOrg.id, { horizon_days: 7 })
-      .then((res: {
-        predictions?: Array<{ date: string; median: number; ci_95_low: number; ci_95_high: number }>;
-        data?: { predictions?: Array<{ date: string; median: number; ci_95_low: number; ci_95_high: number }> };
-      }) => {
-        if (cancelled) return;
-        setData(res.data?.predictions ?? res.predictions ?? []);
-      })
-      .catch((e: unknown) => {
-        if (cancelled) return;
-        setError(errorFromCaught(e, "Failed to load quality forecast"));
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [currentOrg]);
-
-  if (loading) {
-    return (
-      <div className="flex h-48 items-center justify-center" role="status" aria-live="polite">
-        <Loader2 className="h-5 w-5 animate-spin text-[var(--text-muted)]" />
-      </div>
-    );
+  if (isLoading) {
+    return <PageLoadingSkeleton variant="default" lines={4} />;
   }
   if (error) {
-    return <ErrorState title="Could not load quality forecast" message={error} />;
+    return (
+      <ErrorState
+        title="Could not load quality forecast"
+        message={error.message}
+        action={
+          <button
+            onClick={() => refetch()}
+            className="inline-flex items-center gap-2 px-3 py-1.5 rounded-md bg-[var(--accent)] text-[var(--bg-base)] text-xs font-medium hover:bg-[var(--accent-hover)] transition-colors"
+          >
+            Try again
+          </button>
+        }
+      />
+    );
   }
   return (
     <Card>
@@ -181,7 +169,7 @@ function QualityTab() {
         <CardDescription>7-day judge score projection with 95% CI</CardDescription>
       </CardHeader>
       <CardContent>
-        <ForecastLine data={data} />
+        <ForecastLine data={data ?? []} />
       </CardContent>
     </Card>
   );
@@ -189,60 +177,32 @@ function QualityTab() {
 
 function DriftTab() {
   const { currentOrg } = useOrg();
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string>("");
-  const [judgeDrift, setJudgeDrift] = useState<{
-    drift_detected: boolean;
-    drift_score: number;
-    baseline_period: string;
-    current_period: string;
-    severity: string;
-    top_shifts: Array<Record<string, unknown>>;
-  } | null>(null);
+  const orgId = currentOrg?.id;
+  // LP-12: embeddingDrift returns 501 — judge drift only.
+  const { data: judgeDrift, isLoading, error, refetch } = useOrgQuery(
+    queryKeys.predict.drift(orgId),
+    orgId,
+    () => predictiveApi.drift(orgId!),
+  );
 
-  useEffect(() => {
-    if (!currentOrg) return;
-    let cancelled = false;
-    queueMicrotask(() => {
-      if (cancelled) return;
-      setLoading(true);
-      setError("");
-    });
-    // LP-12: embeddingDrift returns 501 — judge drift only.
-    predictiveApi
-      .drift(currentOrg.id)
-      .then((jd: {
-        drift_detected: boolean;
-        drift_score: number;
-        baseline_period: string;
-        current_period: string;
-        severity: string;
-        top_shifts: Array<Record<string, unknown>>;
-      }) => {
-        if (cancelled) return;
-        setJudgeDrift(jd);
-      })
-      .catch((e: unknown) => {
-        if (cancelled) return;
-        setError(errorFromCaught(e, "Failed to load drift"));
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [currentOrg]);
-
-  if (loading) {
-    return (
-      <div className="flex h-48 items-center justify-center">
-        <Loader2 className="h-5 w-5 animate-spin text-[var(--text-muted)]" />
-      </div>
-    );
+  if (isLoading) {
+    return <PageLoadingSkeleton variant="default" lines={4} />;
   }
   if (error) {
-    return <ErrorState title="Could not load drift" message={error} />;
+    return (
+      <ErrorState
+        title="Could not load drift"
+        message={error.message}
+        action={
+          <button
+            onClick={() => refetch()}
+            className="inline-flex items-center gap-2 px-3 py-1.5 rounded-md bg-[var(--accent)] text-[var(--bg-base)] text-xs font-medium hover:bg-[var(--accent-hover)] transition-colors"
+          >
+            Try again
+          </button>
+        }
+      />
+    );
   }
 
   return (
@@ -314,7 +274,7 @@ export default function PredictPage() {
   }
 
   return (
-    <div className="space-y-4">
+    <PageContent>
       <PageHeader
         eyebrow="Predict"
         title="Quality forecast & drift"
@@ -360,6 +320,6 @@ export default function PredictPage() {
           )}
         </AnimatePresence>
       </Tabs>
-    </div>
+    </PageContent>
   );
 }

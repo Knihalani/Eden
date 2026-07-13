@@ -795,44 +795,49 @@ class TestFireToolDriftHook:
         ``get_promotion_hook`` returns a MagicMock we can
         inspect. Returns ``(hook, hook_class_mock)``."""
         hook = MagicMock()
+        # Wave 5 awaits on_drift_alert; sync MagicMock returns are not awaitable.
+        hook.on_drift_alert = AsyncMock(return_value=None)
         mod = MagicMock()
         mod.get_promotion_hook = MagicMock(return_value=hook)
         return hook, mod
 
-    def test_fires_on_large_absolute_drop(self) -> None:
+    @pytest.mark.asyncio
+    async def test_fires_on_large_absolute_drop(self) -> None:
         from eden.services.tool_intel._common import _fire_tool_drift_hook
         hook, mod = self._capture_hook()
         with patch.dict(
             "sys.modules", {"eden.llmops.promotion_hooks": mod}
         ):
-            _fire_tool_drift_hook(
+            await _fire_tool_drift_hook(
                 "org_test",
                 tool_name="search_kb",
                 n_calls=100,
                 success_rate_now=0.5,
                 success_rate_prev=0.9,
             )
-        hook.on_drift_alert.assert_called_once()
+        hook.on_drift_alert.assert_awaited_once()
         call = hook.on_drift_alert.call_args
         assert call.kwargs["drift_type"] == "tool_success_drop:search_kb"
         assert call.kwargs["severity"] in ("medium", "high")
 
-    def test_no_op_below_absolute_threshold(self) -> None:
+    @pytest.mark.asyncio
+    async def test_no_op_below_absolute_threshold(self) -> None:
         from eden.services.tool_intel._common import _fire_tool_drift_hook
         hook, mod = self._capture_hook()
         with patch.dict(
             "sys.modules", {"eden.llmops.promotion_hooks": mod}
         ):
-            _fire_tool_drift_hook(
+            await _fire_tool_drift_hook(
                 "org_test",
                 tool_name="search_kb",
                 n_calls=100,
                 success_rate_now=0.85,
                 success_rate_prev=0.9,
             )
-        hook.on_drift_alert.assert_not_called()
+        hook.on_drift_alert.assert_not_awaited()
 
-    def test_no_op_below_floor(self) -> None:
+    @pytest.mark.asyncio
+    async def test_no_op_below_floor(self) -> None:
         """n_calls < DRIFT_MIN_CALLS → no fire even on a big
         drop (avoids noise on tiny samples)."""
         from eden.services.tool_intel._common import _fire_tool_drift_hook
@@ -840,45 +845,47 @@ class TestFireToolDriftHook:
         with patch.dict(
             "sys.modules", {"eden.llmops.promotion_hooks": mod}
         ):
-            _fire_tool_drift_hook(
+            await _fire_tool_drift_hook(
                 "org_test",
                 tool_name="search_kb",
                 n_calls=3,  # below floor
                 success_rate_now=0.0,
                 success_rate_prev=1.0,
             )
-        hook.on_drift_alert.assert_not_called()
+        hook.on_drift_alert.assert_not_awaited()
 
-    def test_no_op_when_success_rate_now_is_none(self) -> None:
+    @pytest.mark.asyncio
+    async def test_no_op_when_success_rate_now_is_none(self) -> None:
         from eden.services.tool_intel._common import _fire_tool_drift_hook
         hook, mod = self._capture_hook()
         with patch.dict(
             "sys.modules", {"eden.llmops.promotion_hooks": mod}
         ):
-            _fire_tool_drift_hook(
+            await _fire_tool_drift_hook(
                 "org_test",
                 tool_name="search_kb",
                 n_calls=100,
                 success_rate_now=None,
                 success_rate_prev=0.9,
             )
-        hook.on_drift_alert.assert_not_called()
+        hook.on_drift_alert.assert_not_awaited()
 
-    def test_high_severity_on_major_drop(self) -> None:
+    @pytest.mark.asyncio
+    async def test_high_severity_on_major_drop(self) -> None:
         """An absolute drop of 0.30 → 'high' severity."""
         from eden.services.tool_intel._common import _fire_tool_drift_hook
         hook, mod = self._capture_hook()
         with patch.dict(
             "sys.modules", {"eden.llmops.promotion_hooks": mod}
         ):
-            _fire_tool_drift_hook(
+            await _fire_tool_drift_hook(
                 "org_test",
                 tool_name="search_kb",
                 n_calls=100,
                 success_rate_now=0.5,
                 success_rate_prev=0.95,
             )
-        hook.on_drift_alert.assert_called_once()
+        hook.on_drift_alert.assert_awaited_once()
         assert (
             hook.on_drift_alert.call_args.kwargs["severity"] == "high"
         )

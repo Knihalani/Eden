@@ -39,7 +39,7 @@ const QUICK_LINKS: QuickLinkItem[] = [
   },
   {
     label: "Observability",
-    description: "Trace tree, spans, telemetry",
+    description: "KPI hub, drill into eval, decisions & more",
     href: "/observability",
     icon: Activity,
     accent: "trace",

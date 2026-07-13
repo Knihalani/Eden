@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
 import { Check, Clock, Loader2, RefreshCw } from "lucide-react";
 
@@ -8,6 +8,7 @@ import { PageHeader } from "@/components/layout/page-header";
 import { PageContent } from "@/components/layout/page-content";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
+import { ErrorState } from "@/components/ui/error-state";
 import { NoOrgState } from "@/components/ui/no-org-state";
 import { useOrg } from "@/hooks/use-org";
 import { useToast } from "@/components/ui/toast";
@@ -15,6 +16,8 @@ import {
   improveApi,
   type ImproveQueueItem,
 } from "@/lib/api";
+import { useOrgMutation, useOrgQuery } from "@/hooks/use-api-query";
+import { queryKeys } from "@/lib/query-keys";
 import { cn } from "@/lib/utils";
 import { errorFromCaught } from "@/lib/safe-error-message";
 
@@ -28,7 +31,7 @@ const COLUMNS: Array<{ id: string; label: string; hint: string }> = [
 
 function severityClass(sev: string): string {
   const s = sev.toLowerCase();
-  if (s === "critical" || s === "high") return "text-[var(--danger)]";
+  if (s === "critical" || s === "high") return "text-[var(--error)]";
   if (s === "medium") return "text-[var(--warning)]";
   return "text-[var(--text-muted)]";
 }
@@ -36,31 +39,24 @@ function severityClass(sev: string): string {
 export default function ImprovePage() {
   const { currentOrg } = useOrg();
   const toast = useToast();
-  const [items, setItems] = useState<ImproveQueueItem[]>([]);
-  const [refreshedAt, setRefreshedAt] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const orgId = currentOrg?.id ?? null;
   const [busyRef, setBusyRef] = useState<string | null>(null);
 
-  const load = useCallback(async () => {
-    if (!currentOrg) return;
-    setLoading(true);
-    setError(null);
-    try {
-      const res = await improveApi.queue(currentOrg.id);
-      const data = res.data;
-      setItems(data?.items ?? []);
-      setRefreshedAt(data?.refreshed_at ?? null);
-    } catch (e) {
-      setError(errorFromCaught(e, "Failed to load improvement queue"));
-    } finally {
-      setLoading(false);
-    }
-  }, [currentOrg]);
+  const queueQuery = useOrgQuery(
+    queryKeys.improve.queue(orgId),
+    orgId,
+    async () => {
+      const res = await improveApi.queue(orgId!);
+      return res.data ?? null;
+    },
+  );
 
-  useEffect(() => {
-    void load();
-  }, [load]);
+  const items = queueQuery.data?.items ?? [];
+  const refreshedAt = queueQuery.data?.refreshed_at ?? null;
+  const loading = queueQuery.isLoading;
+  const error = queueQuery.error?.message ?? null;
+
+  const load = () => queueQuery.refetch();
 
   const byColumn = useMemo(() => {
     const map: Record<string, ImproveQueueItem[]> = {};
@@ -74,13 +70,22 @@ export default function ImprovePage() {
     return map;
   }, [items]);
 
+  const approveMutation = useOrgMutation(
+    (item: ImproveQueueItem) => improveApi.approve(orgId!, item.ref),
+    { invalidateKeys: [queryKeys.improve.queue(orgId)] },
+  );
+
+  const snoozeMutation = useOrgMutation(
+    (item: ImproveQueueItem) => improveApi.snooze(orgId!, item.ref, 24),
+    { invalidateKeys: [queryKeys.improve.queue(orgId)] },
+  );
+
   const onApprove = async (item: ImproveQueueItem) => {
     if (!currentOrg) return;
     setBusyRef(item.ref);
     try {
-      await improveApi.approve(currentOrg.id, item.ref);
+      await approveMutation.mutateAsync(item);
       toast.success("Approved");
-      await load();
     } catch (e) {
       toast.error(errorFromCaught(e, "Approve failed"));
     } finally {
@@ -92,9 +97,8 @@ export default function ImprovePage() {
     if (!currentOrg) return;
     setBusyRef(item.ref);
     try {
-      await improveApi.snooze(currentOrg.id, item.ref, 24);
+      await snoozeMutation.mutateAsync(item);
       toast.success("Snoozed 24h");
-      await load();
     } catch (e) {
       toast.error(errorFromCaught(e, "Snooze failed"));
     } finally {
@@ -124,9 +128,17 @@ export default function ImprovePage() {
       />
       <PageContent>
         {error && (
-          <p className="mb-4 text-sm text-[var(--danger)]" role="alert">
-            {error}
-          </p>
+          <ErrorState
+            className="mb-4"
+            title="Could not load the improvement queue"
+            message={error}
+            action={
+              <Button onClick={() => void load()} variant="outline" size="default">
+                <RefreshCw className="h-4 w-4" />
+                Try again
+              </Button>
+            }
+          />
         )}
         {refreshedAt && (
           <p className="mb-4 text-xs text-[var(--text-muted)]">

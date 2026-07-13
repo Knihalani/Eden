@@ -1,8 +1,10 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useMemo } from "react";
 import { useOrg } from "@/hooks/use-org";
 import { api } from "@/lib/api";
+import { useOrgQuery } from "@/hooks/use-api-query";
+import { queryKeys } from "@/lib/query-keys";
 import { cn } from "@/lib/utils";
 import { EmptyState } from "@/components/ui/empty-state";
 import { NoOrgState } from "@/components/ui/no-org-state";
@@ -37,16 +39,30 @@ export default function ToolsPage() {
   const {
     currentOrg
   } = useOrg();
+  const orgId = currentOrg?.id;
   const [activeTab, setActiveTab] = useState<Tab>("attribution");
   const [error, setError] = useState("");
 
-  // Attribution
-  const [tools, setTools] = useState<ToolAttribution[]>([]);
-  const [attributionLoading, setAttributionLoading] = useState(false);
+  // Attribution + Taxonomy — the two independent GETs the page needs
+  // on mount, so they're React Query-backed instead of two hand-rolled
+  // useEffect loaders. Compare/Recommend stay imperative (on-demand,
+  // user-triggered mutations).
   const [attributionDays, setAttributionDays] = useState(30);
+  const attributionQuery = useOrgQuery(
+    queryKeys.tools.attribution(orgId, attributionDays),
+    orgId,
+    () => api.post<{ tools: ToolAttribution[] }>(`/orgs/${orgId}/intelligence/tools/attribution`, { days: attributionDays }),
+  );
+  const taxonomyQuery = useOrgQuery(
+    queryKeys.tools.taxonomy(orgId),
+    orgId,
+    () => api.get<{ categories: ToolCategory[] }>(`/orgs/${orgId}/intelligence/tools/taxonomy`),
+  );
+  const tools = attributionQuery.data?.tools ?? [];
+  const taxonomy = taxonomyQuery.data?.categories ?? null;
+  const allToolNames = useMemo(() => (taxonomy ?? []).flatMap(c => c.tools), [taxonomy]);
 
   // Compare
-  const [allToolNames, setAllToolNames] = useState<string[]>([]);
   const [selectedTools, setSelectedTools] = useState<string[]>([]);
   const [comparison, setComparison] = useState<ToolComparison[] | null>(null);
   const [compareLoading, setCompareLoading] = useState(false);
@@ -57,50 +73,10 @@ export default function ToolsPage() {
   const [recommendations, setRecommendations] = useState<ToolRecommendation[] | null>(null);
   const [recommendLoading, setRecommendLoading] = useState(false);
 
-  // Taxonomy
-  const [taxonomy, setTaxonomy] = useState<ToolCategory[] | null>(null);
-  const [taxonomyLoading, setTaxonomyLoading] = useState(false);
   const [taxonomyOpen, setTaxonomyOpen] = useState(true);
-  const loadAttribution = useCallback(async () => {
-    if (!currentOrg) return;
-    setAttributionLoading(true);
-    setError("");
-    try {
-      const data = await api.post<{
-        tools: ToolAttribution[];
-      }>(`/orgs/${currentOrg.id}/intelligence/tools/attribution`, {
-        days: attributionDays
-      });
-      setTools(data.tools || []);
-    } catch (err) {
-      setError(errorFromCaught(err, "Failed to load attribution"));
-    } finally {
-      setAttributionLoading(false);
-    }
-  }, [currentOrg, attributionDays]);
-  const loadTaxonomy = useCallback(async () => {
-    if (!currentOrg) return;
-    setTaxonomyLoading(true);
-    try {
-      const data = await api.get<{
-        categories: ToolCategory[];
-      }>(`/orgs/${currentOrg.id}/intelligence/tools/taxonomy`);
-      setTaxonomy(data.categories || []);
-      // Populate available tools for the compare dropdown
-      const all = (data.categories || []).flatMap(c => c.tools);
-      setAllToolNames(all);
-    } catch (err) {
-      setError(errorFromCaught(err, "Failed to load taxonomy"));
-    } finally {
-      setTaxonomyLoading(false);
-    }
-  }, [currentOrg]);
-  useEffect(() => {
-    if (currentOrg) {
-      loadAttribution();
-      loadTaxonomy();
-    }
-  }, [currentOrg, loadAttribution, loadTaxonomy]);
+
+  const queryErrorMessage = attributionQuery.error?.message ?? taxonomyQuery.error?.message ?? null;
+  const displayError = error || queryErrorMessage;
   async function handleCompare() {
     if (!currentOrg || selectedTools.length < 2) return;
     setCompareLoading(true);
@@ -141,9 +117,9 @@ export default function ToolsPage() {
   return <PageContent size="wide">
       <PageHeader eyebrow="Observe" title="Tool Intelligence" subtitle="Attribution, head-to-head comparison, and task-based recommendations for every tool in the fleet" icon={Wrench} />
 
-      {error && <div className="bg-[var(--error-bg)] text-[var(--error)] text-sm px-4 py-3 rounded-xl flex items-center gap-2.5 border border-[var(--error)]/20">
+      {displayError && <div className="bg-[var(--error-bg)] text-[var(--error)] text-sm px-4 py-3 rounded-xl flex items-center gap-2.5 border border-[var(--error)]/20">
           <AlertTriangle className="w-4 h-4 flex-shrink-0" />
-          {error}
+          {displayError}
         </div>}
 
       {/* Tabs */}
@@ -187,10 +163,10 @@ export default function ToolsPage() {
       }} transition={{
         duration: 0.2
       }}>
-          {activeTab === "attribution" && <AttributionTab tools={tools} loading={attributionLoading} days={attributionDays} onDaysChange={setAttributionDays} onRefresh={loadAttribution} />}
+          {activeTab === "attribution" && <AttributionTab tools={tools} loading={attributionQuery.isLoading} days={attributionDays} onDaysChange={setAttributionDays} onRefresh={() => attributionQuery.refetch()} />}
           {activeTab === "compare" && <CompareTab allToolNames={allToolNames} selectedTools={selectedTools} onSelectedToolsChange={setSelectedTools} dropdownOpen={toolDropdownOpen} onDropdownOpenChange={setToolDropdownOpen} onCompare={handleCompare} comparison={comparison} loading={compareLoading} />}
           {activeTab === "recommender" && <RecommenderTab task={task} onTaskChange={setTask} onRecommend={handleRecommend} recommendations={recommendations} loading={recommendLoading} />}
-          {activeTab === "taxonomy" && <TaxonomyTab taxonomy={taxonomy} loading={taxonomyLoading} expanded={taxonomyOpen} onToggleExpanded={() => setTaxonomyOpen(!taxonomyOpen)} />}
+          {activeTab === "taxonomy" && <TaxonomyTab taxonomy={taxonomy} loading={taxonomyQuery.isLoading} expanded={taxonomyOpen} onToggleExpanded={() => setTaxonomyOpen(!taxonomyOpen)} />}
         </motion.div>
       </AnimatePresence>
       </Tabs>

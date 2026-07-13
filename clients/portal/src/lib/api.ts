@@ -1768,16 +1768,78 @@ export const api = {
 
   listObservabilityTraces: (
     orgId: string,
-    params?: { realm?: string; outcome?: string; agent_id?: string; days?: number; limit?: number },
+    params?: {
+      realm?: string;
+      outcome?: string;
+      agent_id?: string;
+      /** Exact-match a single trace by id — powers deep links (e.g.
+       *  /observability?trace_id=...) without scanning the unfiltered
+       *  page for a match. Independent of `days`/`realm`/`agent_id`
+       *  on the backend — an older trace still resolves. */
+      trace_id?: string;
+      days?: number;
+      limit?: number;
+    },
   ): Promise<{ traces: ObservabilityTrace[]; total: number }> => {
     const q = new URLSearchParams();
     if (params?.realm) q.set("realm", params.realm);
     if (params?.outcome) q.set("outcome", params.outcome);
     if (params?.agent_id) q.set("agent_id", params.agent_id);
+    if (params?.trace_id) q.set("trace_id", params.trace_id);
     if (params?.days !== undefined) q.set("days", String(params.days));
     if (params?.limit) q.set("limit", String(params.limit));
     const qs = q.toString();
     return fetchApi(`/orgs/${orgId}/observability/traces${qs ? `?${qs}` : ""}`);
+  },
+
+  getObservabilitySummary: (
+    orgId: string,
+    params?: {
+      window_hours?: number;
+      agent_id?: string;
+      /** Also return `previous` — the same aggregates over the
+       *  immediately preceding, non-overlapping window of the same
+       *  length. Use this for delta badges instead of subtracting
+       *  two overlapping windows client-side (wrong for non-additive
+       *  metrics like p95/error_rate). */
+      compare_previous?: boolean;
+    },
+  ): Promise<{
+    window_hours: number;
+    agent_id: string | null;
+    total_traces: number;
+    error_rate: number;
+    p50_ms: number | null;
+    p95_ms: number | null;
+    p99_ms: number | null;
+    total_cost_usd: number;
+    eval_coverage_pct?: number;
+    top_failure_modes: Array<{
+      name: string;
+      count: number;
+      sample_trace_ids?: string[];
+    }>;
+    top_tools: Array<{ tool_name: string; name: string; count: number }>;
+    hot_paths: Array<{ name: string; count: number; avg_duration_ms: number }>;
+    model_breakdown: Array<{ model: string; calls: number; cost_usd: number }>;
+    /** Present only when `compare_previous` was requested. */
+    previous?: {
+      total_traces: number;
+      error_rate: number;
+      p95_ms: number | null;
+      total_cost_usd: number;
+    };
+  }> => {
+    const q = new URLSearchParams();
+    if (params?.window_hours !== undefined) {
+      q.set("window_hours", String(params.window_hours));
+    }
+    if (params?.agent_id) q.set("agent_id", params.agent_id);
+    if (params?.compare_previous) q.set("compare_previous", "true");
+    const qs = q.toString();
+    return fetchApi(
+      `/orgs/${orgId}/observability/summary${qs ? `?${qs}` : ""}`,
+    );
   },
 
   // N10 — full-text span search (backend: GET .../observability/spans/search).
@@ -2128,6 +2190,93 @@ export const api = {
       delta_pct: number | null;
     }>(`/orgs/${orgId}/cost/comparison`),
 
+  // ── Budget admin (D.10 cost guardrails) ────────────────────────
+  // Distinct from `getOptimizationBudget` above — this is the
+  // per-org enforcement config + rollup shown on /optimization/budget,
+  // not the 30d optimization-total burn-rate summary.
+  getBudget: (orgId: string) =>
+    fetchApi<{
+      data: {
+        budget: {
+          window: string;
+          cost_soft_limit_usd: number;
+          cost_hard_limit_usd: number;
+          enforcement_enabled: boolean;
+          action_on_exceed: string;
+          threshold_alert_pct: number;
+          source: string;
+        };
+        consumption: { window: string; cost_usd: number; requests_count: number; window_start?: string };
+        rollup: {
+          cost_used_usd: number;
+          cost_soft_limit_usd: number;
+          cost_hard_limit_usd: number;
+          pct_of_hard: number;
+          threshold_alert_pct: number;
+          alert_breached: boolean;
+          exceeded: boolean;
+        };
+      };
+    }>(`/orgs/${orgId}/budget`),
+
+  upsertBudget: (
+    orgId: string,
+    body: {
+      cost_soft_limit_usd: number;
+      cost_hard_limit_usd: number;
+      enforcement_enabled: boolean;
+      window: string;
+      action_on_exceed: string;
+      threshold_alert_pct: number;
+    },
+  ) =>
+    fetchApi<{ data: unknown }>(`/orgs/${orgId}/budget`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+
+  getBudgetActions: (orgId: string, limit = 20) =>
+    fetchApi<{
+      data: {
+        actions: Array<{
+          id: string;
+          action_type: string;
+          severity: string;
+          cost_at_action: number;
+          threshold_pct: number;
+          action_taken: string;
+          created_at: string;
+        }>;
+        count: number;
+      };
+    }>(`/orgs/${orgId}/budget/actions?limit=${limit}`),
+
+  // ── Webhook dead-letter queue (D.13) ───────────────────────────
+  listWebhookDlq: (orgId: string, limit = 50) =>
+    fetchApi<{
+      data: {
+        entries: Array<{
+          id: string;
+          webhook_id: string;
+          event_type: string;
+          last_response_status: number | null;
+          last_error: string | null;
+          attempt_count: number;
+          max_attempts: number;
+          replay_count: number;
+          last_replayed_at: string | null;
+          created_at: string;
+          signature_v1: string | null;
+        }>;
+        count: number;
+      };
+    }>(`/orgs/${orgId}/webhooks/dlq?limit=${limit}`),
+
+  replayWebhookDlq: (orgId: string, dlqId: string) =>
+    fetchApi<{ data: unknown }>(`/orgs/${orgId}/webhooks/dlq/${dlqId}/replay`, {
+      method: "POST",
+    }),
+
   // ── LLM Ops: model artifacts (Phase 7.1c) ──────────────────────
   listModelArtifacts: (
     orgId: string,
@@ -2420,11 +2569,12 @@ export type AgentSummary = {
 };
 
 export const agentsApi = {
-  list: (orgId: string, params?: { framework?: string; name?: string; limit?: number }) => {
+  list: (orgId: string, params?: { framework?: string; name?: string; limit?: number; offset?: number }) => {
     const search = new URLSearchParams();
     if (params?.framework) search.set("framework", params.framework);
     if (params?.name) search.set("name", params.name);
     if (params?.limit) search.set("limit", String(params.limit));
+    if (params?.offset != null) search.set("offset", String(params.offset));
     const qs = search.toString();
     return fetchApi<{ agents: AgentSummary[]; total: number }>(
       `/orgs/${orgId}/agents${qs ? `?${qs}` : ""}`

@@ -15,6 +15,13 @@
  * Auto-reconnects on disconnect with exponential backoff capped at
  * 30s. Last-Event-ID resume is supported — the backend re-sends
  * missed events when the client reconnects.
+ *
+ * Phase 4 (perf/bandwidth pass): once the reconnect cap is hit the
+ * hook used to close the source and go silent — the panel just sat
+ * on "Connecting…" forever with no way to tell the user the stream
+ * had actually given up, and no way to get it back short of a full
+ * page reload. `failed` surfaces that terminal state and `retry()`
+ * resets the attempt counter and reopens the connection.
  */
 
 import * as React from "react";
@@ -61,6 +68,7 @@ export function useObservabilityStream({
   const [events, setEvents] = React.useState<LiveTrace[]>([]);
   const [connected, setConnected] = React.useState(false);
   const [paused, setPaused] = React.useState(false);
+  const [failed, setFailed] = React.useState(false);
   const [lastEventId, setLastEventId] = React.useState<string | null>(null);
   const reconnectAttemptsRef = React.useRef(0);
   const sourceRef = React.useRef<EventSource | null>(null);
@@ -92,6 +100,7 @@ export function useObservabilityStream({
 
     source.onopen = () => {
       setConnected(true);
+      setFailed(false);
       reconnectAttemptsRef.current = 0;
     };
 
@@ -128,6 +137,7 @@ export function useObservabilityStream({
       if (reconnectAttemptsRef.current >= MAX_RECONNECT_ATTEMPTS) {
         source.close();
         sourceRef.current = null;
+        setFailed(true);
         return;
       }
       reconnectAttemptsRef.current = Math.min(
@@ -162,11 +172,22 @@ export function useObservabilityStream({
   const resume = React.useCallback(() => setPaused(false), []);
   const clear = React.useCallback(() => setEvents([]), []);
 
+  /** Manual retry after the reconnect cap gives up. Resets the
+   *  attempt counter (a fresh user action, not another automatic
+   *  hammering) and re-dials immediately. */
+  const retry = React.useCallback(() => {
+    reconnectAttemptsRef.current = 0;
+    setFailed(false);
+    connect();
+  }, [connect]);
+
   return {
     connected: connected && enabled && !paused,
     events,
     paused,
+    failed,
     pause,
     resume,
-    clear };
+    clear,
+    retry };
 }

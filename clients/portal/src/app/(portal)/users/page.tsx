@@ -1,9 +1,11 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useCallback } from "react";
 import { useOrg } from "@/hooks/use-org";
 import { cn } from "@/lib/utils";
 import { api } from "@/lib/api";
+import { useOrgQuery, useOrgMutation } from "@/hooks/use-api-query";
+import { queryKeys } from "@/lib/query-keys";
 import { EmptyState } from "@/components/ui/empty-state";
 import { NoOrgState } from "@/components/ui/no-org-state";
 import { PageHeader } from "@/components/layout/page-header";
@@ -60,132 +62,89 @@ export default function UsersPage() {
   const {
     currentOrg
   } = useOrg();
+  const orgId = currentOrg?.id;
   const [activeTab, setActiveTab] = useState<Tab>("sessions");
-  const [error, setError] = useState("");
 
-  // Sessions
-  const [sessions, setSessions] = useState<SessionRow[]>([]);
-  const [sessionsLoading, setSessionsLoading] = useState(false);
-  const [sessionsDays, setSessionsDays] = useState(30);
-
-  // Goals
-  const [goals, setGoals] = useState<Goal[]>([]);
-  const [goalsLoading, setGoalsLoading] = useState(false);
-  const [showAddGoal, setShowAddGoal] = useState(false);
-  const [newGoalName, setNewGoalName] = useState("");
-  const [newGoalTarget, setNewGoalTarget] = useState<number>(100);
-  const [newGoalDescription, setNewGoalDescription] = useState("");
-  const [creatingGoal, setCreatingGoal] = useState(false);
-
-  // Satisfaction
+  // Satisfaction — kept as an on-demand imperative lookup (single
+  // trace at a time, triggered by user input) rather than a query.
   const [satisfactionTraceId, setSatisfactionTraceId] = useState("");
   const [satisfaction, setSatisfaction] = useState<SatisfactionData | null>(null);
   const [correction, setCorrection] = useState<CorrectionData | null>(null);
   const [satisfactionLoading, setSatisfactionLoading] = useState(false);
+  const [satisfactionError, setSatisfactionError] = useState("");
   const [recentSatisfaction, setRecentSatisfaction] = useState<Array<{
     trace_id: string;
     satisfaction: number;
   }>>([]);
 
-  // Cohorts
-  const [cohorts, setCohorts] = useState<Cohort[]>([]);
-  const [cohortsLoading, setCohortsLoading] = useState(false);
+  // Goals form
+  const [showAddGoal, setShowAddGoal] = useState(false);
+  const [newGoalName, setNewGoalName] = useState("");
+  const [newGoalTarget, setNewGoalTarget] = useState<number>(100);
+  const [newGoalDescription, setNewGoalDescription] = useState("");
+  const [goalError, setGoalError] = useState("");
 
-  // Segments
-  const [segments, setSegments] = useState<Segment[]>([]);
-  const [segmentsLoading, setSegmentsLoading] = useState(false);
-  const loadSessions = useCallback(async () => {
-    if (!currentOrg) return;
-    setSessionsLoading(true);
-    setError("");
-    try {
-      const data = await api.post<{
-        sessions: SessionRow[];
-      }>(`/orgs/${currentOrg.id}/intelligence/user/sessions/aggregate`, {
-        days: sessionsDays
-      });
-      setSessions(data.sessions || []);
-    } catch (err) {
-      setError(errorFromCaught(err, "Failed to load sessions"));
-    } finally {
-      setSessionsLoading(false);
-    }
-  }, [currentOrg, sessionsDays]);
-  const loadGoals = useCallback(async () => {
-    if (!currentOrg) return;
-    setGoalsLoading(true);
-    try {
-      const data = await api.get<{
-        goals: Goal[];
-      }>(`/orgs/${currentOrg.id}/intelligence/user/goals`);
-      setGoals(data.goals || []);
-    } catch (err) {
-      setError(errorFromCaught(err, "Failed to load goals"));
-    } finally {
-      setGoalsLoading(false);
-    }
-  }, [currentOrg]);
-  const loadCohorts = useCallback(async () => {
-    if (!currentOrg) return;
-    setCohortsLoading(true);
-    try {
-      const data = await api.get<{
-        cohorts: Cohort[];
-      }>(`/orgs/${currentOrg.id}/intelligence/user/dashboard/cohort`);
-      setCohorts(data.cohorts || []);
-    } catch (err) {
-      setError(errorFromCaught(err, "Failed to load cohorts"));
-    } finally {
-      setCohortsLoading(false);
-    }
-  }, [currentOrg]);
-  const loadSegments = useCallback(async () => {
-    if (!currentOrg) return;
-    setSegmentsLoading(true);
-    try {
-      const data = await api.get<{
-        segments: Segment[];
-      }>(`/orgs/${currentOrg.id}/intelligence/user/segment`);
-      setSegments(data.segments || []);
-    } catch (err) {
-      setError(errorFromCaught(err, "Failed to load segments"));
-    } finally {
-      setSegmentsLoading(false);
-    }
-  }, [currentOrg]);
-  useEffect(() => {
-    if (currentOrg) {
-      loadSessions();
-      loadGoals();
-      loadCohorts();
-      loadSegments();
-    }
-  }, [currentOrg, loadSessions, loadGoals, loadCohorts, loadSegments]);
+  // The four tabs below load in parallel on mount — 2+ parallel GETs,
+  // so they're React Query-backed for shared caching/dedup instead of
+  // four hand-rolled useEffect loaders.
+  const [sessionsDays, setSessionsDays] = useState(30);
+  const sessionsQuery = useOrgQuery(
+    queryKeys.users.sessions(orgId, sessionsDays),
+    orgId,
+    () => api.post<{ sessions: SessionRow[] }>(`/orgs/${orgId}/intelligence/user/sessions/aggregate`, { days: sessionsDays }),
+  );
+  const goalsQuery = useOrgQuery(
+    queryKeys.users.goals(orgId),
+    orgId,
+    () => api.get<{ goals: Goal[] }>(`/orgs/${orgId}/intelligence/user/goals`),
+  );
+  const cohortsQuery = useOrgQuery(
+    queryKeys.users.cohorts(orgId),
+    orgId,
+    () => api.get<{ cohorts: Cohort[] }>(`/orgs/${orgId}/intelligence/user/dashboard/cohort`),
+  );
+  const segmentsQuery = useOrgQuery(
+    queryKeys.users.segments(orgId),
+    orgId,
+    () => api.get<{ segments: Segment[] }>(`/orgs/${orgId}/intelligence/user/segment`),
+  );
+
+  const createGoalMutation = useOrgMutation(
+    (payload: { name: string; description?: string; target: number }) =>
+      api.post(`/orgs/${orgId}/intelligence/user/goals`, payload),
+    { invalidateKeys: [queryKeys.users.goals(orgId)] },
+  );
+
+  const queryError = sessionsQuery.error ?? goalsQuery.error ?? cohortsQuery.error ?? segmentsQuery.error;
+  const retryAll = useCallback(() => {
+    sessionsQuery.refetch();
+    goalsQuery.refetch();
+    cohortsQuery.refetch();
+    segmentsQuery.refetch();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessionsQuery.refetch, goalsQuery.refetch, cohortsQuery.refetch, segmentsQuery.refetch]);
+
   async function handleCreateGoal() {
-    if (!currentOrg || !newGoalName.trim()) return;
-    setCreatingGoal(true);
-    setError("");
+    if (!newGoalName.trim()) return;
+    setGoalError("");
     try {
-      await api.post(`/orgs/${currentOrg.id}/intelligence/user/goals`, {
+      await createGoalMutation.mutateAsync({
         name: newGoalName.trim(),
         description: newGoalDescription.trim() || undefined,
-        target: newGoalTarget
+        target: newGoalTarget,
       });
       setNewGoalName("");
       setNewGoalTarget(100);
       setNewGoalDescription("");
       setShowAddGoal(false);
-      await loadGoals();
     } catch (err) {
-      setError(errorFromCaught(err, "Failed to create goal"));
-    } finally {
-      setCreatingGoal(false);
+      setGoalError(errorFromCaught(err, "Failed to create goal"));
     }
   }
   async function handleSatisfactionAnalyze() {
     if (!currentOrg || !satisfactionTraceId.trim()) return;
     setSatisfactionLoading(true);
-    setError("");
+    setSatisfactionError("");
     setSatisfaction(null);
     setCorrection(null);
     try {
@@ -197,13 +156,13 @@ export default function UsersPage() {
           satisfaction: sat.value.satisfaction
         }, ...prev].slice(0, 10));
       } else {
-        setError("Satisfaction data not available for this trace");
+        setSatisfactionError("Satisfaction data not available for this trace");
       }
       if (cor.status === "fulfilled") {
         setCorrection(cor.value);
       }
     } catch (err) {
-      setError(errorFromCaught(err, "Analysis failed"));
+      setSatisfactionError(errorFromCaught(err, "Analysis failed"));
     } finally {
       setSatisfactionLoading(false);
     }
@@ -214,16 +173,10 @@ export default function UsersPage() {
   return <PageContent size="wide">
       <PageHeader eyebrow="Intelligence" title="User Intelligence" subtitle="The 97% problem: behaviour-driven satisfaction, behavioural cohorts, and goal tracking" icon={Users} />
 
-      {error && <div role="alert" className="bg-[var(--error-bg)] text-[var(--error)] text-sm px-4 py-3 rounded-xl flex items-center gap-2.5 border border-[var(--error)]/20">
+      {queryError && <div role="alert" className="bg-[var(--error-bg)] text-[var(--error)] text-sm px-4 py-3 rounded-xl flex items-center gap-2.5 border border-[var(--error)]/20">
           <AlertTriangle className="w-4 h-4 flex-shrink-0" aria-hidden />
-          <span className="flex-1">{error}</span>
-          <Button variant="ghost" size="sm" onClick={() => {
-        setError("");
-        loadSessions();
-        loadGoals();
-        loadCohorts();
-        loadSegments();
-      }} aria-label="Retry loading all tabs">
+          <span className="flex-1">{queryError.message}</span>
+          <Button variant="ghost" size="sm" onClick={retryAll} aria-label="Retry loading all tabs">
             <RefreshCw className="w-3.5 h-3.5" aria-hidden />
             Retry
           </Button>
@@ -274,11 +227,11 @@ export default function UsersPage() {
       }} transition={{
         duration: 0.2
       }}>
-          {activeTab === "sessions" && <SessionsTab sessions={sessions} loading={sessionsLoading} days={sessionsDays} onDaysChange={setSessionsDays} onRefresh={loadSessions} />}
-          {activeTab === "goals" && <GoalsTab goals={goals} loading={goalsLoading} showAdd={showAddGoal} onShowAddChange={setShowAddGoal} newName={newGoalName} onNewNameChange={setNewGoalName} newTarget={newGoalTarget} onNewTargetChange={setNewGoalTarget} newDescription={newGoalDescription} onNewDescriptionChange={setNewGoalDescription} onCreate={handleCreateGoal} creating={creatingGoal} />}
-          {activeTab === "satisfaction" && <SatisfactionTab traceId={satisfactionTraceId} onTraceIdChange={setSatisfactionTraceId} onAnalyze={handleSatisfactionAnalyze} satisfaction={satisfaction} correction={correction} loading={satisfactionLoading} recent={recentSatisfaction} />}
-          {activeTab === "cohorts" && <CohortsTab cohorts={cohorts} loading={cohortsLoading} onRefresh={loadCohorts} />}
-          {activeTab === "segments" && <SegmentsTab segments={segments} loading={segmentsLoading} onRefresh={loadSegments} />}
+          {activeTab === "sessions" && <SessionsTab sessions={sessionsQuery.data?.sessions ?? []} loading={sessionsQuery.isLoading} days={sessionsDays} onDaysChange={setSessionsDays} onRefresh={() => sessionsQuery.refetch()} />}
+          {activeTab === "goals" && <GoalsTab goals={goalsQuery.data?.goals ?? []} loading={goalsQuery.isLoading} showAdd={showAddGoal} onShowAddChange={setShowAddGoal} newName={newGoalName} onNewNameChange={setNewGoalName} newTarget={newGoalTarget} onNewTargetChange={setNewGoalTarget} newDescription={newGoalDescription} onNewDescriptionChange={setNewGoalDescription} onCreate={handleCreateGoal} creating={createGoalMutation.isPending} error={goalError} />}
+          {activeTab === "satisfaction" && <SatisfactionTab traceId={satisfactionTraceId} onTraceIdChange={setSatisfactionTraceId} onAnalyze={handleSatisfactionAnalyze} satisfaction={satisfaction} correction={correction} loading={satisfactionLoading} error={satisfactionError} recent={recentSatisfaction} />}
+          {activeTab === "cohorts" && <CohortsTab cohorts={cohortsQuery.data?.cohorts ?? []} loading={cohortsQuery.isLoading} onRefresh={() => cohortsQuery.refetch()} />}
+          {activeTab === "segments" && <SegmentsTab segments={segmentsQuery.data?.segments ?? []} loading={segmentsQuery.isLoading} onRefresh={() => segmentsQuery.refetch()} />}
         </motion.div>
       </AnimatePresence>
       </Tabs>
@@ -369,7 +322,8 @@ function GoalsTab({
   newDescription,
   onNewDescriptionChange,
   onCreate,
-  creating
+  creating,
+  error
 }: {
   goals: Goal[];
   loading: boolean;
@@ -383,8 +337,13 @@ function GoalsTab({
   onNewDescriptionChange: (v: string) => void;
   onCreate: () => void;
   creating: boolean;
+  error?: string;
 }) {
   return <div className="space-y-4">
+      {error && <div role="alert" className="bg-[var(--error-bg)] text-[var(--error)] text-sm px-4 py-3 rounded-xl flex items-center gap-2.5 border border-[var(--error)]/20">
+          <AlertTriangle className="w-4 h-4 flex-shrink-0" aria-hidden />
+          <span className="flex-1">{error}</span>
+        </div>}
       <div className="flex justify-end">
         <button type="button" onClick={() => onShowAddChange(!showAdd)} aria-expanded={showAdd} aria-controls="new-goal-form" className="inline-flex items-center gap-2 px-4 py-2 bg-[var(--accent)] text-[var(--bg-base)] rounded-lg text-sm font-medium hover:bg-[var(--accent-hover)] transition-colors">
           <Plus className="w-4 h-4" aria-hidden />
@@ -477,6 +436,7 @@ function SatisfactionTab({
   satisfaction,
   correction,
   loading,
+  error,
   recent
 }: {
   traceId: string;
@@ -485,6 +445,7 @@ function SatisfactionTab({
   satisfaction: SatisfactionData | null;
   correction: CorrectionData | null;
   loading: boolean;
+  error?: string;
   recent: Array<{
     trace_id: string;
     satisfaction: number;
@@ -509,6 +470,10 @@ function SatisfactionTab({
             Analyze
           </button>
         </div>
+        {error && <p role="alert" className="mt-3 text-xs text-[var(--error)] flex items-center gap-1.5">
+            <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" aria-hidden />
+            {error}
+          </p>}
       </Card>
 
       {/* Result */}

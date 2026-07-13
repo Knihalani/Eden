@@ -57,16 +57,16 @@ export function SelectedTraceCard({ traceId }: SelectedTraceCardProps) {
     let cancelled = false;
     setLoading(true);
 
-    // ponytail: re-use the same single-trace path that /traces uses —
-    // the landing's KPI tiles are already hot on listObservabilityTraces,
-    // so we just hit it again with limit=1 and trace filter. Avoids
-    // a new endpoint.
+    // The backend's `trace_id` exact-match filter (June 2026 fix)
+    // resolves deep links directly instead of scanning the last 50
+    // traces for a match — that scan also silently failed to find
+    // traces outside the default list window.
     api
-      .listObservabilityTraces(currentOrg.id, { limit: 50 })
+      .listObservabilityTraces(currentOrg.id, { trace_id: traceId, limit: 1 })
       .then((res) => {
         if (cancelled) return;
-        const match = (res.traces ?? []).find((t) => t.trace_id === traceId);
-        setTrace(match ?? null);
+        const match = (res.traces ?? []).find((t) => t.trace_id === traceId) ?? res.traces?.[0] ?? null;
+        setTrace(match);
       })
       .catch(() => {
         if (cancelled) return;
@@ -118,7 +118,7 @@ export function SelectedTraceCard({ traceId }: SelectedTraceCardProps) {
         </div>
       ) : !trace ? (
         <p className="text-xs text-[var(--text-muted)]">
-          Trace <span className="font-mono">{traceId.slice(0, 8)}</span> not found in the last 50 traces.
+          Trace <span className="font-mono">{traceId.slice(0, 8)}</span> not found.
         </p>
       ) : (
         <dl className="space-y-2.5 text-xs">

@@ -126,6 +126,13 @@ DEFAULT_SWEEPS: tuple[_Sweep, ...] = (
         comment="AI-insights chat messages older than 90 days "
         "(orphaned-by-conversation cleanup is a separate FK cascade).",
     ),
+    _Sweep(
+        name="telemetry_stream_chunks",
+        table="telemetry_stream_chunks",
+        age_column="received_at",
+        age_days=7,
+        comment="Per-token stream chunks older than 7 days (rollup table retained).",
+    ),
 )
 
 

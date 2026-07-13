@@ -34,6 +34,7 @@ import { PRStatusBadge } from "@/components/ui/status-badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/components/ui/toast";
 import { EmptyState } from "@/components/ui/empty-state";
+import { NoOrgState } from "@/components/ui/no-org-state";
 import { PageHeader } from "@/components/layout/page-header";
 import { PageContent } from "@/components/layout/page-content";
 import type {
@@ -611,12 +612,18 @@ function DisciplineStateCard() {
   );
 }
 
+// The list endpoint has no offset/cursor param (unlike agent-issues),
+// only `limit` — so "load more" bumps the requested limit and
+// re-fetches, the same convention /traces uses for its trace list.
+const PR_SUGGESTIONS_PAGE_SIZE = 50;
+
 export default function PRSuggestionsPage() {
   const router = useRouter();
   const { currentOrg } = useOrg();
   const toast = useToast();
   const [suggestions, setSuggestions] = useState<PRSuggestion[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState("");
   const [statusFilter, setStatusFilter] = useState<PRSuggestionStatus | "all">(
     "all",
@@ -628,17 +635,19 @@ export default function PRSuggestionsPage() {
   const [showCreate, setShowCreate] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkBusy, setBulkBusy] = useState(false);
+  const [limit, setLimit] = useState(PR_SUGGESTIONS_PAGE_SIZE);
 
-  const loadSuggestions = useCallback(async () => {
+  const loadSuggestions = useCallback(async (fetchLimit: number, markLoadingMore = false) => {
     if (!currentOrg) return;
-    setLoading(true);
+    if (markLoadingMore) setLoadingMore(true);
+    else setLoading(true);
     setError("");
     try {
       const params = new URLSearchParams();
       if (statusFilter !== "all") params.set("status", statusFilter);
       if (triggerFilter !== "all") params.set("trigger", triggerFilter);
       if (search) params.set("search", search);
-      params.set("limit", "50");
+      params.set("limit", String(fetchLimit));
       const data = await prSuggestionApi.list(
         currentOrg.id,
         params.toString(),
@@ -658,13 +667,24 @@ export default function PRSuggestionsPage() {
       setError(errorFromCaught(err, "Failed to load"));
     } finally {
       setLoading(false);
+      setLoadingMore(false);
     }
   }, [currentOrg, statusFilter, triggerFilter, search]);
 
   useEffect(() => {
-     
-    loadSuggestions();
+    setLimit(PR_SUGGESTIONS_PAGE_SIZE);
+    void loadSuggestions(PR_SUGGESTIONS_PAGE_SIZE);
   }, [loadSuggestions]);
+
+  const handleLoadMore = useCallback(() => {
+    const next = limit + PR_SUGGESTIONS_PAGE_SIZE;
+    setLimit(next);
+    void loadSuggestions(next, true);
+  }, [limit, loadSuggestions]);
+  // "Load more" is offered while the last fetch returned a full page
+  // — the endpoint has no `total`, so a short page is the only signal
+  // that we've reached the end.
+  const canLoadMore = !loading && !error && suggestions.length === limit;
 
   // Recent files autocomplete — collect file paths from the
   // most recent suggestions in the inbox. Dedupe + cap at 12
@@ -743,7 +763,7 @@ export default function PRSuggestionsPage() {
         }`,
       );
       setSelected(new Set());
-      await loadSuggestions();
+      await loadSuggestions(limit);
     } catch (err) {
       toast.error(
         err instanceof Error ? err.message : "Bulk regenerate failed",
@@ -754,15 +774,7 @@ export default function PRSuggestionsPage() {
   }
 
   if (!currentOrg) {
-    return (
-      <div className="p-6">
-        <EmptyState
-          icon={History}
-          title="No organization"
-          description="Select an organization to view PR suggestions."
-        />
-      </div>
-    );
+    return <NoOrgState feature="PR Suggestions" description="Select an organization to view agent-proposed code changes." />;
   }
 
   return (
@@ -775,7 +787,7 @@ export default function PRSuggestionsPage() {
           <div className="flex items-center gap-2">
             <Button
               variant="outline"
-              onClick={loadSuggestions}
+              onClick={() => loadSuggestions(limit)}
               disabled={loading}
               size="sm"
             >
@@ -906,7 +918,7 @@ export default function PRSuggestionsPage() {
               {error}
             </span>
             <button
-              onClick={loadSuggestions}
+              onClick={() => loadSuggestions(limit)}
               disabled={loading}
               className="text-xs font-medium underline underline-offset-2 hover:opacity-80 disabled:opacity-50"
             >
@@ -945,6 +957,20 @@ export default function PRSuggestionsPage() {
               onClick={() => router.push(`/pr-suggestions/${s.id}`)}
             />
           ))}
+        </div>
+      )}
+
+      {canLoadMore && (
+        <div className="flex justify-center pt-2">
+          <Button
+            variant="outline"
+            size="default"
+            onClick={handleLoadMore}
+            loading={loadingMore}
+            disabled={loadingMore}
+          >
+            Load more suggestions
+          </Button>
         </div>
       )}
 

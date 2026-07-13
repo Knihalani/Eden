@@ -174,6 +174,20 @@ class PRReviewService:
                     set_col="status",
                     set_val=new_status,
                 )
+            # Emit activity event for approve / deny outcomes.
+            if action in {"approve", "deny"}:
+                event_type = "patch_approved" if action == "approve" else "patch_denied"
+                try:
+                    from ..activity_feed import AgentActivityFeed
+                    await AgentActivityFeed().emit(
+                        org_id,
+                        event_type=event_type,
+                        summary=f"Patch {patch_id} {action}d by {actor_user_id}",
+                        deep_link=f"/inbox/{patch_id}",
+                        metadata={"patch_id": patch_id, "actor_user_id": actor_user_id, "comment": comment},
+                    )
+                except Exception as _exc:
+                    logger.debug("pr_review: activity emit failed: %s", _exc)
             return _ok_envelope(
                 self.name,
                 {

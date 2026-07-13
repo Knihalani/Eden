@@ -27,6 +27,8 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
+const PAGE_SIZE = 100;
+
 const FRAMEWORK_BADGE: Record<string, string> = {
   langchain: "bg-[var(--accent-faint)] text-[var(--accent)]",
   "openai-agents": "bg-[var(--terminal-faint)] text-[var(--terminal)]",
@@ -52,7 +54,9 @@ export default function AgentsPage() {
   const { currentOrg } = useOrg();
   const toast = useToast();
   const [agents, setAgents] = useState<AgentSummary[]>([]);
+  const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [frameworkFilter, setFrameworkFilter] = useState<string>("");
@@ -62,8 +66,9 @@ export default function AgentsPage() {
     setLoading(true);
     setError(null);
     try {
-      const data = await agentsApi.list(currentOrg.id, { limit: 200 });
+      const data = await agentsApi.list(currentOrg.id, { limit: PAGE_SIZE });
       setAgents(data.agents);
+      setTotal(data.total);
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Failed to load agents";
       setError(msg);
@@ -72,6 +77,29 @@ export default function AgentsPage() {
       setLoading(false);
     }
   }, [currentOrg, toast]);
+
+  // "Load more" pages via `offset` (the agents list endpoint supports
+  // true offset pagination, unlike traces/PR suggestions) and appends
+  // — the registered-agent count is normally small enough that
+  // duplicate/reordering races between a background refresh and a
+  // load-more click aren't a practical concern.
+  const loadMore = useCallback(async () => {
+    if (!currentOrg) return;
+    setLoadingMore(true);
+    try {
+      const data = await agentsApi.list(currentOrg.id, {
+        limit: PAGE_SIZE,
+        offset: agents.length,
+      });
+      setAgents((prev) => [...prev, ...data.agents]);
+      setTotal(data.total);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Failed to load more agents";
+      toast.error(msg);
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [currentOrg, agents.length, toast]);
 
   useEffect(() => {
      
@@ -114,7 +142,7 @@ export default function AgentsPage() {
         subtitle={
           loading
             ? "Loading…"
-            : `${agents.length} registered · click an agent to upload code, run sims, and inspect results.`
+            : `${total} registered · click an agent to upload code, run sims, and inspect results.`
         }
         icon={Bot}
         actions={
@@ -267,6 +295,23 @@ export default function AgentsPage() {
           {filtered.map((a) => (
             <AgentCard key={a.agent_id} agent={a} />
           ))}
+        </div>
+      )}
+
+      {/* Load more — only offered on the unfiltered view since a
+          client-side search/framework filter can hide the newly
+          appended page, which would make the button look broken. */}
+      {!loading && !error && !search && !frameworkFilter && agents.length < total && (
+        <div className="flex justify-center pt-2">
+          <Button
+            variant="outline"
+            size="default"
+            onClick={loadMore}
+            loading={loadingMore}
+            disabled={loadingMore}
+          >
+            Load more agents ({total - agents.length} remaining)
+          </Button>
         </div>
       )}
     </PageContent>

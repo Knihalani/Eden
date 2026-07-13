@@ -18,13 +18,24 @@ import Link from "next/link";
 import { useState, type ComponentType } from "react";
 import { Eye, EyeOff, Pin, PinOff, RotateCcw, Settings2 } from "lucide-react";
 import { PageHeader } from "@/components/layout/page-header";
+import { PageContent } from "@/components/layout/page-content";
 import { useSidebarPrefs, applySidebarPrefs, DEFAULT_PREFS } from "@/hooks/use-sidebar-prefs";
 import { ALL_ITEM_IDS, DEFAULT_SIDEBAR, type SidebarGroup } from "@/lib/sidebar-config";
 import { cn } from "@/lib/utils";
 import { useOrg } from "@/hooks/use-org";
 import { NoOrgState } from "@/components/ui/no-org-state";
 import { Card } from "@/components/ui/card";
-export default function SidebarSettingsPage() {
+
+export interface SidebarSettingsPageProps {
+  /** When true, render just the body (no PageContent/PageHeader) —
+   *  used when mounted inside the main /settings tab rail, which
+   *  already provides its own PageContent + "Settings" PageHeader.
+   *  Deep-link visits to /settings/sidebar render the full page
+   *  chrome instead (the default). */
+  embedded?: boolean;
+}
+
+export default function SidebarSettingsPage({ embedded = false }: SidebarSettingsPageProps) {
   const {
     currentOrg
   } = useOrg();
@@ -78,15 +89,15 @@ export default function SidebarSettingsPage() {
     }
     setReordering(false);
   }
-  return <>
-      <PageHeader eyebrow="Settings" title="Sidebar" subtitle="Customize the left nav — pin items you use often, hide what you don't, reorder groups" icon={Settings2} actions={<button onClick={() => {
+  const resetButton = <button onClick={() => {
       reset();
       setDraftOrder(DEFAULT_PREFS.groupOrder);
     }} className="inline-flex items-center gap-2 px-3 py-1.5 text-xs text-[var(--text-muted)] bg-[var(--bg-tertiary)] hover:bg-[var(--border-default)] rounded-lg transition-colors">
-            <RotateCcw className="w-3.5 h-3.5" />
-            Reset to default
-          </button>} />
-      <div className="px-4 sm:p-6 lg:p-8 max-w-4xl mx-auto space-y-8">
+      <RotateCcw className="w-3.5 h-3.5" />
+      Reset to default
+    </button>;
+
+  const body = <div className="space-y-8">
         {/* Density */}
         <Card padding="lg" as="section" className="space-y-3">
           <h2 className="text-sm font-semibold text-[var(--text-primary)]">Density</h2>
@@ -208,8 +219,25 @@ export default function SidebarSettingsPage() {
           {saving ? "Saving…" : "Changes save automatically"}{" "}
           · {ALL_ITEM_IDS.length} total items
         </p>
-      </div>
-    </>;
+      </div>;
+
+  if (embedded) {
+    return <div className="space-y-6">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <Settings2 className="w-4 h-4 text-[var(--text-muted)]" />
+            <h2 className="text-sm font-semibold text-[var(--text-primary)]">Sidebar</h2>
+          </div>
+          {resetButton}
+        </div>
+        {body}
+      </div>;
+  }
+
+  return <PageContent>
+      <PageHeader eyebrow="Settings" title="Sidebar" subtitle="Customize the left nav — pin items you use often, hide what you don't, reorder groups" icon={Settings2} actions={resetButton} />
+      {body}
+    </PageContent>;
 }
 function SidebarPreviewGroup({
   label,

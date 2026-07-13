@@ -3,8 +3,9 @@
 import { useEffect, useState, useCallback } from "react";
 import { useOrg } from "@/hooks/use-org";
 import { cn } from "@/lib/utils";
-import { API_BASE } from "@/lib/api";
+import { api, ApiError } from "@/lib/api";
 import { PageHeader } from "@/components/layout/page-header";
+import { PageContent } from "@/components/layout/page-content";
 import { NoOrgState } from "@/components/ui/no-org-state";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ErrorState } from "@/components/ui/error-state";
@@ -51,19 +52,15 @@ export default function WebhooksDlqPage() {
     if (!currentOrg?.id) return;
     setError(null);
     try {
-      const res = await fetch(
-        `${API_BASE}/orgs/${currentOrg.id}/webhooks/dlq?limit=50`,
-        { credentials: "include" }
-      );
-      if (res.ok) {
-        const d = await res.json();
-        setEntries(d.data?.entries || []);
-      } else {
-        setError(`Failed to load DLQ entries (HTTP ${res.status}).`);
-      }
+      const res = await api.listWebhookDlq(currentOrg.id, 50);
+      setEntries(res.data?.entries || []);
     } catch (err) {
       const message =
-        err instanceof Error ? err.message : "Network error loading DLQ entries.";
+        err instanceof ApiError
+          ? `Failed to load DLQ entries (HTTP ${err.status}).`
+          : err instanceof Error
+            ? err.message
+            : "Network error loading DLQ entries.";
       setError(message);
     } finally {
       setLoading(false);
@@ -77,21 +74,19 @@ export default function WebhooksDlqPage() {
 
   const handleReplay = useCallback(
     async (dlqId: string) => {
+      if (!currentOrg?.id) return;
       setReplaying(dlqId);
       try {
-        const res = await fetch(
-          `${API_BASE}/orgs/${currentOrg?.id}/webhooks/dlq/${dlqId}/replay`,
-          { method: "POST", credentials: "include" }
-        );
-        if (res.ok) {
-          toast.success("Replay queued", "Delivery re-scheduled.");
-          await fetchData();
-        } else {
-          toast.error("Replay failed", `HTTP ${res.status}`);
-        }
+        await api.replayWebhookDlq(currentOrg.id, dlqId);
+        toast.success("Replay queued", "Delivery re-scheduled.");
+        await fetchData();
       } catch (err) {
         const message =
-          err instanceof Error ? err.message : "Replay request failed.";
+          err instanceof ApiError
+            ? `HTTP ${err.status}`
+            : err instanceof Error
+              ? err.message
+              : "Replay request failed.";
         toast.error("Replay failed", message);
       } finally {
         setReplaying(null);
@@ -103,7 +98,7 @@ export default function WebhooksDlqPage() {
   if (!currentOrg) return <NoOrgState feature="Webhook DLQ" />;
 
   return (
-    <div className="space-y-6">
+    <PageContent>
       <PageHeader
         icon={Webhook}
         eyebrow="Settings"
@@ -236,6 +231,6 @@ export default function WebhooksDlqPage() {
           )}
         </div>
       </div>
-    </div>
+    </PageContent>
   );
 }

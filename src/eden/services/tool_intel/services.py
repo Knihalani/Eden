@@ -204,7 +204,7 @@ class ToolAttributionScorer:
                 # severity drop (the helper checks its own
                 # thresholds so we always call it on the
                 # observed numbers).
-                _fire_tool_drift_hook(
+                await _fire_tool_drift_hook(
                     org_id,
                     tool_name=tool_id,
                     n_calls=int(agg["n_calls"]),

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import { useOrg } from "@/hooks/use-org";
 import { closedLoopApi, type ClosedLoopAction } from "@/lib/api";
@@ -10,6 +10,8 @@ import { NoOrgState } from "@/components/ui/no-org-state";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/components/ui/toast";
 import { useConfirm } from "@/hooks/use-confirm";
+import { useOrgQuery } from "@/hooks/use-api-query";
+import { queryKeys } from "@/lib/query-keys";
 import { Check, X, Play, AlertCircle, Loader2, Inbox, History, BarChart3, Repeat } from "lucide-react";
 import { PageHeader } from "@/components/layout/page-header";
 import { PageContent } from "@/components/layout/page-content";
@@ -67,45 +69,46 @@ export default function ClosedLoopPage() {
   const {
     currentOrg
   } = useOrg();
+  const orgId = currentOrg?.id;
   const toast = useToast();
   const {
     confirm,
     ConfirmDialog
   } = useConfirm();
   const [tab, setTab] = useState<"pending" | "history" | "dashboard">("pending");
-  const [pending, setPending] = useState<Action[]>([]);
-  const [history, setHistory] = useState<Action[]>([]);
-  const [dashboard, setDashboard] = useState<Dashboard | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [busyActionId, setBusyActionId] = useState<string | null>(null);
-  const loadAll = useCallback(async () => {
-    if (!currentOrg) return;
-    setLoading(true);
-    setError(null);
-    try {
+
+  const {
+    data: board,
+    isLoading: loading,
+    error: queryError,
+    refetch: loadAll,
+  } = useOrgQuery(
+    queryKeys.closedLoop.board(orgId),
+    orgId,
+    async () => {
       const [pendingRes, allRes, dashRes] = await Promise.all([
-        closedLoopApi.listPending(currentOrg.id).catch(() => ({ data: { actions: [] } })),
-        closedLoopApi.listAll(currentOrg.id).catch(() => ({ data: { actions: [] } })),
-        closedLoopApi.dashboard(currentOrg.id).catch(() => null),
+        closedLoopApi.listPending(orgId!).catch(() => ({ data: { actions: [] } })),
+        closedLoopApi.listAll(orgId!).catch(() => ({ data: { actions: [] } })),
+        closedLoopApi.dashboard(orgId!).catch(() => null),
       ]);
-      setPending((pendingRes.data?.actions ?? []).map(mapClosedLoopAction));
-      setHistory((allRes.data?.actions ?? []).map(mapClosedLoopAction));
-      setDashboard(dashRes?.data ? mapDashboard(dashRes.data) : null);
-    } catch (err) {
-      setError(errorFromCaught(err, "Failed to load closed-loop actions"));
-    } finally {
-      setLoading(false);
-    }
-  }, [currentOrg]);
-  useEffect(() => {
-    loadAll();
-  }, [loadAll]);
+      return {
+        pending: (pendingRes.data?.actions ?? []).map(mapClosedLoopAction),
+        history: (allRes.data?.actions ?? []).map(mapClosedLoopAction),
+        dashboard: dashRes?.data ? mapDashboard(dashRes.data) : null,
+      };
+    },
+  );
+  const pending = board?.pending ?? [];
+  const history = board?.history ?? [];
+  const dashboard = board?.dashboard ?? null;
+  const error = queryError ? errorFromCaught(queryError, "Failed to load closed-loop actions") : null;
+
   const handleApprove = async (actionId: string) => {
-    if (!currentOrg) return;
+    if (!orgId) return;
     setBusyActionId(actionId);
     try {
-      await closedLoopApi.approveAction(currentOrg.id, actionId);
+      await closedLoopApi.approveAction(orgId, actionId);
       toast.success("Action approved");
       await loadAll();
     } catch (err) {
@@ -115,14 +118,14 @@ export default function ClosedLoopPage() {
     }
   };
   const handleDeny = async (actionId: string) => {
-    if (!currentOrg) return;
+    if (!orgId) return;
     // ponytail: window.prompt retained as a minimal-but-native way to
     // collect a denial reason. A styled modal is the proper fix; defer
     // until a reason input is needed in more than one place.
     const reason = window.prompt("Optional reason for denial:") ?? undefined;
     setBusyActionId(actionId);
     try {
-      await closedLoopApi.denyAction(currentOrg.id, actionId, {
+      await closedLoopApi.denyAction(orgId, actionId, {
         reason
       });
       toast.success("Action denied");
@@ -134,7 +137,7 @@ export default function ClosedLoopPage() {
     }
   };
   const handleApply = async (actionId: string) => {
-    if (!currentOrg) return;
+    if (!orgId) return;
     const ok = await confirm({
       title: "Apply this action?",
       description: "This will execute the underlying change. Are you sure?",
@@ -144,7 +147,7 @@ export default function ClosedLoopPage() {
     if (!ok) return;
     setBusyActionId(actionId);
     try {
-      await closedLoopApi.applyAction(currentOrg.id, actionId);
+      await closedLoopApi.applyAction(orgId, actionId);
       toast.success("Action applied");
       await loadAll();
     } catch (err) {
@@ -188,7 +191,7 @@ export default function ClosedLoopPage() {
               <p className="text-xs mt-1 opacity-80">{error}</p>
             </div>
           </div>
-          <button onClick={loadAll} disabled={loading} className="text-xs font-medium underline underline-offset-2 hover:opacity-80 disabled:opacity-50 shrink-0">
+          <button onClick={() => loadAll()} disabled={loading} className="text-xs font-medium underline underline-offset-2 hover:opacity-80 disabled:opacity-50 shrink-0">
             Retry
           </button>
         </div>}

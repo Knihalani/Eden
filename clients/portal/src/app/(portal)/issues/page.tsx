@@ -1,9 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useState } from "react";
 import { useOrg } from "@/hooks/use-org";
-import { agentIssuesApi, type AgentIssue } from "@/lib/api";
+import { agentIssuesApi } from "@/lib/api";
+import { useOrgQuery } from "@/hooks/use-api-query";
+import { queryKeys } from "@/lib/query-keys";
 import { EmptyState } from "@/components/ui/empty-state";
 import { NoOrgState } from "@/components/ui/no-org-state";
 import { Card } from "@/components/ui/card";
@@ -24,33 +26,32 @@ const STATUS_FILTERS = [
   "regressed",
 ] as const;
 
+// Backend caps `/agent-issues?limit=` at 200 (see agent_issues.py) and
+// returns no `total`, only `count` of the page actually returned — so
+// "load more" bumps the requested limit (same convention /traces uses)
+// rather than tracking an offset, and stops once the cap is hit.
+const PAGE_SIZE = 100;
+const MAX_LIMIT = 200;
+
 export default function IssuesPage() {
   const { currentOrg } = useOrg();
-  const [issues, setIssues] = useState<AgentIssue[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const orgId = currentOrg?.id ?? null;
   const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [limit, setLimit] = useState(PAGE_SIZE);
 
-  const load = useCallback(async () => {
-    if (!currentOrg) return;
-    setLoading(true);
-    setError(null);
-    try {
-      const res = await agentIssuesApi.list(currentOrg.id, {
-        status: statusFilter === "all" ? undefined : statusFilter,
-        limit: 100,
-      });
-      setIssues(res.data?.issues ?? []);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load issues");
-    } finally {
-      setLoading(false);
-    }
-  }, [currentOrg, statusFilter]);
-
-  useEffect(() => {
-    load();
-  }, [load]);
+  const issuesFilter = { status: statusFilter === "all" ? undefined : statusFilter, limit };
+  const issuesQuery = useOrgQuery(
+    queryKeys.issues.list(orgId, issuesFilter),
+    orgId,
+    () => agentIssuesApi.list(orgId!, issuesFilter),
+  );
+  const issues = issuesQuery.data?.data?.issues ?? [];
+  const loading = issuesQuery.isLoading;
+  const refreshing = issuesQuery.isFetching;
+  const error = issuesQuery.error?.message ?? null;
+  const load = () => void issuesQuery.refetch();
+  const canLoadMore = !loading && !error && limit < MAX_LIMIT && issues.length === limit;
+  const loadMore = () => setLimit((l) => Math.min(l + PAGE_SIZE, MAX_LIMIT));
 
   if (!currentOrg) {
     return (
@@ -76,7 +77,10 @@ export default function IssuesPage() {
             key={s}
             role="tab"
             aria-selected={statusFilter === s}
-            onClick={() => setStatusFilter(s)}
+            onClick={() => {
+              setStatusFilter(s);
+              setLimit(PAGE_SIZE);
+            }}
             className={cn(
               "px-3 py-2 text-sm font-medium border-b-2 -mb-px transition-colors whitespace-nowrap capitalize",
               statusFilter === s
@@ -158,6 +162,14 @@ export default function IssuesPage() {
               </div>
             </Link>
           ))}
+        </div>
+      )}
+
+      {canLoadMore && (
+        <div className="flex justify-center pt-4">
+          <Button variant="outline" size="default" onClick={loadMore} loading={refreshing} disabled={refreshing}>
+            Load more issues
+          </Button>
         </div>
       )}
     </PageContent>

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import dynamic from "next/dynamic";
 import { ArrowRight, Brain, Loader2, TrendingUp, TrendingDown, Sparkles, Target, BarChart3 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
@@ -17,8 +17,9 @@ import { PageContent } from "@/components/layout/page-content";
 import { NoOrgState } from "@/components/ui/no-org-state";
 import { useOrg } from "@/hooks/use-org";
 import { costApi } from "@/lib/api";
+import { useOrgQuery } from "@/hooks/use-api-query";
+import { queryKeys } from "@/lib/query-keys";
 import { cn } from "@/lib/utils";
-import { errorFromCaught } from "@/lib/safe-error-message";
 
 /* ----------------------- Sub-pages (lazy) ----------------------------- */
 
@@ -341,62 +342,44 @@ function formatNumber(n: number) {
 
 function CostTab() {
   const { currentOrg } = useOrg();
+  const orgId = currentOrg?.id ?? null;
   const [days, setDays] = useState<number>(30);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string>("");
 
-  const [efficiency, setEfficiency] = useState<{
-    efficiency_score: number;
-    by_model: Array<{ model: string; cost_per_call: number; success_rate: number }>;
-    period_days: number;
-  } | null>(null);
-  const [roi, setRoi] = useState<{
-    total_cost: number;
-    total_revenue: number;
-    roi: number;
-    per_agent: Array<{ agent_id: string; cost: number; revenue: number; roi: number }>;
-  } | null>(null);
-  const [forecast, setForecast] = useState<{
-    forecast: Array<{ date: string; projected_cost: number; ci_low: number; ci_high: number }>;
-    model: string;
-    period_days: number;
-  } | null>(null);
-  const [anomalies, setAnomalies] = useState<{
-    anomalies: Array<{ date: string; z_score: number; severity: string; agent_id: string; cost: number }>;
-  } | null>(null);
+  const efficiencyQuery = useOrgQuery(
+    queryKeys.cost.efficiency(orgId, days),
+    orgId,
+    () => costApi.efficiency(orgId!, { days }),
+  );
+  const roiQuery = useOrgQuery(
+    queryKeys.cost.roi(orgId, days),
+    orgId,
+    () => costApi.roi(orgId!, { days }),
+  );
+  const anomaliesQuery = useOrgQuery(
+    queryKeys.cost.anomalies(orgId, days),
+    orgId,
+    () => costApi.anomalies(orgId!, { days }),
+  );
+  const forecastQuery = useOrgQuery(
+    queryKeys.cost.forecast(orgId),
+    orgId,
+    () => costApi.forecast(orgId!),
+  );
 
-  useEffect(() => {
-    if (!currentOrg) return;
-    let cancelled = false;
-    queueMicrotask(() => {
-      if (cancelled) return;
-      setLoading(true);
-      setError("");
-    });
-    Promise.all([
-      costApi.efficiency(currentOrg.id, { days }),
-      costApi.roi(currentOrg.id, { days }),
-      costApi.anomalies(currentOrg.id, { days }),
-      costApi.forecast(currentOrg.id),
-    ])
-      .then(([eff, r, an, fc]) => {
-        if (cancelled) return;
-        setEfficiency(eff);
-        setRoi(r);
-        setAnomalies(an);
-        setForecast(fc);
-      })
-      .catch((e) => {
-        if (cancelled) return;
-        setError(errorFromCaught(e, "Failed to load cost data"));
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [currentOrg, days]);
+  const efficiency = efficiencyQuery.data ?? null;
+  const roi = roiQuery.data ?? null;
+  const anomalies = anomaliesQuery.data ?? null;
+  const forecast = forecastQuery.data ?? null;
+  const loading =
+    efficiencyQuery.isLoading || roiQuery.isLoading || anomaliesQuery.isLoading || forecastQuery.isLoading;
+  const failedShards = [efficiencyQuery, roiQuery, anomaliesQuery, forecastQuery].filter((q) => q.isError);
+  const error = failedShards.length > 0 ? failedShards[0].error?.message ?? "Failed to load cost data" : null;
+  const refresh = () => {
+    void efficiencyQuery.refetch();
+    void roiQuery.refetch();
+    void anomaliesQuery.refetch();
+    void forecastQuery.refetch();
+  };
 
   if (!currentOrg) {
     return <NoOrgState feature="Cost & usage optimization" />;
@@ -418,10 +401,7 @@ function CostTab() {
         action={
           <button
             type="button"
-            onClick={() => {
-              setError("");
-              setLoading(true);
-            }}
+            onClick={refresh}
             className="inline-flex items-center rounded-md border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-1.5 text-xs font-medium text-[var(--text-primary)] hover:bg-[var(--bg-secondary)]"
           >
             Retry

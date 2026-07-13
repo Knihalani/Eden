@@ -464,15 +464,45 @@ async def openai_fine_tuning_webhook(
 
 
 async def _lookup_org_for_fine_tune(fine_tune_id: str) -> str | None:
-    """Best-effort: map an OpenAI fine_tune_id back to the
-    Eden org that created the job.
+    """Map a provider fine_tune_id back to the Eden org that created the job.
 
-    v0 stub: we just return ``None`` (the webhook will be
-    ingested with ``org_id='unknown'`` and the operator can
-    re-assign via the admin UI). A real implementation would
-    look up a `fine_tune_id → org_id` mapping in a separate
-    table populated at job-creation time.
+    Queries ``fine_tuning_runs`` for the most recent row whose
+    ``provider_fine_tune_id`` matches. Returns ``None`` when no
+    match is found or when the stored ``org_id`` is the sentinel
+    ``'unknown'``. Best-effort: any DB error returns ``None`` so
+    the caller falls back to the ``'unknown'`` sentinel.
     """
-    # ponytail: explicit None return — the route layer
-    # decides what to do with "unknown" orgs.
-    return None
+    if not fine_tune_id or not str(fine_tune_id).strip():
+        return None
+    try:
+        from eden.storage.postgres import get_postgres_client
+
+        client = await get_postgres_client()
+    except Exception as exc:
+        logger.debug("fine_tune webhook: postgres import failed: %s", exc)
+        return None
+    if client is None:
+        return None
+    try:
+        row = await client.fetchrow(
+            """
+            SELECT org_id FROM fine_tuning_runs
+             WHERE provider_fine_tune_id = $1
+             ORDER BY created_at DESC
+             LIMIT 1
+            """,
+            str(fine_tune_id).strip(),
+        )
+    except Exception as exc:
+        logger.debug(
+            "fine_tune webhook: org lookup failed for %s: %s", fine_tune_id, exc
+        )
+        return None
+    if row is None:
+        return None
+    try:
+        raw = row["org_id"] if hasattr(row, "__getitem__") else getattr(row, "org_id", None)
+    except (KeyError, TypeError, IndexError):
+        return None
+    org_id = str(raw or "").strip()
+    return org_id if org_id and org_id != "unknown" else None

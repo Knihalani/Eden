@@ -1,19 +1,18 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useOrg } from "@/hooks/use-org";
 import { api } from "@/lib/api";
+import { useOrgQuery } from "@/hooks/use-api-query";
+import { queryKeys } from "@/lib/query-keys";
 import { cn } from "@/lib/utils";
 import { SeverityBadge } from "@/components/ui/status-badge";
 import { NoOrgState } from "@/components/ui/no-org-state";
-import { useToast } from "@/components/ui/toast";
 import { PageHeader } from "@/components/layout/page-header";
 import { PageContent } from "@/components/layout/page-content";
 import { AlertOctagon, AlertTriangle, ArrowLeft, CheckCircle2, ChevronRight, Loader2, Network } from "lucide-react";
 import { Card } from "@/components/ui/card";
-import { errorFromCaught } from "@/lib/safe-error-message";
 const rcaApi = {
   summarizeIncident: (orgId: string, clusterId: string) => api.get<{
     cluster_id: string;
@@ -55,65 +54,38 @@ export default function IncidentDetailPage() {
   const {
     currentOrg
   } = useOrg();
-  const toast = useToast();
-  const [summary, setSummary] = useState<SummaryResponse | null>(null);
-  const [factors, setFactors] = useState<FactorItem[]>([]);
-  const [members, setMembers] = useState<MemberTrace[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
-  const load = useCallback(async () => {
-    if (!currentOrg || !cluster_id) return;
-    setLoading(true);
-    setError("");
-    try {
-      const data = await rcaApi.summarizeIncident(currentOrg.id, cluster_id);
-      setSummary({
-        cluster_id: data.cluster_id,
-        summary: data.summary,
-        member_count: data.member_count,
-        severity: data.severity,
-        first_seen: data.first_seen,
-        last_seen: data.last_seen
-      });
-      // Factors aren't returned by summarize; pull from the latest
-      // cluster payload if the list endpoint had them.
-      const list = await rcaApi.listIncidents(currentOrg.id);
-      const matched = (list.incidents as unknown as Array<Record<string, unknown>>).find(i => i.cluster_id === cluster_id);
-      if (matched) {
-        const rawFactors = matched.factors as FactorItem[] | undefined ?? [];
-        setFactors(rawFactors);
-        const rawMembers = matched.recent_members as MemberTrace[] | undefined ?? [];
-        setMembers(rawMembers.slice(0, 5));
-      }
-    } catch (err) {
-      setError(errorFromCaught(err, "Failed to load incident"));
-    } finally {
-      setLoading(false);
-    }
-  }, [currentOrg, cluster_id]);
-  useEffect(() => {
-    if (currentOrg) load();
-  }, [currentOrg, load]);
-  async function handleResolve() {
-    if (!currentOrg) return;
-    try {
-      // Best-effort: tell the backend to mark this cluster resolved.
-      // The endpoint is intentionally permissive — older deployments
-      // return 404 and we just log it.
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/orgs/${currentOrg.id}/intelligence/rca/incidents/${cluster_id}/resolve`, {
-        method: "POST",
-        credentials: "include"
-      });
-      if (res.ok) {
-        toast.success("Cluster resolved");
-        await load();
-      } else {
-        toast.info("Marked resolved locally — backend resolve endpoint not available yet");
-      }
-    } catch {
-      toast.info("Marked resolved locally — backend resolve endpoint not available yet");
-    }
-  }
+  const orgId = currentOrg?.id;
+
+  // Two independent GETs on mount — summarize gives the headline
+  // stats, list gives factors/members for this cluster (not returned
+  // by summarize). Both are React Query-backed so they fetch in
+  // parallel and share a single retry.
+  const summaryQuery = useOrgQuery(
+    queryKeys.incidents.summary(orgId, cluster_id),
+    orgId,
+    () => rcaApi.summarizeIncident(orgId!, cluster_id),
+    { enabled: Boolean(orgId) && Boolean(cluster_id) },
+  );
+  const listQuery = useOrgQuery(
+    queryKeys.incidents.list(orgId),
+    orgId,
+    () => rcaApi.listIncidents(orgId!),
+  );
+
+  const summary = summaryQuery.data ?? null;
+  const matched = (listQuery.data?.incidents as unknown as Array<Record<string, unknown>> | undefined)?.find(
+    (i) => i.cluster_id === cluster_id,
+  );
+  const factors = (matched?.factors as FactorItem[] | undefined) ?? [];
+  const members = ((matched?.recent_members as MemberTrace[] | undefined) ?? []).slice(0, 5);
+
+  const loading = summaryQuery.isLoading || listQuery.isLoading;
+  const error = summaryQuery.error?.message ?? listQuery.error?.message ?? "";
+  const retry = () => {
+    summaryQuery.refetch();
+    listQuery.refetch();
+  };
+
   if (!currentOrg) {
     return <NoOrgState icon={AlertOctagon} feature="Incident Detail" description="Cluster-level RCA detail will appear once your organization is configured." />;
   }
@@ -125,9 +97,9 @@ export default function IncidentDetailPage() {
         </Link>
       </div>
 
-      <PageHeader eyebrow="Observe" title="Incident cluster" subtitle={`Root-cause summary, contributing factors, and the traces that make up this cluster.`} icon={AlertOctagon} actions={<button onClick={handleResolve} aria-label="Mark this incident cluster resolved" className="inline-flex items-center gap-2 px-4 py-2 bg-[var(--terminal)] text-[var(--bg-base)] rounded-lg text-sm font-medium hover:opacity-90 transition-opacity">
+      <PageHeader eyebrow="Observe" title="Incident cluster" subtitle={`Root-cause summary, contributing factors, and the traces that make up this cluster.`} icon={AlertOctagon} actions={<button disabled title="Resolving incident clusters is coming soon" aria-label="Mark resolved (coming soon)" className="inline-flex items-center gap-2 px-4 py-2 bg-[var(--bg-tertiary)] text-[var(--text-muted)] rounded-lg text-sm font-medium cursor-not-allowed opacity-60">
             <CheckCircle2 className="w-4 h-4" />
-            Mark resolved
+            Mark resolved (coming soon)
           </button>} />
       <p className="text-xs font-mono text-[var(--text-muted)] -mt-4 mb-6 break-all">
         {cluster_id}
@@ -138,7 +110,7 @@ export default function IncidentDetailPage() {
             <AlertTriangle className="w-4 h-4 flex-shrink-0" />
             {error}
           </span>
-          <button onClick={load} disabled={loading} className="text-xs font-medium underline underline-offset-2 hover:opacity-80 disabled:opacity-50">
+          <button onClick={retry} disabled={loading} className="text-xs font-medium underline underline-offset-2 hover:opacity-80 disabled:opacity-50">
             Retry
           </button>
         </div>}

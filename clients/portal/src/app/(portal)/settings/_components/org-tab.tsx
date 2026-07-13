@@ -7,12 +7,14 @@
  * transfer-ownership actions. Wraps the inlined patterns in the
  * new <SettingsCard> + <DangerZone> primitives.
  */
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Archive, Building2, Copy, Loader2, Plus, RefreshCw } from "lucide-react";
 import { useOrg } from "@/hooks/use-org";
 import { useToast } from "@/components/ui/toast";
 import { useConfirm } from "@/hooks/use-confirm";
 import { api } from "@/lib/api";
+import { useOrgQuery } from "@/hooks/use-api-query";
+import { queryKeys } from "@/lib/query-keys";
 import { cn } from "@/lib/utils";
 import { SettingsCard } from "@/components/settings/settings-card";
 import { DangerZone } from "@/components/settings/danger-zone";
@@ -45,15 +47,9 @@ export function OrgTab({
   const [showCreate, setShowCreate] = useState(false);
   const [newOrgName, setNewOrgName] = useState("");
   const [name, setName] = useState(org?.name || "");
+  const orgId = org?.id ?? null;
 
   // Transfer-ownership sub-state
-  const [members, setMembers] = useState<Array<{
-    user_id: string;
-    name: string;
-    email: string;
-    role: string;
-  }>>([]);
-  const [loadingMembers, setLoadingMembers] = useState(false);
   const [isTransferExpanded, setIsTransferExpanded] = useState(false);
   const [selectedMember, setSelectedMember] = useState<{
     user_id: string;
@@ -61,6 +57,25 @@ export function OrgTab({
     email: string;
     role: string;
   } | null>(null);
+  const membersQuery = useOrgQuery(
+    queryKeys.settings.members(orgId),
+    orgId,
+    () =>
+      api.listOrgMembers(orgId!) as Promise<
+        Array<{
+          user_id: string;
+          name: string;
+          email: string;
+          role: string;
+        }>
+      >,
+    { enabled: isTransferExpanded },
+  );
+  const members = useMemo(
+    () => (membersQuery.data ?? []).filter(m => m.role !== "owner"),
+    [membersQuery.data],
+  );
+  const loadingMembers = membersQuery.isLoading;
   const handleCreateOrg = async () => {
     if (!newOrgName.trim()) return;
     setLoading(true);
@@ -75,28 +90,8 @@ export function OrgTab({
       setLoading(false);
     }
   };
-  async function loadMembers() {
-    if (!org) return;
-    setLoadingMembers(true);
-    try {
-      const data = await api.listOrgMembers(org.id);
-      setMembers((data as Array<{
-        user_id: string;
-        name: string;
-        email: string;
-        role: string;
-      }>).filter(m => m.role !== "owner"));
-    } finally {
-      setLoadingMembers(false);
-    }
-  }
-  async function toggleTransfer() {
-    if (isTransferExpanded) {
-      setIsTransferExpanded(false);
-    } else {
-      setIsTransferExpanded(true);
-      if (members.length === 0) await loadMembers();
-    }
+  function toggleTransfer() {
+    setIsTransferExpanded(prev => !prev);
   }
   if (!org && !showCreate) {
     return <EmptyState icon={Building2} title="No organization yet" description="Create an organization to start managing members, keys, and settings." action={<Button onClick={() => setShowCreate(true)}>

@@ -1,9 +1,11 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useOrg } from "@/hooks/use-org";
 import { useToast } from "@/components/ui/toast";
 import { api, datasetsApi } from "@/lib/api";
+import { useOrgQuery } from "@/hooks/use-api-query";
+import { queryKeys } from "@/lib/query-keys";
 import { cn } from "@/lib/utils";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ErrorState } from "@/components/ui/error-state";
@@ -114,34 +116,19 @@ export default function InsightsPage() {
     currentOrg
   } = useOrg();
   const toast = useToast();
+  const orgId = currentOrg?.id ?? null;
   const [activeTab, setActiveTab] = useState<Tab>("overview");
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-  const [overview, setOverview] = useState<OverviewData | null>(null);
   const [runningDetectors, setRunningDetectors] = useState(false);
   const [selectedInsight, setSelectedInsight] = useState<OverviewData["insights"]["recent"][0] | null>(null);
-  useEffect(() => {
-    if (!currentOrg) return;
-    loadOverview();
-    // loadOverview is captured per currentOrg change; pulling it into
-    // a useCallback would only create a stale handle. The fetch path
-    // bails on `!currentOrg` so this stays safe.
-  }, [currentOrg]);
-  async function loadOverview() {
-    if (!currentOrg) return;
-    setLoading(true);
-    setError("");
-    try {
-      const data = await api.getInsightsOverview(currentOrg.id);
-      setOverview(data as unknown as OverviewData);
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : "Failed to load insights";
-      setError(msg);
-      toast.error("Could not load insights", msg);
-    } finally {
-      setLoading(false);
-    }
-  }
+  const overviewQuery = useOrgQuery(
+    queryKeys.insights.overview(orgId),
+    orgId,
+    () => api.getInsightsOverview(orgId!) as unknown as Promise<OverviewData>,
+  );
+  const overview = overviewQuery.data ?? null;
+  const loading = overviewQuery.isLoading;
+  const error = overviewQuery.error?.message ?? "";
+  const loadOverview = () => overviewQuery.refetch();
   async function handleRunDetectors() {
     if (!currentOrg) return;
     setRunningDetectors(true);
@@ -151,7 +138,6 @@ export default function InsightsPage() {
       await loadOverview();
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Failed to run detectors";
-      setError(msg);
       toast.error("Detectors failed", msg);
     } finally {
       setRunningDetectors(false);
@@ -496,33 +482,18 @@ function ClosedLoopTab() {
   const {
     currentOrg
   } = useOrg();
-  const [report, setReport] = useState<CorrelationReport | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const orgId = currentOrg?.id ?? null;
   const [days, setDays] = useState(30);
-  useEffect(() => {
-    let cancelled = false;
-    async function load() {
-      if (!currentOrg) return;
-      setLoading(true);
-      setError(null);
-      try {
-        const r = await api.get<CorrelationReport>(`/orgs/${currentOrg.id}/insights/correlation?days=${days}`);
-        if (!cancelled) setReport(r);
-      } catch (_e) {
-        if (!cancelled) {
-          setError("Could not load the correlation report. " + "For pending closed-loop actions, visit /closed-loop.");
-          setReport(null);
-        }
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    }
-    load();
-    return () => {
-      cancelled = true;
-    };
-  }, [currentOrg, days]);
+  const correlationQuery = useOrgQuery(
+    queryKeys.insights.correlation(orgId, days),
+    orgId,
+    () => api.get<CorrelationReport>(`/orgs/${orgId}/insights/correlation?days=${days}`),
+  );
+  const report = correlationQuery.data ?? null;
+  const loading = correlationQuery.isLoading;
+  const error = correlationQuery.error
+    ? "Could not load the correlation report. " + "For pending closed-loop actions, visit /closed-loop."
+    : null;
   if (loading) {
     return <div className="flex items-center justify-center py-20">
         <Loader2 className="w-8 h-8 animate-spin text-[var(--accent)]" />

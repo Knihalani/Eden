@@ -157,6 +157,10 @@ class ConnectRepoRequest(BaseModel):
     provider: str = Field(..., description="github, gitlab, or bitbucket")
     repo_full_name: str
     default_branch: str = "main"
+    # Gate 1: optional GitHub App installation id. When provided the
+    # connector will verify the install via the GitHub API and flip the
+    # repo_connections row to status='active' on success.
+    installation_id: str | None = None
     model_config = {"extra": "ignore"}  # Audit 2026-07-02 S-4: ignore forged fields
 
 
@@ -260,6 +264,7 @@ async def connect_repo(
         repo_full_name=body.repo_full_name,
         default_branch=body.default_branch,
         connected_by_user_id=user.get("user_id") or user.get("sub", "user-test"),
+        installation_id=body.installation_id,
     )
 
 

@@ -11,6 +11,7 @@ export const KNOWN_PORTAL_PREFIXES: readonly string[] = [
   "/traces",
   "/replay",
   "/observability",
+  "/fleet",
   "/tools",
   "/insights",
   "/inspector",

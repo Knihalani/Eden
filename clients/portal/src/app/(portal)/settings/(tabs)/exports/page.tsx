@@ -3,6 +3,8 @@
 import { ExportsTab } from "../../_components/exports-tab";
 import { useOrg } from "@/hooks/use-org";
 import { PageHeader } from "@/components/layout/page-header";
+import { PageContent } from "@/components/layout/page-content";
+import { NoOrgState } from "@/components/ui/no-org-state";
 import { Download } from "lucide-react";
 
 // Standalone /settings/exports deep-link that wraps the same
@@ -11,8 +13,9 @@ import { Download } from "lucide-react";
 // exists for shareable URLs and SSR-friendly deep links.
 export default function ExportsPage() {
   const { currentOrg } = useOrg();
+  if (!currentOrg) return <NoOrgState feature="Data exports" />;
   return (
-    <div className="p-4 sm:p-6 max-w-4xl mx-auto space-y-6">
+    <PageContent>
       <PageHeader
         eyebrow="Settings"
         title="Data exports"
@@ -20,9 +23,9 @@ export default function ExportsPage() {
         subtitle="Export traces, agents, audit logs, and other workspace data. Exports respect your retention policy."
       />
       <ExportsTab
-        orgId={currentOrg?.id || ""}
-        canManage={currentOrg?.role === "owner" || currentOrg?.role === "admin"}
+        orgId={currentOrg.id}
+        canManage={currentOrg.role === "owner" || currentOrg.role === "admin"}
       />
-    </div>
+    </PageContent>
   );
 }

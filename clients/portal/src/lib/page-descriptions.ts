@@ -23,6 +23,8 @@ export const PAGE_DESCRIPTIONS: Record<string, string> = {
     "Curated, labelled evaluation datasets used to score and improve agents.",
   "/labeling":
     "Label traces and events to build ground truth for evals and fine-tunes.",
+  "/fleet":
+    "Fleet health, delegation graph, and multi-agent blast-radius scoring.",
 
   // Observe
   "/traces":
@@ -30,9 +32,11 @@ export const PAGE_DESCRIPTIONS: Record<string, string> = {
   "/replay":
     "Step through a recorded session to see exactly what the agent saw and did.",
   "/observability":
-    "Deep observability hub: APM, memory, retrieval, eval, and columnar query surfaces.",
+    "Deep observability hub: MCP, APM, memory, retrieval, eval, and columnar query surfaces.",
   "/observability/apm":
     "Application-performance tracing across services and AI calls.",
+  "/observability/mcp":
+    "MCP server auth failures and toolchain health.",
   "/observability/cohorts":
     "Run fast columnar analytics over spans, traces, and decisions.",
   "/observability/decisions":

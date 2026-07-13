@@ -6,11 +6,13 @@
  * + scope selection.
  */
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Check, Copy, Key, Loader2, Plus, Trash2 } from "lucide-react";
 import { useToast } from "@/components/ui/toast";
 import { useConfirm } from "@/hooks/use-confirm";
 import { api } from "@/lib/api";
+import { useOrgQuery } from "@/hooks/use-api-query";
+import { queryKeys } from "@/lib/query-keys";
 import { SettingsCard } from "@/components/settings/settings-card";
 import { Button } from "@/components/ui/button";
 import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
@@ -38,8 +40,14 @@ const ALL_SCOPES = [
 export function ApiKeysTab({ org }: ApiKeysTabProps) {
   const toast = useToast();
   const { confirm, ConfirmDialog } = useConfirm();
-  const [keys, setKeys] = useState<ApiKey[]>([]);
-  const [loading, setLoading] = useState(false);
+  const orgId = org?.id ?? null;
+  const keysQuery = useOrgQuery(
+    queryKeys.settings.apiKeys(orgId),
+    orgId,
+    () => api.listApiKeys(orgId!) as Promise<ApiKey[]>,
+  );
+  const keys = keysQuery.data ?? [];
+  const loading = keysQuery.isLoading;
   const [creating, setCreating] = useState(false);
   const [showCreate, setShowCreate] = useState(false);
   const [newKeyName, setNewKeyName] = useState("");
@@ -47,21 +55,7 @@ export function ApiKeysTab({ org }: ApiKeysTabProps) {
   const [createdKey, setCreatedKey] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
 
-  const loadKeys = async () => {
-    if (!org) return;
-    setLoading(true);
-    try {
-      const data = await api.listApiKeys(org.id);
-      setKeys(data as ApiKey[]);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    loadKeys();
-     
-  }, [org?.id]);
+  const loadKeys = () => keysQuery.refetch();
 
   const handleCreate = async () => {
     if (!org || !newKeyName.trim() || selectedScopes.length === 0) return;

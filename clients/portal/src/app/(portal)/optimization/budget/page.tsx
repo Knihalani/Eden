@@ -1,14 +1,17 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { useOrg } from "@/hooks/use-org";
 import { cn } from "@/lib/utils";
-import { API_BASE } from "@/lib/api";
+import { api, ApiError } from "@/lib/api";
 import { PageHeader } from "@/components/layout/page-header";
+import { PageContent, PageLoadingSkeleton } from "@/components/layout/page-content";
 import { NoOrgState } from "@/components/ui/no-org-state";
+import { ErrorState } from "@/components/ui/error-state";
 import { EmptyState } from "@/components/ui/empty-state";
 import { useToast } from "@/components/ui/toast";
-import { usePolling } from "@/hooks/use-polling";
+import { useOrgQuery } from "@/hooks/use-api-query";
+import { queryKeys } from "@/lib/query-keys";
 import { Wallet, Loader2, AlertTriangle, CheckCircle2, History } from "lucide-react";
 import { errorFromCaught } from "@/lib/safe-error-message";
 
@@ -51,89 +54,90 @@ interface ActionLog {
 
 export default function BudgetPage() {
   const { currentOrg } = useOrg();
+  const orgId = currentOrg?.id;
   const toast = useToast();
   const [budget, setBudget] = useState<Budget | null>(null);
-  const [consumption, setConsumption] = useState<Consumption | null>(null);
-  const [rollup, setRollup] = useState<Rollup | null>(null);
-  const [actions, setActions] = useState<ActionLog[]>([]);
-  const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
-  const fetchData = useCallback(async () => {
-    if (!currentOrg?.id) return;
-    try {
-      const [b, a] = await Promise.all([
-        fetch(`${API_BASE}/orgs/${currentOrg.id}/budget`, {
-          credentials: "include",
-        }),
-        fetch(`${API_BASE}/orgs/${currentOrg.id}/budget/actions?limit=20`, {
-          credentials: "include",
-        }),
-      ]);
-      if (b.ok) {
-        const data = await b.json();
-        setBudget(data.data.budget);
-        setConsumption(data.data.consumption);
-        setRollup(data.data.rollup);
-      }
-      if (a.ok) {
-        const data = await a.json();
-        setActions(data.data.actions || []);
-      }
-    } catch (err) {
-      toast.error("Budget fetch failed", errorFromCaught(err, "Unknown error"));
-    } finally {
-      setLoading(false);
-    }
-  }, [currentOrg?.id, toast]);
+  const {
+    data: budgetData,
+    isLoading,
+    error: budgetError,
+    refetch: refetchBudget,
+  } = useOrgQuery(
+    queryKeys.budget.detail(orgId),
+    orgId,
+    async () => {
+      const res = await api.getBudget(orgId!);
+      return res.data as { budget: Budget; consumption: Consumption; rollup: Rollup };
+    },
+    // PQ-1 fix: replace the raw ``setInterval`` (which kept firing on
+    // background tabs and didn't back off on auth errors) with React
+    // Query's ``refetchInterval``. The 5_000 ms cadence is preserved.
+    { refetchInterval: 5_000 },
+  );
+  const { data: actions, refetch: refetchActions } = useOrgQuery(
+    queryKeys.budget.actions(orgId),
+    orgId,
+    async () => {
+      const res = await api.getBudgetActions(orgId!, 20);
+      return (res.data.actions ?? []) as ActionLog[];
+    },
+    { refetchInterval: 5_000 },
+  );
+  const consumption = budgetData?.consumption ?? null;
+  const rollup = budgetData?.rollup ?? null;
 
-  // PQ-1 fix: replace the raw ``setInterval`` (which kept firing
-  // on background tabs and didn't back off on auth errors) with
-  // ``usePolling``. Idle-tab pause + exponential backoff are now
-  // the hook's job. The 5_000 ms cadence is preserved.
-  usePolling({
-    fetch: fetchData,
-    intervalMs: 5_000,
-    deps: [currentOrg?.id],
-    enabled: Boolean(currentOrg?.id),
-  });
+  // Keep an editable local copy of the budget config, resynced whenever
+  // the server value changes (matches the previous polling behavior).
+  useEffect(() => {
+    if (budgetData?.budget) setBudget(budgetData.budget);
+  }, [budgetData?.budget]);
 
   const handleSave = useCallback(async () => {
-    if (!currentOrg?.id || !budget) return;
+    if (!orgId || !budget) return;
     setSaving(true);
     try {
-      const res = await fetch(`${API_BASE}/orgs/${currentOrg.id}/budget`, {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          cost_soft_limit_usd: budget.cost_soft_limit_usd,
-          cost_hard_limit_usd: budget.cost_hard_limit_usd,
-          enforcement_enabled: budget.enforcement_enabled,
-          window: budget.window,
-          action_on_exceed: budget.action_on_exceed,
-          threshold_alert_pct: budget.threshold_alert_pct,
-        }),
+      await api.upsertBudget(orgId, {
+        cost_soft_limit_usd: budget.cost_soft_limit_usd,
+        cost_hard_limit_usd: budget.cost_hard_limit_usd,
+        enforcement_enabled: budget.enforcement_enabled,
+        window: budget.window,
+        action_on_exceed: budget.action_on_exceed,
+        threshold_alert_pct: budget.threshold_alert_pct,
       });
-      if (res.ok) {
-        toast.success("Budget saved", "Cost guardrails updated.");
-        await fetchData();
-      } else {
-        toast.error("Save failed", `HTTP ${res.status}. Org owner required.`);
-      }
+      toast.success("Budget saved", "Cost guardrails updated.");
+      await Promise.all([refetchBudget(), refetchActions()]);
     } catch (err) {
-      toast.error("Save failed", errorFromCaught(err, "Unknown error"));
+      const detail =
+        err instanceof ApiError ? `${err.message}. Org owner required.` : errorFromCaught(err, "Unknown error");
+      toast.error("Save failed", detail);
     } finally {
       setSaving(false);
     }
-  }, [currentOrg?.id, budget, toast, fetchData]);
+  }, [orgId, budget, toast, refetchBudget, refetchActions]);
 
   if (!currentOrg) return <NoOrgState feature="Budgets" />;
-  if (loading) {
+  if (isLoading) {
+    return <PageLoadingSkeleton variant="default" lines={4} />;
+  }
+  if (budgetError) {
     return (
-      <div className="flex items-center justify-center p-12" role="status" aria-live="polite">
-        <Loader2 className="h-6 w-6 animate-spin text-[var(--text-secondary)]" />
-      </div>
+      <PageContent>
+        <PageHeader eyebrow="Optimize" icon={Wallet} title="Cost Guardrails" />
+        <ErrorState
+          title="Could not load budget"
+          message={budgetError.message}
+          action={
+            <button
+              onClick={() => refetchBudget()}
+              className="inline-flex items-center gap-2 px-3 py-1.5 rounded-md bg-[var(--accent)] text-[var(--bg-base)] text-xs font-medium hover:bg-[var(--accent-hover)] transition-colors"
+            >
+              Try again
+            </button>
+          }
+        />
+      </PageContent>
     );
   }
 
@@ -144,7 +148,7 @@ export default function BudgetPage() {
     : "ok";
 
   return (
-    <div className="space-y-6">
+    <PageContent>
       <PageHeader
         eyebrow="Optimize"
         icon={Wallet}
@@ -304,7 +308,7 @@ export default function BudgetPage() {
           </p>
         </div>
         <div className="divide-y divide-[var(--border-default)]">
-          {actions.length === 0 ? (
+          {(actions ?? []).length === 0 ? (
             <EmptyState
               icon={History}
               title="No threshold events yet"
@@ -313,7 +317,7 @@ export default function BudgetPage() {
               className="py-10"
             />
           ) : (
-            actions.map((a) => (
+            (actions ?? []).map((a) => (
               <div key={a.id} className="flex items-center justify-between p-3">
                 <div>
                   <div className="text-sm font-medium text-[var(--text-primary)]">
@@ -343,7 +347,7 @@ export default function BudgetPage() {
           )}
         </div>
       </div>
-    </div>
+    </PageContent>
   );
 }
 

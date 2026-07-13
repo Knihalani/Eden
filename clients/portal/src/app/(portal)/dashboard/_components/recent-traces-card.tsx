@@ -30,9 +30,9 @@ export function RecentTracesCard({
       <div className="flex items-center justify-between p-5 pb-3">
         <div>
           <h2 className="text-base font-semibold text-[var(--text-primary)]">Recent Traces</h2>
-          <p className="text-xs text-[var(--text-muted)] mt-0.5">last 10 — click for tree view</p>
+          <p className="text-xs text-[var(--text-muted)] mt-0.5">last 10 — click to inspect</p>
         </div>
-        <Link href="/observability" className="text-xs font-medium text-[var(--accent)] hover:text-[var(--accent-hover)] inline-flex items-center gap-1">
+        <Link href="/traces" className="text-xs font-medium text-[var(--accent)] hover:text-[var(--accent-hover)] inline-flex items-center gap-1">
           View all
           <ArrowRight className="w-3 h-3" />
         </Link>
@@ -49,7 +49,7 @@ export function RecentTracesCard({
               </Link>} size="sm" />
         </div> : <ul className="divide-y divide-[var(--border-subtle)]">
           {top.map(t => <li key={t.trace_id}>
-              <Link href={`/observability?trace=${encodeURIComponent(t.trace_id)}`} className="flex items-center gap-3 px-5 py-2.5 hover:bg-[var(--bg-secondary)] transition-colors group">
+              <Link href={`/traces?trace_id=${encodeURIComponent(t.trace_id)}`} className="flex items-center gap-3 px-5 py-2.5 hover:bg-[var(--bg-secondary)] transition-colors group">
                 <OutcomeDot outcome={t.outcome} />
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-mono text-[var(--text-primary)] truncate">

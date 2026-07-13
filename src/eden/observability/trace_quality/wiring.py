@@ -284,7 +284,23 @@ def install_cat15_trajectory_replaces_intervention() -> None:
     and respects the per-tenant kill switch. The original
     ``evaluate_and_act`` is kept behind a feature flag
     (``Settings.trace_quality_enabled``).
+
+    Gated by ``Settings.trace_quality_hot_path_enabled``. When the flag
+    is ``False`` the monkey-patch is skipped and the original
+    ``evaluate_and_act`` continues to run unmodified.
     """
+    try:
+        from eden.config import get_settings as _get_settings
+        _s = _get_settings()
+        if not getattr(_s, "trace_quality_hot_path_enabled", True):
+            logger.info(
+                "wiring: Cat 15 hot path disabled by "
+                "trace_quality_hot_path_enabled=False; skipping"
+            )
+            return
+    except Exception as exc:
+        logger.debug("wiring: cat15 settings read failed: %s", exc)
+
     try:
         from eden.guardrails import intervention as intv
         from eden.observability.trace_quality.hooks import (

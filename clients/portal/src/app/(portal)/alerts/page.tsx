@@ -1,10 +1,11 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState } from "react";
 import { useOrg } from "@/hooks/use-org";
-import { usePolling } from "@/hooks/use-polling";
 import { useToast } from "@/components/ui/toast";
 import { api } from "@/lib/api";
+import { useOrgQuery, useOrgMutation } from "@/hooks/use-api-query";
+import { queryKeys } from "@/lib/query-keys";
 import { cn } from "@/lib/utils";
 import { formatRelativeTime } from "@/lib/format";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -28,7 +29,6 @@ import {
   ChevronUp,
   Clock,
   RefreshCw } from "lucide-react";
-import { errorFromCaught } from "@/lib/safe-error-message";
 
 const CHANNEL_CONFIGURED: Record<string, boolean> = {
   in_app: true,
@@ -77,84 +77,73 @@ function getSeverityConfig(severity: string) {
 
 export default function AlertsPage() {
   const { currentOrg } = useOrg();
+  const orgId = currentOrg?.id ?? null;
   const toast = useToast();
-  const [alerts, setAlerts] = useState<AlertItem[]>([]);
-  const [total, setTotal] = useState(0);
-  const [unreadCount, setUnreadCount] = useState(0);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [severityFilter, setSeverityFilter] = useState<SeverityFilter>("all");
   const [acknowledgedFilter, setAcknowledgedFilter] = useState<boolean | null>(null);
   const [selectedAlerts, setSelectedAlerts] = useState<Set<string>>(new Set());
   const [expandedAlert, setExpandedAlert] = useState<string | null>(null);
   const [offset, setOffset] = useState(0);
   const [rulesOpen, setRulesOpen] = useState(false);
-  const [ackLoading, setAckLoading] = useState(false);
   const limit = 50;
 
-  const fetchAlerts = useCallback(async () => {
-    if (!currentOrg) return;
-    const isInitial = alerts.length === 0;
-    if (isInitial) setLoading(true);
-    else setRefreshing(true);
-    setError(null);
-    try {
-      const params: { severity?: string; acknowledged?: boolean; limit: number; offset: number } = {
-        limit,
-        offset };
-      if (severityFilter !== "all") params.severity = severityFilter;
-      if (acknowledgedFilter !== null) params.acknowledged = acknowledgedFilter;
+  const alertsParams: { severity?: string; acknowledged?: boolean; limit: number; offset: number } = {
+    limit,
+    offset,
+    ...(severityFilter !== "all" ? { severity: severityFilter } : {}),
+    ...(acknowledgedFilter !== null ? { acknowledged: acknowledgedFilter } : {}),
+  };
+  const alertsQuery = useOrgQuery(
+    queryKeys.alerts.list(orgId, alertsParams),
+    orgId,
+    () => api.listAlerts(orgId!, alertsParams),
+    // 15s polling — refetchIntervalInBackground defaults to false,
+    // so this pauses on tab-hidden the same way the old usePolling
+    // hook did; the 401/403 permanent-bail semantics come from the
+    // global QueryClient retry policy (see query-provider.tsx).
+    { refetchInterval: 15_000 },
+  );
+  const loading = alertsQuery.isLoading;
+  const refreshing = alertsQuery.isFetching && !loading;
+  const error = alertsQuery.error?.message ?? null;
+  const total = alertsQuery.data?.total ?? 0;
+  const unreadCount = alertsQuery.data?.unread_count ?? 0;
+  // The API returns rows without the legacy ``message``,
+  // ``entity_id``, ``channels`` fields. Map at the boundary so the
+  // rest of the page can keep the existing local shape.
+  const alerts: AlertItem[] = (alertsQuery.data?.alerts ?? []).map((a) => ({
+    alert_id: a.alert_id,
+    title: a.title,
+    description: a.description,
+    source: a.source,
+    message: a.description,
+    severity: a.severity,
+    entity_id: "",
+    acknowledged: a.acknowledged,
+    triggered_at: a.triggered_at,
+    created_at: a.triggered_at,
+    acknowledged_at: a.acknowledged_at,
+    acknowledged_by: a.acknowledged_by,
+    channels: [],
+    metadata: a.metadata,
+  }));
 
-      const data = await api.listAlerts(currentOrg.id, params);
-      // The API returns rows without the legacy ``message``,
-      // ``entity_id``, ``channels`` fields. Map at the boundary
-      // so the rest of the page can keep the existing local shape.
-      setAlerts(
-        data.alerts.map((a) => ({
-          alert_id: a.alert_id,
-          title: a.title,
-          description: a.description,
-          source: a.source,
-          message: a.description,
-          severity: a.severity,
-          entity_id: "",
-          acknowledged: a.acknowledged,
-          triggered_at: a.triggered_at,
-          created_at: a.triggered_at,
-          acknowledged_at: a.acknowledged_at,
-          acknowledged_by: a.acknowledged_by,
-          channels: [],
-          metadata: a.metadata })),
-      );
-      setTotal(data.total);
-      setUnreadCount(data.unread_count);
-    } catch (e) {
-      setError(errorFromCaught(e, "Failed to load alerts"));
-    } finally {
-      if (isInitial) setLoading(false);
-      else setRefreshing(false);
-    }
-  }, [currentOrg, alerts.length, severityFilter, acknowledgedFilter, offset, limit]);
+  const fetchAlerts = () => void alertsQuery.refetch();
 
-  // Polling via the shared usePolling hook — pauses on tab-hidden,
-  // exponential backoff on errors, permanent bail on 401/403. Replaces
-  // a raw setInterval that would have kept firing through all three
-  // failure modes. June 2026 cost-pass.
-  usePolling({
-    fetch: fetchAlerts,
-    intervalMs: 15_000,
-    enabled: Boolean(currentOrg),
-    deps: [currentOrg, severityFilter, acknowledgedFilter, offset, limit] });
+  const ackMutation = useOrgMutation(
+    (alertId: string) => api.acknowledgeAlert(orgId!, alertId),
+    { invalidateKeys: [queryKeys.alerts.list(orgId)] },
+  );
+  const batchAckMutation = useOrgMutation(
+    (ids: string[]) => api.acknowledgeAlertsBatch(orgId!, ids),
+    { invalidateKeys: [queryKeys.alerts.list(orgId)] },
+  );
+  const ackLoading = batchAckMutation.isPending;
 
   const handleAcknowledge = async (alertId: string) => {
-    if (!currentOrg) return;
+    if (!orgId) return;
     try {
-      await api.acknowledgeAlert(currentOrg.id, alertId);
-      setAlerts((prev) =>
-        prev.map((a) => (a.alert_id === alertId ? { ...a, acknowledged: true } : a))
-      );
-      setUnreadCount((prev) => Math.max(0, prev - 1));
+      await ackMutation.mutateAsync(alertId);
       toast.success("Alert acknowledged");
     } catch (e) {
       toast.error("Could not acknowledge alert", e instanceof Error ? e.message : undefined);
@@ -163,20 +152,13 @@ export default function AlertsPage() {
 
   const handleBatchAcknowledge = async () => {
     const ids = Array.from(selectedAlerts);
-    if (ids.length === 0 || !currentOrg) return;
-    setAckLoading(true);
+    if (ids.length === 0 || !orgId) return;
     try {
-      await api.acknowledgeAlertsBatch(currentOrg.id, ids);
-      setAlerts((prev) =>
-        prev.map((a) => (selectedAlerts.has(a.alert_id) ? { ...a, acknowledged: true } : a))
-      );
-      setUnreadCount((prev) => Math.max(0, prev - ids.length));
+      await batchAckMutation.mutateAsync(ids);
       setSelectedAlerts(new Set());
       toast.success(`Acknowledged ${ids.length} alert${ids.length === 1 ? "" : "s"}`);
     } catch (e) {
       toast.error("Batch acknowledge failed", e instanceof Error ? e.message : undefined);
-    } finally {
-      setAckLoading(false);
     }
   };
 
@@ -576,36 +558,15 @@ function DetailRow({ label, value }: { label: string; value: string }) {
 }
 
 function AlertRulesPanel({ orgId }: { orgId?: string }) {
-  const [rules, setRules] = useState<Array<{
-    rule_id: string;
-    name: string;
-    description: string;
-    event_types: string[];
-    severity_threshold: string;
-    channels: string[];
-    enabled: boolean;
-  }>>([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    if (!orgId) return;
-    let cancelled = false;
-    setLoading(true);
-    (async () => {
-      try {
-        const data = await api.getAlertRules(orgId);
-        if (!cancelled) setRules(data.rules);
-      } catch {
-        // Surfaced at the top-level error banner via fetchAlerts;
-        // swallow here to avoid double-toasting.
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [orgId]);
+  const rulesQuery = useOrgQuery(
+    queryKeys.alerts.rules(orgId),
+    orgId,
+    () => api.getAlertRules(orgId!),
+  );
+  // Surfaced at the top-level error banner via alertsQuery; swallow
+  // here to avoid double-toasting.
+  const rules = rulesQuery.data?.rules ?? [];
+  const loading = rulesQuery.isLoading;
 
   if (loading) {
     return (

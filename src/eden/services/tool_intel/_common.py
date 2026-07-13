@@ -955,7 +955,7 @@ async def _delete_then_insert_comparison(
 # ── Closed-loop hook firing ──────────────────────────────────────────
 
 
-def _fire_tool_drift_hook(
+async def _fire_tool_drift_hook(
     org_id: str,
     *,
     tool_name: str,
@@ -1015,7 +1015,7 @@ def _fire_tool_drift_hook(
         logger.debug("tool_intel: get_promotion_hook failed: %s", exc)
         return
     try:
-        hook.on_drift_alert(
+        await hook.on_drift_alert(
             org_id,
             drift_type=f"tool_success_drop:{tool_name}",
             severity=severity,

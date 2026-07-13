@@ -21,7 +21,7 @@
  */
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
 import { useParams } from "next/navigation";
 import {
   ArrowLeft,
@@ -32,6 +32,8 @@ import {
 } from "lucide-react";
 import { useOrg } from "@/hooks/use-org";
 import { agentsApi } from "@/lib/api";
+import { useOrgQuery } from "@/hooks/use-api-query";
+import { queryKeys } from "@/lib/query-keys";
 import { Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ErrorState } from "@/components/ui/error-state";
@@ -74,33 +76,20 @@ export default function AgentDetailPage() {
     [params?.id],
   );
   const { currentOrg } = useOrg();
-  const orgId = currentOrg?.id;
+  const orgId = currentOrg?.id ?? null;
 
-  const [agent, setAgent] = useState<AgentRecord | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState<string | null>(null);
-
-  const load = useMemo(
-    () => async () => {
-      if (!orgId || !agentId) return;
-      setLoading(true);
-      setLoadError(null);
-      try {
-        const agentsResp = await agentsApi.list(orgId, { limit: 200 });
-        const list = (agentsResp?.agents ?? []) as AgentRecord[];
-        setAgent(list.find((a) => a.agent_id === agentId) ?? null);
-      } catch (e) {
-        setLoadError(e instanceof Error ? e.message : "Failed to load agent");
-      } finally {
-        setLoading(false);
-      }
-    },
-    [orgId, agentId],
+  const agentsQuery = useOrgQuery(
+    queryKeys.agents.list(orgId, { limit: 200 }),
+    orgId,
+    () => agentsApi.list(orgId!, { limit: 200 }),
   );
 
-  useEffect(() => {
-    void load();
-  }, [load]);
+  const agent = useMemo(() => {
+    const list = (agentsQuery.data?.agents ?? []) as AgentRecord[];
+    return list.find((a) => a.agent_id === agentId) ?? null;
+  }, [agentsQuery.data, agentId]);
+  const loading = agentsQuery.isLoading;
+  const loadError = agentsQuery.error?.message ?? null;
 
   const isLive = agent?.last_seen_at
     ? Date.now() - new Date(agent.last_seen_at).getTime() < 1000 * 60 * 60 * 24
@@ -142,7 +131,7 @@ export default function AgentDetailPage() {
           action={
             <button
               type="button"
-              onClick={() => void load()}
+              onClick={() => void agentsQuery.refetch()}
               disabled={loading}
               className="inline-flex items-center gap-2 px-4 py-2 bg-[var(--accent)] text-[var(--bg-base)] rounded-lg text-sm font-medium hover:bg-[var(--accent-hover)] disabled:opacity-50 transition-colors"
             >

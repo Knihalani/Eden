@@ -45,6 +45,21 @@ export function retryAfterMs(response: Response): number | null {
  *  re-pinged within hundreds of milliseconds. */
 export const RETRY_AFTER_DEFAULT_MS = 5_000;
 
+/**
+ * Upstream headers that carry throttling / quota information and
+ * must survive the JSON round-trip through ``NextResponse.json``.
+ * ``Retry-After`` drives the client's 429 backoff (see
+ * ``retryAfterMs`` above); the ``X-RateLimit-*`` triad lets callers
+ * that inspect headers directly (rather than the JSON body) see
+ * quota state without an extra round-trip.
+ */
+export const RATE_LIMIT_HEADERS = [
+  "Retry-After",
+  "X-RateLimit-Limit",
+  "X-RateLimit-Remaining",
+  "X-RateLimit-Reset",
+] as const;
+
 export function proxyError(error: unknown, fallback: string) {
   const message = error instanceof Error ? error.message : fallback;
   const isAuthFailure =
@@ -310,6 +325,19 @@ export async function forwardToBackend(
   nextResponse.headers.set("Vary", "Cookie, Authorization");
   nextResponse.headers.set("Cache-Control", "private, no-store");
   nextResponse.headers.set("X-Request-ID", requestId);
+
+  // Forward throttling / rate-limit headers verbatim (F37 fix). The
+  // browser-side ``fetchApi`` (lib/api.ts) reads ``Retry-After`` off
+  // the response it gets from *this* proxy route — not the upstream
+  // response — to honor the backend's advertised 429 cooldown. Before
+  // this fix, ``NextResponse.json`` only carried the status code
+  // through; every 429 hint from FastAPI was silently dropped and
+  // the client always fell back to the generic 5s default, which
+  // both under- and over-shoots the upstream's real cooldown.
+  for (const name of RATE_LIMIT_HEADERS) {
+    const value = response.headers.get(name);
+    if (value) nextResponse.headers.set(name, value);
+  }
 
   // Forward every Set-Cookie header from FastAPI. Next.js's
   // NextResponse.cookies is the supported path — using `headers.append`

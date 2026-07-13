@@ -84,13 +84,17 @@ class ArchiveService:
             logger.warning("archive_old_rows: Postgres unavailable")
             return {"traces_archived": 0, "rows_archived": 0, "s3_objects": 0}
 
-        # Find candidate trace_ids (group by, distinct).
+        # Find candidate trace_ids whose LAST event is older than before_date.
+        # HAVING MAX(timestamp) < $2 ensures long-lived traces (with a recent
+        # event) are never archived early — only traces where every event is
+        # older than the warm window qualify.
         candidate_rows = await client.fetch(
             """
             SELECT trace_id, COUNT(*) AS n, MIN(timestamp) AS first_ts
               FROM telemetry_events
-             WHERE org_id = $1 AND timestamp < $2
+             WHERE tenant_id = $1
              GROUP BY trace_id
+            HAVING MAX(timestamp) < $2
              ORDER BY MIN(timestamp) ASC
              LIMIT $3
             """,
@@ -140,7 +144,7 @@ class ArchiveService:
         rows = await client.fetch(
             """
             SELECT * FROM telemetry_events
-             WHERE org_id = $1 AND trace_id = $2
+             WHERE tenant_id = $1 AND trace_id = $2
              ORDER BY timestamp ASC
             """,
             org_id,
@@ -184,7 +188,7 @@ class ArchiveService:
             )
             await client.execute(
                 "DELETE FROM telemetry_events "
-                "WHERE org_id = $1 AND trace_id = $2",
+                "WHERE tenant_id = $1 AND trace_id = $2",
                 org_id,
                 trace_id,
             )

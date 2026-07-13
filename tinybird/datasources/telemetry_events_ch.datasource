@@ -35,8 +35,6 @@ SCHEMA >
     trace_id String `json:$.trace_id`
 
 ENGINE "MergeTree"
-# ENGINE_SORTING_KEY "user_id, timestamp"
-# ENGINE_TTL "timestamp + toIntervalDay(60)"
-# Learn more at https://www.tinybird.co/docs/forward/dev-reference/datafiles/datasource-filesENGINE_PARTITION_KEY "toYYYYMM(timestamp)"
+ENGINE_PARTITION_KEY "toYYYYMM(timestamp)"
 ENGINE_SORTING_KEY "tenant_id, timestamp"
 ENGINE_TTL "toDateTime(timestamp) + toIntervalDay(90)"

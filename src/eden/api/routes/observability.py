@@ -252,6 +252,14 @@ async def list_traces(
     realm: str | None = Query(None, pattern="^(environment|production)$"),
     outcome: str | None = Query(None),
     agent_id: str | None = Query(None),
+    trace_id: str | None = Query(
+        None,
+        description=(
+            "Exact-match a single trace by id — powers deep links "
+            "(e.g. /observability?trace_id=...) without the client "
+            "having to scan the unfiltered page for a match."
+        ),
+    ),
     limit: int = Query(50, ge=1, le=500),
     offset: int = Query(0, ge=0),
     days: int = Query(7, ge=1, le=90),
@@ -264,7 +272,7 @@ async def list_traces(
         - span_count, duration_ms (max event duration, not sum),
           started_at (min timestamp), outcome, error, model, provider,
           token totals, cost (sum cost_usd → cents).
-    Filters: realm, outcome, agent_id, days.
+    Filters: realm, outcome, agent_id, trace_id, days.
     Falls back to an empty list if Postgres is unavailable (same
     defensive pattern Cat 1 uses).
     """
@@ -278,15 +286,24 @@ async def list_traces(
     if client is None:
         return TraceListResponse(traces=[], total=0, limit=limit, offset=offset)
 
-    since = datetime.now(UTC) - timedelta(days=days)
-    where = "tenant_id = $1 AND timestamp >= $2"
-    args: list[Any] = [org_id, since]
-    if realm:
-        where += f" AND realm = ${len(args) + 1}"
-        args.append(realm)
-    if agent_id:
-        where += f" AND attributes->>'agent_id' = ${len(args) + 1}"
-        args.append(agent_id)
+    if trace_id:
+        # Exact trace lookup — deliberately independent of the
+        # `days` window (and the realm/agent_id filters below) so a
+        # deep link to an older trace still resolves. Unlike the
+        # list view, a single-trace fetch has no reason to silently
+        # 404 just because it's outside the default 7-day window.
+        where = "tenant_id = $1 AND trace_id = $2"
+        args: list[Any] = [org_id, trace_id]
+    else:
+        since = datetime.now(UTC) - timedelta(days=days)
+        where = "tenant_id = $1 AND timestamp >= $2"
+        args = [org_id, since]
+        if realm:
+            where += f" AND realm = ${len(args) + 1}"
+            args.append(realm)
+        if agent_id:
+            where += f" AND attributes->>'agent_id' = ${len(args) + 1}"
+            args.append(agent_id)
     # outcome filters on the rollup; we drop traces that have no
     # matching outcome event so the count is stable.
     if outcome:
@@ -647,6 +664,17 @@ async def observability_summary(
     _user: dict = Depends(get_current_user),  # Audit 2026-06-22 B1.6 — require login
     window_hours: int = Query(24, ge=1, le=720),
     agent_id: str | None = Query(None),
+    compare_previous: bool = Query(
+        False,
+        description=(
+            "Also compute total_traces/error_rate/p95_ms/total_cost_usd "
+            "for the immediately preceding, non-overlapping window of "
+            "the same length (returned under `previous`). Powers "
+            "dashboard delta badges without the client subtracting two "
+            "overlapping windows (which is wrong for non-additive "
+            "metrics like p95/error_rate)."
+        ),
+    ),
 ):
     """Top-of-dashboard summary for an org.
 
@@ -667,12 +695,20 @@ async def observability_summary(
         common_args.append(agent_id)
         common_where += f" AND attributes->>'agent_id' = ${len(common_args)}"
 
-    # 1-6 fire in parallel via asyncio.gather — six 50ms queries
+    # 1-7 fire in parallel via asyncio.gather — six 50ms queries
     # collapse into a single round-trip latency instead of 6×.
-    totals, pct, failure_modes, top_tools, hot_paths, model_breakdown = (
-        await asyncio.gather(
+    (
+        totals,
+        pct,
+        failure_modes,
+        top_tools,
+        hot_paths,
+        model_breakdown,
+        eval_coverage_row,
+    ) = await asyncio.gather(
             client.fetchrow(
-                f"SELECT count(*) AS total, "
+                f"SELECT count(*) AS total_events, "
+                f"count(DISTINCT trace_id) AS total_traces, "
                 f"sum(CASE WHEN error IS NOT NULL THEN 1 ELSE 0 END) AS errors "
                 f"FROM telemetry_events WHERE {common_where}",
                 *common_args,
@@ -694,11 +730,11 @@ async def observability_summary(
                 *common_args,
             ),
             client.fetch(
-                f"SELECT coalesce(payload->>'tool_name', event_type) AS tool_name, "
-                f"tool.name AS name, count(*) AS count "
+                f"SELECT coalesce(payload->>'tool_name', attributes->>'tool_name', name, event_type) AS name, "
+                f"count(*) AS count "
                 f"FROM telemetry_events WHERE {common_where} "
                 f"  AND event_type IN ('tool_call', 'tool_result') "
-                f"GROUP BY 1, 2 ORDER BY count DESC LIMIT 10",
+                f"GROUP BY 1 ORDER BY count DESC LIMIT 10",
                 *common_args,
             ),
             client.fetch(
@@ -717,23 +753,92 @@ async def observability_summary(
                 f"GROUP BY 1",
                 *common_args,
             ),
+            client.fetchrow(
+                f"""
+                WITH traces AS (
+                    SELECT DISTINCT trace_id
+                      FROM telemetry_events
+                     WHERE {common_where}
+                ),
+                judged AS (
+                    SELECT DISTINCT js.trace_id
+                      FROM judge_scores js
+                      JOIN traces t ON t.trace_id = js.trace_id
+                     WHERE js.tenant_id = $1
+                       AND js.scored_at >= $2
+                )
+                SELECT
+                  (SELECT count(*) FROM traces) AS total_traces,
+                  (SELECT count(*) FROM judged) AS judged_traces
+                """,
+                *common_args,
+            ),
         )
-    )
-    total = int(totals["total"] or 0) if totals else 0
-    errors = int(totals["errors"] or 0) if totals else 0
-    error_rate = (errors / total) if total else 0.0
+    total_events = int((totals or {}).get("total_events") or 0)
+    total_traces = int((totals or {}).get("total_traces") or 0)
+    errors = int((totals or {}).get("errors") or 0)
+    error_rate = (errors / total_events) if total_events else 0.0
+    eval_total = int((eval_coverage_row or {}).get("total_traces") or 0)
+    eval_judged = int((eval_coverage_row or {}).get("judged_traces") or 0)
+    eval_coverage_pct = (eval_judged / eval_total) if eval_total else 0.0
 
-    return {
+    result: dict[str, Any] = {
         "window_hours": window_hours,
         "agent_id": agent_id,
-        "total_traces": total,
+        "total_events": total_events,
+        "total_traces": total_traces,
         "error_rate": error_rate,
         "p50_ms": float(pct["p50"]) if pct and pct["p50"] is not None else None,
         "p95_ms": float(pct["p95"]) if pct and pct["p95"] is not None else None,
         "p99_ms": float(pct["p99"]) if pct and pct["p99"] is not None else None,
         "total_cost_usd": float(pct["cost"]) if pct and pct["cost"] is not None else 0.0,
+        "eval_coverage_pct": eval_coverage_pct,
         "top_failure_modes": [dict(r) for r in failure_modes],
         "top_tools": [dict(r) for r in top_tools],
         "hot_paths": [dict(r) for r in hot_paths],
         "model_breakdown": [dict(r) for r in model_breakdown],
     }
+
+    if compare_previous:
+        # Same-length, non-overlapping window immediately preceding
+        # `since` — i.e. hours [2×window_hours ago, window_hours ago).
+        # Deliberately re-queried rather than derived from `totals`/
+        # `pct` above: subtracting a wider overlapping window from
+        # the current one is only valid for additive counts (traces,
+        # cost) and silently wrong for percentiles/rates (p95,
+        # error_rate aren't additive), which is the bug this
+        # parameter replaces.
+        prev_until = since
+        prev_since = since - timedelta(hours=window_hours)
+        prev_where = "tenant_id = $1 AND timestamp >= $2 AND timestamp < $3"
+        prev_args: list[Any] = [org_id, prev_since, prev_until]
+        if agent_id:
+            prev_args.append(agent_id)
+            prev_where += f" AND attributes->>'agent_id' = ${len(prev_args)}"
+
+        prev_totals, prev_pct = await asyncio.gather(
+            client.fetchrow(
+                f"SELECT count(*) AS total_events, "
+                f"count(DISTINCT trace_id) AS total_traces, "
+                f"sum(CASE WHEN error IS NOT NULL THEN 1 ELSE 0 END) AS errors "
+                f"FROM telemetry_events WHERE {prev_where}",
+                *prev_args,
+            ),
+            client.fetchrow(
+                f"SELECT percentile_cont(0.95) WITHIN GROUP (ORDER BY duration_ms) AS p95, "
+                f"coalesce(sum(cost_usd), 0) AS cost "
+                f"FROM telemetry_events WHERE {prev_where}",
+                *prev_args,
+            ),
+        )
+        prev_total_events = int(prev_totals["total_events"] or 0) if prev_totals else 0
+        prev_total_traces = int(prev_totals["total_traces"] or 0) if prev_totals else 0
+        prev_errors = int(prev_totals["errors"] or 0) if prev_totals else 0
+        result["previous"] = {
+            "total_traces": prev_total_traces,
+            "error_rate": (prev_errors / prev_total_events) if prev_total_events else 0.0,
+            "p95_ms": float(prev_pct["p95"]) if prev_pct and prev_pct["p95"] is not None else None,
+            "total_cost_usd": float(prev_pct["cost"]) if prev_pct and prev_pct["cost"] is not None else 0.0,
+        }
+
+    return result

@@ -5,12 +5,14 @@
  * List org members + invite form + pending invitations.
  */
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Trash2, Users, Shield, ShieldOff } from "lucide-react";
 import { usePermissions } from "@/hooks/use-permissions";
 import { useToast } from "@/components/ui/toast";
 import { useConfirm } from "@/hooks/use-confirm";
 import { api } from "@/lib/api";
+import { useOrgQuery } from "@/hooks/use-api-query";
+import { queryKeys } from "@/lib/query-keys";
 import { cn } from "@/lib/utils";
 import { SettingsCard } from "@/components/settings/settings-card";
 import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
@@ -24,18 +26,25 @@ export function MembersTab({ org }: MembersTabProps) {
   const { hasPermission } = usePermissions();
   const toast = useToast();
   const { confirm, ConfirmDialog } = useConfirm();
-  const [members, setMembers] = useState<
-    Array<{
-      user_id: string;
-      name: string;
-      email: string;
-      role: string;
-      joined_at: string;
-      last_active_at: string | null;
-      two_factor_enabled?: boolean;
-    }>
-  >([]);
-  const [loading, setLoading] = useState(false);
+  const orgId = org?.id ?? null;
+  const membersQuery = useOrgQuery(
+    queryKeys.settings.members(orgId),
+    orgId,
+    () =>
+      api.listOrgMembers(orgId!) as Promise<
+        Array<{
+          user_id: string;
+          name: string;
+          email: string;
+          role: string;
+          joined_at: string;
+          last_active_at: string | null;
+          two_factor_enabled?: boolean;
+        }>
+      >,
+  );
+  const members = membersQuery.data ?? [];
+  const loading = membersQuery.isLoading;
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteRole, setInviteRole] = useState("member");
 
@@ -62,31 +71,12 @@ export function MembersTab({ org }: MembersTabProps) {
     return date.toLocaleDateString();
   };
 
-  const loadMembers = async () => {
-    if (!org) return;
-    setLoading(true);
-    try {
-      const data = await api.listOrgMembers(org.id);
-      setMembers(data as typeof members);
-    } catch (err) {
-      console.error("Failed to load members", err);
-      toast.error(err instanceof Error ? err.message : "Failed to load members");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    loadMembers();
-     
-  }, [org?.id]);
-
   const handleInvite = async () => {
     if (!org || !inviteEmail.trim()) return;
     try {
       await api.inviteOrgMember(org.id, inviteEmail, inviteRole);
       setInviteEmail("");
-      await loadMembers();
+      await membersQuery.refetch();
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : "Failed to send invitation");
     }
@@ -105,7 +95,7 @@ export function MembersTab({ org }: MembersTabProps) {
       return;
     try {
       await api.removeOrgMember(org.id, userId);
-      await loadMembers();
+      await membersQuery.refetch();
       toast.success("Member removed");
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : "Failed to remove member");

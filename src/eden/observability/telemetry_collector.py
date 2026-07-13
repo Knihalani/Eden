@@ -238,6 +238,8 @@ class TelemetryCollector:
 
     # Hot-path Redis stream maxlen per trace
     STREAM_MAXLEN = 10000
+    # ClickHouse telemetry batch insert size
+    CH_TELEMETRY_BATCH_SIZE = 100
     # Deduplication window in seconds
     DEDUP_WINDOW_SECONDS = 3600
     # Audit 2026-07-02 P-14 cap; FIFO eviction at this size.
@@ -257,6 +259,8 @@ class TelemetryCollector:
         # ``popitem(last=False)`` which is OrderedDict-specific).
         self._dedup_cache: OrderedDict[str, float] = OrderedDict()
         self._tenant_event_counts: dict[str, int] = defaultdict(int)
+        self._ch_telemetry_buffer: list[dict[str, Any]] = []
+        self._ch_buffer_lock = asyncio.Lock()
 
     # ── Sink accessors ────────────────────────────────────────────────────
 
@@ -325,6 +329,7 @@ class TelemetryCollector:
 
         # 5. Route to sinks
         await self._route(event)
+        await self._flush_clickhouse_buffer()
         # F03 — best-effort debugger checkpoint from LLM spans.
         try:
             from eden.observability.ingestion.checkpoint_hook import (
@@ -396,6 +401,8 @@ class TelemetryCollector:
                 await maybe_persist_checkpoint(ev)
         except Exception:  # noqa: BLE001
             pass
+
+        await self._flush_clickhouse_buffer()
 
         return {
             "accepted": accepted,
@@ -728,7 +735,7 @@ class TelemetryCollector:
                     $31, $32, $33, $34, $35, $36, $37, $38, $39, $40,
                     $41, $42, $43, $44, $45, $46, NOW()
                 )
-                ON CONFLICT (event_id) DO NOTHING
+                ON CONFLICT (event_id, timestamp) DO NOTHING
                 """,
                 event.event_id,
                 event.tenant_id,
@@ -784,42 +791,65 @@ class TelemetryCollector:
         sink = await self._get_clickhouse()
         if not sink:
             return
+        row = {
+            "event_id": event.event_id,
+            "tenant_id": event.tenant_id,
+            "project_id": event.project_id,
+            "trace_id": event.trace_id,
+            "realm": event.realm,
+            "event_type": event.event_type,
+            "timestamp": event.timestamp,
+            "agent_id": event.agent_id or "",
+            "agent_version": event.agent_version or "",
+            "environment_id": event.environment_id or "",
+            "span_id": event.span_id or "",
+            "name": event.name or "",
+            "duration_ms": event.duration_ms or 0.0,
+            "metrics": _dump_jsonb(event.metrics) or "",
+            "tags": json.dumps(event.tags, default=str, separators=(",", ":")),
+            "outcome": event.outcome or "",
+            "request_body": _dump_jsonb(event.request_body) or "",
+            "response_body": _dump_jsonb(event.response_body) or "",
+            "reasoning": _dump_jsonb(event.reasoning) or "",
+            "tool_calls_full": _dump_jsonb(event.tool_calls_full) or "",
+            "tool_results": _dump_jsonb(event.tool_results) or "",
+            "images": _dump_jsonb(event.images) or "",
+            "audio": _dump_jsonb(event.audio) or "",
+            "logprobs": _dump_jsonb(event.logprobs) or "",
+            "citations": _dump_jsonb(event.citations) or "",
+            "finish_reason": event.finish_reason or "",
+            "model": event.attributes.get("model", "") or "",
+            "model_version": event.model_version or "",
+            "cache_hit": 1 if event.cache_hit else 0,
+            "prompt_cache_savings_usd": float(event.prompt_cache_savings_usd or 0.0),
+            "ingested_at": datetime.now(UTC).isoformat(),
+        }
+        batch: list[dict[str, Any]] | None = None
+        async with self._ch_buffer_lock:
+            self._ch_telemetry_buffer.append(row)
+            if len(self._ch_telemetry_buffer) >= self.CH_TELEMETRY_BATCH_SIZE:
+                batch = self._ch_telemetry_buffer
+                self._ch_telemetry_buffer = []
+        if batch:
+            try:
+                await sink.insert("telemetry_events_ch", batch)
+            except Exception as exc:
+                logger.warning("ClickHouse telemetry batch insert failed: %s", exc)
+
+    async def _flush_clickhouse_buffer(self) -> None:
+        """Flush any buffered telemetry_events_ch rows."""
+        sink = await self._get_clickhouse()
+        if not sink:
+            return
+        async with self._ch_buffer_lock:
+            if not self._ch_telemetry_buffer:
+                return
+            batch = self._ch_telemetry_buffer
+            self._ch_telemetry_buffer = []
         try:
-            await sink.insert("telemetry_events_ch", [{
-                "event_id": event.event_id,
-                "tenant_id": event.tenant_id,
-                "project_id": event.project_id,
-                "trace_id": event.trace_id,
-                "realm": event.realm,
-                "event_type": event.event_type,
-                "timestamp": event.timestamp,
-                "agent_id": event.agent_id or "",
-                "agent_version": event.agent_version or "",
-                "environment_id": event.environment_id or "",
-                "span_id": event.span_id or "",
-                "name": event.name or "",
-                "duration_ms": event.duration_ms or 0.0,
-                "metrics": _dump_jsonb(event.metrics) or "",
-                "tags": json.dumps(event.tags, default=str, separators=(",", ":")),
-                "outcome": event.outcome or "",
-                "request_body": _dump_jsonb(event.request_body) or "",
-                "response_body": _dump_jsonb(event.response_body) or "",
-                "reasoning": _dump_jsonb(event.reasoning) or "",
-                "tool_calls_full": _dump_jsonb(event.tool_calls_full) or "",
-                "tool_results": _dump_jsonb(event.tool_results) or "",
-                "images": _dump_jsonb(event.images) or "",
-                "audio": _dump_jsonb(event.audio) or "",
-                "logprobs": _dump_jsonb(event.logprobs) or "",
-                "citations": _dump_jsonb(event.citations) or "",
-                "finish_reason": event.finish_reason or "",
-                "model": event.attributes.get("model", "") or "",
-                "model_version": event.model_version or "",
-                "cache_hit": 1 if event.cache_hit else 0,
-                "prompt_cache_savings_usd": float(event.prompt_cache_savings_usd or 0.0),
-                "ingested_at": datetime.now(UTC).isoformat(),
-            }])
+            await sink.insert("telemetry_events_ch", batch)
         except Exception as exc:
-            logger.debug(f"ClickHouse telemetry insert failed: {exc}")
+            logger.warning("ClickHouse telemetry flush failed: %s", exc)
 
     async def _route_websocket(self, event: TelemetryEvent) -> None:
         """Fan out telemetry event to real-time WebSocket subscribers."""
@@ -1238,7 +1268,9 @@ class TelemetryCollector:
             return None
 
         if not rows:
-            return None
+            rows = await self._load_from_archive(trace_id)
+            if not rows:
+                return None
 
         steps: list[dict[str, Any]] = []
         markers: list[dict[str, Any]] = []
@@ -1613,6 +1645,8 @@ async def get_telemetry_collector() -> TelemetryCollector:
 
 
 async def close_telemetry_collector() -> None:
-    """Close the telemetry collector."""
+    """Close the telemetry collector, flushing any buffered ClickHouse rows."""
     global _telemetry_collector
+    if _telemetry_collector is not None:
+        await _telemetry_collector._flush_clickhouse_buffer()
     _telemetry_collector = None

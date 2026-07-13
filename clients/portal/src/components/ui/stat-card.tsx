@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { ArrowUpRight, ArrowDownRight, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -125,12 +126,12 @@ export function StatCard({
 
   if (href) {
     return (
-      <a
+      <Link
         href={href}
         className="block transition-transform hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--border-glow)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-base)] rounded-xl"
       >
         {inner}
-      </a>
+      </Link>
     );
   }
   return inner;

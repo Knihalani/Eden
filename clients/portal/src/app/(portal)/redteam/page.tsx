@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState } from "react";
 import { useOrg } from "@/hooks/use-org";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -12,51 +12,45 @@ import { ErrorState } from "@/components/ui/error-state";
 import { PageHeader } from "@/components/layout/page-header";
 import { PageContent } from "@/components/layout/page-content";
 import { useToast } from "@/components/ui/toast";
+import { useOrgQuery } from "@/hooks/use-api-query";
+import { queryKeys } from "@/lib/query-keys";
 import { Loader2, RefreshCw, ShieldAlert } from "lucide-react";
-import { redteamApi, type RedteamFinding } from "@/lib/api";
+import { redteamApi } from "@/lib/api";
 
 export default function RedteamPage() {
   const { currentOrg } = useOrg();
+  const orgId = currentOrg?.id;
   const toast = useToast();
-  const [findings, setFindings] = useState<RedteamFinding[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [targetEndpoint, setTargetEndpoint] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
-  const load = useCallback(async () => {
-    if (!currentOrg?.id) return;
-    setLoading(true);
-    setError(null);
-    try {
-      const res = await redteamApi.listFindings(currentOrg.id);
-      setFindings(res.findings || []);
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : "Failed to load findings";
-      setError(msg);
-      toast.error(msg);
-    } finally {
-      setLoading(false);
-    }
-  }, [currentOrg?.id, toast]);
-
-  useEffect(() => {
-    load();
-  }, [load]);
+  const {
+    data: findings,
+    isLoading: loading,
+    error,
+    refetch,
+  } = useOrgQuery(
+    queryKeys.redteam.findings(orgId),
+    orgId,
+    async () => {
+      const res = await redteamApi.listFindings(orgId!);
+      return res.findings ?? [];
+    },
+  );
 
   if (!currentOrg) return <NoOrgState feature="Red team" />;
 
   const submit = async () => {
-    if (!targetEndpoint.trim() || !currentOrg?.id) return;
+    if (!targetEndpoint.trim() || !orgId) return;
     setSubmitting(true);
     try {
-      await redteamApi.runScan(currentOrg.id, {
+      await redteamApi.runScan(orgId, {
         target_endpoint: targetEndpoint.trim(),
         target_label: "portal-scan",
       });
       toast.success("Scan complete");
       setTargetEndpoint("");
-      load();
+      refetch();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Failed to run scan");
     } finally {
@@ -73,7 +67,7 @@ export default function RedteamPage() {
         icon={ShieldAlert}
         actions={
           <Button
-            onClick={load}
+            onClick={() => refetch()}
             variant="outline"
             size="sm"
             disabled={loading}
@@ -111,9 +105,9 @@ export default function RedteamPage() {
       {error ? (
         <ErrorState
           title="Could not load findings"
-          message={error}
+          message={error.message}
           action={
-            <Button onClick={load} variant="outline" size="sm" disabled={loading}>
+            <Button onClick={() => refetch()} variant="outline" size="sm" disabled={loading}>
               <RefreshCw className="h-3.5 w-3.5" /> Try again
             </Button>
           }
@@ -122,7 +116,7 @@ export default function RedteamPage() {
         <Card className="p-2">
           <DataTable
             loading={loading}
-            rows={findings}
+            rows={findings ?? []}
             rowKey={(r) => r.id}
             emptyTitle="No findings"
             emptyDescription="Run a scan against a target endpoint to surface adversarial findings."

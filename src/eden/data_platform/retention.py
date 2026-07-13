@@ -44,7 +44,9 @@ class RetentionPolicy:
 
 
 DEFAULT_POLICIES: list[RetentionPolicy] = [
-    RetentionPolicy("raw_traces", 7, 90, 2555, 2555, scrub_pii_after_days=30),
+    # warm_days=90 matches Team-tier Postgres hot window; cold archive
+    # moves rows older than warm_days to object storage.
+    RetentionPolicy("raw_traces", 7, 90, 2555, 90, scrub_pii_after_days=30),
     RetentionPolicy("derived_metrics", 7, 90, 2555, 2555),
     RetentionPolicy("user_feedback", 7, 90, 2555, 2555),
     RetentionPolicy("training_datasets", 7, 90, 2555, 2555),
@@ -217,6 +219,12 @@ class DataRetentionManager:
             ("quarantine_events", "org_id"),
             ("jobs", "org_id"),
             ("specs", "org_id"),
+            # Wave 6 GDPR completeness — telemetry tables were previously
+            # only swept by the periodic retention cron, not on explicit
+            # user delete. All three must be purged on right-to-erasure.
+            ("telemetry_events", "org_id"),
+            ("trace_archive_index", "org_id"),
+            ("telemetry_stream_chunks", "org_id"),
         ]
 
         for table, col in tables:
@@ -288,16 +296,26 @@ class DataRetentionManager:
         try:
             import aiohttp
             async with aiohttp.ClientSession() as session:
-                # Delete from agent_performance
-                query = (
-                    "ALTER TABLE metrics.agent_performance "
-                    f"DELETE WHERE tenant_id = '{safe_tenant_id}'"
-                )
-                async with session.post(
-                    clickhouse_url, data=query.encode()
-                ) as resp:
-                    if resp.status == 200:
-                        return 1  # ClickHouse ALTER DELETE doesn't return row count
+                deleted = 0
+                ch_deletes = [
+                    (
+                        "ALTER TABLE metrics.agent_performance "
+                        f"DELETE WHERE tenant_id = '{safe_tenant_id}'"
+                    ),
+                    # Wave 6: telemetry_events_ch mirrors Postgres
+                    # telemetry_events; must be purged on tenant delete.
+                    (
+                        "ALTER TABLE default.telemetry_events_ch "
+                        f"DELETE WHERE org_id = '{safe_tenant_id}'"
+                    ),
+                ]
+                for query in ch_deletes:
+                    async with session.post(
+                        clickhouse_url, data=query.encode()
+                    ) as resp:
+                        if resp.status == 200:
+                            deleted += 1
+                return deleted
         except Exception:
             pass
         return 0
@@ -354,16 +372,97 @@ class DataRetentionManager:
         except Exception as exc:
             report.errors.append(f"Archival failed: {exc}")
 
-        # Deletion
-        now - timedelta(days=policy.delete_after_days)
+        # Deletion — purge rows already in cold archive past retention.
+        delete_before = now - timedelta(days=policy.delete_after_days)
         try:
-            # Only delete if policy allows (e.g., debug_dumps after 7 days)
-            if policy.delete_after_days <= policy.warm_days:
-                logger.info(f"Skipping deletion for {policy.data_type} — handled by archival")
+            if policy.data_type == "raw_traces":
+                report.deleted_rows = await self.purge_archived_telemetry(
+                    delete_before,
+                )
+            elif policy.delete_after_days <= policy.warm_days:
+                logger.info(
+                    f"Skipping deletion for {policy.data_type} — handled by archival"
+                )
         except Exception as exc:
             report.errors.append(f"Deletion failed: {exc}")
 
         return report
+
+    async def purge_archived_telemetry(
+        self,
+        before_date: datetime,
+        org_id: str | None = None,
+    ) -> int:
+        """Delete hot ``telemetry_events`` rows older than ``before_date``
+        that already have a ``trace_archive_index`` entry.
+
+        When ``org_id`` is given the purge is scoped to that tenant only,
+        so per-org warm windows are honoured and cross-org deletions with
+        mismatched cutoffs cannot occur.
+        """
+        client = await self._get_postgres()
+        if org_id is not None:
+            org_filter = "AND te.tenant_id = $2"
+            params_count = [before_date, org_id]
+            params_dry = [before_date, org_id]
+        else:
+            org_filter = ""
+            params_count = [before_date]
+            params_dry = [before_date]
+
+        if self.dry_run:
+            count = await client.fetchval(
+                f"""
+                SELECT COUNT(*) FROM telemetry_events te
+                 WHERE te.timestamp < $1
+                   {org_filter}
+                   AND EXISTS (
+                     SELECT 1 FROM trace_archive_index tai
+                      WHERE tai.trace_id = te.trace_id
+                        AND tai.org_id = te.tenant_id
+                   )
+                """,
+                *params_dry,
+            )
+            logger.info(
+                f"[DRY RUN] Would purge {count or 0} archived telemetry_events "
+                f"rows before {before_date.isoformat()}"
+                + (f" for org {org_id}" if org_id else "")
+            )
+            return int(count or 0)
+
+        result = await client.execute(
+            f"""
+            DELETE FROM telemetry_events te
+             WHERE te.timestamp < $1
+               {org_filter}
+               AND EXISTS (
+                 SELECT 1 FROM trace_archive_index tai
+                  WHERE tai.trace_id = te.trace_id
+                    AND tai.org_id = te.tenant_id
+               )
+            """,
+            *params_count,
+        )
+        # asyncpg returns status string like "DELETE 42"
+        try:
+            return int(str(result).split()[-1])
+        except (ValueError, IndexError):
+            return 0
+
+    async def load_org_warm_days(self) -> dict[str, int]:
+        """Load per-tenant warm-window overrides from ``org_retention_policies``."""
+        client = await self._get_postgres()
+        rows = await client.fetch(
+            """
+            SELECT DISTINCT ON (tenant_id) tenant_id, warm_days
+              FROM org_retention_policies
+             WHERE table_name IN ('telemetry_events', 'raw_traces')
+               AND (effective_until IS NULL OR effective_until > NOW())
+             ORDER BY tenant_id, effective_from DESC
+            """
+        )
+        return {r["tenant_id"]: int(r["warm_days"]) for r in rows}
 
     async def run_all_policies(self) -> dict[str, RetentionReport]:
         """Run all configured retention policies and return per-policy reports."""

@@ -33,8 +33,12 @@ from eden.observability.sql_executor import (
     get_schema_summary,
 )
 from eden.storage.postgres import get_postgres_client
+from eden.storage.redis import Cache
 
 logger = logging.getLogger(__name__)
+
+_schema_cache = Cache(prefix="eden:sql:schema", default_ttl=300)
+_SCHEMA_CACHE_TTL = 300
 
 
 router = APIRouter(
@@ -206,12 +210,17 @@ async def get_sql_schema(
     """Return the schema of every allowlisted table.
 
     Reads from ``information_schema.columns`` so the response
-    always matches the live schema. The result is cached for
-    5 minutes at the API layer (TODO: add cache when we wire
-    Redis into the route — Phase 0 follow-up).
+    always matches the live schema. The result is cached per-org
+    for 5 minutes in Redis (L0 in-process + L1 Redis).
     """
+    cache_key = f"schema:{org_id}"
+    cached = await _schema_cache.get(cache_key)
+    if cached is not None and isinstance(cached, list):
+        return SqlSchemaResponse(tables=cached)
+
     pg = await get_postgres_client()
     tables = await get_schema_summary(pg)
+    await _schema_cache.set(cache_key, tables, ttl=_SCHEMA_CACHE_TTL)
     return SqlSchemaResponse(tables=tables)
 
 

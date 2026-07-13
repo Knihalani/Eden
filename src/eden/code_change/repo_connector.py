@@ -67,14 +67,18 @@ class RepoConnector:
         repo_full_name: str,
         default_branch: str,
         connected_by_user_id: str,
+        installation_id: str | None = None,
     ) -> dict[str, Any]:
         """Persist a new repo connection and return the live envelope.
 
-        STUB: validates the request, generates a deterministic
-        ``repo_<uuid>`` id, persists a row, and returns the live
-        envelope. The real Gate-1 implementation will additionally
-        authenticate against the provider's API and read the
-        CODEOWNERS file.
+        Gate 1: when ``provider="github"`` and ``installation_id`` is
+        supplied, verifies the GitHub App installation by minting an
+        installation access token via the existing
+        :class:`~eden.integrations.github.GitHubOAuthClient`. On
+        success the row is persisted with ``status="active"``; on
+        failure (bad install id, missing App credentials) the row is
+        persisted with ``status="pending"`` and the error is included
+        in the message so the UI can prompt the user to re-authorise.
         """
         if provider not in {"github", "gitlab", "bitbucket"}:
             return {
@@ -82,10 +86,19 @@ class RepoConnector:
                 "feature": self.name,
                 "live": True,
                 "trace_id": _new_id("live"),
-                "timestamp": None,  # filled by the envelope wrapper
+                "timestamp": None,
                 "data": None,
                 "message": f"unsupported provider: {provider!r}",
             }
+
+        real_installation_id = installation_id or "stub_installation"
+        status = "pending"
+        verify_message: str | None = None
+
+        if provider == "github" and installation_id:
+            status, real_installation_id, verify_message = await self._verify_github_install(
+                installation_id=installation_id,
+            )
 
         repo_id = _new_id("repo")
         await _insert_row(
@@ -103,14 +116,22 @@ class RepoConnector:
             [
                 repo_id,
                 provider,
-                "stub_installation",  # Gate-1 will read the real install id
+                real_installation_id,
                 repo_full_name,
                 default_branch,
-                "pending",  # Gate-1 will flip to "active"
+                status,
                 connected_by_user_id,
             ],
         )
 
+        message = verify_message or (
+            "Connection active — GitHub install verified."
+            if status == "active"
+            else (
+                "Connection persisted with status 'pending'. "
+                "Provide a valid GitHub App installation_id to activate."
+            )
+        )
         return _ok_envelope(
             self.name,
             {
@@ -118,14 +139,52 @@ class RepoConnector:
                 "provider": provider,
                 "repo_full_name": repo_full_name,
                 "default_branch": default_branch,
-                "status": "pending",
-                "message": (
-                    "Stub connection persisted. Gate 1 (read-only "
-                    "connectivity) will verify the install against "
-                    "the provider and flip status to 'active'."
-                ),
+                "status": status,
+                "installation_id": real_installation_id,
+                "message": message,
             },
         )
+
+    async def _verify_github_install(
+        self, *, installation_id: str
+    ) -> tuple[str, str, str]:
+        """Verify a GitHub App installation id by minting a token.
+
+        Returns ``(status, installation_id, message)`` where ``status``
+        is ``"active"`` on success or ``"pending"`` on failure.
+        The ``installation_id`` is returned unchanged (callers use the
+        returned value so the insert always has the right string).
+        """
+        try:
+            from eden.integrations.github import GitHubOAuthClient, is_configured
+
+            if not is_configured():
+                return (
+                    "pending",
+                    installation_id,
+                    "GitHub App not configured (GITHUB_APP_ID / GITHUB_PRIVATE_KEY "
+                    "missing); status set to 'pending'.",
+                )
+
+            oauth = GitHubOAuthClient()
+            await oauth.installation_token(int(installation_id))
+            return (
+                "active",
+                installation_id,
+                "Connection active — GitHub install verified.",
+            )
+        except Exception as exc:
+            logger.warning(
+                "RepoConnector.connect: GitHub install %s verification failed: %s",
+                installation_id,
+                exc,
+            )
+            return (
+                "pending",
+                installation_id,
+                f"GitHub install verification failed ({exc}); "
+                "status set to 'pending'. Re-authorise to activate.",
+            )
 
     async def list_repos(self, org_id: str) -> dict[str, Any]:
         """List the org's connected repos from the ``repo_connections`` table.
