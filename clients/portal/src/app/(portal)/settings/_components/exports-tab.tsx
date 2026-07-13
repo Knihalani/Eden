@@ -7,6 +7,7 @@ import { useConfirm } from "@/hooks/use-confirm";
 import { Download, Loader2, Plus, Trash2, Cloud, Database, Play, AlertCircle, CheckCircle2, XCircle, Calendar, FileArchive } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
+import { IntegrationStatusBanner } from "@/components/settings/integration-status-banner";
 
 // ────────────────────────────────────────────────────────────────────
 // Catalog (must match eden.api.routes.export_destinations.DATA_TYPES
@@ -249,6 +250,7 @@ export function ExportsTab({
         </div>
   }];
   return <div className="space-y-6">
+      <IntegrationStatusBanner orgId={orgId} watch={["exports"]} />
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>

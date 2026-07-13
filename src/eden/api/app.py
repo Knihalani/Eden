@@ -19,6 +19,7 @@ from eden.api.middleware.security_headers import (
     apply_security_headers,
 )
 from eden.api.middleware.tenant_rate_limit import TenantRateLimitMiddleware
+from eden.api.openapi_public import build_public_openapi_spec
 from eden.api.routes import (
     agent_issues,
     agent_sessions,
@@ -59,6 +60,7 @@ from eden.api.routes import (
     integrations_langfuse,
     integrations_langsmith,
     integrations_runloop,
+    integrations_status,
     integrations_wandb,
     intelligence_agents,
     intelligence_apm_depth,
@@ -822,6 +824,7 @@ app.include_router(integrations_langfuse.router)  # /integrations/langfuse
 app.include_router(integrations_langsmith.router)  # /integrations/langsmith
 app.include_router(integrations_wandb.router)  # /integrations/wandb
 app.include_router(integrations_runloop.router)  # /integrations/runloop
+app.include_router(integrations_status.router)  # /orgs/{org_id}/integrations/status
 
 # Onboarding wizard (June 2026) — GitHub App OAuth + per-org
 # wizard state + integration PR runs. Two routers:
@@ -851,6 +854,17 @@ from eden.api.routes import gateway, gateway_models
 
 app.include_router(gateway.router)  # /gateway/v1 (OpenAI-compatible surface)
 app.include_router(gateway_models.router)
+
+
+# ============================================================================
+# Public OpenAPI (customer contract)
+# ============================================================================
+
+
+@app.get("/openapi/v1/public.json", include_in_schema=False)
+async def public_openapi_spec() -> dict:
+    """Customer-facing OpenAPI document (no auth required)."""
+    return build_public_openapi_spec(app.openapi())
 
 
 # ============================================================================
