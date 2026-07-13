@@ -1,6 +1,6 @@
 import * as React from "react";
 import Link from "next/link";
-import { ChevronLeft } from "lucide-react";
+import { ChevronLeft, FileWarning } from "lucide-react";
 import { Logo } from "@/components/brand/logo";
 import { cn } from "@/lib/utils";
 
@@ -15,6 +15,8 @@ export interface LegalPageProps {
   children: React.ReactNode;
   /** Tailwind: max-w-3xl (default), max-w-4xl, or max-w-5xl. */
   size?: "narrow" | "medium" | "wide";
+  /** When true, show a counsel-review draft banner above the content. */
+  draft?: boolean;
 }
 
 /**
@@ -30,6 +32,7 @@ export function LegalPage({
   description,
   children,
   size = "narrow",
+  draft = false,
 }: LegalPageProps) {
   const maxW =
     size === "wide"
@@ -65,6 +68,18 @@ export function LegalPage({
         <p className="text-base text-[var(--text-secondary)] mb-12 leading-relaxed">
           {description}
         </p>
+        {draft && (
+          <div
+            role="status"
+            className="mb-8 flex items-start gap-3 rounded-lg border border-[var(--warning)]/40 bg-[var(--warning)]/10 px-4 py-3 text-sm text-[var(--warning)]"
+          >
+            <FileWarning className="h-4 w-4 shrink-0 mt-0.5" aria-hidden />
+            <p>
+              Draft for review — clauses on this page have not received final counsel sign-off.
+              Do not rely on this text for contractual purposes until the published DPA is countersigned.
+            </p>
+          </div>
+        )}
         {children}
       </main>
 

@@ -76,6 +76,7 @@ export default function SecurityPage() {
       title="Security"
       description="Eden is built around the principle that observability data is sensitive. This page summarises the controls we have in place to protect your data — and the ways you can verify them yourself."
       size="narrow"
+      draft
     >
 
 

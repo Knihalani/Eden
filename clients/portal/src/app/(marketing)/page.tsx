@@ -113,21 +113,37 @@ resp = client.chat.completions.create(
   {
     id: "sdk",
     label: "Python SDK",
-    code: `import eden
+    code: `import os
+import eden
 
-# Wrap any LLM call to capture a span
-with eden.span("agent.reasoning") as span:
-    resp = client.chat.completions.create(...)
-    span.set_output(resp.choices[0].message.content)
-    span.set_eval("quality", score=0.92, evaluator="llm-judge")`,
+eden.configure(
+    api_key=os.environ["EDEN_API_KEY"],
+    org_id=os.environ.get("EDEN_ORG_ID", "<your-org-id>"),
+    base_url=os.environ.get("EDEN_BASE_URL", "https://api.edenobservability.com"),
+)
+eden.instrument()
+
+@eden.trace_agent(name="hello-world")
+def answer(question: str) -> str:
+    from openai import OpenAI
+    client = OpenAI()
+    resp = client.chat.completions.create(
+        model="gpt-4o-mini",
+        messages=[{"role": "user", "content": question}],
+    )
+    return resp.choices[0].message.content or ""`,
   },
   {
     id: "auto",
     label: "Auto-instrument",
-    code: `import eden
+    code: `import os
+import eden
 from openai import OpenAI
 
-eden.configure(api_key=os.environ["EDEN_API_KEY"])
+eden.configure(
+    api_key=os.environ["EDEN_API_KEY"],
+    org_id=os.environ.get("EDEN_ORG_ID", "<your-org-id>"),
+)
 eden.instrument()  # patches openai, anthropic, langchain, vercel-ai
 
 client = OpenAI()

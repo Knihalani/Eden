@@ -21,7 +21,7 @@ export default function RedteamPage() {
   const [findings, setFindings] = useState<RedteamFinding[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [target, setTarget] = useState("");
+  const [targetEndpoint, setTargetEndpoint] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
   const load = useCallback(async () => {
@@ -47,18 +47,18 @@ export default function RedteamPage() {
   if (!currentOrg) return <NoOrgState feature="Red team" />;
 
   const submit = async () => {
-    if (!target.trim() || !currentOrg?.id) return;
+    if (!targetEndpoint.trim() || !currentOrg?.id) return;
     setSubmitting(true);
     try {
       await redteamApi.runScan(currentOrg.id, {
-        probe_ids: ["jailbreak", "prompt-injection", "pii-leak"],
-        target_prompt: target,
+        target_endpoint: targetEndpoint.trim(),
+        target_label: "portal-scan",
       });
-      toast.success("Scan queued");
-      setTarget("");
+      toast.success("Scan complete");
+      setTargetEndpoint("");
       load();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Failed to queue scan");
+      toast.error(e instanceof Error ? e.message : "Failed to run scan");
     } finally {
       setSubmitting(false);
     }
@@ -69,7 +69,7 @@ export default function RedteamPage() {
       <PageHeader
         eyebrow="Safety"
         title="Red team"
-        subtitle="Adversarial probes run against your prompts. Findings appear here with severity and category."
+        subtitle="Adversarial probes run against your agent endpoint. Findings appear here with severity and category."
         icon={ShieldAlert}
         actions={
           <Button
@@ -88,17 +88,18 @@ export default function RedteamPage() {
       <Card className="p-4">
         <div className="flex flex-col sm:flex-row gap-2">
           <Input
-            placeholder="Target prompt (the system prompt under test)"
-            value={target}
-            onChange={(e) => setTarget(e.target.value)}
-            className="flex-1"
-            aria-label="Target prompt"
+            placeholder="Target endpoint URL (POST JSON { prompt })"
+            value={targetEndpoint}
+            onChange={(e) => setTargetEndpoint(e.target.value)}
+            className="flex-1 min-h-[44px]"
+            aria-label="Target endpoint URL"
             disabled={submitting}
           />
           <Button
             onClick={submit}
-            disabled={!target.trim() || submitting}
+            disabled={!targetEndpoint.trim() || submitting}
             loading={submitting}
+            className="min-h-[44px]"
             aria-label="Run red team scan"
           >
             {submitting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ShieldAlert className="h-3.5 w-3.5" />}
@@ -124,19 +125,19 @@ export default function RedteamPage() {
             rows={findings}
             rowKey={(r) => r.id}
             emptyTitle="No findings"
-            emptyDescription="Run a scan against a target prompt to surface adversarial findings."
+            emptyDescription="Run a scan against a target endpoint to surface adversarial findings."
             emptyIcon={ShieldAlert}
             columns={[
-              { key: "probe", header: "Probe", sortable: true },
+              { key: "probe_name", header: "Probe", sortable: true },
               { key: "category", header: "Category", sortable: true },
               { key: "severity", header: "Severity", sortable: true, cell: (r) => <SeverityBadge severity={r.severity} /> },
               {
-                key: "prompt",
+                key: "attack_prompt",
                 header: "Probe prompt",
                 cell: (r) => (
                   <span className="font-mono text-xs">
-                    {r.prompt.slice(0, 80)}
-                    {r.prompt.length > 80 ? "…" : ""}
+                    {r.attack_prompt.slice(0, 80)}
+                    {r.attack_prompt.length > 80 ? "…" : ""}
                   </span>
                 ),
               },
