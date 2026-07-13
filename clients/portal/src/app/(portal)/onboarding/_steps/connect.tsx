@@ -9,7 +9,7 @@
 "use client";
 
 import { useSearchParams } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { AlertCircle } from "lucide-react";
 import { NoOrgState } from "@/components/ui/no-org-state";
@@ -34,7 +34,15 @@ export function ConnectStep() {
   const searchParams = useSearchParams();
   const { currentOrg, orgSyncing, orgSyncTimedOut, refreshOrgs } = useOrg();
   const { user } = useAuth();
-  const [preselected, setPreselected] = useState<number | null>(null);
+  const initialInstallId = useMemo(() => {
+    const fromUrl = parseInstallationId(searchParams.get("installation_id"));
+    if (fromUrl != null) {
+      storeInstallationId(fromUrl);
+      return fromUrl;
+    }
+    return readStoredInstallationId();
+  }, [searchParams]);
+  const [preselected, setPreselected] = useState<number | null>(initialInstallId);
   const [callbackNotice, setCallbackNotice] = useState<string | null>(null);
 
   useEffect(() => {
@@ -68,7 +76,6 @@ export function ConnectStep() {
       const url = new URL(window.location.href);
       url.searchParams.delete("error");
       url.searchParams.delete("setup_action");
-      url.searchParams.delete("installation_id");
       window.history.replaceState({}, "", url.pathname + url.search);
     }
   }, [searchParams]);

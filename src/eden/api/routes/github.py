@@ -676,6 +676,7 @@ async def list_org_installations(
     org_id: str,
     org: dict = Depends(require_org_member),
 ) -> list[InstallationOut]:
+    eden_org_id = str(org["org_id"])
     pg = await get_postgres_client()
     rows = await pg.fetch(
         """
@@ -685,7 +686,7 @@ async def list_org_installations(
         WHERE org_id = $1
         ORDER BY installed_at DESC
         """,
-        org_id,
+        eden_org_id,
     )
     return [
         InstallationOut(
@@ -709,13 +710,14 @@ async def list_org_repos(
     Admin-only (`integrations:write`). Member/viewer roles see the
     sidebar entry but the page tells them to ask an admin.
     """
+    eden_org_id = str(org["org_id"])
     pg = await get_postgres_client()
     inst_rows = await pg.fetch(
         """
         SELECT installation_id FROM org_github_installations
         WHERE org_id = $1 AND suspended_at IS NULL
         """,
-        org_id,
+        eden_org_id,
     )
     out: list[RepoOut] = []
     for r in inst_rows:
@@ -752,6 +754,8 @@ async def integrate_repo(
     Returns the new ``onboarding_pr_runs`` row. The wizard polls
     ``GET /orgs/{org_id}/onboarding/pr-runs`` for status changes.
     """
+    eden_org_id = str(org["org_id"])
+    eden_user_id = await resolve_eden_user_id(user.get("user_id"))
     pg = await get_postgres_client()
     # Idempotency: if there's already an OPEN run for this (org, agent,
     # repo) triple, return it instead of opening a duplicate PR.
@@ -765,7 +769,7 @@ async def integrate_repo(
         ORDER BY created_at DESC
         LIMIT 1
         """,
-        org_id, req.repo_full_name, req.agent_id,
+        eden_org_id, req.repo_full_name, req.agent_id,
     )
     if existing:
         return _row_to_pr_run_out(dict(existing))
@@ -778,8 +782,8 @@ async def integrate_repo(
         VALUES ($1, $2, $3, $4, 'pending', $5)
         RETURNING *
         """,
-        org_id, req.agent_id, int(req.installation_id),
-        req.repo_full_name, user["user_id"],
+        eden_org_id, req.agent_id, int(req.installation_id),
+        req.repo_full_name, eden_user_id,
     )
     run_id = str(run_row["id"])
     # Mint a token + run detection.
@@ -788,7 +792,7 @@ async def integrate_repo(
         repo_provider = GitHubRepoProvider(token=token.token, repo=req.repo_full_name)
         default_branch = await repo_provider.get_default_branch()
         detection, plan = await build_integration_for_repo(
-            repo_provider, org_id=org_id,
+            repo_provider, org_id=eden_org_id,
         )
         # Build the file changes for the PR.
         files = [
@@ -867,6 +871,7 @@ async def list_onboarding_pr_runs(
     limit: int = Query(50, ge=1, le=200),
     org: dict = Depends(require_org_member),
 ) -> list[PRRunOut]:
+    eden_org_id = str(org["org_id"])
     pg = await get_postgres_client()
     rows = await pg.fetch(
         """
@@ -875,7 +880,7 @@ async def list_onboarding_pr_runs(
         ORDER BY created_at DESC
         LIMIT $2
         """,
-        org_id, limit,
+        eden_org_id, limit,
     )
     return [_row_to_pr_run_out(dict(r)) for r in rows]
 
@@ -885,7 +890,8 @@ async def get_onboarding_state(
     org_id: str,
     org: dict = Depends(require_org_member),
 ) -> OnboardingStateOut:
-    row = await _ensure_state_row(org_id)
+    eden_org_id = str(org["org_id"])
+    row = await _ensure_state_row(eden_org_id)
     return OnboardingStateOut(**_state_to_dict(row))
 
 
@@ -896,8 +902,9 @@ async def patch_onboarding_state(
     user: dict = Depends(get_current_user),
     org: dict = Depends(require_org_member),
 ) -> OnboardingStateOut:
+    eden_org_id = str(org["org_id"])
     pg = await get_postgres_client()
-    existing = await _ensure_state_row(org_id)
+    existing = await _ensure_state_row(eden_org_id)
     new_step = patch.step or existing.get("step") or "welcome"
     new_choice = patch.org_setup_choice or existing.get("org_setup_choice")
     agents = existing.get("agents_onboarded") or []
@@ -927,7 +934,7 @@ async def patch_onboarding_state(
         new_choice,
         json.dumps(agents),
         json.dumps(completed),
-        org_id,
+        eden_org_id,
     )
     # LP-11: best-effort sync of D.14 ``current_step`` when the column
     # exists (056 schema). Ignore failures on legacy ``step``-only DBs.
@@ -941,14 +948,16 @@ async def patch_onboarding_state(
                 WHERE org_id = $2
                 """,
                 v2_step,
-                org_id,
+                eden_org_id,
             )
         except Exception:
             logger.debug(
-                "onboarding: current_step sync skipped for org=%s", org_id, exc_info=True,
+                "onboarding: current_step sync skipped for org=%s",
+                eden_org_id,
+                exc_info=True,
             )
     row = await pg.fetchrow(
-        "SELECT * FROM onboarding_state WHERE org_id = $1", org_id,
+        "SELECT * FROM onboarding_state WHERE org_id = $1", eden_org_id,
     )
     return OnboardingStateOut(**_state_to_dict(dict(row) if row else {}))
 
