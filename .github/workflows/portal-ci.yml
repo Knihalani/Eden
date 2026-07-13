@@ -52,10 +52,26 @@ jobs:
           # CI only needs to compile, not actually call the API.
           NEXT_PUBLIC_API_URL: "http://localhost:8000"
 
+  unit-tests:
+    name: Vitest unit tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: clients/portal
+    steps:
+      - uses: actions/checkout@v7
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - run: bun install --frozen-lockfile
+      - run: bun run test
+        env:
+          NEXT_PUBLIC_API_URL: "http://localhost:8000"
+
   build:
     name: Next.js production build
     runs-on: ubuntu-latest
-    needs: typecheck
+    needs: [typecheck, unit-tests]
     defaults:
       run:
         working-directory: clients/portal

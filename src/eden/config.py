@@ -405,8 +405,14 @@ def _build_settings_class():
         )
 
         # Encryption (Fernet key for sensitive at-rest fields).
-        # If empty, falls back to deriving a key from JWT_SECRET.
+        # Required when eden_production=True. Dev may leave empty
+        # (falls back to deriving a key from JWT_SECRET).
         encryption_key: str = ""
+
+        # Sentry error tracking (optional — no-op when DSN empty).
+        sentry_dsn: str = ""
+        sentry_environment: str = "development"
+        sentry_traces_sample_rate: float = 0.0
 
         # Stripe
         stripe_secret_key: str = ""
@@ -834,5 +840,15 @@ def get_settings() -> "Settings":  # noqa: F821
         raise RuntimeError(
             "jwt_secret must be at least 32 characters. Generate one "
             "with: python -c 'import secrets; print(secrets.token_urlsafe(32))'"
+        )
+    # Production must use a dedicated ENCRYPTION_KEY — never the
+    # JWT_SECRET-derived fallback (rotation of either secret would
+    # break the other).
+    if settings.eden_production and not (settings.encryption_key or "").strip():
+        raise RuntimeError(
+            "encryption_key is required when eden_production=True. "
+            "Set ENCRYPTION_KEY to a Fernet key "
+            "(python -c 'from cryptography.fernet import Fernet; "
+            "print(Fernet.generate_key().decode())')."
         )
     return settings
