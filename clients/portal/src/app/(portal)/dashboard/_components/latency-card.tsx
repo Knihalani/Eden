@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { Loader2, Timer, ArrowUpRight, ArrowDownRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Card } from "@/components/ui/card";
@@ -38,7 +39,7 @@ export function LatencyCard({
   const trendIsGood = trend ? (trend === "down" ? "up" : "down") : "up";
 
   return (
-    <a
+    <Link
       href={href}
       className="block transition-colors hover:border-[var(--border-strong)]"
     >
@@ -98,7 +99,7 @@ export function LatencyCard({
           )}
         </div>
       </div>
-    </Card></a>
+    </Card></Link>
   );
 }
 

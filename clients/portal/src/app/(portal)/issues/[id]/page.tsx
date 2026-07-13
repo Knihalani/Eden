@@ -1,10 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams, usePathname } from "next/navigation";
 import { useOrg } from "@/hooks/use-org";
-import { agentIssuesApi, type AgentIssue, type AgentStumble } from "@/lib/api";
+import { agentIssuesApi, type AgentStumble } from "@/lib/api";
+import { useOrgQuery, useOrgMutation } from "@/hooks/use-api-query";
+import { queryKeys } from "@/lib/query-keys";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { NoOrgState } from "@/components/ui/no-org-state";
@@ -29,59 +31,82 @@ type Tab = "overview" | "fix" | "experiment";
 
 export default function IssueDetailPage() {
   const { currentOrg } = useOrg();
+  const orgId = currentOrg?.id ?? null;
   const params = useParams<{ id: string }>();
   const pathname = usePathname();
   const issueId = params?.id;
   const toast = useToast();
 
   const [tab, setTab] = useState<Tab>("overview");
-  const [issue, setIssue] = useState<AgentIssue | null>(null);
-  const [stumbles, setStumbles] = useState<AgentStumble[]>([]);
-  const [experiments, setExperiments] = useState<Record<string, unknown>[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
 
   useEffect(() => {
     if (pathname?.endsWith("/fix")) setTab("fix");
   }, [pathname]);
 
-  const load = useCallback(async () => {
-    if (!currentOrg || !issueId) return;
-    setLoading(true);
-    setError(null);
-    try {
-      const res = await agentIssuesApi.get(currentOrg.id, issueId);
-      const iss = res.data?.issue ?? null;
-      setIssue(iss);
-      if (iss?.fingerprint) {
-        const st = await agentIssuesApi
-          .stumbles(currentOrg.id, { fingerprint: iss.fingerprint, limit: 20 })
-          .catch(() => ({ data: { stumbles: [], count: 0 } }));
-        setStumbles(st.data?.stumbles ?? []);
-      }
-      const ex = await agentIssuesApi.listExperiments(currentOrg.id, issueId).catch(() => ({
-        data: { experiments: [], count: 0 },
-      }));
-      setExperiments(ex.data?.experiments ?? []);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load issue");
-    } finally {
-      setLoading(false);
-    }
-  }, [currentOrg, issueId]);
+  const issueQuery = useOrgQuery(
+    queryKeys.issues.detail(orgId, issueId),
+    orgId,
+    () => agentIssuesApi.get(orgId!, issueId!),
+    { enabled: Boolean(orgId) && Boolean(issueId) },
+  );
+  const issue = issueQuery.data?.data?.issue ?? null;
+  const loading = issueQuery.isLoading;
+  const error = issueQuery.error?.message ?? null;
 
-  useEffect(() => {
-    load();
-  }, [load]);
+  const stumblesQuery = useOrgQuery(
+    queryKeys.issues.stumbles(orgId, { fingerprint: issue?.fingerprint, limit: 20 }),
+    orgId,
+    () =>
+      agentIssuesApi
+        .stumbles(orgId!, { fingerprint: issue!.fingerprint, limit: 20 })
+        .then((res) => res.data?.stumbles ?? [])
+        .catch(() => []),
+    { enabled: Boolean(orgId) && Boolean(issue?.fingerprint) },
+  );
+  const stumbles = stumblesQuery.data ?? [];
+
+  const experimentsQuery = useOrgQuery(
+    queryKeys.issues.experiments(orgId, issueId),
+    orgId,
+    () =>
+      agentIssuesApi
+        .listExperiments(orgId!, issueId!)
+        .then((res) => res.data?.experiments ?? [])
+        .catch(() => []),
+    { enabled: Boolean(orgId) && Boolean(issueId) },
+  );
+  const experiments = experimentsQuery.data ?? [];
+
+  const invalidateIssue = [
+    queryKeys.issues.detail(orgId, issueId),
+    queryKeys.issues.list(orgId),
+    queryKeys.issues.experiments(orgId, issueId),
+  ];
+
+  const triageMutation = useOrgMutation(
+    () => agentIssuesApi.triage(orgId!, issueId!, { force: true }),
+    { invalidateKeys: invalidateIssue },
+  );
+  const resolveMutation = useOrgMutation(
+    (status: "resolved" | "ignored") => agentIssuesApi.resolve(orgId!, issueId!, { status }),
+    { invalidateKeys: invalidateIssue },
+  );
+  const createExperimentMutation = useOrgMutation(
+    () =>
+      agentIssuesApi.createExperiment(orgId!, issueId!, {
+        control_variant: "production",
+        treatment_variant: "candidate",
+      }),
+    { invalidateKeys: invalidateIssue },
+  );
 
   const onTriage = async () => {
-    if (!currentOrg || !issueId) return;
+    if (!orgId || !issueId) return;
     setBusy("triage");
     try {
-      await agentIssuesApi.triage(currentOrg.id, issueId, { force: true });
+      await triageMutation.mutateAsync();
       toast.success("Triage complete");
-      await load();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Triage failed");
     } finally {
@@ -90,12 +115,11 @@ export default function IssueDetailPage() {
   };
 
   const onResolve = async (status: "resolved" | "ignored") => {
-    if (!currentOrg || !issueId) return;
+    if (!orgId || !issueId) return;
     setBusy(status);
     try {
-      await agentIssuesApi.resolve(currentOrg.id, issueId, { status });
+      await resolveMutation.mutateAsync(status);
       toast.success(`Issue ${status}`);
-      await load();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Update failed");
     } finally {
@@ -104,10 +128,10 @@ export default function IssueDetailPage() {
   };
 
   const onExportFixture = async () => {
-    if (!currentOrg || !issueId) return;
+    if (!orgId || !issueId) return;
     setBusy("export");
     try {
-      const res = await agentIssuesApi.exportFixture(currentOrg.id, issueId);
+      const res = await agentIssuesApi.exportFixture(orgId, issueId);
       const fixture = res.data?.fixture ?? res.data;
       const blob = new Blob([JSON.stringify(fixture, null, 2)], { type: "application/json" });
       const url = URL.createObjectURL(blob);
@@ -125,15 +149,11 @@ export default function IssueDetailPage() {
   };
 
   const onCreateExperiment = async () => {
-    if (!currentOrg || !issueId) return;
+    if (!orgId || !issueId) return;
     setBusy("experiment");
     try {
-      await agentIssuesApi.createExperiment(currentOrg.id, issueId, {
-        control_variant: "production",
-        treatment_variant: "candidate",
-      });
+      await createExperimentMutation.mutateAsync();
       toast.success("Experiment started");
-      await load();
       setTab("experiment");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Experiment failed");
@@ -143,14 +163,14 @@ export default function IssueDetailPage() {
   };
 
   const onExperimentReport = async (linkId: string) => {
-    if (!currentOrg || !issueId) return;
+    if (!orgId || !issueId) return;
     setBusy(`report-${linkId}`);
     try {
-      const res = await agentIssuesApi.experimentReport(currentOrg.id, issueId, linkId);
+      const res = await agentIssuesApi.experimentReport(orgId, issueId, linkId);
       toast.success(
         `Report: ${String((res.data?.report as Record<string, unknown>)?.recommendation ?? "ready")}`,
       );
-      await load();
+      void experimentsQuery.refetch();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Report failed");
     } finally {

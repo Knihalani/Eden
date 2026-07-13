@@ -14,10 +14,7 @@ Endpoints:
 * ``DELETE /settings/approvals/grants/{id}`` — revoke a grant
   (admin-only).
 
-STUB mode (Gate 4a) persists the grant to ``approval_grants`` and
-returns the live envelope. The real implementation will additionally
-enforce the grant scope across the ``ApprovalWorkflowService``
-and the ``PRReviewService.act`` flow.
+Gate 4a: persists grants to ``approval_grants`` and reads live data.
 """
 
 from __future__ import annotations
@@ -25,7 +22,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from .._common import _new_id, _ok_envelope
+from .._common import _error_envelope, _insert_row, _new_id, _ok_envelope, _select_rows
 
 logger = logging.getLogger(__name__)
 
@@ -43,17 +40,36 @@ class ApprovalGrantService:
     async def list_grants(
         self, org_id: str, include_revoked: bool = False
     ) -> dict[str, Any]:
-        """List the org's approval grants. STUB: empty list."""
+        """List the org's approval grants from ``approval_grants``."""
+        where = "" if include_revoked else "revoked_at IS NULL"
+        rows = await _select_rows(
+            org_id,
+            "approval_grants",
+            where=where,
+            order_by="created_at DESC",
+        )
+        grants = [
+            {
+                "grant_id": r.get("id"),
+                "granted_user_id": r.get("granted_user_id"),
+                "granted_by_user_id": r.get("granted_by_user_id"),
+                "scope_type": r.get("scope_type"),
+                "scope_value": r.get("scope_value"),
+                "reason": r.get("reason", ""),
+                "expires_at": str(r["expires_at"]) if r.get("expires_at") else None,
+                "created_at": str(r.get("created_at") or ""),
+                "revoked_at": str(r["revoked_at"]) if r.get("revoked_at") else None,
+                "revoked_by_user_id": r.get("revoked_by_user_id"),
+            }
+            for r in rows
+        ]
         return _ok_envelope(
             self.name,
             {
                 "org_id": org_id,
                 "include_revoked": include_revoked,
-                "grants": [],
-                "count": 0,
-                "message": (
-                    "Stub list — Gate 4a will read from approval_grants."
-                ),
+                "grants": grants,
+                "count": len(grants),
             },
         )
 
@@ -67,48 +83,89 @@ class ApprovalGrantService:
         reason: str,
         expires_at: str,
     ) -> dict[str, Any]:
-        """Create a new approval grant. STUB: validates and returns the id."""
+        """Persist a new approval grant to ``approval_grants``."""
         if scope_type not in GRANT_SCOPE_TYPES:
-            return _ok_envelope(
+            return _error_envelope(
                 self.name,
-                {
-                    "status": "bad_request",
-                    "feature": self.name,
-                    "live": True,
-                    "trace_id": _new_id("live"),
-                    "timestamp": None,
-                    "data": None,
-                    "message": f"unknown scope_type: {scope_type!r}",
-                },
+                message=f"unknown scope_type: {scope_type!r}",
+                error_code="invalid_scope_type",
+                data={"valid_scope_types": sorted(GRANT_SCOPE_TYPES)},
             )
+        grant_id = _new_id("grant")
+        await _insert_row(
+            org_id,
+            "approval_grants",
+            ["id", "granted_user_id", "granted_by_user_id", "scope_type", "scope_value", "reason", "expires_at"],
+            [grant_id, granted_user_id, granted_by_user_id, scope_type, scope_value, reason, expires_at or None],
+        )
         return _ok_envelope(
             self.name,
             {
                 "org_id": org_id,
-                "grant_id": _new_id("grant"),
+                "grant_id": grant_id,
                 "granted_user_id": granted_user_id,
                 "granted_by_user_id": granted_by_user_id,
                 "scope_type": scope_type,
                 "scope_value": scope_value,
                 "reason": reason,
-                "expires_at": expires_at,
-                "message": (
-                    "Stub create — Gate 4a will persist to approval_grants."
-                ),
+                "expires_at": expires_at or None,
             },
         )
 
     async def revoke_grant(
         self, org_id: str, grant_id: str, revoked_by_user_id: str
     ) -> dict[str, Any]:
-        """Revoke an approval grant. STUB: live envelope with a no-op marker."""
+        """Set ``revoked_at`` on an ``approval_grants`` row."""
+        revoked = await _revoke_grant_row(org_id, grant_id, revoked_by_user_id)
         return _ok_envelope(
             self.name,
             {
                 "org_id": org_id,
                 "grant_id": grant_id,
-                "revoked": True,
+                "revoked": revoked,
                 "revoked_by_user_id": revoked_by_user_id,
-                "message": "Stub revoke — Gate 4a will set revoked_at.",
             },
         )
+
+
+async def _revoke_grant_row(
+    org_id: str, grant_id: str, revoked_by_user_id: str
+) -> bool:
+    """Set revoked_at + revoked_by_user_id on an approval_grants row.
+
+    Returns ``True`` if a row was found and updated, ``False`` otherwise.
+    Best-effort — DB errors return ``False``.
+    """
+    try:
+        from eden.storage.postgres import get_postgres_client
+    except Exception:  # pragma: no cover - defensive
+        return False
+    client = await get_postgres_client()
+    if client is None:
+        return False
+    try:
+        async with client.acquire() as conn:
+            result = await conn.execute(
+                "UPDATE approval_grants "
+                "SET revoked_at = NOW(), revoked_by_user_id = $3 "
+                "WHERE org_id = $1 AND id = $2 AND revoked_at IS NULL",
+                org_id,
+                grant_id,
+                revoked_by_user_id,
+            )
+        return result.endswith(" 1")
+    except Exception as exc:
+        logger.debug("approval_grants: revoke_grant_row failed: %s", exc)
+        return False
+
+
+async def has_active_grant(org_id: str, user_id: str) -> bool:
+    """Return True if ``user_id`` has at least one non-expired, non-revoked grant."""
+    rows = await _select_rows(
+        org_id,
+        "approval_grants",
+        where="granted_user_id = $2 AND revoked_at IS NULL AND (expires_at IS NULL OR expires_at > NOW())",
+        params=(user_id,),
+        limit=1,
+    )
+    return bool(rows)

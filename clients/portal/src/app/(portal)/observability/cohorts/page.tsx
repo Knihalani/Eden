@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useOrg } from "@/hooks/use-org";
 import { cn } from "@/lib/utils";
-import { API_BASE } from "@/lib/api";
+import { api } from "@/lib/api";
 import { useToast } from "@/components/ui/toast";
 import { NoOrgState } from "@/components/ui/no-org-state";
 import { PageHeader } from "@/components/layout/page-header";
@@ -31,47 +31,17 @@ interface CompactResult {
   compacted_size_bytes: number;
   duration_ms: number;
 }
-async function fetchJson<T>(path: string, init: RequestInit = {}): Promise<T> {
-  const res = await fetch(`${API_BASE}${path}`, {
-    credentials: "include",
-    headers: {
-      "Content-Type": "application/json"
-    },
-    ...init
-  });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({
-      detail: "Request failed"
-    }));
-    throw new Error(err.detail || `HTTP ${res.status}`);
-  }
-  return res.json() as Promise<T>;
-}
 async function columnarQuery(orgId: string, sql: string): Promise<ColumnarQueryResult> {
-  return fetchJson<ColumnarQueryResult>(`/orgs/${orgId}/intelligence/columnar/query`, {
-    method: "POST",
-    body: JSON.stringify({
-      sql
-    })
-  });
+  return api.post<ColumnarQueryResult>(`/orgs/${orgId}/intelligence/columnar/query`, { sql });
 }
 async function ensurePartitions(orgId: string, period: string): Promise<PartitionsResult> {
-  return fetchJson<PartitionsResult>(`/orgs/${orgId}/intelligence/columnar/partitions/ensure`, {
-    method: "POST",
-    body: JSON.stringify({
-      period
-    })
-  });
+  return api.post<PartitionsResult>(`/orgs/${orgId}/intelligence/columnar/partitions/ensure`, { period });
 }
 async function precomputeRollups(orgId: string): Promise<RollupsResult> {
-  return fetchJson<RollupsResult>(`/orgs/${orgId}/intelligence/columnar/rollups/precompute`, {
-    method: "POST"
-  });
+  return api.post<RollupsResult>(`/orgs/${orgId}/intelligence/columnar/rollups/precompute`, {});
 }
 async function compactColumnar(orgId: string): Promise<CompactResult> {
-  return fetchJson<CompactResult>(`/orgs/${orgId}/intelligence/columnar/compact`, {
-    method: "POST"
-  });
+  return api.post<CompactResult>(`/orgs/${orgId}/intelligence/columnar/compact`, {});
 }
 const DEFAULT_SQL = `SELECT
   event_type,

@@ -294,24 +294,91 @@ class TraceReplayer:
     async def _re_execute_step(
         self, *, org_id: str, step: dict[str, Any]
     ) -> dict[str, Any]:
-        """Re-execute a step live.
+        """Re-execute a step live via the configured AIGateway / OpenRouter.
 
-        The v1.3 ship is a **stub** — the real re-execution
-        routes through the AIGateway. We surface the same
-        shape (``tokens_used``, ``cost_usd``,
-        ``response_hash``) so the rest of the v1.3 surface
-        (the diff route, the list-forks route) works
-        unchanged. A v1.4 implementation can wire the real
-        gateway without changing the API surface.
+        Extracts the model + messages from the stored ``agent.step``
+        payload, builds a :class:`ModelRequest`, and calls the
+        shared :func:`get_ai_gateway` singleton so the PII filter,
+        audit, tenant rate-limit, and cost tracking all apply.
+
+        Falls back to the stored token/cost values when the payload
+        has no usable content or the gateway call fails, so a
+        provider outage never breaks the replay surface.
         """
-        # Defensive: if the customer supplied a per-step
-        # edit, the new step is in ``step``; otherwise we
-        # fall back to the parent step's data.
-        return {
-            "response_hash": step.get("response_hash") or "",
-            "tokens_used": int(step.get("tokens_used", 100) or 100),
-            "cost_usd": float(step.get("cost_usd", 0.001) or 0.001),
-        }
+        import hashlib as _hashlib
+        import json as _json
+
+        payload: dict[str, Any] = step.get("payload") or {}
+        if isinstance(payload, str):
+            try:
+                payload = _json.loads(payload)
+            except Exception:
+                payload = {}
+
+        # Build the prompt from the stored messages (OpenAI-wire format).
+        messages = payload.get("messages") or []
+        if messages:
+            parts: list[str] = []
+            for m in messages:
+                if isinstance(m, dict):
+                    content = m.get("content") or ""
+                    if isinstance(content, str) and content:
+                        parts.append(content)
+                    elif isinstance(content, list):
+                        # multi-part content (vision blocks, etc.)
+                        for block in content:
+                            if isinstance(block, dict) and block.get("type") == "text":
+                                parts.append(block.get("text") or "")
+            prompt = "\n".join(parts)
+        else:
+            prompt = (
+                payload.get("prompt")
+                or payload.get("system_prompt")
+                or ""
+            )
+
+        if not prompt:
+            # No usable content in the stored payload — return the
+            # recorded values so the diff surface still works.
+            return {
+                "response_hash": step.get("response_hash") or "",
+                "tokens_used": int(step.get("tokens_used", 0) or 0),
+                "cost_usd": float(step.get("cost_usd", 0.0) or 0.0),
+            }
+
+        model = str(payload.get("model") or payload.get("model_version") or "")
+        try:
+            from eden.api.routes.gateway import get_ai_gateway
+            from eden.llmops.ai_gateway import ModelRequest
+
+            gw = get_ai_gateway()
+            req = ModelRequest(
+                model_family=model.split("/")[-1].split(":")[0] if model else "default",
+                model_version=model,
+                prompt=prompt,
+                tenant_id=org_id,
+                estimated_tokens=len(prompt.split()),
+            )
+            resp = await gw.complete(req)
+            response_hash = _hashlib.sha256(
+                resp.text.encode("utf-8", errors="replace")
+            ).hexdigest()[:32]
+            return {
+                "response_hash": response_hash,
+                "tokens_used": resp.input_tokens + resp.output_tokens,
+                "cost_usd": float(resp.cost_usd or 0.0),
+            }
+        except Exception as exc:
+            logger.warning(
+                "_re_execute_step: gateway call failed (%s); "
+                "falling back to recorded values",
+                exc,
+            )
+            return {
+                "response_hash": step.get("response_hash") or "",
+                "tokens_used": int(step.get("tokens_used", 0) or 0),
+                "cost_usd": float(step.get("cost_usd", 0.0) or 0.0),
+            }
 
 
 __all__ = ["TraceReplayer"]

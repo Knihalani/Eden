@@ -206,9 +206,9 @@ class ClickHouseSink:
         # telemetry_events_ch — mirror of the Postgres telemetry_events
         # table for fast analytical queries (heatmap, p50/p95/p99 over
         # millions of rows). JSONB is stored as String for simplicity;
-        # the portal parses on the way out. 30-day TTL (tightened from
-        # 90d in Phase B1 / 2026-06-19 — Postgres + Impossible Cloud cold
-        # storage hold the long tail) keeps the cluster bounded.
+        # the portal parses on the way out. 90-day TTL aligned with
+        # Tinybird datasource + Postgres warm window; cold archive holds
+        # the long tail.
         await self._execute(f"""
             CREATE TABLE IF NOT EXISTS {self.config.database}.telemetry_events_ch (
                 event_id           String,
@@ -246,11 +246,62 @@ class ClickHouseSink:
             ENGINE = MergeTree()
             PARTITION BY toYYYYMM(timestamp)
             ORDER BY (tenant_id, timestamp)
-            TTL timestamp + INTERVAL 30 DAY
+            TTL timestamp + INTERVAL 90 DAY
         """)
+
+        await self._apply_ttl_migrations()
 
         self._initialized = True
         logger.info(f"ClickHouse schema initialized in database '{self.config.database}'")
+
+    async def _apply_ttl_migrations(self) -> None:
+        """Apply TTL changes to existing tables.
+
+        CREATE TABLE IF NOT EXISTS only sets TTL on new tables; existing
+        tables keep whatever TTL they were created with. This method issues
+        ALTER TABLE ... MODIFY TTL so that tables created before a TTL
+        change are brought in line with the desired policy.
+
+        The statements are idempotent — ClickHouse accepts a MODIFY TTL
+        even when the current TTL is already identical.
+        """
+        ttl_statements = [
+            (
+                "telemetry_events_ch",
+                "timestamp + INTERVAL 90 DAY",
+            ),
+            (
+                "agent_performance",
+                "timestamp + INTERVAL 7 YEAR",
+            ),
+            (
+                "pipeline_stages",
+                "timestamp + INTERVAL 7 YEAR",
+            ),
+            (
+                "usage_trends",
+                "hour + INTERVAL 7 YEAR",
+            ),
+            (
+                "benchmark_results",
+                "timestamp + INTERVAL 7 YEAR",
+            ),
+        ]
+        for table, ttl_expr in ttl_statements:
+            try:
+                await self._execute(
+                    f"ALTER TABLE {self.config.database}.{table} MODIFY TTL {ttl_expr}"
+                )
+            except Exception as exc:
+                # Table may not exist yet (first-run before CREATE TABLE runs),
+                # or the CH user may lack ALTER privilege. Both are non-fatal:
+                # the CREATE TABLE above already set the correct TTL for new
+                # tables, and a missing ALTER on an existing table only means
+                # the old TTL is kept until the next schema rebuild.
+                logger.debug(
+                    "TTL migration skipped for %s.%s: %s",
+                    self.config.database, table, exc,
+                )
 
     async def ingest_agent_traces(
         self,

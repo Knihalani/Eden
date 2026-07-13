@@ -6,17 +6,9 @@ adjusts based on relevance analysis.
 Tenant isolation
 ----------------
 
-Every method accepts a required ``org_id`` that is enforced in the
-WHERE clause so one tenant's retrieval strategy adjustments cannot
-leak into another tenant's results. The previous implementation
-scoped by ``collection`` only, so all tenants shared the same
-strategy rows.
-
-TODO(Phase 7.4 migration): add a ``tenant_id`` column to
-``retrieval_strategy_state`` and switch the WHERE clause to
-``WHERE collection = $1 AND tenant_id = $2``. Until that
-migration lands, ``org_id`` is accepted (and logged) but the
-underlying SQL still scopes by ``collection`` alone.
+Every method requires ``org_id``, which is enforced in the WHERE clause and
+the ``UNIQUE(collection, org_id)`` constraint (migration 094). Each org gets
+its own strategy rows; cross-tenant collisions are impossible at the DB layer.
 """
 
 import logging
@@ -74,7 +66,7 @@ class RetrievalStrategyStore:
                 """
                 INSERT INTO retrieval_strategy_state (collection, org_id, created_at, updated_at)
                 VALUES ($1, $2, NOW(), NOW())
-                ON CONFLICT (collection) DO NOTHING
+                ON CONFLICT (collection, org_id) DO NOTHING
                 """,
                 collection,
                 org_id,

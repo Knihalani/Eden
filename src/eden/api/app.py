@@ -957,6 +957,23 @@ async def health_check():
     except Exception:
         worker_running = False
 
+    # Degrade /health when the quality worker is expected on this process
+    # (trace_quality_worker_enabled=true AND we are the background leader)
+    # but the worker task has died or never started. Non-leader replicas skip
+    # this check — they never own the worker so is_worker_running() is always
+    # False for them, which is correct.
+    if overall == "healthy":
+        try:
+            from eden.workers.background import background_workers_running
+            if (
+                getattr(settings, "trace_quality_worker_enabled", True)
+                and background_workers_running()
+                and not worker_running
+            ):
+                overall = "degraded"
+        except Exception:
+            pass
+
     body = HealthResponse(
         status=overall,
         version=settings.app_version,

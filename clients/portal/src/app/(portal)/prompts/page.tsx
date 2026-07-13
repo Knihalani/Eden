@@ -1,12 +1,18 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useState, useCallback } from "react";
 import { useOrg } from "@/hooks/use-org";
-import { API_BASE } from "@/lib/api";
+import { api } from "@/lib/api";
+import { useOrgQuery, useOrgMutation } from "@/hooks/use-api-query";
+import { queryKeys } from "@/lib/query-keys";
 import { PageHeader } from "@/components/layout/page-header";
 import { PageContent } from "@/components/layout/page-content";
 import { NoOrgState } from "@/components/ui/no-org-state";
+import { ErrorState } from "@/components/ui/error-state";
+import { EmptyState } from "@/components/ui/empty-state";
+import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/toast";
+import { errorFromCaught } from "@/lib/safe-error-message";
 import {
   FileText,
   GitBranch,
@@ -49,58 +55,45 @@ interface VersionEntry {
  */
 export default function PromptsPage() {
   const { currentOrg } = useOrg();
+  const orgId = currentOrg?.id;
   const toast = useToast();
-  const [prompts, setPrompts] = useState<PromptEntry[]>([]);
-  const [loading, setLoading] = useState(true);
   const [expanded, setExpanded] = useState<string | null>(null);
   const [versions, setVersions] = useState<Record<string, VersionEntry[]>>({});
+  const [versionsLoading, setVersionsLoading] = useState<string | null>(null);
   const [showNewPrompt, setShowNewPrompt] = useState(false);
   const [newPromptName, setNewPromptName] = useState("");
   const [newPromptDesc, setNewPromptDesc] = useState("");
   const [newPromptAutoEval, setNewPromptAutoEval] = useState(false);
 
-  const fetchData = useCallback(async () => {
-    if (!currentOrg?.id) return;
-    try {
-      const res = await fetch(
-        `${API_BASE}/orgs/${currentOrg.id}/prompts?limit=100`,
-        { credentials: "include" }
-      );
-      if (res.ok) {
-        const d = await res.json();
-        setPrompts(d.data?.prompts || []);
-      }
-    } catch (err) {
-      console.error("Prompts fetch failed", err);
-      toast.error(err instanceof Error ? err.message : "Failed to load prompts");
-    } finally {
-      setLoading(false);
-    }
-  }, [currentOrg?.id]);
+  const promptsQuery = useOrgQuery(
+    queryKeys.prompts.list(orgId),
+    orgId,
+    () => api.get<{ data: { prompts: PromptEntry[] } }>(`/orgs/${orgId}/prompts?limit=100`),
+  );
+  const prompts = promptsQuery.data?.data?.prompts ?? [];
 
-  useEffect(() => {
-    if (!currentOrg?.id) return;
-    fetchData();
-  }, [currentOrg?.id, fetchData]);
+  const createMutation = useOrgMutation(
+    (payload: { name: string; description: string | null; tags: string[]; auto_eval_on_save: boolean }) =>
+      api.post(`/orgs/${orgId}/prompts`, payload),
+    { invalidateKeys: [queryKeys.prompts.list(orgId)] },
+  );
 
   const fetchVersions = useCallback(
     async (name: string) => {
-      if (!currentOrg?.id) return;
+      if (!orgId) return;
+      setVersionsLoading(name);
       try {
-        const res = await fetch(
-          `${API_BASE}/orgs/${currentOrg.id}/prompts/${encodeURIComponent(name)}`,
-          { credentials: "include" }
+        const d = await api.get<{ data: { versions: VersionEntry[] } }>(
+          `/orgs/${orgId}/prompts/${encodeURIComponent(name)}`
         );
-        if (res.ok) {
-          const d = await res.json();
-          setVersions((prev) => ({ ...prev, [name]: d.data?.versions || [] }));
-        }
+        setVersions((prev) => ({ ...prev, [name]: d.data?.versions || [] }));
       } catch (err) {
-        console.error("Versions fetch failed", err);
-        toast.error(err instanceof Error ? err.message : "Failed to load prompt versions");
+        toast.error("Failed to load prompt versions", errorFromCaught(err, "Please try again."));
+      } finally {
+        setVersionsLoading(null);
       }
     },
-    [currentOrg?.id]
+    [orgId, toast]
   );
 
   const handleToggle = useCallback(
@@ -118,47 +111,28 @@ export default function PromptsPage() {
   );
 
   const handleCreate = useCallback(async () => {
-    if (!currentOrg?.id || !newPromptName.trim()) {
+    if (!orgId || !newPromptName.trim()) {
       toast.error("Name required", "Prompt name cannot be empty.");
       return;
     }
     try {
-      const res = await fetch(
-        `${API_BASE}/orgs/${currentOrg.id}/prompts`,
-        {
-          method: "POST",
-          credentials: "include",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            name: newPromptName.trim(),
-            description: newPromptDesc || null,
-            tags: [],
-            auto_eval_on_save: newPromptAutoEval }) }
-      );
-      if (res.ok) {
-        toast.success("Prompt created");
-        setShowNewPrompt(false);
-        setNewPromptName("");
-        setNewPromptDesc("");
-        setNewPromptAutoEval(false);
-        await fetchData();
-      } else {
-        const err = await res.json().catch(() => null);
-        toast.error("Create failed", err?.message || `HTTP ${res.status}`);
-      }
+      await createMutation.mutateAsync({
+        name: newPromptName.trim(),
+        description: newPromptDesc || null,
+        tags: [],
+        auto_eval_on_save: newPromptAutoEval,
+      });
+      toast.success("Prompt created");
+      setShowNewPrompt(false);
+      setNewPromptName("");
+      setNewPromptDesc("");
+      setNewPromptAutoEval(false);
     } catch (err) {
-      toast.error("Create failed", String(err));
+      toast.error("Create failed", errorFromCaught(err, "Please try again."));
     }
-  }, [
-    currentOrg?.id,
-    newPromptName,
-    newPromptDesc,
-    newPromptAutoEval,
-    toast,
-    fetchData,
-  ]);
+  }, [orgId, newPromptName, newPromptDesc, newPromptAutoEval, toast, createMutation]);
 
-  if (!currentOrg) return <NoOrgState feature="Prompt Versions" />;
+  if (!currentOrg) return <NoOrgState icon={FileText} feature="Prompt Versions" />;
 
   return (
     <PageContent size="wide">
@@ -169,14 +143,10 @@ export default function PromptsPage() {
       />
 
       <div className="flex items-center justify-end">
-        <button
-          type="button"
-          onClick={() => setShowNewPrompt(!showNewPrompt)}
-          className="inline-flex items-center gap-2 rounded-md bg-[var(--accent)] px-3 py-2 text-sm font-medium text-[var(--accent-foreground)] hover:opacity-90"
-        >
+        <Button type="button" size="sm" onClick={() => setShowNewPrompt(!showNewPrompt)}>
           <Plus className="h-4 w-4" />
           New prompt
-        </button>
+        </Button>
       </div>
 
       {showNewPrompt && (
@@ -216,29 +186,40 @@ export default function PromptsPage() {
               >
                 Cancel
               </button>
-              <button
+              <Button
                 type="button"
+                size="sm"
                 onClick={handleCreate}
-                className="inline-flex items-center gap-2 rounded-md bg-[var(--accent)] px-3 py-1.5 text-xs font-medium text-[var(--accent-foreground)] hover:opacity-90"
+                loading={createMutation.isPending}
               >
                 Create
-              </button>
+              </Button>
             </div>
           </div>
         </div>
       )}
 
-      <div className="rounded-lg border border-[var(--border-default)] bg-[var(--bg-elev-1)]">
-        {loading ? (
-          <div className="flex items-center justify-center p-8">
-            <Loader2 className="h-5 w-5 animate-spin text-[var(--text-secondary)]" />
-          </div>
-        ) : prompts.length === 0 ? (
-          <div className="p-8 text-center text-sm text-[var(--text-secondary)]">
-            <FileText className="mx-auto mb-2 h-8 w-8 text-[var(--text-secondary)]" />
-            No prompts yet. Create your first one to start the version timeline.
-          </div>
-        ) : (
+      {promptsQuery.isLoading ? (
+        <div className="flex items-center justify-center rounded-lg border border-[var(--border-default)] bg-[var(--bg-elev-1)] p-8">
+          <Loader2 className="h-5 w-5 animate-spin text-[var(--text-secondary)]" />
+        </div>
+      ) : promptsQuery.isError ? (
+        <ErrorState
+          message={promptsQuery.error?.message}
+          action={
+            <Button size="sm" onClick={() => promptsQuery.refetch()}>
+              Try again
+            </Button>
+          }
+        />
+      ) : prompts.length === 0 ? (
+        <EmptyState
+          icon={FileText}
+          title="No prompts yet"
+          description="Create your first prompt to start the version timeline."
+        />
+      ) : (
+        <div className="rounded-lg border border-[var(--border-default)] bg-[var(--bg-elev-1)]">
           <div className="divide-y divide-[var(--border-default)]">
             {prompts.map((p) => {
               const isOpen = expanded === p.name;
@@ -284,7 +265,11 @@ export default function PromptsPage() {
                         <History className="h-3 w-3" />
                         Version timeline ({v.length})
                       </div>
-                      {v.length === 0 ? (
+                      {versionsLoading === p.name ? (
+                        <div className="flex items-center justify-center py-4">
+                          <Loader2 className="h-4 w-4 animate-spin text-[var(--text-secondary)]" />
+                        </div>
+                      ) : v.length === 0 ? (
                         <div className="text-xs text-[var(--text-secondary)]">
                           No versions yet — POST to /prompts/{p.name}/versions
                           with a template + model.
@@ -331,9 +316,8 @@ export default function PromptsPage() {
               );
             })}
           </div>
-        )}
-      </div>
-    
+        </div>
+      )}
     </PageContent>
   );
 }

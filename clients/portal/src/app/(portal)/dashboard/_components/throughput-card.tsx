@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { Loader2, Activity, ArrowUpRight, ArrowDownRight } from "lucide-react";
 import { AreaChart, Area, ResponsiveContainer, YAxis } from "recharts";
 import { cn } from "@/lib/utils";
@@ -28,7 +29,7 @@ export function ThroughputCard({
   const empty = !loading && !hasData;
 
   return (
-    <a
+    <Link
       href={href}
       className="block transition-colors hover:border-[var(--border-strong)]"
     >
@@ -111,6 +112,6 @@ export function ThroughputCard({
           </div>
         )}
       </div>
-    </Card></a>
+    </Card></Link>
   );
 }

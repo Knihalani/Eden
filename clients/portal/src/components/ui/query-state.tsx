@@ -1,0 +1,101 @@
+"use client";
+
+import { RefreshCw } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { ErrorState } from "@/components/ui/error-state";
+import { Skeleton } from "@/components/ui/skeleton";
+import { cn } from "@/lib/utils";
+
+interface QueryStateProps<T> {
+  /** ``isLoading`` from ``useApiQuery``/``useOrgQuery`` — true only
+   *  on the very first fetch (no cached data yet). */
+  loading: boolean;
+  /** ``error`` from the query. Falsy means no error. */
+  error: Error | null | undefined;
+  /** The query's ``data``. Used for the emptiness check below. */
+  data: T | null | undefined;
+  /** Retry handler — usually the query's ``refetch``. */
+  onRetry?: () => void;
+  /** Returns true when ``data`` should render the empty slot instead
+   *  of ``children`` (e.g. ``(d) => (d?.items.length ?? 0) === 0``).
+   *  Omit to skip the empty check entirely. */
+  isEmpty?: (data: T) => boolean;
+  /** Rendered while ``loading`` is true. Defaults to a generic
+   *  3-line skeleton card. */
+  loadingSlot?: React.ReactNode;
+  /** Rendered when ``isEmpty`` returns true. */
+  emptySlot?: React.ReactNode;
+  /** Error copy passed through to ``ErrorState``. */
+  errorTitle?: string;
+  className?: string;
+  children: (data: T) => React.ReactNode;
+}
+
+/**
+ * QueryState — mechanical loading → error+retry → empty → children
+ * shell for a single React Query result. Wraps the four states every
+ * page in the quality-bar checklist must handle so wave migrations
+ * don't hand-roll the same four branches per page.
+ *
+ * Usage:
+ *   const query = useOrgQuery(queryKeys.agents.list(orgId), orgId, () => agentsApi.list(orgId!));
+ *   <QueryState {...query} isEmpty={(d) => d.agents.length === 0} emptySlot={<EmptyState .../>}>
+ *     {(data) => <AgentGrid agents={data.agents} />}
+ *   </QueryState>
+ *
+ * Not a replacement for ``NoOrgState`` — callers still guard the
+ * org-less case themselves (before org id exists there's nothing to
+ * query yet, which is a different state than "query failed").
+ */
+export function QueryState<T>({
+  loading,
+  error,
+  data,
+  onRetry,
+  isEmpty,
+  loadingSlot,
+  emptySlot,
+  errorTitle = "Could not load this data",
+  className,
+  children,
+}: QueryStateProps<T>) {
+  if (loading) {
+    return (
+      <div className={cn(className)} aria-busy="true" aria-live="polite">
+        {loadingSlot ?? (
+          <div className="space-y-2 p-1">
+            <Skeleton className="h-4 w-1/3" />
+            <Skeleton className="h-4 w-2/3" />
+            <Skeleton className="h-4 w-1/2" />
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <ErrorState
+        title={errorTitle}
+        message={error.message}
+        className={className}
+        action={
+          onRetry && (
+            <Button onClick={onRetry} variant="outline" size="default">
+              <RefreshCw className="h-4 w-4" />
+              Try again
+            </Button>
+          )
+        }
+      />
+    );
+  }
+
+  if (data == null) return null;
+
+  if (isEmpty?.(data)) {
+    return <div className={cn(className)}>{emptySlot}</div>;
+  }
+
+  return <>{children(data)}</>;
+}

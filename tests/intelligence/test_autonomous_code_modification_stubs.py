@@ -1016,3 +1016,329 @@ class TestDisciplineRouteEnvelopes:
         )
         assert result is not None
         assert result.kind == "report_only"
+
+
+# ─── 13. Gate 4a live behavior tests ─────────────────────────────
+
+
+class TestGate4aGrantsLive:
+    """Gate 4a: ApprovalGrantService reads/writes from approval_grants."""
+
+    @pytest.mark.asyncio
+    async def test_create_grant_returns_grant_id(self) -> None:
+        from eden.code_change import ApprovalGrantService
+
+        svc = ApprovalGrantService()
+        result = await svc.create_grant(
+            "org_test",
+            granted_user_id="user_a",
+            granted_by_user_id="admin_a",
+            scope_type="path",
+            scope_value="src/utils/**",
+            reason="OOO cover",
+            expires_at="2027-01-01T00:00:00Z",
+        )
+        assert result["status"] == "ok"
+        assert result["live"] is True
+        data = result["data"]
+        assert data["grant_id"].startswith("grant_")
+        assert data["scope_type"] == "path"
+        assert data["scope_value"] == "src/utils/**"
+
+    @pytest.mark.asyncio
+    async def test_create_grant_invalid_scope_type_returns_error(self) -> None:
+        from eden.code_change import ApprovalGrantService
+
+        svc = ApprovalGrantService()
+        result = await svc.create_grant(
+            "org_test",
+            granted_user_id="user_a",
+            granted_by_user_id="admin_a",
+            scope_type="invalid_scope",
+            scope_value="*",
+            reason="",
+            expires_at="",
+        )
+        assert result["status"] == "error"
+        assert result["error_code"] == "invalid_scope_type"
+
+    @pytest.mark.asyncio
+    async def test_list_grants_returns_live_envelope(self) -> None:
+        from eden.code_change import ApprovalGrantService
+
+        result = await ApprovalGrantService().list_grants("org_test")
+        assert result["status"] == "ok"
+        assert result["live"] is True
+        assert "grants" in result["data"]
+        assert isinstance(result["data"]["grants"], list)
+
+    @pytest.mark.asyncio
+    async def test_revoke_grant_returns_revoked_field(self) -> None:
+        from eden.code_change import ApprovalGrantService
+
+        result = await ApprovalGrantService().revoke_grant(
+            "org_test", "grant_abc123", "admin_a"
+        )
+        assert result["status"] == "ok"
+        assert "revoked" in result["data"]
+        assert result["data"]["revoked_by_user_id"] == "admin_a"
+
+
+class TestGate4aDelegationsLive:
+    """Gate 4a: ApprovalDelegationService reads/writes from approval_delegations."""
+
+    @pytest.mark.asyncio
+    async def test_create_delegation_returns_delegation_id(self) -> None:
+        from eden.code_change import ApprovalDelegationService
+
+        result = await ApprovalDelegationService().create_delegation(
+            "org_test",
+            delegator_user_id="user_a",
+            delegate_user_id="user_b",
+            starts_at="2026-07-14T00:00:00Z",
+            ends_at="2026-07-21T00:00:00Z",
+            scope_filter="",
+        )
+        assert result["status"] == "ok"
+        assert result["live"] is True
+        assert result["data"]["delegation_id"].startswith("del_")
+        assert result["data"]["delegator_user_id"] == "user_a"
+        assert result["data"]["delegate_user_id"] == "user_b"
+
+    @pytest.mark.asyncio
+    async def test_list_delegations_returns_live_envelope(self) -> None:
+        from eden.code_change import ApprovalDelegationService
+
+        result = await ApprovalDelegationService().list_delegations("org_test")
+        assert result["status"] == "ok"
+        assert result["live"] is True
+        assert isinstance(result["data"]["delegations"], list)
+
+
+class TestGate4aWorkflowLive:
+    """Gate 4a: ApprovalWorkflowService reads/writes from patch_approvals + patch_approval_status."""
+
+    @pytest.mark.asyncio
+    async def test_get_status_awaiting_when_no_approvals(self) -> None:
+        from eden.code_change import ApprovalWorkflowService
+
+        result = await ApprovalWorkflowService().get_status("org_test", "patch_x")
+        assert result["status"] == "ok"
+        assert result["live"] is True
+        data = result["data"]
+        assert data["approvals_required"] >= 1
+        assert data["approvals_received"] == 0
+        assert data["status"] in {"awaiting", "awaiting_approval"}
+
+    @pytest.mark.asyncio
+    async def test_record_approval_returns_approval_id(self) -> None:
+        from eden.code_change import ApprovalWorkflowService
+
+        result = await ApprovalWorkflowService().record_approval(
+            "org_test",
+            patch_id="patch_x",
+            approver_user_id="user_a",
+            approval_type="approve",
+            comment="LGTM",
+        )
+        assert result["status"] == "ok"
+        assert result["data"]["approval_id"].startswith("appr_")
+        assert result["data"]["new_workflow_status"] == "approved"
+
+    @pytest.mark.asyncio
+    async def test_record_deny_returns_denied_status(self) -> None:
+        from eden.code_change import ApprovalWorkflowService
+
+        result = await ApprovalWorkflowService().record_approval(
+            "org_test",
+            patch_id="patch_y",
+            approver_user_id="user_b",
+            approval_type="deny",
+            comment="Too risky",
+        )
+        assert result["status"] == "ok"
+        assert result["data"]["new_workflow_status"] == "denied"
+
+
+class TestGate4aActivityFeedLive:
+    """Gate 4a: AgentActivityFeed persists to + reads from agent_activity_events."""
+
+    @pytest.mark.asyncio
+    async def test_emit_returns_event_id(self) -> None:
+        from eden.code_change import AgentActivityFeed
+
+        result = await AgentActivityFeed().emit(
+            "org_test",
+            event_type="patch_approved",
+            summary="Patch patch_x approved by user_a",
+            deep_link="/inbox/patch_x",
+            metadata={"patch_id": "patch_x"},
+        )
+        assert result["status"] == "ok"
+        assert result["live"] is True
+        assert result["data"]["event_id"].startswith("act_")
+        assert result["data"]["event_type"] == "patch_approved"
+
+    @pytest.mark.asyncio
+    async def test_emit_unknown_event_type_returns_bad_request(self) -> None:
+        from eden.code_change import AgentActivityFeed
+
+        result = await AgentActivityFeed().emit(
+            "org_test",
+            event_type="not_a_real_event",
+            summary="whatever",
+        )
+        assert result["status"] == "bad_request"
+
+    @pytest.mark.asyncio
+    async def test_list_events_returns_live_envelope(self) -> None:
+        from eden.code_change import AgentActivityFeed
+
+        result = await AgentActivityFeed().list_events("org_test", limit=10)
+        assert result["status"] == "ok"
+        assert result["live"] is True
+        assert result["data"]["limit"] == 10
+        assert isinstance(result["data"]["events"], list)
+
+
+class TestGate4aNotifyLive:
+    """Gate 4a: PRReviewerNotifier POSTs to real channels when configured."""
+
+    @pytest.mark.asyncio
+    async def test_notify_pr_opened_no_webhook_no_op(self) -> None:
+        """When no Slack webhook is configured, slack_sent is False."""
+        from eden.code_change import PRReviewerNotifier
+
+        result = await PRReviewerNotifier().notify_pr_opened(
+            "org_test",
+            pr_id="pr_x",
+            rca_category="rate_limiter",
+            test_pass_rate=0.98,
+            blast_radius_score=0.1,
+            estimated_cost_savings_usd=120.0,
+            slack_webhook_url="",
+            severity="critical",
+        )
+        assert result["status"] == "ok"
+        assert result["live"] is True
+        assert "slack" in result["data"]["channels"]
+        # No webhook provided — Slack delivery is False.
+        assert result["data"]["slack_sent"] is False
+
+    @pytest.mark.asyncio
+    async def test_notify_revert_high_severity_contains_email_channel(self) -> None:
+        from eden.code_change import PRReviewerNotifier
+
+        result = await PRReviewerNotifier().notify_revert(
+            "org_test",
+            pr_id="pr_x",
+            revert_reason="Regression in success rate",
+            severity="high",
+        )
+        assert result["status"] == "ok"
+        assert "email" in result["data"]["channels"]
+        assert "slack" not in result["data"]["channels"]  # high → no slack
+
+    @pytest.mark.asyncio
+    async def test_route_for_patch_medium_no_slack(self) -> None:
+        from eden.code_change import PRReviewerNotifier
+
+        result = await PRReviewerNotifier().route_for_patch(
+            "org_test", "patch_x", severity="medium"
+        )
+        assert result["data"]["send_slack"] is False
+        assert result["data"]["in_digest"] is True
+
+    @pytest.mark.asyncio
+    async def test_notify_with_opt_out_disables_channel(self) -> None:
+        from eden.code_change import PRReviewerNotifier
+
+        result = await PRReviewerNotifier().notify_pr_opened(
+            "org_test",
+            pr_id="pr_x",
+            rca_category="cache",
+            test_pass_rate=1.0,
+            blast_radius_score=0.0,
+            estimated_cost_savings_usd=0.0,
+            severity="critical",
+            notify_channels={"slack": False, "email": False},
+        )
+        assert result["status"] == "ok"
+        assert "slack" not in result["data"]["channels"]
+        assert "email" not in result["data"]["channels"]
+
+
+class TestGate4aMetricsLive:
+    """Gate 4a: AutoApprovalMetricsCollector queries codebase_knowledge_graph."""
+
+    @pytest.mark.asyncio
+    async def test_collect_returns_ok_with_is_first_pr(self) -> None:
+        from eden.code_change import AutoApprovalMetricsCollector
+
+        diff = (
+            "--- a/src/utils.py\n+++ b/src/utils.py\n"
+            "@@ -1,2 +1,3 @@\n line\n+new\n"
+        )
+        result = await AutoApprovalMetricsCollector().collect(
+            "org_test",
+            diff=diff,
+            repo_id="repo_x",
+            blast_radius_score=0.1,
+            quality_score=0.9,
+            rca_confidence=0.85,
+        )
+        assert result["status"] == "ok"
+        assert result["live"] is True
+        metrics = result["data"]["metrics"]
+        assert metrics["lines_changed"] == 1
+        assert metrics["files_changed"] == 1
+        # DB returns None (mocked) → unknown files → conservative True
+        assert metrics["is_first_pr_to_file"] is True
+
+    @pytest.mark.asyncio
+    async def test_collect_empty_diff_not_first(self) -> None:
+        from eden.code_change import AutoApprovalMetricsCollector
+
+        result = await AutoApprovalMetricsCollector().collect(
+            "org_test", diff="", repo_id="repo_x"
+        )
+        assert result["status"] == "ok"
+        # Empty diff → no files → is_first_pr_to_file = False
+        assert result["data"]["metrics"]["is_first_pr_to_file"] is False
+
+    @pytest.mark.asyncio
+    async def test_collect_accepts_repo_id_kwarg(self) -> None:
+        from eden.code_change import AutoApprovalMetricsCollector
+
+        diff = "+new_line\n"
+        result = await AutoApprovalMetricsCollector().collect(
+            "org_test", diff=diff, repo_id="repo_custom"
+        )
+        assert result["status"] == "ok"
+
+
+class TestGate4aMigration095:
+    """Migration 095 adds agent_activity_events table (after 094)."""
+
+    @staticmethod
+    def _load_migration():
+        import importlib.util
+        import pathlib
+
+        path = pathlib.Path(
+            "src/eden/db_migrations/versions/095_agent_activity_events.py"
+        )
+        spec = importlib.util.spec_from_file_location("m095", path)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        return mod
+
+    def test_revision_is_095(self) -> None:
+        m = self._load_migration()
+        assert m.revision == "095"
+        assert m.down_revision == "094"
+
+    def test_migration_has_upgrade_and_downgrade(self) -> None:
+        m = self._load_migration()
+        assert callable(m.upgrade)
+        assert callable(m.downgrade)

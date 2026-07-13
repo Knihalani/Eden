@@ -1,9 +1,10 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { useOrg } from "@/hooks/use-org";
 import { rcaApi } from "@/lib/api";
+import { useOrgQuery, useOrgMutation } from "@/hooks/use-api-query";
+import { queryKeys } from "@/lib/query-keys";
 import { SeverityBadge } from "@/components/ui/status-badge";
 import { NoOrgState } from "@/components/ui/no-org-state";
 import { PageHeader } from "@/components/layout/page-header";
@@ -18,7 +19,6 @@ import {
   Zap,
 } from "lucide-react";
 import { useToast } from "@/components/ui/toast";
-import { errorFromCaught } from "@/lib/safe-error-message";
 
 interface Incident {
   cluster_id: string;
@@ -32,43 +32,33 @@ interface Incident {
 
 export default function IncidentsPage() {
   const { currentOrg } = useOrg();
+  const orgId = currentOrg?.id;
   const toast = useToast();
-  const [incidents, setIncidents] = useState<Incident[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
-  const [clustering, setClustering] = useState(false);
 
-  const loadIncidents = useCallback(async () => {
-    if (!currentOrg) return;
-    setLoading(true);
-    setError("");
-    try {
-      const data = await rcaApi.listIncidents(currentOrg.id);
-      setIncidents((data.incidents as unknown as Incident[]) ?? []);
-    } catch (err) {
-      setError(errorFromCaught(err, "Failed to load incidents"));
-    } finally {
-      setLoading(false);
-    }
-  }, [currentOrg]);
+  const incidentsQuery = useOrgQuery(
+    queryKeys.incidents.list(orgId),
+    orgId,
+    () => rcaApi.listIncidents(orgId!),
+  );
+  const incidents = (incidentsQuery.data?.incidents as unknown as Incident[]) ?? [];
+  const loading = incidentsQuery.isLoading;
+  const error = incidentsQuery.error?.message ?? "";
 
-  useEffect(() => {
-    if (currentOrg) loadIncidents();
-  }, [currentOrg, loadIncidents]);
+  const clusterMutation = useOrgMutation(
+    () => rcaApi.clusterIncidents(orgId!),
+    { invalidateKeys: [queryKeys.incidents.list(orgId)] },
+  );
+  const clustering = clusterMutation.isPending;
 
   async function handleCluster() {
-    if (!currentOrg) return;
-    setClustering(true);
+    if (!orgId) return;
     try {
-      const data = await rcaApi.clusterIncidents(currentOrg.id);
+      const data = await clusterMutation.mutateAsync();
       toast.success(
         `Clustering complete — ${data.cluster_count} cluster${data.cluster_count === 1 ? "" : "s"}`
       );
-      await loadIncidents();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Clustering failed");
-    } finally {
-      setClustering(false);
     }
   }
 
@@ -152,7 +142,7 @@ export default function IncidentsPage() {
         actions={
           <div className="flex items-center gap-2">
             <button
-              onClick={loadIncidents}
+              onClick={() => incidentsQuery.refetch()}
               disabled={loading}
               aria-label="Refresh incidents"
               className="inline-flex items-center gap-2 px-3 py-2 bg-[var(--bg-tertiary)] text-[var(--text-primary)] rounded-lg text-sm font-medium hover:bg-[var(--border-default)] disabled:opacity-50 transition-colors"
@@ -183,7 +173,7 @@ export default function IncidentsPage() {
             {error}
           </span>
           <button
-            onClick={loadIncidents}
+            onClick={() => incidentsQuery.refetch()}
             disabled={loading}
             className="text-xs font-medium underline underline-offset-2 hover:opacity-80 disabled:opacity-50"
           >

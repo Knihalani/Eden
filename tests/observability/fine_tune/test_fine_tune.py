@@ -450,7 +450,14 @@ class TestOpenAIFineTuneWebhook:
             f"{ts}.".encode() + body_bytes,
             hashlib.sha256,
         ).hexdigest()
-        mock_postgres_client.fetchrow = AsyncMock(return_value={"id": _RUN_ID})
+        mock_postgres_client.fetchrow = AsyncMock(
+            side_effect=[
+                # Wave 5: _lookup_org_for_fine_tune SELECT org_id ...
+                {"org_id": "org-1"},
+                # FineTuneService upsert RETURNING id
+                {"id": _RUN_ID},
+            ]
+        )
         resp = fine_tune_client.post(
             "/v1/webhooks/openai/fine_tuning",
             content=body_bytes,
@@ -464,11 +471,12 @@ class TestOpenAIFineTuneWebhook:
         body = resp.json()
         assert body["status"] == "ok"
         assert body["data"]["internal_status"] == "succeeded"
-        # Bound args: args[0]=SQL, args[1]=org_id, args[2]=provider,
-        # args[3]=provider_fine_tune_id, args[4]=base_model, ...
-        args = mock_postgres_client.fetchrow.call_args.args
-        assert args[2] == "openai"               # provider
-        assert args[3] == "ftjob-1"              # provider_fine_tune_id
+        # Second fetchrow is the upsert; bound args: args[0]=SQL,
+        # args[1]=org_id, args[2]=provider, args[3]=provider_fine_tune_id, ...
+        upsert_args = mock_postgres_client.fetchrow.call_args_list[1].args
+        assert upsert_args[1] == "org-1"             # org from lookup
+        assert upsert_args[2] == "openai"            # provider
+        assert upsert_args[3] == "ftjob-1"           # provider_fine_tune_id
 
 
 # ── SDK tests ─────────────────────────────────────────────────────────

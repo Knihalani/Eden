@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Loader2, AlertTriangle, Search, Lightbulb, Wrench, ShieldAlert, Wand2 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -9,6 +9,8 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { DataTable } from "@/components/ui/data-table";
 import { NoOrgState } from "@/components/ui/no-org-state";
 import { useOrg } from "@/hooks/use-org";
+import { useOrgQuery } from "@/hooks/use-api-query";
+import { queryKeys } from "@/lib/query-keys";
 import { autonomousApi } from "@/lib/api";
 import { PageHeader } from "@/components/layout/page-header";
 import { PageContent } from "@/components/layout/page-content";
@@ -204,40 +206,18 @@ const IMPACT_COLORS: Record<string, string> = {
 
 function RecommendationsTab() {
   const { currentOrg } = useOrg();
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string>("");
-  const [items, setItems] = useState<
-    Array<{ id: string; title: string; impact: string; effort: string; rationale: string }>
-  >([]);
-  const [reloadKey, setReloadKey] = useState(0);
+  const orgId = currentOrg?.id;
+  const { data, isLoading, error, refetch } = useOrgQuery(
+    queryKeys.autonomous.recommendations(orgId),
+    orgId,
+    async () => {
+      const res = await autonomousApi.recommendations(orgId!);
+      return res.data?.recommendations ?? [];
+    },
+  );
+  const items = data ?? [];
 
-  useEffect(() => {
-    if (!currentOrg) return;
-    let cancelled = false;
-    queueMicrotask(() => {
-      if (cancelled) return;
-      setLoading(true);
-      setError("");
-    });
-    autonomousApi
-      .recommendations(currentOrg.id)
-      .then((res) => {
-        if (cancelled) return;
-        setItems(res.data?.recommendations ?? []);
-      })
-      .catch((err: unknown) => {
-        if (cancelled) return;
-        setError(errorFromCaught(err, "Failed to load recommendations"));
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [currentOrg, reloadKey]);
-
-  if (loading) {
+  if (isLoading) {
     return (
       <div
         role="status"
@@ -254,11 +234,11 @@ function RecommendationsTab() {
       <EmptyState
         icon={AlertTriangle}
         title="Could not load recommendations"
-        description={error}
+        description={error.message}
         size="md"
         action={
           <button
-            onClick={() => setReloadKey((k) => k + 1)}
+            onClick={() => refetch()}
             className="inline-flex items-center gap-2 px-3 py-1.5 rounded-md bg-[var(--accent)] text-[var(--bg-base)] text-xs font-medium hover:bg-[var(--accent-hover)] transition-colors"
           >
             Try again
@@ -401,7 +381,7 @@ function HealTab() {
           </label>
           <button
             type="submit"
-            disabled={submitting || !description.trim()}
+            disabled={submitting}
             aria-label="Propose a self-heal change"
             className={cn(
               "inline-flex items-center gap-2 rounded-md px-4 py-2 text-sm font-medium transition-colors",

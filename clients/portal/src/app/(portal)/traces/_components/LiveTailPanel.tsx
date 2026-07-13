@@ -5,7 +5,7 @@
  * Uses the existing SSE hook + org stream proxy.
  */
 
-import { Pause, Play, Radio, Trash2 } from "lucide-react";
+import { Pause, Play, Radio, RefreshCw, Trash2 } from "lucide-react";
 import { useObservabilityStream } from "@/hooks/use-observability-stream";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -21,7 +21,7 @@ export function LiveTailPanel({
   enabled = true,
   onSelectTrace,
 }: LiveTailPanelProps) {
-  const { connected, events, paused, pause, resume, clear } =
+  const { connected, events, paused, failed, pause, resume, clear, retry } =
     useObservabilityStream({ orgId, maxEvents: 40, enabled });
 
   return (
@@ -34,7 +34,11 @@ export function LiveTailPanel({
           <Radio
             className={cn(
               "h-3.5 w-3.5 shrink-0",
-              connected ? "text-[var(--terminal)]" : "text-[var(--text-muted)]",
+              failed
+                ? "text-[var(--error)]"
+                : connected
+                  ? "text-[var(--terminal)]"
+                  : "text-[var(--text-muted)]",
             )}
             aria-hidden
           />
@@ -42,25 +46,44 @@ export function LiveTailPanel({
             <p className="text-xs font-medium text-[var(--text-primary)]">
               Live tail
             </p>
-            <p className="text-[10px] text-[var(--text-muted)] truncate">
-              {connected
-                ? paused
-                  ? "Paused — new events held"
-                  : "Streaming new traces"
-                : "Connecting…"}
+            <p
+              className={cn(
+                "text-[10px] truncate",
+                failed ? "text-[var(--error)]" : "text-[var(--text-muted)]",
+              )}
+            >
+              {failed
+                ? "Connection lost — giving up"
+                : connected
+                  ? paused
+                    ? "Paused — new events held"
+                    : "Streaming new traces"
+                  : "Connecting…"}
             </p>
           </div>
         </div>
         <div className="flex items-center gap-1">
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            aria-label={paused ? "Resume live tail" : "Pause live tail"}
-            onClick={() => (paused ? resume() : pause())}
-          >
-            {paused ? <Play className="h-3.5 w-3.5" /> : <Pause className="h-3.5 w-3.5" />}
-          </Button>
+          {failed ? (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={retry}
+            >
+              <RefreshCw className="h-3.5 w-3.5" />
+              Retry
+            </Button>
+          ) : (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              aria-label={paused ? "Resume live tail" : "Pause live tail"}
+              onClick={() => (paused ? resume() : pause())}
+            >
+              {paused ? <Play className="h-3.5 w-3.5" /> : <Pause className="h-3.5 w-3.5" />}
+            </Button>
+          )}
           <Button
             type="button"
             variant="ghost"
@@ -73,7 +96,11 @@ export function LiveTailPanel({
         </div>
       </header>
 
-      {events.length === 0 ? (
+      {failed ? (
+        <p className="text-xs text-[var(--text-muted)] py-2">
+          Gave up after repeated reconnect failures. Click Retry to reconnect.
+        </p>
+      ) : events.length === 0 ? (
         <p className="text-xs text-[var(--text-muted)] py-2">
           Waiting for new traces…
         </p>

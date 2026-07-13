@@ -23,8 +23,7 @@ import {
   Rows3,
   ExternalLink,
   RotateCcw,
-  AlertTriangle,
-  History } from "lucide-react";
+  AlertTriangle } from "lucide-react";
 import { useOrg } from "@/hooks/use-org";
 import { prSuggestionApi } from "@/lib/api";
 import { cn } from "@/lib/utils";
@@ -36,7 +35,7 @@ import { PageHeader } from "@/components/layout/page-header";
 import { PageContent } from "@/components/layout/page-content";
 import { PRStatusBadge } from "@/components/ui/status-badge";
 import { useToast } from "@/components/ui/toast";
-import { EmptyState } from "@/components/ui/empty-state";
+import { NoOrgState } from "@/components/ui/no-org-state";
 import type {
   PRSuggestion,
   PRSuggestionStatus,
@@ -800,15 +799,7 @@ export default function PRSuggestionDetailPage({
   }
 
   if (!currentOrg) {
-    return (
-      <div className="p-6">
-        <EmptyState
-          icon={History}
-          title="No organization"
-          description="Select an organization to view PR suggestions."
-        />
-      </div>
-    );
+    return <NoOrgState feature="PR Suggestions" description="Select an organization to view this suggestion." />;
   }
 
   if (loading) {

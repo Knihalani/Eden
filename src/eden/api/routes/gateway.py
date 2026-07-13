@@ -235,6 +235,11 @@ def get_ai_gateway() -> AIGateway:
     On first construction, kicks off a background pricing refresh
     against OpenRouter so the first real request can route on live
     data. The refresh is best-effort and never blocks this call.
+
+    F39 wiring: installs ``NudgeGatewayFilter`` (+ BookGatewayFilter
+    and guardrail) on this gateway instance so runtime nudges fire on
+    real /gateway/v1/chat/completions traffic, not only the retired
+    llmops gateway wired from background workers.
     """
     global _gateway
     if _gateway is None:
@@ -260,6 +265,16 @@ def get_ai_gateway() -> AIGateway:
             # No event loop yet (very early startup); next request
             # will pick this up.
             pass
+
+        # Wire F39 learn filters onto this gateway. Idempotent and
+        # per-gateway so the retired llmops gateway (background
+        # workers path) and this gateway both carry the nudge filter.
+        try:
+            from eden.llmops.learn_wiring import install_learn_filters
+            install_learn_filters(gateway=_gateway)
+        except Exception as _exc:  # noqa: BLE001
+            logger.debug("gateway: learn_wiring install skipped: %s", _exc)
+
     return _gateway
 
 

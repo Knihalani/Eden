@@ -191,6 +191,16 @@ async function handle(
         // a status we explicitly opt out of by setting
         // ``readyState`` ourselves — the consumer-side reconnect
         // policy is owned by the SSE hook, not the proxy.
+        //
+        // Forward Retry-After from the still-throttled upstream so
+        // a caller that inspects headers (not just the JSON body)
+        // sees the real cooldown instead of nothing.
+        const failureHeaders: Record<string, string> = {
+          "Content-Type": "application/json",
+          "Cache-Control": "no-store",
+        };
+        const retryAfter = upstream.headers.get("Retry-After");
+        if (retryAfter) failureHeaders["Retry-After"] = retryAfter;
         return new Response(
           JSON.stringify({
             detail: "Upstream stream error",
@@ -198,10 +208,7 @@ async function handle(
           }),
           {
             status: upstream.status || 502,
-            headers: {
-              "Content-Type": "application/json",
-              "Cache-Control": "no-store",
-            },
+            headers: failureHeaders,
           },
         );
       }

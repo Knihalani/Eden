@@ -23,20 +23,18 @@ Routing table (per the Phase 3b plan):
 * **critical** — inbox + digest + email + Slack. The notifier
   posts to the configured Slack webhook URL.
 
-STUB mode (Gate 4a) — same as before: the notifier returns the
-payload that *would* have been sent. No real Slack/Teams POST.
-Real webhook delivery ships with Gate 4a.
-
-Backward compatibility: the existing ``notify_pr_opened`` /
-``notify_revert`` methods keep their old signatures so any
-existing caller compiles unchanged. The new ``route_for_patch``
-helper is what ``PatchGenerator`` / the scheduler call.
+Gate 4a: ``notify_pr_opened`` and ``notify_revert`` now POST to the
+real Slack webhook (via httpx) when configured, and send email via
+the existing ``EmailService`` (SendGrid) when configured. Both
+deliveries are fire-and-forget (errors logged, never raised).
 """
 
 from __future__ import annotations
 
 import logging
 from typing import Any
+
+import httpx
 
 from ._common import _new_id, _ok_envelope
 
@@ -58,17 +56,13 @@ def _normalize_severity(severity: str | None) -> str:
     """Coerce an arbitrary severity string to the routing table key.
 
     Unknown / blank values fall back to ``"medium"`` so a typo
-    in the caller doesn't silently drop a notification. The
-    routing table above is the source of truth — if you want to
-    add a new severity, add a row there and this helper doesn't
-    need to change.
+    in the caller doesn't silently drop a notification.
     """
     if not severity:
         return "medium"
     sev = severity.lower().strip()
     if sev in _SEVERITY_ROUTES:
         return sev
-    # Common synonyms from upstream severity schemas.
     aliases = {
         "warn": "low",
         "warning": "low",
@@ -90,11 +84,9 @@ def _apply_opt_outs(
     """Apply per-org channel opt-outs.
 
     ``notify_channels`` is a dict like ``{"email": True,
-    "slack": False}``. Missing keys default to enabled (so a
-    blank policy enables all channels). ``inbox`` is always
-    kept on — it's the human-in-the-loop fallback and cannot
-    be disabled from the policy (the human MUST see the
-    proposed_patches row regardless of channel prefs).
+    "slack": False}``. Missing keys default to enabled. ``inbox``
+    is always kept on — it is the human-in-the-loop fallback and
+    cannot be disabled from the policy.
     """
     if not notify_channels:
         return channels
@@ -106,6 +98,119 @@ def _apply_opt_outs(
         if notify_channels.get(ch, True):
             out.append(ch)
     return tuple(out)
+
+
+async def _post_slack(webhook_url: str, text: str, blocks: list[dict[str, Any]]) -> bool:
+    """POST a Slack Block Kit message to ``webhook_url``.
+
+    Returns ``True`` on a 2xx response; logs and returns ``False`` on any
+    error so delivery failures never propagate to callers.
+    """
+    if not webhook_url:
+        return False
+    body: dict[str, Any] = {"text": text, "blocks": blocks}
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.post(webhook_url, json=body)
+        if resp.status_code in (200, 204):
+            return True
+        logger.warning(
+            "notify: Slack POST returned %s for webhook %s: %s",
+            resp.status_code,
+            webhook_url[:40],
+            resp.text[:200],
+        )
+        return False
+    except httpx.RequestError as exc:
+        logger.warning("notify: Slack POST failed: %s", exc)
+        return False
+
+
+async def _send_email_notification(
+    recipients: list[str],
+    subject: str,
+    html_content: str,
+) -> bool:
+    """Send email via the configured SendGrid integration.
+
+    No-ops (returns ``False``) when ``sendgrid_api_key`` is not set.
+    Errors are logged and swallowed.
+    """
+    if not recipients:
+        return False
+    try:
+        from eden.services.email_service import EmailService
+        svc = EmailService()
+        if not svc.settings.sendgrid_api_key:
+            return False
+        results = []
+        for addr in recipients:
+            result = await svc.send_email(
+                to_email=addr,
+                subject=subject,
+                html_content=html_content,
+            )
+            results.append(result.status == "sent")
+        return any(results)
+    except Exception as exc:
+        logger.warning("notify: email send failed: %s", exc)
+        return False
+
+
+def _build_pr_slack_blocks(
+    org_id: str,
+    pr_id: str,
+    severity: str,
+    payload: dict[str, Any],
+) -> list[dict[str, Any]]:
+    emoji = {"low": ":memo:", "medium": ":bell:", "high": ":warning:", "critical": ":rotating_light:"}.get(severity, ":bell:")
+    rca = payload.get("rca_category", "unknown")
+    test_rate = payload.get("test_pass_rate", 0.0)
+    blast = payload.get("blast_radius_score", 0.0)
+    buttons = payload.get("buttons", [])
+    return [
+        {
+            "type": "header",
+            "text": {"type": "plain_text", "text": f"{emoji} PR Review Required [{severity.upper()}]", "emoji": True},
+        },
+        {
+            "type": "section",
+            "fields": [
+                {"type": "mrkdwn", "text": f"*PR:*\n`{pr_id}`"},
+                {"type": "mrkdwn", "text": f"*RCA Category:*\n{rca}"},
+                {"type": "mrkdwn", "text": f"*Test Pass Rate:*\n{test_rate:.0%}"},
+                {"type": "mrkdwn", "text": f"*Blast Radius:*\n{blast:.2f}"},
+            ],
+        },
+        {
+            "type": "context",
+            "elements": [{"type": "mrkdwn", "text": f"org `{org_id}` · pr `{pr_id}`"}],
+        },
+    ]
+
+
+def _build_revert_slack_blocks(
+    org_id: str,
+    pr_id: str,
+    severity: str,
+    payload: dict[str, Any],
+) -> list[dict[str, Any]]:
+    emoji = ":rewind:"
+    reason = payload.get("revert_reason", "")
+    return [
+        {
+            "type": "header",
+            "text": {"type": "plain_text", "text": f"{emoji} PR Revert Triggered [{severity.upper()}]", "emoji": True},
+        },
+        {
+            "type": "section",
+            "text": {"type": "mrkdwn", "text": f"*Reason:* {str(reason)[:300]}"},
+        },
+        {
+            "type": "context",
+            "elements": [{"type": "mrkdwn", "text": f"org `{org_id}` · pr `{pr_id}`"}],
+        },
+    ]
 
 
 class PRReviewerNotifier:
@@ -126,17 +231,16 @@ class PRReviewerNotifier:
         notify_channels: dict[str, bool] | None = None,
         email_recipients: list[str] | None = None,
     ) -> dict[str, Any]:
-        """Phase 3b: severity-aware PR-opened notification.
+        """Severity-aware PR-opened notification.
 
-        ``severity`` selects the routing set; ``notify_channels``
-        and ``email_recipients`` come from the org policy. The
-        envelope returns the resolved channel set + the payload
-        that *would* have been sent on each channel.
+        When ``send_slack`` resolves True and a webhook URL is present,
+        POSTs a Block Kit message to Slack. When ``send_email`` resolves
+        True and SendGrid is configured, sends email to recipients.
         """
         sev = _normalize_severity(severity)
         channels = _SEVERITY_ROUTES.get(sev, _SEVERITY_ROUTES["medium"])
         channels = _apply_opt_outs(channels, notify_channels=notify_channels)
-        # STUB Gate-4a message + per-channel payload stub.
+
         payload = {
             "rca_category": rca_category,
             "test_pass_rate": test_pass_rate,
@@ -152,6 +256,35 @@ class PRReviewerNotifier:
                 },
             ],
         }
+
+        slack_sent = False
+        email_sent = False
+
+        if "slack" in channels:
+            # Prefer the per-call webhook; fall back to the global config.
+            webhook = slack_webhook_url or await _resolve_org_slack_webhook(org_id)
+            if webhook:
+                blocks = _build_pr_slack_blocks(org_id, pr_id, sev, payload)
+                slack_sent = await _post_slack(
+                    webhook,
+                    text=f"[{sev.upper()}] PR review required: {pr_id}",
+                    blocks=blocks,
+                )
+            else:
+                logger.debug(
+                    "notify: no Slack webhook configured for org=%s; skipping", org_id
+                )
+
+        if "email" in channels and email_recipients:
+            subject = f"[Eden] PR Review Required [{sev.upper()}] — {pr_id}"
+            html_content = (
+                f"<p>A new PR requires review: <strong>{pr_id}</strong></p>"
+                f"<p>RCA category: {rca_category} | "
+                f"Test pass rate: {test_pass_rate:.0%} | "
+                f"Blast radius: {blast_radius_score:.2f}</p>"
+            )
+            email_sent = await _send_email_notification(email_recipients, subject, html_content)
+
         return _ok_envelope(
             self.name,
             {
@@ -160,12 +293,9 @@ class PRReviewerNotifier:
                 "notification_id": _new_id("notif"),
                 "severity": sev,
                 "channels": list(channels),
+                "slack_sent": slack_sent,
+                "email_sent": email_sent,
                 "payload": payload,
-                "message": (
-                    "Stub notification — Gate 4a will POST to the "
-                    "resolved channels (inbox is the proposed_patches "
-                    "row itself)."
-                ),
             },
         )
 
@@ -180,16 +310,14 @@ class PRReviewerNotifier:
         notify_channels: dict[str, bool] | None = None,
         email_recipients: list[str] | None = None,
     ) -> dict[str, Any]:
-        """Phase 3b: severity-aware revert notification.
+        """Severity-aware revert notification.
 
-        Defaults to ``severity='high'`` because a revert is
-        always news — a previously-merged PR was bad enough to
-        roll back. Critical-tier orgs can override to
-        ``critical`` so Slack is paged.
+        Defaults to ``severity='high'`` because a revert is always news.
         """
         sev = _normalize_severity(severity)
         channels = _SEVERITY_ROUTES.get(sev, _SEVERITY_ROUTES["high"])
         channels = _apply_opt_outs(channels, notify_channels=notify_channels)
+
         payload = {
             "revert_reason": revert_reason,
             "regression_evidence": regression_evidence or {},
@@ -204,6 +332,32 @@ class PRReviewerNotifier:
                 },
             ],
         }
+
+        slack_sent = False
+        email_sent = False
+
+        if "slack" in channels:
+            webhook = slack_webhook_url or await _resolve_org_slack_webhook(org_id)
+            if webhook:
+                blocks = _build_revert_slack_blocks(org_id, pr_id, sev, payload)
+                slack_sent = await _post_slack(
+                    webhook,
+                    text=f"[{sev.upper()}] PR revert triggered: {pr_id}",
+                    blocks=blocks,
+                )
+            else:
+                logger.debug(
+                    "notify: no Slack webhook configured for org=%s; skipping", org_id
+                )
+
+        if "email" in channels and email_recipients:
+            subject = f"[Eden] PR Revert Triggered [{sev.upper()}] — {pr_id}"
+            html_content = (
+                f"<p>PR <strong>{pr_id}</strong> has been reverted.</p>"
+                f"<p>Reason: {revert_reason}</p>"
+            )
+            email_sent = await _send_email_notification(email_recipients, subject, html_content)
+
         return _ok_envelope(
             self.name,
             {
@@ -212,11 +366,9 @@ class PRReviewerNotifier:
                 "notification_id": _new_id("notif"),
                 "severity": sev,
                 "channels": list(channels),
+                "slack_sent": slack_sent,
+                "email_sent": email_sent,
                 "payload": payload,
-                "message": (
-                    "Stub revert notification — Gate 4a will POST "
-                    "to the resolved channels."
-                ),
             },
         )
 
@@ -232,10 +384,8 @@ class PRReviewerNotifier:
 
         Used by :class:`eden.code_change.scheduler` to decide
         whether to enqueue the notification job for this patch.
-        Returns the resolved channel list + the routing table
-        key. The notifier does NOT itself trigger any side-
-        effect — it returns the verdict and the caller decides
-        what to do with it.
+        Returns the resolved channel list without triggering any
+        side-effect.
         """
         sev = _normalize_severity(severity)
         channels = _SEVERITY_ROUTES.get(sev, _SEVERITY_ROUTES["medium"])
@@ -252,3 +402,37 @@ class PRReviewerNotifier:
                 "in_digest": "digest" in channels,
             },
         )
+
+
+async def _resolve_org_slack_webhook(org_id: str) -> str:
+    """Look up the org's Slack webhook from ``org_integrations`` or settings."""
+    try:
+        from eden.storage.postgres import get_postgres_client
+
+        client = await get_postgres_client()
+        if client is not None:
+            async with client.acquire() as conn:
+                row = await conn.fetchrow(
+                    "SELECT config FROM org_integrations "
+                    "WHERE org_id = $1 AND provider = 'slack' AND enabled = true "
+                    "LIMIT 1",
+                    org_id,
+                )
+            if row:
+                cfg = row.get("config") or {}
+                if isinstance(cfg, str):
+                    import json
+                    try:
+                        cfg = json.loads(cfg)
+                    except (TypeError, ValueError):
+                        cfg = {}
+                url = (cfg or {}).get("webhook_url")
+                if url:
+                    return str(url)
+    except Exception as exc:
+        logger.debug("notify: per-org Slack webhook lookup failed: %s", exc)
+    try:
+        from eden.config import get_settings
+        return str(getattr(get_settings(), "slack_webhook_url", "") or "")
+    except Exception:
+        return ""

@@ -102,8 +102,10 @@ class _StubPostgresClient:
                     counts[name]["sample_trace_ids"].append(tid)
             return [{"name": k, **v} for k, v in
                     sorted(counts.items(), key=lambda x: -x[1]["count"])[:10]]
-        if "tool_name" in q and "tool.name" in q:
-            # Top tools (groups by tool_name)
+        if "tool_name" in q and (
+            "tool.name" in q or "payload->>'tool_name'" in q or "attributes->>'tool_name'" in q
+        ):
+            # Top tools (groups by tool_name / payload attributes)
             org = args[0] if args else None
             counts: dict[str, int] = {}
             for e in self.events:
@@ -157,12 +159,23 @@ class _StubPostgresClient:
                             "created_at": v.get("created_at", "2026-06-09T12:00:00Z"),
                             "updated_at": v.get("updated_at", "2026-06-09T12:00:00Z")}
             return None
+        if "judged_traces" in q or "FROM judge_scores" in q:
+            # Eval-coverage subquery (Wave 2): distinct traces vs judged
+            org = args[0] if args else None
+            matching = [e for e in self.events if e.get("tenant_id") == org]
+            traces = {e.get("trace_id") for e in matching if e.get("trace_id")}
+            return {
+                "total_traces": len(traces),
+                "judged_traces": 0,
+            }
         if "FROM telemetry_events" in q and "count" in q.lower() and "GROUP BY" not in q:
             # Total + error count (single-row aggregate)
             org = args[0] if args else None
             matching = [e for e in self.events if e.get("tenant_id") == org]
+            traces = {e.get("trace_id") for e in matching if e.get("trace_id")}
             return {
-                "total": len(matching),
+                "total_events": len(matching),
+                "total_traces": len(traces),
                 "errors": sum(1 for e in matching if e.get("error")),
             }
         if "percentile_cont" in q:
@@ -471,9 +484,11 @@ def test_observability_summary_returns_deeper_fingerprint(client):
     resp = c.get("/orgs/org-test/observability/summary?window_hours=24")
     assert resp.status_code == 200
     body = resp.json()
-    # Core fields
+    # Core fields — Wave 2: total_traces is COUNT(DISTINCT trace_id);
+    # seed has 3 events on a single trace.
     assert body["window_hours"] == 24
-    assert body["total_traces"] == 3
+    assert body["total_events"] == 3
+    assert body["total_traces"] == 1
     assert body["error_rate"] > 0  # at least 1 of 3 events has an error
     # Deeper-fingerprint fields (Phase 2)
     assert "top_failure_modes" in body

@@ -112,8 +112,11 @@ class ProductionEvalSampler:
             )
             spent = float(row["spend_usd"]) if row else 0.0
             return spent + _SCORE_COST_USD <= cap
-        except Exception:
-            return True
+        except Exception as exc:
+            logger.warning(
+                "prod_eval: budget check DB error — failing closed: %s", exc
+            )
+            return False
 
     async def _score_trace(
         self, org_id: str, trace_id: str, agent_id: str | None

@@ -15,14 +15,19 @@
  *   • Pattern 3.5 (Datadog): Watchdog Insights carousel below tiles
  */
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState } from "react";
-import { Activity, BarChart3, Brain, Compass, Database, History, Network, Sparkles, ArrowRight, TrendingUp, Zap, DollarSign, AlertOctagon, Bot, LineChart } from "lucide-react";
+import { useEffect, useMemo, useRef } from "react";
+import { Activity, BarChart3, Brain, Compass, Database, History, Network, Sparkles, ArrowRight, TrendingUp, Zap, DollarSign, AlertOctagon, Bot, LineChart, RefreshCw, Radio } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { motion } from "framer-motion";
 import { PageHeader } from "@/components/layout/page-header";
 import { PageContent } from "@/components/layout/page-content";
 import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { ErrorState } from "@/components/ui/error-state";
+import { NoOrgState } from "@/components/ui/no-org-state";
 import { useOrg } from "@/hooks/use-org";
+import { useOrgQuery } from "@/hooks/use-api-query";
+import { queryKeys } from "@/lib/query-keys";
 import { api, agentsApi } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { SelectedTraceRail } from "./_components/SelectedTraceCard";
@@ -35,6 +40,11 @@ interface SubPage {
   }>;
 }
 const SUBPAGES: SubPage[] = [{
+  href: "/observability/mcp",
+  title: "MCP SRE",
+  description: "MCP server auth failures, toolchain health, and fleet graph",
+  icon: Radio
+}, {
   href: "/observability/cohorts",
   title: "Columnar Engine",
   description: "Materialised rollups over usage_events with hourly/daily/weekly tiers",
@@ -70,20 +80,6 @@ const SUBPAGES: SubPage[] = [{
   description: "Replay traces with point-in-time state restoration",
   icon: History
 }];
-interface HubStats {
-  traces24h: number;
-  traces24hPrev: number;
-  p95LatencyMs: number;
-  p95LatencyPrev: number;
-  costTodayCents: number;
-  costYesterdayCents: number;
-  errorRate: number;
-  errorRatePrev: number;
-  activeAgents: number;
-  activeAgentsPrev: number;
-  evalCoverage: number;
-  loading: boolean;
-}
 
 // Pattern 3.5 (Datadog): Each "insight" is an auto-detected anomaly
 // the v2.5 detectors have surfaced. Cards link directly to the most
@@ -98,161 +94,101 @@ interface Insight {
   href: string;
 }
 export default function ObservabilityLanding() {
-  const {
-    currentOrg
-  } = useOrg();
-  const [stats, setStats] = useState<HubStats>({
-    traces24h: 0,
-    traces24hPrev: 0,
-    p95LatencyMs: 0,
-    p95LatencyPrev: 0,
-    costTodayCents: 0,
-    costYesterdayCents: 0,
-    errorRate: 0,
-    errorRatePrev: 0,
-    activeAgents: 0,
-    activeAgentsPrev: 0,
-    evalCoverage: 0,
-    loading: true
-  });
-  const [insights, setInsights] = useState<Insight[]>([]);
-  useEffect(() => {
-    if (!currentOrg) return;
-    let cancelled = false;
-    setStats(s => ({
-      ...s,
-      loading: true
-    }));
+  const { currentOrg, authError, orgSyncing, orgSyncTimedOut, refreshOrgs } = useOrg();
+  // Stable primitive dep — `currentOrg` is a fresh Clerk-wrapped
+  // object reference on every parent render; keying queries on
+  // `orgId` (a string) instead is what makes the dep "stable" per
+  // the Phase 1 fix (previously the effect keyed on `currentOrg`
+  // directly).
+  const orgId = currentOrg?.id ?? null;
 
-    // ponytail: compute KPIs + previous-period deltas from the same
-    // 1-day / 2-day trace stream so we never have to call a second
-    // summary endpoint. For p95, we use the simple sorted-N approach;
-    // cost = sum(cost_cents); error rate = failure+crash / total.
-    Promise.allSettled([api.listObservabilityTraces(currentOrg.id, {
-      limit: 200,
-      days: 2
-    }).catch(() => null), api.listAlerts(currentOrg.id, {
-      limit: 1
-    }).catch(() => null), agentsApiSafe(currentOrg.id)]).then(([tracesRes, _alertsRes, agentsRes]) => {
-      if (cancelled) return;
-      const traces = tracesRes.status === "fulfilled" ? tracesRes.value?.traces ?? [] : [];
-      const dayCutoff = Date.now() - 24 * 3600 * 1000;
-      const recent = traces.filter(t => (t as {
-        started_at?: string | null;
-      }).started_at ? new Date((t as {
-        started_at: string;
-      }).started_at).getTime() >= dayCutoff : true);
-      const older = traces.filter(t => (t as {
-        started_at?: string | null;
-      }).started_at ? new Date((t as {
-        started_at: string;
-      }).started_at).getTime() < dayCutoff : false);
-      const durations = recent.map(t => t.duration_ms).filter(d => d > 0);
-      const sorted = [...durations].sort((a, b) => a - b);
-      const p95 = sorted.length ? sorted[Math.floor(sorted.length * 0.95)] ?? sorted[sorted.length - 1] : 0;
-      const durationsPrev = older.map(t => t.duration_ms).filter(d => d > 0);
-      const sortedPrev = [...durationsPrev].sort((a, b) => a - b);
-      const p95Prev = sortedPrev.length ? sortedPrev[Math.floor(sortedPrev.length * 0.95)] ?? sortedPrev[sortedPrev.length - 1] : 0;
-      const sumCost = (xs: typeof recent) => xs.reduce((a, t) => a + ((t as {
-        cost_cents?: number | null;
-      }).cost_cents ?? 0), 0);
-      const errorCount = (xs: typeof recent) => xs.filter(t => t.outcome === "failure" || t.outcome === "crash" || t.outcome === "timeout").length;
-      const errRate = (xs: typeof recent) => xs.length === 0 ? 0 : errorCount(xs) / xs.length;
+  const summaryQuery = useOrgQuery(
+    queryKeys.observability.summary(orgId, { window_hours: 24, compare_previous: true }),
+    orgId,
+    () => api.getObservabilitySummary(orgId!, { window_hours: 24, compare_previous: true }),
+  );
+  const agentsQuery = useOrgQuery(
+    queryKeys.agents.list(orgId, { limit: 1 }),
+    orgId,
+    () => agentsApi.list(orgId!, { limit: 1 }),
+  );
+  // Best-effort supplementary data — a failure here degrades the
+  // Watchdog Insights carousel (fewer cards), it never blocks the
+  // page or surfaces a top-level error.
+  const insightsQuery = useOrgQuery(
+    queryKeys.insights.overview(orgId),
+    orgId,
+    () => api.getInsightsOverview(orgId!),
+  );
 
-      // Eval coverage = share of recent traces that have a token/cost
-      // signature (heuristic proxy: ≥1 trace with cost row). Real
-      // coverage would join on judge_scores; that's deferred to a
-      // future /observability/eval-coverage endpoint.
-      const evaluated = recent.filter(t => (t as {
-        cost_cents?: number | null;
-      }).cost_cents != null && ((t.input_tokens ?? 0) > 0 || (t.output_tokens ?? 0) > 0)).length;
-      const evalCoverage = recent.length === 0 ? 0 : evaluated / recent.length;
-      setStats({
-        traces24h: recent.length,
-        traces24hPrev: older.length,
-        p95LatencyMs: p95,
-        p95LatencyPrev: p95Prev,
-        costTodayCents: sumCost(recent),
-        costYesterdayCents: sumCost(older),
-        errorRate: errRate(recent),
-        errorRatePrev: errRate(older),
-        activeAgents: agentsRes.status === "fulfilled" ? agentsRes.value : 0,
-        activeAgentsPrev: Math.max(0, (agentsRes.status === "fulfilled" ? agentsRes.value : 0) - 1),
-        evalCoverage,
-        loading: false
+  const summary = summaryQuery.data;
+  const previous = summary?.previous;
+  const loading = summaryQuery.isLoading || agentsQuery.isLoading;
+
+  const traces24h = summary?.total_traces ?? 0;
+  const traces24hPrev = previous?.total_traces ?? null;
+  const p95LatencyMs = summary?.p95_ms ?? 0;
+  const p95LatencyPrev = previous?.p95_ms ?? null;
+  const costTodayCents = Math.round((summary?.total_cost_usd ?? 0) * 100);
+  const costYesterdayCents = previous ? Math.round((previous.total_cost_usd ?? 0) * 100) : null;
+  const errorRate = summary?.error_rate ?? 0;
+  const errorRatePrev = previous?.error_rate ?? null;
+  // Registered-agent total (agentsApi.list().total), not the length
+  // of a `limit: 1` page — that used to always read 0 or 1
+  // regardless of how many agents actually exist. June 2026 fix.
+  const activeAgents = agentsQuery.data?.total ?? 0;
+  const evalCoverage = summary?.eval_coverage_pct ?? 0;
+
+  const insights = useMemo<Insight[]>(() => {
+    const generated: Insight[] = [];
+    for (const mode of summary?.top_failure_modes?.slice(0, 4) ?? []) {
+      generated.push({
+        id: `failure-${mode.name}`,
+        severity: mode.count > 10 ? "high" : "medium",
+        kind: "drift",
+        title: mode.name,
+        description: `${mode.count} failures in the last 24h`,
+        href: "/issues",
       });
-
-      // Pattern 3.5: synthesise insights from the same data. These
-      // mirror what the v2.5 watchdog detectors would emit, and look
-      // correct enough to be useful as a placeholder. Real detector
-      // output will replace this when /observability/insights is wired.
-      const generated: Insight[] = [];
-      const durDelta = p95Prev > 0 ? (p95 - p95Prev) / p95Prev : 0;
-      if (p95 > 0 && durDelta > 0.2) {
-        generated.push({
-          id: "p95-latency",
-          severity: "high",
-          kind: "latency",
-          title: `p95 latency ${(durDelta * 100).toFixed(0)}% above baseline`,
-          description: `Latest 24h p95 is ${Math.round(p95)}ms vs ${Math.round(p95Prev)}ms in the previous window.`,
-          href: "/observability/eval"
-        });
-      }
-      const costDelta = sumCost(older) > 0 ? (sumCost(recent) - sumCost(older)) / sumCost(older) : 0;
-      if (sumCost(recent) > 0 && costDelta > 0.3) {
-        generated.push({
-          id: "cost-spike",
-          severity: "medium",
-          kind: "cost",
-          title: `Cost up ${(costDelta * 100).toFixed(0)}% vs yesterday`,
-          description: `Today: $${(sumCost(recent) / 100).toFixed(2)} · Yesterday: $${(sumCost(older) / 100).toFixed(2)}.`,
-          href: "/observability/eval"
-        });
-      }
-      const errDelta = errRate(older) > 0 ? errRate(recent) - errRate(older) : 0;
-      if (errRate(recent) > 0.1 && errDelta > 0.05) {
-        generated.push({
-          id: "error-spike",
-          severity: "high",
-          kind: "drift",
-          title: `Error rate jumped ${(errDelta * 100).toFixed(1)} pts`,
-          description: `${(errRate(recent) * 100).toFixed(1)}% of recent traces failed — check /observability/eval for the cluster.`,
-          href: "/observability/eval"
-        });
-      }
-      if (evalCoverage > 0 && evalCoverage < 0.4) {
-        generated.push({
-          id: "eval-coverage",
-          severity: "low",
-          kind: "eval",
-          title: `Eval coverage ${(evalCoverage * 100).toFixed(0)}% of traces`,
-          description: "Most traces aren't being judged. Wire up a judge via /observability/eval to close this gap.",
-          href: "/observability/eval"
-        });
-      }
-      setInsights(generated);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [currentOrg]);
-
-  // All hooks must run in the same order on every render — keep the
-  // early-return AFTER the useMemo block below.
+    }
+    const overview = insightsQuery.data ?? null;
+    for (const area of overview?.top_friction_areas?.slice(0, 2) ?? []) {
+      generated.push({
+        id: `friction-${area.area}`,
+        severity: area.severity === "high" ? "high" : "medium",
+        kind: "eval",
+        title: area.area,
+        description: `${area.count} friction signals detected`,
+        href: "/insights",
+      });
+    }
+    if (evalCoverage > 0 && evalCoverage < 0.4 && generated.length < 6) {
+      generated.push({
+        id: "eval-coverage",
+        severity: "low",
+        kind: "eval",
+        title: `Eval coverage ${(evalCoverage * 100).toFixed(0)}% of traces`,
+        description: "Wire up a judge via /observability/eval to close this gap.",
+        href: "/observability/eval",
+      });
+    }
+    return generated;
+  }, [summary, insightsQuery.data, evalCoverage]);
 
   // Pattern 6.3 (Helicone): compute deltas vs previous period for every KPI
   // tile. Returning null hides the delta badge entirely (instead of
-  // showing "—%" which would be noisy during cold-start).
-  const deltaPct = (now: number, prev: number): number | null => {
-    if (prev <= 0) return null;
+  // showing "—%" which would be noisy during cold-start, or a lie
+  // for tiles with no real prior-period source).
+  const deltaPct = (now: number, prev: number | null): number | null => {
+    if (prev == null || prev <= 0) return null;
     return (now - prev) / prev * 100;
   };
   const deltaTiles = useMemo(() => [{
     key: "traces24h",
     icon: Activity,
     label: "Traces · 24h",
-    value: stats.traces24h,
-    delta: deltaPct(stats.traces24h, stats.traces24hPrev),
+    value: traces24h,
+    delta: deltaPct(traces24h, traces24hPrev),
     good: "up" as const,
     format: formatNumber,
     href: "/traces",
@@ -261,8 +197,8 @@ export default function ObservabilityLanding() {
     key: "p95",
     icon: Zap,
     label: "p95 latency",
-    value: stats.p95LatencyMs,
-    delta: deltaPct(stats.p95LatencyMs, stats.p95LatencyPrev),
+    value: p95LatencyMs,
+    delta: deltaPct(p95LatencyMs, p95LatencyPrev),
     good: "down" as const,
     format: (v: number | string) => `${Math.round(Number(v))}ms`,
     href: "/observability/eval",
@@ -271,8 +207,8 @@ export default function ObservabilityLanding() {
     key: "cost",
     icon: DollarSign,
     label: "Cost today",
-    value: stats.costTodayCents,
-    delta: deltaPct(stats.costTodayCents, stats.costYesterdayCents),
+    value: costTodayCents,
+    delta: deltaPct(costTodayCents, costYesterdayCents),
     good: "down" as const,
     format: (v: number | string) => `$${(Number(v) / 100).toFixed(2)}`,
     href: "/billing",
@@ -281,18 +217,22 @@ export default function ObservabilityLanding() {
     key: "error",
     icon: AlertOctagon,
     label: "Error rate",
-    value: stats.errorRate,
-    delta: deltaPct(stats.errorRate, stats.errorRatePrev),
+    value: errorRate,
+    delta: deltaPct(errorRate, errorRatePrev),
     good: "down" as const,
     format: (v: number | string) => `${(Number(v) * 100).toFixed(1)}%`,
     href: "/observability/eval",
-    tone: stats.errorRate > 0.1 ? "error" as const : "neutral" as const
+    tone: errorRate > 0.1 ? "error" as const : "neutral" as const
   }, {
     key: "agents",
     icon: Bot,
     label: "Active agents",
-    value: stats.activeAgents,
-    delta: deltaPct(stats.activeAgents, stats.activeAgentsPrev),
+    value: activeAgents,
+    // No real prior-period source for the registered-agent count
+    // (agentsApi.list() isn't time-windowed) — showing a delta here
+    // used to be a fabricated `count - 1`. Better to hide the badge
+    // than lie about it (same call the eval-coverage tile makes).
+    delta: null,
     good: "up" as const,
     format: formatNumber,
     href: "/agents",
@@ -301,14 +241,53 @@ export default function ObservabilityLanding() {
     key: "eval",
     icon: LineChart,
     label: "Eval coverage",
-    value: stats.evalCoverage,
+    value: evalCoverage,
     delta: null,
     // no previous-period column for eval coverage
     good: "up" as const,
     format: (v: number | string) => `${(Number(v) * 100).toFixed(0)}%`,
     href: "/observability/eval",
-    tone: stats.evalCoverage < 0.4 ? "warning" as const : "accent" as const
-  }], [stats]);
+    tone: evalCoverage < 0.4 ? "warning" as const : "accent" as const
+  }], [traces24h, traces24hPrev, p95LatencyMs, p95LatencyPrev, costTodayCents, costYesterdayCents, errorRate, errorRatePrev, activeAgents, evalCoverage]);
+
+  // No-org branch: mirrors the dashboard's guard so a brand-new
+  // signup doesn't see a wall of zeroed KPI tiles.
+  if (!currentOrg && !authError) {
+    return (
+      <NoOrgState
+        feature="Observability"
+        syncing={orgSyncing && !orgSyncTimedOut}
+        syncTimedOut={orgSyncTimedOut}
+        onRetrySync={() => void refreshOrgs()}
+      />
+    );
+  }
+
+  // Real (non-404) summary failure with no cached data to fall back
+  // on — show a retry rather than a hub full of misleading zeros.
+  if (summaryQuery.isError && !summaryQuery.data) {
+    return (
+      <PageContent size="wide">
+        <PageHeader
+          eyebrow="Observe"
+          title="Observability"
+          subtitle="Inspect, evaluate, and replay every interaction in your agent stack"
+          icon={Activity}
+        />
+        <ErrorState
+          title="Could not load observability data"
+          message={summaryQuery.error?.message}
+          action={
+            <Button onClick={() => void summaryQuery.refetch()} variant="outline" size="default">
+              <RefreshCw className="h-4 w-4" />
+              Try again
+            </Button>
+          }
+        />
+      </PageContent>
+    );
+  }
+
   return (
     <PageContent size="wide">
       <PageHeader
@@ -326,7 +305,7 @@ export default function ObservabilityLanding() {
           <div className="flex-1 min-w-0 space-y-6">
             <section>
               <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-                {deltaTiles.map(tile => <KpiTile key={tile.key} icon={tile.icon} label={tile.label} value={tile.value} delta={tile.delta} good={tile.good} format={tile.format} href={tile.href} tone={tile.tone} loading={stats.loading} />)}
+                {deltaTiles.map(tile => <KpiTile key={tile.key} icon={tile.icon} label={tile.label} value={tile.value} delta={tile.delta} good={tile.good} format={tile.format} href={tile.href} tone={tile.tone} loading={loading} />)}
               </div>
             </section>
 
@@ -381,19 +360,6 @@ export default function ObservabilityLanding() {
   );
 }
 
-/** ponytail: minimal local helper — fetches active agents count without
- *  re-implementing the agents list call. The agentsApi helper exposes
- *  list() with a total field for pagination; we only need the total. */
-async function agentsApiSafe(orgId: string): Promise<number> {
-  try {
-    const res = await agentsApi.list(orgId, {
-      limit: 1
-    });
-    return res.agents?.length ?? 0;
-  } catch {
-    return 0;
-  }
-}
 function formatNumber(v: number | string): string {
   const n = Number(v);
   if (!Number.isFinite(n)) return "—";

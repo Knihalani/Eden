@@ -296,14 +296,20 @@ class TestRetentionCronArchive:
                 "eden.data_platform.retention_cron._list_orgs_with_old_traces",
                 new=AsyncMock(return_value=["org_1"]),
             ),
+            patch(
+                "eden.data_platform.retention_cron._load_org_warm_days",
+                new=AsyncMock(return_value={}),
+            ),
         ):
             results = await retention_cron.run(dry_run=True)
 
         assert "cold_archive" in results
         assert "org_1" in results["cold_archive"]
-        mock_archive.archive_old_rows.assert_awaited_once_with(
-            "org_1", dry_run=True
-        )
+        mock_archive.archive_old_rows.assert_awaited_once()
+        call_kwargs = mock_archive.archive_old_rows.await_args
+        assert call_kwargs.args[0] == "org_1"
+        assert call_kwargs.kwargs.get("dry_run") is True
+        assert call_kwargs.kwargs.get("before_date") is not None
 
 
 # ── TelemetryCollector._load_from_archive fallback ────────────────────
@@ -339,3 +345,240 @@ class TestTraceTreeArchiveFallback:
         ):
             rows = await collector._load_from_archive("trace_x")
         assert rows == []
+
+
+# ── Wave 1: mixed-age trace ───────────────────────────────────────────
+
+
+class TestMixedAgeTraceCandidateSql:
+    """Archive eligibility must require MAX(timestamp) < before_date.
+
+    A trace whose last event is recent must not be archived even if some
+    of its earlier events are older than the warm window.
+    """
+
+    def test_candidate_sql_uses_having_max_timestamp(self):
+        source = inspect.getsource(ArchiveService.archive_old_rows)
+        assert "HAVING MAX(timestamp) < $2" in source, (
+            "Candidate SQL must filter with HAVING MAX(timestamp) < $2 "
+            "to prevent premature archiving of long-lived traces"
+        )
+
+    def test_candidate_sql_does_not_filter_timestamp_in_where(self):
+        """WHERE must not contain timestamp < $2 — only HAVING should."""
+        source = inspect.getsource(ArchiveService.archive_old_rows)
+        # Extract only the SQL string (between the triple-quoted strings)
+        # We assert the WHERE clause does not directly filter timestamp.
+        where_block = source.split("WHERE tenant_id = $1")[1].split("GROUP BY")[0]
+        assert "timestamp < $2" not in where_block, (
+            "WHERE clause must not filter timestamp; use HAVING MAX(timestamp) < $2"
+        )
+
+    @pytest.mark.asyncio
+    async def test_mixed_age_trace_excluded_from_candidates(self):
+        """A trace with a recent event must not appear as a candidate."""
+        svc = ArchiveService()
+        client = MagicMock()
+        # The candidate query (with HAVING) returns empty because the
+        # single trace has a recent event; simulate this.
+        client.fetch = AsyncMock(return_value=[])
+        before_date = datetime.now(UTC) - timedelta(days=90)
+        with patch(
+            "eden.storage.postgres.get_postgres_client",
+            new=AsyncMock(return_value=client),
+        ):
+            result = await svc.archive_old_rows("org_1", before_date=before_date)
+        assert result["traces_archived"] == 0
+        # Verify the SQL sent contains HAVING not WHERE timestamp
+        call_args = client.fetch.call_args
+        sql = call_args.args[0]
+        assert "HAVING MAX(timestamp)" in sql
+        assert "WHERE tenant_id" in sql
+        # timestamp filter must be in HAVING, not bare WHERE
+        where_part = sql.split("GROUP BY")[0]
+        assert "timestamp < $2" not in where_part
+
+
+# ── Wave 1: per-org warm scan isolation ──────────────────────────────
+
+
+class TestPerOrgWarmScanIsolation:
+    """_list_orgs_with_old_traces must not miss default-policy orgs."""
+
+    @pytest.mark.asyncio
+    async def test_default_policy_orgs_included_when_override_is_longer(self):
+        """When an override is 120 days (> default 90), the scan cutoff
+        must still use DEFAULT_COLD_AGE_DAYS so 90-day-old data is found."""
+        from eden.data_platform import retention_cron
+        from eden.services.data_platform.archive import DEFAULT_COLD_AGE_DAYS
+
+        archive_svc = ArchiveService()
+        # org_A has an override of 120 days — longer than the default.
+        org_warm_days = {"org_A": 120}
+
+        captured_sql: list[str] = []
+
+        async def fake_get_client():
+            client = MagicMock()
+
+            async def fake_fetch(sql, *args, **kwargs):
+                captured_sql.append(sql)
+                return [{"tenant_id": "org_default"}]
+
+            client.fetch = fake_fetch
+            return client
+
+        # get_postgres_client is imported locally inside the function body;
+        # patch at the source module so the local import resolves to the mock.
+        with patch(
+            "eden.storage.postgres.get_postgres_client",
+            new=AsyncMock(side_effect=fake_get_client),
+        ):
+            orgs = await retention_cron._list_orgs_with_old_traces(
+                archive_svc, org_warm_days
+            )
+
+        assert orgs == ["org_default"]
+        # The INTERVAL used must be <= DEFAULT_COLD_AGE_DAYS (90), not 120.
+        assert captured_sql, "Expected a SQL query to be issued"
+        sql = captured_sql[0]
+        assert f"INTERVAL '{DEFAULT_COLD_AGE_DAYS} days'" in sql, (
+            f"Expected scan to use DEFAULT_COLD_AGE_DAYS ({DEFAULT_COLD_AGE_DAYS}), "
+            f"not the longer override (120). SQL: {sql}"
+        )
+
+    @pytest.mark.asyncio
+    async def test_shorter_override_sets_scan_cutoff(self):
+        """When an org override is shorter than default (30 < 90), the
+        scan should use 30 so that org is not missed."""
+        from eden.data_platform import retention_cron
+
+        archive_svc = ArchiveService()
+        org_warm_days = {"org_B": 30}
+
+        captured_sql: list[str] = []
+
+        async def fake_get_client():
+            client = MagicMock()
+
+            async def fake_fetch(sql, *args, **kwargs):
+                captured_sql.append(sql)
+                return []
+
+            client.fetch = fake_fetch
+            return client
+
+        with patch(
+            "eden.storage.postgres.get_postgres_client",
+            new=AsyncMock(side_effect=fake_get_client),
+        ):
+            await retention_cron._list_orgs_with_old_traces(
+                archive_svc, org_warm_days
+            )
+
+        sql = captured_sql[0]
+        assert "INTERVAL '30 days'" in sql
+
+
+# ── Wave 1: purge index-guard ─────────────────────────────────────────
+
+
+class TestPurgeIndexGuard:
+    """purge_archived_telemetry must only delete rows with an archive index entry
+    and must respect the per-org filter when org_id is provided."""
+
+    @pytest.mark.asyncio
+    async def test_purge_dry_run_counts_only_archived_rows(self):
+        from eden.data_platform.retention import DataRetentionManager
+
+        mgr = DataRetentionManager(dry_run=True)
+        client = MagicMock()
+        client.fetchval = AsyncMock(return_value=5)
+        mgr._postgres_client = client
+
+        before_date = datetime.now(UTC) - timedelta(days=90)
+        count = await mgr.purge_archived_telemetry(before_date)
+
+        assert count == 5
+        call_sql = client.fetchval.call_args.args[0]
+        # Must join against trace_archive_index (the index-guard)
+        assert "trace_archive_index" in call_sql
+
+    @pytest.mark.asyncio
+    async def test_purge_with_org_id_filters_tenant(self):
+        """When org_id is supplied the DELETE must be scoped to that tenant."""
+        from eden.data_platform.retention import DataRetentionManager
+
+        mgr = DataRetentionManager(dry_run=False)
+        client = MagicMock()
+        client.execute = AsyncMock(return_value="DELETE 3")
+        mgr._postgres_client = client
+
+        before_date = datetime.now(UTC) - timedelta(days=90)
+        count = await mgr.purge_archived_telemetry(before_date, org_id="org_42")
+
+        assert count == 3
+        call_args = client.execute.call_args
+        sql = call_args.args[0]
+        params = call_args.args[1:]
+        # SQL must contain a per-tenant filter
+        assert "tenant_id = $2" in sql
+        # org_id must be passed as the second positional param
+        assert "org_42" in params
+
+    @pytest.mark.asyncio
+    async def test_purge_without_org_id_deletes_globally(self):
+        """Without org_id the query must not add a tenant filter."""
+        from eden.data_platform.retention import DataRetentionManager
+
+        mgr = DataRetentionManager(dry_run=False)
+        client = MagicMock()
+        client.execute = AsyncMock(return_value="DELETE 7")
+        mgr._postgres_client = client
+
+        before_date = datetime.now(UTC) - timedelta(days=90)
+        count = await mgr.purge_archived_telemetry(before_date)
+
+        assert count == 7
+        call_args = client.execute.call_args
+        sql = call_args.args[0]
+        assert "tenant_id = $2" not in sql
+
+    @pytest.mark.asyncio
+    async def test_purge_dry_run_with_org_id(self):
+        from eden.data_platform.retention import DataRetentionManager
+
+        mgr = DataRetentionManager(dry_run=True)
+        client = MagicMock()
+        client.fetchval = AsyncMock(return_value=2)
+        mgr._postgres_client = client
+
+        before_date = datetime.now(UTC) - timedelta(days=30)
+        count = await mgr.purge_archived_telemetry(before_date, org_id="org_42")
+
+        assert count == 2
+        call_args = client.fetchval.call_args
+        sql = call_args.args[0]
+        params = call_args.args[1:]
+        assert "tenant_id = $2" in sql
+        assert "org_42" in params
+
+
+class TestArchiveSqlUsesTenantId:
+    """Regression: telemetry_events uses tenant_id, not org_id."""
+
+    def test_candidate_query_uses_tenant_id(self):
+        import inspect
+        from eden.services.data_platform.archive import ArchiveService
+
+        source = inspect.getsource(ArchiveService.archive_old_rows)
+        assert "tenant_id = $1" in source
+        assert "org_id = $1" not in source.split("trace_archive_index")[0]
+
+    def test_archive_one_trace_uses_tenant_id(self):
+        import inspect
+        from eden.services.data_platform.archive import ArchiveService
+
+        source = inspect.getsource(ArchiveService._archive_one_trace)
+        assert "tenant_id = $1" in source
+        assert "org_id" in source

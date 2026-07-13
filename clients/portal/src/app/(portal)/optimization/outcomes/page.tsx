@@ -1,22 +1,23 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Loader2, AlertTriangle, CheckCircle2, Building2, Sparkles, TrendingUp, Wallet, Target } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
-import { EmptyState } from "@/components/ui/empty-state";
 import { ErrorState } from "@/components/ui/error-state";
 import { StatCard } from "@/components/ui/stat-card";
 import { PageHeader } from "@/components/layout/page-header";
+import { PageContent } from "@/components/layout/page-content";
 import { NoOrgState } from "@/components/ui/no-org-state";
 import { useToast } from "@/components/ui/toast";
 import { useOrg } from "@/hooks/use-org";
+import { useOrgQuery } from "@/hooks/use-api-query";
+import { queryKeys } from "@/lib/query-keys";
 import { outcomesApi } from "@/lib/api";
 import { cn } from "@/lib/utils";
-import { errorFromCaught } from "@/lib/safe-error-message";
 
 /* ----------------------- Helpers -------------------------------------- */
 
@@ -37,41 +38,27 @@ function roiColor(roi: number): string {
 
 /* ----------------------- Departments tab ------------------------------ */
 
+type Department = { department: string; total_cost: number; total_revenue: number; roi: number; trace_count: number; anomaly: string | null };
+
 function DepartmentsTab() {
   const { currentOrg } = useOrg();
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string>("");
-  const [departments, setDepartments] = useState<
-    Array<{ department: string; total_cost: number; total_revenue: number; roi: number; trace_count: number; anomaly: string | null }>
-  >([]);
+  const orgId = currentOrg?.id;
+  const {
+    data,
+    isLoading,
+    error,
+    refetch,
+  } = useOrgQuery(
+    queryKeys.outcomes.departments(orgId),
+    orgId,
+    async () => {
+      const res = await outcomesApi.listDepartments(orgId!);
+      return res.departments ?? [];
+    },
+  );
+  const departments: Department[] = data ?? [];
 
-  useEffect(() => {
-    if (!currentOrg) return;
-    let cancelled = false;
-    queueMicrotask(() => {
-      if (cancelled) return;
-      setLoading(true);
-      setError("");
-    });
-    outcomesApi
-      .listDepartments(currentOrg.id)
-      .then((res: { departments?: Array<{ department: string; total_cost: number; total_revenue: number; roi: number; trace_count: number; anomaly: string | null }> }) => {
-        if (cancelled) return;
-        setDepartments(res.departments ?? []);
-      })
-      .catch((e: unknown) => {
-        if (cancelled) return;
-        setError(errorFromCaught(e, "Failed to load departments"));
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [currentOrg]);
-
-  if (loading) {
+  if (isLoading) {
     return (
       <div className="flex h-48 items-center justify-center" role="status" aria-live="polite">
         <Loader2 className="h-5 w-5 animate-spin text-[var(--text-muted)]" />
@@ -83,23 +70,20 @@ function DepartmentsTab() {
     return (
       <ErrorState
         title="Could not load departments"
-        message={error}
+        message={error.message}
+        action={
+          <button
+            onClick={() => refetch()}
+            className="inline-flex items-center gap-2 px-3 py-1.5 rounded-md bg-[var(--accent)] text-[var(--bg-base)] text-xs font-medium hover:bg-[var(--accent-hover)] transition-colors"
+          >
+            Try again
+          </button>
+        }
       />
     );
   }
 
-  if (departments.length === 0) {
-    return (
-      <EmptyState
-        icon={Building2}
-        title="No department data"
-        description="Track outcomes on traces to populate department ROI."
-        size="md"
-      />
-    );
-  }
-
-  const columns: DataTableColumn<typeof departments[number]>[] = [
+  const columns: DataTableColumn<Department>[] = [
     { key: "department", header: "Department", cell: (d) => <span className="font-medium text-[var(--text-primary)]">{d.department}</span>, sortable: true },
     { key: "total_cost", header: "Cost", align: "right", cell: (d) => formatCurrency(d.total_cost, { compact: true }), sortable: true },
     { key: "total_revenue", header: "Revenue", align: "right", cell: (d) => formatCurrency(d.total_revenue, { compact: true }), sortable: true },
@@ -303,49 +287,27 @@ function TrackTab() {
 
 export default function OutcomesPage() {
   const { currentOrg } = useOrg();
+  const orgId = currentOrg?.id;
   const [tab, setTab] = useState<"departments" | "track">("departments");
-  const [analytics, setAnalytics] = useState<{
-    total_revenue: number;
-    total_cost: number;
-    roi: number;
-  } | null>(null);
-  const [analyticsLoading, setAnalyticsLoading] = useState(true);
-
-  useEffect(() => {
-    if (!currentOrg) return;
-    let cancelled = false;
-    queueMicrotask(() => {
-      if (cancelled) return;
-      setAnalyticsLoading(true);
-    });
-    outcomesApi
-      .getAnalytics(currentOrg.id)
-      .then((res: { total_revenue?: number; total_cost?: number; roi?: number }) => {
-        if (cancelled) return;
-        setAnalytics({
-          total_revenue: res.total_revenue ?? 0,
-          total_cost: res.total_cost ?? 0,
-          roi: res.roi ?? 0,
-        });
-      })
-      .catch(() => {
-        if (cancelled) return;
-        setAnalytics({ total_revenue: 0, total_cost: 0, roi: 0 });
-      })
-      .finally(() => {
-        if (!cancelled) setAnalyticsLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [currentOrg]);
+  const { data: analytics, isLoading: analyticsLoading } = useOrgQuery(
+    queryKeys.outcomes.analytics(orgId),
+    orgId,
+    async () => {
+      const res = await outcomesApi.getAnalytics(orgId!);
+      return {
+        total_revenue: res.total_revenue ?? 0,
+        total_cost: res.total_cost ?? 0,
+        roi: res.roi ?? 0,
+      };
+    },
+  );
 
   if (!currentOrg) {
     return <NoOrgState feature="Outcomes" />;
   }
 
   return (
-    <div className="space-y-4">
+    <PageContent>
       <PageHeader
         eyebrow="Optimize"
         title="Outcomes & ROI"
@@ -416,6 +378,6 @@ export default function OutcomesPage() {
           )}
         </AnimatePresence>
       </Tabs>
-    </div>
+    </PageContent>
   );
 }

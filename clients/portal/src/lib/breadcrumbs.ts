@@ -65,6 +65,13 @@ export const BREADCRUMB_LABELS: Record<string, BreadcrumbLabel> = {
   traces: { label: "Traces", category: "observe" },
   onboarding: { label: "Onboarding", category: "workspace" },
   connect: { label: "Connect Agent", category: "build" },
+  fleet: { label: "Fleet", category: "observe" },
+  replay: { label: "Replay", category: "observe" },
+  datasets: { label: "Datasets", category: "build" },
+  labeling: { label: "Labeling", category: "build" },
+  mcp: { label: "MCP SRE", category: "observe" },
+  "model-advisor": { label: "Model Advisor", category: "optimize" },
+  "closed-loop": { label: "Closed-Loop", category: "automate" },
 };
 
 export interface Breadcrumb {

@@ -1,163 +1,137 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import {
   DollarSign,
   AlertTriangle,
-  GitBranch } from "lucide-react";
-import { api } from "@/lib/api";
+  GitBranch,
+  Sparkles,
+} from "lucide-react";
+import { api, ApiError } from "@/lib/api";
 import { useOrg } from "@/hooks/use-org";
 import { usePermissions } from "@/hooks/use-permissions";
+import { useOrgQuery } from "@/hooks/use-api-query";
+import { queryKeys } from "@/lib/query-keys";
 import { PageHeader } from "@/components/layout/page-header";
 import { PageContent } from "@/components/layout/page-content";
 import { StatCard } from "@/components/ui/stat-card";
-import { useToast } from "@/components/ui/toast";
 import { ThroughputCard } from "./_components/throughput-card";
 import { LatencyCard } from "./_components/latency-card";
 import {
   RecentTracesCard,
   type TraceRow } from "./_components/recent-traces-card";
 import { QuickLinks } from "./_components/quick-links";
+import { Card } from "@/components/ui/card";
 import { NoOrgState } from "@/components/ui/no-org-state";
-import { errorFromCaught } from "@/lib/safe-error-message";
-
-interface DashboardData {
-  traces: TraceRow[];
-  tracesTotal: number;
-  optimization: {
-    costs: {
-      total_cost_cents: number;
-      prompt_cost_cents?: number;
-      completion_cost_cents?: number;
-      cache_savings_cents?: number;
-      token_total?: number;
-    };
-    efficiency?: {
-      cache_hit_rate?: number;
-      avg_cost_per_request_cents?: number;
-      p50_latency_ms?: number;
-      p95_latency_ms?: number;
-    };
-    forecast?: {
-      next_7d_cost_cents?: number;
-      next_30d_cost_cents?: number;
-    };
-  } | null;
-  alerts: Array<{ rule_id?: string; severity: string; title: string; fired_at?: string }>;
-  /** monthly cost in cents — current period only. `null` until
-   *  /orgs/{org}/cost/comparison ships — DO NOT synthesize a
-   *  baseline here (June 2026 cleanup — fake deltas destroy trust). */
-  costThisMonthCents: number;
-  costLastMonthCents: number | null;
-}
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
+/**
+ * Wraps a per-shard promise so a 404 ("not deployed yet" — not a
+ * transient error) resolves to `null` instead of throwing, while
+ * every other failure (network, 5xx, 401…) still throws and
+ * surfaces through the query's `error` state. Cat 23 audit fix:
+ * the previous version swallowed ALL errors (including real
+ * outages) to a silent zero — this only swallows the expected
+ * "not found" case.
+ */
+async function shardOr404Null<T>(promise: Promise<T>): Promise<T | null> {
+  try {
+    return await promise;
+  } catch (e) {
+    if (e instanceof ApiError && e.status === 404) return null;
+    throw e;
+  }
+}
+
 export default function DashboardPage() {
   const { currentOrg, authError, orgSyncing, orgSyncTimedOut, refreshOrgs } = useOrg();
-  const toast = useToast();
   const { hasPermission } = usePermissions();
-  const __router = useRouter();
-  const [data, setData] = useState<DashboardData | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   // Gate the primary "Connect a repo" CTA on the actual permission
   // the connect flow enforces (owner/admin only). Without this,
   // non-admins in a multi-tenant org were being sent to a page
   // that immediately told them they needed admin. June 2026 fix.
   const canConnect = hasPermission("integrations:write");
 
-  // Use a stable identifier (the org id) for the effect dep so the
-  // fetcher doesn't re-fire when Clerk returns a fresh `Organization`
-  // object reference on every parent render. Without this guard the
-  // dashboard hammered the (occasionally 404ing) optimization /
-  // observability / alerts endpoints in a tight loop until 429.
-  // June 2026 hardening (companion to the OrgProvider memoization
-  // in hooks/use-org.tsx).
   const orgId = currentOrg?.id ?? null;
 
-  useEffect(() => {
-    if (!orgId) return;
+  // Four telemetry shards fetched independently via useOrgQuery so a
+  // 404 on one (or a real outage) never black-holes the others, and
+  // each shard gets its own retry/error semantics from the React
+  // Query provider (skips retrying non-429 4xx — see
+  // components/providers/query-provider.tsx).
+  const tracesQuery = useOrgQuery(
+    queryKeys.observability.traces(orgId, { limit: 50, days: 7 }),
+    orgId,
+    () => shardOr404Null(api.listObservabilityTraces(orgId!, { limit: 50, days: 7 })),
+  );
+  // Same filter shape the observability hub uses for its summary
+  // call (window_hours + compare_previous) so both pages hit the
+  // identical React Query key and share one cache entry / one
+  // in-flight request instead of double-fetching the same 24h
+  // summary shard whenever a user has both tabs open. `compare_previous`
+  // only adds a `previous` field to the response — free to request
+  // even though the dashboard doesn't render deltas today.
+  const summaryQuery = useOrgQuery(
+    queryKeys.observability.summary(orgId, { window_hours: 24, compare_previous: true }),
+    orgId,
+    () => shardOr404Null(api.getObservabilitySummary(orgId!, { window_hours: 24, compare_previous: true })),
+  );
+  const optimizationQuery = useOrgQuery(
+    queryKeys.optimization.overview(orgId, 30),
+    orgId,
+    () => shardOr404Null(api.getOptimizationOverview(orgId!, 30)),
+  );
+  const alertsQuery = useOrgQuery(
+    queryKeys.alerts.list(orgId, { limit: 50 }),
+    orgId,
+    () => shardOr404Null(api.listAlerts(orgId!, { limit: 50 })),
+  );
+  // Cat 23 audit (2026-06-21): real last-month baseline arrives via
+  // /orgs/{org}/cost/comparison. Surfaced as-is; `null` (rendered as
+  // "—") when Redis has no recorded spend yet — never a fabricated
+  // delta.
+  const costComparisonQuery = useOrgQuery(
+    queryKeys.cost.comparison(orgId),
+    orgId,
+    () => shardOr404Null(api.getCostComparison(orgId!)),
+  );
 
-    let cancelled = false;
+  const loading =
+    tracesQuery.isLoading ||
+    summaryQuery.isLoading ||
+    optimizationQuery.isLoading ||
+    alertsQuery.isLoading ||
+    costComparisonQuery.isLoading;
 
-    async function load() {
-      if (!orgId) return;
-      setLoading(true);
-      setError(null);
-      try {
-        // Fetch the four telemetry shards independently so a 404 on
-        // one of them doesn't black-hole the others. 404 here means
-        // "not found" / "not deployed yet" — NOT a transient error,
-        // so we surface a single user-friendly message and DO NOT
-        // retry. Re-fetching a 404 is what caused the previous 429
-        // lockout.
-        const safeJson = async <T,>(p: Promise<T>): Promise<T | null> => {
-          try {
-            return await p;
-          } catch (e) {
-            if (!cancelled) {
-              const msg = e instanceof Error ? e.message : String(e);
-              // 404 / "Not Found" / "Failed to fetch" — leave the
-              // field null and keep going. Anything else is real
-              // and worth surfacing.
-              if (!/404|not\s*found|failed\s*to\s*fetch/i.test(msg)) {
-                // Surfaced via the dashboard's error banner; no need
-                // to spam the console here (the previous line was the
-                // exact leak use-org.tsx:148 was just refactored to
-                // suppress).
-              }
-            }
-            return null;
-          }
-        };
+  // Only non-404 failures reach `error` (404 resolves to `null`
+  // data above) — this is the "real outage" signal for the banner.
+  const failedShards = [
+    { label: "traces", query: tracesQuery },
+    { label: "summary", query: summaryQuery },
+    { label: "cost & optimization", query: optimizationQuery },
+    { label: "alerts", query: alertsQuery },
+    { label: "cost comparison", query: costComparisonQuery },
+  ].filter((s) => s.query.isError);
+  const error =
+    failedShards.length > 0
+      ? `Could not load ${failedShards.map((s) => s.label).join(", ")}. ${
+          failedShards[0].query.error?.message ?? ""
+        }`.trim()
+      : null;
 
-        const [tracesRes, optimization, alertsRaw, costComparison] = await Promise.all([
-          safeJson(api.listObservabilityTraces(orgId, { limit: 50, days: 7 })),
-          safeJson(api.getOptimizationOverview(orgId, 30)),
-          safeJson(api.listAlerts(orgId, { limit: 50 })),
-          safeJson(api.getCostComparison(orgId).catch(() => null)),
-        ]);
-
-        if (cancelled) return;
-
-        // Cat 23 audit (2026-06-21): real last-month baseline now
-        // arrives via /orgs/{org}/cost/comparison. We surface it as-is
-        // and fall back to `null` (rendered as "—") when Redis has
-        // no recorded spend for either month — never a fabricated delta.
-        const thisMonth = optimization?.costs?.total_cost_cents ?? 0;
-        const lastMonth = costComparison?.previous_month_cents ?? null;
-
-        setData({
-          traces: (tracesRes?.traces ?? []) as unknown as TraceRow[],
-          tracesTotal: tracesRes?.total ?? tracesRes?.traces?.length ?? 0,
-          optimization: optimization ?? null,
-          alerts: (alertsRaw?.alerts ?? []) as unknown as DashboardData["alerts"],
-          costThisMonthCents: thisMonth,
-          costLastMonthCents: lastMonth });
-      } catch (e) {
-        if (!cancelled) {
-          console.error("Failed to load dashboard telemetry:", e);
-          setError(errorFromCaught(e, "Failed to load telemetry"));
-          toast.error(e instanceof Error ? e.message : "Failed to load telemetry");
-        }
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    }
-
-    load();
-    return () => {
-      cancelled = true;
-    };
-  }, [orgId]);
+  const traces = (tracesQuery.data?.traces ?? []) as unknown as TraceRow[];
+  const tracesTotal = tracesQuery.data?.total ?? tracesQuery.data?.traces?.length ?? 0;
+  const summary = summaryQuery.data ?? null;
+  const optimization = optimizationQuery.data ?? null;
+  const alerts = alertsQuery.data?.alerts ?? [];
+  const costComparison = costComparisonQuery.data ?? null;
 
   // ── Derived metrics ─────────────────────────────────────────────
   const throughputSeries = useMemo<Array<{ t: string; eps: number }>>(
-    () => buildThroughputSeries(data?.traces ?? []),
-    [data?.traces]
+    () => buildThroughputSeries(traces),
+    [traces]
   );
 
   const currentEps = useMemo(() => {
@@ -167,56 +141,76 @@ export default function DashboardPage() {
     return last.eps;
   }, [throughputSeries]);
 
-  // p95 / p50 over the last hour (spec: "p95 latency (last hour gauge)")
-  // Captured at the top of each render — fine to read the clock here
-  // because the result is only used as a filter cutoff (a few-ms
-  // drift between renders is irrelevant) and the rule's complaint
-  // is about reads that *change control flow* between server and
-  // client, which a filter cutoff does not. The eslint-disable
-  // documents the intent.
-  const { p95, p50 } = useMemo(
-    () => {
-       
-      const cutoff = Date.now() - 60 * 60 * 1000;
-      const recent = (data?.traces ?? []).filter(
-        (t) => new Date(t.started_at).getTime() >= cutoff
-      );
-      return { p95: computeP95(recent), p50: computeP50(recent) };
-    },
-    [data?.traces]
-  );
+  const { p95, p50 } = useMemo(() => {
+    if (summary) {
+      return {
+        p95: summary.p95_ms,
+        p50: summary.p50_ms,
+      };
+    }
+    const cutoff = Date.now() - 60 * 60 * 1000;
+    const recent = traces.filter(
+      (t) => new Date(t.started_at).getTime() >= cutoff
+    );
+    return { p95: computeP95(recent), p50: computeP50(recent) };
+  }, [summary, traces]);
 
-  const costThisMonth = data?.costThisMonthCents ?? 0;
-  const costLastMonth = data?.costLastMonthCents ?? null;
+  const topFailureModes = summary?.top_failure_modes?.slice(0, 5) ?? [];
+
+  // Cat 23 audit (2026-07): the "current month cost" tile must read
+  // the actual monthly rollup (`cost/comparison`), not the 30-day
+  // optimization total — those cover different windows and drifted
+  // whenever the calendar month didn't align with "last 30 days".
+  const costThisMonth = costComparison?.current_month_cents ?? null;
+  const costLastMonth = costComparison?.previous_month_cents ?? null;
   // No last-month data → no trend arrow. The StatCard subtitle will
   // render "—" rather than a fake dollar comparison.
-  const costDeltaPct = costLastMonth !== null && costLastMonth > 0
-    ? Math.round(((costThisMonth - costLastMonth) / costLastMonth) * 100)
-    : 0;
+  const costDeltaPct =
+    costLastMonth !== null && costLastMonth > 0 && costThisMonth !== null
+      ? Math.round(((costThisMonth - costLastMonth) / costLastMonth) * 100)
+      : 0;
   const costTrend: "up" | "down" | null =
-    costLastMonth === null ? null : costDeltaPct === 0 ? null : costDeltaPct > 0 ? "up" : "down";
+    costLastMonth === null || costThisMonth === null
+      ? null
+      : costDeltaPct === 0
+        ? null
+        : costDeltaPct > 0
+          ? "up"
+          : "down";
 
-  const anomalyCount = data?.alerts?.length ?? 0;
+  // Alerts "24h" card — the feed itself has no time-window filter,
+  // so the card used to label an unbounded fetch as "24h". Filter
+  // client-side to the same last-24h window the traces card uses so
+  // the label is honest. (June 2026 data-trust fix.)
+  const lastDayAlerts = useMemo(() => {
+    const cutoff = Date.now() - DAY_MS;
+    return alerts.filter((a) => new Date(a.triggered_at).getTime() >= cutoff);
+  }, [alerts]);
+  const anomalyCount = lastDayAlerts.length;
 
   // Last 24h traces — see comment above on the eslint-disable for
   // the same purity rule (filter cutoff, not control flow).
   const lastDayTraces = useMemo(() => {
      
     const cutoff = Date.now() - DAY_MS;
-    return (data?.traces ?? []).filter((t) => new Date(t.started_at).getTime() >= cutoff);
-  }, [data?.traces]);
+    return traces.filter((t) => new Date(t.started_at).getTime() >= cutoff);
+  }, [traces]);
 
-  // Detect first-run: no traces AND the API call completed — show a
-  // "Get started" card with a primary CTA to link a repo. Otherwise
-  // the dashboard is a wall of "— / 0 / no data" placeholders, which
-  // is hostile. Uses `data` not `data?.traces` so we don't show
-  // first-run while the API is still in-flight.
-  const isFirstRun = !loading && data !== null && data.tracesTotal === 0;
+  // Detect first-run: the summary shard loaded successfully AND both
+  // it and the trace list report zero traces. Requiring `summary !=
+  // null` (rather than defaulting a failed/404 fetch to 0 via `??`)
+  // is the fix — a shard failure must never be mistaken for "this is
+  // a brand-new tenant". June 2026 data-trust fix.
+  const isFirstRun =
+    !loading &&
+    summary !== null &&
+    tracesTotal === 0 &&
+    (summary.total_traces ?? 0) === 0;
 
   // No-org branch: brand-new Clerk signups land here before they've
-  // joined or created an org. Without this guard the page sat in
-  // its loading skeleton forever because ``useEffect`` short-circuits
-  // when ``currentOrg`` is null but ``loading`` stayed true.
+  // joined or created an org. Without this guard the dashboard sat in
+  // its loading skeleton forever because ``useOrgQuery`` short-
+  // circuits (disabled) when ``currentOrg`` is null. June 2026 fix.
   if (!currentOrg && !authError) {
     return (
       <NoOrgState
@@ -280,7 +274,38 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* Row 1: Live throughput + p95 latency + cost + anomalies */}
+      {/* Row 1: metrics or first-run getting started */}
+      {isFirstRun ? (
+        <Card className="p-6 sm:p-8 border border-[var(--border)] bg-[var(--surface)]">
+          <div className="max-w-xl space-y-4">
+            <h2 className="text-lg font-semibold text-[var(--text-primary)]">
+              Get started with observability
+            </h2>
+            <p className="text-sm text-[var(--text-muted)]">
+              Connect a repo so Eden can instrument your agents automatically, or send a
+              test trace from the SDK to see live throughput, latency, and failures here.
+            </p>
+            <div className="flex flex-wrap gap-3">
+              {canConnect && (
+                <Link
+                  href="/onboarding/connect"
+                  className="inline-flex items-center gap-1.5 px-3 py-2 bg-[var(--accent)] text-[var(--accent-foreground)] rounded-lg text-sm font-medium hover:bg-[var(--accent-hover)] transition-colors"
+                >
+                  <GitBranch className="w-3.5 h-3.5" />
+                  Connect a repo
+                </Link>
+              )}
+              <Link
+                href="/onboarding/install"
+                className="inline-flex items-center gap-1.5 px-3 py-2 border border-[var(--border)] rounded-lg text-sm font-medium text-[var(--text-primary)] hover:bg-[var(--surface-hover)] transition-colors"
+              >
+                <Sparkles className="w-3.5 h-3.5" />
+                Send a test trace
+              </Link>
+            </div>
+          </div>
+        </Card>
+      ) : (
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3 sm:gap-4 mb-4">
         <ThroughputCard
           loading={loading}
@@ -295,8 +320,8 @@ export default function DashboardPage() {
         {(() => {
           const centsThisMonth = costThisMonth;
           const centsLastMonth = costLastMonth;
-          const usd = centsThisMonth / 100;
-          const empty = !loading && centsThisMonth === 0;
+          const empty = !loading && (centsThisMonth === null || centsThisMonth === 0);
+          const usd = (centsThisMonth ?? 0) / 100;
           const subtitle = empty
             ? "no cost data yet"
             : centsLastMonth === null
@@ -320,7 +345,7 @@ export default function DashboardPage() {
           );
         })()}
         {(() => {
-          const severityCounts = countBySeverity(data?.alerts ?? []);
+          const severityCounts = countBySeverity(lastDayAlerts);
           const severityClass = anomalyCount === 0
             ? "bg-[var(--accent-faint)] text-[var(--accent)]"
             : severityCounts.critical
@@ -346,6 +371,28 @@ export default function DashboardPage() {
           );
         })()}
       </div>
+      )}
+
+      {!isFirstRun && topFailureModes.length > 0 && (
+        <Card className="p-4 sm:p-5 mb-4 border border-[var(--border)]">
+          <h2 className="text-sm font-medium text-[var(--text-primary)] mb-3">
+            Top failure modes (24h)
+          </h2>
+          <ul className="space-y-2">
+            {topFailureModes.map((mode) => (
+              <li
+                key={mode.name}
+                className="flex items-center justify-between text-sm gap-4"
+              >
+                <span className="text-[var(--text-primary)] truncate">{mode.name}</span>
+                <span className="text-[var(--text-muted)] shrink-0">
+                  {mode.count} events
+                </span>
+              </li>
+            ))}
+          </ul>
+        </Card>
+      )}
 
       {/* Row 2: recent traces + quick links. (Judge Scores used to
           live as a standalone widget here; demoted to a Quick Link

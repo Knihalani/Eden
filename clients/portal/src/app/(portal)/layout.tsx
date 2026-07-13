@@ -2,6 +2,7 @@
 
 import { useAuth } from "@/hooks/use-auth";
 import { useNotifications } from "@/hooks/use-notifications";
+import { useOnline } from "@/hooks/use-online";
 import { useOrg } from "@/hooks/use-org";
 import {
   useSidebarPrefs,
@@ -36,7 +37,8 @@ import {
   
   
   AlertTriangle,
-  ArrowRight } from "lucide-react";
+  ArrowRight,
+  WifiOff } from "lucide-react";
 import { cn, isExternalHref } from "@/lib/utils";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
@@ -84,12 +86,16 @@ function readCollapsedPreference(): boolean {
 //      from JavaScript. (F34 fix, July 2026.)
 //
 // We fire both in parallel; whichever resolves first unblocks the
-// ``router.push("/login")``. We swallow ``api.logout()`` errors
+// ``router.push("/sign-in")``. We swallow ``api.logout()`` errors
 // because the Clerk-side cleanup is the user-visible one — a
 // network blip on the backend logout must not leave the user
 // staring at an error toast after they've already signed out of
 // Clerk. The proxy's logout route (F34) translates backend 401s
 // (stale cookie) into 200s so this rarely throws anyway.
+//
+// Redirects to ``/sign-in`` (not the legacy ``/login`` alias) —
+// that's the route the rest of the auth chrome (session-expired
+// banner, invite flow, cookie-consent) already treats as canonical.
 async function handleLogout(
   router: ReturnType<typeof useRouter>,
   closeDropdown: () => void,
@@ -104,7 +110,7 @@ async function handleLogout(
       }
     }),
   ]);
-  router.push("/login");
+  router.push("/sign-in");
 }
 
 // buildBreadcrumbs is imported from @/lib/breadcrumbs.
@@ -134,6 +140,7 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
 
 function PortalLayoutContent({ children }: { children: React.ReactNode }) {
   const { user, loading, refreshUserWithRetry } = useAuth();
+  const online = useOnline();
   const { signOut } = useClerk();
   const { prefs, togglePin } = useSidebarPrefs();
   const { authError, clearAuthError, refreshOrgs, currentOrg, orgSyncing } = useOrg();
@@ -927,6 +934,18 @@ function PortalLayoutContent({ children }: { children: React.ReactNode }) {
               </div>
             }
           >
+          {!online && (
+            <div
+              role="status"
+              aria-live="polite"
+              className="flex items-center gap-2 px-4 sm:px-6 py-2.5 bg-[var(--warning-bg)] border-b border-[var(--warning)]/30 text-sm"
+            >
+              <WifiOff className="w-4 h-4 text-[var(--warning-strong)] shrink-0" />
+              <span className="text-[var(--warning-strong)] truncate">
+                You&rsquo;re offline. Showing the last data Eden loaded — changes will retry once your connection returns.
+              </span>
+            </div>
+          )}
           {showOrgSyncingBanner && (
             <div
               role="status"

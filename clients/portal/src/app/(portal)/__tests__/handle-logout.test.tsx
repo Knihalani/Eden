@@ -10,7 +10,12 @@
  *
  * Post-fix: ``handleLogout`` runs ``signOut()`` and ``api.logout()``
  * via ``Promise.allSettled`` (so a backend blip never blocks the
- * UI), then ``router.push(\"/login\")``.
+ * UI), then ``router.push(\"/sign-in\")``.
+ *
+ * ``/sign-in`` (not the legacy ``/login`` alias) — June 2026
+ * portal-frontend audit: the rest of the auth chrome (session-
+ * expired banner, cookie-consent, invite flow) already treats
+ * ``/sign-in`` as canonical.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as React from "react";
@@ -91,7 +96,7 @@ async function handleLogout(
       console.warn("Backend logout failed (continuing):", err);
     }),
   ]);
-  router.push("/login");
+  router.push("/sign-in");
 }
 
 beforeEach(() => {
@@ -104,7 +109,7 @@ afterEach(() => {
 });
 
 describe("F34: layout.handleLogout parallel fan-out", () => {
-  it("calls both Clerk signOut AND api.logout, then routes to /login", async () => {
+  it("calls both Clerk signOut AND api.logout, then routes to /sign-in", async () => {
     const routerPush = vi.fn();
     const fakeRouter = { push: routerPush } as unknown as ReturnType<typeof useRouter>;
     const close = vi.fn();
@@ -114,10 +119,10 @@ describe("F34: layout.handleLogout parallel fan-out", () => {
     expect(close).toHaveBeenCalled();
     expect(signOutMock).toHaveBeenCalledTimes(1);
     expect(apiLogoutMock).toHaveBeenCalledTimes(1);
-    expect(routerPush).toHaveBeenCalledWith("/login");
+    expect(routerPush).toHaveBeenCalledWith("/sign-in");
   });
 
-  it("still routes to /login even when api.logout rejects (network blip)", async () => {
+  it("still routes to /sign-in even when api.logout rejects (network blip)", async () => {
     const routerPush = vi.fn();
     const fakeRouter = { push: routerPush } as unknown as ReturnType<typeof useRouter>;
     apiLogoutMock.mockRejectedValueOnce(new Error("network down"));
@@ -131,6 +136,6 @@ describe("F34: layout.handleLogout parallel fan-out", () => {
 
     expect(signOutMock).toHaveBeenCalledTimes(1);
     expect(apiLogoutMock).toHaveBeenCalledTimes(1);
-    expect(routerPush).toHaveBeenCalledWith("/login");
+    expect(routerPush).toHaveBeenCalledWith("/sign-in");
   });
 });

@@ -2,6 +2,7 @@
 
 import { Server } from "lucide-react";
 import { PageHeader } from "@/components/layout/page-header";
+import { PageContent } from "@/components/layout/page-content";
 
 /**
  * APM Depth page — formerly Cat 22 in-process tail-sampling,
@@ -22,7 +23,7 @@ import { PageHeader } from "@/components/layout/page-header";
 
 export default function ApmPage() {
   return (
-    <div className="space-y-6">
+    <PageContent>
       <PageHeader
         icon={Server}
         title="APM Depth"
@@ -48,6 +49,6 @@ helm install otel-collector open-telemetry/opentelemetry-collector \\
           full pipeline (tail_sampling → k8sattributes → batch → otlp/eden).
         </p>
       </div>
-    </div>
+    </PageContent>
   );
 }

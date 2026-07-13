@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useOrg } from "@/hooks/use-org";
 import { cn } from "@/lib/utils";
-import { API_BASE } from "@/lib/api";
+import { api } from "@/lib/api";
 import { useToast } from "@/components/ui/toast";
 import { Alert } from "@/components/ui/alert";
 import { NoOrgState } from "@/components/ui/no-org-state";
@@ -36,22 +36,8 @@ interface ReplayResult {
   outcome: string;
 }
 
-async function fetchJson<T>(path: string, init: RequestInit = {}): Promise<T> {
-  const res = await fetch(`${API_BASE}${path}`, {
-    credentials: "include",
-    headers: { "Content-Type": "application/json" },
-    ...init });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({ detail: "Request failed" }));
-    throw new Error(err.detail || `HTTP ${res.status}`);
-  }
-  return res.json() as Promise<T>;
-}
-
 function ttRecord(orgId: string, trace_id: string): Promise<RecordResult> {
-  return fetchJson<RecordResult>(`/orgs/${orgId}/intelligence/time-travel/record`, {
-    method: "POST",
-    body: JSON.stringify({ trace_id }) });
+  return api.post<RecordResult>(`/orgs/${orgId}/intelligence/time-travel/record`, { trace_id });
 }
 function ttFork(
   orgId: string,
@@ -59,14 +45,10 @@ function ttFork(
   at_step: number,
   edited_state: Record<string, unknown>
 ): Promise<ForkResult> {
-  return fetchJson<ForkResult>(`/orgs/${orgId}/intelligence/time-travel/fork`, {
-    method: "POST",
-    body: JSON.stringify({ recording_id, at_step, edited_state }) });
+  return api.post<ForkResult>(`/orgs/${orgId}/intelligence/time-travel/fork`, { recording_id, at_step, edited_state });
 }
 function ttReplay(orgId: string, fork_id: string): Promise<ReplayResult> {
-  return fetchJson<ReplayResult>(`/orgs/${orgId}/intelligence/time-travel/replay`, {
-    method: "POST",
-    body: JSON.stringify({ fork_id }) });
+  return api.post<ReplayResult>(`/orgs/${orgId}/intelligence/time-travel/replay`, { fork_id });
 }
 
 export default function TimeTravelPage() {

@@ -1,12 +1,13 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import {
   ArrowDownRight,
   ArrowUpRight,
   BarChart3,
   Clock,
   Coins,
+  RefreshCw,
   Zap,
 } from "lucide-react";
 import {
@@ -28,10 +29,13 @@ import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
 import { PageHeader } from "@/components/layout/page-header";
 import { PageContent } from "@/components/layout/page-content";
 import { NoOrgState } from "@/components/ui/no-org-state";
+import { ErrorState } from "@/components/ui/error-state";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useToast } from "@/components/ui/toast";
+import { Button } from "@/components/ui/button";
 import { useOrg } from "@/hooks/use-org";
 import { api } from "@/lib/api";
+import { useOrgQuery } from "@/hooks/use-api-query";
+import { queryKeys } from "@/lib/query-keys";
 import { cn } from "@/lib/utils";
 import {
   AXIS_TICK_PROPS,
@@ -436,64 +440,47 @@ const DAY_OPTIONS = [
 
 export default function AnalyticsPage() {
   const { currentOrg } = useOrg();
-  const toast = useToast();
+  const orgId = currentOrg?.id ?? null;
   const [days, setDays] = useState<number>(30);
-  const [loading, setLoading] = useState(true);
 
-  const [tokenByDay, setTokenByDay] = useState<
-    Array<{ date: string; input_tokens: number; output_tokens: number }>
-  >([]);
-  const [latencyByDay, setLatencyByDay] = useState<
-    Array<{ date: string; p50_ms: number; p95_ms: number; p99_ms: number }>
-  >([]);
-  const [throughput, setThroughput] = useState<
-    Array<{ hour: number; weekday: number; requests: number }>
-  >([]);
-  const [topAgents, setTopAgents] = useState<
-    Array<{ agent: string; cost_usd: number; requests: number; avg_latency_ms: number }>
-  >([]);
+  // Phase B.1: removed fetchWithFallback + makeSynthetic* — the
+  // /analytics/* sub-routes (Phase A.1) return real data now.
+  const tokenQuery = useOrgQuery(
+    queryKeys.analytics.tokenUsage(orgId, days),
+    orgId,
+    () => api.getTokenUsage(orgId!, days),
+  );
+  const latencyQuery = useOrgQuery(
+    queryKeys.analytics.latency(orgId, days),
+    orgId,
+    () => api.getLatencyPercentiles(orgId!, days),
+  );
+  const throughputQuery = useOrgQuery(
+    queryKeys.analytics.throughput(orgId, days),
+    orgId,
+    () => api.getThroughputByHour(orgId!, days),
+  );
+  const topAgentsQuery = useOrgQuery(
+    queryKeys.analytics.topAgents(orgId, days),
+    orgId,
+    () => api.getTopAgentsByCost(orgId!, days),
+  );
 
-  useEffect(() => {
-    if (!currentOrg) return;
-    let cancelled = false;
-    const orgId = currentOrg.id;
-    // Defer the loading-state update so it isn't called synchronously
-    // within the effect body (avoids cascading-render lint warning).
-    queueMicrotask(() => {
-      if (cancelled) return;
-      setLoading(true);
-    });
-    // Phase B.1: removed fetchWithFallback + makeSynthetic* — the
-    // /analytics/* sub-routes (Phase A.1) return real data now.
-    Promise.all([
-      api.getTokenUsage(orgId, days),
-      api.getLatencyPercentiles(orgId, days),
-      api.getThroughputByHour(orgId, days),
-      api.getTopAgentsByCost(orgId, days),
-    ]).then(([tokens, lat, tp, ag]) => {
-      if (cancelled) return;
-      setTokenByDay(tokens?.by_day ?? []);
-      setLatencyByDay(lat?.by_day ?? []);
-      setThroughput(tp?.by_hour ?? []);
-      setTopAgents(ag?.agents ?? []);
-      setLoading(false);
-    }).catch((e) => {
-      if (cancelled) return;
-      // On error, surface as empty data so the user sees the real
-      // empty state (with the existing empty-state UI) rather than
-      // a broken chart. Notify the user via toast.
-      const message = e instanceof Error ? e.message : "Failed to load analytics";
-      setTokenByDay([]);
-      setLatencyByDay([]);
-      setThroughput([]);
-      setTopAgents([]);
-      setLoading(false);
-      toast.error("Couldn't load analytics", message);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [currentOrg, days, toast]);
+  const tokenByDay = tokenQuery.data?.by_day ?? [];
+  const latencyByDay = latencyQuery.data?.by_day ?? [];
+  const throughput = throughputQuery.data?.by_hour ?? [];
+  const topAgents = topAgentsQuery.data?.agents ?? [];
+  const loading =
+    tokenQuery.isLoading || latencyQuery.isLoading || throughputQuery.isLoading || topAgentsQuery.isLoading;
+  const failedShards = [tokenQuery, latencyQuery, throughputQuery, topAgentsQuery].filter((q) => q.isError);
+  const errorMessage =
+    failedShards.length > 0 ? failedShards[0].error?.message ?? "Failed to load analytics" : null;
+  const refresh = () => {
+    void tokenQuery.refetch();
+    void latencyQuery.refetch();
+    void throughputQuery.refetch();
+    void topAgentsQuery.refetch();
+  };
 
   const totals = useMemo(() => {
     const totalIn = tokenByDay.reduce((s, d) => s + d.input_tokens, 0);
@@ -554,6 +541,19 @@ export default function AnalyticsPage() {
           </div>
         }
       />
+
+      {errorMessage && !loading && (
+        <ErrorState
+          title="Could not load analytics"
+          message={errorMessage}
+          action={
+            <Button onClick={refresh} variant="outline" size="default">
+              <RefreshCw className="h-4 w-4" />
+              Try again
+            </Button>
+          }
+        />
+      )}
 
       {/* KPI strip */}
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">

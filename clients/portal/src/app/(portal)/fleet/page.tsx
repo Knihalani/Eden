@@ -1,9 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import { useOrg } from "@/hooks/use-org";
-import { fleetApi, type FleetAgentCard } from "@/lib/api";
+import { fleetApi } from "@/lib/api";
+import { useOrgQuery } from "@/hooks/use-api-query";
+import { queryKeys } from "@/lib/query-keys";
 import { Card } from "@/components/ui/card";
 import { NoOrgState } from "@/components/ui/no-org-state";
 import { PageContent } from "@/components/layout/page-content";
@@ -15,36 +17,31 @@ type FleetTab = "agents" | "heatmap" | "delegation";
 
 export default function FleetPage() {
   const { currentOrg } = useOrg();
+  const orgId = currentOrg?.id ?? null;
   const [tab, setTab] = useState<FleetTab>("agents");
-  const [agents, setAgents] = useState<FleetAgentCard[]>([]);
-  const [heatmap, setHeatmap] = useState<Array<{ agent_id: string; stumble_kind: string; count: number }>>([]);
-  const [edges, setEdges] = useState<Array<{ source: string; target: string; call_count_7d: number }>>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
 
-  const load = useCallback(async () => {
-    if (!currentOrg) return;
-    setLoading(true);
-    setError(null);
-    try {
-      const [summary, heat, delegation] = await Promise.all([
-        fleetApi.summary(currentOrg.id),
-        fleetApi.heatmap(currentOrg.id),
-        fleetApi.delegation(currentOrg.id),
-      ]);
-      setAgents(summary.data?.agents ?? []);
-      setHeatmap(heat.data?.cells ?? []);
-      setEdges(delegation.data?.edges ?? []);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load fleet health");
-    } finally {
-      setLoading(false);
-    }
-  }, [currentOrg]);
+  const summaryQuery = useOrgQuery(
+    queryKeys.fleet.summary(orgId),
+    orgId,
+    () => fleetApi.summary(orgId!),
+  );
+  const heatmapQuery = useOrgQuery(
+    queryKeys.fleet.heatmap(orgId),
+    orgId,
+    () => fleetApi.heatmap(orgId!),
+  );
+  const delegationQuery = useOrgQuery(
+    queryKeys.fleet.delegation(orgId),
+    orgId,
+    () => fleetApi.delegation(orgId!),
+  );
 
-  useEffect(() => {
-    load();
-  }, [load]);
+  const agents = summaryQuery.data?.data?.agents ?? [];
+  const heatmap = heatmapQuery.data?.data?.cells ?? [];
+  const edges = delegationQuery.data?.data?.edges ?? [];
+  const loading = summaryQuery.isLoading || heatmapQuery.isLoading || delegationQuery.isLoading;
+  const error =
+    summaryQuery.error?.message ?? heatmapQuery.error?.message ?? delegationQuery.error?.message ?? null;
 
   if (!currentOrg) {
     return (

@@ -16,37 +16,42 @@
  * component and reused here.
  */
 
-import { useCallback, useEffect, useMemo, useState , Suspense} from "react";
+import { useCallback, useMemo, useState , Suspense} from "react";
 import { useSearchParams, useRouter } from "next/navigation";
-import { Layers } from "lucide-react";
+import { Layers, RefreshCw } from "lucide-react";
 import { PageHeader } from "@/components/layout/page-header";
 import { PageContent } from "@/components/layout/page-content";
 import { NoOrgState } from "@/components/ui/no-org-state";
-import { useToast } from "@/components/ui/toast";
+import { ErrorState } from "@/components/ui/error-state";
 import { Button } from "@/components/ui/button";
 import { TracesTab } from "../observability/_components/TracesTab";
 import { AnnotateTraceDialog } from "../observability/_components/AnnotateTraceDialog";
 import type { TraceFilter, TraceItem } from "../observability/_lib/types";
 import { useOrg } from "@/hooks/use-org";
 import { api, agentSessionsApi } from "@/lib/api";
+import { useOrgQuery } from "@/hooks/use-api-query";
+import { queryKeys } from "@/lib/query-keys";
 import { SessionTimeline, type AgentSessionTimelineItem } from "@/components/observability/SessionTimeline";
 import { TraceExportModal } from "../observability/_components/TraceExportModal";
 import { TraceShareModal } from "../observability/_components/TraceShareModal";
 import { LiveTailPanel } from "./_components/LiveTailPanel";
 import { SpanSearchBar } from "./_components/SpanSearchBar";
-import { RefreshCw } from "lucide-react";
+
+const PAGE_SIZE = 50;
 
 function TracesPageInner() {
   const { currentOrg } = useOrg();
-  const toast = useToast();
+  const orgId = currentOrg?.id ?? null;
   const router = useRouter();
   const searchParams = useSearchParams();
   const initialTraceId = searchParams.get("trace_id") || undefined;
 
-  const [traces, setTraces] = useState<TraceItem[]>([]);
-  const [sessions, setSessions] = useState<AgentSessionTimelineItem[]>([]);
-  const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<TraceFilter>({ realm: "", outcome: "", agent_id: "" });
+  // "Load more" bumps the fetch limit rather than an offset — the
+  // trace list endpoint has no cursor/offset param, so each bump
+  // re-fetches the top N traces (same pattern the dashboard's
+  // 50-row shard already uses).
+  const [limit, setLimit] = useState(PAGE_SIZE);
   const [_, setSelectedTraceId] = useState<string>(initialTraceId ?? "");
   const [exportOpen, setExportOpen] = useState(false);
   const [exportTraceId, setExportTraceId] = useState<string>("");
@@ -57,6 +62,46 @@ function TracesPageInner() {
   const [annotateTraceId, setAnnotateTraceId] = useState<string>("");
   const [shareOpen, setShareOpen] = useState(false);
   const [shareTraceId, setShareTraceId] = useState<string>("");
+
+  const traceFilterParams = useMemo(
+    () => ({
+      ...(filter.realm ? { realm: filter.realm } : {}),
+      ...(filter.outcome ? { outcome: filter.outcome } : {}),
+      ...(filter.agent_id ? { agent_id: filter.agent_id } : {}),
+      limit,
+    }),
+    [filter, limit],
+  );
+
+  const tracesQuery = useOrgQuery(
+    queryKeys.observability.traces(orgId, traceFilterParams),
+    orgId,
+    () => api.listObservabilityTraces(orgId!, traceFilterParams),
+  );
+  const sessionsQuery = useOrgQuery(
+    queryKeys.agents.sessions(orgId, filter.agent_id ? { agent_id: filter.agent_id } : {}),
+    orgId,
+    () =>
+      agentSessionsApi
+        .list(orgId!, { ...(filter.agent_id ? { agent_id: filter.agent_id } : {}), limit: 50 })
+        .then((res) => res.data?.sessions ?? [])
+        .catch(() => []),
+  );
+
+  const traces = useMemo(
+    () => (tracesQuery.data?.traces ?? []) as unknown as TraceItem[],
+    [tracesQuery.data],
+  );
+  const tracesTotal = tracesQuery.data?.total ?? traces.length;
+  const sessions = sessionsQuery.data ?? [];
+  const loading = tracesQuery.isLoading || sessionsQuery.isLoading;
+  const refreshing = tracesQuery.isFetching || sessionsQuery.isFetching;
+  const errorMessage = tracesQuery.error?.message ?? null;
+
+  const refresh = useCallback(() => {
+    void tracesQuery.refetch();
+    void sessionsQuery.refetch();
+  }, [tracesQuery, sessionsQuery]);
 
   const handleSelectTrace = useCallback(
     (id: string) => {
@@ -87,31 +132,9 @@ function TracesPageInner() {
     setAnnotateOpen(true);
   }, []);
 
-  const loadTraces = useCallback(async () => {
-    if (!currentOrg) return;
-    setLoading(true);
-    try {
-      const [data, sessionRes] = await Promise.all([
-        api.listObservabilityTraces(currentOrg.id, {
-          ...(filter.realm ? { realm: filter.realm } : {}),
-          ...(filter.outcome ? { outcome: filter.outcome } : {}),
-          ...(filter.agent_id ? { agent_id: filter.agent_id } : {}),
-          limit: 50,
-        }),
-        agentSessionsApi.list(currentOrg.id, {
-          ...(filter.agent_id ? { agent_id: filter.agent_id } : {}),
-          limit: 50,
-        }).catch(() => ({ data: { sessions: [], count: 0 } })),
-      ]);
-      setTraces(data.traces as TraceItem[]);
-      setSessions(sessionRes.data?.sessions ?? []);
-    } catch (e) {
-      console.error("Traces load failed:", e);
-      toast.error(e instanceof Error ? e.message : "Failed to load traces");
-    } finally {
-      setLoading(false);
-    }
-  }, [currentOrg, filter, toast]);
+  const handleLoadMore = useCallback(() => {
+    setLimit((l) => l + PAGE_SIZE);
+  }, []);
 
   const sessionTimeline = useMemo(() => {
     const byId = new Map<string, AgentSessionTimelineItem>();
@@ -144,10 +167,6 @@ function TracesPageInner() {
     });
   }, [sessions, traces]);
 
-  useEffect(() => {
-    if (currentOrg) loadTraces();
-  }, [currentOrg, loadTraces]);
-
   if (!currentOrg) return <NoOrgState feature="Traces" />;
 
   return (
@@ -158,12 +177,27 @@ function TracesPageInner() {
         subtitle="Search, filter, and inspect every trace in your system"
         icon={Layers}
         actions={
-          <Button variant="outline" size="default" onClick={loadTraces} loading={loading} aria-label="Refresh traces">
+          <Button variant="outline" size="default" onClick={refresh} loading={refreshing} aria-label="Refresh traces">
             <RefreshCw className="w-4 h-4" />
             Refresh
           </Button>
         }
       />
+      {/* Persistent inline ErrorState (not toast-only) — a failed
+          fetch used to only surface as a transient toast, which is
+          easy to miss and leaves the page looking merely empty. */}
+      {errorMessage && !loading && (
+        <ErrorState
+          title="Could not load traces"
+          message={errorMessage}
+          action={
+            <Button onClick={refresh} variant="outline" size="default" disabled={refreshing} loading={refreshing}>
+              <RefreshCw className="w-4 h-4" />
+              Try again
+            </Button>
+          }
+        />
+      )}
       <div className="grid gap-4 lg:grid-cols-[1fr_18rem]">
         <div className="space-y-4 min-w-0">
           <section aria-label="Agent sessions">
@@ -188,6 +222,13 @@ function TracesPageInner() {
               onAnnotate={handleAnnotate}
               initialTraceId={initialTraceId}
             />
+          {!loading && !errorMessage && tracesTotal > traces.length && (
+            <div className="flex justify-center pt-2">
+              <Button variant="outline" size="default" onClick={handleLoadMore} loading={refreshing} disabled={refreshing}>
+                Load more traces
+              </Button>
+            </div>
+          )}
         </div>
         <LiveTailPanel orgId={currentOrg.id} onSelectTrace={handleSelectTrace} />
       </div>

@@ -152,12 +152,14 @@ class SemanticCache:
         # L1 exact
         self._l1_exact[query_hash] = (response, now + ttl_seconds)
 
-        # L2 semantic entry (with stub embedding)
+        # L2 semantic entry — use the configured embedder when available so
+        # cosine-similarity lookups in ``get()`` work with real vectors.
+        # Stub only when no embedder is configured (dev / CI environments).
         entry = CacheEntry(
             query_hash=query_hash,
             query_text=query,
             response_text=response,
-            embedding=self._stub_embed(query),
+            embedding=self._get_embedding(query),
             model_version=model_version,
             ttl_seconds=ttl_seconds,
             metadata=metadata or {},
@@ -167,6 +169,20 @@ class SemanticCache:
 
         # Prune expired L2 entries
         self._prune_l2()
+
+    def _get_embedding(self, text: str) -> list[float]:
+        """Return an embedding vector for ``text``.
+
+        Uses the configured embedder when available; falls back to the
+        deterministic stub so dev / CI environments without vector infra
+        still have a non-zero embedding for L2 pruning.
+        """
+        if self._embedder is not None:
+            try:
+                return self._embedder.embed(text)
+            except Exception:
+                pass
+        return self._stub_embed(text)
 
     def _stub_embed(self, text: str) -> list[float]:
         """Stub embedding: deterministic pseudo-random vector for dev.

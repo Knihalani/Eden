@@ -14,55 +14,11 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { NoOrgState } from "@/components/ui/no-org-state";
 import { Card } from "@/components/ui/card";
 import { errorFromCaught } from "@/lib/safe-error-message";
-async function callApi<T>(endpoint: string, init: RequestInit = {}): Promise<T> {
-  // Delegate to the shared api client — it knows about Clerk refresh,
-  // SSE, the catch-all proxy, and the in-flight de-dup map. The
-  // previous local ``API_BASE = NEXT_PUBLIC_API_URL || http://localhost:8000``
-  // pointed at the dev process in production, which doesn't exist.
-  const res = await fetch(endpoint.startsWith("http") ? endpoint : `/api/proxy${endpoint}`, {
-    credentials: "include",
-    headers: {
-      "Content-Type": "application/json",
-      ...(init.headers ?? {})
-    },
-    ...init
-  });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({
-      detail: "Request failed"
-    }));
-    throw new Error(err.detail || `HTTP ${res.status}`);
-  }
-  return res.json() as Promise<T>;
-}
-const retrievalApi = {
-  gaps: (orgId: string) => callApi<{
-    gaps: Array<{
-      query: string;
-      gap_score: number;
-      example_trace_id: string;
-    }>;
-  }>(`/orgs/${orgId}/intelligence/retrieval/gaps`, {
-    method: "POST"
-  }),
-  utilization: (orgId: string, traceId: string) => callApi<{
-    trace_id: string;
-    utilization: number;
-    used_chunks: string[];
-    unused_chunks: string[];
-  }>(`/orgs/${orgId}/intelligence/retrieval/${traceId}/utilization`, {
-    method: "POST"
-  }),
-  reorder: (orgId: string) => callApi<{
-    reordering: Array<{
-      chunk_id: string;
-      new_position: number;
-      reason: string;
-    }>;
-  }>(`/orgs/${orgId}/intelligence/retrieval/reorder`, {
-    method: "POST"
-  })
-};
+// Use the shared `retrievalApi` from lib/api.ts (goes through `fetchApi`
+// — Clerk 401 refresh, 429/5xx backoff, in-flight GET dedup). A local
+// duplicate used to shadow this with a raw `fetch()` that skipped all
+// of that transport behavior.
+import { retrievalApi } from "@/lib/api";
 type SubTab = "gaps" | "utilization" | "reorder";
 interface Gap {
   query: string;
