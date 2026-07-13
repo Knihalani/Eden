@@ -4,12 +4,16 @@ Implements RFC 7643 (SCIM Core Schema) and RFC 7644 (SCIM Protocol) for:
 - User provisioning via Identity Provider
 - User de-provisioning (suspend, not delete)
 - Bearer token authentication
+- Clerk Backend API sync (create user + org membership)
 
 SCIM endpoint base: /orgs/{org_id}/scim/v2
 """
 
+from __future__ import annotations
+
 import hashlib
 import logging
+from typing import Any
 from uuid import uuid4
 
 from fastapi import APIRouter, Header, HTTPException, status
@@ -61,6 +65,19 @@ class SCIMUser(BaseModel):
     emails: list[SCIMEmail] | None = None
     active: bool | None = True
     meta: dict | None = None
+
+
+class SCIMPatchOperation(BaseModel):
+    """Single PatchOp operation (RFC 7644 §3.5.2). Azure AD uses capitalized ops."""
+    op: str
+    path: str | None = None
+    value: Any = None
+
+
+class SCIMPatchOp(BaseModel):
+    """SCIM PatchOp envelope used by Azure AD / Okta for partial updates."""
+    schemas: list[str] = ["urn:ietf:params:scim:api:messages:2.0:PatchOp"]
+    Operations: list[SCIMPatchOperation] = Field(default_factory=list)
 
 
 class SCIMListResponse(BaseModel):
@@ -357,6 +374,276 @@ async def _sync_user_to_org(
     return scim_user_id
 
 
+def _coerce_scim_bool(value: Any) -> bool:
+    """Coerce Azure AD / Okta PatchOp boolean values (often strings)."""
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        return value.strip().lower() in ("true", "1", "yes")
+    return bool(value)
+
+
+def apply_scim_patch_operations(
+    current: dict[str, Any],
+    operations: list[dict[str, Any]] | list[SCIMPatchOperation],
+) -> dict[str, Any]:
+    """Apply RFC 7644 PatchOp ``replace`` ops onto a mutable user dict.
+
+    Supports Azure AD paths used in practice:
+    - ``active``
+    - ``name`` / ``name.givenName`` / ``name.familyName`` / ``displayName``
+    - ``emails`` / ``emails[type eq "work"].value`` / ``userName``
+
+    Returns the updated dict (also mutates ``current`` in place).
+    """
+    for raw in operations:
+        op = raw if isinstance(raw, dict) else raw.model_dump()
+        op_name = str(op.get("op") or "").strip().lower()
+        if op_name != "replace":
+            # Phase 1: replace only (Azure AD soft-delete / profile sync).
+            continue
+
+        path = (op.get("path") or "").strip()
+        value = op.get("value")
+
+        # Path-less replace: value is a partial resource object.
+        if not path:
+            if isinstance(value, dict):
+                if "active" in value:
+                    current["active"] = _coerce_scim_bool(value["active"])
+                if "name" in value and isinstance(value["name"], dict):
+                    name = dict(current.get("name") or {})
+                    name.update({k: v for k, v in value["name"].items() if v is not None})
+                    current["name"] = name
+                if "displayName" in value:
+                    current["displayName"] = value["displayName"]
+                if "emails" in value:
+                    current["emails"] = value["emails"]
+                if "userName" in value:
+                    current["userName"] = value["userName"]
+            continue
+
+        path_l = path.lower()
+        if path_l == "active":
+            current["active"] = _coerce_scim_bool(value)
+        elif path_l == "displayname":
+            current["displayName"] = value
+        elif path_l == "username":
+            current["userName"] = value
+        elif path_l == "name":
+            if isinstance(value, dict):
+                name = dict(current.get("name") or {})
+                name.update({k: v for k, v in value.items() if v is not None})
+                current["name"] = name
+        elif path_l == "name.givenname":
+            name = dict(current.get("name") or {})
+            name["givenName"] = value
+            current["name"] = name
+        elif path_l == "name.familyname":
+            name = dict(current.get("name") or {})
+            name["familyName"] = value
+            current["name"] = name
+        elif path_l == "emails":
+            current["emails"] = value
+        elif "emails" in path_l and path_l.endswith(".value"):
+            # emails[type eq "work"].value
+            email_value = value if isinstance(value, str) else None
+            if email_value:
+                emails = list(current.get("emails") or [])
+                if emails and isinstance(emails[0], dict):
+                    emails[0] = {**emails[0], "value": email_value}
+                else:
+                    emails = [{"value": email_value, "type": "work", "primary": True}]
+                current["emails"] = emails
+                # Keep userName in sync when Azure patches email only.
+                if not current.get("userName"):
+                    current["userName"] = email_value
+
+    # Derive displayName from name parts when missing after patch.
+    name = current.get("name") or {}
+    if not current.get("displayName") and isinstance(name, dict):
+        derived = " ".join(
+            filter(None, [name.get("givenName"), name.get("familyName")])
+        )
+        if derived:
+            current["displayName"] = derived
+
+    # Prefer primary email as userName when emails changed.
+    emails = current.get("emails")
+    if emails and isinstance(emails, list) and emails:
+        primary = next(
+            (e for e in emails if isinstance(e, dict) and e.get("primary")),
+            emails[0] if isinstance(emails[0], dict) else None,
+        )
+        if primary and primary.get("value") and not current.get("userName"):
+            current["userName"] = primary["value"]
+
+    return current
+
+
+async def _link_clerk_id(client, user_id: str, clerk_user_id: str) -> None:
+    """Persist Clerk user id on the Eden users row (best-effort)."""
+    try:
+        await client.execute(
+            """
+            UPDATE users
+            SET clerk_id = $1
+            WHERE id = $2
+              AND (clerk_id IS NULL OR clerk_id = $1)
+            """,
+            clerk_user_id,
+            user_id,
+        )
+    except Exception as exc:  # noqa: BLE001 — non-fatal side-effect
+        logger.warning(
+            "Failed to link clerk_id=%s to user=%s: %s",
+            clerk_user_id,
+            user_id,
+            exc,
+        )
+
+
+async def _sync_clerk_for_scim_user(
+    client,
+    *,
+    org_id: str,
+    user_id: str | None,
+    email: str | None,
+    given_name: str | None = None,
+    family_name: str | None = None,
+    active: bool = True,
+) -> None:
+    """Best-effort Clerk sync for a SCIM provision/deprovision event.
+
+    - active=True: ensure Clerk user exists + org membership
+    - active=False: delete Clerk org membership (Eden suspends locally)
+
+    Failures are logged and never raise — local SCIM state is source of
+    truth for the IdP response; Clerk webhooks can reconcile later.
+    """
+    if not user_id or not email:
+        return
+
+    # Lazy import keeps SCIM routes importable in tests that never
+    # touch Clerk (mirrors invitation_service / orgs.create_org).
+    from eden.api.utils.clerk_client import (
+        ClerkAPIError,
+        create_membership,
+        create_user_with_email,
+        delete_membership,
+        resolve_clerk_org_id,
+    )
+
+    clerk_org_id = await resolve_clerk_org_id(client, org_id)
+    if not clerk_org_id:
+        logger.info(
+            "SCIM Clerk sync skipped: org %s has no clerk_org_id",
+            org_id,
+        )
+        return
+
+    # Resolve existing clerk_id from Eden row first.
+    clerk_user_id: str | None = None
+    try:
+        row = await client.fetchrow(
+            "SELECT clerk_id FROM users WHERE id = $1",
+            user_id,
+        )
+        if row and row.get("clerk_id"):
+            clerk_user_id = str(row["clerk_id"])
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("SCIM clerk_id lookup failed user=%s: %s", user_id, exc)
+
+    try:
+        if active:
+            if not clerk_user_id:
+                clerk_user = await create_user_with_email(
+                    email,
+                    first_name=given_name,
+                    last_name=family_name,
+                )
+                clerk_user_id = str(clerk_user.get("id") or "") or None
+                if clerk_user_id:
+                    await _link_clerk_id(client, user_id, clerk_user_id)
+
+            if not clerk_user_id:
+                logger.warning(
+                    "SCIM Clerk sync: could not resolve clerk user for %s",
+                    email,
+                )
+                return
+
+            try:
+                await create_membership(
+                    clerk_org_id=clerk_org_id,
+                    user_id=clerk_user_id,
+                    role="member",
+                )
+            except ClerkAPIError as exc:
+                if "already" in str(exc).lower():
+                    logger.info(
+                        "Clerk membership already exists (user=%s org=%s)",
+                        clerk_user_id,
+                        clerk_org_id,
+                    )
+                else:
+                    logger.warning(
+                        "Clerk membership create failed (user=%s org=%s): %s",
+                        clerk_user_id,
+                        clerk_org_id,
+                        exc,
+                    )
+        else:
+            # Deprovision: look up existing Clerk user only — never create.
+            if not clerk_user_id:
+                from eden.api.utils.clerk_client import find_user_by_email
+
+                found = await find_user_by_email(email)
+                if found and found.get("id"):
+                    clerk_user_id = str(found["id"])
+                    await _link_clerk_id(client, user_id, clerk_user_id)
+
+            if not clerk_user_id:
+                logger.info(
+                    "SCIM Clerk deprovision: no clerk user for %s; skip",
+                    email,
+                )
+                return
+
+            try:
+                await delete_membership(clerk_org_id, clerk_user_id)
+            except ClerkAPIError as exc:
+                # 404 = already removed — benign.
+                if "404" in str(exc):
+                    logger.info(
+                        "Clerk membership already removed (user=%s org=%s)",
+                        clerk_user_id,
+                        clerk_org_id,
+                    )
+                else:
+                    logger.warning(
+                        "Clerk membership delete failed (user=%s org=%s): %s",
+                        clerk_user_id,
+                        clerk_org_id,
+                        exc,
+                    )
+    except ClerkAPIError as exc:
+        logger.warning(
+            "SCIM Clerk sync failed (org=%s email=%s active=%s): %s",
+            org_id,
+            email,
+            active,
+            exc,
+        )
+    except Exception as exc:  # noqa: BLE001 — defensive
+        logger.exception(
+            "Unexpected SCIM Clerk sync error (org=%s email=%s): %s",
+            org_id,
+            email,
+            exc,
+        )
+
+
 # ============================================================================
 # SCIM Endpoints (RFC 7644)
 # ============================================================================
@@ -486,13 +773,25 @@ async def create_scim_user(
 
     # Sync to org
     scim_external_id = parsed.get("external_id") or str(uuid4())
+    active = parsed.get("active", True)
     scim_user_id = await _sync_user_to_org(
         client,
         org_id,
         user_id,
         scim_external_id,
         parsed.get("display_name"),
-        parsed.get("active", True),
+        active,
+    )
+
+    # Best-effort Clerk user + membership (Phase 1 SCIM ↔ Clerk sync).
+    await _sync_clerk_for_scim_user(
+        client,
+        org_id=org_id,
+        user_id=user_id,
+        email=parsed.get("email"),
+        given_name=parsed.get("given_name"),
+        family_name=parsed.get("family_name"),
+        active=active,
     )
 
     # Update sync metadata
@@ -617,6 +916,7 @@ async def update_scim_user(
     )
 
     # Sync to org (handles membership changes)
+    active = parsed.get("active", True)
     if user_id:
         await _sync_user_to_org(
             client,
@@ -624,7 +924,16 @@ async def update_scim_user(
             user_id,
             existing["scim_external_id"],
             parsed.get("display_name"),
-            parsed.get("active", True),
+            active,
+        )
+        await _sync_clerk_for_scim_user(
+            client,
+            org_id=org_id,
+            user_id=str(user_id),
+            email=parsed.get("email") or existing.get("user_email"),
+            given_name=parsed.get("given_name"),
+            family_name=parsed.get("family_name"),
+            active=active,
         )
 
     # Update sync metadata
@@ -644,6 +953,126 @@ async def update_scim_user(
         scim_user_id,
     )
 
+    return _scim_user_to_resource(dict(updated))
+
+
+@router.patch("/Users/{scim_user_id}", response_model=dict)
+async def patch_scim_user(
+    org_id: str,
+    scim_user_id: str,
+    patch: SCIMPatchOp,
+    authorization: str | None = Header(None, alias="Authorization"),
+):
+    """Partial update via PatchOp (RFC 7644 §3.5.2) — required by Azure AD.
+
+    Supports ``replace`` on ``active``, ``name`` / name sub-attrs, and
+    ``emails``. Deprovision (``active=false``) suspends Eden membership
+    and removes the Clerk org membership.
+    """
+    await get_current_org_scim(org_id, authorization)
+
+    client = await get_postgres_client()
+
+    existing = await client.fetchrow(
+        "SELECT * FROM scim_users WHERE id = $1 AND org_id = $2",
+        scim_user_id,
+        org_id,
+    )
+    if not existing:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found",
+        )
+
+    # Seed current resource from stored row, then apply PatchOps.
+    current = _scim_user_to_resource(dict(existing))
+    ops = [op.model_dump() for op in patch.Operations]
+    if not ops:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Operations is required",
+        )
+    apply_scim_patch_operations(current, ops)
+
+    try:
+        parsed = _parse_scim_user(current)
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        ) from e
+
+    user_id = existing["user_id"]
+    active = parsed.get("active", True)
+
+    # Email change on the Eden user account (same guards as PUT).
+    if user_id and parsed["email"].lower() != (existing.get("user_email") or "").lower():
+        existing_user = await client.fetchrow(
+            "SELECT id FROM users WHERE email = $1 AND id != $2",
+            parsed["email"].lower(),
+            user_id,
+        )
+        if existing_user:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Email already in use by another user",
+            )
+        await client.execute(
+            "UPDATE users SET email = $1, name = $2 WHERE id = $3",
+            parsed["email"].lower(),
+            parsed.get("display_name"),
+            user_id,
+        )
+        await client.execute(
+            "UPDATE scim_users SET user_email = $1 WHERE id = $2",
+            parsed["email"].lower(),
+            scim_user_id,
+        )
+
+    await client.execute(
+        """
+        UPDATE scim_users
+        SET display_name = $1, is_active = $2
+        WHERE id = $3
+        """,
+        parsed.get("display_name"),
+        active,
+        scim_user_id,
+    )
+
+    if user_id:
+        await _sync_user_to_org(
+            client,
+            org_id,
+            user_id,
+            existing["scim_external_id"],
+            parsed.get("display_name"),
+            active,
+        )
+        await _sync_clerk_for_scim_user(
+            client,
+            org_id=org_id,
+            user_id=str(user_id),
+            email=parsed.get("email") or existing.get("user_email"),
+            given_name=parsed.get("given_name"),
+            family_name=parsed.get("family_name"),
+            active=active,
+        )
+
+    await client.execute(
+        """
+        UPDATE org_scim_config
+        SET last_sync_at = NOW(),
+            provisioned_user_count = (SELECT COUNT(*) FROM scim_users WHERE org_id = $1 AND is_active = TRUE)
+        WHERE org_id = $1
+        """,
+        org_id,
+    )
+
+    updated = await client.fetchrow(
+        "SELECT * FROM scim_users WHERE id = $1",
+        scim_user_id,
+    )
     return _scim_user_to_resource(dict(updated))
 
 
@@ -684,6 +1113,13 @@ async def delete_scim_user(
             scim_user.get("display_name"),
             False,  # active=False -> suspended
         )
+        await _sync_clerk_for_scim_user(
+            client,
+            org_id=org_id,
+            user_id=str(scim_user["user_id"]),
+            email=scim_user.get("user_email"),
+            active=False,
+        )
 
     # Mark SCIM user as inactive
     await client.execute(
@@ -720,7 +1156,7 @@ async def get_service_provider_config(
     return {
         "schemas": ["urn:ietf:params:scim:schemas:core:2.0:ServiceProviderConfig"],
         "documentationUri": "https://docs.example.com/scim",
-        "patch": {"supported": False},
+        "patch": {"supported": True},
         "bulk": {"supported": False, "maxOperations": 0, "maxPayloadSize": 0},
         "filter": {"supported": True, "maxResults": 100},
         "changePassword": {"supported": False},
